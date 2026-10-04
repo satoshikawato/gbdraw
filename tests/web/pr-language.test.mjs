@@ -7,7 +7,7 @@ import test, { after } from 'node:test';
 
 import {
   evaluateHookCommand,
-  extractPlainLanguageSummary,
+  extractOpeningSummary,
   hookDenialOutput,
   validateBody,
   validateProposal,
@@ -17,12 +17,8 @@ import {
 const CHECKER = resolve('tools/check-pr-language.mjs');
 const ORIGINAL_TITLE = 'Promote steady-state CI topology and finalize main admission';
 const CLEAR_TITLE = 'Stop rerunning full CI on dev-to-main pull requests';
-const ORIGINAL_SUMMARY = `## Plain-language summary
-
-This promotion removes the transition-only CI topology from main and completes the admission-policy cutover.`;
-const CLEAR_BODY = `## Plain-language summary
-
-This PR removes CI jobs that existed only while the new main-merge check was introduced. The exact dev commit still has to pass full staging, and main will require \`Promotion / gate\` and \`CodeQL\` before merge.
+const ORIGINAL_OPENING = 'This promotion removes the transition-only CI topology from main and completes the admission-policy cutover.';
+const CLEAR_BODY = `This PR removes CI jobs that existed only while the new main-merge check was introduced. The exact dev commit still has to pass full staging, and main will require \`Promotion / gate\` and \`CodeQL\` before merge.
 
 ## Change class
 
@@ -48,8 +44,8 @@ test('PR 394 original title fails with each matched opaque phrase identified', (
   errors.forEach((error) => assert.match(error, /Replace it with/));
 });
 
-test('PR 394 original opening sentence fails in the plain-language summary', () => {
-  const errors = validateBody(ORIGINAL_SUMMARY);
+test('PR 394 original opening sentence fails', () => {
+  const errors = validateBody(ORIGINAL_OPENING);
   assert.ok(errors.some((error) => error.includes('transition-only')));
   assert.ok(errors.some((error) => error.includes('CI topology')));
   assert.ok(errors.some((error) => error.includes('admission-policy')));
@@ -66,7 +62,7 @@ test('backticks do not hide opaque language in a PR title', () => {
   assert.ok(errors.some((error) => error.includes('CI topology')));
 });
 
-test('a clear summary with exact backticked check names passes', () => {
+test('a clear opening with exact backticked check names passes', () => {
   assert.deepEqual(validateBody(CLEAR_BODY), []);
 });
 
@@ -77,14 +73,12 @@ test('opaque terms in a later technical section are outside the checker scope', 
 
 This completes the admission-policy cutover and leaves the steady-state CI topology in place.`;
   assert.deepEqual(validateBody(body), []);
-  assert.match(extractPlainLanguageSummary(body), /exact dev commit/);
-  assert.doesNotMatch(extractPlainLanguageSummary(body), /cutover/);
+  assert.match(extractOpeningSummary(body), /exact dev commit/);
+  assert.doesNotMatch(extractOpeningSummary(body), /cutover/);
 });
 
-test('fenced and inline code in the summary are excluded from opaque-language matching', () => {
-  const body = `## Plain-language summary
-
-This PR documents the exact check names and explains when maintainers use them. The examples remain available after merge.
+test('fenced and inline code in the opening are excluded from opaque-language matching', () => {
+  const body = `This PR documents the exact check names and explains when maintainers use them. The examples remain available after merge.
 
 \`\`\`text
 steady-state CI topology
@@ -94,15 +88,15 @@ The literal identifier \`admission-policy cutover\` is preserved for lookup.`;
   assert.deepEqual(validateBody(body), []);
 });
 
-test('a missing or placeholder plain-language summary fails with a specific fix', async (t) => {
-  await t.test('missing section', () => {
+test('a missing or placeholder opening fails with a specific fix', async (t) => {
+  await t.test('missing opening', () => {
     assert.match(validateBody('## Change class\n\n- [x] STANDARD')[0], /missing/);
   });
   await t.test('TODO placeholder', () => {
-    assert.match(validateBody('## Plain-language summary\n\nTODO')[0], /placeholder/);
+    assert.match(validateBody('TODO\n\n## Change class')[0], /placeholder/);
   });
   await t.test('comment-only template', () => {
-    assert.match(validateBody('## Plain-language summary\n\n<!-- Add summary text. -->')[0], /placeholder/);
+    assert.match(validateBody('<!-- Add opening text. -->\n\n## Change class')[0], /placeholder/);
   });
 });
 
@@ -164,9 +158,7 @@ test('wording-changing gh pr edit commands are validated', async (t) => {
   });
   await t.test('literal body is checked', () => {
     const decision = evaluateHookCommand(
-      `gh pr edit 394 --body '## Plain-language summary
-
-This completes the release admission cutover.'`
+      `gh pr edit 394 --body 'This completes the release admission cutover.'`
     );
     assert.equal(decision.allowed, false);
     assert.match(decision.reason, /release admission/);

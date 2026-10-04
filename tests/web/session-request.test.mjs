@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -13,13 +14,21 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
 const {
   buildCanonicalRenderRequest: buildCanonicalRenderRequestRaw,
-  linearRecordLayoutHasSharedRow,
+  bindCanonicalTypedResource,
   managedConfigOverridePathsForMode,
   normalizeWebGridColumnOrdering,
   promoteCanonicalRenderRequestToCurrent,
+  projectCommittedEditorIntent,
+  projectCommittedRecordTransform,
   projectCanonicalSessionRequest
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
+);
+const { migrateLegacyOrthogroupMembers } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'services', 'legacy-similarity-alignment.js'))
+);
+const { linearRecordLayoutHasSharedRow, reconcileLinearRecordLayout } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'app', 'linear-record-layout.js'))
 );
 const {
   createDefaultLinearComparisonPlan,
@@ -64,12 +73,17 @@ assert.deepEqual(
   ]
 );
 
-const buildCanonicalRenderRequest = (args) => buildCanonicalRenderRequestRaw({
+const characterizedRequests = [];
+const buildCanonicalRenderRequest = (args) => {
+  const result = buildCanonicalRenderRequestRaw({
   ...args,
   ...(args.state?.mode?.value === 'linear' && !args.comparisonPlanSnapshot
     ? { comparisonPlanSnapshot: comparisonSnapshotForState(args.state, args.filesData) }
     : {})
-});
+  });
+  characterizedRequests.push(result.renderRequest);
+  return result;
+};
 const {
   buildLinearTrackSlotPayload,
   buildLinearTrackSlotSpec,
@@ -176,7 +190,7 @@ assert.deepEqual(structuredLinearSlot, {
 });
 assert.throws(() => parseLinearTrackSlotSpec('missing-renderer'), /requires '<slot_id>:<renderer>'/);
 assert.throws(() => parseLinearTrackSlotSpec('mystery:not_a_renderer'), /Unsupported linear track renderer/);
-assert.throws(() => parseLinearTrackSlotSpec('features:features@spacing='), /Invalid linear track slot spacing/);
+assert.equal(parseLinearTrackSlotSpec('features:features@spacing=').spacing, '');
 assert.throws(
   () => parseLinearTrackSlotSpec({
     kind: 'linearTrackSlot', id: 'bad', renderer: 'features', enabled: true,
@@ -394,6 +408,9 @@ const state = {
   losatProgram: ref('blastn'),
   losat: { blastp: { collinearMaxUnitGap: 2 } },
   selectedOrthogroupAlignmentFeature: ref(''),
+  similarityAlignmentPlan: ref(null),
+  linearRecordTranslations: ref([]),
+  legacySimilarityAlignment: ref(null),
   linearRecordLayoutEnabled: ref(false),
   linearRecordGap: ref(24),
   linearRecordRows: [],
@@ -417,9 +434,12 @@ const stateForCanonicalProjection = (projection) => {
       config.linearComparisonPlan || createDefaultLinearComparisonPlan()
     ),
     losatProgram: ref(config.losatProgram || 'blastn'),
-    selectedOrthogroupAlignmentFeature: ref(
-      projection.pipelineState?.selectedOrthogroupAlignmentFeature || ''
-    ),
+    similarityAlignmentPlan: ref(structuredClone(
+      linearLayout.similarityAlignment || null
+    )),
+    linearRecordTranslations: ref(structuredClone(
+      linearLayout.recordTranslations || []
+    )),
     currentColors: ref(structuredClone(config.colors || {})),
     selectedPalette: ref(palette),
     paletteDefinitions: ref({ [palette]: {} }),
@@ -463,7 +483,7 @@ const filesData = { c_gb: genbank, linearSeqs: [] };
 state.form.multi_record_canvas = true;
 const canonical = buildCanonicalRenderRequest({ state, filesData });
 state.form.multi_record_canvas = false;
-assert.equal(canonical.renderRequest.schema, 7);
+assert.equal(canonical.renderRequest.schema, 8);
 assert.equal(canonical.renderRequest.mode, 'circular');
 assert.equal(canonical.renderRequest.grouping, 'grid');
 assert.equal(canonical.renderRequest.records[0].source.resourceId, 'record-1-genbank');
@@ -526,7 +546,8 @@ canonicalWithWebBindings.webFiles.bindings = {
     fasta: null,
     depth: null,
     blast: null,
-    losat_gencode: 11
+    losat_gencode: 11,
+    inferred_definition: '<i>Bound organism</i>'
   }],
   linearComparisons: [{
     id: 'inactive-comparison-uid',
@@ -549,6 +570,7 @@ assert.equal(webBindingProjection.files.c_gb.name, 'bound-circular.gb');
 assert.equal(webBindingProjection.files.c_gb.type, 'text/x-genbank');
 assert.equal(webBindingProjection.files.c_gb.lastModified, 123);
 assert.equal(webBindingProjection.files.linearSeqs[0].uid, 'inactive-linear-uid');
+assert.equal(webBindingProjection.files.linearSeqs[0].inferred_definition, '<i>Bound organism</i>');
 assert.equal(webBindingProjection.files.linearSeqs[0].gb.name, 'bound-linear.gb');
 assert.equal(
   webBindingProjection.files.linearComparisons[0].file.name,
@@ -742,6 +764,12 @@ assert.deepEqual(selectedCircularCanonical.renderRequest.records[0].presentation
 assert.equal(selectedCircularCanonical.renderRequest.output.prefix, 'second-record');
 
 const selectedCircularProjection = projectCanonicalSessionRequest(selectedCircularCanonical);
+// A request never invents the other mode's draft values (GUI remediation S04).
+assert.deepEqual([
+  selectedCircularProjection.config.adv.linear_show_replicon,
+  selectedCircularProjection.config.adv.linear_accession_visibility,
+  selectedCircularProjection.config.adv.linear_length_visibility
+], [false, 'auto', 'auto']);
 assert.deepEqual(
   {
     selector: selectedCircularProjection.config.form.circular_record_selector,
@@ -783,7 +811,7 @@ const invalidCircularCases = [
   [{ circular_region_start: 3, circular_region_end: null }, /requires both Start and End/],
   [{ circular_region_start: 8, circular_region_end: 3 }, /must not exceed End/],
   [{ circular_region_start: 3, circular_region_end: 19 }, /exceeds the selected record length/],
-  [{ circular_record_selector: 'missing-record', circular_region_start: null, circular_region_end: null }, /was not found/]
+  [{ circular_record_selector: 'missing-record', circular_region_start: null, circular_region_end: null }, { code: 'RECORD_SELECTION', context: { reason: 'NO_MATCH' } }]
 ];
 for (const [overrides, message] of invalidCircularCases) {
   Object.assign(state.form, {
@@ -805,7 +833,7 @@ Object.assign(state.form, {
 });
 assert.throws(
   () => buildCanonicalRenderRequest({ state, filesData }),
-  /is ambiguous/
+  { code: 'RECORD_SELECTION', context: { reason: 'AMBIGUOUS' } }
 );
 
 Object.assign(state.form, {
@@ -1823,8 +1851,8 @@ currentStructuredCircularSlot.renderRequest.diagramOptions.tracks.circularTrackS
   {
     id: 'current',
     renderer: 'dinucleotide_skew',
-    innerGapPx: { value: 2, unit: 'px' },
-    outerGapPx: { value: 3, unit: 'px' },
+    innerGapPx: 2,
+    outerGapPx: 3,
     params: {}
   }
 ];
@@ -1950,6 +1978,231 @@ assert.deepEqual(
   materializedCanonical.webFiles.linearRecordMetadata.map((entry) => entry.recordKey),
   ['multi-source::record-1', 'multi-source::record-2']
 );
+
+const oneSourceFilesData = {
+  linearSeqs: [{
+    uid: 'one-source', gb: genbank, cardinality: 'all', losat_gencode: 1,
+    region_record_id: '', region_start: null, region_end: null, region_reverse: false
+  }],
+  linearComparisons: []
+};
+const oneSourceRows = [1, 2].map((index) => ({
+  key: JSON.stringify(['linear', 'one-source', `#${index}`]),
+  scope: 'linear', sourceUid: 'one-source', selector: `#${index}`,
+  recordId: 'duplicate', recordLength: 100, detectedTopology: 'circular',
+  reverse: false, cropped: false
+}));
+const oneSourceState = {
+  ...state,
+  recordDisplayRows: ref(oneSourceRows),
+  recordDisplayDrafts: []
+};
+const oneSourceSnapshot = resolveLinearComparisonPlan({
+  plan: { mode: 'none', defaultSource: 'losat', edges: [] },
+  sequences: oneSourceFilesData.linearSeqs
+});
+const unchangedOneSource = buildCanonicalRenderRequest({
+  state: oneSourceState,
+  filesData: oneSourceFilesData,
+  comparisonPlanSnapshot: oneSourceSnapshot
+});
+assert.equal(unchangedOneSource.renderRequest.schema, 8);
+assert.equal(unchangedOneSource.renderRequest.records.length, 1);
+assert.equal(unchangedOneSource.renderRequest.records[0].cardinality, 'all');
+
+oneSourceState.recordDisplayDrafts = [{
+  scope: 'linear', sourceUid: 'one-source', selector: '#2', recordId: 'duplicate',
+  topologyOverride: null, startCoordinate: 25, reverseComplementOverride: true,
+  anchorIntent: null
+}];
+const transformedOneSource = buildCanonicalRenderRequest({
+  state: oneSourceState,
+  filesData: oneSourceFilesData,
+  comparisonPlanSnapshot: oneSourceSnapshot
+});
+assert.deepEqual(
+  transformedOneSource.renderRequest.records.map((record) => ({
+    selector: record.selector,
+    start: record.display.startCoordinate,
+    reverse: record.presentation.reverseComplement
+  })),
+  [
+    { selector: { kind: 'recordIndex', index: 0 }, start: null, reverse: false },
+    { selector: { kind: 'recordIndex', index: 1 }, start: 25, reverse: true }
+  ]
+);
+assert.equal(
+  transformedOneSource.renderRequest.records[0].source.resourceId,
+  transformedOneSource.renderRequest.records[1].source.resourceId
+);
+assert.equal(
+  Object.values(transformedOneSource.resources).filter((resource) => resource.kind === 'genbank').length,
+  1
+);
+
+const committedBeforeProjection = structuredClone(unchangedOneSource);
+const collectionRecord = unchangedOneSource.renderRequest.records[0];
+const collectionMembers = [1, 2].map((index) => ({
+  canonicalRecordKey: collectionRecord.recordKey,
+  recordKey: `${collectionRecord.recordKey}:${index}`,
+  selector: `#${index}`,
+  recordId: 'duplicate',
+  recordLength: 100,
+  committedDisplay: structuredClone(collectionRecord.display),
+  committedReverseComplement: false
+}));
+const projectedTarget = {
+  ...collectionMembers[1],
+  scope: 'linear',
+  source: structuredClone(collectionRecord.source),
+  effectiveCircular: true,
+  cropped: false,
+  members: collectionMembers
+};
+const projected = projectCommittedRecordTransform({
+  committed: unchangedOneSource,
+  target: projectedTarget,
+  transform: { recordLength: 100, startCoordinate: 75, reverseComplement: true }
+});
+assert.deepEqual(unchangedOneSource, committedBeforeProjection);
+assert.deepEqual(projected.receipt, {
+  recordKey: 'one-source:2', canonicalRecordKey: 'one-source', recordIndex: 1,
+  materialized: true, startCoordinate: 75, reverseComplement: true
+});
+assert.deepEqual(projected.canonical.renderRequest.records.map((record) => ({
+  recordKey: record.recordKey,
+  selector: record.selector,
+  start: record.display.startCoordinate,
+  reverse: record.presentation.reverseComplement
+})), [
+  { recordKey: 'one-source:1', selector: { kind: 'recordIndex', index: 0 }, start: null, reverse: false },
+  { recordKey: 'one-source:2', selector: { kind: 'recordIndex', index: 1 }, start: 75, reverse: true }
+]);
+for (const field of ['schema', 'mode', 'grouping', 'diagramOptions', 'layout', 'comparisons', 'output']) {
+  assert.deepEqual(
+    projected.canonical.renderRequest[field],
+    unchangedOneSource.renderRequest[field],
+    `target projection preserves renderRequest.${field}`
+  );
+}
+assert.deepEqual(projected.canonical.resources, unchangedOneSource.resources);
+
+const singletonMember = collectionMembers[0];
+const singletonProjected = projectCommittedRecordTransform({
+  committed: unchangedOneSource,
+  target: {
+    ...singletonMember,
+    scope: 'linear',
+    source: structuredClone(collectionRecord.source),
+    effectiveCircular: true,
+    cropped: false,
+    members: [singletonMember]
+  },
+  transform: { recordLength: 100, startCoordinate: 41, reverseComplement: false }
+});
+assert.deepEqual(singletonProjected.receipt, {
+  recordKey: 'one-source:1', canonicalRecordKey: 'one-source', recordIndex: 0,
+  materialized: true, startCoordinate: 41, reverseComplement: false
+});
+assert.deepEqual(singletonProjected.canonical.renderRequest.records.map((record) => ({
+  recordKey: record.recordKey,
+  cardinality: record.cardinality,
+  selector: record.selector,
+  start: record.display.startCoordinate
+})), [{
+  recordKey: 'one-source:1', cardinality: 'exactly_one',
+  selector: { kind: 'recordIndex', index: 0 }, start: 41
+}]);
+
+const exactCommitted = structuredClone(projected.canonical);
+const exactTarget = {
+  ...projectedTarget,
+  canonicalRecordKey: 'one-source:2',
+  members: []
+};
+const exactProjected = projectCommittedRecordTransform({
+  committed: exactCommitted,
+  target: exactTarget,
+  transform: { recordLength: 100, startCoordinate: 20, reverseComplement: false }
+});
+assert.equal(exactProjected.receipt.materialized, false);
+assert.deepEqual(exactProjected.canonical.renderRequest.records[0], exactCommitted.renderRequest.records[0]);
+assert.equal(exactProjected.canonical.renderRequest.records[1].display.startCoordinate, 20);
+
+for (const [label, targetPatch, transformPatch, requestPatch] of [
+  ['missing', { canonicalRecordKey: 'missing' }, {}, {}],
+  ['duplicate', {}, {}, { records: [collectionRecord, structuredClone(collectionRecord)] }],
+  ['stale resource', { source: { kind: 'genbank', resourceId: 'stale' } }, {}, {}],
+  ['cropped', { cropped: true }, {}, {}],
+  ['non-circular', { effectiveCircular: false }, {}, {}],
+  ['length mismatch', {}, { recordLength: 99 }, {}]
+]) {
+  const committed = structuredClone(unchangedOneSource);
+  Object.assign(committed.renderRequest, requestPatch);
+  assert.throws(() => projectCommittedRecordTransform({
+    committed,
+    target: { ...projectedTarget, ...targetPatch },
+    transform: { recordLength: 100, startCoordinate: 75, reverseComplement: true, ...transformPatch }
+  }), undefined, label);
+}
+// N-16: a label reflow renders the committed Session with only the editor
+// tables replaced; draft settings that apply on Generate stay out.
+{
+  const committed = structuredClone(unchangedOneSource);
+  const committedBefore = structuredClone(committed);
+  const text = (canonical, ref) => Buffer.from(
+    canonical.resources[ref.resourceId].data, 'base64'
+  ).toString('utf8');
+  const draft = {
+    ...oneSourceState,
+    form: { ...oneSourceState.form, species: 'Draft species', show_labels_linear: 'all' },
+    adv: { ...oneSourceState.adv, block_stroke_width: 7 },
+    manualSpecificRules: [{ feat: 'CDS', qual: 'gene', val: '^alpha$', color: '#445566', cap: 'Alpha' }],
+    featureVisibilityRules: ref([{
+      id: 'visibility-1', source: 'editor', recordId: '*', featureType: 'CDS',
+      qualifier: 'product', value: '^beta$', action: 'off'
+    }]),
+    filterMode: ref('Whitelist'),
+    manualWhitelist: [{ feat: 'CDS', qual: 'gene', key: 'alpha' }],
+    generatedLabelOverrideTsv: '*\t*\thash\t^f1$\tRenamed alpha\n'
+  };
+  const reflow = projectCommittedEditorIntent({ committed, state: draft });
+  assert.deepEqual(committed, committedBefore, 'the committed Session is not modified');
+  const { diagramOptions: options, ...requestRest } = reflow.renderRequest;
+  const { diagramOptions: committedOptions, ...committedRest } = committed.renderRequest;
+  assert.deepEqual(requestRest, committedRest);
+  assert.deepEqual(options.configOverrides, committedOptions.configOverrides);
+  assert.match(text(reflow, options.colors.colorTableFile), /\^alpha\$/);
+  assert.match(text(reflow, options.featureVisibilityTableFile), /\^beta\$/);
+  assert.match(text(reflow, options.labelOverrideFile), /Renamed alpha/);
+  assert.equal(options.labelWhitelistFile, committedOptions.labelWhitelistFile);
+  Object.keys(committed.resources).forEach((resourceId) => {
+    if (!/^(?:colors-|feature-visibility|label-override)/.test(resourceId)) {
+      assert.equal(reflow.resources[resourceId], committed.resources[resourceId]);
+    }
+  });
+
+  const enableLabels = projectCommittedEditorIntent({ committed, state: draft, labelSelection: true });
+  const labelOptions = enableLabels.renderRequest.diagramOptions;
+  assert.equal(labelOptions.configOverrides['labels.linear.scope'], 'all');
+  assert.deepEqual(labelOptions.configOverrides['labels.filtering.blacklist_keywords'], []);
+  assert.match(text(enableLabels, labelOptions.labelWhitelistFile), /CDS\tgene\talpha/);
+  assert.equal(
+    labelOptions.configOverrides['objects.features.block_stroke_width'],
+    committedOptions.configOverrides['objects.features.block_stroke_width']
+  );
+
+  // A Session loaded from an older request schema keeps its request until the
+  // next Generate; the reflow promotes it instead of rejecting it.
+  const older = structuredClone(committed);
+  older.renderRequest.schema = 7;
+  const promoted = projectCommittedEditorIntent({ committed: older, state: draft });
+  assert.equal(older.renderRequest.schema, 7, 'the committed Session is not modified');
+  assert.equal(promoted.renderRequest.schema, 8);
+  assert.deepEqual(promoted.renderRequest.records, reflow.renderRequest.records);
+  assert.deepEqual(promoted.renderRequest.diagramOptions, reflow.renderRequest.diagramOptions);
+}
+
 state.form.prefix = '';
 const linearDefaultCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
 assert.equal(linearDefaultCanonical.renderRequest.grouping, 'single');
@@ -2001,6 +2254,7 @@ assert.equal(styledLinearOverrides['objects.scale.font_size.long'], 21);
 assert.equal(styledLinearOverrides['objects.scale.ruler_label_font_size.short'], 12);
 assert.equal(styledLinearOverrides['objects.scale.ruler_label_font_size.long'], 12);
 const styledLinearProjection = projectCanonicalSessionRequest(styledLinearCanonical);
+assert.equal(styledLinearProjection.config.form.multi_record_canvas, true);
 assert.equal(styledLinearProjection.config.adv.scale_font_size, 21);
 assert.equal(styledLinearProjection.config.adv.ruler_label_font_size, 12);
 assert.equal(
@@ -2154,7 +2408,10 @@ state.linearRecordRows.splice(0, state.linearRecordRows.length,
   { uid: 'first', row: 1 }, { uid: 'second', row: 1 }, { uid: 'third', row: 2 });
 const arrangedCanonical = buildCanonicalRenderRequest({ state, filesData: linearFilesData });
 assert.deepEqual(arrangedCanonical.renderRequest.layout, {
-  recordGapPx: 30
+  recordGapPx: 30,
+  multiRecordPositions: null,
+  recordTranslations: [],
+  similarityAlignment: null
 });
 assert.deepEqual(
   arrangedCanonical.renderRequest.records.map((record) => [
@@ -2213,6 +2470,23 @@ assert.deepEqual(
   numericColumnProjection.files.linearSeqs.map((sequence) => sequence.uid),
   ['second', 'first', 'third']
 );
+const cliColumnProjection = projectCanonicalSessionRequest({
+  ...numericColumnCanonical,
+  initializeCliInputs: true
+});
+assert.deepEqual(cliColumnProjection.config.linearRecordLayout.rows, [
+  { uid: 'second', row: 1, canonicalCardinality: 'exactly_one', canonicalRow: 1, canonicalColumn: 1 },
+  { uid: 'first', row: 1, canonicalCardinality: 'exactly_one', canonicalRow: 1, canonicalColumn: 2 },
+  { uid: 'third', row: 2, canonicalCardinality: 'exactly_one', canonicalRow: 2, canonicalColumn: 1 }
+]);
+assert.deepEqual(
+  reconcileLinearRecordLayout(cliColumnProjection.files.linearSeqs, [
+    { ...cliColumnProjection.config.linearRecordLayout.rows[0], row: 2 },
+    ...cliColumnProjection.config.linearRecordLayout.rows.slice(1)
+  ])[0],
+  { uid: 'second', row: 2, canonicalCardinality: 'exactly_one' }
+);
+
 assert.deepEqual(
   numericColumnProjection.files.linearComparisons.map((comparison) => [
     comparison.queryUid,
@@ -2240,7 +2514,7 @@ schema5Arranged.records.forEach((record) => {
   record.presentation.gridRow = null;
 });
 const promotedArranged = promoteCanonicalRenderRequestToCurrent(schema5Arranged);
-assert.equal(promotedArranged.schema, 7);
+assert.equal(promotedArranged.schema, 8);
 assert.deepEqual(
   promotedArranged.records.map((record) => [
     record.cardinality,
@@ -2253,7 +2527,16 @@ assert.deepEqual(
     ['exactly_one', 2, null]
   ]
 );
-assert.deepEqual(promotedArranged.layout, { recordGapPx: 30 });
+assert.deepEqual(promotedArranged.layout, {
+  recordGapPx: 30,
+  multiRecordPositions: null,
+  recordTranslations: promotedArranged.records.map((record) => ({
+    recordKey: record.recordKey,
+    x: 0,
+    y: 0
+  })),
+  similarityAlignment: null
+});
 assert.equal(schema5Arranged.schema, 5, 'promotion must not mutate the imported request');
 
 state.losatProgram.value = 'blastp';
@@ -2281,7 +2564,35 @@ assert.equal(
   projectCanonicalSessionRequest(losatPairCanonical).files.linearComparisons[0].source,
   'losat'
 );
-state.selectedOrthogroupAlignmentFeature.value = 'resolved-feature-anchor';
+const resolvedPlanReference = {
+  recordKey: 'first', biologicalFeatureId: 'feature-first',
+  sourceFeatureIndex: 1, stableFeatureSvgId: 'stable-first'
+};
+state.similarityAlignmentPlan.value = {
+  schema: 2,
+  groupId: 'og-resolved',
+  reference: resolvedPlanReference,
+  records: [
+    {
+      recordKey: 'first', status: 'reference', rationale: 'reference',
+      anchor: resolvedPlanReference
+    },
+    {
+      recordKey: 'second', status: 'skipped', rationale: 'skipped_no_candidate',
+      anchor: null
+    },
+    {
+      recordKey: 'third', status: 'aligned', rationale: 'only_usable_candidate',
+      anchor: {
+        recordKey: 'third', biologicalFeatureId: 'feature-third',
+        sourceFeatureIndex: 2, stableFeatureSvgId: 'stable-third'
+      }
+    }
+  ]
+};
+state.linearRecordTranslations.value = ['first', 'second', 'third'].map(
+  (recordKey, index) => ({ recordKey, x: index * 2, y: -index })
+);
 const resolvedProteinPlotTitlePosition = state.adv.plot_title_position;
 state.adv.plot_title_position = 'bottom';
 const resolvedProteinCanonical = buildCanonicalRenderRequest({
@@ -2321,9 +2632,10 @@ const resolvedProteinSettings = resolvedProteinCanonical.renderRequest.compariso
 assert.ok(resolvedProteinSettings);
 assert.equal(resolvedProteinSettings.mode, 'none');
 assert.deepEqual(resolvedProteinSettings.pairs, []);
-assert.equal(
-  resolvedProteinSettings.settings.alignOrthogroupFeature,
-  'resolved-feature-anchor'
+assert.equal(Object.hasOwn(resolvedProteinSettings.settings, 'alignOrthogroupFeature'), false);
+assert.deepEqual(
+  resolvedProteinCanonical.renderRequest.layout.similarityAlignment,
+  state.similarityAlignmentPlan.value
 );
 const resolvedProteinTsv = Buffer.from(
   resolvedProteinCanonical.resources[resolvedProtein.resourceId].data,
@@ -2349,15 +2661,19 @@ assert.equal(
   resolvedProteinProjection.config.losat.blastp.collinearMaxUnitGap,
   2
 );
-assert.equal(
-  resolvedProteinProjection.pipelineState.selectedOrthogroupAlignmentFeature,
-  'resolved-feature-anchor'
+assert.deepEqual(
+  resolvedProteinProjection.config.linearRecordLayout.similarityAlignment,
+  state.similarityAlignmentPlan.value
 );
 state.losatProgram.value = resolvedProteinProjection.config.losatProgram;
 state.losat = structuredClone(resolvedProteinProjection.config.losat);
 state.losat.blastp.mode = 'pairwise';
-state.selectedOrthogroupAlignmentFeature.value =
-  resolvedProteinProjection.pipelineState.selectedOrthogroupAlignmentFeature;
+state.similarityAlignmentPlan.value = structuredClone(
+  resolvedProteinProjection.config.linearRecordLayout.similarityAlignment
+);
+state.linearRecordTranslations.value = structuredClone(
+  resolvedProteinProjection.config.linearRecordLayout.recordTranslations
+);
 const resolvedProteinRoundTripCanonical = buildCanonicalRenderRequest({
   state,
   filesData: resolvedProteinProjection.files
@@ -2388,6 +2704,164 @@ assert.equal(
   resolvedProteinTsv
 );
 assert.deepEqual(roundTripGenerated, resolvedProteinSettings);
+assert.deepEqual(
+  resolvedProteinRoundTripCanonical.renderRequest.layout,
+  resolvedProteinCanonical.renderRequest.layout,
+  'current alignment display state must survive a Generate projection round trip'
+);
+const reorderedAlignmentCanonical = structuredClone(resolvedProteinCanonical);
+reorderedAlignmentCanonical.renderRequest.records.reverse();
+assert.deepEqual(
+  projectCanonicalSessionRequest(reorderedAlignmentCanonical)
+    .config.linearRecordLayout.similarityAlignment,
+  resolvedProteinCanonical.renderRequest.layout.similarityAlignment
+);
+for (const mutate of [
+  (request) => request.layout.recordTranslations.push(
+    { recordKey: 'first', x: 0, y: 0 }
+  ),
+  (request) => { request.layout.recordTranslations[0].x = Infinity; },
+  (request) => { request.layout.unknownTransform = true; },
+  (request) => { request.layout.similarityAlignment.records[2].anchor = null; },
+  (request) => { request.layout.similarityAlignment.records[2].orientationPolicy = 'preserve'; },
+  (request) => { request.layout.similarityAlignment.records[2].effectiveReverseComplement = true; },
+  (request) => { request.layout.similarityAlignment.schema = 1; }
+]) {
+  const invalid = structuredClone(resolvedProteinCanonical.renderRequest);
+  mutate(invalid);
+  assert.throws(
+    () => projectCanonicalSessionRequest({
+      renderRequest: invalid,
+      resources: resolvedProteinCanonical.resources
+    }),
+    /duplicate record keys|finite numbers|missing or unknown fields|invalid plan combination|schema must be 2/
+  );
+}
+
+const oldGroups = [{ id: 'og-legacy', members: [
+  { recordIndex: 0, featureIndex: 2, stableFeatureSvgId: 'stable-1', featureSvgId: 'stable-1' },
+  { recordIndex: 1, featureIndex: 3, stableFeatureSvgId: 'stable-2', featureSvgId: 'conflict' },
+  { recordIndex: 8, featureIndex: 4, stableFeatureSvgId: 'out-of-range' }
+] }];
+const migratedGroups = migrateLegacyOrthogroupMembers(oldGroups, [
+  { recordKey: 'first' }, { recordKey: 'second' }
+]);
+assert.deepEqual(migratedGroups[0].members[0], {
+  recordIndex: 0, stableFeatureSvgId: 'stable-1', featureSvgId: 'stable-1',
+  recordKey: 'first', biologicalFeatureId: 'stable-1'
+});
+assert.deepEqual(migratedGroups[0].members.slice(1), oldGroups[0].members.slice(1));
+assert.equal(oldGroups[0].members[0].recordKey, undefined);
+
+const legacyAlignmentRequest = structuredClone(losatPairCanonical.renderRequest);
+legacyAlignmentRequest.schema = 7;
+legacyAlignmentRequest.layout = { recordGapPx: 30 };
+const legacyGenerated = legacyAlignmentRequest.comparisons.find(
+  (comparison) => comparison.kind === 'generatedProteinComparison'
+);
+legacyGenerated.settings.alignOrthogroupFeature = 'og-legacy';
+const legacyProjection = projectCanonicalSessionRequest({
+  renderRequest: legacyAlignmentRequest,
+  resources: losatPairCanonical.resources
+});
+assert.deepEqual(legacyProjection.pipelineState.legacySimilarityAlignment, {
+  target: 'og-legacy',
+  sourceSchema: 7
+});
+const legacyFeatureCatalog = {
+  schema: 3,
+  items: [{
+    recordKeys: ['first', 'second', 'third'],
+    biologicalFeatures: [
+      { recordKey: 'first', biologicalFeatureId: 'legacy-first', sourceFeatureIndex: 1 },
+      { recordKey: 'third', biologicalFeatureId: 'legacy-third', sourceFeatureIndex: 3 }
+    ],
+    features: [],
+    orthogroups: [{
+      id: 'og-legacy',
+      members: [
+        { recordKey: 'first', biologicalFeatureId: 'legacy-first', representative: true },
+        { recordKey: 'third', biologicalFeatureId: 'legacy-third', representative: true }
+      ]
+    }]
+  }]
+};
+const promotedLegacyAlignment = promoteCanonicalRenderRequestToCurrent(
+  legacyAlignmentRequest,
+  { featureCatalog: legacyFeatureCatalog }
+);
+assert.equal(promotedLegacyAlignment.schema, 8);
+assert.equal(
+  Object.hasOwn(
+    promotedLegacyAlignment.comparisons.find(
+      (comparison) => comparison.kind === 'generatedProteinComparison'
+    ).settings,
+    'alignOrthogroupFeature'
+  ),
+  false
+);
+assert.equal(promotedLegacyAlignment.layout.similarityAlignment.groupId, 'og-legacy');
+assert.equal(
+  promotedLegacyAlignment.layout.similarityAlignment.reference.stableFeatureSvgId,
+  'legacy-first'
+);
+assert.deepEqual(
+  promotedLegacyAlignment.layout.similarityAlignment.records.map(
+    ({ recordKey, status }) => [recordKey, status]
+  ),
+  [['first', 'reference'], ['second', 'skipped'], ['third', 'aligned']]
+);
+const malformedLegacyAlignment = structuredClone(legacyAlignmentRequest);
+malformedLegacyAlignment.comparisons.find(
+  (comparison) => comparison.kind === 'generatedProteinComparison'
+).settings.alignOrthogroupFeature = ' ';
+assert.throws(
+  () => projectCanonicalSessionRequest({
+    renderRequest: malformedLegacyAlignment,
+    resources: losatPairCanonical.resources
+  }),
+  /non-empty text/
+);
+const ambiguousLegacyFeatureCatalog = structuredClone(legacyFeatureCatalog);
+ambiguousLegacyFeatureCatalog.items[0].orthogroups.push(structuredClone(
+  ambiguousLegacyFeatureCatalog.items[0].orthogroups[0]
+));
+assert.throws(
+  () => promoteCanonicalRenderRequestToCurrent(
+    legacyAlignmentRequest,
+    { featureCatalog: ambiguousLegacyFeatureCatalog }
+  ),
+  /group is ambiguous/
+);
+const ambiguousLegacyMembers = structuredClone(legacyFeatureCatalog);
+ambiguousLegacyMembers.items[0].biologicalFeatures.push({
+  recordKey: 'third',
+  biologicalFeatureId: 'legacy-third-duplicate',
+  sourceFeatureIndex: 4
+});
+ambiguousLegacyMembers.items[0].orthogroups[0].members.push({
+  recordKey: 'third',
+  biologicalFeatureId: 'legacy-third-duplicate',
+  representative: true
+});
+assert.throws(
+  () => promoteCanonicalRenderRequestToCurrent(
+    legacyAlignmentRequest,
+    { featureCatalog: ambiguousLegacyMembers }
+  ),
+  /ambiguous members/
+);
+const ambiguousLegacyIdentity = structuredClone(legacyFeatureCatalog);
+ambiguousLegacyIdentity.items[0].biologicalFeatures.push(structuredClone(
+  ambiguousLegacyIdentity.items[0].biologicalFeatures[0]
+));
+assert.throws(
+  () => promoteCanonicalRenderRequestToCurrent(
+    legacyAlignmentRequest,
+    { featureCatalog: ambiguousLegacyIdentity }
+  ),
+  /lacks unique saved biological identity metadata/
+);
 const selectedComparisonPlan = structuredClone(state.linearComparisonPlan);
 state.linearComparisonPlan = {
   ...createDefaultLinearComparisonPlan(),
@@ -2400,14 +2874,29 @@ const typedCollinearityResource = {
   kind: 'result',
   value: { type: 'CollinearityResult', fields: {} }
 };
-const resolvedCollinearCanonical = buildCanonicalRenderRequest({
-  state,
-  filesData: linearFilesData,
-  resolvedComparisons: [{
-    kind: 'collinearityResult',
-    typedResource: typedCollinearityResource
-  }]
-});
+const originalTextEncoder = globalThis.TextEncoder;
+const typedResourceText = JSON.stringify(typedCollinearityResource);
+let typedResourceEncodes = 0;
+globalThis.TextEncoder = class extends originalTextEncoder {
+  encode(value) {
+    if (value === typedResourceText) typedResourceEncodes += 1;
+    return super.encode(value);
+  }
+};
+let resolvedCollinearCanonical;
+try {
+  resolvedCollinearCanonical = buildCanonicalRenderRequest({
+    state,
+    filesData: linearFilesData,
+    resolvedComparisons: [{
+      kind: 'collinearityResult',
+      typedResource: typedCollinearityResource
+    }]
+  });
+} finally {
+  globalThis.TextEncoder = originalTextEncoder;
+}
+assert.equal(typedResourceEncodes, 1, 'The full typed result is encoded once, with identical resource bytes');
 assert.deepEqual(
   resolvedCollinearCanonical.renderRequest.comparisons.map(
     (comparison) => comparison.kind
@@ -2615,7 +3104,8 @@ assert.equal(
   false,
   'saved protein artifacts must not leak into an active nucleotide pipeline'
 );
-state.selectedOrthogroupAlignmentFeature.value = '';
+state.similarityAlignmentPlan.value = null;
+state.linearRecordTranslations.value = [];
 state.adv.plot_title_position = resolvedProteinPlotTitlePosition;
 state.losatProgram.value = 'blastn';
 state.linearComparisonPlan = {
@@ -2804,8 +3294,8 @@ assert.equal(pythonConfigProjection.config.form.show_labels_linear, 'orthogroup_
 assert.equal(pythonConfigProjection.config.adv.comparison_height, 31);
 assert.equal(pythonConfigProjection.config.adv.track_axis_gap, 7);
 assert.equal(pythonConfigProjection.config.adv.linear_show_replicon, true);
-assert.equal(pythonConfigProjection.config.adv.linear_show_accession, false);
-assert.equal(pythonConfigProjection.config.adv.linear_show_length, false);
+assert.equal(pythonConfigProjection.config.adv.linear_accession_visibility, 'hide');
+assert.equal(pythonConfigProjection.config.adv.linear_length_visibility, 'hide');
 assert.equal(pythonConfigProjection.config.adv.block_stroke_width, 1);
 assert.equal(pythonConfigProjection.config.adv.block_stroke_color, '#111111');
 assert.equal(pythonConfigProjection.config.adv.line_stroke_width, 2);
@@ -2894,13 +3384,13 @@ assert.equal(projectCanonicalSessionRequest(autoHeightCanonical).config.adv.comp
 state.adv.comparison_height = -2;
 assert.throws(
   () => buildCanonicalRenderRequest({ state, filesData: linearFilesData }),
-  /Pairwise Match Height must be Auto or a positive finite number/
+  { code: 'INPUT_INVALID', context: { field: 'match_height', reason: 'POSITIVE_OR_AUTO' } }
 );
 const historicalInvalidHeight = structuredClone(linearCanonical);
 historicalInvalidHeight.renderRequest.diagramOptions.configOverrides.comparison_height = -2;
 assert.throws(
   () => projectCanonicalSessionRequest(historicalInvalidHeight),
-  /Pairwise Match Height must be Auto or a positive finite number/
+  { code: 'INPUT_INVALID', context: { field: 'match_height', reason: 'POSITIVE_OR_AUTO' } }
 );
 assert.equal(
   projectCanonicalSessionRequest({
@@ -3491,7 +3981,7 @@ for (const invalidGeometry of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
       }),
       filesData
     }),
-    /Feature Width must be Auto or a positive finite number/
+    { code: 'INPUT_INVALID', context: { field: 'feature_width_circular', reason: 'POSITIVE_OR_AUTO' } }
   );
 }
 
@@ -4530,6 +5020,11 @@ const resolvedProteinMarker = resolvedSelectedProtein.renderRequest.comparisons[
 assert.equal(resolvedProteinMarker.mode, 'none');
 assert.deepEqual(resolvedProteinMarker.pairs, []);
 
+assert.equal(characterizedRequests.length, 83);
+assert.equal(createHash('sha256').update(JSON.stringify(characterizedRequests)).digest('hex'),
+  '6d8276e6b67c5d00f88c46c9994d1c85c2d1be41e7ef6617672f69f304694d91',
+  'Extraction preserves the 83 characterized request meanings, including topology, tracks and typed comparisons');
+
 const projectSessionIndex = process.argv.indexOf('--project-session');
 if (projectSessionIndex >= 0) {
   const sessionPath = process.argv[projectSessionIndex + 1];
@@ -4584,10 +5079,10 @@ if (projectSessionIndex >= 0) {
     assert.equal(projectedSession.config.adv.inner_label_y_offset, 0.975);
   }
   if (sessionPath.includes('vibrio-harveyi-group-collinear')) {
-    assert.equal(projectedSession.files.linearSeqs.length, 11);
+    assert.equal(projectedSession.files.linearSeqs.length, 4);
     assert.equal(
       projectedSession.files.linearSeqs[0].gb.name,
-      'NZ_CP125875.1__GCF_030060435.1_ASM3006043v1_genomic.gbff'
+      'NC_004603.1__GCF_000196095.1_ASM19609v1_genomic.gbff'
     );
     assert.equal(projectedSession.config.adv.block_stroke_width, 0);
     assert.equal(projectedSession.config.adv.line_stroke_width, 1);
@@ -4713,4 +5208,132 @@ if (roundTripSessionIndex >= 0) {
   assert.throws(() => projectCanonicalSessionRequest({ ...frozen, webFiles: bad }), /at least two/);
   const noDraft = projectCanonicalSessionRequest({ ...frozen, webFiles: { bindings: { schema: 2, c_gb: null } } });
   assert.equal(noDraft.files.c_gb, null);
+}
+
+// The Web factory changes fresh intent only; persisted request omission stays OFF.
+for (const [fixture, locked] of [
+  ['lambda_basic_linear.v40-schema5.json', false],
+  ['BGC0000708-BGC0000713.v40-schema5.json', true],
+  ['rendered-v27.v40-schema6.json.gz', false]
+]) {
+  const bytes = await readFile(join(repoRoot, 'tests/fixtures/sessions', fixture));
+  const session = JSON.parse(fixture.endsWith('.gz') ? gunzipSync(bytes) : bytes);
+  const projection = projectCanonicalSessionRequest(session);
+  assert.equal(projection.config.form.keep_definition_left_aligned, locked, fixture);
+}
+
+// Canonical request projection reads no File contents; resource bytes are deferred.
+const { createDefaultForm, createDefaultAdv } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'services', 'session-active-config-contract.js')));
+const projectionState = {
+  ...linearCombinationRegressionState(), form: createDefaultForm(), adv: createDefaultAdv('linear'),
+  recordDisplayDrafts: [], featurePlacementOverrides: {},
+  currentColors: ref({ CDS: '#abcdef' }), appliedPaletteColors: ref({ CDS: '#abcdef' }),
+  selectedPalette: ref('default'), appliedPaletteName: ref('default'),
+  canonicalLabelOverrideRows: ref([]), featureVisibilityRules: ref([]),
+  labelTextFeatureOverrides: {}, labelTextBulkOverrides: {}, labelTextFeatureOverrideSources: {},
+  labelVisibilityOverrides: {}, manualSpecificRules: [], manualWhitelist: [], manualPriorityRules: [],
+  unmanagedConfigOverrides: { 'objects.definition.linear.text_anchor': 'start' },
+  linearRecordLayoutEnabled: ref(false), linearRecordRows: []
+};
+const bytesForbidden = () => assert.fail('Canonical projection must not read File contents');
+const inputFile = { name: 'same.gb', size: 4, arrayBuffer: bytesForbidden, text: bytesForbidden };
+const projectionFiles = { linearSeqs: [{ uid: 'a', gb: inputFile, definition: 'Alpha', region_record_id: '#1' },
+  { uid: 'b', gb: inputFile, definition: 'Beta', region_record_id: '#2' }] };
+const projectedCanonical = buildCanonicalRenderRequest({ state: projectionState, filesData: projectionFiles });
+assert.equal(projectedCanonical.renderRequest.records.length, 2);
+assert.equal(
+  projectedCanonical.renderRequest.diagramOptions.configOverrides['objects.definition.linear.text_anchor'], 'start');
+
+// Current typed gaps must survive numeric -> draft projection without text acceptance.
+const pixelGapSession = structuredClone(canonical);
+pixelGapSession.renderRequest.diagramOptions.tracks.circularTrackSlots = [{
+  kind: 'circularTrackSlot', id: 'gc_pixel', renderer: 'dinucleotide_content', enabled: false,
+  side: 'inside', radius: null, width: null, innerGapPx: 10, outerGapPx: 0, z: 0, params: {}
+}];
+const pixelGapDraft = projectCanonicalSessionRequest(pixelGapSession).config.adv.circular_track_slots[0];
+assert.equal(pixelGapDraft.inner_gap_px, '10');
+assert.equal(pixelGapDraft.outer_gap_px, '0');
+assert.equal(pixelGapDraft.enabled, false);
+for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
+  const invalidSession = structuredClone(pixelGapSession);
+  invalidSession.renderRequest.diagramOptions.tracks.circularTrackSlots[0].innerGapPx = invalid;
+  assert.throws(() => projectCanonicalSessionRequest(invalidSession), /innerGapPx must be a nonnegative finite number/);
+}
+
+// CLI sidecars without a saved Web draft initialize from complete typed inputs.
+// The same empty slots in a Web draft remain empty, even with a committed Result.
+{
+  const emptyCliSlots = { schema: 2, c_gb: null, c_gff: null, c_fasta: null,
+    c_depth: null, d_color: null, t_color: null, linearSeqs: [], linearComparisons: [] };
+  const cliProjection = projectCanonicalSessionRequest({ ...numericColumnCanonical,
+    webFiles: { ...numericColumnCanonical.webFiles, bindings: emptyCliSlots }, initializeCliInputs: true });
+  const typedProjection = projectCanonicalSessionRequest(numericColumnCanonical);
+  assert.deepEqual(cliProjection.files.linearSeqs, typedProjection.files.linearSeqs);
+  assert.deepEqual(cliProjection.files.linearComparisons, typedProjection.files.linearComparisons);
+  assert.deepEqual(cliProjection.files.linearCanonicalComparisons, typedProjection.files.linearCanonicalComparisons);
+  assert.deepEqual(emptyCliSlots.linearSeqs, [], 'Restore must not change the imported document');
+  for (const args of [
+    { initializeCliInputs: false },
+    { initializeCliInputs: true, storedConfig: {} }
+  ]) {
+    const emptyWeb = projectCanonicalSessionRequest({ ...numericColumnCanonical,
+      webFiles: { ...numericColumnCanonical.webFiles, bindings: emptyCliSlots }, ...args });
+    assert.deepEqual(emptyWeb.files.linearSeqs, []);
+    assert.deepEqual(emptyWeb.files.linearComparisons, []);
+  }
+  const circularCli = projectCanonicalSessionRequest({ ...canonical,
+    webFiles: { bindings: emptyCliSlots }, initializeCliInputs: true });
+  assert.deepEqual(circularCli.files.c_gb, projectCanonicalSessionRequest(canonical).files.c_gb);
+
+  const gffCli = structuredClone(numericColumnCanonical);
+  const descriptor = (kind, name, text) => ({ kind, name, type: 'text/plain',
+    lastModified: 0, size: Buffer.byteLength(text), encoding: 'base64', data: btoa(text) });
+  for (const [index, record] of gffCli.renderRequest.records.entries()) {
+    gffCli.resources[`annotation-${index}`] = descriptor('gff3', `annotation-${index}.gff`, '##gff-version 3\n');
+    gffCli.resources[`sequence-${index}`] = descriptor('fasta', `sequence-${index}.fa`, '>record\nACGT\n');
+    record.source = { kind: 'gffFasta', gffResourceId: `annotation-${index}`, fastaResourceId: `sequence-${index}` };
+  }
+  const gffProjection = projectCanonicalSessionRequest({ ...gffCli,
+    webFiles: { ...gffCli.webFiles, bindings: emptyCliSlots }, initializeCliInputs: true });
+  assert.deepEqual(gffProjection.files.linearSeqs, projectCanonicalSessionRequest(gffCli).files.linearSeqs);
+  assert.deepEqual(gffProjection.files.linearComparisons, projectCanonicalSessionRequest(gffCli).files.linearComparisons);
+  assert.equal(gffProjection.inputType, 'gff');
+  assert(gffProjection.files.linearSeqs.every(row => row.gff && row.fasta && row.depth));
+  assert.equal(gffProjection.files.linearComparisons.length, 1, 'Embedded comparison TSV survives');
+  const originalGffBindings = { ...emptyCliSlots,
+    c_gff: { resourceId: 'annotation-0', name: 'original.gff', type: '', lastModified: 7 },
+    c_fasta: { resourceId: 'sequence-0', name: 'original.fa', type: '', lastModified: 8 } };
+  const originalGff = projectCanonicalSessionRequest({ ...canonical,
+    resources: { ...canonical.resources, ...gffCli.resources },
+    webFiles: { bindings: originalGffBindings }, initializeCliInputs: true });
+  assert.equal(originalGff.inputType, 'gff');
+  assert.equal(originalGff.files.c_gb, null);
+  assert.equal(originalGff.files.c_gff.name, 'original.gff');
+  assert.equal(originalGff.files.c_gff.data, gffCli.resources['annotation-0'].data);
+  assert.equal(originalGff.files.c_fasta.data, gffCli.resources['sequence-0'].data);
+}
+
+// A helper-produced typed resource uses the Python codec bytes without serializing its graph again.
+{
+  state.adv.linear_track_slots_enabled = false;
+  state.mode.value = 'linear';
+  state.losat.blastp.mode = 'collinear';
+  state.linearComparisonPlan = { ...createDefaultLinearComparisonPlan(), mode: 'adjacent' };
+  const typed = { schema: 3, kind: 'result', value: { type: 'CollinearityResult', fields: {} } };
+  const text = JSON.stringify(typed);
+  const backing = { kind: 'collinearity-result', type: 'application/json', size: Buffer.byteLength(text),
+    lastModified: 0, encoding: 'base64', data: Buffer.from(text).toString('base64') };
+  bindCanonicalTypedResource(typed, backing);
+  Object.defineProperty(typed, 'toJSON', { value() { throw new Error('Unexpected full graph serialization'); } });
+  const built = buildCanonicalRenderRequest({ state, filesData: linearFilesData,
+    resolvedComparisons: [{ kind: 'collinearityResult', typedResource: typed }] });
+  const resource = built.resources['comparison-canonical-collinearity-1'];
+  assert.equal(resource.data, backing.data);
+  assert.equal(resource.size, backing.size);
+  assert.equal(built.resources['comparison-canonical-collinearity-1'], resource);
+  assert.deepEqual(JSON.parse(Buffer.from(resource.data, 'base64').toString('utf8')),
+    { schema: 3, kind: 'result', value: { type: 'CollinearityResult', fields: {} } });
+  assert.throws(() => bindCanonicalTypedResource(typed, { ...backing, kind: 'orthogroup-result' }), /backing is invalid/);
+  assert.throws(() => bindCanonicalTypedResource(typed, { ...backing, size: -1 }), /backing is invalid/);
 }

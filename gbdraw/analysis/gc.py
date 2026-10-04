@@ -11,7 +11,11 @@ from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
-from gbdraw.analysis.skew import _build_prefix_counts, _window_count_from_prefix  # type: ignore[reportMissingImports]
+from gbdraw.analysis.skew import (  # type: ignore[reportMissingImports]
+    _build_prefix_counts,
+    _window_count_from_prefix,
+    counted_dinucleotide,
+)
 
 
 def calculate_gc_percent(seq: object) -> float:
@@ -81,10 +85,7 @@ def circular_dinucleotide_content_df(
 ) -> DataFrame:
     """Return centered circular dinucleotide-content data for circular tracks."""
 
-    nt_list = list(str(nt).upper())
-    nt_1 = nt_list[0]
-    nt_2 = nt_list[1]
-    seq_str = str(record.seq).upper()
+    nt, nt_1, nt_2, seq_str = counted_dinucleotide(record, nt)
     seq_length = len(seq_str)
     content_legend = f"{nt} content"
 

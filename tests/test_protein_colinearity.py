@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
@@ -12,14 +13,16 @@ import pandas as pd
 import pytest
 from Bio import SeqIO
 from Bio.Seq import Seq
-from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
+from Bio.SeqFeature import AfterPosition, BeforePosition, CompoundLocation, FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
 import gbdraw.api.diagram as api_diagram_module
 import gbdraw.api.request_render as request_render_module
 import gbdraw.analysis.protein_colinearity as protein_colinearity_module
+import gbdraw.comparisons.losat_runtime as losat_runtime_module
 import gbdraw.linear as linear_cli_module
+import gbdraw.losat_setup as losat_setup_module
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.requests import LinearDiagramRequest
 from gbdraw.analysis.protein_colinearity import (
@@ -53,16 +56,21 @@ from gbdraw.analysis.protein_colinearity import (
     validate_protein_raw_entry_references,
 )
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
-from gbdraw.api.options import LinearDiagramOptions
-from gbdraw.diagrams.linear.orthogroup_alignment import (
-    calculate_orthogroup_alignment_canvas_adjustment,
-    calculate_orthogroup_alignment_canvas_extents,
-    calculate_orthogroup_alignment_offsets,
+from gbdraw.api.options import (
+    LinearDiagramOptions,
+    LosatRuntimeOptions,
+    LosatSearchOptions,
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.io.genome import load_gff_fasta
 from gbdraw.io.record_select import reverse_records
 from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
+
+
+MG1655_START_CODON_SUBSET = (
+    Path(__file__).resolve().parent / "fixtures" / "cds_translation" / "mg1655_start_codon_subset.gb"
+)
 
 
 def _record(
@@ -964,6 +972,200 @@ def test_extract_cds_proteins_handles_compound_location_span() -> None:
     assert protein.strand == 1
 
 
+def _write_gff3_contig(
+    tmp_path: Path,
+    sequence: str,
+    rows: list[tuple[int, int, str, str, str]],
+) -> tuple[Path, Path]:
+    """Write one GFF3 contig whose CDS rows are (start, end, strand, phase, attributes)."""
+
+    gff_path = tmp_path / "proteins.gff3"
+    fasta_path = tmp_path / "proteins.fasta"
+    lines = ["##gff-version 3", f"##sequence-region ctg1 1 {len(sequence)}"]
+    lines.extend(
+        f"ctg1\ttest\tCDS\t{start}\t{end}\t.\t{strand}\t{phase}\t{attributes}"
+        for start, end, strand, phase, attributes in rows
+    )
+    gff_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    fasta_path.write_text(f">ctg1\n{sequence}\n", encoding="utf-8")
+    return gff_path, fasta_path
+
+
+def _protein_sequences_by_locus_tag(result: object) -> dict[str, str]:
+    return {
+        str(protein.locus_tag): protein.sequence
+        for proteins in result.proteins_by_record  # type: ignore[attr-defined]
+        for protein in proteins
+    }
+
+
+@pytest.mark.linear
+def test_extract_cds_proteins_matches_mg1655_translation_from_gff3(tmp_path: Path) -> None:
+    record = SeqIO.read(MG1655_START_CODON_SUBSET, "genbank")
+    cds_features = [feature for feature in record.features if feature.type == "CDS"]
+    expected = {
+        feature.qualifiers["locus_tag"][0]: feature.qualifiers["translation"][0]
+        for feature in cds_features
+    }
+    rows = [
+        (
+            int(feature.location.start) + 1,
+            int(feature.location.end),
+            "+" if feature.location.strand == 1 else "-",
+            "0",
+            f"ID={tag};locus_tag={tag};transl_table=11",
+        )
+        for feature in cds_features
+        for tag in feature.qualifiers["locus_tag"]
+    ]
+    gff_path, fasta_path = _write_gff3_contig(tmp_path, str(record.seq), rows)
+
+    records = load_gff_fasta([str(gff_path)], [str(fasta_path)])
+
+    assert _protein_sequences_by_locus_tag(extract_cds_proteins(records)) == expected
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("reverse", [False, True])
+def test_extract_cds_proteins_reads_gff3_phase_and_five_prime_completeness(
+    tmp_path: Path,
+    reverse: bool,
+) -> None:
+    gff_path, fasta_path = _write_gff3_contig(
+        tmp_path,
+        "CATGAAACCCGGGTAA" + "GTGAAACCCGGGTAA" + "GTGAAACCCGGG" + "CCCGGGTTTCAC" + "GTGAAACCCGGG",
+        [
+            (1, 16, "+", "1", "ID=phase1;locus_tag=phase1;partial=true;start_range=.,1"),
+            (17, 31, "+", "0", "ID=complete;locus_tag=complete;transl_table=11"),
+            (32, 43, "+", "0", "ID=plus3;locus_tag=plus3;transl_table=11;partial=true;end_range=43,."),
+            (44, 55, "-", "0", "ID=minus3;locus_tag=minus3;transl_table=11;partial=true;start_range=.,44"),
+            (56, 67, "+", "0", "ID=pseudo;locus_tag=pseudo;transl_table=11;pseudo=true"),
+        ],
+    )
+
+    records = load_gff_fasta(
+        [str(gff_path)],
+        [str(fasta_path)],
+        reverse_flags=[reverse],
+    )
+
+    assert _protein_sequences_by_locus_tag(extract_cds_proteins(records)) == {
+        "phase1": "MKPG",
+        "complete": "MKPG",
+        "plus3": "MKPG",
+        "minus3": "MKPG",
+        "pseudo": "VKPG",
+    }
+
+
+@pytest.mark.linear
+def test_extract_cds_proteins_keeps_fuzzy_five_prime_codon_literal() -> None:
+    record = _record(
+        "record_fuzzy",
+        sequence="GTGAAACCC" + "GGGTTTCAC" + "GTGAAACCC",
+        features=[
+            SeqFeature(
+                FeatureLocation(BeforePosition(0), 9, strand=1),
+                type="CDS",
+                qualifiers={"locus_tag": ["plus5"], "transl_table": ["11"]},
+            ),
+            SeqFeature(
+                FeatureLocation(9, AfterPosition(18), strand=-1),
+                type="CDS",
+                qualifiers={"locus_tag": ["minus5"], "transl_table": ["11"]},
+            ),
+            SeqFeature(
+                FeatureLocation(18, AfterPosition(27), strand=1),
+                type="CDS",
+                qualifiers={"locus_tag": ["plus3"], "transl_table": ["11"]},
+            ),
+        ],
+    )
+
+    assert _protein_sequences_by_locus_tag(extract_cds_proteins([record])) == {
+        "plus5": "VKP",
+        "minus5": "VKP",
+        "plus3": "MKP",
+    }
+
+
+@pytest.mark.linear
+def test_protein_caches_do_not_reuse_results_from_the_literal_start_translation() -> None:
+    """FE-07 evidence: cached LOSATP rows from the literal GTG translation stay unused."""
+
+    def gtg_records(qualifiers: dict[str, list[str]]) -> list[SeqRecord]:
+        return [
+            _record(
+                "record_a",
+                sequence="GTGAAATAG" * 20,
+                features=[_cds(0, 9, qualifiers={"transl_table": ["11"], **qualifiers})],
+            ),
+            _record(
+                "record_b",
+                sequence="GTGAAATAG" * 20,
+                features=[_cds(9, 18, qualifiers={"transl_table": ["11"], **qualifiers})],
+            ),
+        ]
+
+    extraction = extract_protein_identity_manifest(
+        gtg_records({}),
+        record_instance_keys=("left", "right"),
+    )
+    literal = extract_protein_identity_manifest(
+        gtg_records({"translation": ["VK"]}),
+        record_instance_keys=("left", "right"),
+    )
+    query_proteins, subject_proteins = extraction.proteins_by_record
+    assert [protein.sequence for protein in query_proteins + subject_proteins] == ["MK", "MK"]
+    # Current schema-4 raw cache keys include each record's protein-set hash.
+    assert set(extraction.protein_set_hashes).isdisjoint(literal.protein_set_hashes)
+
+    # Legacy schema-2 promotion re-derives the legacy FASTA from the current
+    # extraction, so an entry computed from the literal translation is rejected.
+    literal_query = protein_colinearity_module._with_stable_web_protein_ids(
+        literal.proteins_by_record[0],
+        "legacy_left",
+    )
+    literal_subject = protein_colinearity_module._with_stable_web_protein_ids(
+        literal.proteins_by_record[1],
+        "legacy_right",
+    )
+    _, query_hash, subject_hash = build_web_losat_cache_key(
+        query_fasta=proteins_to_fasta(literal_query),
+        subject_fasta=proteins_to_fasta(literal_subject),
+        args=[],
+    )
+    scan = promote_legacy_protein_raw_cache_entries(
+        [
+            {
+                "schema": 2,
+                "kind": "raw-losat",
+                "key": "literal-start",
+                "program": "blastp",
+                "outfmt": "6",
+                "args": [],
+                "text": (
+                    f"{literal_query[0].protein_id}\t{literal_subject[0].protein_id}"
+                    "\t100\t2\t0\t0\t1\t2\t1\t2\t1e-5\t20\n"
+                ),
+                "queryCanonicalHash": query_hash,
+                "subjectCanonicalHash": subject_hash,
+            }
+        ],
+        query_proteins=query_proteins,
+        subject_proteins=subject_proteins,
+        query_fasta=proteins_to_fasta(query_proteins),
+        subject_fasta=proteins_to_fasta(subject_proteins),
+        identity_manifest=extraction.identity_manifest,
+        expected_args=[],
+    )
+
+    assert scan.promotion is None
+    assert [rejection.reason for rejection in scan.rejections] == [
+        "Legacy query FASTA hash does not match."
+    ]
+
+
 @pytest.mark.linear
 def test_filter_protein_hits_by_thresholds_removes_low_confidence_bridge() -> None:
     raw_hits = pd.DataFrame.from_records(
@@ -1462,7 +1664,7 @@ def test_run_losatp_blastp_passes_num_threads(monkeypatch: pytest.MonkeyPatch) -
         captured["kwargs"] = kwargs
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(losat_runtime_module.subprocess, "run", fake_run)
 
     protein_colinearity_module.run_losatp_blastp(
         ">query\nM\n",
@@ -1482,6 +1684,230 @@ def test_run_losatp_blastp_passes_num_threads(monkeypatch: pytest.MonkeyPatch) -
     assert command[command.index("-num_threads") + 1] == "4"
 
 
+def _write_conda_losat(prefix: Path, *, executable: bool = True) -> Path:
+    (prefix / "conda-meta").mkdir(parents=True)
+    candidate = prefix / "bin" / "losat"
+    candidate.parent.mkdir()
+    candidate.write_text("#!/bin/sh\n", encoding="utf-8")
+    candidate.chmod(0o755 if executable else 0o644)
+    return candidate.absolute()
+
+
+@pytest.mark.linear
+def test_conda_losat_precedes_cache_bundled_and_path_without_side_effects(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    prefix = tmp_path / "conda-b"
+    candidate = _write_conda_losat(prefix)
+    original_bytes = candidate.read_bytes()
+    original_mode = candidate.stat().st_mode
+
+    monkeypatch.setattr(losat_runtime_module.sys, "prefix", str(prefix))
+    monkeypatch.setattr(
+        losat_setup_module,
+        "managed_losat",
+        lambda: (_ for _ in ()).throw(AssertionError("managed cache was read")),
+    )
+    monkeypatch.setattr(
+        losat_runtime_module,
+        "_bundled_losat_resource",
+        lambda: (_ for _ in ()).throw(AssertionError("bundled discovery ran")),
+    )
+    monkeypatch.setattr(
+        losat_runtime_module,
+        "_path_executable",
+        lambda _name: (_ for _ in ()).throw(AssertionError("PATH discovery ran")),
+    )
+
+    with ExitStack() as stack:
+        runtime = losat_runtime_module.resolve_losat_runtime("losatp", stack=stack)
+
+    assert runtime.source == "conda"
+    assert runtime.executable == str(candidate)
+    assert candidate.read_bytes() == original_bytes
+    assert candidate.stat().st_mode == original_mode
+    assert not (candidate.parent / "LOSAT").exists()
+
+
+@pytest.mark.linear
+def test_conda_losat_identity_uses_sys_prefix_not_environment_or_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    prefix_a = tmp_path / "conda-a"
+    prefix_b = tmp_path / "conda-b"
+    candidate_a = _write_conda_losat(prefix_a)
+    candidate_b = _write_conda_losat(prefix_b)
+    monkeypatch.setattr(losat_runtime_module.sys, "prefix", str(prefix_b))
+    monkeypatch.setenv("CONDA_PREFIX", str(prefix_a))
+    monkeypatch.setenv("PATH", f"{candidate_a.parent}{os.pathsep}{os.environ.get('PATH', '')}")
+
+    with ExitStack() as stack:
+        runtime = losat_runtime_module.resolve_losat_runtime("losatp", stack=stack)
+
+    assert runtime.source == "conda"
+    assert runtime.executable == str(candidate_b)
+
+
+@pytest.mark.linear
+def test_conda_prefix_without_losat_uses_normal_path_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    prefix_a = tmp_path / "conda-a"
+    prefix_b = tmp_path / "conda-b"
+    candidate_a = _write_conda_losat(prefix_a)
+    (prefix_b / "conda-meta").mkdir(parents=True)
+    monkeypatch.setattr(losat_runtime_module.sys, "prefix", str(prefix_b))
+    monkeypatch.setenv("CONDA_PREFIX", str(prefix_a))
+    monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: None)
+    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", lambda: None)
+    monkeypatch.setattr(
+        losat_runtime_module,
+        "_path_executable",
+        lambda name: str(candidate_a) if name == "losat" else None,
+    )
+
+    with ExitStack() as stack:
+        runtime = losat_runtime_module.resolve_losat_runtime("losatp", stack=stack)
+
+    assert runtime.source == "path"
+    assert runtime.executable == str(candidate_a)
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize("conda_marker_kind", ["missing", "file"])
+def test_non_conda_or_venv_prefix_ignores_base_conda_binary(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    conda_marker_kind: str,
+) -> None:
+    base_prefix = tmp_path / "base-conda"
+    _write_conda_losat(base_prefix)
+    venv_prefix = tmp_path / "venv"
+    local_candidate = venv_prefix / "bin" / "losat"
+    local_candidate.parent.mkdir(parents=True)
+    local_candidate.write_text("not selected", encoding="utf-8")
+    if conda_marker_kind == "file":
+        (venv_prefix / "conda-meta").write_text("not a directory", encoding="utf-8")
+    path_candidate = tmp_path / "path" / "losat"
+    monkeypatch.setattr(losat_runtime_module.sys, "prefix", str(venv_prefix))
+    monkeypatch.setattr(losat_runtime_module.sys, "base_prefix", str(base_prefix))
+    monkeypatch.setenv("CONDA_PREFIX", str(base_prefix))
+    monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: None)
+    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", lambda: None)
+    monkeypatch.setattr(
+        losat_runtime_module,
+        "_path_executable",
+        lambda name: str(path_candidate) if name == "losat" else None,
+    )
+
+    with ExitStack() as stack:
+        runtime = losat_runtime_module.resolve_losat_runtime("losatp", stack=stack)
+
+    assert runtime.source == "path"
+    assert runtime.executable == str(path_candidate)
+
+
+@pytest.mark.linear
+@pytest.mark.parametrize(
+    ("candidate_kind", "message"),
+    [
+        ("broken-link", "broken symbolic link"),
+        ("directory", "not a regular file"),
+        ("non-executable", "not executable"),
+    ],
+)
+def test_invalid_conda_losat_stops_at_its_path_without_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    candidate_kind: str,
+    message: str,
+) -> None:
+    prefix = tmp_path / "conda"
+    (prefix / "conda-meta").mkdir(parents=True)
+    candidate = prefix / "bin" / "losat"
+    candidate.parent.mkdir()
+    if candidate_kind == "broken-link":
+        candidate.symlink_to(prefix / "missing-losat")
+    elif candidate_kind == "directory":
+        candidate.mkdir()
+    else:
+        candidate.write_text("#!/bin/sh\n", encoding="utf-8")
+        candidate.chmod(0o644)
+
+    monkeypatch.setattr(losat_runtime_module.sys, "prefix", str(prefix))
+    monkeypatch.setattr(
+        losat_setup_module,
+        "managed_losat",
+        lambda: (_ for _ in ()).throw(AssertionError("managed fallback ran")),
+    )
+    monkeypatch.setattr(
+        losat_runtime_module,
+        "_path_executable",
+        lambda _name: (_ for _ in ()).throw(AssertionError("PATH fallback ran")),
+    )
+
+    with ExitStack() as stack, pytest.raises(ValidationError, match=message) as exc_info:
+        losat_runtime_module.resolve_losat_runtime("losatp", stack=stack)
+
+    assert str(candidate.absolute()) in str(exc_info.value)
+
+
+@pytest.mark.linear
+def test_conda_losat_execution_failure_does_not_fall_back(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    prefix = tmp_path / "conda"
+    candidate = _write_conda_losat(prefix)
+    monkeypatch.setattr(losat_runtime_module.sys, "prefix", str(prefix))
+    monkeypatch.setattr(
+        losat_runtime_module,
+        "_path_executable",
+        lambda _name: (_ for _ in ()).throw(AssertionError("PATH fallback ran")),
+    )
+    monkeypatch.setattr(
+        losat_runtime_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("exec format error")),
+    )
+
+    with pytest.raises(ValidationError, match="could not be started") as exc_info:
+        protein_colinearity_module.run_losatp_blastp(
+            ">query\nM\n",
+            ">subject\nM\n",
+        )
+
+    assert str(candidate) in str(exc_info.value)
+
+
+@pytest.mark.linear
+def test_conda_losat_nonzero_exit_reports_selected_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    prefix = tmp_path / "conda"
+    candidate = _write_conda_losat(prefix)
+    monkeypatch.setattr(losat_runtime_module.sys, "prefix", str(prefix))
+    monkeypatch.setattr(
+        losat_runtime_module.subprocess,
+        "run",
+        lambda command, **_kwargs: subprocess.CompletedProcess(
+            command, 2, stdout="", stderr="bad subject"
+        ),
+    )
+
+    with pytest.raises(ValidationError, match="bad subject") as exc_info:
+        protein_colinearity_module.run_losatp_blastp(
+            ">query\nM\n",
+            ">subject\nM\n",
+        )
+
+    assert str(candidate) in str(exc_info.value)
+
+
 @pytest.mark.linear
 def test_run_losatp_blastp_uses_bundled_binary_by_default(
     monkeypatch: pytest.MonkeyPatch,
@@ -1497,11 +1923,13 @@ def test_run_losatp_blastp_uses_bundled_binary_by_default(
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr(
-        protein_colinearity_module,
-        "_bundled_losatp_resource",
+        losat_runtime_module,
+        "_bundled_losat_resource",
         lambda: bundled_losat,
     )
-    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(losat_runtime_module, "_conda_losat_runtime", lambda: None)
+    monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: None)
+    monkeypatch.setattr(losat_runtime_module.subprocess, "run", fake_run)
 
     protein_colinearity_module.run_losatp_blastp(
         ">query\nM\n",
@@ -1526,9 +1954,11 @@ def test_run_losatp_blastp_uses_path_losat_before_blastp(
     def fake_path_executable(name: str) -> str | None:
         return {"losat": "/usr/local/bin/losat", "blastp": "/usr/local/bin/blastp"}.get(name)
 
-    monkeypatch.setattr(protein_colinearity_module, "_bundled_losatp_resource", lambda: None)
-    monkeypatch.setattr(protein_colinearity_module, "_path_executable", fake_path_executable)
-    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", lambda: None)
+    monkeypatch.setattr(losat_runtime_module, "_conda_losat_runtime", lambda: None)
+    monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: None)
+    monkeypatch.setattr(losat_runtime_module, "_path_executable", fake_path_executable)
+    monkeypatch.setattr(losat_runtime_module.subprocess, "run", fake_run)
 
     protein_colinearity_module.run_losatp_blastp(
         ">query\nM\n",
@@ -1553,9 +1983,11 @@ def test_run_losatp_blastp_falls_back_to_path_ncbi_blastp(
     def fake_path_executable(name: str) -> str | None:
         return "/usr/local/bin/blastp" if name == "blastp" else None
 
-    monkeypatch.setattr(protein_colinearity_module, "_bundled_losatp_resource", lambda: None)
-    monkeypatch.setattr(protein_colinearity_module, "_path_executable", fake_path_executable)
-    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", lambda: None)
+    monkeypatch.setattr(losat_runtime_module, "_conda_losat_runtime", lambda: None)
+    monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: None)
+    monkeypatch.setattr(losat_runtime_module, "_path_executable", fake_path_executable)
+    monkeypatch.setattr(losat_runtime_module.subprocess, "run", fake_run)
 
     protein_colinearity_module.run_losatp_blastp(
         ">query\nM\n",
@@ -1593,9 +2025,14 @@ def test_run_losatp_blastp_explicit_ncbi_blastp_bypasses_losat_discovery(
         captured["kwargs"] = kwargs
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    monkeypatch.setattr(protein_colinearity_module, "_bundled_losatp_resource", fail_bundled)
-    monkeypatch.setattr(protein_colinearity_module, "_path_executable", fail_path)
-    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", fail_bundled)
+    monkeypatch.setattr(
+        losat_runtime_module,
+        "_conda_losat_runtime",
+        lambda: (_ for _ in ()).throw(AssertionError("conda discovery should not run")),
+    )
+    monkeypatch.setattr(losat_runtime_module, "_path_executable", fail_path)
+    monkeypatch.setattr(losat_runtime_module.subprocess, "run", fake_run)
 
     protein_colinearity_module.run_losatp_blastp(
         ">query\nM\n",
@@ -1613,7 +2050,7 @@ def test_run_losatp_blastp_explicit_ncbi_blastp_bypasses_losat_discovery(
 
 @pytest.mark.linear
 def test_run_losatp_blastp_rejects_ambiguous_explicit_runtimes() -> None:
-    with pytest.raises(ValidationError, match="either --losatp_bin or --ncbi_blastp_bin"):
+    with pytest.raises(ValidationError, match="either --losat_bin or --ncbi_blast_bin"):
         protein_colinearity_module.run_losatp_blastp(
             ">query\nM\n",
             ">subject\nM\n",
@@ -1639,9 +2076,14 @@ def test_run_losatp_blastp_explicit_losat_bypasses_discovery(
         captured["kwargs"] = kwargs
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    monkeypatch.setattr(protein_colinearity_module, "_bundled_losatp_resource", fail_bundled)
-    monkeypatch.setattr(protein_colinearity_module, "_path_executable", fail_path)
-    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", fail_bundled)
+    monkeypatch.setattr(
+        losat_runtime_module,
+        "_conda_losat_runtime",
+        lambda: (_ for _ in ()).throw(AssertionError("conda discovery should not run")),
+    )
+    monkeypatch.setattr(losat_runtime_module, "_path_executable", fail_path)
+    monkeypatch.setattr(losat_runtime_module.subprocess, "run", fake_run)
 
     protein_colinearity_module.run_losatp_blastp(
         ">query\nM\n",
@@ -1656,11 +2098,13 @@ def test_run_losatp_blastp_explicit_losat_bypasses_discovery(
 def test_run_losatp_blastp_missing_runtime_error_is_actionable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(protein_colinearity_module, "_bundled_losatp_resource", lambda: None)
-    monkeypatch.setattr(protein_colinearity_module, "_path_executable", lambda _name: None)
+    monkeypatch.setattr(losat_runtime_module, "_bundled_losat_resource", lambda: None)
+    monkeypatch.setattr(losat_runtime_module, "_conda_losat_runtime", lambda: None)
+    monkeypatch.setattr(losat_setup_module, "managed_losat", lambda: None)
+    monkeypatch.setattr(losat_runtime_module, "_path_executable", lambda _name: None)
     monkeypatch.setattr(
-        protein_colinearity_module,
-        "_bundled_losatp_platform_dir",
+        losat_runtime_module,
+        "_bundled_platform_dir",
         lambda: "macos-arm64",
     )
 
@@ -1675,20 +2119,20 @@ def test_run_losatp_blastp_missing_runtime_error_is_actionable(
     assert "macos-arm64" in message
     assert "`losat` was not found on PATH" in message
     assert "`blastp` was not found on PATH" in message
-    assert "--ncbi_blastp_bin" in message
+    assert "--ncbi_blast_bin" in message
 
 
 @pytest.mark.linear
 def test_bundled_losatp_platform_dir_is_platform_specific(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(protein_colinearity_module.sys, "platform", "linux")
-    monkeypatch.setattr(protein_colinearity_module.platform, "machine", lambda: "x86_64")
-    assert protein_colinearity_module._bundled_losatp_platform_dir() == "linux-x86_64"
+    monkeypatch.setattr(losat_runtime_module.sys, "platform", "linux")
+    monkeypatch.setattr(losat_runtime_module.platform, "machine", lambda: "x86_64")
+    assert losat_runtime_module._bundled_platform_dir() == "linux-x86_64"
 
-    monkeypatch.setattr(protein_colinearity_module.sys, "platform", "darwin")
-    monkeypatch.setattr(protein_colinearity_module.platform, "machine", lambda: "arm64")
-    assert protein_colinearity_module._bundled_losatp_platform_dir() == "macos-arm64"
+    monkeypatch.setattr(losat_runtime_module.sys, "platform", "darwin")
+    monkeypatch.setattr(losat_runtime_module.platform, "machine", lambda: "arm64")
+    assert losat_runtime_module._bundled_platform_dir() == "macos-arm64"
 
 
 @pytest.mark.linear
@@ -1700,7 +2144,7 @@ def test_run_losatp_blastp_omits_hsp_cap_when_requested(monkeypatch: pytest.Monk
         captured["kwargs"] = kwargs
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
-    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(losat_runtime_module.subprocess, "run", fake_run)
 
     protein_colinearity_module.run_losatp_blastp(
         ">query\nM\n",
@@ -1713,64 +2157,6 @@ def test_run_losatp_blastp_omits_hsp_cap_when_requested(monkeypatch: pytest.Monk
 
 
 @pytest.mark.linear
-def test_build_losat_blastp_command_uses_losat_flags() -> None:
-    command = protein_colinearity_module._build_losat_blastp_command(
-        executable="losat",
-        query_path=Path("query.faa"),
-        subject_path=Path("subject.faa"),
-        max_hits=5,
-        max_hsps_per_subject=2,
-        threads=4,
-    )
-
-    assert command[:2] == ["losat", "blastp"]
-    assert "-max_hsps" in command
-    assert "-max_target_seqs" in command
-    assert "-num_threads" in command
-
-
-@pytest.mark.linear
-def test_build_ncbi_blastp_command_uses_ncbi_flags() -> None:
-    command = protein_colinearity_module._build_ncbi_blastp_command(
-        executable="blastp",
-        query_path=Path("query.faa"),
-        subject_path=Path("subject.faa"),
-        max_hits=5,
-        max_hsps_per_subject=2,
-        threads=4,
-    )
-
-    assert command[0] == "blastp"
-    assert command[1] == "-query"
-    assert "-max_hsps" in command
-    assert "-max_target_seqs" in command
-    assert "-num_threads" in command
-
-
-@pytest.mark.linear
-def test_build_blastp_commands_omit_hsp_cap_when_requested() -> None:
-    losat_command = protein_colinearity_module._build_losat_blastp_command(
-        executable="losat",
-        query_path=Path("query.faa"),
-        subject_path=Path("subject.faa"),
-        max_hits=None,
-        max_hsps_per_subject=None,
-        threads=None,
-    )
-    ncbi_command = protein_colinearity_module._build_ncbi_blastp_command(
-        executable="blastp",
-        query_path=Path("query.faa"),
-        subject_path=Path("subject.faa"),
-        max_hits=None,
-        max_hsps_per_subject=None,
-        threads=None,
-    )
-
-    assert "-max_hsps" not in losat_command
-    assert "-max_hsps" not in ncbi_command
-
-
-@pytest.mark.linear
 def test_run_losatp_blastp_calls_raw_output_callback_for_ncbi(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1779,7 +2165,7 @@ def test_run_losatp_blastp_calls_raw_output_callback_for_ncbi(
     def fake_run(command, **kwargs):
         return subprocess.CompletedProcess(command, 0, stdout="q\ts\t100\t1\t0\t0\t1\t1\t1\t1\t0\t10\n", stderr="")
 
-    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(losat_runtime_module.subprocess, "run", fake_run)
 
     result = protein_colinearity_module.run_losatp_blastp(
         ">query\nM\n",
@@ -1800,7 +2186,7 @@ def test_run_losatp_blastp_ncbi_failure_includes_stderr(
     def fake_run(command, **kwargs):
         return subprocess.CompletedProcess(command, 2, stdout="", stderr="bad subject")
 
-    monkeypatch.setattr(protein_colinearity_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(losat_runtime_module.subprocess, "run", fake_run)
 
     with pytest.raises(ValidationError, match="NCBI BLAST\\+ blastp failed.*bad subject"):
         protein_colinearity_module.run_losatp_blastp(
@@ -2173,7 +2559,9 @@ def test_linear_cli_save_session_writes_web_losat_cache_entries(
             "--gbk",
             str(input_a),
             str(input_b),
-            "--protein_blastp_mode",
+            "--losat",
+            "losatp",
+            "--losatp_mode",
             "pairwise",
             "-o",
             str(output_prefix),
@@ -2197,7 +2585,9 @@ def test_linear_cli_save_session_writes_web_losat_cache_entries(
     assert payload["proteinIdentityManifest"]["schema"] == 2
     canonical_request = captured["canonical_request"]
     assert isinstance(canonical_request, LinearDiagramRequest)
-    assert canonical_request.options.protein_blastp_mode == "pairwise"
+    assert canonical_request.options.losat_search is not None
+    assert canonical_request.options.losat_search.program == "losatp"
+    assert canonical_request.options.losat_search.losatp_mode == "pairwise"
 
 
 @pytest.mark.linear
@@ -2238,7 +2628,8 @@ def test_linear_cli_writes_hydrated_raw_protein_evidence_and_honors_overwrite(
     input_a.write_text("LOCUS       A\n", encoding="utf-8")
     input_b.write_text("LOCUS       B\n", encoding="utf-8")
     output_prefix = tmp_path / "out"
-    evidence_path = tmp_path / "raw-evidence.tsv"
+    evidence_dir = tmp_path / "raw-evidence"
+    evidence_path = evidence_dir / "losatp.raw.tsv"
     records_by_path = {str(input_a): records[0], str(input_b): records[1]}
 
     monkeypatch.setattr(
@@ -2272,10 +2663,12 @@ def test_linear_cli_writes_hydrated_raw_protein_evidence_and_honors_overwrite(
         "--gbk",
         str(input_a),
         str(input_b),
-        "--protein_blastp_mode",
+        "--losat",
+        "losatp",
+        "--losatp_mode",
         "pairwise",
-        "--protein_blastp_output",
-        str(evidence_path),
+        "--losat_output_dir",
+        str(evidence_dir),
         "-o",
         str(output_prefix),
         "-f",
@@ -2320,36 +2713,26 @@ def test_linear_cli_validates_raw_protein_output_option(
 ) -> None:
     with pytest.raises(SystemExit):
         linear_cli_module._get_args(["--help"])
-    assert "--protein_blastp_output TSV" in capsys.readouterr().out
+    assert "--losat_output_dir DIR" in capsys.readouterr().out
 
     with pytest.raises(SystemExit, match="2"):
         linear_cli_module._get_args(
-            ["--gbk", "a.gb", "b.gb", "--protein_blastp_output", "raw.tsv"]
-        )
-    with pytest.raises(SystemExit, match="2"):
-        linear_cli_module._get_args(
-            [
-                "--gbk",
-                "a.gb",
-                "b.gb",
-                "--protein_blastp_mode",
-                "pairwise",
-                "--protein_blastp_output",
-                "raw.txt",
-            ]
+            ["--gbk", "a.gb", "b.gb", "--losat_output_dir", "raw"]
         )
     parsed = linear_cli_module._get_args(
         [
             "--gbk",
             "a.gb",
             "b.gb",
-            "--protein_blastp_mode",
+            "--losat",
+            "losatp",
+            "--losatp_mode",
             "pairwise",
-            "--protein_blastp_output",
-            "raw.tsv",
+            "--losat_output_dir",
+            "raw",
         ]
     )
-    assert parsed.protein_blastp_output == "raw.tsv"
+    assert parsed.losat_output_dir == "raw"
 
 
 @pytest.mark.linear
@@ -3143,62 +3526,6 @@ def test_convert_protein_hits_to_genomic_links_only_sets_matching_orthogroup_id(
 
 
 @pytest.mark.linear
-def test_web_losat_nucleotide_display_transform_keeps_orientation() -> None:
-    namespace = _load_web_helper_namespace()
-    raw_tsv = "\n".join(
-        [
-            "\t".join(
-                [
-                    "query",
-                    "subject",
-                    "99.0",
-                    "40",
-                    "0",
-                    "0",
-                    "10",
-                    "20",
-                    "5",
-                    "15",
-                    "1e-20",
-                    "120",
-                ]
-            ),
-            "\t".join(
-                [
-                    "query",
-                    "subject",
-                    "98.0",
-                    "35",
-                    "0",
-                    "0",
-                    "30",
-                    "25",
-                    "40",
-                    "35",
-                    "1e-10",
-                    "100",
-                ]
-            ),
-        ]
-    )
-
-    raw_result = namespace["convert_losat_nucleotide_to_display_tsv"](
-        raw_tsv,
-        json.dumps({"length": 100, "reverse": True}),
-        json.dumps({"length": 80, "reverse": False}),
-    )
-    result = json.loads(str(raw_result))
-
-    assert "error" not in result
-    row = result["rows"][0]
-    assert row["qstart"] == 91
-    assert row["qend"] == 81
-    assert row["sstart"] == 5
-    assert row["send"] == 15
-    assert len(result["rows"]) == 2
-
-
-@pytest.mark.linear
 def test_web_cds_span_transform_maps_reverse_display_span_and_strand() -> None:
     namespace = _load_web_helper_namespace()
 
@@ -3593,6 +3920,34 @@ def test_web_losatp_blastp_payload_helper_uses_rbh_edges_for_orthogroups(
     assert inactive_pairwise_limit_result["cache"]["convertedPayloadHit"] is True
     assert inactive_pairwise_limit_result["pairs"] == result["pairs"]
 
+    canonical_outputs = []
+    for name in ("miss.json", "hit.json"):
+        canonical_path = tmp_path / name
+        canonical_result = json.loads(str(namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+            str(pairs_path),
+            str(raw_tsv_path),
+            "orthogroup",
+            2,
+            49,
+            "1e-5",
+            0,
+            0,
+            orthogroup_membership_mode="rbh",
+            canonical_resource_path=str(canonical_path),
+        )))
+        assert "orthogroupResult" not in canonical_result
+        assert canonical_result["canonicalResource"] == {
+            "kind": "orthogroup-result",
+            "size": canonical_path.stat().st_size,
+        }
+        canonical_outputs.append((canonical_result, canonical_path.read_bytes()))
+    (miss, miss_bytes), (hit, hit_bytes) = canonical_outputs
+    assert miss["cache"]["convertedPayloadHit"] is False
+    assert hit["cache"]["convertedPayloadHit"] is True
+    assert hit_bytes == miss_bytes
+    assert json.loads(miss_bytes) == result["orthogroupResult"]
+    assert hit["pairs"] == miss["pairs"] == result["pairs"]
+
 
 @pytest.mark.linear
 def test_web_losatp_blastp_payload_helper_rejects_legacy_list_payload(
@@ -3620,228 +3975,156 @@ def test_web_losatp_blastp_payload_helper_rejects_legacy_list_payload(
     result = json.loads(str(raw_result))
 
     assert "error" in result
-    assert "must be an object" in result["error"]
+def _directed_display_payload(
+    record_count: int,
+    displayed: set[tuple[int, int]],
+) -> dict[str, object]:
+    """One hit in every direction of every record pair; `displayed` flags the display pairs."""
+    records = []
+    for index in range(record_count):
+        protein_id = f"p{index}"
+        records.append(
+            {
+                "recordIndex": index,
+                "recordId": f"record_{index}",
+                "proteinMap": {
+                    protein_id: _web_protein_entry(
+                        protein_id,
+                        record_index=index,
+                        record_id=f"record_{index}",
+                        end=90,
+                    )
+                },
+                "proteinCacheKey": f"record-{index}-cache",
+                "viewTransform": {"length": 200, "reverse": False},
+            }
+        )
+    pairs = []
+    for query in range(record_count):
+        for subject in range(record_count):
+            if query == subject:
+                continue
+            pairs.append(
+                {
+                    "pairIndex": 0 if {query, subject} == {0, 1} else 1,
+                    "queryIndex": query,
+                    "subjectIndex": subject,
+                    "displayPair": (query, subject) in displayed,
+                    "cacheKey": f"pair-{query}-{subject}",
+                    "blastText": pd.DataFrame.from_records(
+                        [_hit_row(f"p{query}", f"p{subject}")],
+                        columns=COMPARISON_COLUMNS,
+                    ).to_csv(sep="\t", header=False, index=False, lineterminator="\n"),
+                }
+            )
+    return {"records": records, "pairs": pairs}
 
 
 @pytest.mark.linear
-def test_orthogroup_alignment_offsets_align_selected_member_to_representatives() -> None:
-    records = [
-        _record("record_a", sequence="A" * 1000),
-        _record("record_b", sequence="A" * 1000),
-    ]
-    comparison = pd.DataFrame.from_records(
-        [
-            {
-                **_hit_row("record_a", "record_b", bitscore=200),
-                "qstart": 100,
-                "qend": 200,
-                "sstart": 400,
-                "send": 500,
-                "query_protein_id": "prot_a",
-                "subject_protein_id": "prot_b",
-                "query_source_protein_id": "",
-                "subject_source_protein_id": "",
-                "query_record_index": 0,
-                "subject_record_index": 1,
-                "query_feature_index": 0,
-                "subject_feature_index": 0,
-                "query_feature_svg_id": "fanchor",
-                "subject_feature_svg_id": "fsubject",
-                "orthogroup_id": "og_1",
-                "query_orthogroup_representative": True,
-                "subject_orthogroup_representative": True,
-            }
+def test_web_losatp_payload_helper_output_follows_the_displayed_pair_direction(
+    tmp_path: Path,
+    stage_web_losatp_transport,
+) -> None:
+    """The converter output depends on `displayPair`, so the derived cache key must too (F-4)."""
+    namespace = _load_web_helper_namespace()
+
+    def convert(displayed: set[tuple[int, int]]) -> dict[str, object]:
+        pairs_path, raw_tsv_path = stage_web_losatp_transport(
+            tmp_path,
+            _directed_display_payload(2, displayed),
+            f"directed-{sorted(displayed)[0][0]}{sorted(displayed)[0][1]}",
+        )
+        result = json.loads(
+            str(
+                namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+                    str(pairs_path),
+                    str(raw_tsv_path),
+                    "orthogroup",
+                    5,
+                    50,
+                    "1e-5",
+                    0,
+                    0,
+                    orthogroup_membership_mode="anchor_core_v1",
+                    orthogroup_member_max_hits=5,
+                )
+            )
+        )
+        assert "error" not in result
+        return result
+
+    forward = convert({(0, 1)})
+    reverse = convert({(1, 0)})
+
+    def displayed_rows(result: dict[str, object]) -> list[tuple[str, str]]:
+        return [
+            (row["query_protein_id"], row["subject_protein_id"])
+            for pair in result["pairs"]
+            for row in pair["rows"]
         ]
-    )
-    canvas_config = _orthogroup_alignment_canvas_config()
 
-    offsets = calculate_orthogroup_alignment_offsets(
-        records,
-        [comparison],
-        canvas_config,
-        "fanchor",
-    )
-
-    assert offsets[0] == pytest.approx(0.0)
-    assert offsets[1] == pytest.approx(-300.0)
+    assert displayed_rows(forward) == [("p0", "p1")]
+    assert displayed_rows(reverse) == [("p1", "p0")]
+    assert forward["pairs"] != reverse["pairs"]
+    # Nothing else differs between the two plans: both search the same raw pairs.
+    assert reverse["cache"]["convertedPayloadHit"] is False
 
 
 @pytest.mark.linear
-def test_orthogroup_alignment_dedup_ignores_public_source_protein_id() -> None:
-    records = [
-        _record("record_a", sequence="A" * 1000),
-        _record("record_b", sequence="A" * 1000),
-    ]
-    rows = []
-    for source_protein_id, bitscore in (("public-a", 200), ("public-b", 150)):
-        rows.append(
-            {
-                **_hit_row("record_a", "record_b", bitscore=bitscore),
-                "qstart": 100,
-                "qend": 200,
-                "sstart": 400,
-                "send": 500,
-                "query_protein_id": f"runtime-{source_protein_id}",
-                "subject_protein_id": "runtime-b",
-                "query_source_protein_id": source_protein_id,
-                "subject_source_protein_id": "public-subject",
-                "query_record_index": 0,
-                "subject_record_index": 1,
-                "query_feature_index": 4,
-                "subject_feature_index": 7,
-                "query_feature_svg_id": "fanchor",
-                "subject_feature_svg_id": "fsubject",
-                "orthogroup_id": "og_1",
-                "query_orthogroup_representative": True,
-                "subject_orthogroup_representative": True,
-            }
+def test_web_losatp_payload_helper_output_follows_explicit_display_pairs(
+    tmp_path: Path,
+    stage_web_losatp_transport,
+) -> None:
+    """`explicit_display_pairs` selects the Collinear output pairs, so no cache may ignore it (F-4)."""
+    namespace = _load_web_helper_namespace()
+    pairs_path, raw_tsv_path = stage_web_losatp_transport(
+        tmp_path,
+        _directed_display_payload(3, {(0, 2)}),
+        "explicit-display-pairs",
+    )
+
+    def convert(explicit_display_pairs: bool) -> dict[str, object]:
+        result = json.loads(
+            str(
+                namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
+                    str(pairs_path),
+                    str(raw_tsv_path),
+                    "collinear",
+                    5,
+                    50,
+                    "1e-5",
+                    0,
+                    0,
+                    1,
+                    0,
+                    "cds",
+                    "orientation",
+                    "rbh",
+                    0,
+                    1,
+                    2,
+                    "all",
+                    "anchor_core_v1",
+                    5,
+                    "either",
+                    True,
+                    None,
+                    explicit_display_pairs,
+                )
+            )
         )
+        assert "error" not in result
+        return result
 
-    offsets = calculate_orthogroup_alignment_offsets(
-        records,
-        [pd.DataFrame.from_records(rows)],
-        _orthogroup_alignment_canvas_config(),
-        "fanchor",
-    )
+    # The same namespace shares the in-process converted-payload cache.
+    all_pairs = convert(False)
+    displayed_only = convert(True)
 
-    assert offsets[0] == pytest.approx(0.0)
-    assert offsets[1] == pytest.approx(-300.0)
-
-
-@pytest.mark.linear
-def test_orthogroup_alignment_rejects_conflicting_group_for_one_feature() -> None:
-    records = [
-        _record("record_a", sequence="A" * 1000),
-        _record("record_b", sequence="A" * 1000),
-    ]
-    rows = []
-    for orthogroup_id in ("og_1", "og_2"):
-        rows.append(
-            {
-                **_hit_row("record_a", "record_b", bitscore=200),
-                "qstart": 100,
-                "qend": 200,
-                "sstart": 400,
-                "send": 500,
-                "query_protein_id": "runtime-a",
-                "subject_protein_id": f"runtime-{orthogroup_id}",
-                "query_source_protein_id": "public-a",
-                "subject_source_protein_id": f"public-{orthogroup_id}",
-                "query_record_index": 0,
-                "subject_record_index": 1,
-                "query_feature_index": 4,
-                "subject_feature_index": 7 if orthogroup_id == "og_1" else 8,
-                "query_feature_svg_id": "fanchor",
-                "subject_feature_svg_id": f"fsubject-{orthogroup_id}",
-                "orthogroup_id": orthogroup_id,
-                "query_orthogroup_representative": True,
-                "subject_orthogroup_representative": True,
-            }
-        )
-
-    with pytest.raises(ValidationError, match="conflicting orthogroups"):
-        calculate_orthogroup_alignment_offsets(
-            records,
-            [pd.DataFrame.from_records(rows)],
-            _orthogroup_alignment_canvas_config(),
-            "fanchor",
-        )
+    assert [pair["pair_index"] for pair in all_pairs["pairs"]] == [0, 1]
+    assert [pair["pair_index"] for pair in displayed_only["pairs"]] == [1]
+    assert displayed_only["cache"]["convertedPayloadHit"] is False
 
 
-@pytest.mark.linear
-def test_orthogroup_alignment_canvas_adjustment_fits_negative_record_offsets() -> None:
-    records = [
-        _record("record_a", sequence="A" * 1000),
-        _record("record_b", sequence="A" * 1000),
-    ]
-    canvas_config = _orthogroup_alignment_canvas_config()
-
-    shift_x, width_extension = calculate_orthogroup_alignment_canvas_adjustment(
-        records,
-        canvas_config,
-        {1: -300.0},
-    )
-
-    assert shift_x == pytest.approx(300.0)
-    assert width_extension == pytest.approx(300.0)
-
-    extents = calculate_orthogroup_alignment_canvas_extents(
-        records,
-        canvas_config,
-        {1: -300.0},
-    )
-    assert extents.ruler_offset_x == pytest.approx(-300.0)
-    assert extents.ruler_width == pytest.approx(1300.0)
-
-
-@pytest.mark.linear
-def test_orthogroup_alignment_canvas_adjustment_extends_positive_record_offsets() -> None:
-    records = [
-        _record("record_a", sequence="A" * 1000),
-        _record("record_b", sequence="A" * 1000),
-    ]
-    canvas_config = _orthogroup_alignment_canvas_config()
-
-    shift_x, width_extension = calculate_orthogroup_alignment_canvas_adjustment(
-        records,
-        canvas_config,
-        {1: 250.0},
-    )
-
-    assert shift_x == pytest.approx(0.0)
-    assert width_extension == pytest.approx(250.0)
-
-    extents = calculate_orthogroup_alignment_canvas_extents(
-        records,
-        canvas_config,
-        {1: 250.0},
-    )
-    assert extents.ruler_offset_x == pytest.approx(0.0)
-    assert extents.ruler_width == pytest.approx(1250.0)
-
-
-@pytest.mark.linear
-def test_orthogroup_alignment_canvas_extents_use_shifted_record_bounds_for_ruler() -> None:
-    records = [
-        _record("record_a", sequence="A" * 1000),
-        _record("record_b", sequence="A" * 1000),
-    ]
-    canvas_config = _orthogroup_alignment_canvas_config()
-
-    shift_x, width_extension = calculate_orthogroup_alignment_canvas_adjustment(
-        records,
-        canvas_config,
-        {0: 250.0, 1: 250.0},
-    )
-    extents = calculate_orthogroup_alignment_canvas_extents(
-        records,
-        canvas_config,
-        {0: 250.0, 1: 250.0},
-    )
-
-    assert shift_x == pytest.approx(0.0)
-    assert width_extension == pytest.approx(250.0)
-    assert extents.ruler_offset_x == pytest.approx(250.0)
-    assert extents.ruler_width == pytest.approx(1000.0)
-
-    shift_x, width_extension = calculate_orthogroup_alignment_canvas_adjustment(
-        records,
-        canvas_config,
-        {0: -300.0, 1: -300.0},
-    )
-    extents = calculate_orthogroup_alignment_canvas_extents(
-        records,
-        canvas_config,
-        {0: -300.0, 1: -300.0},
-    )
-
-    assert shift_x == pytest.approx(300.0)
-    assert width_extension == pytest.approx(0.0)
-    assert extents.ruler_offset_x == pytest.approx(-300.0)
-    assert extents.ruler_width == pytest.approx(1000.0)
-
-
-@pytest.mark.linear
 def test_pairwise_match_group_applies_record_specific_alignment_offsets() -> None:
     records = [
         _record("record_a", sequence="A" * 1000),
@@ -3933,22 +4216,30 @@ def test_build_linear_diagram_forwards_protein_blastp_options(
     canvas = api_diagram_module.build_linear_diagram(
         [_record("record_a"), _record("record_b")],
         options=LinearDiagramOptions(
-            protein_blastp_mode="orthogroup",
-            losatp_bin="custom-losat",
-            losatp_threads=8,
-            protein_blastp_max_hits=7,
-            protein_blastp_candidate_limit=99,
+            losat_search=LosatSearchOptions(
+                program="losatp",
+                losatp_mode="similarity_groups",
+                losatp_max_hits=7,
+                losatp_max_target_seqs=99,
+                runtime=LosatRuntimeOptions(
+                    losat_executable="custom-losat",
+                    threads=8,
+                ),
+            ),
         ),
     )
 
     assert isinstance(canvas, Drawing)
-    assert captured["protein_blastp_mode"] == "orthogroup"
-    assert captured["losatp_bin"] == "custom-losat"
-    assert captured["losatp_threads"] == 8
-    assert captured["protein_blastp_max_hits"] == 7
-    assert captured["protein_blastp_candidate_limit"] == 99
+    search = captured["losat_search"]
+    assert isinstance(search, LosatSearchOptions)
+    assert search.program == "losatp"
+    assert search.losatp_mode == "similarity_groups"
+    assert search.runtime.losat_executable == "custom-losat"
+    assert search.runtime.threads == 8
+    assert search.losatp_max_hits == 7
+    assert search.losatp_max_target_seqs == 99
     assert captured["orthogroup_membership_mode"] == "anchor_core_v1"
-    assert captured["align_orthogroup_feature"] is None
+    assert captured["similarity_alignment"] is None
 
 
 @pytest.mark.linear
@@ -3966,40 +4257,24 @@ def test_build_linear_diagram_forwards_ncbi_blastp_bin(
     canvas = api_diagram_module.build_linear_diagram(
         [_record("record_a"), _record("record_b")],
         options=LinearDiagramOptions(
-            protein_blastp_mode="pairwise",
-            ncbi_blastp_bin="/opt/ncbi/bin/blastp",
+            losat_search=LosatSearchOptions(
+                program="losatp",
+                losatp_mode="pairwise",
+                runtime=LosatRuntimeOptions(
+                    ncbi_blast_executable="/opt/ncbi/bin/blastp",
+                ),
+            ),
         ),
     )
 
     assert isinstance(canvas, Drawing)
-    assert captured["protein_blastp_mode"] == "pairwise"
-    assert captured["ncbi_blastp_bin"] == "/opt/ncbi/bin/blastp"
+    search = captured["losat_search"]
+    assert isinstance(search, LosatSearchOptions)
+    assert search.losatp_mode == "pairwise"
+    assert search.runtime.ncbi_blast_executable == "/opt/ncbi/bin/blastp"
 
 
 @pytest.mark.linear
-def test_build_linear_diagram_forwards_orthogroup_alignment_option(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured: dict[str, object] = {}
-
-    def fake_assemble(*_args, **kwargs):
-        captured.update(kwargs)
-        return Drawing(filename="dummy.svg")
-
-    monkeypatch.setattr(api_diagram_module, "assemble_linear_diagram_from_records", fake_assemble)
-
-    canvas = api_diagram_module.build_linear_diagram(
-        [_record("record_a"), _record("record_b")],
-        options=LinearDiagramOptions(
-            protein_blastp_mode="orthogroup",
-            align_orthogroup_feature="fanchor",
-        ),
-    )
-
-    assert isinstance(canvas, Drawing)
-    assert captured["align_orthogroup_feature"] == "fanchor"
-
-
 @pytest.mark.linear
 def test_linear_cli_rejects_blast_with_protein_blastp_mode() -> None:
     with pytest.raises(SystemExit):
@@ -4010,7 +4285,9 @@ def test_linear_cli_rejects_blast_with_protein_blastp_mode() -> None:
                 "b.gb",
                 "-b",
                 "a_b.tsv",
-                "--protein_blastp_mode",
+                "--losat",
+                "losatp",
+                "--losatp_mode",
                 "pairwise",
             ]
         )
@@ -4029,7 +4306,9 @@ def test_linear_cli_requires_two_records_for_protein_blastp_mode(
             [
                 "--gbk",
                 "dummy.gb",
-                "--protein_blastp_mode",
+                "--losat",
+                "losatp",
+                "--losatp_mode",
                 "pairwise",
                 "--format",
                 "svg",
@@ -4060,6 +4339,7 @@ def test_linear_cli_forwards_protein_blastp_options(
             losat_derived_cache_entries=(),
             protein_identity_manifest=None,
             request=resolved,
+            annotation_warnings=(),
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
@@ -4069,15 +4349,17 @@ def test_linear_cli_forwards_protein_blastp_options(
             "--gbk",
             "a.gb",
             "b.gb",
-            "--protein_blastp_mode",
-            "orthogroup",
-            "--losatp_bin",
+            "--losat",
+            "losatp",
+            "--losatp_mode",
+            "similarity_groups",
+            "--losat_bin",
             "custom-losat",
-            "--losatp_threads",
+            "--losat_threads",
             "6",
-            "--protein_blastp_max_hits",
+            "--losatp_max_hits",
             "9",
-            "--protein_blastp_candidate_limit",
+            "--losatp_max_target_seqs",
             "123",
             "--format",
             "svg",
@@ -4089,13 +4371,17 @@ def test_linear_cli_forwards_protein_blastp_options(
     canonical_request = captured["canonical_request"]
     assert isinstance(canonical_request, LinearDiagramRequest)
     options = canonical_request.options
-    assert options.protein_blastp_mode == "orthogroup"
-    assert options.losatp_bin == "custom-losat"
-    assert options.losatp_threads == 6
-    assert options.protein_blastp_max_hits == 9
-    assert options.protein_blastp_candidate_limit == 123
+    search = options.losat_search
+    assert search is not None
+    assert search.program == "losatp"
+    assert search.losatp_mode == "similarity_groups"
+    assert search.runtime.losat_executable == "custom-losat"
+    assert search.runtime.threads == 6
+    assert search.losatp_max_hits == 9
+    assert search.losatp_max_target_seqs == 123
     assert options.orthogroup_membership_mode == "anchor_core_v1"
-    assert options.align_orthogroup_feature is None
+    assert not hasattr(options, "align_orthogroup_feature")
+    assert not hasattr(options, "similarity_alignment_feature")
 
 
 @pytest.mark.linear
@@ -4121,6 +4407,7 @@ def test_linear_cli_forwards_ncbi_blastp_bin(
             losat_derived_cache_entries=(),
             protein_identity_manifest=None,
             request=resolved,
+            annotation_warnings=(),
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
@@ -4130,9 +4417,11 @@ def test_linear_cli_forwards_ncbi_blastp_bin(
             "--gbk",
             "a.gb",
             "b.gb",
-            "--protein_blastp_mode",
+            "--losat",
+            "losatp",
+            "--losatp_mode",
             "pairwise",
-            "--ncbi_blastp_bin",
+            "--ncbi_blast_bin",
             "/opt/ncbi/bin/blastp",
             "--format",
             "svg",
@@ -4144,56 +4433,12 @@ def test_linear_cli_forwards_ncbi_blastp_bin(
     canonical_request = captured["canonical_request"]
     assert isinstance(canonical_request, LinearDiagramRequest)
     options = canonical_request.options
-    assert options.protein_blastp_mode == "pairwise"
-    assert options.ncbi_blastp_bin == "/opt/ncbi/bin/blastp"
-
-
-@pytest.mark.linear
-def test_linear_cli_forwards_orthogroup_alignment_option(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
-) -> None:
-    records = [_record("record_a"), _record("record_b")]
-    captured: dict[str, object] = {}
-
-    monkeypatch.setattr(request_render_module, "load_gbks", lambda *_args, **_kwargs: records)
-    monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
-    monkeypatch.setattr(request_render_module, "read_feature_visibility_file", lambda _path: None)
-
-    def fake_render(canonical_request, **_kwargs):
-        resolved = request_render_module.resolve_request(canonical_request)
-        captured["canonical_request"] = resolved
-        return SimpleNamespace(
-            drawing=Drawing(filename=str(tmp_path / "dummy.svg")),
-            interactive_context=None,
-            records=tuple(item.source.record for item in resolved.records),
-            losat_cache_entries=(),
-            losat_derived_cache_entries=(),
-            protein_identity_manifest=None,
-            request=resolved,
-        )
-
-    monkeypatch.setattr(linear_cli_module, "render_request", fake_render)
-
-    linear_cli_module.linear_main(
-        [
-            "--gbk",
-            "a.gb",
-            "b.gb",
-            "--protein_blastp_mode",
-            "orthogroup",
-            "--align_orthogroup_feature",
-            "fanchor",
-            "--format",
-            "svg",
-            "-o",
-            str(tmp_path / "out"),
-        ]
+    assert options.losat_search is not None
+    assert options.losat_search.losatp_mode == "pairwise"
+    assert (
+        options.losat_search.runtime.ncbi_blast_executable
+        == "/opt/ncbi/bin/blastp"
     )
-
-    canonical_request = captured["canonical_request"]
-    assert isinstance(canonical_request, LinearDiagramRequest)
-    assert canonical_request.options.align_orthogroup_feature == "fanchor"
 
 
 @pytest.mark.linear

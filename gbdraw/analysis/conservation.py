@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import logging
 import os
 from dataclasses import dataclass
@@ -17,10 +18,38 @@ from gbdraw.io.colors import resolve_color_to_hex  # type: ignore[reportMissingI
 from gbdraw.io.comparisons import (  # type: ignore[reportMissingImports]
     COMPARISON_COLUMNS,
     filter_comparison_dataframe,
+    normalize_comparison_dataframe,
+    read_comparison_table,
 )
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ConservationSearchResult:
+    """Raw outfmt 6 rows of one similarity ring that a LOSAT search produced.
+
+    The planner sets these in place of the search intent. ``name`` is the raw
+    TSV filename (Session resource and ``--losat_output_dir`` file). A Session
+    stores them as ``conservationBlastFiles``, so replay reads them as files.
+    """
+
+    name: str
+    text: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not self.name.strip():
+            raise ValidationError(
+                "ConservationSearchResult.name must be a non-empty string.",
+                diagnostic={"code": "INPUT_INVALID", "field": "conservation_search_results"},
+            )
+        if not isinstance(self.text, str):
+            raise ValidationError(
+                "ConservationSearchResult.text must be a string.",
+                diagnostic={"code": "INPUT_INVALID", "field": "conservation_search_results"},
+            )
+
 
 ConservationReferenceSide = Literal["query", "subject"]
 ConservationReferenceMode = Literal["query", "subject", "auto"]
@@ -52,19 +81,6 @@ NORMALIZED_CONSERVATION_COLUMNS = (
     "bitscore",
     "orientation",
     "full_reference",
-)
-
-_NUMERIC_COMPARISON_COLUMNS = (
-    "identity",
-    "alignment_length",
-    "mismatches",
-    "gap_opens",
-    "qstart",
-    "qend",
-    "sstart",
-    "send",
-    "evalue",
-    "bitscore",
 )
 
 
@@ -106,7 +122,9 @@ def empty_normalized_conservation_hits() -> DataFrame:
     return DataFrame(columns=NORMALIZED_CONSERVATION_COLUMNS)
 
 
-def _default_label(source_index: int, path: str | None) -> str:
+def _default_label(source_index: int, path: "str | ConservationSearchResult | None") -> str:
+    if isinstance(path, ConservationSearchResult):
+        path = path.name
     if path:
         basename = os.path.basename(str(path))
         if basename:
@@ -136,60 +154,33 @@ def conservation_track_gradient_colors(
     return tint_color(normalized_track_color), normalized_track_color
 
 
-def _coerce_comparison_dataframe(dataframe: DataFrame) -> DataFrame:
-    """Return a BLAST outfmt 6/7 shaped dataframe or raise ValueError."""
-
-    if dataframe is None:
-        raise ValueError("dataframe is None")
-
-    if set(COMPARISON_COLUMNS).issubset(set(dataframe.columns)):
-        df = dataframe.loc[:, list(COMPARISON_COLUMNS)].copy()
-    elif len(dataframe.columns) >= len(COMPARISON_COLUMNS):
-        df = dataframe.iloc[:, : len(COMPARISON_COLUMNS)].copy()
-        df.columns = list(COMPARISON_COLUMNS)
-    else:
-        raise ValueError(
-            "comparison dataframe must contain BLAST outfmt 6 columns "
-            f"({', '.join(COMPARISON_COLUMNS)})"
-        )
-
-    for column in ("query", "subject"):
-        df[column] = df[column].astype(str)
-    for column in _NUMERIC_COMPARISON_COLUMNS:
-        df[column] = pd.to_numeric(df[column], errors="coerce")
-    return df
-
-
-def _filter_valid_dataframe(dataframe: DataFrame, blast_config: object) -> DataFrame:
-    df = _coerce_comparison_dataframe(dataframe)
+def _filter_normalized_dataframe(dataframe: DataFrame, blast_config: object) -> DataFrame:
+    df = dataframe.copy()
     # Keep the original source-row identity through filtering and paint-order sorting.
     df["source_hit_index"] = range(len(df))
     filtered = filter_comparison_dataframe(df, blast_config)  # type: ignore[arg-type]
     return filtered.loc[:, [*COMPARISON_COLUMNS, "source_hit_index"]].reset_index(drop=True)
 
 
-def _load_conservation_file(path: str, blast_config: object) -> tuple[DataFrame | None, str | None]:
-    if not os.path.isfile(path):
-        return None, f"file does not exist or is not accessible: {path}"
+def _load_conservation_file(
+    path: "str | ConservationSearchResult",
+    blast_config: object,
+) -> tuple[DataFrame | None, str | None]:
     try:
-        raw_df = pd.read_csv(
-            path,
-            sep="\t",
-            comment="#",
-            names=COMPARISON_COLUMNS,
-        )
-        return _filter_valid_dataframe(raw_df, blast_config), None
-    except pd.errors.EmptyDataError:
-        raw_df = pd.DataFrame(columns=COMPARISON_COLUMNS)
-        return _filter_valid_dataframe(raw_df, blast_config), None
-    except Exception as exc:
-        return None, f"error parsing BLAST file for similarity ring {path}: {exc}"
+        if isinstance(path, ConservationSearchResult):
+            # Resolved LOSAT rows take the file path's reader (byte-identical rings).
+            table = read_comparison_table(io.StringIO(path.text), label=path.name)
+        else:
+            table = read_comparison_table(path)
+        return _filter_normalized_dataframe(table, blast_config), None
+    except ValidationError as exc:
+        return None, str(exc)
 
 
 def load_conservation_sources(
     *,
     blast_config: object,
-    conservation_files: Sequence[str] | None = None,
+    conservation_files: "Sequence[str | ConservationSearchResult] | None" = None,
     conservation_dataframes: Sequence[DataFrame] | None = None,
     labels: Sequence[str] | None = None,
     colors: Sequence[str] | None = None,
@@ -228,7 +219,10 @@ def load_conservation_sources(
         skip_reasons: list[str] = []
 
         if path is not None:
-            frame, reason = _load_conservation_file(str(path), blast_config)
+            frame, reason = _load_conservation_file(
+                path if isinstance(path, ConservationSearchResult) else str(path),
+                blast_config,
+            )
             if frame is not None:
                 valid_frames.append(frame)
             elif reason:
@@ -237,8 +231,13 @@ def load_conservation_sources(
 
         if source_index < len(dataframes):
             try:
-                valid_frames.append(_filter_valid_dataframe(dataframes[source_index], blast_config))
-            except Exception as exc:
+                valid_frames.append(
+                    _filter_normalized_dataframe(
+                        normalize_comparison_dataframe(dataframes[source_index]),
+                        blast_config,
+                    )
+                )
+            except ValidationError as exc:
                 reason = f"error parsing conservation dataframe {source_index}: {exc}"
                 logger.warning("WARNING: %s", reason)
                 skip_reasons.append(reason)
@@ -492,6 +491,7 @@ def normalize_conservation_tracks_for_record(
 
 __all__ = [
     "ConservationLoadResult",
+    "ConservationSearchResult",
     "ConservationReferenceMode",
     "ConservationReferenceSide",
     "ConservationSource",

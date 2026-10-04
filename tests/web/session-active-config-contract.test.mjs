@@ -11,6 +11,9 @@ const {
   createDefaultLosat,
   validateCurrentWriterActiveConfig
 } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
+const { normalizeCurrentPairwiseMatchStyle } = await import(
+  '../../gbdraw/web/js/app/current-option-values.js'
+);
 
 const storedConfig = {
   form: createDefaultForm(),
@@ -34,6 +37,15 @@ assert.equal(createDefaultLosat().blastp.candidateLimit, null);
 assert.equal(createDefaultLosat().executionMode, 'threaded');
 assert.equal(createDefaultLosat().blastp.collinearSearchScope, 'adjacent');
 assert.equal(createDefaultLosat().blastp.collinearMergeOrientation, 'either');
+assert.equal(createDefaultAdv('circular').pairwise_match_style, 'ribbon');
+assert.equal(createDefaultAdv('linear').pairwise_match_style, 'curve');
+assert.equal(normalizeCurrentPairwiseMatchStyle('curve', 'ribbon'), 'curve');
+assert.equal(normalizeCurrentPairwiseMatchStyle(undefined, 'ribbon'), 'ribbon');
+assert.equal(normalizeCurrentPairwiseMatchStyle('invalid', 'curve'), 'curve');
+assert.throws(
+  () => normalizeCurrentPairwiseMatchStyle(undefined, 'invalid'),
+  /fallback must be one of/
+);
 
 assert.doesNotThrow(() => validateCurrentWriterActiveConfig({
   mode: 'circular',
@@ -127,3 +139,37 @@ assert.throws(
   }),
   /config\.adv.*cli_circular_track_slots/
 );
+
+assert.equal(createDefaultForm().keep_definition_left_aligned, true);
+assert.equal(createDefaultAdv('linear').linear_show_replicon, false);
+for (const locked of [false, true]) {
+  assert.doesNotThrow(() => validateCurrentWriterActiveConfig({
+    mode: 'linear', storedConfig: {
+      ...storedConfig, form: { ...storedConfig.form, keep_definition_left_aligned: locked }
+    }
+  }));
+}
+for (const malformed of [null, 'false', 'true', 0, 1, [], {}, undefined]) {
+  assert.throws(() => validateCurrentWriterActiveConfig({
+    mode: 'linear', storedConfig: {
+      ...storedConfig, form: { ...storedConfig.form, keep_definition_left_aligned: malformed }
+    }
+  }), /keep_definition_left_aligned must be a boolean/);
+}
+
+for (const field of ['width', 'radius']) {
+  for (const number of [NaN, Infinity, -Infinity]) {
+    for (const value of [number, { value: number, unit: 'px' }]) {
+      const invalid = structuredClone(storedConfig);
+      invalid.adv.circular_track_slots = [{
+        id: 'features', renderer: 'features', enabled: true, side: 'outside', z: 0,
+        params: { lane_direction: 'outside' }, width: null, radius: null,
+        inner_gap_px: null, outer_gap_px: null,
+        [field]: value
+      }];
+      assert.throws(() => validateCurrentWriterActiveConfig({
+        mode: 'circular', storedConfig: invalid
+      }), /positive finite px or factor scalar/);
+    }
+  }
+}

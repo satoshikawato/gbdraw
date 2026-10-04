@@ -1,4 +1,5 @@
-import { state, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
+import { diagnosticError, normalizeUserFacingError } from './error-normalization.js';
+import { state, sessionOperationAvailability, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 import {
   captureRightDrawerState,
@@ -46,14 +47,18 @@ import {
   normalizeOrthogroupMembershipMode
 } from '../app/losat-normalization.js';
 import { normalizeDefinitionLineStyleState } from '../app/definition-line-style-state.js';
-import { isCliInvocationSessionExportable } from '../app/run-info.js';
 import {
-  normalizeCircularPlotTitlePosition,
-  normalizeLinearPlotTitlePosition
-} from '../app/plot-title-position.js';
+  migrateLegacyLinearLabelVisibility,
+  requireLinearLabelVisibilityMode
+} from '../app/linear-label-visibility.js';
+import { isCliInvocationSessionExportable } from '../app/run-info.js';
+import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
+import { normalizeCircularPlotTitlePosition } from '../app/plot-title-position.js';
 import {
   migrateLegacyLayoutPreferences,
-  replaceLayoutPreferences
+  normalizeLayoutPreferences,
+  replaceLayoutPreferences,
+  resolveActiveLayoutPreference
 } from '../app/layout-preferences.js';
 import { reconcileImportedLinearTypographyLink } from '../app/linear-typography.js';
 import {
@@ -112,11 +117,14 @@ import {
   admitFeatureCatalog,
   featureStateFromCatalog,
   isAdoptedFeatureCatalog,
-  validateFeatureCatalog
+  validateFeatureCatalog,
+  validateFeatureCatalogForImport
 } from './feature-catalog.js';
+import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
 import {
   buildOrthogroupFeatureIndex,
-  enrichFeaturesWithOrthogroups
+  enrichFeaturesWithOrthogroups,
+  normalizeOrthogroupDormantOverrides
 } from './orthogroup-feature-metadata.js';
 import {
   isResourceBackedCanonicalComparison,
@@ -128,9 +136,10 @@ import {
 } from './gallery-session-migration.js';
 import {
   compressSessionData,
-  confirmLargeSessionBlob,
-  readSessionText
+  confirmLargeSessionBlob
 } from './session-file.js';
+import { importSessionFile } from './session-import-client.js';
+import { convertMainSessionComparisonFrames } from './main-session-comparison-frame.js';
 import { downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from '../app/annotations/state.js';
 import { applySpecificRuleProvenance } from '../app/specific-color-rules.js';
@@ -173,23 +182,26 @@ import {
   projectWebOnlyEditorMetadata,
   validateSessionAuthorityInventory
 } from './session-authority.js';
-import { assertSafeObjectKeys } from './safe-object-keys.js';
+import { assertSafeObjectKeysForImport } from './safe-object-keys.js';
 import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
 } from './runtime-test-hooks.js';
 import { setResourcePayloadOwner } from './resource-payload-owner.js';
+import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import {
   migratePersistedCircularMultiRecordSizeMode,
   migratePersistedLinearLabelPlacement,
   migratePersistedLinearTrackLayout,
   migratePersistedWebStateFieldNames,
+  normalizeCurrentPairwiseMatchStyle,
   requireCurrentCircularMultiRecordSizeMode,
   requireCurrentLinearLabelPlacement,
   requireCurrentLinearTrackLayout,
   requireCurrentWebStateFieldNames
 } from '../app/current-option-values.js';
 import {
+  validateSimilarityAlignmentResetReceipt,
   CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,
   CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS,
   createDefaultLosatpHitLimits,
@@ -209,18 +221,25 @@ import {
 
 const { nextTick } = window.Vue;
 
-export const SESSION_VERSION = 42;
+export const SESSION_VERSION = 44;
 const CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40;
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
 const SUPPORTED_SESSION_VERSIONS = new Set([
-  27, 28, 29, 30, 31, 32, 33, 39, 40, 41, SESSION_VERSION
+  27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, SESSION_VERSION
 ]);
 const CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
-const SESSION_FEATURE_CATALOG_SAVE_ERROR =
-  'Generate again before using Save Session. The current results are missing compatible feature metadata.';
-const SESSION_ACTIVE_CONFIG_SAVE_ERROR =
-  'Save Session could not validate the active configuration.';
+// D-25 (PD-OI-079): a Result without current feature metadata (a legacy
+// Session) is saved only after one Generate; the error offers that Generate.
+const sessionSaveRequiresGenerate = () => diagnosticError(
+  'SESSION_SAVE_REQUIRES_GENERATE', {}, { operation: 'session-save', stage: 'result-admission' }
+);
+// A Save wrapper keeps a recognized cause; otherwise it reports the bounded fallback.
+const recognizedCauseOr = (error, fallback) => {
+  const model = normalizeUserFacingError(error);
+  return model && !['UNKNOWN', 'VALIDATION_UNCLASSIFIED'].includes(model.code)
+    ? diagnosticError(model.code, model.context, { stage: model.stage }) : fallback;
+};
 const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
 const cloneColors = (colors) => ({ ...(colors || {}) });
@@ -456,6 +475,54 @@ const normalizeLabelRendering = (value) => {
   return ['auto', 'embedded_only', 'external_only'].includes(normalized) ? normalized : 'auto';
 };
 
+const withHistoricalPairwiseMatchStyleFallback = (configData, mode = null) => {
+  if (!isPlainObject(configData) || !isPlainObject(configData.adv)) return configData;
+  const adv = Object.prototype.hasOwnProperty.call(configData.adv, 'pairwise_match_style')
+    ? configData.adv
+    : { ...configData.adv, pairwise_match_style: 'ribbon' };
+  const profiles = configData.modeProfiles;
+  const activeMode = ['circular', 'linear'].includes(mode)
+    ? mode
+    : profiles?.activeMode;
+  if (
+    !isPlainObject(profiles)
+    || !isPlainObject(profiles.profiles)
+    || !['circular', 'linear'].includes(activeMode)
+    || !isPlainObject(profiles.profiles[activeMode])
+  ) {
+    return adv === configData.adv ? configData : { ...configData, adv };
+  }
+  const activeProfile = profiles.profiles[activeMode];
+  const values = isPlainObject(activeProfile.values) ? activeProfile.values : {};
+  if (Object.prototype.hasOwnProperty.call(values, 'pairwise_match_style')) {
+    return adv === configData.adv ? configData : { ...configData, adv };
+  }
+  const managed = isPlainObject(activeProfile.managed) ? activeProfile.managed : {};
+  return {
+    ...configData,
+    adv,
+    modeProfiles: {
+      ...profiles,
+      profiles: {
+        ...profiles.profiles,
+        [activeMode]: {
+          ...activeProfile,
+          values: { ...values, pairwise_match_style: adv.pairwise_match_style },
+          managed: { ...managed, pairwise_match_style: false }
+        }
+      }
+    }
+  };
+};
+
+const withCurrentLinearLabelVisibility = (configData) => {
+  if (!isPlainObject(configData) || !isPlainObject(configData.adv)) return configData;
+  return {
+    ...configData,
+    adv: migrateLegacyLinearLabelVisibility(configData.adv)
+  };
+};
+
 const normalizePositiveNumberOrNull = (value) => {
   if (
     value === null ||
@@ -523,11 +590,11 @@ const migratePersistedWebOptionValues = (configData = {}) => {
       adv.multi_record_size_mode
     );
   }
-  return {
+  return withCurrentLinearLabelVisibility(withHistoricalPairwiseMatchStyleFallback({
     ...migratedNames,
     ...(form === undefined ? {} : { form }),
     ...(adv === undefined ? {} : { adv })
-  };
+  }));
 };
 
 const migrateImportedLinearTrackSlots = (configData = {}, sourceSessionVersion = null) => {
@@ -596,11 +663,6 @@ const normalizeCollinearColorMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
   if (normalized === 'identity') return 'average_identity';
   return ['average_identity', 'orientation', 'orientation_identity'].includes(normalized) ? normalized : 'orientation';
-};
-
-const normalizePairwiseMatchStyle = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return ['ribbon', 'curve'].includes(normalized) ? normalized : 'ribbon';
 };
 
 const normalizeCircularConservationSource = (value) => {
@@ -919,7 +981,13 @@ export const buildConfigData = () => ({
     recordGap: Number(state.linearRecordGap.value) || 0,
     rows: (state.linearRecordRows || []).map((entry) => ({
       uid: String(entry?.uid || ''),
-      row: Number(entry?.row) || 1
+      row: Number(entry?.row) || 1,
+      ...(entry?.canonicalCardinality === 'exactly_one'
+        ? { canonicalCardinality: 'exactly_one' } : {}),
+      ...(Number(entry?.canonicalRow) === Number(entry?.row)
+        && Number.isInteger(entry?.canonicalColumn) && entry.canonicalColumn > 0
+        ? { canonicalRow: entry.canonicalRow, canonicalColumn: entry.canonicalColumn }
+        : {})
     }))
   },
   linearComparisonPlan: serializeLinearComparisonPlan(state.linearComparisonPlan),
@@ -929,7 +997,8 @@ export const buildConfigData = () => ({
   unmanagedConfigOverrides: cloneJsonData(state.unmanagedConfigOverrides || {}),
   webEdits: {
     orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
-    orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
+    orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides),
+    orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(state.orthogroupDormantOverrides)
   }
 });
 
@@ -953,16 +1022,15 @@ const defaultEditorStateData = () => ({
   featureCatalog: null
 });
 
-const serializableFeatureCatalog = (preserveAdoptedCatalog) => {
-  const liveCatalog = state.featureCatalog?.value;
-  // Vue proxies obscure the identity used by the validated/adopted catalog cache.
-  const rawCatalog = rawReactiveValue(liveCatalog);
-  return preserveAdoptedCatalog && isAdoptedFeatureCatalog(rawCatalog)
-    ? rawCatalog
-    : cloneJsonValue(liveCatalog, null);
+// State, History, and Session rollback hold the Generate-owned catalog by
+// reference; only an admitted catalog may enter state. Vue proxies obscure the
+// identity that admission records.
+const admittedFeatureCatalog = (catalog) => {
+  const rawCatalog = rawReactiveValue(catalog);
+  return isAdoptedFeatureCatalog(rawCatalog) ? rawCatalog : null;
 };
 
-export const buildEditorStateData = ({ preserveAdoptedCatalog = false } = {}) => ({
+export const buildEditorStateData = () => ({
   legend: {
     entries: cloneJsonArray(state.legendEntries.value),
     deletedEntries: cloneJsonArray(state.deletedLegendEntries.value),
@@ -981,7 +1049,8 @@ export const buildEditorStateData = ({ preserveAdoptedCatalog = false } = {}) =>
     color: state.originalSvgStroke.value?.color ?? null,
     width: state.originalSvgStroke.value?.width ?? null
   },
-  featureCatalog: serializableFeatureCatalog(preserveAdoptedCatalog)
+  alignmentResetReceipt: cloneJsonValue(state.similarityAlignmentResetReceipt?.value, null),
+  featureCatalog: admittedFeatureCatalog(state.featureCatalog?.value)
 });
 
 const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined } = {}) => {
@@ -1012,11 +1081,10 @@ const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined
         ? normalizeStrokeWidth(originalSvgStroke.width)
         : defaults.originalSvgStroke.width
     },
-    featureCatalog: featureCatalog !== undefined
-      ? featureCatalog
-      : isPlainObject(source.featureCatalog)
-        ? cloneJsonData(source.featureCatalog)
-        : null
+    alignmentResetReceipt: cloneJsonValue(source.alignmentResetReceipt, null),
+    featureCatalog: admittedFeatureCatalog(
+      featureCatalog !== undefined ? featureCatalog : source.featureCatalog
+    )
   };
 };
 
@@ -1069,6 +1137,9 @@ const validateUnmanagedConfigOverrides = async ({
     managedPaths,
     requireUnmanagedOnly
   });
+  if (result?.result?.error && typeof result.result.error === 'object') {
+    throw Object.assign(new Error('Configuration validation failed.'), result.result.error);
+  }
   if (typeof result?.result?.error === 'string' && result.result.error.trim()) {
     throw new Error(result.result.error.trim());
   }
@@ -1080,14 +1151,15 @@ const validateUnmanagedConfigOverrides = async ({
 
 export const applyEditorStateData = (
   editorState = {},
-  { trusted = false, normalized: alreadyNormalized = false, adoptCatalog = false } = {}
+  { normalized: alreadyNormalized = false } = {}
 ) => {
   const normalized = alreadyNormalized
     ? editorState
-    : trusted
-      ? cloneJsonData(editorState)
-      : normalizeEditorStateData(editorState);
+    : normalizeEditorStateData(editorState);
 
+  if (state.similarityAlignmentResetReceipt) {
+    state.similarityAlignmentResetReceipt.value = normalized.alignmentResetReceipt ?? null;
+  }
   state.legendEntries.value = normalized.legend.entries;
   state.deletedLegendEntries.value = normalized.legend.deletedEntries;
   state.originalLegendOrder.value = normalized.legend.originalOrder;
@@ -1098,28 +1170,21 @@ export const applyEditorStateData = (
   replacePlainObject(state.featureStrokeOverrides, normalized.featureStrokes.overrides);
   state.originalSvgStroke.value = normalized.originalSvgStroke;
   if (state.featureCatalog) {
-    state.featureCatalog.value = adoptCatalog
-      ? normalized.featureCatalog
-      : cloneJsonValue(normalized.featureCatalog, null);
+    state.featureCatalog.value = admittedFeatureCatalog(normalized.featureCatalog);
   }
 };
 
+const SESSION_FORMAT_ERROR = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'SESSION_FORMAT' });
+const SESSION_FIELDS_ERROR = () => diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
 const validateSessionVersion = version => {
-  if (!Number.isInteger(version)) {
-    throw new Error('Session version is required and must be an integer.');
-  }
-  if (version > SESSION_VERSION) {
-    throw new Error(`Session version ${version} is newer than this gbdraw supports (${SESSION_VERSION}).`);
-  }
-  if (!SUPPORTED_SESSION_VERSIONS.has(version)) {
-    throw new Error(`Unsupported session version: ${version}.`);
+  if (!Number.isInteger(version)) throw SESSION_FORMAT_ERROR();
+  if (version > SESSION_VERSION || !SUPPORTED_SESSION_VERSIONS.has(version)) {
+    throw SESSION_FIELDS_ERROR();
   }
 };
 
 const normalizeSessionData = (data) => {
-  if (!isPlainObject(data) || data.format !== 'gbdraw-session') {
-    throw new Error('Invalid session file.');
-  }
+  if (!isPlainObject(data) || data.format !== 'gbdraw-session') throw SESSION_FORMAT_ERROR();
   const version = data.version;
   validateSessionVersion(version);
   if (version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION && Object.prototype.hasOwnProperty.call(data, 'files')) {
@@ -1162,65 +1227,52 @@ const migrateLegacyFeatureRenderingConfig = (configData, legacy) => {
 const sessionArtifactEntries = (data, field) => {
   const container = data[field];
   if (container === undefined || container === null) return [];
-  if (!isPlainObject(container)) {
-    throw new Error(`Session ${field} must be an object when present.`);
-  }
+  if (!isPlainObject(container)) throw SESSION_FIELDS_ERROR();
   const entries = Object.prototype.hasOwnProperty.call(container, 'entries')
     ? container.entries
     : [];
-  if (!Array.isArray(entries)) {
-    throw new Error(`Session ${field}.entries must be an array.`);
-  }
+  if (!Array.isArray(entries)) throw SESSION_FIELDS_ERROR();
   return entries;
 };
 
-const rejectInvalidLosatCacheKeys = (entries, owner, { requireKey = false } = {}) => {
+// A raw key names one cache entry; a repeated or missing key is a malformed
+// Session (R6: classified, without document values).
+const rejectInvalidLosatCacheKeys = (entries, { requireKey = false } = {}) => {
   const seen = new Set();
-  for (const [index, entry] of entries.entries()) {
+  for (const entry of entries) {
     const key = isPlainObject(entry) && typeof entry.key === 'string'
       ? entry.key
       : '';
     if (!key) {
-      if (requireKey) {
-        throw new Error(
-          `LOSAT cache entry at losatCache.entries[${index}] requires a key.`
-        );
-      }
+      if (requireKey) throw SESSION_FIELDS_ERROR();
       continue;
     }
-    if (seen.has(key)) {
-      throw new Error(`Duplicate ${owner} cache key: ${JSON.stringify(key)}.`);
-    }
+    if (seen.has(key)) throw SESSION_FIELDS_ERROR();
     seen.add(key);
   }
 };
 
-export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
+function* sessionLosatArtifactSteps(data, sourceSessionVersion) {
   if (sourceSessionVersion < CURRENT_ARTIFACT_SESSION_MIN_VERSION) return;
   const rawEntries = sessionArtifactEntries(data, 'losatCache');
   const derivedEntries = sessionArtifactEntries(data, 'losatDerivedCache');
   const manifest = data.proteinIdentityManifest;
-  rejectInvalidLosatCacheKeys(rawEntries, 'LOSAT', { requireKey: true });
-  rejectInvalidLosatCacheKeys(derivedEntries, 'derived LOSATP');
+  rejectInvalidLosatCacheKeys(rawEntries, { requireKey: true });
+  rejectInvalidLosatCacheKeys(derivedEntries);
 
   if (sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
     recordStructuralMetric('currentSessionPreflightProteinManifestValidationCount');
   }
   const identityIndex = buildValidatedProteinIdentityIndex(manifest);
-  if (!identityIndex) {
-    throw new Error(
-      `Session version ${sourceSessionVersion} requires a valid schema-2 protein manifest.`
-    );
-  }
+  if (!identityIndex) throw SESSION_FIELDS_ERROR();
   let invalidDerivedEntry = false;
   try {
     for (const entry of rawEntries) {
       const classification = classifyRawLosatCacheEntry(entry);
       if (!['protein-current', 'nucleotide-current'].includes(classification)) {
-        throw new Error(
-          `Session version ${sourceSessionVersion} contains a non-current raw LOSAT entry.`
-        );
+        throw SESSION_FIELDS_ERROR();
       }
+      yield;
       if (classification !== 'protein-current') continue;
       if (sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
         recordStructuralMetric('currentSessionPreflightProteinRawTextValidationCount');
@@ -1228,9 +1280,7 @@ export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
       if (
         !validateProteinRawEntryReferences(entry, manifest, { identityIndex })
       ) {
-        throw new Error(
-          `Session version ${sourceSessionVersion} contains an unresolved protein raw entry.`
-        );
+        throw SESSION_FIELDS_ERROR();
       }
     }
     invalidDerivedEntry = derivedEntries.some(
@@ -1239,10 +1289,20 @@ export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
   } finally {
     releaseValidatedProteinIdentityIndex(identityIndex);
   }
-  if (invalidDerivedEntry) {
-    throw new Error(
-      `Session version ${sourceSessionVersion} contains an invalid derived LOSATP entry.`
-    );
+  if (invalidDerivedEntry) throw SESSION_FIELDS_ERROR();
+};
+
+export const validateSessionLosatArtifacts = (data, sourceSessionVersion) => {
+  for (const _step of sessionLosatArtifactSteps(data, sourceSessionVersion)) { /* exhaust validation */ }
+};
+
+const validateSessionLosatArtifactsForImport = async (data, sourceSessionVersion) => {
+  let deadline = performance.now() + 16;
+  for (const _step of sessionLosatArtifactSteps(data, sourceSessionVersion)) {
+    if (performance.now() >= deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      deadline = performance.now() + 16;
+    }
   }
 };
 
@@ -1475,7 +1535,7 @@ export const restoreCurrentWriterActiveConfig = ({
   return restored;
 };
 
-const validateCurrentWriterFeatureCatalog = (data, { adopt = false } = {}) => {
+const validateCurrentWriterFeatureCatalog = async (data, { adopt = false } = {}) => {
   const results = normalizeLogicalResults(
     (Array.isArray(data.results) ? data.results : []).map((result, index) => ({
       name: result?.name || `Result ${index + 1}`,
@@ -1484,15 +1544,16 @@ const validateCurrentWriterFeatureCatalog = (data, { adopt = false } = {}) => {
   );
   const catalog = data.editorState?.featureCatalog ?? null;
   if (catalog === null) return null;
-  return validateFeatureCatalog(catalog, results, {
+  return validateFeatureCatalogForImport(catalog, results, {
     adopt,
     mode: data.renderRequest?.mode || ''
   });
 };
 
-const preflightSessionImport = (rawData) => {
-  const sourceSessionVersion = rawData?.version;
+const preflightSessionImport = async (sessionData) => {
+  const sourceSessionVersion = sessionData?.version;
   validateSessionVersion(sourceSessionVersion);
+  const rawData = await convertMainSessionComparisonFrames(sessionData);
   const currentSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
   let adoptedSession = null;
   let currentResourceTable = null;
@@ -1501,14 +1562,12 @@ const preflightSessionImport = (rawData) => {
   let normalizedData;
 
   if (currentSession) {
-    if (!isPlainObject(rawData) || rawData.format !== 'gbdraw-session') {
-      throw new Error('Invalid session file.');
-    }
+    if (!isPlainObject(rawData) || rawData.format !== 'gbdraw-session') throw SESSION_FORMAT_ERROR();
     recordSessionLifecycleEvent('session-authority-validation-start');
     adoptedSession = adoptCurrentSessionDocument(rawData, sourceSessionVersion);
     recordSessionLifecycleEvent('session-authority-validation-end');
     recordSessionLifecycleEvent('feature-catalog-validation-start');
-    validatedFeatureCatalog = validateCurrentWriterFeatureCatalog(rawData, {
+    validatedFeatureCatalog = await validateCurrentWriterFeatureCatalog(rawData, {
       adopt: true
     });
     recordSessionLifecycleEvent('feature-catalog-validation-end');
@@ -1534,7 +1593,7 @@ const preflightSessionImport = (rawData) => {
     ? promoteGallerySessionToCurrent(normalizedData)
     : normalizedData;
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-start');
-  validateSessionLosatArtifacts(promotedData, sourceSessionVersion);
+  await validateSessionLosatArtifactsForImport(promotedData, sourceSessionVersion);
   if (currentSession) recordSessionLifecycleEvent('losat-artifact-validation-end');
   const data = currentSession
     ? promotedData
@@ -1550,9 +1609,24 @@ const preflightSessionImport = (rawData) => {
   )
     ? { ...data.renderRequest, comparisons: [] }
     : data.renderRequest;
+  let currentStoredConfig = sourceSessionVersion < SESSION_VERSION
+    ? withCurrentLinearLabelVisibility(data.config)
+    : data.config;
+  if (sourceSessionVersion < SESSION_VERSION && isPlainObject(currentStoredConfig)
+    && Object.prototype.hasOwnProperty.call(currentStoredConfig, 'recordDisplayDrafts')) {
+    currentStoredConfig = {
+      ...currentStoredConfig,
+      recordDisplayDrafts: migrateLegacyRecordDisplayDrafts(
+        currentStoredConfig.recordDisplayDrafts
+      )
+    };
+  }
   const runtimeStoredConfig = currentSession && Object.prototype.hasOwnProperty.call(data, 'config')
     ? migrateImportedLinearTrackSlots(
-        migrateImportedCircularTrackSlots(data.config),
+        migrateImportedCircularTrackSlots(withHistoricalPairwiseMatchStyleFallback(
+          currentStoredConfig,
+          data.ui?.mode || data.renderRequest?.mode
+        )),
         sourceSessionVersion
       )
     : data.config;
@@ -1567,6 +1641,8 @@ const preflightSessionImport = (rawData) => {
         webFiles: data.webFiles,
         legacyFiles: data.files,
         storedConfig: runtimeStoredConfig,
+        initializeCliInputs: !Object.hasOwn(data, 'config')
+          && data.cliInvocation?.generatedBy === 'gbdraw',
         fileBindings: data.cliInvocation?.fileBindings,
         linearTrackSlotSchemaVersion: sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
           ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
@@ -1578,6 +1654,17 @@ const preflightSessionImport = (rawData) => {
       })
     : null;
   if (currentSession) recordSessionLifecycleEvent('canonical-request-projection-end');
+  if (canonicalProjection?.pipelineState?.legacySimilarityAlignment) {
+    const promotedRequest = promoteCanonicalRenderRequestToCurrent(data.renderRequest, {
+      featureCatalog: data.editorState?.featureCatalog || null,
+      legacyOrthogroupState: data.orthogroupState || null
+    });
+    canonicalProjection.config.linearRecordLayout = {
+      ...canonicalProjection.config.linearRecordLayout,
+      recordTranslations: promotedRequest.layout.recordTranslations,
+      similarityAlignment: promotedRequest.layout.similarityAlignment
+    };
+  }
   let restoredConfig = canonicalProjection
     ? sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION
       ? cloneJsonData(canonicalProjection.config)
@@ -1593,6 +1680,9 @@ const preflightSessionImport = (rawData) => {
           )
         }
     : data.config;
+  if (sourceSessionVersion < SESSION_VERSION && restoredConfig) {
+    restoredConfig = withCurrentLinearLabelVisibility(restoredConfig);
+  }
   if (sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION && restoredConfig) {
     const sourceStoredConfig = isPlainObject(normalizedData.config)
       ? normalizedData.config
@@ -1631,6 +1721,11 @@ const preflightSessionImport = (rawData) => {
   if (!canonicalProjection && restoredConfig) {
     hydrateMissingMultiRecordPositionsFromCliInvocation(restoredConfig, data.cliInvocation);
   }
+  // Saved omission means historical OFF, independently of fresh/reset defaults.
+  restoredConfig = {
+    ...restoredConfig,
+    form: { keep_definition_left_aligned: false, ...restoredConfig?.form }
+  };
   const hasCurrentStoredUnmanagedOverrides = currentSession
     && isPlainObject(runtimeStoredConfig)
     && Object.prototype.hasOwnProperty.call(
@@ -1673,13 +1768,8 @@ const preflightSessionImport = (rawData) => {
     ? (() => {
         const artifactState = projectArtifactState(data);
         if (currentSession) artifactState.editorState = normalizedEditorState;
-        if (canonicalProjection.pipelineState) {
-          artifactState.orthogroupState = {
-            ...(artifactState.orthogroupState || {}),
-            selectedOrthogroupAlignmentFeature:
-              canonicalProjection.pipelineState.selectedOrthogroupAlignmentFeature
-          };
-        }
+        artifactState.legacySimilarityAlignment =
+          canonicalProjection.pipelineState?.legacySimilarityAlignment || null;
         return {
           documentMetadata: projectDocumentMetadata(data),
           renderState: {
@@ -1728,11 +1818,18 @@ const hasStoredLayoutPreferences = (ui) => (
   LEGACY_LAYOUT_PREFERENCE_FIELDS.some((field) => hasStoredLayoutValue(ui?.[field]))
 );
 
-const restoreLayoutPreferences = (ui = {}, { preserveActive = false } = {}) => {
-  const activeBeforeRestore = {
-    legend: state.form.legend,
-    plotTitlePosition: state.adv.plot_title_position
-  };
+// A saved layout owner (current or legacy ui fields) wins. Without one, a
+// canonical Session takes the layout preferences projected from its committed
+// request. Legacy fields migrate with the committed values (canonical) or the
+// active values (other payloads) as their fallback.
+const restoreLayoutPreferences = (ui = {}, { projected = null } = {}) => {
+  if (projected && !hasStoredLayoutPreferences(ui)) {
+    replaceLayoutPreferences(state.layoutPreferences, normalizeLayoutPreferences(projected));
+    return;
+  }
+  const active = projected
+    ? resolveActiveLayoutPreference(projected, state.mode.value, Boolean(state.form.multi_record_canvas))
+    : { legend: state.form.legend, plotTitlePosition: state.adv.plot_title_position };
   const migrationUi = (
     !isPlainObject(ui.layoutPreferences) &&
     state.mode.value === 'linear' &&
@@ -1741,39 +1838,21 @@ const restoreLayoutPreferences = (ui = {}, { preserveActive = false } = {}) => {
   )
     ? { ...ui, linearLegendPosition: ui.legend }
     : ui;
-  const migrated = migrateLegacyLayoutPreferences(migrationUi, {
-    mode: state.mode.value,
-    multiRecord: Boolean(state.form.multi_record_canvas),
-    activeLegend: activeBeforeRestore.legend,
-    activePlotTitlePosition: activeBeforeRestore.plotTitlePosition
-  });
-  // Current-session render requests describe the last generated artifact, while
-  // stored layout preferences own the editor's active semantic position. Use the
-  // projected request only when neither the current nor legacy owner is present.
-  if (preserveActive && !hasStoredLayoutPreferences(ui)) {
-    if (state.mode.value === 'linear') {
-      migrated.linear = {
-        legend: normalizeLegendPosition(activeBeforeRestore.legend, 'bottom'),
-        plotTitlePosition: normalizeLinearPlotTitlePosition(
-          activeBeforeRestore.plotTitlePosition
-        )
-      };
-    } else {
-      const key = state.form.multi_record_canvas ? 'multi' : 'single';
-      migrated.circular[key] = {
-        legend: normalizeLegendPosition(activeBeforeRestore.legend, 'left'),
-        plotTitlePosition: normalizeCircularPlotTitlePosition(
-          activeBeforeRestore.plotTitlePosition
-        )
-      };
-    }
-  }
   replaceLayoutPreferences(
     state.layoutPreferences,
-    migrated
+    migrateLegacyLayoutPreferences(migrationUi, {
+      mode: state.mode.value,
+      multiRecord: Boolean(state.form.multi_record_canvas),
+      activeLegend: active.legend,
+      activePlotTitlePosition: active.plotTitlePosition
+    })
   );
 };
 
+// Captured or stored settings (History Undo and Redo, the failed Session Load
+// rollback, a settings-only Session) pass `resolveTrackPlacements: false`: the
+// track stacks are installed as given, so unset slot sides, lane directions,
+// and axis indexes stay unset (R11).
 export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) => {
   requireCurrentWebStateFieldNames(data);
   if (isPlainObject(data.form) && Object.prototype.hasOwnProperty.call(data.form, 'linear_track_layout')) {
@@ -1810,7 +1889,10 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
   const linearLayout = data.linearRecordLayout && typeof data.linearRecordLayout === 'object'
     ? data.linearRecordLayout
     : null;
-  state.linearRecordLayoutEnabled.value = Boolean(linearLayout?.enabled);
+  // Omission takes the fresh default in every Session version.
+  state.linearRecordLayoutEnabled.value = typeof linearLayout?.enabled === 'boolean'
+    ? linearLayout.enabled
+    : WEB_UX_PROFILE.linear.arrangeInRowsByDefault;
   const linearRecordGap = Number(linearLayout?.recordGap);
   state.linearRecordGap.value = Number.isFinite(linearRecordGap) && linearRecordGap >= 0
     ? linearRecordGap
@@ -1819,9 +1901,29 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
     0,
     state.linearRecordRows.length,
     ...(Array.isArray(linearLayout?.rows) ? linearLayout.rows : [])
-      .map((entry) => ({ uid: String(entry?.uid || ''), row: Number(entry?.row) }))
+      .map((entry) => ({
+        uid: String(entry?.uid || ''), row: Number(entry?.row),
+        ...(entry?.canonicalCardinality === 'exactly_one'
+          ? { canonicalCardinality: 'exactly_one' } : {}),
+        ...(Number(entry?.canonicalRow) === Number(entry?.row)
+          && Number.isInteger(entry?.canonicalColumn) && entry.canonicalColumn > 0
+          ? { canonicalRow: entry.canonicalRow, canonicalColumn: entry.canonicalColumn }
+          : {})
+      }))
       .filter((entry) => entry.uid && Number.isInteger(entry.row) && entry.row > 0)
   );
+  if (state.linearRecordTranslations) {
+    state.linearRecordTranslations.value = cloneJsonData(
+      Array.isArray(linearLayout?.recordTranslations)
+        ? linearLayout.recordTranslations
+        : []
+    );
+  }
+  if (state.similarityAlignmentPlan) {
+    state.similarityAlignmentPlan.value = linearLayout?.similarityAlignment
+      ? cloneJsonData(linearLayout.similarityAlignment)
+      : null;
+  }
   replaceLinearComparisonPlan(
     state.linearComparisonPlan,
     data.linearComparisonPlan || createDefaultLinearComparisonPlan()
@@ -1862,7 +1964,10 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
     state.form.linear_track_layout
   );
   state.form.plot_title = String(state.form.plot_title || '');
-  state.form.legend = normalizeLegendPosition(state.form.legend, state.mode.value === 'linear' ? 'bottom' : 'left');
+  // `form.legend` and `adv.plot_title_position` are accessors over
+  // `layoutPreferences` (state.js) whose setters normalize a merged value.
+  // Writing the resolved value back would only pin an unset Circular
+  // multi-record preference, so neither is rewritten here.
   state.adv.feature_shapes = normalizeFeatureRenderingMap(state.adv.feature_shapes);
   Object.assign(state.adv, normalizedPersistedArrowGeometryState(data.adv));
   state.adv.multi_record_size_mode = requireCurrentCircularMultiRecordSizeMode(
@@ -1904,11 +2009,6 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
       return left.__index - right.__index;
     })
     .map(({ __index, ...entry }) => entry);
-  if (state.mode.value === 'linear') {
-    state.adv.plot_title_position = normalizeLinearPlotTitlePosition(state.adv.plot_title_position);
-  } else {
-    state.adv.plot_title_position = normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
-  }
   const rawPlotTitleFontSize = state.adv.plot_title_font_size;
   if (
     rawPlotTitleFontSize === null ||
@@ -1986,6 +2086,12 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
         )
       );
     }
+  } else {
+    // The merge installs the caller's slot objects; copy them so a later edit
+    // never writes into a History entry or another caller-owned snapshot.
+    ['circular_track_slots', 'linear_track_slots'].forEach((key) => {
+      state.adv[key].splice(0, state.adv[key].length, ...cloneJsonData(state.adv[key]));
+    });
   }
   state.adv.depth_window_size = normalizePositiveNumberOrNull(state.adv.depth_window_size);
   state.adv.depth_step_size = normalizePositiveNumberOrNull(state.adv.depth_step_size);
@@ -2040,12 +2146,21 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
     state.adv.gc_content_max_percent = state.adv.gc_content_min_percent;
   }
   state.adv.linear_show_replicon = state.adv.linear_show_replicon === true;
-  state.adv.linear_show_accession = state.adv.linear_show_accession !== false;
-  state.adv.linear_show_length = state.adv.linear_show_length !== false;
+  state.adv.linear_accession_visibility = requireLinearLabelVisibilityMode(
+    state.adv.linear_accession_visibility,
+    'Linear Accession visibility'
+  );
+  state.adv.linear_length_visibility = requireLinearLabelVisibilityMode(
+    state.adv.linear_length_visibility,
+    'Linear Length / Coordinates visibility'
+  );
   state.adv.linear_definition_line_styles = normalizeDefinitionLineStyleState(
     state.adv.linear_definition_line_styles
   );
-  state.adv.pairwise_match_style = normalizePairwiseMatchStyle(state.adv.pairwise_match_style);
+  state.adv.pairwise_match_style = normalizeCurrentPairwiseMatchStyle(
+    state.adv.pairwise_match_style,
+    'ribbon'
+  );
   if (data.losat) {
     safeDeepMerge(state.losat, data.losat);
     const rawParallelWorkers = String(data.losat.parallelWorkers ?? '').trim().toLowerCase();
@@ -2202,6 +2317,9 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
   if (Object.prototype.hasOwnProperty.call(webEdits, 'orthogroupDescriptionOverrides')) {
     replaceStringMap(state.orthogroupDescriptionOverrides, webEdits.orthogroupDescriptionOverrides);
   }
+  // Absent in older Sessions: no dormant names (D-21).
+  clearObject(state.orthogroupDormantOverrides);
+  Object.assign(state.orthogroupDormantOverrides, normalizeOrthogroupDormantOverrides(webEdits.orthogroupDormantOverrides));
   state.modeProfileStateManager?.importState?.(
     data.modeProfiles ?? null,
     state.mode.value,
@@ -2354,8 +2472,7 @@ export const setPreviewRuntime = (runtime) => {
 };
 
 export const serializeResults = () => {
-  if (activePreviewRuntime?.flushActiveResult) {
-    activePreviewRuntime.flushActiveResult();
+  if (activePreviewRuntime) {
     return normalizeLogicalResults(state.results.value.map((res, idx) => ({
       name: res.name || `Result ${idx + 1}`,
       content: res.content
@@ -2467,8 +2584,10 @@ const serializeLosatCache = () => {
     return entry;
   };
 
+  // One entry per raw key: rows that share a key (two rings of one sequence)
+  // keep the first row's filename, as the CLI raw cache does.
   info.forEach((entry, idx) => {
-    if (!entry || !entry.key) return;
+    if (!entry || !entry.key || seen.has(entry.key)) return;
     const cached = cacheMap.get(entry.key);
     if (!isCurrentRawLosatCacheEntry(cached)) return;
     entries.push(buildEntry(entry.key, cached, {
@@ -2645,25 +2764,34 @@ const applyProteinIdentityManifest = (manifest, { adoptCurrent = false } = {}) =
   adoptedProteinIdentityManifest = adoptCurrent ? manifest : null;
 };
 
-export const applyOrthogroupStateData = (orthogroupState = {}) => {
-  const groups = Array.isArray(orthogroupState.groups) ? orthogroupState.groups : [];
+export const applyOrthogroupStateData = (
+  orthogroupState = {}, { legacyRecords = null, catalogFeatureState = null } = {}
+) => {
+  const storedGroups = Array.isArray(orthogroupState.groups) ? orthogroupState.groups : [];
+  const groups = legacyRecords
+    ? migrateLegacyOrthogroupMembers(storedGroups, legacyRecords)
+    : storedGroups;
   const groupIds = groups
     .map((group) => String(group?.id || '').trim())
     .filter(Boolean);
   const groupIdSet = new Set(groupIds);
-  const index = buildOrthogroupFeatureIndex(groups);
+  const index = catalogFeatureState?.featureOrthogroupIndex || buildOrthogroupFeatureIndex(groups);
 
   state.orthogroups.value = groups;
   state.featureOrthogroupIndex.value = index;
-  state.extractedFeatures.value = enrichFeaturesWithOrthogroups(
-    state.extractedFeatures.value,
-    index
-  );
-  if (state.biologicalFeatures) {
-    state.biologicalFeatures.value = enrichFeaturesWithOrthogroups(
-      state.biologicalFeatures.value,
+  // Current catalog admission has already projected these exact groups onto
+  // its features. Reuse that owner rather than deriving the same metadata twice.
+  if (!catalogFeatureState) {
+    state.extractedFeatures.value = enrichFeaturesWithOrthogroups(
+      state.extractedFeatures.value,
       index
     );
+    if (state.biologicalFeatures) {
+      state.biologicalFeatures.value = enrichFeaturesWithOrthogroups(
+        state.biologicalFeatures.value,
+        index
+      );
+    }
   }
   const selectedId = String(orthogroupState.selectedOrthogroupId || '').trim();
   state.selectedOrthogroupId.value = selectedId && groupIdSet.has(selectedId) ? selectedId : (groupIds[0] || '');
@@ -2677,6 +2805,11 @@ export const applyOrthogroupStateData = (orthogroupState = {}) => {
   Object.keys(state.orthogroupDescriptionOverrides).forEach((id) => {
     if (!groupIdSet.has(id)) delete state.orthogroupDescriptionOverrides[id];
   });
+  if (Object.hasOwn(orthogroupState, 'orthogroupDormantOverrides')) {
+    clearObject(state.orthogroupDormantOverrides);
+    Object.assign(state.orthogroupDormantOverrides,
+      normalizeOrthogroupDormantOverrides(orthogroupState.orthogroupDormantOverrides));
+  }
 };
 
 const customDepthRequested = (mode, sourceState) => {
@@ -2694,6 +2827,25 @@ const customDepthRequested = (mode, sourceState) => {
   );
 };
 
+/**
+ * The one check that the active mode has its biological inputs; Generate and
+ * Save from the draft both use it, so both explain the same missing input.
+ */
+export const assertActiveModeInputs = (mode = state.mode.value, sourceState = state) => {
+  const files = sourceState.files || {};
+  if (mode === 'circular') {
+    const gff = sourceState.cInputType?.value === 'gff';
+    if (!(gff ? files.c_gff : files.c_gb)) throw diagnosticError('INPUT_REQUIRED');
+    if (gff && !files.c_fasta) throw diagnosticError('FASTA_REQUIRED');
+    return;
+  }
+  const gff = sourceState.lInputType?.value === 'gff';
+  (Array.isArray(sourceState.linearSeqs) ? sourceState.linearSeqs : []).forEach((seq, index) => {
+    if (!(gff ? seq?.gff : seq?.gb)) throw diagnosticError('INPUT_REQUIRED', { inputOrdinal: index + 1 });
+    if (gff && !seq?.fasta) throw diagnosticError('FASTA_REQUIRED', { inputOrdinal: index + 1 });
+  });
+};
+
 export const materializeLinearRecordFiles = (
   sequences,
   catalog,
@@ -2702,13 +2854,12 @@ export const materializeLinearRecordFiles = (
   const sourceSequences = Array.isArray(sequences) ? sequences : [];
   if (catalog == null) return sourceSequences;
   if (catalog?.mode !== 'linear' || catalog?.status !== 'ready') {
-    const issue = Array.isArray(catalog?.issues) ? catalog.issues[0] : '';
-    throw new Error(issue || 'Linear record discovery is not ready.');
+    const issue = Array.isArray(catalog?.issues) ? catalog.issues[0] : null;
+    throw issue ? diagnosticError(issue.code, issue.context)
+      : diagnosticError('RECORD_SELECTION', { reason: 'DISCOVERY_PENDING' });
   }
   const records = Array.isArray(catalog.records) ? catalog.records : [];
-  if (records.length === 0) {
-    throw new Error('Linear record discovery did not find any records.');
-  }
+  if (records.length === 0) throw diagnosticError('NO_RECORDS');
   const recordCountBySource = new Map();
   records.forEach((record) => {
     const sourceIndex = Number(record?.sourceIndex);
@@ -2716,17 +2867,13 @@ export const materializeLinearRecordFiles = (
   });
   sourceSequences.forEach((source, sourceIndex) => {
     const count = recordCountBySource.get(sourceIndex) || 0;
-    if (count === 0) {
-      throw new Error(`Sequence #${sourceIndex + 1}: no records were found.`);
-    }
+    if (count === 0) throw diagnosticError('NO_RECORDS', { inputOrdinal: sourceIndex + 1 });
     if (count <= 1) return;
     const hasRegion = [source.region_start, source.region_end].some(
       (value) => value !== null && value !== undefined && value !== ''
     );
     if (hasRegion) {
-      throw new Error(
-        `Sequence #${sourceIndex + 1}: choose a Record before setting a region on a multi-record file.`
-      );
+      throw diagnosticError('REGION_INVALID', { inputOrdinal: sourceIndex + 1, reason: 'SELECT_RECORD_FOR_REGION' });
     }
   });
   return sourceSequences;
@@ -2757,6 +2904,7 @@ export const serializeActiveRenderFiles = async (
       record_subtitle: seq.record_subtitle ?? '',
       file_definition: seq.file_definition ?? '',
       file_subtitle: seq.file_subtitle ?? '',
+      inferred_definition: seq.inferred_definition ?? '',
       region_record_id: seq.region_record_id ?? '',
       region_start: seq.region_start ?? null,
       region_end: seq.region_end ?? null,
@@ -2971,10 +3119,10 @@ export const canonicalRenderArtifactOwner = Object.freeze({
   }
 });
 
-const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordInputs = true } = {}) => {
-  state.matchSequenceRegistry?.reset?.();
-  state.circularRecordList.value = [];
-  Object.assign(state.circularRecordDiscovery, {
+const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordInputs = true, targetState = state } = {}) => {
+  targetState.matchSequenceRegistry?.reset?.();
+  targetState.circularRecordList.value = [];
+  Object.assign(targetState.circularRecordDiscovery, {
     status: 'idle',
     error: '',
     inputType: '',
@@ -2982,63 +3130,63 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordIn
     pairedFile: null,
     canonicalRecordIdentities: []
   });
-  state.files.c_gb = null;
-  state.files.c_gff = null;
-  state.files.c_fasta = null;
-  state.files.c_depth = null;
-  state.files.c_conservation_blasts = [];
-  state.files.c_conservation_blasts_source = null;
-  state.files.c_conservation_fastas = [];
-  state.files.c_conservation_sequence_sources = [];
-  state.files.linearCanonicalComparisons = [];
-  state.files.d_color = null;
-  state.files.t_color = null;
-  state.files.blacklist = null;
-  state.files.whitelist = null;
-  state.files.qualifier_priority = null;
-  state.linearReorderNotice.value = '';
+  targetState.files.c_gb = null;
+  targetState.files.c_gff = null;
+  targetState.files.c_fasta = null;
+  targetState.files.c_depth = null;
+  targetState.files.c_conservation_blasts = [];
+  targetState.files.c_conservation_blasts_source = null;
+  targetState.files.c_conservation_fastas = [];
+  targetState.files.c_conservation_sequence_sources = [];
+  targetState.files.linearCanonicalComparisons = [];
+  targetState.files.d_color = null;
+  targetState.files.t_color = null;
+  targetState.files.blacklist = null;
+  targetState.files.whitelist = null;
+  targetState.files.qualifier_priority = null;
+  targetState.linearReorderNotice.value = '';
 
   if (!filesData) {
-    state.linearSeqs.splice(0, state.linearSeqs.length, ...normalizeLinearSeqList([]));
-    state.linearRecordRows.splice(0);
+    targetState.linearSeqs.splice(0, targetState.linearSeqs.length, ...normalizeLinearSeqList([]));
+    targetState.linearRecordRows.splice(0);
     replaceLinearComparisonPlan(
-      state.linearComparisonPlan,
-      reconcileLinearComparisonPlan(state.linearComparisonPlan, state.linearSeqs)
+      targetState.linearComparisonPlan,
+      reconcileLinearComparisonPlan(targetState.linearComparisonPlan, targetState.linearSeqs)
     );
     return { collapsedLinearSeqs: false };
   }
 
-  state.files.c_gb = deserializeFile(filesData.c_gb);
-  state.files.c_gff = deserializeFile(filesData.c_gff);
-  state.files.c_fasta = deserializeFile(filesData.c_fasta);
-  state.files.c_depth = deserializeFile(filesData.c_depth);
-  state.files.c_conservation_blasts = Array.isArray(filesData.c_conservation_blasts)
+  targetState.files.c_gb = deserializeFile(filesData.c_gb);
+  targetState.files.c_gff = deserializeFile(filesData.c_gff);
+  targetState.files.c_fasta = deserializeFile(filesData.c_fasta);
+  targetState.files.c_depth = deserializeFile(filesData.c_depth);
+  targetState.files.c_conservation_blasts = Array.isArray(filesData.c_conservation_blasts)
     ? filesData.c_conservation_blasts.map((entry) => deserializeFile(entry)).filter(Boolean)
     : [];
-  state.files.c_conservation_blasts_source = filesData.c_conservation_blasts_source === 'losat-cache'
+  targetState.files.c_conservation_blasts_source = filesData.c_conservation_blasts_source === 'losat-cache'
     ? 'losat-cache'
     : null;
-  state.files.c_conservation_fastas = Array.isArray(filesData.c_conservation_fastas)
+  targetState.files.c_conservation_fastas = Array.isArray(filesData.c_conservation_fastas)
     ? filesData.c_conservation_fastas.map((entry) => deserializeFile(entry))
     : [];
-  state.files.c_conservation_sequence_sources = Array.isArray(filesData.c_conservation_sequence_sources)
+  targetState.files.c_conservation_sequence_sources = Array.isArray(filesData.c_conservation_sequence_sources)
     ? filesData.c_conservation_sequence_sources.map((entry) => deserializeFile(entry))
     : [];
-  state.files.linearCanonicalComparisons = deserializeCanonicalComparisons(
+  targetState.files.linearCanonicalComparisons = deserializeCanonicalComparisons(
     filesData.linearCanonicalComparisons,
     { adoptCanonicalPayloads }
   );
-  state.files.d_color = deserializeFile(filesData.d_color);
-  state.files.t_color = deserializeFile(filesData.t_color);
-  state.files.blacklist = deserializeFile(filesData.blacklist);
-  state.files.whitelist = deserializeFile(filesData.whitelist);
-  state.files.qualifier_priority = deserializeFile(filesData.qualifier_priority);
+  targetState.files.d_color = deserializeFile(filesData.d_color);
+  targetState.files.t_color = deserializeFile(filesData.t_color);
+  targetState.files.blacklist = deserializeFile(filesData.blacklist);
+  targetState.files.whitelist = deserializeFile(filesData.whitelist);
+  targetState.files.qualifier_priority = deserializeFile(filesData.qualifier_priority);
 
   const canonicalCircularRecords = Array.isArray(filesData.circularRecords)
     ? filesData.circularRecords
     : [];
   if (canonicalCircularRecords.length > 0) {
-    state.circularRecordDiscovery.canonicalRecordIdentities = canonicalCircularRecords
+    targetState.circularRecordDiscovery.canonicalRecordIdentities = canonicalCircularRecords
       .map((record, index) => {
         const selector = record?.region?.selector || record?.selector;
         const selectorValue = selector?.kind === 'recordId'
@@ -3052,15 +3200,17 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordIn
           recordKey: String(record?.recordKey || '')
         };
       });
-    Object.assign(state.circularRecordDiscovery, {
-      status: 'loading',
+    Object.assign(targetState.circularRecordDiscovery, {
+      status: (targetState.cInputType.value === 'gff'
+        ? targetState.files.c_gff && targetState.files.c_fasta
+        : targetState.files.c_gb) ? 'deferred' : 'idle',
       error: '',
-      inputType: state.cInputType.value,
-      primaryFile: state.cInputType.value === 'gff'
-        ? state.files.c_gff
-        : state.files.c_gb,
-      pairedFile: state.cInputType.value === 'gff'
-        ? state.files.c_fasta
+      inputType: targetState.cInputType.value,
+      primaryFile: targetState.cInputType.value === 'gff'
+        ? targetState.files.c_gff
+        : targetState.files.c_gb,
+      pairedFile: targetState.cInputType.value === 'gff'
+        ? targetState.files.c_fasta
         : null
     });
   }
@@ -3077,6 +3227,7 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordIn
       record_subtitle: seq.record_subtitle ?? '',
       file_definition: seq.file_definition ?? '',
       file_subtitle: seq.file_subtitle ?? '',
+      inferred_definition: seq.inferred_definition ?? '',
       region_record_id: seq.region_record_id ?? '',
       region_start: seq.region_start ?? null,
       region_end: seq.region_end ?? null,
@@ -3085,18 +3236,26 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordIn
     const normalized = normalizeLinearSeqList(loadedLinearSeqs);
     const collapsed = resolveRecordInputs ? collapseEmptyLinearSeqList(loadedLinearSeqs) : loadedLinearSeqs;
     const collapsedLinearSeqs = collapsed.length !== normalized.length;
-    state.linearSeqs.splice(0, state.linearSeqs.length, ...collapsed);
+    targetState.linearSeqs.splice(0, targetState.linearSeqs.length, ...collapsed);
     if (resolveRecordInputs) {
-      const rowByUid = new Map(state.linearRecordRows.map((entry) => [String(entry?.uid || ''), entry]));
-      state.linearRecordRows.splice(
+      const rowByUid = new Map(targetState.linearRecordRows.map((entry) => [String(entry?.uid || ''), entry]));
+      targetState.linearRecordRows.splice(
         0,
-        state.linearRecordRows.length,
-        ...state.linearSeqs.map((seq, index) => ({
-          uid: seq.uid,
-          row: Number.isInteger(Number(rowByUid.get(seq.uid)?.row)) && Number(rowByUid.get(seq.uid)?.row) > 0
-            ? Number(rowByUid.get(seq.uid).row)
-            : index + 1
-        }))
+        targetState.linearRecordRows.length,
+        ...targetState.linearSeqs.map((seq, index) => {
+          const saved = rowByUid.get(seq.uid);
+          const row = Number.isInteger(Number(saved?.row)) && Number(saved.row) > 0
+            ? Number(saved.row) : index + 1;
+          return {
+            uid: seq.uid, row,
+            ...(saved?.canonicalCardinality === 'exactly_one'
+              ? { canonicalCardinality: 'exactly_one' } : {}),
+            ...(Number(saved?.canonicalRow) === row
+              && Number.isInteger(saved?.canonicalColumn) && saved.canonicalColumn > 0
+              ? { canonicalRow: row, canonicalColumn: saved.canonicalColumn }
+              : {})
+          };
+        })
       );
     }
     const comparisonFiles = new Map(
@@ -3107,21 +3266,21 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordIn
         ])
         .filter(([id]) => id)
     );
-    const planWithFiles = normalizeLinearComparisonPlan(state.linearComparisonPlan);
+    const planWithFiles = normalizeLinearComparisonPlan(targetState.linearComparisonPlan);
     planWithFiles.edges.forEach((edge) => {
       edge.file = comparisonFiles.get(edge.id) || null;
     });
     replaceLinearComparisonPlan(
-      state.linearComparisonPlan,
-      reconcileLinearComparisonPlan(planWithFiles, state.linearSeqs)
+      targetState.linearComparisonPlan,
+      reconcileLinearComparisonPlan(planWithFiles, targetState.linearSeqs)
     );
     return { collapsedLinearSeqs };
   }
 
-  state.linearSeqs.splice(0, state.linearSeqs.length, ...normalizeLinearSeqList([]));
+  targetState.linearSeqs.splice(0, targetState.linearSeqs.length, ...normalizeLinearSeqList([]));
   replaceLinearComparisonPlan(
-    state.linearComparisonPlan,
-    reconcileLinearComparisonPlan(state.linearComparisonPlan, state.linearSeqs)
+    targetState.linearComparisonPlan,
+    reconcileLinearComparisonPlan(targetState.linearComparisonPlan, targetState.linearSeqs)
   );
   return { collapsedLinearSeqs: false };
 };
@@ -3268,7 +3427,6 @@ const captureSessionImportTransientState = () => ({
     state.semanticFileWatchersSuppressed.value
   ),
   skipCaptureBaseConfig: Boolean(state.skipCaptureBaseConfig.value),
-  skipPositionReapply: Boolean(state.skipPositionReapply.value),
   suppressCircularMultiRecordDefaults: Boolean(
     state.suppressCircularMultiRecordDefaults.value
   ),
@@ -3300,7 +3458,6 @@ const captureSessionImportTransientState = () => ({
   featureSelectionDrag: cloneJsonData(state.featureSelectionDrag),
   labelReflowLastError: state.labelReflowLastError.value,
   labelOverrideBuildWarning: state.labelOverrideBuildWarning.value,
-  labelLayoutDirtyReason: state.labelLayoutDirtyReason.value,
   clickedFeature: state.clickedFeature.value,
   clickedPairwiseMatch: state.clickedPairwiseMatch.value,
   clickedLabel: state.clickedLabel.value,
@@ -3372,7 +3529,6 @@ const restoreSessionImportTransientState = (snapshot) => {
   );
   state.labelReflowLastError.value = snapshot.labelReflowLastError;
   state.labelOverrideBuildWarning.value = snapshot.labelOverrideBuildWarning;
-  state.labelLayoutDirtyReason.value = snapshot.labelLayoutDirtyReason;
   state.clickedFeature.value = snapshot.clickedFeature;
   state.clickedPairwiseMatch.value = snapshot.clickedPairwiseMatch;
   state.clickedLabel.value = snapshot.clickedLabel;
@@ -3402,21 +3558,20 @@ const restoreSessionImportTransientState = (snapshot) => {
   state.semanticFileWatchersSuppressed.value =
     snapshot.semanticFileWatchersSuppressed;
   state.skipCaptureBaseConfig.value = snapshot.skipCaptureBaseConfig;
-  state.skipPositionReapply.value = snapshot.skipPositionReapply;
 };
 
 const captureSessionImportSnapshot = () => ({
   config: cloneJsonData(buildConfigData()),
   ui: cloneJsonData(buildUiStateData()),
   files: cloneLiveFileState(),
-  results: serializeResults(),
+  results: state.results.value,
   features: buildFeatureStateData(),
   editorState: buildEditorStateData(),
   orthogroupState: buildOrthogroupStateData(),
   collinearGroups: state.collinearGroups.value,
   runState: buildRunStateData(),
-  losatCache: new Map(state.losatCache.value),
-  losatDerivedCache: new Map(state.losatDerivedCache.value),
+  losatCache: state.losatCache.value,
+  losatDerivedCache: state.losatDerivedCache.value,
   proteinIdentityManifest: rawReactiveValue(state.proteinIdentityManifest.value)
     === adoptedProteinIdentityManifest
     ? rawReactiveValue(state.proteinIdentityManifest.value)
@@ -3441,12 +3596,11 @@ const restoreSessionImportSnapshot = async (snapshot) => {
     state.semanticFileWatchersSuppressed.value = true;
     resetSessionBaseline();
     state.mode.value = snapshot.ui.mode === 'linear' ? 'linear' : 'circular';
-    await nextTick();
-    applyConfigData(snapshot.config);
+    applyConfigData(snapshot.config, { resolveTrackPlacements: false });
     applyUiStateData(snapshot.ui);
     restoreLiveFileState(snapshot.files);
-    state.losatCache.value = new Map(snapshot.losatCache);
-    state.losatDerivedCache.value = new Map(snapshot.losatDerivedCache);
+    state.losatCache.value = snapshot.losatCache;
+    state.losatDerivedCache.value = snapshot.losatDerivedCache;
     adoptedProteinIdentityManifest = snapshot.adoptedProteinIdentityManifest;
     state.proteinIdentityManifest.value = snapshot.proteinIdentityManifest === adoptedProteinIdentityManifest
       ? snapshot.proteinIdentityManifest
@@ -3464,17 +3618,18 @@ const restoreSessionImportSnapshot = async (snapshot) => {
       cloneJsonData(snapshot.importedComparisonIntent)
     );
     state.skipCaptureBaseConfig.value = true;
-    state.skipPositionReapply.value = true;
     applyResultsData(snapshot.results, snapshot.ui);
     applyFeatureStateData(snapshot.features);
     applyOrthogroupStateData(snapshot.orthogroupState);
     state.collinearGroups.value = snapshot.collinearGroups;
-    applyEditorStateData(snapshot.editorState);
+    applyEditorStateData(snapshot.editorState, { normalized: true });
     applyRunStateData(snapshot.runState);
     state.errorLog.value = snapshot.errorLog;
     state.resultPanelTab.value = snapshot.resultPanelTab;
     await nextTick();
+    recordSessionLifecycleEvent('session-rollback-source-restored');
     restoreSessionImportTransientState(snapshot.transients);
+    recordSessionLifecycleEvent('session-rollback-transients-reconciled');
     await nextTick();
   } finally {
     state.sessionImportRollbackInProgress.value = false;
@@ -3512,6 +3667,8 @@ const resetSessionBaseline = () => {
   state.resultPanelTab.value = 'preview';
   state.lastRunInfo.value = null;
   state.trackSlotResolvedGeometry.value = null;
+  state.annotationWarnings.value = [];
+  state.comparisonWarnings.value = [];
   applyFiles(null);
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
@@ -3526,6 +3683,7 @@ const resetSessionBaseline = () => {
   state.selectedOrthogroupAlignmentFeature.value = '';
   clearObject(state.orthogroupNameOverrides);
   clearObject(state.orthogroupDescriptionOverrides);
+  clearObject(state.orthogroupDormantOverrides);
   state.extractedFeatures.value = [];
   if (state.biologicalFeatures) state.biologicalFeatures.value = [];
   state.featureSelectorSafetyScope.value = [];
@@ -3545,9 +3703,7 @@ const resetSessionBaseline = () => {
   clearObject(state.labelTextBulkOverrides);
   clearObject(state.labelTextFeatureOverrideSources);
   clearObject(state.labelVisibilityOverrides);
-  state.labelOverrideContextKey.value = '';
   state.labelOverrideBuildWarning.value = '';
-  state.labelLayoutDirtyReason.value = '';
   state.generatedMode.value = 'circular';
   state.generatedLegendPosition.value = 'left';
   state.generatedMultiRecordCanvas.value = false;
@@ -3669,14 +3825,13 @@ export const applyUiStateData = (ui = {}, { restorePreviewNavigation = true } = 
 export const applyResultsData = (resultsData = [], ui = {}) => {
   state.failedGeneratePreservedResult.value = false;
   if (Array.isArray(resultsData)) {
-    const logicalResults = normalizeLogicalResults(resultsData.map((res, idx) => (
-      isCommittedSvgResult(res)
-        ? { ...res, name: res?.name || `Result ${idx + 1}` }
-        : {
-            name: res?.name || `Result ${idx + 1}`,
-            content: res?.content || ''
-          }
-    )));
+    const logicalResults = resultsData.every(isCommittedSvgResult)
+      ? resultsData
+      : normalizeLogicalResults(resultsData.map((res, idx) => (
+          isCommittedSvgResult(res)
+            ? res
+            : { name: res?.name || `Result ${idx + 1}`, content: res?.content || '' }
+        )));
     const committedCount = logicalResults.filter(isCommittedSvgResult).length;
     if (committedCount !== 0 && committedCount !== logicalResults.length) {
       throw new Error('Committed and imported SVG Results cannot be mixed.');
@@ -3713,8 +3868,7 @@ export const buildFeatureStateData = () => ({
   labelOverrideRows: cloneJsonData(state.canonicalLabelOverrideRows.value),
   labelTextBulkOverrides: cloneJsonData(state.labelTextBulkOverrides),
   labelTextFeatureOverrideSources: cloneJsonData(state.labelTextFeatureOverrideSources),
-  labelVisibilityOverrides: cloneJsonData(state.labelVisibilityOverrides),
-  labelOverrideContextKey: String(state.labelOverrideContextKey.value || '')
+  labelVisibilityOverrides: cloneJsonData(state.labelVisibilityOverrides)
 });
 
 export const applyFeatureStateData = (features = {}) => {
@@ -3744,15 +3898,14 @@ export const applyFeatureStateData = (features = {}) => {
   replacePlainObject(state.labelTextBulkOverrides, cloneStringMap(features.labelTextBulkOverrides));
   replacePlainObject(state.labelTextFeatureOverrideSources, cloneStringMap(features.labelTextFeatureOverrideSources));
   replacePlainObject(state.labelVisibilityOverrides, cloneJsonObject(features.labelVisibilityOverrides));
-  state.labelOverrideContextKey.value = String(features.labelOverrideContextKey || '');
 };
 
 export const buildOrthogroupStateData = () => ({
   groups: Array.isArray(state.orthogroups.value) ? cloneJsonData(state.orthogroups.value) : [],
   selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
-  selectedOrthogroupAlignmentFeature: String(state.selectedOrthogroupAlignmentFeature.value || ''),
   orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
-  orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
+  orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides),
+  orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(state.orthogroupDormantOverrides)
 });
 
 export const buildRunStateData = () => ({
@@ -3792,19 +3945,6 @@ const synchronizeRestoredFeatureSummaryStatus = ({ generationId = 'session-load'
   return true;
 };
 
-const buildSessionFeatureRecoverySnapshot = () => ({
-  mode: state.mode.value,
-  cInputType: state.cInputType.value,
-  lInputType: state.lInputType.value,
-  files: state.files,
-  linearSeqs: state.linearSeqs,
-  results: state.results.value,
-  selectedResultIndex: state.selectedResultIndex.value,
-  featureState: buildFeatureStateData(),
-  editorState: buildEditorStateData(),
-  orthogroupIndex: state.featureOrthogroupIndex.value
-});
-
 const applySessionFeatureRecoveryPlan = (plan, { generationId = 'session-feature-recovery' } = {}) => {
   state.featureExtractionPending.value = false;
 
@@ -3838,48 +3978,9 @@ const applySessionFeatureRecoveryPlan = (plan, { generationId = 'session-feature
   synchronizeRestoredFeatureSummaryStatus({ generationId });
 };
 
-const recoverSessionFeatureMetadataIfNeeded = async ({ generationId = 'session-feature-recovery' } = {}) => {
-  const validation = classifyFeatureMetadataState({
-    results: state.results.value,
-    selectedResultIndex: state.selectedResultIndex.value,
-    extractedFeatures: state.extractedFeatures.value
-  });
-
-  if (validation.state === 'missing' || validation.state === 'alignable' || validation.state === 'stale') {
-    state.featureExtractionPending.value = true;
-    state.featureExtractionError.value = null;
-    setFeatureEditorStatusData({
-      status: 'pending-summary',
-      generationId,
-      error: null,
-      summaryCount: state.extractedFeatures.value.length
-    });
-  }
-
-  const featureVisibilityTsv = serializeFeatureVisibilityRules(state.featureVisibilityRules?.value || []);
-  let plan;
-  try {
-    plan = await buildSessionFeatureRecoveryPlan({
-      snapshot: buildSessionFeatureRecoverySnapshot(),
-      featureVisibilityTsv
-    });
-  } catch (error) {
-    console.warn('Session feature metadata recovery failed.', error);
-    plan = {
-      status: 'failed',
-      reason: 'recovery-plan-failed',
-      validation,
-      warning: 'Feature metadata recovery failed. The SVG preview and pairwise popups remain available.',
-      errors: [error]
-    };
-  }
-  applySessionFeatureRecoveryPlan(plan, { generationId });
-  return plan;
-};
-
-export const exportSession = async (
+const exportSessionDocument = async (
   titleOverride = null,
-  { linearRecordCatalog = null } = {}
+  { linearRecordCatalog = null, storedConfig, savedUi, isCurrent } = {}
 ) => {
   const resolvedTitle =
     typeof titleOverride === 'string'
@@ -3900,21 +4001,18 @@ export const exportSession = async (
 
   recordSessionLifecycleEvent('session-save-projection-start');
   const logicalResults = serializeResults();
-  const editorState = buildEditorStateData({ preserveAdoptedCatalog: true });
+  const editorState = buildEditorStateData();
   if (logicalResults.length > 0) {
-    if (!editorState.featureCatalog) {
-      throw new Error(SESSION_FEATURE_CATALOG_SAVE_ERROR);
-    }
+    if (!editorState.featureCatalog) throw sessionSaveRequiresGenerate();
     try {
-      const adoptedCatalog = isAdoptedFeatureCatalog(editorState.featureCatalog);
       editorState.featureCatalog = validateFeatureCatalog(
         editorState.featureCatalog,
         logicalResults,
-        { adopt: adoptedCatalog, mode: state.mode.value }
+        { adopt: true, mode: state.mode.value }
       );
     } catch (error) {
-      console.warn('Session feature catalog validation failed.', error);
-      throw new Error(SESSION_FEATURE_CATALOG_SAVE_ERROR);
+      console.warn('Session feature catalog validation failed.', normalizeUserFacingError(error));
+      throw sessionSaveRequiresGenerate();
     }
   } else {
     editorState.featureCatalog = null;
@@ -3929,7 +4027,6 @@ export const exportSession = async (
   const exportableCliInvocation = isCliInvocationSessionExportable(lastRunInvocation)
     ? cloneJsonData(lastRunInvocation)
     : undefined;
-  const storedConfig = buildConfigData();
   Object.assign(
     storedConfig.adv,
     normalizedArrowGeometryState(storedConfig.adv)
@@ -3959,8 +4056,8 @@ export const exportSession = async (
         storedConfig
       });
     } catch (error) {
-      console.warn('Session active configuration validation failed.', error);
-      throw new Error(SESSION_ACTIVE_CONFIG_SAVE_ERROR);
+      console.warn('Session active configuration validation failed.', normalizeUserFacingError(error));
+      throw recognizedCauseOr(error, diagnosticError('INPUT_INVALID', { field: 'config', reason: 'FIELDS' }));
     }
   }
   if (!committed && !settingsOnly) {
@@ -3992,13 +4089,22 @@ export const exportSession = async (
   if (committed && committed.renderRequest.schema < CANONICAL_REQUEST_SCHEMA) {
     const promoted = {
       ...committed,
-      renderRequest: promoteCanonicalRenderRequestToCurrent(committed.renderRequest)
+      renderRequest: promoteCanonicalRenderRequestToCurrent(
+        committed.renderRequest,
+        {
+          featureCatalog: editorState.featureCatalog,
+          legacyOrthogroupState: {
+            groups: cloneJsonData(state.orthogroups.value || [])
+          }
+        }
+      )
     };
     committed = isAdoptedCanonicalSession(committed)
       ? adoptRuntimeCanonicalSession(promoted)
       : promoted;
   }
   const canonical = await assembleSessionResources(state, committed);
+  await validateSimilarityAlignmentResetReceipt(editorState.alignmentResetReceipt, canonical);
   const legacyRawCandidates = serializableLegacyProteinCandidateEnvelope(
     state.legacyProteinRawCandidates.value
   );
@@ -4017,37 +4123,18 @@ export const exportSession = async (
     createdAt: new Date().toISOString(),
     title: resolvedTitle || undefined,
     config: storedConfig,
-    ui: {
-      mode: state.mode.value,
-      zoom: state.zoom.value,
-      canvasPan: { x: state.canvasPan.x, y: state.canvasPan.y },
-      canvasPadding: { ...state.canvasPadding },
-      selectedResultIndex: state.selectedResultIndex.value,
-      generatedLegendPosition: state.generatedLegendPosition.value,
-      generatedMultiRecordCanvas: Boolean(state.generatedMultiRecordCanvas.value),
-      generatedCircularPlotTitlePosition: normalizeCircularPlotTitlePosition(
-        state.generatedCircularPlotTitlePosition.value
-      ),
-      layoutPreferences: cloneJsonData(state.layoutPreferences),
-      featurePanelTab: state.featurePanelTab.value,
-      cInputType: state.cInputType.value,
-      lInputType: state.lInputType.value,
-      downloadDpi: state.downloadDpi.value,
-      autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
-      linearTypographyLinked: Boolean(state.linearTypographyLinked.value),
-      paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
-      appliedPaletteName: state.appliedPaletteName.value,
-      appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
-      pendingPaletteName: state.pendingPaletteName.value,
-      pendingPaletteColors: cloneColors(state.pendingPaletteColors.value)
-    },
+    ui: savedUi,
     renderRequest: canonical.renderRequest,
     resources: canonical.resources,
     webFiles: canonical.webFiles,
     results: logicalResults,
-    runMetadata: state.trackSlotResolvedGeometry.value
-      ? { trackSlotGeometry: cloneJsonData(state.trackSlotResolvedGeometry.value) }
-      : {},
+    ...(!settingsOnly ? { runMetadata: {
+      ...(state.trackSlotResolvedGeometry.value
+        ? { trackSlotGeometry: cloneJsonData(state.trackSlotResolvedGeometry.value) } : {}),
+      annotationWarnings: cloneJsonData(state.annotationWarnings.value),
+      ...(state.comparisonWarnings.value.length
+        ? { comparisonWarnings: cloneJsonData(state.comparisonWarnings.value) } : {})
+    } } : {}),
     features: {
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
       featureColorOverrides: cloneJsonData(state.featureColorOverrides),
@@ -4057,13 +4144,11 @@ export const exportSession = async (
       labelOverrideRows: cloneJsonData(state.canonicalLabelOverrideRows.value),
       labelTextBulkOverrides: cloneJsonData(state.labelTextBulkOverrides),
       labelTextFeatureOverrideSources: cloneJsonData(state.labelTextFeatureOverrideSources),
-      labelVisibilityOverrides: cloneJsonData(state.labelVisibilityOverrides),
-      labelOverrideContextKey: String(state.labelOverrideContextKey.value || '')
+      labelVisibilityOverrides: cloneJsonData(state.labelVisibilityOverrides)
     },
     editorState,
     orthogroupState: {
       selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
-      selectedOrthogroupAlignmentFeature: String(state.selectedOrthogroupAlignmentFeature.value || ''),
       orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
       orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
     },
@@ -4090,8 +4175,8 @@ export const exportSession = async (
   try {
     validateSessionAuthorityInventory(sessionData, SESSION_VERSION);
   } catch (error) {
-    console.error('Session writer validation failed.', error);
-    throw new Error('Save Session could not validate the session data.');
+    console.error('Session writer validation failed.', normalizeUserFacingError(error));
+    throw recognizedCauseOr(error, diagnosticError('INPUT_INVALID', { field: 'schema' }));
   }
 
   recordSessionLifecycleEvent('session-save-projection-end');
@@ -4100,6 +4185,7 @@ export const exportSession = async (
   recordSessionLifecycleEvent('session-save-compression-end', {
     compressedSize: compressed.size
   });
+  if (!isCurrent()) return { status: 'canceled' };
   if (!confirmLargeSessionBlob(compressed)) {
     recordSessionLifecycleEvent('session-save-download-canceled', {
       reason: 'large-download',
@@ -4107,6 +4193,7 @@ export const exportSession = async (
     });
     return { status: 'canceled', compressedSize: compressed.size };
   }
+  if (!isCurrent()) return { status: 'canceled' };
   downloadBlob(compressed, sessionFilename);
   recordSessionLifecycleEvent('session-save-download-handoff-completed', {
     compressedSize: compressed.size
@@ -4115,7 +4202,7 @@ export const exportSession = async (
   return { status: 'saved', blob: compressed, filename: sessionFilename };
 };
 
-export const importSession = async (e, options = {}) => {
+const importSessionDocument = async (e, options = {}) => {
   const file = e.target.files[0];
   if (!file) return { status: 'skipped' };
   recordSessionLifecycleEvent('sessionSelection');
@@ -4127,15 +4214,14 @@ export const importSession = async (e, options = {}) => {
   let rollbackSnapshot = null;
   let rollbackExtensionSnapshot;
   let commitStarted = false;
+  const previousAlert = state.errorLog.value;
 
   try {
-    recordSessionLifecycleEvent('gzip-to-text-start');
-    const text = await readSessionText(file);
-    recordSessionLifecycleEvent('gzip-to-text-end', { characters: text.length });
-    recordSessionLifecycleEvent('json-parse-start');
-    let data = JSON.parse(text);
-    recordSessionLifecycleEvent('json-parse-end');
-    assertSafeObjectKeys(data, 'Session');
+    const candidate = await importSessionFile(file, { signal: options.signal });
+    if (!options.isCurrent()) return { status: 'canceled' };
+    recordSessionLifecycleEvent('session-import-codec-completed', candidate.timings);
+    let data = candidate.data;
+    await assertSafeObjectKeysForImport(data, 'Session');
     if (isLegacyConfigPayload(data)) {
       applyLegacyConfigPayload(data);
       alert('Legacy configuration loaded. Save as a session to use the current format.');
@@ -4143,7 +4229,11 @@ export const importSession = async (e, options = {}) => {
     }
 
     recordSessionLifecycleEvent('current-session-preflight-start');
-    const preflight = preflightSessionImport(data);
+    const preflight = await preflightSessionImport(data);
+    await validateSimilarityAlignmentResetReceipt(
+      data.editorState?.alignmentResetReceipt,
+      { renderRequest: data.renderRequest, resources: data.resources }
+    );
     recordSessionLifecycleEvent('current-session-preflight-end');
     data = preflight.data;
     const {
@@ -4164,6 +4254,211 @@ export const importSession = async (e, options = {}) => {
     const canonicalSession = Boolean(projectionResult);
     const settingsOnly = isSettingsOnlySessionDocument(data);
     const currentSchemaSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
+    const committedMode = projectionResult?.renderState.mode;
+    const savedCurrentWriterMode = sourceSessionVersion === SESSION_VERSION
+      ? data.ui?.mode
+      : null;
+    const ui = canonicalSession
+      ? {
+          ...projectionResult.editorMetadata.ui,
+          ...projectionResult.artifactState.ui,
+          mode: ['circular', 'linear'].includes(savedCurrentWriterMode)
+            ? savedCurrentWriterMode
+            : committedMode
+        }
+      : (data.ui || {});
+    const candidateMode = ui.mode === 'linear' ? 'linear' : 'circular';
+    const candidateInputType = (candidateMode === 'linear'
+      ? ui.lInputType : ui.cInputType) || canonicalProjection?.inputType || 'gb';
+    const candidateFiles = {
+      files: {}, linearSeqs: [], circularRecordList: { value: [] },
+      circularRecordDiscovery: {}, linearReorderNotice: { value: '' },
+      cInputType: { value: candidateMode === 'circular' ? candidateInputType : (ui.cInputType || 'gb') },
+      linearRecordRows: cloneJsonData(restoredConfig?.linearRecordLayout?.rows || []),
+      linearComparisonPlan: normalizeLinearComparisonPlan(restoredConfig?.linearComparisonPlan)
+    };
+    recordSessionLifecycleEvent('session-candidate-files-start');
+    const { collapsedLinearSeqs } = applyFiles(
+      canonicalSession ? projectionResult.restoredFiles : data.files,
+      { adoptCanonicalPayloads: currentSchemaSession, resolveRecordInputs: !settingsOnly, targetState: candidateFiles }
+    );
+    recordSessionLifecycleEvent('session-candidate-files-end');
+    const importedResults = canonicalSession
+      ? projectionResult.artifactState.results
+      : data.results;
+    const logicalImportedResults = normalizeLogicalResults(
+      (Array.isArray(importedResults) ? importedResults : []).map((result, index) => ({
+        name: result?.name || `Result ${index + 1}`,
+        content: result?.content || ''
+      }))
+    );
+    const storedEditorState = canonicalSession
+      ? projectionResult.artifactState.editorState
+      : data.editorState;
+    let currentCatalogFeatureState = null;
+    let validatedSessionCatalog = currentSchemaSession
+      ? projectionResult?.validatedFeatureCatalog || null
+      : null;
+    let restoredEditorState = storedEditorState;
+    if (currentSchemaSession && validatedSessionCatalog) {
+      currentCatalogFeatureState = featureStateFromCatalog(
+        validatedSessionCatalog,
+        { mode: committedMode }
+      );
+    }
+
+    const artifactFeatureState = canonicalSession
+      ? currentSchemaSession
+        ? { ...projectionResult.artifactState.features }
+        : cloneJsonData(projectionResult.artifactState.features)
+      : {};
+    if (currentSchemaSession) {
+      [
+        'extractedFeatures',
+        'biologicalFeatures',
+        'featureSelectorSafetyScope',
+        'featureRecordIds'
+      ].forEach((field) => delete artifactFeatureState[field]);
+    }
+    const features = canonicalSession
+      ? {
+          ...projectionResult.renderState.semanticFeatureState,
+          ...(currentCatalogFeatureState || {}),
+          ...artifactFeatureState
+        }
+      : (data.features || {});
+    const catalogSequenceSources = currentSchemaSession
+      ? (currentCatalogFeatureState?.sequenceSources || [])
+      : [];
+    recordSessionLifecycleEvent('session-candidate-sequences-start');
+    const comparisonSourceAvailability = committedMode === 'circular'
+      ? resolveCircularComparisonSequenceAvailability({
+          files: candidateFiles.files,
+          circularConservation: restoredConfig?.circularConservation || {}
+        })
+      : undefined;
+    const catalogSequenceSourceCoverage = (
+      currentSchemaSession
+      && validatedSessionCatalog
+    )
+      ? analyzeCatalogSequenceSourceCoverage({
+          mode: committedMode,
+          catalogFeatureState: validatedSessionCatalog,
+          renderRequest: data.renderRequest,
+          comparisonSourceAvailability
+        })
+      : null;
+    const missingCatalogSequenceSources = sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION
+      || !catalogSequenceSourceCoverage?.complete;
+    let restoredFileSequenceSources = [];
+    let currentRecoveryError = null;
+    if (missingCatalogSequenceSources && !settingsOnly) {
+      recordStructuralMetric('sourceRecoveryCount');
+      try {
+        restoredFileSequenceSources = await buildRestoredMatchSequenceSources({
+          mode: candidateMode,
+          cInputType: candidateFiles.cInputType.value,
+          lInputType: candidateInputType,
+          files: candidateFiles.files,
+          linearSeqs: candidateFiles.linearSeqs,
+          circularConservation: restoredConfig?.circularConservation || {}
+        });
+      } catch (sequenceError) {
+        currentRecoveryError = sequenceError;
+        console.warn('Session match sequence preparation failed.', normalizeUserFacingError(sequenceError));
+      }
+    }
+
+    recordSessionLifecycleEvent('session-candidate-sequences-end');
+    const restoredFeatureState = currentCatalogFeatureState || features || {};
+    // A saved Result is laid out at its committed legend and title sides.
+    const committedLayout = canonicalProjection?.layoutPreferences
+      ? resolveActiveLayoutPreference(
+          canonicalProjection.layoutPreferences,
+          canonicalProjection.mode,
+          Boolean(canonicalProjection.config?.form?.multi_record_canvas)
+        )
+      : null;
+    const transformRestoredSessionSvg = (svg, { applyStrokes = true } = {}) => {
+      const legendGroupsChanged = normalizeLegacyLegendEntryGroups(svg);
+      let compositionChanged = false;
+      if (
+        svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === null
+        && svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) === null
+      ) {
+        normalizeLegacyComposition(svg, {
+          legendSide: committedLayout?.legend || restoredConfig?.form?.legend || 'none',
+          titleSide: committedLayout?.plotTitlePosition
+            || restoredConfig?.adv?.plot_title_position || 'none',
+          userDeltas: {
+            primary: ui.diagramOffset ? [ui.diagramOffset.x, ui.diagramOffset.y] : null,
+            legend: ui.legendCurrentOffset
+              ? [ui.legendCurrentOffset.x, ui.legendCurrentOffset.y]
+              : null,
+            lengthBar: ui.lengthBarUserOffset
+              ? [ui.lengthBarUserOffset.x, ui.lengthBarUserOffset.y]
+              : null,
+            title: ui.plotTitleUserOffset
+              ? [ui.plotTitleUserOffset.x, ui.plotTitleUserOffset.y]
+              : null
+          }
+        });
+        compositionChanged = true;
+      }
+      const strokeCount = applyStrokes
+        ? applyStrokeOverridesToSvg({
+            svg,
+            features: restoredFeatureState.extractedFeatures || [],
+            legendStrokeOverrides: restoredEditorState?.legend?.strokeOverrides || {},
+            featureStrokeOverrides: restoredEditorState?.featureStrokes?.overrides || {}
+          })
+        : 0;
+      return legendGroupsChanged || compositionChanged || strokeCount > 0;
+    };
+
+    recordSessionLifecycleEvent('svg-admission-start');
+    const committedImportedResults = currentSchemaSession && validatedSessionCatalog
+      ? (() => {
+          const catalogAdmission = admitFeatureCatalog(
+            validatedSessionCatalog,
+            logicalImportedResults,
+            { adopt: true, mode: committedMode }
+          );
+          return admitCurrentSessionResults(
+            createCurrentSessionResultSource(logicalImportedResults, catalogAdmission),
+            { mutationPlan: createEmptySvgMutationPlan(logicalImportedResults.length) }
+          );
+        })()
+      : admitLegacyImportedResults(
+          createLegacyImportResultSource(logicalImportedResults),
+          { transformSvg: transformRestoredSessionSvg }
+        );
+    recordSessionLifecycleEvent('svg-admission-end');
+
+    let legacyFeatureRecoveryPlan = null;
+    if (sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
+      try {
+        legacyFeatureRecoveryPlan = await buildSessionFeatureRecoveryPlan({
+          snapshot: {
+            mode: candidateMode, cInputType: candidateFiles.cInputType.value,
+            lInputType: candidateInputType, files: candidateFiles.files,
+            linearSeqs: candidateFiles.linearSeqs, results: committedImportedResults,
+            selectedResultIndex: ui.selectedResultIndex || 0,
+            featureState: features, editorState: restoredEditorState
+          },
+          featureVisibilityTsv: serializeFeatureVisibilityRules(
+            features.featureVisibilityManualRules || features.featureVisibilityRules || []
+          )
+        });
+      } catch (error) {
+        legacyFeatureRecoveryPlan = { status: 'failed', warning: normalizeUserFacingError(error).summary };
+      }
+    }
+    recordSessionLifecycleEvent('session-candidate-prepared');
+    // The admitted candidate is still private. Let the browser handle input
+    // after SVG sanitation, before the one atomic live-state transaction.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (!options.isCurrent()) return { status: 'canceled' };
     rollbackSnapshot = captureSessionImportSnapshot();
     if (typeof rollbackStateExtension?.capture === 'function') {
       rollbackExtensionSnapshot = rollbackStateExtension.capture();
@@ -4176,13 +4471,6 @@ export const importSession = async (e, options = {}) => {
       committedCanonicalSession = adoptedCanonicalSession;
       activeSessionResourceTable = currentResourceTable;
     }
-    const ui = canonicalSession
-      ? {
-          ...projectionResult.editorMetadata.ui,
-          ...projectionResult.artifactState.ui,
-          mode: projectionResult.renderState.mode
-        }
-      : (data.ui || {});
     state.sessionTitle.value = canonicalSession
       ? projectionResult.documentMetadata.title
       : (typeof data.title === 'string' ? data.title : '');
@@ -4197,23 +4485,20 @@ export const importSession = async (e, options = {}) => {
     if (ui.cInputType) state.cInputType.value = ui.cInputType;
     if (ui.lInputType) state.lInputType.value = ui.lInputType;
     if (ui.downloadDpi) state.downloadDpi.value = ui.downloadDpi;
-    // The mode watcher clears feature/editor state. Let that reset finish before
-    // restoring session-owned metadata such as extractedFeatures.
-    await nextTick();
+    // Suppressed mode watchers observe only the complete admitted document.
     state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
     state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
     state.labelOverrideBuildWarning.value = '';
-    state.labelLayoutDirtyReason.value = '';
     if (ui.featurePanelTab === 'labels' || ui.featurePanelTab === 'colors') {
       state.featurePanelTab.value = ui.featurePanelTab;
     } else {
       state.featurePanelTab.value = 'colors';
     }
-    state.generatedMode.value = ui.mode === 'linear' ? 'linear' : 'circular';
+    state.generatedMode.value = (committedMode || ui.mode) === 'linear' ? 'linear' : 'circular';
     if (ui.generatedLegendPosition) {
       state.generatedLegendPosition.value = normalizeLegendPosition(
         ui.generatedLegendPosition,
-        ui.mode === 'linear' ? 'bottom' : 'left'
+        (committedMode || ui.mode) === 'linear' ? 'bottom' : 'left'
       );
     }
     state.generatedMultiRecordCanvas.value = Boolean(ui.generatedMultiRecordCanvas);
@@ -4227,18 +4512,42 @@ export const importSession = async (e, options = {}) => {
       );
       applyConfigData(restoredConfig, { resolveTrackPlacements: !settingsOnly });
     }
+    const canonicalLinearLayout = canonicalProjection?.config?.linearRecordLayout;
+    if (canonicalLinearLayout && state.linearRecordTranslations) {
+      state.linearRecordTranslations.value = cloneJsonData(
+        canonicalLinearLayout.recordTranslations || []
+      );
+    }
+    if (canonicalLinearLayout && state.similarityAlignmentPlan) {
+      state.similarityAlignmentPlan.value = canonicalLinearLayout.similarityAlignment
+        ? cloneJsonData(canonicalLinearLayout.similarityAlignment)
+        : null;
+    }
+    if (state.legacySimilarityAlignment) {
+      state.legacySimilarityAlignment.value = canonicalSession
+        ? cloneJsonData(
+            projectionResult.artifactState.legacySimilarityAlignment || null
+          )
+        : null;
+    }
     reconcileImportedLinearTypographyLink({
       adv: state.adv,
       linked: state.linearTypographyLinked,
       ui
     });
     restorePaletteStateFromSession(ui);
-    restoreLayoutPreferences(ui, { preserveActive: Boolean(canonicalSession) });
+    restoreLayoutPreferences(ui, {
+      projected: canonicalSession ? canonicalProjection?.layoutPreferences : null
+    });
 
-    const { collapsedLinearSeqs } = applyFiles(
-      canonicalSession ? projectionResult.restoredFiles : data.files,
-      { adoptCanonicalPayloads: currentSchemaSession, resolveRecordInputs: !settingsOnly }
-    );
+    restoreLiveFileState({
+      files: candidateFiles.files,
+      linearSeqs: candidateFiles.linearSeqs,
+      circularRecordList: candidateFiles.circularRecordList.value,
+      circularRecordDiscovery: candidateFiles.circularRecordDiscovery,
+      linearRecordRows: candidateFiles.linearRecordRows,
+      linearComparisonPlan: candidateFiles.linearComparisonPlan
+    });
     restoreImportedComparisonIntent(
       state.importedComparisonIntent,
       comparisonClassification,
@@ -4279,94 +4588,11 @@ export const importSession = async (e, options = {}) => {
     }
 
     state.skipCaptureBaseConfig.value = false;
-    state.skipPositionReapply.value = false;
 
-    const importedResults = canonicalSession
-      ? projectionResult.artifactState.results
-      : data.results;
-    const logicalImportedResults = normalizeLogicalResults(
-      (Array.isArray(importedResults) ? importedResults : []).map((result, index) => ({
-        name: result?.name || `Result ${index + 1}`,
-        content: result?.content || ''
-      }))
-    );
-    const storedEditorState = canonicalSession
-      ? projectionResult.artifactState.editorState
-      : data.editorState;
-    let currentCatalogFeatureState = null;
-    let validatedSessionCatalog = currentSchemaSession
-      ? projectionResult?.validatedFeatureCatalog || null
-      : null;
-    let restoredEditorState = storedEditorState;
-    if (currentSchemaSession && validatedSessionCatalog) {
-      currentCatalogFeatureState = featureStateFromCatalog(
-        validatedSessionCatalog,
-        { mode: state.mode.value }
-      );
-    }
-
-    const artifactFeatureState = canonicalSession
-      ? currentSchemaSession
-        ? { ...projectionResult.artifactState.features }
-        : cloneJsonData(projectionResult.artifactState.features)
-      : {};
-    if (currentSchemaSession) {
-      [
-        'extractedFeatures',
-        'biologicalFeatures',
-        'featureSelectorSafetyScope',
-        'featureRecordIds'
-      ].forEach((field) => delete artifactFeatureState[field]);
-    }
-    const features = canonicalSession
-      ? {
-          ...projectionResult.renderState.semanticFeatureState,
-          ...(currentCatalogFeatureState || {}),
-          ...artifactFeatureState
-        }
-      : (data.features || {});
     applyFeatureStateData(features);
     if (currentSchemaSession && currentCatalogFeatureState) {
       state.collinearGroups.value = currentCatalogFeatureState.collinearGroups;
       synchronizeRestoredFeatureSummaryStatus({ generationId: 'session-load' });
-    }
-    const catalogSequenceSources = currentSchemaSession
-      ? (currentCatalogFeatureState?.sequenceSources || [])
-      : [];
-    const comparisonSourceAvailability = state.mode.value === 'circular'
-      ? resolveCircularComparisonSequenceAvailability({
-          files: state.files,
-          circularConservation: state.circularConservation
-        })
-      : undefined;
-    const catalogSequenceSourceCoverage = (
-      currentSchemaSession
-      && validatedSessionCatalog
-    )
-      ? analyzeCatalogSequenceSourceCoverage({
-          mode: state.mode.value,
-          catalogFeatureState: validatedSessionCatalog,
-          renderRequest: data.renderRequest,
-          comparisonSourceAvailability
-        })
-      : null;
-    const missingCatalogSequenceSources = sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION
-      || !catalogSequenceSourceCoverage?.complete;
-    let restoredFileSequenceSources = [];
-    if (missingCatalogSequenceSources && !currentSchemaSession) {
-      recordStructuralMetric('sourceRecoveryCount');
-      try {
-        restoredFileSequenceSources = await buildRestoredMatchSequenceSources({
-          mode: state.mode.value,
-          cInputType: state.cInputType.value,
-          lInputType: state.lInputType.value,
-          files: state.files,
-          linearSeqs: state.linearSeqs,
-          circularConservation: state.circularConservation
-        });
-      } catch (sequenceError) {
-        console.warn('Session loaded, but match sequence recovery failed.', sequenceError);
-      }
     }
     state.matchSequenceRegistry?.reset?.([
       ...catalogSequenceSources,
@@ -4395,79 +4621,33 @@ export const importSession = async (e, options = {}) => {
               features.orthogroupDescriptionOverrides ||
               data.config?.webEdits?.orthogroupDescriptionOverrides ||
               {}
-        }
-    );
-    applyEditorStateData(restoredEditorState, {
-      normalized: currentSchemaSession,
-      adoptCatalog: currentSchemaSession
-    });
-
-    const restoredFeatureState = currentCatalogFeatureState || features || {};
-    const transformRestoredSessionSvg = (svg, { applyStrokes = true } = {}) => {
-      const legendGroupsChanged = normalizeLegacyLegendEntryGroups(svg);
-      let compositionChanged = false;
-      if (
-        svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === null
-        && svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) === null
-      ) {
-        normalizeLegacyComposition(svg, {
-          legendSide: state.form.legend || 'none',
-          titleSide: state.adv.plot_title_position || 'none',
-          userDeltas: {
-            primary: ui.diagramOffset ? [ui.diagramOffset.x, ui.diagramOffset.y] : null,
-            legend: ui.legendCurrentOffset
-              ? [ui.legendCurrentOffset.x, ui.legendCurrentOffset.y]
-              : null,
-            lengthBar: ui.lengthBarUserOffset
-              ? [ui.lengthBarUserOffset.x, ui.lengthBarUserOffset.y]
-              : null,
-            title: ui.plotTitleUserOffset
-              ? [ui.plotTitleUserOffset.x, ui.plotTitleUserOffset.y]
-              : null
-          }
-        });
-        compositionChanged = true;
+        },
+      {
+        legacyRecords: sourceSessionVersion <= 39 ? data.renderRequest?.records : null,
+        catalogFeatureState: currentCatalogFeatureState
       }
-      const strokeCount = applyStrokes
-        ? applyStrokeOverridesToSvg({
-            svg,
-            features: restoredFeatureState.extractedFeatures || [],
-            legendStrokeOverrides: restoredEditorState?.legend?.strokeOverrides || {},
-            featureStrokeOverrides: restoredEditorState?.featureStrokes?.overrides || {}
-          })
-        : 0;
-      return legendGroupsChanged || compositionChanged || strokeCount > 0;
-    };
-
-    recordSessionLifecycleEvent('svg-admission-start');
-    const committedImportedResults = currentSchemaSession && validatedSessionCatalog
-      ? (() => {
-          const catalogAdmission = admitFeatureCatalog(
-            validatedSessionCatalog,
-            logicalImportedResults,
-            { adopt: true, mode: state.mode.value }
-          );
-          return admitCurrentSessionResults(
-            createCurrentSessionResultSource(logicalImportedResults, catalogAdmission),
-            { mutationPlan: createEmptySvgMutationPlan(logicalImportedResults.length) }
-          );
-        })()
-      : admitLegacyImportedResults(
-          createLegacyImportResultSource(logicalImportedResults),
-          { transformSvg: transformRestoredSessionSvg }
-        );
-    recordSessionLifecycleEvent('svg-admission-end');
+    );
+    applyEditorStateData(restoredEditorState, { normalized: currentSchemaSession });
+    if (legacyFeatureRecoveryPlan) {
+      applySessionFeatureRecoveryPlan(legacyFeatureRecoveryPlan, { generationId: 'session-load' });
+    }
 
     const desiredResultIndex = (
       Number.isInteger(ui.selectedResultIndex) && ui.selectedResultIndex >= 0
     )
       ? Math.min(ui.selectedResultIndex, Math.max(0, committedImportedResults.length - 1))
       : 0;
-    await nextTick();
+    if (!options.isCurrent()) throw new Error('Session loading was canceled.');
     state.skipCaptureBaseConfig.value = true;
-    state.skipPositionReapply.value = true;
+    recordSessionLifecycleEvent('session-candidate-adopted');
     recordSessionLifecycleEvent('preview-mount-start');
     applyResultsData(committedImportedResults, ui);
+    state.annotationWarnings.value = cloneJsonData(
+      projectionResult?.artifactState?.runMetadata?.annotationWarnings || []
+    );
+    state.comparisonWarnings.value = cloneJsonData(
+      projectionResult?.artifactState?.runMetadata?.comparisonWarnings || []
+    );
     state.trackSlotResolvedGeometry.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.trackSlotGeometry ?? null
     );
@@ -4487,28 +4667,6 @@ export const importSession = async (e, options = {}) => {
     if (previewReadiness?.promise) await previewReadiness.promise;
     else if (previewReadiness?.then) await previewReadiness;
 
-    let currentRecoveryError = null;
-    if (currentSchemaSession && missingCatalogSequenceSources) {
-      recordStructuralMetric('sourceRecoveryCount');
-      try {
-        restoredFileSequenceSources = await buildRestoredMatchSequenceSources({
-          mode: state.mode.value,
-          cInputType: state.cInputType.value,
-          lInputType: state.lInputType.value,
-          files: state.files,
-          linearSeqs: state.linearSeqs,
-          circularConservation: state.circularConservation
-        });
-        state.matchSequenceRegistry?.reset?.([
-          ...catalogSequenceSources,
-          ...restoredFileSequenceSources
-        ]);
-      } catch (sequenceError) {
-        currentRecoveryError = sequenceError;
-        console.warn('Session preview loaded, but match sequence recovery failed.', sequenceError);
-      }
-    }
-
     if (typeof options?.afterLoad === 'function') {
       await options.afterLoad({ data, ui });
     }
@@ -4527,18 +4685,9 @@ export const importSession = async (e, options = {}) => {
       state.zoom.value = ui.zoom;
     }
 
-    if (sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
-      try {
-        await recoverSessionFeatureMetadataIfNeeded({ generationId: 'session-load' });
-      } catch (recoveryError) {
-        console.warn('Session loaded, but feature metadata recovery failed.', recoveryError);
-      }
-    }
-
     state.semanticFileWatchersSuppressed.value =
       semanticFileWatchersSuppressedBeforeImport;
     await nextTick();
-    state.sessionResourceDiscoveryDeferred.value = false;
     if (!currentSchemaSession) {
       committedCanonicalSession = cloneCanonicalSession(data);
       activeSessionResourceTable = null;
@@ -4547,16 +4696,22 @@ export const importSession = async (e, options = {}) => {
       status: 'success',
       degradedRecovery: Boolean(currentRecoveryError)
     });
+    if (!options.isCurrent()) throw new Error('Session loading was canceled.');
+    await options.afterImport?.({ status: 'ok', decompressedCharacters: candidate.characters, isCurrent: options.isCurrent });
+    if (!options.isCurrent()) throw new Error('Session loading was canceled.');
     alert('Session loaded successfully!');
     return {
       status: 'ok',
       data,
-      decompressedCharacters: text.length,
+      decompressedCharacters: candidate.characters,
       degradedRecovery: Boolean(currentRecoveryError),
       comparisonDisposition: state.importedComparisonIntent.disposition
     };
   } catch (err) {
-    console.error(err);
+    if (err?.name === 'AbortError' && !commitStarted) return { status: 'canceled' };
+    const error = normalizeUserFacingError(err, { stage: 'request-validation' });
+    const currentAlert = state.errorLog.value;
+    const canNotify = currentAlert === previousAlert || currentAlert === null;
     if (commitStarted && rollbackSnapshot) {
       try {
         await restoreSessionImportSnapshot(rollbackSnapshot);
@@ -4564,20 +4719,152 @@ export const importSession = async (e, options = {}) => {
           await rollbackStateExtension.restore(rollbackExtensionSnapshot);
         }
       } catch (rollbackError) {
-        console.error('Failed to roll back the interrupted session import.', rollbackError);
+        state.generationFailureRecovery.value = 'restore-failed';
       }
     }
-    const message = err?.message || 'Invalid JSON structure.';
+    const restoredPreviousAlert = JSON.stringify(normalizeUserFacingError(state.errorLog.value))
+      === JSON.stringify(normalizeUserFacingError(previousAlert));
+    if (!canNotify) {
+      if (restoredPreviousAlert) state.errorLog.value = currentAlert;
+      return { status: 'stale' };
+    }
+    if (state.errorLog.value !== previousAlert && state.errorLog.value !== null && !restoredPreviousAlert) return { status: 'stale' };
+    state.errorLog.value = error;
     recordSessionLifecycleEvent('interactiveReady', {
       status: 'error',
-      error: message
+      error: error.code
     });
-    alert(`Failed to load session: ${message}`);
-    return { status: 'error', error: err };
+    return { status: 'error', error };
   } finally {
-    state.sessionResourceDiscoveryDeferred.value = false;
     state.semanticFileWatchersSuppressed.value =
       semanticFileWatchersSuppressedBeforeImport;
     e.target.value = '';
+  }
+};
+
+
+let sessionSaveInFlight = null;
+let activeSessionImport = null;
+
+export const disposeSessionOperations = () => {
+  if (sessionSaveInFlight) sessionSaveInFlight.canceled = true;
+  if (activeSessionImport) {
+    activeSessionImport.canceled = true;
+    activeSessionImport.controller.abort();
+  }
+  sessionSaveInFlight = null;
+  activeSessionImport = null;
+  state.sessionSavePending.value = false;
+  state.sessionImportPending.value = false;
+};
+
+export const exportSession = (titleOverride = null, options = {}) => {
+  if (sessionSaveInFlight) {
+    recordSessionLifecycleEvent('session-save-joined');
+    return sessionSaveInFlight.promise;
+  }
+  const busy = sessionOperationAvailability('save');
+  if (busy) return Promise.resolve(busy);
+  const operation = { canceled: false, promise: null };
+  const previousAlert = state.errorLog.value;
+  const isCurrent = () => sessionSaveInFlight === operation && !operation.canceled;
+  operation.promise = Promise.resolve().then(async () => {
+    const busy = sessionOperationAvailability('save');
+    if (busy) return busy;
+    if (!isCurrent()) return { status: 'canceled' };
+    const title = options.resolveTitle ? options.resolveTitle() : titleOverride;
+    if (title === null && options.resolveTitle) return;
+    state.sessionSavePending.value = true;
+    recordSessionLifecycleEvent('session-save-pending-published');
+    // Only mutable draft configuration/navigation is copied. Adopted biological
+    // payloads, resources, catalogs, caches and Results retain their existing owner.
+    const activeConfig = buildConfigData();
+    validateCurrentWriterActiveConfig({ mode: state.mode.value, storedConfig: activeConfig });
+    if (!committedCanonicalSession
+      && hasBiologicalSessionInputs({ ...state.files, linearSeqs: state.linearSeqs })) {
+      assertActiveModeInputs();
+    }
+    const storedConfig = cloneJsonData(activeConfig);
+    const savedUi = {
+      mode: state.mode.value,
+      zoom: state.zoom.value,
+      canvasPan: { x: state.canvasPan.x, y: state.canvasPan.y },
+      canvasPadding: { ...state.canvasPadding },
+      selectedResultIndex: state.selectedResultIndex.value,
+      generatedLegendPosition: state.generatedLegendPosition.value,
+      generatedMultiRecordCanvas: Boolean(state.generatedMultiRecordCanvas.value),
+      generatedCircularPlotTitlePosition: normalizeCircularPlotTitlePosition(
+        state.generatedCircularPlotTitlePosition.value
+      ),
+      layoutPreferences: cloneJsonData(state.layoutPreferences),
+      featurePanelTab: state.featurePanelTab.value,
+      cInputType: state.cInputType.value,
+      lInputType: state.lInputType.value,
+      downloadDpi: state.downloadDpi.value,
+      autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
+      linearTypographyLinked: Boolean(state.linearTypographyLinked.value),
+      paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
+      appliedPaletteName: state.appliedPaletteName.value,
+      appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
+      pendingPaletteName: state.pendingPaletteName.value,
+      pendingPaletteColors: cloneColors(state.pendingPaletteColors.value)
+    };
+    const prepared = await options.beforeExport?.();
+    if (!isCurrent()) return { status: 'canceled' };
+    return exportSessionDocument(title, {
+      ...options, ...prepared, storedConfig, savedUi, isCurrent
+    });
+  }).catch((error) => {
+    recordSessionLifecycleEvent('session-save-error');
+    if (!isCurrent() || (state.errorLog.value !== previousAlert && state.errorLog.value !== null)) {
+      return { status: 'stale' };
+    }
+    if (typeof options.onError !== 'function') throw error;
+    const model = normalizeUserFacingError(error, { operation: 'session-save' });
+    options.onError(model);
+    return { status: 'error', error: model };
+  }).finally(() => {
+    if (sessionSaveInFlight === operation) {
+      state.sessionSavePending.value = false;
+      sessionSaveInFlight = null;
+    }
+    recordSessionLifecycleEvent('session-save-pending-cleared');
+  });
+  sessionSaveInFlight = operation;
+  return operation.promise;
+};
+
+export const importSession = async (event, options = {}) => {
+  const input = event?.target;
+  const file = input?.files?.[0];
+  if (!file) return { status: 'skipped' };
+  const busy = sessionOperationAvailability('load');
+  if (busy) {
+    input.value = '';
+    return busy;
+  }
+  const operation = { canceled: false, controller: new AbortController() };
+  activeSessionImport = operation;
+  const isCurrent = () => activeSessionImport === operation && !operation.canceled;
+  state.sessionImportPending.value = true;
+  recordSessionLifecycleEvent('session-import-pending-published');
+  try {
+    await options.beforeImport?.();
+    if (!isCurrent()) return { status: 'canceled' };
+    const result = await importSessionDocument({ target: { files: [file], value: input.value } }, {
+      ...options, isCurrent, signal: operation.controller.signal
+    });
+    return result;
+  } finally {
+    if (activeSessionImport === operation) {
+      activeSessionImport = null;
+      state.sessionImportPending.value = false;
+    }
+    input.value = '';
+    recordSessionLifecycleEvent('session-import-pending-cleared');
+    // Discovery watchers see the cleared pending flag while an adopted
+    // current-schema Session still defers resource reads; clear it afterwards.
+    await nextTick();
+    if (!activeSessionImport) state.sessionResourceDiscoveryDeferred.value = false;
   }
 };

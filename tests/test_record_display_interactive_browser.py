@@ -78,8 +78,11 @@ def test_display_fragments_preview_and_standalone_source_actions(source_server, 
     standalone_path.write_text(standalone)
     (tmp_path / "catalog.json").write_text(json.dumps(catalog, indent=2))
     expected_count = len([n for n in ET.fromstring(source).iter() if n.get("data-gbdraw-match-id")])
-    # Independent source oracle: raw HSP inclusive endpoints, existing materialized RC sequence.
-    query_sequence = str(record().seq.reverse_complement() if reverse else record().seq)[20:60]
+    # Independent source oracle: raw HSP inclusive endpoints. Linear tables are read in
+    # the search frame (PD-OI-073), so the HSP is source 21..60 on the source strand in
+    # every orientation; circular conservation rows still read the materialized RC sequence.
+    query_sequence = str(record().seq.reverse_complement() if reverse and mode == "circular"
+                         else record().seq)[20:60]
     subject_sequence = str(record(120, "subject").seq)[30:90]
     requests = []
     errors = []

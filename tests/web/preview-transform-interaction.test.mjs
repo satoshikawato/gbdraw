@@ -45,10 +45,12 @@ const copyModule = async (source, destination) => {
   );
 };
 
+await copyModule('services/error-normalization.js', 'services/error-normalization.js');
 await copyModule('app/ui.js', 'app/ui.js');
 await copyModule('app/feature-dom.js', 'app/feature-dom.js');
 await copyModule('app/feature-editor/svg-actions.js', 'app/feature-editor/svg-actions.js');
 await copyModule('services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
+await copyModule('services/feature-identity.js', 'services/feature-identity.js');
 await writeFile(
   join(tempDir, 'app', 'color-utils.js'),
   'export const resolveColorToHex = (value) => value || "#94a3b8";\n',
@@ -57,6 +59,8 @@ await writeFile(
 await writeFile(
   join(tempDir, 'app', 'feature-utils.js'),
   [
+    'export const formatFeatureLength = () => "";',
+    'export const formatFeatureLocation = () => "";',
     'export const getFeatureCaption = (feature) => feature?.label || feature?.id || "Feature";',
     'export const normalizeStringArray = (value) => Array.isArray(value) ? value : (value ? [String(value)] : []);',
     'export const resolveDisplayProteinId = () => "";'
@@ -227,6 +231,20 @@ assert.equal(panZoom.previewTransformInteraction.isActive(), false);
 assert.equal(canvas.style.cursor, 'grab');
 assert.equal(wrapper.style.transition, 'transform 0.2s');
 completeCase('pan updates the wrapper transform and restores the existing transition');
+
+const legendTarget = {
+  tagName: 'text',
+  closest: (selector) => selector === 'g[id]' ? { id: 'feature_legend' }
+    : selector === '.gbdraw-preview-layout-target' ? { id: 'legend' } : null
+};
+panZoom.startPan({ button: 0, shiftKey: false, clientX: 100, clientY: 120, target: legendTarget });
+assert.equal(uiState.isPanning.value, true, 'a bound legend must pan while Layout edit is OFF');
+panZoom.endPan({ clientX: 100, clientY: 120 });
+panZoom.startPan({ button: 0, shiftKey: false, clientX: 100, clientY: 120,
+  target: { tagName: 'path', closest: (selector) => selector === 'g[id]' ? { id: 'f1' } : null } });
+assert.equal(uiState.isPanning.value, false, 'unbound feature groups retain gesture priority');
+completeCase('eligible legend bypasses the feature-prefix pan exclusion without changing feature priority');
+
 
 const changesBeforePanThenWheel = interactionChanges.length;
 panZoom.startPan({

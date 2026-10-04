@@ -472,6 +472,7 @@ def test_linear_cli_gc_percent_options_forward_to_api(
             losat_derived_cache_entries=(),
             protein_identity_manifest=None,
             request=resolved,
+            annotation_warnings=(),
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)

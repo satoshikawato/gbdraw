@@ -122,6 +122,11 @@ const installDiagramWorkerTracking = async (page) => {
         worker.addEventListener('message', (event) => {
           const message = event.data || {};
           if (!['init', 'helper', 'run'].includes(message.type)) return;
+          // A bounded reply streams parts before its one final settlement.
+          if (message.status === 'part') {
+            instance.events.push(`${message.type}:part`);
+            return;
+          }
           const identifier = message.type === 'init' ? message.id : message.requestId;
           instance.settlements.push({
             type: message.type,
@@ -266,6 +271,17 @@ const openApp = async (
   return assertAppShellReady(page, { waitForPalette, checkErrors });
 };
 
+// Enter toggles a summary wherever its help-tip button sits; a click at the
+// summary center can land on that button and leave the section closed.
+const reveal = async (locator) => {
+  for (const details of await locator.locator('xpath=ancestor::details').all()) {
+    if (await details.getAttribute('open') === null) {
+      await details.locator(':scope > summary').press('Enter');
+    }
+  }
+  return locator;
+};
+
 const assertDiagramWorkerIdle = async (page, label = 'Expected the diagram Worker to remain idle') => {
   const diagnostics = await getLifecycleDiagnostics(page);
   expect(
@@ -285,11 +301,127 @@ const assertSessionLoadLeftWorkerIdle = (page) => assertDiagramWorkerIdle(
   'Loading a saved preview must not initialize the diagram Worker'
 );
 
+// Chromium can collect a protocol promise that page.evaluate awaits for a long
+// time (Playwright then reports "Execution context was destroyed"). Start the
+// operation once, retain its outcome in the page, poll for settlement, and
+// rethrow a rejection. tests/web/playwright-long-app-promises.test.mjs keeps
+// long app operations (Generate, Session import and save) on this path.
+let retainedEvaluationIndex = 0;
+const evaluateWithRetainedPromise = async (page, callback, argument) => {
+  const key = `__GBDRAW_TEST_EVALUATION_${++retainedEvaluationIndex}`;
+  try {
+    await page.evaluate(`(() => {
+      const entry = window[${JSON.stringify(key)}] = { settled: false };
+      entry.promise = Promise.resolve((${callback.toString()})(${JSON.stringify(argument) ?? 'undefined'}));
+      entry.promise.then(value => {
+        entry.value = value;
+        entry.settled = true;
+      }, error => {
+        entry.error = error;
+        entry.failed = true;
+        entry.settled = true;
+      });
+    })()`);
+    // Like page.evaluate, the owning test deadline bounds this operation.
+    await page.waitForFunction(key => window[key]?.settled, key, { timeout: 0 });
+    return await page.evaluate(key => {
+      const entry = window[key];
+      if (entry.failed) throw entry.error;
+      return entry.value;
+    }, key);
+  } finally {
+    // Best-effort cleanup must not replace the operation's own failure.
+    if (!page.isClosed()) await page.evaluate(key => { delete window[key]; }, key).catch(() => {});
+  }
+};
+
+// G-G(3), Web GUI audit 2026-09-30: the shared Generate and Save helpers
+// reject three outcomes that previously reached users without failing a test.
+// A caller may opt out only by naming the audit ID of the known defect, so the
+// PR that fixes that defect finds and removes the opt-out.
+const AUDIT_ID = /^(?:[A-Z]{1,3}-\d{2}|N-\d{2})$/;
+const knownDefectOptOut = (value, option) => {
+  if (value === false || value === undefined || value === null) return '';
+  if (typeof value === 'string' && AUDIT_ID.test(value)) return value;
+  throw new TypeError(`${option} must name the audit ID of the known defect, for example 'IN-08'.`);
+};
+
+const INVALID_RUN_INFO_TEXT = /\b(?:NaN|undefined)\b/;
+const findInvalidRunInfoValues = (value, path = 'lastRunInfo', found = []) => {
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) found.push(`${path}=${value}`);
+  } else if (typeof value === 'string') {
+    if (INVALID_RUN_INFO_TEXT.test(value)) found.push(`${path}=${JSON.stringify(value.slice(0, 200))}`);
+  } else if (Array.isArray(value)) {
+    value.forEach((item, index) => findInvalidRunInfoValues(item, `${path}[${index}]`, found));
+  } else if (value && typeof value === 'object') {
+    Object.entries(value).forEach(([key, item]) => findInvalidRunInfoValues(item, `${path}.${key}`, found));
+  }
+  return found;
+};
+
+// An operation that does not clear the alert must not inherit an earlier one.
+const readErrorSignature = (page) => page.evaluate(() => {
+  const error = window.__GBDRAW_APP__?.errorLog;
+  return error ? JSON.stringify([error.code, error.operation, error.stage, error.summary]) : null;
+});
+
+const assertOperationHealth = async (page, {
+  operation = 'operation',
+  allowUnknown = false,
+  allowPageErrors = false,
+  allowInvalidRunInfo = false,
+  errorSignatureBefore = undefined
+} = {}) => {
+  const unknownDefect = knownDefectOptOut(allowUnknown, 'allowUnknown');
+  const pageErrorDefect = knownDefectOptOut(allowPageErrors, 'allowPageErrors');
+  const runInfoDefect = knownDefectOptOut(allowInvalidRunInfo, 'allowInvalidRunInfo');
+  const observed = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const error = app?.errorLog;
+    return {
+      errorCode: error?.code ?? null,
+      errorSummary: String(error?.summary || ''),
+      errorSignature: error ? JSON.stringify([error.code, error.operation, error.stage, error.summary]) : null,
+      lastRunInfo: app?.lastRunInfo ?? null
+    };
+  });
+  const inheritedError = errorSignatureBefore !== undefined
+    && observed.errorSignature !== null
+    && observed.errorSignature === errorSignatureBefore;
+  const collected = installPageErrorCollection(page);
+  const health = {
+    errorCode: inheritedError ? null : observed.errorCode,
+    pageErrors: [...collected.pageErrors],
+    invalidRunInfo: findInvalidRunInfoValues(observed.lastRunInfo)
+  };
+  const rendered = compactJson({ operation, ...health, errorSummary: observed.errorSummary });
+  if (!unknownDefect) {
+    expect(health.errorCode, `${operation} must not report an UNKNOWN diagnostic:\n${rendered}`)
+      .not.toBe('UNKNOWN');
+  }
+  if (!pageErrorDefect) {
+    expect(health.pageErrors, `${operation} must not raise an uncaught page error:\n${rendered}`)
+      .toEqual([]);
+  }
+  if (!runInfoDefect) {
+    expect(health.invalidRunInfo, `${operation} must not record NaN or undefined in Run Info:\n${rendered}`)
+      .toEqual([]);
+  }
+  return health;
+};
+
 const generateAndWaitForResult = async (
   page,
-  { expectedStatus = 'ok', requireCommittedResult = expectedStatus === 'ok' } = {}
+  {
+    expectedStatus = 'ok',
+    requireCommittedResult = expectedStatus === 'ok',
+    allowUnknown = false,
+    allowPageErrors = false,
+    allowInvalidRunInfo = false
+  } = {}
 ) => {
-  const outcome = await page.evaluate(async () => {
+  const outcome = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const result = await app.runAnalysis();
     return {
@@ -314,7 +446,91 @@ const generateAndWaitForResult = async (
   if (outcome.result?.status === 'error') {
     expect(Boolean(outcome.errorSummary || outcome.errorDetails.length), rendered).toBe(true);
   }
+  outcome.health = await assertOperationHealth(page, {
+    operation: `Generate (${outcome.result?.status})`,
+    allowUnknown,
+    allowPageErrors,
+    allowInvalidRunInfo
+  });
   return outcome;
+};
+
+// G-C (Web GUI audit 2026-09-30): an operation that is not an edit (Result
+// selection, a no-change Generate, a mode round trip, an Undo+Redo pair, an
+// unrelated toggle) must leave user-owned state unchanged. The snapshot follows
+// the audit harness: config, UI and editor state plus the user-owned feature,
+// label, and group maps; the feature catalog, bulk feature tables, and preview
+// navigation are excluded.
+const snapshotUserOwnedState = (page) => page.evaluate(async () => {
+  const { state } = await import('/gbdraw/web/js/state.js');
+  const config = await import('/gbdraw/web/js/services/config.js');
+  const editor = config.buildEditorStateData();
+  delete editor.featureCatalog;
+  const features = config.buildFeatureStateData();
+  for (const key of ['extractedFeatures', 'biologicalFeatures', 'featureSelectorSafetyScope']) {
+    delete features[key];
+  }
+  const orthogroups = config.buildOrthogroupStateData();
+  orthogroups.groupCount = orthogroups.groups.length;
+  delete orthogroups.groups;
+  const history = window.__GBDRAW_HISTORY__;
+  return JSON.parse(JSON.stringify({
+    state: {
+      mode: state.mode.value,
+      config: config.buildConfigData(),
+      ui: config.buildUiStateData({ includePreviewNavigation: false }),
+      editor,
+      features,
+      orthogroups
+    },
+    history: { undo: history?.getUndoCount?.() ?? null, redo: history?.getRedoCount?.() ?? null }
+  }));
+});
+
+const diffUserOwnedState = (before, after, path = '', changes = []) => {
+  if (JSON.stringify(before) === JSON.stringify(after)) return changes;
+  const isObject = (value) => value && typeof value === 'object' && !Array.isArray(value);
+  if (isObject(before) && isObject(after)) {
+    for (const key of [...new Set([...Object.keys(before), ...Object.keys(after)])].sort()) {
+      diffUserOwnedState(
+        Object.hasOwn(before, key) ? before[key] : '<missing>',
+        Object.hasOwn(after, key) ? after[key] : '<missing>',
+        path ? `${path}.${key}` : key,
+        changes
+      );
+    }
+    return changes;
+  }
+  if (Array.isArray(before) && Array.isArray(after) && before.length === after.length) {
+    before.forEach((item, index) => diffUserOwnedState(item, after[index], `${path}[${index}]`, changes));
+    return changes;
+  }
+  changes.push({ path, before, after });
+  return changes;
+};
+
+const observeNonEditOperation = async (page, operation) => {
+  const before = await snapshotUserOwnedState(page);
+  await operation();
+  const after = await snapshotUserOwnedState(page);
+  return {
+    before,
+    after,
+    changes: diffUserOwnedState(before.state, after.state),
+    undoDelta: after.history.undo - before.history.undo
+  };
+};
+
+// allowedPaths name the settings an operation legitimately owns. A change that
+// the operation records as a History step is accepted only with allowRecorded.
+const expectNoSilentStateChange = (observation, { label, allowedPaths = [], allowRecorded = false }) => {
+  const allowed = (path) => allowedPaths.some((prefix) => (
+    path === prefix || path.startsWith(`${prefix}.`) || path.startsWith(`${prefix}[`)
+  ));
+  const unexpected = observation.changes.filter(({ path }) => !allowed(path));
+  if (allowRecorded && observation.undoDelta > 0) return unexpected;
+  expect(unexpected, `${label} silently changed user-owned state:\n${compactJson(unexpected)}`).toEqual([]);
+  return unexpected;
 };
 
 const assertWorkerReuseAcrossHelperAndRender = async (page) => {
@@ -352,11 +568,19 @@ const assertSingleWorkerRun = async (page) => {
 
 module.exports = {
   assertDiagramWorkerIdle,
+  assertOperationHealth,
+  readErrorSignature,
   assertSessionLoadLeftWorkerIdle,
   assertSingleWorkerRun,
   assertWorkerReuseAcrossHelperAndRender,
+  diffUserOwnedState,
+  evaluateWithRetainedPromise,
+  expectNoSilentStateChange,
   generateAndWaitForResult,
   getDiagramWorkerActivity,
+  observeNonEditOperation,
   openApp,
+  reveal,
+  snapshotUserOwnedState,
   waitForAppShell
 };

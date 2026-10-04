@@ -4,7 +4,8 @@ const {
   assertDiagramWorkerIdle,
   assertSessionLoadLeftWorkerIdle,
   assertWorkerReuseAcrossHelperAndRender,
-  openApp
+  openApp,
+  evaluateWithRetainedPromise
 } = require('./helpers/app-lifecycle.cjs');
 
 test('uncached protein LOSAT helpers and render share one lazy Worker runtime', async ({ page }) => {
@@ -38,7 +39,7 @@ test('uncached protein LOSAT helpers and render share one lazy Worker runtime', 
     )
   }))).toEqual({ mainLoaderPresent: false, mainRuntimeStatePresent: false });
 
-  const imported = await page.evaluate(async () => {
+  const imported = await evaluateWithRetainedPromise(page, async () => {
     const response = await fetch('/gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json');
     const file = new File(
       [await response.text()],
@@ -64,16 +65,18 @@ test('uncached protein LOSAT helpers and render share one lazy Worker runtime', 
     return {
       program: app.losatProgram,
       blastpMode: app.losat.blastp.mode,
-      cacheEntries: state.losatCache.value.size
+      cacheEntries: state.losatCache.value.size,
+      activeAlignmentPlan: state.similarityAlignmentPlan.value
     };
   });
   expect(proteinMode).toEqual({
     program: 'blastp',
     blastpMode: 'pairwise',
-    cacheEntries: 0
+    cacheEntries: 0,
+    activeAlignmentPlan: null
   });
 
-  const generated = await page.evaluate(async () => {
+  const generated = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const result = await app.runAnalysis();
     return {
@@ -98,7 +101,7 @@ test('uncached protein LOSAT helpers and render share one lazy Worker runtime', 
   expect(hydratedTsv.trim().split('\t')).toHaveLength(12);
   expect(hydratedTsv).not.toMatch(/\bh_[a-z2-7]{26}\b/);
 
-  const repeated = await page.evaluate(async () => ({
+  const repeated = await evaluateWithRetainedPromise(page, async () => ({
     result: await window.__GBDRAW_APP__.runAnalysis(),
     errorLog: window.__GBDRAW_APP__.errorLog,
     executorCalls: window.__GBDRAW_LOSAT_EXECUTOR_CALLS__
@@ -134,7 +137,7 @@ test('Gallery session colors, record labels, and feature labels survive regenera
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page, { waitForPalette: false });
 
-  const imported = await page.evaluate(async () => {
+  const imported = await evaluateWithRetainedPromise(page, async () => {
     const inspectSettings = (app) => ({
       cdsColor: app.currentColors.CDS,
       labels: app.form.show_labels_linear,
@@ -167,7 +170,7 @@ test('Gallery session colors, record labels, and feature labels survive regenera
   expect(imported.settings.recordLabels[0]).toContain('Streptomyces lividus');
   expect(imported.settings.rules).toHaveLength(4);
 
-  const regenerated = await page.evaluate(async () => {
+  const regenerated = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const inspectSettings = () => ({
       cdsColor: app.currentColors.CDS,

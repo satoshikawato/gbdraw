@@ -4,6 +4,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Literal, Mapping, Sequence
 
 from .parsing import (
+    normalize_dinucleotide_params,
     normalize_dinucleotide_skew_color_params as _normalize_dinucleotide_skew_color_params,
     parse_bool,
     parse_nonnegative_integer,
@@ -11,7 +12,7 @@ from .parsing import (
     split_kv_list,
     validate_overlay_annotation_anchors,
 )
-from .scalars import ScalarSpec
+from .scalars import ScalarSpec, parse_optional_pixel
 from gbdraw.annotations.models import AnnotationTrackParams, annotation_track_params_from_mapping
 
 
@@ -126,20 +127,11 @@ def _normalize_side_value(raw: object, *, field_name: str = "side") -> str:
     return side
 
 
-def _parse_px_scalar(raw: object, *, field_name: str) -> ScalarSpec:
-    text = str(raw).strip()
-    if not text:
-        raise ValueError(f"{field_name} cannot be empty")
-    if text.endswith("%"):
-        raise ValueError(f"{field_name} only accepts px or unitless px values")
-    try:
-        if text.endswith("px"):
-            value = float(text[:-2])
-        else:
-            value = float(text)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{field_name} must be a number of pixels") from exc
-    return ScalarSpec(value=value, unit="px")
+def _parse_px_scalar(raw: object, *, field_name: str) -> ScalarSpec | None:
+    value = parse_optional_pixel(
+        raw, field_name=field_name, allow_zero=field_name == "spacing"
+    )
+    return None if value is None else ScalarSpec(value=value, unit="px")
 
 
 def _validate_px_scalar(spec: ScalarSpec | None, *, field_name: str, allow_zero: bool) -> None:
@@ -147,10 +139,10 @@ def _validate_px_scalar(spec: ScalarSpec | None, *, field_name: str, allow_zero:
         return
     if spec.unit != "px":
         raise ValueError(f"{field_name} only accepts px or unitless px values")
-    value = float(spec.value)
-    if value < 0 or (value == 0 and not allow_zero):
+    if isinstance(spec.value, bool) or not isinstance(spec.value, (int, float)):
         relation = "nonnegative" if allow_zero else "positive"
-        raise ValueError(f"{field_name} must be {relation}")
+        raise ValueError(f"{field_name} must be {relation} finite numeric pixels")
+    parse_optional_pixel(spec.value, field_name=field_name, allow_zero=allow_zero)
 
 
 def parse_linear_track_slot(raw: str) -> LinearTrackSlot:
@@ -380,10 +372,7 @@ def _normalize_linear_track_slots(
                 raise ValueError("linear custom track slots support only one features slot")
 
         if renderer in {"dinucleotide_content", "dinucleotide_skew"}:
-            if "dinucleotide" in params and "nt" not in params:
-                params["nt"] = str(params.pop("dinucleotide")).upper()
-            elif "nt" in params:
-                params["nt"] = str(params["nt"]).upper()
+            params = normalize_dinucleotide_params(params)
             if renderer == "dinucleotide_skew":
                 params = _normalize_dinucleotide_skew_color_params(params)
         elif renderer == "depth":

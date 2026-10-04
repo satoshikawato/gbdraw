@@ -329,17 +329,17 @@ def test_protein_flows_separate_bgc_groups_from_hepatoplasma_collinear() -> None
     for fragment in (
         'get_by_role("button", name="Linear", exact=True)',
         'get_by_role("radio", name="GenBank", exact=True)',
-        'get_by_role("status")',
-        '"Current: No comparison"',
+        'name="Set no comparison", exact=True',
+        'to_have_attribute("aria-pressed", "true")',
         'get_by_role("button", name="Add sequence", exact=True)',
-        'expect(add_sequence).to_have_count(2)',
-        'add_sequence.first.click()',
+        'expect(add_sequence).to_have_count(1)',
+        'add_sequence.click()',
         'get_by_test_id(f"linear-genbank-{index}").set_input_files',
         'name=f"Record options for sequence {index}"',
         'f"Definition for sequence {index}"',
         'f"Subtitle / title for sequence {index}"',
         'f"Reverse complement for sequence {index}"',
-        'name="Linear sequence 5", exact=True',
+        '"region", name="Linear input file 5", exact=True',
         'to_contain_text("BGC0000713.gbk")',
         '"Reverse complement for sequence 5", exact=True',
         "to_be_in_viewport()",
@@ -510,13 +510,14 @@ def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> No
     for fragment in (
         'name="Set all adjacent comparisons", exact=True',
         'name="Run LOSAT for all adjacent pairs", exact=True',
-        '"Current: No comparison"',
+        'name="Set no comparison", exact=True',
         "_set_source_inputs(page)",
         'page.get_by_test_id("linear-genbank-1").set_input_files',
         'name=f"Record options for sequence {index}"',
         'f"Record selector for sequence {index}"',
         'not_to_contain_text("Loading records...")',
         "_assert_input_capture_framing(page)",
+        'name=re.compile(r"^Depth tracks for file \\d+$")',
         '"fourth input", fourth_box',
         '"fifth input", fifth_box',
         '"Selected pairs"',
@@ -533,6 +534,13 @@ def test_hepatoplasmataceae_collinear_guards_pin_evidence_and_span_fasta() -> No
         'settings.get_by_label("Collinear evidence scope", exact=True).select_option(',
         '"Advanced comparison and layout"',
         'if evidence_scope not in {"all", "adjacent"}',
+        'name="Infer orthogroups with self-comparisons", exact=True',
+        "infer_orthogroups.check()",
+        'settings.get_by_label("LOSATP Max target seqs", exact=True)',
+        'max_target_seqs.fill("")',
+        'state.get("inferOrthogroups") is not True',
+        'state.get("candidateLimit") is not None',
+        "_frame_collinear_settings(settings)",
         'expected_jobs = 25 if evidence_scope == "all" else 13',
         'threads.select_option("8" if evidence_scope == "all" else "auto")',
         'parallel_runs.select_option("4")',
@@ -708,6 +716,9 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
         "source_record_upload_count=5",
         PINNED_NCBI_REVISIONS_ASSERTION,
         "initial_cache_entries=0",
+        "infer_orthogroups=true",
+        "max_target_seqs=unbounded",
+        "member_hits_per_protein=5",
         "input_frame.final_two_uploaders_visible=true",
         "selected_pairs.boundary_4_to_5_verified=true",
         "baseline_definition_zoom=80%",
@@ -723,6 +734,9 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
     } <= set(gallery_chapter["execution"]["assertions"])
     assert "does not load a Gallery session" in gallery_collinear
     assert "Evidence scope | Adjacent pairs" in gallery_collinear
+    assert "Infer orthogroups with self-comparisons | Selected" in gallery_collinear
+    assert "Max target seqs | Blank (**Unbounded**)" in gallery_collinear
+    assert "Advanced comparison and layout | Execution" not in gallery_collinear
     assert "Open **Selected pairs (4)**" in gallery_collinear
     assert "500 rendered Collinear match elements" in gallery_collinear
     normalized_gallery_collinear = " ".join(gallery_collinear.split())
@@ -806,6 +820,9 @@ def test_protein_comparison_tutorials_and_evidence_record_the_complete_recipe() 
         PINNED_NCBI_REVISIONS_ASSERTION,
         "initial_cache_entries=0",
         "evidence_scope=all",
+        "infer_orthogroups=true",
+        "max_target_seqs=unbounded",
+        "member_hits_per_protein=5",
         "total_threads=32",
         "parallel_runs=4",
         "threads_per_run=8",
@@ -888,7 +905,7 @@ def test_protein_popup_state_uses_catalog_commit_path() -> None:
     for fragment in (
         "kind: 'collinearityResult'",
         "typedResource: convertedPayload.collinearityResult",
-        "const candidateCatalogAdmission = admitFeatureCatalog(",
+        "const candidateCatalogAdmission = execution.catalogAdmission;",
         "catalogAdmission: candidateCatalogAdmission,",
         "collinearGroups: Array.isArray(candidateCommit.featureState.collinearGroups)",
         "generatedArtifactTransactionOwner.activate(generatedArtifactCandidate,",

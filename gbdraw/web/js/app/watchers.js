@@ -1,3 +1,4 @@
+import { normalizeUserFacingError } from '../services/error-normalization.js';
 import {
   parseBlacklistWords,
   parseColorTable,
@@ -5,7 +6,6 @@ import {
   parseWhitelistRules
 } from './file-imports.js';
 import {
-  buildLegendIntents,
   prepareSpecificColorImport
 } from './specific-color-rules.js';
 import {
@@ -38,7 +38,7 @@ export const runRecordDiscoveryWatcher = async ({
 export const setupWatchers = ({
   state,
   rulePreparation,
-  watch,
+  ref, computed, watch,
   nextTick,
   onMounted,
   legendActions,
@@ -59,14 +59,12 @@ export const setupWatchers = ({
     extractedFeatures,
     biologicalFeatures,
     featureSelectorSafetyScope,
-    addedLegendCaptions,
     layoutRepositionMode,
     editableLabels,
     results,
     svgContent,
     selectedResultIndex,
     form,
-    generatedLegendPosition,
     generatedMode,
     shouldDeferCircularPreviewUpdates,
     mode,
@@ -74,7 +72,6 @@ export const setupWatchers = ({
     lInputType,
     canvasPadding,
     skipCaptureBaseConfig,
-    skipPositionReapply,
     skipExtractOnSvgChange,
     trustedArtifactRestoreInProgress,
     svgContainer,
@@ -107,7 +104,6 @@ export const setupWatchers = ({
     currentColors,
     paletteInstantPreviewEnabled,
     pendingPaletteName,
-    fileLegendCaptions,
     semanticFileWatchersSuppressed,
     sessionResourceDiscoveryDeferred,
     sessionImportRollbackInProgress,
@@ -121,29 +117,23 @@ export const setupWatchers = ({
     labelReflowRequestReason,
     labelReflowForceRequestSeq,
     labelReflowForceRequestReason,
-    labelLayoutDirtyReason,
     errorLog
   } = state;
 
   const {
-    removeLegendEntry,
     addLegendEntry,
     extractLegendEntries,
-    refreshLegendDragAffordances,
-    syncFileLegendEntries
+    refreshLegendDragAffordances
   } = legendActions;
 
-  const { applyPaletteToSvg, applySpecificRulesToSvg } = svgActions;
-  const { refreshFeatureOverrides, syncLabelEditor } = featureActions;
+  const { applyPaletteToSvg } = svgActions;
+  const { syncLabelEditor } = featureActions;
   const {
     applyCanvasPadding,
-    repositionForLegendChange,
     refreshDiagramDragAffordances
   } = legendLayout;
   const {
     applyPaletteDraftToPreview,
-    scheduleDefinitionUpdate,
-    cancelDefinitionUpdate,
     syncPaletteDraftState
   } = resultsManager;
 
@@ -186,42 +176,6 @@ export const setupWatchers = ({
     }
   };
 
-  const scheduleCircularDefinitionUpdate = () => {
-    if (mode.value !== 'circular') return;
-    if (generatedMode.value !== mode.value) return;
-    if (shouldDeferCircularPreviewUpdates.value) {
-      cancelDefinitionUpdate();
-      return;
-    }
-    scheduleDefinitionUpdate();
-  };
-
-  watch(
-    () => [...manualSpecificRules],
-    async (newRules, oldRules) => {
-      if (semanticFileWatchersSuppressed.value) return;
-      if (extractedFeatures.value.length > 0) {
-        refreshFeatureOverrides(extractedFeatures.value);
-      }
-      applyPaletteToSvg();
-      applySpecificRulesToSvg();
-
-      const currentCaptions = new Set(newRules.filter((r) => r.cap).map((r) => r.cap));
-      const oldCaptions = new Set((oldRules || []).filter((r) => r.cap).map((r) => r.cap));
-
-      const removedFromRules = [...oldCaptions].filter((cap) => !currentCaptions.has(cap));
-      const removedFromTracked = [...addedLegendCaptions.value].filter((cap) => !currentCaptions.has(cap));
-
-      const allRemovedCaptions = new Set([...removedFromRules, ...removedFromTracked]);
-
-      for (const cap of allRemovedCaptions) {
-        removeLegendEntry(cap);
-        addedLegendCaptions.value.delete(cap);
-      }
-    },
-    { deep: true }
-  );
-
   watch(
     currentColors,
     () => {
@@ -242,6 +196,7 @@ export const setupWatchers = ({
   watch(
     canvasPadding,
     () => {
+      if (semanticFileWatchersSuppressed.value || state.sessionOperationAvailability?.()) return;
       applyCanvasPadding();
     },
     { deep: true }
@@ -258,28 +213,8 @@ export const setupWatchers = ({
   );
 
   watch(
-    () => form.legend,
-    (newPos, oldPos) => {
-      if (generatedMode.value !== mode.value) return;
-      if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
-      if (
-        svgContent.value &&
-        oldPos !== undefined &&
-        newPos !== oldPos &&
-        newPos !== generatedLegendPosition.value
-      ) {
-        nextTick(() => {
-          if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) return;
-          repositionForLegendChange(newPos, generatedLegendPosition.value);
-        });
-      }
-    }
-  );
-
-  watch(
     () => form.multi_record_canvas,
     (enabled, previousEnabled) => {
-      cancelDefinitionUpdate();
       if (mode.value !== 'circular') return;
       if (enabled === previousEnabled) return;
 
@@ -307,7 +242,6 @@ export const setupWatchers = ({
   watch([svgContent, svgContainer, () => results.value[selectedResultIndex.value]], () => {
     const isIncrementalEdit = Boolean(skipCaptureBaseConfig.value);
     skipCaptureBaseConfig.value = false;
-    skipPositionReapply.value = false;
 
     nextTick(async () => {
       const root = svgContainer.value?.querySelector('svg') || null;
@@ -336,11 +270,7 @@ export const setupWatchers = ({
           'PREVIEW_BIND_SUPERSEDED',
           'PREVIEW_ROOT_MISMATCH'
         ].includes(error?.code)) return;
-        errorLog.value = {
-          summary: error?.message || 'The mounted preview could not be prepared.',
-          details: []
-        };
-        console.error('Could not bind the mounted SVG Result.', error);
+        errorLog.value = normalizeUserFacingError(error, { operation: 'generate', stage: 'result-admission' });
       }
     });
   }, { flush: 'post' });
@@ -353,7 +283,6 @@ export const setupWatchers = ({
       const result = results.value[selectedResultIndex.value];
       if (!isCommittedSvgResultMounted(result)) return;
       skipCaptureBaseConfig.value = false;
-      skipPositionReapply.value = false;
     }
   );
 
@@ -401,7 +330,6 @@ export const setupWatchers = ({
     () => mode.value,
     () => {
       if (semanticFileWatchersSuppressed.value) return;
-      cancelDefinitionUpdate();
 
       // Vue replaces the mode-keyed container. Release its frozen live-edit
       // payload first so the new root materializes the selected Result content.
@@ -435,7 +363,6 @@ export const setupWatchers = ({
       selectedOrthogroupId.value = '';
       orthogroupSearch.value = '';
       labelOverrideBuildWarning.value = '';
-      labelLayoutDirtyReason.value = '';
       labelSearch.value = '';
       featurePanelTab.value = 'colors';
       clickedPairwiseMatch.value = null;
@@ -455,33 +382,70 @@ export const setupWatchers = ({
     }
   );
 
-  const pendingFileImports = new WeakMap();
+  const auxiliaryImportFailure = ref(null);
+  const canRetryAuxiliaryImportFailure = computed(() => Boolean(auxiliaryImportFailure.value
+    && errorLog.value === auxiliaryImportFailure.value.error
+    && files[auxiliaryImportFailure.value.key] === auxiliaryImportFailure.value.selection
+    && (!auxiliaryImportFailure.value.snapshot || rulePreparation.isCurrent(auxiliaryImportFailure.value.snapshot))));
+  const retryAuxiliaryImportFailure = () => {
+    const busy = state.sessionOperationAvailability?.();
+    return busy || (canRetryAuxiliaryImportFailure.value ? auxiliaryImportFailure.value.retry() : false);
+  };
+  const pendingFileImports = window.Vue.reactive(new Map());
   let fileImportApplications = Promise.resolve();
   const restoredFileSelections = new Map();
-  const watchFileImport = (key, apply) => watch(() => files[key], (file, previousFile) => {
+  const applyFileImport = (key, apply, file, previousFile) => {
     const restored = restoredFileSelections.has(key) && restoredFileSelections.get(key) === file;
     restoredFileSelections.delete(key);
     if (restored) return;
     if (semanticFileWatchersSuppressed.value || !file) return;
     const ruleContext = key === 't_color' ? rulePreparation.snapshot() : null;
     const isCurrent = () => files[key] === file && !semanticFileWatchersSuppressed.value
+      && !state.sessionOperationAvailability?.()
       && (!ruleContext || rulePreparation.isCurrent(ruleContext));
+    const previousError = errorLog.value;
+    const retainFailure = () => {
+      auxiliaryImportFailure.value = { error: errorLog.value, key, selection: files[key], snapshot: ruleContext ? rulePreparation.snapshot() : null,
+        retry: async () => {
+          if (files[key] === file) return applyFileImport(key, apply, file, previousFile);
+          files[key] = file;
+          await nextTick();
+          return pendingFileImports.get(file);
+        } };
+    };
     const pending = readFileText(file).then((text) => {
       // Reads may finish out of order; serialize only their live application.
       const application = fileImportApplications.then(async () => {
-        if (!isCurrent()) return;
+        if (!isCurrent()) return false;
         if (await apply(text, isCurrent) === false && isCurrent()) {
           restoredFileSelections.set(key, previousFile);
           files[key] = previousFile;
+          if (errorLog.value !== previousError) retainFailure();
+          return false;
+        } else if (files[key] === file && errorLog.value === auxiliaryImportFailure.value?.error) {
+          errorLog.value = null;
+          auxiliaryImportFailure.value = null;
         }
+        return true;
       });
       fileImportApplications = application.catch(() => {});
       return application;
     }).catch((error) => {
-      if (isCurrent()) alert(`Failed to read ${file.name || 'uploaded table'}: ${error.message}`);
+      if (isCurrent() && errorLog.value === previousError) {
+        errorLog.value = normalizeUserFacingError(error, { operation: key === 't_color' ? 'evaluateRules' : 'unknown', stage: 'resource-staging' });
+        restoredFileSelections.set(key, previousFile);
+        files[key] = previousFile;
+        retainFailure();
+      }
+      return false;
     });
     pendingFileImports.set(file, pending);
-  });
+    void pending.finally(() => {
+      if (pendingFileImports.get(file) === pending) pendingFileImports.delete(file);
+    });
+    return pending;
+  };
+  const watchFileImport = (key, apply) => watch(() => files[key], (file, previousFile) => applyFileImport(key, apply, file, previousFile));
   const waitForAuxiliaryFileImport = (file) => pendingFileImports.get(file);
 
   watchFileImport('d_color', (text) => {
@@ -492,35 +456,18 @@ export const setupWatchers = ({
       });
       console.log(`Loaded ${count} colors from file.`);
     } catch (e) {
-      console.error('Failed to load color file:', e);
-      alert('Failed to load color file. Please check the TSV format.');
+      errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
+      return false;
     }
   });
 
   watchFileImport('t_color', async (text, isCurrent) => {
     try {
       const prepared = prepareSpecificColorImport(text, manualSpecificRules);
-      if (!await rulePreparation.prepare(prepared.nextRules) || !isCurrent()) return;
-      const previousCaptions = Array.from(fileLegendCaptions.value);
-      const previousFileIntents = buildLegendIntents(
-        manualSpecificRules.filter((rule) => rule.fromFile),
-        { conflictPolicy: 'last-wins' }
-      ).intents;
-      if (svgContent.value) {
-        await nextTick();
-        await syncFileLegendEntries(prepared.intents, { previousFileIntents });
-      }
-      if (!isCurrent()) return;
-
-      manualSpecificRules.splice(0, manualSpecificRules.length, ...prepared.nextRules);
-      previousCaptions.forEach((caption) => addedLegendCaptions.value.delete(caption));
-      fileLegendCaptions.value = new Set(prepared.fileLegendCaptions);
-      prepared.fileLegendCaptions.forEach((caption) => addedLegendCaptions.value.add(caption));
-      extractLegendEntries();
+      if (!await featureActions.commitSpecificRules(prepared.nextRules, 'Import specific color rules', { isCurrent })) return false;
       console.log(`Loaded ${prepared.importedCount} rules from file.`);
     } catch (e) {
-      console.error('Failed to load rules file:', e);
-      if (isCurrent()) alert(`Failed to load rules file. ${e?.message || 'Please check the TSV format.'}`);
+      if (isCurrent()) errorLog.value = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'rule-validation' });
       return false;
     }
   });
@@ -538,8 +485,8 @@ export const setupWatchers = ({
       });
       console.log(`Loaded ${count} priority rules.`);
     } catch (e) {
-      console.error('Failed to load priority file:', e);
-      alert('Failed to load priority file.');
+      errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
+      return false;
     }
   });
 
@@ -549,8 +496,8 @@ export const setupWatchers = ({
       rules.forEach((rule) => manualWhitelist.push(rule));
       console.log(`Loaded ${count} whitelist rules.`);
     } catch (e) {
-      console.error('Failed to load whitelist file:', e);
-      alert('Failed to load whitelist file.');
+      errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
+      return false;
     }
   });
 
@@ -564,8 +511,8 @@ export const setupWatchers = ({
         console.log(`Loaded ${count} blacklist words.`);
       }
     } catch (e) {
-      console.error('Failed to load blacklist file:', e);
-      alert('Failed to load blacklist file.');
+      errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
+      return false;
     }
   });
 
@@ -579,21 +526,11 @@ export const setupWatchers = ({
     }
   );
 
-  watch(() => form.species, scheduleCircularDefinitionUpdate);
-  watch(() => form.strain, scheduleCircularDefinitionUpdate);
-  watch(() => form.plot_title, scheduleCircularDefinitionUpdate);
-  watch(() => state.adv.def_font_size, scheduleCircularDefinitionUpdate);
-  watch(
-    () => state.adv.plot_title_position,
-    () => {
-      scheduleCircularDefinitionUpdate();
-    }
-  );
-  watch(() => state.adv.plot_title_font_size, scheduleCircularDefinitionUpdate);
-  watch(() => state.adv.keep_full_definition_with_plot_title, scheduleCircularDefinitionUpdate);
   watch(
     () => [
       semanticFileWatchersSuppressed.value,
+      state.sessionSavePending?.value,
+      state.sessionImportPending?.value,
       mode.value,
       cInputType.value,
       files.c_gb,
@@ -606,13 +543,15 @@ export const setupWatchers = ({
         rollbackInProgress: sessionImportRollbackInProgress,
         semanticWatchersSuppressed: semanticFileWatchersSuppressed,
         sessionResourceDiscoveryDeferred,
-        refresh: ({ suppress }) => refreshCircularRecordOrder({ suppress })
+        refresh: ({ suppress }) => refreshCircularRecordOrder({ suppress, automatic: true })
       });
     }
   );
   watch(
     () => [
       semanticFileWatchersSuppressed.value,
+      state.sessionSavePending?.value,
+      state.sessionImportPending?.value,
       mode.value,
       lInputType.value,
       ...linearSeqs.flatMap((seq) => [
@@ -639,8 +578,8 @@ export const setupWatchers = ({
     try {
       await preparePaletteDefinitions();
     } catch (error) {
-      console.warn('Could not load browser palette definitions.', error);
+      console.warn('Could not load browser palette definitions.', normalizeUserFacingError(error, { stage: 'initialization' }));
     }
   });
-  return { waitForAuxiliaryFileImport };
+  return { waitForAuxiliaryFileImport, auxiliaryFileImportPending: () => pendingFileImports.size > 0, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure };
 };

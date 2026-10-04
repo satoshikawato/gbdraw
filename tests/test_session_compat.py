@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import base64
+import gzip
 import json
+import re
 from dataclasses import replace
 from pathlib import Path
 
@@ -27,6 +29,7 @@ from gbdraw.api.request_render import (
 from gbdraw.api.requests import (
     CircularBatchOutputPolicy,
     CircularBatchRequest,
+    CircularDiagramRequest,
     InMemoryRecordSource,
     LinearDiagramRequest,
     RecordInput,
@@ -45,6 +48,7 @@ from gbdraw.session import (
     load_session_document,
     materialize_session,
     render_session,
+    save_session_document,
     session_to_request,
 )
 from gbdraw.session_io import CURRENT_SESSION_VERSION
@@ -62,12 +66,93 @@ _VERSION_39_SESSION = (
     / "sessions"
     / "BGC0000708-BGC0000713.v39.gbdraw-session.json.gz"
 )
+_VERSION_40_LEGACY_ALIGNMENT_SESSION = (
+    Path(__file__).parent
+    / "fixtures"
+    / "sessions"
+    / "BGC0000708-BGC0000713.v40-schema5.json"
+)
+_RELEASE_0_13_0_SESSION = (
+    Path(__file__).parent
+    / "fixtures"
+    / "sessions"
+    / "BGC0000708-BGC0000713.v30.gbdraw-session.json.gz"
+)
+# Record group x translations in the SVG that release 0.13.0 wrote for
+# `gbdraw linear --session <_RELEASE_0_13_0_SESSION> -o replay -f svg`
+# (`git archive 0.13.0 gbdraw`, run with PYTHONPATH). Record 5 is reverse
+# complemented and aligned on its og_1 member like records 2-4.
+_RELEASE_0_13_0_RECORD_X = (
+    895.3450243728452,
+    677.0,
+    1015.6834700590497,
+    687.4823049181628,
+    907.333293702691,
+)
 _SYNTHETIC_CONSERVATION_SESSION = (
     Path(__file__).parent
     / "fixtures"
     / "sessions"
     / "synthetic_conservation.gbdraw-session.json.gz"
 )
+
+
+def test_released_session_44_schema_7_catalog_4_is_typed_readable(
+    tmp_path: Path,
+) -> None:
+    source = (
+        Path(__file__).parent
+        / "fixtures"
+        / "sessions"
+        / "HmmtDNA_basic_circular.v44-schema7.json.gz"
+    )
+    document = load_session_document(source)
+    assert document.version == 44
+    assert document.to_dict()["renderRequest"]["schema"] == 7
+    assert document.to_dict()["editorState"]["featureCatalog"]["schema"] == 4
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        assert isinstance(session_to_request(materialized), CircularDiagramRequest)
+
+
+def test_cli_writer_projects_released_web_config_to_session_44() -> None:
+    source = {
+        "config": {
+            "adv": {
+                "linear_show_accession": True,
+                "linear_show_length": False,
+            },
+            "recordDisplayDrafts": [
+                {
+                    "scope": "circular",
+                    "sourceUid": "source-1",
+                    "selector": "#1",
+                    "recordId": "record-1",
+                    "topologyOverride": None,
+                    "startCoordinate": 3,
+                }
+            ],
+        }
+    }
+
+    adjunct, web_file_inventory = (
+        cli_session_module._project_session_adjunct_for_current_write(
+            source,
+            source_version=41,
+        )
+    )
+
+    assert web_file_inventory is None
+    assert adjunct["config"]["adv"] == {
+        "linear_accession_visibility": "show",
+        "linear_length_visibility": "hide",
+    }
+    assert adjunct["config"]["recordDisplayDrafts"][0][
+        "reverseComplementOverride"
+    ] is None
+    assert adjunct["config"]["recordDisplayDrafts"][0]["anchorIntent"] is None
+    assert "reverseComplementOverride" not in source["config"][
+        "recordDisplayDrafts"
+    ][0]
 
 
 def test_version_39_multiline_conservation_labels_expand_at_compat_boundary() -> None:
@@ -128,6 +213,210 @@ def test_version_39_multiline_conservation_label_count_mismatch_stays_strict() -
     migrated = canonical_payload_for_session_decode(39, payload)
 
     assert migrated["diagramOptions"]["conservationLabels"] == labels
+
+
+@pytest.mark.parametrize(
+    "fixture_path",
+    (_VERSION_39_SESSION, _VERSION_40_LEGACY_ALIGNMENT_SESSION),
+    ids=("legacy-feature-groups", "current-feature-catalog"),
+)
+def test_released_legacy_alignment_session_promotes_to_current_typed_state(
+    fixture_path: Path,
+    tmp_path: Path,
+) -> None:
+    document = load_session_document(fixture_path)
+    current_path = tmp_path / f"{fixture_path.stem}.current.json"
+
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        request = session_to_request(materialized)
+        assert isinstance(request, LinearDiagramRequest)
+        assert not hasattr(request.options, "align_orthogroup_feature")
+        assert request._legacy_similarity_alignment is not None
+        assert request._legacy_similarity_alignment.target == "og_1"
+        assert request.similarity_alignment is not None
+        assert request.similarity_alignment.group_id == "og_1"
+        assert request.similarity_alignment.schema == 2
+        assert request.layout is not None
+        assert [
+            (item.record_key, item.x, item.y)
+            for item in request.layout.record_translations
+        ] == [
+            (record.record_key, 0.0, 0.0)
+            for record in request.records
+        ]
+        adapted = adapt_session_request(request, document.to_dict())
+        assert not hasattr(adapted.request.options, "align_orthogroup_feature")
+        assert adapted.request.similarity_alignment == request.similarity_alignment
+        save_session_document(current_path, request)
+
+    current = load_session_document(current_path)
+    payload = current.to_dict()
+    serialized = json.dumps(payload)
+    assert current.version == CURRENT_SESSION_VERSION
+    assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
+    typed_plan = payload["renderRequest"]["layout"]["similarityAlignment"]
+    assert typed_plan["schema"] == 2
+    assert "mode" not in typed_plan
+    assert all(
+        set(decision) == {"recordKey", "status", "rationale", "anchor"}
+        for decision in typed_plan["records"]
+    )
+    assert "alignOrthogroupFeature" not in serialized
+    assert "align_orthogroup_feature" not in serialized
+    assert "selectedOrthogroupAlignmentFeature" not in serialized
+    with materialize_session(current, output_directory=tmp_path) as materialized:
+        reloaded = session_to_request(materialized)
+    assert isinstance(reloaded, LinearDiagramRequest)
+    assert reloaded._legacy_similarity_alignment is None
+    assert reloaded.similarity_alignment == request.similarity_alignment
+    assert reloaded.layout is not None
+    assert reloaded.layout.record_translations == request.layout.record_translations
+
+
+def test_released_legacy_alignment_session_rejects_conflicting_owners(
+    tmp_path: Path,
+) -> None:
+    payload = json.loads(_VERSION_40_LEGACY_ALIGNMENT_SESSION.read_text())
+    payload["orthogroupState"]["selectedOrthogroupAlignmentFeature"] = "og-conflict"
+    document = load_session_document(payload)
+
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        with pytest.raises(
+            ValidationError,
+            match="conflicting similarity alignment owners",
+        ):
+            session_to_request(materialized)
+
+
+def test_released_legacy_alignment_cli_writes_current_typed_sidecar(
+    tmp_path: Path,
+) -> None:
+    output_prefix = tmp_path / "legacy-aligned"
+    sidecar_path = tmp_path / "legacy-aligned.gbdraw-session.json"
+    rerendered_prefix = tmp_path / "legacy-aligned-rerendered"
+
+    linear_main(
+        [
+            "--session",
+            str(_VERSION_40_LEGACY_ALIGNMENT_SESSION),
+            "--output",
+            str(output_prefix),
+            "--format",
+            "svg",
+            "--session_output",
+            str(sidecar_path),
+        ]
+    )
+
+    assert output_prefix.with_suffix(".svg").is_file()
+    saved = load_session_document(sidecar_path)
+    payload = saved.to_dict()
+    serialized = json.dumps(payload)
+    assert saved.version == CURRENT_SESSION_VERSION
+    assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert payload["renderRequest"]["layout"]["similarityAlignment"]["groupId"] == "og_1"
+    assert payload["editorState"]["alignmentResetReceipt"] is None
+    assert len(payload["renderRequest"]["layout"]["recordTranslations"]) == 5
+    assert "alignOrthogroupFeature" not in serialized
+    assert "align_orthogroup_feature" not in serialized
+    assert "selectedOrthogroupAlignmentFeature" not in serialized
+
+    linear_main(
+        [
+            "--session",
+            str(sidecar_path),
+            "--output",
+            str(rerendered_prefix),
+            "--format",
+            "svg",
+        ]
+    )
+
+    assert (
+        rerendered_prefix.with_suffix(".svg").read_bytes()
+        == output_prefix.with_suffix(".svg").read_bytes()
+    )
+
+
+def test_release_0_13_0_session_replays_its_reverse_complemented_alignment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session_path = tmp_path / "bgc.gbdraw-session.json"
+    with gzip.open(_RELEASE_0_13_0_SESSION, "rt", encoding="utf-8") as handle:
+        session_path.write_text(handle.read(), encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    linear_main(
+        ["--session", str(session_path), "-o", "replay", "-f", "svg", "--save_session"]
+    )
+
+    svg = (tmp_path / "replay.svg").read_text(encoding="utf-8")
+    record_groups = re.findall(
+        r'<g [^>]*data-gbdraw-record-index="(\d+)"[^>]*'
+        r'data-record-translation-x="[^"]*"[^>]*transform="([^"]*)"',
+        svg,
+    )
+    assert [int(index) for index, _ in record_groups] == [0, 1, 2, 3, 4]
+    record_x = [
+        float(re.findall(r"translate\(([-0-9.e]+),", transform)[-1])
+        for _, transform in record_groups
+    ]
+    # Renderer changes since 0.13.0 move the canvas and scale, so compare the
+    # offsets between records as fractions of one offset (scale free).
+    def relative(values) -> list[float]:
+        return [(value - values[0]) / (values[1] - values[0]) for value in values]
+
+    assert relative(record_x) == pytest.approx(
+        relative(_RELEASE_0_13_0_RECORD_X), abs=1e-9
+    )
+
+    def anchors(request: LinearDiagramRequest) -> list[tuple[object, ...]]:
+        assert request.similarity_alignment is not None
+        assert request.similarity_alignment.group_id == "og_1"
+        return [
+            (
+                decision.status,
+                decision.anchor.biological_feature_id,
+                decision.anchor.source_feature_index,
+                decision.anchor.stable_feature_svg_id,
+            )
+            for decision in request.similarity_alignment.records
+        ]
+
+    saved = load_session_document(tmp_path / "replay.gbdraw-session.json")
+    with materialize_session(saved, output_directory=tmp_path) as materialized:
+        replayed = session_to_request(materialized)
+    with materialize_session(
+        load_session_document(_VERSION_39_SESSION), output_directory=tmp_path
+    ) as materialized:
+        version_39 = session_to_request(materialized)
+    # The 0.13.0 display-frame ID of record 5 binds to the same source feature
+    # the version 39 Session of this Gallery diagram names.
+    assert anchors(replayed) == anchors(version_39)
+    assert anchors(replayed)[4][1] == "f20e4885e"
+
+
+def test_released_legacy_alignment_session_rejects_ambiguous_group_metadata(
+    tmp_path: Path,
+) -> None:
+    payload = load_session_document(_VERSION_39_SESSION).to_dict()
+    target = "ambiguous-legacy-target"
+    payload["orthogroupState"]["selectedOrthogroupAlignmentFeature"] = target
+    payload["orthogroupState"]["groups"][0]["members"][0]["label"] = target
+    payload["orthogroupState"]["groups"][1]["members"][0]["label"] = target
+    for comparison in payload["renderRequest"]["comparisons"]:
+        settings = comparison.get("settings", {})
+        if settings.get("alignOrthogroupFeature") is not None:
+            settings["alignOrthogroupFeature"] = target
+    document = load_session_document(payload)
+
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        with pytest.raises(
+            ValidationError,
+            match="absent or ambiguous",
+        ):
+            session_to_request(materialized)
 
 
 def _linear_request(
@@ -413,9 +702,7 @@ def test_rewrite_protein_artifact_references_updates_compound_ids() -> None:
 
 
 @pytest.mark.parametrize("compound", [False, True], ids=["exact", "compound"])
-@pytest.mark.parametrize("owner", ["comparison", "alignment-target"])
 def test_feature_analysis_ids_fail_closed_across_protein_request_artifacts(
-    owner: str,
     compound: bool,
     tmp_path: Path,
 ) -> None:
@@ -428,18 +715,12 @@ def test_feature_analysis_ids_fail_closed_across_protein_request_artifacts(
         if compound
         else feature_analysis_id
     )
-    if owner == "comparison":
-        options = replace(
-            base_request.options,
-            protein_comparisons=(
-                DataFrame({"query_protein_id": [value]}),
-            ),
-        )
-    else:
-        options = replace(
-            base_request.options,
-            align_orthogroup_feature=value,
-        )
+    options = replace(
+        base_request.options,
+        protein_comparisons=(
+            DataFrame({"query_protein_id": [value]}),
+        ),
+    )
     request = replace(base_request, options=options)
 
     with pytest.raises(
@@ -612,38 +893,20 @@ def test_released_schema_v2_fixture_promotes_to_current_typed_artifacts(
     assert adapted.migration_report.protein_raw_candidates == ()
 
 
-def test_released_schema_v2_alignment_target_promotes_with_protein_artifacts(
+def test_released_schema_v2_typed_alignment_survives_protein_artifact_promotion(
     tmp_path: Path,
 ) -> None:
     document = load_session_document(_RELEASED_SCHEMA_V2_SESSION)
 
     with materialize_session(document, output_directory=tmp_path) as materialized:
         request = session_to_request(materialized)
-        comparisons = request.options.linear_comparisons
-        orthogroups = request.options.orthogroups
-        assert comparisons
-        assert orthogroups is not None
-        legacy_target = str(comparisons[0].matches.iloc[0]["query_protein_id"])
-        request = replace(
-            request,
-            options=replace(
-                request.options,
-                align_orthogroup_feature=legacy_target,
-            ),
-        )
-
         adapted = adapt_session_request(request, document.to_dict())
 
-    current_target = adapted.migration_report.protein_id_map[legacy_target]
     adapted_options = adapted.request.options
-    assert adapted_options.align_orthogroup_feature == current_target
+    assert adapted.request.similarity_alignment == request.similarity_alignment
     assert adapted_options.orthogroups is not None
-    assert current_target in adapted_options.orthogroups.member_by_protein_id
     assert adapted_options.linear_comparisons
-    assert (
-        adapted_options.linear_comparisons[0].matches.iloc[0]["query_protein_id"]
-        == current_target
-    )
+    assert adapted.migration_report.protein_id_map
 
 
 def test_released_schema_v2_fixture_cli_sidecar_is_current_and_rerenders(
@@ -809,6 +1072,12 @@ def test_current_typed_replay_retains_web_only_conservation_fastas(
 
     rewritten_web_files = rewritten["webFiles"]
     rewritten_resources = rewritten["resources"]
+    assert rewritten["editorState"]["featureCatalog"]["schema"] == 4
+    assert all(
+        "anchorProfile" in feature
+        for item in rewritten["editorState"]["featureCatalog"]["items"]
+        for feature in item["biologicalFeatures"]
+    )
     rewritten_ids = rewritten_web_files["conservationLosatFastaSources"]
     fasta_bindings = rewritten_web_files["bindings"]["c_conservation_fastas"]
     assert rewritten_ids == [binding["resourceId"] for binding in fasta_bindings]

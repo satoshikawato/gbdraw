@@ -2,8 +2,8 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   EVALUATE_RULES: 'evaluateRules',
   READ_PDF_FONT: 'readPdfFont',
   BUILD_PROTEIN_LOSAT_CACHE_KEYS: 'buildProteinLosatCacheKeys',
-  CONVERT_LOSAT_NUCLEOTIDE_TO_DISPLAY_TSV: 'convertLosatNucleotideToDisplayTsv',
   CONVERT_LOSATP_PAIRS_TO_GENOMIC_PAYLOAD: 'convertLosatpPairsToGenomicPayload',
+  CONVERT_MAIN_SESSION_COMPARISON_FRAME: 'convertMainSessionComparisonFrame',
   EXTRACT_CDS_PROTEIN_FASTA: 'extractCdsProteinFasta',
   EXTRACT_FIRST_FASTA: 'extractFirstFasta',
   GENERATE_LEGEND_ENTRY_SVG: 'generateLegendEntrySvg',
@@ -12,8 +12,9 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   LIST_SEQUENCE_RECORDS: 'listSequenceRecords',
   MEASURE_LEGEND_TEXT: 'measureLegendText',
   PROMOTE_LEGACY_LOSATP_CACHE: 'promoteLegacyLosatpCache',
-  REGENERATE_DEFINITION_SVGS: 'regenerateDefinitionSvgs',
+  READ_COMPARISON_SEQUENCE: 'readComparisonSequence',
   RESOLVE_LEGACY_PROTEIN_REFERENCES: 'resolveLegacyProteinReferences',
+  RESOLVE_SIMILARITY_ALIGNMENT: 'resolveSimilarityAlignment',
   VALIDATE_CONFIG_OVERRIDES: 'validateConfigOverrides'
 });
 

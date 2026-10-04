@@ -1,0 +1,1037 @@
+{
+ "budget": {
+  "visibleP95Ms": 100,
+  "visibleMaxMs": 250,
+  "compareSettleP95Ms": 200,
+  "taskMs": 100
+ },
+ "rows": [
+  {
+   "target": "candidate",
+   "state": "post-generate-override",
+   "op": "compare",
+   "direction": "to-losat",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 24,
+    "p95": 27,
+    "max": 35.6
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 24,
+    "p95": 27,
+    "max": 35.6
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate-override",
+   "op": "compare",
+   "direction": "to-none",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 20.8,
+    "p95": 23.3,
+    "max": 23.9
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 21.7,
+    "p95": 701.3,
+    "max": 1378.8
+   },
+   "maxLoafMs": 73.1,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "FAIL",
+    "failures": [
+     "settle p95 701.3 > 200"
+    ]
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate-override",
+   "op": "generate",
+   "direction": "repeat",
+   "temperature": "warm",
+   "pages": 3,
+   "visibleMs": {
+    "n": 3,
+    "p50": 16.9,
+    "p95": 17.1,
+    "max": 17.1
+   },
+   "settleMs": {
+    "n": 3,
+    "p50": 4941.3,
+    "p95": 5111.9,
+    "max": 5130.8
+   },
+   "generateTotalMs": {
+    "n": 3,
+    "p50": 4941.3,
+    "p95": 5111.9,
+    "max": 5130.8
+   },
+   "maxLoafMs": 966.2,
+   "samplesWithTaskAtLeast100Ms": 3,
+   "unsettled": 0,
+   "diagramWorkerRuns": 3,
+   "diagramWorkerHelpers": 3,
+   "diagramWorkerConstructions": 0
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate-override",
+   "op": "input-blur",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 18.1,
+    "p95": 23.3,
+    "max": 24.5
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 18.1,
+    "p95": 23.3,
+    "max": 24.5
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate-override",
+   "op": "input-key",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 13.3,
+    "p95": 19.2,
+    "max": 19.7
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 13.3,
+    "p95": 19.2,
+    "max": 19.7
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate-override",
+   "op": "program",
+   "direction": "to-LOSATN",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 25.6,
+    "p95": 27.6,
+    "max": 29.4
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 31.2,
+    "p95": 31.7,
+    "max": 32.8
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate-override",
+   "op": "program",
+   "direction": "to-LOSATP",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 25.8,
+    "p95": 29.1,
+    "max": 32.3
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 30.8,
+    "p95": 31.8,
+    "max": 32.3
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate",
+   "op": "compare",
+   "direction": "to-losat",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 24.1,
+    "p95": 25.9,
+    "max": 26.5
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 24.1,
+    "p95": 25.9,
+    "max": 26.5
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate",
+   "op": "compare",
+   "direction": "to-none",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 20.8,
+    "p95": 24.1,
+    "max": 24.3
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 20.8,
+    "p95": 24.1,
+    "max": 24.3
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate",
+   "op": "generate",
+   "direction": "repeat",
+   "temperature": "warm",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 15.9,
+    "p95": 16.9,
+    "max": 17.5
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 4630.3,
+    "p95": 5109.5,
+    "max": 5339.8
+   },
+   "generateTotalMs": {
+    "n": 21,
+    "p50": 4630.3,
+    "p95": 5109.5,
+    "max": 5339.8
+   },
+   "maxLoafMs": 1165.8,
+   "samplesWithTaskAtLeast100Ms": 21,
+   "unsettled": 0,
+   "diagramWorkerRuns": 21,
+   "diagramWorkerHelpers": 21,
+   "diagramWorkerConstructions": 0
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate",
+   "op": "input-blur",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 17.9,
+    "p95": 23.2,
+    "max": 26.5
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 17.9,
+    "p95": 23.2,
+    "max": 26.5
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate",
+   "op": "input-key",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 15.8,
+    "p95": 19.8,
+    "max": 20.5
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 15.8,
+    "p95": 19.8,
+    "max": 20.5
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate",
+   "op": "program",
+   "direction": "to-LOSATN",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 24.4,
+    "p95": 26.4,
+    "max": 29.8
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 30.9,
+    "p95": 31.9,
+    "max": 32
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate",
+   "op": "program",
+   "direction": "to-LOSATP",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 25.4,
+    "p95": 28.6,
+    "max": 28.6
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 31,
+    "p95": 31.5,
+    "max": 31.9
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "pre-generate",
+   "op": "compare",
+   "direction": "to-losat",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 17.4,
+    "p95": 19.1,
+    "max": 20.1
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 17.4,
+    "p95": 19.1,
+    "max": 20.1
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "pre-generate",
+   "op": "compare",
+   "direction": "to-none",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 15.2,
+    "p95": 17.1,
+    "max": 17.3
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 15.2,
+    "p95": 17.1,
+    "max": 17.3
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "pre-generate",
+   "op": "generate",
+   "direction": "first",
+   "temperature": "cold",
+   "pages": 3,
+   "visibleMs": {
+    "n": 3,
+    "p50": 20.7,
+    "p95": 22.7,
+    "max": 22.9
+   },
+   "settleMs": {
+    "n": 3,
+    "p50": 13803.2,
+    "p95": 14910.1,
+    "max": 15033.1
+   },
+   "generateTotalMs": {
+    "n": 3,
+    "p50": 13803.2,
+    "p95": 14910.2,
+    "max": 15033.2
+   },
+   "maxLoafMs": 961,
+   "samplesWithTaskAtLeast100Ms": 3,
+   "unsettled": 0,
+   "diagramWorkerRuns": 3,
+   "diagramWorkerHelpers": 3,
+   "diagramWorkerConstructions": 3
+  },
+  {
+   "target": "candidate",
+   "state": "pre-generate",
+   "op": "input-blur",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 15.8,
+    "p95": 21.7,
+    "max": 24.4
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 15.8,
+    "p95": 21.7,
+    "max": 24.4
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "pre-generate",
+   "op": "input-key",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 12.1,
+    "p95": 17.3,
+    "max": 19.4
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 12.1,
+    "p95": 17.3,
+    "max": 19.4
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "pre-generate",
+   "op": "program",
+   "direction": "to-LOSATN",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 20.7,
+    "p95": 21.8,
+    "max": 22.1
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 30.8,
+    "p95": 31.4,
+    "max": 31.6
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "pre-generate",
+   "op": "program",
+   "direction": "to-LOSATP",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 20.8,
+    "p95": 21.9,
+    "max": 22.1
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 31.1,
+    "p95": 31.7,
+    "max": 31.7
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "vnig-generated",
+   "op": "generate",
+   "direction": "repeat",
+   "temperature": "warm",
+   "pages": 3,
+   "visibleMs": {
+    "n": 3,
+    "p50": 14.8,
+    "p95": 15.2,
+    "max": 15.2
+   },
+   "settleMs": {
+    "n": 3,
+    "p50": 5204.1,
+    "p95": 5414.4,
+    "max": 5437.8
+   },
+   "generateTotalMs": {
+    "n": 3,
+    "p50": 5204.1,
+    "p95": 5414.4,
+    "max": 5437.8
+   },
+   "maxLoafMs": 618.5,
+   "samplesWithTaskAtLeast100Ms": 3,
+   "unsettled": 0,
+   "diagramWorkerRuns": 3,
+   "diagramWorkerHelpers": 3,
+   "diagramWorkerConstructions": 0
+  },
+  {
+   "target": "candidate",
+   "state": "vnig-saved-preview",
+   "op": "generate",
+   "direction": "first",
+   "temperature": "cold",
+   "pages": 3,
+   "visibleMs": {
+    "n": 3,
+    "p50": 115.9,
+    "p95": 116.5,
+    "max": 116.6
+   },
+   "settleMs": {
+    "n": 3,
+    "p50": 12778.3,
+    "p95": 12998,
+    "max": 13022.4
+   },
+   "generateTotalMs": {
+    "n": 3,
+    "p50": 12778.4,
+    "p95": 12998.1,
+    "max": 13022.5
+   },
+   "maxLoafMs": 639.9,
+   "samplesWithTaskAtLeast100Ms": 3,
+   "unsettled": 0,
+   "diagramWorkerRuns": 3,
+   "diagramWorkerHelpers": 3,
+   "diagramWorkerConstructions": 3
+  },
+  {
+   "target": "candidate",
+   "state": "vnig-saved-preview",
+   "op": "input-blur",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 22.6,
+    "p95": 28.5,
+    "max": 30
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 22.6,
+    "p95": 28.5,
+    "max": 30
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "vnig-saved-preview",
+   "op": "input-key",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 12.7,
+    "p95": 19.3,
+    "max": 21
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 12.7,
+    "p95": 19.3,
+    "max": 21
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  }
+ ],
+ "coverage": {
+  "candidate|pre-generate|compare|to-losat": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "candidate|pre-generate|compare|to-none": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "candidate|pre-generate|program|to-LOSATP": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "candidate|pre-generate|program|to-LOSATN": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "candidate|pre-generate|input-key|insert": {
+   "samples": 2,
+   "perSample": {}
+  },
+  "candidate|pre-generate|input-blur|insert": {
+   "samples": 2,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1
+   }
+  },
+  "candidate|pre-generate|input-key|delete": {
+   "samples": 1,
+   "perSample": {}
+  },
+  "candidate|pre-generate|input-blur|delete": {
+   "samples": 1,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1
+   }
+  },
+  "candidate|pre-generate|generate|first": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 1,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#buildCanonicalRenderRequest": 1,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 1,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 1
+   }
+  },
+  "candidate|post-generate|compare|to-losat": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "candidate|post-generate|compare|to-none": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "candidate|post-generate|program|to-LOSATP": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "candidate|post-generate|program|to-LOSATN": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "candidate|post-generate|input-key|insert": {
+   "samples": 2,
+   "perSample": {}
+  },
+  "candidate|post-generate|input-blur|insert": {
+   "samples": 2,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1
+   }
+  },
+  "candidate|post-generate|input-key|delete": {
+   "samples": 1,
+   "perSample": {}
+  },
+  "candidate|post-generate|input-blur|delete": {
+   "samples": 1,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1
+   }
+  },
+  "candidate|post-generate|generate|repeat": {
+   "samples": 2,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 1,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#buildCanonicalRenderRequest": 1,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 1,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 1
+   }
+  },
+  "candidate|post-generate-override|compare|to-losat": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "candidate|post-generate-override|compare|to-none": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "candidate|post-generate-override|program|to-LOSATP": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "candidate|post-generate-override|program|to-LOSATN": {
+   "samples": 3,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2,
+    "app/linear-comparisons.js#buildLinearComparisonTimeline": 1,
+    "app/comparison-ui.js#projectLinearComparisonUi": 1
+   }
+  },
+  "candidate|post-generate-override|input-key|insert": {
+   "samples": 2,
+   "perSample": {}
+  },
+  "candidate|post-generate-override|input-blur|insert": {
+   "samples": 2,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1
+   }
+  },
+  "candidate|post-generate-override|input-key|delete": {
+   "samples": 1,
+   "perSample": {}
+  },
+  "candidate|post-generate-override|input-blur|delete": {
+   "samples": 1,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1
+   }
+  },
+  "candidate|post-generate-override|generate|repeat": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "app/feature-selector.js#buildFeatureMetadataMap": 1,
+    "app/feature-selector.js#buildFeatureSelectorUniquenessIndexFromMetadata": 1,
+    "services/session-request.js#addGeneratedTableResources": 1,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#buildCanonicalRenderRequest": 1,
+    "app/feature-editor/label-override-table.js#buildEditableLabelByFeatureId": 1,
+    "app/feature-editor/label-override-table.js#buildFeatureIdsBySourceText": 1,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 1,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 1
+   }
+  },
+  "candidate|vnig-saved-preview|input-key|insert": {
+   "samples": 2,
+   "perSample": {}
+  },
+  "candidate|vnig-saved-preview|input-blur|insert": {
+   "samples": 2,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2
+   }
+  },
+  "candidate|vnig-saved-preview|input-key|delete": {
+   "samples": 1,
+   "perSample": {}
+  },
+  "candidate|vnig-saved-preview|input-blur|delete": {
+   "samples": 1,
+   "perSample": {
+    "services/history-snapshot.js#buildHistoryIntent": 2,
+    "services/history-snapshot.js#snapshotSignature": 2
+   }
+  },
+  "candidate|vnig-saved-preview|generate|first": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "services/history-snapshot.js#buildHistoryIntent": 1,
+    "services/history-snapshot.js#snapshotSignature": 1,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 1,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#buildCanonicalRenderRequest": 1,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 1,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 1
+   }
+  },
+  "candidate|vnig-generated|generate|repeat": {
+   "samples": 1,
+   "perSample": {
+    "app/color-utils.js#buildDefaultColorOverrideTsv": 2,
+    "app/feature-visibility.js#serializeFeatureVisibilityRules": 2,
+    "services/session-request.js#addGeneratedTableResources": 1,
+    "services/session-request.js#projectCanonicalRenderInput": 1,
+    "services/session-request.js#buildCanonicalRenderRequest": 1,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideRows": 1,
+    "app/feature-editor/label-override-table.js#buildLabelOverrideTsv": 1
+   }
+  }
+ }
+}

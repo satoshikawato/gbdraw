@@ -39,4 +39,176 @@ for (const [domain, key, first, second] of [
 applyConfigData({ form: JSON.parse('{"unknown":1,"__proto__":{"polluted":true}}') });
 assert.equal(Object.hasOwn(state.form, 'unknown'), false);
 assert.equal({}.polluted, undefined);
+
+state.similarityAlignmentPlan.value = {
+  schema: 1,
+  mode: 'position',
+  groupId: 'og-history',
+  reference: {
+    recordKey: 'record-a', biologicalFeatureId: 'feature-a',
+    sourceFeatureIndex: 0, stableFeatureSvgId: 'feature-a'
+  },
+  records: []
+};
+state.linearRecordTranslations.value = [{ recordKey: 'record-a', x: 12, y: -3 }];
+await history.initializeIntentBaseline();
+await history.runUndoable('Clear alignment', () => {
+  state.similarityAlignmentPlan.value = null;
+  state.linearRecordTranslations.value = [{ recordKey: 'record-a', x: 21, y: 4 }];
+});
+await history.undo();
+assert.equal(state.similarityAlignmentPlan.value.groupId, 'og-history');
+assert.deepEqual(state.linearRecordTranslations.value, [
+  { recordKey: 'record-a', x: 12, y: -3 }
+]);
+await history.redo();
+assert.equal(state.similarityAlignmentPlan.value, null);
+assert.deepEqual(state.linearRecordTranslations.value, [
+  { recordKey: 'record-a', x: 21, y: 4 }
+]);
 console.log('History restores nullable config values and preserves key guards.');
+
+// SE-01, N-19, N-20: History checkpoints and the Session rollback hold the
+// admitted feature catalog by reference; state admits no other catalog.
+{
+  const { admitFeatureCatalog, featureStateFromCatalog } = await import('../../gbdraw/web/js/services/feature-catalog.js');
+  const { buildEditorStateData, applyEditorStateData } = await import('../../gbdraw/web/js/services/config.js');
+  const marker = 'se01-catalog-payload';
+  const catalog = admitFeatureCatalog({
+    schema: 4,
+    items: [{
+      resultIndex: 0, resultName: 'diagram.svg', recordKeys: ['record-a'],
+      features: [{ svgId: 'f0001', recordKey: 'record-a', biologicalFeatureId: 'feature-a', fillColor: '#abcdef' }],
+      biologicalFeatures: [{
+        recordKey: 'record-a', biologicalFeatureId: 'feature-a', stableFeatureId: 'stable-a', record_idx: 0,
+        sourceFeatureIndex: 0, record_id: 'record-a', type: 'CDS', start: 1, end: 6, strand: 1,
+        anchorProfile: { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' },
+        qualifiers: { note: [marker] }
+      }],
+      orthogroups: [], annotations: [], comparisonMatches: [], sequenceSources: []
+    }]
+  }, [{ name: 'diagram.svg', content: '<svg />' }], { adopt: true, mode: 'circular' }).catalog;
+  state.mode.value = 'circular';
+  state.results.value = [{ name: 'diagram.svg', content: '<svg />' }];
+  state.featureCatalog.value = catalog;
+  const liveCatalog = () => window.Vue.toRaw?.(state.featureCatalog.value) ?? state.featureCatalog.value;
+  assert.strictEqual(liveCatalog(), catalog);
+
+  const artifactSnapshots = createHistorySnapshotService({
+    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData,
+    buildEditorStateData, applyEditorStateData
+  });
+  const artifactHistory = createHistoryManager({
+    buildIntent: artifactSnapshots.buildHistoryIntent,
+    applyIntent: artifactSnapshots.applyHistoryIntent,
+    buildCheckpoint: artifactSnapshots.buildArtifactCheckpoint,
+    applyCheckpoint: artifactSnapshots.applyArtifactCheckpoint,
+    signatureFor: artifactSnapshots.snapshotSignature
+  });
+  await artifactHistory.captureBaseline();
+  assert.equal(JSON.stringify(artifactHistory.getCurrentCheckpoint()).includes(marker), false);
+  await artifactHistory.runUndoableCheckpoint('Change legend', () => {
+    state.legendEntries.value = [{ caption: 'SE-01', color: '#123456' }];
+  });
+  for (const direction of ['undo', 'redo', 'undo']) {
+    await artifactHistory[direction]();
+    assert.strictEqual(liveCatalog(), catalog, `${direction} keeps the admitted catalog object`);
+    assert.equal(featureStateFromCatalog(liveCatalog(), { mode: 'circular' }).extractedFeatures.length, 1);
+  }
+
+  applyEditorStateData(buildEditorStateData({ preserveAdoptedCatalog: true }));
+  assert.strictEqual(liveCatalog(), catalog, 'Session rollback restores the admitted catalog');
+  applyEditorStateData({ featureCatalog: structuredClone(catalog) });
+  assert.equal(state.featureCatalog.value, null, 'an unadmitted catalog never enters state');
+  state.featureCatalog.value = null;
+  state.results.value = [];
+  state.legendEntries.value = [];
+  console.log('History and Session rollback keep the admitted feature catalog by reference.');
+}
+
+// F-1 (G-H, R11): an Undo or Redo installs the captured state exactly. Unset
+// slot sides, the Features lane direction, both axis indexes, and the Circular
+// multi-record layout stay unset, and the Result's named stroke color stays
+// named, so the next Generate and Session Save see the same state as before.
+{
+  const {
+    buildEditorStateData, applyEditorStateData, buildUiStateData, applyUiStateData
+  } = await import('../../gbdraw/web/js/services/config.js');
+  state.mode.value = 'circular';
+  state.adv.circular_track_slots.forEach((slot) => {
+    slot.side = null;
+    delete slot.params.lane_direction;
+  });
+  state.adv.circular_track_slots_axis_index = null;
+  state.adv.linear_track_slots_axis_index = null;
+  Object.assign(state.layoutPreferences.circular.multi, { legend: null, plotTitlePosition: null });
+  state.originalSvgStroke.value = { color: 'gray', width: 1 };
+  const unsetValues = () => ({
+    sides: state.adv.circular_track_slots.map((slot) => slot.side),
+    laneDirection: state.adv.circular_track_slots.map((slot) => slot.params.lane_direction ?? '<unset>'),
+    circularAxis: state.adv.circular_track_slots_axis_index,
+    linearAxis: state.adv.linear_track_slots_axis_index,
+    multiLayout: { ...state.layoutPreferences.circular.multi },
+    originalSvgStroke: { ...state.originalSvgStroke.value }
+  });
+  const unset = unsetValues();
+  assert.deepEqual(unset, {
+    sides: [null, null, null, null],
+    laneDirection: ['<unset>', '<unset>', '<unset>', '<unset>'],
+    circularAxis: null,
+    linearAxis: null,
+    multiLayout: { legend: null, plotTitlePosition: null },
+    originalSvgStroke: { color: 'gray', width: 1 }
+  });
+  const settings = () => JSON.stringify({
+    config: buildConfigData(), layoutPreferences: buildUiStateData().layoutPreferences
+  });
+  const restoreSnapshots = createHistorySnapshotService({
+    state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData,
+    buildUiStateData, applyUiStateData, buildEditorStateData, applyEditorStateData
+  });
+  const restoreHistory = createHistoryManager({
+    buildIntent: restoreSnapshots.buildHistoryIntent,
+    applyIntent: restoreSnapshots.applyHistoryIntent,
+    buildCheckpoint: restoreSnapshots.buildArtifactCheckpoint,
+    applyCheckpoint: restoreSnapshots.applyArtifactCheckpoint,
+    signatureFor: restoreSnapshots.snapshotSignature
+  });
+  await restoreHistory.captureBaseline();
+  await restoreHistory.initializeIntentBaseline();
+  await restoreHistory.runUndoable('Rich Feature Popup', () => {
+    state.adv.rich_feature_popup = !state.adv.rich_feature_popup;
+  });
+  await restoreHistory.runUndoable('Label Mode', () => { state.form.labels_mode = 'both'; });
+  const edited = settings();
+  for (const direction of ['undo', 'redo', 'undo', 'undo', 'redo', 'redo']) {
+    await restoreHistory[direction]();
+    assert.deepEqual(unsetValues(), unset, `intent ${direction} keeps unset values unset`);
+  }
+  assert.equal(settings(), edited, 'Undo and Redo return to the edited settings');
+
+  await restoreHistory.runUndoableCheckpoint('Change legend', () => {
+    state.legendEntries.value = [{ caption: 'F-1', color: '#123456' }];
+  });
+  const checkpointed = settings();
+  for (const direction of ['undo', 'redo']) {
+    await restoreHistory[direction]();
+    assert.deepEqual(unsetValues(), unset, `checkpoint ${direction} keeps unset values unset`);
+  }
+  assert.equal(settings(), checkpointed, 'checkpoint Undo and Redo return to the same settings');
+
+  // A restored stack belongs to state: an edit after the checkpoint Redo is
+  // its own step and never writes into the checkpoint it was restored from.
+  const steps = restoreHistory.getUndoCount();
+  await restoreHistory.runUndoable('Move features outside', () => {
+    state.adv.circular_track_slots[0].side = 'outside';
+  });
+  assert.equal(restoreHistory.getUndoCount(), steps + 1, 'an edit after a restore adds one step');
+  for (const direction of ['undo', 'undo', 'redo']) {
+    await restoreHistory[direction]();
+    assert.deepEqual(unsetValues(), unset, `${direction} after a later edit keeps the checkpoint unset`);
+  }
+  state.legendEntries.value = [];
+  state.originalSvgStroke.value = { color: null, width: null };
+  console.log('History Undo and Redo keep unset settings unset.');
+}

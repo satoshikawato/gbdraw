@@ -60,7 +60,8 @@ state.results.value = [{
 }];
 state.featureCatalog.value = null;
 
-const saveError = /Generate again before using Save Session\./;
+// D-25 (SE-05): a Result without current feature metadata asks for one Generate.
+const saveError = { code: 'SESSION_SAVE_REQUIRES_GENERATE', operation: 'session-save' };
 await assert.rejects(exportSession('legacy-session'), saveError);
 assert.equal(inputReads, 0);
 
@@ -277,11 +278,35 @@ try {
     assert.equal(document.losatCache.entries.length, rawEntries.length);
     assert.doesNotThrow(() => validateSessionLosatArtifacts(document, document.version));
   }
+
+  // Two rings of one sequence share one raw key. The Session keeps one entry
+  // per raw key, named by its first displayed row (as the CLI cache does).
+  const ringRaw = (text) => ({
+    schema: 2, kind: 'raw-losat', identityKind: 'nucleotide', program: 'blastn', text
+  });
+  state.losatCache.value = new Map([['ring-b', ringRaw('b\n')], ['ring-c', ringRaw('c\n')]]);
+  state.losatCacheInfo.value = [
+    { key: 'ring-b', filename: 'comparison-b.tsv', display: true },
+    { key: 'ring-c', filename: 'comparison-c.tsv', display: true },
+    { key: 'ring-c', filename: 'comparison-c-copy.tsv', display: true }
+  ];
+  const sharedRing = await exportSession('shared-ring-cache');
+  const sharedRingDocument = JSON.parse(
+    gunzipSync(Buffer.from(await sharedRing.blob.arrayBuffer())).toString('utf8')
+  );
+  assert.deepEqual(
+    sharedRingDocument.losatCache.entries.map(({ key, filename, text }) => [key, filename, text]),
+    [['ring-b', 'comparison-b.tsv', 'b\n'], ['ring-c', 'comparison-c.tsv', 'c\n']]
+  );
+  assert.doesNotThrow(
+    () => validateSessionLosatArtifacts(sharedRingDocument, sharedRingDocument.version)
+  );
+  assert.equal(state.losatCacheInfo.value.length, 3, 'Save must not change the live rows');
 } finally {
   URL.createObjectURL = originalCreateObjectUrl;
   globalThis.CompressionStream = OriginalCompressionStream;
 }
 assert.ok(inputReads > 0, 'saving must bind the active input file');
-assert.equal(compressionAttempts, 4);
-assert.equal(downloadedBlobs, 4);
+assert.equal(compressionAttempts, 5);
+assert.equal(downloadedBlobs, 5);
 assert.ok(downloadedBlob instanceof Blob);

@@ -47,6 +47,7 @@ from flows.human_circular import (
     load_raw_human_circular,
 )
 from flows.web_capture import (
+    toggle_disclosure,
     assert_output_paths,
     capture_screenshot,
     fit_complete_linear_preview,
@@ -68,8 +69,8 @@ SESSION_TITLE = "reproducible_work"
 SESSION_FILENAME = f"{SESSION_TITLE}.gbdraw-session.json.gz"
 RELOADED_OUTPUT_PREFIX = "reloaded_diagram"
 RELOADED_SVG_NAME = f"{RELOADED_OUTPUT_PREFIX}.svg"
-CURRENT_SESSION_VERSION = 42
-CURRENT_RENDER_REQUEST_SCHEMA = 7
+CURRENT_SESSION_VERSION = 44
+CURRENT_RENDER_REQUEST_SCHEMA = 8
 STATIC_CAPTURE_HEADER_STYLE = """
 .app-header {
     -webkit-backdrop-filter: none !important;
@@ -292,7 +293,7 @@ def _search_and_open_feature(
     if qualifier_key:
         expect(qualifier).to_be_enabled()
         qualifier.fill(qualifier_key)
-    regex = page.get_by_role("checkbox", name="Regex", exact=True)
+    regex = page.get_by_role("checkbox", name="Regex (JavaScript, i)", exact=True)
     if use_regex:
         regex.check()
         expect(regex).to_be_checked()
@@ -665,13 +666,19 @@ def _frame_finished_preview_with_legend(page: Page) -> dict[str, float]:
         """
         (element) => {
           const margin = 16;
-          const legend = element.querySelector('#legend');
-          const diagramParts = [
-            element.querySelector('#Axis'),
-            element.querySelector('#label_leaders'),
-            element.querySelector('#label_text')
-          ].filter(Boolean);
-          if (!legend || diagramParts.length !== 3) return null;
+          const selectors = {
+            legend: '#legend',
+            Axis: '[id="Axis"], [id^="Axis_"]',
+            label_leaders: '#label_leaders',
+            label_text: '#label_text'
+          };
+          const groups = Object.fromEntries(Object.entries(selectors).map(
+            ([id, selector]) => [id, element.querySelector(selector)]
+          ));
+          const missing = Object.keys(selectors).filter((id) => !groups[id]);
+          if (missing.length) return {error: 'missing preview groups', missing};
+          const legend = groups.legend;
+          const diagramParts = [groups.Axis, groups.label_leaders, groups.label_text];
 
           const canvasRect = element.getBoundingClientRect();
           const legendRect = legend.getBoundingClientRect();
@@ -810,7 +817,10 @@ def _capture_bgc_popups(
             inspect_gui_bgc_losatp_svg,
             assert_gui_bgc_similarity_groups_svg,
         )
+        # As in the BGC tutorial flow, the search row must not move the drag start.
+        set_feature_search_visible(page, visible=False)
         fit_complete_linear_preview(page, target_zoom="40%")
+        set_feature_search_visible(page, visible=True)
         page.wait_for_timeout(350)
 
         match = page.get_by_role(
@@ -1159,13 +1169,12 @@ def _load_current_session(page: Page, path: Path) -> None:
 
 
 def _set_history_marker(page: Page, marker: str) -> Any:
-    panel = page.get_by_label("Title & Legend", exact=True)
-    panel.click()
-    title = page.get_by_label("Plot Title", exact=True)
+    panel = page.get_by_label("Titles and Record Labels", exact=True)
+    toggle_disclosure(panel)
+    title = page.get_by_role("textbox", name="Plot Title", exact=True)
     title.fill(marker)
     title.press("Tab")
     expect(title).to_have_value(marker)
-    panel.click()
     return title
 
 
@@ -1205,6 +1214,10 @@ def capture_gui_session_reproduction(
         expect(redo).to_be_enabled()
         redo.click()
         expect(title).to_have_value(marker)
+        # Capture after the live update, when the Session actions are available again.
+        expect(page.get_by_role("button", name="Save Session", exact=True)).to_be_enabled(
+            timeout=ACTION_TIMEOUT_MS
+        )
         screenshot_bytes["history-actions.png"] = capture_screenshot(
             page, output_paths["history-actions.png"], "Circular"
         )

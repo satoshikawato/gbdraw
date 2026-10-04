@@ -21,6 +21,7 @@ import { WEB_UX_PROFILE } from './web-ux-profile.js';
 import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';
 import {
   getCommittedSvgContent,
+  getCommittedSvgResultMetadata,
   getCommittedSvgResultRuntimeIdentity
 } from './services/svg-result-ingestion.js';
 import { createImportedComparisonIntentState } from './services/imported-comparison-intent.js';
@@ -32,6 +33,7 @@ import {
 } from './services/session-active-config-contract.js';
 export { createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat };
 const { ref, reactive, computed } = window.Vue;
+const toRaw = window.Vue.toRaw || ((value) => value);
 const shallowRef = window.Vue.shallowRef || ref;
 
 // System State
@@ -40,6 +42,8 @@ const processingStatus = ref('');
 const generationCancelRequested = ref(false);
 const errorLog = ref(null);
 const sessionTitle = ref('');
+const sessionSavePending = ref(false);
+const sessionImportPending = ref(false);
 const semanticFileWatchersSuppressed = ref(false);
 const sessionResourceDiscoveryDeferred = ref(false);
 const sessionImportRollbackInProgress = ref(false);
@@ -49,9 +53,12 @@ const unmanagedConfigOverrides = reactive({});
 const results = ref([]);
 const selectedResultIndex = ref(0);
 const failedGeneratePreservedResult = ref(false);
+const generationFailureRecovery = ref(null);
 const resultPanelTab = ref('preview');
 const lastRunInfo = ref(null);
 const trackSlotResolvedGeometry = ref(null);
+const annotationWarnings = ref([]);
+const comparisonWarnings = ref([]);
 // Store original pairwise match factors for re-interpolation
 const pairwiseMatchFactors = ref({}); // { pathId: factor }
 // Analysis-scoped materialized nucleotide sources used by match span popups.
@@ -131,6 +138,7 @@ export const createLinearSeq = (overrides = {}) => {
     record_subtitle: String(source.record_subtitle ?? ''),
     file_definition: String(source.file_definition ?? ''),
     file_subtitle: String(source.file_subtitle ?? ''),
+    inferred_definition: String(source.inferred_definition ?? ''),
     region_record_id: String(source.region_record_id ?? ''),
     region_start: normalizeLinearSeqNumber(source.region_start),
     region_end: normalizeLinearSeqNumber(source.region_end),
@@ -224,7 +232,7 @@ const form = reactive(createDefaultForm());
 // Extended Advanced Config
 const adv = reactive(createDefaultAdv(mode.value));
 const linearTypographyLinked = ref(true);
-const modeProfileStateManager = createModeProfileStateManager(mode.value, adv);
+const modeProfileStateManager = createModeProfileStateManager(mode.value, adv, form);
 const activeLayoutPreferences = computed(() => resolveActiveLayoutPreference(
   layoutPreferences,
   mode.value,
@@ -287,8 +295,14 @@ const orthogroups = ref([]);
 const collinearGroups = ref([]);
 const featureOrthogroupIndex = ref(new Map());
 const selectedOrthogroupAlignmentFeature = ref('');
+const similarityAlignmentPlan = ref(null);
+const similarityAlignmentResetReceipt = ref(null);
+const linearRecordTranslations = ref([]);
+const legacySimilarityAlignment = ref(null);
 const orthogroupNameOverrides = reactive({});
 const orthogroupDescriptionOverrides = reactive({});
+// User names of groups whose members no longer form one group, keyed by member set (D-21).
+const orthogroupDormantOverrides = reactive({});
 const selectedOrthogroupId = ref('');
 const orthogroupSearch = ref('');
 const orthogroupSortMode = ref('id');
@@ -344,7 +358,7 @@ const downloadDpi = ref(defaultEditorDraftState.downloadDpi);
 // Feature Color Editor state
 const extractedFeatures = ref([]); // Features from last generation
 const biologicalFeatures = ref([]); // Complete source catalog, including non-rendered features
-const featureCatalog = ref(null); // Validated schema-3 metadata for committed Results
+const featureCatalog = ref(null); // Validated schema-4 metadata for committed Results
 const specificRuleQualifierSuggestions = computed(() =>
   collectSpecificColorQualifierSuggestions(extractedFeatures.value, manualSpecificRules)
 );
@@ -453,7 +467,6 @@ const canonicalLabelOverrideRows = ref([]);
 const labelTextBulkOverrides = reactive({}); // { sourceText: text }
 const labelTextFeatureOverrideSources = reactive({}); // { featureId: sourceText }
 const labelVisibilityOverrides = reactive({}); // { featureId: 'on' | 'off' }
-const labelOverrideContextKey = ref('');
 const labelOverrideBuildWarning = ref('');
 const autoLabelReflowEnabled = ref(false);
 const labelReflowProcessing = ref(false);
@@ -462,7 +475,6 @@ const labelReflowRequestReason = ref('');
 const labelReflowForceRequestSeq = ref(0);
 const labelReflowForceRequestReason = ref('');
 const labelReflowLastError = ref(null);
-const labelLayoutDirtyReason = ref('');
 
 // SVG Feature Click state
 const svgContainer = ref(null);
@@ -518,7 +530,6 @@ const featureStyleScopeDialog = reactive({
 const resetColorDialog = reactive({
   show: false,
   caption: '',
-  defaultColor: '',
   siblingCount: 0
 });
 
@@ -629,10 +640,6 @@ const shouldDeferCircularPreviewUpdates = computed(
 // This prevents base config from being overwritten during incremental edits
 const skipCaptureBaseConfig = ref(false);
 
-// Flag to skip position reapply after repositionForLegendChange is called
-// This prevents infinite loop when repositionForLegendChange triggers watch(svgContent)
-const skipPositionReapply = ref(false);
-
 // Flag to skip extractLegendEntries in watch(svgContent) when setFeatureColor is handling it
 // This prevents race condition where watcher overwrites correct legend state
 const skipExtractOnSvgChange = ref(false);
@@ -701,11 +708,30 @@ const newFeatureToAdd = ref(defaultEditorDraftState.newFeatureToAdd);
 const addedLegendCaptions = ref(new Set());
 const fileLegendCaptions = ref(new Set());
 
-const filteredFeatures = computed(() => {
-  let features = [...extractedFeatures.value];
+// The Features drawer lists the features rendered in the displayed Result.
+// A batch Result shows one record, so the record picker appears only when the
+// displayed Result shows several records (FE-03).
+const displayedResultFeatures = computed(() => {
+  const features = extractedFeatures.value;
+  if (results.value.length < 2) return features;
+  const renderedIds = getCommittedSvgResultMetadata(toRaw(results.value[selectedResultIndex.value]))
+    ?.renderedFeatureIdentities?.renderedIds;
+  return renderedIds instanceof Set
+    ? features.filter((feature) => renderedIds.has(feature.svg_id))
+    : features;
+});
+const featureRecordPickerVisible = computed(() => (
+  featureRecordIds.value.length > 1
+  && new Set(displayedResultFeatures.value.map((feature) => (
+    mode.value === 'circular' ? feature.record_idx : feature.displayRecordId
+  ))).size > 1
+));
 
-  // Filter by selected record (if multiple records exist)
-  if (featureRecordIds.value.length > 1) {
+const filteredFeatures = computed(() => {
+  let features = [...displayedResultFeatures.value];
+
+  // Filter by the selected record when the displayed Result shows several.
+  if (featureRecordPickerVisible.value) {
     const selectedIdx = selectedFeatureRecordIdx.value;
     if (mode.value === 'circular') {
       // For circular: filter by record_idx within the file
@@ -781,9 +807,26 @@ const filteredEditableLabels = computed(() => {
   });
 });
 
+// Pending is owned by the existing Session lifecycle; availability stores no lock.
+// 'history' words why History rejects Undo/Redo; History decides when (D-28).
+export const sessionOperationAvailability = (operation = 'mutation') => {
+  let reason = '';
+  if (sessionImportPending.value) reason = 'Loading session. Retry after loading finishes.';
+  else if (sessionSavePending.value) reason = 'Saving session. Retry after saving finishes.';
+  else if (operation === 'save' || operation === 'load' || operation === 'history') {
+    if (processing.value) reason = 'Generating diagram. Retry after generation finishes.';
+    else if (labelReflowProcessing.value) reason = 'Updating diagram. Retry after the update finishes.';
+    else reason = state.sessionPreparationBusyReason?.() || '';
+  }
+  return reason ? { status: 'busy', reason } : null;
+};
+
 export const state = {
   processing,
   processingStatus,
+  sessionSavePending,
+  sessionImportPending,
+  sessionOperationAvailability,
   generationCancelRequested,
   errorLog,
   sessionTitle,
@@ -795,9 +838,12 @@ export const state = {
   results,
   selectedResultIndex,
   failedGeneratePreservedResult,
+  generationFailureRecovery,
   resultPanelTab,
   lastRunInfo,
   trackSlotResolvedGeometry,
+  annotationWarnings,
+  comparisonWarnings,
   pairwiseMatchFactors,
   matchSequenceRegistry,
   svgContent,
@@ -846,8 +892,13 @@ export const state = {
   collinearGroups,
   featureOrthogroupIndex,
   selectedOrthogroupAlignmentFeature,
+  similarityAlignmentPlan,
+  similarityAlignmentResetReceipt,
+  linearRecordTranslations,
+  legacySimilarityAlignment,
   orthogroupNameOverrides,
   orthogroupDescriptionOverrides,
+  orthogroupDormantOverrides,
   selectedOrthogroupId,
   orthogroupSearch,
   orthogroupSortMode,
@@ -913,6 +964,7 @@ export const state = {
   featureListViewportHeight,
   isFeatureDrawerMounted,
   visibleFeatureRows,
+  featureRecordPickerVisible,
   featureListTopSpacerPx,
   featureListBottomSpacerPx,
   featureColorOverrides,
@@ -932,7 +984,6 @@ export const state = {
   labelTextBulkOverrides,
   labelTextFeatureOverrideSources,
   labelVisibilityOverrides,
-  labelOverrideContextKey,
   labelOverrideBuildWarning,
   autoLabelReflowEnabled,
   labelReflowProcessing,
@@ -941,7 +992,6 @@ export const state = {
   labelReflowForceRequestSeq,
   labelReflowForceRequestReason,
   labelReflowLastError,
-  labelLayoutDirtyReason,
   svgContainer,
   clickedFeature,
   clickedFeaturePos,
@@ -1001,7 +1051,6 @@ export const state = {
   generatedCircularPlotTitlePosition,
   shouldDeferCircularPreviewUpdates,
   skipCaptureBaseConfig,
-  skipPositionReapply,
   skipExtractOnSvgChange,
   trustedArtifactRestoreInProgress,
   normalizePaletteColors,

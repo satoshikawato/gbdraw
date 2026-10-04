@@ -324,16 +324,16 @@ The records table assigns `row` and `column`; the comparisons table declares `bl
 ```bash
 gbdraw linear \
   --gbk genome1.gb genome2.gb genome3.gb \
-  --protein_blastp_mode orthogroup \
+  --losat losatp --losatp_mode similarity_groups \
   --show_labels orthogroup_top \
   --pairwise_match_style curve \
   -o protein_orthogroup \
   -f svg
 ```
 
-Use `--protein_blastp_mode pairwise`, `orthogroup`, or `collinear`. The
-`orthogroup` mode creates gbdraw similarity groups for visualization; it does
-not infer phylogeny-based orthogroups. Do not combine these modes with
+Use `--losatp_mode pairwise`, `similarity_groups`, or `collinear`. The
+`similarity_groups` mode creates gbdraw similarity groups for visualization; it does
+not infer phylogeny-based orthogroups. Do not combine `--losat` with
 `-b/--blast`. The [comparison technical
 documentation](./REFERENCE/comparison-programs-thresholds-and-results.md)
 defines all three modes. Complete projects cover [Similarity
@@ -372,13 +372,13 @@ gbdraw circular \
 
 Pass more `--conservation_blast` files to add rings. Each ring shows raw BLAST HSP spans, not an inferred measure of evolutionary conservation. Reverse-coordinate BLAST rows are drawn as reverse hits rather than circular wraparound hits.
 
-For a standalone interactive SVG with both matched spans available, add one comparison FASTA per BLAST source:
+For a standalone interactive SVG with both matched spans available, add one comparison genome (FASTA, GenBank, or DDBJ) per BLAST source:
 
 ```bash
 gbdraw circular \
   --gbk reference.gbk \
   --conservation_blast comparison_vs_reference.blast.out \
-  --conservation_fasta comparison.fna \
+  --conservation_sequence comparison.fna \
   --conservation_reference subject \
   -f interactive_svg \
   -o circular_comparison

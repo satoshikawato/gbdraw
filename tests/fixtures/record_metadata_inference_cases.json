@@ -1,10 +1,14 @@
 {
   "comment": [
-    "Shared expectations for record metadata inference.",
+    "Shared expectations for record metadata inference and record discovery.",
     "gbdraw/core/record_metadata.py owns this inference for the Pyodide Worker and the renderer.",
     "gbdraw/web/js/app/record-discovery.js reimplements it for the no-Worker upload fast path.",
     "tests/test_record_metadata.py and tests/web/record-metadata-inference.test.mjs both read this",
-    "file, so the two implementations cannot drift apart unnoticed."
+    "file, so the two implementations cannot drift apart unnoticed.",
+    "discovery: small synthetic inputs. The gbdraw.io.genome loader is the oracle for expected;",
+    "tests/test_record_metadata.py checks the loader and the Worker helper, and the Node test checks",
+    "that the fast path returns expected or declines to the Worker (Web GUI audit 2026-09-30, G-D).",
+    "tests/web/gui-audit-20260930-inputs.playwright.spec.js reads the multi-organism case for the Linear per-record definition check (IN-06)."
   ],
   "definition": [
     {
@@ -54,6 +58,823 @@
       "organism": "",
       "strain": "Sakai",
       "expected": "Sakai"
+    }
+  ],
+  "discovery": [
+    {
+      "name": "Prokka-style empty ACCESSION and VERSION lines",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "prokka.gbk",
+          "lines": [
+            "LOCUS       contig_1                 60 bp    DNA     linear       30-SEP-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   ",
+            "VERSION",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Escherichia coli",
+            "            Unclassified.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Escherichia coli\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "contig_1",
+            "recordLength": 60,
+            "organism": "Escherichia coli",
+            "inferredDefinition": "<i>Escherichia coli</i>"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ACCESSION only, no VERSION line",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "accession_only.gbk",
+          "lines": [
+            "LOCUS       contig_1                 60 bp    DNA     linear       30-SEP-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   NC_000001",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Escherichia coli",
+            "            Unclassified.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Escherichia coli\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "NC_000001",
+            "recordLength": 60,
+            "organism": "Escherichia coli",
+            "inferredDefinition": "<i>Escherichia coli</i>"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ACCESSION with an empty VERSION line",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "accession_empty_version.gbk",
+          "lines": [
+            "LOCUS       contig_1                 60 bp    DNA     linear       30-SEP-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   NC_000001",
+            "VERSION",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Escherichia coli",
+            "            Unclassified.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Escherichia coli\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "NC_000001",
+            "recordLength": 60,
+            "organism": "Escherichia coli",
+            "inferredDefinition": "<i>Escherichia coli</i>"
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty ACCESSION line only",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "empty_accession.gbk",
+          "lines": [
+            "LOCUS       contig_1                 60 bp    DNA     linear       30-SEP-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   ",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Escherichia coli",
+            "            Unclassified.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Escherichia coli\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "contig_1",
+            "recordLength": 60,
+            "organism": "Escherichia coli",
+            "inferredDefinition": "<i>Escherichia coli</i>"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VERSION followed by a GI number",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "version_gi.gbk",
+          "lines": [
+            "LOCUS       contig_1                 60 bp    DNA     linear       30-SEP-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   NC_000001",
+            "VERSION     NC_000001.2  GI:12345",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Escherichia coli",
+            "            Unclassified.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Escherichia coli\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "NC_000001.2",
+            "recordLength": 60,
+            "organism": "Escherichia coli",
+            "inferredDefinition": "<i>Escherichia coli</i>"
+          }
+        ]
+      }
+    },
+    {
+      "name": "several accessions with a VERSION",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "multi_accession.gbk",
+          "lines": [
+            "LOCUS       contig_1                 60 bp    DNA     linear       30-SEP-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   NC_000001 NC_000009",
+            "VERSION     NC_000001.2",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Escherichia coli",
+            "            Unclassified.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Escherichia coli\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "NC_000001.2",
+            "recordLength": 60,
+            "organism": "Escherichia coli",
+            "inferredDefinition": "<i>Escherichia coli</i>"
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty ORGANISM line without a source organism qualifier",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "empty_organism.gbk",
+          "lines": [
+            "LOCUS       contig_1                 60 bp    DNA     linear       30-SEP-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   NC_000001",
+            "VERSION     NC_000001.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM",
+            "            Unclassified.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "NC_000001.1",
+            "recordLength": 60,
+            "organism": "",
+            "inferredDefinition": ""
+          }
+        ]
+      }
+    },
+    {
+      "name": "UTF-8 byte order mark before LOCUS",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "bom.gbk",
+          "bom": true,
+          "lines": [
+            "LOCUS       contig_1                 60 bp    DNA     linear       30-SEP-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   NC_000001",
+            "VERSION     NC_000001.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Escherichia coli",
+            "            Unclassified.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Escherichia coli\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "error": "ValidationError"
+      }
+    },
+    {
+      "name": "VERSION names a later accession than the first ACCESSION",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "version_second_accession.gbk",
+          "lines": [
+            "LOCUS       contig_1                 60 bp    DNA     linear       30-SEP-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   NC_000009 NC_000001",
+            "VERSION     NC_000001.2",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Escherichia coli",
+            "            Unclassified.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Escherichia coli\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "NC_000009.2",
+            "recordLength": 60,
+            "organism": "Escherichia coli",
+            "inferredDefinition": "<i>Escherichia coli</i>"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VERSION before ACCESSION",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "version_first.gbk",
+          "lines": [
+            "LOCUS       contig_1                 60 bp    DNA     linear       30-SEP-2026",
+            "DEFINITION  synthetic record.",
+            "VERSION     NC_000002.3",
+            "ACCESSION   NC_000001",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Escherichia coli",
+            "            Unclassified.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Escherichia coli\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "NC_000002.3",
+            "recordLength": 60,
+            "organism": "Escherichia coli",
+            "inferredDefinition": "<i>Escherichia coli</i>"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VERSION without a numeric suffix",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "version_text.gbk",
+          "lines": [
+            "LOCUS       contig_1                 60 bp    DNA     linear       30-SEP-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   NC_000001",
+            "VERSION     ABC",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Escherichia coli",
+            "            Unclassified.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Escherichia coli\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "ABC",
+            "recordLength": 60,
+            "organism": "Escherichia coli",
+            "inferredDefinition": "<i>Escherichia coli</i>"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ACCESSION continued on a second line",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "accession_continued.gbk",
+          "lines": [
+            "LOCUS       contig_1                 60 bp    DNA     linear       30-SEP-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   A1 A2",
+            "            A3",
+            "VERSION     A1.4",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Escherichia coli",
+            "            Unclassified.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Escherichia coli\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "A1.4",
+            "recordLength": 60,
+            "organism": "Escherichia coli",
+            "inferredDefinition": "<i>Escherichia coli</i>"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a header keyword followed by one space is not read",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "short_keyword_gap.gbk",
+          "lines": [
+            "LOCUS       contig_1                 60 bp    DNA     linear       30-SEP-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION NC_000001",
+            "VERSION NC_000001.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Escherichia coli",
+            "            Unclassified.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Escherichia coli\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "contig_1",
+            "recordLength": 60,
+            "organism": "Escherichia coli",
+            "inferredDefinition": "<i>Escherichia coli</i>"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ORGANISM name continued on a second line",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "organism_continued.gbk",
+          "lines": [
+            "LOCUS       contig_1                 60 bp    DNA     linear       30-SEP-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   NC_000001",
+            "VERSION     NC_000001.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Escherichia coli",
+            "            O157:H7",
+            "            Bacteria; Pseudomonadota.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "NC_000001.1",
+            "recordLength": 60,
+            "organism": "Escherichia coli O157:H7",
+            "inferredDefinition": "<i>Escherichia coli</i> O157:H7"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LOCUS followed by one space starts no record",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "short_locus_gap.gbk",
+          "lines": [
+            "LOCUS contig_1 60 bp DNA linear 30-SEP-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   NC_000001",
+            "VERSION     NC_000001.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Escherichia coli",
+            "            Unclassified.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Escherichia coli\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "error": "ValidationError"
+      }
+    },
+    {
+      "name": "records of one file with different organisms",
+      "format": "genbank",
+      "files": {
+        "source": {
+          "name": "two_organisms.gbk",
+          "lines": [
+            "LOCUS       rec_a                    60 bp    DNA     linear       30-SEP-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   REC_A",
+            "VERSION     REC_A.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Escherichia coli",
+            "            Unclassified.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..60",
+            "                     /organism=\"Escherichia coli\"",
+            "                     /strain=\"K-12\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "//",
+            "LOCUS       rec_b                    70 bp    DNA     linear       30-SEP-2026",
+            "DEFINITION  synthetic record.",
+            "ACCESSION   REC_B",
+            "VERSION     REC_B.1",
+            "KEYWORDS    .",
+            "SOURCE      .",
+            "  ORGANISM  Bacillus subtilis",
+            "            Unclassified.",
+            "FEATURES             Location/Qualifiers",
+            "     source          1..70",
+            "                     /organism=\"Bacillus subtilis\"",
+            "                     /strain=\"168\"",
+            "ORIGIN",
+            "        1 acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt acgtacgtac gtacgtacgt",
+            "       61 acgtacgtac",
+            "//"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "REC_A.1",
+            "recordLength": 60,
+            "organism": "Escherichia coli",
+            "inferredDefinition": "<i>Escherichia coli</i> K-12"
+          },
+          {
+            "recordId": "REC_B.1",
+            "recordLength": 70,
+            "organism": "Bacillus subtilis",
+            "inferredDefinition": "<i>Bacillus subtilis</i> 168"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GFF3+FASTA whose FASTA holds a sequence without GFF3 lines",
+      "format": "gff3-fasta",
+      "files": {
+        "gff": {
+          "name": "pair.gff3",
+          "lines": [
+            "##gff-version 3",
+            "chr\tsynthetic\tCDS\t1\t30\t.\t+\t0\tID=cds1;product=protein one",
+            "plasmid2\tsynthetic\tCDS\t1\t30\t.\t-\t0\tID=cds2;product=protein two"
+          ]
+        },
+        "fasta": {
+          "name": "pair.fasta",
+          "lines": [
+            ">chr",
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT",
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT",
+            ">plasmid1",
+            "GGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCA",
+            ">plasmid2",
+            "TTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAG",
+            "TTAGTTAGTTAGTTAGTTAG"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "chr",
+            "recordLength": 120
+          },
+          {
+            "recordId": "plasmid2",
+            "recordLength": 80
+          }
+        ]
+      }
+    },
+    {
+      "name": "GFF3 sequence-region pragma is not a GFF3 line",
+      "format": "gff3-fasta",
+      "files": {
+        "gff": {
+          "name": "sequence_region.gff3",
+          "lines": [
+            "##gff-version 3",
+            "##sequence-region chr 1 120",
+            "##sequence-region plasmid1 1 60",
+            "##sequence-region plasmid2 1 80",
+            "chr\tsynthetic\tCDS\t1\t30\t.\t+\t0\tID=cds1;product=protein one",
+            "plasmid2\tsynthetic\tCDS\t1\t30\t.\t-\t0\tID=cds2;product=protein two"
+          ]
+        },
+        "fasta": {
+          "name": "sequence_region.fasta",
+          "lines": [
+            ">chr",
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT",
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT",
+            ">plasmid1",
+            "GGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCA",
+            ">plasmid2",
+            "TTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAG",
+            "TTAGTTAGTTAGTTAGTTAG"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "chr",
+            "recordLength": 120
+          },
+          {
+            "recordId": "plasmid2",
+            "recordLength": 80
+          }
+        ]
+      }
+    },
+    {
+      "name": "GFF3 embedded FASTA keeps a record without features",
+      "format": "gff3-fasta",
+      "files": {
+        "gff": {
+          "name": "embedded.gff3",
+          "lines": [
+            "##gff-version 3",
+            "chr\tsynthetic\tCDS\t1\t30\t.\t+\t0\tID=cds1;product=protein one",
+            "plasmid2\tsynthetic\tCDS\t1\t30\t.\t-\t0\tID=cds2;product=protein two",
+            "##FASTA",
+            ">chr",
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT",
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT",
+            ">plasmid1",
+            "GGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCA",
+            ">plasmid2",
+            "TTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAG",
+            "TTAGTTAGTTAGTTAGTTAG"
+          ]
+        },
+        "fasta": {
+          "name": "embedded.fasta",
+          "lines": [
+            ">chr",
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT",
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT",
+            ">plasmid1",
+            "GGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCA",
+            ">plasmid2",
+            "TTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAG",
+            "TTAGTTAGTTAGTTAGTTAG"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "chr",
+            "recordLength": 120
+          },
+          {
+            "recordId": "plasmid1",
+            "recordLength": 60
+          },
+          {
+            "recordId": "plasmid2",
+            "recordLength": 80
+          }
+        ]
+      }
+    },
+    {
+      "name": "GFF3 region line keeps a record without other features",
+      "format": "gff3-fasta",
+      "files": {
+        "gff": {
+          "name": "region.gff3",
+          "lines": [
+            "##gff-version 3",
+            "# comment",
+            "chr\tsynthetic\tregion\t1\t120\t.\t+\t.\tID=region1",
+            "",
+            "plasmid1\tsynthetic\tgene\t1\t30\t.\t+\t.\tID=gene1"
+          ]
+        },
+        "fasta": {
+          "name": "region.fasta",
+          "lines": [
+            ">chr",
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT",
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT",
+            ">plasmid1",
+            "GGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCA",
+            ">plasmid2",
+            "TTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAG",
+            "TTAGTTAGTTAGTTAGTTAG"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "chr",
+            "recordLength": 120
+          },
+          {
+            "recordId": "plasmid1",
+            "recordLength": 60
+          }
+        ]
+      }
+    },
+    {
+      "name": "GFF3 seqid order differs from FASTA order",
+      "format": "gff3-fasta",
+      "files": {
+        "gff": {
+          "name": "reorder.gff3",
+          "lines": [
+            "##gff-version 3",
+            "plasmid2\tsynthetic\tCDS\t1\t30\t.\t-\t0\tID=cds2;product=protein two",
+            "plasmid1\tsynthetic\tCDS\t1\t30\t.\t+\t0\tID=cds3",
+            "chr\tsynthetic\tCDS\t1\t30\t.\t+\t0\tID=cds1;product=protein one"
+          ]
+        },
+        "fasta": {
+          "name": "reorder.fasta",
+          "lines": [
+            ">chr",
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT",
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT",
+            ">plasmid1",
+            "GGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCA",
+            ">plasmid2",
+            "TTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAG",
+            "TTAGTTAGTTAGTTAGTTAG"
+          ]
+        }
+      },
+      "expected": {
+        "records": [
+          {
+            "recordId": "chr",
+            "recordLength": 120
+          },
+          {
+            "recordId": "plasmid1",
+            "recordLength": 60
+          },
+          {
+            "recordId": "plasmid2",
+            "recordLength": 80
+          }
+        ]
+      }
+    },
+    {
+      "name": "GFF3 seqid missing from FASTA",
+      "format": "gff3-fasta",
+      "files": {
+        "gff": {
+          "name": "missing.gff3",
+          "lines": [
+            "##gff-version 3",
+            "chrX\tsynthetic\tCDS\t1\t30\t.\t+\t0\tID=cds1"
+          ]
+        },
+        "fasta": {
+          "name": "missing.fasta",
+          "lines": [
+            ">chr",
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT",
+            "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT",
+            ">plasmid1",
+            "GGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCAGGCA",
+            ">plasmid2",
+            "TTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAGTTAG",
+            "TTAGTTAGTTAGTTAGTTAG"
+          ]
+        }
+      },
+      "expected": {
+        "error": "ParseError"
+      }
     }
   ]
 }

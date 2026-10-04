@@ -1,0 +1,415 @@
+{
+  "startSha": "be4000ede35ea5692d7a88d46c0130ffec992f5f",
+  "inspectedDevSha": "af5d942af60353dda199aa487da9152a3576b3fe",
+  "priorInvestigationSha": "2edc00aebc74e01003da643dfc957b513d5dcfe5",
+  "python": "3.13.3",
+  "node": "v26.8.2",
+  "packages": {
+    "biopython": "1.85",
+    "pandas": "2.3.0",
+    "svgwrite": "1.4.3",
+    "pytest": "9.0.2",
+    "playwright": "1.61.0"
+  },
+  "unchangedTrees": {
+    "gbdraw": {
+      "2edc00aebc74e01003da643dfc957b513d5dcfe5": "3d252362018c3a1614d029cfb247a4b18429e3c6",
+      "af5d942af60353dda199aa487da9152a3576b3fe": "3d252362018c3a1614d029cfb247a4b18429e3c6",
+      "be4000ede35ea5692d7a88d46c0130ffec992f5f": "3d252362018c3a1614d029cfb247a4b18429e3c6"
+    },
+    "tests": {
+      "2edc00aebc74e01003da643dfc957b513d5dcfe5": "8e343a42cd33a02dc2f27fc82085a3fc9af319c4",
+      "af5d942af60353dda199aa487da9152a3576b3fe": "8e343a42cd33a02dc2f27fc82085a3fc9af319c4",
+      "be4000ede35ea5692d7a88d46c0130ffec992f5f": "8e343a42cd33a02dc2f27fc82085a3fc9af319c4"
+    },
+    "tools": {
+      "2edc00aebc74e01003da643dfc957b513d5dcfe5": "5cdf167ecbf3d381a34983589108b687bbf26a0b",
+      "af5d942af60353dda199aa487da9152a3576b3fe": "5cdf167ecbf3d381a34983589108b687bbf26a0b",
+      "be4000ede35ea5692d7a88d46c0130ffec992f5f": "5cdf167ecbf3d381a34983589108b687bbf26a0b"
+    },
+    ".github": {
+      "2edc00aebc74e01003da643dfc957b513d5dcfe5": "a74f11ed16cc3051e974ff9c42e640c85a48e783",
+      "af5d942af60353dda199aa487da9152a3576b3fe": "a74f11ed16cc3051e974ff9c42e640c85a48e783",
+      "be4000ede35ea5692d7a88d46c0130ffec992f5f": "a74f11ed16cc3051e974ff9c42e640c85a48e783"
+    }
+  },
+  "sourceSha256": {
+    "gbdraw/exceptions.py": "fa6c2af6bebde0ddb56399a9a879fa4a90444b4767e2972e4e53f60329d091ce",
+    "gbdraw/render/groups/linear/pairwise_match.py": "fbb24852ffbf233f77ba678891e7bdf2cdd4ea3eaca47f3e55cba7e2295e3c74",
+    "gbdraw/web/js/services/error-normalization.js": "1d080d546d6477fd503a5f5ef2a014374856a383de20b9316678cc80862309ec",
+    "gbdraw/web/js/app/python-helpers.js": "2f43b303a2f87e9fde49917db0c8e70dd7bf26fc1616445ea95a64d742a38a46",
+    "gbdraw/web/js/workers/diagram-generation-worker.js": "d52c76815128dbcb835c1bd8a70f8893d8894310f2a3cff0fd5802ee4c83a02d",
+    "gbdraw/web/js/services/diagram-generation.js": "5381b03f8c6029204af30402f6f80b5df9dd9662f246755b0551610146e76185",
+    "gbdraw/web/js/app/run-analysis.js": "13b571e8a7a80102d8f64decff456ad1ba8e0319b196fc3f79a50112dc53e49d",
+    "gbdraw/web/js/app/similarity-alignment.js": "6bbc10fb00a5320ee33007b270a6b63238727cf7d66f5e884b841549e1143453",
+    "gbdraw/web/js/app/app-setup.js": "9b2121e4093d7a67088a536bbc7e0e7838818e93b1c58f370c2d1aac02cb372e",
+    "gbdraw/web/index.html": "35622e21000ec36cbbd5e110254af7eeb39b7d240d1e381bf9885ec8c36d8d8b",
+    "gbdraw/web/js/app/rule-matching.js": "a9c4633a05fe0fffb9260e0e2db7db166e317ecbc421516d1ed9fce42fea37ae",
+    "gbdraw/web_support/rule_matching.py": "297b89daf83eff87f88ad981048edb9d2fee6199c7f42e4cd4dd0c1dabef4d03",
+    "gbdraw/web/js/app/feature-editor/rule-actions.js": "fccb549260bdbfcc02cb85da714f33e345739c112b3afb60b22a82f0a1aa6049",
+    "gbdraw/web/js/app/feature-editor/label-actions.js": "548496c1d9f186544eab1659f9ad98c142321e9686648837e4a0e3ffd02e6c74",
+    "gbdraw/web/js/app/feature-editor/label-override-table.js": "e014c6f7d76969bdfe1cfffabdcdb01496bea8f43424b26ef930da4074140241",
+    "gbdraw/web/js/app/file-imports.js": "f7a14c8204071728e0ccca4ac7ef06fd70252c575ac53b5d46109d00d1675568",
+    "gbdraw/web/js/app/watchers.js": "44e51a76de1325acefd4f0a2bb3741ca1dbefcd9273cef0a866f33ea02018482",
+    "gbdraw/web/js/app/feature-visibility.js": "b7cb4b02ae6c77eccb0262ecbb9f7ca5486b8f4a59162014c59aa782cad4e8f7",
+    "gbdraw/web/js/app/feature-editor/visibility-actions.js": "8e0aa83e19bf850f320c2a6bd4338349aa8395f48fd5080f66da15589f7d1b30",
+    "gbdraw/web/js/services/export.js": "31bd4cda3566f70c4ce1249a335fd4e86b0dbe42b4eec9b5638e9943818cd0dd",
+    "gbdraw/web/js/services/pdf-fonts.js": "99ab71ba4417e2dfe641ee01f0e7d2957efb7b6a5d617cbe6452054e0ba0e209",
+    "gbdraw/web/js/app/feature-search/search-core.js": "cbd43dd0ae759333124325b2314dcf4c967918811f56459c2ccbdba4e3087451",
+    "gbdraw/web/js/services/standalone-interactivity-assets.js": "f96bb3edfe17b1b21a3717632d550a4317b68f3ed290038e80c27b9314cfa719",
+    "gbdraw/features/colors.py": "675cfb44cdc4accbc84a6ab6a644e0fce841892a3147a6166ee650ef845667a1",
+    "gbdraw/labels/filtering.py": "04f14ddc0c66e04ea7ab45598119ae668bffe4e33d73a26b5fc8b8a902ef7c33",
+    "gbdraw/features/visibility.py": "545079996585518391669e4a1a5cb1e6e9f0e51894b4c45e7e0d21e307eddb91",
+    "gbdraw/web_support/request_render.py": "0475fd8b2a7c7127fd4026f78ff39af223d904e97eff52c16e2f015ac1fdf112"
+  },
+  "authoritySha256": {
+    "docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md": "62e3a9c08ceb64acc349ace81a97a9c87dc45db4d18187a3b78e6e131b2dc595",
+    "tools/web-product-impact-map.json": "dfd88850f67162f6046542e53d3136f51818e127a1320ecbf589b6cf97e14885",
+    "tools/web-product-decisions.json": "23b1843c9cc1d5d1e974f75c647b2dc299c53d5c117cfdf45830003eda5ef3b6",
+    "docs/internal/PRODUCT_IMPACT_RATCHET.md": "f35e4bd11257e10eda1b518e5d6366edb8632de9ea0802d81b9531e1100cd235",
+    "docs/internal/WEB_CHANGE_POLICY.md": "84c1c61dd3d5a91d37642c2e5683f2d80d6d305bea057fe7d88230b4170d35ac",
+    "docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md": "779f5c20630e17522a011bb242bf3e1144fa4d9502c6ea00ceb14990df83db60"
+  },
+  "contractRevision": 21,
+  "pdRevisions": [
+    {
+      "id": "PD-OI-001",
+      "scenarioRevision": 2
+    },
+    {
+      "id": "PD-OI-002",
+      "scenarioRevision": 2
+    },
+    {
+      "id": "PD-OI-003",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-004",
+      "scenarioRevision": 3
+    },
+    {
+      "id": "PD-OI-005",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-006",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-007",
+      "scenarioRevision": 2
+    },
+    {
+      "id": "PD-OI-008",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-009",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-010",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-011",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-012",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-013",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-014",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-015",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-016",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-017",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-018",
+      "scenarioRevision": 3
+    },
+    {
+      "id": "PD-OI-019",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-020",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-021",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-022",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-023",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-024",
+      "scenarioRevision": 2
+    },
+    {
+      "id": "PD-OI-025",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-026",
+      "scenarioRevision": 3
+    },
+    {
+      "id": "PD-OI-027",
+      "scenarioRevision": 5
+    },
+    {
+      "id": "PD-OI-028",
+      "scenarioRevision": 2
+    },
+    {
+      "id": "PD-OI-029",
+      "scenarioRevision": 3
+    },
+    {
+      "id": "PD-OI-030",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-031",
+      "scenarioRevision": 5
+    },
+    {
+      "id": "PD-OI-032",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-033",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-034",
+      "scenarioRevision": 5
+    },
+    {
+      "id": "PD-OI-035",
+      "scenarioRevision": 3
+    },
+    {
+      "id": "PD-OI-036",
+      "scenarioRevision": 2
+    },
+    {
+      "id": "PD-OI-037",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-038",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-039",
+      "scenarioRevision": 2
+    },
+    {
+      "id": "PD-OI-040",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-041",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-042",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-043",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-044",
+      "scenarioRevision": 1
+    },
+    {
+      "id": "PD-OI-045",
+      "scenarioRevision": 1
+    }
+  ],
+  "activeBdDecisions": [],
+  "mapConcernKeys": [
+    "product.canonical-render-request-boundary",
+    "product.saved-session-regeneration-continuity"
+  ],
+  "receiptChecks": [
+    {
+      "file": "DECISION_01_ERROR_DISCLOSURE.md",
+      "receiptSha256": "8617888cb1838521f78640db4653e2dcf88dd427cd466bbbc33d59efacaceae8",
+      "fieldsEqual": 9,
+      "concern": "web.errors.diagnostic-disclosure",
+      "choice": "A / GUIDANCE_WITH_BOUNDED_DIAGNOSTICS"
+    },
+    {
+      "file": "DECISION_02_REGEX_EDIT_RECOVERY.md",
+      "receiptSha256": "9cc66bc30f97cc995b9b0002b094ba74cfa00a8e77b163c33074689f0e73b496",
+      "fieldsEqual": 9,
+      "concern": "web.rules.rejected-pattern-edit-recovery",
+      "choice": "A / KEEP_REJECTED_PATTERN_DRAFT"
+    }
+  ],
+  "disclosureConcernsPresentOnDev": {
+    "web.errors.diagnostic-disclosure": false,
+    "web.errors.user-facing-diagnostic-disclosure": false,
+    "web.rules.rejected-pattern-edit-recovery": false
+  },
+  "relatedBranches": {
+    "fix/issue-601-bug15-bug19": {
+      "sha": "be4000ede35ea5692d7a88d46c0130ffec992f5f",
+      "mergeBaseWithDev": "af5d942af60353dda199aa487da9152a3576b3fe",
+      "unmergedRuntimePaths": [],
+      "isAncestorOfDev": false,
+      "results": {}
+    },
+    "fix/issue-601-export-output-20260926": {
+      "sha": "43836eb77798924bc826d0064d3cc5e219379d91",
+      "mergeBaseWithDev": "b11fe6091f179f6e251fe415ecfde269343ec764",
+      "unmergedRuntimePaths": [],
+      "isAncestorOfDev": false,
+      "results": {}
+    },
+    "fix/issue-598-alignment-direction-reset-20260926": {
+      "sha": "d5edc4bb00b0d793d94361202c31a270f78a4aa0",
+      "mergeBaseWithDev": "302dfa1136c95ab50ddef606ad835ec4087b95b2",
+      "unmergedRuntimePaths": [
+        "gbdraw/api/record_planning.py",
+        "gbdraw/diagrams/linear/assemble.py",
+        "gbdraw/web/js/app/similarity-alignment.js",
+        "gbdraw/web/js/services/diagram-generation.js",
+        "gbdraw/web/js/workers/diagram-generation-worker.js",
+        "gbdraw/web_support/similarity_alignment.py",
+        "tests/test_alignment_direction_projection.py",
+        "tests/web/alignment-direction-projection.test.mjs",
+        "tests/web/alignment-direction-worker.check.py",
+        "tests/web/similarity-alignment-actions.test.mjs"
+      ],
+      "isAncestorOfDev": false,
+      "results": {
+        "docs/internal/issue-598-alignment-direction-reset-20260926/evidence/S00.md": {
+          "sha256": "20e67120e4f8e6fdd87ad7f12c8300bd89b823837741564f9d4e126af03a7fb2",
+          "lastCommit": "d0fc0abb212340184ffc5d3ff725be93097866dd"
+        },
+        "docs/internal/issue-598-alignment-direction-reset-20260926/evidence/S01.md": {
+          "sha256": "11fbdb081dbb35499fe9fe6ed55bedc613702ac18adb698b5aba45aa3511f747",
+          "lastCommit": "d5edc4bb00b0d793d94361202c31a270f78a4aa0"
+        }
+      }
+    },
+    "fix/issue-602-linear-live-edit-20260926": {
+      "sha": "94faf8a98eddf823f5ebfed859d324e258daa689",
+      "mergeBaseWithDev": "af5d942af60353dda199aa487da9152a3576b3fe",
+      "unmergedRuntimePaths": [
+        "gbdraw/web/index.html",
+        "gbdraw/web/js/app/app-setup.js",
+        "gbdraw/web/js/app/generation-status.js",
+        "gbdraw/web/js/app/svg-styles.js",
+        "gbdraw/web/js/services/config.js",
+        "gbdraw/web/js/services/session-active-config-contract.js",
+        "gbdraw/web/js/services/session-request.js",
+        "tests/web/generation-feedback.playwright.spec.js",
+        "tests/web/generation-status.test.mjs",
+        "tests/web/history-canonical-owner.test.mjs",
+        "tests/web/history-generated-authority.playwright.spec.js",
+        "tests/web/linear-label-visibility.test.mjs",
+        "tests/web/linear-multi-record.playwright.spec.js",
+        "tests/web/linear-typography.playwright.spec.js",
+        "tests/web/right-drawer.playwright.spec.js",
+        "tests/web/session-active-config-contract.test.mjs",
+        "tests/web/session-request.test.mjs",
+        "tests/web/similarity-alignment-ui.playwright.spec.js"
+      ],
+      "isAncestorOfDev": false,
+      "results": {
+        "docs/internal/issue-602-proposal-20260926/results/S00.md": {
+          "sha256": "c773a0929802a091e93533086d23b27604f219fe4ff79871a0cd8d7d945af02c",
+          "lastCommit": "ae5f594218ac155c4593f8e7c87008df951bf949"
+        },
+        "docs/internal/issue-602-proposal-20260926/results/S01.md": {
+          "sha256": "d0f3afce0c0f92ad66c4275025f6b658b7934c08916806eafebbc605eb619113",
+          "lastCommit": "695432b3b8a170838abdacdc5c72f3aa7cb62811"
+        },
+        "docs/internal/issue-602-proposal-20260926/results/S02.md": {
+          "sha256": "d04ede42f500f432d037363aebe7bbe277f8983286462fe35914ab7fcb7fd570",
+          "lastCommit": "f68117a0eba29934fe5ee59e2382578122bc63fc"
+        },
+        "docs/internal/issue-602-proposal-20260926/results/S03.md": {
+          "sha256": "7a09da98ab3891026a069557cd809d2eac229002c5916a6365c67f8cc2e0f5b9",
+          "lastCommit": "be9c9af07a45e43a3005d0967c95799a3152e7fa"
+        },
+        "docs/internal/issue-602-proposal-20260926/results/S04.md": {
+          "sha256": "a9e6275c2f6519aacc10de933d396ed8cc603226952b3710aeb15e5717a72e91",
+          "lastCommit": "82e9756de422fbdce45ec77d3415f7fa7d911ae2"
+        },
+        "docs/internal/issue-602-proposal-20260926/results/S05.md": {
+          "sha256": "11844a8780ef9a441812253c0ce667bea297ff2ba4c346a944fc3d84fcb2bafb",
+          "lastCommit": "94faf8a98eddf823f5ebfed859d324e258daa689"
+        }
+      }
+    }
+  },
+  "runAnalysisErrorReturns": [
+    {
+      "line": 1999,
+      "source": "return isReflow ? { status: 'error' } : { status: 'error', error: errorLog.value };"
+    },
+    {
+      "line": 2035,
+      "source": "return { status: 'error', error: errorLog.value };"
+    },
+    {
+      "line": 2050,
+      "source": "return isReflow ? { status: 'error' } : { status: 'error', error: errorLog.value };"
+    },
+    {
+      "line": 4665,
+      "source": "return { status: 'error' };"
+    },
+    {
+      "line": 4669,
+      "source": "return { status: 'error', error: errorLog.value };"
+    },
+    {
+      "line": 4978,
+      "source": "return { status: 'error' };"
+    },
+    {
+      "line": 4982,
+      "source": "return { status: 'error', error: errorLog.value };"
+    },
+    {
+      "line": 5169,
+      "source": "return { status: 'error' };"
+    },
+    {
+      "line": 5282,
+      "source": "return { status: 'error' };"
+    }
+  ],
+  "originalAuditHistory": []
+}

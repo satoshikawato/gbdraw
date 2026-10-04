@@ -64,12 +64,24 @@ from .options import (
     DepthTrackInput,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
+    LosatRuntimeOptions,
+    LosatSearchOptions,
+    LinearRecordTranslation,
     LinearOutputOptions,
     LinearRequestTrackOptions,
     LinearTrackOptions,
 )
 from gbdraw.linear_comparison import LinearComparison
+from gbdraw.analysis.conservation import ConservationSearchResult
 from gbdraw.layout.linear_multi_record import LinearLayoutPlan, LinearRecordPlacement, RecordKey
+from gbdraw.layout.similarity_alignment import (
+    AlignmentAnchorIdentity,
+    AlignmentDecisionStatus,
+    AlignmentRecordDecision,
+    AlignmentResolutionRationale,
+    SimilarityAlignmentPlan,
+    SimilarityAlignmentReference,
+)
 from gbdraw.annotations import (
     AnnotationSet,
     AnnotationTrackParams,
@@ -109,6 +121,7 @@ from .request_render import (
     render_prepared_request,
     render_request,
     resolve_request,
+    resolve_similarity_alignment_plan,
 )
 from .prepared import ResolvedFeatureInputs
 from .requests import (
@@ -250,12 +263,22 @@ __all__ = [
     "CircularRequestTrackOptions",
     "CircularTrackOptions",
     "LinearMultiRecordOptions",
+    "LinearRecordTranslation",
+    "AlignmentAnchorIdentity",
+    "AlignmentDecisionStatus",
+    "AlignmentRecordDecision",
+    "AlignmentResolutionRationale",
+    "SimilarityAlignmentPlan",
+    "SimilarityAlignmentReference",
     "LinearDiagramOptions",
+    "LosatRuntimeOptions",
+    "LosatSearchOptions",
     "LinearDiagramMetadata",
     "LinearOutputOptions",
     "LinearRequestTrackOptions",
     "LinearTrackOptions",
     "LinearComparison",
+    "ConservationSearchResult",
     "LinearLayoutPlan",
     "LinearRecordPlacement",
     "RecordKey",
@@ -305,6 +328,7 @@ __all__ = [
     "render_prepared_request",
     "render_request",
     "resolve_request",
+    "resolve_similarity_alignment_plan",
     # Web runtime capabilities
     "WEB_RENDER_OPTIONS_SCHEMA",
     "WEB_RENDER_PROTOCOL",

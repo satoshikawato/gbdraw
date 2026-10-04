@@ -7,10 +7,46 @@ export const reconcileLinearRecordLayout = (sequences, entries = []) => {
   const previous = new Map(
     (Array.isArray(entries) ? entries : []).map((entry) => [String(entry?.uid || ''), entry])
   );
-  return (Array.isArray(sequences) ? sequences : []).map((sequence, index) => ({
-    uid: String(sequence?.uid || ''),
-    row: positiveRow(previous.get(String(sequence?.uid || ''))?.row, index + 1)
-  }));
+  return (Array.isArray(sequences) ? sequences : []).map((sequence, index) => {
+    const saved = previous.get(String(sequence?.uid || ''));
+    const row = positiveRow(saved?.row, index + 1);
+    return {
+      uid: String(sequence?.uid || ''),
+      row,
+      ...(saved?.canonicalCardinality === 'exactly_one'
+        ? { canonicalCardinality: 'exactly_one' } : {}),
+      ...(saved?.canonicalRow === row && Number.isInteger(saved?.canonicalColumn)
+        && saved.canonicalColumn > 0
+        ? { canonicalRow: row, canonicalColumn: saved.canonicalColumn }
+        : {})
+    };
+  });
+};
+
+export const resolveEffectiveLinearRecordRows = (
+  sequences,
+  entries = [],
+  { enabled = true } = {}
+) => (
+  enabled
+    ? reconcileLinearRecordLayout(sequences, entries)
+    : (Array.isArray(sequences) ? sequences : []).map((sequence, index) => ({
+        uid: String(sequence?.uid || ''),
+        row: index + 1
+      }))
+);
+
+export const linearRecordLayoutHasSharedRow = (
+  sequences,
+  entries = [],
+  { enabled = true } = {}
+) => {
+  const seenRows = new Set();
+  return resolveEffectiveLinearRecordRows(sequences, entries, { enabled }).some(({ row }) => {
+    if (seenRows.has(row)) return true;
+    seenRows.add(row);
+    return false;
+  });
 };
 
 export const planLinearSourceRowMove = ({

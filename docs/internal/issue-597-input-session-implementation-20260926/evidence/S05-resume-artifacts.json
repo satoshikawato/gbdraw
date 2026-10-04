@@ -1,0 +1,923 @@
+{
+  "root": "/tmp/issue597-S05-resume-evidence",
+  "ownedOutputsOnly": true,
+  "exclusions": "Caches, symlink overlays and materialized biological replay inputs are not traversed. Source input fingerprints are in fixture manifest.",
+  "artifacts": [
+    {
+      "path": "/tmp/gbdraw-issue597-S05.ujOWyl/gbdraw/web/gbdraw-0.14.0-py3-none-any.whl",
+      "bytes": 3241325,
+      "sha256": "2c6e00b82c6493ebb631bb68a42c804467448dd73f27a27cc63f28132a63b8e9"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/base-server.log",
+      "bytes": 19664,
+      "sha256": "853ea17811146c764224ebe3fc22c20b2b924e21319931ffabb9a05062c9a4bb"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/browser-corrected.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/browser-corrected.log",
+      "bytes": 4753,
+      "sha256": "703bda3be16e277b14adbab622a731881aa3c543fc2e4b46d5f80b85d1f1a02a"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/browser.exit",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/browser.log",
+      "bytes": 12025,
+      "sha256": "f30de517399a43836cef206055b8648935f73a7d8d455593a69803229db83abc"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/ci-node.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/ci-node.log",
+      "bytes": 5591,
+      "sha256": "19cadf979a95aa772bcd52241c3fdd1227d2d813e833c55bbb0bdfbae9a58522"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/cli-svg-comparison.json",
+      "bytes": 2616,
+      "sha256": "4a156380e8c3f90fc8cf9843582c5efe7c442a1c6dd3f3ed2f55477ef6dd5824"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/collect-handoff.py",
+      "bytes": 8960,
+      "sha256": "30b54296b62090b4c61e15f5dd77fbcccaba5b69adb9252e17aee572bcf3c949"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/compact-pipeline.py",
+      "bytes": 1817,
+      "sha256": "28b01e9b81b0f7f08e4d703673dc7e0592a7d82f2097bf1ae5427ba0b59af80c"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/diagnose-journey-base.py",
+      "bytes": 1414,
+      "sha256": "bf5def2eedd9fd3d667f4330ef7173de488dbf0e16d0bac0bbfd251cdf8d1754"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/diagnose-journey.py",
+      "bytes": 1394,
+      "sha256": "604a5968d593ea194e173e014e3d16d6cba5d52de8f9a179bc00fc9cfab5a69f"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/diagnose_settings.py",
+      "bytes": 1122,
+      "sha256": "fcd1da570c2ba8d3f578cd3fe2cf178b0fe83d41e588414a2de86644a979ec58"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/draft-candidate-owner.exit",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/draft-candidate-owner.log",
+      "bytes": 2710,
+      "sha256": "d1e2396def39afe5a9a69f6ea83aba2fe04fc0f36ad6b2c2867a85a6b4b14464"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/draft-candidate-retry.exit",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/draft-candidate-retry.log",
+      "bytes": 3231,
+      "sha256": "0951de3242415f36894f9cda8e0bbec0dcc50a81c41bae2fc3a477d6bf5023b7"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/draft-candidate.exit",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/draft-candidate.log",
+      "bytes": 2704,
+      "sha256": "c77d311858c8f6d9a6da4ddb5bb071654a8baa713d06ab20215f26fd9a11fd53"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/feature-diagnosis.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/feature-diagnosis.json",
+      "bytes": 682,
+      "sha256": "4e0692418a714c689b6a9d6f19f3d55c16a144c7352352b925a1e12a8c6b98e9"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/feature-diagnosis.log",
+      "bytes": 39830,
+      "sha256": "bc21a5cde6a075e82e0dc51c84ca65888ed7c0a7dc2479508b159a8ddee343d4"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/feature-diagnosis.py",
+      "bytes": 2664,
+      "sha256": "f4a34397038d0b675cdae070a2aaf2c9d1c1ecb2b3a387c9f91c5da3776f9032"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/fixture/fixture-manifest.json",
+      "bytes": 5695,
+      "sha256": "e0f945c7cfaac7d5cb2b1c88f253ba1635a2b5d7b7031ab1ad3fa1d3fd94b065"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/fixture/real-full-pairwise.gbdraw-session.json.gz",
+      "bytes": 134471323,
+      "sha256": "d3cafef9664bff958aec4932eea6e264ae872cce89762a7cbe617447af975388"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/fixture.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/fixture.log",
+      "bytes": 8969,
+      "sha256": "3eda62404a453fb7b3dc44a7059f3fe3bed37365d8d9a96e6a5244639f4d5f33"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/guard-candidate-base.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/guard-candidate-base.log",
+      "bytes": 478,
+      "sha256": "a591bac0c2fae99af63e3076ed10e1d887c43d0302fcb3e5ab006f8bf597fc66"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/guard-candidate-local.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/guard-candidate-local.log",
+      "bytes": 479,
+      "sha256": "3e8b53488bdebafe9ee2c2525de90f7d8f74a6e43921f88bba470c98a724750b"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/guard-candidate.test.mjs",
+      "bytes": 200885,
+      "sha256": "dada6eb873c82ecf952e820d4ceb9fbdd9f0325fbc0cfa9925ff085da37be86f"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/guard-focused.exit",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/guard-focused.log",
+      "bytes": 4474,
+      "sha256": "6135f49984e927f750cbdb47fb87f66d2763fa82b69c082330068a44cd36a46c"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/import-node-final.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/import-node-final.log",
+      "bytes": 906,
+      "sha256": "8ecf0276b9f450a1cd223ebe8c65c95a7c2941649b9703404a73aebb0223b3b6"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/import-node.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/import-node.log",
+      "bytes": 905,
+      "sha256": "b83e297aebaddfe11cd4e211ca512f2abe90820bfdde64af187768fe06bdd14e"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/journey/metrics.json",
+      "bytes": 65905,
+      "sha256": "5f09174cefae2bb1fec133dc8ef1765e8a1f8a5e0d613680aa9b578dc28a292f"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/journey/real-0-generated.json.gz",
+      "bytes": 133518058,
+      "sha256": "11d1e52698e301db89a752d1f3e076fa14ef5982f418e7b847ea41d5015cd1c1"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/journey/vibrio-0-generated.json.gz",
+      "bytes": 29203146,
+      "sha256": "7eb2d422146832b32ab056430254df3c2d6b330d213d4bebd5fd34862b7b2634"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/journey-base/real-base-generated.json.gz",
+      "bytes": 133518039,
+      "sha256": "c077f1e2015d42bd3eb1ea02a9679a70c6cf0a5eda76f1dcdd5529713a22f8d9"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/journey-base/result.json",
+      "bytes": 32966,
+      "sha256": "e92b4a14e69641682bf26ceba0a2209381a14d1ddd3efa7e69890317c7501a16"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/journey-base.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/journey-base.log",
+      "bytes": 98,
+      "sha256": "3abdf3d78a25431c5189e6ad4a0f96e84142f5b37acc7dceca80e3ad8a4c5211"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/journey-diagnosis/real-diagnosis-generated.json.gz",
+      "bytes": 133518052,
+      "sha256": "2c21ce47fcb7de71c49c5c2ee348d22c23b662b9b69b9c080a968f6e92abcede"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/journey-diagnosis/result.json",
+      "bytes": 35736,
+      "sha256": "1138c7a3a92e6065beb99096f5ba68dde78244c9f23e68dde4eda3b49b549a6e"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/journey-diagnosis.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/journey-diagnosis.log",
+      "bytes": 98,
+      "sha256": "3abdf3d78a25431c5189e6ad4a0f96e84142f5b37acc7dceca80e3ad8a4c5211"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/journey.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/journey.log",
+      "bytes": 36,
+      "sha256": "45e91124b1584fd86f0651185e8edceb977a37ff654c13c8ff415118eefc42a0"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/limits/expanded-limit-rejection.json.gz",
+      "bytes": 522893,
+      "sha256": "f5f5a42b272b74570e4850fe680daf25dd0a3e60c6298426b6d925b7f71c7267"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/limits/metrics.json",
+      "bytes": 4674,
+      "sha256": "f47fbcf844fdf42044dd7f68a12fd1c7c4700df33fba77d049af4f9591a21dab"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/limits/real-expanded-rejection.json",
+      "bytes": 466767669,
+      "sha256": "a652b476d4fc5b10c04d7988ecc94ad9d3ffd095f34ea64877ef9f365286b972"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/limits.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/limits.log",
+      "bytes": 16,
+      "sha256": "8f8e28c9265d667e0af28eb00b7a81e6711987589a9010abb0df1b5c7d408605"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/mapped-base-browser.exit",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/mapped-base-browser.log",
+      "bytes": 1717,
+      "sha256": "b21934ee1ff45a74b339d55bbe02e6063efa6bddbaf8b2f7cbb6c2df11755e2f"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/mapped-browser-command.json",
+      "bytes": 282,
+      "sha256": "5dbcfffd7970a8c747eb2166a6e4c16c132e739f92c8978a908486b5974c2e14"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/mapped-browser.log",
+      "bytes": 3795,
+      "sha256": "5dcf096fd84f5cd7e557437d1f0296d3bcbc98510de9faf5572ffe47999772b8"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/mapped-draft.exit",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/mapped-draft.log",
+      "bytes": 2485,
+      "sha256": "5dadef9bbcc9e70b2b51905c626cc8d4d752723780bd2d68f2d7367d6b17716b"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/mapped-legacy.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/mapped-legacy.log",
+      "bytes": 391,
+      "sha256": "6bee43201c7bbda5b0c309cf6998fa7023916f1ba971481b2329f4c6615466ea"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/mapped-performance.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/mapped-performance.log",
+      "bytes": 7408,
+      "sha256": "b6306b384d3902c866e8e88c588046b64f7f48f66d87a1f61baf27be3adfb07b"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/measurement-probe-smoke-corrected.json",
+      "bytes": 1581,
+      "sha256": "cc200b0f43cd3a1af26aac1b6e9680f365554e232078155fdcde01d8946dcbf0"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/measurement-probe-smoke.json",
+      "bytes": 1276,
+      "sha256": "3d445c55ff963d9b51e7d192267155141c88868e3818df9c22cccc554390db39"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/merge-conflicts-review.diff",
+      "bytes": 17063,
+      "sha256": "40708b791144a3a3430cb2414f7fdf5bd17c229d6d429e72475b6a8bcc28de66"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/merge-history.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/merge-history.log",
+      "bytes": 182,
+      "sha256": "0a067402a557ef93cb4d075c0ea48060fd26b59a4929cdb6ae13d933dfe9fe66"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/merge-node.log",
+      "bytes": 4192,
+      "sha256": "46bbfb7f5a69597eaf5ac048f469c0f3498c301229ae498413f9d8c53f863bec"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/node-all.exit",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/node-all.log",
+      "bytes": 136239,
+      "sha256": "90035327c87e4d84ca9db6c8f23aab1b8691a4515d4d6af7d00477ea261bc30b"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/node-final.exit",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/node-final.log",
+      "bytes": 105562,
+      "sha256": "e4c966dd07f20ea9113326f537dc49c786cf13439483d3999474d2baa736fc36"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/node-import-adapted.exit",
+      "bytes": 2,
+      "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/node-import-adapted.log",
+      "bytes": 1832,
+      "sha256": "cf12ad9d1fa36b7176ea68af6a748182be6e63649a5e47e932ee8e30702960f5"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/node-import-final.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/node-import-final.log",
+      "bytes": 7585,
+      "sha256": "ff91c128a8f09c172dfa5fd185f2a6b7f3dcf3cd4d93db7aaf7615bb0bb93188"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/npm.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/npm.log",
+      "bytes": 233,
+      "sha256": "915a4bc4072452a1487556f6b71fd88930ff34ad75a7435fe7ad3cfb0ecafe8d"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/output-comparison.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/output-comparison.log",
+      "bytes": 2421,
+      "sha256": "e11fe8fd45900f34758a0f7a9cd22e6790a6251faa1166c36ae78e6dfd4efc58"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/packaging.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/packaging.log",
+      "bytes": 3869,
+      "sha256": "8072b5c77afba5445347eafc2fde02306e8a0957ec1ad2f5678f0d6affdd4a1a"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/pipeline/metrics.json",
+      "bytes": 1414250,
+      "sha256": "61ab95b0ddffb65729a2ff955f56c9a152aa926d2139ae9486a5032485052fdd"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/pipeline/real-0-saved.gbdraw-session.json.gz",
+      "bytes": 133518068,
+      "sha256": "19eec3c024d4240739ea4d9d6a9946e97e34283f2ca639b6ba2e0df584a94a0b"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/pipeline/real-1-saved.gbdraw-session.json.gz",
+      "bytes": 133518077,
+      "sha256": "6abf72ebe043c775a1cfb2bfa594af12c8a93ce6265aeb4a4443bb39fef4ad8c"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/pipeline/real-2-saved.gbdraw-session.json.gz",
+      "bytes": 133518081,
+      "sha256": "20dd57a9b01a6b4ee70526bd06790b6a6dbb66594eb3536e6a22d41de50e5a3d"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/pipeline/vibrio-0-saved.gbdraw-session.json.gz",
+      "bytes": 23738966,
+      "sha256": "8be73b7293f7049248be6066d52df6c7bbd72327dbd34e1cf316c2eb08cea0f1"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/pipeline/vibrio-1-saved.gbdraw-session.json.gz",
+      "bytes": 23738966,
+      "sha256": "f94194cb09a3cb0d3464955d77418e1e6f3bcc2b499e7d062dc23d8c9937ea55"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/pipeline/vibrio-2-saved.gbdraw-session.json.gz",
+      "bytes": 23738966,
+      "sha256": "fd46ca095dd34fffabe65251b53c700691755096f4206b03541574e4961736a8"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/pipeline.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/pipeline.log",
+      "bytes": 114,
+      "sha256": "232d6c0cc1f8755404d843718e92d649b95ae8b71eae9a1fe520cec9c77f4d77"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/policy-before.log",
+      "bytes": 11051,
+      "sha256": "f1f2ebfbb02ea922c4ef65a78414c87dc57f2fd9e03857d8d570bb2f87c89f6c"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/policy-integrated.log",
+      "bytes": 11051,
+      "sha256": "afb4ac49247acd290e19a0b452b47619976525a3e6a3514b2b4df8f98845f164"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/policy-runtime-staged.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/policy-runtime-staged.log",
+      "bytes": 12164,
+      "sha256": "6f53d6e0efdf79e1b22f477757ca977a55169f07d188044401848a9b7dcdec58"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/policy-runtime-unstaged.log",
+      "bytes": 12164,
+      "sha256": "6f53d6e0efdf79e1b22f477757ca977a55169f07d188044401848a9b7dcdec58"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/pr-smoke.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/pr-smoke.log",
+      "bytes": 2544,
+      "sha256": "a6114cba25813d330eef0ebbc9423c0689c353fac641becfc45325981e3e3bba"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/probe-smoke-corrected.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/probe-smoke-corrected.log",
+      "bytes": 61,
+      "sha256": "c7fef78ba96591be7e14131472aee2ab87d55ceae70877af8859f5a437e56268"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/probe-smoke.py",
+      "bytes": 1379,
+      "sha256": "6b21e5b3dd972df8ba2750eba3e7942f9d53ab75317e73be532b8a66f194fc2f"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/production-review.diff",
+      "bytes": 9096,
+      "sha256": "0ff04eeff1f3f8383c250d551e2b55a7c8d4e56a1eeeb65654705ce3944dd8c6"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/project-session-hepatoplasmataceae.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/project-session-hepatoplasmataceae.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/project-session-tobacco.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/project-session-tobacco.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/python-focused.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/python-focused.log",
+      "bytes": 57425,
+      "sha256": "67c98f4913f3368cba43e68fa7790cd3fefc6e17fc63bf885d24367cf8e79301"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/readiness-integrated.json",
+      "bytes": 7591,
+      "sha256": "d9cbdb76d692d6931b86dddbd7aaa12c6565f5a065f817428b5665b9f7268b13"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/readiness.json",
+      "bytes": 7594,
+      "sha256": "751058bac25fbc24eaa01475f885c0d38f5d39e366e35eec365dbf69ab79ec45"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/real-bindings-summary.json",
+      "bytes": 580,
+      "sha256": "7c9c320f1e0d9cf3902a7094c1a3084a4f435ab8ed4fe5b8429e0d155b522d8d"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/rejected-draft-contract-candidate.patch",
+      "bytes": 976,
+      "sha256": "1647f402c009049cda00db848d6f4751c0cf765068e0503f0ce3eab518b7defb"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/remote-during-validation.txt",
+      "bytes": 145,
+      "sha256": "85a50e8b2ac0370969ab946721c6f90d1588206c59d6524f5212a3e2b52415f3"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-all.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-all.log",
+      "bytes": 136,
+      "sha256": "3577e1d7c73dc242ece43615a47e60b0625f5d4ca6d2570f3b92dca88bd06282"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-all.py",
+      "bytes": 1870,
+      "sha256": "fc9720248151581499707c68d3a4e280052033761858875794150968c1d684b3"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-commands.json",
+      "bytes": 3640,
+      "sha256": "68709ceef0e9badf1ac2249537409114ebb63340095befd06f802c181bfe06a4"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-generated-vibrio/cli-replay.log",
+      "bytes": 1879,
+      "sha256": "78b02cae8d314e1fc9f28c5d02c6dddbe93a39e2121fef7cfd9c7afb7af7af65"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-generated-vibrio/cli-replay.svg",
+      "bytes": 5128555,
+      "sha256": "b781d65863040613a07d16b556afd480abf72f5c2afab99e2a8f51f699f162d3"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-generated-vibrio/saved.svg",
+      "bytes": 5176159,
+      "sha256": "f9b83c450aec6c9e48aaaf56d801f86c1567ee7e582e99dff86ac4d43cbe8c32"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-generated-vibrio/semantic-checks.json",
+      "bytes": 4359,
+      "sha256": "7b92f73affab6611ccd8aef4b9bfe500c7afbbf6b104c8d7c1039a52e5614254"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-generated-vibrio.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-generated-vibrio.log",
+      "bytes": 316,
+      "sha256": "bc1ef92d18dcb830df12ceddf152e0afaff8b0c8e7d9fcd43152ce0bd4cb9996"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-real-0/cli-replay.log",
+      "bytes": 3473,
+      "sha256": "b4cdc8e2ffa2da956ae88b38f1450665c454b5448a539fdc824af7f864e6f6fd"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-real-0/cli-replay.svg",
+      "bytes": 19621657,
+      "sha256": "12ba12af0dc139c8f1a0cf786778c2eac84d00418541bac408bc69e98c8afe8d"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-real-0/saved.svg",
+      "bytes": 19781808,
+      "sha256": "679910dff08c90622b019392d1d5ba4b29739191c8b32ef13edb89009dfda28c"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-real-0/semantic-checks.json",
+      "bytes": 6070,
+      "sha256": "d64dc99c373972e1eb81ad6314cbc44340628fc25b4743a7ee74c5cec7929b56"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-real-0.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-real-0.log",
+      "bytes": 316,
+      "sha256": "bc1ef92d18dcb830df12ceddf152e0afaff8b0c8e7d9fcd43152ce0bd4cb9996"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-real-1/saved.svg",
+      "bytes": 19781808,
+      "sha256": "679910dff08c90622b019392d1d5ba4b29739191c8b32ef13edb89009dfda28c"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-real-1/semantic-checks.json",
+      "bytes": 5881,
+      "sha256": "9c800806c763d054c30c1866d879d3416c0f8726cf3fb0c73ad2003e8ed08ef3"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-real-1.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-real-1.log",
+      "bytes": 268,
+      "sha256": "f822a502ce0d632bc559ab676aa2c6a9706496f46a0d6b3774e4f5a39326858a"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-real-2/saved.svg",
+      "bytes": 19781808,
+      "sha256": "679910dff08c90622b019392d1d5ba4b29739191c8b32ef13edb89009dfda28c"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-real-2/semantic-checks.json",
+      "bytes": 5881,
+      "sha256": "1a4326da4aba7af25e558cf8e897d8f40e5b0725e555c26a7fdddaf75e42268c"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-real-2.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-real-2.log",
+      "bytes": 268,
+      "sha256": "f822a502ce0d632bc559ab676aa2c6a9706496f46a0d6b3774e4f5a39326858a"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-vibrio-0/cli-replay.log",
+      "bytes": 1871,
+      "sha256": "dd05c28205b8721880eb27df175526560b5840b2fe75954bb483c6bd33c45ff5"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-vibrio-0/cli-replay.svg",
+      "bytes": 5128555,
+      "sha256": "b781d65863040613a07d16b556afd480abf72f5c2afab99e2a8f51f699f162d3"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-vibrio-0/saved.svg",
+      "bytes": 5176159,
+      "sha256": "f9b83c450aec6c9e48aaaf56d801f86c1567ee7e582e99dff86ac4d43cbe8c32"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-vibrio-0/semantic-checks.json",
+      "bytes": 6339,
+      "sha256": "6ac83a5d914d65cf3f3ffb1d7339cf49043c0a3db58bbb32e816d689ff95c0ed"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-vibrio-0.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-vibrio-0.log",
+      "bytes": 316,
+      "sha256": "bc1ef92d18dcb830df12ceddf152e0afaff8b0c8e7d9fcd43152ce0bd4cb9996"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-vibrio-1/saved.svg",
+      "bytes": 5176159,
+      "sha256": "f9b83c450aec6c9e48aaaf56d801f86c1567ee7e582e99dff86ac4d43cbe8c32"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-vibrio-1/semantic-checks.json",
+      "bytes": 6152,
+      "sha256": "2ee6bd7b19453e0dd0916ca8d6b2cce864c315b06b62f79ff05efff99fff2730"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-vibrio-1.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-vibrio-1.log",
+      "bytes": 268,
+      "sha256": "f822a502ce0d632bc559ab676aa2c6a9706496f46a0d6b3774e4f5a39326858a"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-vibrio-2/saved.svg",
+      "bytes": 5176159,
+      "sha256": "f9b83c450aec6c9e48aaaf56d801f86c1567ee7e582e99dff86ac4d43cbe8c32"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-vibrio-2/semantic-checks.json",
+      "bytes": 6152,
+      "sha256": "b2c392bdcda33f72c9fb23046db82fe793a80eb1da5e5d7504bee971d72151d4"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-vibrio-2.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/replay-vibrio-2.log",
+      "bytes": 268,
+      "sha256": "f822a502ce0d632bc559ab676aa2c6a9706496f46a0d6b3774e4f5a39326858a"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/ruff.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/ruff.log",
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/runtime-measurement-source.json",
+      "bytes": 41510,
+      "sha256": "8dbd3d71f70b970d5c713328d1b566412b40e76c321f59e92732a34edaa81c12"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/sequence-coverage.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/sequence-coverage.log",
+      "bytes": 398,
+      "sha256": "83b5a226ab5ad2e9c6355e6ea832976fd15bdfcbe675a634ebbefdce37963645"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/settings-diagnostic.json",
+      "bytes": 710,
+      "sha256": "ece2490f669434f2e8fcacd353b4cce29f2913b3747b9c6b3f45413eba0905fc"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/tests-review.diff",
+      "bytes": 23910,
+      "sha256": "c52a6dd07147b3ec5f39fdc3e043feafaece9bb6006dd568ed329d540dbb723c"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/transport/metrics.json",
+      "bytes": 101527,
+      "sha256": "bc6e7df1a4fb8448d232570bd031843fd66bdac06d813feaa045821e6938a05d"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/transport/real-0-reply.json.gz",
+      "bytes": 133515530,
+      "sha256": "27b728ca262f793121c38c2265dd62804c90fc77a2b91d9a3b4d5a032c12774a"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/transport/real-1-reply.json.gz",
+      "bytes": 133515530,
+      "sha256": "27b728ca262f793121c38c2265dd62804c90fc77a2b91d9a3b4d5a032c12774a"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/transport/real-2-reply.json.gz",
+      "bytes": 133515530,
+      "sha256": "27b728ca262f793121c38c2265dd62804c90fc77a2b91d9a3b4d5a032c12774a"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/transport/small-plain-0-reply.json.gz",
+      "bytes": 63125,
+      "sha256": "aebe96d564d7dfca1b5b094c4ef09d6b17f15581a862da8e6473545434ea3921"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/transport/small-plain-1-reply.json.gz",
+      "bytes": 63125,
+      "sha256": "aebe96d564d7dfca1b5b094c4ef09d6b17f15581a862da8e6473545434ea3921"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/transport/small-plain-2-reply.json.gz",
+      "bytes": 63125,
+      "sha256": "aebe96d564d7dfca1b5b094c4ef09d6b17f15581a862da8e6473545434ea3921"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/transport/vibrio-0-reply.json.gz",
+      "bytes": 23739973,
+      "sha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/transport/vibrio-1-reply.json.gz",
+      "bytes": 23739973,
+      "sha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/transport/vibrio-2-reply.json.gz",
+      "bytes": 23739973,
+      "sha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/transport.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/transport.log",
+      "bytes": 198,
+      "sha256": "53489ffce84c67a49940a7616758198606f4f3bef2f616f77dce7452069930ea"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/vibrio-budget.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/vibrio-budget.log",
+      "bytes": 6615,
+      "sha256": "babb834ab8d96f16cb58b26cf65d624c9d5193d3b111f6c24d33373335a3187e"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/wheel.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/wheel.log",
+      "bytes": 703,
+      "sha256": "8a74a8ca5a813281d34e1aa2da09a90c723c2160e171cd5672fe0cff53a3613b"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/policy-final-precommit.log",
+      "bytes": 12164,
+      "sha256": "6f53d6e0efdf79e1b22f477757ca977a55169f07d188044401848a9b7dcdec58"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/policy-final-precommit.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/fetch-dev-final.log",
+      "bytes": 93,
+      "sha256": "5c6aa84089dbde63b7fe62f26b300cf879cdadf74eb302599e9e5f50f83c37c7"
+    },
+    {
+      "path": "/tmp/issue597-S05-resume-evidence/S05-resume-result.md",
+      "bytes": 21237,
+      "sha256": "620aa0355cfc887967f3726d597506a829351add1dff57771f7baf0c520e303f"
+    }
+  ],
+  "laterHandoffLogs": "Final precommit/postcommit policy, nonforce push and actual remote equality are captured externally after this immutable manifest; no circular commit self-hash required."
+}

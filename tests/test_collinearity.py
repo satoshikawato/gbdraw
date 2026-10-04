@@ -37,7 +37,7 @@ from gbdraw.analysis.collinearity import (
 )
 from gbdraw.api.config import apply_config_overrides
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
-from gbdraw.api.options import LinearDiagramOptions
+from gbdraw.api.options import LinearDiagramOptions, LosatSearchOptions
 from gbdraw.api.requests import (
     InMemoryRecordSource,
     LinearDiagramRequest,
@@ -909,7 +909,10 @@ def test_typed_request_max_conflicts_reaches_real_collinearity_consumer(
                 RecordInput(source=InMemoryRecordSource(record)) for record in records
             ),
             options=LinearDiagramOptions(
-                protein_blastp_mode="collinear",
+                losat_search=LosatSearchOptions(
+                    program="losatp",
+                    losatp_mode="collinear",
+                ),
                 collinearity_unit_mode=unit_mode,
                 collinearity_params=params,
             ),
@@ -2081,6 +2084,7 @@ def test_linear_cli_forwards_collinearity_options(
             losat_derived_cache_entries=(),
             protein_identity_manifest=None,
             request=resolved,
+            annotation_warnings=(),
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)
@@ -2090,7 +2094,9 @@ def test_linear_cli_forwards_collinearity_options(
             "--gbk",
             "a.gb",
             "b.gb",
-            "--protein_blastp_mode",
+            "--losat",
+            "losatp",
+            "--losatp_mode",
             "collinear",
             "--collinear_min_anchors",
             "1",
@@ -2120,9 +2126,11 @@ def test_linear_cli_forwards_collinearity_options(
     assert options.collinearity_anchor_mode == "rbh"
     assert options.collinearity_search_scope == "all"
     assert options.orthogroup_membership_mode == "anchor_core_v1"
-    assert options.orthogroup_member_max_hits is None
+    assert options.losat_search is not None
+    assert options.losat_search.losatp_member_max_hits is None
     assert options.collinear_max_paralog_links_per_orthogroup == 2
-    assert options.protein_blastp_mode == "collinear"
+    assert options.losat_search.program == "losatp"
+    assert options.losat_search.losatp_mode == "collinear"
     assert options.protein_comparisons is None
     assert options.collinearity_color_mode == "orientation"
 
@@ -2176,9 +2184,9 @@ def test_linear_cli_help_uses_underscore_option_aliases(capsys: pytest.CaptureFi
     assert exc_info.value.code == 0
     help_text = capsys.readouterr().out
     visible_option_names = [
-        "losatp_bin",
-        "losatp_threads",
-        "protein_blastp_mode",
+        "losat_bin",
+        "losat_threads",
+        "losatp_mode",
         "collinear_min_anchors",
         "collinear_max_unit_gap",
         "collinear_color_mode",
@@ -2188,9 +2196,9 @@ def test_linear_cli_help_uses_underscore_option_aliases(capsys: pytest.CaptureFi
         "session_output",
     ]
     hidden_option_names = [
-        "losatp-bin",
-        "losatp-threads",
-        "protein-blastp-mode",
+        "losat-bin",
+        "losat-threads",
+        "losatp-mode",
         "collinear-min-anchors",
         "collinear-max-unit-gap",
         "collinear-color-mode",
@@ -2209,9 +2217,9 @@ def test_linear_cli_help_uses_underscore_option_aliases(capsys: pytest.CaptureFi
 @pytest.mark.parametrize(
     "option_args",
     [
-        ["--losatp-bin", "losatp"],
-        ["--losatp-threads", "2"],
-        ["--protein-blastp-mode", "pairwise"],
+        ["--losat-bin", "losatp"],
+        ["--losat-threads", "2"],
+        ["--losatp-mode", "pairwise"],
         ["--collinear-min-anchors", "1"],
         ["--collinear-max-unit-gap", "0"],
         ["--collinear-color-mode", "orientation"],
@@ -2269,7 +2277,9 @@ def test_linear_cli_accepts_orientation_identity_collinear_color_mode() -> None:
             "--gbk",
             "a.gb",
             "b.gb",
-            "--protein_blastp_mode",
+            "--losat",
+            "losatp",
+            "--losatp_mode",
             "collinear",
             "--collinear_color_mode",
             "orientation_identity",
@@ -2687,6 +2697,7 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
         scope: str,
         input_payload: Path = pairs_path,
         input_raw_tsv: Path = raw_tsv_path,
+        explicit_display_pairs: bool = False,
     ) -> dict[str, object]:
         raw_result = namespace["convert_losatp_blastp_pairs_to_genomic_payload"](
             str(input_payload),
@@ -2707,6 +2718,11 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
             2,
             scope,
             "rbh",
+            None,
+            "either",
+            True,
+            None,
+            explicit_display_pairs,
         )
         return json.loads(str(raw_result))
 
@@ -2737,12 +2753,23 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
         multi_row_pairs_path,
         multi_row_raw_tsv_path,
     )
+    multi_row_all = convert(
+        "all",
+        multi_row_pairs_path,
+        multi_row_raw_tsv_path,
+        explicit_display_pairs=True,
+    )
 
     assert "error" not in adjacent
     assert "error" not in all_records
     assert "error" not in multi_row_adjacent
-    assert "collinear_search_scope must be one of: adjacent, all" in invalid_scope["error"]
-    assert "Unsupported LOSATP blastp mode" in invalid_mode["error"]
+    assert "error" not in multi_row_all
+    assert invalid_scope["error"] == {
+        "code": "INPUT_INVALID", "operation": "convertLosatpPairsToGenomicPayload",
+        "stage": "helper", "context": {"field": "collinear_search_scope", "reason": "ADJACENT_ALL"},
+    }
+    assert invalid_mode["error"]["code"] == "INPUT_INVALID"
+    assert invalid_mode["error"]["context"] == {"field": "protein_blastp_mode", "reason": "BLASTP_MODE"}
 
     def member_sets(result: dict[str, object]) -> list[set[str]]:
         groups = result["collinearityResult"]["value"]["fields"][
@@ -2765,6 +2792,10 @@ def test_web_losatp_blastp_payload_helper_applies_collinear_search_scope(
             block["fields"]["subjectRecordIndex"],
         )
         for block in multi_row_adjacent["collinearityResult"]["value"]["fields"]["blocks"]
+    } == {(0, 2)}
+    assert {
+        (block["fields"]["queryRecordIndex"], block["fields"]["subjectRecordIndex"])
+        for block in multi_row_all["collinearityResult"]["value"]["fields"]["blocks"]
     } == {(0, 2)}
     assert all(
         block["fields"]["subjectRecordIndex"]
@@ -2929,8 +2960,10 @@ def test_pairwise_match_path_emits_plain_required_metadata() -> None:
 
     assert 'data-gbdraw-pairwise-match-id="comparison1_match7"' in svg_text
     assert 'data-match-kind="pairwise"' in svg_text
-    assert 'data-query-record-id="query_record"' in svg_text
-    assert 'data-subject-record-id="subject_record"' in svg_text
+    # Record identity comes from the endpoint records, never from table IDs (CO-06).
+    assert 'data-query-record-id="record_a"' in svg_text
+    assert 'data-subject-record-id="record_b"' in svg_text
+    assert "query_record" not in svg_text
     assert 'data-identity="87.5"' in svg_text
     assert 'data-alignment-length="120"' in svg_text
     assert 'data-evalue="2e-30"' in svg_text

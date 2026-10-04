@@ -49,8 +49,8 @@ Keep the first four records in their source orientation; turn on
 
 ## Step 1: Load the five Linear records
 
-Select **Linear** and **GenBank**. Confirm the fresh **Current: No comparison**
-status. Upload `BGC0000708.gbk`, then use **Add sequence** in the **Input
+Select **Linear** and **GenBank**. Confirm that **No comparison** is pressed in
+the **Comparison** command group. Upload `BGC0000708.gbk`, then use **Add sequence** in the **Input
 Genomes** header four times and upload the remaining files in the table order.
 
 For the fifth row, `BGC0000713`, open **Record options** and turn on **Reverse
@@ -71,9 +71,8 @@ comparison ribbons.
 In **Comparison**, select **Run LOSAT** explicitly. Open **Settings** and choose
 the **LOSATP** button in **LOSAT Mode**, then choose **Similarity groups** from
 the **LOSATP mode** menu. Under **Comparison appearance**, set **Match style**
-to **Curve**, then enter the filter values. Continue past **Generate Diagram**,
-open **Advanced comparison and layout**, and set the deterministic runtime
-values.
+to **Curve**, then enter the filter values and the deterministic **Runtime and
+reproducibility** values.
 
 | Section | Control | Value |
 |---|---|---|
@@ -84,10 +83,10 @@ values.
 | Settings / Result filters | E-value | `0.01` |
 | Settings / Result filters | Minimum identity | `30` |
 | Settings / Result filters | Minimum length | `0` |
-| Advanced comparison and layout | Execution | Serial |
-| Advanced comparison and layout | Total threads | `1` |
-| Advanced comparison and layout | Parallel runs | `1 run` |
-| Advanced comparison and layout | Threads per run | `1` |
+| Settings / Runtime and reproducibility | Execution | Serial |
+| Settings / Runtime and reproducibility | Total threads | `1` |
+| Settings / Runtime and reproducibility | Parallel runs | `1 run` |
+| Settings / Runtime and reproducibility | Threads per run | `1` |
 | Layout | Separate Strands | Off |
 | Basic | Output Prefix | `bgc_losatp_groups` |
 
@@ -113,8 +112,8 @@ Match the Interactive SVG Gallery presentation with these display settings:
 | Definition accession / length | `20` px, Normal |
 
 The first record therefore carries readable CDS `gene` labels; the remaining
-four records stay unlabeled. Under **Title & Legend**, set the four visible
-Definition line sizes to `20`, choose **Bold** only for **Name / Species**, and
+four records stay unlabeled. Under **Titles & Record Labels**, open each line's
+**Style**, set the four visible line sizes to `20`, choose **Bold** only for **Name / Species**, and
 leave the other lines at **Normal**. Fit the complete final preview at **40%**
 before capturing or exporting it.
 
@@ -135,13 +134,17 @@ Pairwise comparison between only the first and last records.
 ## Step 5: Align every record to `og_1`
 
 Select the `livE` CDS in `og_1` on the first record. Its feature popup includes
-an **Align** action because the current result is in Similarity-groups mode.
+an **Align…** action because the current result is in Similarity-groups mode.
 
 ![og_1 feature popup with the Align action](../../images/t-gui-04/04-align-og1.png)
 
-Select **Align**. gbdraw regenerates the same 23-group comparison without
+Select **Align…**. gbdraw regenerates the same 23-group comparison without
 rerunning LOSATP and shifts each record so its `og_1` member shares one
-x-coordinate. This is the alignment used by the Interactive SVG Gallery.
+x-coordinate. If ambiguity opens **Select alignment anchors**, select the
+recommended first candidate in each unresolved row, leave **Keep current
+directions** selected and choose **Apply**. Inspect and accept a refreshed
+preview with another Apply if requested. This is the alignment used by the
+Interactive SVG Gallery.
 
 ![Five whole BGC records aligned to similarity group og_1](../../images/t-gui-04/05-comparison-result.png)
 
@@ -157,6 +160,37 @@ Select a comparison ribbon. The popup reports the group ID, display name,
 member count, record coverage, RBH seeds, paths, and every member protein.
 
 ![LOSATP similarity-group popup with member details](../../images/t-gui-04/06-match-popup.png)
+
+### Optional: review directions and Reset
+
+Use the same five records and presentation from Steps 1–5. Click the first
+record's left-facing `livA` CDS (`CAG38712.1`, group `og_18`) and choose
+**Review alignment options…**. Choose a
+**Select** anchor for each row still needing a choice. Start with **Keep current
+directions**, then select **All selected arrows right →**. The reference
+currently points left while the selected targets point right, so the preview
+changes only the reference record. Select **Apply**; if final validation updates
+the preview, inspect it and select **Apply** again. Features and labels reverse
+with the record; biological source strands stay unchanged.
+
+Open **Editor**, select **Similarity groups**, then choose **Reset alignment…**
+in **Active plan**. **Reset positions** is selected by default and
+would keep the new reference direction. Select **Reset positions and alignment
+direction changes**, inspect the listed reference and select **Reset** to
+restore its pre-Align direction and positions. The plan is cleared. **Undo**
+restores the aligned artifact and its evidence; reopen Reset to try the other
+scope. After either successful Reset, Undo is required before another scope.
+Combined Reset also replaces subsequent manual direction edits on the listed
+records. See the [Web alignment reference](../../REFERENCE/web-app.md#similarity-group-alignment-in-linear-view)
+for Custom, exclusions, missing old evidence and retry details.
+
+The executable GUI recipe verifies these choices, both Reset scopes and Undo
+from the original five inputs. It captures the Keep figure and group popup
+before those optional steps, then restores Keep before downloading the SVG.
+Regenerate it with
+`python docs/capture/run_all.py --scenario T-GUI-04 --tier extended`;
+environment and source-verification details are in the
+[capture README](../../capture/README.md).
 
 ## Next steps
 

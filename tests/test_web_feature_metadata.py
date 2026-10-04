@@ -2,20 +2,20 @@ from __future__ import annotations
 
 import json
 import re
-import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import pandas as pd
 import pytest
 from Bio import SeqIO
 from Bio.Seq import Seq
-from Bio.SeqFeature import CompoundLocation, FeatureLocation, SeqFeature
+from Bio.SeqFeature import BeforePosition, CompoundLocation, FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 from gbdraw.features.ids import compute_feature_hash
 from gbdraw.io.genome import load_gff_fasta
 from gbdraw.io.regions import apply_region_specs, parse_region_specs
-from gbdraw.svg.ids import definition_group_svg_id
+from gbdraw.io.record_select import reverse_records
+from gbdraw.web_support.feature_metadata import _source_anchor_profile
 from gbdraw.web_support.feature_metadata import extract_features_from_genbank_payload
 from gbdraw.web_support.feature_metadata import extract_features_from_gff_fasta_payload
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
@@ -24,6 +24,9 @@ from gbdraw.features.visibility import compile_feature_visibility_rules, should_
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PYTHON_HELPERS_PATH = REPO_ROOT / "gbdraw" / "web" / "js" / "app" / "python-helpers.js"
+MG1655_START_CODON_SUBSET = (
+    REPO_ROOT / "tests" / "fixtures" / "cds_translation" / "mg1655_start_codon_subset.gb"
+)
 
 
 @pytest.fixture(scope="module")
@@ -102,8 +105,9 @@ def test_canonical_request_wrapper_rejects_invalid_request_without_monkeypatchin
 
     payload = wrapper("{}", "{}", str(tmp_path / "render"))  # type: ignore[operator]
 
-    assert payload["error"]["type"]
-    assert payload["error"]["message"]
+    assert payload["error"]["code"] == "RESOURCE_INVALID"
+    assert payload["error"]["stage"] == "resource-staging"
+    assert set(payload["error"]) == {"code", "operation", "stage", "context"}
     assert assemble.load_comparisons is original_loader
     assert marker.exists()
 
@@ -129,105 +133,6 @@ def test_canonical_request_wrapper_returns_svg_content_as_utf8_bytes(
         "results": [{"name": "diagram.svg", "content": "<svg>µ</svg>".encode()}],
         "metadata": b'{"featureCatalog":{"schema":1}}',
     }
-
-
-def test_regenerate_definition_svgs_accepts_nullish_font_sizes(
-    tmp_path: Path,
-    python_helpers_namespace: dict[str, object],
-) -> None:
-    record = SeqRecord(Seq("ATGAAATAA"), id="NC_000010", name="Nullish")
-    record.features.append(
-        SeqFeature(
-            FeatureLocation(0, 9, strand=1),
-            type="CDS",
-            qualifiers={"locus_tag": ["NULLISH_001"], "translation": ["MK"]},
-        )
-    )
-    path = _write_genbank(tmp_path, record)
-    regenerate = python_helpers_namespace["regenerate_definition_svgs"]
-
-    payload = json.loads(
-        regenerate(  # type: ignore[operator]
-            str(path),
-            font_size=JsNull(),
-            plot_title_font_size=JsUndefined(),
-        )
-    )
-
-    assert "error" not in payload
-    assert payload["definitions"]
-
-
-def test_regenerate_definition_svgs_accepts_numeric_font_size_strings(
-    tmp_path: Path,
-    python_helpers_namespace: dict[str, object],
-) -> None:
-    record = SeqRecord(Seq("ATGAAATAA"), id="NC_000011", name="Numeric")
-    path = _write_genbank(tmp_path, record)
-    regenerate = python_helpers_namespace["regenerate_definition_svgs"]
-
-    payload = json.loads(
-        regenerate(  # type: ignore[operator]
-            str(path),
-            font_size="12.5",
-            plot_title_font_size="16",
-            plot_title="Numeric title",
-            plot_title_position="top",
-        )
-    )
-
-    assert "error" not in payload
-    assert len(payload["definitions"]) == 2
-
-
-def test_regenerate_definition_svgs_reports_invalid_font_size_strings(
-    tmp_path: Path,
-    python_helpers_namespace: dict[str, object],
-) -> None:
-    record = SeqRecord(Seq("ATGAAATAA"), id="NC_000012", name="InvalidNumeric")
-    path = _write_genbank(tmp_path, record)
-    regenerate = python_helpers_namespace["regenerate_definition_svgs"]
-
-    payload = json.loads(regenerate(str(path), font_size="not-a-number"))  # type: ignore[operator]
-
-    assert "error" in payload
-    assert "not-a-number" in payload["error"] or "could not convert" in payload["error"]
-
-
-def test_regenerate_definition_svgs_matches_duplicate_definition_id_contract(
-    tmp_path: Path,
-    python_helpers_namespace: dict[str, object],
-) -> None:
-    records = [
-        SeqRecord(Seq("ATGAAATAA"), id="123/unsafe", name=f"Duplicate{index}")
-        for index in range(2)
-    ]
-    for record in records:
-        record.annotations["molecule_type"] = "DNA"
-    path = tmp_path / "duplicates.gb"
-    SeqIO.write(records, path, "genbank")
-    parsed_record_ids = [record.id for record in SeqIO.parse(path, "genbank")]
-    regenerate = python_helpers_namespace["regenerate_definition_svgs"]
-
-    payload = json.loads(regenerate(str(path), multi_record_canvas=True))  # type: ignore[operator]
-
-    assert "error" not in payload
-    definitions = payload["definitions"]
-    assert [entry["record_index"] for entry in definitions] == [0, 1]
-    assert [entry["definition_group_id"] for entry in definitions] == [
-        definition_group_svg_id(
-            record_id,
-            mode="circular",
-            record_index=index,
-            record_count=2,
-        )
-        for index, record_id in enumerate(parsed_record_ids)
-    ]
-    for index, (entry, record_id) in enumerate(zip(definitions, parsed_record_ids)):
-        group = ET.fromstring(entry["svg"])
-        assert group.attrib["data-gbdraw-role"] == "record-definition"
-        assert group.attrib["data-gbdraw-record-id"] == record_id
-        assert group.attrib["data-gbdraw-record-index"] == str(index)
 
 
 def test_importable_feature_metadata_matches_pyodide_wrapper(
@@ -329,6 +234,12 @@ def test_web_feature_extraction_includes_qualifiers_locations_and_translation(
     assert feature["selector"]["record_location"] == "NC_000001:0..9:+"
     assert feature["selector"]["qualifiers"]["locus_tag"] == ["ABC_0001"]
     assert feature["location_parts"] == [{"start": 0, "end": 9, "strand": "+", "display": "1..9"}]
+    assert feature["anchorProfile"] == {
+        "precision": "exact",
+        "operator": "single",
+        "partOrder": "biological",
+        "strand": "+",
+    }
     assert feature["nucleotide_sequence"] == "ATGAAATAA"
     assert feature["amino_acid_sequence"] == "MK"
     assert feature["sequence_warnings"] == []
@@ -374,6 +285,139 @@ def test_web_feature_extraction_reports_invalid_translation_warning(
     assert any("not divisible by 3" in warning for warning in feature["sequence_warnings"])
 
 
+def _write_gff3_cds_rows(
+    tmp_path: Path,
+    sequence: str,
+    rows: list[tuple[int, int, str, str, str]],
+) -> tuple[Path, Path]:
+    """Write one GFF3 contig whose rows are (start, end, strand, phase, attributes)."""
+
+    gff_path = tmp_path / "cds.gff3"
+    fasta_path = tmp_path / "cds.fasta"
+    lines = ["##gff-version 3", f"##sequence-region ctg1 1 {len(sequence)}"]
+    lines.extend(
+        f"ctg1\ttest\tCDS\t{start}\t{end}\t.\t{strand}\t{phase}\t{attributes}"
+        for start, end, strand, phase, attributes in rows
+    )
+    gff_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    fasta_path.write_text(f">ctg1\n{sequence}\n", encoding="utf-8")
+    return gff_path, fasta_path
+
+
+@pytest.mark.parametrize(
+    ("sequence", "transl_table", "expected"),
+    [
+        ("GTGAAATAA", "11", "MK"),
+        ("TTGAAATAA", "11", "MK"),
+        ("ATTAAATAA", "11", "MK"),
+        ("TTGAAATAA", None, "MK"),
+        ("CTGAAATAA", None, "MK"),
+        ("GTGAAATAA", None, "VK"),
+        ("ATTAAATAA", None, "IK"),
+    ],
+)
+def test_web_feature_extraction_translates_table_start_codon_as_methionine(
+    tmp_path: Path,
+    python_helpers_namespace: dict[str, object],
+    sequence: str,
+    transl_table: str | None,
+    expected: str,
+) -> None:
+    qualifiers = {"locus_tag": ["START_0001"]}
+    if transl_table is not None:
+        qualifiers["transl_table"] = [transl_table]
+    record = SeqRecord(Seq(sequence), id="NC_000010", name="Start")
+    record.features.append(
+        SeqFeature(FeatureLocation(0, len(sequence), strand=1), type="CDS", qualifiers=qualifiers)
+    )
+
+    feature = _extract_features(python_helpers_namespace, _write_genbank(tmp_path, record))[0]
+
+    assert feature["amino_acid_sequence"] == expected
+    assert feature["sequence_warnings"] == []
+
+
+def test_web_feature_extraction_translates_offset_or_five_prime_partial_cds_literally(
+    tmp_path: Path,
+    python_helpers_namespace: dict[str, object],
+) -> None:
+    record = SeqRecord(Seq("AGTGAAATAA"), id="NC_000011", name="Offset")
+    record.features.append(
+        SeqFeature(
+            FeatureLocation(0, 10, strand=1),
+            type="CDS",
+            qualifiers={"locus_tag": ["OFFSET_0001"], "codon_start": ["2"], "transl_table": ["11"]},
+        )
+    )
+    offset_feature = _extract_features(
+        python_helpers_namespace,
+        _write_genbank(tmp_path, record),
+    )[0]
+    assert offset_feature["amino_acid_sequence"] == "VK"
+
+    # The 5' end of a plus-strand GFF3 CDS is its start column; of a minus-strand
+    # CDS, its end column. Only an incomplete 5' end keeps the first codon literal.
+    gff_path, fasta_path = _write_gff3_cds_rows(
+        tmp_path,
+        "GTGAAATAA" + "TTATTTCAC" + "GTGAAACCC" + "GGGTTTCAC",
+        [
+            (1, 9, "+", "0", "ID=plus5;transl_table=11;partial=true;start_range=.,1"),
+            (10, 18, "-", "0", "ID=minus5;transl_table=11;partial=true;end_range=18,."),
+            (19, 27, "+", "0", "ID=plus3;transl_table=11;partial=true;end_range=27,."),
+            (28, 36, "-", "0", "ID=minus3;transl_table=11;partial=true;start_range=.,28"),
+        ],
+    )
+    payload = extract_features_from_gff_fasta_payload(
+        gff_path,
+        fasta_path,
+        selected_features=["CDS"],
+    )
+
+    assert {
+        feature["qualifiers"]["id"][0]: feature["amino_acid_sequence"]
+        for feature in payload["features"]
+    } == {"plus5": "VK", "minus5": "VK", "plus3": "MKP", "minus3": "MKP"}
+
+
+def test_web_feature_extraction_uses_gff3_phase_as_reading_frame(tmp_path: Path) -> None:
+    gff_path, fasta_path = _write_gff3_cds_rows(
+        tmp_path,
+        "CATGAAACCCGGGTAA" + "TTATTTCACGC",
+        [
+            (1, 16, "+", "1", "ID=plus;transl_table=11;partial=true;start_range=.,1"),
+            (17, 27, "-", "2", "ID=minus;transl_table=11;partial=true;end_range=27,."),
+        ],
+    )
+
+    payload = extract_features_from_gff_fasta_payload(
+        gff_path,
+        fasta_path,
+        selected_features=["CDS"],
+    )
+
+    features = {feature["qualifiers"]["id"][0]: feature for feature in payload["features"]}
+    assert features["plus"]["amino_acid_sequence"] == "MKPG"
+    assert features["minus"]["amino_acid_sequence"] == "VK"
+    assert features["plus"]["sequence_warnings"] == []
+    assert features["minus"]["sequence_warnings"] == []
+
+
+def test_web_feature_extraction_matches_mg1655_translation_without_the_qualifier() -> None:
+    record = SeqIO.read(MG1655_START_CODON_SUBSET, "genbank")
+    expected: dict[str, str] = {}
+    for feature in record.features:
+        if feature.type == "CDS":
+            expected[feature.qualifiers["locus_tag"][0]] = feature.qualifiers.pop("translation")[0]
+
+    payload = extract_features_from_records_payload([record], selected_features=["CDS"])
+
+    assert {
+        feature["locus_tag"]: feature["amino_acid_sequence"]
+        for feature in payload["features"]
+        if feature["type"] == "CDS"
+    } == expected
+
+
 def test_web_feature_extraction_adds_compound_location_parts(
     tmp_path: Path,
     python_helpers_namespace: dict[str, object],
@@ -397,6 +441,111 @@ def test_web_feature_extraction_adds_compound_location_parts(
         {"start": 6, "end": 9, "strand": "+", "display": "7..9"},
     ]
     assert feature["nucleotide_sequence"] == "AAAGGG"
+
+
+@pytest.mark.parametrize(
+    ("location", "expected"),
+    [
+        (
+            FeatureLocation(2, 8, strand=1),
+            {"precision": "exact", "operator": "single", "partOrder": "biological", "strand": "+"},
+        ),
+        (
+            FeatureLocation(2, 8, strand=-1),
+            {"precision": "exact", "operator": "single", "partOrder": "biological", "strand": "-"},
+        ),
+        (
+            CompoundLocation(
+                [FeatureLocation(90, 100, strand=1), FeatureLocation(0, 5, strand=1)],
+                operator="join",
+            ),
+            {"precision": "exact", "operator": "join", "partOrder": "biological", "strand": "+"},
+        ),
+        (
+            CompoundLocation(
+                [FeatureLocation(40, 50, strand=-1), FeatureLocation(10, 20, strand=-1)],
+                operator="join",
+            ),
+            {"precision": "exact", "operator": "join", "partOrder": "biological", "strand": "-"},
+        ),
+        (
+            FeatureLocation(2, 8, strand=None),
+            {"precision": "exact", "operator": "single", "partOrder": "source-forward", "strand": "unstranded"},
+        ),
+        (
+            CompoundLocation(
+                [FeatureLocation(2, 8, strand=None), FeatureLocation(12, 16, strand=None)],
+                operator="join",
+            ),
+            {"precision": "exact", "operator": "join", "partOrder": "source-forward", "strand": "unstranded"},
+        ),
+    ],
+)
+def test_source_anchor_profile_classifies_exact_source_paths(
+    location: object,
+    expected: dict[str, str],
+) -> None:
+    assert _source_anchor_profile(SeqFeature(location, type="misc_feature")) == expected
+
+
+@pytest.mark.parametrize(
+    ("location", "expected"),
+    [
+        (
+            CompoundLocation(
+                [FeatureLocation(2, 8, strand=1), FeatureLocation(12, 16, strand=-1)],
+                operator="join",
+            ),
+            {"precision": "exact", "operator": "join", "partOrder": "ambiguous", "strand": "mixed"},
+        ),
+        (
+            FeatureLocation(BeforePosition(2), 8, strand=1),
+            {"precision": "fuzzy", "operator": "single", "partOrder": "biological", "strand": "+"},
+        ),
+        (
+            CompoundLocation(
+                [FeatureLocation(2, 8, strand=1), FeatureLocation(12, 16, strand=1)],
+                operator="order",
+            ),
+            {"precision": "exact", "operator": "order", "partOrder": "ambiguous", "strand": "+"},
+        ),
+        (
+            CompoundLocation(
+                [FeatureLocation(2, 8, strand=1), FeatureLocation(12, 16, strand=1)],
+                operator="bond",
+            ),
+            {"precision": "exact", "operator": "unknown", "partOrder": "ambiguous", "strand": "+"},
+        ),
+    ],
+)
+def test_source_anchor_profile_classifies_unsafe_locations_conservatively(
+    location: object,
+    expected: dict[str, str],
+) -> None:
+    assert _source_anchor_profile(SeqFeature(location, type="misc_feature")) == expected
+
+
+def test_source_anchor_profile_survives_reverse_coordinate_mapping() -> None:
+    record = SeqRecord(Seq("A" * 100), id="NC_ANCHOR_PROFILE")
+    record.features.append(
+        SeqFeature(
+            CompoundLocation(
+                [FeatureLocation(90, 100, strand=1), FeatureLocation(0, 5, strand=1)],
+                operator="join",
+            ),
+            type="misc_feature",
+        )
+    )
+
+    reversed_feature = reverse_records([record], True)[0].features[0]
+
+    assert reversed_feature.location.strand == -1
+    assert _source_anchor_profile(reversed_feature) == {
+        "precision": "exact",
+        "operator": "join",
+        "partOrder": "biological",
+        "strand": "+",
+    }
 
 
 def test_web_feature_extraction_region_uses_absolute_display_coordinates(

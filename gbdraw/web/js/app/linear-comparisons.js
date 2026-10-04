@@ -27,9 +27,11 @@ export const plainTextLinearRecordLabel = (value) => {
   return label.replace(/[<>]/g, '').trim() || 'Record';
 };
 
+// An absent or unknown mode is the Web default (No comparison): a plan never
+// starts a comparison its writer did not state (B15).
 const normalizeMode = (value) => {
   const mode = String(value || '').trim().toLowerCase();
-  return VALID_MODES.has(mode) ? mode : LINEAR_COMPARISON_MODES.ADJACENT;
+  return VALID_MODES.has(mode) ? mode : LINEAR_COMPARISON_MODES.NONE;
 };
 
 const normalizeSource = (value, fallback = LINEAR_COMPARISON_SOURCES.LOSAT) => {
@@ -625,4 +627,66 @@ export const buildPairwiseLosatJobSpecs = ({
       subjectIndex: edge.subjectIndex,
       program: normalizedProgram
     })));
+};
+
+// The record-pair searches one Generate requests. Generate and the Settings
+// job-count estimate both expand them here (N-10). Similarity groups always
+// include within-record evidence; Collinear includes it only when inference is
+// on (PD-OI-018 item 4).
+export const buildLosatJobSpecs = ({
+  resolution,
+  recordCount,
+  recordUids = [],
+  program = 'blastn',
+  blastpMode = 'pairwise',
+  collinearInferOrthogroups = true,
+  collinearSearchScope = 'adjacent'
+} = {}) => {
+  const normalizedProgram = String(program || '').trim().toLowerCase();
+  const mode = String(blastpMode || '').trim().toLowerCase();
+  if (normalizedProgram !== 'blastp' || !['orthogroup', 'collinear'].includes(mode)) {
+    return buildPairwiseLosatJobSpecs({ resolution, program: normalizedProgram, blastpMode: mode });
+  }
+  const edges = (resolution?.edges || []).filter((edge) => edge.source === LINEAR_COMPARISON_SOURCES.LOSAT);
+  const lastOrdinal = Math.max(0, edges.length - 1);
+  const specs = [];
+  const push = (queryIndex, subjectIndex, ordinal) => {
+    const edge = edges.find((candidate) => (
+      candidate.queryIndex === queryIndex && candidate.subjectIndex === subjectIndex
+    )) || edges.find((candidate) => candidate.ordinal === ordinal) || edges[Math.max(0, Math.min(ordinal, lastOrdinal))];
+    specs.push(Object.freeze({
+      edgeKey: edge?.edgeKey || '',
+      ordinal: edge?.ordinal ?? ordinal,
+      queryUid: recordUids[queryIndex],
+      subjectUid: recordUids[subjectIndex],
+      queryIndex,
+      subjectIndex,
+      program: normalizedProgram
+    }));
+  };
+  const pushPairs = (withSelf) => {
+    for (let i = 0; i < recordCount; i += 1) {
+      if (withSelf) push(i, i, Math.min(i, lastOrdinal));
+      for (let j = i + 1; j < recordCount; j += 1) {
+        push(i, j, Math.min(i, lastOrdinal));
+        push(j, i, Math.min(i, lastOrdinal));
+      }
+    }
+  };
+  if (mode === 'orthogroup') {
+    pushPairs(true);
+    return Object.freeze(specs);
+  }
+  if (collinearInferOrthogroups !== false) {
+    for (let i = 0; i < recordCount; i += 1) push(i, i, Math.min(i, lastOrdinal));
+  }
+  if (collinearSearchScope === 'all') {
+    pushPairs(false);
+  } else {
+    edges.forEach((edge) => {
+      push(edge.queryIndex, edge.subjectIndex, edge.ordinal);
+      push(edge.subjectIndex, edge.queryIndex, edge.ordinal);
+    });
+  }
+  return Object.freeze(specs);
 };

@@ -1,0 +1,25 @@
+{
+  "sourceCommit": "4556e04e929a4a85ad28d1833ce7304bd764881c",
+  "history": "first-parent main",
+  "writer": "gbdraw/linear.py --session_output (CLI sidecar) on origin/main, run from `git archive 4556e04e gbdraw` with PYTHONPATH set to the archive",
+  "command": "python -m gbdraw.cli linear --gbk R2c.gb R3c.gb -b R2c_R3c.tsv --reverse_complement 0 --reverse_complement 1 -o main-frame -f svg --session_output main-frame.gbdraw-session.json",
+  "records": "tests/fixtures/web_comparison_shared_block.gb (sha256 d869dd7d849540646125c3eed4ae2a95d84b8a0355563c0f8df546f619e94d0c) split into its two LOCUS entries R2c.gb and R3c.gb",
+  "table": "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t3000\t2001\t0.0\t1847 (main read -b after --reverse_complement: R3c search-frame 1..1000 is display 3000..2001)",
+  "sha256": "f9d18e61dc758b37f5ea829a94a2d7230b7ba992ba5eedb59b63c1979e912ad8",
+  "compression": "gzip -n -9",
+  "sessionVersion": 42,
+  "requestSchema": 7,
+  "mainRibbonSpans": [
+    [
+      [
+        1334.0,
+        2000.0
+      ],
+      [
+        1334.0,
+        2000.0
+      ]
+    ]
+  ],
+  "mainRibbonSpansSource": "query and subject x spans of each data-gbdraw-pairwise-match-id path in main-frame.svg written by the same main run"
+}

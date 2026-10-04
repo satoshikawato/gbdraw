@@ -371,7 +371,7 @@ def test_first_circular_flow_uses_accessible_real_actions_without_state_shortcut
         'get_by_label("Separate Strands", exact=True)',
         'get_by_label("Hide GC Content", exact=True)',
         'get_by_label("Hide GC Skew", exact=True)',
-        'get_by_label("Legend Position", exact=True)',
+        'get_by_label("Legend position", exact=True)',
         'get_by_label("Label Mode", exact=True)',
         'get_by_label("Priority File (TSV)", exact=True).set_input_files',
         'get_by_role("button", name="SVG", exact=True)',
@@ -433,16 +433,16 @@ def test_first_linear_flow_uses_accessible_real_actions_without_state_shortcuts(
     for required in (
         'get_by_role("button", name="Linear", exact=True)',
         'get_by_role("radio", name="GenBank", exact=True)',
-        'get_by_role("status")',
-        '"Current: No comparison"',
-        'get_by_label("GenBank File", exact=True).set_input_files',
+        'name="Set no comparison", exact=True',
+        'to_have_attribute("aria-pressed", "true")',
+        'get_by_label("GenBank / DDBJ File", exact=True).set_input_files',
         'get_by_label("Output Prefix", exact=True)',
         'get_by_label("Track Layout", exact=True)',
         'get_by_label("Separate Strands", exact=True)',
         'get_by_label("Labels", exact=True)',
         'get_by_label("Show Labels", exact=True)',
         'get_by_label("Priority File (TSV)", exact=True).set_input_files',
-        'get_by_label("Legend Position", exact=True)',
+        'get_by_label("Legend position", exact=True)',
         'get_by_label("Axis & Scale", exact=True)',
         'get_by_label("Show Coordinate Scale (Linear)", exact=True)',
         'get_by_label("Linear scale style", exact=True)',
@@ -485,9 +485,9 @@ def test_gui_inputs_flow_uses_whole_files_real_actions_and_actual_error() -> Non
         'get_by_role("button", name="Linear", exact=True)',
         'get_by_role("radio", name="GenBank", exact=True)',
         'name="GFF3 + FASTA", exact=True',
-        'get_by_role("status")',
-        '"Current: No comparison"',
-        'get_by_label("GenBank File", exact=True).set_input_files',
+        'name="Set no comparison", exact=True',
+        'to_have_attribute("aria-pressed", "true")',
+        'get_by_label("GenBank / DDBJ File", exact=True).set_input_files',
         'get_by_label("GFF3", exact=True).set_input_files',
         'get_by_label("FASTA", exact=True).set_input_files',
         'get_by_role("button", name="SVG", exact=True)',
@@ -501,8 +501,8 @@ def test_gui_inputs_flow_uses_whole_files_real_actions_and_actual_error() -> Non
         assert required in source
 
     for message_part in (
-        "No matching FASTA record found for GFF record NC_001416.1.",
-        "Please ensure that all GFF records have corresponding FASTA entries.",
+        "Supply a matching FASTA input for each GFF3 input.",
+        "Ensure every GFF3 record has a matching FASTA entry.",
     ):
         assert message_part in source
 
@@ -540,10 +540,10 @@ def test_gui_circular_layout_flow_uses_complete_records_and_public_controls() ->
         'get_by_label("Min Radius Ratio", exact=True)',
         'get_by_label("Column Gap Ratio", exact=True)',
         'get_by_label("Row Gap Ratio", exact=True)',
-        'get_by_label("Title & Legend", exact=True)',
-        'get_by_label("Plot Title", exact=True)',
+        'get_by_label("Titles and Record Labels", exact=True)',
+        'get_by_role("textbox", name="Plot Title", exact=True)',
         'get_by_label("Plot Title Position", exact=True)',
-        'get_by_label("Definition Font Size", exact=True)',
+        'get_by_label("Default font size", exact=True)',
         '"Keep Full Definition with Plot Title"',
         'get_by_role("button", name="SVG", exact=True)',
         "page.expect_download",
@@ -609,11 +609,11 @@ def test_gui_losatn_flow_runs_the_real_serial_one_thread_journey() -> None:
 
     for required in (
         'get_by_role("button", name="Linear", exact=True)',
-        'get_by_role("status")',
-        '"Current: No comparison"',
+        'name="Set no comparison", exact=True',
+        'to_have_attribute("aria-pressed", "true")',
         '"button", name="Add sequence", exact=True',
-        'expect(add_sequence).to_have_count(2)',
-        'add_sequence.first.click()',
+        'expect(add_sequence).to_have_count(1)',
+        'add_sequence.click()',
         'get_by_test_id("linear-genbank-1").set_input_files',
         'get_by_test_id("linear-genbank-2").set_input_files',
         'name="Set all adjacent comparisons", exact=True',
@@ -767,6 +767,7 @@ def test_screenshot_comparison_allows_only_bounded_raster_noise(tmp_path: Path) 
     tolerated_path = tmp_path / "tolerated.png"
     excessive_count_path = tmp_path / "excessive-count.png"
     excessive_delta_path = tmp_path / "excessive-delta.png"
+    edge_noise_path = tmp_path / "edge-noise.png"
     expected = Image.new("RGB", (120, 1), (100, 100, 100))
     expected.save(expected_path)
     assert run_all._images_match(expected_path, expected_path)
@@ -785,8 +786,18 @@ def test_screenshot_comparison_allows_only_bounded_raster_noise(tmp_path: Path) 
     excessive_count.save(excessive_count_path)
     assert not run_all._images_match(expected_path, excessive_count_path)
 
+    # Anti-aliased rounded corners and shadows differ by up to 9 levels.
+    edge_noise = expected.copy()
+    for x in range(run_all.MAX_RASTER_NOISE_PIXELS):
+        edge_noise.putpixel((x, 0), (109, 100, 100))
+    edge_noise.save(edge_noise_path)
+    assert run_all.MAX_RASTER_CHANNEL_DELTA >= 9
+    assert run_all._images_match(expected_path, edge_noise_path)
+
     excessive_delta = expected.copy()
-    excessive_delta.putpixel((0, 0), (102, 100, 100))
+    excessive_delta.putpixel(
+        (0, 0), (100 + run_all.MAX_RASTER_CHANNEL_DELTA + 1, 100, 100)
+    )
     excessive_delta.save(excessive_delta_path)
     assert not run_all._images_match(expected_path, excessive_delta_path)
 
@@ -847,6 +858,64 @@ def test_complex_svg_screenshot_comparison_is_bounded_to_the_preview(
         expected_path,
         diagram_change_path,
         allow_complex_svg_raster_noise=True,
+    )
+
+
+def test_complex_svg_raster_cases_cover_the_documented_noisy_images() -> None:
+    from docs.capture import run_all
+
+    assert set(run_all.COMPLEX_SVG_RASTER_CASES) == {
+        ("T-GUI-05", "02-first-diagram.png"),
+        ("T-GUI-06", "02-first-diagram.png"),
+        ("T-GUI-10", "presentation-result.png"),
+        ("T-GUI-12", "track-result.png"),
+        ("H-GUI-07", "group-settings.png"),
+        ("H-GUI-11", "style-result.png"),
+        ("H-GUI-15", "exported-result.png"),
+    }
+    for scenario_id, name in run_all.COMPLEX_SVG_RASTER_CASES:
+        assert name in run_all.screenshot_paths_for(scenario_id)
+
+
+def test_complex_svg_canvas_region_allows_panned_diagrams_only(
+    tmp_path: Path,
+) -> None:
+    from docs.capture import run_all
+
+    expected_path = tmp_path / "expected.png"
+    panned_path = tmp_path / "panned.png"
+    chrome_path = tmp_path / "chrome.png"
+    expected = Image.new("RGB", (1440, 900), "white")
+    expected.save(expected_path)
+
+    panned = expected.copy()
+    for x in range(400, 408):
+        panned.putpixel((x, 700), (0, 0, 0))
+    panned.save(panned_path)
+    canvas_region = run_all.COMPLEX_SVG_RASTER_CASES[
+        ("H-GUI-15", "exported-result.png")
+    ]
+    assert not run_all._images_match(
+        expected_path,
+        panned_path,
+        allow_complex_svg_raster_noise=True,
+    )
+    assert run_all._images_match(
+        expected_path,
+        panned_path,
+        allow_complex_svg_raster_noise=True,
+        complex_svg_region=canvas_region,
+    )
+
+    chrome = expected.copy()
+    for x in range(400, 408):
+        chrome.putpixel((x, 150), (0, 0, 0))
+    chrome.save(chrome_path)
+    assert not run_all._images_match(
+        expected_path,
+        chrome_path,
+        allow_complex_svg_raster_noise=True,
+        complex_svg_region=canvas_region,
     )
 
 
@@ -1081,7 +1150,7 @@ def test_circular_tutorial_follows_steps_and_defers_related_links() -> None:
         "| Hide GC Skew | Off |",
         "| Label Mode | Out |",
         "| Priority File (TSV) | `cds_gene_qualifier_priority.tsv` |",
-        "| Legend Position | Right |",
+        "| Legend position | Right |",
         "`human_mitochondrion.svg`",
     ):
         assert value in tutorial
@@ -1121,7 +1190,7 @@ def test_linear_tutorial_shows_the_step_two_result_and_defers_related_links() ->
         "| Priority File (TSV) | `cds_gene_qualifier_priority.tsv` |",
         "| Show Coordinate Scale | On |",
         "| Scale Style | Ruler (Ticks) |",
-        "| Legend Position | Left |",
+        "| Legend position | Left |",
         "`lambda_linear.svg`",
     ):
         assert value in tutorial
@@ -1158,10 +1227,10 @@ def test_gui_losatn_tutorial_preserves_the_approved_five_step_journey() -> None:
     for value in (
         "`NC_001416.1` (48,502 bp)",
         "`NC_042057.1` (42,925 bp)",
-        "| Advanced comparison and layout | Execution | Serial |",
-        "| Advanced comparison and layout | Total threads | 1 |",
-        "| Advanced comparison and layout | Parallel runs | 1 run |",
-        "| Advanced comparison and layout | Threads per run | Fixed at 1 |",
+        "| Settings / Runtime and reproducibility | Execution | Serial |",
+        "| Settings / Runtime and reproducibility | Total threads | 1 |",
+        "| Settings / Runtime and reproducibility | Parallel runs | 1 run |",
+        "| Settings / Runtime and reproducibility | Threads per run | Fixed at 1 |",
         "| Settings | LOSAT Mode | LOSATN |",
         "| Settings | LOSATN task | `megablast` |",
         "| Settings / Comparison appearance | Match height | `120` |",
@@ -1225,3 +1294,32 @@ def test_capture_readme_records_versions_regeneration_and_download_checks() -> N
         assert f"--scenario {scenario_id}" in readme
     assert "--tier extended" in readme
     assert "--check" in readme
+
+
+def test_recipe_subprocesses_import_the_checkout_that_runs_the_tool() -> None:
+    import os
+    import re
+
+    from docs.recipes import _scenario_support, run_cli_scenarios
+
+    root = str(Path(__file__).resolve().parents[1])
+    assert str(_scenario_support.REPO_ROOT) == root
+
+    # Existing entries stay, in order, after the repository root (no duplicates).
+    other = os.pathsep.join(["/elsewhere/a", root, "/elsewhere/b"])
+    environment = _scenario_support.checkout_subprocess_environment(
+        {"PYTHONPATH": other, "KEEP": "1"}
+    )
+    assert environment["PYTHONPATH"].split(os.pathsep) == [root, "/elsewhere/a", "/elsewhere/b"]
+    assert environment["KEEP"] == "1"
+    assert _scenario_support.checkout_subprocess_environment({})["PYTHONPATH"] == root
+
+    # The default base is the process environment, which is not modified.
+    before = os.environ.get("PYTHONPATH")
+    assert _scenario_support.checkout_subprocess_environment()["PYTHONPATH"].split(os.pathsep)[0] == root
+    assert os.environ.get("PYTHONPATH") == before
+
+    # The CLI recipe runner builds its subprocess environment through the helper.
+    source = Path(run_cli_scenarios.__file__).read_text(encoding="utf-8")
+    assert source.count("environment = checkout_subprocess_environment()") == 1
+    assert not re.search(r"os\.environ", source)

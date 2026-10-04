@@ -408,7 +408,7 @@ def test_interactive_svg_maps_biological_id_to_actual_reversed_dom_path() -> Non
       fill="#54bcf8" d="M 1 1 L 2 2" /></svg>"""
     enriched = enrich_svg(source, context)
     payload = _metadata(enriched)
-    assert payload["schema"] == 3
+    assert payload["schema"] == 4
     item = payload["items"][0]
 
     biological = next(

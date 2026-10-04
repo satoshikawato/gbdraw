@@ -1,0 +1,42 @@
+{
+  "scope": "Final source local review; not human approval",
+  "production": {
+    "baselineReviewReceipt": "historical-review-ecb-from-transcript.json; transcript recovery qualified by byte-exact restoration before new edits",
+    "newEncoding": "One encoding per canonical resource; byte-identical output; bounded binary intermediary has no claimed CPU speedup",
+    "newUI": "Existing unique group owner remains; absent aliases invalidate; one computed display-row list with original formatter and source click identity; existing keyed Vue list memo replaces unnecessary row work",
+    "currentChangedRuntimeSinceBaseline": [
+      "gbdraw/web/index.html",
+      "gbdraw/web/js/app/app-setup.js",
+      "gbdraw/web/js/app/orthogroups.js",
+      "gbdraw/web/js/app/right-drawer.js"
+    ],
+    "supersededTemporaryPathsRemoved": [
+      "json-writer module and experimental JSON resource test",
+      "per-row orthogroupRowMemo helper"
+    ],
+    "noNewPersistedStateRendererOrProductChoice": true,
+    "trustedPolicy": "web-policy-final-current.log: PASS / Review REQUIRED"
+  },
+  "tests": {
+    "mappedBodyReferences": 14,
+    "mappedBodiesEqual": true,
+    "scope": "New real Vue invalidation/reuse test and existing unmodified identity assertions; row browser test covers displayed fields, opaque nested metadata, selection, replacement and pre-paint click binding",
+    "unmappedAdapterMigration": "Current trusted dev returns finite normalized error envelope; assert hook executed plus code/stage and identical rollback owner. No timeout/budget changed.",
+    "partialSourceFailuresRetained": "display-row-preparation-failure.json; actual 2 PASS / 3 FAIL before template completion"
+  },
+  "docsEvidence": {
+    "scope": "Dated recovery/computation/resume and final receipts; historical raw loss and FAILs retained; original and reconstructed fixture separated",
+    "notComplete": true
+  },
+  "generated": {
+    "wheelSha256": "fd6ff84920a6e808e6237a843ee75268b6659dfcae20efee95ea9d565bd88282",
+    "pythonSources": 215,
+    "allSourceEqual": true,
+    "ignoredAndNotCommitted": true,
+    "referencesAndSocialPreviewTouched": false,
+    "vendorOrCacheBustChanged": false
+  },
+  "nativeTermination": "Final observer captures a page crash at canonical construction. Exact native exit reason unavailable in this observer; retain historical V8 OOM separately.",
+  "externalOperationsPerformed": false,
+  "requiredHumanReview": "OUTSTANDING"
+}

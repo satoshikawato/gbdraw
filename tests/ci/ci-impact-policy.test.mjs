@@ -62,6 +62,9 @@ test('root Markdown and docs tree are documentation', () => {
   assert.equal(classifyPath('README.md').impact, 'documentation');
   assert.equal(classifyPath('NEW_PLAN.md').impact, 'documentation');
   assert.equal(classifyPath('docs/internal/policy.md').impact, 'documentation');
+  assert.equal(classifyPath('docs/TUTORIALS/1_Intro.md').impact, 'documentation');
+  assert.equal(classifyPath('docs/internal/PRODUCT_DECISION_PACKET_TEMPLATE.md').impact, 'documentation');
+  assert.equal(classifyPath('docs/internal/PRODUCT_IMPACT_RATCHET_FINAL_ACCEPTANCE_2026-08-27.md').impact, 'documentation');
   assert.equal(classifyPath('nested/README.md').impact, 'full');
   assert.equal(classifyPath('README.MD').impact, 'full');
 });
@@ -77,7 +80,7 @@ test('subsystem paths classify without making unknown production paths selective
     ['gbdraw/web/js/services/losat.js', 'losat-integration'],
     ['tests/test_regression.py', 'tests-only'],
     ['.github/workflows/test.yml', 'ci-only'],
-    ['docs/internal/PRODUCT_IMPACT_RATCHET.md', 'ci-only'],
+    ['docs/internal/PRODUCT_IMPACT_RATCHET.md', 'policy-documentation'],
     ['pyproject.toml', 'packaging'],
     ['package-lock.json', 'packaging'],
     ['tools/helper.mjs', 'full'],
@@ -85,6 +88,19 @@ test('subsystem paths classify without making unknown production paths selective
     ['gbdraw/web/new-runtime.bin', 'full'],
     ['future/unknown.file', 'full']
   ]) assert.equal(classifyPath(path).impact, impact, path);
+});
+
+test('only exact normative policy documents receive the policy-documentation route', () => {
+  for (const path of [
+    'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
+    'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md',
+    'docs/internal/PRODUCT_IMPACT_RATCHET.md',
+    'docs/internal/SELECTIVE_CI.md',
+    'docs/internal/WEB_CHANGE_POLICY.md'
+  ]) {
+    assert.equal(classifyPath(path).impact, 'policy-documentation', path);
+  }
+  assert.equal(classifyPath('docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT_COPY.md').impact, 'documentation');
 });
 
 test('mixed changes preserve the capability union', () => {
@@ -144,7 +160,25 @@ test('profile job registries are exact and centralized', () => {
     profile: 'pr', impact: 'documentation', decision: 'selective'
   }), ['recipes-standard']);
   assert.deepEqual(requiredJobsFor({
+    profile: 'pr', impact: 'policy-documentation', decision: 'selective'
+  }), ['web-change-budget']);
+  assert.deepEqual(requiredJobsFor({
+    profile: 'dev', impact: 'policy-documentation', decision: 'selective'
+  }), ['web-change-budget']);
+  assert.deepEqual(requiredJobsFor({
     profile: 'pr', impact: 'full', decision: 'full'
+  }), [
+    'web-change-budget',
+    'core-pr',
+    'recipes-standard',
+    'gallery',
+    'lint',
+    'web-contracts-pr',
+    'web-pr-smoke',
+    'playwright-functional'
+  ]);
+  assert.deepEqual(requiredJobsFor({
+    profile: 'pr', impact: 'ci-only', decision: 'full'
   }), [
     'web-change-budget',
     'core-pr',
@@ -161,7 +195,8 @@ test('profile job registries are exact and centralized', () => {
     'gallery',
     'lint',
     'web-contracts-pr',
-    'web-pr-smoke'
+    'web-pr-smoke',
+    'playwright-functional'
   ]);
   assert.deepEqual(knownJobsFor('dev'), [
     'web-change-budget',
@@ -180,6 +215,9 @@ test('profile job registries are exact and centralized', () => {
   }), []);
   assert.deepEqual(requiredJobsFor({
     profile: 'gallery', impact: 'documentation', decision: 'selective'
+  }), []);
+  assert.deepEqual(requiredJobsFor({
+    profile: 'gallery', impact: 'policy-documentation', decision: 'selective'
   }), []);
   assert.deepEqual(requiredJobsFor({
     profile: 'gallery', impact: 'full', decision: 'full'
@@ -226,16 +264,17 @@ const jobsForPaths = (changes) => {
 test('representative PR routes require the changed subsystem and cross-layer smoke', () => {
   for (const [path, expected] of [
     ['README.md', ['recipes-standard']],
-    ['gbdraw/render/drawers/linear/features.py', ['web-change-budget', 'core-pr', 'lint', 'web-contracts-pr', 'web-pr-smoke']],
-    ['gbdraw/web/js/app/label-editor.js', ['web-change-budget', 'web-contracts-pr', 'web-pr-smoke']],
-    ['gbdraw/web/js/services/session-request.js', ['web-change-budget', 'core-pr', 'recipes-standard', 'lint', 'web-contracts-pr', 'web-pr-smoke']],
-    ['gbdraw/web/gallery/examples.json', ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke']]
+    ['gbdraw/render/drawers/linear/features.py', ['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']],
+    ['gbdraw/web/js/app/label-editor.js', ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']],
+    ['gbdraw/web/js/services/session-request.js', ['web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']],
+    ['gbdraw/web/gallery/examples.json', ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']],
+    ['gbdraw/web/js/services/losat.js', ['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']]
   ]) assert.deepEqual(jobsForPaths([{ status: 'M', paths: [path] }]), expected, path);
 });
 
 test('mixed capabilities and both rename endpoints contribute independent required jobs', () => {
   const paths = ['gbdraw/render/drawers/linear/features.py', 'gbdraw/web/gallery/examples.json'];
-  const expected = ['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke'];
+  const expected = ['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional'];
   for (const changes of [
     paths.map((path) => ({ status: 'M', paths: [path] })),
     [{ status: 'R100', paths }],
@@ -246,10 +285,66 @@ test('mixed capabilities and both rename endpoints contribute independent requir
   assert.throws(() => jobsForPaths([{ status: 'D', paths: ['gbdraw/unknown.py'] }]), /full coverage/);
 });
 
+test('documentation-only edits, copies, renames, and deletes use only documentation jobs', () => {
+  const changes = [
+    { status: 'M', paths: ['docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md'] },
+    { status: 'M', paths: ['docs/TUTORIALS/1_Intro.md'] },
+    { status: 'R100', paths: ['docs/old.md', 'docs/new.md'] },
+    { status: 'D', paths: ['docs/retired.md'] }
+  ];
+  assert.deepEqual(jobsForPaths(changes), ['web-change-budget', 'recipes-standard']);
+  assert.deepEqual(jobsForPaths([changes[0]]), ['web-change-budget']);
+  assert.deepEqual(jobsForPaths([changes[1]]), ['recipes-standard']);
+  assert.deepEqual(jobsForPaths([{
+    status: 'R100',
+    paths: ['docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md', 'docs/internal/retired-contract.md']
+  }]), ['web-change-budget', 'recipes-standard']);
+});
+
 test('control-plane, dependency, unknown and test-only changes cannot select partial coverage', () => {
   for (const impact of ['ci-only', 'packaging', 'full', 'tests-only']) {
     assert.throws(() => requiredJobsFor({ profile: 'pr', impact, decision: 'selective' }), /full coverage/);
-    assert.deepEqual(requiredJobsFor({ profile: 'pr', impact, decision: 'full' }), knownJobsFor('pr'));
+    const fullTier = knownJobsFor('pr').filter((job) => job !== 'playwright-functional');
+    assert.deepEqual(
+      requiredJobsFor({ profile: 'pr', impact, decision: 'full' }),
+      ['full', 'tests-only'].includes(impact) ? knownJobsFor('pr') : fullTier,
+      impact
+    );
+  }
+});
+
+test('functional Playwright joins PR plans only through runtime-facing capabilities', () => {
+  const functional = ['web-runtime', 'session-persistence', 'gallery', 'losat-integration', 'tests-only', 'full'];
+  for (const capability of [
+    'metadata', 'documentation', 'policy-documentation', 'tests-only', 'python-core', 'renderer',
+    'web-runtime', 'session-persistence', 'gallery', 'losat-integration', 'packaging', 'ci-only', 'full'
+  ]) {
+    const expected = functional.includes(capability);
+    // Evidence fallbacks and the architecture-change label use the full decision.
+    assert.equal(
+      requiredJobsFor({ profile: 'pr', impact: capability, decision: 'full' }).includes('playwright-functional'),
+      expected,
+      `${capability} full`
+    );
+    if (!['tests-only', 'packaging', 'ci-only', 'full'].includes(capability)) {
+      assert.equal(
+        requiredJobsFor({ profile: 'pr', impact: capability, decision: 'selective' }).includes('playwright-functional'),
+        expected,
+        `${capability} selective`
+      );
+    }
+  }
+  for (const [capabilities, expected] of [
+    [['documentation', 'ci-only'], false],
+    [['python-core', 'renderer', 'packaging'], false],
+    [['web-runtime', 'ci-only'], true],
+    [['documentation', 'gallery'], true]
+  ]) {
+    const plan = { profile: 'pr', impact: capabilities.at(-1), capabilities, decision: 'full' };
+    assert.equal(requiredJobsFor(plan).includes('playwright-functional'), expected, capabilities.join('+'));
+  }
+  for (const profile of ['dev', 'release']) {
+    assert.ok(requiredJobsFor({ profile, impact: 'ci-only', decision: 'full' }).includes('playwright-functional'), profile);
   }
 });
 
@@ -261,11 +356,12 @@ test('release retains every dev functional job plus supported-version and slow a
 
 test('capability tampering cannot drop an independent contribution', () => {
   const combined = selectivePlan({ impact: 'web-runtime', capabilities: ['documentation', 'web-runtime'] });
-  assert.deepEqual(combined.requiredJobs, ['web-change-budget', 'recipes-standard', 'web-contracts-pr', 'web-pr-smoke']);
+  assert.deepEqual(combined.requiredJobs, ['web-change-budget', 'recipes-standard', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']);
   for (const capabilities of [[], ['web-runtime', 'documentation'], ['documentation', 'documentation'], ['future']]) {
     assert.throws(() => validateImpactPlan({ ...combined, capabilities }), /Capabilities/);
   }
-  assert.throws(() => validateImpactPlan({ ...combined, requiredJobs: ['web-change-budget', 'web-contracts-pr', 'web-pr-smoke'] }), /required jobs/);
+  assert.throws(() => validateImpactPlan({ ...combined, requiredJobs: ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional'] }), /required jobs/);
+  assert.throws(() => validateImpactPlan({ ...combined, requiredJobs: ['web-change-budget', 'recipes-standard', 'gallery', 'web-contracts-pr', 'web-pr-smoke'] }), /required jobs/);
 });
 
 
@@ -274,12 +370,46 @@ test('ordinary Web changes stay selective when accompanied by their regression t
     { status: 'M', paths: ['gbdraw/web/js/app/label-editor.js'] },
     { status: 'A', paths: ['tests/web/label-editor.test.mjs'] },
     { status: 'M', paths: ['tests/web/right-drawer.playwright.spec.js'] }
-  ]), ['web-change-budget', 'web-contracts-pr', 'web-pr-smoke']);
+  ]), ['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']);
   for (const path of ['tests/web/session-request.test.mjs', 'tests/web/contracts/current-session-lazy-materialization.playwright.spec.js']) {
     assert.equal(classifyPath(path).impact, 'session-persistence', path);
     assert.ok(jobsForPaths([{ status: 'M', paths: [path] }]).includes('core-pr'));
   }
   for (const path of ['tests/conftest.py', 'tests/test_inputs/example.gbk', 'tests/web/architecture-ratchet-fixtures.test.mjs']) {
     assert.throws(() => jobsForPaths([{ status: 'M', paths: [path] }]), /full coverage/, path);
+  }
+});
+
+test('documentation-only PR basis requires exact documentary scope and no inherited evidence', () => {
+  const documentary = selectivePlan({ basis: 'DOCUMENTATION_ONLY_PR', inheritedEvidence: null });
+  assert.equal(validateImpactPlan(documentary), true);
+  assert.deepEqual(documentary.requiredJobs, ['recipes-standard']);
+  for (const impact of ['metadata', 'web-runtime', 'ci-only', 'packaging', 'full']) {
+    assert.throws(() => validateImpactPlan({ ...documentary, impact, capabilities: [impact] }),
+      { code: 'BASIS_DECISION_MISMATCH' });
+  }
+  for (const profile of ['dev', 'gallery', 'release']) {
+    assert.throws(() => validateImpactPlan({ ...documentary, profile }),
+      { code: 'BASIS_DECISION_MISMATCH' });
+  }
+  assert.throws(() => validateImpactPlan({ ...documentary, decision: 'full' }),
+    { code: 'BASIS_DECISION_MISMATCH' });
+  assert.throws(() => validateImpactPlan({ ...documentary, inheritedEvidence: evidence() }),
+    { code: 'UNEXPECTED_EVIDENCE' });
+  assert.throws(() => validateImpactPlan({ ...documentary, requiredJobs: [] }),
+    { code: 'REQUIRED_JOBS_MISMATCH' });
+  assert.throws(() => selectivePlan({ impact: 'web-runtime', inheritedEvidence: null }),
+    { code: 'INVALID_EVIDENCE_SCHEMA' });
+});
+
+test('every selective PR smoke route also requires the Gallery parity owner', () => {
+  for (const impact of ['python-core', 'renderer', 'web-runtime', 'session-persistence', 'gallery', 'losat-integration']) {
+    const requiredJobs = requiredJobsFor({ profile: 'pr', impact, decision: 'selective' });
+    assert.ok(requiredJobs.includes('web-pr-smoke'), impact);
+    assert.ok(requiredJobs.includes('gallery'), impact);
+    const candidate = selectivePlan({ impact });
+    assert.throws(() => validateImpactPlan({
+      ...candidate, requiredJobs: requiredJobs.filter((job) => job !== 'gallery')
+    }), /required jobs/, impact);
   }
 });

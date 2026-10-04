@@ -1,0 +1,30 @@
+{
+  "command": [
+    "npx",
+    "--no-install",
+    "playwright",
+    "test",
+    "--config=/tmp/issue597-S05-resume2-20260927-t65_9osr/owned.functional.config.cjs",
+    "--workers=1",
+    "--retries=0",
+    "--reporter=list,/tmp/issue597-S05-resume2-20260927-t65_9osr/evidence-reporter-v2.cjs",
+    "--output=/tmp/issue597-S05-resume2-20260927-t65_9osr/retry-probe-final/browser",
+    "tests/web/contracts/s05-owned-retry-probe.playwright.spec.js",
+    "--grep",
+    "evidence: held real reflow"
+  ],
+  "cwd": "/tmp/issue597-S05-resume2-20260927-t65_9osr/s05-view",
+  "environment": {
+    "GBDRAW_REPO": "/tmp/issue597-S05-resume2-20260927-t65_9osr/s05-view",
+    "GBDRAW_WEB_TEST_PORT": "39047",
+    "S05_EVIDENCE_REPORT": "/tmp/issue597-S05-resume2-20260927-t65_9osr/retry-probe-final/attachments"
+  },
+  "startedUtc": "2026-09-27T09:46:02Z",
+  "sourceHead": "ee6b6207845cc861ae428b4890a091509e1736b6",
+  "mappedBodySha256": "e9521f9b6fadd605712d56d94f9b22ace4d9b783956ebf7d998c7b8871c2745b",
+  "configSha256": "cbddd33bee4edcdc3de70e03e036e06108be47abed53d413ead7c80bc51074f1",
+  "ownership": "Fresh port and reuseExistingServer=false; context belongs to this invocation.",
+  "exit": 0,
+  "finishedUtc": "2026-09-27T09:46:17Z",
+  "logSha256": "e457bd45fd89368b4009a6260bada3de79d14505f442ef2be00aa5e9b937b252"
+}

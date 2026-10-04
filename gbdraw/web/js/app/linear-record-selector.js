@@ -1,3 +1,5 @@
+import { normalizeUserFacingError } from '../services/error-normalization.js';
+import { discoveryErrorIsFinal } from './record-discovery.js';
 import { buildDisambiguatedRecordEntries, formatRecordLength } from './record-options.js';
 
 export const AUTOMATIC_RECORD_OPTION_LABEL = 'Automatic (no explicit selector)';
@@ -94,12 +96,20 @@ export const createLinearRecordSelector = ({
     selectorStateByUid[uid] = {
       status: nextState.status,
       records: Array.isArray(nextState.records) ? nextState.records : [],
-      error: String(nextState.error || ''),
+      error: nextState.error || '',
       inputType: String(nextState.inputType || ''),
       primaryFile: nextState.primaryFile || null,
       pairedFile: nextState.pairedFile || null
     };
   };
+
+  // The settled read of these exact source files on any row: its records, or
+  // an error the reader reported for those bytes. A refresh reuses it.
+  const settledStateFor = (inputType, primaryFile, pairedFile) => Object.values(selectorStateByUid)
+    .find((stored) => (
+      stored.inputType === inputType && stored.primaryFile === primaryFile && stored.pairedFile === pairedFile
+      && (stored.status === 'ready' || (stored.status === 'error' && discoveryErrorIsFinal(stored.error)))
+    )) || null;
 
   const purgeInactiveState = () => {
     const activeUids = new Set(state.linearSeqs.map(uidFor).filter(Boolean));
@@ -151,31 +161,48 @@ export const createLinearRecordSelector = ({
         replaceState(uid, { ...emptySelectorState(), inputType, primaryFile, pairedFile });
         continue;
       }
-      replaceState(uid, {
-        status: 'loading', records: [], error: '', inputType, primaryFile, pairedFile
-      });
+      if (!settledStateFor(inputType, primaryFile, pairedFile)) {
+        replaceState(uid, {
+          status: 'loading', records: [], error: '', inputType, primaryFile, pairedFile
+        });
+      }
       targets.push({ uid, primaryFile, pairedFile });
     }
     for (const { uid, primaryFile, pairedFile } of targets) {
+      const settled = settledStateFor(inputType, primaryFile, pairedFile);
+      if (settled?.status === 'error') {
+        replaceState(uid, settled);
+        continue;
+      }
       try {
-        const records = await recordReader({
+        const records = settled ? settled.records : await recordReader({
           inputType,
           primaryFile,
           pairedFile,
           temporaryPathPrefix: `/record-selector-${sanitizePathSegment(uid)}-${generation}`
         });
         if (!isCurrentRequest({ generation, uid, primaryFile, pairedFile, inputType })) return;
+        const busy = state.sessionOperationAvailability?.();
+        if (busy) {
+          replaceState(uid, { status: 'deferred', records: [], error: '', inputType, primaryFile, pairedFile });
+          return busy;
+        }
         replaceState(uid, {
           status: 'ready', records, error: '', inputType, primaryFile, pairedFile
         });
         if (onRecordsDiscovered?.({ uid, records }) === true) return true;
       } catch (error) {
         if (!isCurrentRequest({ generation, uid, primaryFile, pairedFile, inputType })) return;
-        logger.warn?.(`Failed to read records for ${uid}:`, error);
+        const busy = state.sessionOperationAvailability?.();
+        if (busy) {
+          replaceState(uid, { status: 'deferred', records: [], error: '', inputType, primaryFile, pairedFile });
+          return busy;
+        }
+        logger.warn?.('Input record discovery failed.', normalizeUserFacingError(error));
         replaceState(uid, {
           status: 'error',
           records: [],
-          error: 'Could not read records from this file.',
+          error: normalizeUserFacingError(error, { operation: inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', stage: 'helper' }),
           inputType,
           primaryFile,
           pairedFile
@@ -185,6 +212,8 @@ export const createLinearRecordSelector = ({
   };
 
   const refresh = (options = {}) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const fingerprint = refreshFingerprint(options);
     if (activeRefresh && sameFingerprint(activeRefresh.fingerprint, fingerprint)) {
       return activeRefresh.promise;
@@ -221,7 +250,8 @@ export const createLinearRecordSelector = ({
   const isDisabled = (seq) => stateFor(seq).status !== 'ready';
   const statusFor = (seq) => stateFor(seq).status;
   const recordsFor = (seq) => stateFor(seq).records.slice();
-  const errorFor = (seq) => stateFor(seq).error;
+  const errorModelFor = (seq) => stateFor(seq).error;
+  const errorFor = (seq) => errorModelFor(seq)?.summary || errorModelFor(seq);
   const warningFor = (seq) => {
     const selectorState = stateFor(seq);
     const currentValue = currentSelectorValue(seq);
@@ -239,6 +269,7 @@ export const createLinearRecordSelector = ({
     recordsFor,
     isDisabled,
     errorFor,
+    errorModelFor,
     warningFor
   };
 };

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import wraps
 from inspect import Parameter, signature
 from os import PathLike
@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import Literal, Mapping, Sequence, TypeAlias
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from Bio import SeqIO  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
 
@@ -29,8 +28,9 @@ from gbdraw.analysis.protein_colinearity import (
     OrthogroupResult,
     OrthogroupGraphResult,
 )
-from gbdraw.annotations import AnnotationOptions
+from gbdraw.annotations import AnnotationOptions, ResolutionWarning
 from gbdraw.api.io import load_gbks as _load_gbks, load_gff_fasta as _load_gff_fasta
+from gbdraw.io.comparison_sequences import read_comparison_sequence_records
 from gbdraw.api.options import (
     CircularDiagramOptions as _CircularDiagramOptions,
     CircularMultiRecordOptions as _CircularLayout,
@@ -39,8 +39,14 @@ from gbdraw.api.options import (
     ColorOptions as _ColorOptions,
     LinearDiagramOptions as _LinearDiagramOptions,
     LinearMultiRecordOptions as _LinearLayout,
+    LinearRecordTranslation as _LinearRecordTranslation,
     LinearOutputOptions as _LinearOutputOptions,
     LinearRequestTrackOptions as _LinearRequestTrackOptions,
+    LosatProgram,
+    LosatnTask,
+    LosatRuntimeOptions as _LosatRuntimeOptions,
+    LosatSearchOptions as _LosatSearchOptions,
+    LosatpMode,
     _validate_center_reserved_radius,
     _validate_track_configuration,
 )
@@ -61,6 +67,10 @@ from gbdraw.api.render import render_to_bytes
 from gbdraw.exceptions import ExportError, ValidationError
 from gbdraw.features.placement import FeaturePlacementOverride
 from gbdraw.linear_comparison import LinearComparison
+from gbdraw.layout.similarity_alignment import (
+    SimilarityAlignmentPlan,
+    SimilarityAlignmentReference,
+)
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.mode_profiles import (
     CIRCULAR_MODE_PROFILE,
@@ -299,22 +309,42 @@ class LinearLayout:
 
 @dataclass(frozen=True)
 class ComparisonRingTrackOptions:
-    """One circular comparison ring drawn from sequence-similarity hits."""
+    """One circular comparison ring drawn from sequence-similarity hits.
 
-    source: TableSource
+    Precomputed rings read ``source`` (a BLAST table). With
+    ``ComparisonRingOptions.losat`` the search builds the ring instead:
+    ``source`` stays ``None`` and ``comparison_sequence_source`` names the
+    comparison genome file (FASTA, GenBank, or DDBJ). ``losat_gencode`` is the
+    genome's TLOSATX translation table.
+    """
+
+    source: TableSource | None = None
     label: str | None = None
     color: str | None = None
     comparison_sequence_source: RecordCollection | str | PathLike[str] | None = None
+    losat_gencode: int = 1
 
 
 @dataclass(frozen=True)
 class ComparisonRingOptions:
-    """Circular sequence-similarity comparison rings and their shared geometry."""
+    """Circular sequence-similarity comparison rings and their shared geometry.
+
+    ``losat`` (``"losatn"`` or ``"tlosatx"``) searches each track's comparison
+    genome (query) against the displayed records (subject). ``losatn_task``
+    applies to LOSATN and ``reference_gencode`` to TLOSATX. The runtime fields
+    choose the executable; ``None`` resolves one automatically.
+    """
 
     tracks: Sequence[ComparisonRingTrackOptions] = ()
     reference: Literal["query", "subject", "auto"] = "auto"
     ring_width: float | None = None
     ring_gap: float | None = None
+    losat: Literal["losatn", "tlosatx"] | None = None
+    losatn_task: str = "megablast"
+    reference_gencode: int = 1
+    losat_executable: str | None = None
+    ncbi_blast_executable: str | None = None
+    threads: int | None = None
 
 
 # Compatibility aliases for the original package-root names.
@@ -327,15 +357,28 @@ _LINEAR_DIAGRAM_DEFAULTS = _LinearDiagramOptions()
 
 @dataclass(frozen=True)
 class LinearComparisonOptions:
-    """Precomputed or in-process comparison inputs for a linear diagram."""
+    """Precomputed or in-process comparison inputs for a linear diagram.
+
+    ``similarity_alignment`` takes a resolved ``SimilarityAlignmentPlan`` or a
+    ``SimilarityAlignmentReference``, which ``losat="losatp"`` with
+    ``losatp_mode="similarity_groups"`` resolves once after its analysis.
+    ``losatn_task`` applies to ``losat="losatn"``. ``gencodes`` applies to
+    ``losat="tlosatx"``: one translation table for every record, or one per
+    record (``None`` uses the runtime default, 1). ``pairs`` lists explicit
+    ``(query, subject)`` record indexes for any program (LOSATP: Pairwise
+    only); without it, records in adjacent rows are compared.
+    ``max_hits``, ``max_target_seqs``, and ``member_max_hits`` apply to
+    LOSATP; the runtime fields apply when ``losat`` is set.
+    """
 
     blast_files: Sequence[str] | None = None
     comparisons: Sequence[LinearComparison] | None = None
     protein_comparisons: Sequence[DataFrame] | None = None
     orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None
-    protein_mode: Literal["none", "pairwise", "orthogroup", "collinear"] = (
-        _LINEAR_DIAGRAM_DEFAULTS.protein_blastp_mode
-    )
+    losat: LosatProgram | None = None
+    losatp_mode: LosatpMode = "similarity_groups"
+    losatn_task: LosatnTask = "megablast"
+    gencodes: int | Sequence[int | None] | None = None
     pairs: Sequence[tuple[int, int]] | None = None
     match_style: Literal["ribbon", "curve"] = "ribbon"
     collinearity_blocks: CollinearityResult | Sequence[CollinearityBlock] | None = None
@@ -352,23 +395,21 @@ class LinearComparisonOptions:
     collinearity_color: CollinearityColorMode | str = (
         _LINEAR_DIAGRAM_DEFAULTS.collinearity_color_mode
     )
-    losat_executable: str = _LINEAR_DIAGRAM_DEFAULTS.losatp_bin
-    blastp_executable: str | None = _LINEAR_DIAGRAM_DEFAULTS.ncbi_blastp_bin
-    threads: int | None = _LINEAR_DIAGRAM_DEFAULTS.losatp_threads
-    max_hits: int = _LINEAR_DIAGRAM_DEFAULTS.protein_blastp_max_hits
-    candidate_limit: int | None = (
-        _LINEAR_DIAGRAM_DEFAULTS.protein_blastp_candidate_limit
-    )
+    max_hits: int = 5
+    max_target_seqs: int | None = None
+    member_max_hits: int | None = None
+    losat_executable: str | None = None
+    ncbi_blast_executable: str | None = None
+    threads: int | None = None
     orthogroup_membership: OrthogroupMembershipMode | str = (
         _LINEAR_DIAGRAM_DEFAULTS.orthogroup_membership_mode
-    )
-    orthogroup_member_max_hits: int | None = (
-        _LINEAR_DIAGRAM_DEFAULTS.orthogroup_member_max_hits
     )
     max_paralog_links: int = (
         _LINEAR_DIAGRAM_DEFAULTS.collinear_max_paralog_links_per_orthogroup
     )
-    align_feature: str | None = None
+    similarity_alignment: (
+        SimilarityAlignmentPlan | SimilarityAlignmentReference | None
+    ) = None
 
 
 @dataclass(frozen=True)
@@ -541,6 +582,7 @@ class Diagram:
         *,
         mode: Literal["circular", "linear"],
         records: Sequence[SeqRecord],
+        annotation_warnings: tuple[ResolutionWarning, ...] = (),
         interactive_context: (
             InteractiveSvgContext
             | Callable[[], InteractiveSvgContext]
@@ -551,6 +593,12 @@ class Diagram:
         self.mode = mode
         self.records = tuple(records)
         self._interactive_context = interactive_context
+        self._annotation_warnings = tuple(annotation_warnings)
+
+    @property
+    def annotation_warnings(self) -> tuple[ResolutionWarning, ...]:
+        """Structured notices belonging to this successfully prepared diagram."""
+        return self._annotation_warnings
 
     def _resolve_interactive_context(self) -> InteractiveSvgContext | None:
         if callable(self._interactive_context):
@@ -828,7 +876,15 @@ def _circular_options(
     )
     comparison_rings = options.comparison_rings
     assert comparison_rings is not None
-    if comparison_rings.tracks:
+    if comparison_rings.losat is not None:
+        values.update(_ring_losat_values(comparison_rings))
+    elif comparison_rings.tracks:
+        if any(track.source is None for track in comparison_rings.tracks):
+            raise ValidationError(
+                "Set source on every comparison ring, or set ComparisonRingOptions.losat "
+                "to build the rings from comparison_sequence_source.",
+                diagnostic={"code": "COMPARISON_INPUT", "field": "source"},
+            )
         kinds = {
             "table" if isinstance(track.source, DataFrame) else "file"
             for track in comparison_rings.tracks
@@ -868,6 +924,103 @@ def _circular_options(
     return _CircularDiagramOptions(**values)
 
 
+def _ring_losat_values(comparison_rings: ComparisonRingOptions) -> dict[str, object]:
+    """Typed ring LOSAT intent of the introductory options (design 3.4)."""
+
+    tracks = tuple(comparison_rings.tracks)
+    program = comparison_rings.losat
+    sequences: list[str] = []
+    for index, track in enumerate(tracks, start=1):
+        if track.source is not None:
+            raise ValidationError(
+                f"Comparison ring {index} sets source; with losat the search builds "
+                "the ring from comparison_sequence_source.",
+                diagnostic={"code": "COMPARISON_INPUT", "reason": "RING_LOSAT_INPUT", "field": "source"},
+            )
+        sequence = track.comparison_sequence_source
+        if not isinstance(sequence, (str, PathLike)):
+            raise ValidationError(
+                f"Comparison ring {index} needs comparison_sequence_source as a FASTA, "
+                "GenBank, or DDBJ file path when losat is set.",
+                diagnostic={
+                    "code": "COMPARISON_INPUT",
+                    "reason": "RING_LOSAT_INPUT",
+                    "field": "comparison_sequence_source",
+                },
+            )
+        sequences.append(str(sequence))
+    gencodes = tuple(track.losat_gencode for track in tracks)
+    if program != "tlosatx" and (
+        comparison_rings.reference_gencode != 1 or any(code != 1 for code in gencodes)
+    ):
+        raise ValidationError(
+            "reference_gencode and losat_gencode apply to losat='tlosatx' only.",
+            diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_OPTION_PROGRAM", "field": "conservation_losat_gencodes"},
+        )
+    labels = [track.label for track in tracks]
+    colors = [track.color for track in tracks]
+    values: dict[str, object] = {
+        "losat_search": _LosatSearchOptions(
+            program=program,  # type: ignore[arg-type]
+            losatn_task=comparison_rings.losatn_task if program == "losatn" else None,
+            record_gencodes=(
+                (comparison_rings.reference_gencode,) if program == "tlosatx" else ()
+            ),
+            runtime=_LosatRuntimeOptions(
+                losat_executable=comparison_rings.losat_executable,
+                ncbi_blast_executable=comparison_rings.ncbi_blast_executable,
+                threads=comparison_rings.threads,
+            ),
+        ),
+        "conservation_sequence_files": sequences,
+        "conservation_losat_gencodes": gencodes if program == "tlosatx" else None,
+    }
+    for field_name, entries in (("conservation_labels", labels), ("conservation_colors", colors)):
+        if any(entry is not None for entry in entries):
+            if any(entry is None for entry in entries):
+                raise ValidationError(
+                    f"Set {field_name.split('_')[1]} for every comparison ring or for none of them.",
+                    diagnostic={"code": "COMPARISON_INPUT", "field": field_name},
+                )
+            values[field_name] = entries
+    return values
+
+
+def _linear_losat_search(
+    comparisons: LinearComparisonOptions,
+) -> _LosatSearchOptions | None:
+    if comparisons.losat is None:
+        if comparisons.pairs is not None:
+            raise ValidationError("pairs requires losat.", diagnostic={"code": "COMPARISON_INPUT"})
+        return None
+    gencodes = comparisons.gencodes
+    return _LosatSearchOptions(
+        program=comparisons.losat,
+        pairs=comparisons.pairs,
+        losatp_mode=comparisons.losatp_mode if comparisons.losat == "losatp" else None,
+        losatn_task=(
+            comparisons.losatn_task
+            if comparisons.losat == "losatn" or comparisons.losatn_task != "megablast"
+            else None
+        ),
+        record_gencodes=(
+            ()
+            if gencodes is None
+            else (gencodes,)
+            if isinstance(gencodes, int)
+            else tuple(gencodes)
+        ),
+        losatp_max_hits=comparisons.max_hits,
+        losatp_max_target_seqs=comparisons.max_target_seqs,
+        losatp_member_max_hits=comparisons.member_max_hits,
+        runtime=_LosatRuntimeOptions(
+            losat_executable=comparisons.losat_executable,
+            ncbi_blast_executable=comparisons.ncbi_blast_executable,
+            threads=comparisons.threads,
+        ),
+    )
+
+
 def _linear_options(
     options: LinearOptions,
     *,
@@ -888,8 +1041,7 @@ def _linear_options(
         linear_comparisons=comparisons.comparisons,
         protein_comparisons=comparisons.protein_comparisons,
         orthogroups=comparisons.orthogroups,
-        protein_blastp_mode=comparisons.protein_mode,
-        protein_comparison_pairs=comparisons.pairs,
+        losat_search=_linear_losat_search(comparisons),
         pairwise_match_style=comparisons.match_style,
         collinearity_blocks=comparisons.collinearity_blocks,
         collinearity_params=comparisons.collinearity_params,
@@ -897,15 +1049,8 @@ def _linear_options(
         collinearity_anchor_mode=comparisons.collinearity_anchor,
         collinearity_search_scope=comparisons.collinearity_scope,
         collinearity_color_mode=comparisons.collinearity_color,
-        losatp_bin=comparisons.losat_executable,
-        ncbi_blastp_bin=comparisons.blastp_executable,
-        losatp_threads=comparisons.threads,
-        protein_blastp_max_hits=comparisons.max_hits,
-        protein_blastp_candidate_limit=comparisons.candidate_limit,
         orthogroup_membership_mode=comparisons.orthogroup_membership,
-        orthogroup_member_max_hits=comparisons.orthogroup_member_max_hits,
         collinear_max_paralog_links_per_orthogroup=comparisons.max_paralog_links,
-        align_orthogroup_feature=comparisons.align_feature,
     )
     return _LinearDiagramOptions(**values)
 
@@ -928,7 +1073,7 @@ def _interactive_context(
             elif isinstance(source, Sequence) and not isinstance(source, (str, bytes, PathLike)):
                 comparison_sequence_records.append(list(source))
             else:
-                comparison_sequence_records.append(list(SeqIO.parse(str(source), "fasta")))
+                comparison_sequence_records.append(list(read_comparison_sequence_records(source)))
     context = _build_prepared_interactive_context(
         prepared,
         comparison_sequence_records=comparison_sequence_records,
@@ -949,8 +1094,16 @@ def _record_inputs(
     if not all(isinstance(display, RecordDisplayOptions) for display in record_displays):
         raise ValidationError("record_displays must contain only RecordDisplayOptions.")
     return tuple(
-        _RecordInput(source=_InMemoryRecordSource(record), display=display)
-        for record, display in zip(records, record_displays)
+        _RecordInput(
+            source=_InMemoryRecordSource(record),
+            display=display,
+            record_key=str(
+                record.annotations.get("gbdraw_record_key") or f"record-{index + 1}"
+            ),
+        )
+        for index, (record, display) in enumerate(
+            zip(records, record_displays, strict=True)
+        )
     )
 
 
@@ -979,6 +1132,7 @@ def draw_circular(
     )
     return Diagram(
         prepared.drawing,
+        annotation_warnings=prepared.annotation_warnings,
         mode="circular",
         records=normalized,
         interactive_context=lambda: _interactive_context(
@@ -1004,15 +1158,29 @@ def draw_linear(
     if layout is not None and not isinstance(layout, LinearLayout):
         raise ValidationError("draw_linear layout must be LinearLayout.")
     compiled = _linear_options(options, record_count=len(normalized))
+    record_inputs = _record_inputs(normalized, record_displays)
+    similarity_alignment = options.comparisons.similarity_alignment
+    resolved_layout = layout._legacy() if layout is not None else None
+    if similarity_alignment is not None:
+        resolved_layout = replace(
+            resolved_layout or _LinearLayout(),
+            record_translations=tuple(
+                _LinearRecordTranslation(record_key=record.record_key)
+                for record in record_inputs
+                if record.record_key is not None
+            ),
+        )
     prepared = _build_request_diagram(
         _LinearDiagramRequest(
-            records=_record_inputs(normalized, record_displays),
+            records=record_inputs,
             options=compiled,
-            layout=layout._legacy() if layout is not None else None,
+            layout=resolved_layout,
+            similarity_alignment=similarity_alignment,
         )
     )
     return Diagram(
         prepared.drawing,
+        annotation_warnings=prepared.annotation_warnings,
         mode="linear",
         records=normalized,
         interactive_context=lambda: _interactive_context(

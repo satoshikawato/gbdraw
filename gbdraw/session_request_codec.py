@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 from copy import deepcopy
-from dataclasses import MISSING, asdict, dataclass, fields, is_dataclass
+from dataclasses import MISSING, asdict, dataclass, fields, is_dataclass, replace
 from io import StringIO
 import json
 import math
@@ -27,6 +27,7 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     CollinearityResult,
     LosslessCollinearityParameters,
 )
+from gbdraw.analysis.conservation import _default_label as _default_conservation_label
 from gbdraw.analysis.ortholog_paths import OrthologPathCollection
 from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
     OrthogroupMember,
@@ -36,14 +37,22 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     compact_ortholog_paths,
     OrthologEdge,
     OrthologPath,
+    normalize_protein_blastp_mode,
 )
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from gbdraw.comparisons.losat_jobs import record_source_paths
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.placement import FeaturePlacementOverride
 from gbdraw.io.record_select import RecordSelector
 from gbdraw.io.regions import RegionSpec
-from gbdraw.io.comparisons import COMPARISON_COLUMNS
-from gbdraw.linear_comparison import LinearComparison
+from gbdraw.io.comparisons import read_comparison_table
+from gbdraw.io.filenames import safe_embedded_filename, unique_filename
+from gbdraw.core.record_metadata import _read_coord_map
+from gbdraw.linear_comparison import (
+    LinearComparison,
+    reverse_endpoint_table_text,
+    reverse_unbound_endpoint_rows,
+)
 from gbdraw.tracks import CircularTrackSlot, LinearTrackSlot, ScalarSpec
 from gbdraw.tracks.circular import (
     _InternalCircularTrackSlot,
@@ -70,9 +79,15 @@ from .api.options import (
     DepthTrackInput,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
+    LinearRecordTranslation,
     LinearOutputOptions,
     LinearRequestTrackOptions,
+    LOSATP_MODE_WIRE,
+    LosatRuntimeOptions,
+    LosatSearchOptions,
+    losatp_analysis_mode,
 )
+from .comparisons.losat_runtime import AUTOMATIC_LOSAT_BIN
 from .api.requests import (
     CircularBatchRequest,
     CircularDiagramRequest,
@@ -87,12 +102,24 @@ from .api.requests import (
     RecordInput,
     RecordPresentation,
     RenderOutputRequest,
+    _LegacySimilarityAlignment,
+    _with_legacy_similarity_alignment,
+)
+from .layout.similarity_alignment import (
+    AlignmentAnchorIdentity,
+    AlignmentDecisionStatus,
+    AlignmentRecordDecision,
+    AlignmentResolutionRationale,
+    SimilarityAlignmentPlan,
+    SimilarityAlignmentReference,
 )
 
 
-CANONICAL_REQUEST_SCHEMA = 7
+CANONICAL_REQUEST_SCHEMA = 8
 DISPLAY_PLACEMENT_SCHEMA = 7
-SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset({1, 2, 5, 6, CANONICAL_REQUEST_SCHEMA})
+SUPPORTED_CANONICAL_REQUEST_SCHEMAS = frozenset(
+    {1, 2, 5, 6, 7, CANONICAL_REQUEST_SCHEMA}
+)
 UNKNOWN_FIELD_POLICY = "reject"
 
 
@@ -174,7 +201,7 @@ _SHARED_OPTION_WRONG_MODE_DEFAULTS = {
     },
     "linear": {
         "conservation_blast_files": None,
-        "conservation_fasta_files": None,
+        "conservation_sequence_files": None,
         "conservation_dataframes": None,
         "conservation_reference": "auto",
         "conservation_labels": None,
@@ -366,30 +393,47 @@ _COMPARISON_SOURCE_FIELDS = frozenset(
         "blast_files",
         "linear_comparisons",
         "protein_comparisons",
-        "protein_comparison_pairs",
         "orthogroups",
         "collinearity_blocks",
     }
 )
-_PIPELINE_FIELDS = (
-    "protein_blastp_mode",
-    "collinearity_params",
-    "collinearity_unit_mode",
-    "collinearity_anchor_mode",
-    "collinearity_search_scope",
-    "collinearity_color_mode",
-    "losatp_bin",
-    "ncbi_blastp_bin",
-    "losatp_threads",
-    "protein_blastp_max_hits",
-    "protein_blastp_candidate_limit",
-    "orthogroup_membership_mode",
-    "orthogroup_member_max_hits",
-    "collinear_infer_orthogroups",
-    "collinear_max_paralog_links_per_orthogroup",
-    "align_orthogroup_feature",
+# ``generatedProteinComparison.settings``: persisted wire key -> typed owner
+# and field (design D6). Wire keys never change with typed names. "options"
+# is LinearDiagramOptions, "search" LosatSearchOptions, "runtime" its
+# LosatRuntimeOptions. The order is the persisted key order.
+_PROTEIN_SETTINGS_WIRE: tuple[tuple[str, str, str], ...] = (
+    ("collinearityParams", "options", "collinearity_params"),
+    ("collinearityUnitMode", "options", "collinearity_unit_mode"),
+    ("collinearityAnchorMode", "options", "collinearity_anchor_mode"),
+    ("collinearitySearchScope", "options", "collinearity_search_scope"),
+    ("collinearityColorMode", "options", "collinearity_color_mode"),
+    ("losatpBin", "runtime", "losat_executable"),
+    ("ncbiBlastpBin", "runtime", "ncbi_blast_executable"),
+    ("losatpThreads", "runtime", "threads"),
+    ("proteinBlastpMaxHits", "search", "losatp_max_hits"),
+    ("proteinBlastpCandidateLimit", "search", "losatp_max_target_seqs"),
+    ("orthogroupMembershipMode", "options", "orthogroup_membership_mode"),
+    ("orthogroupMemberMaxHits", "search", "losatp_member_max_hits"),
+    ("collinearInferOrthogroups", "options", "collinear_infer_orthogroups"),
+    (
+        "collinearMaxParalogLinksPerOrthogroup",
+        "options",
+        "collinear_max_paralog_links_per_orthogroup",
+    ),
 )
-_COMPARISON_FIELDS = _COMPARISON_SOURCE_FIELDS | frozenset(_PIPELINE_FIELDS)
+# Schemas 1-7 also stored the retired alignment target in the settings.
+_LEGACY_ALIGNMENT_SETTING = "alignOrthogroupFeature"
+_OPTIONAL_PROTEIN_SETTINGS = frozenset({"collinearInferOrthogroups"})
+_WIRE_LOSATP_MODES = {wire: typed for typed, wire in LOSATP_MODE_WIRE.items()}
+# Settings of a LOSATP search that has not been configured.
+_UNSET_LOSAT_SEARCH = LosatSearchOptions(program="losatp", losatp_mode="none")
+# Circular ring LOSAT intent (encoded only after the planner resolves it) and
+# its resolved rows (encoded as conservationBlastFiles).
+_RING_SEARCH_FIELDS = frozenset({"conservation_losat_gencodes", "conservation_search_results"})
+_COMPARISON_FIELDS = _COMPARISON_SOURCE_FIELDS | frozenset(
+    {"losat_search"}
+    | {name for _key, owner, name in _PROTEIN_SETTINGS_WIRE if owner == "options"}
+)
 
 _TABLE_FIELDS = frozenset(
     {
@@ -411,7 +455,18 @@ _FILE_FIELDS = frozenset(
 )
 _TABLE_SEQUENCE_FIELDS = frozenset({"depth_tables", "conservation_dataframes"})
 _FILE_SEQUENCE_FIELDS = frozenset({"depth_files", "conservation_blast_files"})
-_OPTIONAL_FILE_SEQUENCE_FIELDS = frozenset({"conservation_fasta_files"})
+_OPTIONAL_FILE_SEQUENCE_FIELDS = frozenset({"conservation_sequence_files"})
+# Typed option -> persisted snake name, where the typed name changed and the
+# wire name did not (design D6, D18). Keys and resource IDs use the wire name.
+_OPTION_WIRE_NAMES = {"conservation_sequence_files": "conservation_fasta_files"}
+
+
+def _option_wire_name(name: str) -> str:
+    return _OPTION_WIRE_NAMES.get(name, name)
+
+
+def _option_wire_key(name: str) -> str:
+    return _camel(_option_wire_name(name))
 _TABLE_MATRIX_FIELDS = frozenset({"depth_track_tables"})
 _FILE_MATRIX_FIELDS = frozenset({"depth_track_files"})
 _DEPTH_COMPATIBILITY_FIELDS = frozenset(
@@ -504,9 +559,18 @@ class EncodedCanonicalRequest:
 
 
 class _ResourceBuilder:
+    """Collect resources; each gets a file name no other resource uses.
+
+    A Session materializes its resources side by side by sanitized name, so a
+    name used before (``a/X.fna`` and ``b/X.fna``) takes the next number,
+    ``X.2.fna``, the ``--losat_output_dir`` rule. Other names stay unchanged.
+    """
+
     def __init__(self) -> None:
         self._resources: list[CanonicalRequestResource] = []
         self._ids: set[str] = set()
+        self._names: set[str] = set()
+        self._renamed: set[str] = set()
 
     def add_path(self, resource_id: str, *, kind: str, value: object) -> str:
         if not isinstance(value, (str, Path)) or not str(value).strip():
@@ -546,11 +610,21 @@ class _ResourceBuilder:
         )
         return resource_id
 
+    def renamed(self, resource_id: str) -> bool:
+        """Whether the resource's file name was numbered to stay unique."""
+
+        return resource_id in self._renamed
+
     def _add(self, resource: CanonicalRequestResource) -> None:
         if resource.resource_id in self._ids:
             raise CanonicalRequestEncodingError(
                 f"Duplicate canonical resource ID: {resource.resource_id}."
             )
+        name = unique_filename(resource.name, self._names, key=safe_embedded_filename)
+        if name != resource.name:
+            resource = replace(resource, name=name)
+            self._renamed.add(resource.resource_id)
+        self._names.add(safe_embedded_filename(name))
         self._ids.add(resource.resource_id)
         self._resources.append(resource)
 
@@ -593,14 +667,27 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
             unresolved_reasons.append("record-derived output prefix")
         if request.options.conservation_table_file is not None:
             unresolved_reasons.append("Circular comparison table")
+    if isinstance(request, (CircularDiagramRequest, CircularBatchRequest)):
+        ring_search = request.options.losat_search
+        if ring_search is not None:
+            unresolved_reasons.append(f"{ring_search.program} ring search")
     if isinstance(request, LinearDiagramRequest):
         if request.output.resolve_prefix_from_first_record:
             unresolved_reasons.append("record-derived output prefix")
         if request.options.comparison_table_file is not None:
             unresolved_reasons.append("Linear comparison table")
+        if isinstance(request.similarity_alignment, SimilarityAlignmentReference):
+            unresolved_reasons.append("similarity alignment reference")
+        search = request.options.losat_search
+        if search is not None and search.program != "losatp":
+            unresolved_reasons.append(f"{search.program} search")
+        if request._legacy_similarity_alignment is not None:
+            raise CanonicalRequestEncodingError(
+                "A legacy similarity alignment must be materialized before current encoding."
+            )
     if unresolved_reasons:
         raise CanonicalRequestEncodingError(
-            "Canonical schema 6 cannot encode unresolved request transforms; "
+            "The current canonical schema cannot encode unresolved request transforms; "
             "call gbdraw.api.resolve_request() before encoding (unresolved: "
             + ", ".join(unresolved_reasons)
             + ")."
@@ -633,17 +720,19 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
         "schema": CANONICAL_REQUEST_SCHEMA,
         "mode": mode,
         "grouping": grouping,
-        "records": [
-            _encode_record(record, index=index, resources=resources)
-            for index, record in enumerate(request.records, start=1)
-        ],
+        "records": _encode_records(request.records, resources=resources),
         "diagramOptions": _encode_diagram_options(
             request.options,
             record_count=len(request.records),
             resources=resources,
         ),
         "layout": _encode_layout(request),
-        "comparisons": _encode_comparisons(request.options, mode=mode, resources=resources),
+        "comparisons": _encode_comparisons(
+            request.options,
+            mode=mode,
+            resources=resources,
+            frames=_persisted_record_frames(request),
+        ),
         "output": (
             [_encode_output(output) for output in request.outputs]
             if isinstance(request, CircularBatchRequest)
@@ -737,6 +826,10 @@ def _decode_canonical_request(
     comparison_kwargs = _decode_comparisons(
         top["comparisons"], mode=mode, schema=schema, resource_paths=resource_paths
     )
+    legacy_similarity_alignment = comparison_kwargs.pop(
+        "_legacy_similarity_alignment",
+        None,
+    )
     options_type = (
         CircularDiagramOptions if mode == "circular" else LinearDiagramOptions
     )
@@ -764,13 +857,25 @@ def _decode_canonical_request(
                 )
             linear_layout = None
         else:
-            linear_layout = _decode_linear_layout(top["layout"], schema=schema)
-        return LinearDiagramRequest(
+            linear_layout, similarity_alignment = _decode_linear_layout(
+                top["layout"],
+                schema=schema,
+            )
+        if schema == 1:
+            similarity_alignment = None
+        request = LinearDiagramRequest(
             records=records,
             options=options,
             layout=linear_layout,
+            similarity_alignment=similarity_alignment,
             output=output,
         )
+        if legacy_similarity_alignment is not None:
+            _with_legacy_similarity_alignment(
+                request,
+                legacy_similarity_alignment,
+            )
+        return request
 
     layout = _decode_circular_layout(top["layout"], schema=schema)
     if schema in {1, 2}:
@@ -799,14 +904,87 @@ def _decode_canonical_request(
     )
 
 
+def _genbank_bytes(records: Sequence[Any], *, index: int) -> bytes:
+    stream = StringIO()
+    try:
+        serializable = [deepcopy(record) for record in records]
+        for record in serializable:
+            record.annotations.setdefault("molecule_type", "DNA")
+        SeqIO.write(serializable, stream, "genbank")
+    except Exception as exc:
+        raise CanonicalRequestEncodingError(
+            f"Could not serialize in-memory record {index} as GenBank."
+        ) from exc
+    return stream.getvalue().encode("utf-8")
+
+
+def _encode_records(
+    records: Sequence[RecordInput],
+    *,
+    resources: _ResourceBuilder,
+) -> list[dict[str, Any]]:
+    """Encode records; the in-memory records of one source file share a resource.
+
+    The planner projects each displayed record to an in-memory record. Records
+    whose provenance names one source file are written to one GenBank resource
+    and selected by index, the shape the Web writes for one uploaded
+    multi-record file, so a replay keeps one file as one LOSAT source
+    (:func:`gbdraw.comparisons.losat_jobs.losat_source_ids`). Any other
+    in-memory record is its own source and keeps its own resource.
+    """
+
+    groups: dict[tuple[str, ...], list[int]] = {}
+    for position, record in enumerate(records):
+        if isinstance(record.source, InMemoryRecordSource):
+            paths = record_source_paths(record.source.record)
+            if paths:
+                groups.setdefault(paths, []).append(position)
+    shared: dict[int, tuple[dict[str, Any], RecordSelector]] = {}
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        first = members[0] + 1
+        resource_id = resources.add_bytes(
+            f"record-{first}-genbank",
+            kind="genbank",
+            name=f"record-{first}.gbk",
+            content=_genbank_bytes(
+                [records[position].source.record for position in members],  # type: ignore[union-attr]
+                index=first,
+            ),
+        )
+        for record_index, position in enumerate(members):
+            shared[position] = (
+                {"kind": "genbank", "resourceId": resource_id},
+                RecordSelector(
+                    raw=f"#{record_index + 1}",
+                    record_id=None,
+                    record_index=record_index,
+                ),
+            )
+    return [
+        _encode_record(
+            record,
+            index=position + 1,
+            resources=resources,
+            shared_source=shared.get(position),
+        )
+        for position, record in enumerate(records)
+    ]
+
+
 def _encode_record(
     record: RecordInput,
     *,
     index: int,
     resources: _ResourceBuilder,
+    shared_source: tuple[dict[str, Any], RecordSelector] | None = None,
 ) -> dict[str, Any]:
     source = record.source
-    if isinstance(source, GenBankInputSource):
+    selector = record.selector
+    if shared_source is not None:
+        source_payload, selector = shared_source
+    elif isinstance(source, GenBankInputSource):
         resource_id = resources.add_path(
             f"record-{index}-genbank", kind="genbank", value=source.path
         )
@@ -824,20 +1002,11 @@ def _encode_record(
             "fastaResourceId": fasta_id,
         }
     elif isinstance(source, InMemoryRecordSource):
-        stream = StringIO()
-        try:
-            serializable_record = deepcopy(source.record)
-            serializable_record.annotations.setdefault("molecule_type", "DNA")
-            SeqIO.write((serializable_record,), stream, "genbank")
-        except Exception as exc:
-            raise CanonicalRequestEncodingError(
-                f"Could not serialize in-memory record {index} as GenBank."
-            ) from exc
         resource_id = resources.add_bytes(
             f"record-{index}-genbank",
             kind="genbank",
             name=f"record-{index}.gbk",
-            content=stream.getvalue().encode("utf-8"),
+            content=_genbank_bytes((source.record,), index=index),
         )
         source_payload = {"kind": "genbank", "resourceId": resource_id}
     else:  # pragma: no cover - RecordInput validates its source union.
@@ -852,7 +1021,7 @@ def _encode_record(
             "startCoordinate": record.display.start_coordinate,
         },
         "source": source_payload,
-        "selector": _encode_selector(record.selector),
+        "selector": _encode_selector(selector),
         "region": _encode_region(record.region),
         "presentation": {
             "label": presentation.label,
@@ -1037,18 +1206,140 @@ def _decode_region(value: object, *, path: str) -> RegionSpec | None:
     )
 
 
+def _encode_alignment_anchor(anchor: AlignmentAnchorIdentity) -> dict[str, Any]:
+    return {
+        "recordKey": anchor.record_key,
+        "biologicalFeatureId": anchor.biological_feature_id,
+        "sourceFeatureIndex": anchor.source_feature_index,
+        "stableFeatureSvgId": anchor.stable_feature_svg_id,
+    }
+
+
+def _encode_similarity_alignment_plan(
+    plan: SimilarityAlignmentPlan | None,
+) -> dict[str, Any] | None:
+    if plan is None:
+        return None
+    return {
+        "schema": plan.schema,
+        "groupId": plan.group_id,
+        "reference": _encode_alignment_anchor(plan.reference),
+        "records": [
+            {
+                "recordKey": decision.record_key,
+                "status": decision.status.value,
+                "rationale": decision.rationale.value,
+                "anchor": (
+                    _encode_alignment_anchor(decision.anchor)
+                    if decision.anchor is not None
+                    else None
+                ),
+            }
+            for decision in plan.records
+        ],
+    }
+
+
+def _decode_alignment_anchor(
+    value: object,
+    *,
+    path: str,
+) -> AlignmentAnchorIdentity:
+    payload = _object(
+        value,
+        path=path,
+        required={
+            "recordKey",
+            "biologicalFeatureId",
+            "sourceFeatureIndex",
+            "stableFeatureSvgId",
+        },
+    )
+    return AlignmentAnchorIdentity(
+        record_key=payload["recordKey"],
+        biological_feature_id=payload["biologicalFeatureId"],
+        source_feature_index=payload["sourceFeatureIndex"],
+        stable_feature_svg_id=payload["stableFeatureSvgId"],
+    )
+
+
+def _decode_similarity_alignment_plan(
+    value: object,
+    *,
+    path: str,
+) -> SimilarityAlignmentPlan | None:
+    if value is None:
+        return None
+    payload = _object(
+        value,
+        path=path,
+        required={"schema", "groupId", "reference", "records"},
+    )
+    raw_records = _array(payload["records"], path=f"{path}.records")
+    decisions: list[AlignmentRecordDecision] = []
+    for index, raw in enumerate(raw_records):
+        decision_path = f"{path}.records[{index}]"
+        decision = _object(
+            raw,
+            path=decision_path,
+            required={
+                "recordKey",
+                "status",
+                "rationale",
+                "anchor",
+            },
+        )
+        decisions.append(
+            AlignmentRecordDecision(
+                record_key=decision["recordKey"],
+                status=AlignmentDecisionStatus(decision["status"]),
+                rationale=AlignmentResolutionRationale(decision["rationale"]),
+                anchor=(
+                    _decode_alignment_anchor(
+                        decision["anchor"],
+                        path=f"{decision_path}.anchor",
+                    )
+                    if decision["anchor"] is not None
+                    else None
+                ),
+            )
+        )
+    return SimilarityAlignmentPlan(
+        schema=payload["schema"],
+        group_id=payload["groupId"],
+        reference=_decode_alignment_anchor(
+            payload["reference"],
+            path=f"{path}.reference",
+        ),
+        records=tuple(decisions),
+    )
+
+
 def _encode_layout(request: DiagramRequest) -> dict[str, Any]:
     if isinstance(request, CircularBatchRequest):
         return {}
     if isinstance(request, LinearDiagramRequest):
         if request.layout is None:
             return {}
-        layout: dict[str, Any] = {"recordGapPx": request.layout.record_gap_px}
-        if request.layout.multi_record_positions is not None:
-            layout["multiRecordPositions"] = list(
-                request.layout.multi_record_positions
-            )
-        return layout
+        return {
+            "recordGapPx": request.layout.record_gap_px,
+            "multiRecordPositions": (
+                list(request.layout.multi_record_positions)
+                if request.layout.multi_record_positions is not None
+                else None
+            ),
+            "recordTranslations": [
+                {
+                    "recordKey": translation.record_key,
+                    "x": translation.x,
+                    "y": translation.y,
+                }
+                for translation in request.layout.record_translations
+            ],
+            "similarityAlignment": _encode_similarity_alignment_plan(
+                request.similarity_alignment
+            ),
+        }
     if not isinstance(request, CircularDiagramRequest) or request.layout is None:
         return {}
     layout = request.layout
@@ -1116,10 +1407,64 @@ def _decode_linear_layout(
     value: object,
     *,
     schema: int,
-) -> LinearMultiRecordOptions | None:
+) -> tuple[LinearMultiRecordOptions | None, SimilarityAlignmentPlan | None]:
     layout = _object(value, path="renderRequest.layout")
     if not layout:
-        return None
+        return None, None
+    if schema >= 8:
+        _require_exact_fields(
+            layout,
+            path="renderRequest.layout",
+            required={
+                "recordGapPx",
+                "multiRecordPositions",
+                "recordTranslations",
+                "similarityAlignment",
+            },
+        )
+        raw_positions = layout["multiRecordPositions"]
+        if raw_positions is not None:
+            positions = _array(
+                raw_positions,
+                path="renderRequest.layout.multiRecordPositions",
+            )
+            if not all(isinstance(item, str) and item.strip() for item in positions):
+                raise CanonicalRequestDecodingError(
+                    "renderRequest.layout.multiRecordPositions must contain non-empty text."
+                )
+        else:
+            positions = None
+        raw_translations = _array(
+            layout["recordTranslations"],
+            path="renderRequest.layout.recordTranslations",
+        )
+        translations: list[LinearRecordTranslation] = []
+        for index, raw in enumerate(raw_translations):
+            path = f"renderRequest.layout.recordTranslations[{index}]"
+            item = _object(
+                raw,
+                path=path,
+                required={"recordKey", "x", "y"},
+            )
+            translations.append(
+                LinearRecordTranslation(
+                    record_key=item["recordKey"],
+                    x=item["x"],
+                    y=item["y"],
+                )
+            )
+        result = LinearMultiRecordOptions(
+            record_gap_px=layout["recordGapPx"],
+            multi_record_positions=(
+                tuple(positions) if positions is not None else None
+            ),
+            record_translations=tuple(translations),
+        )
+        _validate_dataclass_contract(result, path="layout", error="decode")
+        return result, _decode_similarity_alignment_plan(
+            layout["similarityAlignment"],
+            path="renderRequest.layout.similarityAlignment",
+        )
     _require_exact_fields(
         layout,
         path="renderRequest.layout",
@@ -1143,7 +1488,7 @@ def _decode_linear_layout(
         multi_record_positions=tuple(positions) if positions is not None else None,
     )
     _validate_dataclass_contract(result, path="layout", error="decode")
-    return result
+    return result, None
 
 
 _PLACEMENT_INPUT_FIELDS = frozenset({
@@ -1188,17 +1533,64 @@ def _encode_diagram_options(
         name = item.name
         if name in _COMPARISON_FIELDS or name in _ALL_DEPTH_INPUT_FIELDS or name in _PLACEMENT_INPUT_FIELDS:
             continue
+        if name == "conservation_search_results":
+            if getattr(options, name):
+                # Planner-resolved ring rows are stored as the Web stores them.
+                result["conservationBlastFiles"] = [
+                    {
+                        "resourceId": resources.add_bytes(
+                            f"conservation-blast-files-{index}",
+                            kind=f"conservation-blast-files-{index}",
+                            name=ring.name,
+                            content=ring.text.encode("utf-8"),
+                        ),
+                        "representation": "file",
+                    }
+                    for index, ring in enumerate(options.conservation_search_results, start=1)
+                ]
+            continue
         value = getattr(options, name)
         default = getattr(default_options, name)
         if _same_default(value, default):
             continue
-        result[_camel(name)] = _encode_option_value(name, value, resources=resources)
+        result[_option_wire_key(name)] = _encode_option_value(name, value, resources=resources)
+    labels = _ring_labels_of_renamed_files(options, result.get("conservationBlastFiles"), resources)
+    if labels is not None:
+        result["conservationLabels"] = _encode_option_value(
+            "conservation_labels", labels, resources=resources
+        )
     if depth_tracks is not None:
         result["depthTracks"] = _encode_depth_tracks(
             depth_tracks,
             resources=resources,
         )
     return result
+
+
+def _ring_labels_of_renamed_files(
+    options: CircularDiagramOptions | LinearDiagramOptions,
+    refs: object,
+    resources: _ResourceBuilder,
+) -> tuple[str, ...] | None:
+    """Ring labels to store when a ring file without a label was renamed.
+
+    A ring without a label is labelled with its file name, which a replay reads
+    from the resource name; storing the labels keeps the drawn labels.
+    """
+
+    files = tuple(getattr(options, "conservation_blast_files", None) or ())
+    if not files or not isinstance(refs, list) or not any(
+        resources.renamed(ref["resourceId"]) for ref in refs if isinstance(ref, Mapping)
+    ):
+        return None
+    given = getattr(options, "conservation_labels", None)
+    count = max(len(files), len(getattr(options, "conservation_dataframes", None) or ()))
+    labels = []
+    for index in range(count):
+        label = str(given[index]) if given is not None and index < len(given) else ""
+        path = files[index] if index < len(files) else None
+        labels.append(label if label.strip() else _default_conservation_label(index, path))
+    return tuple(labels)
 
 
 def _decode_diagram_options(
@@ -1221,16 +1613,18 @@ def _decode_diagram_options(
         for row in placements:
             row.target.validate_mode(mode)
     for name, default in _SHARED_OPTION_WRONG_MODE_DEFAULTS[mode].items():
-        key = _camel(name)
+        key = _option_wire_key(name)
         if key in payload and payload[key] == default:
             payload.pop(key)
     options_type = (
         CircularDiagramOptions if mode == "circular" else LinearDiagramOptions
     )
     known = {
-        _camel(item.name): item.name
+        _option_wire_key(item.name): item.name
         for item in fields(options_type)
-        if item.name not in _COMPARISON_FIELDS and item.name not in _PLACEMENT_INPUT_FIELDS
+        if item.name not in _COMPARISON_FIELDS
+        and item.name not in _PLACEMENT_INPUT_FIELDS
+        and item.name not in _RING_SEARCH_FIELDS
     }
     unknown = set(payload) - set(known)
     if unknown:
@@ -1484,20 +1878,10 @@ def _migrate_flat_config_overrides(
         consumed.add("circular_definition_font_size")
         value = overrides["circular_definition_font_size"]
         if value is not None:
+            # The interval follows this font when the override is applied.
             assign(
                 "objects.definition.circular.font_size",
                 value,
-                source="circular_definition_font_size",
-            )
-            try:
-                interval = int(float(value) + 2)
-            except (TypeError, ValueError, OverflowError) as exc:
-                raise CanonicalRequestDecodingError(
-                    f"{path}.circular_definition_font_size must be numeric."
-                ) from exc
-            assign(
-                "objects.definition.circular.interval",
-                interval,
                 source="circular_definition_font_size",
             )
 
@@ -2069,7 +2453,7 @@ def _encode_option_value(
     if name in _OPTIONAL_FILE_SEQUENCE_FIELDS:
         return [
             (
-                _file_ref(f"{name}-{index}", item, resources=resources)
+                _file_ref(f"{_option_wire_name(name)}-{index}", item, resources=resources)
                 if item is not None
                 else None
             )
@@ -2129,13 +2513,13 @@ def _decode_option_value(
             for index, item in enumerate(raw, start=1)
         )
     if name in _OPTIONAL_FILE_SEQUENCE_FIELDS:
-        raw = _array(value, path=f"renderRequest.diagramOptions.{_camel(name)}")
+        raw = _array(value, path=f"renderRequest.diagramOptions.{_option_wire_key(name)}")
         return tuple(
             (
                 str(
                     _decode_file_ref(
                         item,
-                        name=f"{name}-{index}",
+                        name=f"{_option_wire_name(name)}-{index}",
                         resource_paths=resource_paths,
                     )
                 )
@@ -2827,6 +3211,7 @@ def _decode_track_slots(
                 )
             kwargs["params"] = params
         decoded_slot = cls(**kwargs)
+        _validate_dataclass_contract(decoded_slot, path=slot_path, error="decode")
         if (
             isinstance(decoded_slot, CircularTrackSlot)
             and legacy_spacing is not None
@@ -2971,11 +3356,36 @@ def _decode_resource_matrix(
     return tuple(result)
 
 
+def _persisted_record_frames(request: Any) -> tuple[tuple[int, bool], ...]:
+    """Return ``(L, reversed)`` of each record as the Session persists it (PD-OI-073).
+
+    A materialized reverse-complemented record is persisted as its reversed
+    sequence, whose search frame is the displayed one, so comparison rows that
+    touch it are written in that frame; a file source with
+    ``reverseComplement`` keeps its rows. Every other record is ``(0, False)``;
+    a Circular request has no comparisons.
+    """
+
+    if not isinstance(getattr(request, "options", None), LinearDiagramOptions):
+        return ()
+    frames = []
+    for record_input in request.records:
+        record = getattr(record_input.source, "record", None)
+        reversed_record = isinstance(record_input.source, InMemoryRecordSource) and _read_coord_map(record)[1] == -1
+        frames.append((len(record), True) if reversed_record else (0, False))
+    return tuple(frames)
+
+
+def _record_frame(frames: tuple[tuple[int, bool], ...], index: int) -> tuple[int, bool]:
+    return frames[index] if 0 <= index < len(frames) else (0, False)
+
+
 def _encode_comparisons(
     options: CircularDiagramOptions | LinearDiagramOptions,
     *,
     mode: Literal["circular", "linear"],
     resources: _ResourceBuilder,
+    frames: tuple[tuple[int, bool], ...],
 ) -> list[dict[str, Any]]:
     if mode == "circular":
         return []
@@ -2985,6 +3395,33 @@ def _encode_comparisons(
         )
     result: list[dict[str, Any]] = []
     for index, comparison in enumerate(options.linear_comparisons or (), start=1):
+        endpoint_frames = (
+            _record_frame(frames, comparison.query_record_index),
+            _record_frame(frames, comparison.subject_record_index),
+        )
+        if comparison.search_frame_text is not None:
+            # A planner-resolved LOSAT edge or a decoded nucleotideBlast item
+            # keeps its raw search-frame rows, as the Web writes them (design
+            # 3.7); only a reversed persisted endpoint rewrites them.
+            content = comparison.search_frame_text
+            if endpoint_frames[0][1] or endpoint_frames[1][1]:
+                content = reverse_endpoint_table_text(content, *endpoint_frames)
+            resource_id = resources.add_bytes(
+                _resource_id(f"comparison-losat-{index}"),
+                kind="nucleotide-blast",
+                name=f"comparison-losat-{index}.tsv",
+                content=content.encode("utf-8"),
+            )
+            result.append(
+                {
+                    "kind": "nucleotideBlast",
+                    "resourceId": resource_id,
+                    "queryRecordIndex": comparison.query_record_index,
+                    "subjectRecordIndex": comparison.subject_record_index,
+                }
+            )
+            continue
+        comparison = reverse_unbound_endpoint_rows(comparison, *endpoint_frames)
         ref = _table_ref(
             f"comparison-explicit-{index}", comparison.matches, resources=resources
         )
@@ -2998,8 +3435,11 @@ def _encode_comparisons(
             }
         )
     for index, path in enumerate(options.blast_files or (), start=1):
-        resource_id = resources.add_path(
-            f"comparison-nucleotide-{index}", kind="nucleotide-blast", value=path
+        resource_id = _nucleotide_blast_resource(
+            f"comparison-nucleotide-{index}",
+            path,
+            frames=(_record_frame(frames, index - 1), _record_frame(frames, index)),
+            resources=resources,
         )
         result.append(
             {
@@ -3056,33 +3496,70 @@ def _encode_comparisons(
                 "valueKind": value_kind,
             }
         )
-    if any(
-        not _same_default(
-            getattr(options, name),
-            getattr(_DEFAULT_LINEAR_OPTIONS, name),
-        )
-        for name in _PIPELINE_FIELDS
-    ) or options.protein_comparison_pairs is not None:
-        settings = {
-            _camel(name): _encode_pipeline_value(name, getattr(options, name))
-            for name in _PIPELINE_FIELDS
-            if name != "protein_blastp_mode"
-        }
+    search = options.losat_search
+    pairs = search.pairs if search is not None else None
+    mode = losatp_analysis_mode(search)
+    settings = _encode_protein_settings(options)
+    if (
+        mode != "none"
+        or pairs is not None
+        or settings != _encode_protein_settings(_DEFAULT_LINEAR_OPTIONS)
+    ):
         result.append(
             {
                 "kind": "generatedProteinComparison",
-                "mode": options.protein_blastp_mode,
+                "mode": mode,
                 "pairs": [
                     {
                         "queryRecordIndex": int(pair[0]),
                         "subjectRecordIndex": int(pair[1]),
                     }
-                    for pair in (options.protein_comparison_pairs or ())
+                    for pair in (pairs or ())
                 ],
                 "settings": settings,
             }
         )
     return result
+
+
+def _encode_protein_settings(options: LinearDiagramOptions) -> dict[str, Any]:
+    search = options.losat_search or _UNSET_LOSAT_SEARCH
+    owners = {"options": options, "search": search, "runtime": search.runtime}
+    settings: dict[str, Any] = {}
+    for key, owner, name in _PROTEIN_SETTINGS_WIRE:
+        value = getattr(owners[owner], name)
+        if key == "losatpBin" and value is None:
+            value = AUTOMATIC_LOSAT_BIN
+        settings[key] = _encode_pipeline_value(key, name, value)
+    return settings
+
+
+def _nucleotide_blast_resource(
+    resource_id: str,
+    path: object,
+    *,
+    frames: tuple[tuple[int, bool], tuple[int, bool]],
+    resources: _ResourceBuilder,
+) -> str:
+    """Persist one ``-b`` table, rewritten for a reverse-complemented record.
+
+    The table is in the search frame of the source records; a record persisted
+    as its reverse-complemented sequence needs its rows in that sequence.
+    """
+
+    if not (frames[0][1] or frames[1][1]):
+        return resources.add_path(resource_id, kind="nucleotide-blast", value=path)
+    source = Path(str(path))
+    try:
+        text = source.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeError) as exc:
+        raise CanonicalRequestEncodingError(
+            f"Could not read comparison table {source} for the Session."
+        ) from exc
+    content = reverse_endpoint_table_text(text, frames[0], frames[1])
+    return resources.add_bytes(
+        resource_id, kind="nucleotide-blast", name=source.name, content=content.encode("utf-8")
+    )
 
 
 def _decode_comparisons(
@@ -3117,16 +3594,16 @@ def _decode_comparisons(
                 resource_paths=resource_paths,
             )
             if schema >= 2:
+                # The resource text stays on the edge, so a re-saved Session
+                # writes the same nucleotideBlast resource.
                 try:
-                    table = read_csv(
-                        resource_path,
-                        sep="\t",
-                        comment="#",
-                        names=COMPARISON_COLUMNS,
+                    text = resource_path.read_bytes().decode("utf-8")
+                    table = read_comparison_table(
+                        StringIO(text), label=f"BLAST resource {item['resourceId']!r}"
                     )
-                except Exception as exc:
+                except (OSError, UnicodeError, ValidationError) as exc:
                     raise CanonicalRequestDecodingError(
-                        f"Could not decode BLAST resource for {path}."
+                        f"Could not decode {path}: {exc}"
                     ) from exc
                 query_index = _non_negative_index(
                     item["queryRecordIndex"], f"{path}.queryRecordIndex"
@@ -3135,7 +3612,7 @@ def _decode_comparisons(
                     item["subjectRecordIndex"], f"{path}.subjectRecordIndex"
                 )
                 explicit_comparisons.append(
-                    LinearComparison(query_index, subject_index, table)
+                    LinearComparison(query_index, subject_index, table, search_frame_text=text)
                 )
             else:
                 blast_files.append(str(resource_path))
@@ -3208,7 +3685,11 @@ def _decode_comparisons(
             )
         elif kind == "generatedProteinComparison":
             _check_singleton_kind(kind, singleton_kinds, path=path)
-            result.update(_decode_pipeline(item, path=path, schema=schema))
+            pipeline = _decode_pipeline(item, path=path, schema=schema)
+            legacy_alignment = pipeline.pop("_legacy_similarity_alignment", None)
+            if legacy_alignment is not None:
+                result["_legacy_similarity_alignment"] = legacy_alignment
+            result.update(pipeline)
         else:
             raise CanonicalRequestDecodingError(
                 f"Unsupported comparison kind at {path}: {kind!r}."
@@ -3222,7 +3703,7 @@ def _decode_comparisons(
     return result
 
 
-def _encode_pipeline_value(name: str, value: object) -> Any:
+def _encode_pipeline_value(key: str, name: str, value: object) -> Any:
     if name == "collinearity_params":
         if value is None:
             return None
@@ -3240,7 +3721,7 @@ def _encode_pipeline_value(name: str, value: object) -> Any:
                 for item in fields(value)
             },
         }
-    return _json_value(value, path=f"comparisons.settings.{_camel(name)}")
+    return _json_value(value, path=f"comparisons.settings.{key}")
 
 
 def _decode_pipeline(
@@ -3251,19 +3732,22 @@ def _decode_pipeline(
         required.add("pairs")
     _require_exact_fields(item, path=path, required=required)
     settings = _object(item["settings"], path=f"{path}.settings")
-    setting_fields = tuple(name for name in _PIPELINE_FIELDS if name != "protein_blastp_mode")
-    field_map = {_camel(name): name for name in setting_fields}
+    setting_keys = {key for key, _owner, _name in _PROTEIN_SETTINGS_WIRE}
+    if schema < 8:
+        setting_keys.add(_LEGACY_ALIGNMENT_SETTING)
     _require_exact_fields(
         settings, path=f"{path}.settings",
-        required=set(field_map) - {"collinearInferOrthogroups"},
-        optional={"collinearInferOrthogroups"},
+        required=setting_keys - _OPTIONAL_PROTEIN_SETTINGS,
+        optional=set(_OPTIONAL_PROTEIN_SETTINGS),
     )
-    mode = item["mode"]
-    result = {"protein_blastp_mode": mode}
+    mode = normalize_protein_blastp_mode(item["mode"])
+    result: dict[str, Any] = {}
+    search_values: dict[str, Any] = {}
+    runtime_values: dict[str, Any] = {}
+    decoded_pairs: list[tuple[int, int]] = []
     legacy_max_paralog_links: int | None = None
     if schema >= 2:
         pairs = _array(item["pairs"], path=f"{path}.pairs")
-        decoded_pairs: list[tuple[int, int]] = []
         for index, raw_pair in enumerate(pairs):
             pair_path = f"{path}.pairs[{index}]"
             pair = _object(
@@ -3281,14 +3765,33 @@ def _decode_pipeline(
                     ),
                 )
             )
-        # Early schema-2 writers also stored the derived row-adjacent search pairs
-        # used by collinear mode here.  The public option is pairwise-only; current
-        # collinear rendering derives those pairs from the saved layout instead.
-        result["protein_comparison_pairs"] = (
-            tuple(decoded_pairs) if decoded_pairs and mode == "pairwise" else None
-        )
-    for key, name in field_map.items():
+    # Early schema-2 writers also stored the derived row-adjacent search pairs
+    # used by collinear mode here.  The public option is pairwise-only; current
+    # collinear rendering derives those pairs from the saved layout instead.
+    search_pairs = tuple(decoded_pairs) if decoded_pairs and mode == "pairwise" else None
+    owned_settings = [(key, owner, name) for key, owner, name in _PROTEIN_SETTINGS_WIRE]
+    if schema < 8:
+        owned_settings.append((_LEGACY_ALIGNMENT_SETTING, "legacy", "align_orthogroup_feature"))
+    for key, owner, name in owned_settings:
         raw = settings.get(key, True) if name == "collinear_infer_orthogroups" else settings[key]
+        if owner == "search":
+            search_values[name] = raw
+            continue
+        if owner == "runtime":
+            runtime_values[name] = raw
+            continue
+        if name == "align_orthogroup_feature":
+            if raw is None:
+                continue
+            if not isinstance(raw, str) or not raw.strip() or "\0" in raw:
+                raise CanonicalRequestDecodingError(
+                    f"{path}.settings.{key} must be null or non-empty text without NUL."
+                )
+            result["_legacy_similarity_alignment"] = _LegacySimilarityAlignment(
+                target=raw,
+                source_schema=schema,
+            )
+            continue
         if name == "collinearity_params":
             decoded, legacy_max_paralog_links = _decode_collinearity_params(
                 raw,
@@ -3298,6 +3801,14 @@ def _decode_pipeline(
             result[name] = decoded
         else:
             result[name] = raw
+    search = LosatSearchOptions(
+        program="losatp",
+        losatp_mode=_WIRE_LOSATP_MODES[mode],
+        pairs=search_pairs,
+        runtime=LosatRuntimeOptions(**runtime_values),
+        **search_values,
+    )
+    result["losat_search"] = None if search == _UNSET_LOSAT_SEARCH else search
     if (
         mode == "collinear"
         and legacy_max_paralog_links is not None

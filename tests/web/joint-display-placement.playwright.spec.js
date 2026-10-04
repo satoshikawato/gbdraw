@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const zlib = require('node:zlib');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 
 const replayEnv = { ...process.env };
 delete replayEnv.PYTHONPATH;
@@ -113,7 +113,7 @@ for (const mode of ['circular', 'linear']) {
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(initial.result);
     await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
     await page.locator('.drawer-toggle').click();
-    const tolerance = page.getByRole('spinbutton', { name: 'Feature overlap tolerance (bp)', exact: true });
+    const tolerance = await reveal(page.getByRole('spinbutton', { name: 'Feature overlap tolerance (bp)', exact: true, includeHidden: true }));
     await tolerance.fill('1');
     await tolerance.press('Tab');
     await generateFromControl(page);
@@ -160,8 +160,8 @@ for (const mode of ['circular', 'linear']) {
     await download.saveAs(savedPath);
     const bytes = await fs.readFile(savedPath);
     const session = JSON.parse((bytes[0] === 0x1f ? zlib.gunzipSync(bytes) : bytes).toString());
-    expect(session.version).toBe(42);
-    expect(session.renderRequest.schema).toBe(7);
+    expect(session.version).toBe(44);
+    expect(session.renderRequest.schema).toBe(8);
     expect(session.renderRequest.records[0].display.startCoordinate).toBe(71);
     expect(session.renderRequest.diagramOptions.featurePlacements).toHaveLength(1);
     expect(session.renderRequest.diagramOptions.configOverrides['canvas.feature_overlap_tolerance_bp']).toBe(1);
@@ -207,8 +207,8 @@ test('historical v40/schema6 saves as the joint format without Generate', async 
   await download.saveAs(savedPath);
   const bytes = await fs.readFile(savedPath);
   const saved = JSON.parse(zlib.gunzipSync(bytes));
-  expect(saved.version).toBe(42);
-  expect(saved.renderRequest.schema).toBe(7);
+  expect(saved.version).toBe(44);
+  expect(saved.renderRequest.schema).toBe(8);
   expect(saved.renderRequest.records.every((record) => record.display.isCircular === null
     && record.display.startCoordinate === null)).toBe(true);
   expect(saved.renderRequest.diagramOptions.featurePlacements).toEqual([]);
@@ -255,8 +255,12 @@ for (const mode of ['circular', 'linear']) {
     await saved.saveAs(savedPath);
     await page.locator('input[accept^=".json,"]').setInputFiles(savedPath);
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), { timeout: 180000 }).toBe(false);
-    if (mode === 'linear') await expandLinearRecordControls(page);
-    await page.getByRole('button', { name: 'Load record rotation controls', exact: true }).first().click();
+    if (mode === 'linear') {
+      await expandLinearRecordControls(page);
+      await page.getByRole('button', { name: 'Load record rotation controls', exact: true }).first().click();
+    } else {
+      await page.locator('[data-circular-inspect]').click();
+    }
     await expect(page.getByRole('spinbutton', { name: 'Display start shared #1', exact: true }).first()).toHaveValue('71');
     await expect(page.getByRole('spinbutton', { name: 'Display start shared #2', exact: true }).last()).toHaveValue('91');
     await generateFromControl(page);
@@ -292,8 +296,8 @@ for (const mode of ['circular', 'linear']) {
     await expect(start).toHaveValue('71');
     await page.getByRole('button', { name: 'Reset start', exact: true }).click();
     await expect(start).toHaveValue('');
-    if (mode === 'circular') await page.locator('#circular-track-preset').selectOption('middle');
-    await page.getByRole('checkbox', { name: 'Separate Strands', exact: true }).uncheck();
+    if (mode === 'circular') await (await reveal(page.locator('#circular-track-preset'))).selectOption('middle');
+    await (await reveal(page.getByRole('checkbox', { name: 'Separate Strands', exact: true, includeHidden: true }))).uncheck();
     await generateFromControl(page);
     const features = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.map((f) => ({ id: f.svg_id, stableId: f.stable_feature_id, parts: f.location_parts, strand: f.strand })));
     for (const feature of features) expect(feature.stableId).toBeTruthy();
@@ -374,7 +378,7 @@ for (const mode of ['circular', 'linear']) for (const intent of ['rotation', 'pl
       await page.getByRole('combobox', { name: 'Feature placement', exact: true }).selectOption('main');
       await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
       await page.locator('.drawer-toggle').click();
-      const tolerance = page.getByRole('spinbutton', { name: 'Feature overlap tolerance (bp)', exact: true });
+      const tolerance = await reveal(page.getByRole('spinbutton', { name: 'Feature overlap tolerance (bp)', exact: true, includeHidden: true }));
       await tolerance.fill('1'); await tolerance.press('Tab');
     }
     await generateFromControl(page);
@@ -408,7 +412,7 @@ test('loaded replacement draft cannot place or take shortcuts from the prior Res
   await download.saveAs(savedPath);
   await page.locator('input[accept^=".json,"]').setInputFiles(savedPath);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), { timeout: 180000 }).toBe(false);
-  await page.getByRole('button', { name: 'Load record rotation controls', exact: true }).click();
+  await page.locator('[data-circular-inspect]').click();
   await expect(page.getByRole('spinbutton', { name: 'Display start shared #1', exact: true })).toBeEnabled();
   await page.locator('.drawer-toggle').click();
   await page.locator('.right-drawer').getByRole('button', { name: 'Edit', exact: true }).first().click();

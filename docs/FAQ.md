@@ -48,7 +48,12 @@ ordered anchors. Similarity groups always searches all loaded record pairs.
 Fresh Collinear settings and **Reset Settings** default to **Adjacent pairs**,
 while a saved **All records** scope remains explicit. Circular rings place
 retained evidence around one reference. Linear comparisons connect selected
-query and subject record endpoints.
+query and subject record endpoints. On the command line, `gbdraw linear
+--losat losatn`, `--losat tlosatx`, or `--losat losatp` runs the same Linear
+searches; `--comparisons_table` rows with `source` `losat` or `table` mix
+searched and uploaded edges. `gbdraw circular --losat losatn` or
+`--losat tlosatx` with `--conservation_sequence` (FASTA, GenBank, or DDBJ)
+runs the ring searches against the displayed reference.
 
 The [comparison capability
 matrix](./REFERENCE/comparison-programs-thresholds-and-results.md#capability-matrix)
@@ -152,8 +157,8 @@ section lists the empty-result cases.
 
 Fresh Linear pages and **Reset Settings** start with **No comparison**. If a
 comparison is active, select **No comparison** in the **Comparison** command
-group. The three buttons there apply one choice to every adjacent pair; the
-separate **Current:** status reports the effective plan. Open **Selected pairs
+group. The three buttons there apply one choice to every adjacent pair, and the
+button that matches the effective plan is pressed. Open **Selected pairs
 (N)** to inspect or edit a custom pair plan. Choosing **No comparison** keeps
 retained pair files and raw-result names inactive for later reuse. See the [web
 comparison controls](./REFERENCE/web-app.md#comparison-surfaces) and
@@ -164,6 +169,23 @@ comparison controls](./REFERENCE/web-app.md#comparison-surfaces) and
 A cached search is reused only when its biological inputs, direction, program,
 and meaningful search settings still match. See [saved comparison results and
 cache reuse](./REFERENCE/session-and-request-compatibility.md#saved-comparison-results-and-cache-reuse).
+
+### Why does a loaded Circular session say Records not inspected?
+
+**Load Session** shows the saved Result without reading the embedded source
+again. Select **Inspect source records**, or **Generate Diagram**, to list the
+records and show their rotation rows. A newly uploaded file is inspected at
+once. See [Save and Load Sessions](./REFERENCE/web-app.md#save-and-load-sessions)
+and [Circular source records](./REFERENCE/web-app.md#circular-source-records-and-one-record-settings).
+
+### Why are controls unavailable while a session saves or loads?
+
+Save and Load work on one consistent document, so edits, **Generate Diagram**,
+and the other Session button wait until **Saving session…** or **Loading
+session…** disappears. Scrolling, preview pan and zoom, and feature search stay
+available. If Load reports an **Operation error**, check that a plain Session
+file is at most 200 MiB and that a gzip Session expands to at most 512 MiB. See
+[Save and Load Sessions](./REFERENCE/web-app.md#save-and-load-sessions).
 
 ### Why does Save Raw LOSAT TSV not contain the internal `h_` IDs?
 

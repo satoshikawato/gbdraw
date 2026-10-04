@@ -1,11 +1,23 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import test from 'node:test';
 import {
   groupLinearSourceRecords,
+  isPristineLinearSource,
+  linearSourceHasPrimaryInput,
+  linearSourceDepthStatus,
   moveLinearSourceGroup,
+  planLinearSourceRemoval,
+  planLosatSourceJobs,
   prepareLosatSourceBatches,
   splitLosatSourceResult
 } from '../../gbdraw/web/js/app/linear-sources.js';
+import { readFileSync } from 'node:fs';
+import { buildLosatJobSpecs } from '../../gbdraw/web/js/app/linear-comparisons.js';
+import {
+  buildLosatCachePayload,
+  extractLosatFastaFast
+} from '../../gbdraw/web/js/app/run-analysis.js';
 import {
   adoptCurrentSessionResources,
   createSessionResourceFileView
@@ -56,6 +68,65 @@ assert.deepEqual(
   'distinct uploads with the same filename remain separate sources'
 );
 
+const removalRecords = [
+  { ...sourceRecord('a-1', sourceA), region_record_id: 'A1', depth: [{ name: 'a.tsv' }] },
+  { ...sourceRecord('a-2', sourceA), region_record_id: 'A2', depth: [null] },
+  sourceRecord('b-1', sourceB)
+];
+const clearPlan = planLinearSourceRemoval({
+  sequences: removalRecords,
+  sourceUid: 'a-1',
+  intent: 'clear'
+});
+assert.deepEqual({
+  allowed: clearPlan.allowed,
+  sourceIndex: clearPlan.sourceIndex,
+  insertionIndex: clearPlan.insertionIndex,
+  recordCount: clearPlan.recordCount,
+  removedUids: clearPlan.removedUids,
+  retainedUids: clearPlan.retainedSequences.map(({ uid }) => uid)
+}, {
+  allowed: true,
+  sourceIndex: 0,
+  insertionIndex: 0,
+  recordCount: 2,
+  removedUids: ['a-1', 'a-2'],
+  retainedUids: ['b-1']
+});
+assert.deepEqual(removalRecords.map(({ uid }) => uid), ['a-1', 'a-2', 'b-1'], 'planning does not mutate inputs');
+assert.equal(planLinearSourceRemoval({
+  sequences: removalRecords,
+  sourceUid: 'a-1',
+  intent: 'delete'
+}).allowed, true);
+assert.deepEqual(planLinearSourceRemoval({
+  sequences: [sourceRecord('only', sourceA)],
+  sourceUid: 'only',
+  intent: 'delete'
+}), { allowed: false, reason: 'sole-source', sourceIndex: 0 });
+assert.deepEqual(planLinearSourceRemoval({
+  sequences: removalRecords,
+  sourceUid: 'missing',
+  intent: 'clear'
+}), { allowed: false, reason: 'missing-source' });
+
+const pairedSource = groupLinearSourceRecords([{
+  uid: 'paired', gb: null, gff: { name: 'paired.gff3' }, fasta: { name: 'paired.fasta' },
+  depth: [], definition: '', record_subtitle: '', file_definition: '', file_subtitle: '',
+  region_record_id: '', region_start: null, region_end: null, region_reverse: false
+}])[0];
+assert.equal(linearSourceHasPrimaryInput(pairedSource), true, 'GFF3 and FASTA form one non-empty source');
+assert.equal(isPristineLinearSource(pairedSource), false);
+const pristineSource = groupLinearSourceRecords([{
+  uid: 'blank', gb: null, gff: null, fasta: null, depth: [null, null],
+  definition: '', record_subtitle: '', file_definition: '', file_subtitle: '',
+  region_record_id: '', region_start: null, region_end: null, region_reverse: false
+}])[0];
+assert.equal(linearSourceHasPrimaryInput(pristineSource), false);
+assert.equal(isPristineLinearSource(pristineSource), true);
+pristineSource.sequence.file_subtitle = 'draft';
+assert.equal(isPristineLinearSource(pristineSource), false, 'a configured blank slot is not pristine');
+
 const sharedDescriptor = {
   kind: 'web-file', name: 'session.gb', type: 'text/plain', encoding: 'base64',
   data: '', size: 0, lastModified: 0
@@ -72,6 +143,47 @@ assert.deepEqual(
   ['other', 'session-1', 'session-2'],
   'records backed by one Session descriptor move as one source'
 );
+
+const sharedDepth = { name: 'depth.tsv' };
+const sameNamedDepth = { name: 'depth.tsv' };
+const depthSourceRecords = [
+  { ...sourceRecord('depth-1', sourceA), depth: [] },
+  { ...sourceRecord('depth-2', sourceA), depth: [] }
+];
+const depthSource = groupLinearSourceRecords(depthSourceRecords)[0];
+assert.deepEqual(linearSourceDepthStatus(depthSource, 0), {
+  state: 'empty', file: null, selectedCount: 0, recordCount: 2
+});
+depthSourceRecords[0].depth = [sharedDepth];
+assert.deepEqual(linearSourceDepthStatus(depthSource, 0), {
+  state: 'mixed', file: null, selectedCount: 1, recordCount: 2
+});
+depthSourceRecords[1].depth = [sharedDepth];
+assert.deepEqual(linearSourceDepthStatus(depthSource, 0), {
+  state: 'common', file: sharedDepth, selectedCount: 2, recordCount: 2
+});
+depthSourceRecords[1].depth = [sameNamedDepth];
+assert.deepEqual(linearSourceDepthStatus(depthSource, 0), {
+  state: 'mixed', file: null, selectedCount: 2, recordCount: 2
+}, 'same-named independent Depth uploads remain mixed');
+
+const depthDescriptor = {
+  kind: 'web-file', name: 'saved-depth.tsv', type: 'text/tab-separated-values', encoding: 'base64',
+  data: '', size: 0, lastModified: 0
+};
+const depthSessionTable = adoptCurrentSessionResources({ depth: depthDescriptor });
+depthSourceRecords[0].depth = [createSessionResourceFileView(depthSessionTable, 'depth')];
+depthSourceRecords[1].depth = [createSessionResourceFileView(depthSessionTable, 'depth')];
+assert.equal(linearSourceDepthStatus(depthSource, 0).state, 'common',
+  'views backed by one Session descriptor are one common assignment');
+const distinctDepthSessionTable = adoptCurrentSessionResources({
+  first: depthDescriptor,
+  second: { ...depthDescriptor }
+});
+depthSourceRecords[0].depth = [createSessionResourceFileView(distinctDepthSessionTable, 'first')];
+depthSourceRecords[1].depth = [createSessionResourceFileView(distinctDepthSessionTable, 'second')];
+assert.equal(linearSourceDepthStatus(depthSource, 0).state, 'mixed',
+  'same-named independent Session resources remain mixed');
 
 const interleavedRecords = [
   sourceRecord('a-1', sourceA), sourceRecord('b-1', sourceB),
@@ -92,13 +204,37 @@ const specs = sequences.flatMap((_, queryIndex) => sequences.map((_, subjectInde
 const planFor = (records = sequences, jobs = specs, getEntry = async () => ({ fasta: '>duplicate\nACGT\n' })) => prepareLosatSourceBatches({
   sequences: records, specs: jobs, getEntry, buildArgs: () => ['--task', 'blastn'], hashText, protein: false
 });
+// PD-OI-018 revision 4 (D-19): sources stay batched between files; a record
+// searches itself only when that self comparison is requested, and a
+// comparison within one source searches the source without the query record.
 const plan = await planFor();
-assert.equal(plan.batches.length, 4, 'eight records in two sources require four LOSAT jobs');
+const byScope = (batches) => Object.fromEntries(['between-sources', 'within-source', 'self']
+  .map((scope) => [scope, batches.filter((batch) => batch.scope === scope).length]));
+assert.deepEqual(byScope(plan.batches), { 'between-sources': 2, 'within-source': 8, self: 8 },
+  'eight records in two sources: two between-source jobs, one within-source and one self job per record, never 64');
 assert.equal(plan.batches.reduce((sum, batch) => sum + batch.specs.length, 0), 64);
+assert.equal(
+  planLosatSourceJobs({ sequences, specs, buildArgs: () => ['--task', 'blastn'] }).jobs.length,
+  plan.batches.length,
+  'the job-count estimate and the execution share one plan'
+);
 for (const batch of plan.batches) {
   assert.equal(batch.query.ids.size, batch.query.indexes.length);
   assert.equal(batch.subject.ids.size, batch.subject.indexes.length);
-  assert.match(batch.searchContext, /^[0-9a-f]{64}$/);
+  if (batch.scope === 'self') {
+    assert.deepEqual(batch.query.indexes, batch.subject.indexes, 'a requested self search uses the record alone');
+    assert.equal(batch.query.indexes.length, 1);
+  } else {
+    assert.deepEqual(batch.query.indexes.filter((index) => batch.subject.indexes.includes(index)), [],
+      'no unrequested self search');
+  }
+  if (batch.scope === 'within-source') {
+    const [queryIndex] = batch.query.indexes;
+    const source = queryIndex < 6 ? [0, 1, 2, 3, 4, 5] : [6, 7];
+    assert.deepEqual([...batch.subject.indexes].sort(), source.filter((index) => index !== queryIndex),
+      'the within-source database is the source without the query record');
+  }
+  assert.equal(batch.searchContext === null, batch.query.indexes.length === 1 && batch.subject.indexes.length === 1);
   const jobs = batch.specs.map((spec) => ({ ...spec, cacheKey: `${spec.queryIndex}:${spec.subjectIndex}` }));
   const text = [...batch.query.ids.keys()].flatMap((query) => [...batch.subject.ids.keys()].map(
     (subject) => [query, subject, 100, 4, 0, 0, 1, 4, 1, 4, '1e-20', 50].join('\t')
@@ -111,8 +247,9 @@ for (const batch of plan.batches) {
 }
 const adjacentSpecs = specs.filter((spec) => spec.queryIndex < 6 && spec.subjectIndex >= 6);
 assert.equal((await planFor(sequences, adjacentSpecs)).batches.length, 1);
+const intoSecondSource = (batches) => batches.find((batch) => batch.scope === 'between-sources' && batch.subject.indexes.includes(7));
 const changed = await planFor(sequences, specs, async (index) => ({ fasta: `>duplicate\n${index === 7 ? 'ACGA' : 'ACGT'}\n` }));
-assert.notEqual(plan.batches[1].searchContext, changed.batches[1].searchContext, 'database contents change cache scope');
+assert.notEqual(intoSecondSource(plan.batches).searchContext, intoSecondSource(changed.batches).searchContext, 'database contents change cache scope');
 const reordered = [...sequences].reverse();
 const replay = await planFor(reordered);
 assert.deepEqual(replay.batches.map((batch) => batch.searchContext).sort(), plan.batches.map((batch) => batch.searchContext).sort(), 'record ordering does not change the searched source sets');
@@ -128,12 +265,163 @@ assert.deepEqual(codePlan.batches.map((batch) => batch.query.indexes.length).sor
 const noSelf = await prepareLosatSourceBatches({
   sequences, specs: specs.filter(({ queryIndex, subjectIndex }) => queryIndex !== subjectIndex),
   getEntry: async (index) => ({ fasta: `>protein-${index}\nMKK\n` }),
-  buildArgs: () => ['--max-target-seqs', '5'], hashText, protein: true,
-  excludeSelfComparisons: true
+  buildArgs: () => ['--max-target-seqs', '5'], hashText, protein: true
 });
 for (const batch of noSelf.batches) {
   assert(!batch.query.indexes.some((index) => batch.subject.indexes.includes(index)),
-    'Collinear OFF must never submit a within-record search, including multi-record sources');
+    'no mode submits an unrequested within-record search, including multi-record sources');
 }
-assert.equal(noSelf.batches.length, 34);
+assert.equal(noSelf.batches.length, 2 + 8);
 assert.equal(noSelf.batches.reduce((sum, batch) => sum + batch.specs.length, 0), 56);
+
+// CO-04 (D-19, PD-OI-018 revision 4): two records packaged in one source file
+// search the same database as two single-record files, so an unrequested
+// self hit cannot fill max-target-seqs.
+test('one-file records never search themselves without a request', async () => {
+  const planFiles = (packaged) => prepareLosatSourceBatches({
+    sequences: [0, 1].map((index) => ({
+      uid: `record-${index}`, gb: packaged ? packaged : { name: `record-${index}.gbk` }, gff: null, fasta: null
+    })),
+    specs: [{ queryIndex: 0, subjectIndex: 1 }],
+    getEntry: async (index) => ({ fasta: `>protein-${index}\nMKK\n` }),
+    buildArgs: () => ['--max-target-seqs', '1'],
+    hashText,
+    protein: true
+  });
+  const oneFile = await planFiles({ name: 'two-records.gbk' });
+  const twoFiles = await planFiles(null);
+  for (const batch of oneFile.batches) {
+    assert.deepEqual(batch.query.indexes.filter((index) => batch.subject.indexes.includes(index)), [],
+      'an unrequested within-record search fills max-target-seqs with self hits');
+  }
+  const identity = ({ batches }) => batches.map(({ query, subject, searchContext }) => [query.hash, subject.hash, searchContext]);
+  assert.deepEqual(identity(oneFile), identity(twoFiles), 'file packaging does not change a two-record search');
+});
+
+// Shared vectors (design 3.6, D15): tests/test_losat_job_plan.py runs the same
+// cases against gbdraw.comparisons.losat_jobs, so the CLI and the Web search
+// the same databases under the same raw keys.
+const sharedVectors = (name) => JSON.parse(
+  readFileSync(new URL(`../fixtures/${name}`, import.meta.url), 'utf8')
+).cases;
+
+test('shared LOSAT FASTA extraction vectors', async () => {
+  for (const vector of sharedVectors('losat_fasta_extraction_cases.json')) {
+    const entry = await extractLosatFastaFast({
+      text: vector.text, fmt: vector.fmt, regionSpec: vector.regionSpec,
+      recordSelector: vector.recordSelector, reverseFlag: '0'
+    });
+    assert.deepEqual({
+      recordId: entry.recordId,
+      canonicalLength: entry.canonicalLength,
+      fasta: entry.fasta,
+      hash: await hashText(entry.fasta)
+    }, vector.expected, vector.name);
+  }
+});
+
+test('shared LOSAT job plan and nucleotide raw-key vectors', async () => {
+  for (const vector of sharedVectors('losat_job_plan_cases.json')) {
+    const files = new Map();
+    const records = vector.records.map((record) => {
+      if (!files.has(record.source)) files.set(record.source, { name: record.source });
+      return { uid: record.uid, gb: files.get(record.source), gff: null, fasta: null, losat_gencode: record.gencode };
+    });
+    // The buildLosatArgs rules of run-analysis.js for one record pair.
+    const buildArgs = (query, subject) => {
+      const args = [];
+      const push = (flag, value) => {
+        if (value !== null && value !== undefined && value !== '') args.push(flag, String(value));
+      };
+      if (vector.program === 'blastn') push('--task', vector.task);
+      else {
+        push('--query-gencode', vector.records[query].gencode);
+        push('--db-gencode', vector.records[subject].gencode);
+      }
+      return args;
+    };
+    const specs = vector.specs.map(([queryIndex, subjectIndex]) => ({ queryIndex, subjectIndex }));
+    const plan = await prepareLosatSourceBatches({
+      sequences: records, specs, getEntry: async (index) => ({ fasta: vector.records[index].fasta }),
+      buildArgs, hashText, protein: false
+    });
+    assert.equal(planLosatSourceJobs({ sequences: records, specs, buildArgs }).jobs.length, plan.batches.length);
+    assert.deepEqual(plan.batches.map((batch) => ({
+      scope: batch.scope,
+      args: batch.args,
+      specs: batch.specs.map((spec) => [spec.queryIndex, spec.subjectIndex]),
+      queryIndexes: batch.query.indexes,
+      subjectIndexes: batch.subject.indexes,
+      queryIds: Object.fromEntries([...batch.query.ids].map(([id, value]) => [id, [value.index, value.originalId]])),
+      subjectIds: Object.fromEntries([...batch.subject.ids].map(([id, value]) => [id, [value.index, value.originalId]])),
+      queryHash: batch.query.hash,
+      subjectHash: batch.subject.hash,
+      searchContext: batch.searchContext
+    })), vector.expected.jobs, vector.name);
+    const rawKeys = [];
+    for (const spec of specs) {
+      const payload = buildLosatCachePayload({
+        identityKind: 'nucleotide',
+        program: vector.program,
+        outfmt: '6',
+        args: buildArgs(spec.queryIndex, spec.subjectIndex),
+        queryCanonicalHash: await hashText(vector.records[spec.queryIndex].fasta),
+        subjectCanonicalHash: await hashText(vector.records[spec.subjectIndex].fasta),
+        searchContext: plan.bySpec.get(spec).searchContext
+      });
+      rawKeys.push([spec.queryIndex, spec.subjectIndex, await hashText(JSON.stringify(payload))]);
+    }
+    assert.deepEqual(rawKeys, vector.expected.rawKeys, vector.name);
+  }
+});
+
+// LOSATP uses the same plan (design D7): tests/test_losat_job_plan.py runs
+// these cases against losatp_job_specs and prepare_losat_batches(protein=True).
+// The Web protein raw key comes from build_protein_losat_cache_key through
+// the Python helper, so equal args and searchContext give equal keys.
+test('shared LOSATP specs and job plan vectors', async () => {
+  const cases = JSON.parse(
+    readFileSync(new URL('../fixtures/losat_job_plan_cases.json', import.meta.url), 'utf8')
+  ).proteinCases;
+  assert.ok(cases.length > 0);
+  for (const vector of cases) {
+    const files = new Map();
+    const sequences = vector.records.map((record) => {
+      if (!files.has(record.source)) files.set(record.source, { name: record.source });
+      return { uid: record.uid, gb: files.get(record.source), gff: null, fasta: null };
+    });
+    const resolution = {
+      mode: 'adjacent',
+      edges: vector.edges.map(([queryIndex, subjectIndex], ordinal) => ({
+        source: 'losat', queryIndex, subjectIndex, ordinal, edgeKey: `edge-${ordinal}`,
+        queryUid: vector.records[queryIndex].uid, subjectUid: vector.records[subjectIndex].uid
+      }))
+    };
+    const specs = buildLosatJobSpecs({
+      resolution,
+      recordCount: vector.records.length,
+      recordUids: vector.records.map((record) => record.uid),
+      program: 'blastp',
+      blastpMode: vector.mode,
+      collinearInferOrthogroups: vector.inferOrthogroups,
+      collinearSearchScope: vector.searchScope
+    });
+    assert.deepEqual(specs.map((spec) => [spec.queryIndex, spec.subjectIndex]), vector.specs, vector.name);
+    const plan = await prepareLosatSourceBatches({
+      sequences, specs, getEntry: async (index) => ({ fasta: vector.records[index].fasta }),
+      buildArgs: () => vector.args, hashText, protein: true
+    });
+    assert.deepEqual(plan.batches.map((batch) => ({
+      scope: batch.scope,
+      args: batch.args,
+      specs: batch.specs.map((spec) => [spec.queryIndex, spec.subjectIndex]),
+      queryIndexes: batch.query.indexes,
+      subjectIndexes: batch.subject.indexes,
+      queryIds: Object.fromEntries([...batch.query.ids].map(([id, value]) => [id, [value.index, value.originalId]])),
+      subjectIds: Object.fromEntries([...batch.subject.ids].map(([id, value]) => [id, [value.index, value.originalId]])),
+      queryHash: batch.query.hash,
+      subjectHash: batch.subject.hash,
+      searchContext: batch.searchContext
+    })), vector.expected.jobs, vector.name);
+  }
+});

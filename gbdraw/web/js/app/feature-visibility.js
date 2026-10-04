@@ -321,9 +321,10 @@ export const preserveFeatureVisibilitySelectorCacheForOverrides = (
   return merged;
 };
 
-// Reconcile against the source catalog, including hidden/cropped features.
-// The source-binding owner decides whether a successful Generate replaced a source.
-export const reconcileFeatureVisibilityOverrides = (
+// Prune feature-keyed editor overrides (visibility and labels) whose target no
+// longer exists in the source catalog, including hidden/cropped features. The
+// source-binding owner decides whether a successful Generate replaced a source.
+export const pruneUnmatchedFeatureOverrides = (
   overrides,
   biologicalFeatures,
   previousFeatures = [],
@@ -409,11 +410,15 @@ const getCacheValue = (cache, featureId) => {
   return cache[featureId];
 };
 
+// Feature visibility for the live preview: the per-feature override, then the
+// first matching manual rule. With the feature, the editor's exact-qualifier
+// rules match as Generate does, so an action and a later reconcile agree.
 export const resolveEffectiveFeatureVisibility = (
   featureIdRaw,
   overrides = {},
   baseVisibilityCache = null,
-  manualRules = []
+  manualRules = [],
+  feature = null
 ) => {
   const featureId = normalizeCell(featureIdRaw);
   if (!featureId) return 'default';
@@ -423,6 +428,12 @@ export const resolveEffectiveFeatureVisibility = (
   if (cached !== 'default') return cached;
   for (const rule of Array.isArray(manualRules) ? manualRules : []) {
     const normalized = normalizeFeatureVisibilityRule(rule);
+    if (feature && isEditorExactQualifierRule(normalized)) {
+      if (featureMatchesExactQualifier(feature, normalized)) {
+        return featureVisibilityActionToMode(normalized.action);
+      }
+      continue;
+    }
     if (normalized.qualifier.toLowerCase() !== 'hash') continue;
     if (normalized.recordId !== '*' || normalized.featureType !== '*') continue;
     try {
@@ -458,6 +469,28 @@ const isEditorExactQualifierRule = (rule) => {
     ['product', 'protein_id'].includes(qualifier) &&
     normalized.value.startsWith('^') &&
     normalized.value.endsWith('$');
+};
+
+const qualifierValues = (feat, qualifier) => {
+  const key = normalizeCell(qualifier).toLowerCase();
+  const qualifiers = feat?.qualifiers && typeof feat.qualifiers === 'object' ? feat.qualifiers : {};
+  const entry = Object.entries(qualifiers).find(([name]) => String(name).toLowerCase() === key);
+  const raw = entry ? entry[1] : feat?.[key];
+  return (Array.isArray(raw) ? raw : [raw]).map((value) => normalizeCell(value)).filter(Boolean);
+};
+
+// Python matches qualifier rules with a case-insensitive regex search over
+// every value (gbdraw/features/visibility.py). The editor's exact-qualifier
+// scope and its rule use this one matcher.
+export const featureMatchesExactQualifier = (feat, { featureType, qualifier, value } = {}) => {
+  if (getFeatureType(feat) !== normalizeCell(featureType)) return false;
+  let pattern;
+  try {
+    pattern = new RegExp(normalizeCell(value), 'i');
+  } catch (_err) {
+    return false;
+  }
+  return qualifierValues(feat, qualifier).some((candidate) => pattern.test(candidate));
 };
 
 const reorderEditorVisibilityRules = (rules) => {

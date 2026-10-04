@@ -12,7 +12,7 @@ from Bio.SeqFeature import FeatureLocation, SeqFeature
 from Bio.SeqRecord import SeqRecord
 from svgwrite import Drawing
 
-from gbdraw.api import LinearMultiRecordOptions, save_figure_to
+from gbdraw.api import LinearMultiRecordOptions, LinearRecordTranslation, save_figure_to
 from gbdraw.api.diagram import assemble_linear_diagram_from_records
 from gbdraw.canvas import LinearCanvasConfigurator
 from gbdraw.config.models import GbdrawConfig, LinearRenderProfile
@@ -198,6 +198,7 @@ def test_linear_definition_group_follows_record_offset_by_default() -> None:
 def _definition_row_canvas(
     row_sizes: tuple[int, int], locked: bool, align_center: bool,
     *, subtitles: bool = True, show_replicon: bool = False, text_anchor: str = "middle",
+    translations: tuple[float, ...] | None = None,
 ) -> Drawing:
     records = []
     positions = []
@@ -226,7 +227,13 @@ def _definition_row_canvas(
     )
     return assemble_linear_diagram_from_records(
         records, cfg=GbdrawConfig.from_dict(config), selected_features_set=[],
-        layout=LinearMultiRecordOptions(multi_record_positions=tuple(positions)),
+        layout=LinearMultiRecordOptions(
+            multi_record_positions=tuple(positions),
+            record_translations=tuple(
+                LinearRecordTranslation(f"record-{index + 1}", x)
+                for index, x in enumerate(translations or ())
+            ),
+        ),
         legend="none",
     )
 
@@ -261,6 +268,40 @@ def test_definition_column_aligns_long_and_short_rows(
     assert x(headings[1]) - x(headings[0]) == pytest.approx(expected_shift)
 
 
+@pytest.mark.parametrize("row_sizes", [(1, 1), (2, 2), (1, 2)])
+@pytest.mark.parametrize("locked", [False, True])
+def test_definition_column_after_unequal_record_translations(row_sizes, locked) -> None:
+    translations = tuple((-85.0, 40.0, -35.0, 75.0)[:sum(row_sizes)])
+    drawing = _definition_row_canvas(row_sizes, locked, True, translations=translations)
+    root = ET.fromstring(drawing.tostring())
+    ns = {"s": "http://www.w3.org/2000/svg"}
+    groups = root.findall("s:g", ns)
+    headings = [group for group in groups
+                if group.find("s:text[@data-definition-line-kind='name']", ns) is not None]
+    axes = [next(group for group in groups
+                 if group.get("data-gbdraw-record-id") == f"record_{index}"
+                 and not (group.get("data-gbdraw-role") or "").startswith("record-definition"))
+            for index in range(sum(row_sizes))]
+    assert len(headings) == 2
+
+    def x(group: ET.Element) -> float:
+        return sum(float(value) for value in re.findall(
+            r"translate\(\s*([-+0-9.eE]+)", group.get("transform", "")))
+
+    axis_x = {index: x(group) for index, group in enumerate(axes)}
+    assert min(translations) < 0 < max(translations)
+    if locked:
+        assert x(headings[0]) == pytest.approx(x(headings[1]))
+        # The right edge is measured in the Chromium case below. Here the
+        # common origin must be left of every final sequence start.
+        assert all(x(group) < value for value in axis_x.values() for group in headings)
+    else:
+        first_in_second_row = row_sizes[0]
+        assert x(headings[1]) - x(headings[0]) == pytest.approx(
+            axis_x[first_in_second_row] - axis_x[0]
+        )
+
+
 @pytest.mark.parametrize("anchor", ["start", "end"])
 @pytest.mark.parametrize("row_sizes", [(1, 1), (2, 2), (1, 2)])
 @pytest.mark.parametrize("locked", [False, True])
@@ -289,8 +330,10 @@ def test_browser_definition_column_matches_collision_bounds(
         return bands
 
     monkeypatch.setattr(linear_assemble, "_record_collision_bands", capture)
+    translations = tuple((-85.0, 40.0, -35.0, 75.0)[:sum(row_sizes)])
     drawing = _definition_row_canvas(
         row_sizes, locked, True, subtitles=subtitles, show_replicon=True,
+        translations=translations,
     )
     # The assembler's last pass uses final record positions. Compare those
     # domains to actual SVG text, without copying the placement formula.
@@ -347,6 +390,10 @@ def test_browser_definition_column_matches_collision_bounds(
                     coordinate = lambda b: b["left"] if locked else (b["left"] + b["right"]) / 2
                     assert coordinate(line) == pytest.approx(coordinate(names[0]), abs=tolerance)
     assert len(headings) == 2
+    if locked:
+        leftmost_axis = min(axis["x"] for axis in result["axes"])
+        rightmost_heading = max(heading[0]["right"] for heading in headings)
+        assert leftmost_axis - rightmost_heading >= 20 - tolerance
     (first, axis_a), (second, axis_b) = headings
     coordinate = lambda b: b["left"] if locked else (b["left"] + b["right"]) / 2
     assert coordinate(second) - coordinate(first) == pytest.approx(0 if locked else axis_b - axis_a, abs=tolerance)

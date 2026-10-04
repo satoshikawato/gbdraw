@@ -29,7 +29,7 @@ class ControlledWorker {
   terminate() { this.terminated = true; }
 }
 globalThis.Worker = ControlledWorker;
-const { runDiagramGeneration, cancelDiagramGeneration, disposeDiagramGenerationWorker } = await import(
+const { runDiagramGeneration, runDiagramHelperOperation, cancelDiagramGeneration, disposeDiagramGenerationWorker } = await import(
   '../../gbdraw/web/js/services/diagram-generation.js'
 );
 const flush = async () => { for (let i = 0; i < 12; i += 1) await Promise.resolve(); };
@@ -82,7 +82,7 @@ test('Cancel and failure clean progress listeners and permit a fresh run', async
   for (const terminal of ['cancel-init', 'cancel-render', 'error']) {
     const events = [];
     const pending = runDiagramGeneration(payload(), { onProgress: event => events.push(event) });
-    const rejection = assert.rejects(pending, terminal === 'error' ? /render failed/ : /cancel/i);
+    const rejection = assert.rejects(pending, terminal === 'error' ? error => error.code === 'UNKNOWN' && error.stage === 'render' : /cancel/i);
     const worker = ControlledWorker.instances.at(-1);
     if (terminal !== 'cancel-init') {
       worker.initialize();
@@ -90,7 +90,7 @@ test('Cancel and failure clean progress listeners and permit a fresh run', async
       const requestId = latestRequest(worker);
       worker.emit({ type: 'progress', requestId, stage: 'rendering' });
       if (terminal === 'error') {
-        worker.emit({ type: 'run', requestId, ok: false, error: { message: 'render failed' } });
+        worker.emit({ type: 'run', requestId, ok: false, error: { code: 'UNKNOWN', operation: 'generate', stage: 'render' } });
       }
     }
     if (terminal !== 'error') await cancelDiagramGeneration();
@@ -107,6 +107,72 @@ test('Cancel and failure clean progress listeners and permit a fresh run', async
   await flush();
   worker.emit({ type: 'run', requestId: latestRequest(worker), ok: true, results: [] });
   await retry;
+  assertClean(worker);
+  disposeDiagramGenerationWorker();
+});
+
+
+test('Generate helper preparation reports real cold initialization and shares the warm render Worker', async () => {
+  const events = [];
+  const helper = runDiagramHelperOperation('evaluateRules', { rules: [] }, {
+    onProgress: event => events.push(event)
+  });
+  const worker = ControlledWorker.instances.at(-1);
+  const constructions = ControlledWorker.instances.length;
+  assert.deepEqual(events.map(event => event.stage), ['preparing-runtime']);
+  await flush();
+  assert.equal(events.length, 1);
+  worker.initialize();
+  await flush();
+  const requestId = worker.messages.find(message => message.type === 'helper').requestId;
+  assert.equal(events[0].requestId, requestId);
+  worker.emit({ type: 'helper', requestId, ok: true, result: { rules: [] } });
+  await helper;
+  assertClean(worker);
+  const renderEvents = [];
+  const render = runDiagramGeneration(payload(), { onProgress: event => renderEvents.push(event) });
+  await flush();
+  assert.deepEqual(renderEvents.map(event => event.stage), ['preparing-resources']);
+  worker.emit({ type: 'run', requestId: latestRequest(worker), ok: true, results: [] });
+  await render;
+  assert.equal(ControlledWorker.instances.length, constructions);
+  assertClean(worker);
+  disposeDiagramGenerationWorker();
+
+  const canceledEvents = [];
+  const canceled = runDiagramHelperOperation('evaluateRules', { rules: [] }, {
+    onProgress: event => canceledEvents.push(event)
+  });
+  const rejection = assert.rejects(canceled, /cancel/i);
+  const canceledWorker = ControlledWorker.instances.at(-1);
+  assert.deepEqual(canceledEvents.map(event => event.stage), ['preparing-runtime']);
+  cancelDiagramGeneration();
+  await rejection;
+  assert.equal(canceledWorker.terminated, true);
+  assertClean(canceledWorker);
+  assert.equal(canceledEvents.length, 1);
+});
+
+// GE-09 (Web GUI audit 2026-09-30): a Cancel while no Worker-side request is
+// active (for example, during JS-side preparation) keeps the warm Worker, so the
+// next run is not a cold start.
+test('Cancel without Worker-side work keeps the warm Worker for the next run', async () => {
+  const helper = runDiagramHelperOperation('evaluateRules', { rules: [] });
+  const worker = ControlledWorker.instances.at(-1);
+  worker.initialize();
+  await flush();
+  const requestId = worker.messages.find(message => message.type === 'helper').requestId;
+  worker.emit({ type: 'helper', requestId, ok: true, result: { rules: [] } });
+  await helper;
+  assertClean(worker);
+  const constructions = ControlledWorker.instances.length;
+  assert.equal(cancelDiagramGeneration(), false);
+  assert.equal(Boolean(worker.terminated), false);
+  const next = runDiagramGeneration(payload());
+  await flush();
+  assert.equal(ControlledWorker.instances.length, constructions);
+  worker.emit({ type: 'run', requestId: latestRequest(worker), ok: true, results: [] });
+  await next;
   assertClean(worker);
   disposeDiagramGenerationWorker();
 });

@@ -23,15 +23,12 @@ const runAnalysisUrl = pathToFileURL(runAnalysisPath);
 const identityProbeDir = await mkdtemp(join(tmpdir(), 'gbdraw-raw-identity-'));
 const identityProbePath = join(identityProbeDir, 'run-analysis-identity-probe.mjs');
 const identityProbeSource = (await readFile(runAnalysisPath, 'utf8'))
-  .replace(
-    'const buildLosatCachePayload = ({',
-    'export const buildLosatCachePayload = ({'
-  )
+  .replace('const stripRuntimeCacheStats =', 'export const stripRuntimeCacheStats =')
   .replace(/from '(\.\.?\/[^']+)'/g, (_match, specifier) => (
     `from '${new URL(specifier, runAnalysisUrl).href}'`
   ));
 await writeFile(identityProbePath, identityProbeSource, 'utf8');
-const { buildLosatCachePayload } = await import(pathToFileURL(identityProbePath));
+const { buildLosatCachePayload, stripRuntimeCacheStats } = await import(pathToFileURL(identityProbePath));
 
 const rawIdentityInput = {
   identityKind: 'protein',
@@ -241,3 +238,56 @@ assert.equal(baselineIdentity.pathRepresentation, 'lossless-graph-v1');
 const oldIdentity = {...baselineIdentity};
 delete oldIdentity.pathRepresentation;
 assert.notEqual(cacheKey(oldIdentity), cacheKey(baselineIdentity));
+
+// Current comparison data has one owner; stats can differ without duplicating it.
+const immutablePairs = Object.freeze([Object.freeze({ tsv: 'α\tβ\n', rows: Object.freeze([]) })]);
+const immutableResource = Object.freeze({ schema: 3, kind: 'result', value: Object.freeze({
+  type: 'CollinearityResult', fields: Object.freeze({ blocks: Object.freeze([]) })
+}) });
+const conversionPayload = Object.freeze({ pairs: immutablePairs, collinearityResult: immutableResource,
+  provenance: Object.freeze({ identity: 'original' }), cache: Object.freeze({ convertedPayloadHit: false }) });
+const cachedPayload = stripRuntimeCacheStats(conversionPayload);
+assert.deepEqual(cachedPayload, { pairs: immutablePairs, collinearityResult: immutableResource,
+  provenance: conversionPayload.provenance });
+assert.equal(cachedPayload.pairs, immutablePairs);
+assert.equal(cachedPayload.collinearityResult, immutableResource);
+assert.equal(conversionPayload.cache.convertedPayloadHit, false);
+assert.equal(Object.hasOwn(cachedPayload, 'cache'), false);
+
+// CO-02 (OIPC-C04, PD-OI-022): resolved protein comparisons are reused only
+// when the committed Feature visibility rules equal the active rules.
+{
+  const reuseProbePath = join(identityProbeDir, 'run-analysis-reuse-probe.mjs');
+  await writeFile(reuseProbePath, identityProbeSource.replace(
+    'const canReuseResolvedProteinArtifacts = ({',
+    'export const canReuseResolvedProteinArtifacts = ({'
+  ), 'utf8');
+  const { canReuseResolvedProteinArtifacts } = await import(pathToFileURL(reuseProbePath));
+  const marker = { kind: 'generatedProteinComparison', mode: 'none', settings: {} };
+  const comparisons = [marker, { kind: 'orthogroupResult' }];
+  const sessionWith = (visibilityText) => ({
+    renderRequest: {
+      comparisons,
+      records: [{ recordKey: 'a', region: {} }],
+      diagramOptions: visibilityText === null ? {} : { featureVisibilityTableFile: { resourceId: 'visibility' } }
+    },
+    resources: visibilityText === null ? {} : {
+      visibility: { encoding: 'base64', data: Buffer.from(visibilityText, 'utf8').toString('base64') }
+    }
+  });
+  const active = (featureVisibility) => ({
+    featureVisibility, mode: 'orthogroup', candidateLimit: null, bitscore: 50, evalue: 1e-2,
+    identity: 0, alignmentLength: 0, orthogroupMembershipMode: 'anchor_core_v1', memberMaxHits: null
+  });
+  const reuse = (session, visibility) => canReuseResolvedProteinArtifacts({
+    canonicalComparisons: comparisons, committedSession: session,
+    sequences: [{ uid: 'a', region_record_id: '' }], active: active(visibility)
+  });
+  const hideRule = '*\tCDS\tprotein_id\tCAG38712.1\toff\n';
+  assert.equal(reuse(sessionWith(null), ''), true, 'unchanged empty visibility reuses');
+  assert.equal(reuse(sessionWith(null), hideRule), false, 'a new hiding rule declines reuse');
+  assert.equal(reuse(sessionWith(hideRule), ''), false, 'a removed hiding rule declines reuse');
+  assert.equal(reuse(sessionWith(hideRule), hideRule), true, 'the same rules reuse');
+  assert.equal(reuse(sessionWith(`${hideRule.trimEnd()}\n\n`), hideRule), true, 'rules compare after normalization');
+  assert.equal(reuse({ ...sessionWith(hideRule), resources: {} }, hideRule), false, 'an unreadable committed table declines');
+}

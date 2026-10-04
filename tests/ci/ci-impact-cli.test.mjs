@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { classifyPath } from '../../tools/ci-impact-policy.mjs';
+import { classifyPath, knownJobsFor } from '../../tools/ci-impact-policy.mjs';
 import { PromotionReadinessError } from '../../tools/check-promotion-readiness.mjs';
 import {
   buildImpactPlan,
@@ -87,7 +87,7 @@ test('PR planning uses a three-dot diff and direct base evidence', async () => {
     token: 'test-token',
     runGitImpl: (_root, args) => {
       gitArgs = args;
-      return gitResult('M', 'docs/FAQ.md');
+      return gitResult('M', '.gitignore');
     },
     verifyWorkflowEvidenceImpl: async (args) => {
       evidenceArguments = args;
@@ -104,10 +104,24 @@ test('PR planning uses a three-dot diff and direct base evidence', async () => {
   ]);
   assert.equal(evidenceArguments.expectedHeadSha, SHA.base);
   assert.equal(evidenceArguments.workflowPath, '.github/workflows/test.yml');
-  assert.equal(outcome.plan.impact, 'documentation');
+  assert.equal(outcome.plan.impact, 'metadata');
   assert.equal(outcome.plan.decision, 'selective');
   assert.equal(outcome.plan.basis, 'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE');
-  assert.deepEqual(outcome.plan.requiredJobs, ['recipes-standard']);
+  assert.deepEqual(outcome.plan.requiredJobs, []);
+});
+
+test('Product Contract documentation PR selects only Web policy validation', async () => {
+  const outcome = await buildImpactPlan({
+    configuration: configuration(),
+    token: 'test-token',
+    runGitImpl: () => gitResult('M', 'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md'),
+    verifyWorkflowEvidenceImpl: async () => assert.fail('Documentation PR must not query staging')
+  });
+  assert.equal(outcome.plan.impact, 'policy-documentation');
+  assert.equal(outcome.plan.decision, 'selective');
+  assert.equal(outcome.plan.basis, 'DOCUMENTATION_ONLY_PR');
+  assert.equal(outcome.plan.inheritedEvidence, null);
+  assert.deepEqual(outcome.plan.requiredJobs, ['web-change-budget']);
 });
 
 test('dev and Gallery planning use a two-commit diff and direct parent evidence', async () => {
@@ -141,7 +155,8 @@ test('dev and Gallery planning use a two-commit diff and direct parent evidence'
 test('dev metadata and documentation changes select only changed surfaces', async () => {
   for (const [path, impact, requiredJobs] of [
     ['.agents/skills/example/SKILL.md', 'metadata', []],
-    ['docs/FAQ.md', 'documentation', ['recipes-standard']]
+    ['docs/FAQ.md', 'documentation', ['recipes-standard']],
+    ['docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md', 'policy-documentation', ['web-change-budget']]
   ]) {
     let evidenceArguments;
     const outcome = await buildImpactPlan({
@@ -169,7 +184,8 @@ test('dev metadata and documentation changes select only changed surfaces', asyn
 test('Gallery metadata and documentation changes skip browser and performance', async () => {
   for (const [path, impact] of [
     ['.agents/skills/example/SKILL.md', 'metadata'],
-    ['docs/FAQ.md', 'documentation']
+    ['docs/FAQ.md', 'documentation'],
+    ['docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md', 'policy-documentation']
   ]) {
     let evidenceArguments;
     const outcome = await buildImpactPlan({
@@ -278,51 +294,82 @@ test('dev direct-parent staging failures force the current run to full', async (
   }
 });
 
-test('rapid dev pushes fall back to full while the direct parent is running or cancelled', async () => {
-  for (const state of ['in progress', 'cancelled']) {
-    const outcome = await buildImpactPlan({
-      configuration: configuration({
-        CI_IMPACT_PROFILE: 'dev',
-        CI_IMPACT_EVENT_NAME: 'push'
-      }),
-      token: 'test-token',
-      runGitImpl: () => gitResult('M', 'docs/FAQ.md'),
-      verifyWorkflowEvidenceImpl: async () => {
-        throw new PromotionReadinessError(
-          'RUN_NOT_SUCCESSFUL',
-          `Direct parent run is ${state}.`
-        );
-      }
-    });
-    assert.equal(outcome.plan.impact, 'documentation', state);
-    assert.equal(outcome.plan.decision, 'full', state);
-    assert.equal(outcome.plan.basis, 'INHERITED_EVIDENCE_UNAVAILABLE', state);
+test('documentation-only PRs stay selective without querying any base staging state', async () => {
+  for (const code of [
+    'NO_MATCHING_RUN', 'RUN_NOT_SUCCESSFUL', 'AGGREGATE_JOB_NOT_SUCCESSFUL', 'API_REQUEST_FAILED'
+  ]) {
+    for (const [tokens, jobs] of [
+      [['M', 'docs/TUTORIALS/1_Intro.md'], ['recipes-standard']],
+      [['M', 'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md'], ['web-change-budget']],
+      [['M', '.gitignore', 'M', 'docs/FAQ.md', 'M', 'docs/internal/SELECTIVE_CI.md'],
+        ['web-change-budget', 'recipes-standard']],
+      [['R100', 'docs/old.md', 'docs/new.md'], ['recipes-standard']],
+      [['D', 'docs/FAQ.md'], ['recipes-standard']]
+    ]) {
+      let calls = 0;
+      const outcome = await buildImpactPlan({
+        configuration: configuration(),
+        token: '',
+        runGitImpl: () => gitResult(...tokens),
+        verifyWorkflowEvidenceImpl: async () => {
+          calls += 1;
+          throw new PromotionReadinessError(code, `Base staging unavailable: ${code}`);
+        }
+      });
+      assert.equal(calls, 0);
+      assert.equal(outcome.plan.decision, 'selective');
+      assert.equal(outcome.plan.basis, 'DOCUMENTATION_ONLY_PR');
+      assert.equal(outcome.plan.inheritedEvidence, null);
+      assert.equal(outcome.evidenceFailure, undefined);
+      assert.deepEqual(outcome.plan.requiredJobs, jobs);
+    }
   }
 });
 
-test('Gallery direct-parent evidence failures fall back to both Gallery jobs', async () => {
-  for (const [code, state] of [
-    ['NO_MATCHING_RUN', 'missing'],
-    ['RUN_NOT_SUCCESSFUL', 'in progress'],
-    ['RUN_NOT_SUCCESSFUL', 'cancelled'],
-    ['RUN_NOT_SUCCESSFUL', 'failure'],
-    ['API_REQUEST_FAILED', 'API error']
+test('documentation-only dev pushes without a successful direct parent run the full dev tier', async () => {
+  for (const code of [
+    'NO_MATCHING_RUN', 'RUN_NOT_SUCCESSFUL', 'AGGREGATE_JOB_NOT_SUCCESSFUL', 'API_REQUEST_FAILED'
   ]) {
-    const outcome = await buildImpactPlan({
+    for (const [path, impact] of [
+      ['docs/FAQ.md', 'documentation'],
+      ['docs/internal/SELECTIVE_CI.md', 'policy-documentation']
+    ]) {
+      const outcome = await buildImpactPlan({
+        configuration: configuration({
+          CI_IMPACT_PROFILE: 'dev',
+          CI_IMPACT_EVENT_NAME: 'push'
+        }),
+        token: 'test-token',
+        runGitImpl: () => gitResult('M', path),
+        verifyWorkflowEvidenceImpl: async () => {
+          throw new PromotionReadinessError(code, `Direct parent staging unavailable: ${code}`);
+        }
+      });
+      assert.equal(outcome.plan.impact, impact, code);
+      assert.equal(outcome.plan.decision, 'full', code);
+      assert.equal(outcome.plan.basis, 'INHERITED_EVIDENCE_UNAVAILABLE', code);
+      assert.equal(outcome.plan.inheritedEvidence, null, code);
+      assert.deepEqual(outcome.plan.requiredJobs, knownJobsFor('dev'), code);
+      assert.equal(outcome.evidenceFailure.code, code);
+    }
+  }
+});
+
+test('documentation-only Gallery pushes fail closed without browser or performance jobs', async () => {
+  for (const code of [
+    'NO_MATCHING_RUN', 'RUN_NOT_SUCCESSFUL', 'API_REQUEST_FAILED'
+  ]) {
+    await assert.rejects(buildImpactPlan({
       configuration: configuration({
         CI_IMPACT_PROFILE: 'gallery',
         CI_IMPACT_EVENT_NAME: 'push'
       }),
       token: 'test-token',
-      runGitImpl: () => gitResult('M', 'docs/FAQ.md'),
+      runGitImpl: () => gitResult('M', 'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md'),
       verifyWorkflowEvidenceImpl: async () => {
-        throw new PromotionReadinessError(code, `Direct parent Gallery run is ${state}.`);
+        throw new PromotionReadinessError(code, `Direct parent Gallery run failed: ${code}`);
       }
-    });
-    assert.equal(outcome.plan.impact, 'documentation', state);
-    assert.equal(outcome.plan.decision, 'full', state);
-    assert.equal(outcome.plan.basis, 'INHERITED_EVIDENCE_UNAVAILABLE', state);
-    assert.deepEqual(outcome.plan.requiredJobs, ['browser', 'performance'], state);
+    }), { code: 'DOCUMENTATION_BASE_EVIDENCE_UNAVAILABLE' }, code);
   }
 });
 
@@ -694,6 +741,23 @@ test('workflow keeps trusted PR routing and activates protected dev routing', ()
   assert.doesNotMatch(devGate, /test "\$\{\{ needs\./);
 });
 
+test('every planned job is a gate dependency that can run for its profile', () => {
+  const workflow = readFileSync(resolve(REPOSITORY_ROOT, '.github/workflows/test.yml'), 'utf8');
+  const job = (id) => workflow.match(new RegExp(`\\n  ${id}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`))?.[0] || '';
+  const needs = (id) => job(id).match(/\n    needs:\n((?:      - [a-z0-9-]+\n)+)/)?.[1]
+    .trim().split('\n').map((line) => line.replace('- ', '').trim()) || [];
+  for (const [profile, gate, event] of [
+    ['pr', 'pr-gate', /github\.event_name == 'pull_request' && github\.base_ref == 'dev'/],
+    ['dev', 'dev-staging-gate', /github\.event_name == 'push' && github\.ref == 'refs\/heads\/dev'/]
+  ]) {
+    for (const jobId of knownJobsFor(profile)) {
+      assert.ok(needs(gate).includes(jobId), `${gate} must need ${jobId}`);
+      assert.match(job(jobId), new RegExp(`requiredJobs, '${jobId}'`), jobId);
+      assert.match(job(jobId), event, `${jobId} must run for the ${profile} profile`);
+    }
+  }
+});
+
 test('web PR route inherits only exact base evidence and falls back to full on API failure', async () => {
   for (const available of [true, false]) {
     const outcome = await buildImpactPlan({
@@ -709,6 +773,8 @@ test('web PR route inherits only exact base evidence and falls back to full on A
     assert.equal(outcome.plan.requiredJobs.includes('core-pr'), !available);
     assert.ok(outcome.plan.requiredJobs.includes('web-contracts-pr'));
     assert.ok(outcome.plan.requiredJobs.includes('web-pr-smoke'));
+    assert.ok(outcome.plan.requiredJobs.includes('gallery'));
+    assert.ok(outcome.plan.requiredJobs.includes('playwright-functional'));
   }
 });
 
@@ -742,4 +808,159 @@ test('release workflow binds exhaustive matrices and package/browser contracts t
   assert.match(job('browser'), /Run package build integration[\s\S]*-m "slow and not browser"/);
   assert.match(job('browser'), /Run offline GUI browser contracts[\s\S]*-m "slow and browser"/);
   assert.match(job('pr-gate'), /sparse-checkout: tools[\s\S]*node \.ci-trusted-base\/tools\/ci-impact.mjs gate/);
+});
+
+test('Gallery alone owns PR parity without expanding dev or release execution', () => {
+  const workflow = readFileSync(resolve(REPOSITORY_ROOT, '.github/workflows/test.yml'), 'utf8');
+  const job = (id) => workflow.match(new RegExp(`\\n  ${id}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`))?.[0] || '';
+  const gallery = job('gallery');
+  const smoke = job('web-pr-smoke');
+  assert.equal((workflow.match(/run: npm run test:web:gallery-publication/g) || []).length, 1);
+  assert.match(gallery, /\n    timeout-minutes: 25\n/);
+  assert.match(gallery, /GBDRAW_GALLERY_PR_PARITY: \$\{\{ github\.event_name == 'pull_request' && github\.base_ref == 'dev' && contains\(fromJSON\(needs\.ci-impact\.outputs\.plan\)\.requiredJobs, 'web-pr-smoke'\) \}\}/);
+  assert.match(gallery, /python -m pytest tests\/[\s\S]*-m "gallery and not slow"/);
+  for (const name of ['Set up Node.js for Gallery parity', 'Install Gallery parity dependencies', 'Prepare Gallery browser wheel', 'Verify Gallery first-Generate parity']) {
+    assert.match(gallery, new RegExp(`name: ${name}\\n        if: env\\.GBDRAW_GALLERY_PR_PARITY == 'true'`));
+  }
+  assert.match(gallery, /node-version: "20"/);
+  assert.match(gallery, /npm ci/);
+  assert.match(gallery, /npx playwright install --with-deps chromium/);
+  assert.equal((gallery.match(/run: python tools\/prepare_browser_wheel\.py/g) || []).length, 1);
+  assert.match(gallery, /if: failure\(\) && env\.GBDRAW_GALLERY_PR_PARITY == 'true'/);
+  assert.match(gallery, /path: test-results\//);
+  assert.match(smoke, /\n    timeout-minutes: 20\n/);
+  assert.match(smoke, /run: npm run test:web:pr-smoke/);
+  assert.doesNotMatch(smoke, /test:web:gallery-publication/);
+  assert.equal((smoke.match(/run: python tools\/prepare_browser_wheel\.py/g) || []).length, 1);
+  assert.match(smoke, /Upload Playwright PR smoke traces/);
+});
+
+test('browser jobs seed apt from one verified cache and bound their test steps', () => {
+  const workflow = readFileSync(resolve(REPOSITORY_ROOT, '.github/workflows/test.yml'), 'utf8');
+  const job = (id) => workflow.match(new RegExp(`\\n  ${id}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`))?.[0] || '';
+  const step = (source, name) => source.match(
+    new RegExp(`\\n      - name: ${name}\\n[\\s\\S]*?(?=\\n      - |$)`)
+  )?.[0] || '';
+  const jobIds = [...workflow.slice(workflow.indexOf('\njobs:\n')).matchAll(/\n  ([a-z0-9-]+):\n/g)]
+    .map(([, id]) => id);
+  const browserJobs = jobIds.filter((id) => job(id).includes('playwright install --with-deps chromium'));
+  assert.deepEqual(browserJobs, [
+    'gallery',
+    'browser',
+    'web-contracts-pr',
+    'web-pr-smoke',
+    'playwright-functional',
+    'playwright-performance',
+    'acceptance-supported-main',
+    'losat-cache-browser-acceptance'
+  ]);
+
+  const cacheSteps = [
+    'Restore Playwright system packages',
+    'Install Playwright Chromium and system packages',
+    'Save Playwright system packages'
+  ];
+  const prefix = 'playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-';
+  const copies = new Set();
+  for (const id of browserJobs) {
+    const source = job(id);
+    const [restore, install, save] = cacheSteps.map((name) => step(source, name));
+    assert.ok(restore && install && save, `${id} must restore, install, and save`);
+    assert.ok(source.indexOf(restore) < source.indexOf(install), id);
+    assert.ok(source.indexOf(install) < source.indexOf(save), id);
+    assert.equal((source.match(/playwright install --with-deps chromium/g) || []).length, 1, id);
+    assert.match(restore, /id: playwright-apt\n[\s\S]*uses: actions\/cache\/restore@v4/);
+    assert.ok(restore.includes(`key: ${prefix}\n`), id);
+    assert.ok(restore.includes(`restore-keys: ${prefix}`), id);
+    // apt only receives cached files; the install command and its exit status are unchanged.
+    assert.match(
+      install,
+      /id: playwright-install\n[\s\S]*sudo cp -t \/var\/cache\/apt\/archives\/ ~\/\.cache\/playwright-apt\/\*\.deb [^\n]*\n {10}(?:npx|python -m) playwright install --with-deps chromium\n/
+    );
+    assert.doesNotMatch(install, /playwright install[^\n]*(?:\|\||continue-on-error)/);
+    assert.doesNotMatch(source, /continue-on-error/);
+    assert.match(install, /sudo apt-get autoclean/);
+    assert.match(install, /sha256sum -- \*\.deb \| LC_ALL=C sort \| sha256sum/);
+    assert.match(
+      install,
+      /echo "apt-cache-key=playwright-apt-v1-\$\{RUNNER_OS\}-\$\{RUNNER_ARCH\}-\$\{sum\}" >> "\$GITHUB_OUTPUT"/
+    );
+    assert.match(save, /uses: actions\/cache\/save@v4/);
+    assert.match(save, /steps\.playwright-install\.outputs\.apt-cache-key != ''/);
+    assert.match(
+      save,
+      /steps\.playwright-install\.outputs\.apt-cache-key != steps\.playwright-apt\.outputs\.cache-matched-key/
+    );
+    assert.match(save, /key: \$\{\{ steps\.playwright-install\.outputs\.apt-cache-key \}\}/);
+    copies.add([restore, install, save].join('')
+      .replace(/\n {8}if: (?:env\.GBDRAW_GALLERY_PR_PARITY == 'true'|matrix\.surface == 'browser')(?=\n)/g, '')
+      .replace('python -m playwright', 'npx playwright'));
+  }
+  assert.equal(copies.size, 1, 'every browser job must use the same cache steps');
+
+  const jobTimeouts = Object.fromEntries(browserJobs.map((id) => [
+    id,
+    Number(job(id).match(/\n    timeout-minutes: (\d+)\n/)?.[1])
+  ]));
+  assert.deepEqual(jobTimeouts, {
+    gallery: 25,
+    browser: 20,
+    'web-contracts-pr': 20,
+    'web-pr-smoke': 20,
+    'playwright-functional': 45,
+    'playwright-performance': 25,
+    'acceptance-supported-main': 20,
+    'losat-cache-browser-acceptance': 20
+  });
+  const stepTimeouts = {
+    gallery: { 'Run Gallery tests': 10, 'Verify Gallery first-Generate parity': 10 },
+    browser: {
+      'Run Web JavaScript tests': 5,
+      'Run Python browser tests': 10,
+      'Run package build integration': 5,
+      'Run offline GUI browser contracts': 5
+    },
+    'web-contracts-pr': { 'Run fast Web JavaScript contracts': 5, 'Run non-slow Python browser tests': 10 },
+    'web-pr-smoke': { 'Run Playwright PR smoke': 10 },
+    'playwright-performance': { 'Run Playwright performance tests': 10 }
+  };
+  for (const [id, limits] of Object.entries(stepTimeouts)) {
+    for (const [name, minutes] of Object.entries(limits)) {
+      assert.match(step(job(id), name), new RegExp(`\\n {8}timeout-minutes: ${minutes}\\n`), `${id}: ${name}`);
+    }
+  }
+
+  for (const id of ['ci-impact', 'web-change-budget']) {
+    assert.match(
+      job(id),
+      /uses: actions\/checkout@v4\n {8}with:\n {10}fetch-depth: 0\n(?: {10}#[^\n]*\n)? {10}filter: blob:none\n/,
+      id
+    );
+  }
+  assert.match(job('ci-impact'), /node-version: "20"\n {10}cache: npm\n[\s\S]*run: npm ci/);
+});
+
+test('aggregate gates and the Gallery planner tolerate a slow checkout', () => {
+  const read = (path) => readFileSync(resolve(REPOSITORY_ROOT, path), 'utf8');
+  const jobIn = (workflow, id) => workflow.match(
+    new RegExp(`\\n  ${id}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
+  )?.[0] || '';
+  const tests = read('.github/workflows/test.yml');
+  const gallery = read('.github/workflows/gallery-publication.yml');
+  // A checkout alone has taken 63 s, so a 1-minute gate can cancel a run whose jobs all passed.
+  for (const [workflow, id] of [
+    [tests, 'pr-gate'],
+    [tests, 'dev-staging-gate'],
+    [tests, 'release-gate'],
+    [gallery, 'readiness-gate']
+  ]) {
+    assert.match(jobIn(workflow, id), /\n    timeout-minutes: 5\n/, id);
+  }
+  // A full-history checkout with blobs has taken 4 min 53 s of this 5-minute job.
+  const planner = jobIn(gallery, 'ci-impact');
+  assert.match(planner, /\n    timeout-minutes: 5\n/);
+  assert.match(
+    planner,
+    /uses: actions\/checkout@v4\n {8}with:\n {10}ref: \$\{\{ github\.sha \}\}\n {10}fetch-depth: 0\n(?: {10}#[^\n]*\n)? {10}filter: blob:none\n/
+  );
 });

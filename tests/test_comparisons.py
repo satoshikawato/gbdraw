@@ -29,10 +29,8 @@ from gbdraw.features.ids import (
     compute_feature_object_hash,
     make_linear_rendered_feature_id,
 )
-from gbdraw.render.groups.linear.pairwise_match import (
-    PairWiseMatchGroup,
-    build_linear_feature_dom_index,
-)
+from gbdraw.render.groups.linear import build_linear_feature_dom_index
+from gbdraw.render.groups.linear.pairwise_match import PairWiseMatchGroup
 from gbdraw.svg.ids import instance_svg_id
 
 
@@ -191,6 +189,7 @@ def test_linear_cli_alignment_length_is_forwarded(
             losat_derived_cache_entries=(),
             protein_identity_manifest=None,
             request=resolved,
+            annotation_warnings=(),
         )
 
     monkeypatch.setattr(linear_cli_module, "render_request", fake_render_request)
@@ -297,7 +296,7 @@ def test_build_linear_diagram_forwards_alignment_length(monkeypatch: pytest.Monk
 
 @pytest.mark.linear
 def test_assemble_linear_diagram_rejects_negative_alignment_length() -> None:
-    with pytest.raises(ValidationError, match="alignment_length must be >= 0"):
+    with pytest.raises(ValidationError, match="alignment_length must be an integer >= 0"):
         assemble_linear_diagram_from_records(
             [_build_record()],
             cfg=apply_config_overrides(None, None),

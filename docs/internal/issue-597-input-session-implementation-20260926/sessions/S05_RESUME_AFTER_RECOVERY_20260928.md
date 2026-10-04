@@ -1,0 +1,20 @@
+# Resume Issue #597 / S05 after persistent recovery (2026-09-28)
+
+S05 is INCOMPLETE. Continue local implementation and relevant verification; never start S06+. Read the original `S05_RESUME_AFTER_PR629_20260927.md` completely, then `results/S05_RECOVERY_20260928.md` and `results/S05_COMPUTATION_AUDIT_20260928.md`.
+
+Use `/mnt/c/users/genom/github/gbdraw/.worktrees/issue597-S05-recovered-20260928` on branch `fix/issue-597-input-session-20260926`. Persistent raw evidence is `/mnt/c/users/genom/github/gbdraw/.worktrees/issue597-S05-recovery-evidence-20260928`. Do not keep task work/evidence in `/tmp`. The user confirmed no backup of the disappeared original `/tmp` checkout/fixture/raw traces. Do not claim that loss has been repaired or substitute transcript-derived observations for raw current evidence.
+
+Actual verified dev is `007388567222638b707fbb16fe82dbeba61551c9`; local HEAD/upstream S05 is `ee6b6207845cc861ae428b4890a091509e1736b6`. A local integration into the S05 checkout is uncommitted. Inspect actual refs and preserve unrelated shared Issue #619 work. Nothing was committed/pushed/published/merged/deployed; PR #629 approval does not transfer.
+
+The previous empty-draft A/B question is withdrawn. The current CLI Session format is writer44/request8. Embedded inputs must initialize controls when no saved Web config exists, without overwriting an explicitly saved empty Web draft. Original GFF3+FASTA bindings and auxiliary TSV/data must survive. Existing Product fields PD044/045 match trusted authority; do not ask for their reconfirmation or fabricate new decisions.
+
+New local encoding changes reuse UTF-8 bytes and bound the base64 binary intermediary in the existing owner. Supplementary Node data does not prove a CPU speedup. The original memory crash reached canonical request construction. Its raw trace was lost. Classify a new pinned-source reconstruction separately and keep the original gzip SHA d3cafef... acceptance unmeasured.
+
+Logs/manifests/recipes and final outstanding work are in the dated result and persistent raw directory. Preserve every historical/current FAIL, source qualification and native wire/copy-byte null. The historical readiness recipe reads committed refs, so it cannot certify the current uncommitted integration; keep its failures and separate working-tree identity/ancestry proof. Do not use a candidate guard or invented commit to get a PASS.
+
+Only mark COMPLETE if every applicable criterion, actual current source identity and required human review is satisfied. Otherwise finish authorized local work, record concrete FAIL/unmeasured limitations, and hand off INCOMPLETE with an English proposed commit title/summary.
+
+
+Final 2026-09-28 runtime adds cached unique group entries and a single display-row computed/Vue keyed memo; absent aliases, description override keys, opaque count formatting and pre-paint current click identity are covered. Do not restore the retired per-row helper or JSON resource experiment. Latest source is `source-fingerprints-final.json` / `source-display-rows-final-runtime.json` (402 files). Final validation is `validation-final.json`; exact current real Load maxima 7429.0/7465.9/7529.6 ms, Save 718.4/712.7/672.6 ms remain FAIL. Preview Python Worker count 1 fails zero. Final Generate crashes during canonical construction; exact native exit reason unavailable, continuation unmeasured. Saved-preview strict XML 3/3 PASS is not regenerated agreement or whole-content equality. Native wire/copy bytes remain null. Required review remains outstanding.
+
+Use the dated recovery result for qualified reuse: full Node 1166 is baseline, current focused Node 10 and browser 5 + final binding 1 cover later changes; Python 920+1 skip and references16 are reused on unchanged 215 Python sources. Preserve broader/intermediate failures. Four UI runtime changes versus the pre-experiment baseline have source receipts; transport owners remain unchanged and transport3 evidence is qualified reuse. Final report/manifest/review and patches are persistent; no /tmp task evidence and no external operations.

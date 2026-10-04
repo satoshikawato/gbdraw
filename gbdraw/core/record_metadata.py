@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import NamedTuple
 
+from Bio.SeqFeature import ExactPosition
 from Bio.SeqRecord import SeqRecord
 
 
@@ -9,6 +10,14 @@ _COORD_BASE_KEY = "gbdraw_coord_base"
 _COORD_STEP_KEY = "gbdraw_coord_step"
 _SOURCE_FEATURE_INDEX_ATTR = "_gbdraw_source_feature_index"
 _SOURCE_FEATURE_PARTS_ATTR = "_gbdraw_source_feature_location_parts"
+_SOURCE_FEATURE_ANCHOR_PROFILE_ATTR = "_gbdraw_source_feature_anchor_profile"
+
+
+class _SourceFeatureAnchorProfile(NamedTuple):
+    precision: str
+    operator: str
+    part_order: str
+    strand: str
 
 
 def _iter_source_features(features: object):
@@ -55,6 +64,75 @@ def _source_feature_location_parts(
             strand = None
         parts.append((start, end, strand))
     return tuple(parts) or None
+
+
+def _location_anchor_profile(
+    location: object,
+    *,
+    coord_step: int,
+) -> _SourceFeatureAnchorProfile:
+    """Normalize only source-location facts needed by Web anchor resolution."""
+
+    raw_parts = list(getattr(location, "parts", None) or [location])
+    parts = [part for part in raw_parts if part is not None]
+    exact = bool(parts) and all(
+        isinstance(getattr(part, "start", None), ExactPosition)
+        and isinstance(getattr(part, "end", None), ExactPosition)
+        for part in parts
+    )
+    if len(parts) == 1:
+        operator = "single"
+    else:
+        raw_operator = str(getattr(location, "operator", "") or "")
+        operator = raw_operator if raw_operator in {"join", "order"} else "unknown"
+
+    direction = 1 if int(coord_step) >= 0 else -1
+    strands = [
+        int(part.strand) * direction if getattr(part, "strand", None) in {-1, 1} else None
+        for part in parts
+    ]
+    if strands and all(strand == 1 for strand in strands):
+        strand = "+"
+    elif strands and all(strand == -1 for strand in strands):
+        strand = "-"
+    elif strands and all(strand is None for strand in strands):
+        strand = "unstranded"
+    else:
+        strand = "mixed"
+
+    if operator == "single" and strand in {"+", "-"}:
+        part_order = "biological"
+    elif operator == "single" and strand == "unstranded":
+        part_order = "source-forward"
+    elif operator == "join" and strand in {"+", "-"}:
+        part_order = "biological"
+    elif operator == "join" and strand == "unstranded":
+        part_order = "source-forward"
+    else:
+        part_order = "ambiguous"
+
+    return _SourceFeatureAnchorProfile(
+        precision="exact" if exact else "fuzzy",
+        operator=operator,
+        part_order=part_order,
+        strand=strand,
+    )
+
+
+def _source_feature_anchor_profile(
+    feature: object,
+    *,
+    coord_step: int = 1,
+) -> _SourceFeatureAnchorProfile:
+    """Return pre-transform source facts, computing them before first copy."""
+
+    stored = getattr(feature, _SOURCE_FEATURE_ANCHOR_PROFILE_ATTR, None)
+    if isinstance(stored, _SourceFeatureAnchorProfile):
+        return stored
+    return _location_anchor_profile(
+        getattr(feature, "location", None),
+        coord_step=coord_step,
+    )
 
 
 def _mapped_feature_location_parts(
@@ -114,6 +192,11 @@ def _copy_source_feature_identity(
         )
     if parts:
         setattr(target, _SOURCE_FEATURE_PARTS_ATTR, parts)
+    setattr(
+        target,
+        _SOURCE_FEATURE_ANCHOR_PROFILE_ATTR,
+        _source_feature_anchor_profile(source, coord_step=coord_step),
+    )
 
 
 def _read_coord_map(record: object) -> tuple[int, int]:

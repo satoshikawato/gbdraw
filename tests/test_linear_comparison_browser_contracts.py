@@ -7,10 +7,12 @@ import pytest
 
 
 @pytest.mark.browser
-@pytest.mark.parametrize("shard", ("1/2", "2/2"))
-def test_linear_comparison_browser_contracts(shard):
+# One pytest test runs the whole Playwright suite (3-5 minutes on CI); each
+# Playwright test keeps its own timeout.
+@pytest.mark.timeout(900)
+def test_linear_comparison_browser_contracts():
     result = subprocess.run(
-        ["npm", "run", "test:web:comparison-contracts", "--", f"--shard={shard}"],
+        ["npm", "run", "test:web:comparison-contracts", "--", "--workers=2"],
         cwd=Path(__file__).resolve().parents[1],
         capture_output=True,
         text=True,

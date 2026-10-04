@@ -29,6 +29,8 @@ from gbdraw.api.options import (
     LinearDiagramOptions,
     LinearOutputOptions,
     LinearTrackOptions,
+    LosatRuntimeOptions,
+    LosatSearchOptions,
 )
 from gbdraw.analysis.collinearity import (
     CollinearityResult,
@@ -86,7 +88,10 @@ def test_api_diagram_options_forward_collinearity_search_scope(monkeypatch: pyte
     api_diagram_module.build_linear_diagram(
         [],
         options=LinearDiagramOptions(
-            protein_blastp_mode="collinear",
+            losat_search=LosatSearchOptions(
+                program="losatp",
+                losatp_mode="collinear",
+            ),
             collinearity_anchor_mode="all",
             collinearity_search_scope="all",
             collinearity_unit_mode="cds",
@@ -133,7 +138,7 @@ def test_linear_assembler_forwards_normalized_collinearity_anchor_mode(
     api_diagram_module.assemble_linear_diagram_from_records(
         records,
         cfg=apply_config_overrides(None, None),
-        protein_blastp_mode="collinear",
+        losat_search=LosatSearchOptions(program="losatp", losatp_mode="collinear"),
         collinearity_anchor_mode=requested,
         legend="none",
     )
@@ -174,7 +179,12 @@ def test_each_collinearity_enum_reaches_real_analysis_helper(
         "build_orthogroup_collinearity_blocks",
         fake_build,
     )
-    options: dict[str, object] = {"protein_blastp_mode": "collinear"}
+    options: dict[str, object] = {
+        "losat_search": LosatSearchOptions(
+            program="losatp",
+            losatp_mode="collinear",
+        )
+    }
     if option_name == "merge_orientation":
         options["collinearity_params"] = LosslessCollinearityParameters(
             merge_orientation=value,
@@ -270,10 +280,16 @@ def test_protein_helpers_have_no_parallel_invocation_builder() -> None:
         assert _production_call_owners(diagram_path, helper_name) == [
             "_invoke_protein_analysis_helper"
         ]
+    # One LOSAT job plan answers every LOSATP mode (design 3.8, D7): the
+    # record-pair walkers and the per-pair cache runner are gone.
     assert _production_call_owners(protein_path, "run_losatp_blastp") == [
-        "_execute_losatp_search"
+        "_search_losatp_record_pairs"
     ]
-    assert "_cache_runner_for_search" not in protein_path.read_text(encoding="utf-8")
+    collinearity_path = root / "gbdraw" / "analysis" / "collinearity.py"
+    for path in (protein_path, collinearity_path, diagram_path):
+        text = path.read_text(encoding="utf-8")
+        for retired in ("_cache_runner_for_search", "_execute_losatp_search", "runner_for_search"):
+            assert retired not in text, (path.name, retired)
 
 
 def test_typed_config_override_preserves_label_filtering_dataframes() -> None:
@@ -749,7 +765,23 @@ _LINEAR_ONLY_FORWARDING_CASES = [
     ("blast_files", ["comparison.tsv"], "blast_files", ["comparison.tsv"]),
     ("protein_comparisons", [_FORWARDING_TABLE], "protein_comparisons", [_FORWARDING_TABLE]),
     ("orthogroups", object(), "orthogroups", None),
-    ("protein_blastp_mode", "pairwise", "protein_blastp_mode", "pairwise"),
+    (
+        "losat_search",
+        LosatSearchOptions(
+            program="losatp",
+            losatp_mode="pairwise",
+            pairs=((0, 1),),
+            losatp_max_hits=8,
+            losatp_max_target_seqs=21,
+            losatp_member_max_hits=9,
+            runtime=LosatRuntimeOptions(
+                losat_executable="custom-losat",
+                threads=3,
+            ),
+        ),
+        "losat_search",
+        None,
+    ),
     ("pairwise_match_style", "curve", "pairwise_match_style", "curve"),
     ("collinearity_blocks", object(), "collinearity_blocks", None),
     ("collinearity_unit_mode", "cds", "collinearity_unit_mode", "cds"),
@@ -761,25 +793,18 @@ _LINEAR_ONLY_FORWARDING_CASES = [
         "collinearity_color_mode",
         "average_identity",
     ),
-    ("losatp_bin", "custom-losat", "losatp_bin", "custom-losat"),
-    ("ncbi_blastp_bin", "custom-blastp", "ncbi_blastp_bin", "custom-blastp"),
-    ("losatp_threads", 3, "losatp_threads", 3),
-    ("protein_blastp_max_hits", 8, "protein_blastp_max_hits", 8),
-    ("protein_blastp_candidate_limit", 21, "protein_blastp_candidate_limit", 21),
     (
         "orthogroup_membership_mode",
         "anchor_core_v1",
         "orthogroup_membership_mode",
         "anchor_core_v1",
     ),
-    ("orthogroup_member_max_hits", 9, "orthogroup_member_max_hits", 9),
     (
         "collinear_max_paralog_links_per_orthogroup",
         4,
         "collinear_max_paralog_links_per_orthogroup",
         4,
     ),
-    ("align_orthogroup_feature", "anchor", "align_orthogroup_feature", "anchor"),
 ]
 
 

@@ -1,9 +1,9 @@
 const { test, expect } = require('@playwright/test');
-const { readFileSync } = require('node:fs');
+const { readFileSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { createHash } = require('node:crypto');
-const { openApp, waitForAppShell } = require('./helpers/app-lifecycle.cjs');
+const { openApp, waitForAppShell, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 
@@ -62,9 +62,9 @@ ${origin}
 `;
 };
 
-const makeDefinitionGenbank = (id, qualifiers = '') => makeComparisonGenbank(id)
+const makeDefinitionGenbank = (id, qualifiers = '', repeats = 100) => makeComparisonGenbank(id, 'atg', repeats)
   .replace(/FEATURES[^\n]*\n/, `FEATURES             Location/Qualifiers
-     source          1..300
+     source          1..${3 * repeats}
                      /organism="Aeromonas hydrophila"
                      /strain="A1"
 ${qualifiers}`);
@@ -104,7 +104,11 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
     const app = window.__GBDRAW_APP__;
     app.mode = 'linear';
     Object.assign(app.form, { legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none' });
-    Object.assign(app.adv, { linear_show_replicon: false, linear_show_accession: false, linear_show_length: false });
+    Object.assign(app.adv, {
+      linear_show_replicon: false,
+      linear_accession_visibility: 'hide',
+      linear_length_visibility: 'hide'
+    });
   });
   const source = makeDefinitionGenbank('P1', '                     /plasmid="p1"\n')
     + makeDefinitionGenbank('C')
@@ -115,11 +119,11 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(4);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((s) => s.record_subtitle)))
     .toEqual(['', '', '', '']);
-  await page.locator('summary[aria-label="Title & Legend"]').click();
-  const show = page.getByRole('checkbox', { name: 'Show Replicon', exact: true });
+  await page.locator('summary[aria-label="Titles and Record Labels"]').press('Enter');
+  const show = page.getByRole('checkbox', { name: 'Replicon visibility', exact: true });
   for (const enabled of [false, true, false]) {
     await show.setChecked(enabled);
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+    expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
     const lines = await definitionLines(page);
     expect(lines.filter((line) => line.kind === 'subtitle')).toEqual([]);
     expect(lines.filter((line) => line.kind === 'replicon').map((line) => line.text))
@@ -134,7 +138,7 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
     const app = window.__GBDRAW_APP__;
     app.moveLinearRecordWithinRow(app.linearSeqs[0].uid, 1);
   });
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   expect((await definitionLines(page)).filter(line => ['subtitle', 'replicon'].includes(line.kind))).toEqual([]);
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -152,7 +156,7 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
     app.setDefinitionLineStyleSize('subtitle', '11');
   });
   await show.check();
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   const styled = await definitionLines(page);
   expect(styled.filter((line) => line.kind === 'subtitle')).toMatchObject([
     { text: 'p1', fill: '#0000ff', size: 11 }
@@ -165,7 +169,7 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
   // Save a draft with Replicon off while the committed preview still has it on.
   await show.uncheck();
   const download = page.waitForEvent('download');
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     window.__GBDRAW_APP__.sessionTitle = 'replicon-display';
     await window.__GBDRAW_APP__.saveSessionWithTitle();
   });
@@ -177,7 +181,7 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
   expect(await definitionLines(page)).toEqual(styled);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.linear_show_replicon)).toBe(false);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].record_subtitle)).toBe('p1');
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   expect((await definitionLines(page)).filter((line) => line.kind === 'replicon')).toEqual([]);
   expect((await definitionLines(page)).filter((line) => line.kind === 'subtitle')).toMatchObject([{ text: 'p1' }]);
   // An explicit clear returns to the file default, including after another load.
@@ -189,14 +193,14 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map(s => s.file_subtitle)))
     .toEqual(['File default', 'File default', 'File default', 'File default']);
   const clearedDownload = page.waitForEvent('download');
-  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const cleared = await (await clearedDownload).path();
   await page.reload();
   await waitForAppShell(page);
   await loadDefinitionSession(page, cleared);
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(4);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].record_subtitle)).toBe('');
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   expect((await definitionLines(page)).filter((line) => line.kind === 'subtitle')).toMatchObject([{ text: 'File default' }]);
   await page.locator('[data-linear-source-card] input[type="file"]').first().setInputFiles({
     name: 'single.gb', mimeType: 'text/plain', buffer: Buffer.from(makeDefinitionGenbank('P1', '                     /plasmid="p1"\n'))
@@ -205,14 +209,21 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].record_subtitle)).toBe('');
 });
 
-test('Released Linear session preserves its subtitles and preview until Generate', async ({ page }) => {
+for (const [fixture, locked] of [
+  ['BGC0000708-BGC0000713.v40-schema5.json', true],
+  ['lambda_basic_linear.v40-schema5.json', false],
+  ['rendered-v27.v40-schema6.json.gz', false]
+]) {
+test(`Released Linear ${fixture} preserves Lock, subtitles, and preview until Generate`, async ({ page }, testInfo) => {
   test.setTimeout(120000);
-  const fixturePath = join(repoRoot, 'tests/fixtures/sessions/BGC0000708-BGC0000713.v40-schema5.json');
-  const session = JSON.parse(readFileSync(fixturePath, 'utf8'));
-  const subtitles = session.renderRequest.records.map(record => record.presentation.subtitle);
+  const fixturePath = join(repoRoot, 'tests/fixtures/sessions', fixture);
+  const bytes = readFileSync(fixturePath);
+  const session = JSON.parse(fixture.endsWith('.gz') ? gunzipSync(bytes) : bytes);
+  const subtitles = session.renderRequest.records.map(record => record.presentation?.subtitle || '');
   await installDiagramRequestObserver(page);
   await openApp(page);
   await loadDefinitionSession(page, fixturePath);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.form.keep_definition_left_aligned)).toBe(locked);
   // Normal ingestion removes XML headers and adds editor metadata. Compare all
   // displayed primitives, text, and geometry instead of serialized SVG bytes.
   const previews = await page.evaluate(saved => {
@@ -232,34 +243,48 @@ test('Released Linear session preserves its subtitles and preview until Generate
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map(s => s.record_subtitle))).toEqual(subtitles);
   await page.evaluate(() => {
     window.__GBDRAW_APP__.adv.linear_show_replicon = false;
-    window.__GBDRAW_APP__.form.keep_definition_left_aligned = false;
   });
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
-  expect((await definitionLines(page)).filter(line => line.kind === 'subtitle').map(line => line.text)).toEqual(subtitles);
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect((await definitionLines(page)).filter(line => line.kind === 'subtitle').map(line => line.text)).toEqual(subtitles.filter(Boolean));
   expect((await definitionLines(page)).filter(line => line.kind === 'replicon')).toEqual([]);
+  if (fixture.startsWith('BGC')) {
+    expect(await page.evaluate(async () => {
+      const { state } = await import('/gbdraw/web/js/state.js');
+      return state.similarityAlignmentPlan.value?.schema;
+    })).toBe(2);
+    await page.evaluate(async () => {
+      const app = window.__GBDRAW_APP__;
+      app.adv.linear_accession_visibility = 'hide';
+      app.adv.linear_length_visibility = 'hide';
+      await app.setLinearRecordLayoutEnabled(true);
+    });
+    const measurements = [];
+    for (const rows of [[1, 2, 3, 4, 5], [1, 1, 1, 2, 2], [1, 2, 2, 3, 4]]) {
+      await page.evaluate(rows => {
+        const app = window.__GBDRAW_APP__;
+        app.linearSeqs.forEach((seq, index) => {
+          app.setLinearRecordRow(seq.uid, rows[index]);
+          seq.definition = rows[index] === 1 ? 'Streptomyces comparison' : 'Streptomyces sp.';
+          seq.record_subtitle = rows[index] === 1 ? 'Reference cluster' : 'Target';
+        });
+      }, rows);
+      for (const locked of [false, true]) {
+        await page.getByRole('checkbox', { name: 'Lock Definition Column', exact: true }).setChecked(locked);
+        expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+        const geometry = await measureDefinitionColumns(page);
+        expect(geometry.headings).toHaveLength(new Set(rows).size);
+        expectDefinitionColumns(geometry, locked, 20);
+        expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1).layout.similarityAlignment.schema)).toBe(2);
+        measurements.push({ rows, locked, ...geometry });
+      }
+    }
+    writeFileSync(testInfo.outputPath('similarity-definition-measurements.json'), JSON.stringify(measurements, null, 2));
+  }
 });
 
-test('Linear Lock Definition Column applies common centers and left edges after Generate', async ({ page }) => {
-  test.setTimeout(120000);
-  await openApp(page);
-  await page.evaluate(() => { window.__GBDRAW_APP__.mode = 'linear'; });
-  const source = ['A', 'B', 'C', 'D'].map((id, i) => makeComparisonGenbank(id, 'atg', i < 2 ? 100 : 60)).join('');
-  await page.locator('[data-linear-source-card] input[type="file"]').first().setInputFiles({
-    name: 'definition-rows.gb', mimeType: 'text/plain', buffer: Buffer.from(source)
-  });
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(4);
-  await page.evaluate(async () => {
-    const app = window.__GBDRAW_APP__;
-    Object.assign(app.form, { align_center: true, legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none' });
-    Object.assign(app.adv, { linear_show_replicon: false, linear_show_accession: false, linear_show_length: false });
-    await app.setLinearRecordLayoutEnabled(true);
-    app.linearSeqs.forEach((seq, i) => {
-      seq.definition = i < 2 ? 'Aeromonas hydrophila' : 'Aeromonas sp.';
-      seq.record_subtitle = i < 2 ? 'A1' : 'B';
-      app.setLinearRecordRow(seq.uid, i < 2 ? 1 : 2);
-    });
-  });
-  const measure = () => page.evaluate(async () => {
+}
+
+const measureDefinitionColumns = (page) => page.evaluate(async () => {
     const host = document.createElement('div');
     host.style.cssText = 'position:absolute;left:-10000px;visibility:hidden';
     host.innerHTML = window.__GBDRAW_APP__.results[0].content;
@@ -272,40 +297,217 @@ test('Linear Lock Definition Column applies common centers and left edges after 
       const right = new DOMPoint(b.x + b.width, b.y).matrixTransform(m).x;
       return { left, right, center: (left + right) / 2 };
     };
-    const headings = [...svg.querySelectorAll('g[data-gbdraw-role="record-definition-row"]')].map(g => {
-      const index = g.dataset.gbdrawRecordIndex;
-      const axis = svg.querySelector(`g[data-record-index="${index}"]`);
-      const axisX = new DOMPoint(0, 0).matrixTransform(svg.getCTM().inverse().multiply(axis.getCTM())).x;
-      return { ...box(g), axisX, lines: [...g.querySelectorAll('text')].map(box) };
+    const axes = [...svg.querySelectorAll('g[data-gbdraw-record-index]:not([data-gbdraw-definition-part])')].map(axis => {
+      const line = axis.querySelector(':scope > line');
+      if (!line) throw new Error('Missing displayed sequence axis');
+      return { index: axis.dataset.gbdrawRecordIndex, translation: Number(axis.dataset.recordTranslationX),
+        ...box(line) };
     });
+    const headings = [...svg.querySelectorAll('g[data-gbdraw-role^="record-definition"]')].filter(g => g.querySelector(':scope > text[data-definition-line-kind="name"]')).map(g => ({
+      index: g.dataset.gbdrawRecordIndex, ...box(g), lines: [...g.querySelectorAll('text')].map(box)
+    }));
+    const locals = [...svg.querySelectorAll('g[data-gbdraw-role="record-definition"]')]
+      .filter(g => g.querySelector('text') && !g.querySelector(':scope > text[data-definition-line-kind="name"]'))
+      .map(g => ({ index: g.dataset.gbdrawRecordIndex, ...box(g) }));
     host.remove();
-    return headings;
+    return { axes, headings, locals };
   });
+
+const expectDefinitionColumns = (geometry, locked, gap) => {
+  const { axes, headings, locals } = geometry;
+  expect(headings.length).toBeGreaterThan(0);
+  const coord = box => locked ? box.left : box.center;
+  const first = headings[0];
+  const firstAxis = axes.find(axis => axis.index === first.index);
+  for (const heading of headings) {
+    const sequence = axes.find(axis => axis.index === heading.index);
+    const shift = locked ? 0 : sequence.left - firstAxis.left;
+    expect(Math.abs(coord(heading) - coord(first) - shift)).toBeLessThanOrEqual(1);
+    for (const line of heading.lines) {
+      expect(Math.abs(coord(line) - coord(heading.lines[0]))).toBeLessThanOrEqual(1);
+    }
+    expect(sequence.left - heading.right).toBeGreaterThanOrEqual(gap - 1);
+  }
+  if (locked) {
+    const nearestGap = Math.min(...axes.map(axis => axis.left))
+      - Math.max(...headings.map(heading => heading.right));
+    expect(nearestGap).toBeGreaterThanOrEqual(gap - 1);
+    expect(nearestGap).toBeLessThanOrEqual(gap + 1);
+  }
+  for (const local of locals) {
+    const sequence = axes.find(axis => axis.index === local.index);
+    expect(Math.abs(local.center - sequence.center)).toBeLessThanOrEqual(1);
+  }
+};
+
+test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and regeneration', async ({ page }, testInfo) => {
+  test.setTimeout(120000);
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  const lock = page.getByRole('checkbox', { name: 'Lock Definition Column', exact: true });
+  await expect(lock).toBeChecked();
+  // PD-OI-024 revision 3: one text source feeds the help-tip and the
+  // checkbox's accessible description instead of an always-on paragraph.
+  await expect(lock).toHaveAttribute('aria-describedby', 'linear-definition-lock-help');
+  await expect(lock).toHaveAccessibleDescription(new RegExp(['ON aligns Linear definitions in a common left column',
+    'OFF centers them in a common column width and follows row offsets', 'Changes apply on Generate'].join('.*')));
+  const helpButton = page.locator('.help-tip > button[aria-describedby="linear-definition-lock-help"]');
+  const tooltip = page.locator('[role="tooltip"]');
+  await expect(tooltip).toHaveCount(0);
+  await lock.focus();
+  await page.keyboard.press('Tab');
+  await expect(helpButton).toBeFocused();
+  await expect(tooltip).toContainText('Changes apply on Generate');
+  await page.keyboard.press('Escape');
+  await expect(tooltip).toHaveCount(0);
+  await helpButton.hover();
+  await expect(tooltip).toBeVisible();
+  await page.mouse.move(0, 0);
+  await expect(tooltip).toHaveCount(0);
+  await helpButton.click();
+  await page.mouse.move(0, 0);
+  await expect(tooltip).toBeVisible();
+  await expect(lock).toBeChecked();
+  await lock.focus();
+  await expect(tooltip).toHaveCount(0);
+  await lock.uncheck();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+  await expect(lock).toBeChecked();
+  await page.locator('[data-linear-source-card] input[type="file"]').first().setInputFiles({
+    name: 'definition-draft.gb', mimeType: 'text/plain',
+    buffer: Buffer.from(makeDefinitionGenbank('A') + makeDefinitionGenbank('B', '', 60))
+  });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(2);
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    Object.assign(app.form, { align_center: true, legend: 'none', show_gc: false, show_skew: false });
+    await app.setLinearRecordLayoutEnabled(true);
+    app.linearSeqs.forEach((seq, index) => app.setLinearRecordRow(seq.uid, index + 1));
+    app.linearSeqs[0].definition = 'Aeromonas hydrophila';
+    app.linearSeqs[1].definition = 'Short';
+  });
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   for (const locked of [false, true]) {
-    await page.getByRole('checkbox', { name: 'Lock Definition Column', exact: true }).setChecked(locked);
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
-    const headings = await measure();
-    expect(headings).toHaveLength(2);
-    const coord = box => locked ? box.left : box.center;
-    const delta = locked ? 0 : headings[1].axisX - headings[0].axisX;
-    expect(Math.abs(coord(headings[1]) - coord(headings[0]) - delta)).toBeLessThanOrEqual(1);
-    for (const heading of headings) {
-      expect(heading.lines).toHaveLength(2);
-      expect(Math.abs(coord(heading.lines[0]) - coord(heading.lines[1]))).toBeLessThanOrEqual(1);
-      expect(heading.axisX - heading.right).toBeGreaterThanOrEqual(19);
+    const before = await measureDefinitionColumns(page);
+    const requestBefore = await page.evaluate(async () => (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest());
+    await lock.setChecked(locked);
+    expect(await measureDefinitionColumns(page)).toEqual(before);
+    await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'definition-draft'; });
+    const download = page.waitForEvent('download');
+    expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle())).toMatchObject({ status: 'saved' });
+    const savedPath = await (await download).path();
+    const saved = JSON.parse(gunzipSync(readFileSync(savedPath)));
+    expect(saved.config.form.keep_definition_left_aligned).toBe(locked);
+    expect(saved.renderRequest).toEqual(requestBefore);
+    await page.reload();
+    await waitForAppShell(page);
+    await loadDefinitionSession(page, savedPath);
+    await expect(lock).toBeChecked({ checked: locked });
+    expect(await measureDefinitionColumns(page)).toEqual(before);
+    expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(0);
+    expect(await page.evaluate(async () => (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest())).toEqual(requestBefore);
+    expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+    const regenerated = await measureDefinitionColumns(page);
+    writeFileSync(testInfo.outputPath(`roundtrip-${locked}.json`), JSON.stringify(regenerated, null, 2));
+    expectDefinitionColumns(regenerated, locked, 20);
+    expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1).diagramOptions.configOverrides[
+      'canvas.linear.keep_definition_left_aligned'
+    ])).toBe(locked);
+    for (const malformed of [null, 'false', 0, {}]) {
+      const invalid = structuredClone(saved);
+      invalid.config.form.keep_definition_left_aligned = malformed;
+      const stable = await measureDefinitionColumns(page);
+      const runs = await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length);
+      const outcome = await evaluateWithRetainedPromise(page, async raw => {
+        const result = await window.__GBDRAW_APP__.importSession({
+          target: { files: [new File([raw], 'malformed.gbdraw-session.json')], value: 'selected' }
+        });
+        return { status: result.status, error: result.error };
+      }, JSON.stringify(invalid));
+      expect(outcome.status).toBe('error');
+      expect(outcome.error).toMatchObject({ code: 'INPUT_INVALID', stage: 'request-validation',
+        context: { field: 'keep_definition_left_aligned', reason: 'BOOLEAN' }, summary: expect.stringContaining('Use true or false.') });
+      await expect(lock).toBeChecked({ checked: locked });
+      expect(await measureDefinitionColumns(page)).toEqual(stable);
+      expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(runs);
     }
   }
-  const beforeSave = await measure();
-  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'definition-columns'; });
+  const beforeReset = await measureDefinitionColumns(page);
+  await lock.uncheck();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Reset Settings', exact: true }).click();
+  await expect(lock).toBeChecked();
+  expect(await measureDefinitionColumns(page)).toEqual(beforeReset);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await helpButton.scrollIntoViewIfNeeded();
+  await helpButton.click();
+  await expect(tooltip).toContainText('Changes apply on Generate');
+  // The tip sits beside the checkbox label; capture the row that holds both.
+  await helpButton.locator('xpath=ancestor::div[1]').screenshot({ path: testInfo.outputPath('definition-lock-help.png') });
+});
+
+test('Linear Lock Definition Column measures single, shared, and mixed rows after unequal translations', async ({ page }, testInfo) => {
+  test.setTimeout(120000);
+  await openApp(page);
+  await page.evaluate(() => { window.__GBDRAW_APP__.mode = 'linear'; });
+  const source = ['A', 'B', 'C', 'D'].map((id, index) =>
+    makeDefinitionGenbank(id, `                     /plasmid="${id}"\n`, 100 - 20 * index)).join('');
+  await page.locator('[data-linear-source-card] input[type="file"]').first().setInputFiles({
+    name: 'definition-rows.gb', mimeType: 'text/plain', buffer: Buffer.from(source)
+  });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(4);
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    Object.assign(app.form, { legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none' });
+    Object.assign(app.adv, { linear_show_replicon: true, linear_accession_visibility: 'hide', linear_length_visibility: 'hide' });
+    await app.setLinearRecordLayoutEnabled(true);
+    const { state } = await import('/gbdraw/web/js/state.js');
+    state.unmanagedConfigOverrides['canvas.linear.definition_gap'] = 37;
+    state.linearRecordTranslations.value = app.linearSeqs.map((seq, index) => ({
+      recordKey: seq.uid, x: [-85, 40, -35, 75][index], y: 0
+    }));
+  });
+  const measurements = [];
+  for (const rows of [[1, 2, 3, 4], [1, 1, 2, 2], [1, 2, 2, 3]]) {
+    await page.evaluate(rows => {
+      const app = window.__GBDRAW_APP__;
+      app.linearSeqs.forEach((seq, index) => {
+        app.setLinearRecordRow(seq.uid, rows[index]);
+        seq.definition = rows[index] === 1 ? 'Aeromonas hydrophila' : 'Aeromonas sp.';
+        seq.record_subtitle = rows[index] === 1 ? 'A1' : 'B';
+      });
+    }, rows);
+    for (const centered of [false, true]) {
+      await page.evaluate(centered => { window.__GBDRAW_APP__.form.align_center = centered; }, centered);
+      for (const locked of [false, true]) {
+        await page.getByRole('checkbox', { name: 'Lock Definition Column', exact: true }).setChecked(locked);
+        expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+        const geometry = await measureDefinitionColumns(page);
+        expect(geometry.axes.map(axis => axis.translation)).toEqual([-85, 40, -35, 75]);
+        expect(geometry.headings).toHaveLength(new Set(rows).size);
+        const shared = new Set(rows).size < rows.length;
+        expect(geometry.locals).toHaveLength(shared ? 4 : 0);
+        for (const heading of geometry.headings) expect(heading.lines).toHaveLength(shared ? 2 : 3);
+        expectDefinitionColumns(geometry, locked, 37);
+        measurements.push({ rows, centered, locked, ...geometry });
+      }
+    }
+  }
+  writeFileSync(testInfo.outputPath('definition-column-measurements.json'), JSON.stringify(measurements, null, 2));
+  const beforeSave = await measureDefinitionColumns(page);
+  writeFileSync(testInfo.outputPath('locked-definition.svg'), await page.evaluate(() => window.__GBDRAW_APP__.results[0].content));
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'translated-definition-columns'; });
   const download = page.waitForEvent('download');
-  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle())).toMatchObject({ status: 'saved' });
   const saved = await (await download).path();
   await page.reload();
   await waitForAppShell(page);
   await loadDefinitionSession(page, saved);
-  expect(await measure()).toEqual(beforeSave);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
-  expect(await measure()).toEqual(beforeSave);
+  expect(await measureDefinitionColumns(page)).toEqual(beforeSave);
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await measureDefinitionColumns(page)).toEqual(beforeSave);
 });
 
 const linearRecordCard = (page, uid) => (
@@ -441,6 +643,22 @@ test('Pairwise pointer feedback commits selection and preserves keyboard focus',
   const otherOgMatch = page.getByRole('button', { name: 'Pairwise match 3', exact: true });
   const pairwiseMatch = page.getByRole('button', { name: 'Pairwise match 4', exact: true });
   await expect(firstOgMatch).toBeVisible();
+
+  await page.evaluate(() => {
+    const button = document.createElement('button');
+    button.id = 'match-focus-modality-probe';
+    button.textContent = 'focus';
+    button.style.cssText = 'position:fixed;top:0;left:0;z-index:99999;padding:8px';
+    document.body.appendChild(button);
+  });
+  await page.locator('#match-focus-modality-probe').click();
+  await page.locator('#match-focus-modality-probe').evaluate((button) => button.remove());
+  await firstOgMatch.evaluate((element) => element.focus());
+  expect(await firstOgMatch.evaluate((element) => ({
+    focused: element === document.activeElement,
+    focusVisible: element.matches(':focus-visible'),
+    outlineStyle: getComputedStyle(element).outlineStyle
+  }))).toEqual({ focused: true, focusVisible: false, outlineStyle: 'none' });
 
   await firstOgMatch.dispatchEvent('pointerdown', {
     bubbles: true,
@@ -1006,27 +1224,27 @@ test('Normalize Record Lengths rejects a shared Linear row and remains recoverab
   await expect(linearRecordCard(page, sharedRowUids[0])).toBeVisible();
   await expect(linearRecordCard(page, sharedRowUids[1])).toBeVisible();
 
-  const invalid = await page.evaluate(async () => {
+  const invalid = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const result = await app.runAnalysis();
     return {
       result,
       errorSummary: String(app.errorLog?.summary || ''),
       errorDetails: Array.isArray(app.errorLog?.details)
-        ? app.errorLog.details.map((detail) => String(detail))
+        ? app.errorLog.details.map((detail) => detail.text)
         : [],
       dispatchedRequests: window.__GBDRAW_DIAGRAM_RUNS__.length,
       normalizeLength: app.form.normalize_length
     };
   });
-  expect(invalid.result).toEqual({ status: 'error' });
+  expect(invalid.result.status).toBe('error');
   expect([invalid.errorSummary, ...invalid.errorDetails].join(' ')).toMatch(
-    /Normalize Record Lengths.*same Linear row/i
+    /Turn Normalize Record Lengths off or assign each record to a separate Linear row/
   );
   expect(invalid.dispatchedRequests).toBe(0);
   expect(invalid.normalizeLength).toBe(true);
 
-  const recovered = await page.evaluate(async () => {
+  const recovered = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     app.form.normalize_length = false;
     const result = await app.runAnalysis();
@@ -1101,7 +1319,7 @@ test('No comparison completes a real render without touching dormant comparison 
     makeComparisonGenbank('NoneRecC', 'tta')
   ]);
 
-  const outcome = await page.evaluate(async () => {
+  const outcome = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('./js/state.js');
     const result = await app.runAnalysis();
@@ -1277,7 +1495,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
     cardCount: 2,
     selector: 'AutomaticA',
     grouping: 'single',
-    schema: 7,
+    schema: 8,
     cardinalities: ['exactly_one', 'exactly_one'],
     rows: [1, 1],
     selectors: [{ kind: 'recordId', value: 'AutomaticA' }, { kind: 'recordId', value: 'AutomaticB' }],
@@ -1285,9 +1503,9 @@ test('Automatic Linear renders every record from one GenBank source and survives
   });
 
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(1);
-  await expect(page.getByRole('button', { name: 'Choose GenBank File' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Choose GenBank / DDBJ File' })).toHaveCount(1);
   const sessionDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
-  expect((await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle())).status)
+  expect((await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle())).status)
     .toBe('saved');
   const sessionPath = await (await sessionDownloadPromise).path();
   const session = JSON.parse(gunzipSync(readFileSync(sessionPath)).toString('utf8'));
@@ -1335,7 +1553,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   expect(await page.evaluate(() => window.__GBDRAW_RECORD_RESOURCE_READS__)).toBe(1);
   expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(1);
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(1);
-  await expect(page.getByRole('button', { name: 'Choose GenBank File' })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Choose GenBank / DDBJ File' })).toHaveCount(1);
 
   const restored = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -1393,7 +1611,7 @@ test('Automatic Linear per-record rows survive fresh Load with contiguous biolog
   ];
   const chooseSource = async (index) => {
     const chooserPromise = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Choose GenBank File' }).nth(index).click();
+    await page.getByRole('button', { name: 'Choose GenBank / DDBJ File' }).nth(index).click();
     const chooser = await chooserPromise;
     await chooser.setFiles({
       name: sources[index].name,
@@ -1611,7 +1829,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   const requestPairs = (entries) => entries.map((entry) => [
     entry.kind, entry.queryRecordIndex, entry.subjectRecordIndex
   ]);
-  const sparseUpload = await page.evaluate(async () => {
+  const sparseUpload = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const result = await app.runAnalysis();
     return {
@@ -1693,7 +1911,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     await window.__GBDRAW_APP__.setLinearComparisonGlobalAction('none');
     window.__GBDRAW_RELEASE_LOSAT__();
   });
-  const firstMixed = await page.evaluate(async () => {
+  const firstMixed = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const result = await window.__GBDRAW_MIXED_RUN__;
     return {
@@ -1812,7 +2030,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   );
   expect(await page.evaluate(() => window.__GBDRAW_LOSAT_EXECUTOR_CALLS__)).toBe(1);
 
-  const cachedRun = await page.evaluate(async () => {
+  const cachedRun = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const result = await app.runAnalysis();
     return {
@@ -1840,7 +2058,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
 
   await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'linear-comparison-browser-matrix'; });
   const sessionDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
-  expect((await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle())).status).toBe('saved');
+  expect((await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle())).status).toBe('saved');
   const sessionPath = await (await sessionDownloadPromise).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
@@ -1867,7 +2085,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
         intent: app.linearComparisonUi.intentKey,
         losatMode: app.linearComparisonUi.activeLosatModeKey,
         losatpMode: app.linearComparisonUi.activeLosatpModeKey,
-        summary: app.linearComparisonUi.summaryText,
+        filterSummary: app.linearComparisonUi.filterSummary,
         settings: app.linearComparisonUi.sectionKeys.settings
       }
     };
@@ -1881,7 +2099,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
       intent: 'custom',
       losatMode: 'blastn',
       losatpMode: 'collinear',
-      summary: expect.stringContaining('LOSATN · 2 selected pairs · 1 LOSAT, 1 upload'),
+      filterSummary: expect.stringContaining('E-value <= '),
       settings: [
         'losat-mode', 'losat-runtime', 'blastn-task', 'upload-readiness',
         'result-filters', 'comparison-appearance'
@@ -1893,10 +2111,11 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     name: 'Set all adjacent comparisons'
   });
   await expect(restoredCommands.getByRole('button')).toHaveCount(3);
-  await expect(restoredComparisonCard.getByRole('status')).toContainText(
-    'Current: Selected pairs (2; 1 LOSAT, 1 upload)'
-  );
-  await expect(restoredComparisonCard.getByText('Custom', { exact: true })).toBeVisible();
+  // A restored custom plan presses no bulk command and shows the Custom badge.
+  for (const button of await restoredCommands.getByRole('button').all()) {
+    await expect(button).toHaveAttribute('aria-pressed', 'false');
+  }
+  await expect(restoredComparisonCard.getByRole('status')).toContainText('Custom');
   await expect(linearSelectedPairs(page).locator(':scope > summary')).toContainText(
     'Selected pairs (2)'
   );
@@ -1926,7 +2145,7 @@ test('Existing Gallery session restores edge-owned raw LOSAT cache', async ({ pa
   page.on('dialog', (dialog) => dialog.accept());
   await openApp(page, { waitForPalette: false });
 
-  const imported = await page.evaluate(async () => {
+  const imported = await evaluateWithRetainedPromise(page, async () => {
     const response = await fetch(
       '/gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'
     );
@@ -2005,7 +2224,7 @@ test('Candidate render post-processing sanitizes and reapplies stable styles bef
       ].join('')
     };
     const catalog = {
-      schema: 3,
+      schema: 4,
       items: [{
         resultIndex: 0,
         resultName: 'candidate.svg',
@@ -2029,6 +2248,9 @@ test('Candidate render post-processing sanitizes and reapplies stable styles bef
           start: 0,
           end: 10,
           strand: 1,
+          anchorProfile: {
+            precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+'
+          },
           qualifiers: {}
         }, {
           recordKey: 'record-1',
@@ -2040,6 +2262,9 @@ test('Candidate render post-processing sanitizes and reapplies stable styles bef
           start: 20,
           end: 30,
           strand: 1,
+          anchorProfile: {
+            precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+'
+          },
           qualifiers: {}
         }],
         orthogroups: [],
@@ -2147,7 +2372,7 @@ ${origin}
     firstRecord: makeGenbank('ColorRecA'),
     secondRecord: makeGenbank('ColorRecB')
   });
-  const firstRun = await page.evaluate(async () => {
+  const firstRun = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const result = await app.runAnalysis();
     return { result, errorLog: app.errorLog };
@@ -2193,7 +2418,7 @@ ${origin}
     cap: 'wsv360-like protein'
   }]);
 
-  const secondRun = await page.evaluate(async () => {
+  const secondRun = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     app.editableLabels = [{
       key: 'stale-label',
@@ -2270,7 +2495,7 @@ ${origin}
   expect(regenerated.legendFills).toContain('#ff00ff');
   expect(regenerated.rules).toEqual(edited.rules);
 
-  const postprocessingFailure = await page.evaluate(async () => {
+  const postprocessingFailure = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const targetId = String(app.extractedFeatures?.[0]?.svg_id || '');
     app.selectedFeatureIds = new Set(targetId ? [targetId] : []);
@@ -2304,14 +2529,30 @@ ${origin}
     });
     const before = snapshot();
     const originalSanitize = window.DOMPurify.sanitize;
+    const hooks = window.__GBDRAW_TEST_HOOKS__ ||= {};
+    const priorLifecycle = hooks.onSessionLifecycleEvent;
+    let admissionStarted = false;
+    let sanitizeRejected = false;
+    hooks.onSessionLifecycleEvent = event => {
+      priorLifecycle?.(event);
+      if (event.name === 'result-admission-start') admissionStarted = true;
+    };
     let result;
     try {
-      window.DOMPurify.sanitize = () => {
-        throw new Error('Forced candidate post-processing failure.');
+      window.DOMPurify.sanitize = (...args) => {
+        if (admissionStarted && !sanitizeRejected) {
+          sanitizeRejected = true;
+          window.DOMPurify.sanitize = originalSanitize;
+          throw Object.assign(new Error('Forced candidate post-processing failure.'), {
+            code: 'UNKNOWN', stage: 'result-admission'
+          });
+        }
+        return originalSanitize(...args);
       };
       result = await app.runAnalysis();
     } finally {
       window.DOMPurify.sanitize = originalSanitize;
+      hooks.onSessionLifecycleEvent = priorLifecycle;
     }
     await window.Vue.nextTick();
     const beforeState = JSON.parse(before);
@@ -2319,20 +2560,25 @@ ${origin}
     return {
       result,
       errorSummary: String(app.errorLog?.summary || ''),
+      sanitizeRejected,
       snapshotPreserved: JSON.stringify(afterState) === before,
       changedFields: Object.keys(beforeState).filter(
         (key) => JSON.stringify(beforeState[key]) !== JSON.stringify(afterState[key])
       )
     };
   });
-  expect(postprocessingFailure).toEqual({
-    result: { status: 'error' },
-    errorSummary: 'Forced candidate post-processing failure.',
+  expect(postprocessingFailure).toMatchObject({
+    result: { status: 'error', error: {
+      code: 'UNKNOWN', operation: 'generate', stage: 'result-admission'
+    } },
+    errorSummary: expect.stringContaining('without recognized diagnostic information'),
+    sanitizeRejected: true,
     snapshotPreserved: true,
     changedFields: []
   });
+  expect(postprocessingFailure.errorSummary).not.toContain('Forced candidate post-processing failure.');
 
-  const staleResponse = await page.evaluate(async () => {
+  const staleResponse = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     app.errorLog = null;
     const snapshot = () => JSON.stringify({
@@ -2393,16 +2639,19 @@ ${origin}
       )
     };
   });
-  expect(staleResponse).toEqual({
+  expect(staleResponse).toMatchObject({
     firstResult: { status: 'stale' },
-    secondResult: { status: 'error' },
+    secondResult: { status: 'error', recovery: 'preserved', error: {
+      code: 'GENERATION_BUSY', operation: 'generate', stage: 'render'
+    } },
     errorLog: {
-      summary: 'A diagram generation request is already running.',
-      details: []
+      code: 'GENERATION_BUSY', operation: 'generate', stage: 'render',
+      summary: expect.stringContaining('Wait for it to finish before retrying.')
     },
     snapshotPreserved: true,
     changedFields: []
   });
+  expect(staleResponse.secondResult.error).toEqual(staleResponse.errorLog);
 
   const reset = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
@@ -2414,7 +2663,6 @@ ${origin}
       feat: target,
       color: '#ff00ff'
     };
-    app.resetColorDialog.defaultColor = defaultColor;
     app.resetColorDialog.caption = 'wsv360-like protein';
     await app.handleResetColorChoice('this');
     return {
@@ -2434,7 +2682,7 @@ ${origin}
   });
   expect(reset.rules).toContainEqual(edited.rules[0]);
 
-  const thirdRun = await page.evaluate(async () => {
+  const thirdRun = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const result = await app.runAnalysis();
     const svg = new DOMParser().parseFromString(app.results?.[0]?.content || '', 'image/svg+xml').documentElement;
@@ -2501,7 +2749,7 @@ ORIGIN
     app.addCoordinateAnnotation(set, { start: 1, end: 10 });
   }, genbank);
 
-  await page.getByText('Region Annotations', { exact: false }).click();
+  await page.locator('summary[aria-label="Region Annotations"]').press('Enter');
   const selector = page.getByLabel('Annotation target record');
   await expect(selector).toHaveCount(1);
   await expect(selector).toHaveValue('');
@@ -2512,9 +2760,12 @@ ORIGIN
   ], { timeout: 60000 });
   await expect(page.getByText('Choose the record that this annotation targets.')).toBeVisible();
 
-  const rejected = await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis());
-  expect(rejected).toEqual({ status: 'error' });
-  await expect(page.getByText('Choose a target record for region annotation review/region_1.')).toBeVisible();
+  const rejected = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(rejected.status).toBe('error');
+  await expect(page.getByRole('alert', { name: 'Generation Error' }))
+    .toContainText('Choose an available target record.');
+  expect(rejected.error).toMatchObject({ code: 'ANNOTATION_TARGET',
+    context: { reason: 'TARGET_RECORD' } });
 
   await selector.selectOption({ label: '#2 · RecB · 12 bp' });
   await expect(page.getByText('Choose the record that this annotation targets.')).toHaveCount(0);
@@ -2533,7 +2784,7 @@ test('Region annotation IDs accept continuous typing without losing focus', asyn
     app.addCoordinateAnnotation(set);
   });
 
-  await page.getByText('Region Annotations', { exact: false }).click();
+  await page.locator('summary[aria-label="Region Annotations"]').press('Enter');
   const idInput = page.getByPlaceholder('annotation_id');
   await idInput.selectText();
   await idInput.pressSequentially('Repeat');
@@ -2585,8 +2836,8 @@ AAAAAAAAAA
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
     .map((seq) => seq.region_record_id))).toEqual(['RecB', 'RecA']);
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(1);
-  await expect(page.locator('[data-linear-source-card]').getByRole('button', { name: /^Choose (GenBank File|GFF3|FASTA)$/ })).toHaveCount(2);
-  await page.getByText('Region Annotations', { exact: false }).click();
+  await expect(page.locator('[data-linear-source-card]').getByRole('button', { name: /^Choose (GenBank \/ DDBJ File|GFF3|FASTA)$/ })).toHaveCount(2);
+  await page.locator('summary[aria-label="Region Annotations"]').press('Enter');
   await expect(page.getByLabel('Annotation target record').locator('option')).toHaveText([
     'Select target record',
     '#1 · RecB · 12 bp',
@@ -2681,7 +2932,7 @@ test('protein raw cache survives cancellation and derived options preserve searc
     makeDerivedOptionGenbank('DerivedB', 'gct')
   ]);
 
-  const runAndInspect = () => page.evaluate(async () => {
+  const runAndInspect = () => evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('/gbdraw/web/js/state.js');
     const plain = (value) => JSON.parse(JSON.stringify(value ?? null));
@@ -2710,7 +2961,7 @@ test('protein raw cache survives cancellation and derived options preserve searc
     });
     await page.waitForFunction(() => window.__GBDRAW_PROTEIN_CONVERSION_PAUSED__);
     await page.getByRole('button', { name: /Cancel$/ }).click();
-    const outcome = await page.evaluate(async () => {
+    const outcome = await evaluateWithRetainedPromise(page, async () => {
       window.__GBDRAW_PAUSE_PROTEIN_CONVERSION__ = false;
       return window.__GBDRAW_CANCELED_PROTEIN_RUN__;
     });
@@ -2855,7 +3106,7 @@ test('protein raw cache survives cancellation and derived options preserve searc
   expect(pairwiseTwo.rawKeys).toEqual(pairwiseRawKeys);
   expect(pairwiseTwo.matchCount).toBeGreaterThan(pairwiseOne.matchCount);
 
-  const rejected = await page.evaluate(async () => {
+  const rejected = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const selectedBefore = String(app.results?.[app.selectedResultIndex]?.content || '');
     app.losat.blastp.maxHits = 0;
@@ -2944,6 +3195,8 @@ const completeComparisonSnapshot = (page) => page.evaluate(() => {
   ].join('->'));
   return {
     error: app.errorLog,
+    // LOSAT rows carry the displayed record IDs, so they never raise the PD-OI-074 notice.
+    comparisonWarnings: app.comparisonWarnings,
     selectors: request.records.map((record) => record.selector.value),
     rows: request.records.map((record) => record.presentation.gridRow),
     pairs: request.comparisons.filter((comparison) => comparison.kind === 'nucleotideBlast')
@@ -2960,7 +3213,7 @@ test('@comparison-contract File source order moves multi-record blocks through p
   await openApp(page);
   await uploadCompleteRecordSources(page);
   await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatMode('blastn'));
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
 
   const sources = page.locator('[data-linear-source-card]');
   await expect(sources).toHaveCount(2);
@@ -3061,7 +3314,7 @@ test('@comparison-contract File source order moves multi-record blocks through p
   await page.screenshot({ path: testInfo.outputPath('file-source-order-mobile.png') });
   await page.setViewportSize({ width: 1280, height: 900 });
 
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   const generated = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
@@ -3084,7 +3337,7 @@ test('@comparison-contract File source order moves multi-record blocks through p
   expect(generated.sourceIds[0]).not.toBe(generated.sourceIds[3]);
 
   const saved = page.waitForEvent('download');
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     window.__GBDRAW_APP__.sessionTitle = 'linear-source-order';
     await window.__GBDRAW_APP__.saveSessionWithTitle();
   });
@@ -3104,7 +3357,7 @@ test('@comparison-contract File source order moves multi-record blocks through p
   await expect(page.locator('[data-linear-source-card]').nth(1)).toContainText('upper.gbff');
   expect(await page.evaluate(() => Object.fromEntries(window.__GBDRAW_APP__.linearRecordRows
     .map(({ uid, row }) => [uid, row])))).toEqual(expectedMovedRows);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   expect(await page.evaluate(() => {
     const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
     return {
@@ -3275,7 +3528,7 @@ test('@comparison-contract real LOSAT Wasm searches two multi-record sources in 
   await openApp(page);
   await uploadCompleteRecordSources(page, contents);
   await page.evaluate(() => window.__GBDRAW_APP__.setLinearComparisonLosatMode('blastn'));
-  const result = await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis());
+  const result = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
   expect(result, JSON.stringify(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)))
     .toEqual({ status: 'ok' });
   const snapshot = await completeComparisonSnapshot(page);
@@ -3298,9 +3551,9 @@ test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs
   const controls = page.getByRole('spinbutton', { name: /^Linear record row for sequence \d+$/ });
   await expect(controls).toHaveCount(5);
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(2);
-  await expect(page.getByRole('button', { name: 'Choose GenBank File' })).toHaveCount(2);
+  await expect(page.getByRole('button', { name: 'Choose GenBank / DDBJ File' })).toHaveCount(2);
   const expectedPairs = [[0, 2], [0, 3], [0, 4], [1, 2], [1, 3], [1, 4]];
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   const generated = await completeComparisonSnapshot(page);
   expect(generated).toMatchObject({
     error: null,
@@ -3309,13 +3562,13 @@ test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs
     svgPairs: expectedPairs.map((pair) => pair.join('->')).sort(),
     sourceCount: 2, jobs: [[{ query: [0, 1], subject: [2, 3, 4], pairs: expectedPairs }]]
   });
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   expect((await completeComparisonSnapshot(page)).jobs).toEqual(generated.jobs);
 
   // A single placement edit must target a biological record, not its whole file.
   await controls.nth(4).fill('3');
   const saved = page.waitForEvent('download');
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     window.__GBDRAW_APP__.sessionTitle = 'complete-record-comparison';
     await window.__GBDRAW_APP__.saveSessionWithTitle();
   });
@@ -3329,17 +3582,38 @@ test('@comparison-contract OIC-015: multi-record Adjacent searches all six pairs
   await page.getByRole('button', { name: 'Advanced comparison and layout' }).click();
   await expect(controls).toHaveCount(5);
   await expect(page.locator('[data-linear-source-card]')).toHaveCount(2);
-  await expect(page.getByRole('button', { name: 'Choose GenBank File' })).toHaveCount(2);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  await expect(page.getByRole('button', { name: 'Choose GenBank / DDBJ File' })).toHaveCount(2);
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   const restored = await completeComparisonSnapshot(page);
   expect(restored.rows).toEqual([1, 1, 2, 2, 3]);
   expect(restored.pairs).toEqual([[0, 2], [0, 3], [1, 2], [1, 3], [2, 4], [3, 4]]);
   expect(restored.error).toBeNull();
+  expect(restored.comparisonWarnings).toEqual([]);
   expect(restored.sourceCount).toBe(2);
   await page.setViewportSize({ width: 390, height: 844 });
   await controls.last().scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('per-record-layout-mobile.png') });
 });
+
+// PD-OI-018 revision 4 plan for the five-record, two-file fixture (records 0-1 | 2-4)
+// when every ordered record pair, self pairs included, is requested: the query
+// file searches the whole subject file (2 jobs), a within-file comparison
+// searches that file without the query record (5 jobs, one per query), and a
+// requested self comparison searches the record alone (5 jobs). No job searches
+// a database that holds its own query record unless it is the requested self job.
+const REVISION_4_ALL_PAIR_JOBS = (() => {
+  const job = (query, subject) => ({
+    query, subject, pairs: query.flatMap((q) => subject.map((s) => [q, s]))
+  });
+  return [
+    job([0, 1], [2, 3, 4]), job([2, 3, 4], [0, 1]),
+    ...[0, 1, 2, 3, 4].map((index) => job([index], [index])),
+    job([0], [1]), job([1], [0]), job([2], [3, 4]), job([3], [2, 4]), job([4], [2, 3])
+  ];
+})();
+const describeLosatJob = (job) => JSON.stringify([
+  job.query, job.subject, [...job.pairs].sort((a, b) => a[0] - b[0] || a[1] - b[1])
+]);
 
 for (const mode of ['orthogroup', 'collinear']) {
   test(`@comparison-contract OIC-015: ${mode} all-record evidence includes same-row and non-adjacent records`, async ({ page }) => {
@@ -3356,16 +3630,25 @@ for (const mode of ['orthogroup', 'collinear']) {
       app.linearSeqs.forEach((seq, index) => app.setLinearRecordRow(seq.uid,
         index < 2 ? 1 : index === 2 ? 2 : 3));
     }, mode);
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+    expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
     const snapshot = await completeComparisonSnapshot(page);
     expect(snapshot.selectors).toHaveLength(5);
     expect(snapshot.jobs).toHaveLength(1);
-    expect(snapshot.jobs[0]).toHaveLength(4);
+    expect(snapshot.jobs[0]).toHaveLength(12);
+    expect(snapshot.jobs[0].map(describeLosatJob).sort())
+      .toEqual(REVISION_4_ALL_PAIR_JOBS.map(describeLosatJob).sort());
+    for (const job of snapshot.jobs[0]) {
+      const searchesQuery = job.query.some((index) => job.subject.includes(index));
+      expect(searchesQuery, JSON.stringify(job)).toBe(
+        job.query.length === 1 && job.subject.length === 1 && job.query[0] === job.subject[0]
+      );
+    }
     const pairs = snapshot.jobs.flat().flatMap((job) => job.pairs).map((pair) => pair.join('->')).sort();
     const allPairs = Array.from({ length: 5 }, (_, q) => Array.from({ length: 5 }, (_, s) => `${q}->${s}`)).flat().sort();
     expect(pairs).toEqual(allPairs);
     expect(snapshot.sourceCount).toBe(2);
     expect(snapshot.error).toBeNull();
+    expect(snapshot.comparisonWarnings).toEqual([]);
     if (mode === 'orthogroup') {
       expect(snapshot.svgPairs).toEqual(['0->2', '1->2', '2->3', '2->4']);
     }
@@ -3373,7 +3656,7 @@ for (const mode of ['orthogroup', 'collinear']) {
       const app = window.__GBDRAW_APP__;
       app.linearSeqs.forEach((seq, index) => app.setLinearRecordRow(seq.uid, index < 2 ? 2 : 1));
     });
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+    expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
     if (mode === 'orthogroup') {
       expect((await completeComparisonSnapshot(page)).svgPairs).toEqual([
         '2->0', '2->1', '3->0', '3->1', '4->0', '4->1'
@@ -3383,7 +3666,7 @@ for (const mode of ['orthogroup', 'collinear']) {
       const app = window.__GBDRAW_APP__;
       app.linearSeqs.forEach((seq) => app.setLinearRecordRow(seq.uid, 1));
     });
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+    expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
     const oneRow = await completeComparisonSnapshot(page);
     expect(oneRow.rows).toEqual([1, 1, 1, 1, 1]);
     expect(oneRow.svgPairs).toEqual([]);
@@ -3405,7 +3688,7 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
     Object.assign(app.form, { suppress_gc: true, suppress_skew: true, labels_mode: 'none' });
   }, makeComparisonGenbank('CircularA') + makeComparisonGenbank('CircularB'));
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBe(2);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   expect(await page.evaluate(() => ({
     grouping: window.__GBDRAW_DIAGRAM_RUNS__.at(-1).grouping,
     count: window.__GBDRAW_APP__.results.length,
@@ -3421,7 +3704,7 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
     app.sessionTitle = 'explicit-layout-opt-outs';
   });
   const saved = page.waitForEvent('download');
-  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const savedPath = await (await saved).path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
@@ -3447,7 +3730,7 @@ test('@comparison-contract one uploaded source stays one file card through recor
   await expect(sources).toHaveCount(2);
   await expect(sources.nth(0).locator('[data-linear-record-card]')).toHaveCount(2);
   await expect(sources.nth(1).locator('[data-linear-record-card]')).toHaveCount(3);
-  await expect(sources.getByRole('button', { name: /^Choose (GenBank File|GFF3|FASTA)$/ })).toHaveCount(2);
+  await expect(sources.getByRole('button', { name: /^Choose (GenBank \/ DDBJ File|GFF3|FASTA)$/ })).toHaveCount(2);
   const recordList = sources.first().locator('[data-linear-source-records]');
   const recordSummary = recordList.locator(':scope > summary');
   await expect(recordSummary).toHaveText('Number of records: 2');
@@ -3461,10 +3744,10 @@ test('@comparison-contract one uploaded source stays one file card through recor
   await expect(recordList).not.toHaveAttribute('open', '');
   await page.evaluate(() => { window.__GBDRAW_APP__.lInputType = 'gff'; });
   await expect(sources).toHaveCount(2);
-  await expect(sources.getByRole('button', { name: /^Choose (GenBank File|GFF3|FASTA)$/ })).toHaveCount(4);
+  await expect(sources.getByRole('button', { name: /^Choose (GenBank \/ DDBJ File|GFF3|FASTA)$/ })).toHaveCount(4);
   await page.evaluate(() => { window.__GBDRAW_APP__.lInputType = 'gb'; });
   await expect(sources).toHaveCount(2);
-  await expect(sources.getByRole('button', { name: /^Choose (GenBank File|GFF3|FASTA)$/ })).toHaveCount(2);
+  await expect(sources.getByRole('button', { name: /^Choose (GenBank \/ DDBJ File|GFF3|FASTA)$/ })).toHaveCount(2);
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     app.setLinearRecordRow(app.linearSeqs.at(-1).uid, 3);
@@ -3478,7 +3761,7 @@ test('@comparison-contract one uploaded source stays one file card through recor
   await page.screenshot({ path: testInfo.outputPath('source-files-and-records-desktop.png') });
 
   const chooserPromise = page.waitForEvent('filechooser');
-  await sources.nth(1).getByRole('button', { name: 'Choose GenBank File' }).click();
+  await sources.nth(1).getByRole('button', { name: 'Choose GenBank / DDBJ File' }).click();
   await (await chooserPromise).setFiles({
     // The name deliberately matches the first source; distinct uploads remain distinct.
     name: 'upper.gbff', mimeType: 'text/plain',
@@ -3492,10 +3775,15 @@ test('@comparison-contract one uploaded source stays one file card through recor
   await expect(sources).toHaveCount(2);
   await expect(sources.nth(1).locator('[data-linear-record-card]')).toHaveCount(1);
   await sources.nth(1).getByRole('button', { name: /Remove$/ }).click();
+  const removalDialog = page.getByRole('dialog', { name: 'Clear or delete File?' });
+  await expect(removalDialog).toContainText('upper.gbff');
+  await removalDialog.getByRole('button', { name: 'Delete card', exact: true }).click();
   await expect(sources).toHaveCount(1);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
     .map((seq) => seq.region_record_id))).toEqual(['UpperA', 'UpperB']);
   await sources.first().getByRole('button', { name: /Remove$/ }).click();
+  await expect(removalDialog.getByRole('button', { name: 'Delete card', exact: true })).toBeDisabled();
+  await removalDialog.getByRole('button', { name: 'Clear file only', exact: true }).click();
   await expect(sources).toHaveCount(1);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
     .map((seq) => ({ file: seq.gb, selector: seq.region_record_id }))))
@@ -3532,7 +3820,7 @@ test('@comparison-contract LOSAT Settings preserve execution controls and unboun
   for (const execution of ['auto', 'serial', 'threaded']) {
     await settings.getByRole('combobox', { name: 'LOSAT execution', exact: true }).selectOption(execution);
     const saved = page.waitForEvent('download');
-    await page.evaluate(async () => {
+    await evaluateWithRetainedPromise(page, async () => {
       window.__GBDRAW_APP__.sessionTitle = 'losat-settings';
       await window.__GBDRAW_APP__.saveSessionWithTitle();
     });
@@ -3553,7 +3841,7 @@ test('@comparison-contract LOSAT Settings preserve execution controls and unboun
   expect(await page.evaluate(() => window.__GBDRAW_APP__.losat.executionMode)).toBe('threaded');
 });
 
-test('@comparison-contract LOSATP source jobs are reused after display start, reverse complement, and fresh Load', async ({ page }) => {
+test('@comparison-contract record rotation adds zero LOSATP source jobs and survives reverse complement and fresh Load', async ({ page }) => {
   test.setTimeout(300000);
   await installCompleteRecordComparisonExecutor(page);
   await openApp(page);
@@ -3563,7 +3851,7 @@ test('@comparison-contract LOSATP source jobs are reused after display start, re
     app.setLinearComparisonLosatMode('blastp');
     app.setLinearComparisonLosatpMode('orthogroup');
   });
-  const run = () => page.evaluate(async () => {
+  const run = () => evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const result = await app.runAnalysis();
     const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
@@ -3576,7 +3864,7 @@ test('@comparison-contract LOSATP source jobs are reused after display start, re
   });
   const original = await run();
   expect(original.result).toEqual({ status: 'ok' });
-  expect(original.jobCount).toBe(4);
+  expect(original.jobCount).toBe(12);
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     const row = app.recordDisplayControls.rowsFor(app.linearSeqs[0].uid)[0];
@@ -3585,16 +3873,76 @@ test('@comparison-contract LOSATP source jobs are reused after display start, re
   });
   const shifted = await run();
   expect(shifted.result).toEqual({ status: 'ok' });
-  expect(shifted.jobCount).toBe(4);
-  expect(shifted.firstRecord.display.startCoordinate).toBe(31);
-  expect(shifted.geometry).not.toBe(original.geometry);
-  await page.evaluate(() => { window.__GBDRAW_APP__.linearSeqs[0].region_reverse = true; });
+  expect(shifted.jobCount).toBe(12);
+  expect(shifted.firstRecord.display).toMatchObject({
+    isCircular: true,
+    startCoordinate: 31
+  });
+  const beforePopupRequest = await page.evaluate(() => (
+    JSON.parse(JSON.stringify(window.__GBDRAW_DIAGRAM_RUNS__.at(-1)))
+  ));
+  const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
+  await search.fill('UpperA_a');
+  await search.press('Enter');
+  await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
+  await page.getByRole('button', { name: /Record actions · Rotate record/ }).click();
+  const actions = page.getByRole('region', { name: 'Record actions' });
+  await actions.getByLabel('Record rotation anchor').selectOption('midpoint');
+  await actions.getByLabel('Record rotation signed offset').fill('2');
+  const popupStart = await page.evaluate(() => (
+    window.__GBDRAW_APP__.featureRecordRotationDraft.startCoordinate
+  ));
+  await actions.getByRole('button', { name: 'Apply and regenerate' }).click();
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.processing, null, {
+    timeout: 240000
+  });
+  await expect(actions.locator('[aria-live="polite"]')).toContainText(
+    'Record rotation applied and regenerated.'
+  );
+  const popup = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
+    const svg = new DOMParser().parseFromString(app.results[0]?.content || '', 'image/svg+xml');
+    return {
+      firstRecord: request.records[0],
+      records: request.records,
+      comparisons: request.comparisons,
+      resources: request.resources,
+      jobCount: window.__GBDRAW_COMPLETE_RECORD_JOBS__.flat().length,
+      geometry: [...svg.querySelectorAll('path')]
+        .map((path) => path.getAttribute('d')).join('\n')
+    };
+  });
+  expect(popup.jobCount).toBe(12);
+  expect(popup.firstRecord.display.startCoordinate).toBe(popupStart);
+  expect(popup.records.slice(1)).toEqual(beforePopupRequest.records.slice(1));
+  expect(popup.comparisons).toEqual(beforePopupRequest.comparisons);
+  expect(popup.resources).toEqual(beforePopupRequest.resources);
+  expect(popup.geometry).not.toBe(shifted.geometry);
+  await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.recordDisplayControls
+      .draftFor(window.__GBDRAW_APP__.recordDisplayControls
+        .rowsFor(window.__GBDRAW_APP__.linearSeqs[0].uid)[0]).startCoordinate
+  ))).toBe(31);
+  await expect.poll(() => page.evaluate(() => {
+    const svg = new DOMParser().parseFromString(
+      window.__GBDRAW_APP__.results[0]?.content || '',
+      'image/svg+xml'
+    );
+    return [...svg.querySelectorAll('path')]
+      .map((path) => path.getAttribute('d')).join('\n');
+  })).toBe(shifted.geometry);
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.linearSeqs[0].region_reverse = true;
+  });
   const reversed = await run();
   expect(reversed.result, JSON.stringify(reversed.error)).toEqual({ status: 'ok' });
-  expect(reversed.jobCount).toBe(4);
+  expect(reversed.jobCount).toBe(12);
   expect(reversed.geometry).not.toBe(shifted.geometry);
   const saved = page.waitForEvent('download');
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     window.__GBDRAW_APP__.sessionTitle = 'losat-display-cache';
     await window.__GBDRAW_APP__.saveSessionWithTitle();
   });
@@ -3614,7 +3962,9 @@ test('@comparison-contract LOSATP source jobs are reused after display start, re
   }));
   const cropped = await run();
   expect(cropped.result, JSON.stringify(cropped.error)).toEqual({ status: 'ok' });
-  expect(cropped.jobCount).toBe(3);
+  // Cropping record 0 changes the database or query of every job that holds
+  // it: both between-file jobs, its self job, 0 against 1, and 1 against 0.
+  expect(cropped.jobCount).toBe(5);
   expect(cropped.firstRecord.region).toMatchObject({ start: 1, end: 210, reverseComplement: true });
 });
 
@@ -3663,15 +4013,21 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
   const runs = settings.getByRole('combobox', { name: 'LOSAT parallel runs', exact: true });
   const threads = settings.getByRole('combobox', { name: 'LOSAT threads per run', exact: true });
   await settings.getByRole('combobox', { name: 'LOSAT execution', exact: true }).selectOption('threaded');
-  for (const [budget, parallel, perRun] of [['32', 4, 8], ['16', 4, 4], ['2', 2, 1], ['8', 4, 2]]) {
+  // The PD-OI-018 revision 4 plan has 12 source jobs for these two files (2
+  // between-file, 5 within-file, 5 requested self searches), so Auto runs are
+  // min(12, budget) and Auto threads are floor(budget / runs).
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.losatEstimatedJobCount)).toBe(12);
+  for (const [budget, parallel, perRun] of [
+    ['32', 12, 2], ['16', 12, 1], ['2', 2, 1], ['8', 8, 1], ['24', 12, 2]
+  ]) {
     await total.selectOption(budget);
     await expect(runs.locator('option:checked')).toHaveText(`Auto (${parallel} runs)`);
     await expect(threads.locator('option:checked')).toHaveText(`Auto (${perRun})`);
   }
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
-  expect(await page.evaluate(() => window.__THREAD_DISPATCHES__)).toEqual([2, 2, 2, 2]);
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await page.evaluate(() => window.__THREAD_DISPATCHES__)).toEqual(Array(12).fill(2));
   expect(await page.evaluate(() => window.__THREAD_STATUSES__.find(status => status.state === 'running')))
-    .toMatchObject({ mode: 'threaded', pairWorkers: 4, threadsPerJob: 2, totalBudget: 8 });
+    .toMatchObject({ mode: 'threaded', pairWorkers: 12, threadsPerJob: 2, totalBudget: 24 });
 
   await total.selectOption('32');
   await runs.selectOption('2');
@@ -3682,12 +4038,14 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
   await expect(threads).toHaveValue('8');
   await expect(runs.locator('option:checked')).toContainText('1 effective');
   await expect(threads.locator('option:checked')).toContainText('4 effective');
-  const pendingSave = page.waitForEvent('download');
-  await page.evaluate(async () => {
-    window.__GBDRAW_APP__.sessionTitle = 'thread-budget';
-    await window.__GBDRAW_APP__.saveSessionWithTitle();
-  });
-  const savedPath = await (await pendingSave).path();
+  await page.evaluate(() => { window.__GBDRAW_APP__.sessionTitle = 'thread-budget'; });
+  // Awaiting Save inside evaluate intermittently fails with the DevTools error
+  // "Promise was collected"; click Save and wait for its download instead.
+  const [saved] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('banner').getByRole('button', { name: 'Save Session', exact: true }).click()
+  ]);
+  const savedPath = await saved.path();
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);
   page.once('dialog', dialog => dialog.accept());
@@ -3703,7 +4061,7 @@ test('@comparison-contract Total threads reallocates Auto runs and threads in re
   await runs.selectOption({ index: 0 });
   await threads.selectOption('auto');
   await total.selectOption('16');
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'ok' });
   expect(await page.evaluate(() => window.__THREAD_DISPATCHES__)).toEqual([]);
 });
 
@@ -3721,7 +4079,7 @@ test('Collinear inference checkbox skips self searches and reuses matching evide
   });
   const checkbox = page.getByRole('checkbox', { name: 'Infer orthogroups with self-comparisons' });
   await expect(checkbox).not.toBeChecked();
-  const run = () => page.evaluate(async () => {
+  const run = () => evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('/gbdraw/web/js/state.js');
     const status = await app.runAnalysis();
@@ -3847,7 +4205,7 @@ test('File-level default organism and subtitle apply across records and allow pe
   expect(resetResolved[1]).toEqual({ label: '<i>Escherichia coli</i> O157:H7', subtitle: 'Default Cluster' });
 });
 
-test('GenBank file upload infers the file default organism but leaves the file default subtitle empty', async ({ page }) => {
+test('GenBank file upload infers each record definition and leaves the file defaults empty', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => {
     window.__GBDRAW_APP__.mode = 'linear';
@@ -3877,29 +4235,29 @@ FEATURES             Location/Qualifiers
     app.setLinearSeqPrimaryFile(0, 'gb', new File([content], 'Sakai_sample.gbk', { type: 'text/plain' }));
   }, sampleGenbank);
 
+  // D-12 (PD-OI-067): the record gets its own inferred definition; both file
+  // defaults stay empty, so nothing is marked as a file default.
   await expect.poll(() => page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
     const group = app.linearSourceGroups[0];
+    const seq = app.linearSeqs[0];
     return {
-      definition: app.getLinearSourceDefaultDefinition(group),
-      subtitle: app.getLinearSourceDefaultSubtitle(group)
+      fileDefinition: app.getLinearSourceDefaultDefinition(group),
+      fileSubtitle: app.getLinearSourceDefaultSubtitle(group),
+      inferred: seq.inferred_definition,
+      effective: app.resolveLinearRecordEffectiveDefinition(seq, group)
     };
   })).toEqual({
-    definition: '<i>Escherichia coli</i> O157:H7 str. Sakai',
-    // Only the organism is inferred as a file default. A subtitle describes one
-    // replicon, so inferring it from the first record would overwrite the others.
-    subtitle: ''
+    fileDefinition: '',
+    fileSubtitle: '',
+    inferred: '<i>Escherichia coli</i> O157:H7 str. Sakai',
+    effective: '<i>Escherichia coli</i> O157:H7 str. Sakai'
   });
 
-  await expect(page.getByLabel('Default definition for file 1')).toHaveValue('<i>Escherichia coli</i> O157:H7 str. Sakai');
+  await expect(page.getByLabel('Default definition for file 1')).toHaveValue('');
   await expect(page.getByLabel('Default subtitle for file 1')).toHaveValue('');
-
-  await page.evaluate(() => {
-    const options = document.querySelector('[data-linear-record-options]');
-    if (options) options.open = true;
-  });
-
-  const recordDefInput = page.getByLabel('Definition for sequence 1');
-  await expect(recordDefInput).toHaveAttribute('placeholder', '<i>Escherichia coli</i> O157:H7 str. Sakai');
-  await expect(page.getByText('Using file default').first()).toBeVisible();
+  await expect(page.getByText('Using file default')).toHaveCount(0);
+  // A blank record Definition previews what Generate draws: the inferred value.
+  await expect(page.getByLabel('Definition for sequence 1'))
+    .toHaveAttribute('placeholder', '<i>Escherichia coli</i> O157:H7 str. Sakai');
 });

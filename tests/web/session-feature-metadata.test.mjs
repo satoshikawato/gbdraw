@@ -30,6 +30,7 @@ await copyModule(
   'app/legend-layout/transform-utils.js'
 );
 await copyModule('gbdraw/web/js/services/diagram-generation.js', 'services/diagram-generation.js');
+await copyModule('gbdraw/web/js/services/bounded-json-transport.js', 'services/bounded-json-transport.js');
 await copyModule(
   'gbdraw/web/js/services/current-worker-result-source.js',
   'services/current-worker-result-source.js'
@@ -161,7 +162,7 @@ const { normalizeGenerationResponse } = await import(pathToFileURL(join(tempDir,
     metadata: {},
     artifactIdentity: null
   });
-  const metadata = { trackSlotGeometry: { schema: 1, mode: 'linear', records: [] } };
+  const metadata = { trackSlotGeometry: { schema: 1, mode: 'linear', records: [] }, annotationWarnings: [{ code: 'feature_selector_unmatched', setId: 's', annotationId: 'a', recordId: 'r', recordIndex: 0, missingCount: 1, message: 'Skipped annotation: 1 feature selector(s) unmatched.', resultIndex: 0, resultName: 'out.svg' }] };
   assert.deepEqual(
     normalizeGenerationResponse({ results: legacyResults, metadata }),
     { results: legacyResults, metadata, artifactIdentity: null }

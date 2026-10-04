@@ -15,8 +15,8 @@
 
 SVG is the base render. Static SVG uses `<prefix>.svg`; Interactive SVG uses
 `<prefix>.interactive.svg`. A session uses `.gbdraw-session.json` or
-`.gbdraw-session.json.gz`. Command-line protein evidence uses the path supplied
-to `--protein_blastp_output`.
+`.gbdraw-session.json.gz`. Command-line protein evidence is written to
+`losatp.raw.tsv` inside the directory supplied to `--losat_output_dir`.
 
 Command-line `-f` or `--format` and Python format arguments use `svg`,
 `interactive_svg`, `png`, `pdf`, `eps`, or `ps`.
@@ -42,6 +42,14 @@ script, searchable metadata, popups, zoom and reset controls, and supported
 sequence downloads. Open it in a modern browser; many image viewers display
 only the static artwork or block its script.
 
+In the Web app, SVG, Interactive SVG, PNG, and PDF export the current Result.
+Supported manual legend, title, and Linear scale positions in that Result are
+included. Preview-only Layout edit hints, hover outlines, cursors, and the
+search and toolbar rows are excluded. Export does not apply draft settings;
+select **Generate Diagram** first if they should affect the file. A command or
+raw Python recipe alone does not reproduce positions dragged in the browser;
+keep the Web Session with the exported figure for that handoff.
+
 Interactive output intentionally contains script. Input-derived text must not
 become executable markup, event-handler attributes, or unsafe links. SVG
 optimizers and vector editors can remove the IDs, data attributes, metadata,
@@ -53,6 +61,21 @@ PNG dimensions scale from the SVG canvas by `DPI / 96`; **96 (Screen)** keeps
 the canvas pixel dimensions and **300 (Print)** produces a larger raster.
 Check the downloaded dimensions and file signature instead of trusting the
 extension.
+
+SVG lengths are CSS pixels (96 px per inch). A web PDF page is the SVG canvas
+at 0.75 pt per px, the same physical size as the CLI (CairoSVG) PDF; a
+1491 × 984 px canvas becomes a 1118 × 738 pt page. The PDF text layer keeps
+the spaces in curved and tick labels, so text such as `1 kbp` can be searched
+and copied.
+
+CairoSVG ignores `dominant-baseline` on curved text, such as circular tick
+labels, and places `hanging` and `middle` text on other baselines than
+browsers. It also centers or right-aligns each italic or roman part of a
+mixed-style caption on that part's own width, so the parts overlap. Before
+conversion, gbdraw gives that text the browser baseline offset and each
+caption part its browser start, computed from the packaged font metrics, so
+command-line and Python PNG, PDF, EPS, and PS text sits where browsers draw
+the SVG. The SVG file is not changed.
 
 Mixed inline text formatting, such as italic markup inside a species label,
 does not reliably survive conversion to PNG, PDF, EPS, or PS. Keep SVG when

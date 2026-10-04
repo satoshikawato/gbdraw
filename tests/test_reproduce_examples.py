@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from functools import cache
 import re
 import subprocess
@@ -17,6 +18,7 @@ from tools.reproduce_examples_manifest import (
     CliRecipe,
     CompositeRecipe,
     FigureSpec,
+    SessionVariantRecipe,
     build_figure_specs,
     load_palette_names,
 )
@@ -441,17 +443,30 @@ def reproduced_arrow_geometry_variants(
         "tutorial_9_arrow_geometry_circular",
         "tutorial_9_arrow_geometry_linear",
     )
+    figures = dict(_figure_specs())
+    baseline_ids = []
+    for figure_id in figure_ids:
+        variant = figures[figure_id]
+        assert isinstance(variant.recipe, SessionVariantRecipe)
+        baseline_id = f"{figure_id}_current_baseline"
+        baseline_ids.append(baseline_id)
+        figures[baseline_id] = replace(
+            variant,
+            figure_id=baseline_id,
+            output_path=f"examples/{baseline_id}.svg",
+            recipe=SessionVariantRecipe(variant.recipe.source_session_path),
+        )
     reproducer = Reproducer(
         project_root=PROJECT_ROOT,
         output_root=tmp_path_factory.mktemp("arrow-geometry") / "out",
-        figures=_figure_specs(),
+        figures=figures,
     )
     try:
-        for figure_id in figure_ids:
+        for figure_id in (*figure_ids, *baseline_ids):
             assert reproducer.render_figure(figure_id) is True
         return {
             figure_id: reproducer.output_path_for(figure_id)
-            for figure_id in figure_ids
+            for figure_id in (*figure_ids, *baseline_ids)
         }
     finally:
         reproducer.close()
@@ -460,7 +475,11 @@ def reproduced_arrow_geometry_variants(
 def test_gallery_session_arrow_geometry_variants_reproduce_tracked_svgs(
     reproduced_arrow_geometry_variants: dict[str, Path],
 ) -> None:
-    for figure_id, generated in reproduced_arrow_geometry_variants.items():
+    for figure_id in (
+        "tutorial_9_arrow_geometry_circular",
+        "tutorial_9_arrow_geometry_linear",
+    ):
+        generated = reproduced_arrow_geometry_variants[figure_id]
         tracked = PROJECT_ROOT / _figure_specs()[figure_id].output_path
         assert generated.read_text(encoding="utf-8") == tracked.read_text(
             encoding="utf-8"
@@ -472,15 +491,18 @@ def test_gallery_session_arrow_geometry_variants_only_change_feature_paths(
 ) -> None:
     pairs = (
         (
-            PROJECT_ROOT / "gbdraw/web/gallery/sources/HmmtDNA_ATskew.svg",
+            reproduced_arrow_geometry_variants[
+                "tutorial_9_arrow_geometry_circular_current_baseline"
+            ],
             reproduced_arrow_geometry_variants[
                 "tutorial_9_arrow_geometry_circular"
             ],
             15,
         ),
         (
-            PROJECT_ROOT
-            / "gbdraw/web/gallery/sources/BGC0000708-BGC0000713.svg",
+            reproduced_arrow_geometry_variants[
+                "tutorial_9_arrow_geometry_linear_current_baseline"
+            ],
             reproduced_arrow_geometry_variants[
                 "tutorial_9_arrow_geometry_linear"
             ],

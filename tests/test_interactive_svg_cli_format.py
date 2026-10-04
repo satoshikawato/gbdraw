@@ -59,7 +59,7 @@ def _metadata_payload(svg_source: str) -> dict[str, object]:
 
 def _catalog_item(svg_source: str) -> dict[str, object]:
     payload = _metadata_payload(svg_source)
-    assert payload["schema"] == 3
+    assert payload["schema"] == 4
     items = payload["items"]
     assert isinstance(items, list) and len(items) == 1
     return items[0]
@@ -87,7 +87,7 @@ def _script_payload(svg_source: str) -> str:
     return script.text or ""
 
 
-def test_enrich_svg_embeds_selected_schema_three_catalog_item_exactly() -> None:
+def test_enrich_svg_promotes_selected_schema_three_catalog_item_exactly() -> None:
     item = {
         "resultIndex": 1,
         "resultName": "selected.svg",
@@ -145,7 +145,7 @@ def test_enrich_svg_embeds_selected_schema_three_catalog_item_exactly() -> None:
         feature_catalog=catalog,
     )
 
-    assert _metadata_payload(enriched) == {"schema": 3, "items": [item]}
+    assert _metadata_payload(enriched) == {"schema": 4, "items": [item]}
     root = ET.fromstring(enriched)
     metadata = next(
         element
@@ -154,6 +154,7 @@ def test_enrich_svg_embeds_selected_schema_three_catalog_item_exactly() -> None:
     )
     assert metadata.get("data-result-index") == "1"
     assert metadata.get("data-result-name") == "selected.svg"
+    assert metadata.get("data-schema") == "4"
     feature = next(
         element
         for element in root.iter()
@@ -835,7 +836,7 @@ def test_enrich_svg_generates_fallback_feature_payload() -> None:
     assert payload["features"][0]["fillColor"] == "#54bcf8"
 
 
-def test_enrich_svg_v3_embeds_sequences_without_precomputed_fastas() -> None:
+def test_enrich_svg_v4_embeds_sequences_without_precomputed_fastas() -> None:
     svg = """<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px">
       <path id="fseq" data-gbdraw-feature-id="fseq" fill="#54bcf8" d="M 1 1 L 2 2" />
     </svg>"""
@@ -864,14 +865,14 @@ def test_enrich_svg_v3_embeds_sequences_without_precomputed_fastas() -> None:
     payload = _metadata_payload(enriched)
     feature = payload["items"][0]["biologicalFeatures"][0]
 
-    assert payload["schema"] == 3
+    assert payload["schema"] == 4
     assert feature["nucleotide_sequence"] == "ATGAAATAA"
     assert feature["amino_acid_sequence"] == "MK"
     assert "nucleotide_fasta" not in feature
     assert "amino_acid_fasta" not in feature
 
 
-def test_enrich_svg_v3_deduplicates_translation_sequence() -> None:
+def test_enrich_svg_v4_deduplicates_translation_sequence() -> None:
     svg = """<svg xmlns="http://www.w3.org/2000/svg" width="100px" height="80px">
       <path id="fseq" data-gbdraw-feature-id="fseq" fill="#54bcf8" d="M 1 1 L 2 2" />
     </svg>"""
@@ -897,7 +898,7 @@ def test_enrich_svg_v3_deduplicates_translation_sequence() -> None:
     assert feature["amino_acid_sequence"] == "MPEPTIDE"
 
 
-def test_enrich_svg_v3_metadata_is_at_least_35_percent_smaller_than_v1_fixture() -> None:
+def test_enrich_svg_v4_metadata_is_at_least_35_percent_smaller_than_v1_fixture() -> None:
     features = [
         {
             "svg_id": f"feature-{index}",
@@ -934,10 +935,10 @@ def test_enrich_svg_v3_metadata_is_at_least_35_percent_smaller_than_v1_fixture()
             popup_mode="rich",
         ),
     )
-    v3_text = _metadata_text(enriched)
+    v4_text = _metadata_text(enriched)
 
-    assert _metadata_payload(enriched)["schema"] == 3
-    assert len(v3_text.encode("utf-8")) <= len(v1_text.encode("utf-8")) * 0.65
+    assert _metadata_payload(enriched)["schema"] == 4
+    assert len(v4_text.encode("utf-8")) <= len(v1_text.encode("utf-8")) * 0.65
 
 
 def test_enrich_svg_matches_record_suffixed_session_feature_ids() -> None:

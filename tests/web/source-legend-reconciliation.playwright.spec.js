@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { load, generate, switchMode, download } = require('./helpers/mode-transition.cjs');
+const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const seeds = {
   lambda: 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json',
@@ -49,7 +50,7 @@ const expectEntries = async (page, expected) => {
 };
 const reveal = async locator => {
   for (const details of await locator.locator('xpath=ancestor::details').all()) {
-    if (await details.getAttribute('open') === null) await details.locator(':scope > summary').click();
+    if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
   }
   return locator;
 };
@@ -136,7 +137,7 @@ test('G1-G3 rejected candidates preserve A and dormant category intent and manua
     expect(a.original).not.toContain('Retained annotation');
     const input = page.getByLabel('GenBank/DDBJ File', { exact: true });
     await input.setInputFiles({ name: 'corrupt.gb', mimeType: 'text/plain', buffer: Buffer.from('not a GenBank record') });
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'error' });
+    expect((await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).status).toBe('error');
     const rejected = await inspect(page);
     expect(rejected).toEqual(a);
     await upload(page, 'lambda', false);

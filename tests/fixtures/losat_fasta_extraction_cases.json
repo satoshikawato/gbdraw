@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "description": "Shared LOSAT nucleotide FASTA extraction vectors. tests/test_losat_job_plan.py and tests/web/linear-sources.test.mjs run every case; Python gbdraw.comparisons.losat_jobs.losat_search_frame_fasta and Web extractLosatFastaFast must give the same FASTA text and hash.",
+  "cases": [
+    {
+      "name": "genbank single record, 130 bp wraps at 60 columns",
+      "fmt": "genbank",
+      "text": "LOCUS       AB000001                 130 bp    DNA     linear   UNK 01-JAN-1980\nDEFINITION  first test record.\nACCESSION   AB000001\nVERSION     AB000001.1\nKEYWORDS    .\nSOURCE      .\n  ORGANISM  .\n            .\nFEATURES             Location/Qualifiers\nORIGIN\n        1 gctaaagaca attacataac atacacgtca gcacgaaact tgttggccca gtgtgaatcg\n       61 cttaagggtt aagtaagtgt gatgcatacg cctttacttg ctgtgtccac cccatcggac\n      121 tggcattttt\n//\n",
+      "regionSpec": null,
+      "recordSelector": null,
+      "expected": {
+        "recordId": "AB000001.1",
+        "canonicalLength": 130,
+        "fasta": ">AB000001.1\nGCTAAAGACAATTACATAACATACACGTCAGCACGAAACTTGTTGGCCCAGTGTGAATCG\nCTTAAGGGTTAAGTAAGTGTGATGCATACGCCTTTACTTGCTGTGTCCACCCCATCGGAC\nTGGCATTTTT\n",
+        "hash": "113d18f6503a89f86873158db517c868c74cd62f0926c773f775d10a0ec5e684"
+      }
+    },
+    {
+      "name": "genbank second record by #index",
+      "fmt": "genbank",
+      "text": "LOCUS       AB000001                  70 bp    DNA     linear   UNK 01-JAN-1980\nDEFINITION  one.\nACCESSION   AB000001\nVERSION     AB000001.1\nKEYWORDS    .\nSOURCE      .\n  ORGANISM  .\n            .\nFEATURES             Location/Qualifiers\nORIGIN\n        1 attacactca gaaacagaac tcgggtaatt ttgacaggtc acgcagaggc gcgccctcct\n       61 gaagtgcgtg\n//\nLOCUS       AB000002                  95 bp    DNA     linear   UNK 01-JAN-1980\nDEFINITION  two.\nACCESSION   AB000002\nVERSION     AB000002.2\nKEYWORDS    .\nSOURCE      .\n  ORGANISM  .\n            .\nFEATURES             Location/Qualifiers\nORIGIN\n        1 gacactcgct atgaatctct gatttaccca ctctgccaaa ctccagcgcg gtcagttcca\n       61 tcaccctaag taaccgaata atgcgttcgc tctat\n//\n",
+      "regionSpec": null,
+      "recordSelector": "#2",
+      "expected": {
+        "recordId": "AB000002.2",
+        "canonicalLength": 95,
+        "fasta": ">AB000002.2\nGACACTCGCTATGAATCTCTGATTTACCCACTCTGCCAAACTCCAGCGCGGTCAGTTCCA\nTCACCCTAAGTAACCGAATAATGCGTTCGCTCTAT\n",
+        "hash": "19b1d7b923d576bc88207f7d97b2e71382f9d22eec9db817148b5446fef3afce"
+      }
+    },
+    {
+      "name": "genbank record by ID with region",
+      "fmt": "genbank",
+      "text": "LOCUS       AB000001                  70 bp    DNA     linear   UNK 01-JAN-1980\nDEFINITION  one.\nACCESSION   AB000001\nVERSION     AB000001.1\nKEYWORDS    .\nSOURCE      .\n  ORGANISM  .\n            .\nFEATURES             Location/Qualifiers\nORIGIN\n        1 tgactacgac gcgctcattc ccttgtcgga gagttatgga acaaggacgc tgtctgagac\n       61 tagaagacag\n//\nLOCUS       AB000002                  95 bp    DNA     linear   UNK 01-JAN-1980\nDEFINITION  two.\nACCESSION   AB000002\nVERSION     AB000002.2\nKEYWORDS    .\nSOURCE      .\n  ORGANISM  .\n            .\nFEATURES             Location/Qualifiers\nORIGIN\n        1 atagtgcaca cgaccggcgt cggagaaact ctatttgccg cctgacaagt caatgcgatc\n       61 cgtaggggca gcgcagtatg ccaagactat aggca\n//\n",
+      "regionSpec": "11..80",
+      "recordSelector": "AB000002.2",
+      "expected": {
+        "recordId": "AB000002.2",
+        "canonicalLength": 70,
+        "fasta": ">AB000002.2\nCGACCGGCGTCGGAGAAACTCTATTTGCCGCCTGACAAGTCAATGCGATCCGTAGGGGCA\nGCGCAGTATG\n",
+        "hash": "96db90a218ad5d1d48c093a0f979cef27a6a18315d69afcb217940cb9b1b73b4"
+      }
+    },
+    {
+      "name": "fasta lowercase with description and blank line",
+      "fmt": "fasta",
+      "text": ">contig_1 some description here\nctgtcgcatcacaaacgattaactgataaatgagccctttatgacacggg\ncatatgactggtttacgatagtatgtccaacgg\n\n>contig_2\ncgagctttacatttgctgtg\n",
+      "regionSpec": null,
+      "recordSelector": null,
+      "expected": {
+        "recordId": "contig_1",
+        "canonicalLength": 83,
+        "fasta": ">contig_1\nCTGTCGCATCACAAACGATTAACTGATAAATGAGCCCTTTATGACACGGGCATATGACTG\nGTTTACGATAGTATGTCCAACGG\n",
+        "hash": "666bafd149f02357aaa053ae35e036c6e1a5f295591d2fcd58ea8eaf2eacc6d6"
+      }
+    },
+    {
+      "name": "fasta second record with region",
+      "fmt": "fasta",
+      "text": ">contig_1\nagaggtacagggattagtgagaagccgtgcgtatcaattc\n>contig_2 desc\ngtaccttgggggtcgttaccactctgttcccacgagcggcatttctggatggccagctttt\n",
+      "regionSpec": "2..61",
+      "recordSelector": "#2",
+      "expected": {
+        "recordId": "contig_2",
+        "canonicalLength": 60,
+        "fasta": ">contig_2\nTACCTTGGGGGTCGTTACCACTCTGTTCCCACGAGCGGCATTTCTGGATGGCCAGCTTTT\n",
+        "hash": "ab82ef8a80c4594b972b88a10bdb9b7fdd8aaf5714bf31c89fd4ab4dfe4320c1"
+      }
+    }
+  ]
+}

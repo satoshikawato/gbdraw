@@ -154,7 +154,7 @@ class FakeDomParser {
 }
 
 const catalog = () => ({
-  schema: 3,
+  schema: 4,
   items: [{
     resultIndex: 0,
     resultName: 'diagram.svg',
@@ -173,7 +173,10 @@ const catalog = () => ({
       type: 'CDS',
       start: 0,
       end: 3,
-      strand: 1
+      strand: 1,
+      anchorProfile: {
+        precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+'
+      }
     }],
     orthogroups: [],
     annotations: [],

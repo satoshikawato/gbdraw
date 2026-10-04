@@ -32,6 +32,8 @@ jobs:
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
+          # All commits and trees; Git fetches old file contents on demand.
+          filter: blob:none
           persist-credentials: false
 
       - name: Set up Node.js
@@ -123,7 +125,7 @@ jobs:
       - performance
     if: always()
     runs-on: ubuntu-latest
-    timeout-minutes: 1
+    timeout-minutes: 5
     steps:
       - name: Checkout protected dev CI policy
         uses: actions/checkout@v4

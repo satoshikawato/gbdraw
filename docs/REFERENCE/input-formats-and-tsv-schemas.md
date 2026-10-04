@@ -11,24 +11,81 @@ topology, sequence, feature locations, strand, and qualifiers. The reader does
 not split one biological sequence into artificial records.
 
 GFF3 must be paired with FASTA from the same biological source. GFF3 column 1
-and the first token of the matching FASTA header must agree exactly.
+and the first token of the matching FASTA header must agree exactly. The
+records are the FASTA sequences that have GFF3 rows, including a row that only
+declares a `region`; a FASTA sequence with no GFF3 row is not a record, in the
+command line and the Web app alike.
 Coordinates are 1-based and inclusive; strand is `+` or `-`; CDS phase is `0`,
 `1`, or `2`. `ID` values should be unique, and `Parent` should preserve the
-source annotation model. A `translation` attribute is used when present.
-Otherwise a valid CDS may be translated from sequence, strand, phase or
-`codon_start`, and genetic code.
+source annotation model.
+
+CDS protein sequences use the GenBank `/translation` qualifier or the GFF3
+`translation` attribute when present. Otherwise gbdraw translates the CDS
+nucleotides with `transl_table` (default 1). The reading frame starts at
+`codon_start` or, for GFF3, at the phase of the 5'-most CDS part. As in INSDC
+`/translation`, the first residue is `M` when the 5' end is complete, the frame
+starts at the first base, and the first codon is a start codon of that table;
+for example, `GTG` and `TTG` become `M` in table 11. A 5' end is incomplete when
+its position is fuzzy (`<` on the plus strand, `>` on the minus strand) or GFF3
+has `start_range` (plus strand) or `end_range` (minus strand). Such a CDS, one
+read from frame 2 or 3, and a `pseudo` or `pseudogene` CDS translate the first
+codon literally. `transl_except` is not applied. Feature popups and Interactive SVG
+metadata do not translate a `pseudo`, `pseudogene`, or fuzzy-location CDS.
 
 When one source contains several records, select the intended record by ID or
 index, or explicitly expand all records. Use Circular presentation for a
 complete record whose biological topology is circular. Cropping a region or
 splitting a sequence does not make it circular.
 
+A Circular comparison genome (`--conservation_sequence`, the
+`comparison_sequence` table column, or `comparison_sequence_source` in Python)
+is read by content: a file whose first line starts with `>` is FASTA, and one
+that starts with `LOCUS` is a GenBank or DDBJ flat file. One file is one
+genome; all of its records form the LOSAT query. Only record IDs and sequences
+are used, so the same sequence gives the same ring in any of the three formats.
+A flat-file record without sequence (an empty `ORIGIN` or `CONTIG` only) stops
+the run with `INPUT_UNREADABLE` (`SEQUENCE_MISSING`). The TLOSATX genetic code
+comes from `--conservation_losat_gencode` (default 1), never from
+`/transl_table`.
+
 ## Comparison and numeric tables
 
-BLAST-compatible input uses the 12 outfmt 6 columns, with optional outfmt 7
-comment lines: `qseqid`, `sseqid`, `pident`, `length`, `mismatch`, `gapopen`,
-`qstart`, `qend`, `sstart`, `send`, `evalue`, and `bitscore`. Query and subject
-direction must match the displayed endpoint mapping.
+BLAST-compatible input is tab-separated UTF-8 text. gbdraw reads the first 12
+outfmt 6 columns by position: `qseqid`, `sseqid`, `pident`, `length`,
+`mismatch`, `gapopen`, `qstart`, `qend`, `sstart`, `send`, `evalue`, and
+`bitscore`. Extra columns, such as those from `-outfmt "6 std qlen slen"`, are
+ignored and reported in an INFO log. A line whose first non-blank character is
+`#` is an outfmt 7 comment; a `#` or quote inside a field is part of the value.
+An empty table or a table with only comment lines has no rows. The IDs must be
+non-empty, `length`, `mismatch`, `gapopen`, and the four coordinates must be
+integers, and the other values must be finite numbers. The command line, Python
+API, web app, and Circular similarity rings apply the same rule. For a Linear
+comparison, a row with fewer than 12 columns, a value of the wrong type, or a
+missing or unreadable file stops the run; the error names the line of a
+malformed row. In the web app, Generate reports a comparison-input error whose
+details give that line. A Circular similarity ring whose table is rejected is
+skipped with a warning and keeps its ring position.
+
+Coordinates use the search frame: the selected and cropped record, 1-based,
+on the source strand, as a search of that record reports them. A crop shifts
+coordinates to the cropped record. Reverse complementation does not change the
+table: gbdraw maps a row onto a reverse-complemented record when it draws it,
+so the same table draws the same homologous region in either orientation, on
+the command line, in the Python API, and in the web app. A row outside
+1..record length stops the run with a comparison-input error. Tables made for
+the full record do not match a crop of it. **Save Raw LOSAT TSV** writes this
+frame, so its file can be uploaded again.
+
+Query and subject direction must match the displayed endpoint mapping. For a
+Linear comparison, a row whose `qseqid` or `sseqid` names the other endpoint or
+another displayed record stops the run; in the web app, Generate reports a
+comparison-endpoint error and keeps the previous Result. IDs are compared with
+the record ID and name. A version suffix difference, such as `NC_000913` and `NC_000913.3`, is
+accepted. IDs that match no displayed record keep the positional assignment;
+the command line logs a warning, and the web app shows **Comparison table rows
+were placed by position.** beside the Result. A Session file stores that notice
+as `runMetadata.comparisonWarnings` and restores it on Load. The SVG record-ID
+metadata always names the endpoint records.
 
 Depth input has `reference_name`, a 1-based positive `position`, and a
 non-negative `depth`. Files are normally headerless. One header line is
@@ -44,9 +101,9 @@ containing the table.
 
 | Table | Required columns | Optional columns |
 |---|---|---|
-| Records | One of `gbk`, or both `gff` and `fasta` | `record_label`, `record_subtitle`, `record_id`, `region`, `reverse_complement`, `topology`, `display_start`, `order`, `row`, `column` |
-| Linear comparisons | `blast`, `query`, `subject` | None |
-| Circular conservation | `blast` | `label`, `color`, `comparison_fasta` |
+| Records | One of `gbk`, or both `gff` and `fasta` | `record_label`, `record_subtitle`, `record_id`, `region`, `reverse_complement`, `topology`, `display_start`, `order`, `row`, `column`, `losat_gencode` |
+| Linear comparisons | `query`, `subject`; `blast` for `source=table` rows | `source` |
+| Circular conservation | `blast`; `comparison_sequence` with `--losat` (then `blast` is rejected) | `label`, `color`, `comparison_sequence`, `losat_gencode` |
 | Circular tracks | `id`, `renderer` | `side`, `r`, `w`, `inner_gap_px`, `outer_gap_px`, `z`, `params` |
 | Annotations | `set_id`, `id`, `mark` | Target and presentation fields listed below |
 
@@ -61,9 +118,22 @@ present, every row needs a `row`. `column` controls left-to-right order, and
 duplicate row/column cells are rejected. Use table placement instead of
 repeated surface-specific position options.
 
+`losat_gencode` is a positive genetic code for `--losat tlosatx`; a blank cell
+uses the runtime default (1). gbdraw does not infer it from `/transl_table`.
+It cannot be combined with `--losat_gencode`, and another `--losat` program
+rejects it.
+
 Linear comparison `query` and `subject` values accept a displayed `#index` or
-unique record ID. The endpoints must be different. A comparisons table cannot
-be combined with the positional `--blast` form.
+unique record ID. The endpoints must be different and in adjacent rows. A
+comparisons table cannot be combined with the positional `--blast` form.
+
+`source` is `table` (the default for a blank cell or a table without the
+column) or `losat`. A `table` row reads its `blast` file. A `losat` row leaves
+`blast` empty; `--losat losatn`, `--losat tlosatx`, or `--losat losatp
+--losatp_mode pairwise` searches that record pair. One table can mix both
+sources. A `losat` row without `--losat`, or `--losat` without a `losat` row,
+is an error. The `comparisons.tsv` that `--losat_output_dir` writes uses this
+format.
 
 Circular track-table row order is slot order. A row with `side=axis` must use
 the `features` renderer and establishes the track-axis boundary. Structural
@@ -118,10 +188,31 @@ also accept their documented header row.
 | Label overrides | `record_id`, `feature_type`, `qualifier`, `value`, `label_text` |
 | Feature visibility | `record_id`, `feature_type`, `qualifier`, `value`, `action` |
 
-`priorities` is a comma-separated qualifier list. `value` and `keyword` fields
-are case-insensitive regular expressions. Selector qualifiers may also use the
-documented synthetic keys `location`, `record_location`, and `hash` where that
-surface supports exact feature identity. Visibility `action` is `show`, `off`,
+A Specific-colors `color` is `none` (no fill, any case), an SVG color name,
+`#RGB`, or `#RRGGBB`. Other values, including hex colors with alpha, are
+rejected with their line number. The Web app converts a color name to hex when
+it reads the table. In this table, cells such as `None`, `NA`, and `null` are
+values, not blanks.
+
+`priorities` is a comma-separated qualifier list. Pattern `value` and `keyword`
+fields use case-insensitive Python regular expressions. Specific-color and
+Label-override patterns accept Python-only syntax such as `(?i)NADH`,
+`(?P<enzyme>NADH)` and `NADH\Z`; Unicode matching follows Python semantics.
+The Web app prepares Color rules and Label TSV patterns with that same Python
+owner before committing live changes. Invalid syntax is rejected even when the
+feature catalog is empty or contains no matches. A table-structure error or
+runtime preparation failure is distinct from invalid regex syntax.
+
+Feature Search and search inside downloaded Interactive SVG use
+case-insensitive JavaScript regex instead. Python and JavaScript patterns are
+not translated between these surfaces. Existing Color pattern fields can hold
+an unapplied display draft; it is not part of the accepted TSV rule or saved
+Session. See [Color and Label patterns](web-app.md#color-and-label-patterns) for
+Retry, Revert and Save/Generate/Export behavior.
+
+Selector qualifiers may also use the documented synthetic keys `location`,
+`record_location`, and `hash` where that surface supports exact feature identity.
+Visibility `action` is `show`, `off`,
 or `exclude_matching`.
 
 Table precedence and the meaning of those actions are documented in [Feature

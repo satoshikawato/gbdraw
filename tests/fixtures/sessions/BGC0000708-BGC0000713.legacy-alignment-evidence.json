@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "sourceFixture": "BGC0000708-BGC0000713.v40-schema5.json",
+  "sourceFixtureSha256": "4eb045e070d41243f29d5486ab01be08cf18e84c4ea9a0c28b852f5862e6321d",
+  "firstParentMainCommit": "10d3a3d28b3c9faa42db01c8bd0bd36b9be8433c",
+  "sessionVersion": 40,
+  "requestSchema": 5,
+  "legacyTarget": "og_1",
+  "recordKeys": [
+    "record-1",
+    "record-2",
+    "record-3",
+    "record-4",
+    "record-5"
+  ],
+  "metadataEvidence": {
+    "featureCatalogSchema": 3,
+    "orthogroupId": "og_1",
+    "representativeRecordCoverage": 5,
+    "hasBiologicalFeatureIds": true,
+    "hasSourceFeatureIndexes": true
+  },
+  "saveBeforeMaterializationAudit": {
+    "sourceFixture": "BGC0000708-BGC0000713.v39.gbdraw-session.json.gz",
+    "sourceFixtureSha256": "e2e8296807649b4da8af38fd1f13f0af211543b36cb03c8347691ff9583e0093",
+    "firstParentMainCommit": "8228ffab272d6ea2a0728ae0e1d925424431b21d",
+    "sessionVersion": 39,
+    "requestSchema": 5,
+    "featureCatalogSchema": 1,
+    "legacyOrthogroupId": "og_1",
+    "representativeRecordCoverage": 5,
+    "hasRecordIndexes": true,
+    "hasSourceFeatureIndexes": true,
+    "hasStableFeatureSvgIds": true
+  }
+}

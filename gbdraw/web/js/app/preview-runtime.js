@@ -1,10 +1,10 @@
+import { normalizeUserFacingError } from '../services/error-normalization.js';
 import {
-  filterFeatureFillTargets,
   getFeatureElementIndex,
-  getFeatureIdentity,
   normalizeFeatureIdentity
 } from './feature-dom.js';
 import {
+  applyEditorOperationsToMountedSvg,
   getCommittedSvgResultMetadata,
   getCommittedSvgResultRuntimeIdentity,
   markCommittedSvgResultMounted,
@@ -592,7 +592,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       if (typeof bindingSteps.afterReady === 'function') {
         queueMicrotask(() => {
           Promise.resolve(bindingSteps.afterReady(context)).catch((error) => {
-            console.error('Post-ready preview work failed.', error);
+            console.error('Post-ready preview work failed.', normalizeUserFacingError(error));
           });
         });
       }
@@ -726,18 +726,22 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     runtime.lastInvalidationReason = String(reason || 'unknown');
   };
 
-  const markActiveResultDirty = (reason = 'preview-edit') => {
-    const runtime = activeRuntime || ensureRuntimeForCurrentSvg();
-    if (!runtime?.svg) return false;
-    runtime.dirty = true;
-    runtime.dirtyReasons.add(String(reason || 'preview-edit'));
-    return true;
+  // The one write of a Result's committed content; the Result keeps its
+  // committed identity.
+  const writeResultContent = (resultIndex, content) => {
+    const nextResults = [...state.results.value];
+    nextResults[resultIndex] = {
+      ...state.results.value[resultIndex],
+      content
+    };
+    state.results.value = nextResults;
   };
 
-  const flushActiveResult = ({ force = false, markIncremental = true } = {}) => {
-    const runtime = activeRuntime || (force ? ensureRuntimeForCurrentSvg() : null);
+  // Only commitActiveResultEdit marks the runtime dirty, and it flushes at once.
+  const flushActiveResult = () => {
+    const runtime = activeRuntime;
     if (!runtime?.svg) return false;
-    if (!force && !runtime.dirty) return false;
+    if (!runtime.dirty) return false;
 
     const resultIndex = Number(runtime.resultIndex);
     if (!Number.isInteger(resultIndex) || resultIndex < 0 || resultIndex >= state.results.value.length) {
@@ -752,27 +756,20 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       runtime.dirtyReasons.clear();
       return false;
     }
-    if (markIncremental && state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
-    const nextResults = [...state.results.value];
-    nextResults[resultIndex] = {
-      ...state.results.value[resultIndex],
-      content
-    };
-    state.results.value = nextResults;
+    if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
+    writeResultContent(resultIndex, content);
     runtime.dirty = false;
     runtime.dirtyReasons.clear();
     return true;
   };
 
   const selectResult = (index) => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
     const count = Array.isArray(state.results.value) ? state.results.value.length : 0;
     const numeric = Number(index);
     const nextIndex = Number.isInteger(numeric) ? Math.max(0, Math.min(numeric, Math.max(0, count - 1))) : 0;
-    if (state.selectedResultIndex.value === nextIndex) {
-      flushActiveResult();
-      return false;
-    }
-    flushActiveResult({ markIncremental: false });
+    if (state.selectedResultIndex.value === nextIndex) return false;
     const nextResult = state.results.value[nextIndex];
     const expectation = nextResult
       ? registerReadinessExpectation({
@@ -782,8 +779,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
           generationToken: `result-selection:${nextBindSequence}`,
           catalogState: state.featureCatalog?.value || null,
           phase: 'result-selection',
+          // Editor intent projected while binding replaces the Result content,
+          // never its committed identity (D-07).
           isCurrent: () => (
-            state.results.value[nextIndex] === nextResult
+            resultRuntimeIdentity(state.results.value[nextIndex]) === resultRuntimeIdentity(nextResult)
             && Number(state.selectedResultIndex.value) === nextIndex
           )
         })
@@ -814,25 +813,6 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return byId ? [byId] : [];
   };
 
-  const applyFeatureFillChanges = (changes, { reason = 'feature-fill' } = {}) => {
-    const normalized = normalizeChanges(changes);
-    if (normalized.length === 0) return false;
-
-    let updated = 0;
-    normalized.forEach((change) => {
-      const color = String(change?.color || '').trim();
-      if (!color) return;
-      filterFeatureFillTargets(getFeatureElements(change.featureId)).forEach((element) => {
-        if (element.getAttribute?.('fill') === color) return;
-        element.setAttribute('fill', color);
-        updated += 1;
-      });
-    });
-
-    if (updated > 0) markActiveResultDirty(reason);
-    return updated > 0;
-  };
-
   const applyFeatureVisibilityChanges = (changes, { reason = 'feature-visibility' } = {}) => {
     const normalized = normalizeChanges(changes);
     if (normalized.length === 0) return false;
@@ -853,59 +833,73 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     });
 
     if (updated === 0) return false;
-    markActiveResultDirty(reason);
-    flushActiveResult();
+    commitActiveResultEdit(reason);
     return true;
   };
 
-  const applyFeatureStrokeChanges = (changes, { reason = 'feature-stroke' } = {}) => {
-    const normalized = normalizeChanges(changes);
-    if (normalized.length === 0) return false;
-
-    let updated = 0;
-    normalized.forEach((change) => {
-      const strokeColor = String(change?.strokeColor || '').trim();
-      const strokeWidth = change?.strokeWidth;
-      const hasStrokeWidth = strokeWidth !== null && strokeWidth !== undefined && strokeWidth !== '';
-      getFeatureElements(change.featureId).forEach((element) => {
-        let changed = false;
-        if (strokeColor && element.getAttribute?.('stroke') !== strokeColor) {
-          element.setAttribute('stroke', strokeColor);
-          changed = true;
-        }
-        const normalizedWidth = hasStrokeWidth ? String(Number(strokeWidth)) : '';
-        if (hasStrokeWidth && element.getAttribute?.('stroke-width') !== normalizedWidth) {
-          element.setAttribute('stroke-width', normalizedWidth);
-          changed = true;
-        }
-        if (changed) updated += 1;
-      });
-    });
-
-    if (updated > 0) markActiveResultDirty(reason);
-    return updated > 0;
+  // R1: the one commit for an editor's edit of the displayed Result's SVG.
+  // Serializes the mounted root into its Result at once, so no edit waits for
+  // a Result switch; unchanged content is not written.
+  const commitActiveResultEdit = (reason) => {
+    const runtime = activeRuntime || ensureRuntimeForCurrentSvg();
+    if (!runtime?.svg) return false;
+    runtime.dirty = true;
+    runtime.dirtyReasons.add(String(reason || 'preview-edit'));
+    return flushActiveResult();
   };
 
-  const applyLegendChanges = (_changes, { reason = 'legend' } = {}) => markActiveResultDirty(reason);
+  // B17 (R1, R11): an edit of one Result's SVG. The displayed Result is
+  // edited in place and committed like an editor edit. Another Result's
+  // committed content is parsed, edited, and written once, so History restores
+  // the Result a step was made on while a different Result is displayed.
+  const commitResultEdit = (resultIndex, edit, reason = 'result-edit') => {
+    const index = Number(resultIndex);
+    const result = state.results.value[index];
+    if (!result || typeof edit !== 'function') return false;
+    const runtime = activeRuntime || ensureRuntimeForCurrentSvg();
+    if (runtime?.svg && runtime.resultIndex === index) {
+      return edit(runtime.svg, { mounted: true }) ? commitActiveResultEdit(reason) : false;
+    }
+    const Parser = globalThis.DOMParser;
+    if (typeof Parser !== 'function' || typeof result.content !== 'string') return false;
+    const svg = new Parser().parseFromString(result.content, 'image/svg+xml').documentElement;
+    if (String(svg?.localName || '').toLowerCase() !== 'svg' || !edit(svg, { mounted: false })) return false;
+    const content = serializeSvg(svg);
+    if (content === result.content) return false;
+    writeResultContent(index, content);
+    return true;
+  };
+
+  // D-07: show the canonical editor operations on the displayed Result with
+  // the executor that Generate admission uses, then persist the Result once.
+  const applyEditorOperations = (operations, { afterApply = null } = {}) => {
+    const runtime = activeRuntime || ensureRuntimeForCurrentSvg();
+    if (!runtime?.svg) return false;
+    if (operations) {
+      applyEditorOperationsToMountedSvg(runtime.svg, operations, { resultIndex: runtime.resultIndex });
+    }
+    afterApply?.(runtime.svg);
+    invalidatePreviewIndexes('editor-intent-display');
+    return commitActiveResultEdit('editor-intent-display');
+  };
 
   return {
     acceptReadyReceipt,
-    applyFeatureFillChanges,
-    applyFeatureStrokeChanges,
+    applyEditorOperations,
     applyFeatureVisibilityChanges,
-    applyLegendChanges,
     bindMountedResult,
     clearActiveRuntime,
+    commitActiveResultEdit,
+    commitResultEdit,
     configureMountedResultBinder,
     createMountedResultContext,
-    flushActiveResult,
     getActiveRuntime,
     getFeatureElements,
+    getResultIdentity: resultRuntimeIdentity,
     invalidateReadinessExpectation,
     invalidateReadyReceipt,
     invalidatePreviewIndexes,
     isActiveResultReady,
-    markActiveResultDirty,
     mountResultSvg,
     registerReadinessExpectation,
     restorePreviousSelectedResult,

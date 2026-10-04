@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import copy
 import json
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -37,8 +38,11 @@ from gbdraw.api.options import (
     DepthTrackInput,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
+    LinearRecordTranslation,
     LinearOutputOptions,
     LinearTrackOptions,
+    LosatRuntimeOptions,
+    LosatSearchOptions,
 )
 from gbdraw.api.config import load_default_config
 from gbdraw.api.request_render import render_request
@@ -56,6 +60,13 @@ from gbdraw.api.requests import (
 )
 from gbdraw.io.record_select import parse_record_selector
 from gbdraw.io.regions import parse_region_spec
+from gbdraw.layout.similarity_alignment import (
+    AlignmentAnchorIdentity,
+    AlignmentDecisionStatus,
+    AlignmentRecordDecision,
+    AlignmentResolutionRationale,
+    SimilarityAlignmentPlan,
+)
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.shapes import resolve_feature_rendering
@@ -188,6 +199,13 @@ def _payload_for_schema(
 ) -> dict[str, Any]:
     payload = copy.deepcopy(encoded.payload)
     payload["schema"] = schema
+    if schema < 8:
+        layout = payload.get("layout") or {}
+        layout.pop("recordTranslations", None)
+        layout.pop("similarityAlignment", None)
+        for comparison in payload.get("comparisons", ()):
+            if comparison.get("kind") == "generatedProteinComparison":
+                comparison["settings"]["alignOrthogroupFeature"] = None
     if schema < 5:
         payload.pop("grouping", None)
     _remove_schema6_record_fields(payload, schema)
@@ -305,7 +323,7 @@ def test_schema6_round_trips_unresolved_record_cardinality_and_row(
         )
     )
 
-    assert CANONICAL_REQUEST_SCHEMA == 7
+    assert CANONICAL_REQUEST_SCHEMA == 8
     assert encoded.payload["records"][0]["cardinality"] == "all"
     decoded = decode_canonical_request(
         encoded.payload,
@@ -314,6 +332,251 @@ def test_schema6_round_trips_unresolved_record_cardinality_and_row(
     )
     assert decoded.records[0].cardinality is RecordCardinality.ALL
     assert decoded.records[0].presentation.grid_row == 2
+
+
+def _similarity_alignment_plan() -> SimilarityAlignmentPlan:
+    reference = AlignmentAnchorIdentity(
+        record_key="record-a",
+        biological_feature_id="feature-a",
+        source_feature_index=3,
+        stable_feature_svg_id="stable-a",
+    )
+    target = AlignmentAnchorIdentity(
+        record_key="record-b",
+        biological_feature_id="feature-b",
+        source_feature_index=5,
+        stable_feature_svg_id="stable-b",
+    )
+    return SimilarityAlignmentPlan(
+        group_id="og-1",
+        reference=reference,
+        records=(
+            AlignmentRecordDecision(
+                record_key="record-a",
+                status=AlignmentDecisionStatus.REFERENCE,
+                rationale=AlignmentResolutionRationale.REFERENCE,
+                anchor=reference,
+            ),
+            AlignmentRecordDecision(
+                record_key="record-b",
+                status=AlignmentDecisionStatus.ALIGNED,
+                rationale=AlignmentResolutionRationale.ONLY_USABLE_CANDIDATE,
+                anchor=target,
+            ),
+        ),
+    )
+
+
+def _aligned_linear_request(tmp_path: Path) -> LinearDiagramRequest:
+    return LinearDiagramRequest(
+        records=(
+            RecordInput(
+                source=GenBankInputSource(_source_file(tmp_path / "a.gbk")),
+                record_key="record-a",
+            ),
+            RecordInput(
+                source=GenBankInputSource(_source_file(tmp_path / "b.gbk")),
+                record_key="record-b",
+            ),
+        ),
+        layout=LinearMultiRecordOptions(
+            record_translations=(
+                LinearRecordTranslation("record-a", 4.5, -2),
+                LinearRecordTranslation("record-b", -8, 3.25),
+            )
+        ),
+        similarity_alignment=_similarity_alignment_plan(),
+    )
+
+
+def test_schema8_round_trips_typed_similarity_alignment_and_translations(
+    tmp_path: Path,
+) -> None:
+    encoded = encode_canonical_request(_aligned_linear_request(tmp_path))
+
+    assert encoded.payload["schema"] == 8
+    assert encoded.payload["layout"]["recordTranslations"] == [
+        {"recordKey": "record-a", "x": 4.5, "y": -2.0},
+        {"recordKey": "record-b", "x": -8.0, "y": 3.25},
+    ]
+    alignment = encoded.payload["layout"]["similarityAlignment"]
+    assert alignment["schema"] == 2
+    assert "mode" not in alignment
+    assert alignment["groupId"] == "og-1"
+    assert set(alignment["records"][1]) == {"recordKey", "status", "rationale", "anchor"}
+    assert "alignOrthogroupFeature" not in json.dumps(encoded.payload)
+
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+        output_directory=tmp_path / "output",
+    )
+    assert isinstance(decoded, LinearDiagramRequest)
+    assert decoded.layout == _aligned_linear_request(tmp_path).layout
+    assert decoded.similarity_alignment == _similarity_alignment_plan()
+
+
+def test_schema8_round_trips_record_presentation_with_orientation_free_plan(
+    tmp_path: Path,
+) -> None:
+    base = _aligned_linear_request(tmp_path)
+    request = replace(base, records=(
+        base.records[0],
+        replace(base.records[1], presentation=RecordPresentation(reverse_complement=True)),
+    ))
+    encoded = encode_canonical_request(request)
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+        output_directory=tmp_path / "output",
+    )
+    assert decoded.similarity_alignment == request.similarity_alignment
+    assert decoded.records[1].presentation.reverse_complement is True
+    assert set(encoded.payload["layout"]["similarityAlignment"]["records"][1]) == {
+        "recordKey", "status", "rationale", "anchor"
+    }
+
+
+def test_schema8_accepts_reordered_keyed_alignment_records(tmp_path: Path) -> None:
+    encoded = encode_canonical_request(_aligned_linear_request(tmp_path))
+    payload = copy.deepcopy(encoded.payload)
+    payload["records"].reverse()
+
+    decoded = decode_canonical_request(
+        payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+        output_directory=tmp_path / "output",
+    )
+    assert [record.record_key for record in decoded.records] == ["record-b", "record-a"]
+    assert decoded.similarity_alignment == _similarity_alignment_plan()
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        (
+            lambda layout: layout["recordTranslations"].append(
+                {"recordKey": "record-a", "x": 0, "y": 0}
+            ),
+            "duplicate record keys",
+        ),
+        (
+            lambda layout: layout["recordTranslations"][0].update(x=float("inf")),
+            "finite number",
+        ),
+        (
+            lambda layout: layout.update(unexpected=True),
+            "Unknown field",
+        ),
+        (
+            lambda layout: layout["similarityAlignment"]["records"][1].update(
+                anchor=None
+            ),
+            "invalid plan combination|inconsistent",
+        ),
+        (
+            lambda layout: layout["similarityAlignment"]["records"][1].update(
+                orientationPolicy="preserve"
+            ),
+            "Unknown field|orientationPolicy",
+        ),
+        (
+            lambda layout: layout["similarityAlignment"]["records"][1].update(
+                effectiveReverseComplement=True
+            ),
+            "Unknown field|effectiveReverseComplement",
+        ),
+        (
+            lambda layout: layout["similarityAlignment"].update(mode="position"),
+            "mode",
+        ),
+        (
+            lambda layout: layout["similarityAlignment"].update(schema=1),
+            "schema must be 2",
+        ),
+        (
+            lambda layout: layout["similarityAlignment"]["records"].pop(),
+            "coverage",
+        ),
+    ),
+)
+def test_schema8_rejects_invalid_similarity_layout(
+    tmp_path: Path,
+    mutation: Any,
+    message: str,
+) -> None:
+    encoded = encode_canonical_request(_aligned_linear_request(tmp_path))
+    payload = copy.deepcopy(encoded.payload)
+    mutation(payload["layout"])
+    with pytest.raises(CanonicalRequestDecodingError, match=message):
+        decode_canonical_request(
+            payload,
+            resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+            output_directory=tmp_path / "output",
+        )
+
+
+def test_schema7_decodes_alignment_string_only_as_private_legacy_state(
+    tmp_path: Path,
+) -> None:
+    request = _aligned_linear_request(tmp_path)
+    encoded = encode_canonical_request(
+        LinearDiagramRequest(records=request.records)
+    )
+    payload = _payload_for_schema(encoded, 7)
+    payload["comparisons"] = [{
+        "kind": "generatedProteinComparison",
+        "mode": "orthogroup",
+        "pairs": [],
+        "settings": {
+            "collinearityParams": None,
+            "collinearityUnitMode": "auto",
+            "collinearityAnchorMode": "rbh",
+            "collinearitySearchScope": "adjacent",
+            "collinearityColorMode": "orientation",
+            "losatpBin": "losat",
+            "ncbiBlastpBin": None,
+            "losatpThreads": None,
+            "proteinBlastpMaxHits": 5,
+            "proteinBlastpCandidateLimit": None,
+            "orthogroupMembershipMode": "anchor_core_v1",
+            "orthogroupMemberMaxHits": None,
+            "collinearInferOrthogroups": True,
+            "collinearMaxParalogLinksPerOrthogroup": 2,
+            "alignOrthogroupFeature": "og-legacy",
+        },
+    }]
+
+    decoded = decode_canonical_request(
+        payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+        output_directory=tmp_path / "output",
+    )
+    assert isinstance(decoded, LinearDiagramRequest)
+    assert not hasattr(decoded.options, "align_orthogroup_feature")
+    assert decoded._legacy_similarity_alignment is not None
+    assert decoded._legacy_similarity_alignment.target == "og-legacy"
+    assert decoded._legacy_similarity_alignment.source_schema == 7
+    with pytest.raises(CanonicalRequestEncodingError, match="materialized"):
+        encode_canonical_request(decoded)
+
+    malformed = copy.deepcopy(payload)
+    malformed["comparisons"][0]["settings"]["alignOrthogroupFeature"] = "  "
+    with pytest.raises(CanonicalRequestDecodingError, match="non-empty text"):
+        decode_canonical_request(
+            malformed,
+            resource_paths=_materialize_resources(encoded, tmp_path / "malformed"),
+            output_directory=tmp_path / "output",
+        )
+
+    ambiguous = copy.deepcopy(payload)
+    ambiguous["comparisons"].append(copy.deepcopy(ambiguous["comparisons"][0]))
+    with pytest.raises(CanonicalRequestDecodingError, match="Duplicate singleton"):
+        decode_canonical_request(
+            ambiguous,
+            resource_paths=_materialize_resources(encoded, tmp_path / "ambiguous"),
+            output_directory=tmp_path / "output",
+        )
 
 
 def test_schema5_defaults_record_cardinality_to_exactly_one(
@@ -685,7 +948,10 @@ def test_current_schema_rejects_populated_wrong_mode_track_fields(
 def test_linear_comparison_kinds_and_payload_round_trip(tmp_path: Path) -> None:
     gbk_a = _source_file(tmp_path / "a.gbk")
     gbk_b = _source_file(tmp_path / "b.gbk")
-    nucleotide = _source_file(tmp_path / "nucleotide.tsv", "a\tb\n")
+    nucleotide = _source_file(
+        tmp_path / "nucleotide.tsv",
+        "record-a\trecord-b\t90\t30\t0\t0\t10\t40\t20\t50\t1e-20\t100\n",
+    )
     protein_table = _table()
     member = OrthogroupMember(
         orthogroup_id="OG1",
@@ -754,7 +1020,11 @@ def test_linear_comparison_kinds_and_payload_round_trip(tmp_path: Path) -> None:
             blast_files=(str(nucleotide),),
             protein_comparisons=(protein_table,),
             orthogroups=orthogroups,
-            protein_blastp_mode="collinear",
+            losat_search=LosatSearchOptions(
+                program="losatp",
+                losatp_mode="collinear",
+                runtime=LosatRuntimeOptions(threads=2),
+            ),
             pairwise_match_style="curve",
             collinearity_blocks=collinearity,
             collinearity_params=LosslessCollinearityParameters(
@@ -763,7 +1033,6 @@ def test_linear_comparison_kinds_and_payload_round_trip(tmp_path: Path) -> None:
             ),
             collinearity_unit_mode="locus",
             collinearity_search_scope="all",
-            losatp_threads=2,
             output=LinearOutputOptions(
                 legend="bottom",
                 plot_title_position="bottom",
@@ -824,6 +1093,43 @@ def test_linear_comparison_kinds_and_payload_round_trip(tmp_path: Path) -> None:
     )).payload == canonical.payload
 
 
+def test_decoded_comparisons_re_encode_with_their_kind_and_bytes(tmp_path: Path) -> None:
+    # PR3-B2: a decoded nucleotideBlast item was re-encoded as a
+    # precomputedProteinComparison canonical TSV.
+    nucleotide_bytes = b"record-a\trecord-b\t90.000\t30\t0\t0\t10\t40\t20\t50\t1e-20\t100\r\n"
+    nucleotide = tmp_path / "nucleotide.tsv"
+    nucleotide.write_bytes(nucleotide_bytes)
+    request = LinearDiagramRequest(
+        records=(
+            RecordInput(source=GenBankInputSource(_source_file(tmp_path / "a.gbk"))),
+            RecordInput(source=GenBankInputSource(_source_file(tmp_path / "b.gbk"))),
+        ),
+        options=LinearDiagramOptions(blast_files=(str(nucleotide),), protein_comparisons=(_table(),)),
+        output=RenderOutputRequest(output_prefix="canonical-linear"),
+    )
+    encoded = encode_canonical_request(request)
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "materialized"),
+        output_directory=tmp_path / "replay",
+    )
+    canonical = encode_canonical_request(decoded)
+
+    def comparisons(value: EncodedCanonicalRequest) -> list[tuple[str, int, int, bytes]]:
+        paths = _materialize_resources(value, tmp_path / f"read-{id(value)}")
+        return [
+            (item["kind"], item["queryRecordIndex"], item["subjectRecordIndex"],
+             paths[item["resourceId"]].read_bytes())
+            for item in value.payload["comparisons"]
+        ]
+
+    assert [kind for kind, *_ in comparisons(canonical)] == [
+        "nucleotideBlast", "precomputedProteinComparison",
+    ]
+    assert comparisons(canonical) == comparisons(encoded)
+    assert comparisons(canonical)[0][3] == nucleotide_bytes
+
+
 @pytest.mark.parametrize("schema", (1, 2))
 def test_supported_schemas_privately_migrate_standard_collinearity_parameters(
     tmp_path: Path,
@@ -833,7 +1139,12 @@ def test_supported_schemas_privately_migrate_standard_collinearity_parameters(
     encoded = encode_canonical_request(
         LinearDiagramRequest(
             records=(RecordInput(source=GenBankInputSource(source)),),
-            options=LinearDiagramOptions(protein_blastp_mode="collinear"),
+            options=LinearDiagramOptions(
+                losat_search=LosatSearchOptions(
+                    program="losatp",
+                    losatp_mode="collinear",
+                )
+            ),
         )
     )
     payload = _payload_for_schema(encoded, schema)
@@ -884,7 +1195,10 @@ def test_standard_collinearity_embedded_max_paralog_does_not_override_explicit_s
         LinearDiagramRequest(
             records=(RecordInput(source=GenBankInputSource(source)),),
             options=LinearDiagramOptions(
-                protein_blastp_mode="collinear",
+                losat_search=LosatSearchOptions(
+                    program="losatp",
+                    losatp_mode="collinear",
+                ),
                 collinear_max_paralog_links_per_orthogroup=5,
             ),
         )
@@ -916,7 +1230,12 @@ def test_standard_collinearity_embedded_max_paralog_is_inert_in_orthogroup_mode(
     encoded = encode_canonical_request(
         LinearDiagramRequest(
             records=(RecordInput(source=GenBankInputSource(source)),),
-            options=LinearDiagramOptions(protein_blastp_mode="orthogroup"),
+            options=LinearDiagramOptions(
+                losat_search=LosatSearchOptions(
+                    program="losatp",
+                    losatp_mode="similarity_groups",
+                )
+            ),
         )
     )
     payload = _payload_for_schema(encoded, 2)
@@ -946,7 +1265,12 @@ def test_current_schema_rejects_standard_collinearity_parameters(
     encoded = encode_canonical_request(
         LinearDiagramRequest(
             records=(RecordInput(source=GenBankInputSource(source)),),
-            options=LinearDiagramOptions(protein_blastp_mode="collinear"),
+            options=LinearDiagramOptions(
+                losat_search=LosatSearchOptions(
+                    program="losatp",
+                    losatp_mode="collinear",
+                )
+            ),
         )
     )
     pipeline = next(
@@ -1148,6 +1472,33 @@ def test_current_circular_writer_uses_only_canonical_layout_fields() -> None:
     assert {"spacing", "strict", "compress", "reserve"}.isdisjoint(slot)
 
 
+@pytest.mark.parametrize("field", ["width", "radius"])
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")])
+@pytest.mark.parametrize("typed", [False, True])
+def test_current_circular_request_rejects_nonfinite_scalar(
+    tmp_path: Path, field: str, value: float, typed: bool
+) -> None:
+    record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
+    encoded = encode_canonical_request(
+        CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            options=CircularDiagramOptions(tracks=CircularTrackOptions(
+                circular_track_slots=(CircularTrackSlot(id="features", renderer="features"),)
+            )),
+        )
+    )
+    payload = copy.deepcopy(encoded.payload)
+    payload["diagramOptions"]["tracks"]["circularTrackSlots"][0][field] = (
+        {"value": value, "unit": "px"} if typed else value
+    )
+    with pytest.raises(CanonicalRequestDecodingError, match=field):
+        decode_canonical_request(
+            payload,
+            resource_paths=_materialize_resources(encoded, tmp_path / "resources"),
+            output_directory=tmp_path / "output",
+        )
+
+
 def test_current_schema_rejects_private_circular_track_params(tmp_path: Path) -> None:
     record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
     encoded = encode_canonical_request(
@@ -1299,7 +1650,10 @@ def test_collinear_pipeline_ignores_legacy_derived_comparison_pairs(
             RecordInput(source=GenBankInputSource(gbk_b)),
         ),
         options=LinearDiagramOptions(
-            protein_blastp_mode="collinear",
+            losat_search=LosatSearchOptions(
+                program="losatp",
+                losatp_mode="collinear",
+            ),
             collinearity_search_scope="all",
         ),
     )
@@ -1317,8 +1671,9 @@ def test_collinear_pipeline_ignores_legacy_derived_comparison_pairs(
         output_directory=tmp_path / "replay-legacy",
     )
 
-    assert decoded.options.protein_blastp_mode == "collinear"
-    assert decoded.options.protein_comparison_pairs is None
+    assert decoded.options.losat_search is not None
+    assert decoded.options.losat_search.losatp_mode == "collinear"
+    assert decoded.options.losat_search.pairs is None
     reencoded_pipeline = next(
         item
         for item in encode_canonical_request(decoded).payload["comparisons"]
@@ -1345,7 +1700,7 @@ def test_file_backed_options_and_typed_config_round_trip(tmp_path: Path) -> None
             label_override_file=str(table_file),
             depth_track_files=((str(depth_file),),),
             conservation_blast_files=(str(blast_file),),
-            conservation_fasta_files=(None, str(fasta_file)),
+            conservation_sequence_files=(None, str(fasta_file)),
         ),
     )
 
@@ -1370,7 +1725,7 @@ def test_file_backed_options_and_typed_config_round_trip(tmp_path: Path) -> None
     assert decoded.options.depth_tracks[0].source == str(depth_file)
     assert decoded.options.depth_track_files is None
     assert decoded.options.conservation_blast_files == (str(blast_file),)
-    assert decoded.options.conservation_fasta_files == (None, str(fasta_file))
+    assert decoded.options.conservation_sequence_files == (None, str(fasta_file))
     assert encode_canonical_request(decoded).payload == encoded.payload
 
 
@@ -2342,7 +2697,7 @@ def test_current_canonical_schema_uses_underlay_default_and_round_trips_override
 @pytest.mark.parametrize(
     ("mutator", "message"),
     [
-        (lambda payload: payload.update(schema=8), "Unsupported canonical request schema"),
+        (lambda payload: payload.update(schema=9), "Unsupported canonical request schema"),
         (lambda payload: payload.update(mode="radial"), "Unsupported canonical request mode"),
         (lambda payload: payload.pop("output"), "Missing required field"),
         (lambda payload: payload.update(futureField=True), "Unknown field"),
@@ -2410,9 +2765,12 @@ def test_encode_rejects_noncanonical_option_values(tmp_path: Path) -> None:
     source = _source_file(tmp_path / "record.gbk")
     invalid_config = load_default_config()
     invalid_config["labels"]["filtering"]["extension"] = object()
+    # Typed options now reject a non-integer window themselves (X-02).
+    with pytest.raises(ValidationError, match="window must be a positive integer"):
+        LinearDiagramOptions(window="10")
     invalid_type = LinearDiagramRequest(
         records=(RecordInput(source=GenBankInputSource(source)),),
-        options=LinearDiagramOptions(window="10"),
+        options=LinearDiagramOptions(plot_title=123),
     )
     invalid_json = LinearDiagramRequest(
         records=(RecordInput(source=GenBankInputSource(source)),),
@@ -2439,7 +2797,10 @@ def test_schema_one_unknown_field_policy_is_explicit() -> None:
 def test_collinear_inference_choice_round_trips_and_omission_preserves_old_sessions(tmp_path, inference):
     encoded = encode_canonical_request(LinearDiagramRequest(
         records=(RecordInput(source=GenBankInputSource(_source_file(tmp_path / "source.gbk"))),),
-        options=LinearDiagramOptions(protein_blastp_mode="collinear", collinear_infer_orthogroups=inference),
+        options=LinearDiagramOptions(
+            losat_search=LosatSearchOptions(program="losatp", losatp_mode="collinear"),
+            collinear_infer_orthogroups=inference,
+        ),
     ))
     resource_paths = _materialize_resources(encoded, tmp_path / "resources")
     settings = encoded.payload["comparisons"][0]["settings"]
@@ -2449,3 +2810,52 @@ def test_collinear_inference_choice_round_trips_and_omission_preserves_old_sessi
     del settings["collinearInferOrthogroups"]
     legacy = decode_canonical_request(encoded.payload, resource_paths=resource_paths, output_directory=tmp_path / "legacy")
     assert legacy.options.collinear_infer_orthogroups is True
+
+
+def test_in_memory_records_of_one_source_file_share_one_genbank_resource(
+    tmp_path: Path,
+) -> None:
+    """PR5-B1: the Web shape, so a replay keeps one file as one LOSAT source."""
+
+    def record(record_id: str, source: str | None) -> SeqRecord:
+        annotations: dict[str, Any] = {"molecule_type": "DNA"}
+        if source is not None:
+            annotations["gbdraw_source_paths"] = (source,)
+        return SeqRecord(Seq("ATGC"), id=record_id, annotations=annotations)
+
+    records = (
+        record("A1", "a.gbk"), record("B1", "b.gbk"), record("A2", "a.gbk"), record("M1", None)
+    )
+    encoded = encode_canonical_request(
+        LinearDiagramRequest(
+            records=tuple(RecordInput(source=InMemoryRecordSource(item)) for item in records)
+        )
+    )
+
+    assert [
+        (item["source"]["resourceId"], item["selector"]) for item in encoded.payload["records"]
+    ] == [
+        ("record-1-genbank", {"kind": "recordIndex", "index": 0}),
+        ("record-2-genbank", None),
+        ("record-1-genbank", {"kind": "recordIndex", "index": 1}),
+        ("record-4-genbank", None),
+    ]
+    resources = {resource.resource_id: resource for resource in encoded.resources}
+    assert sorted(resources) == ["record-1-genbank", "record-2-genbank", "record-4-genbank"]
+    assert resources["record-1-genbank"].name == "record-1.gbk"
+    assert [
+        line.split()[1]
+        for line in (resources["record-1-genbank"].content or b"").decode().splitlines()
+        if line.startswith("LOCUS")
+    ] == ["A1", "A2"]
+
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "materialized"),
+        output_directory=tmp_path / "output",
+    )
+    assert decoded.records[0].source == decoded.records[2].source
+    assert [
+        item.selector.record_index if item.selector is not None else None
+        for item in decoded.records
+    ] == [0, None, 1, None]

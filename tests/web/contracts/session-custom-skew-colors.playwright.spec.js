@@ -81,6 +81,10 @@ const loadSessionThroughUi = async (page, sessionPath) => {
 };
 
 const openCustomTrackSlots = async (page) => {
+  const layoutSummary = page.locator('summary[aria-label="Layout"]');
+  if (!await layoutSummary.evaluate((summary) => summary.parentElement.open)) {
+    await layoutSummary.press('Enter');
+  }
   const panel = page.locator('#circular-custom-track-slots-panel');
   if (!await panel.isVisible()) {
     await page.getByRole('button', { name: 'Custom Track Slots' }).click();
@@ -215,7 +219,7 @@ const changePaletteThroughUi = async (page) => {
     has: page.locator('summary[aria-label="Colors"]')
   });
   if (!await colorsPanel.getAttribute('open')) {
-    await colorsPanel.locator('summary[aria-label="Colors"]').click();
+    await colorsPanel.locator('summary[aria-label="Colors"]').press('Enter');
   }
   const palette = page.getByLabel('Palette', { exact: true });
   await expect(palette).toBeVisible();
@@ -258,7 +262,7 @@ test('explicit AT-skew colors survive schema-5 Load, Generate, Save, fresh Load,
 
   const firstGenerate = await generateThroughUi(page);
   expect(requestEvidence(firstGenerate.request)).toEqual({
-    schema: 7,
+    schema: 8,
     at: {
       id: AT_SLOT_ID,
       renderer: 'dinucleotide_skew',
@@ -279,7 +283,7 @@ test('explicit AT-skew colors survive schema-5 Load, Generate, Save, fresh Load,
   expectRenderedAtColors(paletteGenerate.svg);
 
   const { path: savedPath, saved } = await saveSessionThroughUi(page);
-  expect(saved.renderRequest.schema).toBe(7);
+  expect(saved.renderRequest.schema).toBe(8);
   expect(requestEvidence(saved.renderRequest).at.params).toEqual(expectedAtParams);
   expect(
     saved.config.adv.circular_track_slots.find((slot) => slot.id === AT_SLOT_ID).params

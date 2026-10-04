@@ -9,10 +9,39 @@ const markWorkerStart = (control, state) => {
 let preparedContext = null;
 let preparedPayload = null;
 let readyControl = null;
+let faultChannelName = '';
 
 const markSlotState = (state) => {
   if (!readyControl) return;
   markWorkerStart(readyControl, state);
+};
+
+// A trap ends only this thread. Its job worker is blocked inside wasm and never
+// reads this worker's messages, and the other threads may wait for work this
+// thread held. Report the trap to the page, which owns and ends the job.
+const reportThreadFault = (tid, error, context) => {
+  if (!faultChannelName || typeof BroadcastChannel !== 'function') return;
+  const stderr = context
+    ? new TextDecoder().decode(concatUint8Arrays(context.stderrChunks)).trim().slice(-2000)
+    : '';
+  const channel = new BroadcastChannel(faultChannelName);
+  channel.postMessage({
+    type: 'thread-fault',
+    tid,
+    error: error?.message ? String(error.message) : String(error || 'LOSAT WASI thread trapped'),
+    trap: error instanceof WebAssembly.RuntimeError,
+    stderr
+  });
+  channel.close();
+};
+
+const runThreadStart = (context, tid, startArg) => {
+  try {
+    context.instance.exports.wasi_thread_start(tid, startArg);
+  } catch (error) {
+    reportThreadFault(tid, error, context);
+    throw error;
+  }
 };
 
 const instantiateThreadContext = async ({
@@ -64,7 +93,7 @@ const startPreparedThread = ({ id, tid, startArg, control }) => {
         throw new Error('LOSAT WASI thread worker was not prepared before start.');
       }
       markWorkerStart(control, 1);
-      preparedContext.instance.exports.wasi_thread_start(tid, startArg);
+      runThreadStart(preparedContext, tid, startArg);
       flushThreadOutput(preparedContext, { id, type: 'done', tid });
       preparedContext = null;
       markSlotState(0);
@@ -97,13 +126,15 @@ const runThreadFromCold = async (data) => {
     control,
     args,
     env,
-    wasiShimUrl
+    wasiShimUrl,
+    faultChannel
   } = data || {};
+  faultChannelName = String(faultChannel || '');
 
   try {
     const context = await instantiateThreadContext({ module, wasmUrl, memory, args, env, wasiShimUrl });
     markWorkerStart(control, 1);
-    context.instance.exports.wasi_thread_start(tid, startArg);
+    runThreadStart(context, tid, startArg);
     flushThreadOutput(context, { type: 'done', tid });
     self.close();
   } catch (error) {
@@ -123,6 +154,7 @@ self.onmessage = async (event) => {
 
   if (type === 'prepare') {
     readyControl = data.readyControl || null;
+    faultChannelName = String(data.faultChannel || '');
     preparedPayload = {
       module: data.module,
       wasmUrl: data.wasmUrl,

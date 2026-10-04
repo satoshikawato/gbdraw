@@ -251,28 +251,28 @@ test('Gallery renders the Hepatoplasmataceae tutorial and files panels', async (
   expect(pageErrors).toEqual([]);
 });
 
-test('Gallery renders the Vibrio Harveyi-group multi-record tutorial and media', async ({ page }) => {
+test('Gallery renders the two-species Vibrio multi-record tutorial and media', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
 
   await page.goto(`${baseUrl}/gallery/#vibrio-harveyi-group-collinear`, { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#selected-title')).toHaveText('Vibrio Harveyi group multi-record collinearity');
+  await expect(page.locator('#selected-title')).toHaveText('Vibrio parahaemolyticus and V. alginolyticus collinearity');
 
   await page.getByRole('tab', { name: 'Tutorial' }).click();
   const tutorialPanel = page.getByRole('tabpanel', { name: 'Tutorial' });
   await expect(
-    tutorialPanel.getByRole('heading', { name: 'Compare every replicon across five Vibrio Harveyi-group assemblies' })
+    tutorialPanel.getByRole('heading', { name: 'Compare both chromosomes from two Vibrio assemblies' })
   ).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: /3.*NZ_CP125877\.1.*1.*3/ })).toBeVisible();
-  await expect(tutorialPanel.getByRole('row', { name: /11.*NC_022359\.1.*5.*2/ })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: /1.*NC_004603\.1.*1.*1/ })).toBeVisible();
+  await expect(tutorialPanel.getByRole('row', { name: /4.*NC_022359\.1.*2.*2/ })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'CDS Rectangle' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Evidence scope Adjacent pairs' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Plot Title Blank' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Definition line: Organism / strain 18; Bold' })).toBeVisible();
   await expect(tutorialPanel.getByRole('row', { name: 'Definition line: Subtitle / title 16; Normal' })).toBeVisible();
-  await expect(tutorialPanel.getByText('The SB1 assembly contains two chromosomes plus plasmid p1')).toBeVisible();
+  await expect(tutorialPanel.getByText('Both assemblies contain two chromosomes')).toBeVisible();
   await expect(
-    tutorialPanel.getByText('A narrow white gap separates each record from the adjacent blocks')
+    tutorialPanel.getByText('A narrow white gap separates each record from the blocks')
   ).toBeVisible();
 
   const mediaImages = tutorialPanel.getByRole('img');
@@ -295,7 +295,7 @@ test('Gallery renders the Vibrio Harveyi-group multi-record tutorial and media',
   await page.getByRole('tab', { name: 'Files' }).click();
   const filesPanel = page.getByRole('tabpanel', { name: 'Files' });
   await expect(filesPanel.getByText('GCF_000196095.1_ASM19609v1_genomic.gbff')).toBeVisible();
-  await expect(filesPanel.getByText('GCF_030060435.1_ASM3006043v1_genomic.gbff')).toBeVisible();
+  await expect(filesPanel.getByText('GCF_000354175.2_ASM35417v2_genomic.gbff')).toBeVisible();
   const svgLink = filesPanel.getByRole('link', { name: 'Interactive SVG', exact: true });
   await expect(svgLink).toBeVisible();
   await expect(filesPanel.getByRole('link', { name: 'Session JSON (gzip)' })).toBeVisible();
@@ -313,10 +313,10 @@ test('Gallery renders the Vibrio Harveyi-group multi-record tutorial and media',
   )?.[1];
   expect(encodedMetadata).toBeTruthy();
   const metadata = JSON.parse(gunzipSync(Buffer.from(encodedMetadata, 'base64')).toString('utf8'));
-  expect(metadata.schema).toBe(3);
+  expect(metadata.schema).toBe(4);
   expect(metadata.items).toHaveLength(1);
-  expect(metadata.items[0].features).toHaveLength(24_945);
-  expect(metadata.items[0].comparisonMatches).toHaveLength(579);
+  expect(metadata.items[0].features).toHaveLength(9_375);
+  expect(metadata.items[0].comparisonMatches).toHaveLength(116);
   await page.getByRole('tab', { name: 'Preview' }).click();
   await expect(page.locator('#preview-note')).toContainText('JavaScript-enabled');
   await expect(page.locator('#demo-frame')).toHaveAttribute('title', /Interactive gbdraw SVG/);
@@ -437,13 +437,14 @@ test('Gallery renders the aminoglycoside BGC tutorial and media', async ({ page 
     { text: 'BGC0000713.gbk', overflowWrap: 'normal', lineCount: 1 }
   ]);
   const mediaImages = tutorialPanel.getByRole('img');
-  await expect(mediaImages).toHaveCount(18);
+  await expect(mediaImages).toHaveCount(19);
   await expect(tutorialPanel.locator('img[src$="manual-03-03-first-comparison-boundary.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-09-01-orthogroup-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-10-01-feature-popup.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-03-track-layout-middle.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-03-02-select-losatp-orthogroups.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-04-04-pairwise-style-curve.webp"]')).toHaveCount(0);
+  await expect(tutorialPanel.locator('img[src$="manual-06-02-record-labels.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-07-01-specific-rules-all.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-08-01-align-og1.webp"]')).toHaveCount(1);
   await expect(tutorialPanel.locator('img[src$="manual-03-03-set-thresholds.webp"]')).toHaveCount(0);
@@ -490,7 +491,7 @@ test('Gallery restores the tobacco chloroplast region-annotation example', async
   await expect(tutorialPanel.getByRole('row', { name: 'IRb 86,687 112,029 25,343 bp Bracket 0' })).toBeVisible();
   await expect(
     tutorialPanel.getByRole('row', {
-      name: 'plastome_regions Annotations Inside 0.65 20 px Set: plastome_regions; Labels: on; Overflow: Compress; gaps: 1 px'
+      name: 'plastome_regions Annotations Inside 0.65 ×R 20 px Set: plastome_regions; Labels: on; Overflow: Compress; gaps: 1 px'
     })
   ).toBeVisible();
   const tutorialImages = tutorialPanel.getByRole('img');

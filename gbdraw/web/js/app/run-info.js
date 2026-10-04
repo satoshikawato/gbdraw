@@ -1,3 +1,4 @@
+import { normalizeUserFacingError } from '../services/error-normalization.js';
 import {
   buildCircularTrackSlotSpec,
   parseCircularTrackSlotSpec
@@ -6,6 +7,7 @@ import {
   buildLinearTrackSlotSpec,
   parseLinearTrackSlotSpec
 } from './linear-track-slots.js';
+import { countGenBankRecords } from './genbank-header.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
 
@@ -301,7 +303,7 @@ const createRecipeFiles = (resources, webFiles, generatedFileNameHints, readReso
       const bytes = resourceBytes(descriptors[resourceId]);
       const text = bytes ? new TextDecoder().decode(bytes) : '';
       count = kind === 'genbank'
-        ? (text.match(/^LOCUS\s+/gm) || []).length
+        ? countGenBankRecords(text)
         : (text.match(/^>/gm) || []).length;
     }
     recordCountCache.set(cacheKey, count);
@@ -508,12 +510,31 @@ const validateCurrentSemanticCoverage = (request) => {
   }
 
   const layoutFields = request.mode === 'linear'
-    ? ['recordGapPx']
+    ? ['recordGapPx', 'multiRecordPositions', 'recordTranslations', 'similarityAlignment']
     : [
         'multiRecordSizeMode', 'multiRecordMinRadiusRatio', 'multiRecordColumnGapRatio',
         'multiRecordRowGapRatio', 'multiRecordPositions'
       ];
   coverObject(coverage, request.layout || {}, 'layout', layoutFields);
+  if (request.mode === 'linear') {
+    const translations = request.layout?.recordTranslations;
+    if (translations != null) {
+      if (!Array.isArray(translations) || (translations.length !== 0 && translations.length !== request.records.length) ||
+          translations.some((item, index) => (
+            !isPlainObject(item) || Object.keys(item).sort().join(',') !== 'recordKey,x,y' ||
+            item.recordKey !== request.records[index].recordKey || item.x !== 0 || item.y !== 0
+          ))) {
+        throw new SourceRecipeUnavailable(
+          'Source recipe unavailable: nonzero or incomplete record translations have no current CLI projection.'
+        );
+      }
+    }
+    if (request.layout?.similarityAlignment != null) {
+      throw new SourceRecipeUnavailable(
+        'Source recipe unavailable: a resolved similarity alignment has no current CLI projection.'
+      );
+    }
+  }
   (Array.isArray(request.comparisons) ? request.comparisons : []).forEach((comparison, index) => {
     const path = `comparisons[${index}]`;
     if (comparison?.kind !== 'nucleotideBlast') {
@@ -559,10 +580,12 @@ const sourceSpec = (record) => {
   );
 };
 
-const circularLayoutRows = (request, records) => {
-  const positions = Array.isArray(request.layout?.multiRecordPositions)
-    ? request.layout.multiRecordPositions
-    : [];
+const layoutRows = (request, records) => {
+  const positions = request.layout?.multiRecordPositions;
+  if (positions == null) return [];
+  if (!Array.isArray(positions)) {
+    throw new SourceRecipeUnavailable('Source recipe unavailable: record placement is invalid.');
+  }
   if (positions.length === 0) return [];
   const rows = Array(records.length).fill(null);
   positions.forEach((position) => {
@@ -592,14 +615,14 @@ const circularLayoutRows = (request, records) => {
       rows[recordIndex] !== null
     ) {
       throw new SourceRecipeUnavailable(
-        'Source recipe unavailable: circular record placement cannot be projected into a records table.'
+        'Source recipe unavailable: record placement cannot be projected into a records table.'
       );
     }
     rows[recordIndex] = row;
   });
   if (rows.some((row) => row === null)) {
     throw new SourceRecipeUnavailable(
-      'Source recipe unavailable: circular record placement is incomplete for a records table.'
+      'Source recipe unavailable: record placement is incomplete for a records table.'
     );
   }
   return rows;
@@ -659,6 +682,13 @@ const appendInputArgs = async (args, request, files) => {
       }
     }
   }
+  const requestedRows = layoutRows(request, records);
+  records.forEach((record, index) => {
+    const presentationRow = gridCoordinate(record.presentation?.gridRow);
+    if (presentationRow !== '' && requestedRows.length && presentationRow !== requestedRows[index]) {
+      throw new SourceRecipeUnavailable('Source recipe unavailable: record row placement conflicts with the layout.');
+    }
+  });
   const recordsTableRequired = hasDuplicateSources || circularSelectorNeedsTable || recordNeedsTable;
   if (request.schema >= 6 && recordsTableRequired) {
     for (const [index, record] of records.entries()) {
@@ -699,9 +729,7 @@ const appendInputArgs = async (args, request, files) => {
   }
 
   if (recordsTableRequired) {
-    const layoutRows = request.mode === 'circular'
-      ? circularLayoutRows(request, records)
-      : [];
+    const requestedTableRows = requestedRows;
     const columns = inputKind === 'genbank'
       ? ['gbk', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(request.schema >= 7 ? ['topology', 'display_start'] : [])]
       : ['gff', 'fasta', 'record_label', 'record_subtitle', 'record_id', 'region', 'reverse_complement', 'order', 'row', 'column', ...(request.schema >= 7 ? ['topology', 'display_start'] : [])];
@@ -720,7 +748,7 @@ const appendInputArgs = async (args, request, files) => {
           : '',
         reverse_complement: region ? '0' : (record.presentation?.reverseComplement ? '1' : '0'),
         order: index + 1,
-        row: gridCoordinate(record.presentation?.gridRow) || layoutRows[index] || '',
+        row: gridCoordinate(record.presentation?.gridRow) || requestedTableRows[index] || '',
         column: gridCoordinate(record.presentation?.gridColumn),
         topology: record.display?.isCircular == null ? '' : record.display.isCircular ? 'circular' : 'linear',
         display_start: record.display?.startCoordinate ?? ''
@@ -763,12 +791,12 @@ const appendInputArgs = async (args, request, files) => {
         `${record.region.reverseComplement ? ':rc' : ''}`
     );
   });
-  const rows = records.map((record) => Number(record.presentation?.gridRow));
-  if (rows.some((row) => Number.isInteger(row) && row > 0)) {
-    rows.forEach((row, index) => {
-      if (Number.isInteger(row) && row > 0) args.push('--multi_record_position', `#${index + 1}@${row}`);
-    });
-  }
+  const rows = requestedRows.length
+    ? requestedRows
+    : records.map((record) => gridCoordinate(record.presentation?.gridRow));
+  rows.forEach((row, index) => {
+    if (row !== '') args.push('--multi_record_position', `#${index + 1}@${row}`);
+  });
   return false;
 };
 
@@ -909,6 +937,22 @@ const appendConfigOverrides = (args, request) => {
   }
 
   if (request.mode === 'linear') {
+    // Without --ruler_label_font_size the CLI ruler labels follow
+    // --scale_font_size; this render keeps the configured ruler-label sizes.
+    const hasSizedOverride = (prefix) => ['short', 'long'].some(
+      (size) => Object.hasOwn(overrides, `${prefix}.${size}`)
+    );
+    const drawsRulerLabels = overrides['objects.scale.style'] === 'ruler'
+      || overrides['canvas.linear.ruler_on_axis'] === true;
+    if (
+      drawsRulerLabels
+      && hasSizedOverride('objects.scale.font_size')
+      && !hasSizedOverride('objects.scale.ruler_label_font_size')
+    ) {
+      throw new SourceRecipeUnavailable(
+        'Source recipe unavailable: the CLI ruler labels follow --scale_font_size, while this render keeps the default ruler-label font sizes.'
+      );
+    }
     appendBooleanOption(args, take('objects.definition.linear.show_replicon'), '--show_replicon');
     appendBooleanOption(args, take('objects.definition.linear.show_accession'), '', '--hide_accession');
     appendBooleanOption(args, take('objects.definition.linear.show_length'), '', '--hide_length');
@@ -1135,6 +1179,42 @@ const validateStructuredTrackSlot = (slot, mode) => {
   return slot;
 };
 
+// Read a slot token back with the CLI split rules (gbdraw/tracks/parsing.py:
+// strip_inline_comment, one "@", one ":" in the head, "," between key=value
+// options) and require the same identity and well-formed options. A token that
+// the CLI would cut, re-split, or rename makes the recipe unavailable.
+const assertCliSlotTokenLossless = (token, mode, { id, renderer, exact = false }) => {
+  const unavailable = () => new SourceRecipeUnavailable(
+    `Source recipe unavailable: a ${mode} track slot contains text (",", ":", "@", or " #") that the CLI slot grammar cannot carry.`
+  );
+  const text = String(token).trim();
+  const commentIndex = [' #', '\t#'].map((marker) => text.indexOf(marker)).find((index) => index >= 0);
+  if (!text || text.startsWith('#') || commentIndex !== undefined) throw unavailable();
+  const atIndex = text.indexOf('@');
+  const head = atIndex < 0 ? text : text.slice(0, atIndex);
+  const colonIndex = head.indexOf(':');
+  if (colonIndex < 0) throw unavailable();
+  const readId = head.slice(0, colonIndex).trim();
+  const readRenderer = head.slice(colonIndex + 1).trim();
+  const entries = (atIndex < 0 ? '' : text.slice(atIndex + 1)).split(',')
+    .map((part) => part.trim()).filter(Boolean)
+    .map((part) => {
+      const equalsIndex = part.indexOf('=');
+      if (equalsIndex < 0) throw unavailable();
+      return [part.slice(0, equalsIndex).trim(), part.slice(equalsIndex + 1).trim()];
+    });
+  if (readId !== String(id).trim() || readRenderer !== String(renderer).trim()) throw unavailable();
+  if (entries.some(([key, value]) => !key || !value)) {
+    throw new SourceRecipeUnavailable(
+      `Source recipe unavailable: a canonical ${mode} track slot has a malformed option.`
+    );
+  }
+  const reread = `${readId}:${readRenderer}${entries.length
+    ? `@${entries.map(([key, value]) => `${key}=${value}`).join(',')}`
+    : ''}`;
+  if (exact && reread !== text) throw unavailable();
+};
+
 const trackSlotForRecipe = (slot, mode, options) => {
   if (typeof slot === 'string') {
     const text = slot.trim();
@@ -1147,21 +1227,7 @@ const trackSlotForRecipe = (slot, mode, options) => {
       const parsed = mode === 'circular'
         ? parseCircularTrackSlotSpec(text)
         : parseLinearTrackSlotSpec(text);
-      const atIndex = text.indexOf('@');
-      const canonicalHead = `${parsed.id}:${parsed.renderer}`;
-      if ((atIndex < 0 ? text : text.slice(0, atIndex)).trim() !== canonicalHead) {
-        throw new SourceRecipeUnavailable(
-          `Source recipe unavailable: a canonical ${mode} track slot would change identity in the current CLI projection.`
-        );
-      }
-      if (atIndex >= 0 && text.slice(atIndex + 1).split(',').some((entry) => {
-        const equalsIndex = entry.indexOf('=');
-        return equalsIndex <= 0 || !entry.slice(equalsIndex + 1).trim();
-      })) {
-        throw new SourceRecipeUnavailable(
-          `Source recipe unavailable: a canonical ${mode} track slot has a malformed option.`
-        );
-      }
+      assertCliSlotTokenLossless(text, mode, parsed);
       validateTrackParams(mode, parsed.renderer, parsed.params || {});
     } catch (error) {
       if (error instanceof SourceRecipeUnavailable) throw error;
@@ -1173,23 +1239,27 @@ const trackSlotForRecipe = (slot, mode, options) => {
   }
 
   validateStructuredTrackSlot(slot, mode);
+  let token;
   try {
     if (mode === 'circular') {
-      return buildCircularTrackSlotSpec(
+      token = buildCircularTrackSlotSpec(
         circularTrackSlotForRecipe(slot),
         options.dinucleotide,
         options.configOverrides?.['canvas.circular.track_type']
       );
+    } else {
+      const parsed = parseLinearTrackSlotSpec(slot);
+      validateTrackParams('linear', parsed.renderer, parsed.params || {});
+      token = buildLinearTrackSlotSpec(linearTrackSlotForRecipe(parsed), { includeEnabled: true });
     }
-    const parsed = parseLinearTrackSlotSpec(slot);
-    validateTrackParams('linear', parsed.renderer, parsed.params || {});
-    return buildLinearTrackSlotSpec(linearTrackSlotForRecipe(parsed), { includeEnabled: true });
   } catch (error) {
     if (error instanceof SourceRecipeUnavailable) throw error;
     throw new SourceRecipeUnavailable(
       `Source recipe unavailable: a canonical ${mode} track slot cannot be projected losslessly.`
     );
   }
+  assertCliSlotTokenLossless(token, mode, { id: slot.id, renderer: slot.renderer, exact: true });
+  return token;
 };
 
 const circularTrackSlotForRecipe = (slot) => ({
@@ -1263,7 +1333,7 @@ const appendComparisonOptions = (args, request, files) => {
     );
     if (fastas.some(Boolean)) {
       args.push(
-        '--conservation_fasta',
+        '--conservation_sequence',
         ...fastas.map((ref, index) => {
         const resourceId = referencedResourceId(ref);
           return resourceId
@@ -1491,7 +1561,7 @@ export const buildSourceRecipe = async ({
     };
   } catch (error) {
     if (error instanceof SourceRecipeUnavailable) return unavailable(error.message);
-    console.warn('Failed to project the committed render into a source CLI recipe.', error);
+    console.warn('Failed to project the committed render into a source CLI recipe.', normalizeUserFacingError(error));
     return unavailable('Source recipe unavailable: the committed render cannot be represented safely by the current CLI.');
   }
 };
@@ -1616,6 +1686,44 @@ const finalizeGeneratedRecipeFiles = (generatedFiles, allocatedMetadata) => {
   });
 };
 
+// PD-OI-018 revision 4 and D-40: the Web search database differs from the CLI.
+export const LOSAT_DATABASE_SCOPE_NOTE = 'LOSAT E-values use the subject source file as the search database, '
+  + 'without the query record when both records come from the same file.';
+
+const LOSAT_RUNTIME_NAMES = Object.freeze({ losat: 'LOSAT', 'ncbi-blast': 'NCBI BLAST+' });
+
+// One line per search runtime: program, runtime kind, version and source, plus
+// the executable path that CLI Sessions record (design D9/D10).
+export const formatLosatRuntime = ({ program, kind, version, source, path }) => {
+  if (!kind) return `${program}: runtime not recorded`;
+  const name = LOSAT_RUNTIME_NAMES[kind] || kind;
+  const release = version ? ` ${version}` : ', version not recorded';
+  const origin = [source, path].filter(Boolean).join(', ');
+  return `${program}: ${name}${release}${origin ? ` (${origin})` : ''}`;
+};
+
+// The distinct runtimes of the displayed raw LOSAT entries of a run, Web or
+// CLI made. Entries saved before runtimes were recorded show "not recorded".
+export const summarizeLosatRuntimes = (cacheInfo, cacheMap) => {
+  const runtimes = new Map();
+  (Array.isArray(cacheInfo) ? cacheInfo : []).forEach((info) => {
+    if (!info?.key || info.display === false) return;
+    const entry = cacheMap?.get?.(info.key);
+    if (!entry || typeof entry !== 'object') return;
+    const runtime = entry.runtime && typeof entry.runtime === 'object' ? entry.runtime : null;
+    const record = {
+      program: String(runtime?.program || entry.program || ''),
+      kind: runtime ? String(runtime.kind || '') : '',
+      version: runtime?.version == null ? null : String(runtime.version),
+      source: runtime ? String(runtime.source || '') : '',
+      path: runtime?.path ? String(runtime.path) : null
+    };
+    const identity = JSON.stringify(record);
+    if (!runtimes.has(identity)) runtimes.set(identity, { ...record, text: formatLosatRuntime(record) });
+  });
+  return Array.from(runtimes.values());
+};
+
 export const buildRunInfo = ({
   mode,
   args,
@@ -1625,7 +1733,9 @@ export const buildRunInfo = ({
   elapsedMs,
   resultCount,
   startedAtIso,
-  generatedBy = 'gbdraw-web'
+  generatedBy = 'gbdraw-web',
+  losatComparisons = false,
+  losatRuntimes = []
 } = {}) => {
   const normalizedMode = String(mode || '').trim() === 'linear' ? 'linear' : 'circular';
   let sourceAvailable = sourceRecipe?.available !== false;
@@ -1726,6 +1836,9 @@ export const buildRunInfo = ({
   if (notes.length === 0) {
     notes.push('The source recipe can be rerun with the uploaded file names shown here.');
   }
+  if (losatComparisons) {
+    notes.push(LOSAT_DATABASE_SCOPE_NOTE);
+  }
   if (exact?.helperFiles.length > 0) {
     notes.push(
       `Exact replay references ${formatHelperFileList(exact.helperFiles)}, which is included in "Download reproducibility files".`
@@ -1750,6 +1863,7 @@ export const buildRunInfo = ({
     startedAtIso: startedAtIso || new Date().toISOString(),
     elapsedMs: Number.isFinite(Number(elapsedMs)) ? Number(elapsedMs) : 0,
     resultCount: Number.isFinite(Number(resultCount)) ? Number(resultCount) : 0,
+    losatRuntimes: Array.isArray(losatRuntimes) ? losatRuntimes.map((runtime) => ({ ...runtime })) : [],
     command: source.command,
     commandArgs: source.commandArgs,
     sessionCommand: exact?.command || '',

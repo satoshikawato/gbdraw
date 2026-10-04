@@ -1,0 +1,1127 @@
+{
+  "mode": "transport",
+  "head": "c11d4854a899349cd66863c859f6f871724ba3ab",
+  "platform": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "python": "3.13.3",
+  "cpuCount": 32,
+  "ramBytes": 33518579712,
+  "cpuModel": "Intel(R) Core(TM) i9-14900HX",
+  "versions": {
+    "playwright": "1.61.0",
+    "psutil": "7.0.0",
+    "websocket-client": "1.8.0",
+    "biopython": "1.85"
+  },
+  "codecProbeSha256": "aa8511a22b8d833aa4496c5f6c37eb23890d48e729b2c11b5f2572151a45e3e5",
+  "traceSha256": "3716977b65fca8d99f06e2a8971b6b15c87bdcd38b3c8c019b9324568bc58b91",
+  "observerSha256": "19b0d2468f1efd36b2d8bb59aa9af6a4758e5c8b90939aeeea8840846b863c4c",
+  "recipeSha256": "d020db6de7995d39617adb6ed0898de55de87d9fe55499303d512dfbe5e2e68e",
+  "s01RecipeSha256": "c2ea0bbfc389fa0da1f4440a7d164961729814020097096daa4e0fe9cd48a6e7",
+  "url": "http://127.0.0.1:46745",
+  "debugPort": 44591,
+  "launchArgs": [
+    "--enable-precise-memory-info",
+    "--remote-debugging-port=44591"
+  ],
+  "startedUtc": "2026-09-27T05:28:45Z",
+  "browser": "149.0.7827.55",
+  "metricDefinitions": "S05_RESUME_REPRODUCTION.md",
+  "rawArtifact": "/tmp/issue597-S05-resume-evidence/transport/metrics.json",
+  "fixtures": {
+    "vibrio": {
+      "sha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa",
+      "results": [
+        {
+          "wallMs": 884.3000000119209,
+          "heapBefore": 1822664,
+          "heapAfter": 107688543,
+          "events": [
+            {
+              "name": "session-import-worker-start",
+              "timestamp": 89.90000000596046,
+              "operationId": 1,
+              "fileBytes": 23739973
+            },
+            {
+              "name": "session-import-worker-terminated",
+              "timestamp": 772.0999999940395,
+              "operationId": 1
+            },
+            {
+              "name": "session-import-worker-settled",
+              "timestamp": 772.1999999880791,
+              "operationId": 1,
+              "status": "ok"
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js"
+          ],
+          "workerTrace": [
+            {
+              "url": "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js",
+              "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:4:25)\n    at async <anonymous>:329:30",
+              "messages": [
+                {
+                  "type": null,
+                  "operation": null,
+                  "operationId": 1,
+                  "fileBytes": 23739973,
+                  "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:4:25)\n    at async <anonymous>:329:30"
+                }
+              ],
+              "listeners": 0,
+              "terminations": 1
+            }
+          ],
+          "completionMs": 684,
+          "workerCodec": {
+            "readMs": 247.5,
+            "parseMs": 162,
+            "codecProbe": {
+              "decodeCpuMs": 54.00000011920929,
+              "decodedBytes": 95989532,
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 9,
+                  "bytes": 23739973,
+                  "chunks": 16,
+                  "wallMs": 246.09999999403954
+                },
+                {
+                  "kind": "decompress",
+                  "start": 9.299999982118607,
+                  "bytes": 95989532,
+                  "chunks": 1471,
+                  "wallMs": 245.90000000596046
+                }
+              ]
+            }
+          },
+          "characters": 95989532,
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 9,
+            "p95Ms": 158.5,
+            "maxMs": 158.5
+          },
+          "longTasks": {
+            "count": 1,
+            "totalMs": 128,
+            "maxMs": 128,
+            "entries": [
+              {
+                "start": 643.3000000119209,
+                "duration": 128
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 107688543,
+          "receiverTaskMaxMs": null,
+          "stagesMs": {},
+          "fileBytes": 23739973,
+          "transferredBufferBytes": 0,
+          "nativeStructuredCloneWireBytes": null,
+          "nativeStructuredCloneCopyBytes": null,
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "memory": {
+            "sampleCount": 7,
+            "rssPeakBytes": 942530560,
+            "rssErrors": [],
+            "rssStartBytes": 428863488,
+            "v8UsedHeapPeaksBytes": {
+              "page": 107681140,
+              "worker": 188638468
+            },
+            "errors": [
+              "WebSocketConnectionClosedException: Connection to remote host was lost."
+            ],
+            "targets": {
+              "265025EB9E5D63F252876FC2C44AB6BE": {
+                "type": "page",
+                "url": "http://127.0.0.1:46745/__issue597_probe.html"
+              },
+              "EC742EACBEDE09BA9EB3CC110C9F318C": {
+                "type": "worker",
+                "url": "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js"
+              }
+            },
+            "workerPeaksByUrl": {
+              "session-import-worker.js": {
+                "usedSize": 188638468,
+                "backingStorageSize": 175301729
+              }
+            }
+          },
+          "responsivenessAcceptance": true
+        },
+        {
+          "wallMs": 803.8999999761581,
+          "heapBefore": 1822664,
+          "heapAfter": 107688179,
+          "events": [
+            {
+              "name": "session-import-worker-start",
+              "timestamp": 56.5,
+              "operationId": 1,
+              "fileBytes": 23739973
+            },
+            {
+              "name": "session-import-worker-terminated",
+              "timestamp": 658.7000000178814,
+              "operationId": 1
+            },
+            {
+              "name": "session-import-worker-settled",
+              "timestamp": 658.7000000178814,
+              "operationId": 1,
+              "status": "ok"
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js"
+          ],
+          "workerTrace": [
+            {
+              "url": "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js",
+              "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:4:25)\n    at async <anonymous>:329:30",
+              "messages": [
+                {
+                  "type": null,
+                  "operation": null,
+                  "operationId": 1,
+                  "fileBytes": 23739973,
+                  "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:4:25)\n    at async <anonymous>:329:30"
+                }
+              ],
+              "listeners": 0,
+              "terminations": 1
+            }
+          ],
+          "completionMs": 603.5999999940395,
+          "workerCodec": {
+            "readMs": 217.80000001192093,
+            "parseMs": 143.19999998807907,
+            "codecProbe": {
+              "decodeCpuMs": 46.600000232458115,
+              "decodedBytes": 95989532,
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 10.600000023841858,
+                  "bytes": 23739973,
+                  "chunks": 16,
+                  "wallMs": 216
+                },
+                {
+                  "kind": "decompress",
+                  "start": 10.900000005960464,
+                  "bytes": 95989532,
+                  "chunks": 1472,
+                  "wallMs": 215.80000001192093
+                }
+              ]
+            }
+          },
+          "characters": 95989532,
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 8,
+            "p95Ms": 150.59999999403954,
+            "maxMs": 150.59999999403954
+          },
+          "longTasks": {
+            "count": 1,
+            "totalMs": 113,
+            "maxMs": 113,
+            "entries": [
+              {
+                "start": 545.1000000238419,
+                "duration": 113
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 107688179,
+          "receiverTaskMaxMs": null,
+          "stagesMs": {},
+          "fileBytes": 23739973,
+          "transferredBufferBytes": 0,
+          "nativeStructuredCloneWireBytes": null,
+          "nativeStructuredCloneCopyBytes": null,
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "memory": {
+            "sampleCount": 7,
+            "rssPeakBytes": 901214208,
+            "rssErrors": [],
+            "rssStartBytes": 438280192,
+            "v8UsedHeapPeaksBytes": {
+              "page": 107680952,
+              "worker": 188638468
+            },
+            "errors": [
+              "WebSocketConnectionClosedException: Connection to remote host was lost."
+            ],
+            "targets": {
+              "357F9FE93E77388D6D3CFAED6907B0E0": {
+                "type": "page",
+                "url": "http://127.0.0.1:46745/__issue597_probe.html"
+              },
+              "44A2E5BF19C3C6B6F05A603A93B85D08": {
+                "type": "worker",
+                "url": "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js"
+              }
+            },
+            "workerPeaksByUrl": {
+              "session-import-worker.js": {
+                "usedSize": 188638468,
+                "backingStorageSize": 189344897
+              }
+            }
+          },
+          "responsivenessAcceptance": true
+        },
+        {
+          "wallMs": 756,
+          "heapBefore": 1822664,
+          "heapAfter": 107687931,
+          "events": [
+            {
+              "name": "session-import-worker-start",
+              "timestamp": 49,
+              "operationId": 1,
+              "fileBytes": 23739973
+            },
+            {
+              "name": "session-import-worker-terminated",
+              "timestamp": 603.5,
+              "operationId": 1
+            },
+            {
+              "name": "session-import-worker-settled",
+              "timestamp": 603.5,
+              "operationId": 1,
+              "status": "ok"
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js"
+          ],
+          "workerTrace": [
+            {
+              "url": "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js",
+              "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:4:25)\n    at async <anonymous>:329:30",
+              "messages": [
+                {
+                  "type": null,
+                  "operation": null,
+                  "operationId": 1,
+                  "fileBytes": 23739973,
+                  "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:4:25)\n    at async <anonymous>:329:30"
+                }
+              ],
+              "listeners": 0,
+              "terminations": 1
+            }
+          ],
+          "completionMs": 555.7999999821186,
+          "workerCodec": {
+            "readMs": 219.2999999821186,
+            "parseMs": 111.09999999403954,
+            "codecProbe": {
+              "decodeCpuMs": 46.60000017285347,
+              "decodedBytes": 95989532,
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 8.599999994039536,
+                  "bytes": 23739973,
+                  "chunks": 15,
+                  "wallMs": 217.90000000596046
+                },
+                {
+                  "kind": "decompress",
+                  "start": 8.800000011920929,
+                  "bytes": 95989532,
+                  "chunks": 1470,
+                  "wallMs": 217.69999998807907
+                }
+              ]
+            }
+          },
+          "characters": 95989532,
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 6,
+            "p95Ms": 196.40000000596046,
+            "maxMs": 196.40000000596046
+          },
+          "longTasks": {
+            "count": 1,
+            "totalMs": 114,
+            "maxMs": 114,
+            "entries": [
+              {
+                "start": 489.59999999403954,
+                "duration": 114
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 107687931,
+          "receiverTaskMaxMs": null,
+          "stagesMs": {},
+          "fileBytes": 23739973,
+          "transferredBufferBytes": 0,
+          "nativeStructuredCloneWireBytes": null,
+          "nativeStructuredCloneCopyBytes": null,
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "memory": {
+            "sampleCount": 6,
+            "rssPeakBytes": 981635072,
+            "rssErrors": [],
+            "rssStartBytes": 438685696,
+            "v8UsedHeapPeaksBytes": {
+              "page": 107680692,
+              "worker": 188487672
+            },
+            "errors": [
+              "WebSocketConnectionClosedException: Connection to remote host was lost."
+            ],
+            "targets": {
+              "DAF5D75FA842EE7E2599005DEB513582": {
+                "type": "page",
+                "url": "http://127.0.0.1:46745/__issue597_probe.html"
+              },
+              "485453DBE5794096885F59485B8FF065": {
+                "type": "worker",
+                "url": "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js"
+              }
+            },
+            "workerPeaksByUrl": {
+              "session-import-worker.js": {
+                "usedSize": 188487672,
+                "backingStorageSize": 189344897
+              }
+            }
+          },
+          "responsivenessAcceptance": true
+        }
+      ]
+    },
+    "real": {
+      "sha256": "d3cafef9664bff958aec4932eea6e264ae872cce89762a7cbe617447af975388",
+      "results": [
+        {
+          "wallMs": 3166.800000011921,
+          "heapBefore": 1822664,
+          "heapAfter": 464025288,
+          "events": [
+            {
+              "name": "session-import-worker-start",
+              "timestamp": 54.5,
+              "operationId": 1,
+              "fileBytes": 134471323
+            },
+            {
+              "name": "session-import-worker-terminated",
+              "timestamp": 3020,
+              "operationId": 1
+            },
+            {
+              "name": "session-import-worker-settled",
+              "timestamp": 3020,
+              "operationId": 1,
+              "status": "ok"
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js"
+          ],
+          "workerTrace": [
+            {
+              "url": "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js",
+              "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:4:25)\n    at async <anonymous>:329:30",
+              "messages": [
+                {
+                  "type": null,
+                  "operation": null,
+                  "operationId": 1,
+                  "fileBytes": 134471323,
+                  "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:4:25)\n    at async <anonymous>:329:30"
+                }
+              ],
+              "listeners": 0,
+              "terminations": 1
+            }
+          ],
+          "completionMs": 2966.5999999940395,
+          "workerCodec": {
+            "readMs": 1205.5999999940395,
+            "parseMs": 839.5,
+            "codecProbe": {
+              "decodeCpuMs": 228.80000004172325,
+              "decodedBytes": 466767669,
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 9.200000017881393,
+                  "bytes": 134471323,
+                  "chunks": 69,
+                  "wallMs": 1204.0999999940395
+                },
+                {
+                  "kind": "decompress",
+                  "start": 9.5,
+                  "bytes": 466767669,
+                  "chunks": 7158,
+                  "wallMs": 1204
+                }
+              ]
+            }
+          },
+          "characters": 466767669,
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 28,
+            "p95Ms": 100.09999999403954,
+            "maxMs": 512.2000000178814
+          },
+          "longTasks": {
+            "count": 1,
+            "totalMs": 448,
+            "maxMs": 448,
+            "entries": [
+              {
+                "start": 2571.7000000178814,
+                "duration": 448
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 468796364,
+          "receiverTaskMaxMs": null,
+          "stagesMs": {},
+          "fileBytes": 134471323,
+          "transferredBufferBytes": 0,
+          "nativeStructuredCloneWireBytes": null,
+          "nativeStructuredCloneCopyBytes": null,
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "memory": {
+            "sampleCount": 16,
+            "rssPeakBytes": 2331213824,
+            "rssErrors": [],
+            "rssStartBytes": 438239232,
+            "v8UsedHeapPeaksBytes": {
+              "page": 468786184,
+              "worker": 906748596
+            },
+            "errors": [
+              "WebSocketConnectionClosedException: Connection to remote host was lost."
+            ],
+            "targets": {
+              "98863C76B8358E6D7E1D6AC62253D10E": {
+                "type": "page",
+                "url": "http://127.0.0.1:46745/__issue597_probe.html"
+              },
+              "A512CA31EE17B2D8B7F73AC57D2FBFAC": {
+                "type": "worker",
+                "url": "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js"
+              }
+            },
+            "workerPeaksByUrl": {
+              "session-import-worker.js": {
+                "usedSize": 906748596,
+                "backingStorageSize": 486768193
+              }
+            }
+          },
+          "responsivenessAcceptance": false
+        },
+        {
+          "wallMs": 3265.600000023842,
+          "heapBefore": 1822664,
+          "heapAfter": 464140160,
+          "events": [
+            {
+              "name": "session-import-worker-start",
+              "timestamp": 63.400000005960464,
+              "operationId": 1,
+              "fileBytes": 134471323
+            },
+            {
+              "name": "session-import-worker-terminated",
+              "timestamp": 3127.5999999940395,
+              "operationId": 1
+            },
+            {
+              "name": "session-import-worker-settled",
+              "timestamp": 3127.5999999940395,
+              "operationId": 1,
+              "status": "ok"
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js"
+          ],
+          "workerTrace": [
+            {
+              "url": "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js",
+              "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:4:25)\n    at async <anonymous>:329:30",
+              "messages": [
+                {
+                  "type": null,
+                  "operation": null,
+                  "operationId": 1,
+                  "fileBytes": 134471323,
+                  "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:4:25)\n    at async <anonymous>:329:30"
+                }
+              ],
+              "listeners": 0,
+              "terminations": 1
+            }
+          ],
+          "completionMs": 3065.4000000059605,
+          "workerCodec": {
+            "readMs": 1300,
+            "parseMs": 783.9000000059605,
+            "codecProbe": {
+              "decodeCpuMs": 265.9999998807907,
+              "decodedBytes": 466767669,
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 10.799999982118607,
+                  "bytes": 134471323,
+                  "chunks": 70,
+                  "wallMs": 1298.2000000178814
+                },
+                {
+                  "kind": "decompress",
+                  "start": 10.900000005960464,
+                  "bytes": 466767669,
+                  "chunks": 7157,
+                  "wallMs": 1298.199999988079
+                }
+              ]
+            }
+          },
+          "characters": 466767669,
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 29,
+            "p95Ms": 100.10000002384186,
+            "maxMs": 519.5
+          },
+          "longTasks": {
+            "count": 1,
+            "totalMs": 431,
+            "maxMs": 431,
+            "entries": [
+              {
+                "start": 2696.2999999821186,
+                "duration": 431
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 468534292,
+          "receiverTaskMaxMs": null,
+          "stagesMs": {},
+          "fileBytes": 134471323,
+          "transferredBufferBytes": 0,
+          "nativeStructuredCloneWireBytes": null,
+          "nativeStructuredCloneCopyBytes": null,
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "memory": {
+            "sampleCount": 17,
+            "rssPeakBytes": 2274856960,
+            "rssErrors": [],
+            "rssStartBytes": 441806848,
+            "v8UsedHeapPeaksBytes": {
+              "page": 468524112,
+              "worker": 906748688
+            },
+            "errors": [
+              "WebSocketConnectionClosedException: Connection to remote host was lost."
+            ],
+            "targets": {
+              "E63D9BA1BDA531DB01AEAB75EF9726AB": {
+                "type": "page",
+                "url": "http://127.0.0.1:46745/__issue597_probe.html"
+              },
+              "CBBD86BB6889D2D6F0B9566E43BD4489": {
+                "type": "worker",
+                "url": "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js"
+              }
+            },
+            "workerPeaksByUrl": {
+              "session-import-worker.js": {
+                "usedSize": 906748688,
+                "backingStorageSize": 575349019
+              }
+            }
+          },
+          "responsivenessAcceptance": false
+        },
+        {
+          "wallMs": 3179,
+          "heapBefore": 1822664,
+          "heapAfter": 464101476,
+          "events": [
+            {
+              "name": "session-import-worker-start",
+              "timestamp": 55.19999998807907,
+              "operationId": 1,
+              "fileBytes": 134471323
+            },
+            {
+              "name": "session-import-worker-terminated",
+              "timestamp": 3032.7999999821186,
+              "operationId": 1
+            },
+            {
+              "name": "session-import-worker-settled",
+              "timestamp": 3032.7999999821186,
+              "operationId": 1,
+              "status": "ok"
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js"
+          ],
+          "workerTrace": [
+            {
+              "url": "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js",
+              "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:4:25)\n    at async <anonymous>:329:30",
+              "messages": [
+                {
+                  "type": null,
+                  "operation": null,
+                  "operationId": 1,
+                  "fileBytes": 134471323,
+                  "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:4:25)\n    at async <anonymous>:329:30"
+                }
+              ],
+              "listeners": 0,
+              "terminations": 1
+            }
+          ],
+          "completionMs": 2978.699999988079,
+          "workerCodec": {
+            "readMs": 1271.199999988079,
+            "parseMs": 748.9000000059605,
+            "codecProbe": {
+              "decodeCpuMs": 252.80000013113022,
+              "decodedBytes": 466767669,
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 9.400000005960464,
+                  "bytes": 134471323,
+                  "chunks": 69,
+                  "wallMs": 1269.9000000059605
+                },
+                {
+                  "kind": "decompress",
+                  "start": 9.599999994039536,
+                  "bytes": 466767669,
+                  "chunks": 7156,
+                  "wallMs": 1269.800000011921
+                }
+              ]
+            }
+          },
+          "characters": 466767669,
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 28,
+            "p95Ms": 100.09999999403954,
+            "maxMs": 526
+          },
+          "longTasks": {
+            "count": 1,
+            "totalMs": 427,
+            "maxMs": 427,
+            "entries": [
+              {
+                "start": 2605.2999999821186,
+                "duration": 427
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 468541152,
+          "receiverTaskMaxMs": null,
+          "stagesMs": {},
+          "fileBytes": 134471323,
+          "transferredBufferBytes": 0,
+          "nativeStructuredCloneWireBytes": null,
+          "nativeStructuredCloneCopyBytes": null,
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "memory": {
+            "sampleCount": 17,
+            "rssPeakBytes": 2332930048,
+            "rssErrors": [],
+            "rssStartBytes": 442114048,
+            "v8UsedHeapPeaksBytes": {
+              "page": 468530972,
+              "worker": 906748688
+            },
+            "errors": [
+              "WebSocketConnectionClosedException: Connection to remote host was lost."
+            ],
+            "targets": {
+              "C950BC47E49281C7750C9E637A0F8917": {
+                "type": "page",
+                "url": "http://127.0.0.1:46745/__issue597_probe.html"
+              },
+              "EBE74F9C3A5A4882B7C431AA6807E139": {
+                "type": "worker",
+                "url": "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js"
+              }
+            },
+            "workerPeaksByUrl": {
+              "session-import-worker.js": {
+                "usedSize": 906748688,
+                "backingStorageSize": 567031413
+              }
+            }
+          },
+          "responsivenessAcceptance": false
+        }
+      ]
+    },
+    "small-plain": {
+      "sha256": "d53cf930db19cbe2f8c201909d06c69ba02140ffd06498021e7582ddebed83db",
+      "results": [
+        {
+          "wallMs": 215.90000000596046,
+          "heapBefore": 1822664,
+          "heapAfter": 2380035,
+          "events": [
+            {
+              "name": "session-import-worker-start",
+              "timestamp": 53.29999998211861,
+              "operationId": 1,
+              "fileBytes": 270096
+            },
+            {
+              "name": "session-import-worker-terminated",
+              "timestamp": 67.7999999821186,
+              "operationId": 1
+            },
+            {
+              "name": "session-import-worker-settled",
+              "timestamp": 67.7999999821186,
+              "operationId": 1,
+              "status": "ok"
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js"
+          ],
+          "workerTrace": [
+            {
+              "url": "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js",
+              "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:4:25)\n    at async <anonymous>:329:30",
+              "messages": [
+                {
+                  "type": null,
+                  "operation": null,
+                  "operationId": 1,
+                  "fileBytes": 270096,
+                  "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:4:25)\n    at async <anonymous>:329:30"
+                }
+              ],
+              "listeners": 0,
+              "terminations": 1
+            }
+          ],
+          "completionMs": 15.599999994039536,
+          "workerCodec": {
+            "readMs": 3,
+            "parseMs": 0.5,
+            "codecProbe": {
+              "decodeCpuMs": 0.09999999403953552,
+              "decodedBytes": 270096,
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 7.699999988079071,
+                  "bytes": 270096,
+                  "chunks": 3,
+                  "wallMs": 1.7000000178813934
+                }
+              ]
+            }
+          },
+          "characters": 270096,
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 2,
+            "p95Ms": 100,
+            "maxMs": 100
+          },
+          "longTasks": {
+            "count": 0,
+            "totalMs": 0,
+            "maxMs": 0,
+            "entries": []
+          },
+          "mainSampledHeapPeakBytes": 2380035,
+          "receiverTaskMaxMs": null,
+          "stagesMs": {},
+          "fileBytes": 270096,
+          "transferredBufferBytes": 0,
+          "nativeStructuredCloneWireBytes": null,
+          "nativeStructuredCloneCopyBytes": null,
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "memory": {
+            "sampleCount": 3,
+            "rssPeakBytes": 449458176,
+            "rssErrors": [],
+            "rssStartBytes": 440958976,
+            "v8UsedHeapPeaksBytes": {
+              "page": 2372888
+            },
+            "errors": [],
+            "targets": {
+              "3250EFB6A087B373075C1DF4FA217A87": {
+                "type": "page",
+                "url": "http://127.0.0.1:46745/__issue597_probe.html"
+              }
+            },
+            "workerPeaksByUrl": null
+          },
+          "responsivenessAcceptance": true
+        },
+        {
+          "wallMs": 215.90000000596046,
+          "heapBefore": 1822664,
+          "heapAfter": 2380035,
+          "events": [
+            {
+              "name": "session-import-worker-start",
+              "timestamp": 47.599999994039536,
+              "operationId": 1,
+              "fileBytes": 270096
+            },
+            {
+              "name": "session-import-worker-terminated",
+              "timestamp": 62.19999998807907,
+              "operationId": 1
+            },
+            {
+              "name": "session-import-worker-settled",
+              "timestamp": 62.19999998807907,
+              "operationId": 1,
+              "status": "ok"
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js"
+          ],
+          "workerTrace": [
+            {
+              "url": "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js",
+              "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:4:25)\n    at async <anonymous>:329:30",
+              "messages": [
+                {
+                  "type": null,
+                  "operation": null,
+                  "operationId": 1,
+                  "fileBytes": 270096,
+                  "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:4:25)\n    at async <anonymous>:329:30"
+                }
+              ],
+              "listeners": 0,
+              "terminations": 1
+            }
+          ],
+          "completionMs": 15.699999988079071,
+          "workerCodec": {
+            "readMs": 2.7000000178813934,
+            "parseMs": 0.5999999940395355,
+            "codecProbe": {
+              "decodeCpuMs": 0.20000001788139343,
+              "decodedBytes": 270096,
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 9,
+                  "bytes": 270096,
+                  "chunks": 3,
+                  "wallMs": 1.2000000178813934
+                }
+              ]
+            }
+          },
+          "characters": 270096,
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 2,
+            "p95Ms": 99.90000000596046,
+            "maxMs": 99.90000000596046
+          },
+          "longTasks": {
+            "count": 0,
+            "totalMs": 0,
+            "maxMs": 0,
+            "entries": []
+          },
+          "mainSampledHeapPeakBytes": 2380035,
+          "receiverTaskMaxMs": null,
+          "stagesMs": {},
+          "fileBytes": 270096,
+          "transferredBufferBytes": 0,
+          "nativeStructuredCloneWireBytes": null,
+          "nativeStructuredCloneCopyBytes": null,
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "memory": {
+            "sampleCount": 3,
+            "rssPeakBytes": 450494464,
+            "rssErrors": [],
+            "rssStartBytes": 443547648,
+            "v8UsedHeapPeaksBytes": {
+              "page": 2372888
+            },
+            "errors": [],
+            "targets": {
+              "4220A15DB954C4D8F8DD8B30A3E6CAD0": {
+                "type": "page",
+                "url": "http://127.0.0.1:46745/__issue597_probe.html"
+              }
+            },
+            "workerPeaksByUrl": null
+          },
+          "responsivenessAcceptance": true
+        },
+        {
+          "wallMs": 218.7999999821186,
+          "heapBefore": 1822664,
+          "heapAfter": 2380059,
+          "events": [
+            {
+              "name": "session-import-worker-start",
+              "timestamp": 44.900000005960464,
+              "operationId": 1,
+              "fileBytes": 270096
+            },
+            {
+              "name": "session-import-worker-terminated",
+              "timestamp": 62.30000001192093,
+              "operationId": 1
+            },
+            {
+              "name": "session-import-worker-settled",
+              "timestamp": 62.30000001192093,
+              "operationId": 1,
+              "status": "ok"
+            }
+          ],
+          "metrics": {},
+          "workers": [
+            "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js"
+          ],
+          "workerTrace": [
+            {
+              "url": "http://127.0.0.1:46745/gbdraw/web/js/workers/session-import-worker.js",
+              "stack": "Error\n    at new window.Worker (eval at evaluate (:303:30), <anonymous>:5:79)\n    at http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:67:14\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:4:25)\n    at async <anonymous>:329:30",
+              "messages": [
+                {
+                  "type": null,
+                  "operation": null,
+                  "operationId": 1,
+                  "fileBytes": 270096,
+                  "stack": "Error\n    at window.Worker.postMessage (eval at evaluate (:303:30), <anonymous>:9:49)\n    at http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:73:12\n    at new Promise (<anonymous>)\n    at importSessionFile (http://127.0.0.1:46745/gbdraw/web/js/services/session-import-client.js:10:61)\n    at eval (eval at evaluate (:303:30), <anonymous>:4:25)\n    at async <anonymous>:329:30"
+                }
+              ],
+              "listeners": 0,
+              "terminations": 1
+            }
+          ],
+          "completionMs": 18.5,
+          "workerCodec": {
+            "readMs": 2.9000000059604645,
+            "parseMs": 0.5,
+            "codecProbe": {
+              "decodeCpuMs": 0.10000002384185791,
+              "decodedBytes": 270096,
+              "streams": [
+                {
+                  "kind": "file-read",
+                  "start": 9.199999988079071,
+                  "bytes": 270096,
+                  "chunks": 4,
+                  "wallMs": 1.7000000178813934
+                }
+              ]
+            }
+          },
+          "characters": 270096,
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 2,
+            "p95Ms": 99.90000000596046,
+            "maxMs": 99.90000000596046
+          },
+          "longTasks": {
+            "count": 0,
+            "totalMs": 0,
+            "maxMs": 0,
+            "entries": []
+          },
+          "mainSampledHeapPeakBytes": 2380059,
+          "receiverTaskMaxMs": null,
+          "stagesMs": {},
+          "fileBytes": 270096,
+          "transferredBufferBytes": 0,
+          "nativeStructuredCloneWireBytes": null,
+          "nativeStructuredCloneCopyBytes": null,
+          "wholeDocumentEqual": true,
+          "pageErrors": [],
+          "externalRequests": [],
+          "memory": {
+            "sampleCount": 3,
+            "rssPeakBytes": 449961984,
+            "rssErrors": [],
+            "rssStartBytes": 443203584,
+            "v8UsedHeapPeaksBytes": {
+              "page": 2372912
+            },
+            "errors": [],
+            "targets": {
+              "13A77FCFEF9578903C8F8488ACBE11E6": {
+                "type": "page",
+                "url": "http://127.0.0.1:46745/__issue597_probe.html"
+              }
+            },
+            "workerPeaksByUrl": null
+          },
+          "responsivenessAcceptance": true
+        }
+      ]
+    }
+  }
+}

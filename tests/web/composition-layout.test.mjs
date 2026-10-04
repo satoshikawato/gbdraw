@@ -9,10 +9,10 @@ import {
   COMPOSITION_SCHEMA_ATTRIBUTE,
   CompositionMetadataError,
   compositionUserDeltas,
+  materializeRecordTranslations,
   normalizeLegacyComposition,
   parseCompositionMetadata,
   planComposition,
-  reconcileCompositionTitle,
   resetCompositionUserDeltas
 } from '../../gbdraw/web/js/app/legend-layout/composition-actions.js';
 import {
@@ -56,9 +56,11 @@ class FakeElement {
 
   querySelectorAll(selector) {
     const roleMatch = selector.match(/^\[data-gbdraw-composition-role="([^"]+)"\]$/);
+    const attributeMatch = selector.match(/^\[([^=\]]+)\]$/);
     const matches = [];
     const visit = (node) => {
       if (roleMatch && node.getAttribute(COMPOSITION_ROLE_ATTRIBUTE) === roleMatch[1]) matches.push(node);
+      if (attributeMatch && node.getAttribute(attributeMatch[1]) !== null) matches.push(node);
       node.children.forEach(visit);
     };
     this.children.forEach(visit);
@@ -366,6 +368,105 @@ assert.deepEqual(minimumExtentGrowth.placements.primary.finalBounds, {
 }
 
 {
+  const { svg, primaryA, primaryB } = schemaOneSvg();
+  primaryA.setAttribute('data-record-key', 'record-b');
+  primaryA.setAttribute('data-record-translation-x', '100');
+  primaryA.setAttribute('data-record-translation-y', '5');
+  primaryB.setAttribute('data-record-key', 'record-a');
+  primaryB.setAttribute('data-record-translation-x', '10');
+  primaryB.setAttribute('data-record-translation-y', '2');
+  assert.deepEqual(
+    materializeRecordTranslations(svg, [], ['record-a', 'record-b']),
+    [
+      { recordKey: 'record-a', x: 10, y: 2 },
+      { recordKey: 'record-b', x: 104, y: 2 }
+    ]
+  );
+
+  primaryA.removeAttribute('data-record-translation-x');
+  primaryA.removeAttribute('data-record-translation-y');
+  primaryB.removeAttribute('data-record-translation-x');
+  primaryB.removeAttribute('data-record-translation-y');
+  assert.deepEqual(
+    materializeRecordTranslations(
+      svg,
+      [
+        { recordKey: 'record-a', x: 7, y: 8 },
+        { recordKey: 'record-b', x: 20, y: 30 }
+      ],
+      ['record-a', 'record-b']
+    ),
+    [
+      { recordKey: 'record-a', x: 7, y: 8 },
+      { recordKey: 'record-b', x: 24, y: 27 }
+    ]
+  );
+}
+
+{
+  const { svg, primaryA, primaryB } = schemaOneSvg();
+  const unrelated = new FakeElement({
+    id: 'comparison',
+    attributes: {
+      [COMPOSITION_ROLE_ATTRIBUTE]: 'primary',
+      transform: 'translate(6,36) translate(999,999)'
+    }
+  });
+  svg.children.unshift(unrelated);
+  primaryA.setAttribute('transform', 'translate(10,33) translate(101,70)');
+  primaryB.setAttribute('transform', 'translate(6,36) translate(-20,170)');
+  primaryA.appendChild(new FakeElement({
+    attributes: { 'data-gbdraw-stable-feature-id': 'stable-feature-b' }
+  }));
+  primaryB.appendChild(new FakeElement({
+    attributes: { 'data-gbdraw-stable-feature-id': 'stable-feature-a' }
+  }));
+  const plan = {
+    records: [
+      {
+        recordKey: 'record-a',
+        status: 'reference',
+        anchor: { biologicalFeatureId: 'feature-a', stableFeatureSvgId: 'stable-feature-a' }
+      },
+      {
+        recordKey: 'record-b',
+        status: 'aligned',
+        anchor: { biologicalFeatureId: 'feature-b', stableFeatureSvgId: 'stable-feature-b' }
+      }
+    ]
+  };
+  assert.deepEqual(
+    materializeRecordTranslations(
+      svg,
+      [
+        { recordKey: 'record-a', x: 0, y: 2 },
+        { recordKey: 'record-b', x: 0, y: 5 }
+      ],
+      ['record-a', 'record-b'],
+      plan
+    ),
+    [
+      { recordKey: 'record-a', x: -20, y: 2 },
+      { recordKey: 'record-b', x: 105, y: 2 }
+    ]
+  );
+
+  primaryB.children = [];
+  assert.throws(
+    () => materializeRecordTranslations(
+      svg,
+      [
+        { recordKey: 'record-a', x: 0, y: 2 },
+        { recordKey: 'record-b', x: 0, y: 5 }
+      ],
+      ['record-a', 'record-b'],
+      plan
+    ),
+    /cannot bind alignment record "record-a"/
+  );
+}
+
+{
   const missing = new FakeElement({ tagName: 'svg' });
   assert.throws(
     () => parseCompositionMetadata(missing),
@@ -515,34 +616,6 @@ assert.deepEqual(minimumExtentGrowth.placements.primary.finalBounds, {
 }
 
 {
-  const { svg } = schemaOneSvg();
-  const metadata = JSON.parse(svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE));
-  metadata.title = null;
-  metadata.titleSide = 'none';
-  svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(metadata));
-  svg.children = svg.children.filter(
-    (child) => child.getAttribute(COMPOSITION_ROLE_ATTRIBUTE) !== 'title'
-  );
-
-  const title = new FakeElement({
-    id: 'plot_title',
-    attributes: { transform: 'scale(1.25) rotate(4)' },
-    bbox: { x: -8, y: -10, width: 80, height: 20 }
-  });
-  svg.appendChild(title);
-  const added = reconcileCompositionTitle(svg, title, 'top');
-  assert.equal(added.metadata.titleSide, 'top');
-  assert.equal(title.getAttribute(COMPOSITION_ROLE_ATTRIBUTE), 'title');
-  assert.match(title.getAttribute('transform'), /^translate\([^)]*\) scale\(1\.25\) rotate\(4\)$/);
-  assert.deepEqual(compositionUserDeltas(svg).title, [0, 0]);
-
-  const removed = reconcileCompositionTitle(svg, null, 'none');
-  assert.equal(removed.metadata.title, null);
-  assert.equal(removed.metadata.titleSide, 'none');
-  assert.equal(title.getAttribute(COMPOSITION_ROLE_ATTRIBUTE), null);
-}
-
-{
   const legacy = new FakeElement({ tagName: 'svg', attributes: { viewBox: '0 0 200 100' } });
   const primary = new FakeElement({
     id: 'record',
@@ -649,3 +722,162 @@ assert.deepEqual(minimumExtentGrowth.placements.primary.finalBounds, {
 }
 
 console.log('composition layout tests passed');
+
+
+// S01: Result-owned decoration continuity, independent of primary/result order.
+const { projectCompositionRecordIdentity } = await import('../../gbdraw/web/js/services/session-request.js');
+const { normalizeUserFacingError } = await import('../../gbdraw/web/js/services/error-normalization.js');
+const { captureDecorationContinuity } = await import('../../gbdraw/web/js/app/legend-layout/decoration-continuity.js');
+const continuityCanonical = (keys = ['a'], grouping = 'single') => ({
+  renderRequest: { mode: 'linear', grouping, records: keys.map(recordKey => ({
+    recordKey, cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: 0 }, region: null,
+    source: { kind: 'genbank', resourceId: `source-${recordKey}` }
+  })) },
+  resources: Object.fromEntries(keys.map(key => [`source-${key}`, { encoding: 'base64', data: 'YWJj', size: 3 }]))
+});
+const continuityCatalog = keys => ({ items: keys.map(recordKey => ({ recordKeys: [recordKey] })) });
+const decorationSvg = (delta = [40, 20]) => {
+  const fixture = schemaOneSvg();
+  fixture.primaryB.setAttribute('id', 'length_bar');
+  resetCompositionUserDeltas(fixture.svg);
+  applyCompositionUserDeltas(fixture.svg, { legend: delta, title: delta, primary: [[9, 7], delta] });
+  return fixture;
+};
+const captureFixture = (fixture, canonical = continuityCanonical(), keys = ['a']) => captureDecorationContinuity({ projectRecordIdentity: projectCompositionRecordIdentity,
+  canonical, catalog: continuityCatalog(keys), results: [{ content: '' }], mountedSvg: fixture.svg
+});
+{
+  const old = decorationSvg();
+  const canonical = continuityCanonical();
+  const snapshot = captureFixture(old, canonical);
+  // Mutating the old preview after capture must not change the in-flight delta.
+  applyCompositionUserDeltas(old.svg, { legend: [99, 88] });
+  const candidate = decorationSvg([0, 0]);
+  candidate.svg.children.reverse();
+  const metadata = parseCompositionMetadata(candidate.svg);
+  metadata.legend.automaticTranslation = [300, 400];
+  candidate.svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(metadata));
+  const transforms = snapshot(canonical, { catalog: continuityCatalog(['a']) });
+  transforms[0](candidate.svg);
+  transforms[0](candidate.svg); // idempotence at the same candidate seam
+  const actual = compositionUserDeltas(candidate.svg);
+  assert.deepEqual(actual.legend, [40, 20]);
+  assert.deepEqual(actual.title, [40, 20]);
+  assert.deepEqual(actual.primary, [[40, 20], [9, 7]]); // reversed primary; record unchanged
+  assert.equal(readLeadingTranslate(candidate.legend.getAttribute('transform')).x, 340);
+  const second = captureFixture(candidate, canonical)(canonical, { catalog: continuityCatalog(['a']) });
+  const regenerated = decorationSvg([0, 0]);
+  second[0](regenerated.svg);
+  assert.deepEqual(compositionUserDeltas(regenerated.svg).legend, [40, 20]);
+}
+{
+  const zero = decorationSvg([0, 0]);
+  assert.equal(captureFixture(zero), null); // record-only offset is excluded
+  assert.equal(captureDecorationContinuity(), null);
+  const snapshot = captureFixture(decorationSvg());
+  for (const mutate of [
+    c => { c.resources['source-a'].data = 'ZGVm'; },
+    c => { c.renderRequest.records[0].region = { start: 1, end: 10 }; },
+    c => { c.renderRequest.mode = 'circular'; },
+    c => { c.renderRequest.grouping = 'grid'; },
+    c => { c.renderRequest.records[0].recordKey = 'changed'; },
+    c => { delete c.resources['source-a']; }
+  ]) {
+    const candidate = continuityCanonical(); mutate(candidate);
+    assert.throws(() => snapshot(candidate, { catalog: continuityCatalog(['a']) }), { code: 'DECORATION_CONTINUITY', context: { field: 'decorations', inputOrdinal: 1, reason: 'DECORATION_IDENTITY' } });
+  }
+  assert.throws(() => captureFixture(decorationSvg(), null)(continuityCanonical(), { catalog: continuityCatalog(['a']) }), { code: 'DECORATION_CONTINUITY', context: { field: 'decorations', inputOrdinal: 1, reason: 'DECORATION_IDENTITY' } });
+  const missing = decorationSvg([0, 0]);
+  const metadata = parseCompositionMetadata(missing.svg);
+  metadata.title = null; metadata.titleSide = 'none';
+  missing.svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(metadata));
+  missing.svg.children = missing.svg.children.filter(child => child !== missing.title);
+  assert.throws(() => snapshot(continuityCanonical(), { catalog: continuityCatalog(['a']) })[0](missing.svg),
+    { code: 'DECORATION_CONTINUITY', context: { field: 'title', inputOrdinal: 1, reason: 'DECORATION_TARGET' } });
+  const invalid = decorationSvg(); invalid.legend.setAttribute('transform', 'translate(NaN,20)');
+  assert.throws(() => captureFixture(invalid), { code: 'DECORATION_CONTINUITY' });
+}
+{
+  const a = decorationSvg([40, 20]), b = decorationSvg([-15, 5]);
+  const canonical = continuityCanonical(['a', 'b'], 'batch');
+  let parses = 0;
+  class Parser { parseFromString(content) { parses++; return { documentElement: content === 'b' ? b.svg : a.svg }; } }
+  const snapshot = captureDecorationContinuity({ projectRecordIdentity: projectCompositionRecordIdentity, canonical, catalog: continuityCatalog(['a', 'b']),
+    results: [{ name: 'old-a', content: 'a' }, { name: 'old-b', content: 'b' }],
+    mountedSvg: a.svg, selectedResultIndex: 0, parser: Parser });
+  assert.equal(parses, 1);
+  const transforms = snapshot(continuityCanonical(['b', 'a'], 'batch'), { catalog: continuityCatalog(['b', 'a']) });
+  const nextA = decorationSvg([0, 0]), nextB = decorationSvg([0, 0]);
+  transforms[0](nextB.svg); transforms[1](nextA.svg);
+  assert.deepEqual(compositionUserDeltas(nextA.svg).legend, [40, 20]);
+  assert.deepEqual(compositionUserDeltas(nextB.svg).legend, [-15, 5]);
+  assert.throws(() => snapshot(canonical, { catalog: continuityCatalog(['a', 'a']) }),
+    { code: 'DECORATION_CONTINUITY', context: { field: 'decorations', inputOrdinal: 1, reason: 'DECORATION_IDENTITY' } });
+  // A zero-offset duplicate old output must still make correspondence ambiguous.
+  const zero = decorationSvg([0, 0]);
+  class DuplicateParser { parseFromString() { return { documentElement: zero.svg }; } }
+  const duplicate = captureDecorationContinuity({ projectRecordIdentity: projectCompositionRecordIdentity, canonical: continuityCanonical(), catalog: continuityCatalog(['a', 'a']),
+    results: [{content:''}, {content:''}], mountedSvg: a.svg, parser: DuplicateParser });
+  assert.throws(() => duplicate(continuityCanonical(), { catalog: continuityCatalog(['a']) }),
+    { code: 'DECORATION_CONTINUITY', context: { field: 'decorations', inputOrdinal: 1, reason: 'DECORATION_IDENTITY' } });
+}
+
+{
+  const diagnostic = normalizeUserFacingError({ code: 'DECORATION_CONTINUITY', stage: 'result-admission',
+    message: 'PRIVATE GENOME', context: { field: 'scale', reason: 'DECORATION_TARGET', inputOrdinal: 2, raw: 'PRIVATE GENOME' } });
+  assert.match(diagnostic.summary, /Reset Layout.*Result 2.*scale.*missing/);
+  assert.doesNotMatch(JSON.stringify(diagnostic), /PRIVATE GENOME/);
+}
+
+{
+  const canonical = continuityCanonical(['collection']);
+  canonical.renderRequest.records[0].cardinality = 'all';
+  canonical.renderRequest.records[0].selector = null;
+  canonical.renderRequest.records[0].region = {start: 10, end: 20};
+  const snapshot = captureFixture(decorationSvg(), canonical, ['collection:1']);
+  const candidate = structuredClone(canonical);
+  canonical.renderRequest.records[0].region.start = 11;
+  const next = decorationSvg([0, 0]);
+  snapshot(candidate, {catalog: continuityCatalog(['collection:1'])})[0](next.svg);
+  assert.deepEqual(compositionUserDeltas(next.svg).legend, [40,20]);
+  assert.throws(() => snapshot(canonical, {catalog: continuityCatalog(['collection:1'])}),
+    { code: 'DECORATION_CONTINUITY', context: { field: 'decorations', inputOrdinal: 1, reason: 'DECORATION_IDENTITY' } });
+  const huge = captureFixture(decorationSvg([1e308, 1e308]));
+  const overflow = decorationSvg([0,0]);
+  const metadata = parseCompositionMetadata(overflow.svg);
+  metadata.legend.automaticTranslation = [1e308,1e308];
+  overflow.svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(metadata));
+  assert.throws(() => huge(continuityCanonical(), {catalog: continuityCatalog(['a'])})[0](overflow.svg),
+    { code: 'DECORATION_CONTINUITY', context: { field: 'legend', inputOrdinal: 1, reason: 'FINITE' } });
+}
+
+{
+  const old = decorationSvg();
+  const snapshot = captureFixture(old);
+  const missingMetadata = decorationSvg([0,0]);
+  missingMetadata.svg.removeAttribute(COMPOSITION_METADATA_ATTRIBUTE);
+  try {
+    snapshot(continuityCanonical(), {catalog:continuityCatalog(['a'])})[0](missingMetadata.svg);
+    assert.fail('missing candidate metadata must reject');
+  } catch (error) { assert.equal(error.code, 'DECORATION_CONTINUITY'); }
+  const sourceFile = { size: 3, arrayBuffer() { throw new Error('extra genome read'); } };
+  const canonical = continuityCanonical();
+  const { setResourcePayloadOwner } = await import('../../gbdraw/web/js/services/resource-payload-owner.js');
+  canonical.resources['source-a'] = setResourcePayloadOwner({size:3,encoding:'base64'},sourceFile);
+  const filesSnapshot = captureFixture(old, canonical);
+  const same = continuityCanonical();
+  same.resources['source-a'] = setResourcePayloadOwner({size:3,encoding:'base64'},sourceFile);
+  filesSnapshot(same, {catalog:continuityCatalog(['a'])})[0](decorationSvg([0,0]).svg);
+  same.resources['source-a'] = setResourcePayloadOwner({size:3,encoding:'base64'}, {...sourceFile});
+  assert.throws(() => filesSnapshot(same, {catalog:continuityCatalog(['a'])}),
+    { code: 'DECORATION_CONTINUITY', context: { field: 'decorations', inputOrdinal: 1, reason: 'DECORATION_IDENTITY' } });
+}
+
+{
+  const old = continuityCanonical();
+  old.renderRequest.records[0].selector = null;
+  const snapshot = captureFixture(decorationSvg(), old);
+  const next = decorationSvg([0,0]);
+  snapshot(continuityCanonical(), {catalog:continuityCatalog(['a'])})[0](next.svg);
+  assert.deepEqual(compositionUserDeltas(next.svg).legend, [40,20]);
+}

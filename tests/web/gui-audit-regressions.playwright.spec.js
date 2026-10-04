@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { join } = require('node:path');
 const { readFileSync } = require('node:fs');
 const { readPdfText } = require('./helpers/pdf-text.cjs');
-const { openApp, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { openApp, generateAndWaitForResult, reveal, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const session = async (page, name = 'HmmtDNA_basic_circular.gbdraw-session.json') => {
   page.on('dialog', (dialog) => dialog.dismiss());
@@ -10,13 +10,19 @@ const session = async (page, name = 'HmmtDNA_basic_circular.gbdraw-session.json'
   await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions', name));
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length > 0);
 };
+// Inspection may already open the presentation panel; open it only when closed.
+const openPresentation = async (page) => {
+  const details = page.locator('[data-circular-record-presentation]');
+  if (!await details.evaluate((element) => element.open)) await details.locator('summary').click();
+};
 const annotations = (page) => page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
 
 test('opening saved Circular record controls enables editing before another Generate', async ({ page }) => {
   test.setTimeout(180000);
   await session(page);
-  await page.getByLabel('Multi-Record Canvas', { exact: true }).uncheck();
-  await page.locator('summary[aria-label="Circular record presentation"]').click();
+  await (await reveal(page.getByLabel('Multi-Record Canvas', { exact: true }))).uncheck();
+  await page.locator('[data-circular-inspect]').click();
+  await openPresentation(page);
   await expect(page.getByLabel('Circular record label', { exact: true })).toBeEnabled({ timeout: 180000 });
   await expect(page.getByLabel('Circular record', { exact: true })).toContainText('NC_012920.1');
   await page.getByLabel('Circular record label', { exact: true }).fill('Edited before Generate');
@@ -28,7 +34,7 @@ test('new annotation IDs still select their editor row after deletion and regene
   test.setTimeout(180000);
   await session(page);
   const panel = annotations(page);
-  await panel.locator('summary').click();
+  await panel.locator('summary').press('Enter');
   await panel.getByRole('button', { name: /Add set/ }).click();
   const add = panel.getByRole('button', { name: /Coordinates/ });
   for (let i = 0; i < 3; i += 1) await add.click();
@@ -55,7 +61,7 @@ test('imported annotation colors edit the rendered row style', async ({ page }) 
   test.setTimeout(180000);
   await session(page);
   const panel = annotations(page);
-  await panel.locator('summary').click();
+  await panel.locator('summary').press('Enter');
   await panel.locator('input[type=file]').setInputFiles({ name: 'regions.tsv', mimeType: 'text/plain', buffer: Buffer.from('set_id\tid\tmark\tstart\tend\tstroke\tfill\nregions\ta\tband\t1000\t3000\t#123456\t#94a3b8\n') });
   await panel.getByTitle('Fill color', { exact: true }).fill('#ff0000');
   await panel.getByTitle('Stroke color', { exact: true }).fill('#00ff00');
@@ -69,14 +75,14 @@ test('selected D-loop without gene or locus_tag generates a feature annotation',
   test.setTimeout(180000);
   await session(page);
   const features = page.locator('details').filter({ has: page.locator('summary[aria-label="Features"]') });
-  await features.locator('summary').click();
+  await features.locator('summary').press('Enter');
   await features.locator('select').filter({ has: page.locator('option[value="D-loop"]') }).selectOption('D-loop');
   await features.getByRole('button', { name: /Add$/ }).click();
   await generateAndWaitForResult(page);
   const id = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.find((feature) => feature.type === 'D-loop').svg_id);
   await page.locator(`.origin-top svg [data-gbdraw-feature-id="${id}"]`).first().dispatchEvent('click', { ctrlKey: true });
   const panel = annotations(page);
-  await panel.locator('summary').click();
+  await panel.locator('summary').press('Enter');
   await panel.getByRole('button', { name: /Add set/ }).click();
   await panel.getByRole('button', { name: /Selected features/ }).click();
   await generateAndWaitForResult(page);
@@ -86,6 +92,8 @@ test('selected D-loop without gene or locus_tag generates a feature annotation',
 test('label search includes live edits and reports the initial rendered feature count', async ({ page }) => {
   test.setTimeout(180000);
   await session(page);
+  await page.getByRole('button', { name: 'Toggle layout edit mode' }).click();
+  await expect(page.getByRole('button', { name: 'Toggle layout edit mode' })).toHaveAttribute('aria-pressed', 'true');
   const status = page.getByRole('status', { name: 'Feature search status' });
   await expect(status).toHaveText('0 / 37 features');
   const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
@@ -143,7 +151,7 @@ for (const { method, delayedAsset, extension } of [
   const source = ['BGC0000708', 'BGC0000709'].map((id) => readFileSync(join(process.cwd(), 'tests/test_inputs', `${id}.gbk`), 'utf8')).join('\n');
   await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({ name: 'two-records.gbk', mimeType: 'text/plain', buffer: Buffer.from(source) });
   await page.waitForFunction(() => window.__GBDRAW_APP__.circularRecordList.length === 2);
-  await page.getByLabel('Multi-Record Canvas', { exact: true }).uncheck();
+  await (await reveal(page.getByLabel('Multi-Record Canvas', { exact: true }))).uncheck();
   await generateAndWaitForResult(page);
   let release;
   let requested;
@@ -172,7 +180,7 @@ test('malformed annotations preserve the draft and a valid import is undoable', 
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('dialog', (dialog) => { dialogs.push(dialog.message()); dialog.dismiss(); });
   const panel = annotations(page);
-  await panel.locator('summary').click();
+  await panel.locator('summary').press('Enter');
   await panel.getByRole('button', { name: /Add set/ }).click();
   await panel.getByRole('button', { name: /Coordinates/ }).click();
   const before = await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.annotationSets));
@@ -204,12 +212,79 @@ test('PDF preserves Greek and mathematical text from the existing bundled fonts'
   expect(bytes.toString('latin1')).toContain('/FontFile2');
 });
 
+test('PDF pages convert CSS px to pt and keep spaces in curved and tick labels', async ({ page }) => {
+  test.setTimeout(180000);
+  await session(page);
+  const [width, height] = await page.evaluate(() => {
+    const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+    return [parseFloat(svg.getAttribute('width')), parseFloat(svg.getAttribute('height'))];
+  });
+  const pending = page.waitForEvent('download');
+  await page.evaluate(() => window.__GBDRAW_APP__.downloadPDF());
+  const bytes = readFileSync(await (await pending).path());
+  const mediaBoxes = [...bytes.toString('latin1').matchAll(/MediaBox\s*\[([^\]]*)\]/g)];
+  expect(mediaBoxes).toHaveLength(1);
+  const [, , boxWidth, boxHeight] = mediaBoxes[0][1].trim().split(/\s+/).map(Number);
+  expect(boxWidth).toBeCloseTo(width * 0.75, 1);
+  expect(boxHeight).toBeCloseTo(height * 0.75, 1);
+  const text = readPdfText(bytes);
+  expect(text).toContain('cytochrome c oxidase subunit I');
+  expect(text).toContain('1 kbp');
+});
+
+test('PDF text flattening places each curved-label character by its UTF-16 index', async ({ page }) => {
+  await page.goto('/');
+  const outcome = await page.evaluate(async () => {
+    const markup = '<svg xmlns="http://www.w3.org/2000/svg" width="400px" height="200px" viewBox="0 0 400 200">'
+      + '<defs><path id="arc" d="M 10 150 A 190 190 0 0 1 390 150"/></defs>'
+      + '<text font-size="20"><textPath href="#arc">a\u{1F600} b</textPath></text></svg>';
+    const live = new DOMParser().parseFromString(markup, 'image/svg+xml').documentElement;
+    document.body.appendChild(live);
+    const text = live.querySelector('text');
+    const expected = [[0, 'a'], [1, '\u{1F600}'], [3, ' '], [4, 'b']].map(([index, character]) => {
+      const point = text.getStartPositionOfChar(index);
+      return [character, Math.round(point.x * 100) / 100, Math.round(point.y * 100) / 100, !character.trim()];
+    });
+    const flattened = [];
+    const observer = new MutationObserver((records) => records.forEach((record) => {
+      record.addedNodes.forEach((node) => {
+        if (node.localName !== 'g') return;
+        node.querySelectorAll('text').forEach((charText) => flattened.push([
+          charText.textContent,
+          Math.round(Number(charText.getAttribute('x')) * 100) / 100,
+          Math.round(Number(charText.getAttribute('y')) * 100) / 100,
+          charText.getAttributeNS('http://www.w3.org/XML/1998/namespace', 'space') === 'preserve'
+        ]));
+      });
+    }));
+    observer.observe(document.body, { childList: true, subtree: true });
+    const { downloadPDF } = await import('/gbdraw/web/js/services/export.js');
+    try {
+      await downloadPDF(
+        { svg: live.cloneNode(true), name: 'flatten.svg' },
+        { loadPdfFont: () => Promise.reject(new Error('font not needed')) }
+      );
+    } catch {
+      // The flattened text is captured before fonts are loaded.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    observer.disconnect();
+    return { expected, flattened };
+  });
+  expect(outcome.flattened).toEqual(outcome.expected);
+});
+
 test('a failed PDF font request can be retried without reloading the diagram', async ({ page }) => {
   test.setTimeout(180000);
   await session(page);
   await page.route('**/gbdraw-*-py3-none-any.whl*', (route) => route.abort());
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.downloadPDF())).toEqual({ status: 'error' });
-  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.errorLog?.type)).toBe('Export error');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.downloadPDF())).toMatchObject({
+    status: 'error', error: { code: 'WORKER_INIT', operation: 'export-pdf', stage: 'initialization' }
+  });
+  await expect(page.getByRole('alert', { name: 'PDF export error' })).toBeVisible();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+    operation: 'export-pdf', stage: 'initialization'
+  });
   await page.unroute('**/gbdraw-*-py3-none-any.whl*');
   const pending = page.waitForEvent('download');
   await page.evaluate(() => window.__GBDRAW_APP__.downloadPDF());
@@ -248,7 +323,7 @@ test('invalid annotation coordinates preserve the draft and the last successful 
   test.setTimeout(180000);
   await session(page);
   const panel = annotations(page);
-  await panel.locator('summary').click();
+  await panel.locator('summary').press('Enter');
   await panel.getByRole('button', { name: /Add set/ }).click();
   await panel.getByRole('button', { name: /Coordinates/ }).click();
   const before = await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.annotationSets));
@@ -263,8 +338,9 @@ test('invalid annotation coordinates preserve the draft and the last successful 
   const oldResult = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
   await panel.getByPlaceholder('Start (1-based)', { exact: true }).fill('1.5');
   await panel.getByPlaceholder('Start (1-based)', { exact: true }).press('Tab');
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'error' });
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({ summary: expect.stringContaining('positive integers') });
+  expect((await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).status).toBe('error');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({ code: 'ANNOTATION_TARGET', context: { reason: 'POSITIVE_INTEGER' },
+    summary: expect.stringContaining('integer greater than zero') });
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(oldResult);
   await panel.getByPlaceholder('Start (1-based)', { exact: true }).fill('1');
   await generateAndWaitForResult(page);

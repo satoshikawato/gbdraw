@@ -115,15 +115,15 @@ def capture_gui_losatn(
         linear.click()
         expect(linear).to_have_attribute("aria-pressed", "true")
         page.get_by_role("radio", name="GenBank", exact=True).check()
-        expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
-            "Current: No comparison"
-        )
+        expect(
+            page.get_by_role("button", name="Set no comparison", exact=True)
+        ).to_have_attribute("aria-pressed", "true")
 
         add_sequence = page.get_by_role(
             "button", name="Add sequence", exact=True
         )
-        expect(add_sequence).to_have_count(2)
-        add_sequence.first.click()
+        expect(add_sequence).to_have_count(1)
+        add_sequence.click()
         page.get_by_test_id("linear-genbank-1").set_input_files(
             FIRST_LINEAR_FIXTURE_PATH
         )
@@ -131,7 +131,7 @@ def capture_gui_losatn(
             GUI_LOSATN_DE3_FIXTURE_PATH
         )
         selected_files = page.get_by_role(
-            "group", name="GenBank File selection", exact=True
+            "group", name="GenBank / DDBJ File selection", exact=True
         )
         expect(selected_files).to_have_count(2)
         expect(selected_files.nth(0)).to_contain_text("NC_001416.gb")
@@ -155,9 +155,7 @@ def capture_gui_losatn(
             "button", name="Run LOSAT for all adjacent pairs", exact=True
         )
         run_losat.click()
-        expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
-            "Current: Run LOSAT for all adjacent pairs"
-        )
+        expect(run_losat).to_have_attribute("aria-pressed", "true")
         settings = open_linear_comparison_disclosure(
             page,
             "settings",
@@ -191,22 +189,22 @@ def capture_gui_losatn(
             "Advanced comparison and layout",
         )
 
-        execution = advanced.get_by_role(
+        execution = settings.get_by_role(
             "combobox", name="LOSAT execution", exact=True
         )
         execution.select_option("serial")
         expect(execution).to_have_value("serial")
-        total_threads = advanced.get_by_role(
+        total_threads = settings.get_by_role(
             "combobox", name="LOSAT total threads", exact=True
         )
         total_threads.select_option("1")
         expect(total_threads).to_have_value("1")
-        parallel_runs = advanced.get_by_role(
+        parallel_runs = settings.get_by_role(
             "combobox", name="LOSAT parallel runs", exact=True
         )
         parallel_runs.select_option("1")
         expect(parallel_runs).to_have_value("1")
-        threads_per_run = advanced.get_by_role(
+        threads_per_run = settings.get_by_role(
             "combobox", name="LOSAT threads per run", exact=True
         )
         expect(threads_per_run).to_be_disabled()

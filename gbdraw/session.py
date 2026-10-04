@@ -307,15 +307,22 @@ def session_to_request(materialized: MaterializedSession) -> DiagramRequest:
         CanonicalRequestCodecError,
         decode_canonical_request,
     )
-    from gbdraw.api.session_compat import canonical_payload_for_session_decode
+    from gbdraw.api.session_compat import (
+        canonical_payload_for_session_decode,
+        promote_legacy_session_similarity_alignment_request,
+    )
 
     try:
-        return decode_canonical_request(
+        request = decode_canonical_request(
             canonical_payload_for_session_decode(document.version, payload),
             resource_paths=materialized.resource_paths,
             output_directory=materialized.output_directory,
         )
-    except CanonicalRequestCodecError as exc:
+        return promote_legacy_session_similarity_alignment_request(
+            request,
+            document._data,
+        )
+    except (CanonicalRequestCodecError, ValidationError) as exc:
         raise SessionConversionError(str(exc)) from exc
 
 
@@ -351,9 +358,14 @@ def _build_session_document_from_resolved_request(
         CanonicalRequestCodecError,
         encode_canonical_request,
     )
+    from gbdraw.api.session_compat import (
+        project_legacy_similarity_alignment_for_current_write,
+    )
 
     try:
-        encoded = encode_canonical_request(request)
+        encoded = encode_canonical_request(
+            project_legacy_similarity_alignment_for_current_write(request)
+        )
         resources = {
             resource.resource_id: _serialize_canonical_resource(resource)
             for resource in encoded.resources

@@ -1,0 +1,3472 @@
+{
+  "head": "9584ed904c7d1ee93f5a07ea4f3a2a465b061724",
+  "platform": "Linux-5.15.167.4-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+  "python": "3.13.3",
+  "cpuCount": 32,
+  "cpuModel": "Intel(R) Core(TM) i9-14900HX",
+  "versions": {
+    "playwright": "1.61.0",
+    "psutil": "7.0.0",
+    "websocket-client": "1.8.0",
+    "biopython": "1.85"
+  },
+  "workerProbeSha256": "62888060ed33bd9fb69d75642204e7de6ab040d66684ef19a0a9ced57928163d",
+  "ramBytes": 33518579712,
+  "url": "http://127.0.0.1:45779",
+  "debugPort": 34601,
+  "launchArgs": [
+    "--enable-precise-memory-info",
+    "--remote-debugging-port=34601"
+  ],
+  "observerSha256": "19b0d2468f1efd36b2d8bb59aa9af6a4758e5c8b90939aeeea8840846b863c4c",
+  "fixtures": {
+    "vibrio": [
+      {
+        "load": {
+          "wallMs": 13203.200000017881,
+          "heapBefore": 21738405,
+          "heapAfter": 391594626,
+          "events": [
+            {
+              "name": "session-import-pending-published",
+              "timestamp": 933.8000000119209
+            },
+            {
+              "name": "session-import-paint-opportunity-completed",
+              "timestamp": 965.2000000178814
+            },
+            {
+              "name": "sessionSelection",
+              "timestamp": 965.8000000119209
+            },
+            {
+              "name": "gzip-to-text-start",
+              "timestamp": 965.8000000119209
+            },
+            {
+              "name": "gzip-to-text-end",
+              "timestamp": 1180.7000000178814,
+              "characters": 95989532
+            },
+            {
+              "name": "json-parse-start",
+              "timestamp": 1180.7000000178814
+            },
+            {
+              "name": "json-parse-end",
+              "timestamp": 1314.2000000178814
+            },
+            {
+              "name": "current-session-preflight-start",
+              "timestamp": 1370.2000000178814
+            },
+            {
+              "name": "session-authority-validation-start",
+              "timestamp": 1370.5
+            },
+            {
+              "name": "session-authority-validation-end",
+              "timestamp": 1428.300000011921
+            },
+            {
+              "name": "feature-catalog-validation-start",
+              "timestamp": 1428.300000011921
+            },
+            {
+              "name": "catalog.admission-started",
+              "timestamp": 1428.9000000059605,
+              "resultCount": 1
+            },
+            {
+              "name": "catalog.admission-completed",
+              "timestamp": 3099.7000000178814,
+              "resultCount": 1,
+              "itemCount": 1,
+              "recordCount": 4,
+              "renderedFeatureCount": 9375,
+              "biologicalFeatureCount": 18782
+            },
+            {
+              "name": "feature-catalog-validation-end",
+              "timestamp": 3099.7000000178814
+            },
+            {
+              "name": "editor-state-normalization-start",
+              "timestamp": 3099.7000000178814
+            },
+            {
+              "name": "editor-state-normalization-end",
+              "timestamp": 3099.800000011921
+            },
+            {
+              "name": "resource-table-adoption-start",
+              "timestamp": 3099.800000011921
+            },
+            {
+              "name": "resource-table-adoption-end",
+              "timestamp": 3099.9000000059605
+            },
+            {
+              "name": "losat-artifact-validation-start",
+              "timestamp": 3099.9000000059605
+            },
+            {
+              "name": "losat-artifact-validation-end",
+              "timestamp": 3272.4000000059605
+            },
+            {
+              "name": "canonical-request-projection-start",
+              "timestamp": 3272.9000000059605
+            },
+            {
+              "name": "canonical-request-projection-end",
+              "timestamp": 3275.4000000059605
+            },
+            {
+              "name": "current-draft-validation-start",
+              "timestamp": 3275.5
+            },
+            {
+              "name": "current-draft-validation-end",
+              "timestamp": 3276.100000023842
+            },
+            {
+              "name": "artifact-projection-start",
+              "timestamp": 3276.100000023842
+            },
+            {
+              "name": "artifact-projection-end",
+              "timestamp": 3276.2000000178814
+            },
+            {
+              "name": "current-session-preflight-end",
+              "timestamp": 3276.2000000178814
+            },
+            {
+              "name": "svg-admission-start",
+              "timestamp": 3845.7000000178814
+            },
+            {
+              "name": "svg.admission-started",
+              "timestamp": 3845.9000000059605,
+              "phase": "current-session",
+              "resultCount": 1,
+              "mutationKind": "EMPTY"
+            },
+            {
+              "name": "result-svg-characters",
+              "timestamp": 3846,
+              "phase": "current-session",
+              "resultIndex": 0,
+              "value": 5128555
+            },
+            {
+              "name": "sanitize-call",
+              "timestamp": 3846.100000023842,
+              "durationMs": 268.7999999821186
+            },
+            {
+              "name": "svg.admission-completed",
+              "timestamp": 4115.100000023842,
+              "phase": "current-session",
+              "resultCount": 1,
+              "mutationKind": "EMPTY"
+            },
+            {
+              "name": "artifact.candidate-completed",
+              "timestamp": 4115.100000023842,
+              "phase": "current-session",
+              "resultCount": 1,
+              "catalogFootprint": {
+                "resultCount": 1,
+                "itemCount": 1,
+                "recordCount": 4,
+                "renderedFeatureCount": 9375,
+                "biologicalFeatureCount": 18782,
+                "orthogroupRecordCount": 3369,
+                "comparisonMatchCount": 116,
+                "annotationCount": 0,
+                "sequenceSourceCount": 4,
+                "sequenceCharacters": 10312407
+              }
+            },
+            {
+              "name": "svg-admission-end",
+              "timestamp": 4115.100000023842
+            },
+            {
+              "name": "preview-mount-start",
+              "timestamp": 4375.300000011921
+            },
+            {
+              "name": "preview.readiness-expectation-registered",
+              "timestamp": 4375.800000011921,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "bindSequence": 1
+            },
+            {
+              "name": "firstCommittedPreview",
+              "timestamp": 4375.800000011921,
+              "resultCount": 1
+            },
+            {
+              "name": "preview-mount-end",
+              "timestamp": 13472.200000017881
+            },
+            {
+              "name": "preview.mount-observed",
+              "timestamp": 13472.40000000596,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.bind-started",
+              "timestamp": 13472.600000023842,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.bind-completed",
+              "timestamp": 13681.300000011921,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.ready-receipt-emitted",
+              "timestamp": 13681.300000011921,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.ready-receipt-accepted",
+              "timestamp": 13681.40000000596,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "interactiveReady",
+              "timestamp": 13682.40000000596,
+              "status": "success",
+              "degradedRecovery": false
+            },
+            {
+              "name": "history-baseline-start",
+              "timestamp": 13766.200000017881
+            },
+            {
+              "name": "history-baseline-end",
+              "timestamp": 13768.300000011921
+            }
+          ],
+          "metrics": {
+            "featureCatalogAdmissionCount": 1,
+            "featureCatalogSecondaryTraversalCount": 0,
+            "currentSessionPreflightProteinManifestValidationCount": 1,
+            "currentSessionPreflightProteinRawTextValidationCount": 12,
+            "currentWriterActiveConfigRestoreCount": 1,
+            "activeConfigCanonicalOverwriteCount": 0,
+            "currentLegacyNormalizationCount": 0,
+            "legacyOverrideMigrationCount": 0,
+            "manualRuleFeatureMatchCount": 0,
+            "svgSanitizationCount": 1,
+            "generatedArtifactReadinessExpectationCount": 1,
+            "previewMaterializationObservedCount": 1,
+            "previewMountAdoptionCount": 1,
+            "previewBinderInvocationCount": 1,
+            "previewPollingIterationCount": 0,
+            "legendDomFullScanCount": 1,
+            "perFeatureListenerRegistrationCount": 0,
+            "comparisonDomFullScanCount": 1,
+            "previewReadyReceiptEmittedCount": 1,
+            "previewReadyReceiptAcceptedCount": 1
+          },
+          "workers": [],
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 3,
+            "p95Ms": 13005.800000011921,
+            "maxMs": 13005.800000011921
+          },
+          "longTasks": {
+            "count": 1,
+            "totalMs": 12722,
+            "maxMs": 12722,
+            "entries": [
+              {
+                "start": 1180.5,
+                "duration": 12722
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 603712350,
+          "receiverTaskMaxMs": 0,
+          "stagesMs": {
+            "gzip-to-text": 214.90000000596046,
+            "json-parse": 133.5,
+            "session-authority-validation": 57.80000001192093,
+            "feature-catalog-validation": 1671.4000000059605,
+            "editor-state-normalization": 0.09999999403953552,
+            "resource-table-adoption": 0.09999999403953552,
+            "losat-artifact-validation": 172.5,
+            "canonical-request-projection": 2.5,
+            "current-draft-validation": 0.6000000238418579,
+            "artifact-projection": 0.09999999403953552,
+            "current-session-preflight": 1906.0,
+            "svg-admission": 269.40000000596046,
+            "preview-mount": 9096.90000000596,
+            "history-baseline": 2.0999999940395355,
+            "restoreBeforeSvgAdmission": 569.5
+          },
+          "codec": {
+            "decodeCpuMs": 53.599999874830246,
+            "encodeCpuMs": 0,
+            "encodedBytes": 0,
+            "decodedBytes": 95989532,
+            "streams": [
+              {
+                "kind": "file-read",
+                "start": 967.2000000178814,
+                "bytes": 23739973,
+                "chunks": 15,
+                "end": 1180.6000000238419,
+                "wallMs": 213.40000000596046
+              },
+              {
+                "kind": "decompress",
+                "start": 967.3000000119209,
+                "bytes": 95989532,
+                "chunks": 1470,
+                "end": 1180.6000000238419,
+                "wallMs": 213.30000001192093
+              }
+            ]
+          },
+          "memory": {
+            "sampleCount": 10,
+            "rssPeakBytes": 1510117376,
+            "rssErrors": [],
+            "rssStartBytes": 632152064,
+            "v8UsedHeapPeaksBytes": {
+              "page": 581176276
+            },
+            "errors": [
+              "WebSocketTimeoutException: Connection timed out"
+            ],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 581176276,
+                "totalSize": 637837312,
+                "embedderHeapUsedSize": 102515504,
+                "backingStorageSize": 181725031
+              }
+            }
+          },
+          "ready": {
+            "resultCount": 1,
+            "records": 4,
+            "catalog": 1,
+            "requestRecords": 4,
+            "cacheEntries": 12,
+            "mounted": true
+          },
+          "heartbeatTargetMet": false
+        },
+        "save": {
+          "wallMs": 4329.699999988079,
+          "heapBefore": 391826969,
+          "heapAfter": 569233222,
+          "events": [
+            {
+              "name": "session-save-pending-published",
+              "timestamp": 14264.300000011921
+            },
+            {
+              "name": "session-save-paint-opportunity-completed",
+              "timestamp": 14397
+            },
+            {
+              "name": "session-save-catalog-preparation-start",
+              "timestamp": 14397
+            },
+            {
+              "name": "session-save-catalog-preparation-end",
+              "timestamp": 14397,
+              "reusedCommittedSession": true
+            },
+            {
+              "name": "session-save-projection-start",
+              "timestamp": 14397.300000011921
+            },
+            {
+              "name": "session-save-projection-end",
+              "timestamp": 14459.90000000596
+            },
+            {
+              "name": "session-save-compression-start",
+              "timestamp": 14459.90000000596
+            },
+            {
+              "name": "session-save-compression-end",
+              "timestamp": 17853.600000023842,
+              "compressedSize": 23738936
+            },
+            {
+              "name": "session-save-download-handoff-completed",
+              "timestamp": 17854.30000001192,
+              "compressedSize": 23738936
+            },
+            {
+              "name": "session-save-pending-cleared",
+              "timestamp": 17867.70000001788
+            }
+          ],
+          "metrics": {
+            "sessionSaveProteinRawTextValidationReuseCount": 12
+          },
+          "workers": [],
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 38,
+            "p95Ms": 186.09999999403954,
+            "maxMs": 188.19999998807907
+          },
+          "longTasks": {
+            "count": 4,
+            "totalMs": 444,
+            "maxMs": 174,
+            "entries": [
+              {
+                "start": 14264,
+                "duration": 131
+              },
+              {
+                "start": 14397,
+                "duration": 65
+              },
+              {
+                "start": 17575.90000000596,
+                "duration": 74
+              },
+              {
+                "start": 17853.5,
+                "duration": 174
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 569233222,
+          "receiverTaskMaxMs": 0,
+          "stagesMs": {
+            "session-save-catalog-preparation": 0,
+            "session-save-projection": 62.599999994039536,
+            "session-save-compression": 3393.7000000178814
+          },
+          "codec": {
+            "decodeCpuMs": 0,
+            "encodeCpuMs": 154.50000035762787,
+            "encodedBytes": 96041953,
+            "decodedBytes": 0,
+            "streams": []
+          },
+          "memory": {
+            "sampleCount": 34,
+            "rssPeakBytes": 1411346432,
+            "rssErrors": [],
+            "rssStartBytes": 1239416832,
+            "v8UsedHeapPeaksBytes": {
+              "page": 439497120
+            },
+            "errors": [],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 439497120,
+                "totalSize": 509763584,
+                "embedderHeapUsedSize": 88802184,
+                "backingStorageSize": 129734934
+              }
+            }
+          },
+          "outcome": {
+            "status": "saved",
+            "compressedBytes": 23738936
+          },
+          "heartbeatTargetMet": true
+        },
+        "source": {
+          "sha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa",
+          "bytes": 23739973,
+          "version": 44,
+          "requestSchema": 8,
+          "records": 4,
+          "features": 18782,
+          "cacheEntries": 12,
+          "hashes": {
+            "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+            "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+            "createdAt": "6858d08977dc6786f29612b38948216f5b53bcffed49376230ab9f88aee928a1",
+            "title": "63b97e56589c5dddca834bbb236f8c1c3d6248f7aa103168dd058354ea026694",
+            "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+            "results": "2fb2b6de292f58fec96ed320e358a45df78ed05f5df7fe448fd93370d0251d27",
+            "editorState": "8e51664e18040185ea1f7123a11fbae33866eba4d7ac259bf6b66b32681035a9",
+            "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "cliInvocation": "cd961c45b149a9a4ff76f25deb96c9369e88bc0322d668535c9c6df69500f54b",
+            "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+            "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+            "webFiles": "d6c2bcf75638ba0d97f39e4e41a0b9308fe72fb28e92376aa7233744bfcc4653",
+            "losatCache": "df2eb320d47d86749998dfebabf92f2eea8b74a096b76b22f69c863c7e07c4d5",
+            "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+            "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0",
+            "config": "3a6163809d2c4aa8e82d3c7960b9e676f96f34b7e38c92c75870e3cbec74565e",
+            "runMetadata": "adc6b075522aae7d63150a56fe94d9b0f766ad68ee987b45a2afaaba6acefaba"
+          },
+          "wholeHash": "50bd821d25dc81912d9d5beaa52ecf541a511d53a740b91739d6043147f5650b"
+        },
+        "saved": {
+          "sha256": "549e865e02bbc1859941adc6d8ba926ec83acc0daee4a6e5fefbdc8e306baaf2",
+          "bytes": 23738936,
+          "version": 44,
+          "requestSchema": 8,
+          "records": 4,
+          "features": 18782,
+          "cacheEntries": 12,
+          "hashes": {
+            "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+            "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+            "createdAt": "d95fa9d773a83342a71fa5f7a6b98335c31eb1464ddce777aa69b8ce5e194bb0",
+            "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+            "config": "87e14e6c88d78064af0bcb6cbf5bd81d89c15f47e039307019803502cb727892",
+            "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+            "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+            "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+            "webFiles": "8b7b6af2ed79d317af9b6a1fbcd6fca8aac7d8cbcaf34b21d057258f2d7c619d",
+            "results": "2931f0e13a7b44c7076ad10fcff01b3499718ac2673a70b344a0ae7e237aaea3",
+            "runMetadata": "adc6b075522aae7d63150a56fe94d9b0f766ad68ee987b45a2afaaba6acefaba",
+            "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+            "editorState": "24446b486f96c1fbf11e25f27193b664181a6cd1bf854d4da90f883e100741df",
+            "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+            "losatCache": "8c4baf3ebd1658085174b3726535add360a871d806094c26cb63e8e9373b4f62",
+            "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+            "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0"
+          },
+          "wholeHash": "49ad871f35149ee9ed0d7ac0f16513630b7ea206ea3123bbfe63f37e77c34ac5"
+        },
+        "sectionEquality": {
+          "renderRequest": true,
+          "resources": true,
+          "webFiles": false,
+          "editorState": false,
+          "losatCache": false,
+          "losatDerivedCache": true,
+          "proteinIdentityManifest": true
+        },
+        "pageErrors": [],
+        "dialogs": [
+          {
+            "type": "alert",
+            "message": "Session loaded successfully!"
+          }
+        ],
+        "externalRequests": []
+      },
+      {
+        "load": {
+          "wallMs": 12878.700000017881,
+          "heapBefore": 21737789,
+          "heapAfter": 391580778,
+          "events": [
+            {
+              "name": "session-import-pending-published",
+              "timestamp": 823.5
+            },
+            {
+              "name": "session-import-paint-opportunity-completed",
+              "timestamp": 831
+            },
+            {
+              "name": "sessionSelection",
+              "timestamp": 831.4000000059605
+            },
+            {
+              "name": "gzip-to-text-start",
+              "timestamp": 831.4000000059605
+            },
+            {
+              "name": "gzip-to-text-end",
+              "timestamp": 1024.9000000059605,
+              "characters": 95989532
+            },
+            {
+              "name": "json-parse-start",
+              "timestamp": 1025
+            },
+            {
+              "name": "json-parse-end",
+              "timestamp": 1127.2000000178814
+            },
+            {
+              "name": "current-session-preflight-start",
+              "timestamp": 1171.7000000178814
+            },
+            {
+              "name": "session-authority-validation-start",
+              "timestamp": 1171.9000000059605
+            },
+            {
+              "name": "session-authority-validation-end",
+              "timestamp": 1220.2000000178814
+            },
+            {
+              "name": "feature-catalog-validation-start",
+              "timestamp": 1220.2000000178814
+            },
+            {
+              "name": "catalog.admission-started",
+              "timestamp": 1220.5,
+              "resultCount": 1
+            },
+            {
+              "name": "catalog.admission-completed",
+              "timestamp": 2845.4000000059605,
+              "resultCount": 1,
+              "itemCount": 1,
+              "recordCount": 4,
+              "renderedFeatureCount": 9375,
+              "biologicalFeatureCount": 18782
+            },
+            {
+              "name": "feature-catalog-validation-end",
+              "timestamp": 2845.4000000059605
+            },
+            {
+              "name": "editor-state-normalization-start",
+              "timestamp": 2845.4000000059605
+            },
+            {
+              "name": "editor-state-normalization-end",
+              "timestamp": 2845.5
+            },
+            {
+              "name": "resource-table-adoption-start",
+              "timestamp": 2845.5
+            },
+            {
+              "name": "resource-table-adoption-end",
+              "timestamp": 2845.600000023842
+            },
+            {
+              "name": "losat-artifact-validation-start",
+              "timestamp": 2845.600000023842
+            },
+            {
+              "name": "losat-artifact-validation-end",
+              "timestamp": 3030.300000011921
+            },
+            {
+              "name": "canonical-request-projection-start",
+              "timestamp": 3030.7000000178814
+            },
+            {
+              "name": "canonical-request-projection-end",
+              "timestamp": 3033.7000000178814
+            },
+            {
+              "name": "current-draft-validation-start",
+              "timestamp": 3033.7000000178814
+            },
+            {
+              "name": "current-draft-validation-end",
+              "timestamp": 3034.5
+            },
+            {
+              "name": "artifact-projection-start",
+              "timestamp": 3034.5
+            },
+            {
+              "name": "artifact-projection-end",
+              "timestamp": 3034.600000023842
+            },
+            {
+              "name": "current-session-preflight-end",
+              "timestamp": 3034.600000023842
+            },
+            {
+              "name": "svg-admission-start",
+              "timestamp": 3611.300000011921
+            },
+            {
+              "name": "svg.admission-started",
+              "timestamp": 3611.5,
+              "phase": "current-session",
+              "resultCount": 1,
+              "mutationKind": "EMPTY"
+            },
+            {
+              "name": "result-svg-characters",
+              "timestamp": 3611.7000000178814,
+              "phase": "current-session",
+              "resultIndex": 0,
+              "value": 5128555
+            },
+            {
+              "name": "sanitize-call",
+              "timestamp": 3611.7000000178814,
+              "durationMs": 276
+            },
+            {
+              "name": "svg.admission-completed",
+              "timestamp": 3887.9000000059605,
+              "phase": "current-session",
+              "resultCount": 1,
+              "mutationKind": "EMPTY"
+            },
+            {
+              "name": "artifact.candidate-completed",
+              "timestamp": 3887.9000000059605,
+              "phase": "current-session",
+              "resultCount": 1,
+              "catalogFootprint": {
+                "resultCount": 1,
+                "itemCount": 1,
+                "recordCount": 4,
+                "renderedFeatureCount": 9375,
+                "biologicalFeatureCount": 18782,
+                "orthogroupRecordCount": 3369,
+                "comparisonMatchCount": 116,
+                "annotationCount": 0,
+                "sequenceSourceCount": 4,
+                "sequenceCharacters": 10312407
+              }
+            },
+            {
+              "name": "svg-admission-end",
+              "timestamp": 3887.9000000059605
+            },
+            {
+              "name": "preview-mount-start",
+              "timestamp": 4158.200000017881
+            },
+            {
+              "name": "preview.readiness-expectation-registered",
+              "timestamp": 4158.600000023842,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "bindSequence": 1
+            },
+            {
+              "name": "firstCommittedPreview",
+              "timestamp": 4158.600000023842,
+              "resultCount": 1
+            },
+            {
+              "name": "preview-mount-end",
+              "timestamp": 13034
+            },
+            {
+              "name": "preview.mount-observed",
+              "timestamp": 13034.300000011921,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.bind-started",
+              "timestamp": 13034.600000023842,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.bind-completed",
+              "timestamp": 13245.300000011921,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.ready-receipt-emitted",
+              "timestamp": 13245.300000011921,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.ready-receipt-accepted",
+              "timestamp": 13245.40000000596,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "interactiveReady",
+              "timestamp": 13246.90000000596,
+              "status": "success",
+              "degradedRecovery": false
+            },
+            {
+              "name": "history-baseline-start",
+              "timestamp": 13327.90000000596
+            },
+            {
+              "name": "history-baseline-end",
+              "timestamp": 13329.90000000596
+            }
+          ],
+          "metrics": {
+            "featureCatalogAdmissionCount": 1,
+            "featureCatalogSecondaryTraversalCount": 0,
+            "currentSessionPreflightProteinManifestValidationCount": 1,
+            "currentSessionPreflightProteinRawTextValidationCount": 12,
+            "currentWriterActiveConfigRestoreCount": 1,
+            "activeConfigCanonicalOverwriteCount": 0,
+            "currentLegacyNormalizationCount": 0,
+            "legacyOverrideMigrationCount": 0,
+            "manualRuleFeatureMatchCount": 0,
+            "svgSanitizationCount": 1,
+            "generatedArtifactReadinessExpectationCount": 1,
+            "previewMaterializationObservedCount": 1,
+            "previewMountAdoptionCount": 1,
+            "previewBinderInvocationCount": 1,
+            "previewPollingIterationCount": 0,
+            "legendDomFullScanCount": 1,
+            "perFeatureListenerRegistrationCount": 0,
+            "comparisonDomFullScanCount": 1,
+            "previewReadyReceiptEmittedCount": 1,
+            "previewReadyReceiptAcceptedCount": 1
+          },
+          "workers": [],
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 4,
+            "p95Ms": 12685.600000023842,
+            "maxMs": 12685.600000023842
+          },
+          "longTasks": {
+            "count": 1,
+            "totalMs": 12451,
+            "maxMs": 12451,
+            "entries": [
+              {
+                "start": 1024.7000000178814,
+                "duration": 12451
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 609468563,
+          "receiverTaskMaxMs": 0,
+          "stagesMs": {
+            "gzip-to-text": 193.5,
+            "json-parse": 102.2000000178814,
+            "session-authority-validation": 48.30000001192093,
+            "feature-catalog-validation": 1625.199999988079,
+            "editor-state-normalization": 0.09999999403953552,
+            "resource-table-adoption": 0.10000002384185791,
+            "losat-artifact-validation": 184.69999998807907,
+            "canonical-request-projection": 3.0,
+            "current-draft-validation": 0.7999999821186066,
+            "artifact-projection": 0.10000002384185791,
+            "current-session-preflight": 1862.9000000059605,
+            "svg-admission": 276.59999999403954,
+            "preview-mount": 8875.799999982119,
+            "history-baseline": 2.0,
+            "restoreBeforeSvgAdmission": 576.6999999880791
+          },
+          "codec": {
+            "decodeCpuMs": 43.5,
+            "encodeCpuMs": 0,
+            "encodedBytes": 0,
+            "decodedBytes": 95989532,
+            "streams": [
+              {
+                "kind": "file-read",
+                "start": 832.6000000238419,
+                "bytes": 23739973,
+                "chunks": 15,
+                "end": 1024.800000011921,
+                "wallMs": 192.19999998807907
+              },
+              {
+                "kind": "decompress",
+                "start": 832.8000000119209,
+                "bytes": 95989532,
+                "chunks": 1470,
+                "end": 1024.9000000059605,
+                "wallMs": 192.09999999403954
+              }
+            ]
+          },
+          "memory": {
+            "sampleCount": 9,
+            "rssPeakBytes": 1530568704,
+            "rssErrors": [],
+            "rssStartBytes": 650821632,
+            "v8UsedHeapPeaksBytes": {
+              "page": 586931484
+            },
+            "errors": [
+              "WebSocketTimeoutException: Connection timed out"
+            ],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 586931484,
+                "totalSize": 637931520,
+                "embedderHeapUsedSize": 102561880,
+                "backingStorageSize": 179955579
+              }
+            }
+          },
+          "ready": {
+            "resultCount": 1,
+            "records": 4,
+            "catalog": 1,
+            "requestRecords": 4,
+            "cacheEntries": 12,
+            "mounted": true
+          },
+          "heartbeatTargetMet": false
+        },
+        "save": {
+          "wallMs": 4406.800000011921,
+          "heapBefore": 391816029,
+          "heapAfter": 576300578,
+          "events": [
+            {
+              "name": "session-save-pending-published",
+              "timestamp": 13853.40000000596
+            },
+            {
+              "name": "session-save-paint-opportunity-completed",
+              "timestamp": 13995.90000000596
+            },
+            {
+              "name": "session-save-catalog-preparation-start",
+              "timestamp": 13995.90000000596
+            },
+            {
+              "name": "session-save-catalog-preparation-end",
+              "timestamp": 13995.90000000596,
+              "reusedCommittedSession": true
+            },
+            {
+              "name": "session-save-projection-start",
+              "timestamp": 13996.300000011921
+            },
+            {
+              "name": "session-save-projection-end",
+              "timestamp": 14067.800000011921
+            },
+            {
+              "name": "session-save-compression-start",
+              "timestamp": 14067.800000011921
+            },
+            {
+              "name": "session-save-compression-end",
+              "timestamp": 17492.5,
+              "compressedSize": 23738936
+            },
+            {
+              "name": "session-save-download-handoff-completed",
+              "timestamp": 17493.40000000596,
+              "compressedSize": 23738936
+            },
+            {
+              "name": "session-save-pending-cleared",
+              "timestamp": 17510.20000001788
+            }
+          ],
+          "metrics": {
+            "sessionSaveProteinRawTextValidationReuseCount": 12
+          },
+          "workers": [],
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 37,
+            "p95Ms": 203.2999999821186,
+            "maxMs": 260.40000000596046
+          },
+          "longTasks": {
+            "count": 3,
+            "totalMs": 422,
+            "maxMs": 208,
+            "entries": [
+              {
+                "start": 13853,
+                "duration": 140
+              },
+              {
+                "start": 13995.90000000596,
+                "duration": 74
+              },
+              {
+                "start": 17492.40000000596,
+                "duration": 208
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 576300578,
+          "receiverTaskMaxMs": 0,
+          "stagesMs": {
+            "session-save-catalog-preparation": 0.0,
+            "session-save-projection": 71.5,
+            "session-save-compression": 3424.699999988079
+          },
+          "codec": {
+            "decodeCpuMs": 0,
+            "encodeCpuMs": 143.30000042915344,
+            "encodedBytes": 96041953,
+            "decodedBytes": 0,
+            "streams": []
+          },
+          "memory": {
+            "sampleCount": 34,
+            "rssPeakBytes": 1426714624,
+            "rssErrors": [],
+            "rssStartBytes": 1252966400,
+            "v8UsedHeapPeaksBytes": {
+              "page": 446564456
+            },
+            "errors": [],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 446564456,
+                "totalSize": 517378048,
+                "embedderHeapUsedSize": 91837984,
+                "backingStorageSize": 129734954
+              }
+            }
+          },
+          "outcome": {
+            "status": "saved",
+            "compressedBytes": 23738936
+          },
+          "heartbeatTargetMet": true
+        },
+        "source": {
+          "sha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa",
+          "bytes": 23739973,
+          "version": 44,
+          "requestSchema": 8,
+          "records": 4,
+          "features": 18782,
+          "cacheEntries": 12,
+          "hashes": {
+            "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+            "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+            "createdAt": "6858d08977dc6786f29612b38948216f5b53bcffed49376230ab9f88aee928a1",
+            "title": "63b97e56589c5dddca834bbb236f8c1c3d6248f7aa103168dd058354ea026694",
+            "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+            "results": "2fb2b6de292f58fec96ed320e358a45df78ed05f5df7fe448fd93370d0251d27",
+            "editorState": "8e51664e18040185ea1f7123a11fbae33866eba4d7ac259bf6b66b32681035a9",
+            "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "cliInvocation": "cd961c45b149a9a4ff76f25deb96c9369e88bc0322d668535c9c6df69500f54b",
+            "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+            "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+            "webFiles": "d6c2bcf75638ba0d97f39e4e41a0b9308fe72fb28e92376aa7233744bfcc4653",
+            "losatCache": "df2eb320d47d86749998dfebabf92f2eea8b74a096b76b22f69c863c7e07c4d5",
+            "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+            "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0",
+            "config": "3a6163809d2c4aa8e82d3c7960b9e676f96f34b7e38c92c75870e3cbec74565e",
+            "runMetadata": "adc6b075522aae7d63150a56fe94d9b0f766ad68ee987b45a2afaaba6acefaba"
+          },
+          "wholeHash": "50bd821d25dc81912d9d5beaa52ecf541a511d53a740b91739d6043147f5650b"
+        },
+        "saved": {
+          "sha256": "6efc5ebc10513b2893a74dae528891bcbe2984631b15f437f39cf6b83d0aab57",
+          "bytes": 23738936,
+          "version": 44,
+          "requestSchema": 8,
+          "records": 4,
+          "features": 18782,
+          "cacheEntries": 12,
+          "hashes": {
+            "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+            "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+            "createdAt": "6e8b7182b72a098879e83d371d4185091bf9e62ebb48b628516a47a9bb3b07b9",
+            "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+            "config": "87e14e6c88d78064af0bcb6cbf5bd81d89c15f47e039307019803502cb727892",
+            "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+            "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+            "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+            "webFiles": "8b7b6af2ed79d317af9b6a1fbcd6fca8aac7d8cbcaf34b21d057258f2d7c619d",
+            "results": "2931f0e13a7b44c7076ad10fcff01b3499718ac2673a70b344a0ae7e237aaea3",
+            "runMetadata": "adc6b075522aae7d63150a56fe94d9b0f766ad68ee987b45a2afaaba6acefaba",
+            "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+            "editorState": "24446b486f96c1fbf11e25f27193b664181a6cd1bf854d4da90f883e100741df",
+            "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+            "losatCache": "8c4baf3ebd1658085174b3726535add360a871d806094c26cb63e8e9373b4f62",
+            "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+            "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0"
+          },
+          "wholeHash": "11b85252296987ac1c10f9a7ad5677169800e99d843a8d44ddbbd1cd6035281c"
+        },
+        "sectionEquality": {
+          "renderRequest": true,
+          "resources": true,
+          "webFiles": false,
+          "editorState": false,
+          "losatCache": false,
+          "losatDerivedCache": true,
+          "proteinIdentityManifest": true
+        },
+        "pageErrors": [],
+        "dialogs": [
+          {
+            "type": "alert",
+            "message": "Session loaded successfully!"
+          }
+        ],
+        "externalRequests": []
+      },
+      {
+        "load": {
+          "wallMs": 16530.59999999404,
+          "heapBefore": 21740137,
+          "heapAfter": 391640178,
+          "events": [
+            {
+              "name": "session-import-pending-published",
+              "timestamp": 794.4000000059605
+            },
+            {
+              "name": "session-import-paint-opportunity-completed",
+              "timestamp": 825
+            },
+            {
+              "name": "sessionSelection",
+              "timestamp": 825.5
+            },
+            {
+              "name": "gzip-to-text-start",
+              "timestamp": 825.5
+            },
+            {
+              "name": "gzip-to-text-end",
+              "timestamp": 1048.5,
+              "characters": 95989532
+            },
+            {
+              "name": "json-parse-start",
+              "timestamp": 1048.5
+            },
+            {
+              "name": "json-parse-end",
+              "timestamp": 1159
+            },
+            {
+              "name": "current-session-preflight-start",
+              "timestamp": 1206.9000000059605
+            },
+            {
+              "name": "session-authority-validation-start",
+              "timestamp": 1207.199999988079
+            },
+            {
+              "name": "session-authority-validation-end",
+              "timestamp": 1268.0999999940395
+            },
+            {
+              "name": "feature-catalog-validation-start",
+              "timestamp": 1268.0999999940395
+            },
+            {
+              "name": "catalog.admission-started",
+              "timestamp": 1268.4000000059605,
+              "resultCount": 1
+            },
+            {
+              "name": "catalog.admission-completed",
+              "timestamp": 2793,
+              "resultCount": 1,
+              "itemCount": 1,
+              "recordCount": 4,
+              "renderedFeatureCount": 9375,
+              "biologicalFeatureCount": 18782
+            },
+            {
+              "name": "feature-catalog-validation-end",
+              "timestamp": 2793
+            },
+            {
+              "name": "editor-state-normalization-start",
+              "timestamp": 2793
+            },
+            {
+              "name": "editor-state-normalization-end",
+              "timestamp": 2793.0999999940395
+            },
+            {
+              "name": "resource-table-adoption-start",
+              "timestamp": 2793.0999999940395
+            },
+            {
+              "name": "resource-table-adoption-end",
+              "timestamp": 2793.300000011921
+            },
+            {
+              "name": "losat-artifact-validation-start",
+              "timestamp": 2793.300000011921
+            },
+            {
+              "name": "losat-artifact-validation-end",
+              "timestamp": 2960.9000000059605
+            },
+            {
+              "name": "canonical-request-projection-start",
+              "timestamp": 2961.4000000059605
+            },
+            {
+              "name": "canonical-request-projection-end",
+              "timestamp": 2964
+            },
+            {
+              "name": "current-draft-validation-start",
+              "timestamp": 2964.0999999940395
+            },
+            {
+              "name": "current-draft-validation-end",
+              "timestamp": 2964.699999988079
+            },
+            {
+              "name": "artifact-projection-start",
+              "timestamp": 2964.699999988079
+            },
+            {
+              "name": "artifact-projection-end",
+              "timestamp": 2964.800000011921
+            },
+            {
+              "name": "current-session-preflight-end",
+              "timestamp": 2964.800000011921
+            },
+            {
+              "name": "svg-admission-start",
+              "timestamp": 3541.5
+            },
+            {
+              "name": "svg.admission-started",
+              "timestamp": 3541.800000011921,
+              "phase": "current-session",
+              "resultCount": 1,
+              "mutationKind": "EMPTY"
+            },
+            {
+              "name": "result-svg-characters",
+              "timestamp": 3541.800000011921,
+              "phase": "current-session",
+              "resultIndex": 0,
+              "value": 5128555
+            },
+            {
+              "name": "sanitize-call",
+              "timestamp": 3541.800000011921,
+              "durationMs": 271.2999999821186
+            },
+            {
+              "name": "svg.admission-completed",
+              "timestamp": 3813.4000000059605,
+              "phase": "current-session",
+              "resultCount": 1,
+              "mutationKind": "EMPTY"
+            },
+            {
+              "name": "artifact.candidate-completed",
+              "timestamp": 3813.4000000059605,
+              "phase": "current-session",
+              "resultCount": 1,
+              "catalogFootprint": {
+                "resultCount": 1,
+                "itemCount": 1,
+                "recordCount": 4,
+                "renderedFeatureCount": 9375,
+                "biologicalFeatureCount": 18782,
+                "orthogroupRecordCount": 3369,
+                "comparisonMatchCount": 116,
+                "annotationCount": 0,
+                "sequenceSourceCount": 4,
+                "sequenceCharacters": 10312407
+              }
+            },
+            {
+              "name": "svg-admission-end",
+              "timestamp": 3813.4000000059605
+            },
+            {
+              "name": "preview-mount-start",
+              "timestamp": 4086.699999988079
+            },
+            {
+              "name": "preview.readiness-expectation-registered",
+              "timestamp": 4087.0999999940395,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "bindSequence": 1
+            },
+            {
+              "name": "firstCommittedPreview",
+              "timestamp": 4087.0999999940395,
+              "resultCount": 1
+            },
+            {
+              "name": "preview-mount-end",
+              "timestamp": 16026
+            },
+            {
+              "name": "preview.mount-observed",
+              "timestamp": 16026.5,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.bind-started",
+              "timestamp": 16027.199999988079,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.bind-completed",
+              "timestamp": 16666.09999999404,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.ready-receipt-emitted",
+              "timestamp": 16666.19999998808,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.ready-receipt-accepted",
+              "timestamp": 16666.5,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "interactiveReady",
+              "timestamp": 16668.80000001192,
+              "status": "success",
+              "degradedRecovery": false
+            },
+            {
+              "name": "history-baseline-start",
+              "timestamp": 16826.09999999404
+            },
+            {
+              "name": "history-baseline-end",
+              "timestamp": 16828.5
+            }
+          ],
+          "metrics": {
+            "featureCatalogAdmissionCount": 1,
+            "featureCatalogSecondaryTraversalCount": 0,
+            "currentSessionPreflightProteinManifestValidationCount": 1,
+            "currentSessionPreflightProteinRawTextValidationCount": 12,
+            "currentWriterActiveConfigRestoreCount": 1,
+            "activeConfigCanonicalOverwriteCount": 0,
+            "currentLegacyNormalizationCount": 0,
+            "legacyOverrideMigrationCount": 0,
+            "manualRuleFeatureMatchCount": 0,
+            "svgSanitizationCount": 1,
+            "generatedArtifactReadinessExpectationCount": 1,
+            "previewMaterializationObservedCount": 1,
+            "previewMountAdoptionCount": 1,
+            "previewBinderInvocationCount": 1,
+            "previewPollingIterationCount": 0,
+            "legendDomFullScanCount": 1,
+            "perFeatureListenerRegistrationCount": 0,
+            "comparisonDomFullScanCount": 1,
+            "previewReadyReceiptEmittedCount": 1,
+            "previewReadyReceiptAcceptedCount": 1
+          },
+          "workers": [],
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 5,
+            "p95Ms": 16067.800000011921,
+            "maxMs": 16067.800000011921
+          },
+          "longTasks": {
+            "count": 1,
+            "totalMs": 16040,
+            "maxMs": 16040,
+            "entries": [
+              {
+                "start": 1048.199999988079,
+                "duration": 16040
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 582786336,
+          "receiverTaskMaxMs": 0,
+          "stagesMs": {
+            "gzip-to-text": 223.0,
+            "json-parse": 110.5,
+            "session-authority-validation": 60.900000005960464,
+            "feature-catalog-validation": 1524.9000000059605,
+            "editor-state-normalization": 0.09999999403953552,
+            "resource-table-adoption": 0.20000001788139343,
+            "losat-artifact-validation": 167.59999999403954,
+            "canonical-request-projection": 2.5999999940395355,
+            "current-draft-validation": 0.5999999940395355,
+            "artifact-projection": 0.10000002384185791,
+            "current-session-preflight": 1757.9000000059605,
+            "svg-admission": 271.90000000596046,
+            "preview-mount": 11939.300000011921,
+            "history-baseline": 2.4000000059604645,
+            "restoreBeforeSvgAdmission": 576.6999999880791
+          },
+          "codec": {
+            "decodeCpuMs": 49.29999989271164,
+            "encodeCpuMs": 0,
+            "encodedBytes": 0,
+            "decodedBytes": 95989532,
+            "streams": [
+              {
+                "kind": "file-read",
+                "start": 826.9000000059605,
+                "bytes": 23739973,
+                "chunks": 14,
+                "end": 1048.300000011921,
+                "wallMs": 221.40000000596046
+              },
+              {
+                "kind": "decompress",
+                "start": 827,
+                "bytes": 95989532,
+                "chunks": 1470,
+                "end": 1048.4000000059605,
+                "wallMs": 221.40000000596046
+              }
+            ]
+          },
+          "memory": {
+            "sampleCount": 12,
+            "rssPeakBytes": 1532780544,
+            "rssErrors": [],
+            "rssStartBytes": 652464128,
+            "v8UsedHeapPeaksBytes": {
+              "page": 560183864
+            },
+            "errors": [
+              "WebSocketTimeoutException: Connection timed out"
+            ],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 560183864,
+                "totalSize": 638193664,
+                "embedderHeapUsedSize": 102565616,
+                "backingStorageSize": 179824507
+              }
+            }
+          },
+          "ready": {
+            "resultCount": 1,
+            "records": 4,
+            "catalog": 1,
+            "requestRecords": 4,
+            "cacheEntries": 12,
+            "mounted": true
+          },
+          "heartbeatTargetMet": false
+        },
+        "save": {
+          "wallMs": 8081.5,
+          "heapBefore": 391878409,
+          "heapAfter": 576351290,
+          "events": [
+            {
+              "name": "session-save-pending-published",
+              "timestamp": 17837.09999999404
+            },
+            {
+              "name": "session-save-paint-opportunity-completed",
+              "timestamp": 18127.5
+            },
+            {
+              "name": "session-save-catalog-preparation-start",
+              "timestamp": 18127.5
+            },
+            {
+              "name": "session-save-catalog-preparation-end",
+              "timestamp": 18127.59999999404,
+              "reusedCommittedSession": true
+            },
+            {
+              "name": "session-save-projection-start",
+              "timestamp": 18128.09999999404
+            },
+            {
+              "name": "session-save-projection-end",
+              "timestamp": 18245.69999998808
+            },
+            {
+              "name": "session-save-compression-start",
+              "timestamp": 18245.69999998808
+            },
+            {
+              "name": "session-save-compression-end",
+              "timestamp": 24532.90000000596,
+              "compressedSize": 23738936
+            },
+            {
+              "name": "session-save-download-handoff-completed",
+              "timestamp": 24534.30000001192,
+              "compressedSize": 23738936
+            },
+            {
+              "name": "session-save-pending-cleared",
+              "timestamp": 24558.59999999404
+            }
+          ],
+          "metrics": {
+            "sessionSaveProteinRawTextValidationReuseCount": 12
+          },
+          "workers": [],
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 47,
+            "p95Ms": 335.89999997615814,
+            "maxMs": 496.80000001192093
+          },
+          "longTasks": {
+            "count": 14,
+            "totalMs": 1866,
+            "maxMs": 312,
+            "entries": [
+              {
+                "start": 17836.40000000596,
+                "duration": 287
+              },
+              {
+                "start": 18127.40000000596,
+                "duration": 122
+              },
+              {
+                "start": 18318.5,
+                "duration": 57
+              },
+              {
+                "start": 18376.19999998808,
+                "duration": 298
+              },
+              {
+                "start": 18675.40000000596,
+                "duration": 56
+              },
+              {
+                "start": 19456.40000000596,
+                "duration": 158
+              },
+              {
+                "start": 20186.80000001192,
+                "duration": 64
+              },
+              {
+                "start": 20680.40000000596,
+                "duration": 155
+              },
+              {
+                "start": 21203.5,
+                "duration": 60
+              },
+              {
+                "start": 21316.19999998808,
+                "duration": 60
+              },
+              {
+                "start": 21830,
+                "duration": 50
+              },
+              {
+                "start": 23604.69999998808,
+                "duration": 93
+              },
+              {
+                "start": 24429.19999998808,
+                "duration": 94
+              },
+              {
+                "start": 24532.80000001192,
+                "duration": 312
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 576351290,
+          "receiverTaskMaxMs": 0,
+          "stagesMs": {
+            "session-save-catalog-preparation": 0.09999999403953552,
+            "session-save-projection": 117.59999999403954,
+            "session-save-compression": 6287.200000017881
+          },
+          "codec": {
+            "decodeCpuMs": 0,
+            "encodeCpuMs": 338.09999975562096,
+            "encodedBytes": 96041953,
+            "decodedBytes": 0,
+            "streams": []
+          },
+          "memory": {
+            "sampleCount": 47,
+            "rssPeakBytes": 1409695744,
+            "rssErrors": [],
+            "rssStartBytes": 1255100416,
+            "v8UsedHeapPeaksBytes": {
+              "page": 446615088
+            },
+            "errors": [],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 446615088,
+                "totalSize": 516067328,
+                "embedderHeapUsedSize": 89339992,
+                "backingStorageSize": 129734954
+              }
+            }
+          },
+          "outcome": {
+            "status": "saved",
+            "compressedBytes": 23738936
+          },
+          "heartbeatTargetMet": false
+        },
+        "source": {
+          "sha256": "a3cfba6c8d883a0050529c89b1fd0849348254cdfa46dbf938a69cebef5379aa",
+          "bytes": 23739973,
+          "version": 44,
+          "requestSchema": 8,
+          "records": 4,
+          "features": 18782,
+          "cacheEntries": 12,
+          "hashes": {
+            "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+            "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+            "createdAt": "6858d08977dc6786f29612b38948216f5b53bcffed49376230ab9f88aee928a1",
+            "title": "63b97e56589c5dddca834bbb236f8c1c3d6248f7aa103168dd058354ea026694",
+            "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+            "results": "2fb2b6de292f58fec96ed320e358a45df78ed05f5df7fe448fd93370d0251d27",
+            "editorState": "8e51664e18040185ea1f7123a11fbae33866eba4d7ac259bf6b66b32681035a9",
+            "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "cliInvocation": "cd961c45b149a9a4ff76f25deb96c9369e88bc0322d668535c9c6df69500f54b",
+            "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+            "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+            "webFiles": "d6c2bcf75638ba0d97f39e4e41a0b9308fe72fb28e92376aa7233744bfcc4653",
+            "losatCache": "df2eb320d47d86749998dfebabf92f2eea8b74a096b76b22f69c863c7e07c4d5",
+            "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+            "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0",
+            "config": "3a6163809d2c4aa8e82d3c7960b9e676f96f34b7e38c92c75870e3cbec74565e",
+            "runMetadata": "adc6b075522aae7d63150a56fe94d9b0f766ad68ee987b45a2afaaba6acefaba"
+          },
+          "wholeHash": "50bd821d25dc81912d9d5beaa52ecf541a511d53a740b91739d6043147f5650b"
+        },
+        "saved": {
+          "sha256": "96858fa477430d06735e4a42ba277b0d743483f263945debff393ff01022662b",
+          "bytes": 23738936,
+          "version": 44,
+          "requestSchema": 8,
+          "records": 4,
+          "features": 18782,
+          "cacheEntries": 12,
+          "hashes": {
+            "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+            "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+            "createdAt": "0fe8eaa65a4265487343c147f48ac1bd7c39a60eb00a60e70685cb36cafff954",
+            "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+            "config": "87e14e6c88d78064af0bcb6cbf5bd81d89c15f47e039307019803502cb727892",
+            "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+            "renderRequest": "cc326c351cd302304ad8ba922fb18fe933af136d816cc704169f8a7e38317dd5",
+            "resources": "dc83883c064512b2ff3fc48fff51b84b3d82e7e0eb3e5e4ae2999d2ea5c43c5e",
+            "webFiles": "8b7b6af2ed79d317af9b6a1fbcd6fca8aac7d8cbcaf34b21d057258f2d7c619d",
+            "results": "2931f0e13a7b44c7076ad10fcff01b3499718ac2673a70b344a0ae7e237aaea3",
+            "runMetadata": "adc6b075522aae7d63150a56fe94d9b0f766ad68ee987b45a2afaaba6acefaba",
+            "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+            "editorState": "24446b486f96c1fbf11e25f27193b664181a6cd1bf854d4da90f883e100741df",
+            "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+            "losatCache": "8c4baf3ebd1658085174b3726535add360a871d806094c26cb63e8e9373b4f62",
+            "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+            "proteinIdentityManifest": "7971621217011a486d90f526ddf0e75f09ca4e67a4e60107f69c203ea71a18e0"
+          },
+          "wholeHash": "fcb806b1d4186ef2ac0b539ce67cd56974b2dfdd8841f89930f5d87e3e9e51d7"
+        },
+        "sectionEquality": {
+          "renderRequest": true,
+          "resources": true,
+          "webFiles": false,
+          "editorState": false,
+          "losatCache": false,
+          "losatDerivedCache": true,
+          "proteinIdentityManifest": true
+        },
+        "pageErrors": [],
+        "dialogs": [
+          {
+            "type": "alert",
+            "message": "Session loaded successfully!"
+          }
+        ],
+        "externalRequests": []
+      }
+    ],
+    "real": [
+      {
+        "load": {
+          "wallMs": 129825.20000001788,
+          "heapBefore": 21874886,
+          "heapAfter": 1351692671,
+          "events": [
+            {
+              "name": "session-import-pending-published",
+              "timestamp": 1348.4000000059605
+            },
+            {
+              "name": "session-import-paint-opportunity-completed",
+              "timestamp": 1382
+            },
+            {
+              "name": "sessionSelection",
+              "timestamp": 1382.800000011921
+            },
+            {
+              "name": "gzip-to-text-start",
+              "timestamp": 1382.800000011921
+            },
+            {
+              "name": "gzip-to-text-end",
+              "timestamp": 2778.4000000059605,
+              "characters": 466767621
+            },
+            {
+              "name": "json-parse-start",
+              "timestamp": 2778.4000000059605
+            },
+            {
+              "name": "json-parse-end",
+              "timestamp": 3687.5999999940395
+            },
+            {
+              "name": "current-session-preflight-start",
+              "timestamp": 4114.700000017881
+            },
+            {
+              "name": "session-authority-validation-start",
+              "timestamp": 4115.0999999940395
+            },
+            {
+              "name": "session-authority-validation-end",
+              "timestamp": 4454.9000000059605
+            },
+            {
+              "name": "feature-catalog-validation-start",
+              "timestamp": 4454.9000000059605
+            },
+            {
+              "name": "catalog.admission-started",
+              "timestamp": 4455.5999999940395,
+              "resultCount": 1
+            },
+            {
+              "name": "catalog.admission-completed",
+              "timestamp": 11948.200000017881,
+              "resultCount": 1,
+              "itemCount": 1,
+              "recordCount": 12,
+              "renderedFeatureCount": 30993,
+              "biologicalFeatureCount": 62089
+            },
+            {
+              "name": "feature-catalog-validation-end",
+              "timestamp": 11948.200000017881
+            },
+            {
+              "name": "editor-state-normalization-start",
+              "timestamp": 11948.200000017881
+            },
+            {
+              "name": "editor-state-normalization-end",
+              "timestamp": 11948.300000011921
+            },
+            {
+              "name": "resource-table-adoption-start",
+              "timestamp": 11948.300000011921
+            },
+            {
+              "name": "resource-table-adoption-end",
+              "timestamp": 11948.59999999404
+            },
+            {
+              "name": "losat-artifact-validation-start",
+              "timestamp": 11948.59999999404
+            },
+            {
+              "name": "losat-artifact-validation-end",
+              "timestamp": 15126.5
+            },
+            {
+              "name": "canonical-request-projection-start",
+              "timestamp": 15127
+            },
+            {
+              "name": "canonical-request-projection-end",
+              "timestamp": 15132.700000017881
+            },
+            {
+              "name": "artifact-projection-start",
+              "timestamp": 15133
+            },
+            {
+              "name": "artifact-projection-end",
+              "timestamp": 15133.09999999404
+            },
+            {
+              "name": "current-session-preflight-end",
+              "timestamp": 15133.09999999404
+            },
+            {
+              "name": "svg-admission-start",
+              "timestamp": 26029.30000001192
+            },
+            {
+              "name": "svg.admission-started",
+              "timestamp": 26029.59999999404,
+              "phase": "current-session",
+              "resultCount": 1,
+              "mutationKind": "EMPTY"
+            },
+            {
+              "name": "result-svg-characters",
+              "timestamp": 26029.80000001192,
+              "phase": "current-session",
+              "resultIndex": 0,
+              "value": 19621657
+            },
+            {
+              "name": "sanitize-call",
+              "timestamp": 26029.80000001192,
+              "durationMs": 1314.0999999940395
+            },
+            {
+              "name": "svg.admission-completed",
+              "timestamp": 27344.40000000596,
+              "phase": "current-session",
+              "resultCount": 1,
+              "mutationKind": "EMPTY"
+            },
+            {
+              "name": "artifact.candidate-completed",
+              "timestamp": 27344.40000000596,
+              "phase": "current-session",
+              "resultCount": 1,
+              "catalogFootprint": {
+                "resultCount": 1,
+                "itemCount": 1,
+                "recordCount": 12,
+                "renderedFeatureCount": 30993,
+                "biologicalFeatureCount": 62089,
+                "orthogroupRecordCount": 4927,
+                "comparisonMatchCount": 1009,
+                "annotationCount": 0,
+                "sequenceSourceCount": 12,
+                "sequenceCharacters": 34183265
+              }
+            },
+            {
+              "name": "svg-admission-end",
+              "timestamp": 27344.40000000596
+            },
+            {
+              "name": "preview-mount-start",
+              "timestamp": 28547.20000001788
+            },
+            {
+              "name": "preview.readiness-expectation-registered",
+              "timestamp": 28547.70000001788,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "bindSequence": 1
+            },
+            {
+              "name": "firstCommittedPreview",
+              "timestamp": 28547.70000001788,
+              "resultCount": 1
+            },
+            {
+              "name": "preview-mount-end",
+              "timestamp": 127091.30000001192
+            },
+            {
+              "name": "preview.mount-observed",
+              "timestamp": 127091.80000001192,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.bind-started",
+              "timestamp": 127092.09999999404,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.bind-completed",
+              "timestamp": 128928.90000000596,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.ready-receipt-emitted",
+              "timestamp": 128928.90000000596,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.ready-receipt-accepted",
+              "timestamp": 128929.09999999404,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "interactiveReady",
+              "timestamp": 128930.59999999404,
+              "status": "success",
+              "degradedRecovery": false
+            },
+            {
+              "name": "history-baseline-start",
+              "timestamp": 129176.5
+            },
+            {
+              "name": "history-baseline-end",
+              "timestamp": 129180.70000001788
+            }
+          ],
+          "metrics": {
+            "featureCatalogAdmissionCount": 1,
+            "featureCatalogSecondaryTraversalCount": 0,
+            "currentSessionPreflightProteinManifestValidationCount": 1,
+            "currentSessionPreflightProteinRawTextValidationCount": 144,
+            "workerConstructionCount": 1,
+            "workerInitializationCount": 1,
+            "currentLegacyNormalizationCount": 0,
+            "legacyOverrideMigrationCount": 0,
+            "manualRuleFeatureMatchCount": 0,
+            "svgSanitizationCount": 1,
+            "generatedArtifactReadinessExpectationCount": 1,
+            "previewMaterializationObservedCount": 1,
+            "previewMountAdoptionCount": 1,
+            "previewBinderInvocationCount": 1,
+            "previewPollingIterationCount": 0,
+            "legendDomFullScanCount": 1,
+            "perFeatureListenerRegistrationCount": 0,
+            "comparisonDomFullScanCount": 1,
+            "previewReadyReceiptEmittedCount": 1,
+            "previewReadyReceiptAcceptedCount": 1
+          },
+          "workers": [
+            "http://127.0.0.1:45779/gbdraw/web/js/workers/diagram-generation-worker.js"
+          ],
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 86,
+            "p95Ms": 100.2000000178814,
+            "maxMs": 107418.20000001788
+          },
+          "longTasks": {
+            "count": 1,
+            "totalMs": 107358,
+            "maxMs": 107358,
+            "entries": [
+              {
+                "start": 23440.30000001192,
+                "duration": 107358
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 2163560965,
+          "receiverTaskMaxMs": 0,
+          "stagesMs": {
+            "gzip-to-text": 1395.5999999940395,
+            "json-parse": 909.1999999880791,
+            "session-authority-validation": 339.80000001192093,
+            "feature-catalog-validation": 7493.300000011921,
+            "editor-state-normalization": 0.09999999403953552,
+            "resource-table-adoption": 0.29999998211860657,
+            "losat-artifact-validation": 3177.9000000059605,
+            "canonical-request-projection": 5.700000017881393,
+            "artifact-projection": 0.09999999403953552,
+            "current-session-preflight": 11018.399999976158,
+            "svg-admission": 1315.0999999940395,
+            "preview-mount": 98544.09999999404,
+            "history-baseline": 4.200000017881393,
+            "restoreBeforeSvgAdmission": 10896.200000017881
+          },
+          "codec": {
+            "decodeCpuMs": 250.8000005185604,
+            "encodeCpuMs": 0,
+            "encodedBytes": 0,
+            "decodedBytes": 466767621,
+            "streams": [
+              {
+                "kind": "file-read",
+                "start": 1384.300000011921,
+                "bytes": 134471293,
+                "chunks": 69,
+                "end": 2778.2000000178814,
+                "wallMs": 1393.9000000059605
+              },
+              {
+                "kind": "decompress",
+                "start": 1384.5,
+                "bytes": 466767621,
+                "chunks": 7158,
+                "end": 2778.2000000178814,
+                "wallMs": 1393.7000000178814
+              }
+            ]
+          },
+          "memory": {
+            "sampleCount": 143,
+            "rssPeakBytes": 3975876608,
+            "rssErrors": [],
+            "rssStartBytes": 650137600,
+            "v8UsedHeapPeaksBytes": {
+              "page": 2090500388,
+              "worker": 23569976
+            },
+            "errors": [
+              "WebSocketTimeoutException: Connection timed out"
+            ],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 2090500388,
+                "totalSize": 2160893952,
+                "embedderHeapUsedSize": 266650672,
+                "backingStorageSize": 637751433
+              },
+              "worker": {
+                "usedSize": 23569976,
+                "totalSize": 32555008,
+                "embedderHeapUsedSize": 1029280,
+                "backingStorageSize": 107072621
+              }
+            }
+          },
+          "ready": {
+            "resultCount": 1,
+            "records": 1,
+            "catalog": 1,
+            "requestRecords": 12,
+            "cacheEntries": 144,
+            "mounted": true
+          },
+          "heartbeatTargetMet": false
+        },
+        "save": {
+          "wallMs": 24235.69999998808,
+          "heapBefore": 1352182950,
+          "heapAfter": 1381384460,
+          "events": [
+            {
+              "name": "session-save-pending-published",
+              "timestamp": 133230.40000000596
+            },
+            {
+              "name": "session-save-paint-opportunity-completed",
+              "timestamp": 135172.5
+            },
+            {
+              "name": "session-save-catalog-preparation-start",
+              "timestamp": 135172.5
+            },
+            {
+              "name": "session-save-catalog-preparation-end",
+              "timestamp": 135172.59999999404,
+              "reusedCommittedSession": true
+            },
+            {
+              "name": "session-save-projection-start",
+              "timestamp": 135173.09999999404
+            },
+            {
+              "name": "session-save-projection-end",
+              "timestamp": 135604.30000001192
+            },
+            {
+              "name": "session-save-compression-start",
+              "timestamp": 135604.30000001192
+            },
+            {
+              "name": "session-save-compression-end",
+              "timestamp": 152136.80000001192,
+              "compressedSize": 133518007
+            },
+            {
+              "name": "session-save-download-handoff-completed",
+              "timestamp": 152151.90000000596,
+              "compressedSize": 133518007
+            },
+            {
+              "name": "session-save-pending-cleared",
+              "timestamp": 152193.09999999404
+            }
+          ],
+          "metrics": {
+            "sessionSaveProteinRawTextValidationReuseCount": 144
+          },
+          "workers": [
+            "http://127.0.0.1:45779/gbdraw/web/js/workers/diagram-generation-worker.js"
+          ],
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 168,
+            "p95Ms": 199.69999998807907,
+            "maxMs": 2047.5
+          },
+          "longTasks": {
+            "count": 5,
+            "totalMs": 4396,
+            "maxMs": 1943,
+            "entries": [
+              {
+                "start": 133229.90000000596,
+                "duration": 1927
+              },
+              {
+                "start": 135191.59999999404,
+                "duration": 415
+              },
+              {
+                "start": 139954.5,
+                "duration": 56
+              },
+              {
+                "start": 140938.5,
+                "duration": 55
+              },
+              {
+                "start": 152136.59999999404,
+                "duration": 1943
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 1774419967,
+          "receiverTaskMaxMs": 0,
+          "stagesMs": {
+            "session-save-catalog-preparation": 0.09999999403953552,
+            "session-save-projection": 431.2000000178814,
+            "session-save-compression": 16532.5
+          },
+          "codec": {
+            "decodeCpuMs": 0,
+            "encodeCpuMs": 598.3999991118908,
+            "encodedBytes": 466918752,
+            "decodedBytes": 0,
+            "streams": []
+          },
+          "memory": {
+            "sampleCount": 154,
+            "rssPeakBytes": 3214626816,
+            "rssErrors": [],
+            "rssStartBytes": 3159461888,
+            "v8UsedHeapPeaksBytes": {
+              "page": 1442731372,
+              "worker": 13224236
+            },
+            "errors": [],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 1442731372,
+                "totalSize": 1582542848,
+                "embedderHeapUsedSize": 236230472,
+                "backingStorageSize": 347645939
+              },
+              "worker": {
+                "usedSize": 13224236,
+                "totalSize": 14270464,
+                "embedderHeapUsedSize": 386992,
+                "backingStorageSize": 80206656
+              }
+            }
+          },
+          "outcome": {
+            "status": "saved",
+            "compressedBytes": 133518007
+          },
+          "heartbeatTargetMet": false
+        },
+        "source": {
+          "sha256": "a60cce6ecb8a0c499f2d801feabc65b122c78793dafcc15644b46c6ef1ecc98f",
+          "bytes": 134471293,
+          "version": 44,
+          "requestSchema": 8,
+          "records": 12,
+          "features": 62089,
+          "cacheEntries": 144,
+          "hashes": {
+            "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+            "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+            "createdAt": "4451c8df62bf09d9e0c9fe949cc17ce6ead48acddc37dc1895a3ab2b8d2879fd",
+            "title": "41fa90b2b3984145805f4505c76707d3d75551814b5c9510fa868a912eed18de",
+            "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+            "results": "3fc1e5206c155d14a4c33650310bc6ad73b9accd3c7356af9e9c738714f9b018",
+            "editorState": "5a9921e3c4c007a3870c3e7ee910af6df5dc0ec177c9df85cbb1d5dadd9327df",
+            "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "cliInvocation": "d80771e6164097a48d50db16d8c99a74e47ad39877896aa6462296b870bb4331",
+            "renderRequest": "4150ceb467aabf3b26e06facce1ae1a9db604c4289c661589b94bbd9a6ca82ff",
+            "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+            "webFiles": "b0be9635048d1dddaa08db919832436f5522a16b3feba07bee85d2e34d110088",
+            "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+            "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+            "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+          },
+          "wholeHash": "97221322e7d5b55b4cf56cb0aacc019764becb1dfab480592241ba3812aff9f9"
+        },
+        "saved": {
+          "sha256": "9c47a95eb00f0d1e0f00ecfb7be78ea84b04fdc1c82d8af4948431a8c761069d",
+          "bytes": 133518007,
+          "version": 44,
+          "requestSchema": 8,
+          "records": 12,
+          "features": 62089,
+          "cacheEntries": 144,
+          "hashes": {
+            "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+            "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+            "createdAt": "c12aa4c4d7dba79828df3b5df01bf266c266cefe3722c7fa66c0095935cde170",
+            "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+            "config": "5fdda83be1b3dcb42053d49792693610999430564e74fb63883324251dfaea7e",
+            "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+            "renderRequest": "4150ceb467aabf3b26e06facce1ae1a9db604c4289c661589b94bbd9a6ca82ff",
+            "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+            "webFiles": "157adbc958af5db35a01d9c1e20a947246e99fc6740f9cada432f679978a6326",
+            "results": "8eadde508b13b0d3c273bc147cef8c162e7b8c344741fe4fb1aad7031582d687",
+            "runMetadata": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+            "editorState": "96f33d030b7a9566799889b94180e5081992f03b7246332db595ecd3a285c9b2",
+            "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+            "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+            "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+            "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+          },
+          "wholeHash": "0db624304332a370e4b1a27027dd9812d8c5219839415d71e784723d8ffc5d53"
+        },
+        "sectionEquality": {
+          "renderRequest": true,
+          "resources": true,
+          "webFiles": false,
+          "editorState": false,
+          "losatCache": true,
+          "losatDerivedCache": true,
+          "proteinIdentityManifest": true
+        },
+        "pageErrors": [],
+        "dialogs": [
+          {
+            "type": "alert",
+            "message": "Session loaded successfully!"
+          },
+          {
+            "type": "confirm",
+            "message": "Compressed session size is 127.3 MB. Continue?"
+          }
+        ],
+        "externalRequests": []
+      },
+      {
+        "load": {
+          "wallMs": 118309.90000000596,
+          "heapBefore": 40551522,
+          "heapAfter": 1351533299,
+          "events": [
+            {
+              "name": "session-import-pending-published",
+              "timestamp": 665.2999999821186
+            },
+            {
+              "name": "session-import-paint-opportunity-completed",
+              "timestamp": 698
+            },
+            {
+              "name": "sessionSelection",
+              "timestamp": 698.5
+            },
+            {
+              "name": "gzip-to-text-start",
+              "timestamp": 698.5
+            },
+            {
+              "name": "gzip-to-text-end",
+              "timestamp": 1692.3999999761581,
+              "characters": 466767621
+            },
+            {
+              "name": "json-parse-start",
+              "timestamp": 1692.3999999761581
+            },
+            {
+              "name": "json-parse-end",
+              "timestamp": 2259.199999988079
+            },
+            {
+              "name": "current-session-preflight-start",
+              "timestamp": 2560.899999976158
+            },
+            {
+              "name": "session-authority-validation-start",
+              "timestamp": 2561.199999988079
+            },
+            {
+              "name": "session-authority-validation-end",
+              "timestamp": 2757.5999999940395
+            },
+            {
+              "name": "feature-catalog-validation-start",
+              "timestamp": 2757.5999999940395
+            },
+            {
+              "name": "catalog.admission-started",
+              "timestamp": 2758,
+              "resultCount": 1
+            },
+            {
+              "name": "catalog.admission-completed",
+              "timestamp": 7877.899999976158,
+              "resultCount": 1,
+              "itemCount": 1,
+              "recordCount": 12,
+              "renderedFeatureCount": 30993,
+              "biologicalFeatureCount": 62089
+            },
+            {
+              "name": "feature-catalog-validation-end",
+              "timestamp": 7877.899999976158
+            },
+            {
+              "name": "editor-state-normalization-start",
+              "timestamp": 7877.899999976158
+            },
+            {
+              "name": "editor-state-normalization-end",
+              "timestamp": 7878
+            },
+            {
+              "name": "resource-table-adoption-start",
+              "timestamp": 7878
+            },
+            {
+              "name": "resource-table-adoption-end",
+              "timestamp": 7878.299999982119
+            },
+            {
+              "name": "losat-artifact-validation-start",
+              "timestamp": 7878.299999982119
+            },
+            {
+              "name": "losat-artifact-validation-end",
+              "timestamp": 9956.799999982119
+            },
+            {
+              "name": "canonical-request-projection-start",
+              "timestamp": 9957.199999988079
+            },
+            {
+              "name": "canonical-request-projection-end",
+              "timestamp": 9960.59999999404
+            },
+            {
+              "name": "artifact-projection-start",
+              "timestamp": 9960.799999982119
+            },
+            {
+              "name": "artifact-projection-end",
+              "timestamp": 9960.799999982119
+            },
+            {
+              "name": "current-session-preflight-end",
+              "timestamp": 9960.799999982119
+            },
+            {
+              "name": "svg-admission-start",
+              "timestamp": 17394.899999976158
+            },
+            {
+              "name": "svg.admission-started",
+              "timestamp": 17395.09999999404,
+              "phase": "current-session",
+              "resultCount": 1,
+              "mutationKind": "EMPTY"
+            },
+            {
+              "name": "result-svg-characters",
+              "timestamp": 17395.19999998808,
+              "phase": "current-session",
+              "resultIndex": 0,
+              "value": 19621657
+            },
+            {
+              "name": "sanitize-call",
+              "timestamp": 17395.29999998212,
+              "durationMs": 919.7000000178814
+            },
+            {
+              "name": "svg.admission-completed",
+              "timestamp": 18315.19999998808,
+              "phase": "current-session",
+              "resultCount": 1,
+              "mutationKind": "EMPTY"
+            },
+            {
+              "name": "artifact.candidate-completed",
+              "timestamp": 18315.19999998808,
+              "phase": "current-session",
+              "resultCount": 1,
+              "catalogFootprint": {
+                "resultCount": 1,
+                "itemCount": 1,
+                "recordCount": 12,
+                "renderedFeatureCount": 30993,
+                "biologicalFeatureCount": 62089,
+                "orthogroupRecordCount": 4927,
+                "comparisonMatchCount": 1009,
+                "annotationCount": 0,
+                "sequenceSourceCount": 12,
+                "sequenceCharacters": 34183265
+              }
+            },
+            {
+              "name": "svg-admission-end",
+              "timestamp": 18315.19999998808
+            },
+            {
+              "name": "preview-mount-start",
+              "timestamp": 19246.69999998808
+            },
+            {
+              "name": "preview.readiness-expectation-registered",
+              "timestamp": 19247,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "bindSequence": 1
+            },
+            {
+              "name": "firstCommittedPreview",
+              "timestamp": 19247,
+              "resultCount": 1
+            },
+            {
+              "name": "preview-mount-end",
+              "timestamp": 114725.19999998808
+            },
+            {
+              "name": "preview.mount-observed",
+              "timestamp": 114725.5,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.bind-started",
+              "timestamp": 114725.79999998212,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.bind-completed",
+              "timestamp": 116519.69999998808,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.ready-receipt-emitted",
+              "timestamp": 116519.69999998808,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.ready-receipt-accepted",
+              "timestamp": 116519.89999997616,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "interactiveReady",
+              "timestamp": 116521.29999998212,
+              "status": "success",
+              "degradedRecovery": false
+            },
+            {
+              "name": "history-baseline-start",
+              "timestamp": 116776.19999998808
+            },
+            {
+              "name": "history-baseline-end",
+              "timestamp": 116779.79999998212
+            }
+          ],
+          "metrics": {
+            "featureCatalogAdmissionCount": 1,
+            "featureCatalogSecondaryTraversalCount": 0,
+            "currentSessionPreflightProteinManifestValidationCount": 1,
+            "currentSessionPreflightProteinRawTextValidationCount": 144,
+            "workerConstructionCount": 1,
+            "workerInitializationCount": 1,
+            "currentLegacyNormalizationCount": 0,
+            "legacyOverrideMigrationCount": 0,
+            "manualRuleFeatureMatchCount": 0,
+            "svgSanitizationCount": 1,
+            "generatedArtifactReadinessExpectationCount": 1,
+            "previewMaterializationObservedCount": 1,
+            "previewMountAdoptionCount": 1,
+            "previewBinderInvocationCount": 1,
+            "previewPollingIterationCount": 0,
+            "legendDomFullScanCount": 1,
+            "perFeatureListenerRegistrationCount": 0,
+            "comparisonDomFullScanCount": 1,
+            "previewReadyReceiptEmittedCount": 1,
+            "previewReadyReceiptAcceptedCount": 1
+          },
+          "workers": [
+            "http://127.0.0.1:45779/gbdraw/web/js/workers/diagram-generation-worker.js"
+          ],
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 58,
+            "p95Ms": 100.2000000178814,
+            "maxMs": 103149.60000002384
+          },
+          "longTasks": {
+            "count": 1,
+            "totalMs": 103047,
+            "maxMs": 103047,
+            "entries": [
+              {
+                "start": 15475.09999999404,
+                "duration": 103047
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 2175785414,
+          "receiverTaskMaxMs": 0,
+          "stagesMs": {
+            "gzip-to-text": 993.8999999761581,
+            "json-parse": 566.8000000119209,
+            "session-authority-validation": 196.40000000596046,
+            "feature-catalog-validation": 5120.299999982119,
+            "editor-state-normalization": 0.10000002384185791,
+            "resource-table-adoption": 0.29999998211860657,
+            "losat-artifact-validation": 2078.5,
+            "canonical-request-projection": 3.4000000059604645,
+            "artifact-projection": 0.0,
+            "current-session-preflight": 7399.9000000059605,
+            "svg-admission": 920.3000000119209,
+            "preview-mount": 95478.5,
+            "history-baseline": 3.5999999940395355,
+            "restoreBeforeSvgAdmission": 7434.0999999940395
+          },
+          "codec": {
+            "decodeCpuMs": 194.99999970197678,
+            "encodeCpuMs": 0,
+            "encodedBytes": 0,
+            "decodedBytes": 466767621,
+            "streams": [
+              {
+                "kind": "file-read",
+                "start": 699.6999999880791,
+                "bytes": 134471293,
+                "chunks": 68,
+                "end": 1692.199999988079,
+                "wallMs": 992.5
+              },
+              {
+                "kind": "decompress",
+                "start": 699.7999999821186,
+                "bytes": 466767621,
+                "chunks": 7157,
+                "end": 1692.2999999821186,
+                "wallMs": 992.5
+              }
+            ]
+          },
+          "memory": {
+            "sampleCount": 111,
+            "rssPeakBytes": 3975143424,
+            "rssErrors": [],
+            "rssStartBytes": 646656000,
+            "v8UsedHeapPeaksBytes": {
+              "page": 2102790236,
+              "worker": 22045748
+            },
+            "errors": [
+              "WebSocketTimeoutException: Connection timed out"
+            ],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 2102790236,
+                "totalSize": 2161459200,
+                "embedderHeapUsedSize": 266410976,
+                "backingStorageSize": 616591741
+              },
+              "worker": {
+                "usedSize": 22045748,
+                "totalSize": 33730560,
+                "embedderHeapUsedSize": 961400,
+                "backingStorageSize": 106318405
+              }
+            }
+          },
+          "ready": {
+            "resultCount": 1,
+            "records": 1,
+            "catalog": 1,
+            "requestRecords": 12,
+            "cacheEntries": 144,
+            "mounted": true
+          },
+          "heartbeatTargetMet": false
+        },
+        "save": {
+          "wallMs": 25770.80000001192,
+          "heapBefore": 1351933798,
+          "heapAfter": 1374099882,
+          "events": [
+            {
+              "name": "session-save-pending-published",
+              "timestamp": 121163.19999998808
+            },
+            {
+              "name": "session-save-paint-opportunity-completed",
+              "timestamp": 123059.79999998212
+            },
+            {
+              "name": "session-save-catalog-preparation-start",
+              "timestamp": 123059.79999998212
+            },
+            {
+              "name": "session-save-catalog-preparation-end",
+              "timestamp": 123059.89999997616,
+              "reusedCommittedSession": true
+            },
+            {
+              "name": "session-save-projection-start",
+              "timestamp": 123060.29999998212
+            },
+            {
+              "name": "session-save-projection-end",
+              "timestamp": 123531.79999998212
+            },
+            {
+              "name": "session-save-compression-start",
+              "timestamp": 123531.79999998212
+            },
+            {
+              "name": "session-save-compression-end",
+              "timestamp": 141542,
+              "compressedSize": 133518005
+            },
+            {
+              "name": "session-save-download-handoff-completed",
+              "timestamp": 141554.79999998212,
+              "compressedSize": 133518005
+            },
+            {
+              "name": "session-save-pending-cleared",
+              "timestamp": 141585.39999997616
+            }
+          ],
+          "metrics": {
+            "sessionSaveProteinRawTextValidationReuseCount": 144
+          },
+          "workers": [
+            "http://127.0.0.1:45779/gbdraw/web/js/workers/diagram-generation-worker.js"
+          ],
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 177,
+            "p95Ms": 204.90000000596046,
+            "maxMs": 2188.300000011921
+          },
+          "longTasks": {
+            "count": 7,
+            "totalMs": 4472,
+            "maxMs": 1886,
+            "entries": [
+              {
+                "start": 121163,
+                "duration": 1884
+              },
+              {
+                "start": 123079.09999999404,
+                "duration": 457
+              },
+              {
+                "start": 128266.89999997616,
+                "duration": 81
+              },
+              {
+                "start": 128350.29999998212,
+                "duration": 51
+              },
+              {
+                "start": 129372.89999997616,
+                "duration": 60
+              },
+              {
+                "start": 141350.89999997616,
+                "duration": 53
+              },
+              {
+                "start": 141542,
+                "duration": 1886
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 1785978870,
+          "receiverTaskMaxMs": 0,
+          "stagesMs": {
+            "session-save-catalog-preparation": 0.09999999403953552,
+            "session-save-projection": 471.5,
+            "session-save-compression": 18010.20000001788
+          },
+          "codec": {
+            "decodeCpuMs": 0,
+            "encodeCpuMs": 677.6999989748001,
+            "encodedBytes": 466918752,
+            "decodedBytes": 0,
+            "streams": []
+          },
+          "memory": {
+            "sampleCount": 167,
+            "rssPeakBytes": 3217866752,
+            "rssErrors": [],
+            "rssStartBytes": 3203899392,
+            "v8UsedHeapPeaksBytes": {
+              "page": 1442008652,
+              "worker": 13225876
+            },
+            "errors": [],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 1442008652,
+                "totalSize": 1579782144,
+                "embedderHeapUsedSize": 238659152,
+                "backingStorageSize": 344131800
+              },
+              "worker": {
+                "usedSize": 13225876,
+                "totalSize": 14008320,
+                "embedderHeapUsedSize": 360184,
+                "backingStorageSize": 80206656
+              }
+            }
+          },
+          "outcome": {
+            "status": "saved",
+            "compressedBytes": 133518005
+          },
+          "heartbeatTargetMet": false
+        },
+        "source": {
+          "sha256": "a60cce6ecb8a0c499f2d801feabc65b122c78793dafcc15644b46c6ef1ecc98f",
+          "bytes": 134471293,
+          "version": 44,
+          "requestSchema": 8,
+          "records": 12,
+          "features": 62089,
+          "cacheEntries": 144,
+          "hashes": {
+            "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+            "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+            "createdAt": "4451c8df62bf09d9e0c9fe949cc17ce6ead48acddc37dc1895a3ab2b8d2879fd",
+            "title": "41fa90b2b3984145805f4505c76707d3d75551814b5c9510fa868a912eed18de",
+            "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+            "results": "3fc1e5206c155d14a4c33650310bc6ad73b9accd3c7356af9e9c738714f9b018",
+            "editorState": "5a9921e3c4c007a3870c3e7ee910af6df5dc0ec177c9df85cbb1d5dadd9327df",
+            "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "cliInvocation": "d80771e6164097a48d50db16d8c99a74e47ad39877896aa6462296b870bb4331",
+            "renderRequest": "4150ceb467aabf3b26e06facce1ae1a9db604c4289c661589b94bbd9a6ca82ff",
+            "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+            "webFiles": "b0be9635048d1dddaa08db919832436f5522a16b3feba07bee85d2e34d110088",
+            "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+            "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+            "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+          },
+          "wholeHash": "97221322e7d5b55b4cf56cb0aacc019764becb1dfab480592241ba3812aff9f9"
+        },
+        "saved": {
+          "sha256": "0962c9934c501c300e6ac0beabf2ade8ac8cd53ce713bbdd3d0ce0b2ac320f5a",
+          "bytes": 133518005,
+          "version": 44,
+          "requestSchema": 8,
+          "records": 12,
+          "features": 62089,
+          "cacheEntries": 144,
+          "hashes": {
+            "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+            "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+            "createdAt": "142abb9c60f696111a0f45fcc1d84f7c2f9b02c78b49566624666b3eb8ad05d9",
+            "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+            "config": "34bbf9e681fda275a45dd8206c3e97edb1417eebfb88745b59ae4b83365ddbc6",
+            "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+            "renderRequest": "4150ceb467aabf3b26e06facce1ae1a9db604c4289c661589b94bbd9a6ca82ff",
+            "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+            "webFiles": "f48e771883a2b13c98fcb93be41f8dee4b46027c1b425c680156ee379ecb6d06",
+            "results": "8eadde508b13b0d3c273bc147cef8c162e7b8c344741fe4fb1aad7031582d687",
+            "runMetadata": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+            "editorState": "96f33d030b7a9566799889b94180e5081992f03b7246332db595ecd3a285c9b2",
+            "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+            "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+            "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+            "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+          },
+          "wholeHash": "15c9f2347143e11bd5e4789c5e05b865f388cd615c3f79ce2a2a609c509e81a5"
+        },
+        "sectionEquality": {
+          "renderRequest": true,
+          "resources": true,
+          "webFiles": false,
+          "editorState": false,
+          "losatCache": true,
+          "losatDerivedCache": true,
+          "proteinIdentityManifest": true
+        },
+        "pageErrors": [],
+        "dialogs": [
+          {
+            "type": "alert",
+            "message": "Session loaded successfully!"
+          },
+          {
+            "type": "confirm",
+            "message": "Compressed session size is 127.3 MB. Continue?"
+          }
+        ],
+        "externalRequests": []
+      },
+      {
+        "load": {
+          "wallMs": 111364.5,
+          "heapBefore": 21739701,
+          "heapAfter": 1351557118,
+          "events": [
+            {
+              "name": "session-import-pending-published",
+              "timestamp": 879.2999999821186
+            },
+            {
+              "name": "session-import-paint-opportunity-completed",
+              "timestamp": 913.1999999880791
+            },
+            {
+              "name": "sessionSelection",
+              "timestamp": 913.5999999940395
+            },
+            {
+              "name": "gzip-to-text-start",
+              "timestamp": 913.6999999880791
+            },
+            {
+              "name": "gzip-to-text-end",
+              "timestamp": 2049.699999988079,
+              "characters": 466767621
+            },
+            {
+              "name": "json-parse-start",
+              "timestamp": 2049.699999988079
+            },
+            {
+              "name": "json-parse-end",
+              "timestamp": 2668.699999988079
+            },
+            {
+              "name": "current-session-preflight-start",
+              "timestamp": 3018.4000000059605
+            },
+            {
+              "name": "session-authority-validation-start",
+              "timestamp": 3018.7999999821186
+            },
+            {
+              "name": "session-authority-validation-end",
+              "timestamp": 3248.699999988079
+            },
+            {
+              "name": "feature-catalog-validation-start",
+              "timestamp": 3248.699999988079
+            },
+            {
+              "name": "catalog.admission-started",
+              "timestamp": 3249.2999999821186,
+              "resultCount": 1
+            },
+            {
+              "name": "catalog.admission-completed",
+              "timestamp": 8760.40000000596,
+              "resultCount": 1,
+              "itemCount": 1,
+              "recordCount": 12,
+              "renderedFeatureCount": 30993,
+              "biologicalFeatureCount": 62089
+            },
+            {
+              "name": "feature-catalog-validation-end",
+              "timestamp": 8760.40000000596
+            },
+            {
+              "name": "editor-state-normalization-start",
+              "timestamp": 8760.40000000596
+            },
+            {
+              "name": "editor-state-normalization-end",
+              "timestamp": 8760.59999999404
+            },
+            {
+              "name": "resource-table-adoption-start",
+              "timestamp": 8760.59999999404
+            },
+            {
+              "name": "resource-table-adoption-end",
+              "timestamp": 8760.799999982119
+            },
+            {
+              "name": "losat-artifact-validation-start",
+              "timestamp": 8760.799999982119
+            },
+            {
+              "name": "losat-artifact-validation-end",
+              "timestamp": 11022.5
+            },
+            {
+              "name": "canonical-request-projection-start",
+              "timestamp": 11023
+            },
+            {
+              "name": "canonical-request-projection-end",
+              "timestamp": 11026.299999982119
+            },
+            {
+              "name": "artifact-projection-start",
+              "timestamp": 11026.40000000596
+            },
+            {
+              "name": "artifact-projection-end",
+              "timestamp": 11026.5
+            },
+            {
+              "name": "current-session-preflight-end",
+              "timestamp": 11026.5
+            },
+            {
+              "name": "svg-admission-start",
+              "timestamp": 18838.79999998212
+            },
+            {
+              "name": "svg.admission-started",
+              "timestamp": 18839.19999998808,
+              "phase": "current-session",
+              "resultCount": 1,
+              "mutationKind": "EMPTY"
+            },
+            {
+              "name": "result-svg-characters",
+              "timestamp": 18839.19999998808,
+              "phase": "current-session",
+              "resultIndex": 0,
+              "value": 19621657
+            },
+            {
+              "name": "sanitize-call",
+              "timestamp": 18839.29999998212,
+              "durationMs": 971
+            },
+            {
+              "name": "svg.admission-completed",
+              "timestamp": 19810.59999999404,
+              "phase": "current-session",
+              "resultCount": 1,
+              "mutationKind": "EMPTY"
+            },
+            {
+              "name": "artifact.candidate-completed",
+              "timestamp": 19810.59999999404,
+              "phase": "current-session",
+              "resultCount": 1,
+              "catalogFootprint": {
+                "resultCount": 1,
+                "itemCount": 1,
+                "recordCount": 12,
+                "renderedFeatureCount": 30993,
+                "biologicalFeatureCount": 62089,
+                "orthogroupRecordCount": 4927,
+                "comparisonMatchCount": 1009,
+                "annotationCount": 0,
+                "sequenceSourceCount": 12,
+                "sequenceCharacters": 34183265
+              }
+            },
+            {
+              "name": "svg-admission-end",
+              "timestamp": 19810.59999999404
+            },
+            {
+              "name": "preview-mount-start",
+              "timestamp": 20810.79999998212
+            },
+            {
+              "name": "preview.readiness-expectation-registered",
+              "timestamp": 20811.19999998808,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "bindSequence": 1
+            },
+            {
+              "name": "firstCommittedPreview",
+              "timestamp": 20811.19999998808,
+              "resultCount": 1
+            },
+            {
+              "name": "preview-mount-end",
+              "timestamp": 108497.5
+            },
+            {
+              "name": "preview.mount-observed",
+              "timestamp": 108497.90000000596,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.bind-started",
+              "timestamp": 108498.09999999404,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.bind-completed",
+              "timestamp": 110184.59999999404,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.ready-receipt-emitted",
+              "timestamp": 110184.59999999404,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "preview.ready-receipt-accepted",
+              "timestamp": 110184.69999998808,
+              "phase": "session-load",
+              "resultIndex": 0,
+              "rootGeneration": 1,
+              "bindSequence": 1
+            },
+            {
+              "name": "interactiveReady",
+              "timestamp": 110185.59999999404,
+              "status": "success",
+              "degradedRecovery": false
+            },
+            {
+              "name": "history-baseline-start",
+              "timestamp": 110414.59999999404
+            },
+            {
+              "name": "history-baseline-end",
+              "timestamp": 110417.69999998808
+            }
+          ],
+          "metrics": {
+            "featureCatalogAdmissionCount": 1,
+            "featureCatalogSecondaryTraversalCount": 0,
+            "currentSessionPreflightProteinManifestValidationCount": 1,
+            "currentSessionPreflightProteinRawTextValidationCount": 144,
+            "workerConstructionCount": 1,
+            "workerInitializationCount": 1,
+            "currentLegacyNormalizationCount": 0,
+            "legacyOverrideMigrationCount": 0,
+            "manualRuleFeatureMatchCount": 0,
+            "svgSanitizationCount": 1,
+            "generatedArtifactReadinessExpectationCount": 1,
+            "previewMaterializationObservedCount": 1,
+            "previewMountAdoptionCount": 1,
+            "previewBinderInvocationCount": 1,
+            "previewPollingIterationCount": 0,
+            "legendDomFullScanCount": 1,
+            "perFeatureListenerRegistrationCount": 0,
+            "comparisonDomFullScanCount": 1,
+            "previewReadyReceiptEmittedCount": 1,
+            "previewReadyReceiptAcceptedCount": 1
+          },
+          "workers": [
+            "http://127.0.0.1:45779/gbdraw/web/js/workers/diagram-generation-worker.js"
+          ],
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 61,
+            "p95Ms": 100.2000000178814,
+            "maxMs": 95246.30000001192
+          },
+          "longTasks": {
+            "count": 1,
+            "totalMs": 95186,
+            "maxMs": 95186,
+            "entries": [
+              {
+                "start": 16739.5,
+                "duration": 95186
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 2165767860,
+          "receiverTaskMaxMs": 0,
+          "stagesMs": {
+            "gzip-to-text": 1136.0,
+            "json-parse": 619.0,
+            "session-authority-validation": 229.90000000596046,
+            "feature-catalog-validation": 5511.700000017881,
+            "editor-state-normalization": 0.19999998807907104,
+            "resource-table-adoption": 0.19999998807907104,
+            "losat-artifact-validation": 2261.7000000178814,
+            "canonical-request-projection": 3.2999999821186066,
+            "artifact-projection": 0.09999999403953552,
+            "current-session-preflight": 8008.0999999940395,
+            "svg-admission": 971.8000000119209,
+            "preview-mount": 87686.70000001788,
+            "history-baseline": 3.0999999940395355,
+            "restoreBeforeSvgAdmission": 7812.299999982119
+          },
+          "codec": {
+            "decodeCpuMs": 222.20000013709068,
+            "encodeCpuMs": 0,
+            "encodedBytes": 0,
+            "decodedBytes": 466767621,
+            "streams": [
+              {
+                "kind": "file-read",
+                "start": 914.9000000059605,
+                "bytes": 134471293,
+                "chunks": 69,
+                "end": 2049.5,
+                "wallMs": 1134.5999999940395
+              },
+              {
+                "kind": "decompress",
+                "start": 915,
+                "bytes": 466767621,
+                "chunks": 7157,
+                "end": 2049.5,
+                "wallMs": 1134.5
+              }
+            ]
+          },
+          "memory": {
+            "sampleCount": 110,
+            "rssPeakBytes": 3976417280,
+            "rssErrors": [],
+            "rssStartBytes": 652263424,
+            "v8UsedHeapPeaksBytes": {
+              "page": 2092772760,
+              "worker": 23480668
+            },
+            "errors": [
+              "WebSocketTimeoutException: Connection timed out"
+            ],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 2092772760,
+                "totalSize": 2162720768,
+                "embedderHeapUsedSize": 266629192,
+                "backingStorageSize": 616132888
+              },
+              "worker": {
+                "usedSize": 23480668,
+                "totalSize": 33865728,
+                "embedderHeapUsedSize": 1855168,
+                "backingStorageSize": 106328906
+              }
+            }
+          },
+          "ready": {
+            "resultCount": 1,
+            "records": 1,
+            "catalog": 1,
+            "requestRecords": 12,
+            "cacheEntries": 144,
+            "mounted": true
+          },
+          "heartbeatTargetMet": false
+        },
+        "save": {
+          "wallMs": 21727.79999998212,
+          "heapBefore": 1351966313,
+          "heapAfter": 1444958586,
+          "events": [
+            {
+              "name": "session-save-pending-published",
+              "timestamp": 114050.90000000596
+            },
+            {
+              "name": "session-save-paint-opportunity-completed",
+              "timestamp": 115668.09999999404
+            },
+            {
+              "name": "session-save-catalog-preparation-start",
+              "timestamp": 115668.09999999404
+            },
+            {
+              "name": "session-save-catalog-preparation-end",
+              "timestamp": 115668.19999998808,
+              "reusedCommittedSession": true
+            },
+            {
+              "name": "session-save-projection-start",
+              "timestamp": 115668.79999998212
+            },
+            {
+              "name": "session-save-projection-end",
+              "timestamp": 116046.79999998212
+            },
+            {
+              "name": "session-save-compression-start",
+              "timestamp": 116046.79999998212
+            },
+            {
+              "name": "session-save-compression-end",
+              "timestamp": 130998.69999998808,
+              "compressedSize": 133517992
+            },
+            {
+              "name": "session-save-download-handoff-completed",
+              "timestamp": 131001.69999998808,
+              "compressedSize": 133517992
+            },
+            {
+              "name": "session-save-pending-cleared",
+              "timestamp": 131022.69999998808
+            }
+          ],
+          "metrics": {
+            "sessionSaveProteinRawTextValidationReuseCount": 144
+          },
+          "workers": [
+            "http://127.0.0.1:45779/gbdraw/web/js/workers/diagram-generation-worker.js"
+          ],
+          "heartbeat": {
+            "intervalMs": 100,
+            "count": 157,
+            "p95Ms": 178.90000000596046,
+            "maxMs": 1798.0999999940395
+          },
+          "longTasks": {
+            "count": 5,
+            "totalMs": 3717,
+            "maxMs": 1621,
+            "entries": [
+              {
+                "start": 114050.40000000596,
+                "duration": 1605
+              },
+              {
+                "start": 115684.79999998212,
+                "duration": 364
+              },
+              {
+                "start": 120045.29999998212,
+                "duration": 52
+              },
+              {
+                "start": 125418.59999999404,
+                "duration": 75
+              },
+              {
+                "start": 130998.69999998808,
+                "duration": 1621
+              }
+            ]
+          },
+          "mainSampledHeapPeakBytes": 1778835465,
+          "receiverTaskMaxMs": 0,
+          "stagesMs": {
+            "session-save-catalog-preparation": 0.09999999403953552,
+            "session-save-projection": 378.0,
+            "session-save-compression": 14951.90000000596
+          },
+          "codec": {
+            "decodeCpuMs": 0,
+            "encodeCpuMs": 556.2999987006187,
+            "encodedBytes": 466918752,
+            "decodedBytes": 0,
+            "streams": []
+          },
+          "memory": {
+            "sampleCount": 147,
+            "rssPeakBytes": 3214131200,
+            "rssErrors": [],
+            "rssStartBytes": 3153911808,
+            "v8UsedHeapPeaksBytes": {
+              "page": 1441784604,
+              "worker": 13237068
+            },
+            "errors": [],
+            "v8IsolateFieldPeaksBytes": {
+              "page": {
+                "usedSize": 1441784604,
+                "totalSize": 1580826624,
+                "embedderHeapUsedSize": 239529416,
+                "backingStorageSize": 348312618
+              },
+              "worker": {
+                "usedSize": 13237068,
+                "totalSize": 14008320,
+                "embedderHeapUsedSize": 377488,
+                "backingStorageSize": 80206656
+              }
+            }
+          },
+          "outcome": {
+            "status": "saved",
+            "compressedBytes": 133517992
+          },
+          "heartbeatTargetMet": false
+        },
+        "source": {
+          "sha256": "a60cce6ecb8a0c499f2d801feabc65b122c78793dafcc15644b46c6ef1ecc98f",
+          "bytes": 134471293,
+          "version": 44,
+          "requestSchema": 8,
+          "records": 12,
+          "features": 62089,
+          "cacheEntries": 144,
+          "hashes": {
+            "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+            "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+            "createdAt": "4451c8df62bf09d9e0c9fe949cc17ce6ead48acddc37dc1895a3ab2b8d2879fd",
+            "title": "41fa90b2b3984145805f4505c76707d3d75551814b5c9510fa868a912eed18de",
+            "ui": "e8c5aea1f0ebcbaa58a50e79b261e2d7940b78b685fe0d57b9c33e6cc13f312d",
+            "results": "3fc1e5206c155d14a4c33650310bc6ad73b9accd3c7356af9e9c738714f9b018",
+            "editorState": "5a9921e3c4c007a3870c3e7ee910af6df5dc0ec177c9df85cbb1d5dadd9327df",
+            "features": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "orthogroupState": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "cliInvocation": "d80771e6164097a48d50db16d8c99a74e47ad39877896aa6462296b870bb4331",
+            "renderRequest": "4150ceb467aabf3b26e06facce1ae1a9db604c4289c661589b94bbd9a6ca82ff",
+            "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+            "webFiles": "b0be9635048d1dddaa08db919832436f5522a16b3feba07bee85d2e34d110088",
+            "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+            "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+            "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+          },
+          "wholeHash": "97221322e7d5b55b4cf56cb0aacc019764becb1dfab480592241ba3812aff9f9"
+        },
+        "saved": {
+          "sha256": "f3ed3ffae95f37e03b0611b37b2682da3a3c3d9e7ad3f2809929d4681b2a71e8",
+          "bytes": 133517992,
+          "version": 44,
+          "requestSchema": 8,
+          "records": 12,
+          "features": 62089,
+          "cacheEntries": 144,
+          "hashes": {
+            "format": "a565d6c86d89f5062657493c80eed1b314a7d52b81c7504622b0ee9084307f4f",
+            "version": "71ee45a3c0db9a9865f7313dd3372cf60dca6479d46261f3542eb9346e4a04d6",
+            "createdAt": "c7d198b1718b64e7919a3f329b1d266404ee815a19404230a45bf7a11ae900d0",
+            "title": "7ebd154623dc1eac803167beddb7bae56174627d1c61f085a8d15040524c8190",
+            "config": "a102bc38f85f5682dc3ccac8ec9f2c88ad2dd52931d1b0a18991628cd49bc610",
+            "ui": "8bdd3575c36df8ee41a6d1e682cf509c15219ad30b068b734b4ccf608746faab",
+            "renderRequest": "4150ceb467aabf3b26e06facce1ae1a9db604c4289c661589b94bbd9a6ca82ff",
+            "resources": "600846eea4986e6d4fa92002870566c5ede14d6f3abd7c9ab2c98d7e1cec7688",
+            "webFiles": "25065abfb03d4c2d773f3d3880ca4519424cbcaba8cda8d4ae9bd84c1f78aca9",
+            "results": "8eadde508b13b0d3c273bc147cef8c162e7b8c344741fe4fb1aad7031582d687",
+            "runMetadata": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+            "features": "6b4e3687049ef90433ac03d66c81efa02f47cc29e96dde51bd834cac7d6419e0",
+            "editorState": "96f33d030b7a9566799889b94180e5081992f03b7246332db595ecd3a285c9b2",
+            "orthogroupState": "2ef835f9b003a3b9c0300376225b8799ca37512ee954c8e425e3e067e893fc68",
+            "losatCache": "21a45656d0a4c352003e7c1a49a2ad63ac49ce3fefff0c63e62cf4f73403e677",
+            "losatDerivedCache": "d801aa1fb7ddcc330a5e3173372ea6af4a3d08ec58074478e85aa5603e926658",
+            "proteinIdentityManifest": "b0e1ac56011c6f04e76a1b9af7c3431df72911762986163b37f63f7802b51cce"
+          },
+          "wholeHash": "42560616977772495b2ceccd41d2ecc9a418d7756965e7e12ca82fbe1a991818"
+        },
+        "sectionEquality": {
+          "renderRequest": true,
+          "resources": true,
+          "webFiles": false,
+          "editorState": false,
+          "losatCache": true,
+          "losatDerivedCache": true,
+          "proteinIdentityManifest": true
+        },
+        "pageErrors": [],
+        "dialogs": [
+          {
+            "type": "alert",
+            "message": "Session loaded successfully!"
+          },
+          {
+            "type": "confirm",
+            "message": "Compressed session size is 127.3 MB. Continue?"
+          }
+        ],
+        "externalRequests": []
+      }
+    ]
+  },
+  "browser": "149.0.7827.55",
+  "environmentSha256": "9a91009d0934c5cdccd30d7bfae08c159ff7adf3b47c28d862414f874b5ca124",
+  "rawEvidence": {
+    "path": "/tmp/issue597-s01-final-pipeline-j3R30y/pipeline-metrics.json",
+    "sha256": "6c0556dec52ad96d26fd002543e5fa052f0e27198c987a93d12c5f03e0a51074",
+    "memoryCaveat": "100ms sampled peaks are lower bounds. RSS is summed dedicated Chromium descendants, includes shared pages; CDP timeout samples are missing, not zero. Isolate field peaks occur at different times and must not be summed as a simultaneous peak."
+  }
+}

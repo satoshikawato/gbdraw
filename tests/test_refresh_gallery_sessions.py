@@ -62,10 +62,8 @@ from tools.refresh_gallery_sessions import (
 
 pytestmark = pytest.mark.gallery
 
-BUNDLED_REQUEST_SCHEMAS = frozenset({5, 6, CANONICAL_REQUEST_SCHEMA})
-BUNDLED_SESSION_VERSIONS = frozenset(
-    {CURRENT_SESSION_VERSION - 1, CURRENT_SESSION_VERSION}
-)
+BUNDLED_REQUEST_SCHEMAS = frozenset({5, 6, 7, CANONICAL_REQUEST_SCHEMA})
+BUNDLED_SESSION_VERSIONS = frozenset({41, 42, CURRENT_SESSION_VERSION})
 
 
 def test_default_refresh_inventory_covers_gallery_and_test_input_sessions() -> None:
@@ -139,9 +137,9 @@ def test_gallery_artifact_limits_match_phase_two_targets() -> None:
     assert VIBRIO_EXPANDED_REGRESSION_CEILING == 420_000_000
 
 
-def test_interactive_svg_measurements_decode_compressed_schema_three() -> None:
+def test_interactive_svg_measurements_decode_compressed_schema_four() -> None:
     payload = {
-        "schema": 3,
+        "schema": 4,
         "items": [
             {
                 "resultIndex": 0,
@@ -175,7 +173,7 @@ def test_interactive_svg_measurements_decode_compressed_schema_three() -> None:
     output = (
         '<svg xmlns="http://www.w3.org/2000/svg">'
         '<metadata id="gbdraw-interactive-feature-metadata" '
-        'data-schema="3" data-encoding="gzip-base64">'
+        'data-schema="4" data-encoding="gzip-base64">'
         f"{base64.b64encode(compressed).decode('ascii')}"
         "</metadata></svg>"
     )
@@ -213,8 +211,8 @@ def test_vibrio_gallery_interactive_svg_meets_regenerated_targets() -> None:
         < measurements["compressedMetadataBytes"]
         < measurements["decodedMetadataBytes"]
     )
-    assert measurements["renderedFeatureCount"] == 24_945
-    assert measurements["biologicalFeatureCount"] == 49_970
+    assert measurements["renderedFeatureCount"] == 9_375
+    assert measurements["biologicalFeatureCount"] == 18_782
 
 
 def test_session_artifact_measurements_report_component_bytes(
@@ -225,7 +223,7 @@ def test_session_artifact_measurements_report_component_bytes(
         "resources": {"record": {"data": "QUJD", "encoding": "base64"}},
         "webFiles": {"files": []},
         "editorState": {
-            "featureCatalog": {"schema": 3, "items": []},
+            "featureCatalog": {"schema": 4, "items": []},
             "legend": {"entries": []},
         },
         "losatCache": {"entries": []},
@@ -343,7 +341,7 @@ def test_current_session_catalog_structure_rejects_duplicate_payloads(
             "second": {"data": "QUJD", "encoding": "base64"},
         },
         "editorState": {
-            "featureCatalog": {"schema": 3, "items": [item]}
+            "featureCatalog": {"schema": 4, "items": [item]}
         },
     }
 
@@ -472,7 +470,7 @@ def _staged_geometry_session(
         "results": [{"name": "result", "content": "<svg></svg>"}],
         "editorState": {
             "featureCatalog": {
-                "schema": 3,
+                "schema": 4,
                 "items": [
                     {
                         "resultIndex": 0,
@@ -841,7 +839,7 @@ def test_staged_gallery_validator_accepts_current_artifact_schemas(
         "results": [{"name": "result", "content": "<svg></svg>"}],
         "editorState": {
             "featureCatalog": {
-                "schema": 3,
+                "schema": 4,
                 "items": [
                     {
                         "resultIndex": 0,
@@ -1093,6 +1091,12 @@ def test_gallery_validators_materialize_catalog_sequence_references() -> None:
         ],
         "qualifiers": {},
         "sequenceSourceIndex": 1,
+        "anchorProfile": {
+            "precision": "unavailable",
+            "operator": "unknown",
+            "partOrder": "ambiguous",
+            "strand": "mixed",
+        },
     }
     item = {
         "resultIndex": 0,
@@ -1141,7 +1145,7 @@ def test_gallery_validators_materialize_catalog_sequence_references() -> None:
     session = {
         "results": [{"name": "result", "content": source}],
         "editorState": {
-            "featureCatalog": {"schema": 3, "items": [item]}
+            "featureCatalog": {"schema": 4, "items": [item]}
         },
     }
 
@@ -1178,7 +1182,7 @@ def test_gallery_validators_materialize_catalog_sequence_references() -> None:
     simple_session = {
         "results": [{"name": "result", "content": source}],
         "editorState": {
-            "featureCatalog": {"schema": 3, "items": [simple_item]}
+            "featureCatalog": {"schema": 4, "items": [simple_item]}
         },
     }
     _validate_source_feature_ids(EXAMPLES[0], simple_session, source)
@@ -1188,7 +1192,7 @@ def test_gallery_validators_materialize_catalog_sequence_references() -> None:
     broken_session = {
         "results": [{"name": "result", "content": source}],
         "editorState": {
-            "featureCatalog": {"schema": 3, "items": [broken_item]}
+            "featureCatalog": {"schema": 4, "items": [broken_item]}
         },
     }
     with pytest.raises(
@@ -1212,7 +1216,7 @@ def test_gallery_validators_materialize_catalog_sequence_references() -> None:
         "results": [{"name": "result", "content": source}],
         "editorState": {
             "featureCatalog": {
-                "schema": 3,
+                "schema": 4,
                 "items": [unreferenced_invalid_item],
             }
         },
@@ -1252,6 +1256,12 @@ def test_gallery_sequence_source_validation_is_bounded_by_source_count(
             "strand": "+",
             "qualifiers": {},
             "sequenceSourceIndex": 0,
+            "anchorProfile": {
+                "precision": "exact",
+                "operator": "single",
+                "partOrder": "biological",
+                "strand": "+",
+            },
         }
         for index in range(feature_count)
     ]
@@ -1302,7 +1312,7 @@ def test_gallery_sequence_source_validation_is_bounded_by_source_count(
     session = {
         "results": [{"name": "result", "content": source}],
         "editorState": {
-            "featureCatalog": {"schema": 3, "items": [item]}
+            "featureCatalog": {"schema": 4, "items": [item]}
         },
     }
     validation_calls = 0
@@ -1457,11 +1467,23 @@ def test_gallery_session_features_seed_biological_catalog() -> None:
         "recordKey": "record-1",
         "biologicalFeatureId": "fstable",
         "stableFeatureId": "fstable",
+        "anchorProfile": {
+            "precision": "unavailable",
+            "operator": "unknown",
+            "partOrder": "ambiguous",
+            "strand": "unstranded",
+        },
     }
     hidden = {
         "recordKey": "record-2",
         "biologicalFeatureId": "fhidden",
         "stableFeatureId": "fhidden",
+        "anchorProfile": {
+            "precision": "unavailable",
+            "operator": "unknown",
+            "partOrder": "ambiguous",
+            "strand": "unstranded",
+        },
     }
 
     context = _session_interactive_context(
@@ -1469,7 +1491,7 @@ def test_gallery_session_features_seed_biological_catalog() -> None:
             "results": [{"name": "result", "content": "<svg/>"}],
             "editorState": {
                 "featureCatalog": {
-                    "schema": 3,
+                    "schema": 4,
                     "items": [
                         {
                             "resultIndex": 0,
@@ -1520,10 +1542,16 @@ def test_orthogroup_gallery_preserves_session_members_and_rendered_ids(
         if element.get("id") == "gbdraw-interactive-feature-metadata"
     )
     payload = json.loads(metadata.text or "{}")
-    assert payload["schema"] == 3
+    assert payload["schema"] == 4
     assert len(payload["items"]) == 1
     item = payload["items"][0]
-    session_item = session["editorState"]["featureCatalog"]["items"][0]
+    session_catalog = session["editorState"]["featureCatalog"]
+    if session_catalog["schema"] == 3:
+        session_catalog = feature_catalog_module.promote_legacy_feature_catalog(
+            session_catalog
+        )
+    assert session_catalog["schema"] == 4
+    session_item = session_catalog["items"][0]
     assert item == session_item
 
     features = item["features"]
@@ -1607,3 +1635,51 @@ def test_orthogroup_gallery_preserves_session_members_and_rendered_ids(
     assert all(
         str(feature["svgId"]) in dom_ids for feature in features
     )
+
+
+@pytest.mark.parametrize("compressed", [False, True])
+def test_refresh_rewrites_retired_flags_in_the_recorded_cli_invocation(
+    tmp_path: Path,
+    compressed: bool,
+) -> None:
+    invocation = {
+        "schema": 1,
+        "mode": "linear",
+        "args": [
+            "--protein_blastp_mode",
+            "orthogroup",
+            "--gbk",
+            "A.gb",
+            "--align_orthogroup_feature",
+            "P1",
+            "--losatp_threads",
+            "2",
+        ],
+        "fileBindings": [{"argIndex": 3, "slot": "files.linearSeqs[0].gb", "name": "A.gb"}],
+    }
+    payload = json.dumps({"keep": [1, 2], "cliInvocation": invocation}).encode()
+    path = tmp_path / ("s.json.gz" if compressed else "s.json")
+    path.write_bytes(gzip.compress(payload) if compressed else payload)
+
+    refresh_gallery_sessions_module._canonicalize_recorded_cli_invocation(
+        path, mode="linear"
+    )
+
+    raw = path.read_bytes()
+    session = json.loads(gzip.decompress(raw) if compressed else raw)
+    assert session["keep"] == [1, 2]
+    args = session["cliInvocation"]["args"]
+    assert args == [
+        "--losat",
+        "losatp",
+        "--losatp_mode",
+        "similarity_groups",
+        "--gbk",
+        "A.gb",
+        "--similarity_alignment_feature",
+        "P1",
+        "--losat_threads",
+        "2",
+    ]
+    (binding,) = session["cliInvocation"]["fileBindings"]
+    assert args[binding["argIndex"]] == "A.gb"

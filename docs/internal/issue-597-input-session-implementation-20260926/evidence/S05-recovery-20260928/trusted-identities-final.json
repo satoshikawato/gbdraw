@@ -1,0 +1,26 @@
+{
+  "tools/check-web-change-budget.mjs": {
+    "sha256": "c7888ffb9c6d136284b567712f6e11a474e6b08f54d4daaee7d78e1a402d7f1c",
+    "trustedDevBytesEqual": true
+  },
+  "tools/web-change-policy.json": {
+    "sha256": "185f1edde7c5d790a250e15326c01ec2bf13a00f2bcabc117b91ad5d21299fed",
+    "trustedDevBytesEqual": true
+  },
+  "tools/web-product-impact-map.json": {
+    "sha256": "dfd88850f67162f6046542e53d3136f51818e127a1320ecbf589b6cf97e14885",
+    "trustedDevBytesEqual": true
+  },
+  "docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md": {
+    "sha256": "c92ef7048f3bf601959cde97fcd223ac320d9730491dbba9cb74b41028e1eb38",
+    "trustedDevBytesEqual": true
+  },
+  "tests/web/contracts/session-regenerate-intent.playwright.spec.js": {
+    "sha256": "732892b8d9c780cc4713fc41f4d28032e171860f5a176cb1b0bc49a1bf5693c7",
+    "trustedDevBytesEqual": true
+  },
+  "tests/utils/svg_compare.py": {
+    "sha256": "042380d4a27598c6f8f8e7c026e88eb853826ac502185181b833743ea79bbba5",
+    "trustedDevBytesEqual": true
+  }
+}

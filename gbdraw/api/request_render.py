@@ -22,7 +22,6 @@ from typing import (
     TypeAlias,
 )
 
-from Bio import SeqIO  # type: ignore[reportMissingImports]
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 from svgwrite import Drawing  # type: ignore[reportMissingImports]
@@ -41,9 +40,24 @@ from gbdraw.analysis.depth_tracks import (
     normalize_depth_tracks,
 )
 from gbdraw.exceptions import ValidationError
+from gbdraw.comparisons.linear_losat import resolve_linear_nucleotide_losat
+from gbdraw.comparisons.losat_jobs import losat_record_uids, losat_source_ids
+from gbdraw.comparisons.circular_losat import resolve_circular_conservation_losat
+from gbdraw.io.comparison_sequences import ComparisonSequenceFile, read_comparison_sequence_file
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.record_placement import resolve_record_row_positions
+from gbdraw.layout.similarity_alignment import (
+    SimilarityAlignmentCandidate,
+    SimilarityAlignmentPlan,
+    SimilarityAlignmentReference,
+    SimilarityAlignmentReferenceError,
+    resolve_similarity_alignment,
+)
 from gbdraw.analysis.protein_colinearity import (
     LosatpCacheManager,
+    OrthogroupGraphResult,
+    OrthogroupMember,
+    OrthogroupResult,
     ProteinExtractionResult,
     extract_web_stable_cds_proteins,
     is_protein_losat_cache_entry,
@@ -54,7 +68,10 @@ from gbdraw.features.visibility import (
     read_feature_visibility_file,
     resolve_candidate_feature_types,
 )
-from gbdraw.annotations import AnnotationOptions, read_annotation_table
+from gbdraw.annotations import (
+    AnnotationOptions, ResolvedAnnotationBundle, ResolutionWarning,
+    read_annotation_table, resolve_annotations,
+)
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
 from gbdraw.io.colors import load_default_colors, read_color_table
 from gbdraw.labels.filtering import (
@@ -80,10 +97,14 @@ from .diagram import (
 )
 from .io import load_gbks, load_gff_fasta
 from .options import (
+    ColorOptions,
     CircularDiagramOptions,
     CircularMultiRecordOptions,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
+    LinearRecordTranslation,
+    LosatSearchOptions,
+    losatp_analysis_mode,
 )
 from gbdraw.features.placement import ResolvedPlacementInputs, resolve_placement_inputs
 from gbdraw.features.source import build_source_feature_catalog
@@ -102,6 +123,7 @@ from .prepared import (
     resolve_feature_inputs,
 )
 from .record_planning import (
+    project_source_bound_comparisons,
     ResolvedRecordCollection,
     ResolvedRecordDisplay,
     _detected_topology,
@@ -113,6 +135,9 @@ from .record_planning import (
     resolve_implicit_record_output_prefix,
     resolve_linear_options,
     resolve_record_inputs,
+    project_similarity_alignment_centers,
+    similarity_alignment_evidence_edges,
+    _similarity_candidate_from_orthogroup_member,
 )
 from .render import preflight_output_paths, save_figure_to
 from .requests import (
@@ -305,9 +330,10 @@ def _resolve_request_option_tables(
 
 @dataclass
 class _ComparisonSequenceSources:
-    """Memoized Circular companion FASTA records shared by a request batch."""
+    """Memoized Circular comparison-genome records shared by a request batch."""
 
     paths: tuple[str | None, ...]
+    _files: tuple[ComparisonSequenceFile | None, ...] | None = None
     _records: tuple[tuple[SeqRecord, ...], ...] | None = None
 
     def cache_specs(
@@ -328,7 +354,7 @@ class _ComparisonSequenceSources:
                 None
                 if identity is None
                 else (
-                    ("parsed-source-v1", "comparison-fasta", identity),
+                    ("parsed-source-v1", "comparison-sequence", identity),
                     frozenset({identity}),
                 )
             )
@@ -336,18 +362,27 @@ class _ComparisonSequenceSources:
 
     def load(self) -> tuple[tuple[SeqRecord, ...], ...]:
         if self._records is None:
-            loaded: list[tuple[SeqRecord, ...]] = []
+            self._records = tuple(
+                file.records if file is not None else () for file in self.files()
+            )
+        return self._records
+
+    def files(self) -> tuple[ComparisonSequenceFile | None, ...]:
+        """Each comparison genome read once by the one reader (design D12)."""
+
+        if self._files is None:
+            loaded: list[ComparisonSequenceFile | None] = []
             for path, cache_spec in zip(
                 self.paths,
                 self.cache_specs(),
                 strict=True,
             ):
                 if not path:
-                    loaded.append(())
+                    loaded.append(None)
                     continue
 
-                def parse(path: str = path) -> tuple[SeqRecord, ...]:
-                    return tuple(SeqIO.parse(path, "fasta"))
+                def parse(path: str = path) -> ComparisonSequenceFile:
+                    return read_comparison_sequence_file(path)
 
                 if cache_spec is None:
                     loaded.append(parse())
@@ -358,11 +393,11 @@ class _ComparisonSequenceSources:
                         key,
                         identities,
                         parse,
-                        publish=lambda value: bool(value),
+                        publish=lambda value: bool(value.records),
                     )
                 )
-            self._records = tuple(loaded)
-        return self._records
+            self._files = tuple(loaded)
+        return self._files
 
 
 @dataclass(frozen=True)
@@ -538,6 +573,11 @@ class PreparedDiagramRequest:
     losat_derived_cache_entries: tuple[Mapping[str, Any], ...] = ()
     protein_identity_manifest: Mapping[str, Any] | None = None
     transforms: tuple[RecordDisplayTransform, ...] = ()
+    resolved_annotations: ResolvedAnnotationBundle = ResolvedAnnotationBundle(())
+
+    @property
+    def annotation_warnings(self) -> tuple[ResolutionWarning, ...]:
+        return self.resolved_annotations.warnings
 
 
 @dataclass(frozen=True)
@@ -554,6 +594,7 @@ class RequestRenderResult:
     losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
     losat_derived_cache_entries: tuple[Mapping[str, Any], ...] = ()
     protein_identity_manifest: Mapping[str, Any] | None = None
+    annotation_warnings: tuple[ResolutionWarning, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -564,6 +605,7 @@ class PreparedCircularBatchRequest:
     records: tuple[SeqRecord, ...]
     items: tuple[PreparedDiagramRequest, ...]
     inputs: PreparedDiagramInputs | None = None
+    losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
 
     @property
     def mode(self) -> Literal["circular"]:
@@ -577,6 +619,7 @@ class CircularBatchRenderResult:
     request: CircularBatchRequest
     records: tuple[SeqRecord, ...]
     items: tuple[RequestRenderResult, ...]
+    losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
 
     @property
     def mode(self) -> Literal["circular"]:
@@ -636,6 +679,11 @@ def _initialize_plan_display_context(plan) -> None:
         plan.provenance, plan.displays, plan.transforms,
     )):
         raise ValidationError("Plan display context must align with its records.")
+    if plan.resolved_annotations is None:
+        object.__setattr__(plan, "resolved_annotations", resolve_annotations(
+            plan.request.options.annotations, plan.records,
+            mode=plan.mode, record_transforms=plan.transforms,
+        ))
 
 
 @dataclass(frozen=True)
@@ -651,6 +699,8 @@ class CircularRequestPlan:
     provenance: tuple[ResolvedRecordProvenance, ...] = ()
     displays: tuple[ResolvedRecordDisplay, ...] = ()
     transforms: tuple[RecordDisplayTransform, ...] = ()
+    resolved_annotations: ResolvedAnnotationBundle | None = None
+    losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, CircularDiagramRequest):
@@ -700,6 +750,7 @@ class CircularRequestPlan:
         )
         if self.inputs is not None and self.inputs.placements:
             shared_kwargs["_resolved_placement_inputs"] = self.inputs.placements
+        shared_kwargs["_resolved_annotations"] = self.resolved_annotations
         if self.layout is None:
             depth_kwargs: dict[str, Any] = dict(shared_kwargs)
             if self.precomputed_depth_track_specs is not None:
@@ -752,6 +803,8 @@ class CircularBatchRequestPlan:
     provenance: tuple[ResolvedRecordProvenance, ...] = ()
     displays: tuple[ResolvedRecordDisplay, ...] = ()
     transforms: tuple[RecordDisplayTransform, ...] = ()
+    resolved_annotations: ResolvedAnnotationBundle | None = None
+    losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, CircularBatchRequest):
@@ -825,6 +878,14 @@ class CircularBatchRequestPlan:
                     request=item_request,
                     records=(record,),
                     layout=None,
+                    resolved_annotations=ResolvedAnnotationBundle(
+                        annotations=tuple(replace(item, record_index=0)
+                            for item in self.resolved_annotations.annotations
+                            if item.record_index == index),
+                        warnings=tuple(item for item in self.resolved_annotations.warnings
+                            if item.record_index == index),
+                        set_ids=self.resolved_annotations.set_ids,
+                    ),
                     precomputed_depth_track_specs=(
                         tuple(normalized_depth[index])
                         if normalized_depth is not None
@@ -858,6 +919,10 @@ class LinearRequestPlan:
     provenance: tuple[ResolvedRecordProvenance, ...] = ()
     displays: tuple[ResolvedRecordDisplay, ...] = ()
     transforms: tuple[RecordDisplayTransform, ...] = ()
+    resolved_annotations: ResolvedAnnotationBundle | None = None
+    alignment_anchor_centers: tuple[float | None, ...] = ()
+    # Raw cache entries of the LOSATN / TLOSATX searches this plan resolved.
+    losat_cache_entries: tuple[Mapping[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, LinearDiagramRequest):
@@ -889,6 +954,16 @@ class LinearRequestPlan:
             )
 
         _initialize_plan_display_context(self)
+        if not self.alignment_anchor_centers:
+            object.__setattr__(
+                self,
+                "alignment_anchor_centers",
+                tuple(None for _ in self.records),
+            )
+        if len(self.alignment_anchor_centers) != len(self.records):
+            raise ValidationError(
+                "Linear alignment anchor centers must align with its records."
+            )
 
     @property
     def mode(self) -> Literal["linear"]:
@@ -916,7 +991,10 @@ class LinearRequestPlan:
             kwargs["_resolved_feature_inputs"] = self.inputs.features
             if self.inputs.placements:
                 kwargs["_resolved_placement_inputs"] = self.inputs.placements
+        kwargs["_resolved_annotations"] = self.resolved_annotations
         kwargs["_record_transforms"] = self.transforms
+        kwargs["similarity_alignment"] = self.request.similarity_alignment
+        kwargs["_alignment_anchor_centers"] = self.alignment_anchor_centers
         built = build_linear_diagram_result(self.records, **kwargs)
         if isinstance(built, LinearDiagramBuildResult):
             return built
@@ -966,7 +1044,7 @@ def _linear_request_uses_comparisons(request: LinearDiagramRequest) -> bool:
         or options.comparison_table_file
         or options.protein_comparisons
         or options.collinearity_blocks
-        or options.protein_blastp_mode != "none"
+        or options.losat_search is not None
     )
 
 
@@ -1013,10 +1091,10 @@ def _prepare_diagram_inputs(request: DiagramRequest) -> PreparedDiagramInputs:
     )
     comparison_sequences = (
         _ComparisonSequenceSources(
-            tuple(options.conservation_fasta_files or ())
+            tuple(options.conservation_sequence_files or ())
         )
         if isinstance(options, CircularDiagramOptions)
-        and options.conservation_fasta_files
+        and options.conservation_sequence_files
         else None
     )
     return PreparedDiagramInputs(
@@ -1029,6 +1107,18 @@ def _prepare_diagram_inputs(request: DiagramRequest) -> PreparedDiagramInputs:
         gff_keep_all_features=keep_all_features,
         comparison_sequences=comparison_sequences,
     )
+
+
+def _with_prepared_colors(request: DiagramRequest, inputs: PreparedDiagramInputs) -> DiagramRequest:
+    """Record the canonical table actually compiled for this request."""
+    if inputs.features.color_table is None:
+        return request
+    colors = replace(
+        request.options.colors or ColorOptions(),
+        color_table=inputs.features.color_table,
+        color_table_file=None,
+    )
+    return replace(request, options=replace(request.options, colors=colors))
 
 
 def _normalize_request_records(
@@ -1372,6 +1462,31 @@ def _materialize_placement_inputs(
     return request, replace(inputs, placements=placements if exact else ())
 
 
+def _resolve_ring_losat(
+    options: CircularDiagramOptions,
+    records: Sequence[SeqRecord],
+    inputs: PreparedDiagramInputs,
+) -> tuple[CircularDiagramOptions, tuple[Mapping[str, Any], ...]]:
+    """Replace ring LOSATN / TLOSATX intent with ring rows (design 3.3).
+
+    The subject database is every displayed record; each comparison genome is
+    read once through the request's memoized reader.
+    """
+
+    if options.losat_search is None:
+        return options, ()
+    sources = inputs.comparison_sequences or _ComparisonSequenceSources(
+        tuple(options.conservation_sequence_files or ())
+    )
+
+    def load_sequences() -> tuple[ComparisonSequenceFile, ...]:
+        return tuple(file for file in sources.files() if file is not None)
+
+    return resolve_circular_conservation_losat(
+        options, records=records, load_sequences=load_sequences
+    )
+
+
 def plan_circular_request(
     request: CircularDiagramRequest,
 ) -> CircularRequestPlan:
@@ -1391,6 +1506,7 @@ def plan_circular_request(
             else replace(request, options=resolved_options)
         )
         inputs = _prepare_diagram_inputs(unresolved_request)
+        unresolved_request = _with_prepared_colors(unresolved_request, inputs)
     with _request_render_diagnostic_phase("recordLoad"):
         collection = _coerce_resolved_collection(
             unresolved_request,
@@ -1416,6 +1532,11 @@ def plan_circular_request(
             and resolved_layout == unresolved_request.layout
             else projected_request
         )
+        ring_options, losat_cache_entries = _resolve_ring_losat(
+            materialized_request.options, records, inputs
+        )
+        if ring_options is not materialized_request.options:
+            materialized_request = replace(materialized_request, options=ring_options)
         _warn_circular_topologies(records)
     return CircularRequestPlan(
         request=materialized_request,
@@ -1425,6 +1546,7 @@ def plan_circular_request(
         provenance=collection.provenance,
         displays=collection.displays,
         transforms=collection.transforms,
+        losat_cache_entries=losat_cache_entries,
     )
 
 
@@ -1447,6 +1569,7 @@ def plan_circular_batch_request(
             else replace(request, options=resolved_options)
         )
         inputs = _prepare_diagram_inputs(unresolved_request)
+        unresolved_request = _with_prepared_colors(unresolved_request, inputs)
     with _request_render_diagnostic_phase("recordLoad"):
         collection = _coerce_resolved_collection(
             unresolved_request,
@@ -1475,6 +1598,11 @@ def plan_circular_batch_request(
                 record_options=RecordCollectionOptions(),
             )
         )
+        ring_options, losat_cache_entries = _resolve_ring_losat(
+            materialized_request.options, records, inputs
+        )
+        if ring_options is not materialized_request.options:
+            materialized_request = replace(materialized_request, options=ring_options)
         _warn_circular_topologies(records)
     return CircularBatchRequestPlan(
         request=materialized_request,
@@ -1483,16 +1611,25 @@ def plan_circular_batch_request(
         provenance=collection.provenance,
         displays=collection.displays,
         transforms=collection.transforms,
+        losat_cache_entries=losat_cache_entries,
     )
 
 
 def plan_linear_request(
     request: LinearDiagramRequest,
 ) -> LinearRequestPlan:
-    """Normalize a Linear request into one explicit builder plan."""
+    """Normalize a Linear request into one explicit builder plan.
+
+    A :class:`SimilarityAlignmentReference` is resolved first: the requested
+    orthogroup analysis runs once and the plan's request carries its result
+    and the resolved alignment plan. Use :func:`render_request` or
+    :func:`build_request_diagram` to keep that analysis's LOSATP artifacts.
+    """
 
     if not isinstance(request, LinearDiagramRequest):
         raise ValidationError("request must be LinearDiagramRequest.")
+    if isinstance(request.similarity_alignment, SimilarityAlignmentReference):
+        request, _artifacts = _resolve_similarity_alignment_reference(request, None)
     with _request_render_diagnostic_phase("preparation"):
         unresolved_request = replace(
             request,
@@ -1503,6 +1640,7 @@ def plan_linear_request(
             ),
         )
         inputs = _prepare_diagram_inputs(unresolved_request)
+        unresolved_request = _with_prepared_colors(unresolved_request, inputs)
     with _request_render_diagnostic_phase("recordLoad"):
         collection = _coerce_resolved_collection(
             unresolved_request,
@@ -1521,6 +1659,10 @@ def plan_linear_request(
             records=collection.records,
             layout=resolved_layout,
         )
+        resolved_options, losat_cache_entries = _resolve_nucleotide_losat(
+            resolved_options, collection, resolved_layout
+        )
+        resolved_options = project_source_bound_comparisons(resolved_options, collection)
         materialized_request = (
             unresolved_request
             if _is_materialized_exact_one_request(unresolved_request)
@@ -1531,6 +1673,9 @@ def plan_linear_request(
                 options=resolved_options,
             )
         )
+        alignment_anchor_centers = project_similarity_alignment_centers(
+            collection, materialized_request.similarity_alignment
+        )
     return LinearRequestPlan(
         request=materialized_request,
         records=collection.records,
@@ -1539,6 +1684,249 @@ def plan_linear_request(
         provenance=collection.provenance,
         displays=collection.displays,
         transforms=collection.transforms,
+        alignment_anchor_centers=alignment_anchor_centers,
+        losat_cache_entries=losat_cache_entries,
+    )
+
+
+def _resolve_nucleotide_losat(
+    options: LinearDiagramOptions,
+    collection: ResolvedRecordCollection,
+    layout: LinearMultiRecordOptions | None,
+) -> tuple[LinearDiagramOptions, tuple[Mapping[str, Any], ...]]:
+    """Replace LOSATN / TLOSATX intent with comparisons (design 3.4).
+
+    A source file is one genome; an in-memory record is its own source
+    (:func:`gbdraw.comparisons.losat_jobs.losat_source_ids`, as for LOSATP).
+    """
+
+    if options.losat_search is None or options.losat_search.program == "losatp":
+        return options, ()
+    _ordered, rows_by_record = resolve_record_row_positions(
+        collection.records,
+        layout.multi_record_positions if layout is not None else None,
+    )
+    provenance = collection.provenance
+    return resolve_linear_nucleotide_losat(
+        options,
+        records=collection.records,
+        rows_by_record=rows_by_record,
+        source_ids=losat_source_ids(collection.records),
+        record_keys=losat_record_uids(collection.records),
+        record_labels=[
+            item.presentation.label or str(record.id)
+            for item, record in zip(provenance, collection.records, strict=True)
+        ],
+        input_indexes=[item.input_index for item in provenance],
+    )
+
+
+def resolve_similarity_alignment_plan(
+    plan: LinearRequestPlan,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None,
+    reference: SimilarityAlignmentReference,
+) -> SimilarityAlignmentPlan:
+    """Resolve an exact feature/protein reference into one complete plan.
+
+    ``orthogroups`` is the Similarity group result of the orthogroup analysis
+    run on ``plan``'s records (``linear_metadata.orthogroups`` of the built
+    plan). The reference names one member by its exact protein ID or feature
+    SVG ID; a Similarity Group ID is rejected. Each other record aligns on its
+    sole usable member or its sole direct reciprocal-best-hit member, and a
+    record without a candidate keeps its position. A record that still has
+    several candidates raises :class:`SimilarityAlignmentReferenceError`
+    naming the record and its exact candidate IDs; nothing prompts.
+    """
+
+    if not isinstance(plan, LinearRequestPlan):
+        raise ValidationError(
+            "plan must be LinearRequestPlan.",
+            diagnostic={"code": "INPUT_INVALID"},
+        )
+    if not isinstance(reference, SimilarityAlignmentReference):
+        raise ValidationError(
+            "reference must be SimilarityAlignmentReference.",
+            diagnostic={"code": "INPUT_INVALID"},
+        )
+    if orthogroups is None:
+        raise SimilarityAlignmentReferenceError(
+            reference,
+            "requires orthogroup metadata from the requested analysis.",
+        )
+    target = reference.feature_id
+    if target in orthogroups.orthogroups:
+        raise SimilarityAlignmentReferenceError(
+            reference,
+            "accepts an exact feature/protein ID, not "
+            f"Similarity Group ID {target!r}.",
+        )
+    collection = ResolvedRecordCollection(plan.records, plan.provenance)
+    record_keys = tuple(item.record_key for item in collection.provenance)
+    candidate_rows: list[tuple[OrthogroupMember, SimilarityAlignmentCandidate]] = []
+    exact_matches: list[tuple[OrthogroupMember, SimilarityAlignmentCandidate]] = []
+    for members in orthogroups.orthogroups.values():
+        for member in members:
+            if member.record_index < 0 or member.record_index >= len(collection.records):
+                continue
+            candidate = _similarity_candidate_from_orthogroup_member(
+                collection,
+                member,
+            )
+            candidate_rows.append((member, candidate))
+            aliases = {
+                str(value)
+                for value in (
+                    member.protein_id,
+                    member.source_protein_id,
+                    member.feature_svg_id,
+                    candidate.anchor.biological_feature_id,
+                    candidate.anchor.stable_feature_svg_id,
+                )
+                if value
+            }
+            if target in aliases:
+                exact_matches.append((member, candidate))
+    if not exact_matches:
+        raise SimilarityAlignmentReferenceError(
+            reference,
+            "did not match an exact feature/protein ID.",
+        )
+    if len(exact_matches) != 1:
+        matches = ", ".join(
+            sorted(
+                f"{candidate.anchor.record_key}:{member.protein_id}"
+                for member, candidate in exact_matches
+            )
+        )
+        raise SimilarityAlignmentReferenceError(
+            reference,
+            f"is ambiguous; use one exact candidate ID from: {matches}.",
+        )
+    reference_member, reference_candidate = exact_matches[0]
+    group_id = reference_member.orthogroup_id
+    resolution = resolve_similarity_alignment(
+        record_keys=record_keys,
+        group_id=group_id,
+        reference=reference_candidate.anchor,
+        candidates=tuple(
+            candidate
+            for member, candidate in candidate_rows
+            if member.orthogroup_id == group_id
+        ),
+        edges=similarity_alignment_evidence_edges(collection, orthogroups, group_id),
+    )
+    if resolution.ambiguities:
+        protein_by_key = {
+            candidate.anchor.canonical_key: member.protein_id
+            for member, candidate in candidate_rows
+        }
+        details = "; ".join(
+            f"record {ambiguity.record_key!r} candidates ["
+            + ", ".join(
+                protein_by_key.get(
+                    candidate.anchor.canonical_key,
+                    candidate.anchor.biological_feature_id,
+                )
+                for candidate in ambiguity.candidates
+            )
+            + "]"
+            for ambiguity in resolution.ambiguities
+        )
+        raise SimilarityAlignmentReferenceError(
+            reference,
+            "cannot choose among multiple candidates; select an exact candidate "
+            f"for each record: {details}.",
+        )
+    return resolution.require_plan()
+
+
+def _reference_record_inputs(
+    request: LinearDiagramRequest,
+    plan: LinearRequestPlan,
+    reference: SimilarityAlignmentReference,
+) -> tuple[RecordInput, ...]:
+    """Key each input by its one displayed record, as the plan names them."""
+
+    keys_by_input: dict[int, list[str]] = {}
+    for item in plan.provenance:
+        keys_by_input.setdefault(item.input_index, []).append(item.record_key)
+    records: list[RecordInput] = []
+    for index, record in enumerate(request.records):
+        keys = keys_by_input.get(index, [])
+        if len(keys) != 1:
+            raise SimilarityAlignmentReferenceError(
+                reference,
+                "requires every RecordInput to resolve to exactly one displayed record.",
+            )
+        records.append(
+            record if record.record_key == keys[0] else replace(record, record_key=keys[0])
+        )
+    return tuple(records)
+
+
+def _resolved_losat_search(
+    search: LosatSearchOptions | None,
+) -> LosatSearchOptions | None:
+    """Keep the search settings of evidence that the request now carries."""
+
+    if search is None:
+        return None
+    return replace(search, losatp_mode="none", pairs=None)
+
+
+def _resolve_similarity_alignment_reference(
+    request: DiagramRequest,
+    artifacts: CurrentRequestArtifacts | None,
+) -> tuple[DiagramRequest, CurrentRequestArtifacts | None]:
+    """Run the requested analysis once and replace a reference with its plan.
+
+    The resolved request carries that analysis as precomputed comparisons, so
+    rendering it starts no second search, and the returned artifacts carry
+    its LOSATP entries. Any other request passes through unchanged.
+    """
+
+    if not isinstance(request, LinearDiagramRequest) or not isinstance(
+        request.similarity_alignment,
+        SimilarityAlignmentReference,
+    ):
+        return request, artifacts
+    reference = request.similarity_alignment
+    analysis_plan = plan_linear_request(replace(request, similarity_alignment=None))
+    analysis = build_request_plan_diagram(analysis_plan, artifacts=artifacts)
+    metadata = analysis.linear_metadata
+    alignment = resolve_similarity_alignment_plan(
+        analysis_plan,
+        metadata.orthogroups if metadata is not None else None,
+        reference,
+    )
+    assert metadata is not None  # a missing result has no orthogroups
+    records = _reference_record_inputs(request, analysis_plan, reference)
+    layout = request.layout or LinearMultiRecordOptions()
+    resolved = replace(
+        request,
+        records=records,
+        options=replace(
+            request.options,
+            losat_search=_resolved_losat_search(request.options.losat_search),
+            protein_comparisons=metadata.protein_comparisons,
+            linear_comparisons=metadata.linear_comparisons,
+            orthogroups=metadata.orthogroups,
+            collinearity_blocks=metadata.collinearity_result,
+        ),
+        layout=replace(
+            layout,
+            record_translations=layout.record_translations or tuple(
+                LinearRecordTranslation(record_key=str(record.record_key))
+                for record in records
+            ),
+        ),
+        similarity_alignment=alignment,
+    )
+    return resolved, CurrentRequestArtifacts(
+        losat_cache_entries=analysis.losat_cache_entries,
+        losat_derived_cache_entries=analysis.losat_derived_cache_entries,
+        protein_identity_manifest=analysis.protein_identity_manifest,
+        protein_source_mode="orthogroup",
     )
 
 
@@ -1564,7 +1952,7 @@ def _source_protein_mode(
     request: LinearDiagramRequest,
     artifacts: CurrentRequestArtifacts,
 ) -> str:
-    requested = str(request.options.protein_blastp_mode or "none")
+    requested = losatp_analysis_mode(request.options.losat_search)
     if requested != "none":
         return requested
     if artifacts.protein_source_mode in {"pairwise", "orthogroup", "collinear"}:
@@ -1622,7 +2010,7 @@ def _prepare_linear_artifacts(
     )
     needs_protein_identity = bool(
         current_protein
-        or request.options.protein_blastp_mode != "none"
+        or losatp_analysis_mode(request.options.losat_search) != "none"
         or request.options.protein_comparisons is not None
         or request.options.orthogroups is not None
         or request.options.collinearity_blocks is not None
@@ -1651,7 +2039,12 @@ def _prepare_linear_artifacts(
     cache = LosatpCacheManager(
         reusable_current,
         identity_manifest=manifest,
-        threads_per_job=request.options.losatp_threads or "auto",
+        threads_per_job=(
+            request.options.losat_search.runtime.threads
+            if request.options.losat_search is not None
+            else None
+        )
+        or "auto",
     )
     return _PreparedLinearArtifacts(
         cache=cache,
@@ -1845,7 +2238,11 @@ def _build_current_derived_entries(
         },
         "orthogroup": {
             "membershipMode": str(request.options.orthogroup_membership_mode),
-            "memberMaxHits": request.options.orthogroup_member_max_hits,
+            "memberMaxHits": (
+                request.options.losat_search.losatp_member_max_hits
+                if request.options.losat_search is not None
+                else None
+            ),
         },
         "records": [
             {
@@ -1971,6 +2368,16 @@ def _build_current_derived_entries(
     return (entry,)
 
 
+def _merged_losat_entries(
+    loaded: Sequence[Mapping[str, Any]],
+    searched: Sequence[Mapping[str, Any]],
+) -> tuple[Mapping[str, Any], ...]:
+    """Session entries first, then entries this run searched (one per key)."""
+
+    keys = {entry.get("key") for entry in loaded}
+    return (*loaded, *(entry for entry in searched if entry.get("key") not in keys))
+
+
 def build_request_plan_diagram(
     plan: DiagramRequestPlan,
     *,
@@ -2000,6 +2407,7 @@ def build_request_plan_diagram(
                     drawing=item_plan.build(),
                     inputs=item_plan.inputs,
                     transforms=item_plan.transforms,
+                    resolved_annotations=item_plan.resolved_annotations,
                 )
                 for item_plan in plan.item_plans()
             )
@@ -2008,6 +2416,9 @@ def build_request_plan_diagram(
             records=plan.records,
             items=items,
             inputs=plan.inputs,
+            losat_cache_entries=_merged_losat_entries(
+                current_artifacts.losat_cache_entries, plan.losat_cache_entries
+            ),
         )
     request = plan.request
     records = plan.records
@@ -2018,7 +2429,9 @@ def build_request_plan_diagram(
     if isinstance(plan, CircularRequestPlan):
         with _request_render_diagnostic_phase("drawing"):
             drawing = plan.build()
-        losat_cache_entries = current_artifacts.losat_cache_entries
+        losat_cache_entries = _merged_losat_entries(
+            current_artifacts.losat_cache_entries, plan.losat_cache_entries
+        )
         losat_derived_cache_entries = current_artifacts.losat_derived_cache_entries
         protein_identity_manifest = current_artifacts.protein_identity_manifest
     else:
@@ -2044,9 +2457,17 @@ def build_request_plan_diagram(
                 if linear_artifacts.cache is not None
                 else ()
             )
+            nucleotide_keys = {
+                entry.get("key") for entry in linear_artifacts.nucleotide_entries
+            }
             losat_cache_entries = (
                 *protein_entries,
                 *linear_artifacts.nucleotide_entries,
+                *(
+                    entry
+                    for entry in plan.losat_cache_entries
+                    if entry.get("key") not in nucleotide_keys
+                ),
             )
             losat_derived_cache_entries = _build_current_derived_entries(
                 linear_metadata,
@@ -2064,6 +2485,7 @@ def build_request_plan_diagram(
     return PreparedDiagramRequest(
         mode=plan.mode,
         transforms=plan.transforms,
+        resolved_annotations=plan.resolved_annotations,
         request=request,
         records=records,
         drawing=drawing,
@@ -2082,6 +2504,7 @@ def build_request_diagram(
 ) -> PreparedDiagramRequest | PreparedCircularBatchRequest:
     """Normalize inputs and build a drawing from current typed artifacts."""
 
+    request, artifacts = _resolve_similarity_alignment_reference(request, artifacts)
     return build_request_plan_diagram(
         plan_request(request),
         artifacts=artifacts,
@@ -2138,7 +2561,7 @@ def build_prepared_interactive_context(
             specific_color_rules=inputs.features.specific_color_rules,
             orthogroups=computed_orthogroups,
             linear_rendered_feature_ids=prepared.mode == "linear",
-            annotations=options.annotations,
+            annotations=prepared.resolved_annotations,
             mode=prepared.mode,
             comparison_sequence_records=comparison_sequence_records,
             collinearity_search_scope=collinearity_search_scope,
@@ -2414,6 +2837,12 @@ def render_request(
 ) -> RequestRenderResult | CircularBatchRenderResult:
     """Build and save one typed request from current typed artifacts."""
 
+    if isinstance(request, LinearDiagramRequest) and isinstance(
+        request.similarity_alignment,
+        SimilarityAlignmentReference,
+    ):
+        _preflight_render_output(request.output)  # before the analysis runs
+    request, artifacts = _resolve_similarity_alignment_reference(request, artifacts)
     plan = plan_request(request)
     batch_outputs_preflighted = isinstance(plan, CircularBatchRequestPlan)
     plan.preflight_outputs()
@@ -2469,6 +2898,7 @@ def _render_request_diagram(
                 )
                 for item in prepared.items
             ),
+            losat_cache_entries=prepared.losat_cache_entries,
         )
     return _render_prepared_request(
         prepared,
@@ -2505,8 +2935,8 @@ def _comparison_sequence_records(
 
     def load_unprepared() -> tuple[tuple[SeqRecord, ...], ...]:
         return tuple(
-            tuple(SeqIO.parse(path, "fasta")) if path else ()
-            for path in options.conservation_fasta_files or ()
+            read_comparison_sequence_file(path).records if path else ()
+            for path in options.conservation_sequence_files or ()
         )
 
     return require_interactive_svg_metadata(load_unprepared)
@@ -2600,6 +3030,7 @@ def _render_prepared_request(
         records=prepared.records,
         drawing=prepared.drawing,
         output_paths=tuple(Path(path) for path in paths),
+        annotation_warnings=prepared.annotation_warnings,
         interactive_context=interactive_context,
         linear_metadata=prepared.linear_metadata,
         losat_cache_entries=prepared.losat_cache_entries,
@@ -2630,4 +3061,5 @@ __all__ = [
     "render_request",
     "render_prepared_request",
     "resolve_request",
+    "resolve_similarity_alignment_plan",
 ]

@@ -220,7 +220,7 @@ export const createPanZoom = (state) => {
     const closestGroup = target.closest?.('g[id]');
     if (closestGroup) {
       const groupId = closestGroup.id;
-      if (groupId.startsWith('f')) {
+      if (groupId.startsWith('f') && !target.closest('.gbdraw-preview-layout-target')) {
         return;
       }
       if (isLayoutRepositionModeEnabled() && target.closest('svg')) return;
@@ -335,7 +335,12 @@ export const setupGlobalUiEvents = ({
   } = state;
 
   const closeFeaturePopup = (e) => {
-    if (!e.target.closest('.feature-popup') && !e.target.closest('.pairwise-match-popup') && !e.target.closest('.label-popup')) {
+    if (
+      !e.target.closest('.feature-popup')
+      && !e.target.closest('.pairwise-match-popup')
+      && !e.target.closest('.label-popup')
+      && !e.target.closest('[data-similarity-alignment-overlay]')
+    ) {
       if (clickedFeature.value) clickedFeature.value = null;
       if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
       if (clickedLabel.value) clickedLabel.value = null;

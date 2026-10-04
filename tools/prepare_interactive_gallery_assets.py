@@ -13,17 +13,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import cairosvg
 from PIL import Image, ImageDraw, ImageFont
 
 from gbdraw.exceptions import GbdrawError
 from gbdraw.features.ids import compute_feature_hash_from_parts
+from gbdraw.render.export import convert_svg_with_cairosvg, get_cairosvg
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
 from gbdraw.session_io import load_session, write_session_json
 from gbdraw.web_support.feature_catalog import (
     FEATURE_CATALOG_SCHEMA,
     canonical_catalog_sequence_sources,
     materialize_catalog_nucleotide_sequence,
+    promote_legacy_feature_catalog,
     select_feature_catalog_item,
 )
 
@@ -148,7 +149,8 @@ LAMBDA_BASIC_COMMAND = (
 )
 
 BGC_COMMAND = (
-    "gbdraw linear --protein_blastp_mode orthogroup -f interactive_svg "
+    "gbdraw linear --losat losatp --losatp_mode similarity_groups "
+    "--similarity_alignment_feature CAG38695.1 -f interactive_svg "
     "--gbk BGC0000708.gbk BGC0000709.gbk BGC0000711.gbk BGC0000712.gbk BGC0000713.gbk "
     "-k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region -p orange "
     "-d BGC0000708-BGC0000713_default_colors.tsv "
@@ -173,11 +175,11 @@ VIBRIO_HARVEYI_GROUP_COMMAND = (
     "--scale_interval 750000 --separate_strands --hide_accession --hide_length "
     "--definition_font_size 16 --definition_line_style 'name:size=18,weight=bold' "
     "--definition_line_style 'subtitle:size=16' --keep_definition_left_aligned "
-    "--protein_blastp_mode collinear --collinear_search_scope adjacent "
-    "--protein_blastp_candidate_limit 5 --collinear_min_anchors 3 "
+    "--losat losatp --losatp_mode collinear --collinear_search_scope adjacent "
+    "--losatp_max_target_seqs 5 --collinear_min_anchors 3 "
     "--collinear_max_unit_gap 2 --collinear_max_diagonal_drift 2 "
     "--collinear_color_mode orientation_identity --pairwise_match_style curve "
-    "--losatp_threads 16 --feature_shape CDS=rectangle --feature_shape rRNA=rectangle "
+    "--losat_threads 16 --feature_shape CDS=rectangle --feature_shape rRNA=rectangle "
     "--feature_shape tRNA=rectangle --feature_shape tmRNA=rectangle "
     "--feature_shape ncRNA=rectangle --feature_shape misc_RNA=rectangle "
     "--feature_shape repeat_region=rectangle --block_stroke_width 0 "
@@ -262,19 +264,16 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
     ),
     GallerySessionExample(
         id="vibrio-harveyi-group-collinear",
-        title="<i>Vibrio</i> Harveyi group multi-record collinearity",
+        title="<i>Vibrio parahaemolyticus</i> and <i>V. alginolyticus</i> collinearity",
         tags=("Linear", "Multi-record", "Collinear groups", "LOSAT", "Interactive SVG"),
-        description="Compare all 11 replicons from five Harveyi-group Vibrio assemblies as five multi-record rows.",
+        description="Compare both chromosomes from two Harveyi-clade Vibrio assemblies as two multi-record rows.",
         workflow="Multi-record LOSATP collinear blocks",
-        input_summary="5 multi-record GenBank files; 11 replicons",
+        input_summary="2 multi-record GenBank files; 4 chromosomes",
         display_order=65,
         command_kind="runnable",
-        command_note="Run from a source checkout so the records table can read the five GBFF files under tests/test_inputs/.",
+        command_note="Run from a source checkout so the records table can read the two GBFF files under tests/test_inputs/.",
         command=VIBRIO_HARVEYI_GROUP_COMMAND,
         feature_sources=(
-            "GCF_030060435.1_ASM3006043v1_genomic.gbff",
-            "GCF_002021755.1_ASM202175v1_genomic.gbff",
-            "GCF_002906475.1_ASM290647v1_genomic.gbff",
             "GCF_000196095.1_ASM19609v1_genomic.gbff",
             "GCF_000354175.2_ASM35417v2_genomic.gbff",
         ),
@@ -307,7 +306,10 @@ EXAMPLES: tuple[GallerySessionExample, ...] = (
         input_summary="5 GenBank + 3 color/label TSV files",
         display_order=80,
         command_kind="runnable",
-        command_note="Files provides the five MIBiG records and all three repository-managed TSV files used by the command.",
+        command_note=(
+            "Files provides the five MIBiG records and three TSV files. "
+            "The saved Session retains the reviewed alignment and comparison result."
+        ),
         command=BGC_COMMAND,
     ),
     GallerySessionExample(
@@ -383,7 +385,7 @@ def _example_command(example: GallerySessionExample, session: dict[str, Any]) ->
     command = example.command or _session_command(session)
     command = command.replace("interactive-svg", "interactive_svg")
     if example.id == "hepatoplasmataceae_collinear":
-        command = command.replace("--losatp_threads 32 --protein_blastp_mode collinear --losatp_threads 32", "--losatp_threads 32 --protein_blastp_mode collinear")
+        command = command.replace("--losat_threads 32 --losat losatp --losatp_mode collinear --losat_threads 32", "--losat_threads 32 --losat losatp --losatp_mode collinear")
     return command
 
 
@@ -456,12 +458,17 @@ def _session_feature_catalog(
     )
     if catalog is None:
         return None
+    if isinstance(catalog, dict) and catalog.get("schema") == 3:
+        return promote_legacy_feature_catalog(catalog)
     if (
         not isinstance(catalog, dict)
         or catalog.get("schema") != FEATURE_CATALOG_SCHEMA
         or not isinstance(catalog.get("items"), list)
     ):
-        raise ValueError("Session contains an invalid schema-3 feature catalog.")
+        raise ValueError(
+            "Session contains an invalid schema-3/"
+            f"schema-{FEATURE_CATALOG_SCHEMA} feature catalog."
+        )
     return catalog
 
 
@@ -1361,8 +1368,12 @@ def _render_thumbnail(
     allow_placeholder: bool = True,
 ) -> None:
     source_path = example.source_svg_path if example.source_svg_path.exists() else example.output_svg_path
+    cairosvg_module = get_cairosvg()
     try:
-        png_bytes = cairosvg.svg2png(
+        png_bytes = convert_svg_with_cairosvg(
+            source_path.read_bytes(),
+            "png",
+            cairosvg_module=cairosvg_module,
             url=str(source_path),
             output_width=720,
             background_color="white",

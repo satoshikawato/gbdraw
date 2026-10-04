@@ -78,8 +78,9 @@ gbdraw-cli-losatp-collinear/
 ```bash
 gbdraw linear \
   --gbk AP027078.gb AP027131.gb AP027133.gb AP027132.gb NZ_CP006932.gb \
-  --protein_blastp_mode collinear \
-  --losatp_threads 32 \
+  --losat losatp \
+  --losatp_mode collinear \
+  --losat_threads 32 \
   --collinear_search_scope adjacent \
   --collinear_max_unit_gap 0 \
   --collinear_min_anchors 1 \

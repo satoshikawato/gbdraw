@@ -1,12 +1,7 @@
 export const PYTHON_HELPERS = `
 import warnings
 warnings.simplefilter('ignore', SyntaxWarning)
-try:
-    import tomllib
-except ImportError:
-    import tomli as tomllib
 import json
-import traceback
 from gbdraw.web_support.feature_metadata import (
     extract_features_from_genbank_json,
     extract_features_from_gff_fasta_json,
@@ -17,8 +12,11 @@ from gbdraw.web_support.request_render import (
 )
 from gbdraw.session_request_codec import encode_canonical_typed_resource
 from gbdraw.api.prepared import PreparedBiologicalInputCache
+from gbdraw.web_support.error_adapter import private_web_execution, serialize_web_error, web_error_stage
 from gbdraw.web_support.rule_matching import evaluate_rules_json
 from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
+from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_json
+from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
 _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
@@ -70,19 +68,34 @@ def _web_losatp_cache_set(name, key, value):
         old_name, old_key = _WEB_LOSATP_CACHE_ORDER.pop(0)
         _web_losatp_cache_by_name(old_name).pop(old_key, None)
 
-def _web_losatp_json_with_cache_stats(payload_json, **stats):
-    try:
-        payload = json.loads(str(payload_json))
-    except Exception:
-        return payload_json
-    if not isinstance(payload, dict):
-        return payload_json
+_WEB_LOSATP_CANONICAL_KEYS = {
+    "collinearity-result": "collinearityResult",
+    "orthogroup-result": "orthogroupResult",
+}
+
+def _web_losatp_payload_json(summary_json, canonical, canonical_resource_path):
+    # The canonical result stays as its encoded bytes; parsing it back into
+    # Python objects only to serialize it again dominated Worker memory.
+    if canonical is None:
+        return summary_json
+    kind, content = canonical
+    if canonical_resource_path:
+        with open(str(canonical_resource_path), "wb") as handle:
+            handle.write(content)
+        member = json.dumps({"kind": kind, "size": len(content)})
+        return "".join((summary_json[:-1], ', "canonicalResource": ', member, "}"))
+    return "".join((summary_json[:-1], ", ", json.dumps(_WEB_LOSATP_CANONICAL_KEYS[kind]),
+                    ": ", content.decode("utf-8"), "}"))
+
+def _web_losatp_json_with_cache_stats(cached_payload, *, canonical_resource_path=None, **stats):
+    summary_json, canonical = cached_payload
+    payload = json.loads(summary_json)
     cache_payload = payload.get("cache")
     if not isinstance(cache_payload, dict):
         cache_payload = {}
     cache_payload.update(stats)
     payload["cache"] = cache_payload
-    return json.dumps(payload)
+    return _web_losatp_payload_json(json.dumps(payload), canonical, canonical_resource_path)
 
 def _is_blank_or_js_nullish(value):
     if value is None:
@@ -94,6 +107,7 @@ def _is_blank_or_js_nullish(value):
     except Exception:
         return False
 
+@private_web_execution()
 def run_canonical_request_wrapper(
     request_json,
     resource_paths_json,
@@ -102,13 +116,14 @@ def run_canonical_request_wrapper(
     resource_identities_json=None,
 ):
     try:
-        payload = json.loads(str(request_json))
-        resource_paths = json.loads(str(resource_paths_json))
-        resource_identities = None
-        if resource_identities_json is not None and type(resource_identities_json).__name__ not in {"JsNull", "JsUndefined"}:
-            identity_text = str(resource_identities_json).strip()
-            if identity_text and identity_text.lower() not in {"null", "undefined", "none"}:
-                resource_identities = json.loads(identity_text)
+        with web_error_stage("request-validation"):
+            payload = json.loads(str(request_json))
+            resource_paths = json.loads(str(resource_paths_json))
+            resource_identities = None
+            if resource_identities_json is not None and type(resource_identities_json).__name__ not in {"JsNull", "JsUndefined"}:
+                identity_text = str(resource_identities_json).strip()
+                if identity_text and identity_text.lower() not in {"null", "undefined", "none"}:
+                    resource_identities = json.loads(identity_text)
         diagnostics = {"timingsMs": {}, "metrics": {}} if diagnostics_enabled else None
         result = render_staged_canonical_web_request(
             payload,
@@ -172,13 +187,7 @@ def run_canonical_request_wrapper(
             ).encode("utf-8")
         return result
     except Exception as e:
-        return {
-            "error": {
-                "type": e.__class__.__name__,
-                "message": str(e) if str(e) else "Unhandled exception",
-                "traceback": traceback.format_exc(),
-            }
-        }
+        return {"error": serialize_web_error(e, operation="generate", stage="render")}
 
 def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, reverse_flag=None):
     """Extract the first record as FASTA for LOSAT input."""
@@ -188,10 +197,10 @@ def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, rever
     try:
         fmt_map = {"genbank": "genbank", "fasta": "fasta"}
         if fmt not in fmt_map:
-            return json.dumps({"error": f"Unsupported format: {fmt}"})
+            return json.dumps({'error': serialize_web_error(ValueError(f'Unsupported format: {fmt}'), operation='extractFirstFasta', stage="helper")})
         records = list(SeqIO.parse(path, fmt_map[fmt]))
         if not records:
-            return json.dumps({"error": "No records found"})
+            return json.dumps({'error': serialize_web_error(ValueError('No records found'), operation='extractFirstFasta', stage="helper")})
         selector_raw = None
         if record_selector is not None:
             selector_raw = str(record_selector).strip()
@@ -212,9 +221,9 @@ def extract_first_fasta(path, fmt, region_spec=None, record_selector=None, rever
         SeqIO.write(record, handle, "fasta")
         return json.dumps({"fasta": handle.getvalue(), "record_id": record.id, "record_length": len(record.seq)})
     except StopIteration:
-        return json.dumps({"error": "No records found"})
-    except Exception:
-        return json.dumps({"error": traceback.format_exc()})
+        return json.dumps({'error': serialize_web_error(ValueError('No records found'), operation='extractFirstFasta', stage="helper")})
+    except Exception as error:
+        return json.dumps({'error': serialize_web_error(error, operation='extractFirstFasta', stage="helper")})
 
 def _normalize_web_record_selector(record_selector):
     if record_selector is None:
@@ -249,13 +258,6 @@ def _normalize_web_view_transform(view_transform):
     if reverse and length <= 0:
         raise ValueError("Reverse display transform requires a positive length.")
     return {"length": max(0, length), "reverse": reverse}
-
-def _web_transform_blast_pos(position, view_transform):
-    normalized = _normalize_web_view_transform(view_transform)
-    pos = int(position)
-    if not normalized["reverse"]:
-        return pos
-    return int(normalized["length"]) + 1 - pos
 
 def _web_transform_cds_span(start, end, strand, view_transform):
     normalized = _normalize_web_view_transform(view_transform)
@@ -424,43 +426,6 @@ def _web_feature_view_hash_parts(record, source_feature_position):
         (),
     )
 
-def convert_losat_nucleotide_to_display_tsv(blast_text, query_view_transform=None, subject_view_transform=None):
-    """Transform cached raw LOSAT nucleotide outfmt 6 rows into display coordinates."""
-    try:
-        from io import StringIO
-        import pandas as pd
-        from gbdraw.io.comparisons import COMPARISON_COLUMNS
-
-        data_lines = [
-            line
-            for line in str(blast_text or "").splitlines()
-            if line.strip() and not line.lstrip().startswith("#")
-        ]
-        if not data_lines:
-            return json.dumps({"tsv": "", "rows": []})
-        df = pd.read_csv(
-            StringIO(chr(10).join(data_lines)),
-            sep=chr(9),
-            names=COMPARISON_COLUMNS,
-        )
-        query_transform = _normalize_web_view_transform(query_view_transform)
-        subject_transform = _normalize_web_view_transform(subject_view_transform)
-        for column in ("qstart", "qend"):
-            df[column] = df[column].map(lambda value: _web_transform_blast_pos(value, query_transform))
-        for column in ("sstart", "send"):
-            df[column] = df[column].map(lambda value: _web_transform_blast_pos(value, subject_transform))
-        handle = StringIO()
-        df.loc[:, list(COMPARISON_COLUMNS)].to_csv(
-            handle,
-            sep=chr(9),
-            header=False,
-            index=False,
-            lineterminator=chr(10),
-        )
-        return json.dumps({"tsv": handle.getvalue(), "rows": _dataframe_json_rows(df)})
-    except Exception:
-        return json.dumps({"error": traceback.format_exc()})
-
 def _load_single_linear_record_for_proteins(path, fmt, fasta_path=None, region_spec=None, record_selector=None, reverse_flag=None):
     from Bio import SeqIO
     from gbdraw.io.record_select import parse_record_selector, reverse_records, select_record
@@ -596,7 +561,7 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
         )
         proteins = result.proteins_by_record[0] if result.proteins_by_record else []
         if not proteins:
-            return json.dumps({"error": f"No CDS proteins found in {record.id}"})
+            return json.dumps({'error': serialize_web_error(ValueError(f'No CDS proteins found in {record.id}'), operation='extractCdsProteinFasta', stage="helper")})
         view_hash_parts_index = _web_feature_view_hash_parts_index(record)
         protein_map = {
             protein.protein_id: _serialize_cds_protein(
@@ -619,8 +584,8 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             "runtime_binding_hash": result.runtime_binding_hashes[0],
             "display_binding_hash": result.display_binding_hashes[0],
         })
-    except Exception:
-        return json.dumps({"error": traceback.format_exc()})
+    except Exception as error:
+        return json.dumps({'error': serialize_web_error(error, operation='extractCdsProteinFasta', stage="helper")})
 
 def _build_web_cds_protein_map(raw_map):
     from gbdraw.analysis.protein_colinearity import CdsProtein
@@ -798,8 +763,8 @@ def promote_legacy_losatp_cache_candidates(
             "proteinIdMap": protein_id_map,
             "rejections": rejections,
         })
-    except Exception:
-        return json.dumps({"status": "error", "error": traceback.format_exc()})
+    except Exception as error:
+        return json.dumps({'status': 'error', 'error': serialize_web_error(error, operation='promoteLegacyLosatpCache', stage="helper")})
 
 def resolve_legacy_protein_reference_map_json(
     protein_records_json,
@@ -846,8 +811,8 @@ def resolve_legacy_protein_reference_map_json(
             "status": "resolved",
             "proteinIdMap": protein_id_map,
         })
-    except Exception:
-        return json.dumps({"status": "error", "error": traceback.format_exc()})
+    except Exception as error:
+        return json.dumps({'status': 'error', 'error': serialize_web_error(error, operation='resolveLegacyProteinReferences', stage="helper")})
 
 def build_protein_losat_cache_keys_json(
     identity_manifest_json,
@@ -879,8 +844,19 @@ def build_protein_losat_cache_keys_json(
                 search_context=options.get("searchContext"),
             ))
         return json.dumps({"keys": keys})
-    except Exception:
-        return json.dumps({"error": traceback.format_exc()})
+    except Exception as error:
+        return json.dumps({'error': serialize_web_error(error, operation='buildProteinLosatCacheKeys', stage="helper")})
+
+def main_session_table_text_to_search_frame_json(table_text, query_frame_json, subject_frame_json):
+    """Rewrite one origin/main Session nucleotide table to the search frame."""
+    from gbdraw.linear_comparison import reverse_endpoint_table_text
+
+    endpoints = []
+    for frame_json in (query_frame_json, subject_frame_json):
+        frame = json.loads(str(frame_json))
+        endpoints.append((int(frame.get("length") or 0), frame.get("reverse") is True))
+    text = reverse_endpoint_table_text(str(table_text), endpoints[0], endpoints[1])
+    return json.dumps({"tsv": text})
 
 def hydrate_protein_losat_tsv_json(entry_json, identity_manifest_json):
     """Hydrate one internal schema-4 protein TSV for user download."""
@@ -895,8 +871,8 @@ def hydrate_protein_losat_tsv_json(entry_json, identity_manifest_json):
             "text": text,
             "utf8Bytes": len(text.encode("utf-8")),
         })
-    except Exception:
-        return json.dumps({"status": "error", "error": traceback.format_exc()})
+    except Exception as error:
+        return json.dumps({'status': 'error', 'error': serialize_web_error(error, operation='hydrateProteinLosatTsv', stage="helper")})
 
 def _build_display_web_cds_protein_map(raw_map, view_transform):
     normalized = _normalize_web_view_transform(view_transform)
@@ -991,6 +967,8 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
     orthogroup_member_max_hits=None,
     collinear_merge_orientation="either",
     collinear_infer_orthogroups=True,
+    canonical_resource_path=None,
+    explicit_display_pairs=False,
 ):
     """Convert LOSATP blastp outputs for pairwise display or orthogroups."""
     try:
@@ -1253,6 +1231,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 int(normalized_max_paralog_links),
                 normalized_collinear_search_scope,
                 collinear_infer_orthogroups,
+                bool(explicit_display_pairs),
             ) if normalized_mode == "collinear" else None,
             tuple(
                 (
@@ -1278,6 +1257,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
         if cached_payload is not None:
             return _web_losatp_json_with_cache_stats(
                 cached_payload,
+                canonical_resource_path=canonical_resource_path,
                 convertedPayloadHit=True,
                 filteredHitCacheHits=0,
                 filteredHitCacheMisses=0,
@@ -1353,7 +1333,7 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
             **raw_tsv_stats,
         }
 
-        def _finalize_losatp_payload(payload, *, collinearity_result=None):
+        def _finalize_losatp_payload(payload, *, collinearity_result=None, canonical_content=None, canonical_kind=None):
             if collinearity_result is not None:
                 anchors = [
                     anchor
@@ -1371,9 +1351,12 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 })
             payload["provenance"] = derived_provenance
             payload["cache"] = cache_stats
-            result_json = json.dumps(payload)
-            _web_losatp_cache_set("converted", conversion_cache_key, result_json)
-            return result_json
+            cached_payload = (
+                json.dumps(payload),
+                None if canonical_content is None else (canonical_kind, canonical_content),
+            )
+            _web_losatp_cache_set("converted", conversion_cache_key, cached_payload)
+            return _web_losatp_payload_json(*cached_payload, canonical_resource_path)
 
         if normalized_mode == "collinear":
             record_ids = []
@@ -1399,6 +1382,9 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 if item["display_pair"]
                 and int(item["query_index"]) != int(item["subject_index"])
             }))
+            use_display_pairs = bool(display_pairs) and (
+                search_scope == "adjacent" or explicit_display_pairs
+            )
             collinearity_result = build_orthogroup_collinearity_blocks_from_hits(
                 directional_tables,
                 extraction,
@@ -1412,12 +1398,12 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                 max_paralog_links_per_orthogroup=max_paralog_links,
                 comparison_pairs=(
                     display_pairs
-                    if search_scope == "adjacent" and display_pairs
+                    if use_display_pairs
                     else None
                 ),
             )
             color_mode = normalized_collinear_color_mode
-            if search_scope == "adjacent" and display_pairs:
+            if use_display_pairs:
                 display_pair_indices = {
                     tuple(sorted((
                         int(item["query_index"]),
@@ -1462,15 +1448,10 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                         "hit_count": int(converted.shape[0]),
                     }
                 )
-            return _finalize_losatp_payload({
-                "pairs": converted_pairs,
-                "collinearityResult": json.loads(
-                    encode_canonical_typed_resource(
-                        "result",
-                        collinearity_result,
-                    ).decode("utf-8")
-                ),
-            }, collinearity_result=collinearity_result)
+            canonical_content = encode_canonical_typed_resource("result", collinearity_result)
+            return _finalize_losatp_payload({"pairs": converted_pairs},
+               collinearity_result=collinearity_result,
+               canonical_content=canonical_content, canonical_kind="collinearity-result")
 
         if normalized_mode == "pairwise":
             converted_pairs = []
@@ -1553,17 +1534,11 @@ def convert_losatp_blastp_pairs_to_genomic_payload(
                     "hit_count": int(converted.shape[0]),
                 }
             )
-        return _finalize_losatp_payload({
-            "pairs": converted_pairs,
-            "orthogroupResult": json.loads(
-                encode_canonical_typed_resource(
-                    "orthogroupResult",
-                    orthogroups,
-                ).decode("utf-8")
-            ),
-        })
-    except Exception:
-        return json.dumps({"error": traceback.format_exc()})
+        canonical_content = encode_canonical_typed_resource("orthogroupResult", orthogroups)
+        return _finalize_losatp_payload({"pairs": converted_pairs},
+            canonical_content=canonical_content, canonical_kind="orthogroup-result")
+    except Exception as error:
+        return json.dumps({'error': serialize_web_error(error, operation='convertLosatpPairsToGenomicPayload', stage="helper")})
 
 def get_record_length(path, fmt, record_id=None, record_index=None):
     """Return record length for a GenBank/FASTA file."""
@@ -1571,25 +1546,25 @@ def get_record_length(path, fmt, record_id=None, record_index=None):
     try:
         fmt_map = {"genbank": "genbank", "fasta": "fasta"}
         if fmt not in fmt_map:
-            return json.dumps({"error": f"Unsupported format: {fmt}"})
+            return json.dumps({'error': serialize_web_error(ValueError(f'Unsupported format: {fmt}'), operation='unknown', stage="helper")})
         records = list(SeqIO.parse(path, fmt_map[fmt]))
         if not records:
-            return json.dumps({"error": "No records found"})
+            return json.dumps({'error': serialize_web_error(ValueError('No records found'), operation='unknown', stage="helper")})
         if record_id:
             for idx, record in enumerate(records):
                 if record.id == record_id:
                     return json.dumps({"length": len(record.seq), "record_id": record.id, "record_index": idx})
-            return json.dumps({"error": f"Record ID not found: {record_id}"})
+            return json.dumps({'error': serialize_web_error(ValueError(f'Record ID not found: {record_id}'), operation='unknown', stage="helper")})
         if record_index is not None:
             idx = int(record_index)
             if idx < 0 or idx >= len(records):
-                return json.dumps({"error": f"Record index out of range: {idx + 1}"})
+                return json.dumps({'error': serialize_web_error(ValueError(f'Record index out of range: {idx + 1}'), operation='unknown', stage="helper")})
             record = records[idx]
             return json.dumps({"length": len(record.seq), "record_id": record.id, "record_index": idx})
         record = records[0]
         return json.dumps({"length": len(record.seq), "record_id": record.id, "record_index": 0})
-    except Exception:
-        return json.dumps({"error": traceback.format_exc()})
+    except Exception as error:
+        return json.dumps({'error': serialize_web_error(error, operation='unknown', stage="helper")})
 
 def list_sequence_records(path, format):
     """List record selectors, IDs, and lengths from a sequence file."""
@@ -1602,10 +1577,10 @@ def list_sequence_records(path, format):
     try:
         format_map = {"genbank": "genbank", "fasta": "fasta"}
         if format not in format_map:
-            return json.dumps({"error": f"Unsupported format: {format}"})
+            return json.dumps({'error': serialize_web_error(ValueError(f'Unsupported format: {format}'), operation='listSequenceRecords', stage="helper")})
         records = list(SeqIO.parse(path, format_map[format]))
         if not records:
-            return json.dumps({"error": "No records found"})
+            return json.dumps({'error': serialize_web_error(ValueError('No records found'), operation='listSequenceRecords', stage="helper")})
         payload = []
         for idx, record in enumerate(records):
             organism = ""
@@ -1629,14 +1604,14 @@ def list_sequence_records(path, format):
                 }
             )
         return json.dumps({"records": payload})
-    except Exception:
-        return json.dumps({"error": traceback.format_exc()})
+    except Exception as error:
+        return json.dumps({'error': serialize_web_error(error, operation='listSequenceRecords', stage="helper")})
 
 def list_gff_fasta_records(gff_path, fasta_path):
-    """List every FASTA record available to paired GFF3 diagram generation."""
+    """List the records load_gff_fasta reads: GFF3 records the FASTA names, in FASTA order."""
     try:
-        from Bio import SeqIO
-        records = list(SeqIO.parse(fasta_path, "fasta"))
+        from gbdraw.io.genome import load_gff_fasta
+        records = load_gff_fasta([gff_path], [fasta_path])
         payload = [
             {
                 "selector": f"#{idx + 1}",
@@ -1647,22 +1622,24 @@ def list_gff_fasta_records(gff_path, fasta_path):
             for idx, record in enumerate(records)
         ]
         return json.dumps({"records": payload})
-    except Exception:
-        return json.dumps({"error": traceback.format_exc()})
+    except Exception as error:
+        return json.dumps({'error': serialize_web_error(error, operation='listGffFastaRecords', stage="helper")})
 
-def measure_legend_text_json(caption, font_family="Arial", font_size=14):
-    """Measure one legend caption with the packaged gbdraw font metrics."""
+def measure_legend_text_json(caption, font_family="Arial", font_size=14, config_json="null", overrides_json="{}"):
+    """Measure one legend caption at the DPI the renderer resolves from the request config."""
     try:
+        from gbdraw.api.config import apply_config_overrides
         from gbdraw.core.text import calculate_bbox_dimensions
+        cfg = apply_config_overrides(json.loads(str(config_json)), json.loads(str(overrides_json)))
         width, _ = calculate_bbox_dimensions(
             str(caption),
             str(font_family or "Arial"),
             float(font_size or 14),
-            72,
+            int(cfg.canvas.dpi),
         )
         return json.dumps({"width": width})
-    except Exception:
-        return json.dumps({"error": traceback.format_exc()})
+    except Exception as error:
+        return json.dumps({'error': serialize_web_error(error, operation='measureLegendText', stage="helper")})
 
 def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=14, font_family="Arial", x_offset=0, stroke_color="black", stroke_width=0.5):
     """Generate SVG elements for a single legend entry"""
@@ -1679,132 +1656,6 @@ def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=
     text_svg = f'<text font-size="{font_size}" font-family="{font_family}" dominant-baseline="central" text-anchor="start" transform="translate({x_offset + x_margin}, {y_offset})">{safe_caption}</text>'
 
     return json.dumps({"rect": rect_svg, "text": text_svg})
-
-def regenerate_definition_svgs(
-    gb_path,
-    species=None,
-    strain=None,
-    plot_title=None,
-    font_size=None,
-    plot_title_font_size=None,
-    plot_title_position="none",
-    multi_record_canvas=False,
-    keep_full_definition_with_plot_title=False,
-):
-    """Regenerate definition group SVGs for all records in an input file"""
-    from Bio import SeqIO
-    from gbdraw.render.groups.circular.definition import DefinitionGroup
-    from gbdraw.canvas import CircularCanvasConfigurator
-    from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
-    from gbdraw.svg.ids import definition_group_svg_id
-    from importlib import resources
-
-    try:
-        # Load default config
-        with resources.files("gbdraw.data").joinpath("config.toml").open("rb") as fh:
-            config_dict = tomllib.load(fh)
-
-        # Override font sizes if provided
-        if not _is_blank_or_js_nullish(font_size):
-            config_dict["objects"]["definition"]["circular"]["font_size"] = float(font_size)
-        if not _is_blank_or_js_nullish(plot_title_font_size):
-            config_dict["objects"]["definition"]["circular"]["plot_title_font_size"] = float(plot_title_font_size)
-        cfg = GbdrawConfig.from_dict(config_dict)
-        render_profile = CircularRenderProfile(cfg)
-
-        # Parse the GenBank file
-        records = list(SeqIO.parse(gb_path, "genbank"))
-        if not records:
-            return json.dumps({"error": "No records found"})
-
-        normalized_plot_title_position = str(plot_title_position or "none").strip().lower()
-        if normalized_plot_title_position not in {"none", "top", "bottom"}:
-            normalized_plot_title_position = "none"
-        normalized_plot_title = str(plot_title or "").strip()
-        show_plot_title = normalized_plot_title_position in {"top", "bottom"}
-        keep_full_definition = bool(keep_full_definition_with_plot_title)
-
-        definitions = []
-        record_count = len(records)
-        record_id_counts = {}
-        for record in records:
-            raw_record_id = str(record.id)
-            record_id_counts[raw_record_id] = record_id_counts.get(raw_record_id, 0) + 1
-        for index, record in enumerate(records):
-            # Create canvas config
-            canvas_config = CircularCanvasConfigurator(
-                output_prefix=f"temp_{index}",
-                profile=render_profile,
-                legend="none",
-                gb_record=record,
-            )
-
-            if show_plot_title and keep_full_definition:
-                profile = "full"
-            else:
-                profile = "record_summary" if bool(multi_record_canvas) or show_plot_title else "full"
-            raw_record_id = str(record.id)
-            has_duplicate_record_id = record_id_counts[raw_record_id] > 1
-            definition_group_id = (
-                definition_group_svg_id(
-                    raw_record_id,
-                    mode="circular",
-                    record_index=index,
-                    record_count=record_count,
-                )
-                if has_duplicate_record_id
-                else None
-            )
-            def_group = DefinitionGroup(
-                gb_record=record,
-                canvas_config=canvas_config,
-                species=species if species else None,
-                strain=strain if strain else None,
-                plot_title=None,
-                definition_profile=profile,
-                definition_group_id=definition_group_id,
-                record_index=index,
-                record_count=record_count if has_duplicate_record_id else 1,
-                cfg=cfg,
-            )
-
-            group = def_group.get_group()
-            definitions.append(
-                {
-                    "svg": group.tostring(),
-                    "definition_group_id": def_group.definition_group_id,
-                    "record_index": index,
-                }
-            )
-
-        if show_plot_title:
-            shared_canvas_config = CircularCanvasConfigurator(
-                output_prefix="temp_shared",
-                profile=render_profile,
-                legend="none",
-                gb_record=records[0],
-            )
-            shared_group = DefinitionGroup(
-                gb_record=records[0],
-                canvas_config=shared_canvas_config,
-                species=species if species else None,
-                strain=strain if strain else None,
-                plot_title=normalized_plot_title if normalized_plot_title else None,
-                definition_profile="shared_common",
-                definition_group_id="plot_title",
-                cfg=cfg,
-            )
-            definitions.append(
-                {
-                    "svg": shared_group.get_group().tostring(),
-                    "definition_group_id": "plot_title",
-                    "record_index": None,
-                }
-            )
-
-        return json.dumps({"definitions": definitions})
-    except Exception:
-        return json.dumps({"error": traceback.format_exc()})
 
 def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None, include_biological_features=False):
     """Extract feature info from GenBank file for UI display."""
@@ -1831,4 +1682,35 @@ def extract_features_from_gff_fasta(gff_path, fasta_path, region_spec=None, reco
         include_biological_features=include_biological_features,
     )
 
+
+_WEB_JSON_HELPERS = {
+    "resolve_similarity_alignment_json": (resolve_similarity_alignment_json, "resolveSimilarityAlignment"),
+    "evaluate_rules_json": (evaluate_rules_json, "evaluateRules"),
+    "read_pdf_font": (read_pdf_font, "readPdfFont"),
+    "validate_web_config_overrides_json": (validate_web_config_overrides_json, "validateConfigOverrides"),
+    "extract_first_fasta": (extract_first_fasta, "extractFirstFasta"),
+    "extract_cds_protein_fasta": (extract_cds_protein_fasta, "extractCdsProteinFasta"),
+    "build_protein_losat_cache_keys_json": (build_protein_losat_cache_keys_json, "buildProteinLosatCacheKeys"),
+    "promote_legacy_losatp_cache_candidates": (promote_legacy_losatp_cache_candidates, "promoteLegacyLosatpCache"),
+    "resolve_legacy_protein_reference_map_json": (resolve_legacy_protein_reference_map_json, "resolveLegacyProteinReferences"),
+    "convert_losatp_blastp_pairs_to_genomic_payload": (convert_losatp_blastp_pairs_to_genomic_payload, "convertLosatpPairsToGenomicPayload"),
+    "main_session_table_text_to_search_frame_json": (main_session_table_text_to_search_frame_json, "convertMainSessionComparisonFrame"),
+    "hydrate_protein_losat_tsv_json": (hydrate_protein_losat_tsv_json, "hydrateProteinLosatTsv"),
+    "list_sequence_records": (list_sequence_records, "listSequenceRecords"),
+    "list_gff_fasta_records": (list_gff_fasta_records, "listGffFastaRecords"),
+    "read_comparison_sequence_json": (read_comparison_sequence_json, "readComparisonSequence"),
+    "measure_legend_text_json": (measure_legend_text_json, "measureLegendText"),
+    "generate_legend_entry_svg": (generate_legend_entry_svg, "generateLegendEntrySvg"),
+    "extract_features_from_genbank": (extract_features_from_genbank, "feature-extraction"),
+    "extract_features_from_gff_fasta": (extract_features_from_gff_fasta, "feature-extraction"),
+}
+
+@private_web_execution()
+def call_web_json_helper(helper_name, *args):
+    operation = "unknown"
+    try:
+        helper, operation = _WEB_JSON_HELPERS[helper_name]
+        return helper(*args)
+    except Exception as error:
+        return json.dumps({"error": serialize_web_error(error, operation=operation, stage="helper")})
 `;

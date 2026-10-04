@@ -185,10 +185,11 @@ gbdraw circular \
 ```bash
 gbdraw linear \
   --gbk BGC0000708.gbk BGC0000709.gbk BGC0000711.gbk BGC0000712.gbk BGC0000713.gbk \
-  --protein_blastp_mode orthogroup \
-  --losatp_threads 1 \
+  --losat losatp \
+  --losatp_mode similarity_groups \
+  --losat_threads 1 \
   --identity 30 \
-  --align_orthogroup_feature CAG38695.1 \
+  --similarity_alignment_feature CAG38695.1 \
   -k CDS,rRNA,tRNA,tmRNA,ncRNA,repeat_region \
   -p orange \
   -d BGC0000708-BGC0000713_default_colors.tsv \
@@ -224,8 +225,9 @@ gbdraw linear \
 ```bash
 gbdraw linear \
   --gbk BGC0000708.gbk BGC0000709.gbk BGC0000711.gbk BGC0000712.gbk BGC0000713.gbk \
-  --protein_blastp_mode collinear \
-  --losatp_threads 1 \
+  --losat losatp \
+  --losatp_mode collinear \
+  --losat_threads 1 \
   --identity 30 \
   --collinear_search_scope adjacent \
   --collinear_min_anchors 2 \
@@ -326,10 +328,11 @@ gbdraw circular \
 ```bash
 gbdraw linear \
   --gbk BGC0000708.gbk BGC0000709.gbk BGC0000711.gbk BGC0000712.gbk BGC0000713.gbk \
-  --protein_blastp_mode pairwise \
-  --losatp_threads 1 \
-  --protein_blastp_max_hits 1 \
-  --protein_blastp_output cli_losatp_pairwise.tsv \
+  --losat losatp \
+  --losatp_mode pairwise \
+  --losat_threads 1 \
+  --losatp_max_hits 1 \
+  --losat_output_dir . \
   --identity 30 \
   --pairwise_match_style curve \
   --show_labels none \

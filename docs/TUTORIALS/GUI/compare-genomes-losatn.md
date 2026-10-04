@@ -41,12 +41,12 @@ filename, `lambda-de3.losatn.tsv`.
 
 ## Step 1: Load both complete genomes
 
-Select **Linear**. A fresh Linear page reports **Current: No comparison** under
-the record list. Under **Input Genomes**, keep **GenBank** selected.
+Select **Linear**. On a fresh Linear page, **No comparison** is pressed in the
+**Comparison** command group. Under **Input Genomes**, keep **GenBank** selected.
 
-1. In the first **GenBank File** control, choose `NC_001416.gb`.
-2. Select **Add sequence** in the **Input Genomes** header.
-3. In the second **GenBank File** control, choose `NC_042057.1.gb`.
+1. In the first **GenBank / DDBJ File** control, choose `NC_001416.gb`.
+2. Select **Add sequence** below the File list.
+3. In the second **GenBank / DDBJ File** control, choose `NC_042057.1.gb`.
 
 Keep Lambda first and DE3 second. Leave both **Region (optional)** sections unchanged so the inputs remain the complete `NC_001416.1` (48,502 bp) and `NC_042057.1` (42,925 bp) records.
 
@@ -65,10 +65,10 @@ Select **Generate Diagram**. The first result should contain two annotated recor
 ## Step 3: Configure LOSATN
 
 In **Comparison**, select **Run LOSAT** explicitly. Open **Settings**, choose
-the **LOSATN** button in **LOSAT Mode**, and set **LOSATN task** and **Match height**. Open
-**Basic** and set **Output Prefix**. Finally, continue past **Generate
-Diagram**, open **Advanced comparison and layout**, and set the runtime and raw
-result values.
+the **LOSATN** button in **LOSAT Mode**, and set **LOSATN task**, **Match height**,
+and the **Runtime and reproducibility** values. Open **Basic** and set **Output
+Prefix**. Finally, continue past **Generate Diagram**, open **Advanced
+comparison and layout**, and set the raw result value.
 
 | Section | Control | Value |
 | --- | --- | --- |
@@ -76,10 +76,10 @@ result values.
 | Settings | LOSATN task | `megablast` |
 | Settings / Comparison appearance | Match height | `120` |
 | Basic | Output Prefix | `lambda-de3-losatn` |
-| Advanced comparison and layout | Execution | Serial |
-| Advanced comparison and layout | Total threads | 1 |
-| Advanced comparison and layout | Parallel runs | 1 run |
-| Advanced comparison and layout | Threads per run | Fixed at 1 |
+| Settings / Runtime and reproducibility | Execution | Serial |
+| Settings / Runtime and reproducibility | Total threads | 1 |
+| Settings / Runtime and reproducibility | Parallel runs | 1 run |
+| Settings / Runtime and reproducibility | Threads per run | Fixed at 1 |
 | Advanced comparison and layout / Raw LOSAT results | Raw LOSAT filename | `lambda-de3.losatn.tsv` |
 
 ![LOSATN selected in LOSAT Mode with megablast and result filters](../../images/t-gui-03/03-losatn-settings.png)

@@ -551,15 +551,20 @@ class Reproducer:
 
     def _load_image(self, source_path: Path, target_size: tuple[int, int]) -> Image.Image:
         if source_path.suffix.lower() == ".svg":
+            from gbdraw.render.export import convert_svg_with_cairosvg, get_cairosvg
+
             try:
-                import cairosvg
-            except ModuleNotFoundError as exc:  # pragma: no cover - environment dependent
+                cairosvg_module = get_cairosvg()
+            except ImportError as exc:  # pragma: no cover - environment dependent
                 raise RuntimeError("CairoSVG is required to build composite PNG outputs") from exc
             src_width, src_height = self._svg_size(source_path)
             scale = min(target_size[0] / src_width, target_size[1] / src_height)
             render_width = max(1, int(round(src_width * scale)))
             render_height = max(1, int(round(src_height * scale)))
-            png_bytes = cairosvg.svg2png(
+            png_bytes = convert_svg_with_cairosvg(
+                source_path.read_bytes(),
+                "png",
+                cairosvg_module=cairosvg_module,
                 url=str(source_path),
                 output_width=render_width,
                 output_height=render_height,

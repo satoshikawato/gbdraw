@@ -1,4 +1,5 @@
 import { resolveColorToHex } from './color-utils.js';
+import { defaultLegendEntryOrder, isLegendOrderEdited } from './legend/utils.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import {
   admitCurrentGeneratedResults
@@ -42,6 +43,7 @@ const emptyOperations = () => ({
   legendRenames: [],
   legendDeletes: [],
   legendAdds: [],
+  legendOrder: [],
   callerTransforms: []
 });
 
@@ -115,6 +117,8 @@ const compilePlanBundle = ({
   legendColorOverrides = {},
   legendStrokeOverrides = {},
   manualSpecificRules = [],
+  replayDefaultLegendOrder = false,
+  resultTransforms = [],
   transformSvg = null
 }) => {
   if (!catalogAdmission || !Array.isArray(catalogAdmission.resultNames)) {
@@ -224,6 +228,22 @@ const compilePlanBundle = ({
   });
   const allResultIndexes = operationsByResult.map((_, index) => index);
 
+  // D-08 (PD-OI-063): an edited Legend order is replayed over the renderer's
+  // slots. The renderer places generated entries in their generated order and
+  // direct additions after them; only a different order emits an operation,
+  // and a renamed entry then takes its slot from that order. A displayed batch
+  // Result that may still show an earlier edited order also receives the
+  // default order (D-07, B20).
+  const legendOrderChanged = isLegendOrderEdited(currentEntries, [...originalCaptions]);
+  const replayedLegendOrder = legendOrderChanged
+    ? currentEntries
+    : (replayDefaultLegendOrder ? defaultLegendEntryOrder(currentEntries, [...originalCaptions]) : null);
+  if (replayedLegendOrder) {
+    addToResults(operationsByResult, allResultIndexes, 'legendOrder', {
+      captions: Object.freeze(replayedLegendOrder.map((entry) => entry.caption))
+    });
+  }
+
   currentEntries.forEach((entry) => {
     const isOriginal = originalCaptions.has(entry.originalCaption);
     if (
@@ -235,8 +255,8 @@ const compilePlanBundle = ({
         from: entry.originalCaption,
         to: entry.caption,
         allowMissing: sourceReplaced,
-        xPos: entry.xPos,
-        yPos: entry.yPos
+        xPos: legendOrderChanged ? null : entry.xPos,
+        yPos: legendOrderChanged ? null : entry.yPos
       });
     }
     if (
@@ -281,9 +301,12 @@ const compilePlanBundle = ({
     if (stroke && typeof stroke === 'object') {
       const strokeColor = hasOwn(stroke, 'strokeColor') ? normalizePaint(stroke.strokeColor, 'legend stroke color') : '';
       const strokeWidth = hasOwn(stroke, 'strokeWidth') ? normalizeStrokeWidth(stroke.strokeWidth) : null;
-      if (strokeColor || strokeWidth !== null) addToResults(operationsByResult, allResultIndexes, 'legendStrokes', {
-        caption: targetCaption, strokeColor, strokeWidth, allowMissing,
-        renderedIds: legendRenderedIds.filter(id => renderedResultIndexes(catalogAdmission, id).size > 0)
+      // Each Result strokes only the category features it renders.
+      if (strokeColor || strokeWidth !== null) operationsByResult.forEach((operations, resultIndex) => {
+        operations.legendStrokes.push({
+          caption: targetCaption, strokeColor, strokeWidth, allowMissing,
+          renderedIds: legendRenderedIds.filter(id => renderedResultIndexes(catalogAdmission, id).has(resultIndex))
+        });
       });
     }
   });
@@ -292,6 +315,10 @@ const compilePlanBundle = ({
     // Explicit deletions remain valid while their category is absent, including
     // subsequent Generate calls after a source replacement.
     addToResults(operationsByResult, allResultIndexes, 'legendDeletes', { caption, allowMissing: true });
+  });
+
+  resultTransforms.forEach((transform, index) => {
+    if (typeof transform === 'function') operationsByResult[index].callerTransforms.push(transform);
   });
 
   if (typeof transformSvg === 'function') {

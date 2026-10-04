@@ -1,4 +1,6 @@
 import { normalizeStringArray } from '../app/feature-utils.js';
+import { readRecordSourceSpan, recordSourceInterval } from '../app/record-source-coordinates.js';
+import { FEATURE_CATALOG_SCHEMA } from './feature-catalog.js';
 import { STANDALONE_INTERACTIVE_SCRIPT, STANDALONE_INTERACTIVE_STYLE } from './standalone-interactivity-assets.js';
 import { ensureSvgDefs } from './svg-serialization.js';
 
@@ -28,7 +30,6 @@ const INTERACTIVE_MATCH_GLOW_FILTER_ID = 'gbdraw-interactive-feature-match-glow'
 const FEATURE_PART_SUFFIX_RE = /__part\d+$/;
 const FEATURE_RECORD_SUFFIX_RE = /_record_\d+$/;
 const INTERACTIVE_SCHEMA = 'gbdraw-interactive-feature-popup-v2';
-const INTERACTIVE_CATALOG_SCHEMA = 3;
 
 const compactWireValue = (value) => {
   if (Array.isArray(value)) {
@@ -102,16 +103,6 @@ const normalizeLocationParts = (parts) => {
       };
     })
     .filter((part) => part.display && part.display !== '..');
-};
-
-const buildStandaloneFeatureLocation = (feature) => {
-  const start = Number(feature?.start);
-  const end = Number(feature?.end);
-  const startText = Number.isFinite(start) ? String(start + 1) : String(feature?.start ?? '');
-  const endText = Number.isFinite(end) ? String(end) : String(feature?.end ?? '');
-  const strand = String(feature?.strand || '').trim();
-  const range = `${startText}..${endText}`;
-  return strand ? `${range} (${strand})` : range;
 };
 
 const firstQualifierValue = (feature, key) => {
@@ -336,7 +327,7 @@ const selectStandaloneCatalogItem = (context) => {
   const catalog = context?.featureCatalog;
   if (
     !catalog
-    || catalog.schema !== INTERACTIVE_CATALOG_SCHEMA
+    || catalog.schema !== FEATURE_CATALOG_SCHEMA
     || !Array.isArray(catalog.items)
   ) {
     return null;
@@ -1068,7 +1059,6 @@ const buildFallbackStandaloneFeaturePayload = (svgId, entry, captionsByColor) =>
     start: null,
     end: null,
     strand: '',
-    location: '',
     locus_tag: '',
     gene_id: '',
     old_locus_tag: '',
@@ -1130,7 +1120,6 @@ const normalizeStandaloneBiologicalFeature = (feature, context) => {
     start: Number.isFinite(Number(feature.start)) ? Number(feature.start) : null,
     end: Number.isFinite(Number(feature.end)) ? Number(feature.end) : null,
     strand: String(feature.strand || ''),
-    location: buildStandaloneFeatureLocation(feature),
     locus_tag: String(feature.locus_tag || feature.locusTag || ''),
     gene_id: String(feature.gene_id || feature.geneId || ''),
     old_locus_tag: String(feature.old_locus_tag || feature.oldLocusTag || ''),
@@ -1250,7 +1239,6 @@ const buildStandaloneFeaturePayloads = (svg, options = {}) => {
       start: Number.isFinite(Number(feature?.start)) ? Number(feature.start) : null,
       end: Number.isFinite(Number(feature?.end)) ? Number(feature.end) : null,
       strand: String(feature?.strand || ''),
-      location: buildStandaloneFeatureLocation(feature),
       locus_tag: String(feature?.locus_tag || feature?.locusTag || ''),
       gene_id: String(feature?.gene_id || feature?.geneId || ''),
       old_locus_tag: String(feature?.old_locus_tag || feature?.oldLocusTag || ''),
@@ -1351,9 +1339,19 @@ const buildStandaloneMatchPayloads = (svg) => {
       element.setAttribute('data-gbdraw-match-id', id);
       element.setAttribute('data-gbdraw-pairwise-match-id', id);
     }
+    const matchKind = standaloneMatchKind(element);
+    // Source coordinates for the embedded popup and FASTA header (PD-OI-076).
+    const source = (role, start, end) => (matchKind === 'homology' ? null : recordSourceInterval(
+      readRecordSourceSpan(element, standaloneAttr(element, `data-${role}-record-index`)),
+      standaloneAttr(element, start),
+      standaloneAttr(element, end)
+    ));
+    const querySource = source('query', 'data-qstart', 'data-qend');
+    const subjectSource = source('subject', 'data-sstart', 'data-send');
+    const tableInterval = (interval) => (interval?.table ? `${interval.table.start}..${interval.table.end}` : '');
     return compactWireValue({
       id,
-      match_kind: standaloneMatchKind(element),
+      match_kind: matchKind,
       orthogroup_ids: uniqueStandaloneMetadataValues(standaloneAttr(element, 'data-orthogroup-id')),
       collinearity_block_id: standaloneAttr(element, 'data-collinearity-block-id'),
       fill: firstStandaloneText(element.getAttribute('fill'), '#94a3b8'),
@@ -1376,6 +1374,12 @@ const buildStandaloneMatchPayloads = (svg) => {
       qend: standaloneAttr(element, 'data-qend'),
       sstart: standaloneAttr(element, 'data-sstart'),
       send: standaloneAttr(element, 'data-send'),
+      qsource_start: querySource ? String(querySource.start) : '',
+      qsource_end: querySource ? String(querySource.end) : '',
+      ssource_start: subjectSource ? String(subjectSource.start) : '',
+      ssource_end: subjectSource ? String(subjectSource.end) : '',
+      qtable_interval: tableInterval(querySource),
+      stable_interval: tableInterval(subjectSource),
       orientation: firstStandaloneText(
         standaloneAttr(element, 'data-collinearity-orientation'),
         standaloneAttr(element, 'data-orientation')
@@ -1763,11 +1767,11 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
   metadata.setAttribute('id', INTERACTIVE_METADATA_ID);
   metadata.setAttribute('data-popup-mode', normalizedPopupMode);
   if (catalogItem) {
-    metadata.setAttribute('data-schema', String(INTERACTIVE_CATALOG_SCHEMA));
+    metadata.setAttribute('data-schema', String(FEATURE_CATALOG_SCHEMA));
     metadata.setAttribute('data-result-index', String(catalogItem.resultIndex));
     metadata.setAttribute('data-result-name', String(catalogItem.resultName || ''));
     metadata.textContent = JSON.stringify({
-      schema: INTERACTIVE_CATALOG_SCHEMA,
+      schema: FEATURE_CATALOG_SCHEMA,
       items: [catalogItem]
     });
   } else {

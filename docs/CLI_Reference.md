@@ -64,7 +64,7 @@ Options (examples):
   --comparisons_table  Linear BLAST manifest with explicit query/subject endpoints
   --conservation_blast BLAST result file(s) for circular similarity rings (-outfmt 6 or 7)
   --conservation_table TSV manifest for circular BLAST similarity rings
-  --conservation_fasta Optional comparison FASTA source(s) for interactive matched-span export
+  --conservation_sequence Comparison genome FASTA, GenBank, or DDBJ file(s) for LOSAT rings or interactive span export
   --circular_track_table TSV manifest for circular track slots
   --annotation_table    TSV table for coordinate- or feature-targeted region annotations
 
@@ -112,14 +112,19 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--depth_track_tick_font_size VALUE [VALUE ...]]
               [--conservation_blast BLAST [BLAST ...]]
               [--conservation_table TSV]
-              [--conservation_fasta FASTA [FASTA ...]]
+              [--conservation_sequence FILE [FILE ...]]
               [--conservation_reference {query,subject,auto}]
               [--conservation_labels LABEL [LABEL ...]]
               [--conservation_colors COLOR [COLOR ...]]
               [--conservation_ring_width CONSERVATION_RING_WIDTH]
               [--conservation_ring_gap CONSERVATION_RING_GAP]
-              [--evalue EVALUE] [--bitscore BITSCORE] [--identity IDENTITY]
-              [--alignment_length ALIGNMENT_LENGTH]
+              [--losat {losatn,tlosatx,losatp}]
+              [--losatn_task {megablast,blastn,dc-megablast}]
+              [--losat_gencode CODE]
+              [--conservation_losat_gencode CODE [CODE ...]]
+              [--losat_bin PATH | --ncbi_blast_bin PATH] [--losat_threads N]
+              [--losat_output_dir DIR] [--evalue EVALUE] [--bitscore BITSCORE]
+              [--identity IDENTITY] [--alignment_length ALIGNMENT_LENGTH]
               [--depth_color DEPTH_COLOR] [--depth_width DEPTH_WIDTH]
               [--depth_window DEPTH_WINDOW] [--depth_step DEPTH_STEP]
               [--share_depth_axis] [--depth_min DEPTH_MIN]
@@ -209,7 +214,8 @@ options:
   -t, --table TABLE     color table (optional)
   -d, --default_colors DEFAULT_COLORS
                         TSV file that overrides the color palette (optional)
-  -n, --nt NT           dinucleotide (default: GC).
+  -n, --nt NT           dinucleotide: two letters from A, C, G, T, and U;
+                        case-insensitive, U counts as T (default: GC).
   -w, --window WINDOW   window size (optional; default: 1kb for genomes < 1Mb,
                         10kb for genomes <10Mb, 100kb for genomes >=10Mb)
   -s, --step STEP       step size (optional; default: 100 bp for genomes <
@@ -293,9 +299,11 @@ options:
   --conservation_table TSV
                         TSV manifest with BLAST files for similarity rings,
                         labels, and colors.
-  --conservation_fasta FASTA [FASTA ...]
-                        Optional comparison FASTA source(s), aligned with
-                        --conservation_blast for interactive span export.
+  --conservation_sequence FILE [FILE ...]
+                        Comparison genome sequence file(s) (FASTA, GenBank, or
+                        DDBJ; one file is one genome): the ring queries with
+                        --losat, otherwise one per --conservation_blast for
+                        interactive span export.
   --conservation_reference {query,subject,auto}
                         BLAST side containing displayed circular reference
                         coordinates.
@@ -311,6 +319,37 @@ options:
   --conservation_ring_gap CONSERVATION_RING_GAP
                         Similarity ring gap for circular mode (in px; must be
                         > 0).
+  --losat {losatn,tlosatx,losatp}
+                        Build the similarity rings with LOSAT: losatn compares
+                        nucleotide sequences (LOSAT blastn) and tlosatx their
+                        translations (LOSAT tblastx). Each
+                        --conservation_sequence genome is the query and the
+                        displayed records are the subject. Cannot be combined
+                        with --conservation_blast (default: no LOSAT search).
+  --losatn_task {megablast,blastn,dc-megablast}
+                        LOSATN search task with --losat losatn. A native
+                        runtime that does not support the task stops before
+                        searching (default: megablast).
+  --losat_gencode CODE  TLOSATX genetic code of the displayed (reference)
+                        records with --losat tlosatx (default: 1).
+  --conservation_losat_gencode CODE [CODE ...]
+                        TLOSATX genetic code of each comparison genome with
+                        --losat tlosatx: one for every ring or one per
+                        --conservation_sequence, in the same order; the
+                        --conservation_table losat_gencode column sets it per
+                        row (default: 1).
+  --losat_bin PATH      Native LOSAT executable for --losat (default:
+                        automatic runtime resolution).
+  --ncbi_blast_bin PATH
+                        NCBI BLAST+ executable of the selected --losat program
+                        (blastn or tblastx) (default: automatic runtime
+                        resolution).
+  --losat_threads N     Threads passed to each LOSAT or NCBI BLAST+ job
+                        (default: runtime default).
+  --losat_output_dir DIR
+                        Write the raw LOSAT evidence to DIR; requires --losat.
+                        One TSV per ring and conservation.tsv, which
+                        --conservation_table accepts unchanged.
   --evalue EVALUE       Maximum BLAST e-value retained for similarity rings
                         (default: 1e-5).
   --bitscore BITSCORE   Minimum BLAST bitscore retained for similarity rings
@@ -539,9 +578,11 @@ and Windows-reserved device, stream, or wildcard names are rejected. Pass an
 explicit `--output` path or prefix for such records.
 Session replay keeps its saved prefix unless an output override is supplied.
 
-Circular BLAST similarity rings use one ring per `--conservation_blast` source and a shared identity gradient legend. The rings display raw HSPs rather than an inferred measure of evolutionary conservation. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit. The CLI does not run LOSAT for these rings, so provide precomputed BLAST output.
+Circular BLAST similarity rings use one ring per `--conservation_blast` source and a shared identity gradient legend. The rings display raw HSPs rather than an inferred measure of evolutionary conservation. BLAST tables must be outfmt 6 or 7. Coordinates on the selected reference side are normalized from BLAST 1-based inclusive coordinates to drawing spans; `start > end` marks reverse orientation and is not interpreted as a circular-origin-spanning hit.
 
-For `interactive_svg`, add one `--conservation_fasta` value per `--conservation_blast` value to enable Reference span, Comparison span, and Both spans FASTA actions in the HSP popup. Without it, the reference span remains available and the comparison action explains that no comparison sequence was supplied. These actions export ungapped genomic spans. A reversed coordinate pair is sliced from the lower to the higher coordinate and reverse-complemented.
+To run the searches instead, use `--losat losatn` or `--losat tlosatx` with one `--conservation_sequence` file per ring (`losatp` is not available for rings). Each comparison genome file (FASTA, GenBank, or DDBJ; all records of one file are one genome) is the LOSAT query, and all displayed records are the subject, so every ring uses the reference genome as its E-value database and `--conservation_reference` resolves to `subject` (`query` is rejected). `--conservation_blast` cannot be combined with `--losat`. Ring order, labels, and colors follow `--conservation_sequence`; without `--conservation_labels`, a GenBank or DDBJ ring is labelled with its DEFINITION (or organism) and a FASTA ring with its file name. `--losatn_task` applies to LOSATN. For TLOSATX, `--losat_gencode` sets the reference genetic code and `--conservation_losat_gencode` one code for all rings or one per ring; both default to 1 and are never read from `/transl_table`. `--losat_bin`, `--ncbi_blast_bin`, and `--losat_threads` choose the runtime as in Linear mode. `--losat_output_dir DIR` writes one raw TSV per ring and `conservation.tsv`, which `--conservation_table` accepts unchanged. A saved Session stores the search results, so it replays without LOSAT. Thresholds, ring geometry, and `--circular_track_slot` work as for precomputed rings.
+
+For `interactive_svg`, add one `--conservation_sequence` value (FASTA, GenBank, or DDBJ) per `--conservation_blast` value to enable Reference span, Comparison span, and Both spans FASTA actions in the HSP popup. Without it, the reference span remains available and the comparison action explains that no comparison sequence was supplied. These actions export ungapped genomic spans. A reversed coordinate pair is sliced from the lower to the higher coordinate and reverse-complemented.
 
 ## Feature rendering
 
@@ -596,7 +637,7 @@ Bind a set to a custom slot with `set_id=<set_id>`. Without custom slots, `highl
 
 `lane` is the zero-based collision-avoidance row within an annotation track. Leave it blank for deterministic automatic packing. Use `0` for the first row, `1` for the second, and so on only when a fixed row is required. Highlights always cover the full feature band, so `lane` does not apply to them.
 
-The table options accept UTF-8, tab-separated files with a header row, with or without a UTF-8 byte order mark (BOM). Use real tab characters between cells. Blank lines are ignored, duplicate or unknown column names are rejected, and relative paths resolve against the table file.
+The table options accept UTF-8, tab-separated files with a header row, with or without a UTF-8 byte order mark (BOM). Use real tab characters between cells. Blank lines are ignored, duplicate column names are rejected, and relative paths resolve against the table file. Unknown columns remain errors for records and track tables. For Annotation TSV only, import discards unknown columns and warns once per table with the ignored column names and their absence from Session and TSV re-export; warnings exclude cell contents. Missing required columns, duplicate headers after normalization, malformed rows, and invalid known values still reject the whole import. Header names are trimmed and a BOM is removed before required-column and duplicate checks. Misspelled optional names such as `fill_colour` are ignored with the same warning; they are not converted to known names.
 
 ### `--records_table`
 
@@ -655,7 +696,7 @@ Then keep the other Gallery options, but replace `--gbk ...`, repeated `--record
 ```bash
 gbdraw linear \
   --records_table bgc_records.tsv \
-  --protein_blastp_mode orthogroup \
+  --losat losatp --losatp_mode similarity_groups \
   --show_labels first \
   --pairwise_match_style curve \
   -o BGC0000708-BGC0000713 \
@@ -700,7 +741,9 @@ Use `--comparisons_table` in Linear mode when comparison endpoints are not impli
 | `query` | yes | Displayed query record selector, such as `#1` or a unique record ID. |
 | `subject` | yes | Displayed subject record selector. |
 
-Endpoints must be different records in adjacent rows. Any number of selected pairs may connect the same two rows, and repeated rows for the same pair are merged after the shared filters are applied. The table cannot be combined with legacy `-b/--blast`. Legacy BLAST arguments remain adjacency-based and are rejected when a Linear row contains more than one record.
+Endpoints must be different records in adjacent rows. Any number of selected pairs may connect the same two rows, and repeated rows for the same pair are merged after the shared filters are applied. The table cannot be combined with legacy `-b/--blast`. Legacy BLAST arguments remain adjacency-based and are rejected when a Linear row contains more than one record. The `n`th `-b` file belongs to loaded records `n` and `n + 1`, so more `-b` files than adjacent record pairs stop the run before drawing. With `-b` and two or more input files, or with GFF3 input, each file contributes one record: the first, or the first that matches `--record_id`.
+
+Both `--comparisons_table` and `-b/--blast` read the first 12 outfmt 6 columns and ignore extra columns. Coordinates refer to the selected and cropped record on its source strand; `--reverse_complement` and reversed regions do not change how a table is read, and a row outside the record stops the run. See [Comparison and numeric tables](REFERENCE/input-formats-and-tsv-schemas.md#comparison-and-numeric-tables). A missing, unreadable, or malformed BLAST file stops the run with a non-zero exit status; `-b` no longer skips it. A table whose `qseqid` or `sseqid` names the other endpoint or another displayed record is rejected. See [Comparison and numeric tables](REFERENCE/input-formats-and-tsv-schemas.md#comparison-and-numeric-tables).
 
 ```tsv
 blast	query	subject
@@ -710,20 +753,21 @@ PemoMJNVA.PeseMJNV.tblastx.out	#2	#4
 
 ### `--conservation_table`
 
-Use `--conservation_table` in circular mode to keep BLAST paths, optional comparison FASTA paths, ring labels, and colors together. It cannot be combined with `--conservation_blast`, `--conservation_fasta`, `--conservation_labels`, or `--conservation_colors`.
+Use `--conservation_table` in circular mode to keep BLAST paths, optional comparison sequence paths, ring labels, and colors together. It cannot be combined with `--conservation_blast`, `--conservation_sequence`, `--conservation_labels`, `--conservation_colors`, or `--conservation_losat_gencode`.
 
 Allowed columns:
 
 | Column | Required | Meaning |
 | --- | --- | --- |
-| `blast` | yes | Path to a precomputed BLAST outfmt 6 or 7 file. |
-| `comparison_fasta` | optional | Comparison FASTA used only for interactive comparison-span export. |
+| `blast` | yes; rejected with `--losat` | Path to a precomputed BLAST outfmt 6 or 7 file. |
+| `comparison_sequence` | optional; required with `--losat` | Comparison genome (FASTA, GenBank, or DDBJ): the ring query with `--losat`, otherwise used only for interactive comparison-span export. |
+| `losat_gencode` | optional | TLOSATX genetic code of the ring with `--losat tlosatx` (empty cells use 1); rejected with `--losat losatn`, unused without `--losat`. |
 | `label` | optional | Similarity ring label. If the column is present, row order supplies the label list. |
 | `color` | optional | SVG color name or `#RRGGBB`. If the column is present, row order supplies the color list. |
 
 The row order defines the ring order. Thresholds and geometry still stay on the CLI, for example `--conservation_reference`, `--bitscore`, `--evalue`, `--identity`, `--alignment_length`, `--conservation_ring_width`, and `--conservation_ring_gap`.
 
-`comparison_fasta` does not change static ring geometry or filtering. Omit it when only the reference span should be available in an interactive SVG.
+Without `--losat`, `comparison_sequence` does not change static ring geometry or filtering. Omit it when only the reference span should be available in an interactive SVG. The retired `comparison_fasta` column is rejected with a message naming `comparison_sequence`.
 
 ```tsv
 blast	label	color
@@ -752,10 +796,12 @@ Allowed columns:
 | `side` | optional | `outside`, `axis`, or `inside`. If omitted, rows default to `inside`, except the first `features` row may become `axis` when no explicit axis row exists. |
 | `r` | optional | Slot radius scalar. Values may be ratios such as `0.8`, percentages such as `80%`, or pixels such as `200px`. |
 | `w` | optional | Slot width scalar, using the same scalar syntax as `r`. |
-| `inner_gap_px` | optional | Numeric inner gap in pixels, without a unit. |
-| `outer_gap_px` | optional | Numeric outer gap in pixels, without a unit. |
+| `inner_gap_px` | optional | Finite nonnegative inner gap in pixels. The approved text grammar accepts decimal/exponent values with optional case-insensitive `px`; blank means auto (runtime implementation pending). |
+| `outer_gap_px` | optional | Finite nonnegative outer gap in pixels. The approved text grammar accepts decimal/exponent values with optional case-insensitive `px`; blank means auto (runtime implementation pending). |
 | `z` | optional | Integer SVG layering order. |
 | `params` | optional | Comma-separated renderer-specific parameters in `key=value` form, for example `nt=AT,legend_label=AT skew`. Structural settings belong in their dedicated columns and cannot be repeated here. |
+
+The approved pure pixel text grammar is limited to Circular `inner_gap_px`/`outer_gap_px` and Linear `height`/`spacing`; height must be positive, while gaps and spacing may be zero. It does not change Circular `r`/`w` ratio or percent semantics, numeric-only typed JSON gaps, or the existing Linear `ScalarSpec` representation. See [the approved issue #600 outcome](internal/issue-600-implementation-20260926/APPROVED_PRODUCT_DECISIONS.md#trackspixel-text-input-domain); static authority integration and runtime implementation are pending.
 
 Only one row may use `side=axis`, and it must use `renderer=features`. That row defines the circular axis boundary and is converted internally to a split feature slot. Rows with `side=outside` are placed before the axis boundary, and rows with `side=inside` are placed after it. Relative row order is preserved within each side group.
 
@@ -801,6 +847,10 @@ track; provide one file to reuse it for every record, or one file per record.
 Semantic SVG track hooks identify the renderer and logical slot; internal ID
 spelling is deterministic but is not a cross-version selector contract.
 
+For the exact-reference and non-interactive ambiguity behavior of
+`--similarity_alignment_feature`, see [Strict Similarity Group
+alignment](./REFERENCE/command-line.md#strict-similarity-group-alignment).
+
 ## Linear mode
 
 <!-- BEGIN GENERATED LINEAR HELP -->
@@ -814,14 +864,15 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--fasta [FASTA_FILE ...]] [--records_table TSV]
               [--multi_record_position SELECTOR@ROW] [--linear_record_gap PX]
               [--comparisons_table TSV] [-b [BLAST ...]]
-              [--losatp_bin LOSATP_BIN] [--ncbi_blastp_bin NCBI_BLASTP_BIN]
-              [--losatp_threads LOSATP_THREADS]
-              [--protein_blastp_mode {none,pairwise,orthogroup,collinear}]
-              [--protein_blastp_max_hits PROTEIN_BLASTP_MAX_HITS]
-              [--protein_blastp_candidate_limit PROTEIN_BLASTP_CANDIDATE_LIMIT]
-              [--protein_blastp_output TSV]
-              [--align_orthogroup_feature ALIGN_ORTHOGROUP_FEATURE]
+              [--losat {losatn,tlosatx,losatp}]
+              [--losatp_mode {similarity_groups,collinear,pairwise}]
+              [--losatn_task {megablast,blastn,dc-megablast}]
+              [--losat_gencode CODE [CODE ...]] [--losat_bin PATH |
+              --ncbi_blast_bin PATH] [--losat_threads N] [--losatp_max_hits N]
+              [--losatp_max_target_seqs N] [--losatp_member_max_hits N]
+              [--losat_output_dir DIR] [--similarity_alignment_feature ID]
               [--collinear_search_scope {adjacent,all}]
+              [--collinear_infer_orthogroups {on,off}]
               [--collinear_min_anchors COLLINEAR_MIN_ANCHORS]
               [--collinear_max_unit_gap COLLINEAR_MAX_UNIT_GAP]
               [--collinear_max_diagonal_drift COLLINEAR_MAX_DIAGONAL_DRIFT]
@@ -941,37 +992,57 @@ options:
   -b, --blast [BLAST ...]
                         input BLAST result file in tab-separated format
                         (-outfmt 6 or 7) (optional)
-  --losatp_bin LOSATP_BIN
-                        Native LOSAT executable for --protein_blastp_mode
-                        pairwise/orthogroup/collinear (default: losat).
-  --ncbi_blastp_bin NCBI_BLASTP_BIN
-                        NCBI BLAST+ blastp executable for
-                        --protein_blastp_mode pairwise/orthogroup/collinear
-                        (default: use automatic runtime resolution).
-  --losatp_threads LOSATP_THREADS
-                        Threads passed to the selected protein blastp runtime
-                        for --protein_blastp_mode
-                        pairwise/orthogroup/collinear (default: runtime
-                        default).
-  --protein_blastp_mode {none,pairwise,orthogroup,collinear}
-                        Protein blastp comparison mode: none, pairwise
-                        adjacent ribbons, all-record similarity groups
-                        (orthogroup), or collinear blocks (default: none).
-  --protein_blastp_max_hits PROTEIN_BLASTP_MAX_HITS
-                        Maximum distinct subject protein hits per query
-                        protein for pairwise protein blastp display links
-                        (default: 5).
-  --protein_blastp_candidate_limit PROTEIN_BLASTP_CANDIDATE_LIMIT
-                        Optional protein blastp candidate cap per query; use
-                        'none' for no cap (default: none).
-  --protein_blastp_output TSV
-                        Write the raw protein-search evidence to one
-                        deterministic TSV. Runtime handles are replaced with
-                        user-visible protein IDs; requires
-                        --protein_blastp_mode.
-  --align_orthogroup_feature ALIGN_ORTHOGROUP_FEATURE
-                        Align linear records by the gbdraw similarity group
-                        containing this feature SVG hash or protein ID.
+  --losat {losatn,tlosatx,losatp}
+                        Run a LOSAT comparison between the records: losatn
+                        compares the nucleotide sequences (LOSAT blastn),
+                        tlosatx compares their translations (LOSAT tblastx),
+                        and losatp compares the CDS proteins (LOSAT blastp).
+                        Records in adjacent rows are compared unless
+                        --comparisons_table lists source=losat rows. Cannot be
+                        combined with -b/--blast (default: no LOSAT
+                        comparison).
+  --losatp_mode {similarity_groups,collinear,pairwise}
+                        LOSATP display with --losat losatp: similarity_groups
+                        (Similarity groups across all records), collinear
+                        (Collinear blocks), or pairwise (adjacent-record
+                        ribbons) (default: similarity_groups).
+  --losatn_task {megablast,blastn,dc-megablast}
+                        LOSATN search task with --losat losatn. A native
+                        runtime that does not support the task stops before
+                        searching (default: megablast).
+  --losat_gencode CODE [CODE ...]
+                        TLOSATX genetic code with --losat tlosatx: one for
+                        every record or one per record input; the records
+                        table losat_gencode column sets it per row (default:
+                        the runtime default, 1).
+  --losat_bin PATH      Native LOSAT executable for --losat (default:
+                        automatic runtime resolution).
+  --ncbi_blast_bin PATH
+                        NCBI BLAST+ executable of the selected --losat program
+                        (blastn, tblastx, or blastp) (default: automatic
+                        runtime resolution).
+  --losat_threads N     Threads passed to each LOSAT or NCBI BLAST+ job
+                        (default: runtime default).
+  --losatp_max_hits N   Maximum distinct subject proteins per query protein in
+                        --losatp_mode pairwise links (default: 5).
+  --losatp_max_target_seqs N
+                        LOSATP -max_target_seqs per query; 'none' for no cap
+                        (default: none).
+  --losatp_member_max_hits N
+                        Maximum hits per protein used for Similarity group and
+                        Collinear membership; 'none' for no cap (default:
+                        none).
+  --losat_output_dir DIR
+                        Write the raw LOSAT evidence to DIR; requires --losat.
+                        LOSATN and TLOSATX: one TSV per compared record pair
+                        and comparisons.tsv, which --comparisons_table accepts
+                        unchanged. LOSATP: losatp.raw.tsv with user-visible
+                        protein IDs.
+  --similarity_alignment_feature ID
+                        Align linear records using this exact feature SVG hash
+                        or protein ID; Similarity Group IDs are not accepted.
+                        Requires --losat losatp with --losatp_mode
+                        similarity_groups.
   --collinear_search_scope {adjacent,all}
                         Collinear protein blastp scope: adjacent displayed
                         records/rows or all record pairs. With multi-record
@@ -979,6 +1050,9 @@ options:
                         between neighboring rows; all uses every pair as
                         grouping evidence but renders only pairs across
                         adjacent rows (default: adjacent).
+  --collinear_infer_orthogroups {on,off}
+                        Infer Similarity groups from the Collinear evidence
+                        and color blocks by group (default: on).
   --collinear_min_anchors COLLINEAR_MIN_ANCHORS
                         Minimum anchors/genes required for a rendered
                         Collinear block; 1 allows singleton links (default:
@@ -1001,7 +1075,8 @@ options:
   -o, --output OUTPUT   output file prefix (default: out)
   --overwrite           Replace existing output files (default: refuse to
                         overwrite).
-  -n, --nt NT           dinucleotide skew (default: GC).
+  -n, --nt NT           dinucleotide skew: two letters from A, C, G, T, and U;
+                        case-insensitive, U counts as T (default: GC).
   -w, --window WINDOW   window size (optional; default: 1kb for genomes < 1Mb,
                         10kb for genomes <10Mb, 100kb for genomes >=10Mb)
   -s, --step STEP       step size (optional; default: 100 bp for genomes <
@@ -1373,14 +1448,25 @@ logical index used by labels, colors, shared axes, and custom track slots. In
 Linear mode the missing cell reserves no vertical geometry, so later numeric
 tracks compact without renumbering the logical series.
 
-For `--protein_blastp_mode`, gbdraw first uses a bundled native LOSAT binary
-when one is available. The current package bundles LOSAT for Linux x86_64.
-macOS and Windows packages do not currently include bundled LOSAT binaries; if
-no native LOSAT executable is available, install NCBI BLAST+ and make `blastp`
-available on `PATH`, or pass it explicitly with `--ncbi_blastp_bin`. You can
-still force a native LOSAT executable on any platform with `--losatp_bin`.
-NCBI BLAST+ fallback produces compatible outfmt 6 protein comparisons, but its
-hit set is not guaranteed to be identical to LOSAT.
+`gbdraw linear --losat {losatn,tlosatx,losatp}` runs the comparison before
+drawing: LOSATN (`blastn`) and TLOSATX (`tblastx`) compare the records in
+adjacent rows, or the `source=losat` rows of `--comparisons_table`; LOSATP
+(`blastp`) compares CDS proteins. `--losatn_task` selects the LOSATN task and
+`--losat_gencode` (or the records table `losat_gencode` column) sets the
+TLOSATX genetic codes. A native runtime that does not list the requested
+LOSATN task (released LOSAT 0.1.0 has no `dc-megablast`) stops before
+searching. `--losat_output_dir DIR` writes one raw TSV per compared record pair
+and a `comparisons.tsv` that `--comparisons_table` accepts unchanged.
+
+gbdraw uses a native LOSAT executable when one is available. The PyPI package
+does not bundle native LOSAT: install the pinned release with
+`gbdraw setup-losat`, or place `losat` on `PATH`. The resolution order is in
+[Command-line reference](./REFERENCE/command-line.md). If no native LOSAT
+executable is available, install NCBI BLAST+ and make the program executable
+(`blastn`, `tblastx`, or `blastp`) available on `PATH`, or pass it explicitly
+with `--ncbi_blast_bin`. You can force a native LOSAT executable on any
+platform with `--losat_bin`. NCBI BLAST+ fallback produces compatible outfmt 6
+comparisons, but its hit set is not guaranteed to be identical to LOSAT.
 
 ## Related documentation
 

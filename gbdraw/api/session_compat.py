@@ -21,11 +21,27 @@ from gbdraw.analysis.protein_colinearity import (
     validate_legacy_protein_raw_candidate_envelope,
     validate_protein_raw_entry_references,
 )
+from gbdraw.core.record_metadata import _iter_source_features, _source_feature_index
 from gbdraw.exceptions import ValidationError
+from gbdraw.features.ids import compute_feature_hash
+from gbdraw.layout.similarity_alignment import (
+    AlignmentAnchorIdentity,
+    AlignmentDecisionStatus,
+    AlignmentRecordDecision,
+    AlignmentResolutionRationale,
+    SimilarityAlignmentPlan,
+)
 from gbdraw.session_io import (
+    CURRENT_SESSION_VERSION,
     classify_raw_losat_cache_entry,
     empty_protein_identity_manifest,
     validate_session,
+)
+
+from .options import LinearMultiRecordOptions, LinearRecordTranslation
+from .record_planning import (
+    ResolvedRecordCollection,
+    project_similarity_alignment_centers,
 )
 
 from .request_render import (
@@ -45,6 +61,13 @@ from .request_render import (
 from .requests import (
     DiagramRequest,
     LinearDiagramRequest,
+    _LegacySimilarityAlignment,
+    _with_legacy_similarity_alignment,
+)
+from ..linear_comparison import (
+    _endpoint_frame,
+    project_search_frame_comparisons,
+    reverse_endpoint_table_text,
 )
 
 _LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32
@@ -556,7 +579,428 @@ def _request_protein_artifacts(
         options.protein_comparisons,
         options.orthogroups,
         options.collinearity_blocks,
-        options.align_orthogroup_feature,
+    )
+
+
+@dataclass(frozen=True)
+class _LegacyAlignmentMember:
+    anchor: AlignmentAnchorIdentity
+    representative: bool
+    aliases: frozenset[str]
+
+
+def _mapping_items(value: object) -> tuple[Mapping[str, Any], ...]:
+    if not isinstance(value, list):
+        return ()
+    return tuple(item for item in value if isinstance(item, Mapping))
+
+
+def _legacy_display_frame_feature_id(
+    plan: LinearRequestPlan | None,
+    record_key: str,
+    feature_id: str,
+) -> str:
+    """Bind a release-0.13.0 display-frame feature ID to its source-frame ID.
+
+    0.13.0 hashed the displayed feature, so a reverse-complemented record saved
+    IDs of its displayed coordinates; the source feature catalog hashes source
+    coordinates. An ID that already names a catalog feature is returned as is.
+    """
+
+    if plan is None:
+        return feature_id
+    for record, provenance in zip(plan.records, plan.provenance, strict=True):
+        if provenance.record_key != record_key:
+            continue
+        catalog = {
+            entry.source_feature_index: entry
+            for entry in provenance.source_feature_catalog or ()
+        }
+        if any(entry.stable_feature_id == feature_id for entry in catalog.values()):
+            return feature_id
+        matches = {
+            catalog[index].stable_feature_id
+            for feature in _iter_source_features(record.features)
+            if (index := _source_feature_index(feature)) in catalog
+            and compute_feature_hash(feature, record_id=record.id) == feature_id
+        }
+        return matches.pop() if len(matches) == 1 else feature_id
+    return feature_id
+
+
+def _legacy_alignment_groups(
+    request: LinearDiagramRequest,
+    session_artifacts: Mapping[str, Any],
+    plan: LinearRequestPlan | None = None,
+) -> tuple[tuple[str, tuple[_LegacyAlignmentMember, ...]], ...]:
+    record_keys = tuple(record.record_key for record in request.records)
+    if any(record_key is None for record_key in record_keys):
+        raise ValidationError(
+            "Legacy similarity alignment requires stable displayed record keys."
+        )
+    stable_keys = tuple(str(record_key) for record_key in record_keys)
+    editor_state = session_artifacts.get("editorState")
+    catalog = editor_state.get("featureCatalog") if isinstance(editor_state, Mapping) else None
+    items = (
+        _mapping_items(catalog.get("items"))
+        if isinstance(catalog, Mapping) and catalog.get("schema") == 3
+        else ()
+    )
+    biological = tuple(
+        feature
+        for item in items
+        for feature in _mapping_items(item.get("biologicalFeatures"))
+    )
+    rendered = tuple(
+        feature
+        for item in items
+        for feature in _mapping_items(item.get("features"))
+    )
+    catalog_groups = tuple(
+        group
+        for item in items
+        for group in _mapping_items(item.get("orthogroups"))
+    )
+    state = session_artifacts.get("orthogroupState")
+    groups = catalog_groups or (
+        _mapping_items(state.get("groups")) if isinstance(state, Mapping) else ()
+    )
+    use_legacy_groups = not catalog_groups
+    result: list[tuple[str, tuple[_LegacyAlignmentMember, ...]]] = []
+    for group in groups:
+        group_id = group.get("id")
+        if not isinstance(group_id, str) or not group_id.strip():
+            raise ValidationError("Legacy similarity alignment group has no stable ID.")
+        members: list[_LegacyAlignmentMember] = []
+        for member in _mapping_items(group.get("members")):
+            if use_legacy_groups:
+                record_index = member.get("recordIndex")
+                if (
+                    isinstance(record_index, bool)
+                    or not isinstance(record_index, int)
+                    or record_index < 0
+                    or record_index >= len(stable_keys)
+                ):
+                    raise ValidationError(
+                        "Legacy similarity alignment member has no stable record mapping."
+                    )
+                record_key = stable_keys[record_index]
+                stable_id = next(
+                    (
+                        value.strip()
+                        for name in (
+                            "stableFeatureSvgId",
+                            "stable_feature_svg_id",
+                            "featureSvgId",
+                        )
+                        if isinstance((value := member.get(name)), str)
+                        and value.strip()
+                    ),
+                    None,
+                )
+                feature_index = member.get("featureIndex")
+                if stable_id is None or not isinstance(feature_index, int) or isinstance(feature_index, bool) or feature_index < 0:
+                    raise ValidationError(
+                        "Legacy similarity alignment member lacks stable feature metadata."
+                    )
+                stable_id = _legacy_display_frame_feature_id(plan, record_key, stable_id)
+                anchor = AlignmentAnchorIdentity(
+                    record_key,
+                    stable_id,
+                    None,
+                    stable_id,
+                )
+            else:
+                record_key = member.get("recordKey")
+                biological_id = member.get("biologicalFeatureId")
+                matches = tuple(
+                    feature
+                    for feature in biological
+                    if feature.get("recordKey") == record_key
+                    and feature.get("biologicalFeatureId") == biological_id
+                )
+                if record_key not in stable_keys or not isinstance(biological_id, str) or len(matches) != 1:
+                    raise ValidationError(
+                        "Legacy similarity alignment member lacks unique biological identity metadata."
+                    )
+                source_index = matches[0].get("sourceFeatureIndex")
+                anchor = AlignmentAnchorIdentity(
+                    record_key,
+                    biological_id,
+                    source_index if isinstance(source_index, int) and not isinstance(source_index, bool) and source_index >= 0 else None,
+                )
+            rendered_ids = {
+                str(feature.get("svgId")).strip()
+                for feature in rendered
+                if feature.get("recordKey") == anchor.record_key
+                and feature.get("biologicalFeatureId") == anchor.biological_feature_id
+                and feature.get("svgId")
+            }
+            aliases = frozenset(
+                {
+                    str(value).strip()
+                    for value in (
+                        member.get("biologicalFeatureId"),
+                        member.get("stableFeatureSvgId"),
+                        member.get("stable_feature_svg_id"),
+                        member.get("featureSvgId"),
+                        member.get("sourceProteinId"),
+                        member.get("proteinId"),
+                        member.get("label"),
+                    )
+                    if value is not None and str(value).strip()
+                }
+                | rendered_ids
+            )
+            members.append(
+                _LegacyAlignmentMember(
+                    anchor,
+                    member.get("representative") is True,
+                    aliases,
+                )
+            )
+        result.append((group_id.strip(), tuple(members)))
+    return tuple(result)
+
+
+def _legacy_alignment_record_member(
+    members: Sequence[_LegacyAlignmentMember],
+    record_key: str,
+) -> _LegacyAlignmentMember | None:
+    matching = [member for member in members if member.anchor.record_key == record_key]
+    representatives = [member for member in matching if member.representative]
+    if len(representatives) == 1:
+        return representatives[0]
+    if len(representatives) > 1 or len(matching) > 1:
+        raise ValidationError(
+            "Legacy similarity alignment has ambiguous members for one displayed record."
+        )
+    return matching[0] if matching else None
+
+
+def _legacy_similarity_alignment_plan(
+    request: LinearDiagramRequest,
+    session_artifacts: Mapping[str, Any],
+    *,
+    target: str,
+    plan: LinearRequestPlan | None = None,
+) -> SimilarityAlignmentPlan:
+    groups = _legacy_alignment_groups(request, session_artifacts, plan)
+    group_matches = [group for group in groups if group[0] == target]
+    selected_member: _LegacyAlignmentMember | None = None
+    if len(group_matches) > 1:
+        raise ValidationError(
+            "Legacy similarity alignment group is ambiguous in saved metadata."
+        )
+    if group_matches:
+        group_id, members = group_matches[0]
+        selected_member = next(
+            (member for member in members if member.representative),
+            members[0] if members else None,
+        )
+    else:
+        member_matches = [
+            (group_id, members, member)
+            for group_id, members in groups
+            for member in members
+            if target in member.aliases
+        ]
+        if len(member_matches) != 1:
+            raise ValidationError(
+                "Legacy similarity alignment target is absent or ambiguous in saved stable metadata."
+            )
+        group_id, members, selected_member = member_matches[0]
+    if selected_member is None:
+        raise ValidationError(
+            "Legacy similarity alignment has no materializable reference member."
+        )
+    reference = selected_member.anchor
+    decisions = []
+    for record in request.records:
+        assert record.record_key is not None
+        if record.record_key == reference.record_key:
+            status = AlignmentDecisionStatus.REFERENCE
+            rationale = AlignmentResolutionRationale.REFERENCE
+            anchor = reference
+        else:
+            member = _legacy_alignment_record_member(members, record.record_key)
+            status = (
+                AlignmentDecisionStatus.ALIGNED
+                if member is not None
+                else AlignmentDecisionStatus.SKIPPED
+            )
+            rationale = (
+                AlignmentResolutionRationale.ONLY_USABLE_CANDIDATE
+                if member is not None
+                else AlignmentResolutionRationale.SKIPPED_NO_CANDIDATE
+            )
+            anchor = member.anchor if member is not None else None
+        decisions.append(
+            AlignmentRecordDecision(
+                record_key=record.record_key,
+                status=status,
+                rationale=rationale,
+                anchor=anchor,
+            )
+        )
+    return SimilarityAlignmentPlan(
+        group_id=group_id,
+        reference=reference,
+        records=tuple(decisions),
+    )
+
+
+def promote_legacy_session_similarity_alignment_request(
+    request: DiagramRequest,
+    session_artifacts: Mapping[str, Any],
+    *,
+    plan: LinearRequestPlan | None = None,
+) -> DiagramRequest:
+    """Promote one supported old Session alignment into current typed state.
+
+    With the resolved ``plan`` of ``request``, saved feature IDs of displayed
+    (reverse-complemented) records also bind to their source features.
+    """
+
+    if not isinstance(request, LinearDiagramRequest):
+        return request
+    orthogroup_state = session_artifacts.get("orthogroupState")
+    session_target = (
+        orthogroup_state.get("selectedOrthogroupAlignmentFeature")
+        if isinstance(orthogroup_state, Mapping)
+        else None
+    )
+    if session_target == "":
+        # origin/main's Web Save writes "" when no alignment target is selected.
+        session_target = None
+    if session_target is not None and (
+        not isinstance(session_target, str)
+        or not session_target.strip()
+        or "\0" in session_target
+    ):
+        raise ValidationError(
+            "Legacy Session similarity alignment target must be non-empty text without NUL."
+        )
+    session_target = session_target.strip() if isinstance(session_target, str) else None
+    legacy = request._legacy_similarity_alignment
+    targets = {value for value in (session_target, legacy.target if legacy else None) if value}
+    if not targets:
+        return request
+    if len(targets) != 1:
+        raise ValidationError(
+            "Legacy Session contains conflicting similarity alignment owners."
+        )
+    session_version = session_artifacts.get("version")
+    if (
+        isinstance(session_version, bool)
+        or not isinstance(session_version, int)
+        or session_version >= CURRENT_SESSION_VERSION
+    ):
+        raise ValidationError(
+            "Current Sessions must store typed similarity alignment state."
+        )
+    if (
+        request.similarity_alignment is not None
+        and request.layout is not None
+        and request.layout.record_translations
+    ):
+        if legacy is not None:
+            return request
+        expected_plan = _legacy_similarity_alignment_plan(
+            request,
+            session_artifacts,
+            target=targets.pop(),
+            plan=plan,
+        )
+        if request.similarity_alignment != expected_plan or any(
+            translation.x != 0.0 or translation.y != 0.0
+            for translation in request.layout.record_translations
+        ):
+            raise ValidationError(
+                "Legacy Session similarity alignment conflicts with current typed state."
+            )
+        return _with_legacy_similarity_alignment(
+            request,
+            _LegacySimilarityAlignment(
+                target=session_target or expected_plan.group_id,
+                source_schema=int(
+                    session_artifacts.get("renderRequest", {}).get("schema", 1)
+                ),
+            ),
+        )
+    if request.similarity_alignment is not None or (
+        request.layout is not None and request.layout.record_translations
+    ):
+        raise ValidationError(
+            "Legacy Session similarity alignment conflicts with current typed state."
+        )
+    target = targets.pop()
+    alignment = _legacy_similarity_alignment_plan(
+        request,
+        session_artifacts,
+        target=target,
+        plan=plan,
+    )
+    layout = request.layout or LinearMultiRecordOptions()
+    promoted = replace(
+        request,
+        layout=replace(
+            layout,
+            record_translations=tuple(
+                LinearRecordTranslation(record_key=record.record_key)
+                for record in request.records
+                if record.record_key is not None
+            ),
+        ),
+        similarity_alignment=alignment,
+    )
+    return _with_legacy_similarity_alignment(
+        promoted,
+        legacy
+        or _LegacySimilarityAlignment(
+            target=target,
+            source_schema=int(
+                session_artifacts.get("renderRequest", {}).get("schema", 1)
+            ),
+        ),
+    )
+
+
+def materialize_legacy_similarity_alignment_request(
+    request: DiagramRequest,
+) -> DiagramRequest:
+    """Keep an old-schema projection on the current typed render boundary."""
+
+    if not isinstance(request, LinearDiagramRequest):
+        return request
+    return request
+
+
+def project_legacy_similarity_alignment_for_current_write(
+    request: DiagramRequest,
+    *,
+    legacy_source: DiagramRequest | None = None,
+) -> DiagramRequest:
+    """Remove a materialized runtime string when a typed legacy projection exists."""
+
+    if not isinstance(request, LinearDiagramRequest):
+        return request
+    source = legacy_source if isinstance(legacy_source, LinearDiagramRequest) else request
+    if source._legacy_similarity_alignment is None:
+        return request
+    if (
+        source.similarity_alignment is None
+        or source.layout is None
+        or not source.layout.record_translations
+        or request.similarity_alignment != source.similarity_alignment
+    ):
+        raise ValidationError(
+            "Legacy similarity alignment cannot be projected to a current request."
+        )
+    return replace(
+        request,
+        layout=source.layout,
+        similarity_alignment=source.similarity_alignment,
     )
 
 
@@ -586,10 +1030,6 @@ def _rewrite_linear_request_protein_references(
                 ),
                 collinearity_blocks=rewrite_protein_artifact_references(
                     options.collinearity_blocks,
-                    id_map,
-                ),
-                align_orthogroup_feature=rewrite_protein_artifact_references(
-                    options.align_orthogroup_feature,
                     id_map,
                 ),
             ),
@@ -625,20 +1065,111 @@ def _deduplicate_raw_entries(
     return tuple(result)
 
 
+def _replace_plan_request(
+    plan: DiagramRequestPlan,
+    request: DiagramRequest,
+) -> DiagramRequestPlan:
+    if not isinstance(plan, LinearRequestPlan):
+        return replace(plan, request=request)
+    if plan.request.similarity_alignment == request.similarity_alignment:
+        return replace(plan, request=request)
+    if plan.request.similarity_alignment is not None:
+        raise ValidationError(
+            "Session compatibility cannot replace an active similarity alignment plan."
+        )
+    centers = project_similarity_alignment_centers(
+        ResolvedRecordCollection(plan.records, plan.provenance),
+        request.similarity_alignment,
+    )
+    # Promotion adds the record translations of the alignment; keep the
+    # placement rows the plan already resolved.
+    layout = request.layout
+    if layout is not None and plan.layout is not None:
+        layout = replace(
+            layout, multi_record_positions=plan.layout.multi_record_positions
+        )
+    return replace(
+        plan,
+        request=request,
+        layout=layout,
+        alignment_anchor_centers=centers,
+    )
+
+
+_MAIN_DISPLAY_FRAME_SESSION_VERSION = 42
+
+
+def _main_display_frame_rows_to_search_frame(
+    plan: DiagramRequestPlan,
+    request: DiagramRequest,
+    session_artifacts: Mapping[str, Any],
+) -> DiagramRequest:
+    """Convert main Session comparison rows to the search frame once (PD-OI-073).
+
+    Sessions up to version 42 (origin/main 4556e04e) stored nucleotide rows
+    after the reverse complement of their endpoint records. The x -> L + 1 - x
+    map is its own inverse, so the projection that draws search-frame rows also
+    converts these rows; the adapted request and any re-saved Session then use
+    the search frame. The decoded resource text of a ``nucleotideBlast`` item
+    is converted with its rows.
+    """
+
+    version = session_artifacts.get("version")
+    if (
+        not isinstance(plan, LinearRequestPlan)
+        or not isinstance(request, LinearDiagramRequest)
+        or not isinstance(version, int)
+        or version > _MAIN_DISPLAY_FRAME_SESSION_VERSION
+        or not request.options.linear_comparisons
+    ):
+        return request
+    originals = request.options.linear_comparisons
+    projected = project_search_frame_comparisons(originals, plan.records)
+    if all(
+        before.matches.equals(after.matches)
+        for before, after in zip(originals, projected, strict=True)
+    ):
+        return request
+    converted = tuple(
+        after
+        if before.search_frame_text is None or before.matches.equals(after.matches)
+        else replace(
+            after,
+            search_frame_text=reverse_endpoint_table_text(
+                before.search_frame_text,
+                *(
+                    _endpoint_frame(plan.records[index])
+                    for index in (before.query_record_index, before.subject_record_index)
+                ),
+            ),
+        )
+        for before, after in zip(originals, projected, strict=True)
+    )
+    return replace(request, options=replace(request.options, linear_comparisons=converted))
+
+
 def _adapt_session_plan(
     plan: DiagramRequestPlan,
     session_artifacts: Mapping[str, Any],
 ) -> AdaptedSessionRequest:
     source = _read_session_artifact_source(session_artifacts)
-    request = plan.request
+    request = promote_legacy_session_similarity_alignment_request(
+        plan.request,
+        session_artifacts,
+        plan=plan if isinstance(plan, LinearRequestPlan) else None,
+    )
+    request = _main_display_frame_rows_to_search_frame(plan, request, session_artifacts)
+    if request is not plan.request:
+        plan = _replace_plan_request(plan, request)
     current_raw = source.current_raw_entries
     manifest = source.protein_identity_manifest
     unresolved = source.legacy_candidates
     id_map: dict[str, str] = {}
 
     if isinstance(plan, LinearRequestPlan):
+        request = materialize_legacy_similarity_alignment_request(request)
         reference_ids: set[str] = set()
-        for value in _request_protein_artifacts(plan.request):
+        for value in _request_protein_artifacts(request):
             reference_ids.update(_legacy_protein_reference_ids(value))
         current_protein = tuple(
             entry for entry in current_raw if is_protein_losat_cache_entry(entry)
@@ -653,7 +1184,7 @@ def _adapt_session_plan(
                     "Linear session compatibility plan has no prepared inputs."
                 )
             extraction = _extract_linear_request_proteins(
-                plan.request,
+                request,
                 plan.records,
                 plan.inputs,
             )
@@ -694,12 +1225,12 @@ def _adapt_session_plan(
             )
             manifest = extracted_manifest.to_dict()
         request = _rewrite_linear_request_protein_references(
-            plan.request,
+            request,
             id_map,
         )
-        has_protein_tables = plan.request.options.protein_comparisons is not None or any(
+        has_protein_tables = request.options.protein_comparisons is not None or any(
             "query_protein_id" in comparison.matches.columns
-            for comparison in plan.request.options.linear_comparisons or ()
+            for comparison in request.options.linear_comparisons or ()
         )
         if has_protein_tables and promoted:
             unresolved = ()
@@ -790,7 +1321,7 @@ def _build_session_compatible_plan(
 
     adapted = _adapt_session_plan(plan, session_artifacts)
     if adapted.request is not plan.request:
-        plan = replace(plan, request=adapted.request)
+        plan = _replace_plan_request(plan, adapted.request)
     prepared = build_request_plan_diagram(
         plan,
         artifacts=adapted.artifacts,
@@ -959,6 +1490,9 @@ __all__ = [
     "adapt_session_request",
     "build_session_compatible_request_diagram",
     "canonical_payload_for_session_decode",
+    "materialize_legacy_similarity_alignment_request",
+    "project_legacy_similarity_alignment_for_current_write",
+    "promote_legacy_session_similarity_alignment_request",
     "render_session_compatible_request",
     "rewrite_protein_artifact_references",
 ]

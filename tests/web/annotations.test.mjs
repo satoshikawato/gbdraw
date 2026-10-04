@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cp, mkdtemp, writeFile } from 'node:fs/promises';
+import { readFile, cp, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -21,13 +21,14 @@ const {
   parseAnnotationRecordSelectorValue
 } = await load('app/annotations/target-actions.js');
 const { buildAnnotationRecordCatalog } = await load('app/annotations/record-catalog.js');
+const { resolveCircularRequestRecordSet } = await load('app/record-options.js');
 const {
   annotationRecordOptions,
   reconcileAnnotationRecordBindings,
   setAnnotationRecordValue
 } = await load('app/annotations/record-selector.js');
 const { validateAnnotationRecordTargets } = await load('app/annotations/validation.js');
-const { encodeAnnotationTable, parseAnnotationTable } = await load('app/annotations/table-codec.js');
+const { encodeAnnotationTable, parseAnnotationTable, parseAnnotationTableWithNotice } = await load('app/annotations/table-codec.js');
 const { createAnnotationEditor } = await load('app/annotations.js');
 const { buildLinearTrackSlotSpec, normalizeLinearTrackSlots } = await load('app/linear-track-slots.js');
 const { buildCircularTrackSlotSpec, normalizeCircularTrackSlots } = await load('app/circular-track-slots.js');
@@ -64,13 +65,13 @@ test('invalid annotation coordinates cannot be silently clamped or truncated', (
   for (const start of ['abc', '0', '-10', '1.5', '', 'Infinity']) {
     assert.throws(() => parseAnnotationTable(`set_id\tid\tmark\tstart\tend\ns\ta\thighlight\t${start}\t30\n`), /positive integers/);
     const invalid = [{ id: 's', annotations: [{ id: 'a', target: coordinateTarget({ start, end: 30 }) }] }];
-    assert.match(validateAnnotationRecordTargets(invalid, { records: [] }), /positive integers/);
+    assert.deepEqual(validateAnnotationRecordTargets(invalid, { records: [] }), { code: 'ANNOTATION_TARGET', context: { reason: 'POSITIVE_INTEGER' } });
   }
   assert.equal(parseAnnotationTable('set_id\tid\tmark\tstart\tend\ns\ta\thighlight\t10\t30\n')[0].annotations[0].target.start, 10);
 });
 
-test('TSV cannot silently replace unknown annotation choices or ignore misspelled columns', () => {
-  for (const [column, value] of [['coordinate_space', 'typo'], ['lane', '-1'], ['lane', '1.5'], ['fill_colour', 'red']]) {
+test('TSV cannot silently replace invalid known annotation choices', () => {
+  for (const [column, value] of [['coordinate_space', 'typo'], ['lane', '-1'], ['lane', '1.5']]) {
     assert.throws(() => parseAnnotationTable(`set_id\tid\tmark\tstart\tend\t${column}\ns\ta\tband\t1\t8\t${value}\n`));
   }
   const local = parseAnnotationTable('set_id\tid\tmark\tstart\tend\tcoordinate_space\ns\ta\tBAND\t1\t8\tLOCAL\n')[0].annotations[0];
@@ -257,33 +258,30 @@ const targetSet = createAnnotationSet({
   id: 'targets',
   annotations: [{ id: 'window', target: coordinateTarget({ start: 1, end: 5 }), label: '', mark: 'band' }]
 });
-assert.match(validateAnnotationRecordTargets([targetSet], linearCatalog), /targets\/window/);
+assert.deepEqual(validateAnnotationRecordTargets([targetSet], linearCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'TARGET_RECORD' } });
 const featureTargetSet = createAnnotationSet({
   id: 'features',
   annotations: [{ id: 'gene', target: featureTarget({ selector: 'locus_tag=ABC_1' }), label: '', mark: 'bracket' }]
 });
-assert.match(validateAnnotationRecordTargets([featureTargetSet], linearCatalog), /features\/gene/);
+assert.deepEqual(validateAnnotationRecordTargets([featureTargetSet], linearCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'TARGET_RECORD' } });
 assert.deepEqual(
   annotationRecordOptions(linearCatalog, targetSet.annotations[0]).map((option) => option.value),
   ['', linearCatalog.records[0].key, linearCatalog.records[1].key]
 );
 setAnnotationRecordValue(linearCatalog, targetSet.annotations[0], linearCatalog.records[1].key);
 assert.deepEqual(targetSet.annotations[0].target.record, { kind: 'recordId', value: 'RecB' });
-assert.equal(validateAnnotationRecordTargets([targetSet], linearCatalog), '');
+assert.equal(validateAnnotationRecordTargets([targetSet], linearCatalog), null);
 assert.equal(encodeAnnotationTable([targetSet]).trim().split('\n')[1].split('\t')[3], 'RecB');
 delete targetSet.annotations[0].metadata._gbdraw_web_target_record_key;
 targetSet.annotations[0].target.record = { kind: 'recordIndex', index: 2 };
-assert.match(validateAnnotationRecordTargets([targetSet], linearCatalog), /out of range/);
+assert.deepEqual(validateAnnotationRecordTargets([targetSet], linearCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'OUT_OF_RANGE' } });
 targetSet.annotations[0].target.record = { kind: 'recordId', value: 'missing' };
-assert.match(validateAnnotationRecordTargets([targetSet], linearCatalog), /not available/);
+assert.deepEqual(validateAnnotationRecordTargets([targetSet], linearCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'NO_MATCH' } });
 setAnnotationRecordValue(duplicateCatalog, targetSet.annotations[0], duplicateCatalog.records[0].key);
-assert.equal(validateAnnotationRecordTargets([targetSet], duplicateCatalog), '');
+assert.equal(validateAnnotationRecordTargets([targetSet], duplicateCatalog), null);
 targetSet.annotations[0].target.record = { kind: 'recordIndex', index: -1 };
 delete targetSet.annotations[0].metadata._gbdraw_web_target_record_key;
-assert.match(
-  validateAnnotationRecordTargets([targetSet], linearCatalog),
-  /valid target record/
-);
+assert.deepEqual(validateAnnotationRecordTargets([targetSet], linearCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'TARGET_RECORD' } });
 
 const automaticSourceCatalog = buildAnnotationRecordCatalog({
   mode: 'linear',
@@ -315,7 +313,7 @@ const emptySourceCatalog = buildAnnotationRecordCatalog({
   linearSources: [{ sourceKey: 'empty', hasInput: true, status: 'ready', selector: '', records: [] }]
 });
 assert.equal(emptySourceCatalog.status, 'error');
-assert.match(emptySourceCatalog.issues[0], /no records were found/);
+assert.deepEqual(emptySourceCatalog.issues[0], { code: 'NO_RECORDS', context: { inputOrdinal: 1 } });
 
 const gbComparisonCatalog = buildAnnotationRecordCatalog({
   mode: 'linear',
@@ -382,31 +380,63 @@ const reorderedDuplicateCatalog = buildAnnotationRecordCatalog({
 });
 reconcileAnnotationRecordBindings([duplicateTargetSet], reorderedDuplicateCatalog);
 assert.deepEqual(duplicateTargetSet.annotations[0].target.record, { kind: 'recordIndex', index: 0 });
-assert.equal(validateAnnotationRecordTargets([duplicateTargetSet], reorderedDuplicateCatalog), '');
+assert.equal(validateAnnotationRecordTargets([duplicateTargetSet], reorderedDuplicateCatalog), null);
 const replacedSourceCatalog = buildAnnotationRecordCatalog({
   mode: 'linear',
   linearSources: [{ sourceKey: 'replacement', hasInput: true, status: 'ready', selector: '', records: [{ recordId: 'dup' }] }]
 });
-assert.match(validateAnnotationRecordTargets([duplicateTargetSet], replacedSourceCatalog), /no longer available/);
+assert.deepEqual(validateAnnotationRecordTargets([duplicateTargetSet], replacedSourceCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'TARGET_RECORD' } });
 
+// FE-05 (PD-OI-041): a Circular request that draws several records, in one
+// figure or one output per record, needs an explicit target record, which
+// Python binds to that record alone. A target without a record is ambiguous.
 targetSet.annotations[0].target.record = { kind: 'recordId', value: 'RecA' };
 targetSet.annotations[0].metadata = {};
 const circularMultiOutputCatalog = buildAnnotationRecordCatalog({
   mode: 'circular',
-  multiRecordCanvas: false,
   circularSource: {
     sourceKey: 'circular', hasInput: true, status: 'ready',
     records: [{ record_id: 'RecA' }, { record_id: 'RecB' }]
   }
 });
-assert.match(validateAnnotationRecordTargets([targetSet], circularMultiOutputCatalog), /enable Multi-record canvas/);
+assert.equal(circularMultiOutputCatalog.requiresSelection, true);
+assert.equal(validateAnnotationRecordTargets([targetSet], circularMultiOutputCatalog), null);
+assert.deepEqual(
+  annotationRecordOptions(circularMultiOutputCatalog, targetSet.annotations[0]).map((option) => option.label),
+  ['Select target record', '#1 · RecA', '#2 · RecB']
+);
+targetSet.annotations[0].target.record = null;
+assert.deepEqual(validateAnnotationRecordTargets([targetSet], circularMultiOutputCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'TARGET_RECORD' } });
+targetSet.annotations[0].target.record = { kind: 'recordId', value: 'RecA' };
+// The catalog offers the records the Circular request draws: the selected
+// record of a single presentation, every record of a grid or batch.
+const circularRecords = [{ selector: '#1', record_id: 'RecA' }, { selector: '#2', record_id: 'RecB' }];
+const drawnIds = (options) => resolveCircularRequestRecordSet({ records: circularRecords, ...options })
+  .records.map((record) => record.recordId);
+assert.deepEqual(drawnIds({ selector: 'RecB' }), ['RecB']);
+assert.deepEqual(drawnIds({ selector: '' }), ['RecA', 'RecB']);
+assert.deepEqual(drawnIds({ selector: 'RecB', multiRecordCanvas: true }), ['RecA', 'RecB']);
+assert.deepEqual(drawnIds({ selector: 'RecB', groupingIntent: 'batch' }), ['RecA', 'RecB']);
+assert.equal(resolveCircularRequestRecordSet({ records: circularRecords, selector: 'missing' }).selectionFailure, 'NO_MATCH');
+const circularSelectedCatalog = buildAnnotationRecordCatalog({
+  mode: 'circular',
+  circularSource: {
+    sourceKey: 'circular', hasInput: true, status: 'ready',
+    records: resolveCircularRequestRecordSet({ records: circularRecords, selector: 'RecB' }).records
+  }
+});
+assert.deepEqual(circularSelectedCatalog.records.map((record) => record.recordId), ['RecB']);
+assert.equal(circularSelectedCatalog.requiresSelection, false);
+targetSet.annotations[0].target.record = { kind: 'recordId', value: 'RecB' };
+assert.equal(validateAnnotationRecordTargets([targetSet], circularSelectedCatalog), null);
+targetSet.annotations[0].target.record = { kind: 'recordId', value: 'RecA' };
 
 const circularSingleCatalog = buildAnnotationRecordCatalog({
   mode: 'circular',
   circularSource: { sourceKey: 'single', hasInput: true, status: 'ready', records: [{ record_id: 'RecA' }] }
 });
 targetSet.annotations[0].target.record = null;
-assert.equal(validateAnnotationRecordTargets([targetSet], circularSingleCatalog), '');
+assert.equal(validateAnnotationRecordTargets([targetSet], circularSingleCatalog), null);
 
 const tableLines = table.trimEnd().split('\n');
 const tableHeader = tableLines[0].split('\t');
@@ -419,7 +449,7 @@ const nullRecordRow = tableLines[1].split('\t');
 nullRecordRow[recordColumn] = 'NULL';
 const nullRecordSets = parseAnnotationTable(`${tableLines[0]}\n${nullRecordRow.join('\t')}\n`);
 assert.equal(nullRecordSets[0].annotations[0].target.record, null);
-assert.match(validateAnnotationRecordTargets(nullRecordSets, linearCatalog), /Choose a target record/);
+assert.deepEqual(validateAnnotationRecordTargets(nullRecordSets, linearCatalog), { code: 'ANNOTATION_TARGET', context: { reason: 'TARGET_RECORD' } });
 const invalidIndexRow = tableLines[1].split('\t');
 invalidIndexRow[recordColumn] = '#0';
 assert.throws(
@@ -442,3 +472,105 @@ const circularSlot = normalizeCircularTrackSlots([{
 assert.equal(circularSlot.side, 'outside');
 assert.match(buildCircularTrackSlotSpec(circularSlot), /set_id=review/);
 assert.match(buildCircularTrackSlotSpec(circularSlot), /overflow=compress/);
+
+const importCases = JSON.parse(await readFile(join(process.cwd(), 'tests/fixtures/annotations/tsv-import-cases.json'), 'utf8'));
+for (const entry of importCases) {
+  test(`Annotation TSV parity: ${entry.name}`, () => {
+    if (!entry.valid) {
+      assert.throws(() => parseAnnotationTable(entry.table));
+      assert.throws(() => parseAnnotationTableWithNotice(entry.table));
+      return;
+    }
+    const parsed = parseAnnotationTableWithNotice(entry.table);
+    assert.deepEqual(parsed.sets, parseAnnotationTable(entry.control));
+    assert.deepEqual(parseAnnotationTable(entry.table), parsed.sets);
+    assert.equal(Array.isArray(parsed.sets), true);
+    if (entry.ignored.length) {
+      for (const name of entry.ignored) assert.ok(parsed.notice.includes(name));
+      assert.match(parsed.notice, /not saved in Sessions or TSV re-export/);
+    } else assert.equal(parsed.notice, '');
+    assert.ok(!JSON.stringify(parsed).includes('PRIVATE-CELL'));
+    const encoded = encodeAnnotationTable(parsed.sets);
+    for (const name of entry.ignored) assert.ok(!encoded.split('\n')[0].split('\t').includes(name));
+  });
+}
+
+test('file import commits once, separates notices, and preserves draft/Result on failure or stale completion', async () => {
+  const state = { annotationSets: [createAnnotationSet({ id: 'before', annotations: [
+    { id: 'old', target: coordinateTarget({ start: 1, end: 3 }), mark: 'band' }
+  ] })], results: [{ content: '<svg/>', warnings: ['resolved warning'] }] };
+  const notices = [];
+  const editor = createAnnotationEditor({ state, onImportNotice: (notice) => notices.push(notice) });
+  const alerts = [];
+  const oldAlert = globalThis.alert;
+  globalThis.alert = (message) => alerts.push(message);
+  let commits = 0;
+  const splice = state.annotationSets.splice.bind(state.annotationSets);
+  Object.defineProperty(state.annotationSets, 'splice', { value: (...args) => { commits++; return splice(...args); } });
+  const good = importCases[0];
+  const input = { files: [{ text: async () => good.table }], value: 'annotations.tsv' };
+  try {
+    const result = structuredClone(state.results);
+    await editor.importAnnotationTableFile({ target: input });
+    assert.equal(commits, 1);
+    assert.deepEqual(state.annotationSets, parseAnnotationTable(good.control));
+    assert.equal(notices.filter(Boolean).length, 1);
+    assert.deepEqual(state.results, result);
+    for (const entry of importCases.filter((entry) => !entry.valid)) {
+      const before = JSON.stringify(state);
+      input.files = [{ text: async () => entry.table }];
+      await editor.importAnnotationTableFile({ target: input });
+      assert.equal(JSON.stringify(state), before);
+      assert.equal(commits, 1);
+      assert.equal(notices.at(-1), '');
+    }
+    const before = JSON.stringify(state);
+    input.files = [{ text: async () => { throw new Error('read failure'); } }];
+    await editor.importAnnotationTableFile({ target: input });
+    assert.equal(JSON.stringify(state), before);
+    assert.match(alerts.at(-1), /read failure/);
+    let finish;
+    input.files = [{ text: () => new Promise((resolve) => { finish = resolve; }) }];
+    const pending = editor.importAnnotationTableFile({ target: input });
+    state.annotationSets[0].annotations[0].label = 'newer draft edit';
+    const edited = JSON.stringify(state);
+    finish(good.table);
+    await pending;
+    assert.equal(JSON.stringify(state), edited);
+    assert.equal(commits, 1);
+    assert.equal(notices.at(-1), '');
+    let finishResultRead;
+    input.files = [{ text: () => new Promise((resolve) => { finishResultRead = resolve; }) }];
+    const staleResult = editor.importAnnotationTableFile({ target: input });
+    state.results.splice(0, 1, { content: '<svg>new result</svg>', warnings: [] });
+    const replacedResult = JSON.stringify(state);
+    finishResultRead(good.table);
+    await staleResult;
+    assert.equal(JSON.stringify(state), replacedResult);
+    assert.equal(commits, 1);
+    state.results.splice(0, 1, ...result);
+    let finishOld;
+    input.files = [{ text: () => new Promise((resolve) => { finishOld = resolve; }) }];
+    const obsolete = editor.importAnnotationTableFile({ target: input });
+    input.files = [{ text: async () => good.control }];
+    await editor.importAnnotationTableFile({ target: input });
+    const current = JSON.stringify(state);
+    finishOld(good.table);
+    await obsolete;
+    assert.equal(JSON.stringify(state), current);
+    assert.equal(commits, 2);
+    assert.equal(notices.at(-1), '');
+    assert.deepEqual(state.results, result);
+  } finally {
+    if (oldAlert === undefined) delete globalThis.alert;
+    else globalThis.alert = oldAlert;
+  }
+});
+
+test('record reconciliation failure cannot partially replace an imported draft', () => {
+  const state = { annotationSets: [createAnnotationSet({ id: 'original' })] };
+  const before = JSON.stringify(state);
+  const editor = createAnnotationEditor({ state, getRecordCatalog: () => { throw new Error('catalog unavailable'); } });
+  assert.throws(() => editor.importAnnotationTable(importCases[0].table), /catalog unavailable/);
+  assert.equal(JSON.stringify(state), before);
+});

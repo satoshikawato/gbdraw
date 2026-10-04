@@ -270,23 +270,20 @@ def test_interactive_rejects_real_fragment_identity_conflicts(mutation):
 
 
 def test_group_alignment_projects_member_centers_before_translation():
-    from gbdraw.diagrams.linear.orthogroup_alignment import calculate_orthogroup_alignment_offsets
-    frame = hit_frame().assign(orthogroup_id="og_1", query_record_index=0, subject_record_index=1,
-                              query_feature_index=0, subject_feature_index=0,
-                              query_feature_svg_id="anchor", subject_feature_svg_id="target")
-    before = frame.copy(deep=True)
-    config = SimpleNamespace(normalize_length=False, align_center=False, alignment_width=120., longest_genome=120.)
-    offsets = calculate_orthogroup_alignment_offsets([record(), record(120, "subject")], [frame], config, "anchor",
-        record_transforms=(RecordDisplayTransform(100, 1, 1, 41, True), RecordDisplayTransform(120, 1, 1, 51, True)))
-    # Historical inclusive centers: 40.5 and 60.5; projected: 0.5 and 10.5.
-    assert offsets == {0: 0., 1: -10.}
-    pd.testing.assert_frame_equal(frame, before)
+    reference = RecordDisplayTransform(100, 1, 1, 41, True)
+    target = RecordDisplayTransform(120, 1, 1, 51, True)
+
+    assert reference.source_position_to_display_offset(40.5) == 0.5
+    assert target.source_position_to_display_offset(60.5) == 10.5
 
 
 @pytest.mark.parametrize("reverse", [False, True])
 def test_final_hsp_vertices_equal_independent_common_t_oracle(reverse):
+    # Tables are read in the search frame; the planner projects the reversal
+    # (PD-OI-073), so the same record-local HSP 60..21 is 41..80 in the table.
+    table = (101 - 60, 101 - 21, 31, 90) if reverse else (60, 21, 31, 90)
     _, root = svg(request("linear", [record(), record(120, "subject")], [41, 51], [reverse, False],
-                          linear_comparisons=[LinearComparison(0, 1, hit_frame(60, 21, 31, 90))]))
+                          linear_comparisons=[LinearComparison(0, 1, hit_frame(*table))]))
     paths = [n for n in root.iter() if n.get("data-gbdraw-match-id")]
     axes = [n for n in root.iter() if n.get("data-gbdraw-record-id") and any(c.tag.endswith("}line") for c in n)]
     scales = [float(next(c for c in axis if c.tag.endswith("}line")).get("x2")) / length
@@ -424,6 +421,36 @@ def test_duplicate_record_instances_use_their_own_comparison_transform(mode):
     assert len(paths) == (2 if mode == "linear" else 3)
     assert len({n.get("id") for n in paths}) == len(paths)
     context = build_interactive_svg_context(plan.records, mode=mode, linear_rendered_feature_ids=mode == "linear", record_transforms=plan.transforms)
+    enrich_svg(ET.tostring(root, encoding="unicode"), context)
+
+
+def test_rotated_single_circular_record_context_matches_rendered_feature_ids():
+    from gbdraw.api.options import CircularMultiRecordOptions
+    item = record()
+    req = replace(
+        request("circular", [item], [41]),
+        grouping="grid",
+        layout=CircularMultiRecordOptions(),
+    )
+    plan, root = svg(req)
+    context = build_interactive_svg_context(
+        plan.records,
+        mode="circular",
+        record_transforms=plan.transforms,
+    )
+
+    rendered_ids = {
+        node.get("data-gbdraw-rendered-feature-id")
+        or node.get("data-gbdraw-feature-id")
+        for node in root.iter()
+        if node.get("data-gbdraw-feature-id")
+    }
+    context_ids = {
+        feature["rendered_feature_svg_id"]
+        for feature in context.features
+    }
+
+    assert context_ids == rendered_ids
     enrich_svg(ET.tostring(root, encoding="unicode"), context)
 
 

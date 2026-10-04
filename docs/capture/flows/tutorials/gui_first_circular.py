@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
-from playwright.sync_api import BrowserType, Page, expect
+from playwright.sync_api import BrowserType, expect
 
 from assertions.downloads import (
     EXPECTED_FIRST_CIRCULAR_SVG,
@@ -28,11 +28,18 @@ from config import (
     FIRST_LINEAR_LABEL_RULE_SHA256,
     FIRST_LINEAR_LABEL_RULE_SIZE,
 )
+from flows.how_to.interactive_sessions import (
+    _frame_finished_preview_with_legend,
+    _reset_finished_preview_viewport,
+)
 from flows.web_capture import (
+    toggle_disclosure,
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
+    expect_circular_source_status,
     generate_and_inspect,
+    open_ancestor_details,
     open_browser_capture,
     set_feature_search_visible,
     wait_for_app_shell,
@@ -45,20 +52,6 @@ class CaptureResult:
     first_svg_semantics: dict[str, Any]
     final_svg_semantics: dict[str, Any]
     download: dict[str, Any]
-
-
-def _pan_finished_preview_left(page: Page) -> None:
-    """Use the preview's drag interaction to bring the right legend into view."""
-
-    result_region = page.get_by_role("region", name="Result Preview", exact=True)
-    box = result_region.bounding_box()
-    if box is None:
-        raise AssertionError("Could not resolve the Result Preview bounds for panning")
-    y = box["y"] + (box["height"] * 0.55)
-    page.mouse.move(box["x"] + (box["width"] * 0.43), y)
-    page.mouse.down()
-    page.mouse.move(box["x"] + (box["width"] * 0.12), y, steps=10)
-    page.mouse.up()
 
 
 def capture_first_circular(
@@ -105,6 +98,7 @@ def capture_first_circular(
             "group", name="GenBank/DDBJ File selection", exact=True
         )
         expect(selected_file).to_contain_text("HmmtDNA.gbk")
+        expect_circular_source_status(page, "1 source record(s) inspected")
         screenshot_bytes["01-input-ready.png"] = capture_screenshot(
             page, output_paths["01-input-ready.png"], "Circular"
         )
@@ -131,7 +125,9 @@ def capture_first_circular(
             page, output_paths["03-publication-label.png"], "Circular"
         )
 
-        track_preset = page.get_by_label("Track Preset", exact=True)
+        track_preset = open_ancestor_details(
+            page.get_by_label("Track Preset", exact=True)
+        )
         track_preset.select_option("middle")
         expect(track_preset).to_have_value("middle")
         separate_strands = page.get_by_label("Separate Strands", exact=True)
@@ -144,11 +140,11 @@ def capture_first_circular(
         hide_gc_skew.uncheck()
         expect(hide_gc_skew).not_to_be_checked()
 
-        page.get_by_label("Title & Legend", exact=True).click()
-        legend_position = page.get_by_label("Legend Position", exact=True)
+        toggle_disclosure(page.get_by_label("Legend settings", exact=True))
+        legend_position = page.get_by_label("Legend position", exact=True)
         legend_position.select_option("right")
         expect(legend_position).to_have_value("right")
-        page.get_by_label("Labels", exact=True).click()
+        toggle_disclosure(page.get_by_label("Labels", exact=True))
         label_mode = page.get_by_label("Label Mode", exact=True)
         label_mode.select_option("out")
         expect(label_mode).to_have_value("out")
@@ -171,13 +167,8 @@ def capture_first_circular(
             page, inspect_first_circular_svg, assert_first_circular_svg
         )
         assert_finished_circular_svg(final_report)
-        zoom_out = page.get_by_role("button", name="Zoom out", exact=True)
-        for _ in range(4):
-            zoom_out.click()
-        expect(page.get_by_role("button", name="Reset zoom", exact=True)).to_contain_text(
-            "60%"
-        )
-        _pan_finished_preview_left(page)
+        _reset_finished_preview_viewport(page, target_zoom=50)
+        _frame_finished_preview_with_legend(page)
         set_feature_search_visible(page, visible=False)
         screenshot_bytes["04-finished-diagram.png"] = capture_screenshot(
             page, output_paths["04-finished-diagram.png"], "Circular"

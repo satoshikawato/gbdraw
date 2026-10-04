@@ -45,8 +45,8 @@ The uploader should show `NC_001416.gb` in green. Keep one input row only; this 
 
 ![Linear GenBank input showing NC_001416.gb selected](../../images/t-gui-02/01-input-ready.png)
 
-*Confirm Linear, GenBank, the `NC_001416.gb` upload, and the separate **Current:
-No comparison** status before generating.*
+*Confirm Linear, GenBank, the `NC_001416.gb` upload, and the pressed **No
+comparison** command before generating.*
 
 ## Step 2: Generate the first diagram
 
@@ -60,7 +60,7 @@ Select **Generate Diagram** without changing the presentation settings. When pro
 
 Set **Output Prefix** under **Basic**. **Generate Diagram** follows **Basic** in
 the DOM. Continue past it to the **Layout**, **Labels**, **Axis & Scale**, and
-**Title & Legend** sections for the remaining values below. Leave the closed
+**Legend · Bottom** sections for the remaining values below. Leave the closed
 **Advanced comparison and layout** disclosure unchanged.
 
 | Control | Value |
@@ -72,7 +72,7 @@ the DOM. Continue past it to the **Layout**, **Labels**, **Axis & Scale**, and
 | Priority File (TSV) | `cds_gene_qualifier_priority.tsv` |
 | Show Coordinate Scale | On |
 | Scale Style | Ruler (Ticks) |
-| Legend Position | Left |
+| Legend position | Left |
 
 ![Linear layout controls configured for labels and a ruler](../../images/t-gui-02/03-layout-settings.png)
 

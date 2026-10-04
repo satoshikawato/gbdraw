@@ -70,6 +70,7 @@ test('gate accepts metadata, documentation, and full PR routes', () => {
   const routes = [
     plan({ impact: 'metadata' }),
     plan(),
+    plan({ impact: 'policy-documentation' }),
     plan({
       impact: 'full',
       decision: 'full',
@@ -80,6 +81,7 @@ test('gate accepts metadata, documentation, and full PR routes', () => {
   assert.deepEqual(routes.map(({ requiredJobs }) => requiredJobs), [
     [],
     ['recipes-standard'],
+    ['web-change-budget'],
     [
       'web-change-budget',
       'core-pr',
@@ -87,7 +89,8 @@ test('gate accepts metadata, documentation, and full PR routes', () => {
       'gallery',
       'lint',
       'web-contracts-pr',
-      'web-pr-smoke'
+      'web-pr-smoke',
+      'playwright-functional'
     ]
   ]);
   routes.forEach((impactPlan) => {
@@ -105,6 +108,7 @@ test('gate accepts metadata, documentation, and full dev staging routes', () => 
   const routes = [
     devPlan({ impact: 'metadata' }),
     devPlan(),
+    devPlan({ impact: 'policy-documentation' }),
     devPlan({
       impact: 'full',
       decision: 'full',
@@ -115,6 +119,7 @@ test('gate accepts metadata, documentation, and full dev staging routes', () => 
   assert.deepEqual(routes.map(({ requiredJobs }) => requiredJobs), [
     [],
     ['recipes-standard'],
+    ['web-change-budget'],
     [
       'web-change-budget',
       'core',
@@ -136,6 +141,7 @@ test('Gallery gate accepts both light routes and requires both full jobs', () =>
   const routes = [
     galleryPlan({ impact: 'metadata' }),
     galleryPlan(),
+    galleryPlan({ impact: 'policy-documentation' }),
     galleryPlan({
       impact: 'full',
       decision: 'full',
@@ -146,13 +152,14 @@ test('Gallery gate accepts both light routes and requires both full jobs', () =>
   assert.deepEqual(routes.map(({ requiredJobs }) => requiredJobs), [
     [],
     [],
+    [],
     ['browser', 'performance']
   ]);
   routes.forEach((impactPlan) => {
     assert.equal(validate(impactPlan, needsFor(impactPlan)).ok, true);
   });
 
-  const full = routes[2];
+  const full = routes[3];
   for (const jobId of ['browser', 'performance']) {
     for (const result of ['skipped', 'failure', 'cancelled']) {
       const needs = needsFor(full);
@@ -395,5 +402,71 @@ test('release aggregate rejects any skipped or failed exhaustive matrix', () => 
       needs[jobId].result = result;
       assert.throws(() => validate(release, needs), /required CI job did not succeed/);
     }
+  }
+});
+
+test('documentation-only PR gate requires selected checks without claiming inherited staging', () => {
+  for (const impact of ['documentation', 'policy-documentation']) {
+    const documentary = plan({ impact, basis: 'DOCUMENTATION_ONLY_PR', inheritedEvidence: null });
+    const needs = needsFor(documentary);
+    const outcome = validate(documentary, needs);
+    assert.equal(outcome.ok, true);
+    assert.equal(outcome.inheritedEvidence, false);
+    for (const result of ['failure', 'cancelled', 'skipped']) {
+      const job = documentary.requiredJobs[0];
+      assert.throws(() => validate(documentary, { ...needs, [job]: { result } }),
+        { code: 'REQUIRED_JOB_NOT_SUCCESSFUL' });
+    }
+  }
+});
+
+test('PR gate requires Gallery parity for full and every selective smoke route', () => {
+  const routes = [
+    plan({ impact: 'full', decision: 'full', basis: 'FULL_CHANGE', inheritedEvidence: null }),
+    ...['python-core', 'renderer', 'web-runtime', 'session-persistence', 'gallery', 'losat-integration'].map((impact) => plan({ impact }))
+  ];
+  for (const impactPlan of routes) {
+    assert.ok(impactPlan.requiredJobs.includes('gallery'), impactPlan.impact);
+    assert.equal(validate(impactPlan, needsFor(impactPlan)).ok, true);
+    for (const result of ['skipped', 'failure', 'cancelled']) {
+      const needs = needsFor(impactPlan);
+      needs.gallery.result = result;
+      assert.throws(() => validate(impactPlan, needs), /required CI job did not succeed/, `${impactPlan.impact}: ${result}`);
+    }
+    const missing = needsFor(impactPlan);
+    delete missing.gallery;
+    assert.throws(() => validate(impactPlan, missing), /result is missing or invalid/);
+  }
+});
+
+test('PR gate requires functional Playwright exactly when the plan selects it', () => {
+  const selected = [
+    plan({ impact: 'web-runtime' }),
+    plan({ impact: 'full', decision: 'full', basis: 'FULL_CHANGE', inheritedEvidence: null }),
+    plan({ impact: 'gallery', capabilities: ['renderer', 'gallery'], decision: 'full', basis: 'INHERITED_EVIDENCE_UNAVAILABLE', inheritedEvidence: null })
+  ];
+  for (const impactPlan of selected) {
+    assert.ok(impactPlan.requiredJobs.includes('playwright-functional'), impactPlan.impact);
+    assert.equal(validate(impactPlan, needsFor(impactPlan)).ok, true);
+    for (const result of ['skipped', 'failure', 'cancelled']) {
+      const needs = needsFor(impactPlan);
+      needs['playwright-functional'].result = result;
+      assert.throws(() => validate(impactPlan, needs), { code: 'REQUIRED_JOB_NOT_SUCCESSFUL' }, result);
+    }
+    const missing = needsFor(impactPlan);
+    delete missing['playwright-functional'];
+    assert.throws(() => validate(impactPlan, missing), { code: 'MISSING_OR_INVALID_JOB' });
+  }
+  const notSelected = [
+    plan({ impact: 'python-core' }),
+    plan({ impact: 'ci-only', decision: 'full', basis: 'FULL_CHANGE', inheritedEvidence: null })
+  ];
+  for (const impactPlan of notSelected) {
+    assert.ok(!impactPlan.requiredJobs.includes('playwright-functional'), impactPlan.impact);
+    const needs = needsFor(impactPlan);
+    assert.equal(needs['playwright-functional'].result, 'skipped');
+    assert.equal(validate(impactPlan, needs).ok, true);
+    needs['playwright-functional'].result = 'failure';
+    assert.throws(() => validate(impactPlan, needs), { code: 'UNREQUIRED_JOB_FAILED' });
   }
 });

@@ -8,6 +8,7 @@ const color = async (page, value, index = 0) => {
     element.dispatchEvent(new Event('change', { bubbles: true }));
   }, value);
   await page.getByText('This feature only', { exact: true }).click();
+  await expect(page.getByText('This feature only', { exact: true })).toBeHidden({ timeout: 180000 });
   await closeEditor(page);
   return target;
 };
@@ -42,7 +43,7 @@ for (const mode of ['circular', 'linear']) {
       if (mode === 'circular') {
         const scale = page.getByLabel('Show Coordinate Scale (Linear)', { exact: true });
         for (const details of await scale.locator('xpath=ancestor::details').all()) {
-          if (await details.getAttribute('open') === null) await details.locator(':scope > summary').click();
+          if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
         }
         await scale.uncheck();
         expect((await snapshot(page)).request).toEqual(edited.request);

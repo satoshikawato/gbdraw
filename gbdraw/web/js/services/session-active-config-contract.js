@@ -1,9 +1,13 @@
+import { adoptCurrentSessionResources, createSessionResourceFileView, readSessionResourceBytes } from './session-resource-backing.js';
+import { sha256Hex, textToBytes } from './byte-utils.js';
+import { canonicalRecordReverseComplement } from '../app/record-display-options.js';
 import { createDefaultLinearDefinitionLineStyles } from '../app/definition-line-style-state.js'; import { CIRCULAR_TRACK_RENDERERS, createDefaultCircularTrackSlots } from '../app/circular-track-slots.js';
 import { LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_RENDERERS, LINEAR_TRACK_SLOT_SCHEMA_VERSION, createDefaultLinearTrackSlots } from '../app/linear-track-slots.js'; import { validateTrackSlotBindingInvariants } from '../app/track-slot-validation.js';
 import { requireCurrentCircularMultiRecordSizeMode, requireCurrentCollinearAnchorMode, requireCurrentCollinearColorMode, requireCurrentCollinearMaxConflicts, requireCurrentCollinearMaxDiagonalDrift, requireCurrentCollinearMaxParalogLinks, requireCurrentCollinearMaxUnitGap, requireCurrentCollinearMergeOrientation, requireCurrentCollinearMinAnchors, requireCurrentCollinearInferOrthogroups, requireCurrentCollinearSearchScope, requireCurrentCollinearUnitMode, requireCurrentLinearLabelPlacement, requireCurrentLinearTrackLayout, requireCurrentOrthogroupMemberMaxHits, requireCurrentOrthogroupMembershipMode, requireCurrentProteinBlastpCandidateLimit, requireCurrentProteinBlastpMaxHits, requireCurrentProteinBlastpMode, requireCurrentWebStateFieldNames } from '../app/current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
 import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, managedAdvStateForMode, trackDefaultsForMode } from '../mode-profiles.js'; import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { validateRecordDisplayDrafts } from '../app/record-display-options.js';
+import { requireLinearLabelVisibilityMode } from '../app/linear-label-visibility.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
 const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDefaultsForMode('linear');
 export const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4, LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
@@ -14,7 +18,7 @@ export const createDefaultForm = () => ({
   circular_record_selector: '', circular_region_start: null, circular_region_end: null, circular_reverse: false,
   circular_record_label: '', circular_record_subtitle: '',
   separate_strands: WEB_UX_PROFILE.separateStrands, suppress_gc: !circularTracks.gc, suppress_skew: !circularTracks.skew, align_center: false,
-  keep_definition_left_aligned: false, show_gc: linearTracks.gc, show_skew: linearTracks.skew, show_depth: false, normalize_length: false
+  keep_definition_left_aligned: true, show_gc: linearTracks.gc, show_skew: linearTracks.skew, show_depth: false, normalize_length: false
 });
 export const createDefaultAdv = (mode = 'circular') => ({
   rich_feature_popup: true, features: [...MODE_DEFAULT_FEATURE_TYPES], feature_shapes: createDefaultFeatureRenderings(), arrow_head_length_ratio: null,
@@ -23,13 +27,13 @@ export const createDefaultAdv = (mode = 'circular') => ({
   circular_label_placement: 'horizontal', label_placement: 'auto', label_rotation: null, block_stroke_width: null, block_stroke_color: null,
   line_stroke_width: null, line_stroke_color: null, axis_stroke_width: null, axis_stroke_color: managedAdvStateForMode(mode).axis_stroke_color,
   legend_box_size: null, legend_font_size: null, resolve_overlaps: false, feature_overlap_tolerance_bp: 0, feature_height: null, track_axis_gap: null, linear_show_replicon: false,
-  linear_show_accession: true, linear_show_length: true, linear_definition_line_styles: createDefaultLinearDefinitionLineStyles(), gc_height: null,
+  linear_accession_visibility: 'auto', linear_length_visibility: 'auto', linear_definition_line_styles: createDefaultLinearDefinitionLineStyles(), gc_height: null,
   depth_height: null, depth_color: '#4A90E2', depth_tracks: [], depth_window_size: null, depth_step_size: null, depth_share_axis: false,
   depth_min: null, depth_max: null, depth_normalize: false, depth_show_axis: true, depth_show_ticks: true, depth_large_tick_interval: null,
   depth_small_tick_interval: null, depth_tick_font_size: null, linear_track_slots_enabled: false, linear_track_slots_schema_version: LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   linear_track_slots_axis_index: null, linear_track_slots: createDefaultLinearTrackSlots(), gc_content_mode: 'deviation', gc_content_min_percent: 0,
   gc_content_max_percent: 100, gc_content_show_axis: true, gc_content_show_ticks: true, gc_content_tick_interval: 20, gc_content_small_tick_interval: null,
-  gc_content_tick_font_size: null, comparison_height: null, pairwise_match_style: 'ribbon', ...comparisonStateForMode(mode), scale_interval: null,
+  gc_content_tick_font_size: null, comparison_height: null, pairwise_match_style: mode === 'linear' ? 'curve' : 'ribbon', ...comparisonStateForMode(mode), scale_interval: null,
   scale_font_size: null, ruler_label_font_size: null, scale_stroke_width: null, scale_stroke_color: null, ruler_label_color: null, circular_grouping_intent: 'auto',
   multi_record_size_mode: 'auto', multi_record_min_radius_ratio: 0.55, multi_record_column_gap_ratio: 0.10, multi_record_row_gap_ratio: 0.05,
   multi_record_positions: [], tick_label_font_size: null, plot_title_font_size: null, keep_full_definition_with_plot_title: false,
@@ -145,9 +149,19 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }
   if (has(config.adv, 'feature_overlap_tolerance_bp') && (!Number.isSafeInteger(config.adv.feature_overlap_tolerance_bp)
     || config.adv.feature_overlap_tolerance_bp < 0)) throw new Error('Feature overlap tolerance must be a non-negative integer.');
   assertFields(config.form, new Set(CURRENT_WRITER_FORM_FIELDS), 'config.form'); assertFields(config.adv, new Set(CURRENT_WRITER_ADV_FIELDS), 'config.adv');
+  if (has(config.form, 'keep_definition_left_aligned') && typeof config.form.keep_definition_left_aligned !== 'boolean')
+    throw new Error('Current session active configuration config.form.keep_definition_left_aligned must be a boolean.');
   if (has(config.form, 'linear_track_layout')) requireCurrentLinearTrackLayout(config.form.linear_track_layout);
   if (has(config.adv, 'label_placement')) requireCurrentLinearLabelPlacement(config.adv.label_placement);
   if (has(config.adv, 'multi_record_size_mode')) requireCurrentCircularMultiRecordSizeMode(config.adv.multi_record_size_mode);
+  requireLinearLabelVisibilityMode(
+    config.adv.linear_accession_visibility,
+    'Linear Accession visibility'
+  );
+  requireLinearLabelVisibilityMode(
+    config.adv.linear_length_visibility,
+    'Linear Length / Coordinates visibility'
+  );
   for (const [path, value] of [['config.adv.losatProgram', config.adv.losatProgram], ['config.losatProgram', config.losatProgram]]) {
     if (value !== undefined && !['blastn', 'tblastx', 'blastp'].includes(value))
       throw new Error(`Current session active configuration ${path} is invalid.`);
@@ -201,4 +215,100 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }
     }
   }
   validateImportedCircularTrackSlots(config); validateImportedLinearTrackSlots(config);
+};
+
+// Artifact metadata admission is shared by Session, History and Align/Reset.
+// The binding deliberately excludes current orientation, translations, labels and
+// row order: manual Reverse, style and stable reorder do not rewrite history.
+const sortedValue = (value) => Array.isArray(value)
+  ? value.map(sortedValue)
+  : isObject(value) ? Object.fromEntries(Object.keys(value).sort()
+    .map((key) => [key, sortedValue(value[key])])) : value;
+
+export const validateAlignmentResetReceiptShape = (receipt, request) => {
+  if (receipt === null || receipt === undefined) return null;
+  const invalid = () => { throw new Error('Alignment reset receipt is malformed or stale.'); };
+  if (!isObject(receipt)
+    || Object.keys(receipt).sort().join(',') !== 'binding,directions,referenceDeltaX'
+    || !/^[0-9a-f]{64}$/.test(receipt.binding)
+    || !Array.isArray(receipt.directions)
+    || request?.mode !== 'linear' || !request.layout?.similarityAlignment) invalid();
+  const plan = request.layout.similarityAlignment;
+  const eligible = new Set(plan.records.filter(({ status }) => status !== 'skipped')
+    .map(({ recordKey }) => recordKey));
+  const keys = new Set();
+  receipt.directions.forEach((delta) => {
+    if (!isObject(delta) || Object.keys(delta).sort().join(',') !== 'after,before,recordKey'
+      || !eligible.has(delta.recordKey) || keys.has(delta.recordKey)
+      || typeof delta.before !== 'boolean' || typeof delta.after !== 'boolean'
+      || delta.before === delta.after) invalid();
+    keys.add(delta.recordKey);
+  });
+  const delta = receipt.referenceDeltaX;
+  if (delta !== null && (!isObject(delta)
+    || Object.keys(delta).sort().join(',') !== 'deltaX,recordKey'
+    || delta.recordKey !== plan.reference.recordKey
+    || typeof delta.deltaX !== 'number' || !Number.isFinite(delta.deltaX)
+    || delta.deltaX === 0)) invalid();
+  return receipt;
+};
+
+const resetBinding = async (canonical) => {
+  const request = canonical?.renderRequest;
+  if (request?.mode !== 'linear' || !request.layout?.similarityAlignment) {
+    throw new Error('Alignment reset receipt requires an active canonical plan.');
+  }
+  const table = adoptCurrentSessionResources(canonical.resources);
+  const fingerprints = new Map();
+  const sourceIdentity = async (source) => {
+    const identity = {};
+    for (const [key, value] of Object.entries(source)) {
+      if (key === 'kind') identity[key] = value;
+      else {
+        if (!fingerprints.has(value)) fingerprints.set(value, sha256Hex(
+          await readSessionResourceBytes(createSessionResourceFileView(table, value))
+        ));
+        identity[key] = await fingerprints.get(value);
+      }
+    }
+    return identity;
+  };
+  const records = await Promise.all(request.records.map(async (record) => ({
+    recordKey: record.recordKey, source: await sourceIdentity(record.source),
+    selector: record.selector,
+    region: record.region ? { start: record.region.start, end: record.region.end } : null,
+    display: record.display
+  })));
+  const plan = { ...request.layout.similarityAlignment,
+    records: [...request.layout.similarityAlignment.records].sort(
+      (a, b) => a.recordKey < b.recordKey ? -1 : a.recordKey > b.recordKey ? 1 : 0) };
+  records.sort((a, b) => a.recordKey < b.recordKey ? -1 : a.recordKey > b.recordKey ? 1 : 0);
+  return sha256Hex(textToBytes(JSON.stringify(sortedValue({ plan, records }))));
+};
+
+export const validateSimilarityAlignmentResetReceipt = async (receipt, canonical) => {
+  const validated = validateAlignmentResetReceiptShape(receipt, canonical?.renderRequest);
+  if (validated && validated.binding !== await resetBinding(canonical)) {
+    throw new Error('Alignment reset receipt source or plan binding changed.');
+  }
+  return validated;
+};
+
+export const buildSimilarityAlignmentResetReceipt = async ({ before, after }) => {
+  const previous = new Map(before.renderRequest.records.map((record) => [record.recordKey, record]));
+  const directions = after.renderRequest.records.flatMap((record) => {
+    const old = previous.get(record.recordKey);
+    if (!old) throw new Error('Alignment reset receipt record binding changed.');
+    const beforeReverse = canonicalRecordReverseComplement(old);
+    const afterReverse = canonicalRecordReverseComplement(record);
+    return beforeReverse === afterReverse ? []
+      : [{ recordKey: record.recordKey, before: beforeReverse, after: afterReverse }];
+  });
+  const referenceKey = after.renderRequest.layout.similarityAlignment.reference.recordKey;
+  const x = (canonical) => canonical.renderRequest.layout.recordTranslations
+    .find(({ recordKey }) => recordKey === referenceKey)?.x ?? 0;
+  const deltaX = x(after) - x(before);
+  const receipt = { binding: await resetBinding(after), directions,
+    referenceDeltaX: deltaX === 0 ? null : { recordKey: referenceKey, deltaX } };
+  return validateSimilarityAlignmentResetReceipt(receipt, after);
 };

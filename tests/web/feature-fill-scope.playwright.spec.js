@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
+const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
-const loadGallerySession = async (page, filename) => page.evaluate(async (name) => {
+const loadGallerySession = async (page, filename) => evaluateWithRetainedPromise(page, async (name) => {
   const response = await fetch(`/gbdraw/web/gallery/sessions/${name}`);
   if (!response.ok) throw new Error(`Could not load ${name}: ${response.status}`);
   const bytes = await response.arrayBuffer();
@@ -100,9 +101,10 @@ test('inherited Feature fill uses the existing scope dialog with atomic Undo and
   await page.locator('.drawer-toggle').click();
   await expect(drawer.getByText(/^Features \(\d+\)$/)).toBeVisible();
 
-  const target = await page.evaluate(() => {
+  const target = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     const svg = document.querySelector('.origin-top svg');
+    const { formatFeatureLocation } = await import('/gbdraw/web/js/app/feature-utils.js');
     for (const feature of app.visibleFeatureRows) {
       const featureId = String(feature?.svg_id || '').trim();
       if (!featureId || app.getFeatureColorValue(feature) !== null) continue;
@@ -121,8 +123,7 @@ test('inherited Feature fill uses the existing scope dialog with atomic Undo and
       if (featureIds.length < 2) continue;
       return {
         id: featureId,
-        start: feature.start,
-        end: feature.end,
+        location: formatFeatureLocation(feature),
         color: app.getFeatureColor(feature),
         caption: legendEntry.caption,
         featureIds
@@ -131,7 +132,7 @@ test('inherited Feature fill uses the existing scope dialog with atomic Undo and
     throw new Error('No visible inherited Feature with a shared legend item was found.');
   });
 
-  const featureRow = drawer.locator(`span[title="${target.start}..${target.end}"]`).locator('..');
+  const featureRow = drawer.locator(`span[title="${target.location}"]`).locator('..');
   const listPicker = featureRow.locator('input[type="color"]');
   await expect(listPicker).toBeEnabled();
   await expect(listPicker).toHaveValue(target.color.toLowerCase());
@@ -226,6 +227,7 @@ test('Feature stroke width steppers defer scope selection and stroke changes kee
     const { getFeatureElements } = await import(
       '/gbdraw/web/js/app/feature-editor/svg-actions.js'
     );
+    const { formatFeatureLocation } = await import('/gbdraw/web/js/app/feature-utils.js');
     for (const feature of app.visibleFeatureRows) {
       const featureId = String(feature?.svg_id || '').trim();
       if (!featureId || getFeatureElements(svg, featureId).length === 0) continue;
@@ -240,8 +242,7 @@ test('Feature stroke width steppers defer scope selection and stroke changes kee
       if (featureIds.length < 2) continue;
       return {
         id: featureId,
-        start: feature.start,
-        end: feature.end,
+        location: formatFeatureLocation(feature),
         caption: entry.caption,
         featureIds
       };
@@ -249,7 +250,7 @@ test('Feature stroke width steppers defer scope selection and stroke changes kee
     throw new Error('No visible Feature with a shared legend item was found.');
   });
 
-  const featureRow = drawer.locator(`span[title="${target.start}..${target.end}"]`).locator('..');
+  const featureRow = drawer.locator(`span[title="${target.location}"]`).locator('..');
   await featureRow.getByRole('button', { name: 'Edit' }).click();
 
   const popup = page.locator('.feature-popup');

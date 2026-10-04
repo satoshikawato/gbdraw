@@ -20,15 +20,18 @@ on:
         required: true
 
 concurrency:
-  # Promotion accepts only the current remote dev tip, so older dev staging can be canceled.
+  # A newer pull request run replaces the older one. A dev push run is never
+  # canceled once started, so every started staging run leaves exact-SHA
+  # evidence: the newest later push waits, and GitHub cancels older waiting runs.
   group: tests-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.tier || 'dev' }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 jobs:
   ci-impact:
     name: CI impact plan
     runs-on: ubuntu-latest
-    # Full-history checkout can take nearly five minutes before trusted-base setup.
+    # A full-history checkout with blobs took up to 5.7 minutes; history without
+    # blobs costs about as much as a depth-1 checkout.
     timeout-minutes: 10
     outputs:
       plan: ${{ steps.pr_plan.outputs.plan || steps.dev_plan.outputs.plan }}
@@ -37,11 +40,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # All commits and trees; Git fetches old file contents on demand.
+          filter: blob:none
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: npm
 
       - name: Install locked CI test dependencies
         run: npm ci
@@ -105,6 +111,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # All commits and trees; Git fetches old file contents on demand.
+          filter: blob:none
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -253,7 +261,10 @@ jobs:
       (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Leaves room for a slow apt mirror on a cache miss; test steps keep their own limits.
+    timeout-minutes: 25
+    env:
+      GBDRAW_GALLERY_PR_PARITY: ${{ github.event_name == 'pull_request' && github.base_ref == 'dev' && contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-pr-smoke') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -269,10 +280,75 @@ jobs:
         run: python -m pip install -e ".[export]" pytest pytest-timeout Pillow
 
       - name: Run Gallery tests
+        timeout-minutes: 10
         run: >-
           python -m pytest tests/
           -m "gallery and not slow"
           --durations=30
+
+      - name: Set up Node.js for Gallery parity
+        if: env.GBDRAW_GALLERY_PR_PARITY == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install Gallery parity dependencies
+        if: env.GBDRAW_GALLERY_PR_PARITY == 'true'
+        run: |
+          python -m pip install build
+          npm ci
+
+      - name: Restore Playwright system packages
+        if: env.GBDRAW_GALLERY_PR_PARITY == 'true'
+        id: playwright-apt
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+          restore-keys: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install Playwright Chromium and system packages
+        if: env.GBDRAW_GALLERY_PR_PARITY == 'true'
+        id: playwright-install
+        run: |
+          # Seed apt with cached .deb files; apt checks each against the signed index.
+          sudo cp -t /var/cache/apt/archives/ ~/.cache/playwright-apt/*.deb 2>/dev/null || true
+          npx playwright install --with-deps chromium
+          # Keep the .deb files apt can still download; key the cache by their content.
+          sudo apt-get autoclean -qq || true
+          rm -rf ~/.cache/playwright-apt && mkdir -p ~/.cache/playwright-apt
+          if cp -t ~/.cache/playwright-apt/ /var/cache/apt/archives/*.deb 2>/dev/null; then
+            sum="$(cd ~/.cache/playwright-apt && sha256sum -- *.deb | LC_ALL=C sort | sha256sum | cut -c1-16)"
+            echo "apt-cache-key=playwright-apt-v1-${RUNNER_OS}-${RUNNER_ARCH}-${sum}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save Playwright system packages
+        if: >-
+          steps.playwright-install.outputs.apt-cache-key != '' &&
+          steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: ${{ steps.playwright-install.outputs.apt-cache-key }}
+
+      - name: Prepare Gallery browser wheel
+        if: env.GBDRAW_GALLERY_PR_PARITY == 'true'
+        run: python tools/prepare_browser_wheel.py
+
+      - name: Verify Gallery first-Generate parity
+        if: env.GBDRAW_GALLERY_PR_PARITY == 'true'
+        timeout-minutes: 10
+        run: npm run test:web:gallery-publication
+
+      - name: Upload Gallery parity traces
+        if: failure() && env.GBDRAW_GALLERY_PR_PARITY == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: gallery-parity-traces-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
   browser:
     name: Browser (Python 3.11)
@@ -284,7 +360,8 @@ jobs:
       ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Leaves room for a slow apt mirror on a cache miss; test steps keep their own limits.
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -306,12 +383,43 @@ jobs:
         run: |
           python -m pip install -e ".[dev]"
           npm ci
+
+      - name: Restore Playwright system packages
+        id: playwright-apt
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+          restore-keys: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install Playwright Chromium and system packages
+        id: playwright-install
+        run: |
+          # Seed apt with cached .deb files; apt checks each against the signed index.
+          sudo cp -t /var/cache/apt/archives/ ~/.cache/playwright-apt/*.deb 2>/dev/null || true
           python -m playwright install --with-deps chromium
+          # Keep the .deb files apt can still download; key the cache by their content.
+          sudo apt-get autoclean -qq || true
+          rm -rf ~/.cache/playwright-apt && mkdir -p ~/.cache/playwright-apt
+          if cp -t ~/.cache/playwright-apt/ /var/cache/apt/archives/*.deb 2>/dev/null; then
+            sum="$(cd ~/.cache/playwright-apt && sha256sum -- *.deb | LC_ALL=C sort | sha256sum | cut -c1-16)"
+            echo "apt-cache-key=playwright-apt-v1-${RUNNER_OS}-${RUNNER_ARCH}-${sum}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save Playwright system packages
+        if: >-
+          steps.playwright-install.outputs.apt-cache-key != '' &&
+          steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: ${{ steps.playwright-install.outputs.apt-cache-key }}
 
       - name: Prepare browser wheel
         run: python tools/prepare_browser_wheel.py
 
       - name: Run Web JavaScript tests
+        timeout-minutes: 5
         run: |
           find tests/web -maxdepth 1 -type f \
             -name '*.test.mjs' ! -name 'architecture-contracts.test.mjs' \
@@ -321,18 +429,21 @@ jobs:
           node tests/web/session-request.test.mjs --project-session gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json
 
       - name: Run Python browser tests
+        timeout-minutes: 10
         run: >-
           python -m pytest tests/
           -m "browser and not slow"
           --durations=30
 
       - name: Run package build integration
+        timeout-minutes: 5
         run: >-
           python -m pytest tests/test_web_packaging.py
           -m "slow and not browser"
           --durations=30
 
       - name: Run offline GUI browser contracts
+        timeout-minutes: 5
         run: >-
           python -m pytest tests/test_web_packaging.py
           -m "slow and browser"
@@ -347,7 +458,8 @@ jobs:
       (contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-contracts-pr') ||
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-pr-smoke'))
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Leaves room for a slow apt mirror on a cache miss; test steps keep their own limits.
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -369,12 +481,43 @@ jobs:
         run: |
           python -m pip install -e ".[dev]"
           npm ci
+
+      - name: Restore Playwright system packages
+        id: playwright-apt
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+          restore-keys: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install Playwright Chromium and system packages
+        id: playwright-install
+        run: |
+          # Seed apt with cached .deb files; apt checks each against the signed index.
+          sudo cp -t /var/cache/apt/archives/ ~/.cache/playwright-apt/*.deb 2>/dev/null || true
           python -m playwright install --with-deps chromium
+          # Keep the .deb files apt can still download; key the cache by their content.
+          sudo apt-get autoclean -qq || true
+          rm -rf ~/.cache/playwright-apt && mkdir -p ~/.cache/playwright-apt
+          if cp -t ~/.cache/playwright-apt/ /var/cache/apt/archives/*.deb 2>/dev/null; then
+            sum="$(cd ~/.cache/playwright-apt && sha256sum -- *.deb | LC_ALL=C sort | sha256sum | cut -c1-16)"
+            echo "apt-cache-key=playwright-apt-v1-${RUNNER_OS}-${RUNNER_ARCH}-${sum}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save Playwright system packages
+        if: >-
+          steps.playwright-install.outputs.apt-cache-key != '' &&
+          steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: ${{ steps.playwright-install.outputs.apt-cache-key }}
 
       - name: Prepare browser wheel
         run: python tools/prepare_browser_wheel.py
 
       - name: Run fast Web JavaScript contracts
+        timeout-minutes: 5
         run: >-
           find tests/web -maxdepth 1 -type f
           -name '*.test.mjs' ! -name 'architecture-contracts.test.mjs'
@@ -382,6 +525,7 @@ jobs:
           -print0 | xargs -0 node --test
 
       - name: Run non-slow Python browser tests
+        timeout-minutes: 10
         run: >-
           python -m pytest tests/
           -m "browser and not slow"
@@ -395,7 +539,8 @@ jobs:
       needs.ci-impact.result == 'success' &&
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'web-pr-smoke')
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Leaves room for a slow apt mirror on a cache miss; test steps keep their own limits.
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -417,16 +562,44 @@ jobs:
         run: |
           python -m pip install -e . build
           npm ci
+
+      - name: Restore Playwright system packages
+        id: playwright-apt
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+          restore-keys: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install Playwright Chromium and system packages
+        id: playwright-install
+        run: |
+          # Seed apt with cached .deb files; apt checks each against the signed index.
+          sudo cp -t /var/cache/apt/archives/ ~/.cache/playwright-apt/*.deb 2>/dev/null || true
           npx playwright install --with-deps chromium
+          # Keep the .deb files apt can still download; key the cache by their content.
+          sudo apt-get autoclean -qq || true
+          rm -rf ~/.cache/playwright-apt && mkdir -p ~/.cache/playwright-apt
+          if cp -t ~/.cache/playwright-apt/ /var/cache/apt/archives/*.deb 2>/dev/null; then
+            sum="$(cd ~/.cache/playwright-apt && sha256sum -- *.deb | LC_ALL=C sort | sha256sum | cut -c1-16)"
+            echo "apt-cache-key=playwright-apt-v1-${RUNNER_OS}-${RUNNER_ARCH}-${sum}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save Playwright system packages
+        if: >-
+          steps.playwright-install.outputs.apt-cache-key != '' &&
+          steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: ${{ steps.playwright-install.outputs.apt-cache-key }}
 
       - name: Prepare browser wheel
         run: python tools/prepare_browser_wheel.py
 
       - name: Run Playwright PR smoke
+        timeout-minutes: 10
         run: npm run test:web:pr-smoke
-
-      - name: Verify Gallery first-Generate parity
-        run: npm run test:web:gallery-publication
 
       - name: Upload Playwright PR smoke traces
         if: failure()
@@ -438,20 +611,22 @@ jobs:
           retention-days: 7
 
   playwright-functional:
-    name: Playwright functional (shard ${{ matrix.shard }}/4)
+    name: Playwright functional (shard ${{ matrix.shard }}/8)
     needs: ci-impact
+    # Runs on a pull request only when the trusted base plan selects it.
     if: >-
       !cancelled() &&
       needs.ci-impact.result == 'success' &&
       contains(fromJSON(needs.ci-impact.outputs.plan).requiredJobs, 'playwright-functional') &&
-      ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
+      ((github.event_name == 'pull_request' && github.base_ref == 'dev') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -473,16 +648,52 @@ jobs:
         run: |
           python -m pip install -e ".[dev]"
           npm ci
+
+      - name: Restore Playwright system packages
+        id: playwright-apt
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+          restore-keys: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install Playwright Chromium and system packages
+        id: playwright-install
+        run: |
+          # Seed apt with cached .deb files; apt checks each against the signed index.
+          sudo cp -t /var/cache/apt/archives/ ~/.cache/playwright-apt/*.deb 2>/dev/null || true
           npx playwright install --with-deps chromium
+          # Keep the .deb files apt can still download; key the cache by their content.
+          sudo apt-get autoclean -qq || true
+          rm -rf ~/.cache/playwright-apt && mkdir -p ~/.cache/playwright-apt
+          if cp -t ~/.cache/playwright-apt/ /var/cache/apt/archives/*.deb 2>/dev/null; then
+            sum="$(cd ~/.cache/playwright-apt && sha256sum -- *.deb | LC_ALL=C sort | sha256sum | cut -c1-16)"
+            echo "apt-cache-key=playwright-apt-v1-${RUNNER_OS}-${RUNNER_ARCH}-${sum}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save Playwright system packages
+        if: >-
+          steps.playwright-install.outputs.apt-cache-key != '' &&
+          steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: ${{ steps.playwright-install.outputs.apt-cache-key }}
 
       - name: Prepare browser wheel
         run: python tools/prepare_browser_wheel.py
 
       - name: Run Playwright functional tests
-        run: npm run test:web:functional-full -- --shard=${{ matrix.shard }}/4
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/functional-report.json
+        # Each shard runs the spec files that tests/ci/functional-shards.json assigns
+        # to it by measured duration; docs/internal/SELECTIVE_CI.md explains rebalancing.
+        run: |
+          files="$(node -p "require('./tests/ci/functional-shards.json').shards[${{ matrix.shard }} - 1].join(' ')")"
+          npm run test:web:functional-full -- --reporter=line,github,json $files
 
-      - name: Upload Playwright functional traces
-        if: failure()
+      - name: Upload Playwright functional traces and report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-functional-shard-${{ matrix.shard }}-traces-${{ github.run_id }}-${{ github.run_attempt }}
@@ -500,7 +711,8 @@ jobs:
       ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Leaves room for a slow apt mirror on a cache miss; test steps keep their own limits.
+    timeout-minutes: 25
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -522,12 +734,43 @@ jobs:
         run: |
           python -m pip install -e ".[dev]"
           npm ci
+
+      - name: Restore Playwright system packages
+        id: playwright-apt
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+          restore-keys: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install Playwright Chromium and system packages
+        id: playwright-install
+        run: |
+          # Seed apt with cached .deb files; apt checks each against the signed index.
+          sudo cp -t /var/cache/apt/archives/ ~/.cache/playwright-apt/*.deb 2>/dev/null || true
           npx playwright install --with-deps chromium
+          # Keep the .deb files apt can still download; key the cache by their content.
+          sudo apt-get autoclean -qq || true
+          rm -rf ~/.cache/playwright-apt && mkdir -p ~/.cache/playwright-apt
+          if cp -t ~/.cache/playwright-apt/ /var/cache/apt/archives/*.deb 2>/dev/null; then
+            sum="$(cd ~/.cache/playwright-apt && sha256sum -- *.deb | LC_ALL=C sort | sha256sum | cut -c1-16)"
+            echo "apt-cache-key=playwright-apt-v1-${RUNNER_OS}-${RUNNER_ARCH}-${sum}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save Playwright system packages
+        if: >-
+          steps.playwright-install.outputs.apt-cache-key != '' &&
+          steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: ${{ steps.playwright-install.outputs.apt-cache-key }}
 
       - name: Prepare browser wheel
         run: python tools/prepare_browser_wheel.py
 
       - name: Run Playwright performance tests
+        timeout-minutes: 10
         run: npm run test:web:perf-smoke
 
       - name: Upload Playwright performance traces
@@ -580,8 +823,40 @@ jobs:
         if: matrix.surface == 'browser'
         run: |
           npm ci
-          python -m playwright install --with-deps chromium
           python tools/prepare_browser_wheel.py
+
+      - name: Restore Playwright system packages
+        if: matrix.surface == 'browser'
+        id: playwright-apt
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+          restore-keys: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install Playwright Chromium and system packages
+        if: matrix.surface == 'browser'
+        id: playwright-install
+        run: |
+          # Seed apt with cached .deb files; apt checks each against the signed index.
+          sudo cp -t /var/cache/apt/archives/ ~/.cache/playwright-apt/*.deb 2>/dev/null || true
+          python -m playwright install --with-deps chromium
+          # Keep the .deb files apt can still download; key the cache by their content.
+          sudo apt-get autoclean -qq || true
+          rm -rf ~/.cache/playwright-apt && mkdir -p ~/.cache/playwright-apt
+          if cp -t ~/.cache/playwright-apt/ /var/cache/apt/archives/*.deb 2>/dev/null; then
+            sum="$(cd ~/.cache/playwright-apt && sha256sum -- *.deb | LC_ALL=C sort | sha256sum | cut -c1-16)"
+            echo "apt-cache-key=playwright-apt-v1-${RUNNER_OS}-${RUNNER_ARCH}-${sum}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save Playwright system packages
+        if: >-
+          steps.playwright-install.outputs.apt-cache-key != '' &&
+          steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: ${{ steps.playwright-install.outputs.apt-cache-key }}
 
       - name: Run supported-version acceptance
         run: >-
@@ -693,7 +968,37 @@ jobs:
           python -m pip install --upgrade build setuptools wheel
           python -m pip install -e .
           npm ci
+
+      - name: Restore Playwright system packages
+        id: playwright-apt
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+          restore-keys: playwright-apt-v1-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install Playwright Chromium and system packages
+        id: playwright-install
+        run: |
+          # Seed apt with cached .deb files; apt checks each against the signed index.
+          sudo cp -t /var/cache/apt/archives/ ~/.cache/playwright-apt/*.deb 2>/dev/null || true
           npx playwright install --with-deps chromium
+          # Keep the .deb files apt can still download; key the cache by their content.
+          sudo apt-get autoclean -qq || true
+          rm -rf ~/.cache/playwright-apt && mkdir -p ~/.cache/playwright-apt
+          if cp -t ~/.cache/playwright-apt/ /var/cache/apt/archives/*.deb 2>/dev/null; then
+            sum="$(cd ~/.cache/playwright-apt && sha256sum -- *.deb | LC_ALL=C sort | sha256sum | cut -c1-16)"
+            echo "apt-cache-key=playwright-apt-v1-${RUNNER_OS}-${RUNNER_ARCH}-${sum}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save Playwright system packages
+        if: >-
+          steps.playwright-install.outputs.apt-cache-key != '' &&
+          steps.playwright-install.outputs.apt-cache-key != steps.playwright-apt.outputs.cache-matched-key
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/playwright-apt
+          key: ${{ steps.playwright-install.outputs.apt-cache-key }}
 
       - name: Prepare browser wheel
         run: python tools/prepare_browser_wheel.py
@@ -712,12 +1017,13 @@ jobs:
       - lint
       - web-contracts-pr
       - web-pr-smoke
+      - playwright-functional
     if: >-
       always() &&
       github.event_name == 'pull_request' &&
       github.base_ref == 'dev'
     runs-on: ubuntu-latest
-    timeout-minutes: 1
+    timeout-minutes: 5
     steps:
       - name: Checkout trusted CI policy
         uses: actions/checkout@v4
@@ -756,7 +1062,7 @@ jobs:
       ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
-    timeout-minutes: 1
+    timeout-minutes: 5
     steps:
       - name: Checkout protected dev CI policy
         uses: actions/checkout@v4

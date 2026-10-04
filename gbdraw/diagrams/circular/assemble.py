@@ -14,7 +14,8 @@ import logging
 import math
 import copy
 from dataclasses import dataclass, replace
-from typing import Any, Optional, Mapping, Sequence, cast
+from functools import lru_cache
+from typing import Any, Callable, Optional, Mapping, Sequence, cast
 
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
@@ -33,6 +34,7 @@ from ...analysis.depth_tracks import (  # type: ignore[reportMissingImports]
     sync_depth_track_legend_entries,
 )
 from ...config.models import (  # type: ignore[reportMissingImports]
+    CircularRenderProfile,
     GbdrawConfig,
 )
 from ...configurators import (  # type: ignore[reportMissingImports]
@@ -46,6 +48,7 @@ from ...configurators import (  # type: ignore[reportMissingImports]
 from ...configurators.gc import _slot_skew_config
 from ...core.sequence import check_feature_presence  # type: ignore[reportMissingImports]
 from ...core.text import calculate_bbox_dimensions, calculate_svg_bbox_dimensions
+from ...config.toml import load_config_toml  # type: ignore[reportMissingImports]
 from ...exceptions import ValidationError
 from ...features.colors import precompute_used_color_rules  # type: ignore[reportMissingImports]
 from ...features.factory import FeatureBuildResult, create_feature_layers  # type: ignore[reportMissingImports]
@@ -101,6 +104,7 @@ from ...render.composition import apply_composition_plan
 from ...svg.ids import stable_svg_id, track_slot_svg_id
 from .positioning import _parse_svg_number as _svg_number, center_group_on_canvas
 from ...tracks.circular import tick_sides_for_tick_label_layout  # type: ignore[reportMissingImports]
+from ...tracks.parsing import slot_dinucleotide
 
 from .builders import (
     add_axis_group_on_canvas,
@@ -249,6 +253,41 @@ def _tag_circular_track_slot_group(
     return canvas
 
 
+def plan_circular_annotation_slots(
+    annotations: AnnotationOptions | ResolvedAnnotationBundle | None,
+    records: Sequence[SeqRecord],
+    slots: list[CircularTrackSlot] | None,
+    *,
+    show_ticks: bool,
+    show_depth: bool,
+    show_gc: bool,
+    show_skew: bool,
+    depth_track_count: int,
+    record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    record_indices: Sequence[int] | None = None,
+) -> tuple[list[CircularTrackSlot] | None, ResolvedAnnotationBundle]:
+    """Bind annotation sets to the Circular slot list that the records use."""
+
+    slots, bundle, _auto_slot_ids = prepare_annotation_track_slots(
+        annotations,
+        records,
+        slots,
+        mode="circular",
+        record_transforms=record_transforms,
+        record_indices=record_indices,
+        default_slots=lambda: default_circular_track_slots(
+            show_features=True,
+            show_ticks=show_ticks,
+            show_depth=show_depth,
+            depth_track_count=depth_track_count,
+            show_gc=show_gc,
+            show_skew=show_skew,
+        ),
+        slot_factory=CircularTrackSlot,
+    )
+    return slots, bundle
+
+
 def _prepare_circular_annotation_tracks(
     gb_record: SeqRecord,
     annotations: AnnotationOptions | ResolvedAnnotationBundle | None,
@@ -263,22 +302,17 @@ def _prepare_circular_annotation_tracks(
     depth_track_count: int,
     record_transform: RecordDisplayTransform | None = None,
 ) -> tuple[list[CircularTrackSlot] | None, ResolvedAnnotationBundle, dict[str, ResolvedAnnotationTrack]]:
-    slots, bundle, _auto_slot_ids = prepare_annotation_track_slots(
+    slots, bundle = plan_circular_annotation_slots(
         annotations,
         [gb_record],
         slots,
-        mode="circular",
+        show_ticks=show_ticks,
+        show_depth=show_depth,
+        show_gc=show_gc,
+        show_skew=show_skew,
+        depth_track_count=depth_track_count,
         record_transforms=(record_transform,) if record_transform is not None else None,
         record_indices=(record_index,),
-        default_slots=lambda: default_circular_track_slots(
-            show_features=True,
-            show_ticks=show_ticks,
-            show_depth=show_depth,
-            depth_track_count=depth_track_count,
-            show_gc=show_gc,
-            show_skew=show_skew,
-        ),
-        slot_factory=CircularTrackSlot,
     )
     if not bundle.set_ids and not bundle.annotations:
         return slots, bundle, {}
@@ -1119,15 +1153,6 @@ def _slot_width_ratio_factor(
 
 
 
-def _slot_dinucleotide(slot_or_resolved: CircularTrackSlot | CircularResolvedSlot, default: str) -> str:
-    params = getattr(slot_or_resolved, "params", {}) or {}
-    raw = params.get("nt", params.get("dinucleotide", default))
-    nt = str(raw or default).upper()
-    return nt if len(nt) >= 2 else str(default or "GC").upper()
-
-
-
-
 def _text_element_plain_text(element: Any) -> str:
     parts: list[str] = []
     text = getattr(element, "text", None)
@@ -1149,6 +1174,7 @@ def _definition_reserved_radius_px(
     plot_title: str | None,
     definition_profile: str,
     record_transform: RecordDisplayTransform | None = None,
+    species_line_count: int = 1,
 ) -> float:
     cfg = canvas_config.profile.config
     definition_group = DefinitionGroup(
@@ -1160,6 +1186,7 @@ def _definition_reserved_radius_px(
         plot_title=plot_title,
         definition_profile=definition_profile,
         record_transform=record_transform,
+        species_line_count=species_line_count,
     ).get_group()
 
     # Track-slot reservation is a record-local compatibility contract. Keep its
@@ -1199,6 +1226,94 @@ def _definition_reserved_radius_px(
         return 0.0
     padding_px = max(8.0, 0.02 * float(canvas_config.radius))
     return float(max_extent + padding_px)
+
+
+MAX_WRAPPED_SPECIES_LINES = 8
+
+
+@lru_cache(maxsize=1)
+def _packaged_circular_definition_font_size() -> float:
+    config = load_config_toml("gbdraw.data", "config.toml")
+    return float(config["objects"]["definition"]["circular"]["font_size"])
+
+
+def _track_layout_reason(error: ValidationError) -> str | None:
+    """Return the ``TRACK_LAYOUT`` diagnostic reason of a placement failure."""
+
+    diagnostic = error.diagnostic or {}
+    if diagnostic.get("code") != "TRACK_LAYOUT":
+        return None
+    reason = diagnostic.get("reason")
+    return reason if isinstance(reason, str) else None
+
+
+def _resolve_radial_layout_fitting_definition(
+    resolve_layout: Callable[[float | None], CircularRadialLayout],
+    *,
+    gb_record: SeqRecord,
+    canvas_config: CircularCanvasConfigurator,
+    species: str | None,
+    strain: str | None,
+    plot_title: str | None,
+    definition_profile: str,
+    definition_position: str,
+    center_reserved_radius: float | None,
+    record_transform: RecordDisplayTransform | None,
+) -> tuple[CircularRadialLayout, float | None, int]:
+    """Place the slots around the center definition (PD-OI-078).
+
+    Returns the layout, the reserved definition radius and the species line
+    count. Only a placement that fails because of the definition band wraps
+    the species line at word boundaries and places again, with the fewest
+    lines that fit. An explicit ``center_reserved_radius`` keeps the single
+    line. ``definition_font_size`` 18 is the packaged default, so 18 counts as
+    not explicit and may wrap; any other value is explicit and never wraps. A
+    failure the wrap cannot fix raises the original definition-band error.
+    """
+
+    if center_reserved_radius is not None:
+        reserved = max(0.0, float(center_reserved_radius))
+        return resolve_layout(reserved), reserved, 1
+    if str(definition_position).strip().lower() != "center":
+        return resolve_layout(None), None, 1
+
+    def reserved_for(line_count: int) -> float:
+        return _definition_reserved_radius_px(
+            gb_record,
+            canvas_config,
+            species,
+            strain,
+            plot_title=plot_title,
+            definition_profile=definition_profile,
+            record_transform=record_transform,
+            species_line_count=line_count,
+        )
+
+    reserved = reserved_for(1)
+    try:
+        return resolve_layout(reserved), reserved, 1
+    except ValidationError as error:
+        font_size = float(canvas_config.profile.config.objects.definition.circular.font_size)
+        if (
+            _track_layout_reason(error) != "DEFINITION_RESERVED"
+            or str(definition_profile) != "full"
+            or not math.isclose(font_size, _packaged_circular_definition_font_size())
+        ):
+            raise
+        definition_error = error
+
+    previous = reserved
+    for line_count in range(2, MAX_WRAPPED_SPECIES_LINES + 1):
+        wrapped = reserved_for(line_count)
+        if wrapped >= previous - FEATURE_BAND_EPSILON:
+            break
+        previous = wrapped
+        try:
+            return resolve_layout(wrapped), wrapped, line_count
+        except ValidationError as retry_error:
+            if _track_layout_reason(retry_error) != "DEFINITION_RESERVED":
+                break
+    raise definition_error
 
 
 def _slot_config_with_dinucleotide(config: Any, nt: str) -> Any:
@@ -1340,7 +1455,7 @@ def _sync_legend_table_for_circular_slots(
                 "width": depth_config.stroke_width,
             }
         elif renderer == "dinucleotide_content":
-            nt = _slot_dinucleotide(slot, default_nt)
+            nt = slot_dinucleotide(slot.params, default_nt)
             label = _slot_legend_label(slot, f"{nt} content")
             if gc_config.high_fill_color == gc_config.low_fill_color:
                 out[_unique_legend_key(out, label)] = {
@@ -1363,7 +1478,7 @@ def _sync_legend_table_for_circular_slots(
                     "width": gc_config.stroke_width,
                 }
         elif renderer == "dinucleotide_skew":
-            nt = _slot_dinucleotide(slot, default_nt)
+            nt = slot_dinucleotide(slot.params, default_nt)
             label = _slot_legend_label(slot, f"{nt} skew")
             slot_skew_config = _slot_skew_config(skew_config, slot, nt)
             if slot_skew_config.high_fill_color == slot_skew_config.low_fill_color:
@@ -1681,7 +1796,7 @@ def _draw_resolved_circular_slot(
         )
 
     default_nt = str(getattr(gc_config, "dinucleotide", "GC")).upper()
-    nt = _slot_dinucleotide(resolved_slot, default_nt)
+    nt = slot_dinucleotide(resolved_slot.params, default_nt)
     if renderer == "dinucleotide_content":
         slot_df = _slot_dataframe_for_nt(
             nt=nt,
@@ -2050,28 +2165,29 @@ def add_record_on_circular_canvas(
         )
     resolved_track_slots: list[CircularResolvedSlot] = []
     resolved_feature_anchor_radius_px: float | None = None
-    definition_reserved_radius_px: float | None = None
-    if center_reserved_radius is not None:
-        definition_reserved_radius_px = max(0.0, float(center_reserved_radius))
-    elif str(definition_position).strip().lower() == "center":
-        definition_reserved_radius_px = _definition_reserved_radius_px(
-            gb_record,
-            canvas_config,
-            species,
-            strain,
+    radial_layout, definition_reserved_radius_px, species_line_count = (
+        _resolve_radial_layout_fitting_definition(
+            lambda reserved_radius_px: resolve_circular_radial_layout(
+                total_length=len(gb_record.seq),
+                canvas_config=canvas_config,
+                slots=layout_slots,
+                feature_dict=layout_feature_dict,
+                definition_reserved_radius_px=reserved_radius_px,
+                tick_track_channel_override=_tick_track_channel_override,
+                preferred_anchor_slot_ids=preferred_anchor_slot_ids,
+                depth_config=depth_config if show_depth_track else None,
+                center_reserved_radius_explicit=center_reserved_radius is not None,
+            ),
+            gb_record=gb_record,
+            canvas_config=canvas_config,
+            species=species,
+            strain=strain,
             plot_title=plot_title,
             definition_profile=definition_profile,
+            definition_position=definition_position,
+            center_reserved_radius=center_reserved_radius,
             record_transform=record_transform,
         )
-    radial_layout = resolve_circular_radial_layout(
-        total_length=len(gb_record.seq),
-        canvas_config=canvas_config,
-        slots=layout_slots,
-        feature_dict=layout_feature_dict,
-        definition_reserved_radius_px=definition_reserved_radius_px,
-        tick_track_channel_override=_tick_track_channel_override,
-        preferred_anchor_slot_ids=preferred_anchor_slot_ids,
-        depth_config=depth_config if show_depth_track else None,
     )
     resolved_track_slots = list(radial_layout.slots)
     setattr(
@@ -2245,6 +2361,7 @@ def add_record_on_circular_canvas(
                     tick_track_channel_override=_tick_track_channel_override,
                     preferred_anchor_slot_ids=preferred_anchor_slot_ids,
                     depth_config=depth_config if show_depth_track else None,
+                    center_reserved_radius_explicit=center_reserved_radius is not None,
                 )
                 resolved_track_slots = list(radial_layout.slots)
                 setattr(
@@ -2466,6 +2583,8 @@ def add_record_on_circular_canvas(
         definition_kwargs["definition_position"] = definition_position
     if definition_group_id is not None:
         definition_kwargs["definition_group_id"] = definition_group_id
+    if species_line_count > 1:
+        definition_kwargs["species_line_count"] = species_line_count
     definition_target_start = len(getattr(canvas, "elements", []))
     canvas = add_record_definition_group_on_canvas(
         canvas,
@@ -2646,6 +2765,91 @@ def _compose_circular_plot(
     return result
 
 
+def build_circular_legend_table(
+    records: Sequence[SeqRecord],
+    *,
+    feature_config: FeatureDrawingConfigurator,
+    gc_config: GcContentConfigurator,
+    skew_config: GcSkewConfigurator,
+    profile: CircularRenderProfile,
+    depth_config: DepthConfigurator | None = None,
+    depth_df: DataFrame | None = None,
+    depth_tracks: Sequence[DepthTrackData] | None = None,
+    depth_track_count_value: int = 0,
+    circular_track_slots: list[CircularTrackSlot] | None = None,
+    annotations: ResolvedAnnotationBundle | None = None,
+    conservation_tracks: Sequence[ConservationTrack] | None = None,
+    conservation_min_identity: float = 0.0,
+) -> dict:
+    """Build the one Circular legend table for the records drawn on a canvas.
+
+    Single-record and Multi-Record Canvas output both call this owner, so slot
+    renderer parameters, region annotation and depth ``legend_label`` values,
+    and conservation rows reach every Circular legend in the same order.
+    ``circular_track_slots`` is the slot list after annotation planning.
+    """
+
+    cfg = profile.config
+    records = list(records)
+    color_map = feature_config.specific_color_rules
+    default_color_map = feature_config.default_color_map
+    features_present = check_feature_presence(
+        records,
+        feature_config.selected_features_set,
+        feature_visibility_rules=feature_config.feature_visibility_rules,
+        specific_color_rules=color_map,
+    )
+    used_color_rules, default_used_features = precompute_used_color_rules(
+        records,
+        color_map,
+        default_color_map,
+        set(feature_config.selected_features_set),
+        feature_visibility_rules=feature_config.feature_visibility_rules,
+    )
+    singleton_depth = bool(
+        profile.show_depth
+        and depth_config is not None
+        and (depth_df is not None or int(depth_track_count_value) == 1)
+    )
+    legend_table = prepare_legend_table(
+        gc_config,
+        skew_config,
+        feature_config,
+        features_present,
+        used_color_rules=used_color_rules,
+        default_used_features=default_used_features,
+        depth_config=depth_config if singleton_depth else None,
+        show_gc=profile.show_gc,
+        show_skew=profile.show_skew,
+        show_depth=singleton_depth,
+    )
+    if depth_tracks and circular_track_slots is None:
+        legend_table = sync_depth_track_legend_entries(legend_table, depth_tracks)
+    legend_table = _sync_legend_table_for_circular_slots(
+        legend_table,
+        circular_track_slots=circular_track_slots,
+        gc_config=gc_config,
+        skew_config=skew_config,
+        depth_config=depth_config,
+        depth_df=depth_df,
+        depth_tracks=depth_tracks,
+        cfg=cfg,
+        conservation_tracks=conservation_tracks,
+        conservation_min_identity=conservation_min_identity,
+    )
+    if annotations is not None:
+        legend_table = sync_annotation_legend_entries(
+            legend_table,
+            annotations,
+            (
+                normalize_circular_track_slots(circular_track_slots)
+                if circular_track_slots is not None
+                else None
+            ),
+        )
+    return legend_table
+
+
 def _assemble_circular_diagram_result(
     gb_record: SeqRecord,
     canvas_config: CircularCanvasConfigurator,
@@ -2727,63 +2931,20 @@ def _assemble_circular_diagram_result(
         wrap_width=canvas_config.total_width,
     )
     if canvas_config.legend_position != "none":
-        color_map = feature_config.specific_color_rules
-        default_color_map = feature_config.default_color_map
-        features_present = check_feature_presence(
-            gb_record,
-            feature_config.selected_features_set,
-            feature_visibility_rules=feature_config.feature_visibility_rules,
-            specific_color_rules=color_map,
-        )
-        used_color_rules, default_used_features = precompute_used_color_rules(
-            gb_record,
-            color_map,
-            default_color_map,
-            set(feature_config.selected_features_set),
-            feature_visibility_rules=feature_config.feature_visibility_rules,
-        )
-        legend_table = prepare_legend_table(
-            gc_config,
-            skew_config,
-            feature_config,
-            features_present,
-            used_color_rules=used_color_rules,
-            default_used_features=default_used_features,
-            depth_config=depth_config if (
-                depth_config is not None
-                and (depth_df is not None or resolved_depth_track_count == 1)
-            ) else None,
-            show_gc=profile.show_gc,
-            show_skew=profile.show_skew,
-            show_depth=bool(
-                profile.show_depth
-                and depth_config is not None
-                and (depth_df is not None or resolved_depth_track_count == 1)
-            ),
-        )
-        if depth_tracks and effective_circular_track_slots is None:
-            legend_table = sync_depth_track_legend_entries(legend_table, depth_tracks)
-        legend_table = _sync_legend_table_for_circular_slots(
-            legend_table,
-            circular_track_slots=effective_circular_track_slots,
+        legend_table = build_circular_legend_table(
+            [gb_record],
+            feature_config=feature_config,
             gc_config=gc_config,
             skew_config=skew_config,
+            profile=profile,
             depth_config=depth_config,
             depth_df=depth_df,
             depth_tracks=depth_tracks,
-            cfg=cfg,
+            depth_track_count_value=resolved_depth_track_count,
+            circular_track_slots=effective_circular_track_slots,
+            annotations=resolved_annotations,
             conservation_tracks=conservation_tracks,
             conservation_min_identity=conservation_min_identity,
-        )
-        normalized_annotation_slots = (
-            normalize_circular_track_slots(effective_circular_track_slots)
-            if effective_circular_track_slots is not None
-            else None
-        )
-        legend_table = sync_annotation_legend_entries(
-            legend_table,
-            resolved_annotations,
-            normalized_annotation_slots,
         )
     canvas: Drawing = canvas_config.create_svg_canvas()
     plot = add_record_on_circular_canvas(
@@ -2904,4 +3065,6 @@ __all__ = [
     "CircularAssemblyResult",
     "assemble_circular_diagram",
     "add_record_on_circular_canvas",
+    "build_circular_legend_table",
+    "plan_circular_annotation_slots",
 ]

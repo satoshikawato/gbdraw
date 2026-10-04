@@ -228,6 +228,102 @@ const importersOf = (target) => [...directImports]
   .map(([owner]) => owner)
   .sort();
 
+// These two request/Session callers may use the pure warning validator, not
+// rendered-identity collection. The metadata admission callers remain exact.
+const assertMetadataImportOwners = (sources) => {
+  const target = 'services/session-feature-metadata.js';
+  const validationCallers = new Set(['app/run-analysis.js', 'services/session-authority.js']);
+  const identityCallers = [];
+  for (const [owner, source] of sources) {
+    const imports = literalImportSpecifiers(source).filter(specifier => {
+      const resolved = resolveRelativeImport(join(JAVASCRIPT_ROOT, owner), specifier);
+      return resolved && relativeModulePath(resolved) === target;
+    });
+    if (!imports.length) continue;
+    if (!validationCallers.has(owner)) { identityCallers.push(owner); continue; }
+    assert.equal(imports.length, 1, `${owner}: one warning validation import`);
+    const code = maskJavaScript(source);
+    const declarations = [...maskJavaScript(source, { strings: false }).matchAll(
+      /(?:^|\n)\s*import\s*\{\s*validateAnnotationWarnings\s*\}\s*from\s*(['"])([^'"]+)\1/g
+    )];
+    assert.ok(declarations.some(match => match[2] === imports[0]
+      && code.slice(match.index + match[0].indexOf('import')).startsWith('import')),
+    `${owner}: only the named pure warning validator is permitted`);
+  }
+  assert.deepEqual(identityCallers.sort(), [
+    'app/session-feature-metadata.js', 'services/svg-result-ingestion.js'
+  ]);
+};
+
+// The Result replacement ceilings below count Result writes and SVG serialization
+// together, as the single Mounted SVG/Result replacement capability did before G-J(1).
+const RESULT_REPLACEMENT_CAPABILITIES = Object.freeze([
+  'Result content commit',
+  'SVG serialization'
+]);
+const resultReplacementCount = (detected, path, capability) => (
+  detected.operatorMatchesByCapability[capability]
+    .find((entry) => entry.path === path)?.count || 0
+);
+const resultReplacementOperators = (detected, path, capability) => {
+  const count = resultReplacementCount(detected, path, capability);
+  return count ? [{ path, count }] : [];
+};
+const totalResultReplacementCount = (detected, path) => RESULT_REPLACEMENT_CAPABILITIES
+  .reduce((total, capability) => total + resultReplacementCount(detected, path, capability), 0);
+
+// IN-01 and GE-02 (Web GUI audit 2026-09-30, D-04 and D-05) retire the live
+// definition and stroke rewrites, and A1 of the post-audit follow-ups (W8 G-J)
+// moves the editor Result commits into app/preview-runtime.js. These operators
+// and imports may shrink or disappear without editing this guard; they may not
+// grow, and no owner is added. Each ceiling counts both capabilities together.
+const RETIRING_REPLACEMENT_CEILINGS = Object.freeze({
+  'app/app-setup.js': 1,
+  'app/feature-editor/color-actions.js': 1,
+  'app/feature-editor/label-actions.js': 2,
+  'app/feature-editor/svg-actions.js': 4,
+  'app/legend-layout/canvas-actions.js': 2,
+  'app/legend-layout/diagram-drag.js': 2,
+  'app/legend-layout/reposition-actions.js': 2,
+  'app/legend/drag-actions.js': 4,
+  'app/legend/entry-actions.js': 5,
+  'app/legend/sort-actions.js': 2,
+  'app/legend/stroke-actions.js': 2,
+  'app/results.js': 4,
+  'app/svg-styles.js': 2
+});
+const retiringReplacementOperators = (detected, path, capability) => {
+  const ceiling = RETIRING_REPLACEMENT_CEILINGS[path];
+  assert.ok(totalResultReplacementCount(detected, path) <= ceiling,
+    `${path}: retiring Result replacement may only contract (ceiling ${ceiling})`);
+  return resultReplacementOperators(detected, path, capability);
+};
+// The retiring owners that sort before `boundary`, in detector (path) order.
+const retiringOperatorsBefore = (detected, boundary, capability) => Object.keys(
+  RETIRING_REPLACEMENT_CEILINGS
+).filter((path) => path < boundary)
+  .flatMap((path) => retiringReplacementOperators(detected, path, capability));
+// After A1, the Result switch and Save flushes of the remaining owners never
+// write (T6 of the post-audit follow-ups). Their Result content commit counts
+// may shrink without editing this guard; they may not grow.
+const RESULT_COMMIT_KEEPER_CEILINGS = Object.freeze({
+  'app/preview-runtime.js': 4,
+  'services/config.js': 4
+});
+const keeperCommitOperators = (detected, path) => {
+  const ceiling = RESULT_COMMIT_KEEPER_CEILINGS[path];
+  assert.ok(resultReplacementCount(detected, path, 'Result content commit') <= ceiling,
+    `${path}: Result content commit may only contract (ceiling ${ceiling})`);
+  return resultReplacementOperators(detected, path, 'Result content commit');
+};
+const importersWithRetiringOwners = (target, required, retiring) => {
+  const actual = importersOf(target);
+  const allowed = new Set([...required, ...retiring]);
+  assert.deepEqual(actual.filter((path) => !allowed.has(path)), [],
+    `${target}: no importer may be added`);
+  return [...required, ...retiring.filter((path) => actual.includes(path))].sort();
+};
+
 test('the main application import graph excludes Worker-only modules', () => {
   const reachable = reachableModules(APP_ENTRY);
   assert.ok(reachable.has('app/run-analysis.js'), 'render owner must remain reachable');
@@ -243,6 +339,8 @@ test('Worker construction and the diagram-generation client have explicit owners
     new Map([
       ['services/diagram-generation.js', 1],
       ['services/losat.js', 2],
+      ...(productionSources.has('services/session-import-client.js')
+        ? [['services/session-import-client.js', 1]] : []),
       ['workers/losat-threaded-worker.js', 2]
     ])
   );
@@ -265,14 +363,17 @@ test('Worker construction and the diagram-generation client have explicit owners
       ['workers/diagram-generation-worker.js', 2]
     ])
   );
-  assert.deepEqual(importersOf('services/diagram-generation.js'), [
-    'app/app-setup.js',
-    'app/feature-metadata-extraction.js',
-    'app/legend/entry-actions.js',
-    'app/record-discovery.js',
-    'app/results.js',
-    'app/run-analysis.js'
-  ]);
+  assert.deepEqual(importersOf('services/diagram-generation.js'), importersWithRetiringOwners(
+    'services/diagram-generation.js',
+    [
+      'app/app-setup.js',
+      'app/feature-metadata-extraction.js',
+      'app/legend/entry-actions.js',
+      'app/record-discovery.js',
+      'app/run-analysis.js'
+    ],
+    ['app/results.js']
+  ));
 });
 
 test('Pyodide initialization and helper execution are Worker-only', () => {
@@ -394,15 +495,12 @@ test('History intent and SVG admission have one production ownership path', () =
     'services/config.js',
     'state.js'
   ]);
-  assert.deepEqual(importersOf('services/session-feature-metadata.js'), [
-    'app/session-feature-metadata.js',
-    'services/svg-result-ingestion.js'
-  ]);
-  assert.deepEqual(importersOf('services/svg-result-normalization.js'), [
-    'app/svg-styles.js',
-    'services/config.js',
-    'services/svg-result-ingestion.js'
-  ]);
+  assertMetadataImportOwners(productionSources);
+  assert.deepEqual(importersOf('services/svg-result-normalization.js'), importersWithRetiringOwners(
+    'services/svg-result-normalization.js',
+    ['services/config.js', 'services/svg-result-ingestion.js'],
+    ['app/svg-styles.js']
+  ));
   assert.doesNotMatch(
     productionSources.get('app/session-feature-metadata.js'),
     /DOMParser|parseFromString|result\?\.content/
@@ -453,6 +551,15 @@ test('right drawer availability and transitions have one production owner', () =
   assert.doesNotMatch(INDEX_HTML, /rightDrawerTab\s*\|\|/);
 });
 
+// Capability keys that the policy holds while no detector reports them, during a
+// split ("Splitting a capability" in docs/internal/WEB_CHANGE_POLICY.md).
+// None is pending: the G-J(1) split of Mounted SVG/Result replacement is complete.
+const UNDETECTED_POLICY_CAPABILITY_KEYS = Object.freeze([]);
+const policyCapabilityKeysMatchDetectors = (policy) => assert.deepEqual(
+  Object.keys(policy.allowedPrivilegedOwners).sort(),
+  [...WEB_PRIVILEGED_CAPABILITY_KEYS, ...UNDETECTED_POLICY_CAPABILITY_KEYS].sort()
+);
+
 test('privileged capability owners and importers stay within their allowlists', () => {
   const detected = detectPrivilegedWebCapabilities(productionSources);
   const assertSubset = (actual, allowed, label) => {
@@ -463,10 +570,7 @@ test('privileged capability owners and importers stay within their allowlists', 
   Object.entries(WEB_CHANGE_POLICY.allowedPrivilegedImporters).forEach(([target, allowed]) => {
     assertSubset(detected.importersByTarget[target], allowed, `${target} importers`);
   });
-  assert.deepEqual(
-    Object.keys(WEB_CHANGE_POLICY.allowedPrivilegedOwners).sort(),
-    WEB_PRIVILEGED_CAPABILITY_KEYS
-  );
+  policyCapabilityKeysMatchDetectors(WEB_CHANGE_POLICY);
   assert.deepEqual(
     Object.keys(WEB_CHANGE_POLICY.allowedPrivilegedImporters).sort(),
     WEB_PRIVILEGED_IMPORT_TARGETS
@@ -477,15 +581,151 @@ test('privileged capability owners and importers stay within their allowlists', 
   });
 });
 
+test('the policy capability key set is exact', () => {
+  const withPolicyKeys = (keys) => ({
+    allowedPrivilegedOwners: Object.fromEntries(keys.map((key) => [key, []]))
+  });
+  const expectedKeys = [...WEB_PRIVILEGED_CAPABILITY_KEYS, ...UNDETECTED_POLICY_CAPABILITY_KEYS];
+  policyCapabilityKeysMatchDetectors(withPolicyKeys(expectedKeys));
+  assert.throws(() => policyCapabilityKeysMatchDetectors(
+    withPolicyKeys([...expectedKeys, 'Unregistered capability'])
+  ));
+  assert.throws(() => policyCapabilityKeysMatchDetectors(
+    withPolicyKeys(expectedKeys.filter((key) => key !== 'Result content commit'))
+  ));
+  assert.throws(() => policyCapabilityKeysMatchDetectors(
+    withPolicyKeys([...expectedKeys, 'Mounted SVG/Result replacement'])
+  ));
+});
+
+const privilegedOwnerViolations = (sources) => {
+  const detected = detectPrivilegedWebCapabilities(sources);
+  return Object.entries(detected.operatorMatchesByCapability).flatMap(([capability, matches_]) => {
+    const allowed = new Set(WEB_CHANGE_POLICY.allowedPrivilegedOwners[capability]);
+    return matches_.filter(({ path }) => !allowed.has(path))
+      .map(({ path }) => `${capability}: owner ${path}`);
+  });
+};
+const withSeededLine = (path, line) => new Map([
+  ...productionSources,
+  [path, `${productionSources.get(path) ?? ''}\n${line}\n`]
+]);
+
+test('Result content commit and SVG serialization detect different operators', () => {
+  const detected = detectPrivilegedWebCapabilities(new Map([
+    ['app/seeded-result-writer.js', [
+      'results.value = next;',
+      'state.results.value[index] = next;',
+      'previewRuntime.flushActiveResult();',
+      'if (results.value === next) previous = results.value;',
+      '// results.value = comment;',
+      'const text = "serializeCleanSvg(svg)";'
+    ].join('\n')],
+    ['app/seeded-serializer.js', 'const content = serializeCleanSvg(svg);\n']
+  ]));
+  assert.deepEqual(detected.operatorMatchesByCapability['Result content commit'],
+    [{ path: 'app/seeded-result-writer.js', count: 3 }]);
+  assert.deepEqual(detected.operatorMatchesByCapability['SVG serialization'],
+    [{ path: 'app/seeded-serializer.js', count: 1 }]);
+});
+
+test('a Result writer or SVG serializer outside its allowlist fails the policy', () => {
+  assert.deepEqual(privilegedOwnerViolations(productionSources), []);
+  const unlisted = 'app/feature-search/preview-svg.js';
+  assert.ok(productionSources.has(unlisted), unlisted);
+  for (const [line, capability] of [
+    ['results.value = nextResults;', 'Result content commit'],
+    ['state.results.value[0] = nextResult;', 'Result content commit'],
+    ['previewRuntime.flushActiveResult();', 'Result content commit'],
+    ['const content = serializeCleanSvg(svg);', 'SVG serialization']
+  ]) {
+    assert.deepEqual(privilegedOwnerViolations(withSeededLine(unlisted, line)),
+      [`${capability}: owner ${unlisted}`], line);
+  }
+  assert.deepEqual(privilegedOwnerViolations(
+    withSeededLine('app/preview-runtime.js', 'state.results.value = nextResults;')
+  ), []);
+  assert.deepEqual(privilegedOwnerViolations(
+    withSeededLine('services/svg-result-ingestion.js', 'const content = serializeCleanSvg(svg);')
+  ), []);
+});
+
+// R1 (gbdraw/web/CLAUDE.md): the Result content commit list only contracts.
+// Removing an owner needs no edit here; adding one fails.
+const RESULT_CONTENT_COMMIT_OWNER_CEILING = Object.freeze([
+  'app/app-setup.js',
+  'app/feature-editor/color-actions.js',
+  'app/feature-editor/label-actions.js',
+  'app/feature-editor/svg-actions.js',
+  'app/legend-layout/canvas-actions.js',
+  'app/legend-layout/diagram-drag.js',
+  'app/legend-layout/reposition-actions.js',
+  'app/legend/drag-actions.js',
+  'app/legend/entry-actions.js',
+  'app/legend/sort-actions.js',
+  'app/legend/stroke-actions.js',
+  'app/preview-runtime.js',
+  'app/run-analysis.js',
+  'app/svg-styles.js',
+  'services/config.js'
+]);
+const assertResultCommitOwnersOnlyContract = (owners) => assert.deepEqual(
+  owners.filter((path) => !RESULT_CONTENT_COMMIT_OWNER_CEILING.includes(path)),
+  [],
+  'Result content commit owners may only be removed (R1)'
+);
+
+test('the Result content commit allowlist can only contract', () => {
+  assertResultCommitOwnersOnlyContract(
+    WEB_CHANGE_POLICY.allowedPrivilegedOwners['Result content commit']
+  );
+  assertResultCommitOwnersOnlyContract(RESULT_CONTENT_COMMIT_OWNER_CEILING.slice(1));
+  assertResultCommitOwnersOnlyContract([]);
+  for (const added of ['services/history-snapshot.js', 'app/feature-search/preview-svg.js']) {
+    assert.throws(() => assertResultCommitOwnersOnlyContract(
+      [...RESULT_CONTENT_COMMIT_OWNER_CEILING, added]
+    ), /only be removed/, added);
+  }
+});
+
+test('each Result write allowlist admits only its own kind of operator', () => {
+  const owners = WEB_CHANGE_POLICY.allowedPrivilegedOwners;
+  const commitOwners = owners['Result content commit'];
+  const serializationOwners = owners['SVG serialization'];
+  const seededViolations = (path, line) => privilegedOwnerViolations(
+    new Map([[path, `${productionSources.get(path) ?? ''}\n${line}\n`]])
+  );
+  const commitLine = 'state.results.value = nextResults;';
+  const serializationLine = 'const content = serializeCleanSvg(svg);';
+
+  // The shared Mounted SVG/Result replacement list let all of these owners do both.
+  const crossKindCases = [
+    ...serializationOwners.filter((path) => !commitOwners.includes(path))
+      .map((path) => [path, commitLine, 'Result content commit']),
+    ...commitOwners.filter((path) => !serializationOwners.includes(path))
+      .map((path) => [path, serializationLine, 'SVG serialization'])
+  ];
+  assert.ok(crossKindCases.length > 0);
+  for (const [path, line, capability] of crossKindCases) {
+    assert.deepEqual(seededViolations(path, line), [`${capability}: owner ${path}`],
+      `${path}: ${line}`);
+  }
+  commitOwners.forEach((path) => assert.deepEqual(seededViolations(path, commitLine), [], path));
+  serializationOwners.forEach((path) => (
+    assert.deepEqual(seededViolations(path, serializationLine), [], path)
+  ));
+});
+
 test('shared privileged detectors preserve the characterized current-source facts', () => {
   assert.deepEqual(WEB_PRIVILEGED_CAPABILITY_KEYS, [
     'Canonical editor state',
     'Diagram Worker',
     'History',
-    'Mounted SVG/Result replacement',
     'Python helper',
     'Render request',
     'Resource staging',
+    'Result content commit',
+    'SVG serialization',
     'SVG/Result admission',
     'Session'
   ]);
@@ -531,6 +771,8 @@ test('shared privileged detectors preserve the characterized current-source fact
       { path: 'app/run-analysis.js', count: 1 },
       { path: 'services/diagram-generation.js', count: 1 },
       { path: 'services/losat.js', count: 2 },
+      ...(productionSources.has('services/session-import-client.js')
+        ? [{ path: 'services/session-import-client.js', count: 1 }] : []),
       { path: 'workers/diagram-generation-worker.js', count: 1 },
       { path: 'workers/losat-threaded-worker.js', count: 2 }
     ],
@@ -539,23 +781,17 @@ test('shared privileged detectors preserve the characterized current-source fact
       { path: 'services/history-snapshot.js', count: 2 },
       { path: 'services/history.js', count: 7 }
     ],
-    'Mounted SVG/Result replacement': [
-      { path: 'app/app-setup.js', count: 1 },
-      { path: 'app/feature-editor/color-actions.js', count: 1 },
-      { path: 'app/feature-editor/label-actions.js', count: 2 },
-      { path: 'app/feature-editor/svg-actions.js', count: 4 },
-      { path: 'app/legend-layout/canvas-actions.js', count: 2 },
-      { path: 'app/legend-layout/diagram-drag.js', count: 2 },
-      { path: 'app/legend-layout/reposition-actions.js', count: 2 },
-      { path: 'app/legend/drag-actions.js', count: 4 },
-      { path: 'app/legend/entry-actions.js', count: 5 },
-      { path: 'app/legend/sort-actions.js', count: 2 },
-      { path: 'app/legend/stroke-actions.js', count: 2 },
-      { path: 'app/preview-runtime.js', count: 4 },
-      { path: 'app/results.js', count: 4 },
+    'Result content commit': [
+      ...retiringOperatorsBefore(detected, 'app/preview-runtime.js', 'Result content commit'),
+      ...keeperCommitOperators(detected, 'app/preview-runtime.js'),
+      ...retiringReplacementOperators(detected, 'app/results.js', 'Result content commit'),
       { path: 'app/run-analysis.js', count: 2 },
-      { path: 'app/svg-styles.js', count: 2 },
-      { path: 'services/config.js', count: 5 },
+      ...retiringReplacementOperators(detected, 'app/svg-styles.js', 'Result content commit'),
+      ...keeperCommitOperators(detected, 'services/config.js')
+    ],
+    'SVG serialization': [
+      ...retiringOperatorsBefore(detected, 'services/config.js', 'SVG serialization'),
+      { path: 'services/config.js', count: 1 },
       { path: 'services/history-snapshot.js', count: 1 },
       { path: 'services/svg-result-ingestion.js', count: 1 }
     ],
@@ -587,6 +823,97 @@ test('shared privileged detectors preserve the characterized current-source fact
       { path: 'services/session-file.js', count: 1 }
     ]
   });
+});
+
+test('metadata validation callers cannot acquire identity or namespace access', () => {
+  const admission = new Map([
+    ['app/session-feature-metadata.js', "import { normalizeRenderedFeatureId } from '../services/session-feature-metadata.js';"],
+    ['services/svg-result-ingestion.js', "import { collectRenderedFeatureIdentitiesFromSvgRoot } from './session-feature-metadata.js';"]
+  ]);
+  assertMetadataImportOwners(admission);
+  for (const owner of ['app/run-analysis.js', 'services/session-authority.js']) {
+    const specifier = owner.startsWith('app/') ? '../services/session-feature-metadata.js' : './session-feature-metadata.js';
+    const valid = `import { validateAnnotationWarnings } from '${specifier}';`;
+    assertMetadataImportOwners(new Map([...admission, [owner, valid]]));
+    for (const invalid of [
+      `import { collectRenderedFeatureIdentitiesFromSvgRoot } from '${specifier}';`,
+      `import { validateAnnotationWarnings, normalizeRenderedFeatureId } from '${specifier}';`,
+      `import * as metadata from '${specifier}';`,
+      `import metadata from '${specifier}';`,
+      `const metadata = await import('${specifier}');`,
+      `${valid}\nimport { normalizeRenderedFeatureId } from '${specifier}';`,
+      `const fake = \`${valid}\`;\nimport metadata from '${specifier}';`
+    ]) assert.throws(() => assertMetadataImportOwners(new Map([...admission, [owner, invalid]])));
+  }
+  assert.throws(() => assertMetadataImportOwners(new Map([...admission,
+    ['app/unapproved.js', "import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';"]
+  ])));
+  assert.throws(() => assertMetadataImportOwners(new Map([...admission].slice(1))));
+});
+
+test('legend replacement characterization permits contraction but rejects growth', () => {
+  const path = 'app/legend/entry-actions.js';
+  for (const [commits, serializations] of [[4, 0], [5, 0], [2, 2], [3, 2], [6, 0], [3, 3], [0, 0]]) {
+    const code = 'results.value = candidate;\n'.repeat(commits)
+      + 'serializeCleanSvg(svg);\n'.repeat(serializations)
+      + '// results.value = comment;\nconst text = "results.value = string;";';
+    const detected = detectPrivilegedWebCapabilities(new Map([[path, code]]));
+    assert.deepEqual(detected.operatorMatchesByCapability['Result content commit'],
+      commits ? [{ path, count: commits }] : []);
+    assert.deepEqual(detected.operatorMatchesByCapability['SVG serialization'],
+      serializations ? [{ path, count: serializations }] : []);
+    const total = commits + serializations;
+    if (total <= 5) {
+      assert.deepEqual(retiringReplacementOperators(detected, path, 'Result content commit'),
+        commits ? [{ path, count: commits }] : []);
+    } else {
+      assert.throws(() => retiringReplacementOperators(detected, path, 'Result content commit'),
+        /may only contract/);
+    }
+  }
+});
+
+test('retiring Result replacement owners may contract or disappear but never grow', () => {
+  for (const [path, ceiling] of Object.entries(RETIRING_REPLACEMENT_CEILINGS)) {
+    for (const count of [0, 1, ceiling, ceiling + 1]) {
+      const code = 'results.value = candidate;\n'.repeat(count);
+      const detected = detectPrivilegedWebCapabilities(new Map([[path, code]]));
+      if (count <= ceiling) {
+        assert.deepEqual(retiringReplacementOperators(detected, path, 'Result content commit'),
+          count ? [{ path, count }] : []);
+      } else {
+        assert.throws(
+          () => retiringReplacementOperators(detected, path, 'Result content commit'),
+          /may only contract/
+        );
+      }
+    }
+    const split = detectPrivilegedWebCapabilities(new Map([[
+      path,
+      'results.value = candidate;\n'.repeat(ceiling) + 'serializeCleanSvg(svg);\n'
+    ]]));
+    assert.throws(() => retiringReplacementOperators(split, path, 'SVG serialization'),
+      /may only contract/);
+  }
+  const required = importersOf('services/diagram-generation.js').filter((path) => path !== 'app/results.js');
+  assert.throws(
+    () => importersWithRetiringOwners('services/diagram-generation.js', required.slice(1), ['app/results.js']),
+    /no importer may be added/
+  );
+});
+
+test('kept Result content commit owners may contract but never grow', () => {
+  for (const [path, ceiling] of Object.entries(RESULT_COMMIT_KEEPER_CEILINGS)) {
+    for (const count of [0, 1, ceiling, ceiling + 1]) {
+      const code = 'results.value = candidate;\n'.repeat(count) + 'serializeCleanSvg(svg);\n';
+      const detected = detectPrivilegedWebCapabilities(new Map([[path, code]]));
+      if (count <= ceiling) {
+        assert.deepEqual(keeperCommitOperators(detected, path), count ? [{ path, count }] : []);
+      } else {
+        assert.throws(() => keeperCommitOperators(detected, path), /may only contract/);
+      }
+    }
+  }
 });
 
 test('versioned architecture detectors expose stable normalized subjects', () => {
@@ -1001,7 +1328,8 @@ test('workflow triggers separate dev admission, dev staging, promotion, and depl
     TEST_WORKFLOW,
     /group: tests-\$\{\{ github\.event_name \}\}-\$\{\{ github\.event\.pull_request\.number \|\| github\.ref \}\}/
   );
-  assert.match(TEST_WORKFLOW, /cancel-in-progress: true/);
+  // Pull request and dispatch runs replace older runs; dev push staging runs finish.
+  assert.match(TEST_WORKFLOW, /\n  cancel-in-progress: \$\{\{ github\.event_name != 'push' \}\}\n/);
 
   assert.match(BASE_POLICY_WORKFLOW, /\n  pull_request_target:\n/);
   assert.deepEqual(
@@ -1060,7 +1388,7 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
   assert.match(webPrSmoke, /needs: ci-impact/);
   assert.match(webPrSmoke, /needs\.ci-impact\.result == 'success'/);
   assert.match(webPrSmoke, /requiredJobs, 'web-pr-smoke'/);
-  assert.match(webPrSmoke, /timeout-minutes: 10/);
+  assert.match(webPrSmoke, /\n    timeout-minutes: 20\n/);
   assert.equal([...webPrSmoke.matchAll(/uses: actions\/checkout@/g)].length, 1);
   assert.equal([...webPrSmoke.matchAll(/npm ci/g)].length, 1);
   assert.equal([...webPrSmoke.matchAll(/playwright install --with-deps chromium/g)].length, 1);
@@ -1073,7 +1401,12 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
   assert.match(webPrSmoke, /npm run test:web:pr-smoke/);
   assert.match(
     webPrSmoke,
-    /Prepare browser wheel[\s\S]+Run Playwright PR smoke[\s\S]+Verify Gallery first-Generate parity[\s\S]+npm run test:web:gallery-publication/
+    /Prepare browser wheel[\s\S]+Run Playwright PR smoke[\s\S]+npm run test:web:pr-smoke/
+  );
+  assert.doesNotMatch(webPrSmoke, /test:web:gallery-publication/);
+  assert.match(
+    workflowJob('gallery'),
+    /Prepare Gallery browser wheel[\s\S]+Verify Gallery first-Generate parity[\s\S]+npm run test:web:gallery-publication/
   );
   assert.match(webPrSmoke, /if: failure\(\)[\s\S]+path: test-results\//);
   assert.doesNotMatch(
@@ -1094,7 +1427,8 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
     'gallery',
     'lint',
     'web-contracts-pr',
-    'web-pr-smoke'
+    'web-pr-smoke',
+    'playwright-functional'
   ]);
   assert.match(
     gate,
@@ -1137,10 +1471,14 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
       );
     }
   }
+  // The trusted plan selects functional Playwright on pull requests; the job is shared with dev.
+  assert.match(
+    workflowJob('playwright-functional'),
+    /\(\(github\.event_name == 'pull_request' && github\.base_ref == 'dev'\) \|\|/
+  );
   for (const jobId of [
     'core',
     'browser',
-    'playwright-functional',
     'playwright-performance',
     'acceptance-supported-main',
     'slow-main',
@@ -1214,11 +1552,11 @@ test('exact dev staging routes every job through the protected-branch plan', () 
   }
 
   const fullPlaywright = workflowJob('playwright-functional');
-  assert.match(fullPlaywright, /\n    name: Playwright functional \(shard \$\{\{ matrix\.shard \}\}\/4\)\n/);
-  assert.match(fullPlaywright, /shard: \[1, 2, 3, 4\]/);
+  assert.match(fullPlaywright, /\n    name: Playwright functional \(shard \$\{\{ matrix\.shard \}\}\/8\)\n/);
+  assert.match(fullPlaywright, /shard: \[1, 2, 3, 4, 5, 6, 7, 8\]/);
   assert.match(
     fullPlaywright,
-    /npm run test:web:functional-full -- --shard=\$\{\{ matrix\.shard \}\}\/4/
+    /npm run test:web:functional-full -- --reporter=line,github,json \$files\n/
   );
   assert.match(fullPlaywright, /playwright-functional-shard-\$\{\{ matrix\.shard \}\}-traces-/);
   assert.match(BASE_PLAYWRIGHT_CONFIG, /retries: process\.env\.CI \? 2 : 0/);
@@ -3064,7 +3402,7 @@ test('candidate Product Impact authority is validation-only and cannot authorize
     },
     ({ status, output }) => {
       assert.equal(status, 1, output);
-      assert.match(output, /Candidate authority validation: VALID \(inert data only\)/);
+      assert.match(output, /Candidate authority validation: VALID \(inert map and decision data only\)/);
       assert.match(output, /candidate data does not alter this head runtime admission/);
       assert.match(output, /Observation: INSUFFICIENT_EVIDENCE/);
       assert.doesNotMatch(output, /Observation: CONFORMING/);
@@ -3921,6 +4259,151 @@ test('the Product Contract authority path is exact and isolated', () => {
   );
 });
 
+const PRODUCT_CONTRACT_BASE_SOURCE = '# Option Integrity Product Contract\n\n### PD-OI-900: Fixture record\n';
+const PRODUCT_CONTRACT_CHANGED_SOURCE = `${PRODUCT_CONTRACT_BASE_SOURCE}\nRevised outcome with its receipt.\n`;
+const PRODUCT_CONTRACT_CO_CHANGE_REVIEW =
+  /static Product Contract co-change requires human review that each changed record serializes the explicit Product Decision Owner receipt/;
+const writeProductContractCoChangeRuntime = (write) => {
+  write('gbdraw/web/js/services/session-file.js', 'export const readSession = () => ({ version: 2 });\n');
+  write('tests/web/session-file.test.mjs', "test('reads the revised Session', () => {});\n");
+  write('docs/SESSION_COMPATIBILITY.md', '# Session compatibility\n\nRevised outcome.\n');
+};
+// The Contract exists at the base, as it does in the repository, so the
+// candidate modifies it in place.
+const runProductContractRevisionCase = (mutate) => withChangeBudgetRepository(
+  ({ commit, execute, write }) => {
+    write(PRODUCT_CONTRACT_AUTHORITY_PATH, PRODUCT_CONTRACT_BASE_SOURCE);
+    const base = commit('Product Contract baseline');
+    mutate(write);
+    const head = commit('candidate');
+    return execute({ base, head });
+  }
+);
+
+test('a static Product Contract co-change with runtime, tests, and docs requires review only', () => {
+  const coChange = runProductContractRevisionCase((write) => {
+    write(PRODUCT_CONTRACT_AUTHORITY_PATH, PRODUCT_CONTRACT_CHANGED_SOURCE);
+    writeProductContractCoChangeRuntime(write);
+  });
+  assert.equal(coChange.status, 0, coChange.output);
+  assert.match(coChange.output, /Gate: \*\*PASS\*\*/);
+  assert.match(coChange.output, /Review: \*\*REQUIRED\*\*/);
+  assert.match(reportSection(coChange.output, 'Review reasons'), PRODUCT_CONTRACT_CO_CHANGE_REVIEW);
+  assert.match(coChange.output, /Static Product Contract: co-change with its implementation; human Review verifies the receipt/);
+  assert.doesNotMatch(coChange.output, /production runtime files and Web guard\/CI files changed together/);
+  assert.doesNotMatch(coChange.output, /Product Contract authority changes must be isolated/);
+
+  const contractOnly = runProductContractRevisionCase((write) => {
+    write(PRODUCT_CONTRACT_AUTHORITY_PATH, PRODUCT_CONTRACT_CHANGED_SOURCE);
+  });
+  assert.equal(contractOnly.status, 0, contractOnly.output);
+  assert.match(contractOnly.output, /Review: \*\*REQUIRED\*\*/);
+  assert.doesNotMatch(contractOnly.output, PRODUCT_CONTRACT_CO_CHANGE_REVIEW);
+  assert.match(contractOnly.output, /Static Product Contract: isolated change for human Review/);
+
+  const runtimeOnly = runProductContractRevisionCase(writeProductContractCoChangeRuntime);
+  assert.equal(runtimeOnly.status, 0, runtimeOnly.output);
+  assert.doesNotMatch(runtimeOnly.output, PRODUCT_CONTRACT_CO_CHANGE_REVIEW);
+  assert.equal(reportSection(runtimeOnly.output, 'Guard files touched').trim(), '- None');
+
+  const lookalikeCompanion = runProductContractRevisionCase((write) => {
+    write(PRODUCT_CONTRACT_AUTHORITY_PATH, PRODUCT_CONTRACT_CHANGED_SOURCE);
+    write('docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT_COPY.md', '# Similar name, ordinary document\n');
+  });
+  assert.equal(lookalikeCompanion.status, 0, lookalikeCompanion.output);
+  assert.match(reportSection(lookalikeCompanion.output, 'Review reasons'), PRODUCT_CONTRACT_CO_CHANGE_REVIEW);
+  assert.equal(
+    reportSection(lookalikeCompanion.output, 'Guard files touched').trim(),
+    `- ${PRODUCT_CONTRACT_AUTHORITY_PATH}`
+  );
+});
+
+test('a static Product Contract co-change cannot carry any other guard or authority change', () => {
+  [
+    'tools/check-web-change-budget.mjs',
+    'tools/web-product-impact-evaluation.mjs',
+    'tools/web-architecture-detectors.mjs',
+    '.github/workflows/test.yml',
+    '.github/workflows/web-base-policy.yml',
+    'tools/web-product-impact-map.json',
+    'tools/web-product-decisions.json',
+    'tools/web-architecture-rules.json',
+    'tools/web-change-policy.json',
+    'docs/internal/PRODUCT_IMPACT_RATCHET.md',
+    'docs/internal/WEB_CHANGE_POLICY.md',
+    '.github/pull_request_template.md',
+    'tests/web/architecture-contracts.test.mjs'
+  ].forEach((extraPath) => {
+    const result = runProductContractRevisionCase((write) => {
+      write(PRODUCT_CONTRACT_AUTHORITY_PATH, PRODUCT_CONTRACT_CHANGED_SOURCE);
+      writeProductContractCoChangeRuntime(write);
+      const baseline = BUDGET_FIXTURE[extraPath];
+      write(
+        extraPath,
+        !baseline ? reservedPathContent(extraPath)
+          : extraPath.endsWith('.json') ? `${baseline}\n` : `${baseline}\n// changed\n`
+      );
+    });
+    assert.equal(result.status, 1, `${extraPath}\n${result.output}`);
+    assert.match(result.output, /Gate: \*\*FAIL\*\*/, extraPath);
+    assert.match(result.output, /production runtime files and Web guard\/CI files changed together/, extraPath);
+    assert.match(result.output, /Product Contract authority changes must be isolated from other changed paths/, extraPath);
+    assert.doesNotMatch(result.output, PRODUCT_CONTRACT_CO_CHANGE_REVIEW, extraPath);
+  });
+});
+
+test('deleting or moving the static Product Contract never uses the co-change route', () => {
+  [
+    ['deleted', (write, root) => rmSync(join(root, PRODUCT_CONTRACT_AUTHORITY_PATH))],
+    ['moved', (write, root) => {
+      rmSync(join(root, PRODUCT_CONTRACT_AUTHORITY_PATH));
+      write('docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT_COPY.md', PRODUCT_CONTRACT_CHANGED_SOURCE);
+    }]
+  ].forEach(([label, mutate]) => {
+    const result = withChangeBudgetRepository(({ commit, execute, root, write }) => {
+      write(PRODUCT_CONTRACT_AUTHORITY_PATH, PRODUCT_CONTRACT_BASE_SOURCE);
+      const base = commit('Product Contract baseline');
+      mutate(write, root);
+      writeProductContractCoChangeRuntime(write);
+      const head = commit(`candidate ${label}`);
+      return execute({ base, head });
+    });
+    assert.equal(result.status, 1, `${label}\n${result.output}`);
+    assert.match(result.output, /production runtime files and Web guard\/CI files changed together/, label);
+    assert.match(result.output, /Product Contract authority changes must be isolated from other changed paths/, label);
+  });
+});
+
+test('a static Product Contract co-change cannot replace mapped hard evidence', () => {
+  const hardEvidenceMap = JSON.parse(canonicalTransitionProductImpactMapSource({ enforcement: 'hard' }));
+  hardEvidenceMap.concerns[0].contracts[0].ref = (
+    'tests/web/contracts/product-impact-entry.test.mjs::canonical alternate entry'
+  );
+  withTrustedArchitectureRepository(
+    (write) => {
+      write(PRODUCT_CONTRACT_AUTHORITY_PATH, PRODUCT_CONTRACT_CHANGED_SOURCE);
+      moveCanonicalEntry(write);
+      write(
+        'tests/web/contracts/product-impact-entry.test.mjs',
+        "test('canonical alternate entry', () => { /* candidate modified */ });\n"
+      );
+    },
+    ({ status, output }) => {
+      assert.equal(status, 1, output);
+      assert.match(output, /Product Impact hard enforcement:.*INSUFFICIENT_EVIDENCE/);
+      assert.match(output, /integrity=CANDIDATE_MODIFIED/);
+      assert.match(reportSection(output, 'Review reasons'), PRODUCT_CONTRACT_CO_CHANGE_REVIEW);
+      assert.doesNotMatch(output, /Product Contract authority changes must be isolated/);
+    },
+    {
+      ...preauthorizedProductBaseFiles(`${JSON.stringify(hardEvidenceMap, null, 2)}\n`),
+      [PRODUCT_CONTRACT_AUTHORITY_PATH]: PRODUCT_CONTRACT_BASE_SOURCE,
+      'tests/web/contracts/product-impact-entry.test.mjs': "test('canonical alternate entry', () => {});\n"
+    },
+    productImpactPullRequestEnvironment()
+  );
+});
+
 test('the narrow inert authority bundle contains only architecture rules, map, and decisions', () => {
   assert.deepEqual(NARROW_PRODUCT_IMPACT_AUTHORITY_BUNDLE, [
     'tools/web-architecture-rules.json',
@@ -4573,6 +5056,59 @@ test('base privileged allowlist keys cannot disappear', () => {
   });
 });
 
+const withRetiredCapabilityBase = (runCase) => withChangeBudgetRepository((repository) => {
+  assert.ok(!WEB_PRIVILEGED_CAPABILITY_KEYS.includes('Retired capability'));
+  const policy = cloneBudgetPolicy();
+  policy.allowedPrivilegedOwners['Retired capability'] = ['app/editor.js', 'app/run-analysis.js'];
+  writeBudgetPolicy(repository.write, policy);
+  const base = repository.commit('hold a capability key that no detector defines');
+  delete policy.allowedPrivilegedOwners['Retired capability'];
+  return runCase({ ...repository, base, policy });
+});
+
+test('an authority-only change removes a capability key that no detector defines', () => {
+  withRetiredCapabilityBase(({ base, commit, execute, policy, write }) => {
+    writeBudgetPolicy(write, policy);
+    const head = commit('remove retired capability key');
+    for (const environment of [{}, { WEB_ARCHITECTURE_CHANGE: 'true' }]) {
+      const result = execute({ base, head, environment });
+      assert.equal(result.status, 0, result.output);
+      assert.match(result.output, /Gate: \*\*PASS\*\*/);
+      assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
+      assert.match(result.output,
+        /## Removed retired privileged allowlist keys\n\n- allowedPrivilegedOwners\.Retired capability\n/);
+      assert.match(result.output, /allowedPrivilegedOwners\.Retired capability: app\/editor\.js/);
+      assert.doesNotMatch(result.output,
+        /proposed privileged capability policy is missing base allowlist keys/);
+    }
+  });
+});
+
+test('a capability key that a detector defines still cannot be removed', () => {
+  withRetiredCapabilityBase(({ base, commit, execute, policy, write }) => {
+    delete policy.allowedPrivilegedOwners['Render request'];
+    writeBudgetPolicy(write, policy);
+    const head = commit('remove retired and detected capability keys');
+    assertNonWaivableRevisionFailure(execute, base, head, [
+      /## Missing base privileged allowlist keys\n\n- allowedPrivilegedOwners\.Render request\n/,
+      /proposed privileged capability policy is missing base allowlist keys/
+    ]);
+  });
+});
+
+test('a runtime contraction cannot also remove a retired capability key', () => {
+  withRetiredCapabilityBase(({ base, commit, execute, policy, write }) => {
+    removePolicyPath(policy, 'allowedPrivilegedOwners', 'Diagram Worker', 'app/editor.js');
+    writeBudgetPolicy(write, policy);
+    removeEditorOwnerUse(write);
+    const head = commit('remove runtime owner, its permission, and a retired key');
+    assertNonWaivableRevisionFailure(execute, base, head, [
+      /production runtime files and Web guard\/CI files changed together/,
+      /## Removed retired privileged allowlist keys\n\n- allowedPrivilegedOwners\.Retired capability\n/
+    ]);
+  });
+});
+
 test('privileged expansion requires policy preauthorization on the base revision', () => {
   withChangeBudgetRepository(({ commit, execute, git, write }) => {
     const policy = JSON.parse(JSON.stringify(BUDGET_POLICY));
@@ -4616,6 +5152,37 @@ test('comments, strings, and local session object keys are not hard failures', (
   assert.equal(result.status, 0, result.output);
   assert.match(result.output, /Report-only session object keys and compatibility names/);
   assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
+});
+
+test('in-memory Session-import snapshot keys are not Session object keys', () => {
+  const configSource = (snapshotKeys, sessionKeys) => (
+    'const captureSessionImportSnapshot = () => ({\n'
+      + snapshotKeys.map((key) => `  ${key}: state.${key}.value,\n`).join('')
+      + '  transients: captureTransientState()\n'
+      + '});\n'
+      + 'const captureTransientState = () => ({ pan: state.pan.value });\n'
+      + 'export const buildRunStateData = () => ({\n'
+      + sessionKeys.map((key) => `  ${key}: 1,\n`).join('')
+      + '  version: 1\n'
+      + '});\n'
+  );
+  const signalLine = /Architecture-bearing signals: .*session schema fields/;
+  withChangeBudgetRepository(({ commit, execute, write }) => {
+    write('gbdraw/web/js/services/config.js', configSource(['errorLog'], ['runId']));
+    const base = commit('config baseline');
+
+    write('gbdraw/web/js/services/config.js', configSource(['errorLog', 'newSnapshotField'], ['runId']));
+    const snapshotOnly = execute({ base, head: commit('snapshot key only') });
+    assert.equal(snapshotOnly.status, 0, snapshotOnly.output);
+    assert.doesNotMatch(snapshotOnly.output, signalLine);
+    assert.doesNotMatch(snapshotOnly.output, /newSnapshotField/);
+
+    write('gbdraw/web/js/services/config.js', configSource(['errorLog'], ['runId', 'newSessionField']));
+    const realKey = execute({ base, head: commit('real Session key') });
+    assert.equal(realKey.status, 0, realKey.output);
+    assert.match(realKey.output, signalLine);
+    assert.match(realKey.output, /services\/config\.js: newSessionField/);
+  });
 });
 
 test('index.html growth counts toward the net-addition review threshold', () => {

@@ -426,12 +426,24 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
                 "stable_feature_id": "feature-1",
                 "record_idx": 0,
                 "nucleotide_sequence": "ATGC",
+                "anchorProfile": {
+                    "precision": "exact",
+                    "operator": "single",
+                    "partOrder": "biological",
+                    "strand": "+",
+                },
             },
             {
                 "svg_id": "feature-2",
                 "stable_feature_id": "feature-2",
                 "record_idx": 1,
                 "nucleotide_sequence": "ATGA",
+                "anchorProfile": {
+                    "precision": "exact",
+                    "operator": "single",
+                    "partOrder": "biological",
+                    "strand": "+",
+                },
             },
         ),
         orthogroup_metadata=(
@@ -469,7 +481,7 @@ def test_session_sidecar_saves_complete_orthogroup_state(tmp_path: Path) -> None
     assert payload["features"] == {}
     assert payload["orthogroupState"] == {}
     catalog = payload["editorState"]["featureCatalog"]
-    assert catalog["schema"] == 3
+    assert catalog["schema"] == 4
     item = catalog["items"][0]
     assert item["resultIndex"] == 0
     assert item["resultName"] == "diagram"
@@ -521,9 +533,9 @@ def test_current_session_version_matches_web_config() -> None:
     if "SESSION_VERSION" in supported_match.group(1):
         web_supported_versions.add(int(match.group(1)))
 
-    assert CURRENT_SESSION_VERSION == 42
+    assert CURRENT_SESSION_VERSION == 44
     assert SUPPORTED_SESSION_VERSIONS == frozenset(
-        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, CURRENT_SESSION_VERSION}
+        {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, CURRENT_SESSION_VERSION}
     )
     assert int(match.group(1)) == CURRENT_SESSION_VERSION
     assert web_supported_versions == SUPPORTED_SESSION_VERSIONS
@@ -565,7 +577,7 @@ def test_current_session_feature_catalog_is_single_and_lossless(
     tmp_path: Path,
 ) -> None:
     catalog = {
-        "schema": 3,
+        "schema": 4,
         "items": [
             {
                 "resultIndex": 0,
@@ -591,6 +603,12 @@ def test_current_session_feature_catalog_is_single_and_lossless(
                         "qualifiers": {"product": ["example"]},
                         "nucleotide_sequence": "ATG",
                         "amino_acid_sequence": "M",
+                        "anchorProfile": {
+                            "precision": "exact",
+                            "operator": "single",
+                            "partOrder": "biological",
+                            "strand": "unstranded",
+                        },
                     }
                 ],
                 "orthogroups": [],
@@ -823,6 +841,16 @@ def test_current_session_validates_mixed_protein_and_nucleotide_raw_cache() -> N
             "use adv.depth_large_tick_interval.",
         ),
         (
+            {"adv": {"linear_show_accession": True}},
+            "Web state field adv.linear_show_accession is obsolete; "
+            "use the selected visibility mode.",
+        ),
+        (
+            {"adv": {"linear_show_length": True}},
+            "Web state field adv.linear_show_length is obsolete; "
+            "use the selected visibility mode.",
+        ),
+        (
             {"adv": {"depth_tracks": [{"tick_interval": 10}]}},
             "Web state field adv.depth_tracks[0].tick_interval is obsolete; "
             "use large_tick_interval.",
@@ -868,6 +896,9 @@ def test_current_session_rejects_obsolete_web_state_field_names(
 def test_released_web_state_field_names_migrate_copy_on_write() -> None:
     source = {
         "adv": {
+            "linear_accession_visibility": "HIDE",
+            "linear_show_accession": True,
+            "linear_show_length": False,
             "depth_tick_interval": 10,
             "depth_large_tick_interval": 20,
             "depth_tracks": [
@@ -875,6 +906,16 @@ def test_released_web_state_field_names_migrate_copy_on_write() -> None:
                 {"tick_interval": 6, "large_tick_interval": 7},
             ],
         },
+        "recordDisplayDrafts": [
+            {
+                "scope": "circular",
+                "sourceUid": "source-1",
+                "selector": "#1",
+                "recordId": "record-1",
+                "topologyOverride": None,
+                "startCoordinate": 3,
+            }
+        ],
         "losat": {
             "blastp": {
                 "collinearMaxGeneGap": 2,
@@ -886,6 +927,10 @@ def test_released_web_state_field_names_migrate_copy_on_write() -> None:
     migrated = migrate_persisted_web_state_field_names(source)
 
     assert isinstance(migrated, dict)
+    assert migrated["adv"]["linear_accession_visibility"] == "hide"
+    assert migrated["adv"]["linear_length_visibility"] == "hide"
+    assert "linear_show_accession" not in migrated["adv"]
+    assert "linear_show_length" not in migrated["adv"]
     assert migrated["adv"]["depth_large_tick_interval"] == 20
     assert "depth_tick_interval" not in migrated["adv"]
     assert migrated["adv"]["depth_tracks"] == [
@@ -894,10 +939,104 @@ def test_released_web_state_field_names_migrate_copy_on_write() -> None:
     ]
     assert migrated["losat"]["blastp"]["collinearMaxUnitGap"] == 3
     assert "collinearMaxGeneGap" not in migrated["losat"]["blastp"]
+    assert migrated["recordDisplayDrafts"][0]["reverseComplementOverride"] is None
+    assert migrated["recordDisplayDrafts"][0]["anchorIntent"] is None
     assert source["adv"]["depth_tick_interval"] == 10
     assert source["adv"]["depth_tracks"][0]["tick_interval"] == 5
     assert source["losat"]["blastp"]["collinearMaxGeneGap"] == 2
+    assert "reverseComplementOverride" not in source["recordDisplayDrafts"][0]
     validate_current_web_state_field_names(migrated)
+
+
+def test_session_version_44_validates_record_rotation_draft_and_version_42_shape() -> None:
+    payload = build_session_json(
+        SessionBuildContext(
+            mode="circular",
+            output_prefix="out",
+            render_formats=("svg",),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={},
+        generated_at=datetime(2026, 9, 23),
+        canonical_request=_canonical_request("circular"),
+    )
+    payload["config"] = {
+        "adv": {},
+        "recordDisplayDrafts": [
+            {
+                "scope": "circular",
+                "sourceUid": "source-1",
+                "selector": "#1",
+                "recordId": "record-1",
+                "topologyOverride": None,
+                "startCoordinate": 3,
+                "reverseComplementOverride": True,
+                "anchorIntent": {
+                    "schema": 1,
+                    "recordKey": "record-1",
+                    "biologicalFeatureId": "feature-1",
+                    "placement": "anchor",
+                    "anchor": "five-prime",
+                    "offsetBp": -2,
+                    "orientForward": True,
+                },
+            }
+        ],
+    }
+
+    validate_session(payload)
+
+    legacy = copy.deepcopy(payload)
+    legacy["version"] = 42
+    legacy["editorState"]["featureCatalog"]["schema"] = 3
+    legacy_draft = legacy["config"]["recordDisplayDrafts"][0]
+    legacy_draft.pop("reverseComplementOverride")
+    legacy_draft.pop("anchorIntent")
+    legacy["config"]["adv"] = {
+        "linear_show_accession": True,
+        "linear_show_length": False,
+    }
+    validate_session(legacy)
+
+
+def test_session_version_44_rejects_invalid_record_rotation_anchor_intent() -> None:
+    payload = build_session_json(
+        SessionBuildContext(
+            mode="circular",
+            output_prefix="out",
+            render_formats=("svg",),
+        ),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={},
+        generated_at=datetime(2026, 9, 23),
+        canonical_request=_canonical_request("circular"),
+    )
+    payload["config"] = {
+        "adv": {},
+        "recordDisplayDrafts": [
+            {
+                "scope": "circular",
+                "sourceUid": "source-1",
+                "selector": "#1",
+                "recordId": "record-1",
+                "topologyOverride": None,
+                "startCoordinate": 3,
+                "reverseComplementOverride": True,
+                "anchorIntent": {
+                    "schema": 1,
+                    "recordKey": "record-1",
+                    "biologicalFeatureId": "feature-1",
+                    "placement": "feature-end",
+                    "anchor": "five-prime",
+                    "offsetBp": 0,
+                    "orientForward": True,
+                },
+            }
+        ],
+    }
+
+    with pytest.raises(ValidationError, match="Invalid record display anchor intent"):
+        validate_session(payload)
 
 
 @pytest.mark.parametrize(
@@ -1210,6 +1349,9 @@ def test_current_writer_requires_typed_request_to_promote_legacy_schema() -> Non
     source["config"]["losat"] = {
         "blastp": {"collinearMaxGeneGap": 2}
     }
+    source["orthogroupState"] = {
+        "selectedOrthogroupAlignmentFeature": "legacy-target",
+    }
 
     context = SessionBuildContext(
         mode="linear",
@@ -1237,6 +1379,7 @@ def test_current_writer_requires_typed_request_to_promote_legacy_schema() -> Non
 
     assert promoted["version"] == CURRENT_SESSION_VERSION
     assert promoted["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
+    assert "selectedOrthogroupAlignmentFeature" not in promoted["orthogroupState"]
     assert promoted["config"]["adv"]["depth_large_tick_interval"] == 10
     assert promoted["config"]["adv"]["depth_tracks"] == [
         {"large_tick_interval": 5}
@@ -1365,7 +1508,7 @@ def test_version_39_writer_promotes_once_and_preserves_web_inventory() -> None:
         assert "blastSource" not in payload["config"]
         assert "comparisons" not in payload["config"]["linearRecordLayout"]
         assert payload["editorState"]["legend"] == source["editorState"]["legend"]
-        assert payload["editorState"]["featureCatalog"]["schema"] == 3
+        assert payload["editorState"]["featureCatalog"]["schema"] == 4
         assert len(payload["editorState"]["featureCatalog"]["items"]) == 1
         assert payload["features"] == {"selectedFeatureRecordIdx": 0}
         assert (
@@ -1799,7 +1942,7 @@ def test_current_session_rejects_legacy_files_but_version_39_accepts_them() -> N
     validate_session(session)
 
 
-@pytest.mark.parametrize("version", (34, 35, 36, 37, 38))
+@pytest.mark.parametrize("version", (34, 35, 36, 37, 38, 43))
 def test_branch_internal_session_versions_are_rejected_at_read_and_rewrite_boundaries(
     version: int,
 ) -> None:
@@ -2592,9 +2735,9 @@ def test_gui_only_linear_session_restores_losatp_blastp_args(tmp_path: Path) -> 
         format_override=None,
     )
 
-    assert "--protein_blastp_mode" in spec.args
-    assert spec.args[spec.args.index("--protein_blastp_mode") + 1] == "collinear"
-    assert spec.args[spec.args.index("--losatp_threads") + 1] == "2"
+    assert spec.args[spec.args.index("--losat") + 1] == "losatp"
+    assert spec.args[spec.args.index("--losatp_mode") + 1] == "collinear"
+    assert spec.args[spec.args.index("--losat_threads") + 1] == "2"
     assert spec.args[spec.args.index("--collinear_max_unit_gap") + 1] == "3"
     assert spec.args[spec.args.index("--collinear_max_diagonal_drift") + 1] == "4"
     assert spec.args[spec.args.index("--collinear_max_conflicts_in_merge_gap") + 1] == "6"
@@ -2701,8 +2844,12 @@ def test_gui_only_linear_session_restores_orthogroup_alignment_target(tmp_path: 
         format_override=None,
     )
 
-    assert spec.args[spec.args.index("--protein_blastp_mode") + 1] == "orthogroup"
-    assert spec.args[spec.args.index("--align_orthogroup_feature") + 1] == "target_feature"
+    assert spec.args[spec.args.index("--losat") + 1] == "losatp"
+    assert spec.args[spec.args.index("--losatp_mode") + 1] == "similarity_groups"
+    assert (
+        spec.args[spec.args.index("--similarity_alignment_feature") + 1]
+        == "target_feature"
+    )
 
 
 def test_gui_only_linear_session_restores_top_level_losatp_keys(tmp_path: Path) -> None:
@@ -2730,9 +2877,9 @@ def test_gui_only_linear_session_restores_top_level_losatp_keys(tmp_path: Path) 
         format_override=None,
     )
 
-    assert "--protein_blastp_mode" in spec.args
-    assert spec.args[spec.args.index("--protein_blastp_mode") + 1] == "orthogroup"
-    assert spec.args[spec.args.index("--losatp_threads") + 1] == "4"
+    assert spec.args[spec.args.index("--losat") + 1] == "losatp"
+    assert spec.args[spec.args.index("--losatp_mode") + 1] == "similarity_groups"
+    assert spec.args[spec.args.index("--losat_threads") + 1] == "4"
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])
@@ -2784,9 +2931,11 @@ def test_cli_session_keeps_lossless_cli_provenance_out_of_web_config() -> None:
         "AP027133.gb",
         "AP027132.gb",
         "NZ_CP006932.gb",
-        "--protein_blastp_mode",
-        "orthogroup",
-        "--losatp_threads",
+        "--losat",
+        "losatp",
+        "--losatp_mode",
+        "similarity_groups",
+        "--losat_threads",
         "32",
         "--align_center",
         "--separate_strands",
@@ -2853,9 +3002,11 @@ def test_current_cli_session_writer_uses_canonical_linear_inventory() -> None:
         "Beta subtitle",
         "--region",
         "RecB:10-20:rc",
-        "--protein_blastp_mode",
-        "orthogroup",
-        "--align_orthogroup_feature",
+        "--losat",
+        "losatp",
+        "--losatp_mode",
+        "similarity_groups",
+        "--similarity_alignment_feature",
         "target_feature",
     )
     payload = build_session_json(
@@ -3040,7 +3191,7 @@ def test_circular_cli_save_session_round_trip(tmp_path: Path, examples_dir: Path
     assert payload["resources"]["record-1-genbank"]["data"]
     assert "<svg" in payload["results"][0]["content"]
     catalog = payload["editorState"]["featureCatalog"]
-    assert catalog["schema"] == 3
+    assert catalog["schema"] == 4
     assert len(catalog["items"]) == len(payload["results"]) == 1
     assert catalog["items"][0]["features"]
     assert catalog["items"][0]["biologicalFeatures"]
@@ -3307,13 +3458,13 @@ def _replay_cli_sidecar(source, tmp_path, suffix='.json'):
     ])
     assert source_path.read_bytes() == original
     result = load_session_document(sidecar).to_dict()
-    assert (result['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (42, 2, 7)
+    assert (result['version'], result['webFiles']['bindings']['schema'], result['renderRequest']['schema']) == (44, 2, 8)
     assert result['renderRequest']['output']['prefix'] == 'replayed'
     assert len(result['renderRequest']['records']) == 1  # Replay consumes committed input.
     assert result['results'][0]['content'] == prefix.with_suffix('.svg').read_text()
     assert result['results'] != source['results']
     catalog = result['editorState']['featureCatalog']
-    assert catalog['schema'] == 3 and len(catalog['items']) == 1
+    assert catalog['schema'] == 4 and len(catalog['items']) == 1
     assert catalog['items'][0]['resultName'] == result['results'][0]['name']
     return result
 

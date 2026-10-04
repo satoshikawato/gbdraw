@@ -1,5 +1,5 @@
 import { parseTransform } from './utils.js';
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
+import { setClassToken } from '../../services/svg-serialization.js';
 import {
   bindCompositionMetadata,
   COMPOSITION_SCHEMA_ATTRIBUTE,
@@ -7,10 +7,8 @@ import {
 } from '../legend-layout/composition-actions.js';
 import { replaceLeadingTranslate } from '../legend-layout/transform-utils.js';
 
-export const createLegendDragActions = ({ state, extractLegendEntries, history = null }) => {
+export const createLegendDragActions = ({ state, extractLegendEntries, history = null, previewRuntime = null }) => {
   const {
-    results,
-    selectedResultIndex,
     svgContainer,
     legendDragging,
     legendDragStart,
@@ -18,8 +16,7 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     legendInitialTransform,
     legendCurrentOffset,
     layoutRepositionMode,
-    zoom,
-    skipCaptureBaseConfig
+    zoom
   } = state;
   let legendDragFrameId = null;
   let pendingLegendPointer = null;
@@ -45,6 +42,8 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
   };
 
   const applyLegendDragPosition = (clientX, clientY) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!legendDragging.value) return;
     const legendGroup = legendDragContext?.binding.legend.targets[0] || null;
     if (!legendGroup) return;
@@ -64,6 +63,8 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
   };
 
   const startLegendDrag = (e) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!isLayoutRepositionModeEnabled()) return;
     if (e.shiftKey) return;
     if (!svgContainer.value) return;
@@ -79,8 +80,9 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     cancelLegendDragFrame();
     pendingLegendPointer = null;
     legendDragContext = { binding, svg };
+    // The drag gesture owns its transaction and settles a focused control's (N-18).
     legendDragTxPromise = history?.begin
-      ? history.begin('Move legend', { source: 'legend-drag' })
+      ? history.begin('Move legend', { source: 'legend-drag', owner: Symbol('Move legend') })
       : null;
     legendDragging.value = true;
     legendDragStart.x = e.clientX;
@@ -89,6 +91,7 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     const currentTransform = parseTransform(legendGroup.getAttribute('transform'));
     legendOriginalTransform.value = { ...currentTransform };
     legendGroup.style.willChange = 'transform';
+    setElementCursor(legendGroup, 'grabbing');
   };
 
   const onLegendDrag = (e) => {
@@ -117,22 +120,14 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     const completedLegendGroup = completedDragContext?.binding.legend.targets[0] || null;
     if (completedLegendGroup) {
       completedLegendGroup.style.willChange = '';
+      setElementCursor(completedLegendGroup, isLayoutRepositionModeEnabled() ? 'grab' : 'help');
     }
 
     pendingLegendPointer = null;
     legendDragging.value = false;
     legendDragContext = null;
 
-    if (completedDragContext?.svg) {
-      const svg = completedDragContext.svg;
-      const idx = selectedResultIndex.value;
-      if (svg && idx >= 0 && results.value.length > idx) {
-        skipCaptureBaseConfig.value = true;
-        const nextResults = [...results.value];
-        nextResults[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
-        results.value = nextResults;
-      }
-    }
+    if (completedDragContext?.svg) previewRuntime?.commitActiveResultEdit('legend-drag');
 
     const tx = legendDragTxPromise ? await legendDragTxPromise : null;
     legendDragTxPromise = null;
@@ -147,10 +142,13 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     const legendGroup = bindCompositionMetadata(svg).legend.targets[0] || null;
     if (!legendGroup) return;
 
-    setElementCursor(legendGroup, isLayoutRepositionModeEnabled() ? 'grab' : '');
+    setClassToken(legendGroup, 'gbdraw-preview-layout-target', true);
+    setElementCursor(legendGroup, legendDragging.value ? 'grabbing' : isLayoutRepositionModeEnabled() ? 'grab' : 'help');
   };
 
   const resetLegendPositionOnly = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -168,13 +166,7 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     legendCurrentOffset.x = 0;
     legendCurrentOffset.y = 0;
 
-    skipCaptureBaseConfig.value = true;
-    const idx = selectedResultIndex.value;
-    if (idx >= 0 && results.value.length > idx) {
-      const nextResults = [...results.value];
-      nextResults[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
-      results.value = nextResults;
-    }
+    previewRuntime?.commitActiveResultEdit('legend-position-reset');
   };
 
   const resetLegendPosition = () => {

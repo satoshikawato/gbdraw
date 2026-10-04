@@ -15,3 +15,34 @@ Its decompressed SHA-256 is
 `69786dd18f7a431441085fad3e7d20ed9b54ed2f0b5aeac9685dbb3a704e6da1`.
 `test_run_info_exact_replay.py` applies only the title and unused-resource changes
 specified in [Issue #469](https://github.com/satoshikawato/gbdraw/issues/469).
+
+`HmmtDNA_basic_circular.v44-schema7.json.gz` preserves the released version 44,
+request schema 7, feature catalog schema 4 Gallery session from
+`4d1cf93514d0f75fa7a0ee32c1c4b2f176e03682:gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json`
+before its owner refresh to request schema 8. It is compressed with `gzip -n -9`.
+Its decompressed SHA-256 is
+`d5758ff5fbd22c3a9ecb277f716b88c7766d7aeda81a7d2e45ca68ff9c88985e`.
+
+`BGC0000708-BGC0000713.v30.gbdraw-session.json.gz` preserves the unmodified
+version 30 Gallery session from release tag `0.13.0`
+(`git show 0.13.0:gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json`),
+compressed with `gzip -n -9`. Its decompressed SHA-256 is
+`a4793e572600d62767d9bb6be645952e8a515d3dc80ec1ce096e082217b91276`. Its
+`cliInvocation.args` use the retired LOSATP flags, so
+`test_losatp_option_names.py` replays them through the legacy argv rewrite.
+
+`cli-linear-protein.v30.replay.svg` is the SVG written by replaying
+`cli-linear-protein.v30.gbdraw-session.json.gz` (see its `.provenance.json`) with
+`gbdraw linear --session ... -o replay -f svg` before the LOSATP option rename. The
+rename must not change it. SHA-256:
+`0ae2dedeb8dbb426dc1dc5fa8d66d5c9c0a3b1945deca39eb7a71db5a4560b1b`.
+
+`conservation-fasta.v39.gbdraw-session.json.gz` is a version 39 Circular CLI
+session written by first-parent `main` commit
+`cdd31013` (`git archive cdd31013 gbdraw`) for
+`gbdraw circular --gbk HmmtDNA.gbk --conservation_blast danio-human.tlosatx.tsv
+--conservation_fasta NC_002333.2.fna --conservation_reference subject
+--conservation_labels Danio --identity 40 -o argv-v39 -f svg --save_session`,
+compressed with `gzip -n -9`. Its decompressed SHA-256 is
+`a885bdad7bf8778c0836c686710111f85871ffecbdd7da3e460b971f8701884a`. It is the
+positive fixture for the retired `--conservation_fasta` flag (design D18).

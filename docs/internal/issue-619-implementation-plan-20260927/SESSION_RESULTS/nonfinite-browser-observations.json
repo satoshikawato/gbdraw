@@ -1,0 +1,255 @@
+{
+  "sourceSha": "eef7c9469912af22a07eb0eaece5d6e9a8a06497",
+  "snapshotRuntimeMatchesCheckout": true,
+  "fixture": "gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json",
+  "fixtureSha256": "d70eb5bba1796df80733792af1f81cfd210bbfe042eaf6c71a3abc710affcc17",
+  "runtimeTreeSha256": "4c1f77c0109f6318fac612449d6b1e60c0879612144e314e3977a07d27da1410",
+  "wheelSha256": "81278bffd43eb41211fc65188abbd3b6b6cddf99a29efc490215e15a0bf98ea5",
+  "pythonVersion": "3.13.3",
+  "playwrightVersion": "1.61.0",
+  "browserVersion": "149.0.7827.55",
+  "observations": [
+    {
+      "name": "infinity",
+      "input": {
+        "$number": "Infinity"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "$number": "Infinity"
+        },
+        "radius": {
+          "$number": "Infinity"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": null,
+          "radius": null
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": false,
+        "redone": {
+          "width": null,
+          "radius": null
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "draftAtSave": {
+        "width": {
+          "$number": "Infinity"
+        },
+        "radius": {
+          "$number": "Infinity"
+        }
+      },
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "$number": "Infinity"
+        },
+        "radius": {
+          "$number": "Infinity"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Unexpected token 'I', ...\"\"radius\": Infinity, \"... is not valid JSON"
+        ],
+        "width": {
+          "value": 0.08,
+          "unit": "factor"
+        },
+        "radius": {
+          "value": 0.56,
+          "unit": "factor"
+        },
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "nan",
+      "input": {
+        "$number": "NaN"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "$number": "NaN"
+        },
+        "radius": {
+          "$number": "NaN"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": null,
+          "radius": null
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": false,
+        "redone": {
+          "width": null,
+          "radius": null
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "draftAtSave": {
+        "width": {
+          "$number": "NaN"
+        },
+        "radius": {
+          "$number": "NaN"
+        }
+      },
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "$number": "NaN"
+        },
+        "radius": {
+          "$number": "NaN"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Unexpected token 'N', ...\"\"radius\": NaN, \"widt\"... is not valid JSON"
+        ],
+        "width": {
+          "value": 0.08,
+          "unit": "factor"
+        },
+        "radius": {
+          "value": 0.56,
+          "unit": "factor"
+        },
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    },
+    {
+      "name": "typed_infinity",
+      "input": {
+        "value": {
+          "$number": "Infinity"
+        },
+        "unit": "px"
+      },
+      "draftAfterEdit": {
+        "width": {
+          "value": {
+            "$number": "Infinity"
+          },
+          "unit": "px"
+        },
+        "radius": {
+          "value": {
+            "$number": "Infinity"
+          },
+          "unit": "px"
+        }
+      },
+      "history": {
+        "captured": {
+          "width": {
+            "value": null,
+            "unit": "px"
+          },
+          "radius": {
+            "value": null,
+            "unit": "px"
+          }
+        },
+        "undoReturned": true,
+        "redoReturned": true,
+        "undoRestored": true,
+        "redoRestored": false,
+        "redone": {
+          "width": {
+            "value": null,
+            "unit": "px"
+          },
+          "radius": {
+            "value": null,
+            "unit": "px"
+          }
+        }
+      },
+      "requestAndResultPreserved": true,
+      "workersDuringEdit": 0,
+      "draftAtSave": {
+        "width": {
+          "value": {
+            "$number": "Infinity"
+          },
+          "unit": "px"
+        },
+        "radius": {
+          "value": {
+            "$number": "Infinity"
+          },
+          "unit": "px"
+        }
+      },
+      "save": {
+        "accepted": false,
+        "error": "Save Session could not validate the active configuration."
+      },
+      "nativeSynthetic": {
+        "accepted": true,
+        "width": {
+          "value": {
+            "$number": "Infinity"
+          },
+          "unit": "px"
+        },
+        "radius": {
+          "value": {
+            "$number": "Infinity"
+          },
+          "unit": "px"
+        }
+      },
+      "loadSynthetic": {
+        "accepted": false,
+        "dialogs": [
+          "Failed to load session: Unexpected token 'I', ...\"{\"value\": Infinity, \"... is not valid JSON"
+        ],
+        "width": {
+          "value": 0.08,
+          "unit": "factor"
+        },
+        "radius": {
+          "value": 0.56,
+          "unit": "factor"
+        },
+        "requestPreserved": true,
+        "resultPreserved": true
+      }
+    }
+  ],
+  "variants": [],
+  "pageErrors": [],
+  "externalRequests": [],
+  "limits": [
+    "No new controls, selector/IME transaction, Generate geometry, SVG download/replay or Auto unit lifetime was implemented or tested.",
+    "Fixture scalar changes call the existing History manager in a real app; they do not prove future DOM input transaction wiring.",
+    "Native acceptance alone is not Web draft admission. NaN/Infinity JSON bytes are deliberately nonstandard negative reader inputs."
+  ]
+}

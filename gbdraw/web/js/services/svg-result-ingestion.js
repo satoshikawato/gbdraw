@@ -1,5 +1,10 @@
 import { FEATURE_SELECTOR, filterFeatureFillTargets, getFeatureIdentity } from '../app/feature-dom.js';
-import { getAllFeatureLegendGroups, parseTransformXY } from '../app/legend/utils.js';
+import {
+  getAllFeatureLegendGroups,
+  getLegendEntrySwatch as legendSwatch,
+  moveLegendEntryToAnchor,
+  orderLegendEntries
+} from '../app/legend/utils.js';
 import { isCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
 import { sanitizeSvgContent } from './svg-sanitization.js';
 import { serializeCleanSvg } from './svg-serialization.js';
@@ -215,6 +220,7 @@ const hasOperations = (operations) => Boolean(
     || operations.legendRenames.length
     || operations.legendDeletes.length
     || operations.legendAdds.length
+    || operations.legendOrder.length
     || operations.callerTransforms.length
   )
 );
@@ -230,6 +236,7 @@ const hasDetachedOperations = (operations) => Boolean(
     || operations.legendRenames.length
     || operations.legendDeletes.length
     || operations.legendAdds.length
+    || operations.legendOrder.length
     || operations.callerTransforms.length
   )
 );
@@ -261,6 +268,7 @@ const freezeEmptyOperations = () => Object.freeze({
   legendRenames: Object.freeze([]),
   legendDeletes: Object.freeze([]),
   legendAdds: Object.freeze([]),
+  legendOrder: Object.freeze([]),
   callerTransforms: Object.freeze([])
 });
 
@@ -288,13 +296,6 @@ const removeAttributeIfPresent = (element, name) => {
   element.removeAttribute(name);
   return true;
 };
-
-const legendSwatch = (entryGroup) => Array.from(
-  entryGroup?.querySelectorAll?.('path') || []
-).find((path) => {
-  const fill = path.getAttribute('fill');
-  return fill && fill !== 'none' && !fill.startsWith('url(');
-}) || null;
 
 const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
   const state = {
@@ -392,39 +393,7 @@ const updateLegendCaption = (entry, caption) => {
   if (label) label.textContent = caption;
 };
 
-const legendEntryAnchor = (entry) => {
-  const groupOffset = parseTransformXY(entry?.getAttribute?.('transform'));
-  const target = entry?.querySelector?.('text') || legendSwatch(entry);
-  const targetOffset = parseTransformXY(target?.getAttribute?.('transform'));
-  return { x: groupOffset.x + targetOffset.x, y: groupOffset.y + targetOffset.y };
-};
-
-const moveLegendEntryToAnchor = (entry, xPos, yPos) => {
-  if (!Number.isFinite(xPos) || !Number.isFinite(yPos)) return;
-  const current = legendEntryAnchor(entry);
-  const deltaX = xPos - current.x;
-  const deltaY = yPos - current.y;
-  if (Math.abs(deltaX) < 1e-6 && Math.abs(deltaY) < 1e-6) return;
-  if (entry.hasAttribute?.('transform')) {
-    const groupOffset = parseTransformXY(entry.getAttribute('transform'));
-    entry.setAttribute(
-      'transform',
-      `translate(${groupOffset.x + deltaX}, ${groupOffset.y + deltaY})`
-    );
-    return;
-  }
-  const transformedChildren = Array.from(entry.querySelectorAll?.('[transform]') || []);
-  if (transformedChildren.length === 0) {
-    entry.setAttribute('transform', `translate(${deltaX}, ${deltaY})`);
-    return;
-  }
-  transformedChildren.forEach((node) => {
-    const position = parseTransformXY(node.getAttribute('transform'));
-    node.setAttribute('transform', `translate(${position.x + deltaX}, ${position.y + deltaY})`);
-  });
-};
-
-const applyLegendOperations = (index, operations) => {
+const applyLegendOperations = (index, operations, { displayed = false } = {}) => {
   operations.legendFills.forEach(({ caption, color, allowMissing }) => {
     requireLegendEntries(index, caption, { allowMissing }).forEach((entry) => {
       const swatch = legendSwatch(entry);
@@ -490,6 +459,42 @@ const applyLegendOperations = (index, operations) => {
       group.appendChild(added);
     });
   });
+  // The edited Legend order is replayed last, over the renderer's slots (D-08).
+  // A displayed batch Result that already follows it keeps its order, so the
+  // entries only that Result draws keep their places (B18).
+  operations.legendOrder.forEach(({ captions }) => {
+    index.legends().groups.forEach((group) => orderLegendEntries(group, captions, { keepFollowed: displayed }));
+  });
+};
+
+/**
+ * Apply one Result's compiled editor operations to its mounted SVG with the
+ * executor that Generate admission uses (D-07, PD-OI-062). The preview binder
+ * owns label DOM identity, so label operations stay with it. Legend operations
+ * are diagram-wide and a batch Result shows only its own categories and
+ * features, so an absent caption or feature is skipped.
+ */
+export const applyEditorOperationsToMountedSvg = (svg, operations, { resultIndex = 0 } = {}) => {
+  const index = createLazyMutationIndex(svg, { phase: 'result-selection', resultIndex });
+  const present = ({ renderedId }) => (index.features().get(renderedId) || []).length > 0;
+  applyFeatureOperations(index, {
+    featureFills: operations.featureFills.filter(present),
+    featureStrokes: operations.featureStrokes.filter(present),
+    featureVisibility: operations.featureVisibility.filter(present)
+  });
+  if (index.legends().groups.length === 0) return;
+  const allowMissing = (operation) => ({ ...operation, allowMissing: true });
+  applyLegendOperations(index, {
+    legendFills: operations.legendFills.map(allowMissing),
+    legendStrokes: operations.legendStrokes.map((operation) => ({
+      ...allowMissing(operation),
+      renderedIds: (operation.renderedIds || []).filter((renderedId) => present({ renderedId }))
+    })),
+    legendRenames: operations.legendRenames.map(allowMissing),
+    legendDeletes: operations.legendDeletes.map(allowMissing),
+    legendAdds: operations.legendAdds,
+    legendOrder: operations.legendOrder
+  }, { displayed: true });
 };
 
 const admitCurrentResult = (

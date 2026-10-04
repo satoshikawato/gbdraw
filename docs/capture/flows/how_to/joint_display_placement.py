@@ -16,7 +16,8 @@ from flows.tutorials.gui_annotated_chloroplast import (
 )
 from flows.web_capture import (
     assert_fixture_identity, assert_output_paths, generate_and_inspect,
-    open_browser_capture, wait_for_app_shell,
+    open_ancestor_details, open_browser_capture, toggle_disclosure,
+    wait_for_app_shell,
 )
 
 NAMES = ('01-record-start.png', '02-feature-placement.png')
@@ -48,8 +49,10 @@ def capture_joint_display_placement(browser_type, base_url, output_paths, downlo
         page.get_by_label('Separate Strands', exact=True).uncheck()
         page.get_by_label('Resolve Overlaps', exact=True).check()
         annotations = page.get_by_label('Region Annotations', exact=True)
-        annotations.click()
-        page.get_by_label('Import TSV', exact=True).set_input_files(GUI_ANNOTATION_TABLE_PATH)
+        toggle_disclosure(annotations)
+        with page.expect_file_chooser() as chooser:
+            open_ancestor_details(page.get_by_role('button', name='Import TSV', exact=True)).click()
+        chooser.value.set_files(GUI_ANNOTATION_TABLE_PATH)
         slots = _configure_gallery_slots(page)
         generate_and_inspect(page, _inspect_tracks_svg, _assert_safe_svg)
         start = page.get_by_role('spinbutton', name='Display start NC_001879.2 #1', exact=True)
@@ -98,7 +101,7 @@ def capture_joint_display_placement(browser_type, base_url, output_paths, downlo
         session_path = download_dir / session.suggested_filename
         session.save_as(session_path)
         saved = json.loads(gzip.decompress(session_path.read_bytes()))
-        assert saved['version'] == 42 and saved['renderRequest']['schema'] == 7
+        assert saved['version'] == 44 and saved['renderRequest']['schema'] == 8
         assert saved['renderRequest']['records'][0]['display']['startCoordinate'] == 5500
         assert saved['renderRequest']['diagramOptions']['configOverrides']['canvas.feature_overlap_tolerance_bp'] == 1
         assert len(saved['renderRequest']['diagramOptions']['featurePlacements']) == 1

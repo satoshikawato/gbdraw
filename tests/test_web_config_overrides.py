@@ -149,8 +149,12 @@ def test_json_boundary_returns_actionable_safe_rejection() -> None:
         "[]",
     ))
 
-    assert "objects.gc_content.unknown" in result["error"]
-    assert "biological secret" not in result["error"]
+    assert result["error"] == {
+        "code": "INPUT_INVALID", "operation": "validateConfigOverrides", "stage": "helper",
+        "context": {"field": "configOverrides", "reason": "UNKNOWN_CONFIG_PATH"}
+    }
+    assert "objects.gc_content.unknown" not in json.dumps(result)
+    assert "biological secret" not in json.dumps(result)
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])

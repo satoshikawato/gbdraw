@@ -1,0 +1,50 @@
+{
+  "sourceCommit": "4556e04e929a4a85ad28d1833ce7304bd764881c",
+  "history": "first-parent main",
+  "writer": "gbdraw/web/js/services/config.js::exportSession (Web Save Session button) on origin/main",
+  "checkout": "git worktree add --detach .worktrees/main-fixture origin/main; python tools/prepare_browser_wheel.py (gbdraw-0.14.0-py3-none-any.whl sha256 1fbd084598f3939dca9a0507505c4366a24d095aa7ecda635abe6c85746a3206); served with python3 -m http.server 9425 --directory <checkout>",
+  "driver": "Node @playwright/test 1.61.1 spec main-web-session.spec.js (sha256 19697617e1b4b8d117b59116ec72c4e2c2e021487237b9396dda246686510cb0, kept in the audit orchestration logs for P15) using origin/main tests/web/helpers/app-lifecycle.cjs openApp and generateAndWaitForResult",
+  "tools": {
+    "node": "v26.8.2",
+    "playwright": "1.61.1",
+    "chromium": "149.0.7827.55",
+    "python": "3.13.3",
+    "pyodide": "0.29.0 (vendored in the checkout)"
+  },
+  "records": "tests/fixtures/web_comparison_shared_block.gb (sha256 d869dd7d849540646125c3eed4ae2a95d84b8a0355563c0f8df546f619e94d0c) split into its two LOCUS entries R2c.gb and R3c.gb",
+  "steps": [
+    "openApp('/gbdraw/web/index.html'); click Linear",
+    "setLinearSeqPrimaryFile(0, 'gb', R2c.gb); setLinearSeqPrimaryFile(1, 'gb', R3c.gb)",
+    "linearSeqs[1].region_reverse = true (Reverse complement of R3c)",
+    "upload: setLinearComparisonGlobalAction('upload'); setLinearComparisonCardFile(<edge R2c-R3c>, R2c_R3c.tsv)",
+    "losatn: setLinearComparisonGlobalAction('losat'); setLinearComparisonLosatMode('blastn'); losat.executionMode = 'serial'",
+    "runAnalysis(); click Save Session; keep the downloaded .gbdraw-session.json.gz bytes unchanged"
+  ],
+  "uploadedTable": "R2c\tR3c\t100.0\t1000\t0\t0\t2001\t3000\t3000\t2001\t0.0\t1847 (main read uploaded tables after the reverse complement: R3c search-frame 1..1000 is display 3000..2001)",
+  "sessions": {
+    "q-frame-main-web-upload.v42.gbdraw-session.json.gz": {
+      "sha256": "6cce32d06e480a4c0334308ccc3ff806324f4625e2fedf1178d7630b43995f69",
+      "storedRows": "resource comparison-nucleotide-1 (renderRequest.comparisons[0] and webFiles.bindings.linearComparisons[0].file) holds the uploaded display-frame row"
+    },
+    "q-frame-main-web-losatn.v42.gbdraw-session.json.gz": {
+      "sha256": "6996f039908cccfc01c62d84372a92890ee517b7cbd91c1b6c495d785329d662",
+      "storedRows": "resource comparison-resolved-1 holds main's convert_losat_nucleotide_to_display_tsv output (R3c 3000..2001); losatCache keeps the raw search-frame row (R3c 1..1000)"
+    }
+  },
+  "sessionVersion": 42,
+  "requestSchema": 7,
+  "presentation": "records[1].presentation.reverseComplement = true; records keep the original source files",
+  "mainRibbonSpans": [
+    [
+      [
+        1334.0,
+        2000.0
+      ],
+      [
+        1334.0,
+        2000.0
+      ]
+    ]
+  ],
+  "mainRibbonSpansSource": "query and subject x spans of each data-gbdraw-pairwise-match-id path in the committed Result SVG of each main run (identical for both Sessions), and of main's own CLI --session replay of each Session"
+}

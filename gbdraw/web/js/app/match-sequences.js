@@ -1,9 +1,11 @@
 import { formatFastaEntry } from './feature-sequence-fasta.js';
+import { recordSourceInterval } from './record-source-coordinates.js';
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
 } from './conservation-series.js';
 import { readFileText } from '../services/file-content-cache.js';
+import { genbankHeaderIds } from './genbank-header.js';
 
 const IUPAC_COMPLEMENT = Object.freeze({
   A: 'T', C: 'G', G: 'C', T: 'A', U: 'A',
@@ -752,19 +754,24 @@ export const buildMatchSequenceEntry = (
   );
   if (!extracted.valid) return unavailable(extracted.reason);
   const recordId = normalizedSpan.recordId || resolution.source.recordId;
+  // The sequence is read on the displayed record; the header reports the
+  // same bases in input-file coordinates (PD-OI-076).
+  const source = recordSourceInterval(span?.sourceSpan, normalizedSpan.start, normalizedSpan.end);
+  const coords = source || normalizedSpan;
+  const strand = source ? (source.start <= source.end ? '+' : '-') : extracted.orientation;
   const header = [
     `${safePart(matchId, 'match')}_${normalizedSpan.role}`,
     `record=${recordId}`,
-    `coords=${normalizedSpan.start}..${normalizedSpan.end}`,
-    `strand=${extracted.orientation}`
+    `coords=${coords.start}..${coords.end}`,
+    `strand=${strand}`
   ].join('|');
   const fasta = `${formatFastaEntry({ id: header, sequence: extracted.sequence })}\n`;
   return {
     span: { ...normalizedSpan, recordId },
-    orientation: extracted.orientation,
+    orientation: strand,
     sequenceLength: extracted.sequenceLength,
     fasta,
-    filename: `${safePart(matchId)}_${normalizedSpan.role}_${safePart(recordId)}_${normalizedSpan.start}-${normalizedSpan.end}.fna`,
+    filename: `${safePart(matchId)}_${normalizedSpan.role}_${safePart(recordId)}_${coords.start}-${coords.end}.fna`,
     available: true,
     unavailableReason: ''
   };
@@ -816,13 +823,11 @@ const parseGenbankSequenceRecords = (value) => {
   const records = [];
   String(value ?? '').split(/^\/\/\s*$/m).forEach((chunk) => {
     const originMatch = chunk.match(/\nORIGIN\b([\s\S]*)$/i);
-    if (!originMatch) return;
-    const locus = text(chunk.match(/^LOCUS\s+(\S+)/m)?.[1]);
-    const accession = text(chunk.match(/^ACCESSION\s+(\S+)/m)?.[1]);
-    const version = text(chunk.match(/^VERSION\s+(\S+)/m)?.[1]);
+    const header = originMatch ? genbankHeaderIds(chunk) : null;
+    if (!header) return;
+    const { recordId, version, accession, locus } = header;
     const sequence = normalizedSequence(originMatch[1].replace(/[^A-Za-z]/g, ''));
     if (!sequence) return;
-    const recordId = version || accession || locus || `record_${records.length + 1}`;
     records.push({
       recordId,
       header: recordId,

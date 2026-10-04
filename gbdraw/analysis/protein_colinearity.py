@@ -6,24 +6,15 @@
 from __future__ import annotations
 
 import copy
-from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 import base64
 import hashlib
-from importlib import resources
 from io import StringIO
 import json
 import logging
 import math
-import os
-import platform
-from pathlib import Path
 import re
-import stat
-import shutil
-import subprocess
 import sys
-import tempfile
 import unicodedata
 from typing import Callable, Literal, Mapping, Sequence
 
@@ -33,24 +24,40 @@ from Bio.SeqFeature import SeqFeature  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.analysis.ortholog_paths import OrthologPath, OrthologPathCollection, ortholog_edge_id
+from gbdraw.comparisons.losat_jobs import (
+    LosatBatch,
+    RecordPair,
+    losat_record_uids,
+    losat_source_ids,
+    losatp_job_specs,
+    plan_losat_jobs,
+    prepare_losat_batches,
+    split_losat_batch_result,
+)
+from gbdraw.comparisons.losat_runtime import (
+    LosatRawCache,
+    LosatRuntimeCallback,
+    LosatSearchArgs,
+    losat_cache_args,
+    run_losat_search,
+)
 from gbdraw.core.record_metadata import (
     _absolute_display_interval,
     _read_coord_map as _read_record_coord_map,
     _source_feature_index,
     _source_feature_location_parts,
 )
+from gbdraw.core.sequence import translate_cds
 from gbdraw.exceptions import ParseError, ValidationError
 from gbdraw.features.ids import compute_feature_hash_from_location_parts
 from gbdraw.features.visibility import should_include_feature_in_analysis
-from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.io.comparisons import COMPARISON_COLUMNS, read_comparison_table
 
 # Historical internal import; edge identity is owned by ortholog_paths.
 _edge_id = ortholog_edge_id
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_LOSATP_BIN = "losat"
-_BUNDLED_LOSATP_DIR = "bin"
 PROTEIN_IDENTITY_MANIFEST_SCHEMA = 2
 PROTEIN_LOSAT_CACHE_SCHEMA = 4
 LEGACY_PROTEIN_LOSAT_CACHE_SCHEMA = 2
@@ -452,15 +459,6 @@ class ProteinBlastpResult:
 
     comparisons: list[DataFrame]
     orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None
-
-
-@dataclass(frozen=True)
-class ProteinBlastpRuntime:
-    """Resolved executable for protein blastp searches."""
-
-    kind: Literal["losat", "ncbi-blastp"]
-    executable: str
-    source: Literal["explicit", "managed", "bundled", "path"]
 
 
 @dataclass(frozen=True)
@@ -2226,7 +2224,7 @@ def promote_legacy_protein_raw_cache_entries(
     )
 
 
-class LosatpCacheManager:
+class LosatpCacheManager(LosatRawCache):
     """Validated schema-4 protein raw-cache lookup and collection."""
 
     def __init__(
@@ -2237,6 +2235,7 @@ class LosatpCacheManager:
         threads_per_job: str | int = "auto",
         runtime_compatibility: str = "threaded-compatible-v1",
     ) -> None:
+        super().__init__()
         self.threads_per_job = threads_per_job
         self.runtime_compatibility = runtime_compatibility
         self.identity_manifest = (
@@ -2248,11 +2247,8 @@ class LosatpCacheManager:
                 else None
             )
         )
-        self._entries_by_key: dict[str, dict[str, object]] = {}
         self._legacy_entries: list[dict[str, object]] = []
         self._proteins_by_instance: dict[str, tuple[CdsProtein, ...]] = {}
-        self._display_order: list[str] = []
-        self._display_info: dict[str, tuple[str, bool]] = {}
         for entry in entries or ():
             if is_legacy_protein_losat_cache_entry(entry):
                 self._legacy_entries.append(copy.deepcopy(dict(entry)))
@@ -2292,14 +2288,7 @@ class LosatpCacheManager:
                 self.identity_manifest,
             ):
                 continue
-            self._entries_by_key[key] = normalized
-            if normalized["display"] is not False and key not in self._display_info:
-                self._display_order.append(key)
-                self._display_info[key] = (str(normalized["filename"] or ""), True)
-
-    @property
-    def has_entries(self) -> bool:
-        return bool(self._entries_by_key)
+            self._add_loaded_entry(key, normalized, entry)
 
     @property
     def has_legacy_candidates(self) -> bool:
@@ -2314,19 +2303,10 @@ class LosatpCacheManager:
             if isinstance(manifest, ProteinIdentityManifest)
             else validate_protein_identity_manifest(manifest)
         )
-        self._entries_by_key = {
-            key: entry
-            for key, entry in self._entries_by_key.items()
-            if validate_protein_raw_entry_references(entry, self.identity_manifest)
-        }
-        self._display_order = [
-            key for key in self._display_order if key in self._entries_by_key
-        ]
-        self._display_info = {
-            key: value
-            for key, value in self._display_info.items()
-            if key in self._entries_by_key
-        }
+        authority = self.identity_manifest
+        self._retain_entries(
+            lambda entry: validate_protein_raw_entry_references(entry, authority)
+        )
 
     def set_protein_extraction(self, extraction: ProteinExtractionResult) -> None:
         """Attach the current extraction needed to verify legacy cache candidates."""
@@ -2377,8 +2357,7 @@ class LosatpCacheManager:
             self.identity_manifest,
         ):
             raise ValidationError("Promoted protein entry does not match the current manifest.")
-        key = str(entry["key"])
-        self._entries_by_key[key] = dict(entry)
+        self._add_search_entry(str(entry["key"]), dict(entry))
 
     def _pair_identity_from_fasta(
         self,
@@ -2406,7 +2385,7 @@ class LosatpCacheManager:
         outfmt: str,
         args: Sequence[str],
     ) -> dict[str, object] | None:
-        cached = self._entries_by_key.get(cache_key)
+        cached = self._cached_entry(cache_key)
         if cached is None or self.identity_manifest is None:
             return None
         expected = pair_identity.cache_payload(args=args, program=program, outfmt=outfmt)
@@ -2442,142 +2421,129 @@ class LosatpCacheManager:
             return None
         return cached
 
-    def runner_for_search(
+    def cached_text(
         self,
+        query_fasta: str,
+        subject_fasta: str,
         *,
-        losatp_bin: str,
-        ncbi_blastp_bin: str | None = None,
-        losatp_threads: int | None,
-        candidate_limit: int | None,
-        max_hsps_per_subject: int | None,
         args: Sequence[str],
-        filename: str = "",
+        search_context: str | None,
         display: bool = False,
-    ) -> LosatpRunner:
-        def _runner(query_fasta: str, subject_fasta: str) -> DataFrame:
-            pair_identity = self._pair_identity_from_fasta(query_fasta, subject_fasta)
-            cache_key = build_protein_losat_cache_key(
+        filename: str = "",
+    ) -> str | None:
+        """Raw TSV of one record pair from a current or promoted entry, if any."""
+
+        pair_identity = self._pair_identity_from_fasta(query_fasta, subject_fasta)
+        cache_key = build_protein_losat_cache_key(
+            pair_identity,
+            args=args,
+            program="blastp",
+            outfmt="6",
+            search_context=search_context,
+        )
+        cached = self._find_cached_entry(
+            cache_key=cache_key,
+            pair_identity=pair_identity,
+            program="blastp",
+            outfmt="6",
+            args=args,
+        )
+        if cached is not None:
+            if display:
+                self._mark_display(cache_key, filename)
+            return str(cached.get("text") or "")
+        # Legacy entries predate source batches; they answer only a search
+        # whose sides are the two records themselves (as in the Web).
+        if search_context is not None or not self._legacy_entries:
+            return None
+        query_proteins = self._proteins_by_instance.get(
+            pair_identity.query_record_instance_key
+        )
+        subject_proteins = self._proteins_by_instance.get(
+            pair_identity.subject_record_instance_key
+        )
+        if query_proteins is None or subject_proteins is None:
+            return None
+        scan = promote_legacy_protein_raw_cache_entries(
+            self._legacy_entries,
+            query_proteins=query_proteins,
+            subject_proteins=subject_proteins,
+            query_fasta=query_fasta,
+            subject_fasta=subject_fasta,
+            identity_manifest=self.identity_manifest,  # type: ignore[arg-type]
+            expected_args=args,
+            expected_program="blastp",
+            expected_outfmt="6",
+        )
+        if scan.promotion is None:
+            return None
+        promotion = scan.promotion
+        self.add_promoted_entry(promotion.entry)
+        del self._legacy_entries[promotion.candidate_index]
+        if display:
+            self._mark_display(cache_key, filename)
+        return promotion.rewritten_tsv
+
+    def store_search(
+        self,
+        query_fasta: str,
+        subject_fasta: str,
+        *,
+        args: Sequence[str],
+        search_context: str | None,
+        text: str,
+        runtime: Mapping[str, object] | None,
+        display: bool = False,
+        filename: str = "",
+    ) -> None:
+        """Store the raw TSV that a source job produced for one record pair."""
+
+        pair_identity = self._pair_identity_from_fasta(query_fasta, subject_fasta)
+        entry: dict[str, object] = {
+            "schema": PROTEIN_LOSAT_CACHE_SCHEMA,
+            "kind": "raw-losat",
+            "identityKind": "protein",
+            "idEncoding": "runtime-handle-v1",
+            "key": build_protein_losat_cache_key(
                 pair_identity,
                 args=args,
                 program="blastp",
                 outfmt="6",
-            )
-            cached = self._find_cached_entry(
-                cache_key=cache_key,
-                pair_identity=pair_identity,
-                program="blastp",
-                outfmt="6",
-                args=args,
-            )
-            if cached is not None:
-                if display:
-                    self._mark_display(cache_key, filename)
-                return parse_losatp_outfmt6(str(cached.get("text") or ""))
-
-            query_proteins = self._proteins_by_instance.get(
-                pair_identity.query_record_instance_key
-            )
-            subject_proteins = self._proteins_by_instance.get(
-                pair_identity.subject_record_instance_key
-            )
-            if self._legacy_entries and query_proteins is not None and subject_proteins is not None:
-                scan = promote_legacy_protein_raw_cache_entries(
-                    self._legacy_entries,
-                    query_proteins=query_proteins,
-                    subject_proteins=subject_proteins,
-                    query_fasta=query_fasta,
-                    subject_fasta=subject_fasta,
-                    identity_manifest=self.identity_manifest,  # type: ignore[arg-type]
-                    expected_args=args,
-                    expected_program="blastp",
-                    expected_outfmt="6",
-                )
-                if scan.promotion is not None:
-                    promotion = scan.promotion
-                    promoted_result = parse_losatp_outfmt6(promotion.rewritten_tsv)
-                    self.add_promoted_entry(promotion.entry)
-                    del self._legacy_entries[promotion.candidate_index]
-                    if display:
-                        self._mark_display(cache_key, filename)
-                    return promoted_result
-
-            raw_text_holder: dict[str, str] = {}
-            result = _execute_losatp_search(
-                query_fasta,
-                subject_fasta,
-                losatp_bin=losatp_bin,
-                ncbi_blastp_bin=ncbi_blastp_bin,
-                candidate_limit=candidate_limit,
-                max_hsps_per_subject=max_hsps_per_subject,
-                losatp_threads=losatp_threads,
-                runner=None,
-                losatp_cache=None,
-                raw_output_callback=lambda text: raw_text_holder.__setitem__("text", text),
-            )
-            entry = {
-                "schema": PROTEIN_LOSAT_CACHE_SCHEMA,
-                "kind": "raw-losat",
-                "identityKind": "protein",
-                "idEncoding": "runtime-handle-v1",
-                "key": cache_key,
-                "filename": filename if display else "",
-                "display": bool(display),
-                "text": raw_text_holder.get("text", ""),
-                "program": "blastp",
-                "outfmt": "6",
-                "args": [str(arg) for arg in args],
-                "queryProteinSetHash": pair_identity.query_protein_set_hash,
-                "subjectProteinSetHash": pair_identity.subject_protein_set_hash,
-                "queryRuntimeBindingHash": pair_identity.query_runtime_binding_hash,
-                "subjectRuntimeBindingHash": pair_identity.subject_runtime_binding_hash,
-                "queryRecordInstanceKey": pair_identity.query_record_instance_key,
-                "subjectRecordInstanceKey": pair_identity.subject_record_instance_key,
-            }
-            if not raw_protein_tsv_matches_bindings(
-                str(entry["text"]),
-                query_ids=_binding_runtime_ids(
-                    self.identity_manifest,  # type: ignore[arg-type]
-                    pair_identity.query_record_instance_key,
-                ),
-                subject_ids=_binding_runtime_ids(
-                    self.identity_manifest,  # type: ignore[arg-type]
-                    pair_identity.subject_record_instance_key,
-                ),
-            ):
-                raise ValidationError("LOSAT output references IDs outside the current protein bindings.")
-            self._entries_by_key[cache_key] = entry
-            if display:
-                self._mark_display(cache_key, filename)
-            return result
-
-        return _runner
-
-    def _mark_display(self, key: str, filename: str) -> None:
-        if key not in self._display_info:
-            self._display_order.append(key)
-        self._display_info[key] = (str(filename or ""), True)
-
-    def session_entries(self) -> tuple[dict[str, object], ...]:
-        result: list[dict[str, object]] = []
-        seen: set[str] = set()
-        for key in self._display_order:
-            entry = self._entries_by_key.get(key)
-            if entry is None:
-                continue
-            filename, display = self._display_info.get(key, ("", True))
-            rendered = dict(entry)
-            rendered["filename"] = filename
-            rendered["display"] = display
-            result.append(rendered)
-            seen.add(key)
-        for key, entry in self._entries_by_key.items():
-            if key in seen:
-                continue
-            rendered = dict(entry)
-            rendered["filename"] = ""
-            rendered["display"] = False
-            result.append(rendered)
-        return tuple(result)
+                search_context=search_context,
+            ),
+            "filename": filename if display else "",
+            "display": bool(display),
+            "text": str(text),
+            "program": "blastp",
+            "outfmt": "6",
+            "args": [str(arg) for arg in args],
+            **({"searchContext": search_context} if search_context else {}),
+            "queryProteinSetHash": pair_identity.query_protein_set_hash,
+            "subjectProteinSetHash": pair_identity.subject_protein_set_hash,
+            "queryRuntimeBindingHash": pair_identity.query_runtime_binding_hash,
+            "subjectRuntimeBindingHash": pair_identity.subject_runtime_binding_hash,
+            "queryRecordInstanceKey": pair_identity.query_record_instance_key,
+            "subjectRecordInstanceKey": pair_identity.subject_record_instance_key,
+        }
+        if not raw_protein_tsv_matches_bindings(
+            str(entry["text"]),
+            query_ids=_binding_runtime_ids(
+                self.identity_manifest,  # type: ignore[arg-type]
+                pair_identity.query_record_instance_key,
+            ),
+            subject_ids=_binding_runtime_ids(
+                self.identity_manifest,  # type: ignore[arg-type]
+                pair_identity.subject_record_instance_key,
+            ),
+        ):
+            raise ValidationError("LOSAT output references IDs outside the current protein bindings.")
+        self._add_search_entry(
+            str(entry["key"]),
+            entry,
+            runtime=runtime,
+            display=display,
+            filename=filename,
+        )
 
 
 def _first_qualifier(feature: SeqFeature, key: str) -> str | None:
@@ -2646,27 +2612,6 @@ def _clean_protein_sequence(sequence: object | None) -> str | None:
     if not _VALID_PROTEIN_RE.fullmatch(protein):
         return None
     return protein
-
-
-def _translation_table(feature: SeqFeature) -> int | str:
-    raw_table = _first_qualifier(feature, "transl_table")
-    if raw_table is None:
-        return 1
-    try:
-        return int(raw_table)
-    except ValueError:
-        return raw_table
-
-
-def _codon_start(feature: SeqFeature) -> int:
-    raw_start = _first_qualifier(feature, "codon_start")
-    if raw_start is None:
-        return 1
-    try:
-        codon_start = int(raw_start)
-    except ValueError:
-        return 1
-    return codon_start if codon_start in {1, 2, 3} else 1
 
 
 def _feature_identifier(feature: SeqFeature) -> str | None:
@@ -2760,11 +2705,7 @@ def _resolve_gene_parent_id(
 
 def _translate_cds_feature(record: SeqRecord, feature: SeqFeature) -> str | None:
     try:
-        nucleotide_sequence = feature.extract(record.seq)
-        offset = _codon_start(feature) - 1
-        if offset:
-            nucleotide_sequence = nucleotide_sequence[offset:]
-        protein = nucleotide_sequence.translate(table=_translation_table(feature), to_stop=False)
+        protein = translate_cds(feature, feature.extract(record.seq))
     except Exception as exc:
         logger.debug(
             "Skipping CDS feature %s on %s: translation failed: %s",
@@ -3091,17 +3032,11 @@ def parse_losatp_outfmt6(text: str) -> DataFrame:
                 "LOSATP blastp output contains non-numeric outfmt 6 fields."
             )
     try:
-        df = pd.read_csv(
-            StringIO("\n".join(data_lines)),
-            sep="\t",
-            names=COMPARISON_COLUMNS,
+        return read_comparison_table(
+            StringIO("\n".join(data_lines)), label="LOSATP blastp output"
         )
-    except Exception as exc:
+    except ValidationError as exc:
         raise ParseError(f"Failed to parse LOSATP blastp output: {exc}") from exc
-
-    if len(df.columns) != len(COMPARISON_COLUMNS):
-        raise ParseError("LOSATP blastp output does not match outfmt 6 columns.")
-    return _coerce_outfmt6_numeric_columns(df)
 
 
 def _validate_max_hits(max_hits: int, *, option_name: str = "protein_blastp_max_hits") -> None:
@@ -3161,177 +3096,6 @@ def normalize_orthogroup_membership_mode(mode: str | None) -> OrthogroupMembersh
             + ", ".join(_LEGACY_ORTHOGROUP_MEMBERSHIP_MODES)
         )
     return normalized  # type: ignore[return-value]
-
-
-def _normalize_losatp_machine(machine: str | None = None) -> str:
-    normalized = str(machine or platform.machine()).strip().lower()
-    aliases = {
-        "amd64": "x86_64",
-        "x64": "x86_64",
-        "arm64": "aarch64",
-    }
-    return aliases.get(normalized, normalized)
-
-
-def _bundled_losatp_platform_dir() -> str | None:
-    machine = _normalize_losatp_machine()
-    if sys.platform.startswith("linux"):
-        if machine == "x86_64":
-            return "linux-x86_64"
-        if machine == "aarch64":
-            return "linux-aarch64"
-    if sys.platform == "darwin":
-        if machine == "x86_64":
-            return "macos-x86_64"
-        if machine == "aarch64":
-            return "macos-arm64"
-    if os.name == "nt":
-        if machine == "x86_64":
-            return "windows-x86_64"
-        if machine == "aarch64":
-            return "windows-arm64"
-    return None
-
-
-def _bundled_losatp_filename() -> str:
-    return "losat.exe" if os.name == "nt" else "losat"
-
-
-def _bundled_losatp_resource():
-    platform_dir = _bundled_losatp_platform_dir()
-    if platform_dir is None:
-        return None
-    try:
-        package_root = resources.files("gbdraw")
-    except (ModuleNotFoundError, FileNotFoundError):
-        return None
-    candidate = (
-        package_root
-        .joinpath(_BUNDLED_LOSATP_DIR)
-        .joinpath(platform_dir)
-        .joinpath(_bundled_losatp_filename())
-    )
-    if not candidate.is_file():
-        return None
-    return candidate
-
-
-def _ensure_losatp_executable(path: Path) -> None:
-    if os.name == "nt":
-        return
-    try:
-        mode = path.stat().st_mode
-    except OSError:
-        return
-    if mode & stat.S_IXUSR:
-        return
-    try:
-        path.chmod(mode | stat.S_IXUSR)
-    except OSError:
-        logger.debug("Could not mark bundled LOSATP binary executable: %s", path)
-
-
-def _path_executable(name: str) -> str | None:
-    return shutil.which(str(name).strip())
-
-
-def _protein_blastp_runtime_label(runtime: ProteinBlastpRuntime) -> str:
-    if runtime.kind == "ncbi-blastp":
-        return "NCBI BLAST+ blastp"
-    return "LOSAT blastp"
-
-
-def _protein_blastp_runtime_error(
-    *,
-    platform_dir: str | None,
-    bundled_losat_found: bool,
-    path_losat: str | None,
-    path_blastp: str | None,
-) -> ValidationError:
-    platform_name = platform_dir or "this platform"
-    bundled_status = (
-        "a bundled LOSAT binary was found"
-        if bundled_losat_found
-        else f"no bundled LOSAT binary was found for {platform_name}"
-    )
-    losat_status = (
-        f"`losat` was found on PATH at {path_losat}"
-        if path_losat
-        else "`losat` was not found on PATH"
-    )
-    blastp_status = (
-        f"`blastp` was found on PATH at {path_blastp}"
-        if path_blastp
-        else "`blastp` was not found on PATH"
-    )
-    platform_note = ""
-    if platform_dir and (platform_dir.startswith("macos-") or platform_dir.startswith("windows-")):
-        platform_note = (
-            " gbdraw does not currently include a LOSAT binary for this platform."
-        )
-    return ValidationError(
-        "Protein BLASTP comparison needs LOSAT or NCBI BLAST+. "
-        f"{bundled_status}, {losat_status}, and {blastp_status}. "
-        "Run gbdraw setup-losat to install the pinned release when available."
-        f"{platform_note} "
-        "Install NCBI BLAST+ and make `blastp` available on PATH, or pass a "
-        "native LOSAT executable with --losatp_bin, or pass an NCBI BLAST+ "
-        "executable with --ncbi_blastp_bin."
-    )
-
-
-def _resolve_protein_blastp_runtime(
-    losatp_bin: str,
-    ncbi_blastp_bin: str | None,
-    stack: ExitStack,
-) -> ProteinBlastpRuntime:
-    requested_bin = str(losatp_bin or _DEFAULT_LOSATP_BIN).strip() or _DEFAULT_LOSATP_BIN
-    requested_ncbi_bin = str(ncbi_blastp_bin or "").strip() or None
-    if requested_bin != _DEFAULT_LOSATP_BIN and requested_ncbi_bin is not None:
-        raise ValidationError(
-            "Pass either --losatp_bin or --ncbi_blastp_bin for protein BLASTP comparisons, not both."
-        )
-    if requested_bin != _DEFAULT_LOSATP_BIN:
-        runtime = ProteinBlastpRuntime("losat", requested_bin, "explicit")
-        logger.debug("Using explicit LOSAT blastp runtime: %s", runtime.executable)
-        return runtime
-    if requested_ncbi_bin is not None:
-        runtime = ProteinBlastpRuntime("ncbi-blastp", requested_ncbi_bin, "explicit")
-        logger.debug("Using explicit NCBI BLAST+ blastp runtime: %s", runtime.executable)
-        return runtime
-
-    from gbdraw.losat_setup import managed_losat
-
-    managed_path = managed_losat()
-    if managed_path is not None:
-        return ProteinBlastpRuntime("losat", str(managed_path), "managed")
-
-    bundled_resource = _bundled_losatp_resource()
-    if bundled_resource is not None:
-        bundled_path = stack.enter_context(resources.as_file(bundled_resource))
-        _ensure_losatp_executable(bundled_path)
-        runtime = ProteinBlastpRuntime("losat", str(bundled_path), "bundled")
-        logger.debug("Using bundled LOSAT blastp runtime: %s", runtime.executable)
-        return runtime
-
-    path_losat = _path_executable(_DEFAULT_LOSATP_BIN)
-    if path_losat is not None:
-        runtime = ProteinBlastpRuntime("losat", path_losat, "path")
-        logger.debug("Using PATH LOSAT blastp runtime: %s", runtime.executable)
-        return runtime
-
-    path_blastp = _path_executable("blastp")
-    if path_blastp is not None:
-        runtime = ProteinBlastpRuntime("ncbi-blastp", path_blastp, "path")
-        logger.debug("Using PATH NCBI BLAST+ blastp runtime: %s", runtime.executable)
-        return runtime
-
-    raise _protein_blastp_runtime_error(
-        platform_dir=_bundled_losatp_platform_dir(),
-        bundled_losat_found=False,
-        path_losat=path_losat,
-        path_blastp=path_blastp,
-    )
 
 
 def _validate_comparison_columns(hits: DataFrame) -> None:
@@ -5875,103 +5639,6 @@ def convert_pair_protein_hits_to_genomic_links(
     return pd.DataFrame.from_records(rows, columns=LOSATP_COMPARISON_COLUMNS)
 
 
-def _build_losat_blastp_command(
-    *,
-    executable: str,
-    query_path: Path,
-    subject_path: Path,
-    max_hits: int | None,
-    max_hsps_per_subject: int | None,
-    threads: int | None,
-) -> list[str]:
-    command = [
-        str(executable),
-        "blastp",
-        "-query",
-        str(query_path),
-        "-subject",
-        str(subject_path),
-        "-outfmt",
-        "6",
-    ]
-    if max_hsps_per_subject is not None:
-        command.extend(["-max_hsps", str(int(max_hsps_per_subject))])
-    if max_hits is not None:
-        command.extend(["-max_target_seqs", str(int(max_hits))])
-    if threads is not None:
-        command.extend(["-num_threads", str(int(threads))])
-    return command
-
-
-def _build_ncbi_blastp_command(
-    *,
-    executable: str,
-    query_path: Path,
-    subject_path: Path,
-    max_hits: int | None,
-    max_hsps_per_subject: int | None,
-    threads: int | None,
-) -> list[str]:
-    command = [
-        str(executable),
-        "-query",
-        str(query_path),
-        "-subject",
-        str(subject_path),
-        "-outfmt",
-        "6",
-    ]
-    if max_hsps_per_subject is not None:
-        command.extend(["-max_hsps", str(int(max_hsps_per_subject))])
-    if max_hits is not None:
-        command.extend(["-max_target_seqs", str(int(max_hits))])
-    if threads is not None:
-        command.extend(["-num_threads", str(int(threads))])
-    return command
-
-
-def _build_protein_blastp_command(
-    runtime: ProteinBlastpRuntime,
-    *,
-    query_path: Path,
-    subject_path: Path,
-    max_hits: int | None,
-    max_hsps_per_subject: int | None,
-    threads: int | None,
-) -> list[str]:
-    builder = (
-        _build_ncbi_blastp_command
-        if runtime.kind == "ncbi-blastp"
-        else _build_losat_blastp_command
-    )
-    return builder(
-        executable=runtime.executable,
-        query_path=query_path,
-        subject_path=subject_path,
-        max_hits=max_hits,
-        max_hsps_per_subject=max_hsps_per_subject,
-        threads=threads,
-    )
-
-
-def _run_protein_blastp_subprocess(
-    command: list[str],
-    *,
-    runtime_label: str,
-) -> subprocess.CompletedProcess[str]:
-    try:
-        return subprocess.run(
-            command,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except FileNotFoundError as exc:
-        raise ValidationError(f"{runtime_label} executable not found: {command[0]}") from exc
-    except PermissionError as exc:
-        raise ValidationError(f"{runtime_label} executable is not executable: {command[0]}") from exc
-
-
 def run_losatp_blastp(
     query_fasta: str,
     subject_fasta: str,
@@ -5982,50 +5649,31 @@ def run_losatp_blastp(
     max_hsps_per_subject: int | None = 1,
     threads: int | None = None,
     raw_output_callback: Callable[[str], None] | None = None,
+    runtime_callback: LosatRuntimeCallback | None = None,
 ) -> DataFrame:
-    """Run an external protein blastp runtime and parse outfmt 6 output."""
+    """Run LOSATP through the shared LOSAT runtime and parse outfmt 6 output."""
 
     if max_hits is not None:
         _validate_max_hits(max_hits, option_name="protein_blastp_candidate_limit")
     if max_hsps_per_subject is not None:
         _validate_max_hits(max_hsps_per_subject, option_name="max_hsps_per_subject")
     _validate_losatp_threads(threads)
-    with ExitStack() as stack:
-        runtime = _resolve_protein_blastp_runtime(
-            losatp_bin,
-            ncbi_blastp_bin,
-            stack,
-        )
-        temp_dir = stack.enter_context(tempfile.TemporaryDirectory(prefix="gbdraw_losatp_"))
-        temp_path = Path(temp_dir)
-        query_path = temp_path / "query.faa"
-        subject_path = temp_path / "subject.faa"
-        query_path.write_text(query_fasta, encoding="utf-8")
-        subject_path.write_text(subject_fasta, encoding="utf-8")
-
-        command = _build_protein_blastp_command(
-            runtime,
-            query_path=query_path,
-            subject_path=subject_path,
-            max_hits=max_hits,
-            max_hsps_per_subject=max_hsps_per_subject,
-            threads=threads,
-        )
-        runtime_label = _protein_blastp_runtime_label(runtime)
-        logger.info("INFO: Running %s for protein colinearity.", runtime_label)
-        completed = _run_protein_blastp_subprocess(
-            command,
-            runtime_label=runtime_label,
-        )
-
-    if completed.returncode != 0:
-        stderr = completed.stderr.strip()
-        detail = f": {stderr}" if stderr else ""
-        runtime_label = _protein_blastp_runtime_label(runtime)
-        raise ValidationError(f"{runtime_label} failed with exit code {completed.returncode}{detail}")
+    raw_text = run_losat_search(
+        "losatp",
+        query_fasta,
+        subject_fasta,
+        options=LosatSearchArgs(
+            max_hsps=max_hsps_per_subject,
+            max_target_seqs=max_hits,
+        ),
+        losat_bin=losatp_bin,
+        ncbi_blast_bin=ncbi_blastp_bin,
+        threads=threads,
+        runtime_callback=runtime_callback,
+    )
     if raw_output_callback is not None:
-        raw_output_callback(completed.stdout)
-    return parse_losatp_outfmt6(completed.stdout)
+        raw_output_callback(raw_text)
+    return parse_losatp_outfmt6(raw_text)
 
 
 def _validate_extraction_has_proteins(
@@ -6047,22 +5695,53 @@ def _validate_extraction_has_proteins(
         )
 
 
-def _losatp_cache_args(
-    *,
-    candidate_limit: int | None,
-    max_hsps_per_subject: int | None,
-) -> list[str]:
-    args: list[str] = []
-    if max_hsps_per_subject is not None:
-        args.extend(["--max-hsps-per-subject", str(int(max_hsps_per_subject))])
-    if candidate_limit is not None:
-        args.extend(["--max-target-seqs", str(int(candidate_limit))])
-    return args
+def _split_protein_hits(
+    hits: DataFrame,
+    batch: LosatBatch,
+    pairs: Sequence[RecordPair],
+) -> dict[RecordPair, DataFrame]:
+    """Split the hits of one source job into record-pair hits, in runtime order."""
+
+    query_records = [batch.query.ids.get(str(value), (None, ""))[0] for value in hits["query"]]
+    subject_records = [
+        batch.subject.ids.get(str(value), (None, ""))[0] for value in hits["subject"]
+    ]
+    if None in query_records or None in subject_records:
+        raise ValidationError(
+            "LOSAT output references IDs outside the current protein bindings.",
+            diagnostic={"code": "LOSAT_RUNTIME", "reason": "OUTPUT"},
+        )
+    return {
+        pair: hits.loc[
+            [
+                query == pair[0] and subject == pair[1]
+                for query, subject in zip(query_records, subject_records)
+            ]
+        ].reset_index(drop=True)
+        for pair in pairs
+    }
 
 
-def _execute_losatp_search(
-    query_fasta: str,
-    subject_fasta: str,
+def _consecutive_display_filenames(
+    record_count: int,
+    cache_filenames: Sequence[str] | None,
+) -> dict[RecordPair, str]:
+    """Displayed pairs are the consecutive records; ``cache_filenames[i]`` names (i, i+1)."""
+
+    return {
+        (index, index + 1): (
+            str(cache_filenames[index])
+            if cache_filenames is not None and index < len(cache_filenames)
+            else ""
+        )
+        for index in range(max(0, record_count - 1))
+    }
+
+
+def _search_losatp_record_pairs(
+    records: Sequence[SeqRecord],
+    extraction: ProteinExtractionResult,
+    specs: Sequence[RecordPair],
     *,
     losatp_bin: str,
     ncbi_blastp_bin: str | None,
@@ -6071,39 +5750,93 @@ def _execute_losatp_search(
     max_hsps_per_subject: int | None,
     runner: LosatpRunner | None,
     losatp_cache: LosatpCacheManager | None,
-    filename: str = "",
-    display: bool = False,
-    raw_output_callback: Callable[[str], None] | None = None,
-) -> DataFrame:
-    """Build one raw-search invocation from already resolved values."""
+    display_filenames: Mapping[RecordPair, str] | None = None,
+) -> dict[RecordPair, DataFrame]:
+    """Answer directed record-pair searches with the LOSAT job plan (design D7).
 
-    resolved_runner = runner
-    if resolved_runner is None and losatp_cache is not None:
-        resolved_runner = losatp_cache.runner_for_search(
-            losatp_bin=losatp_bin,
-            ncbi_blastp_bin=ncbi_blastp_bin,
-            losatp_threads=losatp_threads,
-            candidate_limit=candidate_limit,
-            max_hsps_per_subject=max_hsps_per_subject,
-            args=_losatp_cache_args(
-                candidate_limit=candidate_limit,
-                max_hsps_per_subject=max_hsps_per_subject,
-            ),
-            filename=filename,
-            display=display,
+    A source file is one database: each source job of
+    :func:`gbdraw.comparisons.losat_jobs.plan_losat_jobs` runs once, and its
+    result is split into record-pair hits and raw cache entries under the Web
+    raw keys. ``display_filenames`` names the displayed pairs.
+    """
+
+    args = tuple(
+        losat_cache_args(
+            "losatp",
+            LosatSearchArgs(max_hsps=max_hsps_per_subject, max_target_seqs=candidate_limit),
         )
-    if resolved_runner is not None:
-        return resolved_runner(query_fasta, subject_fasta)
-    return run_losatp_blastp(
-        query_fasta,
-        subject_fasta,
-        losatp_bin=losatp_bin,
-        ncbi_blastp_bin=ncbi_blastp_bin,
-        max_hits=candidate_limit,
-        max_hsps_per_subject=max_hsps_per_subject,
-        threads=losatp_threads,
-        raw_output_callback=raw_output_callback,
     )
+    fasta_by_record: dict[int, str] = {}
+
+    def record_fasta(index: int) -> str:
+        if index not in fasta_by_record:
+            fasta_by_record[index] = proteins_to_fasta(extraction.proteins_by_record[index])
+        return fasta_by_record[index]
+
+    batches = prepare_losat_batches(
+        plan_losat_jobs(
+            source_ids=losat_source_ids(records),
+            specs=specs,
+            build_args=lambda _query, _subject: args,
+        ),
+        uids=losat_record_uids(records),
+        record_fasta=record_fasta,
+        protein=True,
+    )
+    displayed = dict(display_filenames or {})
+    cache = losatp_cache if runner is None else None
+    hits: dict[RecordPair, DataFrame] = {}
+    for batch in batches:
+        texts: dict[RecordPair, str] = {}
+        if cache is not None:
+            for pair in batch.job.specs:
+                text = cache.cached_text(
+                    record_fasta(pair[0]),
+                    record_fasta(pair[1]),
+                    args=args,
+                    search_context=batch.search_context,
+                    display=pair in displayed,
+                    filename=displayed.get(pair, ""),
+                )
+                if text is not None:
+                    texts[pair] = text
+        for pair, text in texts.items():
+            hits[pair] = parse_losatp_outfmt6(text)
+        missing = [pair for pair in batch.job.specs if pair not in texts]
+        if not missing:
+            continue
+        raw_text: list[str] = []
+        runtime_records: list[dict[str, object]] = []
+        if runner is not None:
+            batch_hits = runner(batch.query.fasta, batch.subject.fasta)
+        else:
+            batch_hits = run_losatp_blastp(
+                batch.query.fasta,
+                batch.subject.fasta,
+                losatp_bin=losatp_bin,
+                ncbi_blastp_bin=ncbi_blastp_bin,
+                max_hits=candidate_limit,
+                max_hsps_per_subject=max_hsps_per_subject,
+                threads=losatp_threads,
+                raw_output_callback=raw_text.append,
+                runtime_callback=runtime_records.append,
+            )
+        hits.update(_split_protein_hits(batch_hits, batch, missing))
+        if cache is None:
+            continue
+        split = split_losat_batch_result("".join(raw_text), batch, missing)
+        for pair in missing:
+            cache.store_search(
+                record_fasta(pair[0]),
+                record_fasta(pair[1]),
+                args=args,
+                search_context=batch.search_context,
+                text=split[pair],
+                runtime=runtime_records[0] if runtime_records else None,
+                display=pair in displayed,
+                filename=displayed.get(pair, ""),
+            )
+    return hits
 
 
 def _empty_comparison_hits() -> DataFrame:
@@ -6561,8 +6294,14 @@ def build_pairwise_protein_blastp_comparisons(
     protein_extraction: ProteinExtractionResult | None = None,
     feature_visibility_rules: list[dict[str, object]] | None = None,
     cache_filenames: Sequence[str] | None = None,
+    pairs: Sequence[RecordPair] | None = None,
 ) -> ProteinBlastpResult:
-    """Generate adjacent-record LOSATP blastp display comparisons."""
+    """Generate LOSATP blastp display comparisons for record pairs.
+
+    ``pairs`` are directed (query, subject) record indexes; omitted, they are
+    the consecutive records. ``comparisons`` follows ``pairs`` and
+    ``cache_filenames`` names the raw TSV of each pair.
+    """
 
     if len(records) < 2:
         raise ValidationError("protein_blastp_mode='pairwise' requires at least two records")
@@ -6576,35 +6315,38 @@ def build_pairwise_protein_blastp_comparisons(
         records,
         feature_visibility_rules=feature_visibility_rules,
     )
+    specs = losatp_job_specs("pairwise", record_count=len(records), pairs=pairs)
+    searched = sorted({index for pair in specs for index in pair})
     _validate_extraction_has_proteins(
-        records,
-        extraction,
+        [records[index] for index in searched],
+        replace(
+            extraction,
+            proteins_by_record=[extraction.proteins_by_record[index] for index in searched],
+        ),
         option_name="protein_blastp_mode='pairwise'",
     )
-
+    hits_by_pair = _search_losatp_record_pairs(
+        records,
+        extraction,
+        specs,
+        losatp_bin=losatp_bin,
+        ncbi_blastp_bin=ncbi_blastp_bin,
+        losatp_threads=losatp_threads,
+        candidate_limit=candidate_limit,
+        max_hsps_per_subject=1,
+        runner=runner,
+        losatp_cache=losatp_cache,
+        display_filenames={
+            pair: str(cache_filenames[index])
+            if cache_filenames is not None and index < len(cache_filenames)
+            else ""
+            for index, pair in enumerate(specs)
+        },
+    )
     comparisons: list[DataFrame] = []
-    for record_index in range(len(records) - 1):
-        query_fasta = proteins_to_fasta(extraction.proteins_by_record[record_index])
-        subject_fasta = proteins_to_fasta(extraction.proteins_by_record[record_index + 1])
-        protein_hits = _execute_losatp_search(
-            query_fasta,
-            subject_fasta,
-            losatp_bin=losatp_bin,
-            ncbi_blastp_bin=ncbi_blastp_bin,
-            losatp_threads=losatp_threads,
-            candidate_limit=candidate_limit,
-            max_hsps_per_subject=1,
-            runner=runner,
-            losatp_cache=losatp_cache,
-            filename=(
-                str(cache_filenames[record_index])
-                if cache_filenames is not None and record_index < len(cache_filenames)
-                else ""
-            ),
-            display=True,
-        )
+    for pair in specs:
         filtered_hits = filter_protein_hits_by_thresholds(
-            protein_hits,
+            hits_by_pair[pair],
             evalue=evalue,
             bitscore=bitscore,
             identity=identity,
@@ -6668,60 +6410,30 @@ def build_rbh_orthogroup_protein_blastp_comparisons(
         option_name="protein_blastp_mode='orthogroup'",
     )
 
-    search_candidate_limit = candidate_limit
-    directional_hits_by_pair: dict[tuple[int, int], DataFrame] = {}
-    for query_index in range(len(records)):
-        for subject_index in range(query_index, len(records)):
-            query_fasta = proteins_to_fasta(extraction.proteins_by_record[query_index])
-            subject_fasta = proteins_to_fasta(extraction.proteins_by_record[subject_index])
-
-            forward_hits = _execute_losatp_search(
-                query_fasta,
-                subject_fasta,
-                losatp_bin=losatp_bin,
-                ncbi_blastp_bin=ncbi_blastp_bin,
-                losatp_threads=losatp_threads,
-                candidate_limit=search_candidate_limit,
-                max_hsps_per_subject=None,
-                runner=runner,
-                losatp_cache=losatp_cache,
-                filename=(
-                    str(cache_filenames[query_index])
-                    if cache_filenames is not None and query_index < len(cache_filenames)
-                    else ""
-                ),
-                display=subject_index == query_index + 1,
-            )
-            filtered_forward_hits = filter_protein_hits_by_thresholds(
-                forward_hits,
-                evalue=evalue,
-                bitscore=bitscore,
-                identity=identity,
-                alignment_length=alignment_length,
-            )
-            directional_hits_by_pair[(query_index, subject_index)] = filtered_forward_hits
-            if query_index == subject_index:
-                continue
-            reverse_hits = _execute_losatp_search(
-                subject_fasta,
-                query_fasta,
-                losatp_bin=losatp_bin,
-                ncbi_blastp_bin=ncbi_blastp_bin,
-                losatp_threads=losatp_threads,
-                candidate_limit=search_candidate_limit,
-                max_hsps_per_subject=None,
-                runner=runner,
-                losatp_cache=losatp_cache,
-                display=False,
-            )
-            filtered_reverse_hits = filter_protein_hits_by_thresholds(
-                reverse_hits,
-                evalue=evalue,
-                bitscore=bitscore,
-                identity=identity,
-                alignment_length=alignment_length,
-            )
-            directional_hits_by_pair[(subject_index, query_index)] = filtered_reverse_hits
+    specs = losatp_job_specs("orthogroup", record_count=len(records))
+    hits_by_pair = _search_losatp_record_pairs(
+        records,
+        extraction,
+        specs,
+        losatp_bin=losatp_bin,
+        ncbi_blastp_bin=ncbi_blastp_bin,
+        losatp_threads=losatp_threads,
+        candidate_limit=candidate_limit,
+        max_hsps_per_subject=None,
+        runner=runner,
+        losatp_cache=losatp_cache,
+        display_filenames=_consecutive_display_filenames(len(records), cache_filenames),
+    )
+    directional_hits_by_pair: dict[tuple[int, int], DataFrame] = {
+        pair: filter_protein_hits_by_thresholds(
+            hits_by_pair[pair],
+            evalue=evalue,
+            bitscore=bitscore,
+            identity=identity,
+            alignment_length=alignment_length,
+        )
+        for pair in specs
+    }
 
     edge_selection = select_rbh_orthogroup_edges_from_directional_hits(
         directional_hits_by_pair,
@@ -6777,7 +6489,6 @@ __all__ = [
     "OrthologRenderRole",
     "ProteinBlastpMode",
     "ProteinBlastpResult",
-    "ProteinBlastpRuntime",
     "ProteinExtractionResult",
     "ProteinIdentityManifest",
     "ProteinLosatPairIdentity",

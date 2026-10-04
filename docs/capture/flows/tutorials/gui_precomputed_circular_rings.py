@@ -30,14 +30,16 @@ from flows.how_to.nucleotide_comparisons import (
     _assert_circular_ring_svg,
     _assert_gene_labels_only,
     _assert_span_fasta,
-    _fit_circular_ring_preview,
     _inspect_circular_rings,
 )
+from flows.how_to.tracks import _fit_circular_preview
 from flows.web_capture import (
+    toggle_disclosure,
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
     generate_and_inspect,
+    open_ancestor_details,
     open_browser_capture,
     wait_for_app_shell,
 )
@@ -219,7 +221,7 @@ def capture_gui_precomputed_circular_rings(
             "precomputed_circular_rings"
         )
         page.get_by_label("Species", exact=True).fill("<i>Homo sapiens</i>")
-        track_preset = page.get_by_label("Track Preset", exact=True)
+        track_preset = open_ancestor_details(page.get_by_label("Track Preset", exact=True))
         track_preset.select_option("middle")
         expect(track_preset).to_have_value("middle")
         page.get_by_label("Separate Strands", exact=True).uncheck()
@@ -234,7 +236,7 @@ def capture_gui_precomputed_circular_rings(
         generate_and_inspect(
             page, inspect_first_circular_svg, _assert_plain_reference
         )
-        _fit_circular_ring_preview(page)
+        _fit_circular_preview(page, target_zoom="40%", pan_left_ratio=0.0)
         screenshot_bytes[GUI_PRECOMPUTED_CIRCULAR_RINGS_SCREENSHOT_NAMES[1]] = (
             capture_screenshot(
                 page,
@@ -243,7 +245,7 @@ def capture_gui_precomputed_circular_rings(
             )
         )
 
-        page.get_by_label("Pairwise Comparisons", exact=True).click()
+        toggle_disclosure(page.get_by_label("Pairwise Comparisons", exact=True))
         upload = page.get_by_role("radio", name="Upload BLAST", exact=True)
         upload.check()
         expect(upload).to_be_checked()
@@ -257,7 +259,7 @@ def capture_gui_precomputed_circular_rings(
         expect(reference_side).to_have_value("subject")
 
         companion_labels = page.locator("label").filter(
-            has_text="Comparison FASTA (optional)"
+            has_text="Comparison sequence (optional)"
         )
         expect(companion_labels).to_have_count(3)
         for index, (report, label) in enumerate(
@@ -285,16 +287,17 @@ def capture_gui_precomputed_circular_rings(
             control.press("Tab")
             expect(control).to_have_value(value)
 
-        page.get_by_label("Labels", exact=True).click()
+        toggle_disclosure(page.get_by_label("Labels", exact=True))
         page.get_by_label("Label Mode", exact=True).select_option("out")
         page.get_by_label("Priority File (TSV)", exact=True).set_input_files(
             FIRST_LINEAR_LABEL_RULE_PATH
         )
-        page.get_by_label("Title & Legend", exact=True).click()
-        page.get_by_label("Plot Title", exact=True).fill(TITLE)
+        toggle_disclosure(page.get_by_label("Titles and Record Labels", exact=True))
+        page.get_by_role("textbox", name="Plot Title", exact=True).fill(TITLE)
         page.get_by_label("Plot Title Position", exact=True).select_option("bottom")
-        page.get_by_label("Legend Position", exact=True).select_option("right")
-        page.get_by_label("Definition Font Size", exact=True).fill("18")
+        page.get_by_label("Default font size", exact=True).fill("18")
+        toggle_disclosure(page.get_by_label("Legend settings", exact=True))
+        page.get_by_label("Legend position", exact=True).select_option("right")
 
         page.get_by_label(
             "Comparison ring label 1", exact=True
@@ -311,7 +314,7 @@ def capture_gui_precomputed_circular_rings(
             page, _inspect_circular_rings, _assert_precomputed_result
         )
         _assert_gene_labels_only(final_report)
-        _fit_circular_ring_preview(page)
+        _fit_circular_preview(page, target_zoom="40%", pan_left_ratio=0.32)
         screenshot_bytes[GUI_PRECOMPUTED_CIRCULAR_RINGS_SCREENSHOT_NAMES[3]] = (
             capture_screenshot(
                 page,

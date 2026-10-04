@@ -1,13 +1,21 @@
 import assert from 'node:assert/strict';
-import { readFile, writeFile, mkdtemp } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
 const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'app');
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-file-imports-'));
-await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
+const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-file-imports-'));
+const tempDir = join(tempRoot, 'app');
+await mkdir(tempDir);
+await mkdir(join(tempRoot, 'services'));
+await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
+await writeFile(
+  join(tempRoot, 'services', 'error-normalization.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'error-normalization.js'), 'utf8'),
+  'utf8'
+);
 await writeFile(
   join(tempDir, 'file-imports.js'),
   await readFile(join(sourceDir, 'file-imports.js'), 'utf8'),
@@ -85,17 +93,17 @@ assert.deepEqual(
 
 assert.throws(
   () => parseSpecificRules('CDS\tgene\talpha\n'),
-  /line 1: expected 4 or 5 columns/
+  { code: 'TABLE_INVALID', context: { row: 1, reason: 'SPECIFIC_COLUMNS' } }
 );
 assert.throws(
   () => parseSpecificRules('feature_type\n'),
-  /line 1: expected 4 or 5 columns/
+  { code: 'TABLE_INVALID', context: { row: 1, reason: 'SPECIFIC_COLUMNS' } }
 );
 // The TSV codec preserves Python patterns; validation belongs to the Worker.
 assert.equal(parseSpecificRules('CDS\tgene\t(?i)alpha\t#112233\tAlpha\n').rules[0].val, '(?i)alpha');
 assert.throws(
   () => parseSpecificRules('CDS\tgene\talpha\tnot-a-color\tAlpha\n'),
-  /Invalid specific-color value at line 1/
+  { code: 'TABLE_INVALID', context: { row: 1, field: 'color', reason: 'COLOR' } }
 );
 assert.equal(
   parseSpecificRules(
@@ -113,14 +121,10 @@ const prepared = prepareSpecificColorImport(
 );
 assert.equal(prepared.nextRules.length, 3);
 assert.equal(prepared.nextRules.filter((rule) => rule.fromFile).length, 2);
-assert.deepEqual(prepared.intents, [{ caption: 'Alpha', color: '#112233' }]);
-assert.throws(
-  () => prepareSpecificColorImport(
-    'CDS\tgene\talpha\t#112233\tAlpha\nCDS\tgene\tbeta\t#445566\tAlpha\n',
-    []
-  ),
-  /caption "Alpha" uses multiple colors/
-);
+// Import assembles the full draft; allocation belongs to Python preparation.
+assert.deepEqual(prepareSpecificColorImport(
+  'CDS\tgene\talpha\t#112233\tAlpha\nCDS\tgene\tbeta\t#445566\tAlpha\n', []
+).nextRules.map(rule => rule.cap), ['Alpha', 'Alpha']);
 
 assert.deepEqual(diffLegendIntents(
   [
@@ -150,3 +154,51 @@ assert.equal(applySpecificRuleProvenance(canonicalRules, [
 assert.deepEqual(buildLegendIntents(canonicalRules).intents, [
   { caption: 'Alpha', color: '#112233' }
 ]);
+
+{
+  // G-D: the Specific-color domain is shared with Python's table reader (FE-12, D-39).
+  const domain = JSON.parse(await readFile(
+    join(repoRoot, 'tests', 'fixtures', 'specific_color_domain.json'),
+    'utf8'
+  ));
+  const parseColor = (value) => parseSpecificRules(`CDS\tproduct\tx\t${value}\tcap\n`).rules[0].color;
+  const rejects = (value) => assert.throws(
+    () => parseColor(value),
+    { code: 'TABLE_INVALID', context: { row: 1, field: 'color', reason: 'COLOR' } },
+    value
+  );
+  // DOM-free JavaScript cannot resolve a color name; Python validates it.
+  [...domain.valid, ...domain.invalid].forEach((entry) => {
+    if (entry.word) assert.equal(parseColor(entry.value), entry.value.toLowerCase(), entry.value);
+    else if (entry.normalized) assert.equal(parseColor(entry.value), entry.normalized, entry.value);
+    else rejects(entry.value);
+  });
+  const noneRule = { feat: 'CDS', qual: 'hash', val: 'fx', color: 'none', cap: 'hollow' };
+  assert.deepEqual(
+    parseSpecificRules(serializeSpecificRules([noneRule])).rules
+      .map(({ feat, qual, val, color, cap }) => ({ feat, qual, val, color, cap })),
+    [noneRule]
+  );
+
+  const browserColors = new Map(domain.valid
+    .filter((entry) => entry.browser)
+    .map((entry) => [entry.value.toLowerCase(), entry.browser]));
+  let fillStyle = '#000000';
+  const context = {
+    get fillStyle() { return fillStyle; },
+    set fillStyle(value) {
+      const text = String(value).toLowerCase();
+      if (browserColors.has(text)) fillStyle = browserColors.get(text);
+      else if (/^#[0-9a-f]{6}$/.test(text)) fillStyle = text;
+    }
+  };
+  globalThis.document = { createElement: () => ({ getContext: () => context }) };
+  try {
+    domain.valid.forEach((entry) => {
+      assert.equal(parseColor(entry.value), entry.browser || entry.normalized, entry.value);
+    });
+    domain.invalid.forEach((entry) => rejects(entry.value));
+  } finally {
+    delete globalThis.document;
+  }
+}

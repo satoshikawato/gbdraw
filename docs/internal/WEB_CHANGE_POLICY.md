@@ -33,9 +33,13 @@ push to main exact SHA
 ```
 
 A pull request to `dev` answers whether one candidate is safe to integrate. Its
-required path is intentionally fast. Heavy jobs may still run on the pull
-request during the transition, but complete supported-version, slow, browser,
-and Gallery evidence belongs to the exact integrated `dev` SHA.
+required path runs only the jobs the change needs, as defined in
+[selective CI](./SELECTIVE_CI.md). A change to Web runtime, session, Gallery,
+LOSAT, shared test, or unclassified paths also runs the full functional
+Playwright suite before merge, because existing functional cases are the
+checks that runtime changes break most often. Complete supported-version,
+slow, browser, and Gallery evidence still belongs to the exact integrated
+`dev` SHA.
 
 A `dev` to `main` pull request is a `PROMOTION`, not an ordinary combined
 architecture implementation pull request. It contains no implementation
@@ -83,6 +87,34 @@ succeeds. `Web base policy (trusted base)` evaluates untrusted candidate data
 with trusted base code. Legacy leaf jobs may continue to run, but they are not
 part of the final required set.
 
+### Merging pull requests into `dev`
+
+Branch protection on `dev` requires the two checks above. It does not require
+a pull request branch to be up to date with `dev`, so a pull request that
+passed on an older base can merge without another CI cycle. Two rules replace
+the up-to-date requirement:
+
+- After a pull request that changes a governance, policy, checker, or
+  authority file merges into `dev`, update every other open pull request to
+  `dev` with `gh pr update-branch <number>`, and merge it only after its
+  required checks pass again. These files are the
+  [current guard scope](#current-guard-scope),
+  `docs/internal/SELECTIVE_CI.md`, `tools/ci-impact.mjs`, and
+  `tools/ci-impact-policy.mjs`. Both required checks run trusted code from the
+  pull request base, so a result computed on the older base applied the old
+  rules.
+- Integrated `dev` staging is the safety net after merge. It runs on each
+  exact merged SHA and finds conflicts between pull requests that passed on
+  different bases.
+
+A maintainer may queue a merge with
+`gh pr merge <number> --auto --merge --match-head-commit <sha>`, where
+`<sha>` is the reviewed head commit. GitHub refuses the request unless the
+pull request head is exactly `<sha>`, and merges once the required checks
+pass. This needs repository auto-merge to be enabled. The two rules above
+still apply: update the branch first when a governance, policy, checker, or
+authority change merged after the pull request's last run.
+
 ## Gate and Review are independent
 
 Every policy result has two axes:
@@ -117,7 +149,8 @@ The following are hard failures when applicable:
 - unauthorized privileged owners or importers;
 - malformed authority or rules;
 - active deterministic architecture violations;
-- prohibited runtime and guard changes in one pull request;
+- prohibited runtime and guard changes in one pull request, outside the
+  static Product Contract co-change route;
 - checker implementation combined with authority or an evidence producer in
   one ordinary pull request;
 - candidate execution in a trusted workflow;
@@ -137,6 +170,7 @@ Human review is required for at least these cases:
 
 - a selected size threshold is exceeded;
 - a governance- or authority-only change;
+- a static Product Contract change, including a co-change with its runtime;
 - an architecture-bearing owner, path, or responsibility move;
 - a new module, public export, reactive owner, watcher, or resource signal;
 - a material performance-baseline change;
@@ -218,6 +252,8 @@ tools/web-architecture-violations.json
 .github/workflows/deploy_web.yml
 ```
 
+`docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md` is also authority; see
+[Static Product Contract co-change](#static-product-contract-co-change).
 The accepted-violation file is absent when no frozen rule has accepted debt.
 Its absence does not remove it from the authority class.
 
@@ -226,7 +262,8 @@ The following rules apply:
 - checker implementation does not change with authority or an evidence
   producer in the same ordinary pull request;
 - production runtime does not change with guard or CI authority, except the
-  already-defined narrow safe contraction below;
+  already-defined narrow safe contraction below and the static Product
+  Contract co-change route;
 - normative authority is declared before executable wiring;
 - promotion aggregation is admitted only through trusted exact-SHA evidence,
   not by same-pull-request self-approval; and
@@ -244,6 +281,7 @@ The ordinary Web guard additionally treats these files as a separated group:
 ```text
 docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md
 docs/internal/PRODUCT_IMPACT_RATCHET.md
+docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md
 .github/pull_request_template.md
 tools/check-web-change-budget.mjs
 tools/web-architecture-detectors.mjs
@@ -296,20 +334,19 @@ tools/web-product-decisions.json
 mapped behavior contract files
 ```
 
-The exact preauthorized future static Product authority path for broad or
-currently unmapped durable Option Integrity outcomes is:
+The static Product authority path for broad or currently unmapped durable
+Option Integrity outcomes is:
 
 ```text
 docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md
 ```
 
-That path is normative preauthorization only at this stage. The file is absent,
-supplies no Product outcome, and is not yet part of executable guard or
-authority path recognition. A later checker-only pull request must add
-exact-path enforcement from a base that contains this policy before any
-authority-only pull request creates the file.
+The file exists. It was created through the bootstrap order below, and the
+checker recognizes its exact path as both guard and authority. It is an inert
+static Product authority surface. It adds no workflow, required status,
+evaluator, or machine-readable decision store, and no parser reads its prose.
 
-The required bootstrap order is:
+The bootstrap order that created it was:
 
 ```text
 normative process/path preauthorization
@@ -319,12 +356,46 @@ normative process/path preauthorization
               -> dependent runtime implementation
 ```
 
-The Product Contract, once correctly created through that sequence, is an inert
-static Product authority surface. It does not add a workflow, required status,
-evaluator, or machine-readable decision store. Candidate Product Contract
-content cannot authorize candidate runtime, and the authority-only creation
-pull request cannot include checker, workflow, evidence-producer, runtime, or
-expected-output changes.
+#### Static Product Contract co-change
+
+A pull request may change the static Product Contract together with the
+runtime, tests, and documentation that implement the changed outcome. All of
+these conditions must hold:
+
+- the Contract is modified in place at its exact path. It is not added,
+  deleted, renamed, or copied, and a similarly named path is not the Contract;
+- the Contract is the only changed guard or authority file. Checker
+  implementation, detectors, evaluators, workflows, the Product Impact map,
+  durable decisions, architecture rules, accepted violations,
+  `tools/web-change-policy.json`, policy documents, the pull request template,
+  and guard tests remain unchanged;
+- no mapped behavior contract of an affected concern is replaced as the sole
+  hard proof (see mapped evidence below); and
+- each changed Contract record serializes the Product Decision Owner's
+  explicit receipt: choice, rationale, preservation, retirement scope,
+  accepted residual risk, owner, and decision date. Missing receipt fields
+  leave the change unresolved, and nobody fills them by inference.
+
+The co-change is `Review: REQUIRED`. The machine Gate classifies paths and
+evaluates mapped concerns with trusted base authority only. Candidate Contract
+text never becomes machine authority. The human reviewer confirms that the
+serialized receipt matches the explicit human choice and that the runtime and
+tests realize exactly that outcome. The Gate does not claim to verify Product
+meaning that no parser reads. Headings that trusted authority references,
+such as `OIPC-C07` and `PD-OI-016`, keep their anchors.
+
+Contract-only, runtime-only, and mapped-decision pull requests keep their
+existing routes. The route does not extend to any other guard or authority
+file.
+
+The route takes effect for a pull request only when that pull request's base
+checker implements it. Until then, a Contract change must be isolated from
+every other changed path. Once the route is effective, it replaces only one
+procedural rule: that Contract authority must merge before dependent runtime.
+That rule appears in the Contract lifecycle and in individual records. It does
+not change any Product outcome, preservation condition, or compatibility
+commitment. The first permitted co-change aligns those procedural Contract
+sentences.
 
 The JSON files are inert authority. The checker loads trusted base authority,
 validates candidate authority as data, and evaluates affected concerns without
@@ -332,9 +403,11 @@ executing candidate modules.
 
 Runtime admission uses the trusted base checker, detectors, architecture rules,
 Product Impact map, durable decisions, maintainer allowlist, and base/head
-source facts. Candidate authority is validation-only inert data and cannot
-authorize the same candidate runtime. A runtime pull request therefore cannot
-change Product Impact authority or durable decisions to approve itself.
+source facts. Candidate machine authority is validation-only inert data and
+cannot authorize the same candidate runtime. A runtime pull request therefore
+cannot change the Product Impact map or durable decisions to approve itself.
+A static Product Contract co-change does not approve itself either. Its
+authorization is the reviewed explicit human receipt, not the candidate text.
 
 Future preauthorization may use only this narrow inert authority bundle:
 
@@ -355,8 +428,9 @@ the sole proof of hard safety. Update or add the contract in a prior
 evidence-only pull request, then update its authority reference separately.
 Unrelated test changes are unaffected.
 
-The runtime/guard exception applies only when `tools/web-change-policy.json` is
-the sole changed guard file and the change is a pure policy contraction. The
+Apart from the static Product Contract co-change, the runtime/guard exception
+applies only when `tools/web-change-policy.json` is the sole changed guard file
+and the change is a pure policy contraction. The
 checker implementation and source parser cannot change with that policy or its
 policy workflows.
 
@@ -387,6 +461,38 @@ Every capability and import-target key in the base policy must remain, including
 keys whose arrays become empty. The candidate runtime must remain covered by
 base authority, the proposed policy must cover head runtime, and all unrelated
 dependency, vendor, binary, integrity, and architecture gates remain blocking.
+The only exception is a retired capability key, defined below.
+
+### Splitting a capability
+
+A capability key is split, or renamed, in three pull requests in this order:
+
+1. Authority only: add each new key to `allowedPrivilegedOwners` with every
+   owner of the key it replaces. Do not change runtime, detectors, or the
+   checker.
+2. Checker only: after step 1 merges, replace the old detector entry in
+   `tools/web-architecture-detectors.mjs` with one entry per new key and
+   update the characterization in `tests/web/architecture-contracts.test.mjs`.
+   The old policy key is then retired: no trusted detector reports it, so it
+   authorizes nothing.
+3. Authority only: after step 2 merges, remove the retired key and reduce each
+   new key to the owners that its detector reports.
+
+A retired key may be removed only when the trusted base detector no longer
+defines it. Removing a key that the base detector still defines remains a
+blocking failure.
+
+The former `Mounted SVG/Result replacement` capability was split this way into:
+
+- `Result content commit`: code that replaces the current Result, that is an
+  assignment to `results.value` or `state.results.value`, or a call to
+  `flushActiveResult(`; and
+- `SVG serialization`: code that serializes a mounted SVG with
+  `serializeCleanSvg(`.
+
+Web design rule R1 in `gbdraw/web/CLAUDE.md` limits which code may write the
+Result, so the `Result content commit` list only contracts. Do not preauthorize
+a new owner for it; route the write through an existing owner instead.
 
 ## Architecture evidence and authority
 

@@ -301,7 +301,10 @@ An ordinary non-increasing change records concise decision evidence:
 - its canonical location before and after;
 - the superseded location removed, or the reason it remains;
 - user-visible behavior verification;
-- applicable deterministic checks; and
+- applicable deterministic checks;
+- for each heavy derived value it adds, moves, or removes: owner, trigger,
+  input, consumer, lifetime, and retired path (see
+  [Computation ownership](#computation-ownership)); and
 - rollback.
 
 This concise form covers private decomposition, a one-for-one owner move, path
@@ -383,6 +386,64 @@ excess. It must also begin with one canonical path.
 
 A change is architecture-convergent when supported behavior is preserved or
 improved, the vector does not worsen, and at least one component decreases.
+
+## Computation ownership
+
+Heavy derived values have one owner and are built only for the operation that
+needs them. This fitness function keeps repeated construction from returning
+unnoticed. It is verified by ordinary Web tests and review. It is not a
+registered deterministic rule in `tools/web-architecture-rules.json` and adds
+no checker state. A failing CW test fails the job that runs it.
+
+| ID | Rule |
+| --- | --- |
+| CW-01 | Operation acceptance, selection display, help, and status updates do not build or traverse the canonical request, generated tables, full feature metadata, or SVG and History checkpoints. A comparison switch dispatches no Python or LOSAT work. |
+| CW-02 | For one construction purpose, one operation, and one semantic input, a target table or index is built at most once. Real additional consumers use the owner's result. |
+| CW-03 | When every label and visibility override is empty, override output builds no feature metadata or index. |
+| CW-04 | Required validation, sanitization, and each Generate's rendering and catalog admission are never skipped. |
+| CW-05 | Removing a display-only consumer also removes the producer, subscription, and saved state that existed only for it. |
+| CW-06 | The owner can state the scope, input dependency, and lifetime of any reuse. Operation-local reuse is preferred. A long-lived cache needs measured need and an invalidation test. |
+
+"Same" in CW-02 is semantic, not function-name or pointer identity. The owner
+defines it from data, record and source identity, overrides, and mode, using
+existing operation and source revisions. None of these is a CW-02 duplicate:
+- independent before and after observations, even when values coincide;
+- a new operation or an explicit retry;
+- required validation and rendering.
+
+CW-02 does not mean "compute once and never again".
+
+Initial automated scope:
+- values: generated label-override table serialization, and feature-selector
+  metadata and uniqueness index;
+- operations: comparison switching (No comparison and LOSAT, LOSATN and
+  LOSATP), ordinary input (keystroke and blur), and Generate acceptance.
+
+Other computations follow these rules as design-review principles. No
+mechanism tracks computation application-wide.
+
+A CW verification passes only when all of these hold:
+- the observation sits at the real construction boundary and uses the
+  existing `recordStructuralMetric` test hook, History diagnostics, and
+  test-helper Worker tracking;
+- the metric sink is installed, and a positive control in the same test
+  records the metric;
+- the test proves that the operation happened, for example that the
+  selection changed and History recorded it;
+- a missing metric fails. A missing value is not read as zero, and a
+  constant-zero record does not prove that work is absent;
+- temporary mutations make the targeted tests fail and are then reverted. At
+  minimum they are: removing the empty-override early exit, reintroducing
+  full feature traversal from status, and duplicating construction on a real
+  path. When no second real consumer exists, sensitivity is checked by
+  duplicating construction on the real path, not by adding a hypothetical
+  consumer.
+
+Observation adds no generic computation registry, observation-only
+production state manager, whole-genome hashing, or new dependency tracker.
+Review checks both construction counts and response time, so a fast machine
+cannot hide duplicated work. [`gbdraw/web/CLAUDE.md`](../../gbdraw/web/CLAUDE.md)
+names the current owners.
 
 ## Evidence examples
 
@@ -528,11 +589,16 @@ reinterpretation is reviewed separately from runtime observation.
 
 ## Initial rule schema
 
-The initial registry supports at most three rules and exactly two discriminated
-rule kinds:
+The schema version 1 registry supports at most four rules and exactly two
+discriminated rule kinds:
 
 - `single-semantic-owner`
 - `single-canonical-entry-edge`
+
+`MAXIMUM_RULE_COUNT` in `tools/web-architecture-evaluation.mjs` enforces the cap.
+PR #449 raised it from three to four; `tests/web/architecture-ratchet-fixtures.test.mjs`
+accepts four rules and rejects a fifth, and `tools/web-architecture-rules.json`
+uses all four slots.
 
 The cap and kinds belong to schema version 1. Raising the cap or adding a kind
 requires an evidence-backed schema plan. The registry is inert JSON. It must not

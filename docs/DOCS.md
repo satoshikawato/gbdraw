@@ -44,6 +44,11 @@ provenance. Common entry points include:
 - [Recipes](./RECIPES.md)
 - [SVG semantic hooks](./SVG_SEMANTIC_HOOKS.md)
 
+For Linear Similarity Group alignment, see the [Web controls](./REFERENCE/web-app.md#similarity-group-alignment-in-linear-view),
+[strict CLI behavior](./REFERENCE/command-line.md#strict-similarity-group-alignment),
+[typed Python example](./REFERENCE/python-api.md#typed-linear-similarity-group-alignment),
+and [Session compatibility](./REFERENCE/session-and-request-compatibility.md#similarity-alignment-request-ownership).
+
 ## FAQ
 
 The [FAQ](./FAQ.md) answers layout, interface, comparison method, privacy,

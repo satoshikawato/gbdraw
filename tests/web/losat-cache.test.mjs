@@ -98,6 +98,25 @@ const legacyProteinEntry = {
 assert.equal(cache.classifyRawLosatCacheEntry(proteinEntry), 'protein-current');
 assert.equal(cache.classifyRawLosatCacheEntry(nucleotideEntry), 'nucleotide-current');
 assert.equal(cache.classifyRawLosatCacheEntry(legacyProteinEntry), 'protein-legacy');
+// The native runtime record (CLI sessions) is a non-key field: it neither
+// changes classification nor blocks a cache hit.
+const runtimeRecord = {
+  kind: 'losat', version: '0.1.0', source: 'bundled',
+  path: 'gbdraw/bin/linux-x86_64/losat', program: 'blastn', cli: 'v1'
+};
+assert.equal(
+  cache.classifyRawLosatCacheEntry({ ...proteinEntry, runtime: { ...runtimeRecord, program: 'blastp' } }),
+  'protein-current'
+);
+assert.equal(
+  cache.classifyRawLosatCacheEntry({ ...nucleotideEntry, runtime: runtimeRecord }),
+  'nucleotide-current'
+);
+assert.ok(cache.getCurrentRawLosatCacheEntry(
+  new Map([['nucleotide-key', { ...nucleotideEntry, runtime: runtimeRecord }]]),
+  'nucleotide-key',
+  { program: 'blastn', outfmt: '6', args: [], queryCanonicalHash: 'q', subjectCanonicalHash: 's' }
+));
 assert.equal(
   cache.classifyRawLosatCacheEntry({ ...proteinEntry, schema: 3 }),
   'invalid',
@@ -807,6 +826,8 @@ const exercisePairLoop = async ({failure = null, promote = false, mutateSource =
   const cancellation = new Error('canceled inside pair preparation');
   const context = {
     useProteinBlastp: true,
+    useCollinearBlastp: false,
+    linearRecordLayoutEnabled: {value: false},
     preparedJobs: entries.map((entry, index) => ({
       spec: {ordinal: index, queryIndex: 0, subjectIndex: 1, edgeKey: String(index)},
       losatArgs: [], cacheMetadata: entry, batch: {}
@@ -931,3 +952,11 @@ assert.equal(counted.validateProteinIdentityManifest(manifest), true);
 const aliasOperations = counted.aliasNormalizations - aliasCountBefore;
 console.log(`RW-04: 2 valid feature aliases, ${aliasOperations} NFC/trim operations`);
 assert.equal(aliasOperations, 2, 'one normalization per valid feature alias in each manifest validation');
+
+// PR3-B1: default Linear raw LOSAT TSV names follow the CLI rule.
+const { cases: edgeFilenameCases } = JSON.parse(await readFile(
+  join(repoRoot, 'tests', 'fixtures', 'losat_edge_filename_cases.json'), 'utf8'
+));
+for (const { left, right, suffix, expected } of edgeFilenameCases) {
+  assert.equal(cache.losatEdgeFilename(left, right, suffix), expected, JSON.stringify({ left, right }));
+}

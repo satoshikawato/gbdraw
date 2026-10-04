@@ -14,7 +14,7 @@ from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.exceptions import ValidationError
-from gbdraw.features.colors import preprocess_color_tables
+from gbdraw.features.colors import normalize_specific_color_captions, preprocess_color_tables
 from gbdraw.features.source import SourceFeatureIdentity
 from gbdraw.features.visibility import compile_feature_visibility_rules
 
@@ -790,6 +790,7 @@ def resolve_feature_inputs(
 ) -> ResolvedFeatureInputs:
     """Compile already-loaded feature inputs into one reusable value."""
 
+    color_table = normalize_specific_color_captions(color_table)
     specific_color_rules, default_color_map = preprocess_color_tables(
         color_table,
         default_colors,

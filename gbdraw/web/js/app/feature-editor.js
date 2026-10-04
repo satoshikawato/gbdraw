@@ -16,10 +16,12 @@ export const createFeatureEditor = ({
   svgActions,
   featureSelection = null,
   previewRuntime = null,
+  isPatternEditAvailable = () => true,
   previewTransformInteraction = null
 }) => {
-  const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions, rulePreparation, history, svgActions });
-  const labelActions = createFeatureLabelActions({ state, previewRuntime, rulePreparation });
+  const { ref, computed } = window.Vue;
+  const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions, rulePreparation, history, svgActions, ref, computed, isPatternEditAvailable });
+  const labelActions = createFeatureLabelActions({ state, previewRuntime, rulePreparation, ref, computed });
   const featureSvgActions = createFeatureSvgActions({
     state,
     getFeatureColor: ruleActions.getFeatureColor,
@@ -43,6 +45,7 @@ export const createFeatureEditor = ({
   const visibilityActions = createFeatureVisibilityActions({
     state,
     featureSvgActions,
+    labelActions,
     previewRuntime
   });
   const openFeatureEditorForFeature = (feat, eventLike = null) => {
@@ -50,14 +53,33 @@ export const createFeatureEditor = ({
   };
 
   return {
+    specificRulePattern: ruleActions.specificRulePattern,
+    specificRulePatternDraft: ruleActions.specificRulePatternDraft,
+    specificRulePatternFieldId: ruleActions.specificRulePatternFieldId,
+    editSpecificRulePattern: ruleActions.editSpecificRulePattern,
+    retrySpecificRulePattern: ruleActions.retrySpecificRulePattern,
+    revertSpecificRulePattern: ruleActions.revertSpecificRulePattern,
+    suspendSpecificRulePatternDrafts: ruleActions.suspendSpecificRulePatternDrafts,
+    clearSpecificRulePatternDrafts: ruleActions.clearSpecificRulePatternDrafts,
+    captureSpecificRulePatternDrafts: ruleActions.captureSpecificRulePatternDrafts,
+    restoreSpecificRulePatternDrafts: ruleActions.restoreSpecificRulePatternDrafts,
     placementActions: createFeaturePlacementActions({ state, history, getCommittedRequest, isCurrentFeature }),
+    canRetrySpecificRuleFailure: ruleActions.canRetrySpecificRuleFailure,
+    canEditSpecificRuleFailure: ruleActions.canEditSpecificRuleFailure,
+    retrySpecificRuleFailure: ruleActions.retrySpecificRuleFailure,
+    editSpecificRuleFailure: ruleActions.editSpecificRuleFailure,
     addCustomColor: ruleActions.addCustomColor,
     addPriorityRule: ruleActions.addPriorityRule,
+    setLabelFilterMode: ruleActions.setLabelFilterMode,
+    addWhitelistRule: ruleActions.addWhitelistRule,
+    removeWhitelistRule: ruleActions.removeWhitelistRule,
+    removePriorityRule: ruleActions.removePriorityRule,
     addFeature: ruleActions.addFeature,
     removeFeature: ruleActions.removeFeature,
     getFeatureShape: ruleActions.getFeatureShape,
     setFeatureShape: ruleActions.setFeatureShape,
     addSpecificRule: ruleActions.addSpecificRule,
+    commitSpecificRules: ruleActions.commitSpecificRules,
     applySpecificRulePreset: ruleActions.applySpecificRulePreset,
     clearAllSpecificRules: ruleActions.clearAllSpecificRules,
     downloadSpecificRulesTsv: ruleActions.downloadSpecificRulesTsv,
@@ -105,6 +127,10 @@ export const createFeatureEditor = ({
     attachSvgFeatureHandlers: featureSvgActions.attachSvgFeatureHandlers,
     preparePairwiseInteractionAffordances:
       featureSvgActions.preparePairwiseInteractionAffordances,
+    previewAlignmentCandidate: featureSvgActions.previewAlignmentCandidate,
+    clearAlignmentCandidatePreview: featureSvgActions.clearAlignmentCandidatePreview,
+    showAlignmentOverlay: featureSvgActions.showAlignmentOverlay,
+    clearAlignmentOverlay: featureSvgActions.clearAlignmentOverlay,
     dispose: featureSvgActions.dispose,
     openFeatureEditorForFeature,
     refreshFeatureOverrides: ruleActions.refreshFeatureOverrides,
@@ -112,6 +138,9 @@ export const createFeatureEditor = ({
     syncLabelEditor: labelActions.syncLabelEditor,
     downloadLabelOverrideTable: labelActions.downloadLabelOverrideTable,
     loadLabelOverrideTable: labelActions.loadLabelOverrideTable,
+    canRetryLabelImportFailure: labelActions.canRetryLabelImportFailure,
+    retryLabelImportFailure: labelActions.retryLabelImportFailure,
+    editLabelImportFailure: labelActions.editLabelImportFailure,
     updateClickedFeatureLabelText: labelActions.updateClickedFeatureLabelText,
     handleLabelTextScopeChoice: labelActions.handleLabelTextScopeChoice,
     handleGlobalLabelModeChoice: labelActions.handleGlobalLabelModeChoice,

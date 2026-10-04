@@ -2,13 +2,17 @@
 
 # Session and request compatibility
 
-Current writers emit session version 42 and canonical `renderRequest` schema 7.
+Current writers emit session version 44 and canonical `renderRequest` schema 8.
 
 | Persisted format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 42 | 27–33 and 39–42 |
-| Canonical `renderRequest` | 7 | 1, 2, 5, 6, and 7 |
-| Web file bindings | 2 | 1; 2 in sessions 41–42 |
+| gbdraw session | 44 | 27–33, 39–42, and 44 |
+| Canonical `renderRequest` | 8 | 1, 2, 5, 6, 7, and 8 |
+| Web file bindings | 2 | 1; 2 in sessions 41–42 and 44 |
+
+Session 44 documents written with canonical request schema 7 remain readable.
+Current saves promote that request to schema 8 while retaining feature
+catalog schema 4 and the saved preview until the next Generate.
 
 Session versions 34–38 and request schemas 3–4 were development-only and are
 rejected. Do not change a version number, resource hash, or runtime binding by
@@ -20,6 +24,12 @@ A current session embeds its input resources, normalized settings, last
 committed render request, generated result, and supported editor and comparison
 state. Replay does not depend on the original file path remaining valid.
 Treat the session as sensitive when its embedded source data is sensitive.
+
+Replay reads embedded BLAST outfmt 6/7 resources with the current [comparison
+table rules](input-formats-and-tsv-schemas.md#comparison-and-numeric-tables).
+A saved table with more than 12 columns replays from its first 12 columns. A
+malformed saved table, or one whose IDs name the wrong Linear records, stops
+replay with an error.
 
 Both `.gbdraw-session.json` and lossless `.gbdraw-session.json.gz` are
 accepted. The web app writes compressed sessions by default. The command line
@@ -33,10 +43,39 @@ Generate deliberately preserves the newer draft alongside the earlier Result. Lo
 record placement, comparison artifacts, and supported editor state; SVG bytes
 or text metrics can still differ across gbdraw versions.
 
+A Web Session also preserves supported manual legend, plot title, and Linear
+scale positions in its saved Result. After loading, **Generate Diagram** carries
+each matched item's offset into the new automatic layout for the same diagram;
+it does not pin an absolute page position. If the source, selected region,
+record set, or layout no longer matches a moved item, Generate keeps the saved
+Result and asks for that item's position reset, **Reset Layout**, or matching
+settings. Preview search placement and Layout edit hints are not saved. Keep
+the Session when browser positioning must be reproduced; a raw Python render
+request alone does not contain those manual positions.
+
 Fresh CLI sessions omit `config` because they have no independent Web draft.
 Web initializes their settings from `renderRequest` and restores original input
 files from their bindings. A present `config` must contain valid `form` and `adv`
 objects; a partial draft is rejected. CLI replay preserves a supplied Web draft.
+A CLI binding uid such as `cli-seq-1` is only an initial value: each Linear
+file takes the record identity of `renderRequest.records[].recordKey`. A
+multi-record file, whose records are `record-1:1`, `record-1:2`, and so on,
+becomes one Linear row per record with that recordKey and the `#n` record
+selector, so **Inherit saved comparison** finds every record it names. A CLI
+comparison stays read-only in Web; **Inherit saved comparison** reuses it after
+promoting an older committed request, such as a version 42 sidecar, to the
+current schema. A Linear Session without a stored comparison plan loads with
+**No comparison**. A CLI Session written with `-b` therefore offers
+**Replace with current controls** only after a comparison is set up, and starts
+no LOSAT run before that. A CLI Linear Session written without `-b` or
+`--losat` commits only a disabled protein pipeline (mode `none`,
+no pairs). It loads with **No comparison** and without selecting LOSATP, so
+Generate draws no ribbons and starts no LOSAT run. A CLI Session written with
+`--losat losatp` and an editable protein pipeline loads with the
+adjacent LOSATP comparison it drew. Without saved
+`ui.layoutPreferences`, the legend and plot-title positions come from the
+committed `diagramOptions.output` for its mode and grouping, so a CLI
+`--legend` survives loading and the first Generate.
 
 The Web file inventory uses binding schema 2. An explicit composite `c_gb`
 restores one editable GenBank File from ordered component resource bindings.
@@ -50,7 +89,7 @@ its components for rendering.
 Schema-1 ordinary bindings and File arrays remain supported. Existing sessions
 without explicit bindings retain their request-derived source initialization;
 original components cannot be recovered if their membership was never saved.
-Schema 2 is accepted with sessions 41–42. Unknown or malformed bindings reject
+Schema 2 is accepted with sessions 41–42 and 44. Unknown or malformed bindings reject
 before import replaces the current work. Older schema-1 readers reject new
 schema-2 documents; changing the schema number does not convert them.
 
@@ -72,9 +111,38 @@ loading restores the same editable state:
 Both pairs are written only when the source has a file-level default. Sessions
 written before these fields existed carry neither; those readers compare the
 resolved text against the file default instead, which reads an override that
-happens to repeat the default as inheritance. Session 42 and request schema 7
-are unchanged, because these fields describe Web editing state rather than the
+happens to repeat the default as inheritance. Request schema 8 adds no field for
+these Web-only defaults,
+because these fields describe Web editing state rather than the
 render request: a reader that ignores them still renders identical output.
+
+`webFiles.bindings.linearSeqs[].inferred_definition` stores the definition
+inferred from the record that row selects. It is written when a GenBank File is
+uploaded or a row selects another record, and a record's definition is its own
+value, then the file default, then this value. Sessions saved before the field
+existed, and Sessions written by the CLI, carry none and are not re-inferred when
+loaded, so their records keep the definitions they were drawn with.
+
+Session 44 replaces the two editable Linear visibility booleans with independent
+selected modes: `linear_accession_visibility` and `linear_length_visibility`,
+each set to `auto`, `show`, or `hide`. Auto resolves from the effective rendered
+rows and is projected to the existing request-schema-7 booleans; the request and
+Python render model did not gain a new field. A version-42 `true` becomes Show,
+`false` becomes Hide, and a missing boolean becomes historical Show. If a
+selected-mode field is already present, it takes precedence. Current writers do
+not write the retired booleans.
+
+Plot-title text (`plot_title`), plot-title font size (`plot_title_font_size`),
+and the record-label default font size (`def_font_size`) are kept per mode in
+`config.modeProfiles`; the active mode's values also remain in the
+flat `form` and `adv` fields. When a Session has no per-mode entry, its saved
+flat value belongs to the active mode only, and the other mode starts with an
+empty title and automatic font sizes. Other explicit values saved for the
+inactive mode are kept. A missing `config.linearRecordLayout` means **Arrange in
+rows** is on. A missing `ui.linearTypographyLinked` means the scale and ruler
+label font sizes are linked while they are equal. A Circular request supplies no
+Linear display values, so a Session without a saved draft keeps Accession and
+Length at Auto and Replicon off.
 
 When several records share a Linear row, a label or subtitle that no record of
 the row contradicts describes the whole row and is drawn once beside it. An
@@ -101,15 +169,18 @@ priorities. **Load Session** replaces the current Session with those settings,
 clearing any previous sources and Result. A rejected Load restores the previous
 work. Load a real source and Generate to apply the saved settings to a diagram.
 
-This settings-only variant uses session 42 with explicit `renderRequest: null`,
+This settings-only variant was introduced in session 42 with explicit
+`renderRequest: null`,
 empty `results`, and a null feature catalog. It has no committed render. Missing
 requests, dangling resources, or biological inputs in either mode cannot select
 this variant. Auxiliary files retain their ordinary resource bindings and bytes.
 
 Python can load and materialize a settings-only Session. CLI replay,
 `session_to_request()` and `render_session()` report that it has no biological
-render request. Existing supported full Sessions remain readable. Readers that
-support only session 41 reject new session-42 files, including full Sessions.
+render request. Existing supported full Sessions remain readable. Current
+settings-only writers emit session 44, while current readers also accept the
+released session-42 form. Readers whose maximum version is 42
+reject newly written session-44 files.
 
 Older settings JSON without a `format` field (containing `form` or `adv`) still
 uses the legacy configuration import. It does not need a render request. This
@@ -135,10 +206,77 @@ request. Rendering that request alone does not replay saved comparison
 artifacts; use `render_session()` when those artifacts belong in the result.
 
 `render_request()` accepts current typed requests, not historical session
-envelopes. Public typed session conversion accepts full versions 31–33 and 39–42;
-versions 27–30 are CLI replay inputs only. Canonical schema 7 retains schema 6's
-input cardinality, including selectorless `all` inputs. Resolve a typed request
+envelopes. Public typed session conversion accepts full versions 31–33, 39–42, and 44;
+versions 27–30 are CLI replay inputs only. Canonical schema 8 retains schema 7's
+display values and schema 6's input cardinality, including selectorless `all`
+inputs. Resolve a typed request
 before encoding when it still contains deferred paths or collection-level transforms.
+
+## Similarity alignment request ownership
+
+For Linear requests, `renderRequest` schema 8 stores `recordTranslations` and
+`similarityAlignment` inside `renderRequest.layout`. The nested alignment plan
+is schema 2; this does not change the Session version or request schema. Every
+translation has one stable `recordKey` and finite `x` and `y` values. An active
+plan covers those displayed keys and stores the exact reference, each target's
+Select or Skip outcome and rationale. Record presentation or region state
+owns the orientation used to project each anchor center. Current readers reject
+partial, malformed, mismatched, or unsupported plans. Schema 1 of the nested
+plan was never released and has no reader. There is no Circular form or generic
+transform matrix. A Python `SimilarityAlignmentReference` is not a persisted
+form: writers store the plan it resolves to.
+
+Web **Align…** and **Review alignment options…** take the direct ortholog
+evidence for the selected Similarity Group from the orthogroup result in the
+committed `renderRequest`, not from the feature catalog. An edge counts only
+when both endpoints bind to current members of their own source records;
+missing or unbound evidence leaves the usual Review rules in place instead of
+a guess. A Web LOSATP Generate commits its typed orthogroup or Collinear result
+with the request, so Align, record rotation, and Save and Load use the same
+evidence without running LOSATP again.
+
+Released request schemas 1, 2, 5, 6, and 7 remain readable. Their
+`alignOrthogroupFeature` protein-setting string is confined to a reader-only
+legacy path. Current writers emit neither that field nor the old Session-only
+`orthogroupState.selectedOrthogroupAlignmentFeature` copy. Released legacy
+Sessions with saved feature-catalog and orthogroup identity metadata materialize
+that state to the current schema-2 plan before saving. Malformed or unmappable
+legacy values produce an actionable error without replacing the last successful
+Result. Current requests reject group-only input. Loading a saved preview does
+not start LOSATP; [Save and Load Sessions](web-app.md#save-and-load-sessions)
+describes when Load starts the diagram engine.
+
+A current Session round trip retains exact feature and record identities,
+Select/Skip rationale, record orientation, base translations, and the
+immediate pre-align Reset baseline and trustworthy restoration evidence.
+Ordinary Generate renders the saved plan through the canonical typed path without guessing a new anchor. A stable
+reorder resolves by `recordKey` and biological feature identity. Source
+replacement, crop, selector, and record drag clear the plan with a visible reason.
+Manual Reverse keeps the plan and aligns the same anchors on the next Generate.
+**Reset alignment…** offers positions only (preserving current directions) or
+positions plus the latest Align's actual direction changes. Combined Reset
+restores absolute pre-Align directions only for those records, including a
+changed reference, and replaces later manual direction edits on those targets.
+Either scope consumes plan and evidence; Undo restores them before another scope
+can be chosen. See [Web Reset](web-app.md#reset-positions-or-directions).
+A stale reference requires Reselect/Clear and a stale target requires Select/Skip; pending or failed repair keeps the last
+successful Result. Undo/Redo restores the complete artifact. Preview-only guides,
+candidate markers, and recommendation badges are never saved.
+
+Restoration evidence is stored in `editorState.alignmentResetReceipt`, separately
+from the direction-independent plan. It binds source bytes, record/selector/crop
+identity and exact anchors, and stores only actual absolute direction deltas
+plus any reference x correction. It never stores a review mode or Custom policy.
+Save and fresh Load retain this binding; style regeneration, stable reorder and
+ordinary Reverse do not rewrite the pre-Align directions. Source/selector/crop
+invalidation and record drag clear evidence with the plan.
+
+Supported older Sessions without historical direction evidence retain their
+position baseline, with combined Reset disabled for missing evidence. A current
+receipt with an empty direction list instead reports that the latest Align
+changed no directions. Malformed or stale current evidence is rejected before
+replacing the current artifact; it is not silently dropped. Session version 44,
+request schema 8 and plan schema 2 remain unchanged by this restoration data.
 
 In Web **Run Info**, **Source recipe** uses the original input filenames and
 public CLI settings. Keep those original files and download any listed generated
@@ -165,7 +303,9 @@ falling back to a display label.
 Comparison cache reuse requires the same sequence content, selected proteins,
 record and feature bindings, query/subject direction, program, and meaningful
 search arguments. Filenames and display labels do not define cache identity.
-Only affected record pairs rerun when one valid cache key changes.
+Only affected record pairs rerun when one valid cache key changes. A Session
+stores each raw result once: rows that share a cache key, such as two ring
+files with one sequence, share one entry named by the first row.
 
 Pairwise hit limits, Similarity-group member limits, and Collinear block
 settings are derived options. Changing one recomputes the affected derived

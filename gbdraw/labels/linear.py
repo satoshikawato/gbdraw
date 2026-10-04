@@ -575,6 +575,7 @@ def prepare_label_list_linear(
         # Create base label entry
         label_entry = {
             "label_text": feature_label_text,
+            "source_feature_index": feature_object.source_feature_index,
             "middle": label_anchor_x,
             "start": bbox_start,
             "end": bbox_end,

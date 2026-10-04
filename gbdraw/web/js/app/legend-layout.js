@@ -1,43 +1,114 @@
+import { captureDecorationContinuity } from './legend-layout/decoration-continuity.js';
 import { createLegendCanvasActions } from './legend-layout/canvas-actions.js';
 import { createDiagramDragActions } from './legend-layout/diagram-drag.js';
 import { createLegendRepositionActions } from './legend-layout/reposition-actions.js';
 import {
   applyCompositionUserDeltas,
+  compositionUserDeltas,
   resetCompositionUserDeltas
 } from './legend-layout/composition-actions.js';
 
-export const createLegendLayout = ({ state, legendActions, history = null }) => {
-  const diagramActions = createDiagramDragActions({ state, history });
-  const canvasActions = createLegendCanvasActions({ state });
+export const createLegendLayout = ({
+  state,
+  legendActions,
+  history = null,
+  previewRuntime = null,
+  similarityAlignmentLifecycle = null
+}) => {
+  const diagramActions = createDiagramDragActions({
+    state,
+    history,
+    previewRuntime,
+    similarityAlignmentLifecycle
+  });
+  const canvasActions = createLegendCanvasActions({ state, previewRuntime });
   const repositionActions = createLegendRepositionActions({
     state,
     legendActions,
-    diagramActions
+    previewRuntime
   });
 
   const resetAllPositions = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const svg = state.svgContainer.value?.querySelector?.('svg') || null;
     if (!svg) return;
     diagramActions.resetLengthBarPosition();
     const binding = resetCompositionUserDeltas(svg);
     repositionActions.syncStateFromComposition(svg, binding);
-    canvasActions.persistCurrentSvg(svg);
+    previewRuntime?.commitActiveResultEdit('layout-position-reset');
   };
 
-  const reconcileCompositionUserDeltas = (deltas) => {
+  // B17 (R11, D-07): History records composition offsets per Result, keyed by
+  // the Result's committed identity. A Result appears in the record only while
+  // its offsets differ from the offsets History first saw it with, so showing
+  // a Result records nothing, and Undo and Redo restore the Result a step was
+  // made on. Only the displayed Result is read, and only when the mounted root
+  // is bound to it; another Result keeps the offsets last seen or restored.
+  const firstSeenDeltas = new Map();
+  const movedDeltas = new Map();
+  const recordSeenDeltas = (identity, deltas) => {
+    if (!firstSeenDeltas.has(identity)) firstSeenDeltas.set(identity, deltas);
+    if (JSON.stringify(deltas) === JSON.stringify(firstSeenDeltas.get(identity))) {
+      movedDeltas.delete(identity);
+    } else {
+      movedDeltas.set(identity, deltas);
+    }
+  };
+  const resultIdentity = (result) => previewRuntime?.getResultIdentity?.(result) || '';
+  const captureCompositionIntent = () => {
+    const runtime = previewRuntime?.getActiveRuntime?.() || null;
     const svg = state.svgContainer.value?.querySelector?.('svg') || null;
-    if (!svg || !deltas) return false;
-    const { binding, changed } = applyCompositionUserDeltas(svg, deltas);
-    if (!changed) return false;
-    repositionActions.syncStateFromComposition(svg, binding);
-    canvasActions.persistCurrentSvg(svg);
-    return true;
+    if (svg && runtime?.svg === svg && runtime.resultIdentity) {
+      let deltas = null;
+      try {
+        deltas = compositionUserDeltas(svg);
+      } catch (_error) {
+        deltas = null;
+      }
+      if (deltas) recordSeenDeltas(runtime.resultIdentity, deltas);
+    }
+    const record = {};
+    if (movedDeltas.size === 0) return record;
+    state.results.value.forEach((result) => {
+      const identity = resultIdentity(result);
+      if (movedDeltas.has(identity)) record[identity] = movedDeltas.get(identity);
+    });
+    return record;
+  };
+
+  // Restores the recorded offsets of the named Results; a Result absent from
+  // the record returns to the offsets History first saw it with.
+  const reconcileCompositionUserDeltas = (record, identities) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
+    let reconciled = false;
+    identities.forEach((identity) => {
+      const deltas = record?.[identity] || firstSeenDeltas.get(identity);
+      const index = state.results.value.findIndex((result) => resultIdentity(result) === identity);
+      if (!deltas || index < 0) return;
+      const changed = previewRuntime?.commitResultEdit(index, (svg, { mounted }) => {
+        const applied = applyCompositionUserDeltas(svg, deltas);
+        if (applied.changed && mounted) repositionActions.syncStateFromComposition(svg, applied.binding);
+        return applied.changed;
+      }, 'layout-composition-reconcile');
+      recordSeenDeltas(identity, deltas);
+      reconciled = reconciled || Boolean(changed);
+    });
+    return reconciled;
   };
 
   return {
+    captureDecorationContinuity: (canonical, projectRecordIdentity) => captureDecorationContinuity({
+      canonical, projectRecordIdentity, results: state.results.value, catalog: state.featureCatalog.value,
+      mountedSvg: state.svgContainer.value?.querySelector?.('svg') || null,
+      selectedResultIndex: state.selectedResultIndex.value,
+      canvasPadding: state.canvasPadding
+    }),
     ...canvasActions,
     ...repositionActions,
     refreshDiagramDragAffordances: diagramActions.refreshDiagramDragAffordances,
+    captureCompositionIntent,
     reconcileCompositionUserDeltas,
     resetAllPositions,
     setupDiagramDrag: diagramActions.setupDiagramDrag

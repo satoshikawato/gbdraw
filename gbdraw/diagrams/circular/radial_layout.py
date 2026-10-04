@@ -88,6 +88,34 @@ class _RadialSlotIntent:
     params: Mapping[str, Any]
 
 
+def _cannot_fit_diagnostic(intent: "_RadialSlotIntent | None", window: Any) -> dict[str, object]:
+    """Track row and usable band of a fit failure; the slot ID stays private."""
+
+    diagnostic: dict[str, object] = {
+        "code": "TRACK_LAYOUT",
+        "reason": "CANNOT_FIT",
+        "innerPx": max(0, round(float(window.inner_px))),
+        "outerPx": max(0, round(float(window.outer_px))),
+    }
+    if intent is not None:
+        diagnostic["slotIndex"] = int(intent.slot_index)
+    return diagnostic
+
+
+def _center_reserved_diagnostic(
+    diagnostic: Mapping[str, object], *, explicit_radius: bool
+) -> dict[str, object]:
+    """The same fit failure, limited by the center reservation.
+
+    ``DEFINITION_RESERVED``: the band that the center definition text needs.
+    ``CENTER_RESERVED``: an explicit ``center_reserved_radius``.
+    """
+
+    if explicit_radius:
+        return {**diagnostic, "code": "TRACK_LAYOUT", "reason": "CENTER_RESERVED"}
+    return {**diagnostic, "code": "TRACK_LAYOUT", "reason": "DEFINITION_RESERVED"}
+
+
 def _band_from_center_width(center_px: float, width_px: float) -> RadialBand:
     half = max(0.0, float(width_px) / 2.0)
     return RadialBand(float(center_px) - half, float(center_px) + half)
@@ -931,10 +959,10 @@ def _place_inside_auto(
         )
         if resolved is not None:
             return resolved
-    raise ValidationError(
-        f"Circular track slot '{intent.slot_id}' cannot fit inside between "
-        f"{placement_window.inner_px:.1f}px and {placement_window.outer_px:.1f}px. "
-        "Move the slot, reduce widths, disable conflicting labels, or use side=outside."
+    raise _InsideFitError(
+        f"Circular track slot '{intent.slot_id}'",
+        intent=intent,
+        placement_window=placement_window,
     )
 
 
@@ -1121,6 +1149,53 @@ def _gap_between_inner_outer_tracks(
     )
 
 
+class _InsideFitError(ValidationError):
+    """An inside slot or group that cannot be placed in its window."""
+
+    def __init__(
+        self,
+        subject: str,
+        *,
+        intent: _RadialSlotIntent | None,
+        placement_window: PlacementWindow,
+        hint: str = "",
+    ) -> None:
+        self.subject = subject
+        self.placement_window = placement_window
+        self.hint = hint
+        super().__init__(
+            f"{self._between()}. Move the slot, reduce widths, disable conflicting labels, "
+            f"or use side=outside.{hint}",
+            diagnostic=_cannot_fit_diagnostic(intent, placement_window),
+        )
+
+    def _between(self) -> str:
+        return (
+            f"{self.subject} cannot fit inside between "
+            f"{self.placement_window.inner_px:.1f}px and {self.placement_window.outer_px:.1f}px"
+        )
+
+    def limited_by_center(self, reserved_radius_px: float, *, explicit_radius: bool) -> ValidationError:
+        """Name the center reservation (definition text or explicit radius) as the cause."""
+
+        reserved = f"{float(reserved_radius_px):.1f}px"
+        if explicit_radius:
+            message = (
+                f"{self._between()} because center_reserved_radius reserves {reserved}. "
+                f"Set a smaller center_reserved_radius or place tracks outside.{self.hint}"
+            )
+        else:
+            message = (
+                f"{self._between()} because the center definition text reserves {reserved}. "
+                "Shorten the species or strain text, reduce the definition font size, "
+                f"set a smaller center_reserved_radius, or place tracks outside.{self.hint}"
+            )
+        return ValidationError(
+            message,
+            diagnostic=_center_reserved_diagnostic(self.diagnostic or {}, explicit_radius=explicit_radius),
+        )
+
+
 def _inside_stack_failure_hint(intents: Sequence[_RadialSlotIntent]) -> str:
     if any(intent.renderer == "sequence_conservation" for intent in intents):
         return (
@@ -1143,6 +1218,7 @@ def _place_inside_auto_stack_group(
     tick_track_channel_override: str | None,
     depth_config: DepthConfigurator | None,
 ) -> tuple[CircularResolvedSlot, ...]:
+    failure: _RadialSlotIntent | None = None
     for scale in _inside_auto_stack_width_scales(intents):
         working_occupied = list(occupied)
         working_outer = float(placement_window.outer_px)
@@ -1165,6 +1241,7 @@ def _place_inside_auto_stack_group(
                 depth_config=depth_config,
             )
             if resolved is None:
+                failure = intent
                 failed = True
                 break
             resolved_group.append(resolved)
@@ -1189,12 +1266,14 @@ def _place_inside_auto_stack_group(
         if not failed:
             return tuple(resolved_group)
 
-    first_unplaced = intents[-1].slot_id if intents else "<empty>"
-    raise ValidationError(
-        f"Circular track slot '{first_unplaced}' cannot fit inside between "
-        f"{placement_window.inner_px:.1f}px and {placement_window.outer_px:.1f}px. "
-        "Move the slot, reduce widths, disable conflicting labels, or use side=outside."
-        f"{_inside_stack_failure_hint(intents)}"
+    # Name the slot that failed at the smallest scale; the band is the group's.
+    failed_intent = failure
+    failed_slot_id = failed_intent.slot_id if failed_intent is not None else "<empty>"
+    raise _InsideFitError(
+        f"Circular track slot '{failed_slot_id}'",
+        intent=failed_intent,
+        placement_window=placement_window,
+        hint=_inside_stack_failure_hint(intents),
     )
 
 
@@ -1476,9 +1555,10 @@ def _place_preferred_numeric_group(
             return placed
 
     group_name = ",".join(intent.slot_id for intent in intents) or "<empty>"
-    raise ValidationError(
-        f"Preferred numeric group '{group_name}' cannot fit inside between "
-        f"{placement_window.inner_px:.1f}px and {placement_window.outer_px:.1f}px."
+    raise _InsideFitError(
+        f"Preferred numeric group '{group_name}'",
+        intent=intents[0] if intents else None,
+        placement_window=placement_window,
     )
 
 
@@ -1731,6 +1811,53 @@ def _outside_placement_window(
 
 
 def resolve_circular_radial_layout(
+    *,
+    total_length: int,
+    canvas_config: CircularCanvasConfigurator,
+    slots: Sequence[CircularTrackSlot],
+    feature_dict: Mapping[str, Any] | None = None,
+    definition_reserved_radius_px: float | None = None,
+    tick_track_channel_override: str | None = None,
+    preferred_anchor_slot_ids: Collection[str] = (),
+    depth_config: DepthConfigurator | None = None,
+    center_reserved_radius_explicit: bool = False,
+) -> CircularRadialLayout:
+    """Resolve every slot band; a failed inside placement names its cause.
+
+    When an inside slot cannot be placed but the same slots fit without the
+    center reservation, the ``TRACK_LAYOUT`` diagnostic reason is
+    ``DEFINITION_RESERVED`` (the definition text band) or ``CENTER_RESERVED``
+    (``center_reserved_radius_explicit``); otherwise it is ``CANNOT_FIT``.
+    """
+
+    layout_inputs = dict(
+        total_length=total_length,
+        canvas_config=canvas_config,
+        slots=slots,
+        feature_dict=feature_dict,
+        tick_track_channel_override=tick_track_channel_override,
+        preferred_anchor_slot_ids=preferred_anchor_slot_ids,
+        depth_config=depth_config,
+    )
+    try:
+        return _resolve_circular_radial_layout(
+            definition_reserved_radius_px=definition_reserved_radius_px,
+            **layout_inputs,
+        )
+    except _InsideFitError as error:
+        if definition_reserved_radius_px is None or definition_reserved_radius_px <= LAYOUT_EPSILON:
+            raise
+        try:
+            _resolve_circular_radial_layout(definition_reserved_radius_px=None, **layout_inputs)
+        except ValidationError:
+            raise error from None
+        raise error.limited_by_center(
+            float(definition_reserved_radius_px),
+            explicit_radius=center_reserved_radius_explicit,
+        ) from None
+
+
+def _resolve_circular_radial_layout(
     *,
     total_length: int,
     canvas_config: CircularCanvasConfigurator,

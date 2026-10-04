@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import base64
 import binascii
+import dataclasses
 import gc
 import gzip
 import hashlib
@@ -30,6 +31,8 @@ from gbdraw.session_io import (  # noqa: E402
     CURRENT_SESSION_VERSION,
     LOSAT_DERIVED_CACHE_SCHEMA,
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
+    SessionFileBinding,
+    canonicalize_cli_invocation,
     classify_raw_losat_cache_entry,
     load_session,
     session_mode,
@@ -58,7 +61,7 @@ SESSION_ROOT = GALLERY_ROOT / "sessions"
 TEST_INPUT_SESSION_ROOT = REPO_ROOT / "tests" / "test_inputs"
 SESSION_PUBLICATION_BRIDGE = REPO_ROOT / "tools" / "publish_gallery_session.mjs"
 VIBRIO_SESSION_NAME = "vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
-VIBRIO_RAW_ENTRY_COUNT = 59
+VIBRIO_RAW_ENTRY_COUNT = 12
 VIBRIO_GZIP_HARD_LIMIT = 90_000_000
 VIBRIO_EXPANDED_HARD_LIMIT = 400_000_000
 VIBRIO_GZIP_REGRESSION_CEILING = 95_000_000
@@ -81,24 +84,13 @@ def _directed_cross_pairs(
     }
 
 
-_VIBRIO_RECORD_KEYS = tuple(f"record-{index}" for index in range(1, 12))
+_VIBRIO_RECORD_KEYS = tuple(f"record-{index}" for index in range(1, 5))
 _VIBRIO_ROW_GROUPS = (
-    _VIBRIO_RECORD_KEYS[0:3],
-    _VIBRIO_RECORD_KEYS[3:5],
-    _VIBRIO_RECORD_KEYS[5:7],
-    _VIBRIO_RECORD_KEYS[7:9],
-    _VIBRIO_RECORD_KEYS[9:11],
+    _VIBRIO_RECORD_KEYS[0:2],
+    _VIBRIO_RECORD_KEYS[2:4],
 )
 VIBRIO_EXPECTED_RAW_PAIRS = frozenset(
     {(record_key, record_key) for record_key in _VIBRIO_RECORD_KEYS}
-    | {
-        pair
-        for index in range(len(_VIBRIO_RECORD_KEYS) - 1)
-        for pair in (
-            (_VIBRIO_RECORD_KEYS[index], _VIBRIO_RECORD_KEYS[index + 1]),
-            (_VIBRIO_RECORD_KEYS[index + 1], _VIBRIO_RECORD_KEYS[index]),
-        )
-    }
     | {
         pair
         for index in range(len(_VIBRIO_ROW_GROUPS) - 1)
@@ -1012,6 +1004,39 @@ def _canonicalize_orthogroup_resources(session: dict[str, Any]) -> int:
     return rewritten
 
 
+def _canonicalize_recorded_cli_invocation(
+    session_path: Path,
+    *,
+    mode: str,
+) -> None:
+    """Rewrite retired flags in the recorded ``cliInvocation`` of a staged session.
+
+    The recorded argv is provenance for Gallery commands. Current sessions do not
+    replay it, so the refresh moves it to the current flag names here.
+    """
+
+    payload = session_path.read_bytes()
+    compressed = payload[:2] == b"\x1f\x8b"
+    session = json.loads(gzip.decompress(payload) if compressed else payload)
+    invocation = session.get("cliInvocation")
+    if not isinstance(invocation, dict) or not isinstance(invocation.get("args"), list):
+        return
+    args, bindings = canonicalize_cli_invocation(
+        [str(arg) for arg in invocation["args"]],
+        [
+            SessionFileBinding(**binding)
+            for binding in invocation.get("fileBindings") or []
+        ],
+        mode=mode,
+    )
+    invocation["args"] = args
+    invocation["fileBindings"] = [dataclasses.asdict(binding) for binding in bindings]
+    text = json.dumps(session, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    session_path.write_bytes(
+        gzip.compress(text, compresslevel=6, mtime=0) if compressed else text
+    )
+
+
 def _refresh_one_session(
     session_path: Path,
     *,
@@ -1047,6 +1072,7 @@ def _refresh_one_session(
             prepared_path,
             env=env,
         )
+        _canonicalize_recorded_cli_invocation(prepared_path, mode=mode)
         subprocess.run(
             [
                 sys.executable,
@@ -1058,7 +1084,7 @@ def _refresh_one_session(
                 "-f",
                 "interactive_svg",
                 "-o",
-                "out",
+                session_path.name.split(".gbdraw-session", 1)[0],
                 "--session_output",
                 str(replayed_path),
             ],

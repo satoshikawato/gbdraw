@@ -1,3 +1,4 @@
+import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import {
   normalizeFeatureVisibilityRule,
   normalizeVisibilityMode,
@@ -28,7 +29,7 @@ const replacePlainObject = (target, source) => {
 };
 
 const replaceRefArray = (target, source) => {
-  if (!target || typeof target !== 'object' || !Object.prototype.hasOwnProperty.call(target, 'value')) return;
+  if (!target || typeof target !== 'object' || !('value' in target)) return;
   target.value = Array.isArray(source) ? cloneJsonData(source) : [];
 };
 
@@ -42,13 +43,13 @@ const buildFeatureIntentData = (features = {}) => ({
   labelTextFeatureOverrides: clonePlainObject(features.labelTextFeatureOverrides),
   labelTextBulkOverrides: clonePlainObject(features.labelTextBulkOverrides),
   labelTextFeatureOverrideSources: clonePlainObject(features.labelTextFeatureOverrideSources),
-  labelVisibilityOverrides: clonePlainObject(features.labelVisibilityOverrides),
-  labelOverrideContextKey: String(features.labelOverrideContextKey || '')
+  labelVisibilityOverrides: clonePlainObject(features.labelVisibilityOverrides)
 });
 
 const buildEditorIntentData = (editorState = {}) => ({
   legend: {
     entries: cloneJsonData(editorState?.legend?.entries) || [],
+    ...(editorState?.legend?.entryOwners ? { entryOwners: cloneJsonData(editorState.legend.entryOwners) } : {}),
     deletedEntries: cloneJsonData(editorState?.legend?.deletedEntries) || [],
     colorOverrides: clonePlainObject(editorState?.legend?.colorOverrides),
     strokeOverrides: clonePlainObject(editorState?.legend?.strokeOverrides),
@@ -63,15 +64,23 @@ const buildOrthogroupIntentData = (orthogroupState = {}) => ({
   selectedOrthogroupId: String(orthogroupState.selectedOrthogroupId || ''),
   selectedOrthogroupAlignmentFeature: String(orthogroupState.selectedOrthogroupAlignmentFeature || ''),
   orthogroupNameOverrides: clonePlainObject(orthogroupState.orthogroupNameOverrides),
-  orthogroupDescriptionOverrides: clonePlainObject(orthogroupState.orthogroupDescriptionOverrides)
+  orthogroupDescriptionOverrides: clonePlainObject(orthogroupState.orthogroupDescriptionOverrides),
+  orthogroupDormantOverrides: clonePlainObject(orthogroupState.orthogroupDormantOverrides)
 });
 
+// Neither the selected Result nor the offsets read from its mounted root is
+// an edit, so neither is intent; composition offsets are recorded per Result
+// in `compositionUserDeltas` (B17).
 const buildUiIntentData = (ui = {}) => {
   const intent = clonePlainObject(ui);
   delete intent.generatedLegendPosition;
   delete intent.generatedMode;
   delete intent.generatedMultiRecordCanvas;
   delete intent.generatedCircularPlotTitlePosition;
+  delete intent.selectedResultIndex;
+  delete intent.legendCurrentOffset;
+  delete intent.diagramOffset;
+  delete intent.plotTitleUserOffset;
   return intent;
 };
 
@@ -89,7 +98,6 @@ const applyFeatureIntentData = (state, features = {}) => {
     clonePlainObject(features.labelTextFeatureOverrideSources)
   );
   replacePlainObject(state.labelVisibilityOverrides, clonePlainObject(features.labelVisibilityOverrides));
-  setRef(state.labelOverrideContextKey, String(features.labelOverrideContextKey || ''));
 };
 
 const applyEditorIntentData = (state, editorState = {}) => {
@@ -120,10 +128,11 @@ const applyOrthogroupIntentData = (state, orthogroupState = {}) => {
     state.orthogroupDescriptionOverrides,
     clonePlainObject(orthogroupState.orthogroupDescriptionOverrides)
   );
+  replacePlainObject(state.orthogroupDormantOverrides, clonePlainObject(orthogroupState.orthogroupDormantOverrides));
 };
 
 const cloneLinearComparisonPlanMetadata = (plan = {}) => ({
-  mode: String(plan?.mode || 'adjacent'),
+  mode: String(plan?.mode || 'none'),
   defaultSource: String(plan?.defaultSource || 'losat'),
   edges: (Array.isArray(plan?.edges) ? plan.edges : []).map((edge) => ({
     id: String(edge?.id || ''),
@@ -194,13 +203,13 @@ const replaceFeatureVisibilityState = (state, features = {}) => {
 };
 
 const setRef = (target, value) => {
-  if (target && typeof target === 'object' && Object.prototype.hasOwnProperty.call(target, 'value')) {
+  if (target && typeof target === 'object' && 'value' in target) {
     target.value = value;
   }
 };
 
 const getRef = (target, fallback = null) => (
-  target && typeof target === 'object' && Object.prototype.hasOwnProperty.call(target, 'value')
+  target && typeof target === 'object' && 'value' in target
     ? target.value
     : fallback
 );
@@ -362,8 +371,7 @@ const buildFallbackFeatureStateData = (state) => ({
   labelTextFeatureOverrides: clonePlainObject(state.labelTextFeatureOverrides),
   labelTextBulkOverrides: clonePlainObject(state.labelTextBulkOverrides),
   labelTextFeatureOverrideSources: clonePlainObject(state.labelTextFeatureOverrideSources),
-  labelVisibilityOverrides: clonePlainObject(state.labelVisibilityOverrides),
-  labelOverrideContextKey: getRef(state.labelOverrideContextKey, '')
+  labelVisibilityOverrides: clonePlainObject(state.labelVisibilityOverrides)
 });
 
 const applyFallbackFeatureStateData = (state, features = {}) => {
@@ -383,7 +391,6 @@ const applyFallbackFeatureStateData = (state, features = {}) => {
     clonePlainObject(features.labelTextFeatureOverrideSources)
   );
   replacePlainObject(state.labelVisibilityOverrides, clonePlainObject(features.labelVisibilityOverrides));
-  setRef(state.labelOverrideContextKey, String(features.labelOverrideContextKey || ''));
 };
 
 const buildFallbackOrthogroupStateData = (state) => ({
@@ -391,7 +398,8 @@ const buildFallbackOrthogroupStateData = (state) => ({
   selectedOrthogroupId: getRef(state.selectedOrthogroupId, ''),
   selectedOrthogroupAlignmentFeature: getRef(state.selectedOrthogroupAlignmentFeature, ''),
   orthogroupNameOverrides: clonePlainObject(state.orthogroupNameOverrides),
-  orthogroupDescriptionOverrides: clonePlainObject(state.orthogroupDescriptionOverrides)
+  orthogroupDescriptionOverrides: clonePlainObject(state.orthogroupDescriptionOverrides),
+  orthogroupDormantOverrides: clonePlainObject(state.orthogroupDormantOverrides)
 });
 
 const applyFallbackOrthogroupStateData = (state, data = {}) => {
@@ -400,6 +408,7 @@ const applyFallbackOrthogroupStateData = (state, data = {}) => {
   setRef(state.selectedOrthogroupAlignmentFeature, String(data.selectedOrthogroupAlignmentFeature || ''));
   replacePlainObject(state.orthogroupNameOverrides, clonePlainObject(data.orthogroupNameOverrides));
   replacePlainObject(state.orthogroupDescriptionOverrides, clonePlainObject(data.orthogroupDescriptionOverrides));
+  replacePlainObject(state.orthogroupDormantOverrides, clonePlainObject(data.orthogroupDormantOverrides));
 };
 
 const buildFallbackResultsData = (state) => {
@@ -427,7 +436,10 @@ const applyFallbackResultsData = (state, results = []) => {
   );
 };
 
-const buildFilesData = (state, fileStore) => ({
+// The History intent holds every file binding by reference, including the
+// BLAST rows and comparison sequences of a LOSAT-cache replay: its ring rows and
+// managed track slots name those rows, so Undo restores them together (B23).
+const buildIntentFilesData = (state, fileStore) => ({
   c_gb: fileStore.describeValue(state.files?.c_gb),
   c_gff: fileStore.describeValue(state.files?.c_gff),
   c_fasta: fileStore.describeValue(state.files?.c_fasta),
@@ -438,18 +450,6 @@ const buildFilesData = (state, fileStore) => ({
     : null,
   c_conservation_fastas: fileStore.describeValue(state.files?.c_conservation_fastas || []),
   c_conservation_sequence_sources: fileStore.describeValue(state.files?.c_conservation_sequence_sources || []),
-  linearCanonicalComparisons: (
-    Array.isArray(state.files?.linearCanonicalComparisons)
-      ? state.files.linearCanonicalComparisons
-      : []
-  ).map((comparison) => (
-    isResourceBackedCanonicalComparison(comparison)
-      ? {
-          ...mapResourceBackedCanonicalComparison(comparison),
-          file: fileStore.describeValue(comparison.file)
-        }
-      : cloneJsonData(comparison)
-  )),
   d_color: fileStore.describeValue(state.files?.d_color),
   t_color: fileStore.describeValue(state.files?.t_color),
   blacklist: fileStore.describeValue(state.files?.blacklist),
@@ -466,6 +466,7 @@ const buildFilesData = (state, fileStore) => ({
     record_subtitle: seq.record_subtitle ?? '',
     file_definition: seq.file_definition ?? '',
     file_subtitle: seq.file_subtitle ?? '',
+    inferred_definition: seq.inferred_definition ?? '',
     region_record_id: seq.region_record_id ?? '',
     region_start: seq.region_start ?? null,
     region_end: seq.region_end ?? null,
@@ -477,47 +478,22 @@ const buildFilesData = (state, fileStore) => ({
   }))
 });
 
-const buildIntentFilesData = (state, fileStore) => {
-  const files = {
-    c_gb: fileStore.describeValue(state.files?.c_gb),
-    c_gff: fileStore.describeValue(state.files?.c_gff),
-    c_fasta: fileStore.describeValue(state.files?.c_fasta),
-    c_depth: fileStore.describeValue(state.files?.c_depth),
-    c_conservation_blasts_source: state.files?.c_conservation_blasts_source === 'losat-cache'
-      ? 'losat-cache'
-      : null,
-    c_conservation_fastas: fileStore.describeValue(state.files?.c_conservation_fastas || []),
-    d_color: fileStore.describeValue(state.files?.d_color),
-    t_color: fileStore.describeValue(state.files?.t_color),
-    blacklist: fileStore.describeValue(state.files?.blacklist),
-    whitelist: fileStore.describeValue(state.files?.whitelist),
-    qualifier_priority: fileStore.describeValue(state.files?.qualifier_priority),
-    linearSeqs: Array.from(state.linearSeqs || []).map((seq) => ({
-      uid: seq.uid,
-      gb: fileStore.describeValue(seq.gb),
-      gff: fileStore.describeValue(seq.gff),
-      fasta: fileStore.describeValue(seq.fasta),
-      depth: fileStore.describeValue(seq.depth),
-      losat_gencode: seq.losat_gencode ?? 1,
-      definition: seq.definition ?? '',
-      record_subtitle: seq.record_subtitle ?? '',
-      file_definition: seq.file_definition ?? '',
-      file_subtitle: seq.file_subtitle ?? '',
-      region_record_id: seq.region_record_id ?? '',
-      region_start: seq.region_start ?? null,
-      region_end: seq.region_end ?? null,
-      region_reverse: Boolean(seq.region_reverse)
-    })),
-    linearComparisons: Array.from(state.linearComparisonPlan?.edges || []).map((edge) => ({
-      id: String(edge?.id || ''),
-      file: fileStore.describeValue(edge?.file)
-    }))
-  };
-  if (state.files?.c_conservation_blasts_source !== 'losat-cache') {
-    files.c_conservation_blasts = fileStore.describeValue(state.files?.c_conservation_blasts || []);
-  }
-  return files;
-};
+// An artifact checkpoint adds the generated Linear comparisons.
+const buildFilesData = (state, fileStore) => ({
+  ...buildIntentFilesData(state, fileStore),
+  linearCanonicalComparisons: (
+    Array.isArray(state.files?.linearCanonicalComparisons)
+      ? state.files.linearCanonicalComparisons
+      : []
+  ).map((comparison) => (
+    isResourceBackedCanonicalComparison(comparison)
+      ? {
+          ...mapResourceBackedCanonicalComparison(comparison),
+          file: fileStore.describeValue(comparison.file)
+        }
+      : cloneJsonData(comparison)
+  ))
+});
 
 const collectCurrentFileIds = (state, fileStore) => {
   const fileIds = new Set();
@@ -568,24 +544,18 @@ const applyFilesData = (state, filesData, fileStore, normalizeLinearSeqList = nu
   state.files.c_gff = restore(filesData?.c_gff);
   state.files.c_fasta = restore(filesData?.c_fasta);
   state.files.c_depth = restore(filesData?.c_depth);
-  if (Object.prototype.hasOwnProperty.call(filesData || {}, 'c_conservation_blasts')) {
-    state.files.c_conservation_blasts = Array.isArray(filesData?.c_conservation_blasts)
-      ? restore(filesData.c_conservation_blasts).filter(Boolean)
-      : [];
-  }
-  if (Object.prototype.hasOwnProperty.call(filesData || {}, 'c_conservation_blasts_source')) {
-    state.files.c_conservation_blasts_source = filesData?.c_conservation_blasts_source === 'losat-cache'
-      ? 'losat-cache'
-      : null;
-  }
+  state.files.c_conservation_blasts = Array.isArray(filesData?.c_conservation_blasts)
+    ? restore(filesData.c_conservation_blasts).filter(Boolean)
+    : [];
+  state.files.c_conservation_blasts_source = filesData?.c_conservation_blasts_source === 'losat-cache'
+    ? 'losat-cache'
+    : null;
   state.files.c_conservation_fastas = Array.isArray(filesData?.c_conservation_fastas)
     ? restore(filesData.c_conservation_fastas)
     : [];
-  if (Object.prototype.hasOwnProperty.call(filesData || {}, 'c_conservation_sequence_sources')) {
-    state.files.c_conservation_sequence_sources = Array.isArray(filesData?.c_conservation_sequence_sources)
-      ? restore(filesData.c_conservation_sequence_sources)
-      : [];
-  }
+  state.files.c_conservation_sequence_sources = Array.isArray(filesData?.c_conservation_sequence_sources)
+    ? restore(filesData.c_conservation_sequence_sources)
+    : [];
   if (Object.prototype.hasOwnProperty.call(filesData || {}, 'linearCanonicalComparisons')) {
     state.files.linearCanonicalComparisons = Array.isArray(filesData?.linearCanonicalComparisons)
       ? filesData.linearCanonicalComparisons.map((comparison) => (
@@ -614,6 +584,7 @@ const applyFilesData = (state, filesData, fileStore, normalizeLinearSeqList = nu
         record_subtitle: seq.record_subtitle ?? '',
         file_definition: seq.file_definition ?? '',
         file_subtitle: seq.file_subtitle ?? '',
+        inferred_definition: seq.inferred_definition ?? '',
         region_record_id: seq.region_record_id ?? '',
         region_start: seq.region_start ?? null,
         region_end: seq.region_end ?? null,
@@ -645,6 +616,7 @@ export const createHistorySnapshotService = ({
   buildUiStateData = null,
   applyUiStateData = null,
   buildCompositionIntent = null,
+  buildLegendEntryOwners = null,
   buildFeatureStateData = null,
   applyFeatureStateData = null,
   buildEditorStateData = null,
@@ -680,6 +652,26 @@ export const createHistorySnapshotService = ({
     ) ? owner : null;
   };
 
+  const captureLinearRecordOrientations = () => (
+    (Array.isArray(state.linearSeqs) ? state.linearSeqs : []).map((sequence) => ({
+      recordKey: String(sequence?.uid || ''),
+      reverseComplement: Boolean(sequence?.region_reverse)
+    })).filter(({ recordKey }) => recordKey)
+  );
+
+  const installLinearRecordOrientations = (orientations) => {
+    const byRecord = new Map(
+      (Array.isArray(orientations) ? orientations : []).map((entry) => [
+        String(entry?.recordKey || ''),
+        Boolean(entry?.reverseComplement)
+      ])
+    );
+    (Array.isArray(state.linearSeqs) ? state.linearSeqs : []).forEach((sequence) => {
+      const recordKey = String(sequence?.uid || '');
+      if (byRecord.has(recordKey)) sequence.region_reverse = byRecord.get(recordKey);
+    });
+  };
+
   const captureGeneratedArtifactOwnerSet = () => {
     const results = artifactOwnedValue(getGeneratedArtifactRef(state.results, []));
     return Object.freeze({
@@ -701,6 +693,20 @@ export const createHistorySnapshotService = ({
         getGeneratedArtifactRef(state.featureOrthogroupIndex, null)
       ),
       collinearGroups: artifactOwnedValue(getGeneratedArtifactRef(state.collinearGroups, null)),
+      similarityAlignmentResetReceipt: artifactOwnedValue(
+        getGeneratedArtifactRef(state.similarityAlignmentResetReceipt, null)
+      ),
+      similarityAlignmentPlan: artifactOwnedValue(
+        getGeneratedArtifactRef(state.similarityAlignmentPlan, null)
+      ),
+      linearRecordTranslations: artifactOwnedValue(
+        getGeneratedArtifactRef(state.linearRecordTranslations, null)
+      ),
+      linearRecordOrientations: artifactOwnedValue(captureLinearRecordOrientations()),
+      annotationWarnings: artifactOwnedValue(getGeneratedArtifactRef(state.annotationWarnings, null)),
+      comparisonWarnings: artifactOwnedValue(getGeneratedArtifactRef(state.comparisonWarnings, null)),
+      specificRules: (state.manualSpecificRules || []).map(rule => ({ ...rule })),
+      fileLegendCaptions: new Set(state.fileLegendCaptions?.value || []),
       trackSlotResolvedGeometry: artifactOwnedValue(
         getGeneratedArtifactRef(state.trackSlotResolvedGeometry, null)
       ),
@@ -785,6 +791,25 @@ export const createHistorySnapshotService = ({
       ownerSet.featureOrthogroupIndex || new Map()
     );
     setGeneratedArtifactRef(state.collinearGroups, ownerSet.collinearGroups || []);
+    setGeneratedArtifactRef(
+      state.similarityAlignmentResetReceipt,
+      ownerSet.similarityAlignmentResetReceipt ?? null
+    );
+    setGeneratedArtifactRef(
+      state.similarityAlignmentPlan,
+      ownerSet.similarityAlignmentPlan ?? null
+    );
+    setGeneratedArtifactRef(
+      state.linearRecordTranslations,
+      ownerSet.linearRecordTranslations || []
+    );
+    installLinearRecordOrientations(ownerSet.linearRecordOrientations);
+    setGeneratedArtifactRef(state.annotationWarnings, ownerSet.annotationWarnings || []);
+    setGeneratedArtifactRef(state.comparisonWarnings, ownerSet.comparisonWarnings || []);
+    if (state.manualSpecificRules && ownerSet.specificRules) {
+      state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...ownerSet.specificRules.map(rule => ({ ...rule })));
+    }
+    if (state.fileLegendCaptions && ownerSet.fileLegendCaptions) state.fileLegendCaptions.value = new Set(ownerSet.fileLegendCaptions);
     setGeneratedArtifactRef(
       state.trackSlotResolvedGeometry,
       ownerSet.trackSlotResolvedGeometry ?? null
@@ -872,7 +897,12 @@ export const createHistorySnapshotService = ({
       'orthogroups',
       'featureOrthogroupIndex',
       'collinearGroups',
+      'similarityAlignmentResetReceipt',
+      'similarityAlignmentPlan',
+      'linearRecordTranslations',
       'trackSlotResolvedGeometry',
+      'annotationWarnings',
+      'comparisonWarnings',
       'proteinIdentityManifest',
       'legacyProteinRawCandidates',
       'legacyProteinDerivedEvidence',
@@ -911,8 +941,7 @@ export const createHistorySnapshotService = ({
         labelOverrideRows: mutableIntent.features.labelOverrideRows,
         labelTextBulkOverrides: mutableIntent.features.labelTextBulkOverrides,
         labelTextFeatureOverrideSources: mutableIntent.features.labelTextFeatureOverrideSources,
-        labelVisibilityOverrides: mutableIntent.features.labelVisibilityOverrides,
-        labelOverrideContextKey: mutableIntent.features.labelOverrideContextKey
+        labelVisibilityOverrides: mutableIntent.features.labelVisibilityOverrides
       },
       editor: {
         legend: mutableIntent.editorState.legend,
@@ -925,8 +954,10 @@ export const createHistorySnapshotService = ({
           mutableIntent.orthogroupState.selectedOrthogroupAlignmentFeature,
         orthogroupNameOverrides: mutableIntent.orthogroupState.orthogroupNameOverrides,
         orthogroupDescriptionOverrides:
-          mutableIntent.orthogroupState.orthogroupDescriptionOverrides
+          mutableIntent.orthogroupState.orthogroupDescriptionOverrides,
+        orthogroupDormantOverrides: mutableIntent.orthogroupState.orthogroupDormantOverrides
       },
+      alignmentState: mutableIntent.alignmentState,
       presentation: {
         resultPanelTab: mutableIntent.presentation.resultPanelTab
       }
@@ -958,10 +989,7 @@ export const createHistorySnapshotService = ({
       labelTextFeatureOverrideSources: clonePlainObject(
         state.labelTextFeatureOverrideSources
       ),
-      labelVisibilityOverrides: clonePlainObject(state.labelVisibilityOverrides),
-      labelOverrideContextKey: String(
-        getGeneratedArtifactRef(state.labelOverrideContextKey, '') || ''
-      )
+      labelVisibilityOverrides: clonePlainObject(state.labelVisibilityOverrides)
     };
     const editorState = {
       legend: {
@@ -999,13 +1027,22 @@ export const createHistorySnapshotService = ({
       orthogroupNameOverrides: clonePlainObject(state.orthogroupNameOverrides),
       orthogroupDescriptionOverrides: clonePlainObject(
         state.orthogroupDescriptionOverrides
-      )
+      ),
+      orthogroupDormantOverrides: clonePlainObject(state.orthogroupDormantOverrides)
     };
     const mutableIntent = Object.freeze({
       ui,
       features,
       editorState,
       orthogroupState,
+      alignmentState: Object.freeze({
+        receipt: cloneJsonData(getGeneratedArtifactRef(state.similarityAlignmentResetReceipt, null)),
+        plan: cloneJsonData(getGeneratedArtifactRef(state.similarityAlignmentPlan, null)),
+        recordTranslations: cloneJsonData(
+          getGeneratedArtifactRef(state.linearRecordTranslations, [])
+        ) || [],
+        recordOrientations: captureLinearRecordOrientations()
+      }),
       presentation: Object.freeze({
         resultGenerationKey: getGeneratedArtifactRef(state.resultGenerationKey, 0),
         resultPanelTab: getGeneratedArtifactRef(state.resultPanelTab, 'preview'),
@@ -1050,6 +1087,10 @@ export const createHistorySnapshotService = ({
     { clearFailedGeneratePresentation = false } = {}
   ) => {
     if (!handle || handle.kind !== 'GeneratedArtifactHandle') return false;
+    await validateSimilarityAlignmentResetReceipt(
+      handle.ownerSet?.similarityAlignmentResetReceipt,
+      handle.runtimeState?.canonical?.committedCanonicalSession
+    );
     if (clearFailedGeneratePresentation && state.failedGeneratePreservedResult) {
       state.failedGeneratePreservedResult.value = false;
     }
@@ -1076,7 +1117,6 @@ export const createHistorySnapshotService = ({
       await nextTick();
 
       if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
-      if (state.skipPositionReapply) state.skipPositionReapply.value = true;
       installGeneratedArtifactOwnerSet(handle.ownerSet, {
         selectedResultIndex: ui.selectedResultIndex
       });
@@ -1097,6 +1137,10 @@ export const createHistorySnapshotService = ({
         state.orthogroupDescriptionOverrides,
         clonePlainObject(mutableIntent.orthogroupState?.orthogroupDescriptionOverrides)
       );
+      replacePlainObject(
+        state.orthogroupDormantOverrides,
+        clonePlainObject(mutableIntent.orthogroupState?.orthogroupDormantOverrides)
+      );
 
       const trustedEditorState = {
         ...cloneJsonData({
@@ -1104,13 +1148,11 @@ export const createHistorySnapshotService = ({
           featureStrokes: mutableIntent.editorState?.featureStrokes || {},
           originalSvgStroke: mutableIntent.editorState?.originalSvgStroke || {}
         }),
+        alignmentResetReceipt: handle.ownerSet?.similarityAlignmentResetReceipt ?? null,
         featureCatalog: handle.ownerSet?.featureCatalog || null
       };
       if (typeof applyEditorStateData === 'function') {
-        applyEditorStateData(trustedEditorState, {
-          normalized: true,
-          adoptCatalog: true
-        });
+        applyEditorStateData(trustedEditorState, { normalized: true });
       } else {
         applyEditorIntentData(state, trustedEditorState);
         setGeneratedArtifactRef(state.featureCatalog, trustedEditorState.featureCatalog);
@@ -1188,9 +1230,28 @@ export const createHistorySnapshotService = ({
     && before.identity.compactSignature === after?.identity?.compactSignature
   );
 
-  const buildGeneratedArtifactSnapshot = ({ includePreviewNavigation = true } = {}) => {
+  // The alignment plan, its Reset receipt, and record translations; intents
+  // and checkpoints capture and restore them together.
+  const captureAlignmentState = () => ({
+    receipt: getGeneratedArtifactRef(state.similarityAlignmentResetReceipt, null),
+    plan: getGeneratedArtifactRef(state.similarityAlignmentPlan, null),
+    recordTranslations: getGeneratedArtifactRef(state.linearRecordTranslations, [])
+  });
+  const installAlignmentState = (alignmentState) => {
+    setGeneratedArtifactRef(
+      state.similarityAlignmentResetReceipt,
+      cloneJsonData(alignmentState?.receipt) || null
+    );
+    setGeneratedArtifactRef(state.similarityAlignmentPlan, cloneJsonData(alignmentState?.plan) || null);
+    setGeneratedArtifactRef(
+      state.linearRecordTranslations,
+      cloneJsonData(alignmentState?.recordTranslations) || []
+    );
+  };
+
+  const buildGeneratedArtifactSnapshot = () => {
     const ui = typeof buildUiStateData === 'function'
-      ? buildUiStateData({ includePreviewNavigation })
+      ? buildUiStateData({ includePreviewNavigation: false })
       : buildFallbackUiStateData(state);
     const features = typeof buildFeatureStateData === 'function'
       ? buildFeatureStateData()
@@ -1211,28 +1272,21 @@ export const createHistorySnapshotService = ({
           pairwiseMatchFactors: clonePlainObject(getRef(state.pairwiseMatchFactors, {}))
         };
 
-    return cloneJsonData({
-      ui,
-      results,
-      features,
-      editorState,
-      orthogroupState,
-      runState
-    });
+    return { ui, results, features, editorState, orthogroupState, runState };
   };
 
-  const applyArtifactDomains = (
-    snapshot,
-    { trusted = false, restoreResults = true } = {}
-  ) => {
+  // SE-01/N-20 (R11): a checkpoint never copies or signs the Generate-owned
+  // feature catalog. It keeps the admitted catalog by reference, and History
+  // retains each checkpoint object as captured.
+  const checkpointFeatureCatalogs = new WeakMap();
+
+  const applyArtifactDomains = (snapshot) => {
     const ui = snapshot?.ui || {};
-    if (restoreResults) {
-      if (typeof applyResultsData === 'function') {
-        applyResultsData(snapshot?.results || [], ui);
-      } else {
-        applyFallbackResultsData(state, snapshot?.results || []);
-        applyFallbackUiStateData(state, { selectedResultIndex: ui.selectedResultIndex });
-      }
+    if (typeof applyResultsData === 'function') {
+      applyResultsData(snapshot?.results || [], ui);
+    } else {
+      applyFallbackResultsData(state, snapshot?.results || []);
+      applyFallbackUiStateData(state, { selectedResultIndex: ui.selectedResultIndex });
     }
 
     if (typeof applyFeatureStateData === 'function') {
@@ -1248,7 +1302,12 @@ export const createHistorySnapshotService = ({
     }
 
     if (typeof applyEditorStateData === 'function') {
-      applyEditorStateData(snapshot?.editorState || {}, { trusted });
+      // The checkpoint holds the editor state as captured: install a copy as
+      // is, so a value such as the Result's named stroke color stays unchanged.
+      applyEditorStateData({
+        ...cloneJsonData(snapshot?.editorState || {}),
+        featureCatalog: checkpointFeatureCatalogs.get(snapshot) ?? null
+      }, { normalized: true });
     }
 
     if (typeof applyRunStateData === 'function') {
@@ -1256,18 +1315,6 @@ export const createHistorySnapshotService = ({
     } else {
       setRef(state.lastRunInfo, cloneJsonData(snapshot?.runState?.lastRunInfo) || null);
       setRef(state.pairwiseMatchFactors, clonePlainObject(snapshot?.runState?.pairwiseMatchFactors));
-    }
-  };
-
-  const applyGeneratedArtifactSnapshot = (snapshot, { restoreResults = true } = {}) => {
-    if (!snapshot || typeof snapshot !== 'object') return;
-    if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
-    if (state.skipPositionReapply) state.skipPositionReapply.value = true;
-    applyArtifactDomains(snapshot, { trusted: true, restoreResults });
-    if (typeof applyUiStateData === 'function') {
-      applyUiStateData(snapshot.ui || {});
-    } else {
-      applyFallbackUiStateData(state, snapshot.ui || {});
     }
   };
 
@@ -1290,12 +1337,12 @@ export const createHistorySnapshotService = ({
       labelTextFeatureOverrides: state.labelTextFeatureOverrides,
       labelTextBulkOverrides: state.labelTextBulkOverrides,
       labelTextFeatureOverrideSources: state.labelTextFeatureOverrideSources,
-      labelVisibilityOverrides: state.labelVisibilityOverrides,
-      labelOverrideContextKey: getRef(state.labelOverrideContextKey, '')
+      labelVisibilityOverrides: state.labelVisibilityOverrides
     };
     const editorState = {
       legend: {
         entries: getRef(state.legendEntries, []),
+        ...(typeof buildLegendEntryOwners === 'function' ? { entryOwners: buildLegendEntryOwners() } : {}),
         deletedEntries: getRef(state.deletedLegendEntries, []),
         colorOverrides: state.legendColorOverrides,
         strokeOverrides: state.legendStrokeOverrides,
@@ -1307,7 +1354,8 @@ export const createHistorySnapshotService = ({
       selectedOrthogroupId: getRef(state.selectedOrthogroupId, ''),
       selectedOrthogroupAlignmentFeature: getRef(state.selectedOrthogroupAlignmentFeature, ''),
       orthogroupNameOverrides: state.orthogroupNameOverrides,
-      orthogroupDescriptionOverrides: state.orthogroupDescriptionOverrides
+      orthogroupDescriptionOverrides: state.orthogroupDescriptionOverrides,
+      orthogroupDormantOverrides: state.orthogroupDormantOverrides
     };
 
     const uiIntent = buildUiIntentData(ui);
@@ -1319,6 +1367,7 @@ export const createHistorySnapshotService = ({
     return cloneJsonData({
       config,
       files: buildIntentFilesData(state, fileStore),
+      alignmentState: captureAlignmentState(),
       ui: uiIntent,
       drafts: buildDraftIntentData(state),
       features: buildFeatureIntentData(features),
@@ -1334,8 +1383,20 @@ export const createHistorySnapshotService = ({
     const domains = new Set(
       Array.isArray(context.changes) && context.changes.length > 0
         ? context.changes.map((change) => change?.path?.[0]).filter(Boolean)
-        : ['config', 'files', 'ui', 'drafts', 'features', 'editorState', 'orthogroupState']
+        : [
+            'config', 'files', 'alignmentState', 'ui', 'drafts', 'features',
+            'editorState', 'orthogroupState'
+          ]
     );
+    if (domains.has('alignmentState')) {
+      const canonical = generatedArtifactRuntimeOwner?.capture?.()?.canonical?.committedCanonicalSession;
+      await validateSimilarityAlignmentResetReceipt(intent.alignmentState?.receipt, canonical && {
+        ...canonical,
+        renderRequest: { ...canonical.renderRequest, layout: {
+          ...canonical.renderRequest.layout, similarityAlignment: intent.alignmentState?.plan
+        } }
+      });
+    }
     const retainedComparisonFiles = domains.has('config') && !domains.has('files')
       ? new Map(
           (Array.isArray(state.linearComparisonPlan?.edges)
@@ -1360,7 +1421,7 @@ export const createHistorySnapshotService = ({
 
       if (domains.has('config')) {
         if (typeof applyConfigData === 'function' && intent.config) {
-          applyConfigData(intent.config);
+          applyConfigData(intent.config, { resolveTrackPlacements: false });
         } else if (intent.config?.linearComparisonPlan) {
           replaceLinearComparisonPlan(state.linearComparisonPlan, intent.config.linearComparisonPlan);
         }
@@ -1380,22 +1441,12 @@ export const createHistorySnapshotService = ({
         } else {
           applyFallbackUiStateData(state, intent.ui || {});
         }
-        if (Number.isInteger(intent.ui?.selectedResultIndex)) {
-          const resultCount = Array.isArray(getRef(state.results, []))
-            ? getRef(state.results, []).length
-            : 0;
-          setRef(
-            state.selectedResultIndex,
-            resultCount > 0
-              ? Math.max(0, Math.min(intent.ui.selectedResultIndex, resultCount - 1))
-              : 0
-          );
-        }
       }
 
       if (domains.has('files')) {
         applyFilesData(state, intent.files || {}, fileStore, normalizeLinearSeqList);
       }
+      if (domains.has('alignmentState')) installAlignmentState(intent.alignmentState);
       if (domains.has('drafts')) applyDraftIntentData(state, intent.drafts || {});
       if (domains.has('features')) applyFeatureIntentData(state, intent.features || {});
       if (domains.has('editorState')) applyEditorIntentData(state, intent.editorState || {});
@@ -1418,57 +1469,70 @@ export const createHistorySnapshotService = ({
           linearComparisonPlan: cloneLinearComparisonPlanMetadata(state.linearComparisonPlan)
         };
 
-    return cloneJsonData({
+    const generated = buildGeneratedArtifactSnapshot();
+    const { featureCatalog = null, ...editorState } = generated.editorState || {};
+    const checkpoint = cloneJsonData({
       config,
       files: buildFilesData(state, fileStore),
+      alignmentState: captureAlignmentState(),
       drafts: buildDraftIntentData(state),
-      ...buildGeneratedArtifactSnapshot({ includePreviewNavigation: false })
+      ...generated,
+      editorState
     });
+    checkpointFeatureCatalogs.set(checkpoint, featureCatalog);
+    return checkpoint;
   };
 
   const applyArtifactCheckpoint = async (snapshot) => {
     if (!snapshot || typeof snapshot !== 'object') return;
-    closeTransientState(state);
+    const suppressRef = state.semanticFileWatchersSuppressed;
+    const previousSuppressed = getGeneratedArtifactRef(suppressRef, false);
+    setGeneratedArtifactRef(suppressRef, true);
+    try {
+      closeTransientState(state);
 
-    const ui = snapshot.ui || {};
-    if (ui.mode) setRef(state.mode, ui.mode === 'linear' ? 'linear' : 'circular');
-    if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
-    if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
-    // The mode watcher clears generated metadata. Let that reset finish before
-    // restoring snapshot-owned feature, label, and orthogroup state.
-    await nextTick();
+      const ui = snapshot.ui || {};
+      if (ui.mode) setRef(state.mode, ui.mode === 'linear' ? 'linear' : 'circular');
+      if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
+      if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
+      // The mode watcher clears generated metadata. Let that reset finish before
+      // restoring snapshot-owned feature, label, and orthogroup state.
+      await nextTick();
 
-    if (typeof applyConfigData === 'function' && snapshot.config) {
-      applyConfigData(snapshot.config);
-    } else if (snapshot.config?.linearComparisonPlan) {
-      replaceLinearComparisonPlan(
-        state.linearComparisonPlan,
-        snapshot.config.linearComparisonPlan
-      );
-    }
-    applyDraftIntentData(state, snapshot.drafts || {});
+      if (typeof applyConfigData === 'function' && snapshot.config) {
+        applyConfigData(snapshot.config, { resolveTrackPlacements: false });
+      } else if (snapshot.config?.linearComparisonPlan) {
+        replaceLinearComparisonPlan(
+          state.linearComparisonPlan,
+          snapshot.config.linearComparisonPlan
+        );
+      }
+      applyDraftIntentData(state, snapshot.drafts || {});
 
-    if (typeof applyUiStateData === 'function') {
-      applyUiStateData(ui, { restorePreviewNavigation: false });
-    } else {
-      applyFallbackUiStateData(state, ui);
-    }
-    await nextTick();
+      if (typeof applyUiStateData === 'function') {
+        applyUiStateData(ui, { restorePreviewNavigation: false });
+      } else {
+        applyFallbackUiStateData(state, ui);
+      }
+      await nextTick();
 
-    applyFilesData(state, snapshot.files || {}, fileStore, normalizeLinearSeqList);
+      applyFilesData(state, snapshot.files || {}, fileStore, normalizeLinearSeqList);
+      installAlignmentState(snapshot.alignmentState);
 
-    if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
-    if (state.skipPositionReapply) state.skipPositionReapply.value = true;
-    if (state.skipExtractOnSvgChange) state.skipExtractOnSvgChange.value = false;
+      if (state.skipCaptureBaseConfig) state.skipCaptureBaseConfig.value = true;
+      if (state.skipExtractOnSvgChange) state.skipExtractOnSvgChange.value = false;
 
-    applyArtifactDomains(snapshot);
+      applyArtifactDomains(snapshot);
 
-    await nextTick();
-    await nextFrame();
-    if (typeof applyUiStateData === 'function') {
-      applyUiStateData(ui, { restorePreviewNavigation: false });
-    } else {
-      applyFallbackUiStateData(state, ui);
+      await nextTick();
+      await nextFrame();
+      if (typeof applyUiStateData === 'function') {
+        applyUiStateData(ui, { restorePreviewNavigation: false });
+      } else {
+        applyFallbackUiStateData(state, ui);
+      }
+    } finally {
+      setGeneratedArtifactRef(suppressRef, previousSuppressed);
     }
   };
 
@@ -1476,7 +1540,6 @@ export const createHistorySnapshotService = ({
 
   return {
     applyArtifactCheckpoint,
-    applyGeneratedArtifactSnapshot,
     applyHistoryIntent,
     buildArtifactCheckpoint,
     captureGeneratedArtifactHandle,
@@ -1484,7 +1547,6 @@ export const createHistorySnapshotService = ({
     clearGeneratedArtifactIdentity,
     collectCurrentFileIds: () => collectCurrentFileIds(state, fileStore),
     compareGeneratedArtifactHandles,
-    buildGeneratedArtifactSnapshot,
     buildHistoryIntent,
     installGeneratedArtifactOwnerSet,
     restoreGeneratedArtifactHandle,

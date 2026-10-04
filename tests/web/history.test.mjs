@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -15,6 +15,7 @@ await writeFile(
   await readFile(join(webSourceDir, 'web-ux-profile.js'), 'utf8'),
   'utf8'
 );
+await cp(webSourceDir, tempDir, {recursive:true});
 await mkdir(join(tempDir, 'services'), { recursive: true });
 await mkdir(join(tempDir, 'app'), { recursive: true });
 for (const filename of [
@@ -514,6 +515,71 @@ const createLayoutPreferences = () => ({
 }
 
 {
+  let artifact = {
+    id: 'before',
+    identity: { fingerprint: 'a'.repeat(64), compactSignature: 'before' },
+    retainedBytes: 128,
+    fileIds: []
+  };
+  let targetDraft = { startCoordinate: 1, reverseComplementOverride: false, anchorIntent: null };
+  const history = createHistoryManager({
+    buildIntent: async () => ({ unrelated: 'pending', targetDraft }),
+    applyIntent: async (intent) => { targetDraft = intent.targetDraft; },
+    buildCheckpoint: () => ({}),
+    applyCheckpoint: async () => {},
+    captureGeneratedArtifactHandle: () => artifact,
+    restoreGeneratedArtifactHandle: async (handle) => { artifact = handle; },
+    compareGeneratedArtifactHandles: (left, right) => (
+      left.identity.fingerprint === right.identity.fingerprint
+      && left.identity.compactSignature === right.identity.compactSignature
+    )
+  });
+  const checkpointOptions = {
+    shouldCommit: (result) => result.status === 'ok',
+    captureIntentCheckpoint: () => structuredClone(targetDraft),
+    restoreIntentCheckpoint: (checkpoint) => { targetDraft = structuredClone(checkpoint); }
+  };
+  await history.initializeIntentBaseline('Atomic artifact baseline');
+  await history.runUndoableArtifactReplacement('Rotate record to feature', async () => {
+    artifact = {
+      id: 'after',
+      identity: { fingerprint: 'b'.repeat(64), compactSignature: 'after' },
+      retainedBytes: 128,
+      fileIds: []
+    };
+    targetDraft = {
+      startCoordinate: 75,
+      reverseComplementOverride: true,
+      anchorIntent: { schema: 1, recordKey: 'record-2' }
+    };
+    return { status: 'ok' };
+  }, checkpointOptions);
+  assert.equal(history.getUndoCount(), 1);
+  await history.undo();
+  assert.equal(artifact.id, 'before');
+  assert.deepEqual(targetDraft, {
+    startCoordinate: 1, reverseComplementOverride: false, anchorIntent: null
+  });
+  await history.redo();
+  assert.equal(artifact.id, 'after');
+  assert.equal(targetDraft.startCoordinate, 75);
+  assert.equal(targetDraft.reverseComplementOverride, true);
+
+  const undoCount = history.getUndoCount();
+  const failed = await history.runUndoableArtifactReplacement(
+    'Rejected record rotation',
+    async (before) => {
+      artifact = before;
+      return { status: 'stale' };
+    },
+    checkpointOptions
+  );
+  assert.deepEqual(failed, { status: 'stale' });
+  assert.equal(targetDraft.startCoordinate, 75);
+  assert.equal(history.getUndoCount(), undoCount);
+}
+
+{
   let value = 0;
   const buildState = async () => ({ value });
   const applyState = async (snapshot) => {
@@ -940,7 +1006,6 @@ const createLayoutPreferences = () => ({
     labelTextBulkOverrides: {},
     labelTextFeatureOverrideSources: {},
     labelVisibilityOverrides: {},
-    labelOverrideContextKey: ref(''),
     orthogroups: ref([]),
     selectedOrthogroupId: ref(''),
     selectedOrthogroupAlignmentFeature: ref(''),
@@ -949,7 +1014,6 @@ const createLayoutPreferences = () => ({
     lastRunInfo: ref(null),
     pairwiseMatchFactors: ref({}),
     skipCaptureBaseConfig: ref(false),
-    skipPositionReapply: ref(false),
     skipExtractOnSvgChange: ref(false)
   };
   const snapshots = createHistorySnapshotService({
@@ -1217,7 +1281,6 @@ const createLayoutPreferences = () => ({
     labelTextBulkOverrides: {},
     labelTextFeatureOverrideSources: {},
     labelVisibilityOverrides: {},
-    labelOverrideContextKey: ref(''),
     orthogroups: ref([]),
     selectedOrthogroupId: ref(''),
     selectedOrthogroupAlignmentFeature: ref(''),
@@ -1226,7 +1289,6 @@ const createLayoutPreferences = () => ({
     lastRunInfo: ref(null),
     pairwiseMatchFactors: ref({}),
     skipCaptureBaseConfig: ref(false),
-    skipPositionReapply: ref(false),
     skipExtractOnSvgChange: ref(false)
   };
   const snapshots = createHistorySnapshotService({
@@ -1396,7 +1458,6 @@ const createLayoutPreferences = () => ({
     labelTextBulkOverrides: {},
     labelTextFeatureOverrideSources: {},
     labelVisibilityOverrides: {},
-    labelOverrideContextKey: ref(''),
     orthogroups: ref([{ members: ['x'.repeat(100_000)] }]),
     selectedOrthogroupId: ref(''),
     selectedOrthogroupAlignmentFeature: ref(''),
@@ -1409,9 +1470,13 @@ const createLayoutPreferences = () => ({
     addedLegendCaptions: ref(new Set()),
     semanticFileWatchersSuppressed: ref(false)
   };
+  state.legendEntries = Object.create({ value: [{ caption: 'tRNA', color: '#e8b441' }] });
+  state.deletedLegendEntries = Object.create({ value: [] });
+  const entryOwners = [{ target: 'feature_legend', entries: [{ caption: 'tRNA', owner: '' }] }];
   const snapshots = createHistorySnapshotService({
     state,
     fileStore,
+    buildLegendEntryOwners: () => entryOwners,
     buildConfigData: () => ({ form: state.form, adv: state.adv }),
     buildFeatureStateData: () => {
       forbiddenArtifactBuilds += 1;
@@ -1431,6 +1496,13 @@ const createLayoutPreferences = () => ({
     }
   });
   const intent = await snapshots.buildHistoryIntent();
+  assert.deepEqual(intent.editorState.legend.entries, [{ caption: 'tRNA', color: '#e8b441' }]);
+  state.legendEntries.value = [{ caption: 'tRNA', color: '#c026d3' }];
+  await snapshots.applyHistoryIntent(intent, { changes: [{ path: ['editorState'] }] });
+  assert.deepEqual(state.legendEntries.value, [{ caption: 'tRNA', color: '#e8b441' }]);
+  entryOwners[0].entries[0].owner = 'specific-color-file';
+  assert.equal(intent.editorState.legend.entryOwners[0].entries[0].owner, '');
+  assert.equal(state.legendEntries.value.some(entry => Object.hasOwn(entry, 'entryOwners')), false);
   assert.equal(forbiddenArtifactBuilds, 0);
   assert.equal(Object.prototype.hasOwnProperty.call(intent, 'results'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent, 'runState'), false);
@@ -1438,8 +1510,65 @@ const createLayoutPreferences = () => ({
   assert.equal(Object.prototype.hasOwnProperty.call(intent.editorState, 'featureCatalog'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent.orthogroupState, 'groups'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent.files, 'linearCanonicalComparisons'), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(intent.files, 'c_conservation_sequence_sources'), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(intent.files, 'c_conservation_blasts'), false);
+  // B23: a LOSAT-cache replay's comparison sequences are held by reference only.
+  assert.deepEqual(intent.files.c_conservation_blasts, []);
+  assert.deepEqual(
+    Object.keys(intent.files.c_conservation_sequence_sources[0]).sort(),
+    ['fileId', 'lastModified', 'name', 'size', 'type']
+  );
+
+  // B21: with uploaded BLAST rows, the optional comparison sequence is a user
+  // choice, so the intent holds it and Undo restores it.
+  state.files.c_conservation_blasts_source = null;
+  const uploadIntent = await snapshots.buildHistoryIntent();
+  assert.equal(uploadIntent.files.c_conservation_sequence_sources.length, 1);
+  state.files.c_conservation_sequence_sources = [];
+  await snapshots.applyHistoryIntent(uploadIntent, { changes: [{ path: ['files'] }] });
+  assert.deepEqual(state.files.c_conservation_sequence_sources.map((file) => file?.name), ['generated-source.fa']);
+
+  // B23: in a LOSAT-cache replay the ring rows and managed track slots name the
+  // derived BLAST rows, so Undo and Redo of a ring removal restore those rows
+  // and their comparison sequences with the ring files.
+  const derivedBlasts = ['b', 'c', 'd'].map((id) => makeFile(`comparison-${id}.losatn.tsv`, 60));
+  const derivedSources = ['b', 'c', 'd'].map((id) => makeFile(`comparison-${id}.fasta`, 1234));
+  const ringFastas = ['b', 'c', 'd'].map((id) => makeFile(`comparison-${id}.fasta`, 1234));
+  Object.assign(state.files, {
+    c_conservation_blasts: [...derivedBlasts],
+    c_conservation_blasts_source: 'losat-cache',
+    c_conservation_fastas: [...ringFastas],
+    c_conservation_sequence_sources: [...derivedSources]
+  });
+  const replayHistory = createHistoryManager({
+    fileStore,
+    collectCurrentFileIds: snapshots.collectCurrentFileIds,
+    buildIntent: snapshots.buildHistoryIntent,
+    applyIntent: snapshots.applyHistoryIntent,
+    buildCheckpoint: () => {
+      throw new Error('a ring removal must not build an artifact checkpoint');
+    },
+    applyCheckpoint: snapshots.applyArtifactCheckpoint
+  });
+  await replayHistory.initializeIntentBaseline('Loaded session');
+  const replayRows = () => ({
+    blasts: [...state.files.c_conservation_blasts],
+    source: state.files.c_conservation_blasts_source,
+    fastas: [...state.files.c_conservation_fastas],
+    sequenceSources: [...state.files.c_conservation_sequence_sources]
+  });
+  const loadedRows = replayRows();
+  await replayHistory.runUndoable('Remove series', () => {
+    state.files.c_conservation_blasts = derivedBlasts.slice(1);
+    state.files.c_conservation_fastas = ringFastas.slice(1);
+    state.files.c_conservation_sequence_sources = derivedSources.slice(1);
+  });
+  const removedRows = replayRows();
+  await replayHistory.undo();
+  assert.deepEqual(replayRows(), loadedRows);
+  replayRows().blasts.forEach((file, index) => assert.equal(file, derivedBlasts[index]));
+  await replayHistory.redo();
+  assert.deepEqual(replayRows(), removedRows);
+  await replayHistory.undo();
+  assert.deepEqual(replayRows(), loadedRows);
 }
 
 {
@@ -1670,7 +1799,6 @@ const createLayoutPreferences = () => ({
     labelTextBulkOverrides: {},
     labelTextFeatureOverrideSources: {},
     labelVisibilityOverrides: {},
-    labelOverrideContextKey: ref('context-a'),
     legendEntries: ref([{ caption: 'A', color: '#112233' }]),
     deletedLegendEntries: ref([]),
     originalLegendOrder: ref(['A']),
@@ -1725,7 +1853,6 @@ const createLayoutPreferences = () => ({
       };
     })(),
     skipCaptureBaseConfig: ref(false),
-    skipPositionReapply: ref(false),
     skipExtractOnSvgChange: ref(false),
     trustedArtifactRestoreInProgress: ref(false),
     semanticFileWatchersSuppressed: ref(false)
@@ -1796,7 +1923,6 @@ const createLayoutPreferences = () => ({
     },
     applyEditorStateData: (editorState, options) => {
       assert.equal(options.normalized, true);
-      assert.equal(options.adoptCatalog, true);
       state.legendEntries.value = editorState.legend.entries;
       state.featureCatalog.value = editorState.featureCatalog;
     },
@@ -2212,3 +2338,74 @@ const createLayoutPreferences = () => ({
 }
 
 console.log('history tests passed');
+
+{
+  let file = 'original.tsv';
+  let rules = ['original'];
+  let svg = 'original legend';
+  const history = createHistoryManager({
+    buildIntent: () => ({ file, rules }),
+    applyIntent: (intent) => { file = intent.file; rules = [...intent.rules]; },
+    buildCheckpoint: () => ({ file, rules: [...rules], svg }),
+    applyCheckpoint: (checkpoint) => {
+      file = checkpoint.file;
+      rules = [...checkpoint.rules];
+      svg = checkpoint.svg;
+    }
+  });
+  await history.initializeIntentBaseline('Rejected artifact baseline');
+  await history.runUndoableCheckpoint('Import specific colors', async () => {
+    file = 'colors.tsv';
+    await history.runUndoableCheckpoint('Commit prepared rules', async () => {
+      rules = ['canonical caption'];
+      svg = 'canonical legend';
+      await history.runUndoable('Derived preview', () => { svg += ' and colors'; });
+    });
+  });
+  assert.equal(history.getUndoCount(), 1, 'an upload and its canonical rule/legend edit are one action');
+  assert.equal(history.getDiagnostics().artifactCheckpointBuilds, 2, 'nested edits share the outer capture');
+  await history.undo();
+  assert.deepEqual({ file, rules, svg }, { file: 'original.tsv', rules: ['original'], svg: 'original legend' });
+  await history.redo();
+  assert.deepEqual({ file, rules, svg }, { file: 'colors.tsv', rules: ['canonical caption'], svg: 'canonical legend and colors' });
+  await assert.rejects(history.runUndoableCheckpoint('Invalid import', async () => {
+    throw new Error('invalid known value');
+  }), /invalid known value/);
+  assert.equal(history.getUndoCount(), 1);
+  await history.runUndoable('Next edit', () => { rules = ['next']; });
+  assert.equal(history.getUndoCount(), 2, 'a failed checkpoint releases its nesting scope');
+  await history.undo();
+  assert.deepEqual(rules, ['canonical caption']);
+}
+
+for (const previousSuppressed of [false, true]) {
+  const state = { semanticFileWatchersSuppressed: ref(previousSuppressed) };
+  const snapshots = createHistorySnapshotService({
+    state,
+    fileStore: createHistoryFileStore(),
+    nextTick: async () => {
+      assert.equal(state.semanticFileWatchersSuppressed.value, true);
+      throw new Error('restore did not settle');
+    }
+  });
+  await assert.rejects(snapshots.applyArtifactCheckpoint({}), /restore did not settle/);
+  assert.equal(state.semanticFileWatchersSuppressed.value, previousSuppressed,
+    'checkpoint failure restores the prior semantic file-watcher suppression');
+}
+
+{
+  const before = { identity: { fingerprint: '', compactSignature: 'before' }, retainedBytes: 0, fileIds: [] };
+  const primary = {code:'RESULT_INVALID',stage:'result-admission',message:'PRIVATE_PRIMARY_SENTINEL'};
+  const history = createHistoryManager({buildIntent:async()=>({}),applyIntent:async()=>{},
+    buildCheckpoint:async()=>({}),applyCheckpoint:async()=>{},
+    captureGeneratedArtifactHandle:()=>before,restoreGeneratedArtifactHandle:async()=>{},
+    compareGeneratedArtifactHandles:()=>false});
+  await history.initializeIntentBaseline('Rejected artifact baseline');
+  let rollbackSettled = false;
+  await assert.rejects(history.runUndoableArtifactReplacement('Rejected artifact', async()=>{throw primary;}, {
+    restoreAppliedArtifact:async()=>{await Promise.resolve();rollbackSettled=true;throw new Error('PRIVATE_ROLLBACK_SENTINEL');}
+  }), error=>error===primary && error.artifactRestoreFailed===true);
+  assert.equal(rollbackSettled,true);
+  assert.equal(history.getUndoCount(),0);
+  assert.equal(history.getRedoCount(),0);
+}

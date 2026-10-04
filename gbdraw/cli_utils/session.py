@@ -30,6 +30,7 @@ from gbdraw.render.track_slot_metadata import (
 )
 from gbdraw.session_io import (
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
+    CURRENT_SESSION_VERSION,
     CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS,
     SessionBuildContext,
     SessionFileBinding,
@@ -497,6 +498,7 @@ def render_canonical_session_if_present(
         output_directory=output_directory,
     ) as materialized:
         request = session_to_request(materialized)
+        legacy_source_request = request
         request = with_request_output(
             request,
             output_prefix=output_path.name if output_path is not None else None,
@@ -633,6 +635,14 @@ def render_canonical_session_if_present(
                 else (rendered.drawing,)
             )
             rendered_request = rendered.request
+            from gbdraw.api.session_compat import (
+                project_legacy_similarity_alignment_for_current_write,
+            )
+
+            rendered_request = project_legacy_similarity_alignment_for_current_write(
+                rendered_request,
+                legacy_source=legacy_source_request,
+            )
             result_names = (
                 tuple(output.output_prefix for output in rendered_request.outputs)
                 if isinstance(rendered_request, CircularBatchRequest)
@@ -766,6 +776,17 @@ def _project_web_file_inventory(
     return files
 
 
+# Similarity-alignment flags a projected source session drops from its argv:
+# the current flag and the spellings that legacy sessions carry.
+_SIMILARITY_ALIGNMENT_FLAGS = frozenset(
+    {
+        "--similarity_alignment_feature",
+        "--align_orthogroup_feature",
+        "--align-orthogroup-feature",
+    }
+)
+
+
 def _project_session_adjunct_for_current_write(
     session: Mapping[str, Any],
     *,
@@ -786,21 +807,85 @@ def _project_session_adjunct_for_current_write(
             "files",
         }
     }
+    orthogroup_state = adjunct.get("orthogroupState")
+    if isinstance(orthogroup_state, Mapping):
+        projected_orthogroup_state = dict(orthogroup_state)
+        projected_orthogroup_state.pop(
+            "selectedOrthogroupAlignmentFeature",
+            None,
+        )
+        adjunct["orthogroupState"] = projected_orthogroup_state
+    cli_invocation = adjunct.get("cliInvocation")
+    if isinstance(cli_invocation, Mapping):
+        projected_invocation = dict(cli_invocation)
+        args = cli_invocation.get("args")
+        bindings = cli_invocation.get("fileBindings")
+        if isinstance(args, list):
+            projected_args: list[str] = []
+            retained_indexes: dict[int, int] = {}
+            index = 0
+            while index < len(args):
+                token = str(args[index])
+                if token in _SIMILARITY_ALIGNMENT_FLAGS:
+                    index += 2
+                    continue
+                if token.startswith(
+                    tuple(f"{flag}=" for flag in _SIMILARITY_ALIGNMENT_FLAGS)
+                ):
+                    index += 1
+                    continue
+                retained_indexes[index] = len(projected_args)
+                projected_args.append(token)
+                index += 1
+            projected_invocation["args"] = projected_args
+            if isinstance(bindings, list):
+                projected_bindings = []
+                for binding in bindings:
+                    if not isinstance(binding, Mapping):
+                        projected_bindings.append(binding)
+                        continue
+                    arg_index = binding.get("argIndex")
+                    if arg_index not in retained_indexes:
+                        raise ValidationError(
+                            "Legacy similarity alignment cannot own a CLI file binding."
+                        )
+                    projected_bindings.append(
+                        {
+                            **dict(binding),
+                            "argIndex": retained_indexes[arg_index],
+                        }
+                    )
+                projected_invocation["fileBindings"] = projected_bindings
+        adjunct["cliInvocation"] = projected_invocation
+    editor_state_value = adjunct.get("editorState")
+    if isinstance(editor_state_value, Mapping):
+        editor_state = dict(editor_state_value)
+        catalog = editor_state.get("featureCatalog")
+        if isinstance(catalog, Mapping) and catalog.get("schema") == 3:
+            from gbdraw.web_support.feature_catalog import (
+                promote_legacy_feature_catalog,
+            )
+
+            editor_state["featureCatalog"] = promote_legacy_feature_catalog(catalog)
+            adjunct["editorState"] = editor_state
     web_file_inventory = _project_web_file_inventory(session)
+    config = adjunct.get("config")
+    if source_version < CURRENT_SESSION_VERSION and isinstance(config, Mapping):
+        migrated_config = migrate_persisted_web_state_field_names(config)
+        assert isinstance(migrated_config, Mapping)
+        config = migrated_config
+        adjunct["config"] = config
     if source_version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         return adjunct, web_file_inventory
 
-    config = adjunct.get("config")
     if isinstance(config, Mapping):
-        migrated_config = migrate_persisted_web_state_field_names(config)
-        assert isinstance(migrated_config, Mapping)
         source_files = session.get("files")
         has_source_file_inventory = (
             isinstance(source_files, Mapping) and bool(source_files)
         ) or web_file_inventory is not None
         migrated_config, migrated_files = (
             migrate_legacy_linear_comparison_draft_for_current_writer(
-                migrated_config,
+                config,
                 source_files
                 if isinstance(source_files, Mapping)
                 else (web_file_inventory or {}),
@@ -934,7 +1019,11 @@ def collect_embedded_files_from_cli_args(
                     "slot": table_slot,
                     "dependencies": [],
                 }
-                for dependency in _read_cli_table_dependencies(token, cli_args[value_index]):
+                for dependency in _read_cli_table_dependencies(
+                    token,
+                    cli_args[value_index],
+                    ring_losat=mode == "circular" and _has_cli_losat(cli_args),
+                ):
                     if not _is_embeddable_path(dependency.path):
                         continue
                     dependency_slot = _append_cli_input(files, dependency.path, depth=False)
@@ -1065,11 +1154,17 @@ def _cli_table_kind(token: str) -> str:
     return "unknown"
 
 
-def _read_cli_table_dependencies(token: str, path: object):
+def _has_cli_losat(cli_args) -> bool:
+    return any(
+        str(token) == "--losat" or str(token).startswith("--losat=") for token in cli_args
+    )
+
+
+def _read_cli_table_dependencies(token: str, path: object, *, ring_losat: bool = False):
     if token == "--records_table":
         return read_records_table(str(path)).path_dependencies
     if token == "--conservation_table":
-        return read_conservation_table(str(path)).path_dependencies
+        return read_conservation_table(str(path), losat=ring_losat).path_dependencies
     if token == "--circular_track_table":
         return read_circular_track_table(str(path)).path_dependencies
     if token == "--comparisons_table":

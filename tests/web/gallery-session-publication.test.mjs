@@ -61,8 +61,24 @@ for (const name of sessionNames) {
   const source = await loadSession(name);
   const committedBefore = JSON.stringify(source.renderRequest);
   const result = await prepareGallerySessionForPublication(source);
-  assert.equal(result.session.version, 42, name);
-  assert.equal(result.session.renderRequest.schema, 7, name);
+  assert.equal(result.session.version, 44, name);
+  assert.equal(result.session.renderRequest.schema, 8, name);
+  const plan = result.session.renderRequest.layout?.similarityAlignment;
+  if (plan) {
+    assert.equal(plan.schema, 2, name);
+    assert.equal(Object.hasOwn(plan, 'mode'), false, name);
+    assert.deepEqual(new Set(plan.records.map(({ recordKey }) => recordKey)),
+      new Set(result.session.renderRequest.records.map(({ recordKey }) => recordKey)), name);
+    for (const decision of plan.records) {
+      assert.deepEqual(Object.keys(decision).sort(),
+        ['anchor', 'rationale', 'recordKey', 'status'], name);
+    }
+  }
+  assert.equal(
+    Object.hasOwn(result.session.orthogroupState || {}, 'selectedOrthogroupAlignmentFeature'),
+    false,
+    name
+  );
   assert.equal(result.equivalence.equivalent, true, name);
   assert.equal(JSON.stringify(source.renderRequest), committedBefore, name);
   assert.equal(result.session.cliInvocation, source.cliInvocation, name);
@@ -73,6 +89,15 @@ for (const name of sessionNames) {
   );
   const readiness = await validateGalleryPublicationReadiness(result.session);
   assert.equal(readiness.equivalence.equivalent, true, name);
+  // The unused mode has no published draft intent: fresh Linear display values
+  // for Circular files and the fresh Circular grid default for Linear files.
+  const { form: publishedForm, adv: publishedAdv } = result.session.config;
+  if (result.session.renderRequest.mode === 'circular') {
+    assert.deepEqual([publishedAdv.linear_show_replicon, publishedAdv.linear_accession_visibility,
+      publishedAdv.linear_length_visibility], [false, 'auto', 'auto'], name);
+  } else {
+    assert.equal(publishedForm.multi_record_canvas, true, name);
+  }
   if (name === 'tobacco-chloroplast.gbdraw-session.json') {
     assert.equal(result.session.config.rules.length, 71, name);
     assert.deepEqual(result.session.config.qualifierPriorityRules, [
@@ -82,8 +107,20 @@ for (const name of sessionNames) {
 }
 
 const lambda = await loadSession('lambda_basic_linear.gbdraw-session.json');
-assert.equal(admitGallerySession(lambda).version, 42);
-assert.equal(lambda.version, 42);
+const admittedLambda = admitGallerySession(lambda);
+assert.equal(admittedLambda.version, 44);
+assert.equal(admittedLambda.editorState.featureCatalog.schema, 4);
+assert.deepEqual(admittedLambda.results, lambda.results);
+assert.equal(lambda.version, 44);
+assert.equal(lambda.editorState.featureCatalog.schema, 4);
+const releasedCurrent = await loadSession('HmmtDNA_basic_circular.gbdraw-session.json');
+assert.equal(releasedCurrent.version, 44);
+assert.equal(releasedCurrent.renderRequest.schema, 8);
+assert.equal(releasedCurrent.editorState.featureCatalog.schema, 4);
+const admittedReleasedCurrent = admitGallerySession(releasedCurrent);
+assert.equal(admittedReleasedCurrent.renderRequest.schema, 8);
+assert.equal(admittedReleasedCurrent.editorState.featureCatalog.schema, 4);
+assert.deepEqual(admittedReleasedCurrent.results, releasedCurrent.results);
 const alteredProvenance = structuredClone(lambda);
 alteredProvenance.cliInvocation = {
   ...alteredProvenance.cliInvocation,
@@ -96,7 +133,7 @@ const [lambdaPrepared, alteredPrepared] = await Promise.all([
 assert.deepEqual(
   lambdaPrepared.session.renderRequest.records.map(({ cardinality }) => cardinality),
   ['exactly_one'],
-  'publication must preserve schema-5 materialized record cardinality'
+  'publication must preserve materialized record cardinality'
 );
 assert.equal(
   lambdaPrepared.equivalence.actual.digest,
@@ -168,7 +205,7 @@ for (const field of ['cli_circular_track_order', 'cli_circular_track_slots']) {
 for (const version of [27, 30, 34, 38, 43]) {
   assert.throws(
     () => admitGallerySession({ ...lambda, version }),
-    /supports current version 42 or historical versions 31-33\/39/
+    /supports current version 44 or historical versions 31-33\/39-42/
   );
 }
 

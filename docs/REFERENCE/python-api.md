@@ -29,7 +29,7 @@ The `gbdraw` package exports the four functions above, `__version__`, and these 
 | Record display / placement | `RecordDisplayOptions`, `FeaturePlacementOverride`, `FeaturePlacementTarget` |
 | Shared presentation | `FeatureOptions`, `LabelOptions`, `TitleOptions`, `Thresholds`, `DepthTrackOptions` |
 | Circular | `CircularOptions`, `CircularLayout`, `CircularTrackOptions`, `ComparisonRingOptions`, `ComparisonRingTrackOptions` |
-| Linear | `LinearOptions`, `LinearLayout`, `LinearTrackOptions`, `LinearComparisonOptions` |
+| Linear | `LinearOptions`, `LinearLayout`, `LinearTrackOptions`, `LinearComparisonOptions`, `SimilarityAlignmentReference` |
 | Compatibility aliases | `ConservationOptions`, `ConservationTrackOptions` |
 
 `ConservationOptions` and `ConservationTrackOptions` are identity aliases for `ComparisonRingOptions` and `ComparisonRingTrackOptions`. New code should use the comparison-ring names.
@@ -52,8 +52,8 @@ The `gbdraw` package exports the four functions above, `__version__`, and these 
 | `TitleOptions.position` | `none`, `center`, `top`, `bottom`, or `None` | `None` |
 | `TitleOptions.font_size` | positive number or `None` | `None` |
 | `CircularOptions.legend`, `LinearOptions.legend` | legend position token | `right` |
-| `CircularOptions.dinucleotide`, `LinearOptions.dinucleotide` | two-base string | `GC` |
-| `window`, `step`, `depth_window`, `depth_step` | integer or `None` | `None` |
+| `CircularOptions.dinucleotide`, `LinearOptions.dinucleotide` | two letters from `A`, `C`, `G`, `T`, and `U` in any case; `U` counts as `T` | `GC` |
+| `window`, `step`, `depth_window`, `depth_step` | positive integer or `None` | `None` |
 | `annotations`, `config`, `config_overrides` | mode-appropriate value or `None` | `None` |
 | `depth_tracks` | sequence of `DepthTrackOptions` | empty |
 
@@ -65,6 +65,8 @@ Unset `Thresholds` values resolve through the mode profile:
 | Linear | `1e-2` | `50` | `0` | `0` | off / off |
 
 E-value, bitscore, and identity must be finite and non-negative; identity is limited to `0`–`100`. Alignment length must be a non-negative integer.
+
+In `config` and `config_overrides`, font sizes must be greater than zero and stroke widths zero or greater; offsets, spacing, `track_axis_gap`, and label rotation keep their current ranges. When `config_overrides` sets `objects.definition.circular.font_size` without `objects.definition.circular.interval`, the interval becomes the font size plus 2, truncated to an integer, as with the command-line `--definition_font_size`. An invalid value raises `ValidationError` before rendering.
 
 ## Layout and track options
 
@@ -84,7 +86,9 @@ Each `DepthTrackOptions` represents one logical series. `source` is one path or 
 
 `CircularOptions.tracks` defaults to an empty `CircularTrackOptions`. `comparison_rings` defaults to an empty `ComparisonRingOptions`; `species` and `strain` default to `None`; `keep_full_definition_with_title` defaults to `False`. Circular title position accepts `None`, `none`, `top`, or `bottom`.
 
-`ComparisonRingOptions` defaults to no tracks, `reference="auto"`, and automatic ring width and gap. `reference` accepts `query`, `subject`, or `auto`. Every `ComparisonRingTrackOptions` requires a BLAST/LOSAT table path or `DataFrame`; its label, color, and comparison sequence source are optional. All tracks in one diagram must use the same source kind. If any ring has a label or color, every ring must provide that field.
+`ComparisonRingOptions` defaults to no tracks, `reference="auto"`, and automatic ring width and gap. `reference` accepts `query`, `subject`, or `auto`. Without `losat`, every `ComparisonRingTrackOptions` requires `source`, a BLAST/LOSAT table path or `DataFrame`; its label, color, and comparison sequence source (FASTA, GenBank, or DDBJ) are optional. All tracks in one diagram must use the same source kind. If any ring has a label or color, every ring must provide that field.
+
+`ComparisonRingOptions(losat="losatn" | "tlosatx")` runs the ring searches: each track leaves `source` unset and names its comparison genome file with `comparison_sequence_source`, which is the query; the displayed records are the subject, and `reference` must stay `auto` or `subject`. `losatn_task` (default `megablast`) applies to LOSATN; `reference_gencode` and each track's `losat_gencode` (default 1) apply to TLOSATX. `losat_executable`, `ncbi_blast_executable`, and `threads` choose the runtime. The typed equivalent is `CircularDiagramOptions.losat_search` (`LosatSearchOptions` with `program` `losatn` or `tlosatx`; `losatp`, `pairs`, and the LOSATP fields are rejected), `conservation_sequence_files`, and `conservation_losat_gencodes`; the planner replaces them with `conservation_search_results` (`ConservationSearchResult` name and raw rows), which a Session stores as `conservationBlastFiles`.
 
 `CircularOptions.comparison_rings` is the canonical field. The `conservation` constructor and attribute alias remains available for compatible code, but passing both names is an error.
 
@@ -96,22 +100,30 @@ Important `LinearComparisonOptions` defaults are:
 
 | Field | Default |
 |---|---|
-| `protein_mode` | `none` |
+| `losat` | `None` |
+| `losatp_mode` | `similarity_groups` (used when `losat="losatp"`) |
 | `match_style` | `ribbon` |
 | `collinearity_unit` | `auto` |
 | `collinearity_anchor` | `rbh` |
 | `collinearity_scope` | `adjacent` |
 | `collinearity_color` | `orientation` |
-| `losat_executable` | `losat` |
-| `blastp_executable` | `None` |
+| `losat_executable` | `None` |
+| `ncbi_blast_executable` | `None` |
 | `threads` | `None` |
 | `max_hits` | `5` |
-| `candidate_limit` | `None` |
+| `max_target_seqs` | `None` |
 | `orthogroup_membership` | `anchor_core_v1` |
-| `orthogroup_member_max_hits` | `None` (unbounded) |
+| `member_max_hits` | `None` (unbounded) |
 | `max_paralog_links` | `2` |
 
-`protein_mode` accepts `none`, `pairwise`, `orthogroup`, or `collinear`. The `orthogroup` token means gbdraw Similarity groups; it does not claim phylogenetic orthology.
+`losat="losatp"` runs a LOSATP protein comparison; `losat=None` runs no search. `losatp_mode` accepts `similarity_groups`, `collinear`, or `pairwise`. `similarity_groups` means gbdraw Similarity groups; it does not claim phylogenetic orthology. `losat_executable` and `ncbi_blast_executable` are mutually exclusive; `None` selects the runtime automatically.
+
+`similarity_alignment` defaults to `None`. With `losat="losatp"` and `losatp_mode="similarity_groups"`,
+`SimilarityAlignmentReference(feature_id="CAG38695.1")` aligns the records on
+the Similarity group of that exact protein ID or feature SVG ID, like the CLI
+`--similarity_alignment_feature`; a resolved `SimilarityAlignmentPlan` is also
+accepted. See [Typed Linear Similarity Group
+alignment](#typed-linear-similarity-group-alignment).
 
 `LinearComparisonOptions(blast_files=...)` consumes prepared comparison TSV
 files. Supplying those files does not start a nucleotide or protein search.
@@ -190,6 +202,132 @@ unchanged. Circular places that base at 12 o'clock; Linear places it at the left
 edge and wraps the complete record. See the [combined executable
 example](command-line.md#rotate-a-plastome-and-place-a-multipart-feature) and the
 [placement rules](palettes-feature-rules-labels-shapes-and-tracks.md#manual-feature-placement).
+
+## Typed Linear Similarity Group alignment
+
+`gbdraw.api.LinearDiagramRequest.similarity_alignment` and
+`LinearComparisonOptions.similarity_alignment` accept one of two typed values.
+A string, including a group ID, is rejected.
+
+`SimilarityAlignmentReference(feature_id=...)` names one exact protein ID or
+feature SVG ID. It requires `LosatSearchOptions(program="losatp", losatp_mode="similarity_groups")`
+on `LinearDiagramOptions.losat_search` (`losat="losatp"` with
+`losatp_mode="similarity_groups"` in `LinearComparisonOptions`). The planner runs
+that analysis once, resolves the reference with the resolver that
+`--similarity_alignment_feature` uses, and
+renders the resolved request with the analysis result as precomputed
+comparisons, so nothing searches twice. The resolved request and every saved
+Session store the plan, never the reference. A record without a candidate
+keeps its position. A Similarity Group ID, an ID that matches no member or
+several members, or a record left with several candidates raises
+`ValidationError`; an ambiguous record is named with its exact candidate IDs,
+and nothing prompts. Records without `record_key` take the planner's keys
+(`record-1`, ...). `render_request()` and `build_request_diagram()` also keep
+the analysis's LOSATP artifacts in their result.
+
+To inspect the plan first, build a `LinearRequestPlan` that requests the
+orthogroup analysis with `build_request_plan_diagram()`, then call
+`resolve_similarity_alignment_plan(plan, prepared.linear_metadata.orthogroups,
+reference)` and pass the returned plan.
+
+A complete `SimilarityAlignmentPlan` is the second value;
+`LinearMultiRecordOptions.record_translations` supplies
+one finite base X/Y translation for each stable record key. The typed API rejects
+an incomplete plan. The shared Python resolver applies
+explicit choice → sole usable member → sole distinct direct RBH → Select/Skip.
+When multiple candidates remain, it returns a transient recommendation: the
+unique representative, or candidate 1 in stable identity order. A recommendation
+is a convenience heuristic, not biological proof; callers still submit an
+explicit Select or Skip. Selection never uses score, support count, viewport
+position, or multi-hop paths. A plan stores anchors and Select/Skip rationale.
+Record presentation or region state owns orientation. Callers can inspect each
+review candidate's `strand_relation` (`same`, `opposite`, or `unknown`) before
+changing a record's presentation. Collinear alignment controls, anchor TSV,
+scored inference, support-count ranking, and multi-hop automatic selection are
+unsupported.
+
+This executable, in-memory contract example renders no public showcase file.
+In an integration, use actual group membership, current crop/display centers,
+displayed strands, and direct evidence; the two synthetic candidates here only
+show how the typed request and resolver fit together. Source feature identities
+come from the planned records, so they remain stable across record reorder.
+Save the block as `typed_similarity_alignment.py` and run
+`python typed_similarity_alignment.py` from an empty directory with gbdraw
+installed. It prints `only_usable_candidate opposite True`.
+
+<!-- executable:S07-PY-01:start -->
+```python
+from dataclasses import replace
+from Bio.Seq import Seq
+from Bio.SeqFeature import SeqFeature, SimpleLocation
+from Bio.SeqRecord import SeqRecord
+from gbdraw.api import (
+    AlignmentAnchorIdentity, InMemoryRecordSource, LinearDiagramRequest,
+    LinearMultiRecordOptions, LinearRecordTranslation, RecordInput,
+    RecordPresentation, build_request_diagram, plan_request,
+)
+from gbdraw.layout.similarity_alignment import (
+    AlignmentStrandRelation, SimilarityAlignmentCandidate,
+    resolve_similarity_alignment,
+)
+
+
+def record(name, start, strand=1):
+    item = SeqRecord(Seq('A' * 100), id=name, description=name)
+    item.annotations['topology'] = 'linear'
+    item.features = [SeqFeature(SimpleLocation(start, start + 12, strand=strand),
+                                type='CDS', qualifiers={'gene': [name]})]
+    return item
+
+base = LinearDiagramRequest(records=(
+    RecordInput(InMemoryRecordSource(record('alpha', 10)), record_key='alpha'),
+    RecordInput(InMemoryRecordSource(record('beta', 40, -1)), record_key='beta'),
+))
+provenance = plan_request(base).provenance
+anchors = []
+for key, item in zip(('alpha', 'beta'), provenance, strict=True):
+    feature = item.source_feature_catalog[0]
+    anchors.append(AlignmentAnchorIdentity(
+        key, feature.biological_feature_id, feature.source_feature_index,
+        feature.stable_feature_id,
+    ))
+candidates = (
+    SimilarityAlignmentCandidate('example-group', anchors[0], 1, True, 16),
+    SimilarityAlignmentCandidate('example-group', anchors[1], -1, True, 46),
+)
+resolution = resolve_similarity_alignment(
+    record_keys=('alpha', 'beta'), group_id='example-group',
+    reference=anchors[0], candidates=candidates,
+)
+relation = resolution.review_rows[1].candidates[0].strand_relation
+assert relation is AlignmentStrandRelation.OPPOSITE
+plan = resolution.require_plan()
+request = replace(
+    base,
+    records=(
+        base.records[0],
+        replace(base.records[1], presentation=RecordPresentation(
+            reverse_complement=relation is AlignmentStrandRelation.OPPOSITE
+        )),
+    ),
+    layout=LinearMultiRecordOptions(record_translations=(
+        LinearRecordTranslation('alpha'), LinearRecordTranslation('beta'),
+    )),
+    similarity_alignment=plan,
+)
+prepared = build_request_diagram(request)
+assert prepared.drawing.tostring().startswith('<svg')
+print(plan.records[1].rationale.value, relation.value,
+      request.records[1].presentation.reverse_complement)
+```
+<!-- executable:S07-PY-01:end -->
+
+Current Session round trips preserve the exact plan and rationale, record
+orientation, and base translations. An active plan survives ordinary
+regeneration; Web **Reset alignment…** uses the immediate pre-align base and
+offers optional restoration of the directions actually changed by that Align.
+Supported old Sessions enter an isolated reader-only compatibility path and save only the
+current typed representation. See [Session and request compatibility](session-and-request-compatibility.md#similarity-alignment-request-ownership).
 
 ## Combined rotation and placement example
 

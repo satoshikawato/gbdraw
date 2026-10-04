@@ -6,6 +6,7 @@ import {
   normalizeFeatureIdKey,
   selectFeatureSelector
 } from '../feature-selector.js';
+import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 
 const LABEL_OVERRIDE_COLUMN_COUNT = 5;
 const PRIMARY_HEADER = ['record_id', 'feature_type', 'qualifier', 'value', 'label_text'];
@@ -80,20 +81,22 @@ const resolveDefaultLabelText = (metadata, editableLabelEntry = null) => {
   return '';
 };
 
-const buildFeatureIdsBySourceText = (editableLabels) => {
+// The features whose label shows each source text: the displayed labels, and
+// the recorded source of a feature in any Result, so that a bulk label edit
+// reaches every Result of a batch (B6).
+const buildFeatureIdsBySourceText = (editableLabels, featureOverrideSources) => {
   const featureIdsBySourceText = new Map();
-  if (!Array.isArray(editableLabels)) return featureIdsBySourceText;
-
-  editableLabels.forEach((entry) => {
-    const sourceText = String(entry?.sourceText || '');
-    const featureIdKey = normalizeFeatureIdKey(entry?.featureId);
+  const add = (sourceTextRaw, featureIdRaw) => {
+    const sourceText = String(sourceTextRaw || '');
+    const featureIdKey = normalizeFeatureIdKey(featureIdRaw);
     if (!sourceText || !featureIdKey) return;
     if (!featureIdsBySourceText.has(sourceText)) {
       featureIdsBySourceText.set(sourceText, new Set());
     }
     featureIdsBySourceText.get(sourceText).add(featureIdKey);
-  });
-
+  };
+  (Array.isArray(editableLabels) ? editableLabels : []).forEach((entry) => add(entry?.sourceText, entry?.featureId));
+  Object.entries(featureOverrideSources || {}).forEach(([featureId, sourceText]) => add(sourceText, featureId));
   return featureIdsBySourceText;
 };
 
@@ -115,11 +118,18 @@ export const buildLabelOverrideRows = (featureOverrides, bulkOverrides, options 
   let skippedFeatureSourceCount = 0;
   let skippedMissingSourceCount = 0;
   let fallbackHashCount = 0;
+  const visibilityOverridesByFeatureId = normalizeVisibilityOverrides(options.visibilityOverrides);
+  if (toSortedKeys(featureOverrides).length === 0 && toSortedKeys(bulkOverrides).length === 0
+    && visibilityOverridesByFeatureId.size === 0) {
+    return { rows, skippedFeatureCount, skippedFeatureSourceCount, skippedMissingSourceCount, fallbackHashCount };
+  }
+  recordStructuralMetric('labelOverrideTableBuildCount', 1, {
+    featureCount: Array.isArray(options.extractedFeatures) ? options.extractedFeatures.length : 0
+  });
   const featureMetadataById = buildFeatureMetadataMap(options.extractedFeatures);
   const editableLabelByFeatureId = buildEditableLabelByFeatureId(options.editableLabels);
-  const featureIdsBySourceText = buildFeatureIdsBySourceText(options.editableLabels);
+  const featureIdsBySourceText = buildFeatureIdsBySourceText(options.editableLabels, options.featureOverrideSources);
   const featureUniquenessIndex = buildFeatureUniquenessIndexFromMetadata(featureMetadataById);
-  const visibilityOverridesByFeatureId = normalizeVisibilityOverrides(options.visibilityOverrides);
   const featureOverrideKeyById = new Map();
   toSortedKeys(featureOverrides).forEach((featureIdRaw) => {
     const key = normalizeFeatureIdKey(featureIdRaw);

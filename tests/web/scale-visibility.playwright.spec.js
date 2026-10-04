@@ -1,11 +1,11 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests/test_inputs/HmmtDNA.gbk');
-const runDiagram = async (page) => page.evaluate(async () => {
+const runDiagram = async (page) => evaluateWithRetainedPromise(page, async () => {
   const app = window.__GBDRAW_APP__;
   const result = await app.runAnalysis();
   return {
@@ -85,7 +85,7 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
     await window.Vue.nextTick();
   });
   const circularAxisCard = page.locator('summary').filter({ hasText: 'Axis & Scale' });
-  await circularAxisCard.click();
+  await circularAxisCard.press('Enter');
   await expect(page.getByLabel('Show Coordinate Scale (Circular)')).toBeDisabled();
   await expect(page.locator('[data-scale-visibility-note]')).toContainText(
     'Use an enabled Ticks slot'
@@ -143,7 +143,7 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
     window.__GBDRAW_APP__.form.show_scale = false;
   });
   const linearAxisCard = page.locator('summary').filter({ hasText: 'Axis & Scale' });
-  await linearAxisCard.click();
+  await linearAxisCard.press('Enter');
   await expect(page.getByLabel('Linear scale style')).toBeDisabled();
   await expect(page.getByLabel('Axis stroke color mode')).toBeEnabled();
 
@@ -181,7 +181,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
   const featuresCard = page.locator('.card').filter({
     has: page.locator('summary').filter({ hasText: 'Features' })
   }).first();
-  await featuresCard.locator('summary').click();
+  await featuresCard.locator('summary').press('Enter');
   const rendering = page.getByLabel('Rendering for CDS');
   const headRatio = page.getByLabel('Arrow head length ratio');
   const shaftRatio = page.getByLabel('Arrow shaft width ratio');
@@ -214,10 +214,14 @@ test('Arrow controls render in both modes and survive a session round trip', asy
 
   await headRatio.fill('0');
   const invalidRun = await runDiagram(page);
-  expect(invalidRun.result).toEqual({ status: 'error' });
+  expect(invalidRun.result.status).toBe('error');
   expect(invalidRun.errorSummary).toContain(
-    'Arrow head length ratio must be Auto or a positive finite number.'
+    'Field: Arrow head length ratio. Use Auto or a finite value greater than zero.'
   );
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+    code: 'INPUT_INVALID', operation: 'generate', stage: 'request-validation',
+    context: { field: 'arrow_head_length_ratio', reason: 'POSITIVE_OR_AUTO' }
+  });
   await headRatio.fill('1.25');
   await shaftRatio.fill('0.25');
   await expect(rendering).toHaveValue('arrow');
@@ -291,7 +295,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
     window.__GBDRAW_APP__.sessionTitle = 'arrow-browser-round-trip';
   });
   const sessionDownloadPromise = page.waitForEvent('download', { timeout: 120000 });
-  expect((await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle())).status)
+  expect((await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle())).status)
     .toBe('saved');
   const sessionPath = await (await sessionDownloadPromise).path();
 

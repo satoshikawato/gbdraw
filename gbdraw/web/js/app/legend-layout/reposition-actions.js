@@ -1,9 +1,7 @@
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
 import {
   applyCompositionEdit,
   bindCompositionMetadata,
-  compositionUserDeltas,
-  reconcileCompositionTitle
+  compositionUserDeltas
 } from './composition-actions.js';
 
 const isHorizontalSide = (side) => side === 'top' || side === 'bottom';
@@ -24,7 +22,8 @@ const setLegendVariant = (legendGroup, side) => {
 
 export const createLegendRepositionActions = ({
   state,
-  legendActions
+  legendActions,
+  previewRuntime = null
 }) => {
   const {
     svgContent,
@@ -37,30 +36,12 @@ export const createLegendRepositionActions = ({
     legendCurrentOffset,
     plotTitleAutoTransform,
     plotTitleUserOffset,
-    canvasPadding,
-    selectedResultIndex,
-    results,
-    skipCaptureBaseConfig,
-    skipPositionReapply
+    canvasPadding
   } = state;
   const {
     reflowDualLegendLayout,
     reflowSingleLegendLayout
   } = legendActions;
-  const persist = (svg) => {
-    skipCaptureBaseConfig.value = true;
-    skipPositionReapply.value = true;
-    const index = selectedResultIndex.value;
-    if (index >= 0 && index < results.value.length) {
-      const nextResults = [...results.value];
-      nextResults[index] = {
-        ...results.value[index],
-        content: serializeCleanSvg(svg)
-      };
-      results.value = nextResults;
-    }
-  };
-
   const syncStateFromComposition = (svg, binding = bindCompositionMetadata(svg)) => {
     const { metadata } = binding;
     const deltas = compositionUserDeltas(svg);
@@ -106,15 +87,17 @@ export const createLegendRepositionActions = ({
   };
 
   const repositionForLegendChange = (newPosition, _oldPosition, _options = {}) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!svgContainer.value || !svgContent.value) return false;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;
 
     const binding = bindCompositionMetadata(svg);
     const legendGroup = binding.legend.targets[0] || null;
-    if (!legendGroup && newPosition !== 'none') {
-      throw new Error('This diagram has no legend composition target. Regenerate it with a legend before changing its side.');
-    }
+    // A diagram generated without a legend cannot show one in place; the
+    // Result stays unchanged and the next Generate applies the side (GE-07).
+    if (!legendGroup && newPosition !== 'none') return false;
 
     if (legendGroup && newPosition !== 'none') {
       legendGroup.removeAttribute('display');
@@ -135,7 +118,7 @@ export const createLegendRepositionActions = ({
 
     const nextBinding = applyCompositionEdit(svg, { legendSide: newPosition, canvasPadding });
     syncStateFromComposition(svg, nextBinding);
-    persist(svg);
+    previewRuntime?.commitActiveResultEdit('legend-position');
     return true;
   };
 
@@ -150,30 +133,8 @@ export const createLegendRepositionActions = ({
     });
   };
 
-  const refreshCompositionGeometry = ({ titleSide = null, titleTarget = undefined } = {}) => {
-    if (!svgContainer.value || !svgContent.value) return false;
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return false;
-    const binding = titleTarget === undefined
-      ? applyCompositionEdit(svg, {
-          titleSide: titleSide ?? bindCompositionMetadata(svg).metadata.titleSide,
-          canvasPadding
-        })
-      : reconcileCompositionTitle(
-          svg,
-          titleTarget,
-          titleSide ?? (titleTarget ? 'bottom' : 'none'),
-          { canvasPadding }
-        );
-    syncStateFromComposition(svg, binding);
-    persist(svg);
-    return true;
-  };
-
   return {
-    refreshCompositionGeometry,
     refreshLegendGeometry,
-    repositionForLegendChange,
     syncStateFromComposition
   };
 };

@@ -1,15 +1,26 @@
+import { normalizeUserFacingError } from '../../services/error-normalization.js';
 import { resolveColorToHex } from '../color-utils.js';
-import { getFeatureCaption, normalizeStringArray, resolveDisplayProteinId } from '../feature-utils.js';
+import {
+  formatFeatureLength,
+  formatFeatureLocation,
+  getFeatureCaption,
+  normalizeStringArray,
+  resolveDisplayProteinId
+} from '../feature-utils.js';
 import {
   PAIRWISE_MATCH_SELECTOR,
   buildPairwiseMatchHoverSummary,
   buildPairwiseMatchPayload
 } from '../pairwise-match-popup.js';
 import { buildFeatureSequenceFastas } from '../feature-sequence-fasta.js';
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
 import { getFeatureOverride } from '../../services/feature-override-identity.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../legend/utils.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
+import {
+  featureIdentity,
+  identityMatches,
+  renderedFeatureIdentity
+} from '../../services/feature-identity.js';
 import {
   FEATURE_ID_ATTRIBUTE,
   FEATURE_SELECTOR,
@@ -46,8 +57,6 @@ export const createFeatureSvgActions = ({
   previewTransformInteraction = null
 }) => {
   const {
-    results,
-    selectedResultIndex,
     orthogroups,
     collinearGroups,
     orthogroupNameOverrides,
@@ -66,7 +75,6 @@ export const createFeatureSvgActions = ({
     selectedAnnotation,
     featurePopupSize,
     featureSelectionDrag,
-    skipCaptureBaseConfig,
     adv
   } = state;
   let delegatedFeatureHandlers = null;
@@ -121,14 +129,6 @@ export const createFeatureSvgActions = ({
     };
   };
 
-  const buildFeatureLocation = (feat) => {
-    const startNumeric = Number(feat.start);
-    const endNumeric = Number(feat.end);
-    const startPos = Number.isFinite(startNumeric) ? startNumeric + 1 : feat.start;
-    const endPos = Number.isFinite(endNumeric) ? endNumeric : feat.end;
-    return `${startPos}..${endPos}${feat.strand ? ` (${feat.strand})` : ''}`;
-  };
-
   const normalizeQualifierRows = (qualifiers) => {
     if (!qualifiers || typeof qualifiers !== 'object' || Array.isArray(qualifiers)) return [];
     return Object.entries(qualifiers)
@@ -166,14 +166,6 @@ export const createFeatureSvgActions = ({
     ''
   );
 
-  const formatFeatureLength = (feat) => {
-    const startNumeric = Number(feat?.start);
-    const endNumeric = Number(feat?.end);
-    if (!Number.isFinite(startNumeric) || !Number.isFinite(endNumeric)) return '';
-    const length = Math.max(0, Math.round(endNumeric - startNumeric));
-    return `${length.toLocaleString()} bp`;
-  };
-
   const createHoverSummaryElement = (tagName, className = '', text = '') => {
     const element = document.createElement(tagName);
     if (className) element.className = className;
@@ -199,7 +191,7 @@ export const createFeatureSvgActions = ({
     const gene = getQualifierFirstValue(feat, 'gene');
     const locusTag = getQualifierFirstValue(feat, 'locus_tag');
     const note = getQualifierFirstValue(feat, 'note');
-    const locationText = buildFeatureLocation(feat);
+    const locationText = formatFeatureLocation(feat);
     const effectiveCaption = String(getEffectiveLegendCaption?.(feat) || '').trim();
     const rows = [];
 
@@ -327,7 +319,7 @@ export const createFeatureSvgActions = ({
     const defaultLabel = getFeatureCaption(feat);
     const existingOverride = getFeatureOverride(featureColorOverrides, feat);
     const effectiveCaption = String(getEffectiveLegendCaption?.(feat) || existingOverride?.caption || defaultLabel || '').trim();
-    const locationText = buildFeatureLocation(feat);
+    const locationText = formatFeatureLocation(feat);
     const locationParts = Array.isArray(feat.location_parts) ? feat.location_parts : [];
     const qualifierRows = normalizeQualifierRows(feat.qualifiers);
     const sequenceWarnings = normalizeStringArray(feat.sequence_warnings);
@@ -425,9 +417,10 @@ export const createFeatureSvgActions = ({
   };
 
   const openFeatureEditorForFeature = (feat, eventLike = null) => {
+    const previousAlert = state.errorLog?.value;
     const opened = () => openPreparedFeatureEditor(feat, eventLike);
     const result = rulePreparation ? rulePreparation.run(state.manualSpecificRules, opened) : opened();
-    return result?.catch ? result.catch((error) => { alert(`Cannot open feature editor: ${error.message}`); }) : result;
+    return result?.catch ? result.catch((error) => { state.errorLog && state.errorLog.value === previousAlert && (state.errorLog.value = normalizeUserFacingError(error, { operation: 'feature-extraction', stage: 'helper' })); }) : result;
   };
 
   const hoverSummaryIsAllowed = () => {
@@ -490,7 +483,7 @@ export const createFeatureSvgActions = ({
     const primaryLabel = getHoverSummaryPrimaryLabel(feat);
     const featureType = String(feat?.type || 'Feature').trim() || 'Feature';
     const titleText = primaryLabel ? `${featureType}: ${primaryLabel}` : featureType;
-    const locationText = buildFeatureLocation(feat);
+    const locationText = formatFeatureLocation(feat);
     const color = resolveColorToHex(
       featureElement?.getAttribute?.('fill') || getFeatureColor(feat) || '#94a3b8'
     ) || '#94a3b8';
@@ -606,56 +599,6 @@ export const createFeatureSvgActions = ({
     hoverSummaryState.lastEvent = null;
   }
 
-  const applyInstantPreview = (feat, color) => {
-    const svgId = renderedFeatureSvgId(feat);
-    if (!svgId) {
-      console.log('No svg_id for feature', feat);
-      return;
-    }
-
-    if (previewRuntime?.applyFeatureFillChanges) {
-      const updated = previewRuntime.applyFeatureFillChanges(
-        [{ featureId: svgId, color }],
-        { reason: 'feature-fill' }
-      );
-      if (updated) {
-        console.log(`Instant preview: updated feature ${svgId} to ${color}`);
-      } else {
-        console.log(`Instant preview: element ${svgId} not found in SVG`);
-      }
-      return;
-    }
-
-    if (!svgContainer.value) return;
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
-
-    try {
-      const elements = getFeatureFillElements(svg, svgId);
-      let updated = elements.length > 0;
-
-      if (updated) {
-        elements.forEach((el) => el.setAttribute('fill', color));
-      }
-
-      if (updated) {
-        const newContent = serializeCleanSvg(svg);
-        skipCaptureBaseConfig.value = true;
-        const idx = selectedResultIndex.value;
-        if (idx >= 0 && results.value.length > idx) {
-          const nextResults = [...results.value];
-          nextResults[idx] = { ...results.value[idx], content: newContent };
-          results.value = nextResults;
-        }
-        console.log(`Instant preview: updated ${elements.length} element(s) for ${svgId} to ${color}`);
-      } else {
-        console.log(`Instant preview: element ${svgId} not found in SVG`);
-      }
-    } catch (e) {
-      console.error('Instant preview error:', e);
-    }
-  };
-
   const groupsForMatch = (matchElement) => (
     matchElement.getAttribute('data-match-kind') === 'collinear'
       ? collinearGroups?.value || []
@@ -699,47 +642,7 @@ export const createFeatureSvgActions = ({
       }))
       .filter((change) => change.featureId);
     if (normalizedChanges.length === 0) return false;
-
-    if (previewRuntime?.applyFeatureVisibilityChanges) {
-      return previewRuntime.applyFeatureVisibilityChanges(normalizedChanges, { reason });
-    }
-
-    if (!svgContainer.value) return false;
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return false;
-
-    try {
-      let updated = false;
-      normalizedChanges.forEach(({ featureId, mode }) => {
-        const elements = getFeatureElements(svg, featureId);
-        if (!elements || elements.length === 0) {
-          console.log(`Instant preview: element ${featureId} not found for visibility update`);
-          return;
-        }
-        elements.forEach((el) => {
-          if (mode === 'off') {
-            el.setAttribute('display', 'none');
-          } else {
-            el.removeAttribute('display');
-          }
-          updated = true;
-        });
-      });
-      if (!updated) return false;
-
-      const newContent = serializeCleanSvg(svg);
-      skipCaptureBaseConfig.value = true;
-      const idx = selectedResultIndex.value;
-      if (idx >= 0 && results.value.length > idx) {
-        const nextResults = [...results.value];
-        nextResults[idx] = { ...results.value[idx], content: newContent };
-        results.value = nextResults;
-      }
-      return true;
-    } catch (e) {
-      console.error('Instant visibility preview error:', e);
-      return false;
-    }
+    return previewRuntime?.applyFeatureVisibilityChanges(normalizedChanges, { reason }) === true;
   };
 
   const applyVisibilityPreviewBySvgId = (svgId, modeRaw) => (
@@ -794,6 +697,14 @@ export const createFeatureSvgActions = ({
       transformPointer: null,
       reconcileHoverAfterTransform: false,
       hoverReconcileFrame: null,
+      alignmentCandidateSvgId: '',
+      alignmentCandidateRestore: null,
+      alignmentOverlay: null,
+      alignmentCandidatesBySvgId: new Map(),
+      showAlignmentOverlay: null,
+      clearAlignmentOverlay: null,
+      previewAlignmentCandidate: null,
+      clearAlignmentCandidatePreview: null,
       beginPreviewTransformInteraction: null,
       endPreviewTransformInteraction: null,
       cleanup: null
@@ -968,6 +879,180 @@ export const createFeatureSvgActions = ({
         handlerState.activeMatchHoverKey = '';
       };
 
+      const clearAlignmentCandidatePreview = ({ restore = true } = {}) => {
+        if (!handlerState.alignmentCandidateSvgId && !handlerState.alignmentCandidateRestore) return;
+        clearTrackedHoverStyles();
+        handlerState.alignmentCandidateSvgId = '';
+        const previous = handlerState.alignmentCandidateRestore;
+        handlerState.alignmentCandidateRestore = null;
+        if (!restore || !previous) return;
+        if (previous.featureSvgId && ensureFeatureLookup().has(previous.featureSvgId)) {
+          setHoverHighlight(previous.featureSvgId);
+          handlerState.activeHoverSvgId = previous.featureSvgId;
+          handlerState.activeHoverKey = getFeatureHoverKey(previous.featureSvgId);
+          return;
+        }
+        if (previous.matchElement?.isConnected) {
+          setMatchHover(previous.matchElement);
+          handlerState.activeMatchHoverElement = previous.matchElement;
+          handlerState.activeMatchHoverKey = getMatchHoverKey(previous.matchElement);
+        }
+      };
+
+      const previewAlignmentCandidate = (anchor) => {
+        const requested = featureIdentity(anchor);
+        if (!requested.usable) return false;
+        const matches = Array.from(ensureFeatureLookup().entries())
+          .filter(([, feature]) => {
+            const candidate = renderedFeatureIdentity(feature);
+            return candidate.usable
+              && identityMatches(requested, candidate);
+          });
+        if (matches.length !== 1) return false;
+        const restore = handlerState.alignmentCandidateRestore || {
+          featureSvgId: handlerState.activeHoverSvgId,
+          matchElement: handlerState.activeMatchHoverElement
+        };
+        if (handlerState.alignmentCandidateSvgId) {
+          clearTrackedHoverStyles();
+          handlerState.alignmentCandidateSvgId = '';
+        }
+        clearActiveFeatureHover();
+        clearActiveMatchHover();
+        hideHoverSummary();
+        handlerState.alignmentCandidateRestore = restore;
+        const [svgId] = matches[0];
+        setFeatureHover(svgId);
+        handlerState.alignmentCandidateSvgId = svgId;
+        return true;
+      };
+
+      handlerState.previewAlignmentCandidate = previewAlignmentCandidate;
+      handlerState.clearAlignmentCandidatePreview = clearAlignmentCandidatePreview;
+
+      const uniqueRenderedFeature = (anchor) => {
+        const requested = featureIdentity(anchor);
+        if (!requested.usable) return null;
+        const matches = Array.from(ensureFeatureLookup().entries()).filter(([, feature]) => (
+          identityMatches(requested, renderedFeatureIdentity(feature))
+        ));
+        if (matches.length !== 1) return null;
+        const [svgId] = matches[0];
+        const blocks = getFeatureFillElements(svg, svgId, ensureFeaturePaths());
+        return blocks.length === 1 ? { svgId, element: blocks[0] } : null;
+      };
+
+      const clearAlignmentOverlay = () => {
+        const overlay = handlerState.alignmentOverlay;
+        if (!overlay) return;
+        if (overlay.frame) window.cancelAnimationFrame(overlay.frame);
+        overlay.scrollRoot.removeEventListener('scroll', overlay.schedule);
+        window.removeEventListener('resize', overlay.schedule);
+        overlay.observer?.disconnect();
+        overlay.element.remove();
+        handlerState.alignmentOverlay = null;
+        handlerState.alignmentCandidatesBySvgId.clear();
+        clearAlignmentCandidatePreview();
+      };
+
+      const showAlignmentOverlay = ({ reference, ambiguities, onSelect, onHover }) => {
+        clearAlignmentOverlay();
+        const scrollRoot = svgContainer.value?.parentElement;
+        const viewport = scrollRoot?.parentElement;
+        if (!scrollRoot || !viewport || !svg.isConnected) return;
+        const referenceFeature = uniqueRenderedFeature(reference);
+        const candidates = [];
+        (ambiguities || []).forEach((record) => record.candidates.forEach((candidate, index) => {
+          const rendered = uniqueRenderedFeature(candidate.anchor);
+          if (rendered) candidates.push({
+            ...rendered, recordKey: record.recordKey, anchor: candidate.anchor,
+            key: candidate.key, number: index + 1,
+            accessibleName: 'Select ' + record.recordLabel + ' candidate ' + (index + 1)
+              + ': ' + candidate.label + ', ' + candidate.coordinates
+          });
+        }));
+        const counts = new Map();
+        candidates.forEach(({ svgId }) => counts.set(svgId, (counts.get(svgId) || 0) + 1));
+        const visibleCandidates = candidates.filter(({ svgId }) => counts.get(svgId) === 1);
+        visibleCandidates.forEach((candidate) => {
+          handlerState.alignmentCandidatesBySvgId.set(candidate.svgId, candidate);
+        });
+
+        const element = document.createElement('div');
+        element.className = 'gbdraw-alignment-overlay';
+        element.setAttribute('data-similarity-alignment-canvas', '');
+        const guide = document.createElement('div');
+        guide.className = 'gbdraw-alignment-guide';
+        guide.setAttribute('aria-hidden', 'true');
+        element.appendChild(guide);
+        const badges = visibleCandidates.map((candidate) => {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'gbdraw-alignment-badge';
+          button.textContent = String(candidate.number);
+          button.setAttribute('data-alignment-record-key', candidate.recordKey);
+          button.setAttribute('data-alignment-candidate-key', candidate.key);
+          button.setAttribute('aria-label', candidate.accessibleName);
+          button.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onSelect(candidate.recordKey, candidate.anchor);
+          });
+          button.addEventListener('mouseenter', () => onHover(candidate.recordKey, candidate.key));
+          button.addEventListener('mouseleave', () => onHover('', ''));
+          button.addEventListener('focus', () => onHover(candidate.recordKey, candidate.key));
+          button.addEventListener('blur', () => onHover('', ''));
+          element.appendChild(button);
+          return { candidate, button };
+        });
+        viewport.appendChild(element);
+
+        const geometry = (target, viewportRect) => {
+          if (!target?.isConnected || target.getClientRects().length !== 1
+            || window.getComputedStyle(target).visibility === 'hidden') return null;
+          const rect = target.getBoundingClientRect();
+          if (!rect.width || !rect.height || rect.right <= viewportRect.left
+            || rect.left >= viewportRect.right || rect.bottom <= viewportRect.top) return null;
+          return {
+            x: (rect.left + rect.right) / 2 - viewportRect.left,
+            y: (rect.top + rect.bottom) / 2 - viewportRect.top
+          };
+        };
+        const overlay = { element, scrollRoot, frame: 0, observer: null, schedule: null, onSelect, onHover };
+        const update = () => {
+          overlay.frame = 0;
+          if (!element.isConnected || delegatedFeatureHandlers !== handlerState) return;
+          const rect = viewport.getBoundingClientRect();
+          const referencePoint = geometry(referenceFeature?.element, rect);
+          guide.hidden = !referencePoint || referencePoint.x < 0 || referencePoint.x > rect.width;
+          if (!guide.hidden) guide.style.left = referencePoint.x + 'px';
+          badges.forEach(({ candidate, button }) => {
+            const point = geometry(candidate.element, rect);
+            button.hidden = !point || point.x < 0 || point.x > rect.width
+              || point.y < 0 || point.y > rect.height;
+            if (!button.hidden) {
+              button.style.left = point.x + 'px';
+              button.style.top = point.y + 'px';
+            }
+          });
+        };
+        overlay.schedule = () => {
+          if (!overlay.frame) overlay.frame = window.requestAnimationFrame(update);
+        };
+        scrollRoot.addEventListener('scroll', overlay.schedule, { passive: true });
+        window.addEventListener('resize', overlay.schedule);
+        if (window.ResizeObserver) {
+          overlay.observer = new ResizeObserver(overlay.schedule);
+          overlay.observer.observe(viewport);
+          overlay.observer.observe(svgContainer.value);
+        }
+        handlerState.alignmentOverlay = overlay;
+        overlay.schedule();
+      };
+
+      handlerState.showAlignmentOverlay = showAlignmentOverlay;
+      handlerState.clearAlignmentOverlay = clearAlignmentOverlay;
+
       const clearPendingMatch = () => {
         if (!handlerState.pendingMatchElement) return;
         matchFragments(handlerState.pendingMatchElement).forEach((element) => element.classList.remove('gbdraw-match-pending'));
@@ -1003,11 +1088,14 @@ export const createFeatureSvgActions = ({
         }
         handlerState.activeHoverSvgId = svgId;
         handlerState.activeHoverKey = hoverKey;
+        const candidate = handlerState.alignmentCandidatesBySvgId.get(svgId);
+        handlerState.alignmentOverlay?.onHover(candidate?.recordKey || '', candidate?.key || '');
         scheduleHoverSummary(ensureFeatureLookup().get(svgId), featureEl, eventLike);
         return true;
       };
 
       const activateMatchHover = (matchEl, eventLike) => {
+        handlerState.alignmentOverlay?.onHover('', '');
         clearActiveFeatureHover();
         const matchKey = getMatchHoverKey(matchEl);
         if (handlerState.activeMatchHoverKey !== matchKey && handlerState.activeMatchHoverElement) {
@@ -1023,6 +1111,8 @@ export const createFeatureSvgActions = ({
       };
 
       handlerState.beginPreviewTransformInteraction = (eventLike, kind = '') => {
+        if (handlerState.alignmentOverlay) handlerState.alignmentOverlay.element.hidden = true;
+        handlerState.alignmentOverlay?.onHover('', '');
         if (handlerState.hoverReconcileFrame !== null) {
           window.cancelAnimationFrame(handlerState.hoverReconcileFrame);
           handlerState.hoverReconcileFrame = null;
@@ -1038,6 +1128,10 @@ export const createFeatureSvgActions = ({
       };
 
       handlerState.endPreviewTransformInteraction = ({ reconcile = true } = {}) => {
+        if (handlerState.alignmentOverlay) {
+          handlerState.alignmentOverlay.element.hidden = false;
+          handlerState.alignmentOverlay.schedule();
+        }
         if (!reconcile || !handlerState.reconcileHoverAfterTransform || !handlerState.transformPointer) {
           handlerState.reconcileHoverAfterTransform = false;
           handlerState.transformPointer = null;
@@ -1113,6 +1207,7 @@ export const createFeatureSvgActions = ({
           const relatedFeature = getFeatureTarget(e.relatedTarget, svg);
           if (relatedFeature && getFeatureHoverKey(getFeatureIdentity(relatedFeature)) === handlerState.activeHoverKey) return;
           clearActiveFeatureHover();
+          handlerState.alignmentOverlay?.onHover('', '');
           hideHoverSummary();
           return;
         }
@@ -1168,6 +1263,14 @@ export const createFeatureSvgActions = ({
         if (featureEl) {
           const svgId = getFeatureIdentity(featureEl);
           if (!svgId) return;
+          const candidate = handlerState.alignmentCandidatesBySvgId.get(svgId);
+          if (candidate) {
+            e.preventDefault();
+            e.stopPropagation();
+            hideHoverSummary();
+            handlerState.alignmentOverlay?.onSelect(candidate.recordKey, candidate.anchor);
+            return;
+          }
           e.stopPropagation();
           hideHoverSummary();
           featureSelection?.markPlainFeatureClick?.(svgId);
@@ -1277,6 +1380,8 @@ export const createFeatureSvgActions = ({
         handlerState.reconcileHoverAfterTransform = false;
         handlerState.transformPointer = null;
         clearPendingMatch();
+        clearAlignmentOverlay();
+        clearAlignmentCandidatePreview({ restore: false });
         clearActiveFeatureHover();
         clearActiveMatchHover();
         hideHoverSummary();
@@ -1311,6 +1416,22 @@ export const createFeatureSvgActions = ({
     hoverSummaryState.element = null;
   };
 
+  const previewAlignmentCandidate = (anchor) => (
+    delegatedFeatureHandlers?.previewAlignmentCandidate?.(anchor) || false
+  );
+
+  const clearAlignmentCandidatePreview = () => {
+    delegatedFeatureHandlers?.clearAlignmentCandidatePreview?.();
+  };
+
+  const showAlignmentOverlay = (request) => {
+    delegatedFeatureHandlers?.showAlignmentOverlay?.(request);
+  };
+
+  const clearAlignmentOverlay = () => {
+    delegatedFeatureHandlers?.clearAlignmentOverlay?.();
+  };
+
   const preparePairwiseInteractionAffordances = ({
     root = null,
     phase = 'preview-bind',
@@ -1331,13 +1452,16 @@ export const createFeatureSvgActions = ({
   };
 
   return {
-    applyInstantPreview,
     applyVisibilityPreviewBySvgId,
     applyVisibilityPreviewChanges,
     attachSvgFeatureHandlers,
     getFeatureElements,
     getFeatureFillElements,
     openFeatureEditorForFeature,
+    previewAlignmentCandidate,
+    clearAlignmentCandidatePreview,
+    showAlignmentOverlay,
+    clearAlignmentOverlay,
     preparePairwiseInteractionAffordances,
     dispose
   };

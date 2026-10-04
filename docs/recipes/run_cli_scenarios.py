@@ -7,7 +7,6 @@ import argparse
 import gzip
 import json
 import math
-import os
 import re
 import shlex
 import shutil
@@ -20,12 +19,16 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from xml.etree import ElementTree
 
+from gbdraw.session_io import CURRENT_SESSION_VERSION
+from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
+
 if __package__:
     from ._scenario_support import (
         PUBLISHED_IMAGE_ROOT,
         RecipeContractError,
         assert_gallery_bgc_definitions,
         assert_exact_workdir_files,
+        checkout_subprocess_environment,
         copy_declared_inputs,
         extract_executable_block,
         inspect_standard_svg,
@@ -42,6 +45,7 @@ else:
         RecipeContractError,
         assert_gallery_bgc_definitions,
         assert_exact_workdir_files,
+        checkout_subprocess_environment,
         copy_declared_inputs,
         extract_executable_block,
         inspect_standard_svg,
@@ -1164,13 +1168,15 @@ def _assert_bgc_svg(
 
 
 def _assert_pinned_losat(command: list[str], *, scenario_id: str) -> None:
-    mode_index = command.index("--protein_blastp_mode") + 1
-    threads_index = command.index("--losatp_threads") + 1
+    if command[command.index("--losat") + 1] != "losatp":
+        raise RecipeContractError(f"{scenario_id} must run the LOSATP program.")
+    mode_index = command.index("--losatp_mode") + 1
+    threads_index = command.index("--losat_threads") + 1
     expected_mode = {
-        "T-CLI-08": "orthogroup",
+        "T-CLI-08": "similarity_groups",
         "T-CLI-10": "collinear",
         "H-CLI-06": "pairwise",
-        "H-CLI-07": "orthogroup",
+        "H-CLI-07": "similarity_groups",
         "H-CLI-08": "collinear",
     }[scenario_id]
     expected_threads = "32" if scenario_id == "T-CLI-10" else "1"
@@ -1181,17 +1187,15 @@ def _assert_pinned_losat(command: list[str], *, scenario_id: str) -> None:
         raise RecipeContractError(
             f"{scenario_id} must run its documented LOSATP mode and thread count."
         )
-    if "--losatp_bin" in command or "--ncbi_blastp_bin" in command:
+    if "--losat_bin" in command or "--ncbi_blast_bin" in command:
         raise RecipeContractError(
             f"{scenario_id} must exercise automatic bundled-runtime selection."
         )
 
-    from gbdraw.analysis.protein_colinearity import (  # noqa: PLC2701
-        _resolve_protein_blastp_runtime,
-    )
+    from gbdraw.comparisons.losat_runtime import resolve_losat_runtime
 
     with ExitStack() as stack:
-        runtime = _resolve_protein_blastp_runtime("losat", None, stack)
+        runtime = resolve_losat_runtime("losatp", stack=stack)
         if runtime.kind != "losat" or runtime.source != "bundled":
             raise RecipeContractError(
                 f"{scenario_id} did not resolve the bundled LOSAT runtime."
@@ -2138,8 +2142,9 @@ def _assert_session_roundtrip(
     for payload in (plain, compressed):
         if (
             payload.get("format") != "gbdraw-session"
-            or payload.get("version") != 42
-            or payload.get("renderRequest", {}).get("schema") != 7
+            or payload.get("version") != CURRENT_SESSION_VERSION
+            or payload.get("renderRequest", {}).get("schema")
+            != CANONICAL_REQUEST_SCHEMA
             or payload.get("renderRequest", {}).get("mode") != "circular"
         ):
             raise RecipeContractError("H-CLI-12 session schema changed.")
@@ -2252,7 +2257,7 @@ def _assert_export_set(workdir: Path) -> None:
     if (
         len(scripts) != 1
         or len(metadata) != 1
-        or metadata[0].attrib.get("data-schema") != "3"
+        or metadata[0].attrib.get("data-schema") != "4"
         or any(
             token not in interactive_source
             for token in (
@@ -2337,7 +2342,7 @@ def _assert_tutorial_interactive_handoff(workdir: Path) -> None:
         interactive_root.attrib.get("data-gbdraw-interactive-svg") != "true"
         or len(feature_ids) != 37
         or len(metadata) != 1
-        or metadata[0].attrib.get("data-schema") != "3"
+        or metadata[0].attrib.get("data-schema") != "4"
         or "COX1" not in interactive_source
         or any(
             token not in interactive_source
@@ -2362,8 +2367,9 @@ def _assert_tutorial_interactive_handoff(workdir: Path) -> None:
     resources = session.get("resources", {})
     if (
         session.get("format") != "gbdraw-session"
-        or session.get("version") != 42
-        or session.get("renderRequest", {}).get("schema") != 7
+        or session.get("version") != CURRENT_SESSION_VERSION
+        or session.get("renderRequest", {}).get("schema")
+        != CANONICAL_REQUEST_SCHEMA
         or session.get("renderRequest", {}).get("mode") != "circular"
         or len(resources) < 2
         or not any(
@@ -2398,7 +2404,7 @@ def run_scenario(
     expected_outputs = chapter["execution"]["expected_outputs"]
     if scenario_id == "H-CLI-06":
         if len(commands) != 1 or expected_outputs != [
-            "cli_losatp_pairwise.tsv",
+            "losatp.raw.tsv",
             "cli_losatp_pairwise.svg",
         ]:
             raise RecipeContractError(
@@ -2480,7 +2486,7 @@ def run_scenario(
             workdir=workdir,
         )
         copied_inputs.update(_materialize_generated_tables(scenario_id, workdir))
-        environment = os.environ.copy()
+        environment = checkout_subprocess_environment()
         environment.update({"LC_ALL": "C.UTF-8", "PYTHONHASHSEED": "0", "TZ": "UTC"})
         if fontconfig_runtime is not None:
             environment = _hcli13_export_environment(
@@ -2641,7 +2647,7 @@ def run_scenario(
             if scenario_id == "H-CLI-06":
                 _assert_pairwise_protein_search(
                     chapter,
-                    tsv_path=workdir / "cli_losatp_pairwise.tsv",
+                    tsv_path=workdir / "losatp.raw.tsv",
                     svg_path=workdir / "cli_losatp_pairwise.svg",
                 )
             elif scenario_id == "H-CLI-07":

@@ -14,6 +14,8 @@ import {
   buildCanonicalRequestState,
   projectCanonicalSessionRequest
 } from './session-request.js';
+import { migrateLegacyLinearLabelVisibility } from '../app/linear-label-visibility.js';
+import { resolveActiveLayoutPreference } from '../app/layout-preferences.js';
 import {
   createLinearComparisonEdge,
   normalizeLinearComparisonPlan,
@@ -185,11 +187,20 @@ const mergedGuiConfig = (session, projection) => {
     isPlainObject(session.config) ? session.config : {}
   );
   const projected = isPlainObject(projection.config) ? projection.config : {};
+  const committedLayout = resolveActiveLayoutPreference(
+    projection.layoutPreferences,
+    projection.mode,
+    Boolean(projected.form?.multi_record_canvas)
+  );
   return {
     ...saved,
     ...projected,
-    form: { ...(saved.form || {}), ...(projected.form || {}) },
-    adv: { ...(saved.adv || {}), ...(projected.adv || {}) },
+    form: { ...(saved.form || {}), ...(projected.form || {}), legend: committedLayout.legend },
+    adv: {
+      ...(saved.adv || {}),
+      ...(projected.adv || {}),
+      plot_title_position: committedLayout.plotTitlePosition
+    },
     palette: String(projected.palette || 'default'),
     colors: cloneJson(isPlainObject(projected.colors) ? projected.colors : {}),
     annotationSets: Array.isArray(projected.annotationSets)
@@ -226,7 +237,11 @@ const migratePersistedGalleryConfig = (config) => {
         : migrateLegacyCircularTrackSlot(slot)
     ));
   }
-  return { ...migratedNames, form, adv };
+  return {
+    ...migratedNames,
+    form,
+    adv: migrateLegacyLinearLabelVisibility(adv)
+  };
 };
 
 const legacyComparisonSource = (value, fallback = 'losat') => {
@@ -284,6 +299,12 @@ export const migrateLegacyLinearComparisonDraft = ({
   const rawGlobalSource = config.blastSource ?? config.adv?.blastSource;
   const globalSource = legacyComparisonSource(rawGlobalSource);
   const legacyNone = String(rawGlobalSource || '').trim().toLowerCase() === 'none';
+  // Legacy CLI writers selected LOSATP exactly when --protein_blastp_mode was
+  // not `none`; that run compared adjacent records.
+  const cliProteinMode = String(optionValues(
+    Array.isArray(config.cliOptions?.rawArgs) ? config.cliOptions.rawArgs : [],
+    ['--protein_blastp_mode', '--protein-blastp-mode']
+  ).at(-1) || 'none').trim().toLowerCase();
 
   stripLegacyComparisonConfig(config);
   filesData.linearSeqs = filesData.linearSeqs.map((sequence) => {
@@ -310,8 +331,14 @@ export const migrateLegacyLinearComparisonDraft = ({
   }
 
   if (!hasWebDraft) {
+    // A CLI-only draft gains no synthetic Web comparison (No comparison). Its
+    // own protein comparison is stated as the adjacent LOSATP plan.
     delete config.linearRecordLayout;
-    delete config.linearComparisonPlan;
+    if (cliProteinMode !== 'none') {
+      config.linearComparisonPlan = { mode: 'adjacent', defaultSource: 'losat', edges: [] };
+    } else {
+      delete config.linearComparisonPlan;
+    }
     filesData.linearComparisons = [];
     return { config, filesData };
   }
@@ -508,6 +535,11 @@ const preserveComparisonResources = (session, promoted) => {
     : [];
   const preservingSavedComparisons = comparisons.length > 0;
   if (preservingSavedComparisons) promoted.renderRequest.comparisons = comparisons;
+  for (const comparison of promoted.renderRequest.comparisons || []) {
+    if (comparison?.kind === 'generatedProteinComparison' && comparison.settings) {
+      delete comparison.settings.alignOrthogroupFeature;
+    }
+  }
   promoted.resources = {
     ...(session.resources || {}),
     ...promoted.resources
@@ -583,13 +615,20 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
     filesData,
     comparisonPlanSnapshot
   });
+  const orthogroupState = isPlainObject(session.orthogroupState)
+    ? cloneJson(session.orthogroupState)
+    : session.orthogroupState;
+  if (isPlainObject(orthogroupState)) {
+    delete orthogroupState.selectedOrthogroupAlignmentFeature;
+  }
   const promoted = {
     ...session,
     format: 'gbdraw-session',
-    version: 42,
+    version: 44,
     config: cloneJson(config),
     renderRequest: promotedCore.renderRequest,
     resources: promotedCore.resources,
+    orthogroupState,
     webFiles: {
       ...(session.webFiles || {}),
       ...promotedCore.webFiles

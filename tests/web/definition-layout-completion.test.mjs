@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
+import { setClassToken } from '../../gbdraw/web/js/services/svg-serialization.js';
 import * as transforms from '../../gbdraw/web/js/app/legend-layout/transform-utils.js';
 
 // Load the existing owners with a controlled scheduler and Worker response.
@@ -9,8 +10,8 @@ const loadOwner = async (path, name, dependencies) => {
   const source = (await readFile(new URL(`../../gbdraw/web/js/app/${path}`, import.meta.url), 'utf8'))
     .replace(/import\s+\{([\s\S]*?)\}\s+from\s+['"][^'"]+['"];?/g, 'const {$1} = dependencies;')
     .replace(/export const /g, 'const ');
-  return new Function('dependencies', 'setTimeout', 'clearTimeout', `${source}\nreturn ${name};`)(
-    dependencies, dependencies.setTimeout, dependencies.clearTimeout);
+  return new Function('dependencies', 'setTimeout', 'clearTimeout', 'window', `${source}\nreturn ${name};`)(
+    dependencies, dependencies.setTimeout, dependencies.clearTimeout, { Vue: { reactive: value => value } });
 };
 const ref = value => ({ value });
 const group = (id, transform) => {
@@ -26,7 +27,7 @@ test('incremental rebind adopts the replacement scale geometry, retaining same-r
   const root = { getAttribute: () => '1', getElementById: id => id === 'length_bar' ? activeBar : null,
     addEventListener() {}, removeEventListener() {} };
   const create = await loadOwner('legend-layout/diagram-drag.js', 'createDiagramDragActions', {
-    ...transforms, COMPOSITION_SCHEMA_ATTRIBUTE: 'schema', bindCompositionMetadata: () => binding,
+    ...transforms, setClassToken, COMPOSITION_SCHEMA_ATTRIBUTE: 'schema', bindCompositionMetadata: () => binding,
     compositionUserDeltas: () => ({ primary: [] })
   });
   const state = Object.fromEntries(['results','selectedResultIndex','diagramElements','diagramElementIds',
@@ -46,40 +47,4 @@ test('incremental rebind adopts the replacement scale geometry, retaining same-r
   state.lengthBarUserOffset.y = 0;
   actions.setupDiagramDrag(true);
   assert.equal(activeBar.getAttribute('transform'), 'translate(0,144.5)');
-});
-
-test('controlled definition callbacks complete for the active root and ignore superseded Results', async () => {
-  let callback;
-  let resolveHelper;
-  let mutations = 0;
-  const root = { getAttribute: () => null, querySelectorAll: () => [], getElementById: () => null };
-  let mounted = root;
-  const state = { svgContent: ref('<svg/>'), svgResultIdentity: ref(1), mode: ref('circular'), shouldDeferCircularPreviewUpdates: ref(false),
-    svgContainer: ref({ querySelector: () => mounted }), cInputType: ref('gb'), files: { c_gb: {} },
-    linearSeqs: [], form: {}, adv: {}, selectedResultIndex: ref(0), results: ref([{ content: 'old' }]), skipCaptureBaseConfig: ref(false) };
-  const create = await loadOwner('results.js', 'createResultsManager', {
-    setTimeout(fn) { callback = fn; return 1; }, clearTimeout() {},
-    isMultiRecordCanvasSvg: () => false, cloneFileBytesForTransfer: async () => new ArrayBuffer(0),
-    DIAGRAM_HELPER_OPERATIONS: { REGENERATE_DEFINITION_SVGS: 'definitions' },
-    runDiagramHelperOperation: () => new Promise(resolve => { resolveHelper = resolve; })
-  });
-  const owner = create({ state, legendLayout: { refreshCompositionGeometry() { mutations++; } } });
-  owner.scheduleDefinitionUpdate();
-  assert.equal(mutations, 0, 'fast path before the scheduled callback');
-  callback();
-  await new Promise(setImmediate);
-  assert.equal(typeof resolveHelper, 'function');
-  resolveHelper({ result: { definitions: [{ definition_group_id: 'unused' }] } });
-  await new Promise(setImmediate);
-  assert.equal(mutations, 1, 'the current root receives its legitimate delayed layout');
-  owner.scheduleDefinitionUpdate();
-  callback();
-  await new Promise(setImmediate);
-  mounted = { ...root };
-  state.results.value = [{ content: 'replacement' }];
-  state.svgResultIdentity.value = 2;
-  resolveHelper({ result: { definitions: [{ definition_group_id: 'unused' }] } });
-  await new Promise(setImmediate);
-  assert.equal(mutations, 1, 'superseded callback must not reflow the current root');
-  assert.equal(state.results.value[0].content, 'replacement');
 });

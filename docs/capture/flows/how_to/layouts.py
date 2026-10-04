@@ -39,9 +39,11 @@ from config import (
     PYTHON_OPERATION_TIMEOUT_MS,
 )
 from flows.web_capture import (
+    toggle_disclosure,
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
+    center_preview_diagram,
     fit_complete_linear_preview,
     generate_and_inspect,
     open_browser_capture,
@@ -135,7 +137,7 @@ def _write_complete_mitochondrial_container(path: Path) -> tuple[dict[str, Any],
 
 
 def _fit_complete_grid_preview(page: Page, target_zoom: str = "30%") -> None:
-    """Fit the complete 2 by 2 canvas in the public result viewport."""
+    """Center the complete 2 by 2 canvas in the visible Result Preview frame."""
 
     reset_zoom = page.get_by_role("button", name="Reset zoom", exact=True)
     zoom_out = page.get_by_role("button", name="Zoom out", exact=True)
@@ -147,22 +149,9 @@ def _fit_complete_grid_preview(page: Page, target_zoom: str = "30%") -> None:
         raise AssertionError(
             f"Could not reach the documented Circular preview zoom: {target_zoom}"
         )
+    page.wait_for_timeout(250)
 
-    result_region = page.get_by_role("region", name="Result Preview", exact=True)
-    box = result_region.bounding_box()
-    if box is None:
-        raise AssertionError("Could not resolve the Circular result preview bounds")
-    page.mouse.move(
-        box["x"] + (box["width"] * 0.82),
-        box["y"] + (box["height"] * 0.42),
-    )
-    page.mouse.down()
-    page.mouse.move(
-        box["x"] + (box["width"] * 0.225),
-        box["y"] + (box["height"] * 0.50),
-        steps=12,
-    )
-    page.mouse.up()
+    center_preview_diagram(page, label="Circular grid")
     page.evaluate("() => window.getSelection()?.removeAllRanges()")
     selection_range_count = page.evaluate(
         "() => window.getSelection()?.rangeCount ?? 0"
@@ -217,7 +206,11 @@ def capture_gui_circular_layout(
         prefix = page.get_by_label("Output Prefix", exact=True)
         prefix.fill("multi_record_circular")
         expect(prefix).to_have_value("multi_record_circular")
+        # Layout starts closed in Circular mode; open it before its controls.
+        layout = page.get_by_label("Layout", exact=True)
+        toggle_disclosure(layout)
         multi_record = page.get_by_label("Multi-Record Canvas", exact=True)
+        expect(multi_record).to_be_visible()
         multi_record.check()
         expect(multi_record).to_be_checked()
 
@@ -251,15 +244,15 @@ def capture_gui_circular_layout(
         row_gap.fill("0.08")
         expect(row_gap).to_have_value("0.08")
 
-        title_and_legend = page.get_by_label("Title & Legend", exact=True)
-        title_and_legend.click()
-        plot_title = page.get_by_label("Plot Title", exact=True)
+        title_and_labels = page.get_by_label("Titles and Record Labels", exact=True)
+        toggle_disclosure(title_and_labels)
+        plot_title = page.get_by_role("textbox", name="Plot Title", exact=True)
         plot_title.fill("Complete metazoan mitochondrial genomes")
         expect(plot_title).to_have_value("Complete metazoan mitochondrial genomes")
         title_position = page.get_by_label("Plot Title Position", exact=True)
         title_position.select_option("top")
         expect(title_position).to_have_value("top")
-        definition_font_size = page.get_by_label("Definition Font Size", exact=True)
+        definition_font_size = page.get_by_label("Default font size", exact=True)
         definition_font_size.fill("20")
         expect(definition_font_size).to_have_value("20")
         keep_definitions = page.get_by_label(
@@ -268,10 +261,10 @@ def capture_gui_circular_layout(
         )
         keep_definitions.check()
         expect(keep_definitions).to_be_checked()
-        title_and_legend.click()
+        toggle_disclosure(title_and_labels)
 
         labels = page.get_by_label("Labels", exact=True)
-        labels.click()
+        toggle_disclosure(labels)
         label_mode = page.get_by_label("Label Mode", exact=True)
         label_mode.select_option("out")
         expect(label_mode).to_have_value("out")
@@ -281,7 +274,7 @@ def capture_gui_circular_layout(
         label_font_size = page.get_by_label("Label Font Size", exact=True)
         label_font_size.fill("16")
         expect(label_font_size).to_have_value("16")
-        labels.click()
+        toggle_disclosure(labels)
 
         size_mode.scroll_into_view_if_needed()
         expect(row_controls[-1]).to_be_visible()
@@ -495,14 +488,14 @@ def capture_gui_linear_layout(
         linear.click()
         expect(linear).to_have_attribute("aria-pressed", "true")
         page.get_by_role("radio", name="GenBank", exact=True).check()
-        expect(page.get_by_role("status").filter(has_text="Current:")).to_contain_text(
-            "Current: No comparison"
-        )
+        expect(
+            page.get_by_role("button", name="Set no comparison", exact=True)
+        ).to_have_attribute("aria-pressed", "true")
         add_sequence = page.get_by_role(
             "button", name="Add sequence", exact=True
         )
-        expect(add_sequence).to_have_count(2)
-        add_sequence.first.click()
+        expect(add_sequence).to_have_count(1)
+        add_sequence.click()
         page.get_by_test_id("linear-genbank-1").set_input_files(
             FIRST_LINEAR_FIXTURE_PATH
         )
@@ -569,7 +562,7 @@ def capture_gui_linear_layout(
         track_layout = page.get_by_label("Track Layout", exact=True)
         track_layout.select_option("above")
         expect(track_layout).to_have_value("above")
-        page.get_by_label("Axis & Scale", exact=True).click()
+        toggle_disclosure(page.get_by_label("Axis & Scale", exact=True))
         show_scale = page.get_by_label(
             "Show Coordinate Scale (Linear)", exact=True
         )

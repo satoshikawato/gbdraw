@@ -1,9 +1,133 @@
 # Web Gallery operation screenshot register
 
-Last updated: 2026-09-11
+Last updated: 2026-09-29
 
 This register records task-specific decisions for Gallery operation media.
 Capture metadata remains the executable source of truth in each tutorial JSON.
+
+## Comparison pressed state and Align help-tip (GUI remediation S07)
+
+The removed **Current: …** status line and the always-on Align paragraph were
+visible in these images. Each recapture was compared with the committed image
+at the same display size.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `BGC0000708-BGC0000713` | `manual-08-01-align-og1.webp` | Recapture; recipe corrected | Exact BGC Session; the recipe pans with `app.canvasPan` (the old container transform no longer moves the canvas); clicked livE beside the popup; **Align…**, **Review alignment options…** and the help-tip in one row | DSF 3; livE, its highlight and label are no longer covered; accepted |
+| `BGC0000708-BGC0000713`, `majanivirus_orthogroup` | `manual-03-01-open-pairwise.webp` | Recapture; taller viewport | **Run LOSAT** pressed; open **Settings** with the asserted filters; viewport 1600 × 1600 so the whole card fits without the sticky header | Taller because Settings now also shows Runtime and reproducibility and Comparison appearance; no status line; accepted |
+| `hepatoplasmataceae_collinear`, `hepatoplasmataceae_orthogroup`, `vibrio-harveyi-group-collinear` | `manual-03-01-open-pairwise.webp`, `manual-03-01-browser-losat.webp`, `manual-04-00-run-adjacent-losat.webp` | Recapture; recipe corrected | **Run LOSAT** pressed; the recipe closes the Settings disclosure that the app opens for LOSAT, as the alt text states | Compact card; the old Vibrio image was cut off under the header; accepted |
+| `lambda_basic_linear` | `manual-02-03-no-comparison.webp` | Recapture | **No comparison** pressed; closed **Settings** and **Selected pairs (0)** | No status line; accepted |
+
+The other Gallery media are unchanged. The Vibrio linear-layout image never
+showed the Lock explanation paragraph, and other popup images do not show the
+Align area.
+
+## Popup framing with `app.canvasPan` (GUI remediation follow-up)
+
+These recipes panned with the preview container's `style.transform`. The
+preview binds that transform to `canvasPan` and `zoom`, so the next zoom change
+overwrote it and the step had no effect. Each recipe now sets `app.canvasPan`
+and waits 500 ms, so the clicked target is inside the visible canvas before the
+click. Each recapture was compared with the committed image at the same scale.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `BGC0000708-BGC0000713` | `manual-09-01-orthogroup-popup.webp` | Recapture; recipe corrected | Zoom 1.4; the og_18 ribbon is highlighted and the popup opens beside it; the crop runs to the first member row | The ribbon is no longer hidden behind the popup and the footer is gone; legend fragments remain at the lower left, as before; accepted |
+| `BGC0000708-BGC0000713` | `manual-10-01-feature-popup.webp` | Recapture; recipe corrected | livE, its highlight and label left of the **Qualifiers** popup; drawer toggle hidden | No app-header fragments; accepted |
+| `Vnig_TUMSAT-TG-2018` | `manual-08-01-feature-popup.webp` | Recapture; recipe corrected | The clicked dnaA CDS is highlighted beside the 720 px popup; the whole 4.0 Mbp tick label is visible | dnaA was not visible before; accepted |
+| `hepatoplasmataceae_collinear` | `manual-07-01-collinear-block-popup.webp` | Recapture; recipe corrected | The whole highlighted block_0024 is to the right of the popup | Fragments of the AP027133.1 record label remain between popup and block because that label ends 4 px left of the block; accepted |
+| `hepatoplasmataceae_collinear`, `hepatoplasmataceae_orthogroup` | `post-01-01-feature-popup.webp`, `post-02-01-feature-popup.webp` | Recapture; recipe corrected | The highlighted DnaA at the start of AP027078.1 is to the right of the popup; the popup is below the toolbar | Taller because the popup now shows the **Feature placement** row; no Run info or toolbar fragments; accepted |
+| `majanivirus_orthogroup` | `manual-08-01-orthogroup-popup.webp` | Recapture; recipe corrected | The whole og_31 ribbon and its highlight are visible; the other og_31 members show the group outline | The ribbon was cut off at the left edge before; accepted |
+
+The Vibrio feature-popup caption says the popup reports qualifiers and the
+sequence, but the image shows the **Details** tab, where those appear only as
+tab names. This predates the recapture and is left for a caption review.
+
+## Circular record discovery and loaded-preview inspection (#597 S07)
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `tobacco-chloroplast` | `manual-06-01-region-annotations.webp` | Keep; recipe corrected | Exact tobacco Session; **Inspect source records** replaces the removed Circular **Load record rotation controls** click before the four region rows are asserted | Corrected recipe captured and passed every declared assertion; the new crop truncates the label cells, so the existing bitmap is kept |
+| `vibrio-harveyi-group-collinear` | `manual-02-01-record-row.webp` | Keep; recipe corrected | Exact Vibrio Session; the removed click is dropped because the loaded Linear record rows already exist | Corrected recipe captured the same row and values; only the region label gained its later **Applies on Generate** note, so the existing bitmap is kept |
+
+Tutorial text and captions are unchanged. Public documentation images for the
+changed Circular upload and Session steps come from `T-GUI-01` and `T-GUI-09`;
+see `results/S07_RESULT.md` in the Issue #597 plan for the remaining stale
+Circular Tutorial captures that this change did not regenerate.
+
+## Circular Width/Radius numeric and unit controls (#619 S03)
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `tobacco-chloroplast` | `manual-07-01-custom-track-slots.webp` | Replace | Exact tobacco Session; features Auto; plastome_regions 20 px / 0.65 ×R; GC content 0.08 ×R / 0.56 ×R; explicit numeric/unit controls | Recaptured at DSF 3 / quality 94; eight value/unit controls passed; equal-width visual comparison accepted |
+
+Keep the three-row stack, annotation binding and all finished-preview media.
+Update the existing table and caption to name numeric values and units. A taller viewport keeps the added unit/help controls fully visible without widening
+the crop. The operation declares its own Session, app state and eight visible
+controls. The existing GUI Tutorial's corresponding track-controls crop uses
+its original `T-GUI-05` owner recipe; unrelated images remain unchanged.
+
+## Alignment direction and Reset (#598 S04)
+
+The existing BGC tutorial keeps its public reader route and media. The alignment
+instruction now names exclusive Keep/right/left/Custom and both Reset scopes.
+`manual-08-01-align-og1.webp` shows the feature-popup entry points, with no
+retired Match control. The final preview uses automatic Keep alignment. Both
+images remain truthful: **Keep**, with no recapture or new public smoke figure.
+The five-source GUI recipe regenerates the finished BGC example and verifies
+optional minority-reference reversal, both Reset scopes and Undo; see
+`docs/capture/README.md`. Internal acceptance captures remain internal.
+
+## Optional Similarity Group alignment review (#586)
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `BGC0000708-BGC0000713` | `manual-08-01-align-og1.webp` | Recapture | Exact BGC Session; clicked livE feature in og_1; popup shows both **Align…** and **Review alignment options…** in one crop | Recaptured at DSF 3, quality 94; old/new reviewed at equal display size; current controls and clicked feature verified |
+
+## Two-species Vibrio collinearity example
+
+The Product owner selected a smaller public comparison containing only
+*Vibrio parahaemolyticus* RIMD 2210633 and *Vibrio alginolyticus* NBRC 15630.
+The stable Gallery ID remains `vibrio-harveyi-group-collinear`, while its owner
+records table, generated session/SVG/thumbnail, tutorial copy, and every
+data-dependent operation capture are regenerated for four chromosomes in two
+rows (`1,1,2,2`). The LOSATP scope remains Adjacent pairs, now covering one
+species boundary and four cross-record combinations.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `vibrio-harveyi-group-collinear` | all referenced media under its own media directory | Recapture | Exact regenerated two-species session; 4 Linear records; rows `1,1,2,2`; *V. parahaemolyticus* and *V. alginolyticus* identity; one adjacent collinear boundary | Recaptured at DSF 3 and quality 94; strict validation passed; final 3804×591 overview and operation crops visually accepted |
+
+## Linear input workflow cleanup (#568 Phase 1)
+
+The Lambda tutorial is the only Gallery example that shows the renamed Linear
+GenBank uploader and the single-record comparison state. Update its capture
+metadata and replace only the two affected operation crops; keep the remaining
+control and final-preview media.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `lambda_basic_linear` | `manual-02-01-genbank-upload.webp` | Recapture | Exact Lambda session; one Linear row; **GenBank / DDBJ File** uploader containing `NC_001416.gb`; no record-reorder or source-card Remove action | Recaptured at DSF 3, quality 94; visually accepted |
+| `lambda_basic_linear` | `manual-02-03-no-comparison.webp` | Recapture | Exact Lambda session; **No comparison** command; one **Current: No comparison** status; disabled **Run LOSAT** with its two-input requirement | Recaptured at DSF 3, quality 94; visually accepted |
+
+## Titles, Record Labels, and Legend regrouping (#562)
+
+The combined **Title & Legend** card was replaced by **Titles & Record Labels**
+and a separate **Legend · position** card. Recapture only operations that showed
+the replaced controls; retain input, comparison, and generated-preview media.
+
+| Tutorial | Operation media | Decision | Required capture state | Status |
+| --- | --- | --- | --- | --- |
+| `HmmtDNA_ATskew` | `manual-03-03-legend-position-left.webp` | Replace | Separate Legend card; Position menu open with Left selected | Recaptured at DSF 3, quality 94; visually accepted |
+| `lambda_basic_linear` | `manual-03-04-legend-position-left.webp` | Replace | Separate Legend card; Position menu open with Left selected | Recaptured at DSF 3, quality 94; visually accepted |
+| `BGC0000708-BGC0000713` | `manual-05-03-legend-position-bottom.webp`, `manual-06-01-title-record-text.webp`, `manual-06-02-record-labels.webp` | Replace/add | Bottom Legend menu; focused Plot Title subsection; focused Record Labels rows with Show/Show visibility | Recaptured at DSF 3, quality 94; old/new same-size review accepted the smaller focused crops |
+| `Vnig_TUMSAT-TG-2018` | `manual-03-02-legend-position-left.webp`, `manual-05-01-bottom-title.webp` | Replace | Separate Legend card; focused Plot Title subsection with Bottom selected | Recaptured at DSF 3, quality 94; old/new review accepted |
+| `majanivirus_orthogroup` | `manual-04-02-legend-position-right.webp` | Replace | Separate Legend card; Position menu open with Right selected | Recaptured at DSF 3, quality 94; visually accepted |
+| `vibrio-harveyi-group-collinear` | `manual-07-02-bottom-legend.webp` | Replace | Separate Legend card; Position menu open with Bottom selected | Recaptured at DSF 3, quality 94; visually accepted |
+
+The tobacco tutorial changes table labels only; its referenced operations do
+not show the replaced controls. No generated preview or session artifact is
+recaptured for this UI-only organization change.
 
 ## Comparison commands in History (05A4-02)
 
@@ -136,7 +260,7 @@ All six linked Gallery result WebPs were refreshed from their exact sessions.
 | `T-GUI-02` | Four files under `docs/images/t-gui-02/` | Exact: `lambda_basic_linear/manual-05-01-final-preview.webp` | Fresh Lambda flow for docs; exact `lambda_basic_linear` session for Gallery; Linear, no comparison, all labels, ruler, left legend | Re-run all owner outputs; expect input-only PNG unchanged; recapture generated-result/full-preview views | Corrected documentation images accepted; exact-session Gallery WebP recaptured at 4182×1452 |
 | `T-GUI-05` | Five files under `docs/images/t-gui-05/` | Exact: `tobacco-chloroplast/manual-08-01-chloroplast-preview.webp` | Fresh NC_001879.2 flow for docs; exact `tobacco-chloroplast` session for Gallery; three-slot stack, four region labels, upper-left legend | Re-run all owner outputs and recapture the exact-session Gallery result | Corrected documentation images accepted; exact-session Gallery WebP recaptured at 3072×2187 |
 | `H-GUI-02` | `grid-settings.png`, `grid-result.png` | Contextual only: `Vnig_TUMSAT-TG-2018/manual-06-01-multirecord-preview.webp` | Docs use four complete mitochondrial records in a 2×2 equal-size grid; Gallery uses six Vibrio replicons with Auto sizing, left legend, bottom title | Keep distinction explicit; add exact-session metadata for the Gallery result before recapture | Documentation images accepted; contextual Gallery WebP recaptured at 3072×2016 |
-| `H-GUI-03` | `record-layout.png`, `orientation-result.png` | Contextual only: `vibrio-harveyi-group-collinear/manual-08-01-collinear-overview.webp` | Docs use two comparison-free phage rows at 24 px; Gallery uses 11 comparison records in five rows at 48 px with bottom legend | Recapture docs result; strengthen Gallery app-state/visible-text assertions before its result recapture | Documentation images accepted; contextual Gallery WebP recaptured at 3804×1200 |
+| `H-GUI-03` | `record-layout.png`, `orientation-result.png` | Contextual only: `vibrio-harveyi-group-collinear/manual-08-01-collinear-overview.webp` | Docs use two comparison-free phage rows at 24 px; Gallery uses four comparison records in two rows at 48 px with bottom legend | Recapture docs result; strengthen Gallery app-state/visible-text assertions before its result recapture | Documentation images accepted; contextual Gallery WebP recaptured at 3804×591 |
 | `H-GUI-09` | `track-settings.png`, `track-result.png` | Contextual only: `HmmtDNA_ATskew/manual-09-01-atskew-preview.webp` | Docs use AP027133 depth + GC content/skew; Gallery uses HmmtDNA GC/AT skew without depth | Recapture docs result; add exact-session metadata for the manual-only Gallery result | Documentation result accepted at 70%; contextual Gallery WebP recaptured at 3072×2304 |
 | `H-GUI-10` | `slot-settings.png`, `annotation-result.png` | Contextual only: tobacco chloroplast final preview | Docs use alternating annotation lanes, an outside annotation slot, AT skew, top title, right legend; Gallery uses one inside region lane, no AT skew, no title, upper-left legend | Recapture docs result; reuse the T-GUI-05 Gallery recapture only as contextual coverage | Documentation result accepted at 70%; contextual Gallery coverage verified |
 | `H-GUI-11` | `style-settings.png`, `style-result.png` | Contextual only: HmmtDNA basic final preview | Docs use soft_pastels, whitelist, selected labels, top title, and exact legend order; Gallery basic example has a different style/title state | Recapture both docs views; reuse the T-GUI-01 Gallery recapture only as contextual right-legend coverage | Documentation images accepted at the largest complete-fit scale; contextual Gallery coverage verified |
@@ -152,12 +276,14 @@ capture validation proves the visible control or selected value is stale.
 - Use 70% whenever the complete title, plot, labels, and legend remain visible.
   This applies to `T-GUI-10`, `T-GUI-12`, `H-GUI-09`, and `H-GUI-10`, plus
   the intermediate `T-GUI-05` states.
-- Use 60% only where 70% clips required content. This applies to `T-GUI-01`,
-  `T-GUI-09`, `H-GUI-11`, `H-GUI-12`, `H-GUI-13`, `H-GUI-14`, and
-  `H-GUI-15`.
+- Use 60% only where 70% clips required content. This applies to `H-GUI-11`,
+  `H-GUI-12`, `H-GUI-13`, `H-GUI-14`, and `H-GUI-15`.
 - Use 50% only for the dense final tobacco chloroplast figure (`T-GUI-05`) and
   the three-comparison-ring figures (`T-GUI-06` and `H-GUI-06`), where 60%
-  clips the title, labels, legend, or outer comparison ring.
+  clips the title, labels, legend, or outer comparison ring. `T-GUI-01` and
+  `T-GUI-09` also use 50% since #597 S07: the Generation status row above the
+  Preview leaves too little canvas height at 60%, and bottom labels such as
+  `tRNA-Asp` fall behind the preview toolbar.
 - The HmmtDNA feature-highlight result uses `Middle`, strand separation off,
   70%, and gene labels for all 13 mitochondrial CDS features, including
   `COX1`.

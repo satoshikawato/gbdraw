@@ -217,6 +217,9 @@ const dragFixture = () => {
   try {
     const { legend, state, svg } = dragFixture();
     const actions = createLegendDragActions({ state, extractLegendEntries: () => {} });
+    actions.refreshLegendDragAffordances();
+    assert.equal(legend.style.cursor, 'grab');
+    assert.equal(legend.getAttribute('class'), 'gbdraw-preview-layout-target');
     actions.startLegendDrag({
       clientX: 100,
       clientY: 200,
@@ -224,6 +227,7 @@ const dragFixture = () => {
       shiftKey: false,
       stopPropagation: () => {}
     });
+    assert.equal(legend.style.cursor, 'grabbing');
     const selectorCallsAtStart = svg.selectorCalls;
     assert.ok(selectorCallsAtStart > 0, 'drag start must bind the composition roles');
 
@@ -239,6 +243,15 @@ const dragFixture = () => {
       selectorCallsAtStart,
       'pointer frames and drag completion must reuse the composition binding from drag start'
     );
+    assert.equal(legend.style.cursor, 'grab');
+    state.layoutRepositionMode.value = false;
+    actions.refreshLegendDragAffordances();
+    assert.equal(legend.style.cursor, 'help');
+    actions.startLegendDrag({ preventDefault: () => assert.fail('OFF must retain pan') });
+    assert.equal(state.legendDragging.value, false);
+    state.layoutRepositionMode.value = true;
+    actions.startLegendDrag({ shiftKey: true, preventDefault: () => assert.fail('Shift must retain selection') });
+    assert.equal(state.legendDragging.value, false);
     assert.equal(legend.getAttribute('transform'), 'translate(22,36) rotate(2)');
     assert.deepEqual(state.legendCurrentOffset, { x: 12, y: 16 });
   } finally {

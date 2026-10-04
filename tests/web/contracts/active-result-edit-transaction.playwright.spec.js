@@ -78,6 +78,7 @@ test.describe('active Result Feature fill transaction', () => {
     const { featureOverrideKey } = await import(
       '/gbdraw/web/js/services/feature-override-identity.js'
     );
+    const { formatFeatureLocation } = await import('/gbdraw/web/js/app/feature-utils.js');
     const rendered = (feature) => {
       const id = String(feature?.svg_id || '').trim();
       return id && getFeatureFillElements(svg, id).length > 0;
@@ -95,8 +96,8 @@ test.describe('active Result Feature fill transaction', () => {
       id: String(feature.svg_id),
       key: featureOverrideKey(feature),
       type: String(feature.type),
-      start: Number(feature.start),
-      end: Number(feature.end)
+      // The Features drawer row shows this 1-based INSDC location as its title.
+      location: formatFeatureLocation(feature)
     });
     return {
       targets: targets.map(inventoryEntry),
@@ -261,7 +262,7 @@ test.describe('active Result Feature fill transaction', () => {
       .toBeVisible();
     const selectedTarget = inventory.targets[0];
     const targetRow = drawer
-      .locator(`span[title="${selectedTarget.start}..${selectedTarget.end}"]`)
+      .locator(`span[title="${selectedTarget.location}"]`)
       .locator('..');
     await targetRow.getByRole('button', { name: 'Edit', exact: true }).click();
 
@@ -325,8 +326,8 @@ test.describe('active Result Feature fill transaction', () => {
     const savedSession = readSavedSession(savedSessionPath);
     expect(savedSession).toMatchObject({
       format: 'gbdraw-session',
-      version: 42,
-      renderRequest: { schema: 7 },
+      version: 44,
+      renderRequest: { schema: 8 },
       editorState: {
         legend: { colorOverrides: { [TARGET_CAPTION]: AFTER_COLOR } }
       }
@@ -391,7 +392,7 @@ test.describe('active Result Feature fill transaction', () => {
       const freshDrawer = freshPage.locator('.right-drawer');
       await freshDrawer.getByPlaceholder('Search by feature or annotation...').fill(TARGET_CAPTION);
       const freshTargetRow = freshDrawer
-        .locator(`span[title="${selectedTarget.start}..${selectedTarget.end}"]`)
+        .locator(`span[title="${selectedTarget.location}"]`)
         .locator('..');
       await freshTargetRow.getByRole('button', { name: 'Edit', exact: true }).click();
       const continuationPicker = freshPage

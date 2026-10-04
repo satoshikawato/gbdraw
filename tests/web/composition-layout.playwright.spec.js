@@ -313,16 +313,21 @@ test('frozen v39 session is admitted once with usable composition geometry', asy
   expect(admitted.liveRecordBounds.width).toBeGreaterThan(0);
   expect(admitted.liveRecordBounds.height).toBeGreaterThan(0);
 
-  await page.evaluate(() => {
-    window.__GBDRAW_APP__.form.legend = 'right';
+  // The first explicit layout edit (here a Legend addition, which reflows the
+  // Legend at its side) replaces the conservative legacy envelope. A legend
+  // side change applies on Generate (D-30), so it is not that edit.
+  const legendSide = admitted.metadata.legendSide;
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    app.newLegendCaption = 'Legacy edit';
+    app.newLegendColor = '#884422';
+    await app.addNewLegendEntry();
   });
   await page.waitForFunction(() => {
-    const app = window.__GBDRAW_APP__;
     const svg = document.querySelector('svg[data-gbdraw-composition-schema="1"]');
-    if (!svg || app?.form?.legend !== 'right') return false;
-    const metadata = JSON.parse(svg.getAttribute('data-gbdraw-composition'));
-    return metadata.legendSide === 'right' && metadata.legacyNormalized !== true;
-  }, null, { timeout: 120000 });
+    if (!svg || !svg.querySelector('g[data-legend-key="Legacy edit"]')) return false;
+    return JSON.parse(svg.getAttribute('data-gbdraw-composition')).legacyNormalized !== true;
+  }, null, { timeout: 180000 });
 
   const edited = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
@@ -338,7 +343,7 @@ test('frozen v39 session is admitted once with usable composition geometry', asy
     return { liveMetadata, resultMetadata, errorLog: app.errorLog };
   });
   expect(edited.errorLog).toBeNull();
-  expect(edited.liveMetadata.legendSide).toBe('right');
+  expect(edited.liveMetadata.legendSide).toBe(legendSide);
   expect(edited.liveMetadata.legacyNormalized).toBeUndefined();
   expect(edited.liveMetadata.primary.finalBounds.width).toBeCloseTo(2280, 3);
   expect(edited.liveMetadata.primary.finalBounds.height).toBeCloseTo(568.1312770843506, 3);

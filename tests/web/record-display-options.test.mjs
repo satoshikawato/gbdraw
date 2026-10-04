@@ -2,13 +2,15 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildRecordDisplayRows, createRecordDisplayControls, parseRecordDisplayStart, reconcileRecordDisplayDrafts,
-  recordDisplaySurface, selectedFeatureDisplayStart
+  effectiveRecordReverseComplement, migrateLegacyRecordDisplayDrafts, recordDisplaySurface,
+  requestedRecordTransform, selectedFeatureDisplayStart, validateAnchorIntent,
+  validateRecordDisplayDrafts
 } from '../../gbdraw/web/js/app/record-display-options.js';
-import { parseSequenceRecordText } from '../../gbdraw/web/js/app/record-discovery.js';
+import { circularDiscoveryForInput, parseSequenceRecordText } from '../../gbdraw/web/js/app/record-discovery.js';
 
 import { createFeaturePlacementActions } from '../../gbdraw/web/js/app/feature-editor/placement-actions.js';
 import { createDefaultForm, createDefaultAdv } from '../../gbdraw/web/js/services/session-active-config-contract.js';
-import { adoptCurrentSessionResources, createCombinedSessionResourceFileView } from '../../gbdraw/web/js/services/session-resource-backing.js';
+import { adoptCurrentSessionResources, createCombinedSessionResourceFileView, createSessionResourceFileView } from '../../gbdraw/web/js/services/session-resource-backing.js';
 import { readFileBytes } from '../../gbdraw/web/js/services/file-content-cache.js';
 
 const source = {};
@@ -48,6 +50,51 @@ test('blank remains null, explicit 1 survives, malformed input is never clamped'
   }
 });
 
+const anchorIntent = {
+  schema: 1,
+  recordKey: 'record-key',
+  biologicalFeatureId: 'feature-key',
+  placement: 'anchor',
+  anchor: 'five-prime',
+  offsetBp: 0,
+  orientForward: true
+};
+
+test('record display drafts use one exact transform and provenance contract', () => {
+  const draft = {
+    scope: 'linear', sourceUid: 'card-1', selector: '#1', recordId: 'same',
+    topologyOverride: null, startCoordinate: 25, reverseComplementOverride: true,
+    anchorIntent
+  };
+  const drafts = [draft];
+  assert.equal(validateRecordDisplayDrafts(drafts), drafts);
+  assert.equal(validateAnchorIntent(anchorIntent), anchorIntent);
+  assert.deepEqual(migrateLegacyRecordDisplayDrafts([{
+    scope: 'linear', sourceUid: 'card-1', selector: '#1', recordId: 'same',
+    topologyOverride: null, startCoordinate: 25
+  }])[0], { ...draft, reverseComplementOverride: null, anchorIntent: null });
+  for (const invalid of [
+    { ...draft, extra: true },
+    { ...draft, reverseComplementOverride: 'true' },
+    { ...draft, anchorIntent: { ...anchorIntent, schema: 2 } }
+  ]) assert.throws(() => validateRecordDisplayDrafts([invalid]));
+});
+
+test('complete orientation override has one owner while cropped reverse stays region-owned', () => {
+  const row = { ...rows[0], reverse: false, cropped: false };
+  assert.equal(effectiveRecordReverseComplement(row, { reverseComplementOverride: true }), true);
+  assert.equal(effectiveRecordReverseComplement(
+    { ...row, reverse: true, cropped: true },
+    { reverseComplementOverride: false }
+  ), true);
+  assert.deepEqual(requestedRecordTransform(row, {
+    topologyOverride: null, startCoordinate: 25, reverseComplementOverride: true
+  }), {
+    display: { isCircular: null, startCoordinate: 25 },
+    reverseComplement: true
+  });
+});
+
 test('detected topology, nullable reset, crop lock, and RC default stay separate from raw draft', () => {
   const draft = { topologyOverride: false, startCoordinate: 25 };
   assert.equal(recordDisplaySurface(rows[0], draft).startEnabled, false);
@@ -67,8 +114,11 @@ for (const strand of ['+', '-']) {
         const sequence = Array.from({ length: end - start }, (_, i) => start + i + 1);
         return strand === '-' ? sequence.reverse() : sequence;
       });
-      const feature = { record_key: 'instance', strand, location_parts: ordered.map(([start, end]) => ({ start, end, strand })) };
-      const args = { row: rows[0], committedRow: { ...rows[0], recordKey: 'instance' }, selectedFeatures: [feature] };
+      const feature = { record_key: 'instance', biological_feature_id: 'feature', strand,
+        anchorProfile: { precision: 'exact', operator: parts.length === 1 ? 'single' : 'join',
+          partOrder: 'biological', strand },
+        location_parts: ordered.map(([start, end]) => ({ start, end, strand })) };
+      const args = { row: rows[0], committedRow: { ...rows[0], recordKey: 'instance' }, feature };
       assert.equal(selectedFeatureDisplayStart({ ...args, shortcut: 'five-prime' }), bases[0]);
       assert.equal(selectedFeatureDisplayStart({ ...args, shortcut: 'midpoint' }), bases[Math.floor((bases.length - 1) / 2)]);
     });
@@ -76,32 +126,34 @@ for (const strand of ['+', '-']) {
 }
 
 test('shortcuts reject stale, unbound, cross-record, empty, and unknown/mixed-strand selections', () => {
-  const feature = { record_key: 'instance', strand: '+', location_parts: [{ start: 5, end: 10, strand: '+' }] };
-  const args = { row: rows[0], committedRow: { ...rows[0], recordKey: 'instance' }, selectedFeatures: [feature], shortcut: 'midpoint' };
+  const feature = { record_key: 'instance', biological_feature_id: 'feature', strand: '+',
+    anchorProfile: { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' },
+    location_parts: [{ start: 5, end: 10, strand: '+' }] };
+  const args = { row: rows[0], committedRow: { ...rows[0], recordKey: 'instance' }, feature, shortcut: 'midpoint' };
   for (const changed of [
     { committedRow: null }, { committedRow: { ...args.committedRow, source: {} } },
     { committedRow: { ...args.committedRow, selector: '#2' } },
-    { selectedFeatures: [] }, { selectedFeatures: [feature, feature] },
-    { selectedFeatures: [{ ...feature, record_key: 'other' }] },
-    { selectedFeatures: [{ ...feature, strand: 'unknown' }] },
-    { selectedFeatures: [{ ...feature, location_parts: [] }] },
-    { selectedFeatures: [{ ...feature, location_parts: [{ start: 5, end: 10, strand: '-' }] }] }
+    { feature: null },
+    { feature: { ...feature, record_key: 'other' } },
+    { feature: { ...feature, anchorProfile: { ...feature.anchorProfile, strand: 'mixed' } } },
+    { feature: { ...feature, location_parts: [] } },
+    { feature: { ...feature, location_parts: [{ start: 5, end: 10, strand: '-' }] } }
   ]) assert.throws(() => selectedFeatureDisplayStart({ ...args, ...changed }));
 });
 
 const descriptor = (name, text) => ({ kind: 'genbank', name, type: 'text/plain',
   lastModified: 0, size: Buffer.byteLength(text), encoding: 'base64', data: btoa(text) });
-const compositeControls = () => {
+const compositeControls = ({ linear = false, discovered = true } = {}) => {
   const resources = Object.fromEntries(['first', 'second'].map((id) => [id,
     descriptor(`${id}.gb`, `LOCUS       ${id} 100 bp DNA circular\n//\n`)]));
   const table = adoptCurrentSessionResources(resources);
   const components = Object.keys(resources).map((resourceId) => ({ resourceId }));
   const makeFile = () => createCombinedSessionResourceFileView(table, components);
   const file = makeFile();
-  let committed = { resources, renderRequest: { mode: 'circular', records: components.map(({ resourceId }, i) => ({
+  let committed = { resources, renderRequest: { mode: linear ? 'linear' : 'circular', records: components.map(({ resourceId }, i) => ({
     recordKey: `record-${i + 1}`, cardinality: 'exactly_one', source: { kind: 'genbank', resourceId },
     selector: null })) } };
-  const state = { mode: { value: 'circular' }, cInputType: { value: 'gb' },
+  const state = { mode: { value: linear ? 'linear' : 'circular' }, cInputType: { value: 'gb' },
     lInputType: { value: 'gb' }, files: { c_gb: file }, linearSeqs: [],
     form: createDefaultForm(), adv: createDefaultAdv('circular'),
     recordDisplayDrafts: [], featurePlacementOverrides: {},
@@ -109,15 +161,18 @@ const compositeControls = () => {
       record_id: resourceId, record_length: 100, selector: `#${i + 1}`, detectedTopology: 'circular' })) },
     featureCatalog: { value: { items: [{ recordKeys: ['record-1', 'record-2'] }] } } };
   state.form.track_type = 'middle';
+  if (linear) state.linearSeqs = components.map(({resourceId}, index) => ({
+    uid:`record-${index+1}`,gb:createSessionResourceFileView(table,resourceId),region_record_id:'',region_reverse:false
+  }));
   const getCommittedRequest = () => committed.renderRequest;
   const history = { runUndoable: (_label, fn) => fn() };
   const controls = createRecordDisplayControls({ state, computed: (fn) => ({ get value() { return fn(); } }),
-    watch: () => {}, linearRecordSelector: { recordsFor: () => [] }, history,
+    watch: () => {}, linearRecordSelector: { recordsFor: seq => discovered ? [{selector:'#1',recordId:components[Number(seq.uid.slice(-1))-1].resourceId,recordLength:100,detectedTopology:'circular'}] : [] }, history,
     getCommittedRequest, getCommittedSession: () => committed });
   const actions = createFeaturePlacementActions({ state, history, getCommittedRequest,
     isCurrentFeature: controls.isCurrentFeature });
   const feature = { record_key: 'record-2', biological_feature_id: 'logical-feature' };
-  return { state, actions, feature, file, makeFile,
+  return { state, actions, controls, feature, file, makeFile,
     enabled: () => actions.choices([feature]).filter((choice) => choice.enabled).map((choice) => choice.value),
     commitCombined: async () => {
       const bytes = await readFileBytes(file);
@@ -140,6 +195,67 @@ test('same composite retains semantic capability when the committed resource bec
   assert.equal(model.actions.valueFor(model.feature), 'main');
 });
 
+test('manual start and orientation edits clear feature provenance', () => {
+  const model = compositeControls();
+  const row = model.controls.allRows.value[0];
+  model.controls.setResolvedTransform(row, {
+    startCoordinate: 25, reverseComplement: true, anchorIntent
+  });
+  assert.deepEqual(model.state.recordDisplayDrafts[0].anchorIntent, anchorIntent);
+  model.controls.setStart(row, 10);
+  assert.equal(model.state.recordDisplayDrafts[0].anchorIntent, null);
+  model.controls.setResolvedTransform(row, {
+    startCoordinate: 25, reverseComplement: true, anchorIntent
+  });
+  model.controls.setReverseComplement(row, false);
+  assert.equal(model.state.recordDisplayDrafts[0].anchorIntent, null);
+});
+
+test('explicit popup target and its draft checkpoint stay record-bound', () => {
+  const model = compositeControls();
+  const { row, target } = model.controls.targetForFeature(model.feature);
+  assert.equal(target.recordKey, 'record-2');
+  assert.equal(target.canonicalRecordKey, 'record-2');
+  assert.equal(target.source.resourceId, 'second');
+  assert.equal(target.recordLength, 100);
+  assert.equal(target.effectiveCircular, true);
+  assert.equal(target.committedReverseComplement, false);
+  assert.equal(target.members.length, 1);
+  const before = model.controls.captureTargetDraft(row);
+  model.controls.commitResolvedTransform(row, {
+    startCoordinate: 25,
+    reverseComplement: true,
+    anchorIntent
+  });
+  assert.equal(model.state.recordDisplayDrafts.length, 1);
+  model.controls.restoreTargetDraft(before);
+  assert.deepEqual(model.state.recordDisplayDrafts, []);
+  assert.throws(
+    () => model.controls.targetForFeature({ ...model.feature, record_key: 'missing' }),
+    /stale or ambiguous/
+  );
+});
+
+test('a Linear rotation writes the File card orientation and leaves no row override (CO-03, N-09)', () => {
+  const model = compositeControls({ linear: true });
+  const row = model.controls.rows.value.find((entry) => entry.sourceUid === 'record-2');
+  const sequence = model.state.linearSeqs[1];
+  const before = model.controls.captureTargetDraft(row);
+  model.controls.commitResolvedTransform(row, { startCoordinate: 25, reverseComplement: true, anchorIntent });
+  assert.equal(sequence.region_reverse, true, 'the card checkbox shows the applied orientation');
+  assert.equal(model.state.recordDisplayDrafts[0].reverseComplementOverride, null);
+  assert.equal(model.state.recordDisplayDrafts[0].startCoordinate, 25);
+  sequence.region_reverse = false;
+  assert.equal(model.controls.rows.value.find((entry) => entry.sourceUid === 'record-2').reverse, false,
+    'no override can mask a later card checkbox edit');
+  sequence.region_reverse = true;
+  model.controls.restoreTargetDraft(before);
+  assert.equal(sequence.region_reverse, false, 'a failed apply restores the card orientation');
+  assert.deepEqual(model.state.recordDisplayDrafts, []);
+  model.controls.setReverseComplement(row, true);
+  assert.deepEqual([sequence.region_reverse, model.state.recordDisplayDrafts[0].reverseComplementOverride], [true, null]);
+});
+
 test('same-name, same-content source replacement does not retain old feature capability', () => {
   const model = compositeControls();
   assert.equal(model.enabled().length, 4);
@@ -157,4 +273,67 @@ test('unsupported draft lanes remain unavailable independently of current placem
   assert.equal(model.actions.valueFor(model.feature), 'outward');
   assert.deepEqual(model.enabled(), ['auto', 'main']);
   assert.throws(() => model.actions.setPlacement([model.feature], 'inward'), /Unavailable/);
+});
+
+
+test('alignment intent changes only its target direction and preserves pending display settings', () => {
+  const model=compositeControls({linear:true});
+  const rows=model.controls.allRows.value.filter(row=>row.scope==='linear');
+  model.controls.setStart(rows[0],25);model.controls.setStart(rows[1],40);
+  const pending=structuredClone(model.state.recordDisplayDrafts);
+  const directions=[{recordKey:'record-1',reverseComplement:true}];
+  const checkpoint=model.controls.captureAlignmentOrientationIntent(directions);
+  model.controls.commitAlignmentOrientations(directions);
+  assert.equal(model.state.linearSeqs[0].region_reverse,true);
+  assert.equal(model.state.linearSeqs[1].region_reverse,false);
+  assert.equal(model.state.recordDisplayDrafts.length,pending.length);
+  assert.equal(model.state.recordDisplayDrafts[0].startCoordinate,25);
+  assert.deepEqual(model.state.recordDisplayDrafts[1],pending[1]);
+  assert.equal(effectiveRecordReverseComplement({...rows[0],reverse:true},model.state.recordDisplayDrafts[0]),true);
+  // A later normal Reverse checkbox remains effective, with no forced override.
+  model.state.linearSeqs[0].region_reverse=false;
+  assert.equal(effectiveRecordReverseComplement({...rows[0],reverse:false},model.state.recordDisplayDrafts[0]),false);
+  model.controls.restoreAlignmentOrientationIntent(checkpoint);
+  assert.deepEqual(model.state.recordDisplayDrafts,pending);
+});
+
+
+test('fresh loaded alignment binds canonical sources before discovery and restores pending orientation', () => {
+  const model = compositeControls({linear:true, discovered:false});
+  model.state.linearSeqs[0].region_reverse = true;
+  const target = {recordKey:'record-1', reverseComplement:true};
+  assert.equal(model.controls.allRows.value.filter(row => row.scope === 'linear').length, 0);
+  const checkpoint = model.controls.captureAlignmentOrientationIntent([target]);
+  model.controls.commitAlignmentOrientations([target]);
+  assert.equal(model.state.linearSeqs[0].region_reverse, true);
+  assert.equal(model.state.linearSeqs[1].region_reverse, false);
+  // Artifact rollback restores its canonical direction first; the same owner
+  // then restores the pre-operation pending input, without needing discovery.
+  model.state.linearSeqs[0].region_reverse = false;
+  model.controls.restoreAlignmentOrientationIntent(checkpoint);
+  assert.equal(model.state.linearSeqs[0].region_reverse, true);
+  model.state.linearSeqs[0].gb = new Blob(['replacement']);
+  assert.throws(() => model.controls.captureAlignmentOrientationIntent([target]), /source binding changed/);
+});
+
+test('Circular discovery metadata belongs only to the current source and complete input pair', () => {
+  const source = {};
+  const state = { cInputType: { value: 'gb' }, files: { c_gb: source },
+    circularRecordList: { value: [{ selector: '#1', record_id: 'committed' }] },
+    circularRecordDiscovery: { status: 'ready', inputType: 'gb', primaryFile: source, pairedFile: null, error: '' } };
+  assert.equal(circularDiscoveryForInput(state).status, 'ready');
+  assert.equal(circularDiscoveryForInput(state).records.length, 1);
+  state.files.c_gb = {};
+  assert.equal(circularDiscoveryForInput(state).status, 'deferred');
+  assert.deepEqual(circularDiscoveryForInput(state).records, []);
+  state.files.c_gb = source;
+  state.circularRecordDiscovery.status = 'deferred';
+  assert.equal(circularDiscoveryForInput(state).status, 'deferred');
+  assert.deepEqual(circularDiscoveryForInput(state).records, []);
+  state.cInputType.value = 'gff';
+  state.files.c_gff = {};
+  assert.equal(circularDiscoveryForInput(state).status, 'idle');
+  state.files.c_fasta = {};
+  assert.equal(circularDiscoveryForInput(state).status, 'deferred');
+  assert.deepEqual(circularDiscoveryForInput(state).records, []);
 });

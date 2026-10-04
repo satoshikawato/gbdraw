@@ -1,6 +1,11 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const {
+  assertSessionLoadLeftWorkerIdle,
+  evaluateWithRetainedPromise,
+  openApp,
+  reveal
+} = require('./helpers/app-lifecycle.cjs');
 
 test('chloroplast multipart placement survives strand and label changes and session restore', async ({ page, browser }, testInfo) => {
   test.setTimeout(240000);
@@ -45,11 +50,14 @@ test('chloroplast multipart placement survives strand and label changes and sess
     return svg;
   };
   const place = async (gene, side) => {
-    await page.evaluate((gene) => {
+    // Opening the editor first settles Python specific-color rule matching, which
+    // can be the operation that constructs the lazy Worker. Await its outcome.
+    await evaluateWithRetainedPromise(page, async (gene) => {
       const app = window.__GBDRAW_APP__;
       const feature = app.extractedFeatures.find((f) => f.type === 'CDS' && f.qualifiers.gene?.[0] === gene);
       if (!feature || feature.location_parts.length < 2) throw new Error(`Multipart feature missing: ${gene}`);
-      app.openFeatureEditorFromList(feature);
+      const opened = await app.openFeatureEditorFromList(feature);
+      if (!opened || opened.status === 'busy') throw new Error(`Feature editor did not open: ${opened?.reason || gene}`);
     }, gene);
     const placement = page.getByRole('combobox', { name: 'Feature placement', exact: true });
     await expect(placement.locator(`option[value=${side}]`)).toHaveJSProperty('disabled', false);
@@ -65,10 +73,10 @@ test('chloroplast multipart placement survives strand and label changes and sess
   await place('rpoC1', 'inward');
   await place('petB', 'outward');
   await generate('02-separated-placement');
-  const strands = page.getByRole('checkbox', { name: 'Separate Strands', exact: true });
+  const strands = await reveal(page.getByRole('checkbox', { name: 'Separate Strands', exact: true, includeHidden: true }));
   await strands.uncheck();
   await generate('03-combined-both');
-  await page.locator('summary[aria-label="Labels"]').click();
+  await page.locator('summary[aria-label="Labels"]').press('Enter');
   await page.locator('#circular-label-mode').selectOption('out');
   await generate('04-combined-outer');
   await strands.check();
@@ -92,6 +100,8 @@ test('chloroplast multipart placement survives strand and label changes and sess
   await page.locator('input[accept^=".json,"]').setInputFiles(saved);
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_APP__.sessionImportPending
     && window.__GBDRAW_APP__.results.length === 1), { timeout: 180000 }).toBe(true);
+  // The saved preview needs no Python, so opening the first editor starts the Worker.
+  await assertSessionLoadLeftWorkerIdle(page);
   await place('clpP', 'inward');
   await generate('07-restored');
   expect(await page.evaluate(async () => {

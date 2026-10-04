@@ -1,3 +1,4 @@
+import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -58,6 +59,8 @@ globalThis.File = class File extends Blob {
 };
 const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
+
+installSessionImportWorker();
 
 const {
   adoptCanonicalRenderArtifacts,
@@ -1007,6 +1010,25 @@ const frozenV39Session = () => JSON.parse(gunzipSync(readFileSync(new URL(
   import.meta.url
 ))));
 
+test('current schema-8 alignment retains exact typed anchors and explicit historical receipt absence on import', async () => {
+  const source = JSON.parse(readFileSync(new URL(
+    '../test_inputs/BGC0000708-BGC0000713.gbdraw-session.json',
+    import.meta.url
+  )));
+  const file = new Blob([JSON.stringify(source)], { type: 'application/json' });
+  const result = await importSession({ target: { files: [file], value: 'selected' } });
+
+  assert.equal(result.status, 'ok');
+  assert.equal(state.similarityAlignmentPlan.value.groupId, 'og_1');
+  assert.deepEqual(state.similarityAlignmentPlan.value.reference, {
+    recordKey: source.renderRequest.records[0].recordKey,
+    biologicalFeatureId: 'fed46a3a6',
+    sourceFeatureIndex: 14,
+    stableFeatureSvgId: 'fed46a3a6'
+  });
+  assert.equal(state.linearRecordTranslations.value.length, 5);
+});
+
 test('visible protein cache entries from the frozen v39 session recover stable edge identities', async () => {
   alerts.length = 0;
   const sessionData = frozenV39Session();
@@ -1064,6 +1086,43 @@ test('a conflicting restored edge key is not exposed under the wrong endpoints',
   );
 });
 
+// A rejected Session artifact is a classified Session-schema diagnostic (R6).
+const sessionSchemaDiagnostic = (error) => {
+  assert.equal(error.code, 'INPUT_INVALID');
+  assert.deepEqual(error.context, { field: 'schema', reason: 'FIELDS' });
+  return true;
+};
+
+const syntheticConservationSession = () => JSON.parse(gunzipSync(readFileSync(new URL(
+  '../fixtures/sessions/synthetic_conservation.gbdraw-session.json.gz',
+  import.meta.url
+))).toString('utf8'));
+
+test('a Session that repeats a raw LOSAT cache key is rejected with a classified diagnostic', async () => {
+  const valid = syntheticConservationSession();
+  const accepted = await importSession({
+    target: { files: [new Blob([JSON.stringify(valid)], { type: 'application/json' })], value: 'selected' }
+  });
+  assert.equal(accepted.status, 'ok');
+
+  alerts.length = 0;
+  const repeated = syntheticConservationSession();
+  const [, ringC] = repeated.losatCache.entries;
+  repeated.losatCache.entries.push({
+    ...ringC,
+    filename: 'comparison-c-copy.circular_conservation.losatn.tsv'
+  });
+  const event = {
+    target: { files: [new Blob([JSON.stringify(repeated)], { type: 'application/json' })], value: 'selected' }
+  };
+  const result = await importSession(event);
+  assert.equal(result.status, 'error');
+  assert.equal(result.error.code, 'INPUT_INVALID');
+  assert.deepEqual(result.error.context, { field: 'schema', reason: 'FIELDS' });
+  assert.match(result.error.summary, /supported Session file/);
+  assert.deepEqual(alerts, []);
+});
+
 for (const version of [39, 40]) {
   test(`version-${version} import rejects duplicate raw LOSAT cache keys`, () => {
     assert.throws(
@@ -1071,7 +1130,7 @@ for (const version of [39, 40]) {
         session([rawEntry('raw-key'), rawEntry('raw-key')], []),
         version
       ),
-      /Duplicate LOSAT cache key/
+      sessionSchemaDiagnostic
     );
   });
 
@@ -1084,7 +1143,7 @@ for (const version of [39, 40]) {
         ),
         version
       ),
-      /Duplicate derived LOSATP cache key/
+      sessionSchemaDiagnostic
     );
   });
 
@@ -1095,7 +1154,7 @@ for (const version of [39, 40]) {
           session([rawEntry(invalidKey)], []),
           version
         ),
-        /LOSAT cache entry at losatCache\.entries\[0\] requires a key/
+        sessionSchemaDiagnostic
       );
     });
   }
@@ -1106,7 +1165,7 @@ for (const version of [39, 40]) {
         session([proteinRawEntry('')], []),
         version
       ),
-      /LOSAT cache entry at losatCache\.entries\[0\] requires a key/
+      sessionSchemaDiagnostic
     );
   });
 
@@ -1116,7 +1175,7 @@ for (const version of [39, 40]) {
       malformed[field] = [];
       assert.throws(
         () => validateSessionLosatArtifacts(malformed, version),
-        new RegExp(`Session ${field} must be an object when present`)
+        sessionSchemaDiagnostic
       );
     });
 
@@ -1125,7 +1184,7 @@ for (const version of [39, 40]) {
       malformed[field] = { entries: null };
       assert.throws(
         () => validateSessionLosatArtifacts(malformed, version),
-        new RegExp(`Session ${field}\\.entries must be an array`)
+        sessionSchemaDiagnostic
       );
     });
   }
@@ -1133,7 +1192,7 @@ for (const version of [39, 40]) {
     const malformed = session([{ ...proteinRawEntry('raw-key'), schema: 3 }], []);
     assert.throws(
       () => validateSessionLosatArtifacts(malformed, version),
-      new RegExp(`Session version ${version} contains a non-current raw LOSAT entry`)
+      sessionSchemaDiagnostic
     );
   });
 
@@ -1141,7 +1200,7 @@ for (const version of [39, 40]) {
     const malformed = session([], [{ ...derivedEntry('derived-key'), schema: 2 }]);
     assert.throws(
       () => validateSessionLosatArtifacts(malformed, version),
-      new RegExp(`Session version ${version} contains an invalid derived LOSATP entry`)
+      sessionSchemaDiagnostic
     );
   });
 }
@@ -1156,13 +1215,11 @@ for (const unsupportedVersion of [34, 35, 36, 37, 38]) {
     const event = { target: { files: [file], value: 'selected' } };
     const result = await importSession(event);
     assert.equal(result.status, 'error');
-    assert.match(
-      String(result.error?.message || ''),
-      new RegExp(`Unsupported session version: ${unsupportedVersion}`)
-    );
-    assert.deepEqual(alerts, [
-      `Failed to load session: Unsupported session version: ${unsupportedVersion}.`
-    ]);
+    assert.equal(result.error.code, 'INPUT_INVALID');
+    assert.deepEqual(result.error.context, {field:'schema',reason:'FIELDS'});
+    assert.match(result.error.summary, /supported Session file/);
+    assert.deepEqual(state.errorLog.value, result.error);
+    assert.deepEqual(alerts, []);
     assert.equal(event.target.value, '');
   });
 }

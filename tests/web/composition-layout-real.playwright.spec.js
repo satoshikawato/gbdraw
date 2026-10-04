@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const genbankPath = join(repoRoot, 'tests', 'test_inputs', 'HmmtDNA.gbk');
@@ -37,7 +37,7 @@ const renderRealDiagram = async (
   genbankText,
   { legendSide = 'right' } = {}
 ) => {
-  const outcome = await page.evaluate(async ({ diagramMode, source, requestedLegendSide }) => {
+  const outcome = await evaluateWithRetainedPromise(page, async ({ diagramMode, source, requestedLegendSide }) => {
     const app = window.__GBDRAW_APP__;
     app.mode = diagramMode;
     await window.Vue.nextTick();
@@ -303,28 +303,6 @@ const inspectLiveComposition = async (page, caption = renamedLegendCaption) => (
   }, caption)
 );
 
-const switchLegendSide = async (page, legendSide) => {
-  await page.evaluate(async (requestedLegendSide) => {
-    window.__GBDRAW_APP__.form.legend = requestedLegendSide;
-    await window.Vue.nextTick();
-  }, legendSide);
-  await page.waitForFunction((expectedLegendSide) => {
-    const app = window.__GBDRAW_APP__;
-    const svg = document.querySelector('svg[data-gbdraw-composition-schema="1"]');
-    if (!svg) return false;
-    const liveSide = JSON.parse(svg.getAttribute('data-gbdraw-composition')).legendSide;
-    const resultText = String(app.results?.[app.selectedResultIndex]?.content || '');
-    const resultDocument = new DOMParser().parseFromString(resultText, 'image/svg+xml');
-    const resultSvg = resultDocument.documentElement;
-    const resultMetadata = resultDocument.querySelector('parsererror')
-      ? null
-      : JSON.parse(resultSvg.getAttribute('data-gbdraw-composition'));
-    return app.form.legend === expectedLegendSide &&
-      liveSide === expectedLegendSide &&
-      resultMetadata?.legendSide === expectedLegendSide;
-  }, legendSide, { timeout: 120000 });
-};
-
 const addPostDragLegendEntry = async (page) => {
   await page.evaluate(async ({ caption, color }) => {
     const app = window.__GBDRAW_APP__;
@@ -436,7 +414,7 @@ const dragCompositionRole = async (page, role, dx, dy) => {
 
 const saveSession = async (page) => {
   const downloadPromise = page.waitForEvent('download', { timeout: 120000 });
-  const outcome = await page.evaluate(async () => ({
+  const outcome = await evaluateWithRetainedPromise(page, async () => ({
     result: await window.__GBDRAW_APP__.saveSessionWithTitle(),
     errorLog: window.__GBDRAW_APP__.errorLog
   }));
@@ -662,20 +640,13 @@ for (const mode of ['circular', 'linear']) {
     const genbankText = readFileSync(genbankPath, 'utf8');
 
     await openApp(page);
-    const supportsImmediateLegendReposition = mode === 'linear';
-    const initialLegendSide = supportsImmediateLegendReposition ? 'right' : 'bottom';
+    // A legend side applies on Generate in both modes (D-30, PD-OI-084).
+    const initialLegendSide = 'bottom';
     await renderRealDiagram(page, mode, genbankText, { legendSide: initialLegendSide });
     const fresh = await inspectLiveComposition(page, '');
     expectValidComposition(fresh, { legendSide: initialLegendSide });
     expectZeroDeltas(fresh.deltas);
-    let baselineDeltas = fresh.deltas;
-
-    if (supportsImmediateLegendReposition) {
-      await switchLegendSide(page, 'bottom');
-      const switched = await inspectLiveComposition(page, '');
-      expectValidComposition(switched);
-      baselineDeltas = switched.deltas;
-    }
+    const baselineDeltas = fresh.deltas;
 
     const { renamed } = await addAndRenameLegendEntry(page);
     expectValidComposition(renamed);
@@ -729,20 +700,6 @@ for (const mode of ['circular', 'linear']) {
     expectDeltasClose(reflowedAfterDrag.deltas, moved.deltas);
     expectRenamedEntry(reflowedAfterDrag);
     expect(reflowedAfterDrag.metadataBoundsErrors.legend).toBeLessThan(1);
-
-    if (supportsImmediateLegendReposition) {
-      await switchLegendSide(page, 'right');
-      const movedRight = await inspectLiveComposition(page);
-      expectValidComposition(movedRight, { legendSide: 'right' });
-      expectDeltasClose(movedRight.deltas, moved.deltas);
-      expectRenamedEntry(movedRight);
-
-      await switchLegendSide(page, 'bottom');
-      const movedBottomAgain = await inspectLiveComposition(page);
-      expectValidComposition(movedBottomAgain);
-      expectDeltasClose(movedBottomAgain.deltas, moved.deltas);
-      expectRenamedEntry(movedBottomAgain);
-    }
 
     const saved = await saveSession(page);
     expect(saved.session.format).toBe('gbdraw-session');

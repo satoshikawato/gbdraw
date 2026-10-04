@@ -1,0 +1,16 @@
+{
+  "sourceCommit": "4556e04e929a4a85ad28d1833ce7304bd764881c",
+  "history": "first-parent main",
+  "writer": "gbdraw/linear.py --session_output (CLI sidecar) on origin/main",
+  "command": "python -m gbdraw.cli linear --gbk R2c.gb R3c.gb -b R2c_R3c.tsv -o main-blast -f svg --session_output main-blast.gbdraw-session.json",
+  "records": "R2c.gb and R3c.gb are the two LOCUS entries of tests/fixtures/web_comparison_shared_block.gb (sha256 d869dd7d849540646125c3eed4ae2a95d84b8a0355563c0f8df546f619e94d0c), split at '//' lines in file order (sha256 ad62a600de6bf3f77e38b62a8115f408fdc682f27093e79f3f491e9eec1eef2a and ae27a14cd773dbfd7ed6d01395617f84a5a6e7c4e051f4d2087570f616c72680)",
+  "comparison": "R2c_R3c.tsv is the single outfmt 6 row 'R2c\\tR3c\\t100.000\\t1000\\t0\\t0\\t2001\\t3000\\t1\\t1000\\t0.0\\t1847' (sha256 6b349044a17e64f041b46758654cabe54db1c0171cab3ec6eff8f0bdaf39b1c5)",
+  "sha256": "63558416f7fab0b43ab001af119a913a08a4f9154c636339f7fea37bb9927147",
+  "compression": "gzip -n -9",
+  "sessionVersion": 42,
+  "requestSchema": 7,
+  "bindingUids": ["cli-seq-1", "cli-seq-2"],
+  "requestRecordKeys": ["record-1", "record-2"],
+  "comparisonKinds": ["nucleotideBlast", "generatedProteinComparison"],
+  "legacyPipelineSetting": "renderRequest.comparisons[1].settings.alignOrthogroupFeature is null (schema 7 field removed by schema 8)"
+}

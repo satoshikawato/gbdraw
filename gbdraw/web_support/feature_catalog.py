@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping, MutableMapping, Sequence
+import copy
 from dataclasses import dataclass
 import math
 import re
@@ -32,7 +33,8 @@ from gbdraw.render.interactive_svg import (
     _validate_match_fragments,
 )
 
-FEATURE_CATALOG_SCHEMA = 3
+FEATURE_CATALOG_SCHEMA = 4
+LEGACY_FEATURE_CATALOG_SCHEMA = 3
 
 _BIOLOGICAL_ALIAS_KEYS = {
     "id",
@@ -140,6 +142,113 @@ def _text(value: object | None) -> str:
     return _first_text(value)
 
 
+def _legacy_feature_strand(
+    feature: Mapping[str, object],
+    parts: Sequence[Mapping[str, object]],
+) -> str:
+    strands: set[str] = set()
+    for part in parts or (feature,):
+        value = part.get("strand")
+        if value in (1, "1", "+"):
+            strands.add("+")
+        elif value in (-1, "-1", "-"):
+            strands.add("-")
+    if len(strands) > 1:
+        return "mixed"
+    if strands:
+        return next(iter(strands))
+    return "unstranded"
+
+
+def _legacy_exact_coordinate(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    try:
+        number = int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if isinstance(value, float) and not value.is_integer():
+        return None
+    if isinstance(value, str) and value.strip() != str(number):
+        return None
+    return number if abs(number) <= 9_007_199_254_740_991 else None
+
+
+def promote_legacy_feature_catalog(
+    catalog: Mapping[str, object],
+) -> dict[str, object]:
+    """Promote schema 3 with only safely inferred source-anchor metadata."""
+
+    if catalog.get("schema") != LEGACY_FEATURE_CATALOG_SCHEMA:
+        raise GbdrawError(
+            f"Feature catalog must use schema {LEGACY_FEATURE_CATALOG_SCHEMA}."
+        )
+    migrated = copy.deepcopy(dict(catalog))
+    items = migrated.get("items")
+    if not isinstance(items, list):
+        raise GbdrawError("Feature catalog items must be an array.")
+    migrated["schema"] = FEATURE_CATALOG_SCHEMA
+    for item in items:
+        if not isinstance(item, dict):
+            raise GbdrawError("Feature catalog items must contain objects.")
+        features = item.get("biologicalFeatures")
+        if not isinstance(features, list):
+            raise GbdrawError(
+                "Feature catalog item is missing biologicalFeatures."
+            )
+        for feature in features:
+            if not isinstance(feature, dict):
+                raise GbdrawError(
+                    "Feature catalog biologicalFeatures must contain objects."
+                )
+            raw_parts = feature.get("location_parts", feature.get("locationParts"))
+            parts = (
+                raw_parts
+                if isinstance(raw_parts, list) and raw_parts
+                else [feature]
+            )
+            mapping_parts = [part for part in parts if isinstance(part, Mapping)]
+            exact_single = len(mapping_parts) == len(parts) == 1
+            start = (
+                _legacy_exact_coordinate(mapping_parts[0].get("start"))
+                if exact_single
+                else None
+            )
+            end = (
+                _legacy_exact_coordinate(mapping_parts[0].get("end"))
+                if exact_single
+                else None
+            )
+            exact_single = exact_single and start is not None and end is not None
+            strand = _legacy_feature_strand(feature, mapping_parts)
+            feature["anchorProfile"] = (
+                {
+                    "precision": "exact",
+                    "operator": "single",
+                    "partOrder": (
+                        "source-forward" if strand == "unstranded" else "biological"
+                    ),
+                    "strand": strand,
+                }
+                if exact_single
+                else {
+                    "precision": "unavailable",
+                    "operator": "unknown",
+                    "partOrder": "ambiguous",
+                    "strand": strand,
+                }
+            )
+            if (
+                exact_single
+                and "location_parts" not in feature
+                and "locationParts" not in feature
+            ):
+                feature["location_parts"] = [
+                    {"start": start, "end": end, "strand": strand}
+                ]
+    return migrated
+
+
 _MATCH_ATTRIBUTES = {
     "query_record_index": "data-query-record-index",
     "subject_record_index": "data-subject-record-index",
@@ -229,6 +338,7 @@ class _RenderedSvgCatalogIndex:
     annotation_candidates: tuple[_SvgCatalogCandidate, ...]
     dom_element_count: int
     feature_candidate_count: int
+    record_source_spans: Mapping[int, tuple[int, int, int]]
 
 
 @dataclass(frozen=True)
@@ -306,10 +416,14 @@ def _build_rendered_svg_catalog_index(
     rendered_features: dict[str, _RenderedFeatureEntry] = {}
     match_candidates: list[_SvgCatalogCandidate] = []
     annotation_candidates: list[_SvgCatalogCandidate] = []
+    record_source_spans: dict[int, tuple[int, int, int]] = {}
     dom_element_count = 0
     feature_candidate_count = 0
     for element in root.iter():
         dom_element_count += 1
+        span = _record_source_span(element)
+        if span is not None:
+            record_source_spans[span[0]] = span[1]
         if _is_feature_candidate(element):
             feature_candidate_count += 1
             entry = _rendered_feature_entry(element)
@@ -337,6 +451,7 @@ def _build_rendered_svg_catalog_index(
         annotation_candidates=tuple(annotation_candidates),
         dom_element_count=dom_element_count,
         feature_candidate_count=feature_candidate_count,
+        record_source_spans=MappingProxyType(record_source_spans),
     )
     _record_catalog_index_metrics(diagnostics, index)
     return index
@@ -401,9 +516,60 @@ def _match_payload(
     return dict(_compact_wire_value(payload) or {})
 
 
+def _record_source_span(element: ET.Element) -> tuple[int, tuple[int, int, int]] | None:
+    """Read one record group's input-file span (PD-OI-076), as the Web reads it."""
+
+    raw = (
+        element.get("data-gbdraw-record-index"),
+        element.get("data-gbdraw-record-source-start"),
+        element.get("data-gbdraw-record-source-end"),
+        element.get("data-gbdraw-record-source-step"),
+    )
+    if raw[3] is None or raw[0] is None:
+        return None
+    try:
+        index, start, end, step = (int(str(value)) for value in raw)
+    except ValueError:
+        return None
+    if index < 0 or start < 1 or end < start or step not in (1, -1):
+        return None
+    return index, (start, end, step)
+
+
+def _record_source_interval_fields(
+    payload: Mapping[str, object],
+    record_source_spans: Mapping[int, tuple[int, int, int]],
+) -> dict[str, str]:
+    """Source coordinates of a match on cropped or reversed records (PD-OI-076).
+
+    Mirrors ``recordSourceInterval`` in ``app/record-source-coordinates.js``,
+    which fills the same fields for Interactive SVGs built without a catalog.
+    """
+
+    if _text(payload.get("match_kind")) == "homology":
+        return {}
+    fields: dict[str, str] = {}
+    for role, prefix in (("query", "q"), ("subject", "s")):
+        try:
+            span = record_source_spans.get(int(str(payload.get(f"{role}_record_index"))))
+            local = [float(str(payload.get(f"{prefix}{name}"))) for name in ("start", "end")]
+        except (TypeError, ValueError):
+            continue
+        if span is None or not all(value.is_integer() and value >= 1 for value in local):
+            continue
+        low, high, step = span
+        start, end = (low + int(value) - 1 if step == 1 else high - int(value) + 1 for value in local)
+        fields[f"{prefix}source_start"] = str(start)
+        fields[f"{prefix}source_end"] = str(end)
+        if low != 1:
+            fields[f"{prefix}table_interval"] = f"{start - low + 1}..{end - low + 1}"
+    return fields
+
+
 def _match_payloads(
     candidates: Sequence[_SvgCatalogCandidate],
     rendered_features: Mapping[str, Mapping[str, object]],
+    record_source_spans: Mapping[int, tuple[int, int, int]],
 ) -> list[dict[str, object]]:
     payloads: list[dict[str, object]] = []
     grouped: dict[str, list[_SvgCatalogCandidate]] = {}
@@ -427,6 +593,7 @@ def _match_payloads(
                 f"{role}_stable_feature_svg_id", _feature_stable_id(rendered)
             )
             payload.setdefault(f"{role}_feature_index", rendered.get("feature_index"))
+        payload.update(_record_source_interval_fields(payload, record_source_spans))
         payloads.append(dict(_compact_wire_value(payload) or {}))
     return payloads
 
@@ -1900,6 +2067,7 @@ def build_feature_catalog_item(
     raw_matches = _match_payloads(
         svg_index.match_candidates,
         rendered_match_identities,
+        svg_index.record_source_spans,
     )
     orthogroups = list(context.orthogroups)
     known_group_ids: set[str] = set()
@@ -1979,7 +2147,7 @@ def build_feature_catalog_item(
 def build_feature_catalog(
     items: Sequence[Mapping[str, object]],
 ) -> dict[str, object]:
-    """Wrap normalized logical-result items in the schema-3 envelope."""
+    """Wrap normalized logical-result items in the schema-4 envelope."""
 
     return {
         "schema": FEATURE_CATALOG_SCHEMA,
@@ -1992,14 +2160,28 @@ def select_feature_catalog_item(
     *,
     result_index: int,
     result_name: str,
+    expected_schema: int | None = None,
 ) -> dict[str, object]:
-    """Return one validated schema-3 item matched to a logical Result."""
+    """Return one validated catalog item matched to a logical Result."""
 
+    catalog_schema = catalog.get("schema") if isinstance(catalog, Mapping) else None
+    allowed_schemas = (
+        {expected_schema}
+        if expected_schema is not None
+        else {3, FEATURE_CATALOG_SCHEMA}
+    )
     if (
         not isinstance(catalog, Mapping)
-        or catalog.get("schema") != FEATURE_CATALOG_SCHEMA
+        or catalog_schema not in allowed_schemas
     ):
-        raise GbdrawError("Feature catalog must use schema 3.")
+        required = (
+            str(expected_schema)
+            if expected_schema is not None
+            else f"3 or {FEATURE_CATALOG_SCHEMA}"
+        )
+        raise GbdrawError(
+            f"Feature catalog must use schema {required}."
+        )
     items = catalog.get("items")
     if not isinstance(items, Sequence) or isinstance(items, (str, bytes)):
         raise GbdrawError("Feature catalog items must be an array.")
@@ -2097,6 +2279,28 @@ def select_feature_catalog_item(
             raise GbdrawError(
                 "Feature catalog contains an invalid source feature index."
             )
+        if catalog_schema >= 4:
+            profile = feature.get("anchorProfile")
+            if (
+                not isinstance(profile, Mapping)
+                or set(profile) != {
+                    "precision",
+                    "operator",
+                    "partOrder",
+                    "strand",
+                }
+                or profile.get("precision")
+                not in {"exact", "fuzzy", "unavailable"}
+                or profile.get("operator")
+                not in {"single", "join", "order", "unknown"}
+                or profile.get("partOrder")
+                not in {"biological", "source-forward", "ambiguous"}
+                or profile.get("strand")
+                not in {"+", "-", "unstranded", "mixed"}
+            ):
+                raise GbdrawError(
+                    "Feature catalog contains an invalid source anchor profile."
+                )
         stable_id = _text(feature.get("stableFeatureId")) or reference[1]
         source_feature_index = feature.get("sourceFeatureIndex")
         biological_source_indexes[(reference[0], stable_id)].append(
@@ -2341,5 +2545,6 @@ __all__ = [
     "build_feature_catalog_item",
     "canonical_catalog_sequence_sources",
     "materialize_catalog_nucleotide_sequence",
+    "promote_legacy_feature_catalog",
     "select_feature_catalog_item",
 ]

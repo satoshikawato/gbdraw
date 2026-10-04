@@ -4,21 +4,23 @@ export const IMPACT_PLAN_SCHEMA_VERSION = 2;
 
 // Ordered only for the summary label. Routing unions every affected capability.
 export const IMPACT_CLASSES = freeze([
-  'metadata', 'documentation', 'tests-only', 'python-core', 'renderer',
+  'metadata', 'documentation', 'policy-documentation', 'tests-only', 'python-core', 'renderer',
   'web-runtime', 'session-persistence', 'gallery', 'losat-integration',
   'packaging', 'ci-only', 'full'
 ]);
 export const IMPACT_DECISIONS = freeze(['selective', 'full']);
 export const IMPACT_PLAN_BASES = freeze([
   'FULL_CHANGE', 'UNKNOWN_OR_INVALID_CHANGE', 'MANUAL_FULL_RUN',
-  'ARCHITECTURE_CHANGE', 'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE',
+  'ARCHITECTURE_CHANGE', 'DOCUMENTATION_ONLY_PR', 'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE',
   'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE', 'INHERITED_EVIDENCE_UNAVAILABLE'
 ]);
 
-const PR_JOBS = freeze([
+// The full PR tier. Functional Playwright joins it only through the capabilities below.
+const PR_FULL_TIER_JOBS = freeze([
   'web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint',
   'web-contracts-pr', 'web-pr-smoke'
 ]);
+const PR_JOBS = freeze([...PR_FULL_TIER_JOBS, 'playwright-functional']);
 const DEV_JOBS = freeze([
   'web-change-budget', 'core', 'recipes-standard', 'gallery', 'browser',
   'playwright-functional', 'playwright-performance', 'lint',
@@ -33,15 +35,16 @@ const PROFILE_REQUIRED_JOBS = freeze({
 const PR_CAPABILITY_JOBS = freeze({
   metadata: freeze([]),
   documentation: freeze(['recipes-standard']),
+  'policy-documentation': freeze(['web-change-budget']),
   'tests-only': PR_JOBS,
-  'python-core': freeze(['web-change-budget', 'core-pr', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
-  renderer: freeze(['web-change-budget', 'core-pr', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
-  'web-runtime': freeze(['web-change-budget', 'web-contracts-pr', 'web-pr-smoke']),
-  'session-persistence': freeze(['web-change-budget', 'core-pr', 'recipes-standard', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
-  gallery: freeze(['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke']),
-  'losat-integration': freeze(['web-change-budget', 'core-pr', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
-  packaging: PR_JOBS,
-  'ci-only': PR_JOBS,
+  'python-core': freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
+  renderer: freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke']),
+  'web-runtime': freeze(['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']),
+  'session-persistence': freeze(['web-change-budget', 'core-pr', 'recipes-standard', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']),
+  gallery: freeze(['web-change-budget', 'gallery', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']),
+  'losat-integration': freeze(['web-change-budget', 'core-pr', 'gallery', 'lint', 'web-contracts-pr', 'web-pr-smoke', 'playwright-functional']),
+  packaging: PR_FULL_TIER_JOBS,
+  'ci-only': PR_FULL_TIER_JOBS,
   full: PR_JOBS
 });
 
@@ -49,11 +52,21 @@ const PR_CAPABILITY_JOBS = freeze({
 // Control-plane, dependency, and unknown changes cannot inherit a narrower route.
 export const requiresFullCoverage = (profile, capabilities) => profile === 'release'
   || capabilities.some((capability) => ['full', 'ci-only', 'packaging', 'tests-only'].includes(capability))
-  || (profile !== 'pr' && capabilities.some((capability) => !['metadata', 'documentation'].includes(capability)));
+  || (profile !== 'pr' && capabilities.some((capability) => !['metadata', 'documentation', 'policy-documentation'].includes(capability)));
+export const isDocumentationOnly = (capabilities) => Array.isArray(capabilities)
+  && capabilities.some((capability) => ['documentation', 'policy-documentation'].includes(capability))
+  && capabilities.every((capability) => ['metadata', 'documentation', 'policy-documentation'].includes(capability));
 const orderedCapabilities = (capabilities) => IMPACT_CLASSES.filter((capability) => capabilities.includes(capability));
 const primaryImpact = (capabilities) => capabilities.at(-1);
 const FULL_OBJECT_ID = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i;
 const ROOT_MARKDOWN = /^[^/]+\.md$/;
+const POLICY_DOCUMENTS = new Set([
+  'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
+  'docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md',
+  'docs/internal/PRODUCT_IMPACT_RATCHET.md',
+  'docs/internal/SELECTIVE_CI.md',
+  'docs/internal/WEB_CHANGE_POLICY.md'
+]);
 const METADATA_DIRECTORIES = freeze(['.agents', '.claude', '.codex', '.cursor']);
 const METADATA_FILES = new Set([
   '.github/pull_request_template.md',
@@ -132,13 +145,12 @@ const isValidRepositoryPath = (path) => typeof path === 'string'
 export const classifyPath = (path) => {
   const classified = (impact, reason) => freeze({ path, impact, reason });
   if (!isValidRepositoryPath(path)) return classified('full', 'INVALID_REPOSITORY_PATH');
-  // Policy documents are executable authority even though they are Markdown.
+  if (POLICY_DOCUMENTS.has(path)) return classified('policy-documentation', 'POLICY_DOCUMENT');
   if (path.startsWith('.github/workflows/') || path.startsWith('tests/ci/')
       || /^tools\/(?:ci-impact|check-web|web-(?:architecture|product|change)|check-promotion)/.test(path)
       || /^tests\/web\/(?:architecture|product-impact|promotion-readiness).*\.test\.mjs$/.test(path)
-      || /^playwright.*\.config\.js$/.test(path)
-      || /^docs\/internal\/(?:WEB_CHANGE_POLICY|ARCHITECTURE_FITNESS_FUNCTION_RATCHET|PRODUCT_|OPTION_INTEGRITY_PRODUCT_CONTRACT|SELECTIVE_CI)/.test(path)) {
-    return classified('ci-only', 'CI_OR_POLICY_AUTHORITY');
+      || /^playwright.*\.config\.js$/.test(path)) {
+    return classified('ci-only', 'CI_CONTROL_PLANE');
   }
   if (METADATA_FILES.has(path)) return classified('metadata', 'METADATA_FILE_ALLOWLIST');
   if (METADATA_DIRECTORIES.some((directory) => path.startsWith(`${directory}/`))) {
@@ -260,10 +272,15 @@ export const requiredJobsFor = ({ profile, impact, decision, capabilities = [imp
     fail('INVALID_SELECTIVE_PLAN', 'This impact requires full coverage.');
   }
   const all = PROFILE_REQUIRED_JOBS[profile];
-  if (decision === 'full') return freeze([...all]);
+  if (decision === 'full' && profile !== 'pr') return freeze([...all]);
   const selected = profile === 'pr'
-    ? capabilities.flatMap((capability) => PR_CAPABILITY_JOBS[capability])
-    : profile === 'dev' && capabilities.includes('documentation') ? ['recipes-standard'] : [];
+    ? [
+      ...(decision === 'full' ? PR_FULL_TIER_JOBS : []),
+      ...capabilities.flatMap((capability) => PR_CAPABILITY_JOBS[capability])
+    ]
+    : profile === 'dev'
+      ? capabilities.flatMap((capability) => PR_CAPABILITY_JOBS[capability] || [])
+      : [];
   return freeze(all.filter((job) => selected.includes(job)));
 };
 
@@ -294,7 +311,12 @@ const validateBasis = (plan) => {
   const selectiveBasis = plan.profile === 'pr'
     ? 'LIGHT_CHANGE_WITH_DIRECT_BASE_EVIDENCE'
     : 'LIGHT_CHANGE_WITH_DIRECT_PARENT_EVIDENCE';
-  if (plan.decision === 'selective' && plan.basis !== selectiveBasis) {
+  const documentationOnlyPr = plan.basis === 'DOCUMENTATION_ONLY_PR';
+  if (documentationOnlyPr && (plan.profile !== 'pr' || plan.decision !== 'selective'
+      || !isDocumentationOnly(plan.capabilities))) {
+    fail('BASIS_DECISION_MISMATCH', 'Documentation-only PR basis requires only documentation and metadata.');
+  }
+  if (plan.decision === 'selective' && !documentationOnlyPr && plan.basis !== selectiveBasis) {
     fail('BASIS_DECISION_MISMATCH', 'Selective decision does not match its evidence basis.');
   }
   if (plan.decision === 'full' && [
@@ -349,10 +371,10 @@ export const validateImpactPlan = (plan, expected = {}) => {
       observed: plan.requiredJobs
     });
   }
-  if (plan.decision === 'selective') {
+  if (plan.decision === 'selective' && plan.basis !== 'DOCUMENTATION_ONLY_PR') {
     validateInheritedEvidence(plan.inheritedEvidence, plan.changeBaseSha);
   } else if (plan.inheritedEvidence !== null) {
-    fail('UNEXPECTED_EVIDENCE', 'Full plans cannot contain inherited evidence.');
+    fail('UNEXPECTED_EVIDENCE', 'Plans without an evidence basis cannot contain inherited evidence.');
   }
   if (expected.profile !== undefined && plan.profile !== expected.profile) {
     fail('PROFILE_MISMATCH', 'Impact plan profile does not match the gate.', {

@@ -12,8 +12,47 @@ from gbdraw.web_support.feature_catalog import (
     build_feature_catalog_item,
     canonical_catalog_sequence_sources,
     materialize_catalog_nucleotide_sequence,
+    promote_legacy_feature_catalog,
     select_feature_catalog_item,
 )
+
+
+def test_schema_three_promotion_only_restores_exact_single_part_anchors() -> None:
+    legacy = {
+        "schema": 3,
+        "items": [
+            {
+                "biologicalFeatures": [
+                    {"start": 2, "end": 7, "strand": -1},
+                    {
+                        "location_parts": [
+                            {"start": 1, "end": 2, "strand": "+"},
+                            {"start": 4, "end": 5, "strand": "+"},
+                        ]
+                    },
+                ]
+            }
+        ],
+    }
+
+    promoted = promote_legacy_feature_catalog(legacy)
+
+    assert legacy["schema"] == 3
+    assert promoted["schema"] == 4
+    exact, compound = promoted["items"][0]["biologicalFeatures"]
+    assert exact["anchorProfile"] == {
+        "precision": "exact",
+        "operator": "single",
+        "partOrder": "biological",
+        "strand": "-",
+    }
+    assert exact["location_parts"] == [{"start": 2, "end": 7, "strand": "-"}]
+    assert compound["anchorProfile"] == {
+        "precision": "unavailable",
+        "operator": "unknown",
+        "partOrder": "ambiguous",
+        "strand": "+",
+    }
 
 
 def _combined_catalog_fixture() -> tuple[str, InteractiveSvgContext]:
@@ -1712,3 +1751,32 @@ def test_sequence_source_validation_is_bounded_by_source_count(
                 },
             ],
         )
+
+
+def test_catalog_match_payload_reports_record_source_coordinates() -> None:
+    """Catalog-backed Interactive SVG popups show input-file coordinates (CO-10, PD-OI-076)."""
+
+    from tests.test_record_display_interactive_browser import interactive_fixture
+
+    for reverse in (False, True):
+        _, _, catalog = interactive_fixture("linear", reverse)
+        match = catalog["items"][0]["comparisonMatches"][0]
+        source = {key: value for key, value in match.items() if "source_" in key or "table_" in key}
+        # The table row 21..60 is in the search frame; a reversed record shows it at 80..41.
+        assert (match["qstart"], match["qend"]) == (("80", "41") if reverse else ("21", "60"))
+        assert source == ({"qsource_start": "21", "qsource_end": "60"} if reverse else {})
+
+    fields = feature_catalog_module._record_source_interval_fields(
+        {"match_kind": "pairwise", "query_record_index": "0", "qstart": "80", "qend": "41",
+         "subject_record_index": "1", "sstart": "5", "send": "9"},
+        {0: (101, 200, -1), 1: (11, 30, 1)},
+    )
+    # Same values as recordSourceInterval in app/record-source-coordinates.js.
+    assert fields == {
+        "qsource_start": "121", "qsource_end": "160", "qtable_interval": "21..60",
+        "ssource_start": "15", "ssource_end": "19", "stable_interval": "5..9",
+    }
+    assert feature_catalog_module._record_source_interval_fields(
+        {"match_kind": "homology", "query_record_index": "0", "qstart": "80", "qend": "41"},
+        {0: (101, 200, -1)},
+    ) == {}

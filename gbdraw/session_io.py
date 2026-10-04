@@ -29,6 +29,7 @@ from .analysis.protein_artifacts import (
 )
 from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
+from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
 from .render.formats import normalize_format_token
 from .render.output_paths import commit_staged_output_file
 
@@ -37,11 +38,11 @@ if TYPE_CHECKING:
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 42
+CURRENT_SESSION_VERSION = 44
 CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
-    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, CURRENT_SESSION_VERSION}
+    {27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, CURRENT_SESSION_VERSION}
 )
 CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39
 PROTEIN_LOSAT_CACHE_SCHEMA = 4
@@ -52,7 +53,7 @@ PROTEIN_IDENTITY_MANIFEST_SCHEMA = 2
 LEGACY_PROTEIN_CANDIDATE_SCHEMA = 1
 FEATURE_CATALOG_SCHEMA = 1
 FEATURE_CATALOG_ENCODING = "biological-authority-v1"
-CURRENT_FEATURE_CATALOG_SCHEMA = 3
+CURRENT_FEATURE_CATALOG_SCHEMA = 4
 CURRENT_SESSION_TOP_LEVEL_FIELDS = frozenset(
     {
         "format",
@@ -91,7 +92,6 @@ DEPTH_FILE_SCHEMA = 1
 JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991
 
 _DEPTH_COLUMNS = ("reference_name", "position", "depth")
-_SAFE_FILENAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 _SLOT_PART_RE = re.compile(r"([^\[\]]+)|\[(\d+)\]")
 
 
@@ -593,6 +593,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
         _validate_current_retired_active_config_paths(session)
         _validate_current_comparison_authority(session)
         _validate_current_feature_catalog_authority(session)
+        _validate_alignment_reset_receipt(session)
     if version >= 41:
         _validate_display_placement_drafts(session)
     if is_settings_only_session(session):
@@ -601,7 +602,7 @@ def validate_session(session: Mapping[str, Any]) -> None:
 
 def is_settings_only_session(session: Mapping[str, Any]) -> bool:
     """Recognize the explicit document variant, never a missing-resource error."""
-    return session.get("version") == 42 and "renderRequest" in session and session["renderRequest"] is None
+    return session.get("version") in (42, CURRENT_SESSION_VERSION) and "renderRequest" in session and session["renderRequest"] is None
 
 
 def _validate_settings_only_session(session: Mapping[str, Any]) -> None:
@@ -662,8 +663,8 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
     if isinstance(schema, bool) or schema not in (1, 2):
         raise ValidationError("Unsupported Web file binding schema.")
     current = schema == 2
-    if current and (session.get("version") not in (41, 42) or "c_gb" not in bindings):
-        raise ValidationError("Web binding schema 2 requires session 41 or 42 and c_gb.")
+    if current and (session.get("version") not in (41, 42, CURRENT_SESSION_VERSION) or "c_gb" not in bindings):
+        raise ValidationError("Web binding schema 2 requires session 41, 42, or 44 and c_gb.")
     resources = session.get("resources", {})
 
     def metadata(value: Mapping[str, Any]) -> None:
@@ -755,11 +756,15 @@ def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
     drafts = config.get("recordDisplayDrafts", [])
     if not isinstance(drafts, list):
         raise ValidationError("config.recordDisplayDrafts must be an array.")
+    current = session.get("version") == CURRENT_SESSION_VERSION
+    expected_fields = {
+        "scope", "sourceUid", "selector", "recordId", "topologyOverride", "startCoordinate",
+    }
+    if current:
+        expected_fields |= {"reverseComplementOverride", "anchorIntent"}
     keys = set()
     for row in drafts:
-        if not isinstance(row, Mapping) or set(row) != {
-            "scope", "sourceUid", "selector", "recordId", "topologyOverride", "startCoordinate",
-        }:
+        if not isinstance(row, Mapping) or set(row) != expected_fields:
             raise ValidationError("Invalid record display draft fields.")
         if row["scope"] not in {"circular", "linear"} or any(
             not isinstance(row[name], str) or "\0" in row[name]
@@ -768,6 +773,42 @@ def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
             raise ValidationError("Record display drafts require a source UID and exact selector.")
         RecordDisplayOptions(row["topologyOverride"], None)
         RecordDisplayOptions(None, row["startCoordinate"])
+        if current:
+            reverse = row["reverseComplementOverride"]
+            if reverse is not None and not isinstance(reverse, bool):
+                raise ValidationError(
+                    "Record display reverse override must be a boolean or null."
+                )
+            intent = row["anchorIntent"]
+            if intent is not None:
+                intent_fields = {
+                    "schema", "recordKey", "biologicalFeatureId", "placement",
+                    "anchor", "offsetBp", "orientForward",
+                }
+                offset = intent.get("offsetBp") if isinstance(intent, Mapping) else None
+                if (
+                    not isinstance(intent, Mapping)
+                    or set(intent) != intent_fields
+                    or intent.get("schema") != 1
+                    or isinstance(intent.get("schema"), bool)
+                    or not isinstance(intent.get("recordKey"), str)
+                    or not intent["recordKey"]
+                    or "\0" in intent["recordKey"]
+                    or not isinstance(intent.get("biologicalFeatureId"), str)
+                    or not intent["biologicalFeatureId"]
+                    or "\0" in intent["biologicalFeatureId"]
+                    or intent.get("placement") not in {"anchor", "feature-end"}
+                    or (
+                        intent.get("anchor") not in {"five-prime", "midpoint", "three-prime"}
+                        if intent.get("placement") == "anchor"
+                        else intent.get("anchor") is not None
+                    )
+                    or not isinstance(offset, int)
+                    or isinstance(offset, bool)
+                    or abs(offset) > 9_007_199_254_740_991
+                    or not isinstance(intent.get("orientForward"), bool)
+                ):
+                    raise ValidationError("Invalid record display anchor intent.")
         key = (row["scope"], row["sourceUid"], row["selector"])
         if key in keys:
             raise ValidationError("Duplicate record display draft identity.")
@@ -984,10 +1025,89 @@ def _validate_current_comparison_authority(
             )
 
 
+def _validate_alignment_reset_receipt(session: Mapping[str, Any]) -> None:
+    """Admit optional artifact restoration history without interpreting render policy."""
+    editor = session.get("editorState")
+    request = session.get("renderRequest")
+    plan = request.get("layout", {}).get("similarityAlignment") if isinstance(request, Mapping) else None
+    if (isinstance(request, Mapping) and request.get("schema") == 8 and plan
+            and isinstance(editor, Mapping) and "alignmentResetReceipt" not in editor):
+        raise ValidationError("Current alignment Session requires editorState.alignmentResetReceipt.")
+    receipt = editor.get("alignmentResetReceipt") if isinstance(editor, Mapping) else None
+    if receipt is None:
+        return
+    def invalid() -> None:
+        raise ValidationError("Alignment reset receipt is malformed or stale.")
+
+    if (not isinstance(receipt, Mapping)
+            or set(receipt) != {"binding", "directions", "referenceDeltaX"}
+            or not isinstance(receipt.get("binding"), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", receipt["binding"])
+            or not isinstance(receipt.get("directions"), list)
+            or not isinstance(plan, Mapping) or request.get("mode") != "linear"):
+        invalid()
+    eligible = {item["recordKey"] for item in plan["records"] if item["status"] != "skipped"}
+    keys: set[str] = set()
+    for delta in receipt["directions"]:
+        if (not isinstance(delta, Mapping) or set(delta) != {"recordKey", "before", "after"}
+                or delta["recordKey"] not in eligible or delta["recordKey"] in keys
+                or not isinstance(delta["before"], bool) or not isinstance(delta["after"], bool)
+                or delta["before"] == delta["after"]):
+            invalid()
+        keys.add(delta["recordKey"])
+    delta = receipt["referenceDeltaX"]
+    if delta is not None and (not isinstance(delta, Mapping)
+            or set(delta) != {"recordKey", "deltaX"}
+            or delta["recordKey"] != plan["reference"]["recordKey"]
+            or isinstance(delta["deltaX"], bool) or not isinstance(delta["deltaX"], (int, float))
+            or not math.isfinite(delta["deltaX"]) or delta["deltaX"] == 0):
+        invalid()
+    fingerprints: dict[str, str] = {}
+
+    def source_identity(source: Mapping[str, Any]) -> dict[str, str]:
+        identity = {}
+        for key, value in source.items():
+            if key == "kind":
+                identity[key] = value
+            else:
+                if value not in fingerprints:
+                    resource = session.get("resources", {}).get(value)
+                    if not isinstance(resource, Mapping) or resource.get("encoding") != "base64":
+                        invalid()
+                    try:
+                        content = base64.b64decode(resource["data"], validate=True)
+                    except (ValueError, TypeError, KeyError) as exc:
+                        raise ValidationError("Alignment reset receipt resource is invalid.") from exc
+                    if len(content) != resource.get("size"):
+                        invalid()
+                    fingerprints[value] = hashlib.sha256(content).hexdigest()
+                identity[key] = fingerprints[value]
+        return identity
+
+    records = [{
+        "recordKey": record["recordKey"], "source": source_identity(record["source"]),
+        "selector": record["selector"],
+        "region": ({"start": record["region"]["start"], "end": record["region"]["end"]}
+                   if record.get("region") else None), "display": record["display"],
+    } for record in request["records"]]
+    binding = {"plan": {**plan, "records": sorted(plan["records"], key=lambda item: item["recordKey"].encode("utf-16be"))},
+               "records": sorted(records, key=lambda item: item["recordKey"].encode("utf-16be"))}
+    digest = hashlib.sha256(json.dumps(binding, ensure_ascii=False, sort_keys=True,
+                                     separators=(",", ":")).encode()).hexdigest()
+    if receipt["binding"] != digest:
+        raise ValidationError("Alignment reset receipt source or plan binding changed.")
+
+
 def _validate_current_feature_catalog_authority(
     session: Mapping[str, Any],
 ) -> None:
-    """Require the v40 schema-3 catalog and reject duplicated derived payloads."""
+    """Require the version-owned catalog and reject duplicated payloads."""
+
+    catalog_schema = (
+        CURRENT_FEATURE_CATALOG_SCHEMA
+        if session.get("version") == CURRENT_SESSION_VERSION
+        else 3
+    )
 
     unknown_fields = sorted(
         str(field)
@@ -1047,11 +1167,11 @@ def _validate_current_feature_catalog_authority(
     if not results:
         if catalog is not None and (
             not isinstance(catalog, Mapping)
-            or catalog.get("schema") != CURRENT_FEATURE_CATALOG_SCHEMA
+            or catalog.get("schema") != catalog_schema
             or catalog.get("items") != []
         ):
             raise ValidationError(
-                "An empty Result set requires an empty schema-3 feature catalog."
+                "An empty Result set requires an empty feature catalog."
             )
         return
     if not isinstance(catalog, Mapping):
@@ -1060,12 +1180,12 @@ def _validate_current_feature_catalog_authority(
         )
     items = catalog.get("items")
     if (
-        catalog.get("schema") != CURRENT_FEATURE_CATALOG_SCHEMA
+        catalog.get("schema") != catalog_schema
         or not isinstance(items, list)
         or len(items) != len(results)
     ):
         raise ValidationError(
-            "Session feature catalog must contain one schema-3 item per Result."
+            "Session feature catalog must contain one version-compatible item per Result."
         )
 
     from .web_support.feature_catalog import select_feature_catalog_item
@@ -1101,6 +1221,7 @@ def _validate_current_feature_catalog_authority(
                 catalog,
                 result_index=result_index,
                 result_name=result_name,
+                expected_schema=catalog_schema,
             )
         except GbdrawError as exc:
             raise ValidationError(str(exc)) from exc
@@ -1150,8 +1271,13 @@ def classify_raw_losat_cache_entry(entry: object) -> str:
 def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
     """Validate current cache, manifest, and legacy artifact boundaries."""
 
-    validate_current_web_state_field_names(session.get("config"))
     session_version = session.get("version")
+    validate_current_web_state_field_names(
+        session.get("config"),
+        include_linear_label_visibility=(
+            session_version == CURRENT_SESSION_VERSION
+        ),
+    )
     cache_entries = _artifact_entries(session, "losatCache")
     protein_entries: list[Mapping[str, Any]] = []
     seen_cache_keys: set[str] = set()
@@ -1238,7 +1364,7 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
 
 
 def migrate_persisted_web_state_field_names(config: object) -> object:
-    """Project released Web config field names without mutating persisted data."""
+    """Project released Web config into the current shape without mutation."""
 
     if not isinstance(config, Mapping):
         return config
@@ -1247,6 +1373,33 @@ def migrate_persisted_web_state_field_names(config: object) -> object:
     adv = config.get("adv")
     if isinstance(adv, Mapping):
         migrated_adv = dict(adv)
+        for current, legacy, label in (
+            (
+                "linear_accession_visibility",
+                "linear_show_accession",
+                "Linear Accession visibility",
+            ),
+            (
+                "linear_length_visibility",
+                "linear_show_length",
+                "Linear Length / Coordinates visibility",
+            ),
+        ):
+            if current in migrated_adv:
+                value = str(migrated_adv[current]).strip().lower()
+                if value not in {"auto", "show", "hide"}:
+                    raise ValidationError(
+                        f"{label} must be one of: auto, show, hide."
+                    )
+                migrated_adv[current] = value
+            elif legacy in migrated_adv:
+                value = migrated_adv[legacy]
+                if not isinstance(value, bool):
+                    raise ValidationError(f"{label} legacy value must be a boolean.")
+                migrated_adv[current] = "show" if value else "hide"
+            else:
+                migrated_adv[current] = "show"
+            migrated_adv.pop(legacy, None)
         if "depth_tick_interval" in migrated_adv:
             migrated_adv.setdefault(
                 "depth_large_tick_interval",
@@ -1283,16 +1436,43 @@ def migrate_persisted_web_state_field_names(config: object) -> object:
             migrated_losat = dict(losat)
             migrated_losat["blastp"] = migrated_blastp
             migrated["losat"] = migrated_losat
+    drafts = config.get("recordDisplayDrafts")
+    if isinstance(drafts, list):
+        migrated["recordDisplayDrafts"] = [
+            (
+                row
+                if not isinstance(row, Mapping)
+                or "reverseComplementOverride" in row
+                or "anchorIntent" in row
+                else {
+                    **row,
+                    "reverseComplementOverride": None,
+                    "anchorIntent": None,
+                }
+            )
+            for row in drafts
+        ]
     return migrated
 
 
-def validate_current_web_state_field_names(config: object) -> None:
+def validate_current_web_state_field_names(
+    config: object,
+    *,
+    include_linear_label_visibility: bool = True,
+) -> None:
     """Reject obsolete Web config names at current session write boundaries."""
 
     if not isinstance(config, Mapping):
         return
     adv = config.get("adv")
     if isinstance(adv, Mapping):
+        if include_linear_label_visibility:
+            for field in ("linear_show_accession", "linear_show_length"):
+                if field in adv:
+                    raise ValidationError(
+                        f"Web state field adv.{field} is obsolete; "
+                        "use the selected visibility mode."
+                    )
         if "depth_tick_interval" in adv:
             raise ValidationError(
                 "Web state field adv.depth_tick_interval is obsolete; "
@@ -1329,6 +1509,13 @@ def normalize_current_session_artifacts(
     Legacy protein artifacts are kept outside the current cache maps so a
     save-before-generate round trip is lossless.
     """
+
+    request = session.get("renderRequest")
+    editor = session.get("editorState")
+    if (isinstance(request, Mapping)
+            and request.get("layout", {}).get("similarityAlignment") is not None
+            and isinstance(editor, dict)):
+        editor.setdefault("alignmentResetReceipt", None)
 
     source_manifest = (
         protein_identity_manifest
@@ -1630,14 +1817,6 @@ def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
             raise ValidationError(f"Session JSON contains a duplicate object key: {key!r}.")
         result[key] = value
     return result
-
-
-def safe_embedded_filename(name: object, *, fallback: str = "embedded-file") -> str:
-    """Return a basename-only filename safe for materializing embedded content."""
-
-    raw_name = str(name or "").replace("\\", "/").split("/")[-1].strip()
-    cleaned = _SAFE_FILENAME_RE.sub("_", raw_name).strip("._")
-    return cleaned or fallback
 
 
 def encode_depth_text(text: str) -> dict[str, Any] | None:
@@ -2553,7 +2732,7 @@ def build_session_json(
     config = payload.get("config")
     if not isinstance(config, dict):
         config = {}
-    elif source_version is not None and source_version < CURRENT_AUTHORITY_SESSION_MIN_VERSION:
+    elif source_version is not None and source_version < CURRENT_SESSION_VERSION:
         migrated_config = migrate_persisted_web_state_field_names(config)
         assert isinstance(migrated_config, dict)
         config = migrated_config
@@ -2614,6 +2793,7 @@ def build_session_json(
         else {}
     )
     orthogroup_state.pop("groups", None)
+    orthogroup_state.pop("selectedOrthogroupAlignmentFeature", None)
     payload["orthogroupState"] = orthogroup_state
     payload["cliInvocation"] = {
         "schema": 1,
@@ -2773,6 +2953,107 @@ def get_session_slot(session: Mapping[str, Any], slot: str) -> Any:
     return current
 
 
+@dataclass(frozen=True)
+class RetiredCliOption:
+    """One retired CLI flag (design D4).
+
+    Fresh runs reject the flag and name ``replacement``. Legacy session argv
+    is rewritten before replay: ``renamed_to`` keeps the value, and
+    ``value_rewrites`` replaces flag and value with zero or more tokens. A flag
+    with neither has no legacy rewrite.
+    """
+
+    option: str
+    modes: tuple[Literal["circular", "linear"], ...]
+    replacement: str
+    renamed_to: str | None = None
+    value_rewrites: Mapping[str, tuple[str, ...]] | None = None
+    # argparse nargs of the retired flag, so a fresh run reports the flag
+    # itself rather than its extra values. A rename keeps every value.
+    nargs: str | None = None
+
+    def rewrite(self, value: str) -> tuple[str, ...] | None:
+        if self.renamed_to is not None:
+            return (self.renamed_to, value)
+        if self.value_rewrites is not None:
+            return self.value_rewrites.get(str(value).strip().lower())
+        return None
+
+    def message(self, value: object = None) -> str:
+        replacement = self.replacement
+        if self.value_rewrites is not None and isinstance(value, str):
+            tokens = self.value_rewrites.get(value.strip().lower())
+            if tokens is not None:
+                replacement = (
+                    "use " + " ".join(tokens)
+                    if tokens
+                    else "omit it (no protein comparison)"
+                )
+        return f"{self.option} was retired; {replacement}."
+
+
+def _losatp_mode_rewrites() -> dict[str, tuple[str, ...]]:
+    from gbdraw.api.options import LOSATP_MODE_WIRE
+
+    rewrites: dict[str, tuple[str, ...]] = {"none": ()}
+    for typed_mode, wire_mode in LOSATP_MODE_WIRE.items():
+        if typed_mode != "none":
+            rewrites[wire_mode] = ("--losat", "losatp", "--losatp_mode", typed_mode)
+    return rewrites
+
+
+# The one old -> new table for retired CLI flags (design 3.5). Both the
+# fresh-run rejection and the legacy session argv rewrite read it.
+RETIRED_CLI_OPTIONS: Mapping[str, RetiredCliOption] = {
+    item.option: item
+    for item in (
+        RetiredCliOption(
+            "--protein_blastp_mode",
+            ("linear",),
+            "use --losat losatp --losatp_mode {similarity_groups,collinear,pairwise}",
+            value_rewrites=_losatp_mode_rewrites(),
+        ),
+        RetiredCliOption("--losatp_bin", ("linear",), "use --losat_bin", "--losat_bin"),
+        RetiredCliOption(
+            "--ncbi_blastp_bin", ("linear",), "use --ncbi_blast_bin", "--ncbi_blast_bin"
+        ),
+        RetiredCliOption(
+            "--losatp_threads", ("linear",), "use --losat_threads", "--losat_threads"
+        ),
+        RetiredCliOption(
+            "--protein_blastp_max_hits",
+            ("linear",),
+            "use --losatp_max_hits",
+            "--losatp_max_hits",
+        ),
+        RetiredCliOption(
+            "--protein_blastp_candidate_limit",
+            ("linear",),
+            "use --losatp_max_target_seqs",
+            "--losatp_max_target_seqs",
+        ),
+        RetiredCliOption(
+            "--align_orthogroup_feature",
+            ("linear",),
+            "use --similarity_alignment_feature",
+            "--similarity_alignment_feature",
+        ),
+        RetiredCliOption(
+            "--protein_blastp_output",
+            ("linear",),
+            "use --losat_output_dir DIR, which writes DIR/losatp.raw.tsv",
+        ),
+        RetiredCliOption(
+            "--conservation_fasta",
+            ("circular",),
+            "use --conservation_sequence (FASTA, GenBank, or DDBJ)",
+            "--conservation_sequence",
+            nargs="+",
+        ),
+    )
+}
+
+
 def _canonicalize_legacy_session_cli_args(
     args: Sequence[str],
     *,
@@ -2826,8 +3107,27 @@ def _canonicalize_legacy_session_cli_args(
 
     canonical_args: list[str] = []
     source_to_canonical_index: dict[int, int] = {}
+
+    def extend(option_index: int, value_index: int, tokens: Sequence[str]) -> None:
+        if not tokens:
+            return
+        source_to_canonical_index[option_index] = len(canonical_args)
+        source_to_canonical_index[value_index] = len(canonical_args) + len(tokens) - 1
+        canonical_args.extend(tokens)
+
+    pending_retired: tuple[RetiredCliOption, int] | None = None
     for source_index, raw_token in enumerate(args):
         token = str(raw_token)
+        if pending_retired is not None:
+            retired, option_index = pending_retired
+            pending_retired = None
+            rewritten = retired.rewrite(token)
+            extend(
+                option_index,
+                source_index,
+                (retired.option, token) if rewritten is None else rewritten,
+            )
+            continue
         if token == "--show_depth":
             continue
         option, separator, inline_value = (
@@ -2836,6 +3136,18 @@ def _canonicalize_legacy_session_cli_args(
             else (token, "", "")
         )
         option = replacements.get(option, option)
+        retired_option = RETIRED_CLI_OPTIONS.get(option)
+        if retired_option is not None and mode in retired_option.modes:
+            if not separator:
+                pending_retired = (retired_option, source_index)
+                continue
+            rewritten = retired_option.rewrite(inline_value)
+            if rewritten is None:
+                rewritten = (f"{option}={inline_value}",)
+            elif retired_option.renamed_to is not None:
+                rewritten = (f"{retired_option.renamed_to}={inline_value}",)
+            extend(source_index, source_index, rewritten)
+            continue
         if separator:
             if mode == "circular" and option == "--circular_track_slot":
                 inline_value = _migrate_legacy_circular_slot_cli_value(inline_value)
@@ -2869,6 +3181,10 @@ def _canonicalize_legacy_session_cli_args(
                     token = _migrate_legacy_circular_slot_cli_value(token)
         source_to_canonical_index[source_index] = len(canonical_args)
         canonical_args.append(token)
+    if pending_retired is not None:
+        retired, option_index = pending_retired
+        source_to_canonical_index[option_index] = len(canonical_args)
+        canonical_args.append(retired.option)
     return canonical_args, source_to_canonical_index
 
 
@@ -2893,6 +3209,35 @@ def _migrate_legacy_circular_slot_cli_value(value: str) -> str:
         else:
             migrated.append(part)
     return head if not migrated else f"{head}@{','.join(migrated)}"
+
+
+def canonicalize_cli_invocation(
+    args: Sequence[str],
+    file_bindings: Sequence[SessionFileBinding],
+    *,
+    mode: Literal["circular", "linear"],
+) -> tuple[list[str], list[SessionFileBinding]]:
+    """Rewrite retired CLI flags in a recorded invocation and remap its bindings.
+
+    Legacy session replay and the Gallery session refresh both use this, so a
+    recorded ``cliInvocation`` reaches the current flag names the same way.
+    """
+
+    canonical_args, index_map = _canonicalize_legacy_session_cli_args(args, mode=mode)
+    remapped: list[SessionFileBinding] = []
+    for binding in file_bindings:
+        if binding.argIndex not in index_map:
+            raise ValidationError(
+                "cliInvocation.fileBindings cannot reference a removed legacy CLI flag."
+            )
+        remapped.append(
+            SessionFileBinding(
+                argIndex=index_map[binding.argIndex],
+                slot=binding.slot,
+                name=binding.name,
+            )
+        )
+    return canonical_args, remapped
 
 
 def _session_cli_invocation_to_args(
@@ -2942,24 +3287,11 @@ def _session_cli_invocation_to_args(
 
     if migrate_legacy_cli:
         run_args, _ = _canonicalize_legacy_session_cli_args(run_args, mode=mode)
-        invocation_args, invocation_index_map = _canonicalize_legacy_session_cli_args(
+        invocation_args, file_bindings = canonicalize_cli_invocation(
             invocation_args,
+            file_bindings,
             mode=mode,
         )
-        remapped_bindings: list[SessionFileBinding] = []
-        for binding in file_bindings:
-            if binding.argIndex not in invocation_index_map:
-                raise ValidationError(
-                    "cliInvocation.fileBindings cannot reference a removed legacy CLI flag."
-                )
-            remapped_bindings.append(
-                SessionFileBinding(
-                    argIndex=invocation_index_map[binding.argIndex],
-                    slot=binding.slot,
-                    name=binding.name,
-                )
-            )
-        file_bindings = remapped_bindings
 
     run_args = _apply_option_override(run_args, "-o", "--output", output_override)
     run_args = _apply_option_override(run_args, "-f", "--format", format_override)
@@ -3720,7 +4052,13 @@ def _append_linear_gui_blastp_args(
     mode = str(blastp_cfg.get("mode") or "none").strip().lower()
     if mode not in {"pairwise", "orthogroup", "collinear"}:
         return
-    _append_pair(run_args, invocation_args, "--protein_blastp_mode", mode)
+    _append_pair(run_args, invocation_args, "--losat", "losatp")
+    _append_pair(
+        run_args,
+        invocation_args,
+        "--losatp_mode",
+        _losatp_mode_rewrites()[mode][-1],
+    )
     threads_per_job = str(losat_cfg.get("threadsPerJob") or "auto").strip().lower()
     if threads_per_job != "auto":
         try:
@@ -3728,16 +4066,16 @@ def _append_linear_gui_blastp_args(
         except ValueError:
             parsed_threads = 0
         if parsed_threads >= 1:
-            _append_pair(run_args, invocation_args, "--losatp_threads", str(parsed_threads))
+            _append_pair(run_args, invocation_args, "--losat_threads", str(parsed_threads))
 
     max_hits = blastp_cfg.get("maxHits")
     if max_hits not in (None, "", False):
-        _append_pair(run_args, invocation_args, "--protein_blastp_max_hits", str(max_hits))
+        _append_pair(run_args, invocation_args, "--losatp_max_hits", str(max_hits))
         if mode == "pairwise":
-            _append_pair(run_args, invocation_args, "--protein_blastp_candidate_limit", str(max_hits))
+            _append_pair(run_args, invocation_args, "--losatp_max_target_seqs", str(max_hits))
     candidate_limit = blastp_cfg.get("candidateLimit")
     if mode != "pairwise" and candidate_limit not in (None, "", False):
-        _append_pair(run_args, invocation_args, "--protein_blastp_candidate_limit", str(candidate_limit))
+        _append_pair(run_args, invocation_args, "--losatp_max_target_seqs", str(candidate_limit))
 
     for key, option in (
         ("min_bitscore", "--bitscore"),
@@ -3757,7 +4095,7 @@ def _append_linear_gui_blastp_args(
             else ""
         )
         if selected_target:
-            _append_pair(run_args, invocation_args, "--align_orthogroup_feature", selected_target)
+            _append_pair(run_args, invocation_args, "--similarity_alignment_feature", selected_target)
 
     if mode != "collinear":
         return
@@ -4187,6 +4525,7 @@ __all__ = [
     "SessionFileBinding",
     "SessionRunSpec",
     "build_session_json",
+    "canonicalize_cli_invocation",
     "classify_raw_losat_cache_entry",
     "compact_session_feature_catalog",
     "decode_depth_payload",

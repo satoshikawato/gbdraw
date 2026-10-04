@@ -40,7 +40,9 @@ from flows.human_circular import (
 from flows.web_capture import (
     assert_output_paths,
     capture_screenshot,
+    expect_circular_source_status,
     open_browser_capture,
+    release_pointer_and_focus,
     set_feature_search_visible,
     wait_for_app_shell,
 )
@@ -146,8 +148,9 @@ def capture_gui_interactive_handoff(
         )
 
         source_report = generate_finished_human_diagram(page)
-        _reset_finished_preview_viewport(page, target_zoom=60)
+        _reset_finished_preview_viewport(page, target_zoom=50)
         set_feature_search_visible(page, visible=False)
+        release_pointer_and_focus(page)
         screenshot_bytes[GUI_INTERACTIVE_HANDOFF_SCREENSHOT_NAMES[1]] = (
             capture_screenshot(
                 page,
@@ -161,6 +164,7 @@ def capture_gui_interactive_handoff(
             "button", name=re.compile(r"Interactive SVG$")
         )
         interactive_button.scroll_into_view_if_needed()
+        release_pointer_and_focus(page)
         screenshot_bytes[GUI_INTERACTIVE_HANDOFF_SCREENSHOT_NAMES[2]] = (
             capture_screenshot(
                 page,
@@ -239,6 +243,7 @@ def capture_gui_interactive_handoff(
         wait_for_app_shell(page)
         _stabilize_static_capture_surface(page)
         _load_current_session(page, session_path)
+        expect_circular_source_status(page, "Records not inspected")
         restored_region = page.get_by_role(
             "region", name="Result Preview", exact=True
         )
@@ -251,8 +256,9 @@ def capture_gui_interactive_handoff(
         prefix.fill(RESTORED_PREFIX)
         prefix.press("Tab")
         final_report = generate_finished_human_diagram(page)
+        expect_circular_source_status(page, "1 source record(s) inspected")
         _assert_reproduced(source_report, final_report)
-        _reset_finished_preview_viewport(page, target_zoom=60)
+        _reset_finished_preview_viewport(page, target_zoom=50)
         final_report["restoredPreviewFrame"] = _frame_finished_preview_with_legend(
             page
         )

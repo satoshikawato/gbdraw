@@ -1,0 +1,209 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor/rule-actions.js';
+import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
+import { createLegendManager } from '../../gbdraw/web/js/app/legend.js';
+import { diffLegendIntents } from '../../gbdraw/web/js/app/specific-color-rules.js';
+import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
+
+const setup = () => {
+  const state = {
+    manualSpecificRules: [], extractedFeatures: { value: [
+      { type: 'CDS', svg_id: 'a', qualifiers: { gene: ['a'] } },
+      { type: 'CDS', svg_id: 'b', qualifiers: { gene: ['b'] } }
+    ] },
+    featureColorOverrides: {}, results: { value: [{name:'figure',content:'before'}] },
+    svgResultIdentity: { value:'before' }, fileLegendCaptions: { value:new Set() }, addedLegendCaptions: { value:new Set() },
+    legendEntries: { value:[] }, files: {t_color:null},
+    newSpecRule: {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared'}
+  };
+  const notices = [], transactions = [], transactionScopes = [];
+  const preparation = createRulePreparation({state, evaluate:evaluatePythonRules, notify:message=>notices.push(message)});
+  let prepareLegend = async () => {};
+  let previousIntents = [];
+  const transact = scope => async (label, commit) => {
+    const before=JSON.stringify(state.manualSpecificRules);
+    await commit();
+    if (before!==JSON.stringify(state.manualSpecificRules)) {
+      transactions.push(label);
+      transactionScopes.push(scope);
+    }
+  };
+  const actions = createFeatureRuleActions({ref:value=>({value}),computed:get=>({get value(){return get();}}),state, rulePreparation:preparation, history:{
+    runUndoableCheckpoint: transact('checkpoint'),
+    runUndoable: transact('intent')
+  }, legendActions: {
+    syncFileLegendEntries: async (intents, {isCurrent,commit,previousFileIntents,transact = (_diff, apply) => apply()}) => {
+      previousIntents=previousFileIntents;
+      await prepareLegend(intents);
+      if (!isCurrent()) return false;
+      return transact(diffLegendIntents(state.legendEntries.value, intents), () => {
+        if (!isCurrent()) return false;
+        commit();
+        state.legendEntries.value=intents;
+        state.results.value=[{name:'figure',content:'after'}];
+        return true;
+      });
+    }
+  }, svgActions:{applyPaletteToSvg(){},applySpecificRulesToSvg(){}}, nextTick:async()=>{}});
+  return {state,actions,preparation,notices,transactions,transactionScopes, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents};
+};
+const rules = [
+  {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared',fromFile:true},
+  {feat:'CDS',qual:'gene',val:'b',color:'#445566',cap:'Shared'}
+];
+
+test('rule action admits full canonical rules and legend in one transaction after preparation', async () => {
+  const s=setup();
+  let release, started;
+  const ready=new Promise(resolve=>{started=resolve;});
+  s.setLegendPreparation(()=>new Promise(resolve=>{release=resolve;started();}));
+  const pending=s.actions.commitSpecificRules(rules);
+  await ready;
+  assert.deepEqual(s.state.manualSpecificRules,[]);
+  assert.equal(s.state.results.value[0].content,'before');
+  assert.deepEqual(s.state.legendEntries.value,[]);
+  release();
+  assert.equal(await pending,true);
+  s.setLegendPreparation(async () => {});
+  assert.deepEqual(s.state.manualSpecificRules.map(r=>r.cap),['Shared [#112233]','Shared [#445566]']);
+  assert.equal(s.state.manualSpecificRules[0].fromFile,true);
+  assert.deepEqual([...s.state.fileLegendCaptions.value],['Shared [#112233]']);
+  assert.equal(s.transactions.length,1);
+  assert.match(s.notices[0],/Updated 2/);
+  await s.actions.setSpecificRuleField(1,'cap','Renamed');
+  assert.equal(s.state.manualSpecificRules[1].cap,'Renamed');
+  assert.equal(s.state.manualSpecificRules[0].cap,'Shared [#112233]');
+  await s.actions.moveSpecificRuleUp(1);
+  assert.equal(s.state.manualSpecificRules[0].cap,'Renamed');
+  s.state.addedLegendCaptions.value.add('Independent manual legend');
+  await s.actions.removeSpecificRule(0);
+  assert(s.state.addedLegendCaptions.value.has('Independent manual legend'));
+  assert.equal(s.state.manualSpecificRules.length,1);
+});
+
+for (const outcome of ['stale','error']) {
+  test(`legend ${outcome} candidate leaves canonical rules, provenance, Result and History unchanged`, async () => {
+    const s=setup();
+    await s.actions.commitSpecificRules(rules);
+    s.state.addedLegendCaptions.value.add('Independent manual legend');
+    const before=JSON.stringify(s.state.manualSpecificRules), result=s.state.results.value;
+    const captions=[...s.state.fileLegendCaptions.value], count=s.transactions.length;
+    s.setLegendPreparation(async()=>{
+      if(outcome==='error') throw new Error('measurement failed');
+      s.state.svgResultIdentity.value='replacement';
+    });
+    const candidate=rules.map(r=>({...r,cap:'Changed'}));
+    if(outcome==='error') await assert.rejects(()=>s.actions.commitSpecificRules(candidate),/measurement failed/);
+    else assert.equal(await s.actions.commitSpecificRules(candidate),false);
+    assert.equal(JSON.stringify(s.state.manualSpecificRules),before);
+    assert.equal(s.state.results.value,result);
+    assert.deepEqual([...s.state.fileLegendCaptions.value],captions);
+    assert.equal(s.transactions.length,count);
+  });
+}
+
+
+test('historical caption ownership retains every source color before normalization',async()=>{
+  const s=setup();s.state.manualSpecificRules.push(...rules.map(rule=>({...rule})));
+  await s.actions.setSpecificRuleField(0,'val','a');
+  assert.deepEqual(s.previousIntents(),[{caption:'Shared',color:'#112233'},{caption:'Shared',color:'#445566'}]);
+  assert.deepEqual(s.state.manualSpecificRules.map(rule=>rule.cap),['Shared [#112233]','Shared [#445566]']);
+});
+
+test('complete caption recolor uses bounded intent while caption replacement retains checkpoint History', async () => {
+  const s = setup();
+  s.state.legendEntries.value = [{ caption: 'Shared', color: '#012345' }];
+  const recolor = [{ feat: 'CDS', qual: 'gene', val: 'a', color: '#abcdef', cap: 'Shared' }];
+  assert.equal(await s.actions.commitSpecificRules(recolor, 'Recolor', {
+    previousLegendIntents: [{ caption: 'Shared', color: '#012345' }]
+  }), true);
+  assert.deepEqual(s.transactionScopes, ['intent']);
+  assert.deepEqual(s.state.legendEntries.value, [{ caption: 'Shared', color: '#abcdef' }]);
+  assert.deepEqual(s.state.manualSpecificRules.map(rule => rule.cap), ['Shared']);
+  assert.equal(s.transactions.length, 1);
+  assert.equal(await s.actions.commitSpecificRules(recolor.map(rule => ({ ...rule, cap: 'Renamed' }))), true);
+  assert.deepEqual(s.transactionScopes, ['intent', 'checkpoint']);
+  assert.deepEqual(s.state.legendEntries.value, [{ caption: 'Renamed', color: '#abcdef' }]);
+});
+
+// F-2 (D-14, PD-OI-069): Generate matches a hash rule against the drawn
+// feature, whose hash on a cropped or reverse-complemented record differs from
+// the source identity in `selector.hash`. The rule "This feature only" writes
+// matches that feature live too.
+test('a This feature only rule on a cropped record paints its feature live as Generate does', async () => {
+  const s = setup();
+  const cropped = {
+    type: 'CDS', svg_id: 'fbd3d0b74_record_1', stable_feature_id: 'f3ccacda4', record_id: 'TESTA',
+    selector: { type: 'CDS', start: 300, end: 600, strand: '+', hash: 'f3ccacda4', qualifiers: { locus_tag: ['TESTA_0001'] } },
+    qualifiers: { locus_tag: ['TESTA_0001'] }
+  };
+  s.state.extractedFeatures.value = [cropped];
+  const qualifier = s.actions.getFeatureQualifier(cropped);
+  assert.deepEqual(qualifier, { qual: 'hash', val: 'fbd3d0b74' });
+  let intents = null;
+  s.setLegendPreparation(async (next) => { intents = next; });
+  assert.equal(await s.actions.commitSpecificRules([
+    { feat: 'CDS', ...qualifier, color: '#c83366', cap: 'duplicate protein' }
+  ]), true);
+  assert.deepEqual(Object.values(s.state.featureColorOverrides), [{ color: '#c83366', caption: 'duplicate protein' }]);
+  assert.deepEqual(intents, [{ caption: 'duplicate protein', color: '#c83366' }]);
+});
+
+// N-06 (PD-OI-042): a rule captioned like a generated row of another color is
+// drawn as "<caption> [<hex>]". The live commit adds that row, the row is tied to
+// the rule, and the generated row is not.
+test('a rule captioned like a generated row commits, and is edited through, its suffixed row', async () => {
+  const s = setup();
+  const trna = { type: 'tRNA', svg_id: 'trna', qualifiers: { product: ['tRNA-Phe'] } };
+  s.state.extractedFeatures.value = [{ type: 'CDS', svg_id: 'cds', qualifiers: { gene: ['a'] } }, trna];
+  s.state.originalLegendOrder = { value: ['CDS', 'tRNA'] };
+  s.state.legendEntries.value = [
+    { caption: 'CDS', originalCaption: 'CDS', color: '#54bcf8' },
+    { caption: 'tRNA', originalCaption: 'tRNA', color: '#e8b441' }
+  ];
+  let intents = null;
+  s.setLegendPreparation(async (next) => { intents = next; });
+  const rule = { feat: 'tRNA', qual: 'product', val: '.*', color: '#ff0000', cap: 'CDS' };
+  assert.equal(await s.actions.commitSpecificRules([rule]), true);
+  assert.deepEqual(intents, [{ caption: 'CDS [#ff0000]', color: '#ff0000' }]);
+  assert.deepEqual(s.state.manualSpecificRules.map((row) => row.cap), ['CDS'], 'the rule keeps its caption');
+
+  // The Result Generate drew: the generated CDS row and the rule's row.
+  s.state.originalLegendOrder.value = ['CDS', 'CDS [#ff0000]'];
+  s.state.legendEntries.value = [
+    { caption: 'CDS', originalCaption: 'CDS', color: '#54bcf8' },
+    { caption: 'CDS [#ff0000]', originalCaption: 'CDS [#ff0000]', color: '#ff0000' }
+  ];
+  assert.equal(s.actions.getEffectiveLegendCaption(trna), 'CDS [#ff0000]');
+  assert.deepEqual(s.actions.getLegendRowRules('CDS'), []);
+  assert.deepEqual(s.actions.getLegendRowRules('CDS [#ff0000]'), s.state.manualSpecificRules);
+
+  // Recoloring the rule retires the drawn row and adds the row for the new color.
+  assert.equal(await s.actions.commitSpecificRules([{ ...rule, color: '#00ff00' }]), true);
+  assert.deepEqual(s.previousIntents(), [{ caption: 'CDS [#ff0000]', color: '#ff0000' }]);
+  assert.deepEqual(intents, [{ caption: 'CDS [#00ff00]', color: '#00ff00' }]);
+});
+
+test('the Legend editor recolors the rule of a suffixed row, and only that row', () => {
+  const ref = (value) => ({ value });
+  const rule = { feat: 'tRNA', qual: 'product', val: '.*', color: '#ff0000', cap: 'CDS' };
+  const state = {
+    manualSpecificRules: [rule], svgContainer: ref(null), results: ref([]), selectedResultIndex: ref(0),
+    legendEntries: ref([
+      { caption: 'CDS', originalCaption: 'CDS', color: '#54bcf8' },
+      { caption: 'CDS [#ff0000]', originalCaption: 'CDS [#ff0000]', color: '#ff0000' }
+    ]),
+    originalLegendOrder: ref(['CDS', 'CDS [#ff0000]']), deletedLegendEntries: ref([]), originalLegendColors: ref({}),
+    legendStrokeOverrides: {}, legendColorOverrides: {}, adv: {}
+  };
+  const committed = [];
+  const legend = createLegendManager({ state, rulePreparation: {}, commitSpecificRules: (next, label) => {
+    committed.push({ rules: next, label });
+    return true;
+  } });
+  assert.equal(legend.updateLegendEntryColor(1, '#00ff00'), true);
+  assert.deepEqual(committed, [{ rules: [{ ...rule, color: '#00ff00' }], label: 'Change legend color' }]);
+  assert.equal(legend.updateLegendEntryColor(0, '#123456'), false, 'the generated CDS row is no rule row');
+  assert.equal(committed.length, 1);
+});

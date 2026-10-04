@@ -6,6 +6,11 @@ import {
 
 const DEFAULT_MAX_ACTIONS = 30;
 const DEFAULT_MAX_BYTES = 200 * 1024 * 1024;
+// The Session availability wording for an edit still being applied.
+const HISTORY_EDIT_BUSY = Object.freeze({
+  status: 'busy',
+  reason: 'Applying an edit. Retry after the edit finishes.'
+});
 
 const makeBox = (value) => ({ value });
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
@@ -126,7 +131,8 @@ export const createHistoryManager = ({
   collectCurrentFileIds = null,
   maxActions = DEFAULT_MAX_ACTIONS,
   maxBytes = DEFAULT_MAX_BYTES,
-  makeRef = makeBox
+  makeRef = makeBox,
+  mutationAvailability = () => null
 } = {}) => {
   if (typeof buildIntent !== 'function') {
     throw new Error('createHistoryManager requires buildIntent.');
@@ -144,6 +150,8 @@ export const createHistoryManager = ({
   const undoStack = [];
   const redoStack = [];
   const revision = makeRef(0);
+  // Transaction open/close notifies mutationPending() without a document revision.
+  const transactionRevision = makeRef(0);
   const restoring = makeRef(false);
   const capturing = makeRef(false);
   const historyLimitMessage = makeRef('');
@@ -171,9 +179,29 @@ export const createHistoryManager = ({
   let currentFileIds = new Set();
   let totalEntryBytes = 0;
   let activeTransaction = null;
+  let activeCheckpoint = null;
+  let activeReplacement = null;
 
   const touch = () => {
     revision.value += 1;
+  };
+  const touchTransaction = () => {
+    transactionRevision.value += 1;
+  };
+  const intentCommitOwnedByAction = () => Boolean(
+    activeTransaction && !activeTransaction.closed && activeTransaction.deferAdapterCommit
+  );
+
+  // D-28 (PD-OI-082): an open artifact replacement or checkpoint, or an action
+  // that still owns its intent commit, owns the current state. Undo, Redo, and
+  // their buttons and shortcuts share this one reactive availability; the
+  // Session owner words a Generate or diagram update in progress.
+  const historyAvailability = () => {
+    void transactionRevision.value;
+    const busy = mutationAvailability();
+    if (busy) return busy;
+    if (!activeReplacement && !activeCheckpoint && !intentCommitOwnedByAction()) return null;
+    return mutationAvailability('history') || HISTORY_EDIT_BUSY;
   };
 
   const computeSignature = (value, scope) => {
@@ -355,11 +383,25 @@ export const createHistoryManager = ({
     touch();
   };
 
+  // R11: a transaction belongs to one owner (a control or a gesture). An
+  // ownerless action, the same owner, or an action that owns the open commit
+  // joins it; another owner first settles it.
   const begin = async (label = 'Edit', options = {}) => {
+    if (mutationAvailability()) return null;
     if (restoring.value || capturing.value) return null;
-    if (activeTransaction && !activeTransaction.closed) return activeTransaction;
+    const open = activeTransaction && !activeTransaction.closed ? activeTransaction : null;
+    if (open) {
+      if (
+        options.owner === undefined
+        || open.owner === options.owner
+        || open.deferAdapterCommit
+      ) return open;
+      await settlePendingIntent();
+      if (activeTransaction && !activeTransaction.closed) return activeTransaction;
+    }
 
     const before = await captureIntent();
+    if (mutationAvailability()) return null;
     emitHistoryDiagnostic({ type: 'begin', scope: 'intent', label });
     const tx = {
       label,
@@ -367,22 +409,25 @@ export const createHistoryManager = ({
       beforeSignature: before.signature,
       beforeFileIds: before.fileIds,
       closed: false,
-      source: options.source || ''
+      source: options.source || '',
+      owner: options.owner
     };
     activeTransaction = tx;
+    touchTransaction();
     return tx;
   };
 
   const cancel = (transaction) => {
     if (!transaction) return;
     transaction.closed = true;
-    if (activeTransaction === transaction) activeTransaction = null;
+    if (activeTransaction === transaction) { activeTransaction = null; touchTransaction(); }
   };
 
-  const initializeIntentBaseline = async (_label = 'Intent baseline') => {
+  const initializeIntentBaseline = async (_label = 'Intent baseline', { isCurrent = () => true } = {}) => {
     if (restoring.value) return false;
     if (activeTransaction && !activeTransaction.closed) cancel(activeTransaction);
     const intentRecord = await captureIntent();
+    if (!isCurrent()) return false;
     clearStack(undoStack);
     clearRedo();
     currentCheckpoint = null;
@@ -414,8 +459,12 @@ export const createHistoryManager = ({
   const commit = async (transaction, options = {}) => {
     if (!transaction || transaction.closed) return false;
     const afterRecord = await captureIntent();
+    // A concurrent settlement may have committed it during the capture.
+    if (transaction.closed) return false;
+    const busy = mutationAvailability();
+    if (busy) { cancel(transaction); return busy; }
     transaction.closed = true;
-    if (activeTransaction === transaction) activeTransaction = null;
+    if (activeTransaction === transaction) { activeTransaction = null; touchTransaction(); }
     setCurrentIntent(afterRecord);
 
     const entry = buildPatchEntry(transaction, afterRecord, options);
@@ -441,15 +490,35 @@ export const createHistoryManager = ({
     return true;
   };
 
+  // R11: the one path that commits the open intent before another owner, a
+  // checkpoint, an artifact replacement, a command, Undo, or Redo takes the
+  // state. The input adapter skips its own commit of a settled transaction.
+  const settlePendingIntent = async () => {
+    const pending = activeTransaction;
+    if (!pending || pending.closed) return;
+    const previousDeferred = Boolean(pending.deferAdapterCommit);
+    pending.deferAdapterCommit = true;
+    try {
+      await commit(pending);
+    } catch (error) {
+      if (!pending.closed) pending.deferAdapterCommit = previousDeferred;
+      throw error;
+    }
+  };
+
   const runUndoable = async (label, fn, options = {}) => {
+    const sessionBusy = mutationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (typeof fn !== 'function') return undefined;
-    if (restoring.value || capturing.value) return fn();
+    if (restoring.value || capturing.value || activeCheckpoint) return fn();
 
     const usesActiveTransaction = Boolean(activeTransaction && !activeTransaction.closed);
     const tx = usesActiveTransaction ? activeTransaction : await begin(label, options);
-    if (usesActiveTransaction && tx) tx.deferAdapterCommit = true;
+    if (tx) { tx.deferAdapterCommit = true; touchTransaction(); }
 
     try {
+      const busy = mutationAvailability();
+      if (busy) { cancel(tx); return busy; }
       const result = await fn();
       await commit(tx, options);
       return result;
@@ -488,16 +557,7 @@ export const createHistoryManager = ({
     };
 
     if (!activeTransaction || activeTransaction.closed) return captureBefore();
-
-    const pendingIntent = activeTransaction;
-    const previousDeferred = Boolean(pendingIntent.deferAdapterCommit);
-    pendingIntent.deferAdapterCommit = true;
-    return Promise.resolve(commit(pendingIntent))
-      .then(captureBefore)
-      .catch((error) => {
-        if (!pendingIntent.closed) pendingIntent.deferAdapterCommit = previousDeferred;
-        throw error;
-      });
+    return settlePendingIntent().then(captureBefore);
   };
 
   const commitCheckpoint = async (transaction, options = {}) => {
@@ -548,9 +608,15 @@ export const createHistoryManager = ({
   };
 
   const runUndoableCheckpoint = (label, fn, options = {}) => {
+    const sessionBusy = mutationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (typeof fn !== 'function') return undefined;
-    if (restoring.value || capturing.value) return fn();
+    if (restoring.value || capturing.value || activeCheckpoint) return fn();
     const execute = async (tx) => {
+      const busy = mutationAvailability();
+      if (busy) { cancel(tx); return busy; }
+      activeCheckpoint = tx;
+      touchTransaction();
       try {
         const result = await fn();
         if (
@@ -567,6 +633,9 @@ export const createHistoryManager = ({
         if (tx) tx.closed = true;
         releaseUnreferencedFiles();
         throw error;
+      } finally {
+        activeCheckpoint = null;
+        touchTransaction();
       }
     };
     const transaction = beginCheckpoint(label, options);
@@ -617,28 +686,50 @@ export const createHistoryManager = ({
     }
   };
 
+  const captureReplacementIntentCheckpoint = async (options, phase) => {
+    if (typeof options?.captureIntentCheckpoint !== 'function') {
+      return { enabled: false, value: undefined };
+    }
+    return {
+      enabled: true,
+      value: await options.captureIntentCheckpoint({ phase })
+    };
+  };
+
+  const restoreReplacementIntentCheckpoint = async (checkpoint, restore) => {
+    if (!checkpoint?.enabled || typeof restore !== 'function') return;
+    restoring.value = true;
+    try {
+      await restore(checkpoint.value);
+    } finally {
+      restoring.value = false;
+    }
+  };
+
   const beginArtifactReplacement = async (label = 'Generate diagram', options = {}) => {
     if (restoring.value || capturing.value) return null;
-    if (activeTransaction && !activeTransaction.closed) {
-      const pendingIntent = activeTransaction;
-      const previousDeferred = Boolean(pendingIntent.deferAdapterCommit);
-      pendingIntent.deferAdapterCommit = true;
-      try {
-        await commit(pendingIntent);
-      } catch (error) {
-        if (!pendingIntent.closed) pendingIntent.deferAdapterCommit = previousDeferred;
-        throw error;
-      }
+    const capturesIntent = typeof options.captureIntentCheckpoint === 'function';
+    const restoresIntent = typeof options.restoreIntentCheckpoint === 'function';
+    if (capturesIntent !== restoresIntent) {
+      throw new Error(
+        'Artifact replacement intent checkpoints require capture and restore hooks.'
+      );
     }
+    await settlePendingIntent();
     notifyCheckpointCapture(options, 'before-start');
     recordSessionLifecycleEvent('history.before-capture-started');
     const before = await captureArtifactHandle('before');
     recordSessionLifecycleEvent('history.before-capture-completed');
+    const beforeIntentCheckpoint = await captureReplacementIntentCheckpoint(
+      options,
+      'before'
+    );
     notifyCheckpointCapture(options, 'before-end');
     emitHistoryDiagnostic({ type: 'begin', scope: 'artifact-replacement', label });
     return {
       label,
       before,
+      beforeIntentCheckpoint,
       closed: false,
       source: options.source || ''
     };
@@ -667,11 +758,26 @@ export const createHistoryManager = ({
     if (!transaction || transaction.closed) return false;
     notifyCheckpointCapture(options, 'after-start');
     const after = await captureArtifactHandle('after');
+    const afterIntentCheckpoint = await captureReplacementIntentCheckpoint(
+      options,
+      'after'
+    );
     transaction.closed = true;
     currentFileIds = artifactHandleFileIds(after);
     clearCurrentCheckpoint();
 
-    if (sameArtifactHandles(transaction.before, after)) {
+    const intentChanged = transaction.beforeIntentCheckpoint.enabled
+      && afterIntentCheckpoint.enabled
+      && (typeof options.compareIntentCheckpoints === 'function'
+        ? !options.compareIntentCheckpoints(
+            transaction.beforeIntentCheckpoint.value,
+            afterIntentCheckpoint.value
+          )
+        : !sameJsonValue(
+            transaction.beforeIntentCheckpoint.value,
+            afterIntentCheckpoint.value
+          ));
+    if (sameArtifactHandles(transaction.before, after) && !intentChanged) {
       emitHistoryDiagnostic({
         type: 'commit',
         scope: 'artifact-replacement',
@@ -686,6 +792,16 @@ export const createHistoryManager = ({
 
     const fileIds = artifactHandleFileIds(transaction.before);
     artifactHandleFileIds(after).forEach((id) => fileIds.add(id));
+    if (intentChanged) {
+      collectHistoryFileIds(transaction.beforeIntentCheckpoint.value, fileIds);
+      collectHistoryFileIds(afterIntentCheckpoint.value, fileIds);
+    }
+    const intentCheckpointBytes = intentChanged
+      ? (JSON.stringify([
+          transaction.beforeIntentCheckpoint.value,
+          afterIntentCheckpoint.value
+        ]) || '').length * 2
+      : 0;
     const entry = {
       type: 'artifact-replacement',
       label: transaction.label || options.label || 'Generate diagram',
@@ -694,8 +810,15 @@ export const createHistoryManager = ({
       byteSize: Math.max(
         1,
         (Number(transaction.before.retainedBytes) || 0) + (Number(after.retainedBytes) || 0)
-      ),
-      fileIds
+      ) + intentCheckpointBytes,
+      fileIds,
+      ...(intentChanged ? {
+        intentCheckpoint: {
+          before: transaction.beforeIntentCheckpoint,
+          after: afterIntentCheckpoint,
+          restore: options.restoreIntentCheckpoint
+        }
+      } : {})
     };
     diagnostics.byteEstimateComputations += 1;
     diagnostics.artifactReplacementHistoryEntryCount += 1;
@@ -737,9 +860,15 @@ export const createHistoryManager = ({
   };
 
   const runUndoableArtifactReplacement = async (label, fn, options = {}) => {
+    const sessionBusy = mutationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (typeof fn !== 'function') return undefined;
     if (restoring.value || capturing.value) return fn(null);
     const transaction = await beginArtifactReplacement(label, options);
+    const busy = mutationAvailability();
+    if (busy) { cancel(transaction); return busy; }
+    activeReplacement = transaction;
+    touchTransaction();
     try {
       const result = await fn(transaction?.before || null);
       if (
@@ -756,23 +885,34 @@ export const createHistoryManager = ({
       recordSessionLifecycleEvent('history.finalization-completed', { label });
       return result;
     } catch (error) {
-      if (transaction) {
-        transaction.closed = true;
-        if (typeof options.restoreAppliedArtifact === 'function') {
-          restoring.value = true;
-          try {
-            await options.restoreAppliedArtifact(transaction.before);
-          } finally {
-            restoring.value = false;
+      try {
+        if (transaction) {
+          transaction.closed = true;
+          if (typeof options.restoreAppliedArtifact === 'function') {
+            restoring.value = true;
+            try {
+              await options.restoreAppliedArtifact(transaction.before);
+            } finally {
+              restoring.value = false;
+            }
+            clearCurrentCheckpoint();
+          } else {
+            recordStructuralMetric('generatedArtifactRollbackCount', 1);
+            await restoreArtifactHandle(transaction.before, { refreshIntent: false });
           }
-          clearCurrentCheckpoint();
-        } else {
-          recordStructuralMetric('generatedArtifactRollbackCount', 1);
-          await restoreArtifactHandle(transaction.before, { refreshIntent: false });
+          await restoreReplacementIntentCheckpoint(
+            transaction.beforeIntentCheckpoint,
+            options.restoreIntentCheckpoint
+          );
+          await refreshCurrentIntent();
         }
+        releaseUnreferencedFiles();
+      } catch (_) {
+        if (error && typeof error === 'object') error.artifactRestoreFailed = true;
       }
-      releaseUnreferencedFiles();
       throw error;
+    } finally {
+      if (activeReplacement === transaction) { activeReplacement = null; touchTransaction(); }
     }
   };
 
@@ -811,11 +951,14 @@ export const createHistoryManager = ({
   };
 
   const runUndoableCommand = async (label, buildCommand) => {
+    const sessionBusy = mutationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (typeof buildCommand !== 'function') return false;
-    if (!restoring.value && !capturing.value && activeTransaction && !activeTransaction.closed) {
-      await commit(activeTransaction);
-    }
-    const command = normalizeCommand(label, await buildCommand());
+    if (!restoring.value && !capturing.value) await settlePendingIntent();
+    const preparedCommand = await buildCommand();
+    const busy = mutationAvailability();
+    if (busy) return busy;
+    const command = normalizeCommand(label, preparedCommand);
     if (!command) return false;
 
     if (restoring.value || capturing.value) {
@@ -864,8 +1007,21 @@ export const createHistoryManager = ({
     await refreshCurrentIntent();
   };
 
-  const applyArtifactReplacementEntry = async (handle) => {
-    await restoreArtifactHandle(handle);
+  const applyArtifactReplacementEntry = async (entry, direction) => {
+    const handle = direction === 'undo' ? entry.before : entry.after;
+    if (!entry.intentCheckpoint) {
+      await restoreArtifactHandle(handle);
+      return;
+    }
+    await restoreArtifactHandle(handle, { refreshIntent: false });
+    const checkpoint = direction === 'undo'
+      ? entry.intentCheckpoint.before
+      : entry.intentCheckpoint.after;
+    await restoreReplacementIntentCheckpoint(
+      checkpoint,
+      entry.intentCheckpoint.restore
+    );
+    await refreshCurrentIntent();
   };
 
   const applyCommandWithFlag = async (entry, direction) => {
@@ -878,7 +1034,18 @@ export const createHistoryManager = ({
     }
   };
 
+  // SE-04: the focused control's open intent is settled first, so an Undo is
+  // never recorded afterward as a new edit that clears Redo.
+  const settleBeforeTraversal = async () => {
+    const busy = historyAvailability();
+    if (busy || restoring.value) return busy;
+    await settlePendingIntent();
+    return historyAvailability();
+  };
+
   const undo = async () => {
+    const busy = await settleBeforeTraversal();
+    if (busy) return busy;
     if (restoring.value || undoStack.length === 0) return false;
     const entry = undoStack[undoStack.length - 1];
     if (entry.type === 'command') {
@@ -891,7 +1058,7 @@ export const createHistoryManager = ({
     } else if (entry.type === 'checkpoint') {
       await applyCheckpointEntry(entry.before);
     } else if (entry.type === 'artifact-replacement') {
-      await applyArtifactReplacementEntry(entry.before);
+      await applyArtifactReplacementEntry(entry, 'undo');
     } else {
       await applyIntentEntry(entry, 'undo');
     }
@@ -903,6 +1070,8 @@ export const createHistoryManager = ({
   };
 
   const redo = async () => {
+    const busy = await settleBeforeTraversal();
+    if (busy) return busy;
     if (restoring.value || redoStack.length === 0) return false;
     const entry = redoStack[redoStack.length - 1];
     if (entry.type === 'command') {
@@ -915,7 +1084,7 @@ export const createHistoryManager = ({
     } else if (entry.type === 'checkpoint') {
       await applyCheckpointEntry(entry.after);
     } else if (entry.type === 'artifact-replacement') {
-      await applyArtifactReplacementEntry(entry.after);
+      await applyArtifactReplacementEntry(entry, 'redo');
     } else {
       await applyIntentEntry(entry, 'redo');
     }
@@ -926,12 +1095,16 @@ export const createHistoryManager = ({
     return true;
   };
 
-  const canUndo = () => undoStack.length > 0 && !restoring.value;
-  const canRedo = () => redoStack.length > 0 && !restoring.value;
+  const canUndo = () => undoStack.length > 0 && !restoring.value && !historyAvailability();
+  const canRedo = () => redoStack.length > 0 && !restoring.value && !historyAvailability();
   const undoLabel = () => (canUndo() ? undoStack[undoStack.length - 1].label : '');
   const redoLabel = () => (canRedo() ? redoStack[redoStack.length - 1].label : '');
 
   return {
+    mutationPending: () => {
+      void transactionRevision.value;
+      return Boolean(restoring.value || capturing.value || intentCommitOwnedByAction());
+    },
     begin,
     beginArtifactReplacement,
     beginCheckpoint,

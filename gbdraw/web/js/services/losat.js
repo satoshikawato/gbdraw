@@ -1,3 +1,4 @@
+import { diagnosticError, normalizeUserFacingError } from './error-normalization.js';
 import { LOSAT_THREADED_WASM_URL, WASI_SHIM_URL } from '../config.js';
 import { resolveLosatThreadPlan } from './losat-thread-plan.js';
 import {
@@ -9,6 +10,10 @@ import {
 const DEFAULT_WASM_PATH = './wasm/losat/losat.wasm';
 const DEFAULT_THREADED_WASM_PATH = LOSAT_THREADED_WASM_URL || './wasm/losat/losat-threaded.wasm';
 const DEFAULT_THREADED_MIN_FASTA_CHARS = 500000;
+// Chromium can trap a thread's memory.copy or memory.fill right after another
+// thread grows the shared memory. A job is deterministic, so a trapped job runs
+// again, up to this many times, before the run fails.
+const THREADED_TRAP_RETRY_LIMIT = 2;
 const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
 
 let wasiShimPromise = null;
@@ -90,18 +95,26 @@ const buildThreadingStatus = (state, message, details = {}) => ({
   ...details
 });
 
+// The synchronous browser preconditions of threaded LOSAT (PD-OI-018: threaded
+// stays strict; Settings and dispatch read the same answer).
+export const losatThreadingPrecondition = () => {
+  if (typeof Worker !== 'function') {
+    return buildThreadingStatus('unavailable', 'Web Workers are unavailable in this browser.', { reason: 'WORKERS' });
+  }
+  if (typeof SharedArrayBuffer !== 'function') {
+    return buildThreadingStatus('unavailable', 'SharedArrayBuffer is unavailable.', { reason: 'SHARED_MEMORY' });
+  }
+  if (globalThis.crossOriginIsolated !== true) {
+    return buildThreadingStatus('unavailable', 'Cross-origin isolation is not enabled.', { reason: 'CROSS_ORIGIN_ISOLATION' });
+  }
+  return buildThreadingStatus('available', 'Threaded LOSAT preconditions are met.');
+};
+
 export const getLosatThreadingSupport = async ({
   threadedWasmPath = DEFAULT_THREADED_WASM_PATH
 } = {}) => {
-  if (typeof Worker !== 'function') {
-    return buildThreadingStatus('unavailable', 'Web Workers are unavailable in this browser.');
-  }
-  if (typeof SharedArrayBuffer !== 'function') {
-    return buildThreadingStatus('unavailable', 'SharedArrayBuffer is unavailable.');
-  }
-  if (globalThis.crossOriginIsolated !== true) {
-    return buildThreadingStatus('unavailable', 'Cross-origin isolation is not enabled.');
-  }
+  const precondition = losatThreadingPrecondition();
+  if (precondition.state !== 'available') return precondition;
 
   const key = String(threadedWasmPath || DEFAULT_THREADED_WASM_PATH);
   if (!threadedSupportPromises.has(key)) {
@@ -111,7 +124,7 @@ export const getLosatThreadingSupport = async ({
         return buildThreadingStatus(
           'unavailable',
           'Threaded LOSAT wasm is missing WASI thread imports or exports.',
-          { wasmModule: null }
+          { wasmModule: null, reason: 'THREADED_WASM' }
         );
       }
       return buildThreadingStatus(
@@ -122,7 +135,7 @@ export const getLosatThreadingSupport = async ({
     })().catch((error) =>
       buildThreadingStatus(
         'unavailable',
-        error?.message ? String(error.message) : String(error || 'Threaded LOSAT is unavailable.')
+        normalizeUserFacingError(error || { code: 'UNKNOWN' }, { operation: 'generate', stage: 'initialization' }).summary
       )
     ));
   }
@@ -548,6 +561,8 @@ const runLosatPairsThreaded = async (
   const effectiveThreads = Math.max(1, Number(threadsPerJob) || 1);
   const results = new Array(jobs.length);
   const activeWorkers = new Set();
+  const faultChannels = new Set();
+  const trapRetries = new Map();
   let nextJobIndex = 0;
   let completed = 0;
   let requestId = 0;
@@ -559,6 +574,8 @@ const runLosatPairsThreaded = async (
       if (handleAbort) signal?.removeEventListener?.('abort', handleAbort);
       activeWorkers.forEach((worker) => worker.terminate());
       activeWorkers.clear();
+      faultChannels.forEach((channel) => channel.close());
+      faultChannels.clear();
     };
     const fail = (error) => {
       if (settled) return;
@@ -588,6 +605,19 @@ const runLosatPairsThreaded = async (
 
       const index = nextJobIndex;
       nextJobIndex += 1;
+      launchJob(index);
+    };
+    const failOrRetryTrap = (index, error, trapped) => {
+      const attempt = (trapRetries.get(index) || 0) + 1;
+      if (!trapped || attempt > THREADED_TRAP_RETRY_LIMIT || settled || signal?.aborted) {
+        fail(error);
+        return;
+      }
+      trapRetries.set(index, attempt);
+      console.warn(`${error.message}; running the pair again (retry ${attempt} of ${THREADED_TRAP_RETRY_LIMIT}).`);
+      launchJob(index);
+    };
+    const launchJob = (index) => {
       const job = jobs[index];
       const id = `threaded-${Date.now()}-${requestId}`;
       requestId += 1;
@@ -607,6 +637,13 @@ const runLosatPairsThreaded = async (
         return;
       }
       activeWorkers.add(worker);
+      // A trapped WASI thread cannot notify its job worker, which is blocked in
+      // wasm, so it reports here and the job fails instead of waiting forever.
+      const faultChannelName = typeof BroadcastChannel === 'function'
+        ? `gbdraw-losat-thread-fault:${id}:${Math.random().toString(36).slice(2)}`
+        : '';
+      const faultChannel = faultChannelName ? new BroadcastChannel(faultChannelName) : null;
+      if (faultChannel) faultChannels.add(faultChannel);
 
       const cleanupWorker = () => {
         worker.removeEventListener('message', handleMessage);
@@ -614,6 +651,10 @@ const runLosatPairsThreaded = async (
         worker.removeEventListener('messageerror', handleMessageError);
         worker.terminate();
         activeWorkers.delete(worker);
+        if (faultChannel) {
+          faultChannel.close();
+          faultChannels.delete(faultChannel);
+        }
       };
 
       const handleMessage = (event) => {
@@ -623,7 +664,11 @@ const runLosatPairsThreaded = async (
         cleanupWorker();
 
         if (!data.ok) {
-          fail(new Error(`${formatPairErrorPrefix(job)}: ${data.error || 'Threaded LOSAT worker failed'}`));
+          failOrRetryTrap(
+            index,
+            new Error(`${formatPairErrorPrefix(job)}: ${data.error || 'Threaded LOSAT worker failed'}`),
+            data.trap === true
+          );
           return;
         }
         if (signal?.aborted) {
@@ -631,9 +676,6 @@ const runLosatPairsThreaded = async (
           return;
         }
 
-        if (data.stderr) {
-          console.info(`Threaded LOSAT stderr for ${formatPairErrorPrefix(job)}:\n${data.stderr}`);
-        }
         results[index] = { ...job, text: data.text || '' };
         completed += 1;
         if (typeof onProgress === 'function') {
@@ -653,9 +695,22 @@ const runLosatPairsThreaded = async (
         fail(new Error(`${formatPairErrorPrefix(job)}: Threaded LOSAT worker message could not be decoded`));
       };
 
+      const handleThreadFault = (event) => {
+        const data = event.data || {};
+        if (data.type !== 'thread-fault') return;
+        cleanupWorker();
+        const detail = [data.error || 'LOSAT WASI thread trapped', data.stderr].filter(Boolean).join('\n');
+        failOrRetryTrap(
+          index,
+          new Error(`${formatPairErrorPrefix(job)}: LOSAT thread ${data.tid} failed: ${detail}`),
+          data.trap === true
+        );
+      };
+
       worker.addEventListener('message', handleMessage);
       worker.addEventListener('error', handleError);
       worker.addEventListener('messageerror', handleMessageError);
+      faultChannel?.addEventListener('message', handleThreadFault);
       worker.postMessage({
         type: 'run',
         id,
@@ -665,7 +720,8 @@ const runLosatPairsThreaded = async (
         job,
         queryFasta: payloadJob.queryFasta,
         subjectFasta: payloadJob.subjectFasta,
-        threadsPerJob: effectiveThreads
+        threadsPerJob: effectiveThreads,
+        faultChannel: faultChannelName
       });
     };
 
@@ -737,11 +793,13 @@ export const runLosatPairsParallel = async (jobs, options = {}) => {
       } catch (error) {
         if (isAbortError(error, options.signal)) throw getAbortReason(options.signal);
         if (executionMode === 'threaded') throw error;
-        threadedFallbackReason = error?.message ? String(error.message) : String(error || 'Threaded LOSAT failed.');
-        console.warn('Threaded LOSAT failed; falling back to serial browser execution.', error);
+        const diagnostic = normalizeUserFacingError(error || { code: 'UNKNOWN' }, { operation: 'generate', stage: 'helper' });
+        threadedFallbackReason = diagnostic.summary;
+        console.warn('Threaded LOSAT failed; falling back to serial browser execution.', diagnostic);
       }
     } else if (executionMode === 'threaded') {
-      throw new Error(support.message || 'Threaded LOSAT is unavailable.');
+      // Only uncached jobs reach dispatch, so a fully cached rerun still succeeds.
+      throw diagnosticError('LOSAT_THREADING_UNAVAILABLE', { reason: support.reason || 'THREADED_WASM' }, { stage: 'losat' });
     } else {
       threadedFallbackReason = support.state === 'available'
         ? 'Current LOSAT workload is below the threaded auto threshold.'
@@ -769,7 +827,7 @@ export const runLosatPairsParallel = async (jobs, options = {}) => {
     return await runLosatPairsWithWorkers(jobList, options);
   } catch (error) {
     if (isAbortError(error, options.signal)) throw getAbortReason(options.signal);
-    console.warn('LOSAT Worker pool failed; falling back to sequential execution.', error);
+    console.warn('LOSAT Worker pool failed; falling back to sequential execution.', normalizeUserFacingError(error));
     return runLosatPairsSequential(jobList, options);
   }
 };

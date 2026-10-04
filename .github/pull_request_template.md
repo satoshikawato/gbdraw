@@ -2,8 +2,6 @@
 Use a concrete action and object in the PR title. Assume the reader has not read the implementation plan or earlier PRs.
 -->
 
-## Plain-language summary
-
 <!--
 In 2-4 sentences, explain what changes, why it changes, and what will be different after merge.
 Keep exact check names, paths, and identifiers in backticks, then explain their role in ordinary language.
@@ -50,7 +48,7 @@ Use `N/A` and leave `decisions` empty for the normal path.
 Nonempty decisions are Product Decision Owner-only and bind to the exact head SHA.
 The human selects an outcome with the documented `PRODUCT_DECISION` response; Codex fills the machine-only fields and shows the generated block for review.
 Every nonempty current decision requires a product-level `rationale`.
-This block does not waive any other gate. Product change or retirement requires durable base authority.
+This block does not waive any other gate. Product change or retirement requires durable base authority, or a static Product Contract co-change that carries the explicit receipt (Review REQUIRED).
 -->
 
 - Product-impact role: N/A | EVIDENCE_ONLY | DECISION_ONLY | IMPLEMENTATION
@@ -136,3 +134,4 @@ implementation changes.
 - Source-coverage and result-tree identity proof:
 - Required-check/protection notes:
 - Release verification and deploy notes:
+- Periodic audit checklist (`docs/internal/WEB_PERIODIC_AUDIT.md`, sections "Promotion PR checklist" and "First promotion after the 2026-09-30 audit"):

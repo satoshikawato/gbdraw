@@ -6,9 +6,11 @@ const {
   assertDiagramWorkerIdle,
   assertSingleWorkerRun,
   assertWorkerReuseAcrossHelperAndRender,
+  evaluateWithRetainedPromise,
   generateAndWaitForResult,
   getDiagramWorkerActivity,
   openApp,
+  reveal,
   waitForAppShell
 } = require('./helpers/app-lifecycle.cjs');
 
@@ -238,7 +240,7 @@ const inspectCircularSparseDepthResult = async (page) => page.evaluate(() => {
   };
 });
 
-const runDiagramWithDiagnostics = async (page) => page.evaluate(async () => {
+const runDiagramWithDiagnostics = async (page) => evaluateWithRetainedPromise(page, async () => {
   const app = window.__GBDRAW_APP__;
   const result = await app.runAnalysis();
   return {
@@ -261,7 +263,7 @@ test('Circular GFF3 mode exposes one annotation and one FASTA uploader', async (
   await expect(page.getByLabel('FASTA File', { exact: true })).toHaveCount(1);
 });
 
-test('Circular enabled options render without an undefined-property warning', { tag: '@pr-smoke' }, async ({ page }) => {
+test('Circular enabled options render without an undefined-property warning', async ({ page }) => {
   const warnings = [];
   page.on('console', (message) => {
     if (message.type() === 'warning' && message.text().includes('enabledOptionClass')) {
@@ -271,7 +273,7 @@ test('Circular enabled options render without an undefined-property warning', { 
   await openApp(page, { waitForPalette: false });
 
   for (const name of ['Separate Strands', 'Resolve Overlaps']) {
-    const checkbox = page.getByRole('checkbox', { name, exact: true });
+    const checkbox = await reveal(page.getByRole('checkbox', { name, exact: true, includeHidden: true }));
     await expect(checkbox).toBeEnabled();
     const label = checkbox.locator('..');
     await expect.soft(label).toHaveClass(/\btext-slate-700\b/);
@@ -283,7 +285,7 @@ test('Circular enabled options render without an undefined-property warning', { 
 test('Show Depth stays disabled until a depth TSV is uploaded', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
 
-  const showDepthCheckbox = page.locator('label:has-text("Show Depth") input[type="checkbox"]').first();
+  const showDepthCheckbox = await reveal(page.locator('label:has-text("Show Depth") input[type="checkbox"]').first());
   await expect(showDepthCheckbox).toBeDisabled();
   await expect(showDepthCheckbox).not.toBeChecked();
 
@@ -314,7 +316,7 @@ test('Linear Depth above Features generates with repeat_region underlays', async
   const genbank = readFileSync(repeatRegionGenbankPath, 'utf8');
   await openApp(page);
 
-  const outcome = await page.evaluate(async (genbankText) => {
+  const outcome = await evaluateWithRetainedPromise(page, async (genbankText) => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('./js/state.js');
     app.mode = 'linear';
@@ -443,35 +445,37 @@ test('Linear depth add, clear, and remove keep global sparse columns aligned', a
     app.resetLinearTrackSlotsFromSimpleControls();
     app.setLinearTrackSlotsEnabled(true);
     const clonePlain = (value) => JSON.parse(JSON.stringify(value));
+    const depthRows = () => app.adv.linear_track_slots
+      .filter((slot) => slot.renderer === 'depth')
+      .map((slot) => `${slot.id}:${slot.params.track_index}:${slot.enabled === false ? 'off' : 'on'}`);
     const originalSlots = clonePlain(app.adv.linear_track_slots);
     const originalAxisIndex = app.adv.linear_track_slots_axis_index;
     const originalFeatureSlot = clonePlain(
       app.adv.linear_track_slots.find((slot) => slot.renderer === 'features')
     );
-    const duplicateManagedSlot = clonePlain(
-      app.adv.linear_track_slots.find((slot) => (
-        slot.renderer === 'depth' && slot.params.track_index === 0
-      ))
-    );
+    // PD-OI-058: a row the user disabled stays disabled, and a series that
+    // regains its source gets no managed row while a row references it.
     app.adv.linear_track_slots.splice(
       0,
       app.adv.linear_track_slots.length,
       {
-        id: 'manual_depth', renderer: 'depth', enabled: true, side: 'above',
+        id: 'manual_depth', renderer: 'depth', enabled: false, side: 'above',
         params: { track_index: 0, custom: 'manual' }
       },
-      duplicateManagedSlot,
       originalFeatureSlot
     );
-    app.adv.linear_track_slots_axis_index = 2;
-    app.ensureLinearTrackDepthSlots();
-    const deduplicatedSlots = {
-      ids: app.adv.linear_track_slots.map((slot) => slot.id),
+    app.adv.linear_track_slots_axis_index = 1;
+    app.setLinearDepthFile(app.linearSeqs[0], 0, null);
+    app.setLinearDepthFile(app.linearSeqs[0], 0, first);
+    const preservedSlots = {
+      depthRows: depthRows(),
+      manualParams: clonePlain(app.adv.linear_track_slots[0].params),
       axisIndex: app.adv.linear_track_slots_axis_index
     };
     app.adv.linear_track_slots.splice(0, app.adv.linear_track_slots.length, ...originalSlots);
     app.adv.linear_track_slots_axis_index = originalAxisIndex;
     app.addLinearDepthTrack();
+    const afterAddSeries = depthRows();
     app.setLinearDepthFile(app.linearSeqs[1], 1, second);
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
@@ -491,9 +495,10 @@ test('Linear depth add, clear, and remove keep global sparse columns aligned', a
         .map((slot) => slot.params.track_index)
     };
     const featureSlot = app.adv.linear_track_slots.find((slot) => slot.renderer === 'features');
-    const trackZeroSlot = app.adv.linear_track_slots.find((slot) => (
-      slot.renderer === 'depth' && slot.params.track_index === 0
-    ));
+    // Series 0 lost its last source, so its managed row is gone; rebuild one.
+    const trackZeroSlot = {
+      id: 'depth', renderer: 'depth', enabled: true, side: 'above', params: { track_index: 0 }
+    };
     const trackOneSlot = app.adv.linear_track_slots.find((slot) => (
       slot.renderer === 'depth' && slot.params.track_index === 1
     ));
@@ -513,7 +518,7 @@ test('Linear depth add, clear, and remove keep global sparse columns aligned', a
       trackOneSlot
     );
     app.adv.linear_track_slots_axis_index = 2;
-    app.removeLinearDepthTrack(app.linearSeqs[0], 0);
+    app.removeLinearDepthTrack(0);
     const manualSlot = app.adv.linear_track_slots.find((slot) => slot.id === 'custom_depth');
     const { linearTrackAxisIndexForEnabledSlots } = await import(
       new URL('./js/app/linear-track-slots.js', window.location.href).href
@@ -545,10 +550,15 @@ test('Linear depth add, clear, and remove keep global sparse columns aligned', a
       trackIndex: manualSlot.params.track_index,
       error: manualSlot.depth_binding_error ?? null
     };
-    return { deduplicatedSlots, beforeClear, afterClear, afterRemove, afterRepair };
+    return { preservedSlots, afterAddSeries, beforeClear, afterClear, afterRemove, afterRepair };
   });
 
-  expect(result.deduplicatedSlots).toEqual({ ids: ['manual_depth', 'features'], axisIndex: 1 });
+  expect(result.preservedSlots).toMatchObject({
+    depthRows: ['manual_depth:0:off'],
+    manualParams: { track_index: 0, custom: 'manual' },
+    axisIndex: 1
+  });
+  expect(result.afterAddSeries).toEqual(['depth:0:on']);
   expect(result.beforeClear.rows).toEqual([
     ['sample-a.tsv', null],
     [null, 'sample-b.tsv']
@@ -559,7 +569,7 @@ test('Linear depth add, clear, and remove keep global sparse columns aligned', a
     [null, 'sample-b.tsv']
   ]);
   expect(result.afterClear.labels).toEqual(result.beforeClear.labels);
-  expect(result.afterClear.slotIndexes).toEqual(result.beforeClear.slotIndexes);
+  expect(result.afterClear.slotIndexes).toEqual([1]);
   expect(result.afterRemove.rows).toEqual([
     [null],
     ['sample-b.tsv']
@@ -573,6 +583,220 @@ test('Linear depth add, clear, and remove keep global sparse columns aligned', a
   expect(result.afterRemove.emittedAxisIndex).toBe(0);
   expect(result.afterRemove.emittedSlotIds).toEqual(['features', 'depth_2']);
   expect(result.afterRepair).toEqual({ enabled: false, trackIndex: 0, error: null });
+});
+
+test('Linear File-level Depth assignment preserves history, sessions, and regeneration', { tag: '@pr-smoke' }, async ({ page }) => {
+  test.setTimeout(300000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page, { waitForPalette: false });
+
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.addLinearSeq();
+    app.addLinearSeq();
+    const multiRecordFile = new File(['LOCUS       MULTI\n'], 'multi.gbk', { type: 'text/plain' });
+    const singleRecordFile = new File(['LOCUS       SINGLE\n'], 'single.gbk', { type: 'text/plain' });
+    app.linearSeqs[0].gb = multiRecordFile;
+    app.linearSeqs[1].gb = multiRecordFile;
+    app.linearSeqs[2].gb = singleRecordFile;
+  });
+
+  const firstSource = page.locator('[data-linear-source-depth]').first();
+  const firstSourceRecords = page.locator('[data-linear-source-records]').first();
+  const firstSourceSummary = firstSource.locator(':scope > summary');
+  await expect(firstSource).toBeVisible();
+  await expect(firstSource).not.toHaveAttribute('open', '');
+  await expect(firstSourceSummary).toHaveText('No depth track attached');
+  expect(await firstSourceRecords.evaluate((element) => element.open)).toBe(false);
+  await expect(page.locator('[data-linear-depth-settings]')).toHaveCount(0);
+  await expect(page.locator('[data-linear-source-records]').nth(1).getByText('Per-record Depth TSV')).toHaveCount(0);
+
+  const closedHeight = await firstSource.evaluate((element) => element.getBoundingClientRect().height);
+  await firstSourceSummary.press('Enter');
+  await expect(firstSource).toHaveAttribute('open', '');
+  expect(await firstSource.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThan(closedHeight);
+  await expect(page.getByRole('button', { name: /Add Depth TSV series from file/ })).toHaveCount(1);
+
+  await page.getByTestId('linear-source-depth-1-1').setInputFiles({
+    name: 'common.tsv',
+    mimeType: 'text/tab-separated-values',
+    buffer: Buffer.from('position\tdepth\n1\t10\n')
+  });
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.depth?.[0]?.name || null)
+  ))).toEqual(['common.tsv', 'common.tsv', null]);
+  await expect(page.locator('[data-linear-depth-settings]')).toHaveCount(1);
+  await expect(firstSourceSummary).toHaveText('1 depth track attached');
+  await expect(firstSource.locator('[data-linear-source-depth-state="common"]')).toBeVisible();
+  await page.locator('[data-linear-source-depth]').nth(1).locator(':scope > summary').click();
+  await expect(page.locator('[data-linear-source-depth]').nth(1).locator('[data-linear-source-depth-state="empty"]')).toBeVisible();
+
+  await page.getByRole('button', {
+    name: 'Add Depth TSV series from file 1', exact: true
+  }).click();
+  await expect(firstSourceSummary).toHaveText('1 depth track attached');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map((sequence) => ({
+    width: sequence.depth.length,
+    files: sequence.depth.map((file) => file?.name || null)
+  })))).toEqual([
+    { width: 2, files: ['common.tsv', null] },
+    { width: 2, files: ['common.tsv', null] },
+    { width: 2, files: [null, null] }
+  ]);
+  expect(await firstSource.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearDepthFile(
+      app.linearSeqs[1],
+      0,
+      new File(['position\tdepth\n1\t20\n'], 'override.tsv', { type: 'text/tab-separated-values' })
+    );
+  });
+  await expect(firstSource.locator('[data-linear-source-depth-state="mixed"]')).toBeVisible();
+  await expect(firstSource).toContainText('Attached to some records');
+  await expect(firstSource.getByText(/Choosing a file applies it to every record/)).toBeVisible();
+
+  await firstSource.getByRole('button', { name: 'Remove from all records' }).click();
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.depth?.[0]?.name || null)
+  ))).toEqual([null, null, null]);
+  await page.evaluate(async () => window.__GBDRAW_APP__.undoHistory());
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.depth?.[0]?.name || null)
+  ))).toEqual(['common.tsv', 'override.tsv', null]);
+  await page.evaluate(async () => window.__GBDRAW_APP__.redoHistory());
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.depth?.[0]?.name || null)
+  ))).toEqual([null, null, null]);
+  await page.evaluate(async () => window.__GBDRAW_APP__.undoHistory());
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.depth?.[0]?.name || null)
+  ))).toEqual(['common.tsv', 'override.tsv', null]);
+
+  await page.getByTestId('linear-source-depth-1-1').setInputFiles({
+    name: 'replacement.tsv',
+    mimeType: 'text/tab-separated-values',
+    buffer: Buffer.from('position\tdepth\n1\t30\n')
+  });
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.depth?.[0]?.name || null)
+  ))).toEqual(['replacement.tsv', 'replacement.tsv', null]);
+  await page.evaluate(async () => window.__GBDRAW_APP__.undoHistory());
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.depth?.[0]?.name || null)
+  ))).toEqual(['common.tsv', 'override.tsv', null]);
+  await page.evaluate(async () => window.__GBDRAW_APP__.redoHistory());
+  await expect.poll(() => page.evaluate(() => (
+    window.__GBDRAW_APP__.linearSeqs.map((sequence) => sequence.depth?.[0]?.name || null)
+  ))).toEqual(['replacement.tsv', 'replacement.tsv', null]);
+  // Continue through the real request, Session, Worker, and renderer path.
+  const genbankA = readFileSync(sparseGenbankAPath, 'utf8');
+  const genbankB = readFileSync(sparseGenbankBPath, 'utf8');
+  const depthRows = (recordId, length, value) => Array.from(
+    { length: Math.ceil(length / 1000) },
+    (_, index) => `${recordId}\t${Math.min(length, index * 1000 + 1)}\t${value + (index % 3)}`
+  );
+  const commonDepth = [
+    'reference_name\tposition\tdepth',
+    ...depthRows('BGC0000708', 40579, 10),
+    ...depthRows('BGC0000709', 50466, 30)
+  ].join('\n');
+  const overrideDepth = [
+    'reference_name\tposition\tdepth',
+    ...depthRows('BGC0000709', 50466, 50)
+  ].join('\n');
+
+  const saveAndReload = async (title) => {
+    const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
+    await evaluateWithRetainedPromise(page, async (sessionTitle) => {
+      const app = window.__GBDRAW_APP__;
+      app.sessionTitle = sessionTitle;
+      await app.saveSessionWithTitle();
+    }, title);
+    const savedPath = await (await downloadPromise).path();
+    expect(savedPath).toBeTruthy();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForAppShell(page, { waitForPalette: false });
+    const dialogPromise = page.waitForEvent('dialog', { timeout: 120000 });
+    await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
+    const dialog = await dialogPromise;
+    expect(dialog.message()).toBe('Session loaded successfully!');
+    await dialog.accept();
+    await expect.poll(() => page.evaluate(() => (
+      window.__GBDRAW_APP__.mode === 'linear' && window.__GBDRAW_APP__.linearSeqs.length
+    ))).toBe(2);
+  };
+  const showDepthRows = async () => {
+    const disclosure = page.locator('[data-linear-source-depth]').first();
+    if (!(await disclosure.evaluate((element) => element.open))) {
+      await disclosure.locator(':scope > summary').click();
+    }
+  };
+
+  await openApp(page, { waitForPalette: false });
+  await page.evaluate(async ({ first, second }) => {
+    const app = window.__GBDRAW_APP__;
+    app.mode = 'linear';
+    app.lInputType = 'gb';
+    app.setLinearSeqPrimaryFile(0, 'gb', new File([first, second], 'multi-depth.gbk', {
+      type: 'text/plain', lastModified: 1
+    }));
+    Object.assign(app.form, {
+      legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none'
+    });
+    await app.setLinearComparisonGlobalAction('none');
+  }, { first: genbankA, second: genbankB });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.length)).toBe(2);
+
+  await page.evaluate((text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearSourceDepthFile(
+      app.linearSourceGroups[0],
+      0,
+      new File([text], 'common.tsv', { type: 'text/tab-separated-values', lastModified: 2 })
+    );
+  }, commonDepth);
+  await showDepthRows();
+  await expect(page.locator('[data-linear-source-depth-state="common"]')).toBeVisible();
+  expect(await runDiagramWithDiagnostics(page)).toEqual({
+    result: { status: 'ok' }, errorSummary: '', errorDetails: []
+  });
+  expect(await runDiagramWithDiagnostics(page)).toEqual({
+    result: { status: 'ok' }, errorSummary: '', errorDetails: []
+  });
+
+  await saveAndReload('multi-record-common-depth');
+  await showDepthRows();
+  await expect(page.locator('[data-linear-source-depth-state="common"]')).toBeVisible();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map(
+    (sequence) => sequence.depth?.[0]?.name || null
+  ))).toEqual(['common.tsv', 'common.tsv']);
+
+  await page.evaluate((text) => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearDepthFile(
+      app.linearSeqs[1],
+      0,
+      new File([text], 'override.tsv', { type: 'text/tab-separated-values', lastModified: 3 })
+    );
+  }, overrideDepth);
+  await showDepthRows();
+  await expect(page.locator('[data-linear-source-depth-state="mixed"]')).toBeVisible();
+  expect(await runDiagramWithDiagnostics(page)).toEqual({
+    result: { status: 'ok' }, errorSummary: '', errorDetails: []
+  });
+
+  await saveAndReload('multi-record-mixed-depth');
+  await showDepthRows();
+  await expect(page.locator('[data-linear-source-depth-state="mixed"]')).toBeVisible();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs.map(
+    (sequence) => sequence.depth?.[0]?.name || null
+  ))).toEqual(['common.tsv', 'override.tsv']);
+  expect(await runDiagramWithDiagnostics(page)).toEqual({
+    result: { status: 'ok' }, errorSummary: '', errorDetails: []
+  });
 });
 
 test('Linear custom slot panel and enable state preserve the explicit stack', async ({ page }) => {
@@ -1007,7 +1231,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
   const svgExport = page.getByRole('button', { name: 'SVG', exact: true });
   await expect(svgExport).toBeEnabled();
 
-  const outcome = await page.evaluate(async () => {
+  const outcome = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const featureId = String(app.extractedFeatures?.[0]?.svg_id || 'transaction-feature');
     app.selectedFeatureIds = new Set([featureId]);
@@ -1113,6 +1337,8 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
       presentationWhileRepeatedAttemptStarts,
       repeatedPresentation: app.failedGeneratePreservedResult,
       errorSummary: String(app.errorLog?.summary || ''),
+      errorCode: app.errorLog?.code,
+      errorContext: app.errorLog?.context,
       diagramWorkerMessages:
         window.__GBDRAW_DIAGRAM_RUN_MESSAGES__ - workerMessagesBefore,
       beforeResultCount: before.results.length,
@@ -1136,7 +1362,11 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
   expect(outcome.firstPresentation).toBe(true);
   expect(outcome.presentationWhileRepeatedAttemptStarts).toBe(true);
   expect(outcome.repeatedPresentation).toBe(true);
-  expect(outcome.errorSummary).toContain("references unknown set 'missing'");
+  expect(outcome.errorCode).toBe('TRACK_INVALID');
+  expect(outcome.errorContext).toMatchObject({ field: 'set_id', reason: 'ANNOTATION_SET' });
+  expect(outcome.errorSummary).toContain('Select an existing annotation set.');
+  expect(outcome.errorSummary).not.toContain('missing');
+  expect(outcome.errorSummary).not.toContain('invalid_annotation');
   expect(outcome.diagramWorkerMessages).toBe(0);
   expect(outcome.beforeResultCount).toBeGreaterThan(0);
   expect(outcome.serializedSvgPreserved).toBe(true);
@@ -1151,7 +1381,8 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
 
   const generationError = page.getByRole('alert', { name: 'Generation Error' });
   await expect(generationError).toBeVisible();
-  await expect(generationError).toContainText("references unknown set 'missing'");
+  await expect(generationError).toContainText('Select an existing annotation set.');
+  await expect(generationError).not.toContainText('missing');
   await expect(
     page.getByRole('heading', { name: 'Last Successful Result', exact: true })
   ).toBeVisible();
@@ -1165,7 +1396,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
     .toBeVisible();
   await expect(svgExport).toBeEnabled();
 
-  const successfulRetry = await page.evaluate(async () => {
+  const successfulRetry = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('./js/state.js');
     const committedContentBefore = app.results[app.selectedResultIndex]?.content || '';
@@ -1203,7 +1434,7 @@ test('Invalid Annotation slot is rejected before worker startup and preserves co
 test('preserved Result presentation ignores no-Result Generate failures and non-Generate errors', async ({ page }) => {
   await openApp(page, { waitForPalette: false });
 
-  const noResultFailure = await page.evaluate(async () => {
+  const noResultFailure = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const result = await app.runAnalysis();
     return {
@@ -1227,14 +1458,14 @@ test('preserved Result presentation ignores no-Result Generate failures and non-
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     state.errorLog.value = {
-      summary: 'Non-Generate operation failed.',
-      details: []
+      code: 'UNKNOWN', operation: 'evaluateRules', stage: 'helper'
     };
     await window.Vue.nextTick();
   });
 
-  await expect(page.getByRole('alert', { name: 'Generation Error' }))
-    .toContainText('Non-Generate operation failed.');
+  await expect(page.getByRole('alert', { name: 'Rule error' }))
+    .toContainText('without recognized diagnostic information');
+  await expect(page.getByRole('alert', { name: 'Generation Error' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Result Preview', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Last Successful Result', exact: true }))
     .toHaveCount(0);
@@ -1288,6 +1519,12 @@ test('Session preflight rejects invalid canonical data without resetting live st
     dialogs.push(dialog.message());
     await dialog.accept();
   });
+  await page.evaluate(() => {
+    window.__SESSION_REJECTIONS__ = 0;
+    window.__GBDRAW_TEST_HOOKS__ = { onSessionLifecycleEvent(event) {
+      if (event.name === 'interactiveReady' && event.status === 'error') window.__SESSION_REJECTIONS__++;
+    } };
+  });
   const input = page.locator('input[accept^=".json,"]').first();
 
   const invalidCanonicalSession = {
@@ -1307,8 +1544,17 @@ test('Session preflight rejects invalid canonical data without resetting live st
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(invalidCanonicalSession))
   });
-  await expect.poll(() => dialogs.length).toBe(1);
-  expect(dialogs[0]).toContain('Canonical renderRequest records are required.');
+  const expectSchemaRejection = async (count, reason) => {
+    await expect.poll(() => page.evaluate(() => window.__SESSION_REJECTIONS__)).toBe(count);
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending)).toBe(false);
+    await expect(page.getByRole('alert', { name: 'Operation error' }))
+      .toContainText('Load a supported Session file or recreate it with the current writer.');
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+      code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason }
+    });
+    expect(dialogs).toEqual([]);
+  };
+  await expectSchemaRejection(1, 'RECORDS_REQUIRED');
   expect(await snapshot()).toEqual(before);
 
   const invalidSlotSchemaSession = {
@@ -1326,8 +1572,7 @@ test('Session preflight rejects invalid canonical data without resetting live st
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(invalidSlotSchemaSession))
   });
-  await expect.poll(() => dialogs.length).toBe(2);
-  expect(dialogs[1]).toContain('Custom Track Slots use an obsolete schema.');
+  await expectSchemaRejection(2, 'TRACK_SCHEMA');
   expect(await snapshot()).toEqual(before);
 
   const recordText = `LOCUS       PREFLIGHT                   4 bp    DNA     linear   UNK 01-JAN-1980
@@ -1399,8 +1644,7 @@ ORIGIN
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(unknownAuthoritySession))
   });
-  await expect.poll(() => dialogs.length).toBe(3);
-  expect(dialogs[2]).toContain('unclassified top-level field');
+  await expectSchemaRejection(3, 'SESSION_FIELDS');
   expect(await snapshot()).toEqual(before);
 
   const invalidLegacyConfig = {
@@ -1414,8 +1658,7 @@ ORIGIN
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(invalidLegacyConfig))
   });
-  await expect.poll(() => dialogs.length).toBe(4);
-  expect(dialogs[3]).toContain('Custom Track Slots use an obsolete schema.');
+  await expectSchemaRejection(4, 'TRACK_SCHEMA');
   expect(await snapshot()).toEqual(before);
 
   const repairedCanonicalSession = {
@@ -1445,8 +1688,8 @@ ORIGIN
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(repairedCanonicalSession))
   });
-  await expect.poll(() => dialogs.length).toBe(5);
-  expect(dialogs[4]).toBe('Session loaded successfully!');
+  await expect.poll(() => dialogs.length).toBe(1);
+  expect(dialogs[0]).toBe('Session loaded successfully!');
   expect(await page.evaluate(() => ({
     mode: window.__GBDRAW_APP__.mode,
     comparisonHeight: window.__GBDRAW_APP__.adv.comparison_height,
@@ -1581,7 +1824,7 @@ ORIGIN
     app.adv.linear_track_slots_axis_index = 1;
   });
   const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
-  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const download = await downloadPromise;
   const savedSessionPath = await download.path();
   expect(savedSessionPath).toBeTruthy();
@@ -1600,7 +1843,7 @@ ORIGIN
     'circularMultiRecordLegendPosition',
     'circularMultiRecordPlotTitlePosition'
   ];
-  expect(exportedSession.version).toBe(42);
+  expect(exportedSession.version).toBe(44);
   expect(exportedSession).not.toHaveProperty('files');
   expect(exportedSession.webFiles).toEqual(expect.any(Object));
   expect(exportedSession.webFiles.bindings.schema).toBe(2);
@@ -1940,6 +2183,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     app.sessionTitle = 'p3-drafts-v40';
   }, { genbankText: recordText, nestedStyle: styleOverride });
 
+  await page.locator('summary[aria-label="Layout"]').press('Enter');
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     if (!app.circularTrackSlotsPanelOpen) app.toggleCircularTrackSlotsPanel();
@@ -1948,9 +2192,9 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   const circularAnnotationRow = page.locator(
     '[data-capture="circular-track-slot-review_overlay"]'
   );
-  await page.locator(
-    '[data-capture="circular-track-slot-disabled_outer_space"] input[title="Width"]'
-  ).fill('15px');
+  await page.getByRole('textbox', {
+    name: 'Circular track slot disabled_outer_space Width value', exact: true
+  }).fill('15px');
   await circularAnnotationRow
     .locator('.track-slot-field')
     .filter({ hasText: 'padding' })
@@ -2031,7 +2275,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
       }
     };
   })).toEqual({
-    circularSpacerWidth: '15px',
+    circularSpacerWidth: { value: '15', unit: 'px' },
     circularAnnotation: {
       marks: ['line'],
       padding: 4,
@@ -2047,14 +2291,14 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   });
 
   const initialDownloadPromise = page.waitForEvent('download', { timeout: 60000 });
-  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const initialDownload = await initialDownloadPromise;
   const initialPath = await initialDownload.path();
   expect(initialPath).toBeTruthy();
   const initialSession = JSON.parse(
     gunzipSync(readFileSync(initialPath)).toString('utf8')
   );
-  expect(initialSession.version).toBe(42);
+  expect(initialSession.version).toBe(44);
   const expectedDraft = p3Draft(initialSession);
   expect(expectedDraft.circularEnabled).toBe(true);
   expect(expectedDraft.linearEnabled).toBe(false);
@@ -2086,6 +2330,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
   await loadSession(initialPath);
   expect(await browserDraft()).toEqual(expectedDraft);
 
+  await page.locator('summary[aria-label="Layout"]').press('Enter');
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     if (!app.circularTrackSlotsPanelOpen) app.toggleCircularTrackSlotsPanel();
@@ -2138,7 +2383,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     window.__GBDRAW_APP__.sessionTitle = 'p3-drafts-resaved';
   });
   const secondDownloadPromise = page.waitForEvent('download', { timeout: 60000 });
-  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const secondDownload = await secondDownloadPromise;
   const secondPath = await secondDownload.path();
   expect(secondPath).toBeTruthy();
@@ -2155,10 +2400,11 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     window.__GBDRAW_APP__.sessionTitle = 'p3-drafts-fresh-resave';
   });
   const thirdDownloadPromise = page.waitForEvent('download', { timeout: 60000 });
-  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const thirdSession = await readSessionDownload(await thirdDownloadPromise);
   expect(p3Draft(thirdSession)).toEqual(expectedDraft);
 
+  await page.locator('summary[aria-label="Layout"]').press('Enter');
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     if (!app.circularTrackSlotsPanelOpen) app.toggleCircularTrackSlotsPanel();
@@ -2262,8 +2508,13 @@ ORIGIN
     mimeType: 'application/json',
     buffer: Buffer.from(JSON.stringify(session))
   });
-  await expect.poll(() => dialogs.length).toBe(1);
-  expect(dialogs[0]).toContain('Injected session commit failure');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending)).toBe(false);
+  await expect(page.getByRole('alert', { name: 'Operation error' })).toBeVisible();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+    code: 'UNKNOWN', operation: 'unknown', stage: 'request-validation'
+  });
+  await expect(page.getByRole('alert', { name: 'Operation error' })).not.toContainText('Injected session commit failure');
+  expect(dialogs).toEqual([]);
   expect(await page.evaluate(() => ({
     mode: window.__GBDRAW_APP__.mode,
     title: window.__GBDRAW_APP__.sessionTitle,
@@ -2578,7 +2829,7 @@ test('Linear sparse diagonal depth generates and survives a session round trip',
   expect(firstRecipe.exactReplay).toContain('--session');
 
   const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
-  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const download = await downloadPromise;
   const savedSessionPath = await download.path();
   expect(savedSessionPath).toBeTruthy();
@@ -2735,7 +2986,7 @@ test('Circular sparse diagonal depth survives a session round trip and track rem
   ]);
 
   const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
-  await page.evaluate(async () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const download = await downloadPromise;
   const savedSessionPath = await download.path();
   expect(savedSessionPath).toBeTruthy();
@@ -2885,7 +3136,7 @@ test('BGC session keeps restored feature metadata selectable in the preview', as
     target.id
   );
   await expect(page.locator('.feature-popup')).toBeVisible();
-  await expect(page.locator('.feature-popup').getByRole('button', { name: /Align/ })).toBeVisible();
+  await expect(page.locator('.feature-popup').getByRole('button', { name: 'Align…', exact: true })).toBeVisible();
 });
 
 test('BGC session selected feature Hide undo redo keeps visibility and legend stable', async ({ page }) => {

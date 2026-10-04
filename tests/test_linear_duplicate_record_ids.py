@@ -235,7 +235,7 @@ def test_duplicate_rendered_feature_payload_entries_do_not_collapse() -> None:
         ),
     )
     payload = _metadata_payload(enriched)
-    assert payload["schema"] == 3
+    assert payload["schema"] == 4
     item = payload["items"][0]
     feature_ids = {feature["svgId"] for feature in item["features"]}
     biological_by_key = {

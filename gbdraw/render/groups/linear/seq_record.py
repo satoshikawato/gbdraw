@@ -10,6 +10,7 @@ from svgwrite.shapes import Line
 from svgwrite.text import Text
 
 from ....canvas import LinearCanvasConfigurator
+from ....core.record_metadata import _read_coord_map
 from ...drawers.linear.features import FeatureDrawer
 from ...drawers.linear.labels import LabelDrawer
 from ....labels.linear import prepare_label_list_linear
@@ -18,6 +19,8 @@ from ....features.factory import FeatureBuildResult
 from ....configurators import FeatureDrawingConfigurator
 from ....svg.ids import record_group_svg_id
 from ....layout.record_labels import source_ruler_ticks
+from ...label_binding import bind_label_part
+from .feature_identity import LinearFeatureDomIndex
 from .length_bar import (
     RULER_LABEL_OFFSET,
     RULER_TICK_LENGTH,
@@ -38,6 +41,7 @@ class SeqRecordGroup:
         feature_config: FeatureDrawingConfigurator,
         feature_layers: FeatureBuildResult,
         render_context: LinearRecordRenderContext,
+        feature_dom_index: LinearFeatureDomIndex,
         precalculated_labels: Optional[list] = None,
         draw_features: bool = True,
         label_font_size: float | None = None,
@@ -58,6 +62,7 @@ class SeqRecordGroup:
         self.length_param = self.canvas_config.length_param
         self.feature_config = feature_config
         self.feature_layers = feature_layers
+        self.feature_dom_index = feature_dom_index
         self.precalculated_labels = precalculated_labels
         self.draw_features_enabled = bool(draw_features)
         self.orthogroup_label_member_ids = orthogroup_label_member_ids
@@ -282,6 +287,15 @@ class SeqRecordGroup:
         # Process labels if enabled
         if self.show_labels and self.draw_features_enabled:
             for label in label_list:
+                source_feature_index = label.get("source_feature_index")
+                feature_id = self.feature_dom_index.by_source_index.get(
+                    (self.record_index, source_feature_index)
+                )
+                if not feature_id:
+                    raise ValueError(
+                        "Prepared linear label has no rendered feature identity."
+                    )
+                label["feature_id"] = feature_id
                 if label.get("leader_line"):
                     line_path = Line(
                         start=(label["leader_start_x"], label["leader_start_y"]),
@@ -289,6 +303,7 @@ class SeqRecordGroup:
                         stroke=self.label_stroke_color,
                         stroke_width=self.label_stroke_width,
                     )
+                    bind_label_part(line_path, feature_id)
                     feature_group.add(line_path)
                 elif not label["is_embedded"]:
                     label_middle_y = float(label["middle_y"])
@@ -306,6 +321,7 @@ class SeqRecordGroup:
                         stroke=self.label_stroke_color,
                         stroke_width=self.label_stroke_width,
                     )
+                    bind_label_part(line_path, feature_id)
                     feature_group.add(line_path)
 
         # Draw features
@@ -375,6 +391,14 @@ class SeqRecordGroup:
         record_group.attribs["data-gbdraw-record-index"] = str(self.record_index)
 
         record_length: int = len(self.gb_record.seq)
+        # Input-file span of a cropped or reverse-complemented record (PD-OI-076):
+        # match popups and FASTA headers report source coordinates through it.
+        source_base, source_step = _read_coord_map(self.gb_record)
+        if record_length and (source_base, source_step) != (1, 1):
+            source_low = source_base if source_step == 1 else source_base - record_length + 1
+            record_group.attribs["data-gbdraw-record-source-start"] = str(source_low)
+            record_group.attribs["data-gbdraw-record-source-end"] = str(source_low + record_length - 1)
+            record_group.attribs["data-gbdraw-record-source-step"] = str(source_step)
 
         if self.sequence_width is not None:
             genome_size_normalization_factor = 1.0

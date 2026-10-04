@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from collections import Counter
-from dataclasses import dataclass, field
+from gbdraw.exceptions import ComparisonIdentityError
+
 import math
-from typing import Dict, Mapping, Sequence, Tuple
+from typing import Dict, Sequence, Tuple
 
 from pandas import DataFrame
 from svgwrite.container import Group
@@ -19,63 +19,9 @@ from ....core.color import (
 )
 from ....features.ids import make_linear_rendered_feature_id
 from ....layout.linear_multi_record import LinearRecordPlacement
-from ....layout.linear import VerticalBand
-from ....svg.ids import instance_svg_id
 from ....layout.record_coordinates import RecordDisplayTransform
 from ....linear_comparison import project_match_endpoints
-from ...drawers.linear.features import FeatureDrawer
-
-
-@dataclass(frozen=True)
-class LinearFeatureDomIndex:
-    """Source-bound DOM identities and final feature attachment geometry."""
-
-    by_source_index: Mapping[tuple[int, int], str]
-    by_view_id: Mapping[tuple[int, str], tuple[str, ...]]
-    attachment_bands: Mapping[str, VerticalBand] = field(default_factory=dict)
-
-
-def build_linear_feature_dom_index(
-    feature_dicts: Sequence[Mapping[str, object]],
-) -> LinearFeatureDomIndex:
-    """Index the exact DOM IDs produced from the prepared feature layers."""
-
-    record_count = len(feature_dicts)
-    by_source_index: dict[tuple[int, int], str] = {}
-    by_view_id: dict[tuple[int, str], tuple[str, ...]] = {}
-    for record_index, feature_dict in enumerate(feature_dicts):
-        features = list(feature_dict.values())
-        view_ids = [
-            str(FeatureDrawer.get_feature_data_id(feature) or "")
-            for feature in features
-        ]
-        view_id_counts = Counter(view_id for view_id in view_ids if view_id)
-        mutable_by_view_id: dict[str, list[str]] = {}
-        for feature, view_id in zip(features, view_ids, strict=True):
-            if not view_id:
-                continue
-            rendered_id = make_linear_rendered_feature_id(
-                record_index=record_index,
-                stable_feature_id=view_id,
-                record_count=record_count,
-            )
-            if not rendered_id:
-                continue
-            source_index = getattr(feature, "source_feature_index", None)
-            if view_id_counts[view_id] > 1 and source_index is not None:
-                rendered_id = instance_svg_id(rendered_id, source_index)
-            mutable_by_view_id.setdefault(view_id, []).append(rendered_id)
-            if source_index is None:
-                continue
-            key = (record_index, int(source_index))
-            if key in by_source_index:
-                raise ValueError(
-                    "Prepared linear features contain a duplicate source feature index."
-                )
-            by_source_index[key] = rendered_id
-        for view_id, rendered_ids in mutable_by_view_id.items():
-            by_view_id[(record_index, view_id)] = tuple(rendered_ids)
-    return LinearFeatureDomIndex(by_source_index, by_view_id)
+from .feature_identity import LinearFeatureDomIndex
 
 
 def _row_value(row: object, name: str, default: object = "") -> object:
@@ -307,26 +253,26 @@ class PairWiseMatchGroup:
         if not any(view_ids):
             return ""
         if any(not view_id for view_id in view_ids):
-            raise ValueError("Comparison view feature IDs contain an empty endpoint.")
+            raise ComparisonIdentityError("Comparison view feature IDs contain an empty endpoint.", reason="EMPTY_ENDPOINT")
         raw_indexes = _attribute_text(feature_index_value)
         feature_indexes: list[int | None]
         if raw_indexes:
             index_parts = [part.strip() for part in raw_indexes.split(";")]
             if len(index_parts) != len(view_ids):
-                raise ValueError(
-                    "Comparison feature IDs and source feature indexes are not aligned."
+                raise ComparisonIdentityError(
+                    "Comparison feature IDs and source feature indexes are not aligned.", reason="INDEX_ALIGNMENT"
                 )
             feature_indexes = []
             for part in index_parts:
                 try:
                     feature_index = int(part)
                 except (TypeError, ValueError):
-                    raise ValueError(
-                        "Comparison source feature index must be a nonnegative integer."
+                    raise ComparisonIdentityError(
+                        "Comparison source feature index must be a nonnegative integer.", reason="SOURCE_INDEX"
                     ) from None
                 if feature_index < 0 or str(feature_index) != part:
-                    raise ValueError(
-                        "Comparison source feature index must be a nonnegative integer."
+                    raise ComparisonIdentityError(
+                        "Comparison source feature index must be a nonnegative integer.", reason="SOURCE_INDEX"
                     )
                 feature_indexes.append(feature_index)
         else:
@@ -352,8 +298,8 @@ class PairWiseMatchGroup:
                     (),
                 )
                 if rendered_id is not None and rendered_id not in candidates:
-                    raise ValueError(
-                        "Comparison source feature index conflicts with its view feature ID."
+                    raise ComparisonIdentityError(
+                        "Comparison source feature index conflicts with its view feature ID.", reason="SOURCE_VIEW_CONFLICT"
                     )
             else:
                 candidates = feature_dom_index.by_view_id.get(
@@ -486,16 +432,9 @@ class PairWiseMatchGroup:
         subject_record_index = int(
             getattr(self, "subject_record_index", self.comparison_count)
         )
-        query_record_id = (
-            _attribute_text(_row_value(row, "query", ""))
-            or _attribute_text(_row_value(row, "qseqid", ""))
-            or self._record_id_for_index(query_record_index)
-        )
-        subject_record_id = (
-            _attribute_text(_row_value(row, "subject", ""))
-            or _attribute_text(_row_value(row, "sseqid", ""))
-            or self._record_id_for_index(subject_record_index)
-        )
+        # Endpoint records own record identity; table IDs never override them.
+        query_record_id = self._record_id_for_index(query_record_index)
+        subject_record_id = self._record_id_for_index(subject_record_index)
         match_id = self._next_pairwise_match_id(match_index)
         required_attributes = {
             "data-gbdraw-match-id": match_id,

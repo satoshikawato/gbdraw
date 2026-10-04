@@ -7,23 +7,35 @@
 | Evidence or mode | Web app | Command line and Python | Result shown |
 |---|---|---|---|
 | Uploaded BLAST outfmt 6/7 | **Upload BLAST TSV** | Prepared table input | One retained row per Linear link or Circular span |
-| LOSATN | Browser nucleotide search | Read its exported table as prepared input | Local nucleotide-alignment spans |
-| TLOSATX | Browser six-frame translated-nucleotide search | Read its exported table as prepared input | Translated query and subject spans |
+| LOSATN | Browser nucleotide search | Linear and Circular rings: `--losat losatn` (Python `losat="losatn"`) | Local nucleotide-alignment spans |
+| TLOSATX | Browser six-frame translated-nucleotide search | Linear and Circular rings: `--losat tlosatx` (Python `losat="tlosatx"`) | Translated query and subject spans |
 | LOSATP Pairwise | Browser protein search | `pairwise` protein-search mode | Retained individual protein matches |
 | LOSATP **Similarity groups** | Browser protein search | `orthogroup` compatibility token | Search-derived group membership and links |
 | LOSATP **Collinear blocks** | Browser protein search | `collinear` protein-search mode | Ordered blocks built from compatible anchors |
-| Selected mixed edges | Per-edge browser plan | Explicit prepared-table endpoints | Only the selected record pairs |
+| Selected mixed edges | Per-edge browser plan | `--comparisons_table` rows with `source` `losat` or `table` | Only the selected record pairs |
 | Circular similarity rings | Uploaded or browser-generated evidence | Prepared conservation inputs | Ordered evidence tracks around one reference |
 
 LOSATN compares nucleotide sequence directly. TLOSATX translates both sides
 and is useful when coding similarity remains after nucleotide divergence.
-LOSATP searches annotated CDS translations. Unusable or missing CDS
-translations cannot contribute protein matches.
+LOSATP searches CDS protein sequences, taken from `/translation` or translated
+as described in [Input formats](input-formats-and-tsv-schemas.md#sequence-and-annotation-files).
+A CDS whose protein is unusable, such as one with an internal stop codon,
+cannot contribute protein matches.
 
-The command line can run LOSATP or a compatible BLASTP runtime. It does not run
-LOSATN or TLOSATX; use `--blast`, `--comparisons_table`, or
-`--conservation_blast` for their exported rows. The web app can run all three
-LOSAT program families. Threaded browser search requires cross-origin
+The command line and Python API run LOSATN, TLOSATX, and LOSATP for Linear
+diagrams, with native LOSAT or the matching NCBI BLAST+ program. They search
+the same source-file databases as the web app and write the same raw-cache
+keys, so a Session saved from either reuses its LOSAT results in the other.
+For Circular similarity rings they run LOSATN or TLOSATX: each comparison
+genome (`--conservation_sequence`, one file per ring) is the query and the
+displayed records are the subject database, as in the web app. A comparison
+FASTA with ID-only headers and 60-column uppercase lines, like the tutorial
+files, gets the web app's raw-cache key; other FASTA layouts and GenBank or
+DDBJ files give the same rows under a different key. Precomputed rings read
+exported rows (`--conservation_blast`).
+The web app can run all three LOSAT program families. The web app offers the
+LOSATN task `dc-megablast`; a native runtime that does not list that task (the
+released LOSAT 0.1.0) stops before searching. Threaded browser search requires cross-origin
 isolation.
 
 For Linear browser searches, the three **LOSAT Mode** buttons select
@@ -64,7 +76,7 @@ scheduling, and thread count when an exact result must be reproduced.
 
 LOSATP Pairwise search keeps at most one HSP for each query-subject protein
 combination in its raw result. The display-stage `max_hits` setting
-(`--protein_blastp_max_hits` on the command line) is a separate limit: it
+(`--losatp_max_hits` on the command line) is a separate limit: it
 defaults to `5` and retains the strongest distinct subject proteins for each
 query protein after the display thresholds are applied. Similarity-group and
 Collinear construction use **Member hits per protein**, a separate limit on
@@ -86,11 +98,34 @@ inference. Older Collinear Sessions that lack the checkbox setting retain ON
 for reproducibility. The Python and CLI omission defaults retain their previous
 behavior; typed requests can explicitly set `collinear_infer_orthogroups=False`.
 
+The Web app, the CLI, and the Python API treat one source file as one genome
+when they run LOSATN, TLOSATX, or LOSATP. Records from two different files are
+searched as one job per directed file pair, and the E-value database is the
+subject file. A comparison between two records of the same file searches that
+file without the query record, and a requested within-record search
+(Similarity groups, or Collinear with inference ON) searches the record alone,
+so a record never searches itself unless that search was requested. Records of
+one multi-record file therefore get the same E-values and raw cache keys in all
+three. Run Info states this scope. Settings shows the job count from the same
+plan that Generate runs.
+
+In the Web app, a Similarity group name or description stays with the exact set
+of member proteins. When regrouping changes the members, the name is kept as a
+saved name that waits for those members, returns when the same group forms
+again, and is listed with **Clear** in the Similarity group panel. Session files
+store saved names in `webEdits.orthogroupDormantOverrides`; older Sessions have
+none.
+
 Prepared rows retain `qseqid`, `sseqid`, `pident`, `length`, `mismatch`,
-`gapopen`, `qstart`, `qend`, `sstart`, `send`, `evalue`, and `bitscore`.
-Query and subject are directional. They must map to the intended displayed
-records, including version suffixes. A start greater than its end marks reverse
-orientation; it does not by itself mean that a hit crosses a Circular origin.
+`gapopen`, `qstart`, `qend`, `sstart`, `send`, `evalue`, and `bitscore` from
+the first 12 columns; extra columns are ignored. Query and subject are
+directional. In Linear mode, a row that names the other endpoint or another
+displayed record is rejected, a version suffix difference is accepted, and IDs
+that match no displayed record keep the positional pair with a warning (logged
+by the CLI, shown beside the Result in the web app). See
+[Comparison and numeric tables](input-formats-and-tsv-schemas.md#comparison-and-numeric-tables).
+A start greater than its end marks reverse orientation; it does not by itself
+mean that a hit crosses a Circular origin.
 
 For a Circular ring, the selected reference side is `query`, `subject`, or
 `auto`. The renderer paints retained spans from that side on the displayed
@@ -101,10 +136,8 @@ row.
 
 The Linear **Comparison** command group has **No comparison**, **Run LOSAT**,
 and **Upload BLAST TSV** buttons. Each button applies one choice to all
-positional adjacent pairs. These are bulk commands rather than a complete list
-of possible current states. The separate **Current:** status reports the
-resolved state; a selected or mixed plan appears as **Current: Selected pairs
-(N; ...)** with a **Custom** badge.
+positional adjacent pairs. The button that matches the resolved plan is pressed;
+a selected or mixed plan presses none of them and shows a **Custom** badge.
 
 Open **Selected pairs (N)** to change the source or uploaded file for one pair,
 omit a pair, or select **Add** and define an explicit non-adjacent pair. The
@@ -149,7 +182,7 @@ Inspect warnings and raw evidence before relaxing thresholds.
 
 ## Raw results and cache identity
 
-**Save Raw LOSAT TSV** and `--protein_blastp_output` preserve raw search rows.
+**Save Raw LOSAT TSV** and `--losat_output_dir` preserve raw search rows.
 Generated protein results replace session-only runtime handles with stable
 percent-encoded protein or feature aliases. Export fails if a handle cannot be
 resolved safely. An uploaded comparison table is not rewritten.

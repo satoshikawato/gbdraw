@@ -83,6 +83,11 @@ def _comparison_row(**metadata: object) -> dict[str, object]:
             "subject": "subject",
             "identity": 100.0,
             "alignment_length": 100,
+            # In the search frame on the first CDS of each synthetic record (PD-OI-073).
+            "qstart": 101,
+            "qend": 300,
+            "sstart": 101,
+            "send": 300,
             "evalue": 0.0,
             "bitscore": 100.0,
         }
@@ -589,6 +594,8 @@ def test_linear_label_drawer_applies_rotation_transform() -> None:
     # Verify both signs are carried through into SVG transforms.
     positive_label = next(label for label in labels if label["strand"] == "positive")
     negative_label = next(label for label in labels if label["strand"] == "negative")
+    positive_label["feature_id"] = "linear-label-positive"
+    negative_label["feature_id"] = "linear-label-negative"
 
     group = Group(id="test")
     drawer = LabelDrawer()

@@ -18,6 +18,11 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PALETTES_FILE = PROJECT_ROOT / "gbdraw" / "data" / "color_palettes.toml"
 
 MANUALLY_MANAGED_FIGURES: dict[str, str] = {
+    "docs/assets/web-app/linear-current-result.png": (
+        "Specialized browser reference screenshot; regenerate and verify with "
+        "python docs/capture/verify_linear_live_edit.py --capture using the "
+        "source-verification receipt, then visually review the complete figure."
+    ),
     "examples/gbdraw_social_preview.png": (
         "Owner-maintained README artwork; automated reproduction and replacement are prohibited."
     ),
@@ -1341,16 +1346,16 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
                 "--hide_length",
                 "--definition_font_size", "8",
                 "--keep_definition_left_aligned",
-                "--protein_blastp_mode", "collinear",
+                "--losat", "losatp", "--losatp_mode", "collinear",
                 "--collinear_search_scope", "all",
-                "--protein_blastp_candidate_limit", "5",
+                "--losatp_max_target_seqs", "5",
                 "--collinear_min_anchors", "3",
                 "--collinear_max_unit_gap", "2",
                 "--collinear_max_diagonal_drift", "2",
                 "--collinear_color_mode", "orientation_identity",
                 "--pairwise_match_style", "curve",
-                "--losatp_bin", "gbdraw/bin/linux-x86_64/losat",
-                "--losatp_threads", "8",
+                "--losat_bin", "gbdraw/bin/linux-x86_64/losat",
+                "--losat_threads", "8",
                 "--plot_title", "Vibrio nigripulchritudo replicons: LOSATP collinear blocks",
                 "--plot_title_position", "top",
             ),
@@ -1413,7 +1418,9 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
             ),
             extra_args=linear_feature_style_args
             + (
-                "--protein_blastp_mode",
+                "--losat",
+                "losatp",
+                "--losatp_mode",
                 "pairwise",
                 "--align_center",
                 "--pairwise_match_style",
@@ -1448,8 +1455,10 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
             subcommand="linear",
             gbk_files=protein_inputs,
             extra_args=(
-                "--protein_blastp_mode",
-                "orthogroup",
+                "--losat",
+                "losatp",
+                "--losatp_mode",
+                "similarity_groups",
                 "--show_labels",
                 "orthogroup_top",
                 "--pairwise_match_style",
@@ -1466,7 +1475,9 @@ def _remaining_tutorial_figures() -> dict[str, FigureSpec]:
             subcommand="linear",
             gbk_files=protein_inputs,
             extra_args=(
-                "--protein_blastp_mode",
+                "--losat",
+                "losatp",
+                "--losatp_mode",
                 "collinear",
                 "--collinear_min_anchors",
                 "2",

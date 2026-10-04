@@ -4,6 +4,7 @@ const { gunzipSync } = require('node:zlib');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { load, generate, switchMode, popup, closeEditor, download, snapshot } = require('./helpers/mode-transition.cjs');
+const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const seed = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
 const tobacco = 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json';
@@ -94,7 +95,7 @@ test('V6/V7 shared biological targets and manual matchers survive while rejected
     });
     const before = await snapshot(page);
     await upload(page, { name: 'corrupt.gb', mimeType: 'text/plain', buffer: Buffer.from('invalid GenBank source') });
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.runAnalysis())).toEqual({ status: 'error' });
+    expect((await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis())).status).toBe('error');
     const failed = await snapshot(page);
     expect(failed.featureVisibility).toEqual(before.featureVisibility);
     expect(failed.visibilityRules).toEqual(before.visibilityRules);

@@ -28,8 +28,9 @@ from flows.web_capture import (
     assert_output_paths,
     capture_screenshot,
     generate_and_inspect,
+    open_ancestor_details,
     open_browser_capture,
-    set_feature_search_visible,
+    toggle_disclosure,
     wait_for_app_shell,
 )
 
@@ -149,7 +150,7 @@ def _feature_details(page: Page) -> Any:
 
 def _configure_feature_types(page: Page) -> None:
     details = _feature_details(page)
-    page.get_by_label("Features", exact=True).click()
+    toggle_disclosure(page.get_by_label("Features", exact=True))
     current = tuple(
         page.evaluate(
             "() => (window.__GBDRAW_APP__?.adv?.features || []).map(String)"
@@ -182,13 +183,14 @@ def _configure_feature_types(page: Page) -> None:
         raise AssertionError(f"Unexpected chloroplast feature types: {selected!r}")
     page.get_by_label("Block Stroke Width", exact=True).fill("1")
     page.get_by_label("Line Stroke Width", exact=True).fill("2")
-    page.get_by_label("Features", exact=True).click()
+    toggle_disclosure(page.get_by_label("Features", exact=True))
 
 
 def _configure_gallery_presentation(page: Page) -> None:
     page.get_by_label("Output Prefix", exact=True).fill("annotated_chloroplast_map")
     page.get_by_label("Species", exact=True).fill("<i>Nicotiana tabacum</i>")
-    page.get_by_label("Track Preset", exact=True).select_option("tuckin")
+    preset = open_ancestor_details(page.get_by_label("Track Preset", exact=True))
+    preset.select_option("tuckin")
     page.get_by_label("Separate Strands", exact=True).check()
     page.get_by_label("Hide GC Content", exact=True).uncheck()
     page.get_by_label("Hide GC Skew", exact=True).check()
@@ -196,14 +198,14 @@ def _configure_gallery_presentation(page: Page) -> None:
     _configure_feature_types(page)
 
     colors = page.get_by_label("Colors", exact=True)
-    colors.click()
+    toggle_disclosure(colors)
     page.get_by_label("Specific Table (-t)", exact=True).set_input_files(
         SPECIFIC_COLORS_PATH
     )
-    colors.click()
+    toggle_disclosure(colors)
 
     labels = page.get_by_label("Labels", exact=True)
-    labels.click()
+    toggle_disclosure(labels)
     page.get_by_label("Label Mode", exact=True).select_option("both")
     for label, value in (
         ("Outer X Offset", "0.9"),
@@ -220,20 +222,23 @@ def _configure_gallery_presentation(page: Page) -> None:
     page.get_by_label("Priority File (TSV)", exact=True).set_input_files(
         QUALIFIER_PRIORITY_PATH
     )
-    labels.click()
+    toggle_disclosure(labels)
 
     axis = page.locator("summary").filter(has_text="Axis & Scale")
-    axis.click()
+    toggle_disclosure(axis)
     page.get_by_label("Axis Stroke Width", exact=True).fill("3")
-    axis.click()
+    toggle_disclosure(axis)
 
-    title = page.get_by_label("Title & Legend", exact=True)
-    title.click()
-    page.get_by_label("Plot Title", exact=True).fill("")
+    title = page.get_by_label("Titles and Record Labels", exact=True)
+    toggle_disclosure(title)
+    page.get_by_role("textbox", name="Plot Title", exact=True).fill("")
     page.get_by_label("Plot Title Position", exact=True).select_option("none")
-    page.get_by_label("Definition Font Size", exact=True).fill("28")
-    page.get_by_label("Legend Position", exact=True).select_option("upper_left")
-    title.click()
+    page.get_by_label("Default font size", exact=True).fill("28")
+    toggle_disclosure(title)
+    legend = page.get_by_label("Legend settings", exact=True)
+    toggle_disclosure(legend)
+    page.get_by_label("Legend position", exact=True).select_option("upper_left")
+    toggle_disclosure(legend)
 
 
 def _remove_slot_if_present(page: Page, slot_id: str) -> None:
@@ -245,10 +250,12 @@ def _remove_slot_if_present(page: Page, slot_id: str) -> None:
 
 
 def _configure_gallery_slots(page: Page) -> tuple[dict[str, Any], ...]:
-    custom_slots = page.get_by_role(
-        "button", name=re.compile(r"Custom Track Slots$"), exact=False
-    )
-    custom_slots.click()
+    custom_slots = page.locator("button[aria-controls='circular-custom-track-slots-panel']")
+    for details in custom_slots.locator("xpath=ancestor::details").all():
+        if details.get_attribute("open") is None:
+            toggle_disclosure(details.locator(":scope > summary"))
+    if custom_slots.get_attribute("aria-expanded") != "true":
+        custom_slots.click()
     page.get_by_role("checkbox", name="Use custom stack", exact=True).check()
     _remove_slot_if_present(page, "ticks")
     _remove_slot_if_present(page, "gc_skew")
@@ -283,8 +290,10 @@ def _configure_gallery_slots(page: Page) -> tuple[dict[str, Any], ...]:
     annotation_slot = page.get_by_role(
         "group", name="Circular track slot plastome_regions", exact=True
     )
-    annotation_slot.get_by_title("Width", exact=True).fill("20px")
-    annotation_slot.get_by_title("Radius", exact=True).fill("0.65")
+    annotation_slot.get_by_role("textbox", name="Circular track slot plastome_regions Width value", exact=True).fill("20")
+    annotation_slot.get_by_role("combobox", name="Circular track slot plastome_regions Width unit", exact=True).select_option("px")
+    annotation_slot.get_by_role("textbox", name="Circular track slot plastome_regions Radius value", exact=True).fill("0.65")
+    annotation_slot.get_by_role("combobox", name="Circular track slot plastome_regions Radius unit", exact=True).select_option("factor")
     annotation_slot.get_by_title("Inner gap", exact=True).fill("1")
     annotation_slot.get_by_title("Outer gap", exact=True).fill("1")
     annotation_slot.get_by_label("Show annotation labels", exact=True).check()
@@ -298,8 +307,10 @@ def _configure_gallery_slots(page: Page) -> tuple[dict[str, Any], ...]:
     gc_slot = page.get_by_role(
         "group", name="Circular track slot gc_content", exact=True
     )
-    gc_slot.get_by_title("Width", exact=True).fill("0.08")
-    gc_slot.get_by_title("Radius", exact=True).fill("0.56")
+    gc_slot.get_by_role("textbox", name="Circular track slot gc_content Width value", exact=True).fill("0.08")
+    gc_slot.get_by_role("combobox", name="Circular track slot gc_content Width unit", exact=True).select_option("factor")
+    gc_slot.get_by_role("textbox", name="Circular track slot gc_content Radius value", exact=True).fill("0.56")
+    gc_slot.get_by_role("combobox", name="Circular track slot gc_content Radius unit", exact=True).select_option("factor")
 
     slots = _track_slot_snapshot(page)
     enabled = tuple(
@@ -366,10 +377,9 @@ def capture_gui_annotated_chloroplast(
         generate_and_inspect(page, _inspect_tracks_svg, _assert_plain_plastome)
         _fit_circular_preview(
             page,
-            target_zoom="70%",
+            target_zoom="40%",
             pan_left_ratio=0.0,
         )
-        set_feature_search_visible(page, visible=False)
         screenshot_bytes[SCREENSHOT_NAMES[1]] = capture_screenshot(
             page, output_paths[SCREENSHOT_NAMES[1]], "Circular"
         )
@@ -377,14 +387,14 @@ def capture_gui_annotated_chloroplast(
         _configure_gallery_presentation(page)
         _fit_circular_preview(
             page,
-            target_zoom="70%",
+            target_zoom="40%",
             pan_left_ratio=0.0,
         )
         annotations = page.get_by_label("Region Annotations", exact=True)
-        annotations.click()
-        page.get_by_label("Import TSV", exact=True).set_input_files(
-            GUI_ANNOTATION_TABLE_PATH
-        )
+        toggle_disclosure(annotations)
+        with page.expect_file_chooser() as chooser:
+            page.get_by_role("button", name="Import TSV", exact=True).click()
+        chooser.value.set_files(GUI_ANNOTATION_TABLE_PATH)
         expect(page.get_by_label("Annotation set id", exact=True)).to_have_value(
             "plastome_regions"
         )
@@ -408,7 +418,7 @@ def capture_gui_annotated_chloroplast(
             page, _inspect_tracks_svg, _assert_gallery_chloroplast
         )
         _fit_circular_preview(
-            page, target_zoom="50%", pan_left_ratio=0.32
+            page, target_zoom="40%", pan_left_ratio=0.45
         )
         popup = page.get_by_role("dialog", name=re.compile(r"^Feature details:"))
         if popup.is_visible():

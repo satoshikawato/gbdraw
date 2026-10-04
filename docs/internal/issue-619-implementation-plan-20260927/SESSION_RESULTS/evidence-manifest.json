@@ -1,0 +1,179 @@
+{
+  "sourceSha": "eef7c9469912af22a07eb0eaece5d6e9a8a06497",
+  "authorityBaseSha": "d313b70b9f97c2c1d70f9ae885edbead80b62021",
+  "environment": {
+    "python": "3.13.3",
+    "node": "v26.8.2",
+    "playwright": "1.61.0",
+    "chromium": "149.0.7827.55",
+    "nativeSource": "target checkout",
+    "browserSource": "/tmp/gbdraw-619-s00-20260927/source",
+    "wheelSha256": "81278bffd43eb41211fc65188abbd3b6b6cddf99a29efc490215e15a0bf98ea5",
+    "wheelPythonFilesCompared": 214,
+    "wheelSourceMismatches": []
+  },
+  "authoritySourceSha256": {
+    "docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md": "5451db7da8e4de970f05afd5d19b003b7de77d52eb84c05d71ff85a533d4b1fb",
+    "tools/web-product-impact-map.json": "dfd88850f67162f6046542e53d3136f51818e127a1320ecbf589b6cf97e14885",
+    "tools/web-product-decisions.json": "23b1843c9cc1d5d1e974f75c647b2dc299c53d5c117cfdf45830003eda5ef3b6"
+  },
+  "commands": [
+    {
+      "id": "checkout",
+      "command": "git status --short --branch; git worktree list; git branch --show-current; git rev-parse --abbrev-ref --symbolic-full-name @{upstream}",
+      "exitCode": 0,
+      "observation": "Expected branch/upstream; unrelated untracked directories preserved."
+    },
+    {
+      "id": "handoff",
+      "command": "git fetch origin; git pull --ff-only origin fix/issue-619-circular-track-measure-inputs; git merge-base --is-ancestor eef7c9469912af22a07eb0eaece5d6e9a8a06497 HEAD",
+      "exitCode": 0,
+      "observation": "Already up to date; specified public plan is ancestor."
+    },
+    {
+      "id": "authority",
+      "command": "git fetch origin refs/heads/dev:refs/remotes/origin/dev; git show origin/dev:docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md",
+      "exitCode": 0,
+      "observation": "Authority revision 22; no issue-619 receipts. No BD decision."
+    },
+    {
+      "id": "node-focused",
+      "command": "node --test tests/web/track-slot-display.test.mjs tests/web/circular-track-slots.test.mjs tests/web/track-slot-validation.test.mjs tests/web/session-request.test.mjs tests/web/session-draft-authority.test.mjs tests/web/session-active-config-contract.test.mjs tests/web/settings-only-session.test.mjs",
+      "exitCode": 0,
+      "observation": "272 passed; focused-node.log"
+    },
+    {
+      "id": "architecture",
+      "command": "node --test tests/web/architecture-contracts.test.mjs",
+      "exitCode": 0,
+      "observation": "139 passed; architecture.log"
+    },
+    {
+      "id": "node-continuity",
+      "command": "node --test tests/web/history-inputs.test.mjs tests/web/history-config-restore.test.mjs tests/web/session-cli-compatibility.test.mjs tests/web/linear-track-slots.test.mjs",
+      "exitCode": 0,
+      "observation": "9 passed; continuity-node.log"
+    },
+    {
+      "id": "original-probe",
+      "command": "node docs/internal/issue-619-implementation-plan-20260927/probe_scalar_boundary.mjs",
+      "exitCode": 0,
+      "observation": "DOM-free only; original-scalar-probe.json"
+    },
+    {
+      "id": "scalar-probe",
+      "command": "node docs/internal/issue-619-implementation-plan-20260927/SESSION_RESULTS/probe_s00.mjs",
+      "exitCode": 0,
+      "observation": "64 observations; scalar-observations.json"
+    },
+    {
+      "id": "wheel",
+      "command": "git archive HEAD | tar -x -C /tmp/gbdraw-619-s00-20260927/source; python /tmp/gbdraw-619-s00-20260927/source/tools/prepare_browser_wheel.py --no-build-isolation",
+      "exitCode": 0,
+      "observation": "wheel.log; generated snapshot wheel matches all 214 tracked Python files; no source mismatches"
+    },
+    {
+      "id": "cli",
+      "command": "gbdraw circular --gbk tests/fixtures/sessions/cli-web-mito.gb -o /tmp/gbdraw-619-s00-20260927/cli-origin --save_session --session_output /tmp/gbdraw-619-s00-20260927/downloads/cli-origin.gbdraw-session.json",
+      "exitCode": 0,
+      "observation": "cli.log; actual native writer output, no config, Session 44/schema 8"
+    },
+    {
+      "id": "native-probe",
+      "command": "PYTHONPATH=. python docs/internal/issue-619-implementation-plan-20260927/SESSION_RESULTS/probe_native_request.py",
+      "exitCode": 0,
+      "observation": "90 observations; all 26 positive canonical fields accepted; no rendering"
+    },
+    {
+      "id": "native-tests",
+      "command": "pytest -q tests/test_settings_only_session.py tests/test_session_request_codec.py -k 'settings_only or track_slot or scalar'",
+      "exitCode": 0,
+      "observation": "12 settings-only tests passed; 137 deselected; native-tests.log; codec tests were not selected"
+    },
+    {
+      "id": "browser-matrix",
+      "command": "PYTHONPATH=. python docs/internal/issue-619-implementation-plan-20260927/SESSION_RESULTS/observe_s00.py --source-root /tmp/gbdraw-619-s00-20260927/source --artifacts /tmp/gbdraw-619-s00-20260927/downloads --output docs/internal/issue-619-implementation-plan-20260927/SESSION_RESULTS/browser-native-observations.json",
+      "exitCode": 0,
+      "observation": "32 cases; 13 actual button Save/download/fresh Load positives. Matrix nonfinite Save was observed after History loss, not raw nonfinite admission."
+    },
+    {
+      "id": "browser-nonfinite",
+      "command": "PYTHONPATH=. python docs/internal/issue-619-implementation-plan-20260927/SESSION_RESULTS/observe_s00.py --only-case infinity --only-case nan --only-case typed_infinity --source-root /tmp/gbdraw-619-s00-20260927/source --artifacts /tmp/gbdraw-619-s00-20260927/nonfinite --output docs/internal/issue-619-implementation-plan-20260927/SESSION_RESULTS/nonfinite-browser-observations.json",
+      "exitCode": 0,
+      "observation": "Original nonfinite raw value independently rejected by actual writer; History redo loses nonfinite value."
+    },
+    {
+      "id": "browser-variants",
+      "command": "PYTHONPATH=. python docs/internal/issue-619-implementation-plan-20260927/SESSION_RESULTS/observe_s00.py --variants-only --only-variant settings-only --only-variant settings-only-control --only-variant cli-origin --source-root /tmp/gbdraw-619-s00-20260927/source --artifacts /tmp/gbdraw-619-s00-20260927/downloads --output docs/internal/issue-619-implementation-plan-20260927/SESSION_RESULTS/continuity-observations.json",
+      "exitCode": 0,
+      "observation": "Observation completed. Reused unchanged disabled/inactive successes from variant-progress.json. CLI-origin Save/fresh Load/native succeeded. Settings-only Save and unedited control REJECTED; exit zero does not certify those boundaries."
+    },
+    {
+      "id": "probe-static",
+      "command": "ruff check docs/internal/issue-619-implementation-plan-20260927/SESSION_RESULTS/observe_s00.py docs/internal/issue-619-implementation-plan-20260927/SESSION_RESULTS/probe_native_request.py; node --check docs/internal/issue-619-implementation-plan-20260927/SESSION_RESULTS/probe_s00.mjs",
+      "exitCode": 0,
+      "observation": "Passed after formatting corrections."
+    },
+    {
+      "id": "policy-initial",
+      "command": "node tools/check-web-change-budget.mjs",
+      "exitCode": 0,
+      "observation": "web-policy-initial.log; initial working tree before staging new evidence. Final staged gate recorded separately."
+    },
+    {
+      "id": "policy-final",
+      "command": "node tools/check-web-change-budget.mjs --base eef7c9469912af22a07eb0eaece5d6e9a8a06497",
+      "exitCode": 0,
+      "observation": "Final staged 14-path S00 diff: Gate PASS / Review CLEAR; no blocking violations or production/guard changes; web-policy-final.log"
+    }
+  ],
+  "diagnosticFailures": [
+    {
+      "exitCode": 1,
+      "reason": "Checker --help is unsupported; native API discovery used an incorrect decoder name, then corrected."
+    },
+    {
+      "exitCode": 130,
+      "reason": "Initial own matrix process interrupted to correct nonfinite JSON encoding; no acceptance inferred."
+    },
+    {
+      "exitCode": 1,
+      "reason": "Variant fixture had unknown enable key; corrected to existing circular_track_slots_enabled."
+    },
+    {
+      "exitCode": 130,
+      "reason": "Own variant retry interrupted after failed kill skipped fixture correction; fixture then corrected."
+    },
+    {
+      "exitCode": 1,
+      "reason": "Settings-only download timeout diagnosed as actual writer/validator rejection; boundary remains unaccepted."
+    },
+    {
+      "exitCode": 1,
+      "reason": "Playwright rejects builtin callback binding; evidence harness corrected to lambda."
+    },
+    {
+      "exitCode": 1,
+      "reason": "CLI-origin omits explicit gc_content slot; evidence reader corrected to mark absence rather than invent scalar."
+    },
+    {
+      "exitCode": 1,
+      "reason": "Probe lint E701; formatting corrected; final static checks passed."
+    }
+  ],
+  "artifactRoot": "/tmp/gbdraw-619-s00-20260927",
+  "limits": [
+    "This is evidence provenance, not a Product authority registry and not checker input.",
+    "Probe execution exit zero is not success of every observed admission boundary. Settings-only Save and nonfinite History restoration remain unaccepted.",
+    "No signed Product receipts, authority mutation, new controls, runtime changes, full render replay or deployment."
+  ],
+  "evidenceSha256": {
+    "browser-native-observations.json": "f803d319e0d14e8cad3a5fd542ad7cb2f8842485174b7d25d191cd2b9edc7fe6",
+    "continuity-observations.json": "d4328ed8d161aa26e954718c7110546c9ebc0a0be51c8712c771448fb959aecb",
+    "native-request-observations.json": "3585e89b44cb3b784d11c2b7bfd2374f8df0bbd8b3db5d6888dc96f601557f40",
+    "nonfinite-browser-observations.json": "684c52897340b256d63a12eb5d08d065f8beb1112a9867901aec4e7297613737",
+    "scalar-fixtures.json": "633cef73a7b5fd87eef558ebb5dbc139d25879e9dd5e2fac2e4a9b04ca1bda2d",
+    "scalar-observations.json": "049cb3c29eefd78d13763ef61bd7850e6550179548c802ff897708c41af9ebca"
+  },
+  "finalPolicyReportSha256": "21bb5368c6629eccba1ae74f8c7639f0cf63deae23c6b27fc9d2b61a93d2e92d"
+}

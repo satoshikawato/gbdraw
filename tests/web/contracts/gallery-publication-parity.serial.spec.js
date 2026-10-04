@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { spawnSync } = require('node:child_process');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { basename, resolve } = require('node:path');
-const { openApp } = require('../helpers/app-lifecycle.cjs');
+const { openApp, evaluateWithRetainedPromise } = require('../helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const examples = JSON.parse(readFileSync(
@@ -16,7 +16,9 @@ const commonExamples = examples.filter(({ id }) => !isolatedExamples.has(id));
 const compareCommand = [
   'import sys',
   'from tests.utils.svg_compare import compare_svgs',
-  'result = compare_svgs(sys.argv[1], sys.argv[2])',
+  'ignored = {"data-label-feature-id", "data-gbdraw-label-binding-schema", '
+    + '"data-record-key", "data-record-translation-x", "data-record-translation-y"}',
+  'result = compare_svgs(sys.argv[1], sys.argv[2], ignored_attributes=ignored)',
   'print(result.message)',
   'print("\\n".join(result.differences))',
   'raise SystemExit(0 if result.equal else 1)'
@@ -54,7 +56,7 @@ for (const example of commonExamples) {
 
     try {
       await openApp(page, { waitForPalette: false });
-      const loaded = await page.evaluate(async ({ session, id }) => {
+      const loaded = await evaluateWithRetainedPromise(page, async ({ session, id }) => {
         const response = await fetch(`/gbdraw/web/gallery/${session.replace(/^\.\//, '')}`);
         if (!response.ok) throw new Error(`Could not load ${id}: ${response.status}`);
         const bytes = await response.arrayBuffer();
@@ -100,7 +102,7 @@ for (const example of commonExamples) {
         expect(loaded.ruleCaptions).toHaveLength(3);
       }
 
-      const generated = await page.evaluate(async () => {
+      const generated = await evaluateWithRetainedPromise(page, async () => {
         const app = window.__GBDRAW_APP__;
         const result = await app.runAnalysis();
         const { state } = await import('/gbdraw/web/js/state.js');
@@ -109,7 +111,8 @@ for (const example of commonExamples) {
         const svg = String(selected?.content || '');
         return {
           status: result?.status,
-          error: result?.error?.message || result?.message || error?.summary
+          error: result?.error?.message || result?.message
+            || app.similarityAlignmentRepair?.reason || result?.reason || error?.summary
             || error?.message || (error ? JSON.stringify(error) : null),
           svg,
           matchCount: (svg.match(/data-gbdraw-pairwise-match-id=/g) || []).length,

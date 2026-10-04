@@ -1,7 +1,14 @@
 import { createRulePreparation } from './rule-matching.js';
+import { compileDirectEditorMutationPlan } from './candidate-render.js';
+import { isLegendOrderEdited } from './legend/utils.js';
+import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
 import { createRecordDisplayControls } from './record-display-options.js';
-import { state, createLinearSeq, normalizeLinearSeqList } from '../state.js';
+import {
+  createFeatureRecordRotationAction,
+  createFeatureRecordRotationWorkflow
+} from './record-display/feature-record-rotation.js';
+import { state, sessionOperationAvailability, createLinearSeq, normalizeLinearSeqList } from '../state.js';
 import {
   adoptCanonicalRenderArtifacts,
   applyConfigData,
@@ -19,8 +26,10 @@ import {
   buildUiStateData,
   canonicalRenderArtifactOwner,
   exportSession,
+  disposeSessionOperations,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
+  assertActiveModeInputs,
   importSession as importSessionFromFile,
   SESSION_VERSION,
   serializeActiveRenderFiles,
@@ -28,15 +37,20 @@ import {
   setUnmanagedConfigOverrideValidator,
   setPreviewRuntime
 } from '../services/config.js';
+import { setMainSessionComparisonFrameConverter } from '../services/main-session-comparison-frame.js';
 import { createHistoryManager } from '../services/history.js';
 import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
 import { cloneJsonData } from '../services/json-clone.js';
-import { readFileText } from '../services/file-content-cache.js';
 import {
   groupLinearSourceRecords,
+  isPristineLinearSource,
+  linearSourceHasPrimaryInput,
+  linearSourceDepthStatus,
   moveLinearSourceGroup,
+  planLinearSourceRemoval,
   getLinearSourceDefaultDefinition,
+  inferredDefinitionForRecord,
   setLinearSourceDefaultDefinition,
   getLinearSourceDefaultSubtitle,
   setLinearSourceDefaultSubtitle,
@@ -66,13 +80,13 @@ import { createSvgStyles } from './svg-styles.js';
 import { createLegendManager } from './legend.js';
 import { createPaletteLoader } from './palettes.js';
 import { afterPaint, createRunAnalysis } from './run-analysis.js';
-import { normalizeUserFacingError } from '../services/error-normalization.js';
+import { createSimilarityAlignmentActions } from './similarity-alignment.js';
+import { diagnosticError, normalizeUserFacingError } from '../services/error-normalization.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import {
   COMPOSITION_METADATA_ATTRIBUTE,
-  COMPOSITION_SCHEMA_ATTRIBUTE,
-  compositionUserDeltas
+  COMPOSITION_SCHEMA_ATTRIBUTE
 } from './legend-layout/composition-actions.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
@@ -106,15 +120,22 @@ import { createLinearTypographyController } from './linear-typography.js';
 import {
   buildDisambiguatedRecordEntries,
   formatRecordLength,
+  resolveCircularRequestRecordSet,
   resolveDisambiguatedRecordSelection
 } from './record-options.js';
 import {
+  linearRecordLayoutHasSharedRow,
   linearRecordPositionTokens,
   moveLinearRecordInRow,
   planLinearSourceRowMove,
   reconcileLinearRecordLayout,
   setLinearRecordRow as updateLinearRecordRow
 } from './linear-record-layout.js';
+import {
+  describeLinearLabelVisibility,
+  requireLinearLabelVisibilityMode,
+  resolveLinearLabelVisibility
+} from './linear-label-visibility.js';
 import {
   LINEAR_COMPARISON_MODES,
   LINEAR_COMPARISON_SOURCES,
@@ -132,8 +153,14 @@ import {
   projectLinearComparisonLosatpModeSelection,
   projectLinearComparisonUi
 } from './comparison-ui.js';
-import { discoverGffFastaRecords, discoverSequenceRecords } from './record-discovery.js';
 import {
+  circularDiscoveryForInput,
+  discoverComparisonSequenceRecordLabel,
+  discoverGffFastaRecords,
+  discoverSequenceRecords
+} from './record-discovery.js';
+import {
+  applyComparisonSequenceRecordLabel,
   conservationSourceDescriptors,
   defaultConservationSeriesLabel,
   moveConservationSeriesEntry,
@@ -178,6 +205,7 @@ import {
 } from './depth-track-state.js';
 
 const { onMounted, onUnmounted, watch, nextTick, computed, ref, reactive } = window.Vue;
+const toRaw = window.Vue.toRaw || ((value) => value);
 
 let exportServicePromise = null;
 
@@ -191,13 +219,16 @@ export const createSessionImportRollbackState = ({
   depthTracks,
   featureListScrollTop,
   featureListScrollRef,
-  selectedPairwiseBlockOrthogroupId
+  selectedPairwiseBlockOrthogroupId,
+  captureSpecificRulePatternDrafts = null,
+  restoreSpecificRulePatternDrafts = null
 }) => ({
   capture: () => ({
     circularDepthTrackUiCount: depthTrackUiCounts.circular,
     depthTracks: cloneJsonData(depthTracks),
     featureListScrollTop: featureListScrollTop.value,
-    selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value
+    selectedPairwiseBlockOrthogroupId: selectedPairwiseBlockOrthogroupId.value,
+    ...(captureSpecificRulePatternDrafts ? { specificRulePatternDrafts: captureSpecificRulePatternDrafts() } : {})
   }),
   restore: async (snapshot) => {
     depthTrackUiCounts.circular = snapshot.circularDepthTrackUiCount;
@@ -213,6 +244,9 @@ export const createSessionImportRollbackState = ({
     }
     selectedPairwiseBlockOrthogroupId.value =
       snapshot.selectedPairwiseBlockOrthogroupId;
+    if (Object.hasOwn(snapshot, 'specificRulePatternDrafts')) {
+      restoreSpecificRulePatternDrafts?.(snapshot.specificRulePatternDrafts);
+    }
   }
 });
 
@@ -221,9 +255,15 @@ export const createAppSetup = () => {
     DIAGRAM_HELPER_OPERATIONS.VALIDATE_CONFIG_OVERRIDES,
     payload
   ));
+  setMainSessionComparisonFrameConverter((payload) => runDiagramHelperOperation(
+    DIAGRAM_HELPER_OPERATIONS.CONVERT_MAIN_SESSION_COMPARISON_FRAME,
+    payload
+  ));
   const {
     processing,
     processingStatus,
+    sessionSavePending,
+    sessionImportPending,
     generationCancelRequested,
     errorLog,
     sessionTitle,
@@ -231,8 +271,11 @@ export const createAppSetup = () => {
     results,
     selectedResultIndex,
     failedGeneratePreservedResult,
+    generationFailureRecovery,
     resultPanelTab,
     lastRunInfo,
+    annotationWarnings,
+    comparisonWarnings,
     pairwiseMatchFactors,
     matchSequenceRegistry,
     svgContent,
@@ -269,7 +312,6 @@ export const createAppSetup = () => {
     losatThreadingStatus,
     orthogroups,
     featureOrthogroupIndex,
-    selectedOrthogroupAlignmentFeature,
     orthogroupNameOverrides,
     orthogroupDescriptionOverrides,
     selectedOrthogroupId,
@@ -301,6 +343,7 @@ export const createAppSetup = () => {
     specificRulePresetLoading,
     downloadDpi,
     extractedFeatures,
+    biologicalFeatures,
     selectedFeatureIds,
     selectedFeatureAnchorId,
     featureSelectionStatus,
@@ -331,6 +374,7 @@ export const createAppSetup = () => {
     featureListViewportHeight,
     isFeatureDrawerMounted,
     visibleFeatureRows,
+    featureRecordPickerVisible,
     featureListTopSpacerPx,
     featureListBottomSpacerPx,
     labelSearch,
@@ -340,7 +384,6 @@ export const createAppSetup = () => {
     labelTextBulkOverrides,
     labelTextFeatureOverrideSources,
     labelVisibilityOverrides,
-    labelOverrideContextKey,
     labelOverrideBuildWarning,
     autoLabelReflowEnabled,
     labelReflowProcessing,
@@ -350,7 +393,6 @@ export const createAppSetup = () => {
     featureVisibilityRules,
     featureVisibilityOverrides,
     featureStrokeOverrides,
-    labelLayoutDirtyReason,
     resultGenerationKey,
     svgContainer,
     clickedFeature,
@@ -399,7 +441,6 @@ export const createAppSetup = () => {
     showCanvasControls,
     generatedLegendPosition,
     skipCaptureBaseConfig,
-    skipPositionReapply,
     skipExtractOnSvgChange,
     featureKeys,
     defaultColorKeys,
@@ -412,11 +453,23 @@ export const createAppSetup = () => {
     fileLegendCaptions,
     filteredFeatures
   } = state;
+  let featureActions = null;
+  let similarityAlignmentActions = null;
+  let refreshSimilarityAlignmentCanvas = () => {};
   const linearTypography = createLinearTypographyController({
     adv,
-    linked: linearTypographyLinked
+    linked: linearTypographyLinked,
+    mutationAvailability: sessionOperationAvailability
   });
-  const rightDrawerActions = createRightDrawerController({ state, watch });
+  let alignmentReviewBlocksEditor = () => false;
+  const rightDrawerActions = createRightDrawerController({ state, watch,
+    onClose: () => featureActions?.suspendSpecificRulePatternDrafts(),
+    focusReturn: {
+      isFocusInDrawer: () => Boolean(document.querySelector('.right-drawer')?.contains(document.activeElement)),
+      focusToggle: () => document.querySelector('.drawer-toggle')?.focus()
+    },
+    getOpenDisabledReason: () => alignmentReviewBlocksEditor()
+      ? 'Finish or cancel alignment review before opening Editor.' : '' });
 
   const comparisonHeightValidationError = computed(() => {
     if (
@@ -424,7 +477,7 @@ export const createAppSetup = () => {
       linearComparisonResolution.value?.hasComparisonIntent !== true
     ) return '';
     return classifyOptionalPositiveNumber(adv.comparison_height).status === 'invalid'
-      ? 'Pairwise Match Height must be Auto or a positive finite number.'
+      ? normalizeUserFacingError(diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' })).summary
       : '';
   });
 
@@ -481,6 +534,15 @@ export const createAppSetup = () => {
 
   const replaceLinearComparisonPlan = (nextPlan, { invalidate = true } = {}) => {
     const normalized = normalizeLinearComparisonPlan(nextPlan);
+    const changed = normalized.mode !== linearComparisonPlan.mode
+      || normalized.defaultSource !== linearComparisonPlan.defaultSource
+      || normalized.edges.length !== linearComparisonPlan.edges.length
+      || normalized.edges.some((edge, index) => (
+        !sameLinearComparisonEdge(edge, linearComparisonPlan.edges[index])
+      ));
+    if (invalidate && changed) {
+      similarityAlignmentActions?.clearForMutation?.('comparison configuration changed.');
+    }
     linearComparisonPlan.mode = normalized.mode;
     linearComparisonPlan.defaultSource = normalized.defaultSource;
     linearComparisonPlan.edges.splice(
@@ -527,6 +589,8 @@ export const createAppSetup = () => {
     return !rowsUnchanged || comparisonsChanged;
   };
   const setLinearRecordRow = (uid, row) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     syncLinearRecordLayout({ preserveLosatCacheInfo: true });
     const previous = linearRecordRows.find((entry) => entry.uid === uid)?.row;
     updateLinearRecordRow(linearRecordRows, uid, row);
@@ -535,6 +599,8 @@ export const createAppSetup = () => {
     }
   };
   const setLinearRecordLayoutEnabled = (enabled) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const nextEnabled = Boolean(enabled);
     if (linearRecordLayoutEnabled.value === nextEnabled) return;
     linearRecordLayoutEnabled.value = nextEnabled;
@@ -543,6 +609,8 @@ export const createAppSetup = () => {
     if (nextEnabled) return materializeAutomaticLinearRecords();
   };
   const moveLinearRecordWithinRow = (uid, direction) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const next = moveLinearRecordInRow(linearSeqs, linearRecordRows, uid, direction);
     linearRecordRows.splice(0, linearRecordRows.length, ...next);
     syncLinearComparisonRecords({ invalidate: false });
@@ -567,8 +635,28 @@ export const createAppSetup = () => {
       alignment_length: adv.alignment_length
     }
   }));
+  const canRunLinearLosat = computed(() => linearSeqs.filter((sequence) => (
+    lInputType.value === 'gff'
+      ? sequence.gff && sequence.fasta
+      : sequence.gb
+  )).length >= 2);
 
   const linearSourceGroups = computed(() => groupLinearSourceRecords(linearSeqs));
+  const linearSourceRemovalDialog = reactive({ open: false, sourceUid: '', origin: '' });
+  const linearSourceRemovalReturnFocus = ref(null);
+  const linearSourceRemovalTarget = computed(() => (
+    linearSourceGroups.value.find((source) => source.uid === linearSourceRemovalDialog.sourceUid) || null
+  ));
+  const linearSourceRemovalCanDelete = computed(() => linearSourceGroups.value.length > 1);
+  const linearSourceRemovalTargetName = computed(() => {
+    const source = linearSourceRemovalTarget.value;
+    if (!source) return 'Unavailable File';
+    const sequence = source.sequence || source.records?.[0]?.sequence || {};
+    const names = [sequence.gb, sequence.gff, sequence.fasta]
+      .filter(Boolean)
+      .map((file) => String(file?.name || 'Unnamed file'));
+    return names.length ? names.join(' + ') : `File ${linearSourceGroups.value.indexOf(source) + 1}`;
+  });
   const linearComparisonTimeline = computed(() => buildLinearComparisonTimeline({
     sequences: linearSeqs,
     layout: effectiveLinearComparisonLayout(),
@@ -637,6 +725,8 @@ export const createAppSetup = () => {
   };
 
   const setLinearComparisonGlobalAction = async (action) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const normalized = String(action || '').trim().toLowerCase();
     const result = await mutateLinearComparisonPlan((next) => {
       if (normalized === 'none') {
@@ -655,16 +745,21 @@ export const createAppSetup = () => {
   };
 
   const setLinearComparisonLosatMode = (modeKey) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const selection = projectLinearComparisonLosatModeSelection({ modeKey });
     if (!selection.selectable || !selection.patch) return false;
     const nextProgram = selection.patch.losatProgram;
     if (losatProgram.value === nextProgram) return true;
+    similarityAlignmentActions?.clearForMutation?.('comparison program changed.');
     losatProgram.value = nextProgram;
     invalidateLinearComparisonArtifacts();
     return true;
   };
 
   const setLinearComparisonLosatpMode = (modeKey) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const selection = projectLinearComparisonLosatpModeSelection({
       plan: linearComparisonPlan,
       modeKey
@@ -672,6 +767,7 @@ export const createAppSetup = () => {
     if (!selection.selectable || !selection.patch) return false;
     const nextBlastpMode = selection.patch.blastpMode;
     if (losat.blastp?.mode === nextBlastpMode) return true;
+    similarityAlignmentActions?.clearForMutation?.('comparison mode changed.');
     const hitLimits = losat.blastp.hitLimitsByMode ||= createDefaultLosatpHitLimits();
     hitLimits[losat.blastp.mode] = {
       candidateLimit: losat.blastp.candidateLimit,
@@ -740,6 +836,8 @@ export const createAppSetup = () => {
   };
 
   const addLinearComparison = async () => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (linearSeqs.length < 2) return;
     syncLinearRecordLayout();
     const [firstPair] = adjacentRowPairs(
@@ -753,6 +851,8 @@ export const createAppSetup = () => {
     await focusLinearComparisonPair(linearComparisonEdgeKey(queryUid, subjectUid));
   };
   const omitLinearComparison = (id) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit();
     const index = findEdgeIndex(next.edges, id);
     if (index < 0) return;
@@ -762,6 +862,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const clearSelectedLinearComparisons = () => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit();
     next.edges = next.edges
       .filter((edge) => edge.file || String(edge.losatFilename || '').trim())
@@ -769,6 +871,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const setLinearComparisonEndpoint = (id, endpoint, uid) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (!['queryUid', 'subjectUid'].includes(endpoint)) return;
     const next = selectedPlanForEdit();
     const edge = next.edges.find((entry) => entry.id === id);
@@ -778,6 +882,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const setLinearComparisonSource = (id, source) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const normalized = source === LINEAR_COMPARISON_SOURCES.LOSAT
       ? LINEAR_COMPARISON_SOURCES.LOSAT
       : LINEAR_COMPARISON_SOURCES.UPLOAD;
@@ -789,6 +895,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const setLinearComparisonFile = (id, file) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit();
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge) return;
@@ -799,6 +907,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const reuseLinearComparisonFile = (id) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit();
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge?.file) return;
@@ -808,6 +918,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const deactivateLinearComparisonFile = (id) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit();
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge?.file) return;
@@ -816,6 +928,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const setLinearComparisonLosatFilename = (id, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit();
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge) return;
@@ -824,6 +938,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next, { invalidate: false });
   };
   const reuseLinearComparisonLosatFilename = (id) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit();
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge || !String(edge.losatFilename || '').trim()) return;
@@ -833,6 +949,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const deactivateLinearComparisonLosatFilename = (id) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const next = selectedPlanForEdit();
     const edge = next.edges.find((entry) => entry.id === id);
     if (!edge) return;
@@ -840,6 +958,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next, { invalidate: false });
   };
   const updateResolvedLosatFilenameDraft = (edgeKey, updater) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const resolved = linearComparisonResolution.value.edges.find((edge) => edge.edgeKey === edgeKey);
     if (!resolved) return;
     const next = normalizeLinearComparisonPlan(linearComparisonPlan);
@@ -886,6 +1006,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const setLinearComparisonGapAction = (edgeKey, action) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const pair = linearComparisonPairForEdgeKey(edgeKey);
     if (!pair) return;
     const next = selectedPlanForEdit();
@@ -911,6 +1033,8 @@ export const createAppSetup = () => {
     replaceLinearComparisonPlan(next);
   };
   const setLinearComparisonCardFile = (edgeKey, file) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     let pair = linearComparisonPairForEdgeKey(edgeKey);
     let draft = pair?.draft || null;
     if (!draft) {
@@ -936,23 +1060,35 @@ export const createAppSetup = () => {
 
   const pendingLinearRecordExpansions = new Set();
   const pendingLinearMetadataInference = new Set();
-  const expandDiscoveredLinearRecords = ({ uid, records }) => {
-    if (!pendingLinearRecordExpansions.delete(uid)) return;
+  const expandDiscoveredLinearRecords = ({ uid, records, inferDefinitions = false }) => {
+    const expanding = pendingLinearRecordExpansions.delete(uid);
     const index = linearSeqs.findIndex((seq) => seq.uid === uid);
-    if (index < 0 || records.length < 2) return;
+    if (index < 0) return;
     const source = linearSeqs[index];
-    if (source.region_record_id || source.region_start != null || source.region_end != null) return;
+    if (!expanding || records.length < 2 || source.region_record_id) {
+      if (inferDefinitions) {
+        source.inferred_definition = inferredDefinitionForRecord(records, source.region_record_id);
+      }
+      return;
+    }
     const row = linearRecordRowFor(uid, index + 1);
-    const expanded = buildDisambiguatedRecordEntries(records).map((record, recordIndex) => {
-      return createLinearSeq({
-        ...source,
-        uid: recordIndex === 0 ? uid : undefined,
-        region_record_id: record.value
-      });
-    });
+    // Expanded records keep only File-level values. A crop or record display
+    // value of the replaced File does not apply to the new records (IN-04).
+    const expanded = buildDisambiguatedRecordEntries(records).map((record, recordIndex) => createLinearSeq({
+      uid: recordIndex === 0 ? uid : undefined,
+      gb: source.gb,
+      gff: source.gff,
+      fasta: source.fasta,
+      depth: source.depth,
+      losat_gencode: source.losat_gencode,
+      file_definition: source.file_definition,
+      file_subtitle: source.file_subtitle,
+      inferred_definition: inferDefinitions ? record.inferredDefinition || '' : '',
+      region_record_id: record.value
+    }));
     applyLinearSeqMutation([
       ...linearSeqs.slice(0, index), ...expanded, ...linearSeqs.slice(index + 1)
-    ]);
+    ], { alignmentMutation: 'record selector changed.' });
     expanded.forEach((seq) => updateLinearRecordRow(linearRecordRows, seq.uid, row));
     return true;
   };
@@ -961,20 +1097,9 @@ export const createAppSetup = () => {
       state.sessionImportRollbackInProgress?.value ||
       state.sessionResourceDiscoveryDeferred?.value
     );
-    if (!isRollbackOrSessionLoad && pendingLinearMetadataInference.delete(uid)) {
-      if (Array.isArray(records) && records.length > 0) {
-        const first = records[0];
-        const group = linearSourceGroups.value.find((entry) => (
-          entry.uid === uid || entry.records.some(({ sequence }) => sequence.uid === uid)
-        ));
-        if (group) {
-          if (first.inferredDefinition && !getLinearSourceDefaultDefinition(group)) {
-            setLinearSourceDefaultDefinition(group, first.inferredDefinition);
-          }
-        }
-      }
-    }
-    return expandDiscoveredLinearRecords({ uid, records });
+    // Only an upload infers record definitions; a loaded Session keeps its own.
+    const inferDefinitions = !isRollbackOrSessionLoad && pendingLinearMetadataInference.delete(uid);
+    return expandDiscoveredLinearRecords({ uid, records, inferDefinitions });
   };
   const materializeAutomaticLinearRecords = async () => {
     if (mode.value !== 'linear') return;
@@ -990,29 +1115,16 @@ export const createAppSetup = () => {
     onRecordsDiscovered: handleLinearRecordsDiscovered,
     recordReader: ({ inputType, primaryFile, pairedFile }) => (
       inputType === 'gff'
-        ? discoverGffFastaRecords({
-            gffFile: primaryFile,
-            fastaFile: pairedFile,
-            readText: readFileText
-          })
-        : discoverSequenceRecords({
-            file: primaryFile,
-            format: 'genbank',
-            readText: readFileText
-          })
+        ? discoverGffFastaRecords({ gffFile: primaryFile, fastaFile: pairedFile })
+        : discoverSequenceRecords({ file: primaryFile, format: 'genbank' })
     )
   });
-  const getAnnotationRecordCatalog = (loadComparisonOverride = null) => {
+  const getCircularRecordDiscoveryState = () => circularDiscoveryForInput(state);
+  const getAnnotationRecordCatalog = (loadComparisonOverride = null, linearSourcesOverride = null) => {
     const inputType = mode.value === 'linear' ? lInputType.value : cInputType.value;
     const circularPrimaryFile = cInputType.value === 'gff' ? files.c_gff : files.c_gb;
     const circularPairedFile = cInputType.value === 'gff' ? files.c_fasta : null;
-    const circularHasInput = Boolean(
-      circularPrimaryFile && (cInputType.value !== 'gff' || circularPairedFile)
-    );
-    const circularIsCurrent =
-      circularRecordDiscovery.inputType === cInputType.value &&
-      circularRecordDiscovery.primaryFile === circularPrimaryFile &&
-      circularRecordDiscovery.pairedFile === circularPairedFile;
+    const circularDiscovery = getCircularRecordDiscoveryState();
     const loadComparison = loadComparisonOverride == null
       ? mode.value === 'linear' && hasLinearComparisonIntent.value
       : Boolean(loadComparisonOverride);
@@ -1020,7 +1132,6 @@ export const createAppSetup = () => {
       mode: mode.value,
       inputType,
       loadComparison,
-      multiRecordCanvas: form.multi_record_canvas,
       circularSource: {
         sourceKey: annotationSourceKey({
           scope: 'circular',
@@ -1028,14 +1139,17 @@ export const createAppSetup = () => {
           primaryFile: circularPrimaryFile,
           pairedFile: circularPairedFile
         }),
-        hasInput: circularHasInput,
-        status: circularIsCurrent
-          ? circularRecordDiscovery.status
-          : (circularHasInput ? 'loading' : 'idle'),
-        error: circularIsCurrent ? circularRecordDiscovery.error : '',
-        records: circularIsCurrent ? circularRecordList.value : []
+        hasInput: circularDiscovery.hasInput,
+        status: circularDiscovery.status,
+        error: circularDiscovery.error,
+        records: resolveCircularRequestRecordSet({
+          records: circularDiscovery.records,
+          selector: form.circular_record_selector,
+          multiRecordCanvas: form.multi_record_canvas,
+          groupingIntent: adv.circular_grouping_intent
+        }).records
       },
-      linearSources: linearSeqs.map((seq) => {
+      linearSources: linearSourcesOverride || linearSeqs.map((seq) => {
         const primaryFile = lInputType.value === 'gff' ? seq.gff : seq.gb;
         const pairedFile = lInputType.value === 'gff' ? seq.fasta : null;
         return {
@@ -1068,15 +1182,8 @@ export const createAppSetup = () => {
     applyConfigData,
     buildUiStateData,
     applyUiStateData,
-    buildCompositionIntent: () => {
-      const svg = svgContainer.value?.querySelector?.('svg') || null;
-      if (!svg) return null;
-      try {
-        return compositionUserDeltas(svg);
-      } catch (_error) {
-        return null;
-      }
-    },
+    buildLegendEntryOwners: () => legendActions.captureLegendEntryOwners(),
+    buildCompositionIntent: () => legendLayout.captureCompositionIntent(),
     buildFeatureStateData,
     applyFeatureStateData,
     buildEditorStateData,
@@ -1088,18 +1195,27 @@ export const createAppSetup = () => {
     buildRunStateData,
     applyRunStateData
   });
+  const restoreWithSpecificRuleDrafts = async (restore, ...args) => {
+    const drafts = featureActions?.captureSpecificRulePatternDrafts();
+    try {
+      return await restore(...args);
+    } finally {
+      if (drafts) featureActions.restoreSpecificRulePatternDrafts(drafts);
+    }
+  };
   const history = createHistoryManager({
     buildIntent: historySnapshots.buildHistoryIntent,
-    applyIntent: historySnapshots.applyHistoryIntent,
+    applyIntent: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.applyHistoryIntent, ...args),
     buildCheckpoint: historySnapshots.buildArtifactCheckpoint,
-    applyCheckpoint: historySnapshots.applyArtifactCheckpoint,
+    applyCheckpoint: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.applyArtifactCheckpoint, ...args),
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
-    restoreGeneratedArtifactHandle: historySnapshots.restoreGeneratedArtifactHandle,
+    restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
     compareGeneratedArtifactHandles: historySnapshots.compareGeneratedArtifactHandles,
     signatureFor: historySnapshots.snapshotSignature,
     fileStore: historyFileStore,
     collectCurrentFileIds: historySnapshots.collectCurrentFileIds,
-    makeRef: ref
+    makeRef: ref,
+    mutationAvailability: sessionOperationAvailability
   });
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch, linearRecordSelector, history, getCommittedRequest: getCommittedCanonicalRenderRequest, getCommittedSession: getCommittedCanonicalSession });
   state.recordDisplayRows = recordDisplayControls.allRows;
@@ -1163,32 +1279,38 @@ export const createAppSetup = () => {
   } = createPanZoom(state);
   const { startResizing } = createSidebarResize(state);
 
+  const specificRuleNotice = ref('');
   const ruleMatchingPending = ref(false);
   const rulePreparation = createRulePreparation({
     state,
     pending: ruleMatchingPending,
-    evaluate: async (payload) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload)).result
+    notify: notice => { specificRuleNotice.value = notice; },
+    evaluate: async (payload, options) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload, options)).result
   });
   const legendActions = createLegendManager({
     state,
+    commitSpecificRules: (...args) => featureActions.commitSpecificRules(...args),
     rulePreparation,
     history,
-    previewRuntime
+    previewRuntime,
+    getCommittedRequest: getCommittedCanonicalRenderRequest
   });
   const svgActions = createSvgStyles({
     state,
     rulePreparation,
-    watch,
+    ref, computed, watch,
     nextTick,
-    legendActions
+    legendActions,
+    previewRuntime
   });
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted });
-  const featureActions = createFeatureEditor({
+  featureActions = createFeatureEditor({
     state,
     rulePreparation,
     history,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     isCurrentFeature: recordDisplayControls.isCurrentFeature,
+    isPatternEditAvailable: () => !sessionImportPending.value,
     nextTick,
     legendActions,
     svgActions,
@@ -1201,7 +1323,6 @@ export const createAppSetup = () => {
     watch,
     nextTick,
     computed,
-    reactive,
     previewRuntime,
     resolveOrthogroups: () => orthogroups.value.map((group) => ({
       ...group,
@@ -1211,18 +1332,27 @@ export const createAppSetup = () => {
     openFeatureEditorForFeature: featureActions.openFeatureEditorForFeature
   });
 
-  watch(selectedResultIndex, (newIndex, oldIndex) => {
-    if (newIndex !== oldIndex) previewRuntime.flushActiveResult({ markIncremental: false });
+  watch(selectedResultIndex, () => {
     featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
   });
+  const setDiagramMode = (nextMode) => {
+    if (!['circular', 'linear'].includes(nextMode) || nextMode === mode.value) return;
+    const busy = sessionOperationAvailability();
+    if (busy) return busy;
+    featureActions.suspendSpecificRulePatternDrafts();
+    return setMode(nextMode);
+  };
   watch(mode, () => {
+    featureActions.suspendSpecificRulePatternDrafts();
     featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
-  });
+  }, { flush: 'sync' });
   watch(svgContent, () => {
+    refreshSimilarityAlignmentCanvas();
     if (!skipCaptureBaseConfig.value) {
       featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
     }
   });
+  watch(() => results.value[selectedResultIndex.value], () => refreshSimilarityAlignmentCanvas(), { flush: 'post' });
 
   let featureSearchDebounceId = null;
   const featureListScrollRef = ref(null);
@@ -1250,7 +1380,10 @@ export const createAppSetup = () => {
     }, delay);
   });
   watch(
-    () => [selectedFeatureRecordIdx.value, showRightDrawer.value, rightDrawerTab.value, extractedFeatures.value.length],
+    () => [
+      selectedFeatureRecordIdx.value, selectedResultIndex.value, showRightDrawer.value,
+      rightDrawerTab.value, extractedFeatures.value.length
+    ],
     resetFeatureListScroll
   );
 
@@ -1278,6 +1411,9 @@ export const createAppSetup = () => {
     featureActions.dispose();
     disposePanZoom();
     setUnmanagedConfigOverrideValidator(null);
+    setMainSessionComparisonFrameConverter(null);
+    disposeSessionOperations();
+    state.sessionPreparationBusyReason = null;
     disposeDiagramGenerationWorker();
   });
 
@@ -1294,7 +1430,11 @@ export const createAppSetup = () => {
   const circularConservationFastaInput = ref(null);
   const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
   const linearTrackSlotEditor = createLinearTrackSlotEditor({ state });
-  const annotationEditor = createAnnotationEditor({ state, getRecordCatalog: getAnnotationRecordCatalog });
+  const annotationImportNotice = ref('');
+  const annotationEditor = createAnnotationEditor({
+    state, getRecordCatalog: getAnnotationRecordCatalog,
+    onImportNotice: (notice) => { annotationImportNotice.value = notice; }
+  });
   watch(
     () => {
       const catalog = getAnnotationRecordCatalog();
@@ -1302,7 +1442,7 @@ export const createAppSetup = () => {
     },
     () => {
       const catalog = getAnnotationRecordCatalog();
-      if (catalog.status === 'ready') {
+      if (catalog.status === 'ready' && !sessionOperationAvailability()) {
         reconcileAnnotationRecordBindings(annotationSets, catalog);
       }
     },
@@ -1399,10 +1539,12 @@ export const createAppSetup = () => {
     normalizeDepthTrackConfigEntry(entry, index, depthTrackConfigDefaults())
   );
   const optionalNumberInputValue = (value) => value ?? '';
-  const setOptionalNumberInputValue = (target, key, value) => {
+  const setOptionalNumberInputValue = (target, key, value, numeric = false) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (!target || typeof target !== 'object') return;
     const text = String(value ?? '').trim();
-    target[key] = text === '' ? null : text;
+    target[key] = text === '' ? null : numeric ? Number(text) : text;
   };
   const activeDepthTrackCount = () => {
     if (mode.value === 'linear') {
@@ -1428,6 +1570,16 @@ export const createAppSetup = () => {
     sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular)
   ));
   const linearDepthTrackRows = () => rowsForDepthTrackCount(linearDepthTrackUiCount());
+  const linearSourceDepthRows = (source) => linearDepthTrackRows().map((track) => ({
+    ...track,
+    status: linearSourceDepthStatus(source, track.index)
+  }));
+  const linearSourceDepthSummary = (source) => {
+    const tracks = linearSourceDepthRows(source);
+    const attachedCount = tracks.filter((track) => track.status.selectedCount > 0).length;
+    if (attachedCount === 0) return 'No depth track attached';
+    return `${attachedCount} depth track${attachedCount === 1 ? '' : 's'} attached`;
+  };
   const depthTrackRows = computed(() => rowsForDepthTrackCount(activeDepthTrackCount()));
   const linearDepthTrackCoverageLabel = (trackIndex) => {
     const covered = depthTrackCoverageCount(linearDepthRows(), trackIndex);
@@ -1447,10 +1599,52 @@ export const createAppSetup = () => {
   const definitionLineStyleRows = Object.freeze([
     { key: 'name', label: 'Name / Species' },
     { key: 'subtitle', label: 'Subtitle' },
-    { key: 'replicon', label: 'Replicon', visibilityKey: 'linear_show_replicon' },
-    { key: 'accession', label: 'Accession', visibilityKey: 'linear_show_accession' },
-    { key: 'length', label: 'Length / Coord.', visibilityKey: 'linear_show_length' }
+    { key: 'replicon', label: 'Replicon', visibilityKey: 'linear_show_replicon', visibilityType: 'boolean' },
+    { key: 'accession', label: 'Accession', visibilityKey: 'linear_accession_visibility', visibilityType: 'mode' },
+    { key: 'length', label: 'Length / Coordinates', visibilityKey: 'linear_length_visibility', visibilityType: 'mode' }
   ]);
+  const linearLabelHasSharedRow = computed(() => linearRecordLayoutHasSharedRow(
+    linearSeqs,
+    linearRecordRows,
+    { enabled: Boolean(linearRecordLayoutEnabled.value) }
+  ));
+  const linearLabelVisibilitySummary = (mode) => describeLinearLabelVisibility(mode, {
+    hasSharedRow: linearLabelHasSharedRow.value
+  });
+  const linearLabelAutoFields = computed(() => definitionLineStyleRows.filter((row) => (
+    row.visibilityType === 'mode'
+    && requireLinearLabelVisibilityMode(adv[row.visibilityKey]) === 'auto'
+  )));
+  const linearLabelAutoDisclosure = computed(() => {
+    if (!linearLabelAutoFields.value.length) return '';
+    const fields = linearLabelAutoFields.value.map((row) => row.label).join(' and ');
+    const shown = resolveLinearLabelVisibility('auto', {
+      hasSharedRow: linearLabelHasSharedRow.value
+    });
+    return shown
+      ? `${fields}: Auto will show these fields throughout the diagram on the next successful Generate because no rendered row contains multiple records.`
+      : `${fields}: Auto will hide these fields throughout the diagram on the next successful Generate because at least one rendered row contains multiple records. Choose Show in Record Labels to keep a field visible.`;
+  });
+  const focusLinearLabelVisibility = async (key) => {
+    if (mode.value !== 'linear') return;
+    const select = document.getElementById(`linear-label-visibility-${key}`);
+    if (!select) return;
+    select.closest('details').open = true;
+    await nextTick();
+    select.scrollIntoView({ block: 'center' });
+    select.focus({ preventScroll: true });
+  };
+  const legendPositionLabel = (position) => ({
+    right: 'Right',
+    left: 'Left',
+    top: 'Top',
+    bottom: 'Bottom',
+    upper_left: 'Upper Left',
+    upper_right: 'Upper Right',
+    lower_left: 'Lower Left',
+    lower_right: 'Lower Right',
+    none: 'None'
+  })[String(position || '').trim().toLowerCase()] || 'None';
   const ensureDefinitionLineStyle = (kind) => {
     const key = String(kind || '');
     if (
@@ -1474,15 +1668,21 @@ export const createAppSetup = () => {
     ensureDefinitionLineStyle(kind).font_size
   );
   const setDefinitionLineStyleSize = (kind, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     setOptionalNumberInputValue(ensureDefinitionLineStyle(kind), 'font_size', value);
   };
   const getDefinitionLineStyleWeight = (kind) => ensureDefinitionLineStyle(kind).font_weight ?? '';
   const setDefinitionLineStyleWeight = (kind, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const normalized = String(value || '').trim().toLowerCase();
     ensureDefinitionLineStyle(kind).font_weight = normalized === 'bold' ? 'bold' : null;
   };
   const getDefinitionLineStyleFill = (kind) => ensureDefinitionLineStyle(kind).fill ?? '';
   const setDefinitionLineStyleColor = (kind, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const normalized = String(value || '').trim();
     ensureDefinitionLineStyle(kind).fill = normalized || null;
   };
@@ -1494,7 +1694,13 @@ export const createAppSetup = () => {
   };
   const isDefinitionLineStyleMuted = (row) => {
     const key = row?.visibilityKey;
-    return key ? adv[key] === false : false;
+    if (!key) return false;
+    if (row.visibilityType === 'mode') {
+      return !resolveLinearLabelVisibility(adv[key], {
+        hasSharedRow: linearLabelHasSharedRow.value
+      });
+    }
+    return adv[key] === false;
   };
   const normalizeDepthSlotTrackIndex = (slot) => {
     const rawTrackIndex = Number(slot?.params?.track_index);
@@ -1515,6 +1721,8 @@ export const createAppSetup = () => {
     return String(config?.color || depthTrackFallbackColor(idx));
   };
   const setDepthTrackColor = (index, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Math.max(0, Number(index) || 0);
     const color = String(value ?? '').trim();
     const config = depthTrackConfigForIndex(idx);
@@ -1535,6 +1743,8 @@ export const createAppSetup = () => {
     void index;
   };
   const setDepthTrackLabel = (index, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Math.max(0, Number(index) || 0);
     const config = depthTrackConfigForIndex(idx);
     config.label = String(value ?? '');
@@ -1544,6 +1754,8 @@ export const createAppSetup = () => {
     getDepthTrackLabel(normalizeDepthSlotTrackIndex(slot))
   );
   const setDepthTrackLegendLabelForSlot = (slot, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (!slot) return;
     const idx = normalizeDepthSlotTrackIndex(slot);
     slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
@@ -1601,55 +1813,79 @@ export const createAppSetup = () => {
   };
   const getCircularDepthFile = (index) => circularDepthRepresentatives()[Number(index)] || null;
   const setCircularDepthFile = (index, file) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Math.max(0, Number(index) || 0);
     ensureDepthTrackConfigCount(idx + 1);
     depthTrackUiCounts.circular = Math.max(depthTrackUiCounts.circular, idx + 1);
     const rows = circularDepthRows();
     const previousFile = circularDepthRepresentatives()[idx] || null;
-    rows.forEach((row) => {
-      row[idx] = file || null;
+    circularTrackSlotEditor.changeCircularDepthSources(() => {
+      rows.forEach((row) => {
+        row[idx] = file || null;
+      });
+      files.c_depth = rows.map((row) => compactDepthFileSlots(row));
     });
-    files.c_depth = rows.map((row) => compactDepthFileSlots(row));
     if (file) {
       updateDepthTrackLabelFromFile(idx, file, previousFile);
       form.show_depth = true;
     }
   };
   const getLinearDepthFile = (seq, index) => depthFileSlotsFromValue(seq?.depth)[Number(index)] || null;
-  const setLinearDepthFile = (seq, index, file) => {
-    if (!seq) return;
+  const setLinearDepthFiles = (sequences, index, file) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
+    const targets = Array.from(sequences || []).filter(Boolean);
+    if (!targets.length) return;
     const idx = Math.max(0, Number(index) || 0);
     const logicalWidth = Math.max(linearDepthLogicalWidth(), idx + 1);
     padLinearDepthRows(logicalWidth);
     ensureDepthTrackConfigCount(logicalWidth);
-    const slots = depthFileSlotsFromValue(seq.depth);
-    const previousFile = slots[idx] || null;
-    if (file) {
-      slots[idx] = file;
-      seq.depth = slots;
-    } else {
-      seq.depth = clearDepthTrackSourceAt(slots, idx, logicalWidth);
-    }
+    const previousFile = getLinearDepthFile(targets[0], idx);
+    linearTrackSlotEditor.changeLinearDepthSources(() => {
+      targets.forEach((seq) => {
+        const slots = depthFileSlotsFromValue(seq.depth);
+        if (file) {
+          slots[idx] = file;
+          seq.depth = slots;
+        } else {
+          seq.depth = clearDepthTrackSourceAt(slots, idx, logicalWidth);
+        }
+      });
+    });
     if (file) {
       updateDepthTrackLabelFromFile(idx, file, previousFile);
       form.show_depth = true;
     }
   };
+  const setLinearDepthFile = (seq, index, file) => setLinearDepthFiles([seq], index, file);
+  const setLinearSourceDepthFile = (source, index, file) => setLinearDepthFiles(
+    (source?.records || []).map(({ sequence }) => sequence),
+    index,
+    file
+  );
+  const clearLinearSourceDepthFile = (source, index) => history.runUndoable(
+    'Clear File Depth TSV',
+    () => setLinearSourceDepthFile(source, index, null)
+  );
   const addCircularDepthTrack = () => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     depthTrackUiCounts.circular = sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular) + 1;
     ensureDepthTrackConfigCount(depthTrackUiCounts.circular);
     if (canShowDepthTrack.value) form.show_depth = true;
   };
   const addLinearDepthTrack = () => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const nextCount = linearDepthTrackUiCount() + 1;
     padLinearDepthRows(nextCount);
     ensureDepthTrackConfigCount(nextCount);
     if (canShowDepthTrack.value) form.show_depth = true;
-    if (adv.linear_track_slots_enabled && form.show_depth) {
-      linearTrackSlotEditor.ensureLinearTrackDepthSlots();
-    }
   };
   const removeCircularDepthTrack = (index) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0) return;
     const count = sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular);
@@ -1673,11 +1909,10 @@ export const createAppSetup = () => {
     );
     syncDepthTrackSlotLabelsForTrack(idx);
     circularTrackSlotEditor.normalizeCircularTrackSlots();
-    if (adv.circular_track_slots_enabled && form.show_depth && activeFileCount > 0) {
-      circularTrackSlotEditor.ensureCircularTrackDepthSlot();
-    }
   };
-  const removeLinearDepthTrack = (_seq, index) => {
+  const removeLinearDepthTrack = (index) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0) return;
     const logicalWidth = linearDepthLogicalWidth();
@@ -1689,12 +1924,11 @@ export const createAppSetup = () => {
     if (idx < adv.depth_tracks.length) adv.depth_tracks.splice(idx, 1);
     depthTrackAutoLabels.splice(idx, 1);
     ensureDepthTrackConfigCount(activeDepthTrackCount());
-    const activeFileCount = activeDepthTrackIndices(linearDepthRows()).length;
     const previousAxisIndex = Number(adv.linear_track_slots_axis_index);
     const removedManagedSlotCountBeforeAxis = Number.isInteger(previousAxisIndex)
       ? adv.linear_track_slots.reduce((count, slot, slotIndex) => {
           if (slotIndex >= previousAxisIndex || !isDefaultManagedDepthSlot(slot)) return count;
-          return depthSlotTrackIndex(slot, slotIndex) === idx ? count + 1 : count;
+          return depthSlotTrackIndex(slot) === idx ? count + 1 : count;
         }, 0)
       : 0;
     adv.linear_track_slots.splice(
@@ -1716,9 +1950,6 @@ export const createAppSetup = () => {
     syncDepthTrackSlotLabelsForTrack(0);
     linearTrackSlotEditor.syncLinearDepthSlotHeightsFromDepthTracks();
     linearTrackSlotEditor.normalizeLinearTrackSlots();
-    if (adv.linear_track_slots_enabled && form.show_depth && activeFileCount > 0) {
-      linearTrackSlotEditor.ensureLinearTrackDepthSlots();
-    }
   };
   watch(
     () => [
@@ -1745,11 +1976,8 @@ export const createAppSetup = () => {
   );
   watch(mode, (nextMode, previousMode) => {
     if (nextMode === previousMode) return;
-    if (state.semanticFileWatchersSuppressed.value) {
-      state.modeProfileStateManager.invalidate(nextMode);
-    } else {
-      state.modeProfileStateManager.transition(adv, previousMode, nextMode);
-    }
+    if (state.semanticFileWatchersSuppressed.value) return;
+    state.modeProfileStateManager.transition(adv, previousMode, nextMode);
     matchSequenceRegistry?.reset?.();
     clickedPairwiseMatch.value = null;
   });
@@ -1775,6 +2003,8 @@ export const createAppSetup = () => {
     files.c_conservation_blasts_source = null;
   };
   const setCircularConservationSourceFiles = (nextFiles) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const normalized = normalizeFileList(nextFiles);
     if (isCircularConservationUploadSource()) {
       files.c_conservation_blasts = normalized;
@@ -1787,6 +2017,8 @@ export const createAppSetup = () => {
     syncCircularConservationSeries();
   };
   const setCircularConservationUploadFiles = (nextFiles) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     files.c_conservation_blasts = normalizeFileList(nextFiles);
     files.c_conservation_blasts_source = null;
     files.c_conservation_sequence_sources = [];
@@ -1844,6 +2076,8 @@ export const createAppSetup = () => {
     );
   };
   const moveCircularConservationSeries = (index, direction) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (moveConservationSeriesEntry(circularConservation.series, index, direction)) {
       if (adv.circular_track_slots_enabled === true) {
         circularTrackSlotEditor.syncCircularConservationSlots();
@@ -1853,17 +2087,46 @@ export const createAppSetup = () => {
   const openCircularConservationComparisonFilePicker = () => {
     circularConservationFastaInput.value?.click();
   };
+  const pendingComparisonRecordLabels = new Set();
+  // Also waits for a read that starts meanwhile (another Add Seq).
+  const settleComparisonRecordLabels = async () => {
+    while (pendingComparisonRecordLabels.size > 0) {
+      await Promise.allSettled([...pendingComparisonRecordLabels]);
+    }
+  };
   const addCircularConservationComparisonFile = (event) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const target = event?.target || null;
     const selectedFile = Array.from(target?.files || []).filter(Boolean)[0] || null;
     if (!selectedFile) return;
+    // D12: the Python ring reader names a GenBank or DDBJ row after it is added
+    // (a read failure keeps the file-name default; Generate reports it).
+    // Generate waits for these reads before it reads the row labels.
+    const pending = discoverComparisonSequenceRecordLabel({ file: selectedFile })
+      .then((recordLabel) => applyComparisonSequenceRecordLabel({
+        series: circularConservation.series,
+        sourceFiles: getCircularConservationSourceFiles(),
+        file: selectedFile,
+        recordLabel
+      }))
+      .catch(() => false)
+      .finally(() => pendingComparisonRecordLabels.delete(pending));
+    pendingComparisonRecordLabels.add(pending);
+    // B22 (R11): the input is data-history-managed. This one Add Seq step
+    // captures its before now, the row appears at once, and the step commits
+    // after the label read, so Undo and Redo restore the label.
+    const step = history.runUndoable('Change uploaded file', settleComparisonRecordLabels);
     clearDerivedCircularConservationBlasts();
     files.c_conservation_fastas = [...normalizeFileList(files.c_conservation_fastas), selectedFile];
     losatCacheInfo.value = [];
     syncCircularConservationSeries();
     if (target) target.value = '';
+    return step;
   };
   const setCircularConservationCompanionFile = (sourceIndex, event) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const index = Number(sourceIndex);
     if (!Number.isInteger(index) || index < 0) return;
     const selectedFile = Array.from(event?.target?.files || []).filter(Boolean)[0] || null;
@@ -1876,6 +2139,8 @@ export const createAppSetup = () => {
     if (event?.target) event.target.value = '';
   };
   const removeCircularConservationSource = (index) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= circularConservation.series.length) return;
     if (isDerivedCircularConservationReplay()) {
@@ -1946,28 +2211,6 @@ export const createAppSetup = () => {
   watch(
     () => [
       adv.circular_track_slots_enabled,
-      form.show_depth,
-      form.suppress_gc,
-      form.suppress_skew,
-      representativeDepthFiles(files.c_depth).length,
-      depthTrackUiCounts.circular
-    ],
-    ([slotsEnabled, showDepth]) => {
-      if (slotsEnabled) {
-        circularTrackSlotEditor.normalizeCircularTrackSlots();
-        circularTrackSlotEditor.syncCircularConservationSlots();
-      }
-      if (slotsEnabled && showDepth) {
-        circularTrackSlotEditor.ensureCircularTrackDepthSlot();
-      }
-      if (slotsEnabled) {
-        adv.depth_tracks.forEach((_track, index) => syncDepthTrackSlotLabelsForTrack(index));
-      }
-    }
-  );
-  watch(
-    () => [
-      adv.circular_track_slots_enabled,
       circularConservation.enabled,
       circularConservation.source,
       circularConservation.series.map((entry) => `${entry?.sourceKey || ''}:${entry?.label || ''}:${entry?.color || ''}`).join('|')
@@ -1976,7 +2219,16 @@ export const createAppSetup = () => {
       if (slotsEnabled) circularTrackSlotEditor.syncCircularConservationSlots();
     }
   );
-  const legendLayout = createLegendLayout({ state, legendActions, history });
+  const legendLayout = createLegendLayout({
+    state,
+    legendActions,
+    history,
+    previewRuntime,
+    similarityAlignmentLifecycle: {
+      beforeRecordDrag: () => similarityAlignmentActions?.beforeRecordDrag?.(),
+      afterRecordDrag: (options) => similarityAlignmentActions?.afterRecordDrag?.(options)
+    }
+  });
   legendActions.setLegendGeometryChangedHandler(legendLayout.refreshLegendGeometry);
   const shouldSyncMountedLabelEditor = () => (
     isFeatureDrawerMounted.value
@@ -1987,8 +2239,20 @@ export const createAppSetup = () => {
     || Object.keys(labelTextBulkOverrides).length > 0
     || Object.keys(labelVisibilityOverrides).length > 0
   );
+  // A legacy imported SVG without composition metadata stays unbound: it has
+  // no composition to capture and no canvas to pad.
+  const shouldBindComposition = (context) => (
+    context.root.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== null
+    || context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
+    || (!context.bindingOptions.isIncrementalEdit && context.sourceClass !== 'legacy-import')
+  );
   previewRuntime.configureMountedResultBinder({
-    adoptLegend(context) {
+    async adoptLegend(context) {
+      if (context.phase === 'result-selection' && !context.bindingOptions.trustedRestore) {
+        await projectEditorIntentOnDisplay(context);
+      } else {
+        rememberCommittedEditorState(context);
+      }
       if (
         context.bindingOptions.skipLegendExtraction
         || context.bindingOptions.trustedRestore
@@ -2003,18 +2267,7 @@ export const createAppSetup = () => {
     },
     bindComposition(context) {
       if (context.bindingOptions.trustedRestore) return;
-      const hasCompositionMetadata = (
-        context.root.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== null
-        || context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
-      );
-      const shouldBind = (
-        hasCompositionMetadata
-        || (
-          !context.bindingOptions.isIncrementalEdit
-          && context.sourceClass !== 'legacy-import'
-        )
-      );
-      if (shouldBind) legendLayout.captureBaseConfig();
+      if (shouldBindComposition(context)) legendLayout.captureBaseConfig();
     },
     setupDragAffordances(context) {
       legendActions.setupLegendDrag();
@@ -2027,6 +2280,7 @@ export const createAppSetup = () => {
         phase: context.phase,
         rootGeneration: context.rootGeneration
       });
+      refreshSimilarityAlignmentCanvas();
       featureActions.preparePairwiseInteractionAffordances({
         root: context.root,
         phase: context.phase,
@@ -2034,7 +2288,9 @@ export const createAppSetup = () => {
       });
     },
     synchronizeLabelEditor(context) {
-      if (!context.bindingOptions.trustedRestore && shouldSyncMountedLabelEditor()) {
+      const labelsChanged = labelProjectionResultIdentity === context.resultIdentity;
+      labelProjectionResultIdentity = '';
+      if (!context.bindingOptions.trustedRestore && (labelsChanged || shouldSyncMountedLabelEditor())) {
         featureActions.syncLabelEditor({
           requiredFeatureIds: context.bindingOptions.requiredLabelFeatureIds,
           optionalFeatureIds: context.bindingOptions.optionalLabelFeatureIds
@@ -2047,10 +2303,9 @@ export const createAppSetup = () => {
         || context.bindingOptions.isIncrementalEdit
       ) return;
       legendLayout.captureOriginalStroke();
-      canvasPadding.top = 0;
-      canvasPadding.right = 0;
-      canvasPadding.bottom = 0;
-      canvasPadding.left = 0;
+      // Generate already padded its candidates; another batch Result shows
+      // the current canvas padding when it is displayed (D-09).
+      if (shouldBindComposition(context)) legendLayout.applyCanvasPadding();
     },
     reconcileSelection(context) {
       if (
@@ -2066,6 +2321,9 @@ export const createAppSetup = () => {
   });
   const {
     runAnalysis: runGeneratedDiagramAnalysis,
+    runCommittedCanonicalCandidate,
+    projectCommittedRecordTransform,
+    projectCommittedSimilarityAlignment,
     cancelRunAnalysis,
     runLabelReflow,
     refreshCircularRecordOrder,
@@ -2079,22 +2337,25 @@ export const createAppSetup = () => {
     restoreGeneratedArtifactRuntimeState
   } = createRunAnalysis({
     state,
+    rulePreparation,
+    settleComparisonRecordLabels,
     isCurrentFeature: recordDisplayControls.isCurrentFeature,
-    serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog = null) => (
-      serializeActiveRenderFiles(state.mode.value, state, {
+    serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog, runState) => (
+      serializeActiveRenderFiles(runState.mode.value, runState, {
         comparisonPlan: comparisonPlanSnapshot,
         linearRecordCatalog
       })
     ),
     prepareLinearRecordCatalog,
+    assertActiveModeInputs,
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts,
-    getCommittedCanonicalRenderRequest,
     getCommittedCanonicalSession,
+    captureDecorationContinuity: legendLayout.captureDecorationContinuity,
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
     captureGeneratedArtifactOwnerSet: historySnapshots.captureGeneratedArtifactOwnerSet,
     installGeneratedArtifactOwnerSet: historySnapshots.installGeneratedArtifactOwnerSet,
-    restoreGeneratedArtifactHandle: historySnapshots.restoreGeneratedArtifactHandle,
+    restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
     setGeneratedArtifactIdentity: historySnapshots.setGeneratedArtifactIdentity,
     runGeneratedArtifactReplacement: (...args) => (
       history.runUndoableArtifactReplacement(...args)
@@ -2115,6 +2376,80 @@ export const createAppSetup = () => {
       return validateAnnotationRecordTargets(annotationSets, catalog);
     }
   });
+  const resolvePopupRotationFeature = ({ recordKey, biologicalFeatureId }) => {
+    const matchesIdentity = (feature) => (
+      String(feature?.record_key ?? feature?.recordKey ?? '') === recordKey
+      && String(
+        feature?.biological_feature_id ?? feature?.biologicalFeatureId ?? ''
+      ) === biologicalFeatureId
+    );
+    const renderedMatches = extractedFeatures.value.filter(matchesIdentity);
+    if (renderedMatches.length === 1) return renderedMatches[0];
+    const biologicalMatches = biologicalFeatures.value.filter(matchesIdentity);
+    return biologicalMatches.length === 1 ? biologicalMatches[0] : null;
+  };
+  const featureRecordRotationAction = createFeatureRecordRotationAction({
+    recordDisplayControls,
+    getCommittedSession: getCommittedCanonicalSession,
+    projectCommittedRecordTransform,
+    runCommittedCanonicalCandidate,
+    resolveCurrentFeature: resolvePopupRotationFeature,
+    isCurrentFeature: recordDisplayControls.isCurrentFeature
+  });
+  const featureRecordRotation = createFeatureRecordRotationWorkflow({
+    action: featureRecordRotationAction,
+    makeReactive: reactive,
+    onRebind: (feature, identity) => {
+      const popupFeature = clickedFeature.value?.feat;
+      if (!popupFeature) return;
+      const popupRecordKey = String(
+        popupFeature.record_key ?? popupFeature.recordKey ?? ''
+      );
+      const popupFeatureId = String(
+        popupFeature.biological_feature_id ?? popupFeature.biologicalFeatureId ?? ''
+      );
+      if (popupRecordKey !== identity.recordKey
+        || popupFeatureId !== identity.biologicalFeatureId) return;
+      clickedFeature.value.feat = feature;
+      const renderedId = String(
+        feature?.rendered_feature_svg_id
+        ?? feature?.renderedFeatureSvgId
+        ?? feature?.svg_id
+        ?? ''
+      );
+      if (renderedId) clickedFeature.value.svg_id = renderedId;
+    }
+  });
+  const recordActionsExpanded = ref(false);
+  watch(clickedFeature, (popup) => {
+    recordActionsExpanded.value = false;
+    if (popup?.feat) {
+      featureRecordRotation.open({
+        feature: popup.feat,
+        featureLabel: popup.label
+      });
+    } else {
+      featureRecordRotation.close();
+    }
+  }, { flush: 'sync' });
+  const closeFeaturePopup = () => {
+    featureRecordRotation.cancel();
+    recordActionsExpanded.value = false;
+    clickedFeature.value = null;
+  };
+  const toggleRecordActions = () => {
+    if (!recordActionsExpanded.value && !featureRecordRotation.draft.active && clickedFeature.value?.feat) {
+      featureRecordRotation.open({
+        feature: clickedFeature.value.feat,
+        featureLabel: clickedFeature.value.label
+      });
+    }
+    recordActionsExpanded.value = !recordActionsExpanded.value;
+  };
+  const cancelRecordActions = () => {
+    featureRecordRotation.cancel();
+    recordActionsExpanded.value = false;
+  };
   historySnapshots.setGeneratedArtifactRuntimeOwner({
     capture: () => ({
       ...captureGeneratedArtifactRuntimeState(),
@@ -2125,16 +2460,12 @@ export const createAppSetup = () => {
       return restoreGeneratedArtifactRuntimeState(snapshot, options);
     }
   });
-  const resultsManager = createResultsManager({
-    state,
-    legendLayout,
-    rerenderLinearDefinitions: runLabelReflow
-  });
+  const resultsManager = createResultsManager({ state });
 
-  const { waitForAuxiliaryFileImport } = setupWatchers({
+  const { waitForAuxiliaryFileImport, auxiliaryFileImportPending, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure } = setupWatchers({
     state,
     rulePreparation,
-    watch,
+    ref, computed, watch,
     nextTick,
     onMounted,
     legendActions,
@@ -2151,77 +2482,71 @@ export const createAppSetup = () => {
     preparePaletteDefinitions: paletteLoader.loadPaletteAsset
   });
 
-  const sessionImportPending = ref(false);
-  const sessionSavePending = ref(false);
-  let sessionSaveInFlight = null;
+  state.sessionPreparationBusyReason = () => {
+    if (history.mutationPending() || ruleMatchingPending.value || auxiliaryFileImportPending()) {
+      return 'Applying an edit. Retry after the edit finishes.';
+    }
+    return '';
+  };
+  const semanticMutationAvailable = computed(() => !sessionOperationAvailability());
+  const sessionSaveAvailable = computed(() => !sessionOperationAvailability('save'));
+  const sessionLoadAvailable = computed(() => !sessionOperationAvailability('load'));
+  const sessionBusyReason = computed(() => sessionOperationAvailability('save')?.reason || '');
   const circularRecordPresentationPanel = ref(null);
   let nextSessionPreviewToken = 1;
-  const importSession = async (event) => {
-    const input = event?.target;
-    const file = input?.files?.[0];
-    if (!file) return { status: 'skipped' };
-    if (sessionImportPending.value) {
-      input.value = '';
-      return { status: 'busy' };
-    }
-
-    const importEvent = {
-      target: {
-        files: [file],
-        value: input.value
-      }
-    };
-    sessionImportPending.value = true;
-    recordSessionLifecycleEvent('session-import-pending-published');
-    try {
+  const importSession = (event) => importSessionFromFile(event, {
+    beforeImport: async () => {
       await nextTick();
       await afterPaint();
       recordSessionLifecycleEvent('session-import-paint-opportunity-completed');
-      const result = await importSessionFromFile(importEvent, {
-        beforePreviewMount: ({ results: importedResults, resultIndex }) => {
-          const selectedResult = importedResults[resultIndex] || null;
-          if (!selectedResult) return null;
-          const token = `session-load:${nextSessionPreviewToken++}`;
-          return previewRuntime.registerReadinessExpectation({
-            result: selectedResult,
-            resultIndex,
-            artifactIdentity: token,
-            generationToken: token,
-            catalogState: state.featureCatalog?.value || null,
-            phase: 'session-load',
-            bindingOptions: { isIncrementalEdit: true },
-            isCurrent: () => (
-              results.value[resultIndex] === selectedResult
-              && Number(selectedResultIndex.value) === resultIndex
-            )
-          });
-        },
-        rollbackState: createSessionImportRollbackState({
-          depthTrackUiCounts,
-          depthTracks: adv.depth_tracks,
-          featureListScrollTop,
-          featureListScrollRef,
-          selectedPairwiseBlockOrthogroupId
-        })
+    },
+    beforePreviewMount: ({ results: importedResults, resultIndex }) => {
+      const selectedResult = importedResults[resultIndex] || null;
+      if (!selectedResult) return null;
+      const token = `session-load:${nextSessionPreviewToken++}`;
+      return previewRuntime.registerReadinessExpectation({
+        result: selectedResult,
+        resultIndex,
+        artifactIdentity: token,
+        generationToken: token,
+        catalogState: state.featureCatalog?.value || null,
+        phase: 'session-load',
+        bindingOptions: { isIncrementalEdit: true },
+        isCurrent: () => (
+          results.value[resultIndex] === selectedResult
+          && Number(selectedResultIndex.value) === resultIndex
+        )
       });
+    },
+    rollbackState: createSessionImportRollbackState({
+      depthTrackUiCounts,
+      depthTracks: adv.depth_tracks,
+      featureListScrollTop,
+      featureListScrollRef,
+      selectedPairwiseBlockOrthogroupId,
+      captureSpecificRulePatternDrafts: featureActions.captureSpecificRulePatternDrafts,
+      restoreSpecificRulePatternDrafts: featureActions.restoreSpecificRulePatternDrafts
+    }),
+    afterImport: async (result) => {
       if (result?.status === 'ok' || result?.status === 'legacy') {
+        await nextTick();
+        recordSessionLifecycleEvent('history-baseline-start');
+        if (!await history.initializeIntentBaseline('Loaded session', { isCurrent: result.isCurrent })) {
+          throw new Error('Session loading canceled.');
+        }
+        featureActions.clearSpecificRulePatternDrafts();
+        annotationImportNotice.value = '';
+        specificRuleNotice.value = '';
         historySnapshots.clearGeneratedArtifactIdentity({
           retainedBytes: result?.status === 'ok'
             ? Number(result.decompressedCharacters || 0) * 2
             : 0
         });
-        await nextTick();
-        recordSessionLifecycleEvent('history-baseline-start');
-        await history.initializeIntentBaseline('Loaded session');
         recordSessionLifecycleEvent('history-baseline-end');
-        if (circularRecordPresentationPanel.value?.open) await refreshCircularRecordOrder();
+        if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = false;
       }
-      return result;
-    } finally {
-      sessionImportPending.value = false;
-      input.value = '';
     }
-  };
+  });
 
   const {
     addNewLegendEntry,
@@ -2246,6 +2571,10 @@ export const createAppSetup = () => {
   const {
     addCustomColor,
     addPriorityRule,
+    setLabelFilterMode,
+    addWhitelistRule,
+    removeWhitelistRule,
+    removePriorityRule,
     addFeature,
     removeFeature,
     getFeatureShape,
@@ -2258,6 +2587,8 @@ export const createAppSetup = () => {
     moveSpecificRuleUp,
     removeSpecificRule,
     setSpecificRuleField,
+    specificRulePattern, specificRulePatternDraft, specificRulePatternFieldId,
+    editSpecificRulePattern, retrySpecificRulePattern, revertSpecificRulePattern,
     addFeatureVisibilityRule,
     downloadFeatureVisibilityRulesTsv,
     featureVisibilityQualifierSuggestions,
@@ -2308,30 +2639,187 @@ export const createAppSetup = () => {
     resetAllLabelTextOverrides
   } = featureActions;
 
-  historySnapshots.setAfterApplyHistoryIntent(async (_intent, { domains, changes } = {}) => {
+  // One projection of the canonical editor intent onto the mounted Result,
+  // shared by History apply and the display of another batch Result (D-07,
+  // R3). History restores the mounted Legend inventory; a newly displayed
+  // Result receives the diagram-wide Legend operations Generate applies.
+  const projectMountedEditorIntent = async ({
+    palette = false,
+    rules = false,
+    prepareRules = rules,
+    visibility = false,
+    legend = null,
+    strokes = null,
+    labels = false
+  } = {}) => {
+    if ((palette || rules) && prepareRules && !await rulePreparation.prepare()) return false;
+    if (palette) svgActions.applyPaletteToSvg();
+    if (rules) svgActions.applySpecificRulesToSvg();
+    if (visibility) reconcileFeatureVisibility();
+    if (legend) reconcileLegendEntries(legend);
+    if (strokes) reconcileStrokeOverrides(strokes);
+    if (labels) reconcileLabelOverrides();
+    return true;
+  };
+
+  historySnapshots.setAfterApplyHistoryIntent(async (_intent, { domains, changes, direction } = {}) => {
     if (!svgContainer.value?.querySelector?.('svg')) return;
     const changedDomains = domains instanceof Set ? domains : new Set();
-    if (changedDomains.has('ui')) {
-      legendLayout.reconcileCompositionUserDeltas(_intent?.ui?.compositionUserDeltas);
+    // B17: restore the offsets of each Result whose composition this step changed.
+    const compositionResults = new Set();
+    (Array.isArray(changes) ? changes : []).forEach(({ path, before, after } = {}) => {
+      if (path?.[0] !== 'ui' || path[1] !== 'compositionUserDeltas') return;
+      if (path.length > 2) compositionResults.add(path[2]);
+      else [before, after].forEach((record) => Object.keys(record || {}).forEach((key) => compositionResults.add(key)));
+    });
+    if (compositionResults.size > 0) {
+      legendLayout.reconcileCompositionUserDeltas(_intent?.ui?.compositionUserDeltas, compositionResults);
     }
-    if (changedDomains.has('config') || changedDomains.has('features')) {
-      if (!await rulePreparation.prepare()) return;
-      svgActions.applyPaletteToSvg();
-      svgActions.applySpecificRulesToSvg();
-    }
-    if (changedDomains.has('features')) {
-      reconcileFeatureVisibility();
-      reconcileLabelOverrides();
-    }
-    if (changedDomains.has('editorState')) {
-      reconcileLegendEntries({ restoreColorState: true });
-      reconcileStrokeOverrides({ changes });
-      reconcileLabelOverrides();
-    }
+    const colors = changedDomains.has('config') || changedDomains.has('features');
+    const rulesChanged = Array.isArray(changes) && changes.some((change) => (
+      change?.path?.[0] === 'config' && change.path[1] === 'rules'
+    ));
+    const editorState = changedDomains.has('editorState');
+    // B19: in a batch, the Legend list this step leaves tells whether the
+    // restored list describes the displayed Result or another Result.
+    const legendChange = (Array.isArray(changes) ? changes : []).find(({ path } = {}) => (
+      path?.length === 3 && path[0] === 'editorState' && path[1] === 'legend' && path[2] === 'entries'
+    ));
+    const legendFrom = results.value.length > 1
+      ? (legendChange ? legendChange[direction === 'undo' ? 'after' : 'before'] : _intent?.editorState?.legend?.entries)
+      : null;
+    const projected = await projectMountedEditorIntent({
+      palette: colors,
+      rules: colors,
+      prepareRules: changedDomains.has('features') || rulesChanged || !rulePreparation.isPrepared(),
+      visibility: changedDomains.has('features'),
+      legend: editorState
+        ? {
+            restoreColorState: true,
+            entryOwners: _intent.editorState.legend.entryOwners,
+            from: Array.isArray(legendFrom) ? legendFrom : null
+          }
+        : null,
+      strokes: editorState ? { changes } : null,
+      labels: changedDomains.has('features') || editorState
+    });
+    if (!projected) return;
     await nextTick();
   });
 
-  const { updatePalette, resetColors, cancelDefinitionUpdate } = resultsManager;
+  // Each Result's bytes reflect the editor state it was committed or last
+  // shown with. A displayed Result receives a domain only when that state
+  // changed since, so a Result without new edits gets no projection work and
+  // an Undo reaches a Result that is displayed again.
+  const projectedEditorStateByResult = new Map();
+  let lastBoundResultIdentity = '';
+  // A displayed Result whose label intent changed since it was last shown
+  // receives the label projection in the binder's label step, also when no
+  // label intent remains (an undone or replaced Label TSV import).
+  let labelProjectionResultIdentity = '';
+  const currentEditorProjectionState = () => ({
+    colors: [
+      toRaw(appliedPaletteColors.value),
+      JSON.stringify([manualSpecificRules, featureColorOverrides, legendColorOverrides])
+    ],
+    visibility: JSON.stringify([featureVisibilityOverrides, featureVisibilityManualRules]),
+    labels: JSON.stringify([
+      labelTextFeatureOverrides, labelTextBulkOverrides, labelTextFeatureOverrideSources, labelVisibilityOverrides
+    ]),
+    // An edited Legend order, or '' for the default order (D-08).
+    legendOrder: isLegendOrderEdited(legendEntries.value, originalLegendOrder.value)
+      ? JSON.stringify(legendEntries.value.map((entry) => entry.caption))
+      : ''
+  });
+  const sameColors = (left, right) => left[0] === right[0] && left[1] === right[1];
+  const rememberCommittedEditorState = (context) => {
+    const current = currentEditorProjectionState();
+    const identities = new Set(results.value.map(previewRuntime.getResultIdentity).filter(Boolean));
+    identities.forEach((identity) => {
+      if (!projectedEditorStateByResult.has(identity)) projectedEditorStateByResult.set(identity, current);
+    });
+    [...projectedEditorStateByResult.keys()].forEach((identity) => {
+      if (!identities.has(identity)) projectedEditorStateByResult.delete(identity);
+    });
+    lastBoundResultIdentity = context.resultIdentity;
+  };
+  const compileDisplayedResultOperations = (resultIndex, { replayDefaultLegendOrder = false } = {}) => {
+    const catalog = toRaw(state.featureCatalog.value);
+    if (!catalog) return null;
+    const plan = compileDirectEditorMutationPlan({
+      catalogAdmission: admitFeatureCatalog(catalog, toRaw(results.value), { mode: state.generatedMode.value }),
+      featureColorOverrides,
+      featureStrokeOverrides,
+      featureVisibilityOverrides,
+      labelTextFeatureOverrides,
+      labelVisibilityOverrides,
+      legendEntries: legendEntries.value,
+      deletedLegendEntries: deletedLegendEntries.value,
+      originalLegendOrder: originalLegendOrder.value,
+      addedLegendCaptions: addedLegendCaptions.value,
+      legendColorOverrides,
+      legendStrokeOverrides,
+      manualSpecificRules,
+      replayDefaultLegendOrder
+    });
+    return plan.operationsByResult[resultIndex] || null;
+  };
+  const DISPLAY_PROJECTED_DOMAINS = Object.freeze([
+    'featureFills', 'featureStrokes', 'featureVisibility',
+    'legendFills', 'legendStrokes', 'legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder'
+  ]);
+  // D-07 (PD-OI-062): a batch Result shows the canonical color, visibility,
+  // Legend, and label edits when it is displayed. Labels follow in the
+  // binder's label step.
+  const projectEditorIntentOnDisplay = async (context) => {
+    const identity = context.resultIdentity;
+    const current = currentEditorProjectionState();
+    // The Result shown until now followed every live edit.
+    if (lastBoundResultIdentity && lastBoundResultIdentity !== identity
+      && projectedEditorStateByResult.has(lastBoundResultIdentity)) {
+      projectedEditorStateByResult.set(lastBoundResultIdentity, current);
+    }
+    lastBoundResultIdentity = identity;
+    const previous = projectedEditorStateByResult.get(identity) || current;
+    const colors = !sameColors(previous.colors, current.colors);
+    const visibility = previous.visibility !== current.visibility;
+    labelProjectionResultIdentity = previous.labels !== current.labels ? identity : '';
+    // B20: a Result last shown with another Legend order receives the current
+    // order, also the default order.
+    const replayDefaultLegendOrder = previous.legendOrder !== current.legendOrder;
+    let operations = null;
+    try {
+      operations = compileDisplayedResultOperations(context.resultIndex, { replayDefaultLegendOrder });
+    } catch (error) {
+      console.error('Editor edits could not be compiled for the displayed Result.', normalizeUserFacingError(error));
+    }
+    const hasOperations = Boolean(operations)
+      && DISPLAY_PROJECTED_DOMAINS.some((domain) => operations[domain].length > 0);
+    const legend = {
+      resultIdentity: identity,
+      liveResultIdentities: results.value.map(previewRuntime.getResultIdentity),
+      deletedCaptions: (operations?.legendDeletes || []).map(({ caption }) => caption)
+    };
+    const restoresLegend = legendActions.hasRetiredResultLegend(legend);
+    const projects = colors || visibility || hasOperations || restoresLegend;
+    recordStructuralMetric('displayedResultEditorProjectionCount', projects ? 1 : 0, {
+      phase: context.phase,
+      rootGeneration: context.rootGeneration
+    });
+    if (!projects) return;
+    try {
+      await projectMountedEditorIntent({ palette: colors, rules: colors, visibility });
+      const legendChanged = legendActions.prepareDisplayedResultLegend(context.root, legend);
+      previewRuntime.applyEditorOperations(hasOperations ? operations : null, {
+        afterApply: (root) => { if (legendChanged) legendActions.compactLegendEntries(root); }
+      });
+      projectedEditorStateByResult.set(identity, current);
+    } catch (error) {
+      console.error('Editor edits could not be shown on the displayed Result.', normalizeUserFacingError(error));
+    }
+  };
+
+  const { updatePalette, resetColors } = resultsManager;
   const undoableAction = (label, fn) => (...args) => history.runUndoable(label, () => fn(...args));
   const addFeatureVisibilityRuleWithHistory = undoableAction('Add feature visibility rule', addFeatureVisibilityRule);
   const moveFeatureVisibilityRuleDownWithHistory = undoableAction('Move feature visibility rule', moveFeatureVisibilityRuleDown);
@@ -2440,7 +2928,7 @@ export const createAppSetup = () => {
         if (status.value === 'Copied') status.value = '';
       }, 1600);
     } catch (error) {
-      console.warn(`Failed to copy ${description}:`, error);
+      console.warn('Failed to copy the requested command.', normalizeUserFacingError(error));
       status.value = 'Copy failed';
       setTimeout(() => {
         if (status.value === 'Copy failed') status.value = '';
@@ -2458,7 +2946,11 @@ export const createAppSetup = () => {
     'exact replay command'
   );
 
-  async function prepareLinearRecordCatalog(loadComparison = false) {
+  const catalogIssueError = (catalog) => {
+    const issue = catalog.issues[0];
+    return issue ? diagnosticError(issue.code, issue.context) : diagnosticError('INPUT_UNREADABLE');
+  };
+  async function prepareLinearRecordCatalog(loadComparison = false, { privateCandidate = false } = {}) {
     if (mode.value !== 'linear') return { catalog: null, error: '' };
     const hasAutomaticSequence = linearSeqs.some((sequence) => {
       if (String(sequence?.region_record_id || '').trim()) return false;
@@ -2471,12 +2963,31 @@ export const createAppSetup = () => {
     if (!hasAutomaticSequence && !hasRegionAnnotations) {
       return { catalog: null, error: '' };
     }
+    if (privateCandidate) {
+      const sources = await Promise.all(linearSeqs.map(async (seq) => {
+        const inputType = lInputType.value;
+        const primaryFile = inputType === 'gff' ? seq.gff : seq.gb;
+        const pairedFile = inputType === 'gff' ? seq.fasta : null;
+        const sourceKey = annotationSourceKey({ scope: 'linear', uid: seq.uid, inputType, primaryFile, pairedFile });
+        try {
+          const records = inputType === 'gff'
+            ? await discoverGffFastaRecords({ gffFile: primaryFile, fastaFile: pairedFile })
+            : await discoverSequenceRecords({ file: primaryFile, format: 'genbank' });
+          return { sourceKey, selector: seq.region_record_id, hasInput: Boolean(primaryFile), status: 'ready', records };
+        } catch (error) {
+          return { sourceKey, selector: seq.region_record_id, hasInput: Boolean(primaryFile), status: 'error', error: error.message, records: [] };
+        }
+      }));
+      const catalog = getAnnotationRecordCatalog(loadComparison, sources);
+      return catalog.status === 'ready' ? { catalog, error: '' }
+        : { catalog: null, error: catalogIssueError(catalog) };
+    }
     let catalog = getAnnotationRecordCatalog(loadComparison);
     if (catalog.status !== 'ready') {
       try {
         await linearRecordSelector.refresh();
       } catch (error) {
-        console.warn('Failed to start Linear record discovery:', error);
+        return { catalog: null, error: normalizeUserFacingError(error, { operation: 'listSequenceRecords', stage: 'helper' }) };
       }
       catalog = getAnnotationRecordCatalog(loadComparison);
     }
@@ -2484,45 +2995,61 @@ export const createAppSetup = () => {
       ? { catalog, error: '' }
       : {
           catalog: null,
-          error: catalog.issues[0] || 'Could not read records from the Linear input file(s).'
+          error: linearSeqs.map(seq => linearRecordSelector.errorModelFor(seq)).find(error => error?.code)
+            || catalogIssueError(catalog)
         };
   }
 
-  const runAnalysis = async () => {
-    if (mode.value === 'linear') {
-      if (importedComparisonIntent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE) {
-        await materializeAutomaticLinearRecords();
-      } else {
-        await linearRecordSelector.refresh();
+  const runAnalysis = (options = null) => {
+    const patternDrafts = featureActions.captureSpecificRulePatternDrafts();
+    return runGeneratedDiagramAnalysis(null, null, null, {
+      prepareGenerate: async () => {
+        if (mode.value === 'linear') {
+          if (importedComparisonIntent.disposition === IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE) {
+            await materializeAutomaticLinearRecords();
+          } else {
+            await linearRecordSelector.refresh();
+          }
+        }
+        if (similarityAlignmentActions?.validateBeforeGenerate) {
+          const validation = await similarityAlignmentActions.validateBeforeGenerate();
+          if (validation?.status !== 'ok') {
+            failedGeneratePreservedResult.value = results.value.length > 0;
+            if (similarityAlignmentActions.dialogOpen.value) {
+              await focusSimilarityAlignmentDialog();
+            }
+            return validation;
+          }
+        }
+        const comparisonPlanSnapshot = mode.value === 'linear'
+          ? linearComparisonResolution.value
+          : null;
+        const comparisonExecution = importedComparisonExecution({
+          intent: importedComparisonIntent,
+          draftResolution: comparisonPlanSnapshot
+        });
+        if (!comparisonExecution.ok) {
+          errorLog.value = normalizeUserFacingError(comparisonExecution.message, { operation: 'generate', stage: 'request-validation' });
+          generationFailureRecovery.value = results.value.length ? 'preserved' : 'no-result';
+          failedGeneratePreservedResult.value = results.value.length > 0;
+          if (mode.value === 'linear') await focusLinearComparisonIssue();
+          return { status: 'error', error: errorLog.value };
+        }
+        return { status: 'ready', comparisonPlanSnapshot, comparisonExecution };
+      },
+      afterGenerate: async (result) => {
+        if (result?.status === 'error' && mode.value === 'linear') {
+          await focusLinearComparisonIssue();
+        }
+        if (result?.status === 'ok') {
+          featureActions.clearSpecificRulePatternDrafts();
+          await rulePreparation.prepare();
+          featureSelection.clearFeatureSelection({ clearStatus: true });
+        } else {
+          featureActions.restoreSpecificRulePatternDrafts(patternDrafts);
+        }
       }
-    }
-    const comparisonPlanSnapshot = mode.value === 'linear'
-      ? linearComparisonResolution.value
-      : null;
-    const comparisonExecution = importedComparisonExecution({
-      intent: importedComparisonIntent,
-      draftResolution: comparisonPlanSnapshot
     });
-    if (!comparisonExecution.ok) {
-      errorLog.value = new Error(comparisonExecution.message);
-      failedGeneratePreservedResult.value = results.value.length > 0;
-      if (mode.value === 'linear') await focusLinearComparisonIssue();
-      return { status: 'error' };
-    }
-    cancelDefinitionUpdate();
-    const result = await runGeneratedDiagramAnalysis(
-      comparisonPlanSnapshot,
-      null,
-      comparisonExecution
-    );
-    if (result?.status === 'error' && mode.value === 'linear') {
-      await focusLinearComparisonIssue();
-    }
-    if (result?.status === 'ok') {
-      await rulePreparation.prepare();
-      featureSelection.clearFeatureSelection({ clearStatus: true });
-    }
-    return result;
   };
 
   const chooseImportedComparisonAction = (action) => history.runUndoable(
@@ -2534,7 +3061,7 @@ export const createAppSetup = () => {
         draftResolution: linearComparisonResolution.value
       });
       if (!outcome.ok) {
-        errorLog.value = new Error(outcome.message);
+        errorLog.value = normalizeUserFacingError(outcome.message, { operation: 'generate', stage: 'request-validation' });
         return false;
       }
       if (outcome.action === IMPORTED_COMPARISON_ACTIONS.CLEAR) {
@@ -2565,14 +3092,202 @@ export const createAppSetup = () => {
     && linearComparisonResolution.value.hasComparisonIntent
   ));
 
-  const cancelGeneration = () => {
-    cancelRunAnalysis();
-  };
+  const cancelGeneration = () => cancelRunAnalysis();
 
-  const orthogroupActions = createOrthogroupEditor({
+  const orthogroupActions = createOrthogroupEditor({ state });
+  similarityAlignmentActions = createSimilarityAlignmentActions({
     state,
-    runAnalysis
+    getOrthogroupById: orthogroupActions.getOrthogroupById,
+    getEnrichedOrthogroupMembers: orthogroupActions.getEnrichedOrthogroupMembers,
+    getRecordCatalog: getAnnotationRecordCatalog,
+    getCommittedRequest: getCommittedCanonicalRenderRequest,
+    getCommittedSession: getCommittedCanonicalSession,
+    projectCommittedAlignment: projectCommittedSimilarityAlignment,
+    runCommittedCanonicalCandidate,
+    recordDisplayControls,
+    cancelRunAnalysis,
+    runHelperOperation: runDiagramHelperOperation,
+    resolveOperation: DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT,
+    getCurrentSvg: () => svgContainer.value?.querySelector?.('svg') || null,
+    previewCandidate: featureActions.previewAlignmentCandidate,
+    clearCandidatePreview: featureActions.clearAlignmentCandidatePreview,
+    onError: (error) => { errorLog.value = error; }
   });
+  const similarityAlignmentCanvasHover = ref(null);
+  refreshSimilarityAlignmentCanvas = () => {
+    if (!similarityAlignmentActions.dialogOpen.value
+      || similarityAlignmentActions.status.value !== 'reviewing'
+      || !similarityAlignmentActions.isDraftArtifactCurrent()) {
+      featureActions.clearAlignmentOverlay();
+      similarityAlignmentCanvasHover.value = null;
+      return;
+    }
+    const current = similarityAlignmentActions.draft.value;
+    similarityAlignmentCanvasHover.value = null;
+    featureActions.showAlignmentOverlay({
+      reference: current.response.reference,
+      ambiguities: current.rows.filter(({ candidates }) => candidates.length > 0),
+      onSelect: similarityAlignmentActions.selectCandidate,
+      onHover: (recordKey, candidateKey) => {
+        similarityAlignmentCanvasHover.value = recordKey ? { recordKey, candidateKey } : null;
+      }
+    });
+  };
+  watch([
+    similarityAlignmentActions.dialogOpen,
+    () => similarityAlignmentActions.draft.value?.rows,
+    similarityAlignmentActions.status
+  ], refreshSimilarityAlignmentCanvas, { flush: 'post' });
+  let similarityAlignmentReturnFocus = null;
+  const similarityAlignmentPaletteRef = ref(null);
+  const similarityAlignmentPalettePosition = reactive({ x: null, y: null });
+  const similarityAlignmentCompact = ref(false);
+  const syncSimilarityAlignmentCompact = () => {
+    const preview = document.querySelector('[aria-label="Result Preview"]');
+    similarityAlignmentCompact.value = Boolean(preview
+      && getComputedStyle(preview).getPropertyValue('--alignment-review-compact').trim() === '1');
+  };
+  const similarityAlignmentEditorDisabledReason = computed(() => (
+    similarityAlignmentCompact.value && similarityAlignmentActions.dialogOpen.value
+      ? 'Finish or cancel alignment review before opening Editor.' : ''
+  ));
+  alignmentReviewBlocksEditor = () => Boolean(similarityAlignmentEditorDisabledReason.value);
+  let similarityAlignmentPreviewObserver = null;
+  watch([similarityAlignmentActions.dialogOpen, similarityAlignmentCompact], ([open, compact]) => {
+    if (open && compact) {
+      stopSimilarityAlignmentPaletteDrag();
+      rightDrawerActions.closeRightDrawer();
+    }
+  }, { flush: 'sync' });
+  let similarityAlignmentPaletteDrag = null;
+  const clampSimilarityAlignmentPalette = () => {
+    const palette = similarityAlignmentPaletteRef.value;
+    if (!palette || similarityAlignmentCompact.value) return;
+    const margin = 12;
+    const maxX = Math.max(margin, window.innerWidth - palette.offsetWidth - margin);
+    const maxY = Math.max(margin, window.innerHeight - palette.offsetHeight - margin);
+    similarityAlignmentPalettePosition.x = Math.min(
+      Math.max(similarityAlignmentPalettePosition.x ?? maxX, margin), maxX
+    );
+    similarityAlignmentPalettePosition.y = Math.min(
+      Math.max(similarityAlignmentPalettePosition.y ?? margin, margin), maxY
+    );
+  };
+  const similarityAlignmentPaletteStyle = computed(() => similarityAlignmentCompact.value ? {} : ({
+    left: similarityAlignmentPalettePosition.x === null ? undefined : `${similarityAlignmentPalettePosition.x}px`,
+    right: similarityAlignmentPalettePosition.x === null ? undefined : 'auto',
+    top: similarityAlignmentPalettePosition.y === null ? undefined : `${similarityAlignmentPalettePosition.y}px`
+  }));
+  const moveSimilarityAlignmentPalette = (event) => {
+    if (!similarityAlignmentPaletteDrag) return;
+    similarityAlignmentPalettePosition.x = event.clientX - similarityAlignmentPaletteDrag.x;
+    similarityAlignmentPalettePosition.y = event.clientY - similarityAlignmentPaletteDrag.y;
+    clampSimilarityAlignmentPalette();
+    event.preventDefault();
+  };
+  const stopSimilarityAlignmentPaletteDrag = () => {
+    similarityAlignmentPaletteDrag = null;
+    document.removeEventListener('pointermove', moveSimilarityAlignmentPalette);
+    document.removeEventListener('pointerup', stopSimilarityAlignmentPaletteDrag);
+    document.removeEventListener('pointercancel', stopSimilarityAlignmentPaletteDrag);
+  };
+  const startSimilarityAlignmentPaletteDrag = (event) => {
+    if (similarityAlignmentCompact.value || event.button !== 0
+      || event.target.closest('button, a, input, select, textarea')) return;
+    const rect = similarityAlignmentPaletteRef.value?.getBoundingClientRect();
+    if (!rect) return;
+    similarityAlignmentPaletteDrag = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    document.addEventListener('pointermove', moveSimilarityAlignmentPalette);
+    document.addEventListener('pointerup', stopSimilarityAlignmentPaletteDrag);
+    document.addEventListener('pointercancel', stopSimilarityAlignmentPaletteDrag);
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  const rememberSimilarityAlignmentInvoker = (event) => {
+    similarityAlignmentReturnFocus = event?.currentTarget || document.activeElement || null;
+  };
+  const restoreSimilarityAlignmentFocus = async () => {
+    await nextTick();
+    const target = similarityAlignmentReturnFocus;
+    similarityAlignmentReturnFocus = null;
+    const hiddenEditorInvoker = target?.closest?.('.right-drawer') && !showRightDrawer.value;
+    if (!hiddenEditorInvoker && target?.isConnected && target.getClientRects().length && typeof target.focus === 'function') {
+      target.focus();
+      return;
+    }
+    document.querySelector('.drawer-toggle')?.focus();
+  };
+  const focusSimilarityAlignmentDialog = async () => {
+    await nextTick();
+    clampSimilarityAlignmentPalette();
+    document.getElementById('similarity-alignment-dialog-title')?.focus();
+  };
+  const handleSimilarityAlignmentEscape = (event) => {
+    if (event.key !== 'Escape' || !similarityAlignmentActions.dialogOpen.value) return;
+    if (document.querySelector('[data-linear-source-removal-dialog]')
+      || event.target?.closest?.('.fixed.inset-0')) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    void cancelSimilarityAlignmentDialog();
+  };
+  const openSimilarityAlignmentReset = (event) => {
+    rememberSimilarityAlignmentInvoker(event);
+    similarityAlignmentActions.openReset();
+  };
+  watch([similarityAlignmentActions.dialogOpen, similarityAlignmentActions.resetDialogOpen], async ([open, resetOpen]) => {
+    if (resetOpen) {
+      await nextTick();
+      document.getElementById('similarity-alignment-reset-title')?.focus();
+      return;
+    }
+    if (open) return;
+    stopSimilarityAlignmentPaletteDrag();
+    similarityAlignmentPalettePosition.x = null;
+    similarityAlignmentPalettePosition.y = null;
+    void restoreSimilarityAlignmentFocus();
+  });
+  onMounted(() => {
+    similarityAlignmentPreviewObserver = new ResizeObserver(syncSimilarityAlignmentCompact);
+    const pane = document.querySelector('.result-pane');
+    if (pane) similarityAlignmentPreviewObserver.observe(pane);
+    document.addEventListener('keydown', handleSimilarityAlignmentEscape, true);
+    window.addEventListener('resize', clampSimilarityAlignmentPalette);
+  });
+  onUnmounted(() => {
+    similarityAlignmentPreviewObserver?.disconnect();
+    stopSimilarityAlignmentPaletteDrag();
+    document.removeEventListener('keydown', handleSimilarityAlignmentEscape, true);
+    window.removeEventListener('resize', clampSimilarityAlignmentPalette);
+  });
+  watch(() => results.value.length, syncSimilarityAlignmentCompact, { flush: 'post' });
+  const finishSimilarityAlignmentStart = async (outcome) => {
+    if (similarityAlignmentActions.dialogOpen.value) {
+      if (similarityAlignmentActions.error.value) {
+        await nextTick();
+        document.querySelector('[data-similarity-alignment-error]')?.focus();
+      } else await focusSimilarityAlignmentDialog();
+    } else await restoreSimilarityAlignmentFocus();
+    return outcome;
+  };
+  const startSimilarityAlignmentFromDrawer = async (groupId, event = null, mode = 'align') => {
+    rememberSimilarityAlignmentInvoker(event);
+    return finishSimilarityAlignmentStart(
+      await similarityAlignmentActions.startFromDrawer({ groupId, mode })
+    );
+  };
+  const cancelSimilarityAlignmentDialog = async () => {
+    similarityAlignmentActions.cancel();
+  };
+  const applySimilarityAlignmentDialog = async (reset = false) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
+    const outcome = await (reset ? similarityAlignmentActions.applyReset() : similarityAlignmentActions.applyDraft());
+    if (outcome.status === 'error' || outcome.status === 'reviewing') {
+      await nextTick();
+      document.querySelector('[data-similarity-alignment-error], [data-similarity-alignment-reset-error]')?.focus();
+    }
+    return outcome;
+  };
   const canUseClickedOrthogroupActions = computed(() => {
     const cf = clickedFeature.value;
     return Boolean(
@@ -2613,17 +3328,16 @@ export const createAppSetup = () => {
     };
   });
 
-  const alignByClickedOrthogroup = async () => {
-    const cf = clickedFeature.value;
-    if (!cf?.orthogroupId) return;
-    selectedOrthogroupAlignmentFeature.value = String(cf.orthogroupId || '').trim();
-    clickedFeature.value = null;
-    await runAnalysis();
-  };
-
-  const resetOrthogroupAlignment = async () => {
-    clickedFeature.value = null;
-    await orthogroupActions.resetOrthogroupAlignment();
+  const alignByClickedOrthogroup = async (event = null, mode = 'align') => {
+    const detail = clickedOrthogroupDetail.value;
+    if (!detail?.id) return { status: 'rejected' };
+    rememberSimilarityAlignmentInvoker(event);
+    const outcome = await similarityAlignmentActions.startFromPopup({
+      groupId: detail.id,
+      reference: detail.currentMember,
+      mode
+    });
+    return finishSimilarityAlignmentStart(outcome);
   };
 
   const highlightClickedOrthogroup = () => {
@@ -2643,6 +3357,14 @@ export const createAppSetup = () => {
     return true;
   };
 
+  const reselectSimilarityAlignmentReference = () => {
+    const groupId = similarityAlignmentActions.repair.value?.groupId
+      || state.similarityAlignmentPlan.value?.groupId
+      || '';
+    similarityAlignmentActions.drawerReferenceKey.value = '';
+    return openOrthogroupInDrawer(groupId);
+  };
+
   const openClickedOrthogroupInEditor = () => {
     const orthogroupId = String(clickedFeature.value?.orthogroupId || '').trim();
     if (!openOrthogroupInDrawer(orthogroupId)) return;
@@ -2652,14 +3374,27 @@ export const createAppSetup = () => {
   const { resetAllPositions, resetCanvasPadding } = legendLayout;
 
   const resetSettings = () => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const proceed = window.confirm(
       'Reset all settings to the webapp defaults?\n\nUploaded files and current results will be kept.'
     );
     if (!proceed) return false;
 
     return history.runUndoableCheckpoint('Reset settings', async () => {
-      cancelDefinitionUpdate();
+      featureActions.clearSpecificRulePatternDrafts();
       resetSettingsState(state);
+      // Linear records return to their File defaults and inferred definitions;
+      // Files, record selections, File defaults, and depth stay. The mutation
+      // also clears the alignment plan (D-15).
+      applyLinearSeqMutation(linearSeqs.map((sequence) => ({
+        ...sequence,
+        definition: '',
+        record_subtitle: '',
+        region_start: null,
+        region_end: null,
+        region_reverse: false
+      })), { alignmentMutation: 'settings reset.' });
       invalidateLinearComparisonArtifacts();
       matchSequenceRegistry?.reset?.();
       circularTrackNewRenderer.value = 'dinucleotide_skew';
@@ -2671,6 +3406,8 @@ export const createAppSetup = () => {
   };
 
   const resetLayout = () => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     resetAllPositions();
     resetCanvasPadding();
     resetLayoutState(state);
@@ -2995,6 +3732,10 @@ export const createAppSetup = () => {
   };
 
   const errorDisplay = computed(() => normalizeUserFacingError(errorLog.value));
+  // D-25: a Result without current feature metadata (a Session older than 40)
+  // is saved only after one Generate; the notice comes from the same state.
+  const sessionSaveNeedsGenerate = computed(() => results.value.length > 0 && !state.featureCatalog?.value);
+  const reloadAfterOperationError = () => window.location.reload();
 
   const sessionTitleLabel = computed(() => {
     const title = normalizeSessionTitle(sessionTitle.value);
@@ -3020,20 +3761,7 @@ export const createAppSetup = () => {
     )
   );
 
-  const clickedFeatureLocation = computed(() => {
-    const cf = clickedFeature.value;
-    if (!cf) return '';
-    if (cf.location) return cf.location;
-    const feat = cf.feat;
-    if (!feat) return '';
-    const startVal = Number(feat.start);
-    const endVal = Number(feat.end);
-    const startPos = Number.isFinite(startVal) ? startVal + 1 : feat.start;
-    const endPos = Number.isFinite(endVal) ? endVal : feat.end;
-    if (startPos === undefined || endPos === undefined || startPos === null || endPos === null) return '';
-    const strand = feat.strand ? ` (${feat.strand})` : '';
-    return `${startPos}..${endPos}${strand}`;
-  });
+  const clickedFeatureLocation = computed(() => clickedFeature.value?.location || '');
 
   const downloadText = (filename, text, type = 'text/plain;charset=utf-8') => {
     const value = String(text ?? '');
@@ -3041,7 +3769,12 @@ export const createAppSetup = () => {
     downloadTextFile(String(filename || 'gbdraw.txt'), value, type);
   };
 
-  const runExportAction = async (methodName, label) => {
+  let latestExportOperation = 0;
+  const failedInteractiveSvgExport = ref(null);
+  const canRetryInteractiveSvgExport = computed(() => Boolean(failedInteractiveSvgExport.value
+    && errorLog.value === failedInteractiveSvgExport.value));
+  const runExportAction = async (methodName, operation) => {
+    const operationId = ++latestExportOperation;
     const previousError = errorLog.value;
     try {
       const snapshot = captureSvgExport(state, { interactive: methodName === 'downloadInteractiveSVG' });
@@ -3056,25 +3789,23 @@ export const createAppSetup = () => {
           return result.result.base64;
         }
       });
-      if (errorLog.value === previousError && previousError?.type === 'Export error') errorLog.value = null;
+      if (operationId === latestExportOperation && errorLog.value === previousError && previousError?.operation?.startsWith('export-')) errorLog.value = null;
       return result;
     } catch (error) {
-      const normalized = normalizeUserFacingError(error);
-      errorLog.value = {
-        type: 'Export error',
-        message: `${label} export failed: ${normalized?.summary || 'Unknown export error.'}`,
-        details: normalized?.details || []
-      };
-      return { status: 'error' };
+      const normalized = normalizeUserFacingError(error, { operation, stage: 'export-capture' });
+      if (operationId !== latestExportOperation || errorLog.value !== previousError) return { status: 'stale' };
+      errorLog.value = normalized;
+      failedInteractiveSvgExport.value = methodName === 'downloadInteractiveSVG' ? normalized : null;
+      return { status: 'error', error: normalized };
     }
   };
 
-  const downloadSVG = () => runExportAction('downloadSVG', 'SVG');
+  const downloadSVG = () => runExportAction('downloadSVG', 'export-svg');
   const downloadInteractiveSVG = () => (
-    runExportAction('downloadInteractiveSVG', 'Interactive SVG')
+    runExportAction('downloadInteractiveSVG', 'export-svg')
   );
-  const downloadPNG = () => runExportAction('downloadPNG', 'PNG');
-  const downloadPDF = () => runExportAction('downloadPDF', 'PDF');
+  const downloadPNG = () => runExportAction('downloadPNG', 'export-png');
+  const downloadPDF = () => runExportAction('downloadPDF', 'export-pdf');
 
   const specificRuleLegendOptions = computed(() => {
     const byCaption = new Map();
@@ -3108,70 +3839,52 @@ export const createAppSetup = () => {
   });
 
   const editSessionTitle = () => {
+    const busy = sessionOperationAvailability();
+    if (busy) return busy;
     const current = normalizeSessionTitle(sessionTitle.value);
     const input = prompt('Session title', current);
     if (input === null) return;
     sessionTitle.value = normalizeSessionTitle(input);
   };
 
-  const saveSessionWithTitle = () => {
-    if (sessionSaveInFlight) {
-      recordSessionLifecycleEvent('session-save-joined');
-      return sessionSaveInFlight;
-    }
-
-    const operation = Promise.resolve().then(async () => {
-      try {
-        let title = normalizeSessionTitle(sessionTitle.value);
-        if (!title) {
-          const input = prompt('Session title', '');
-          if (input === null) {
-            recordSessionLifecycleEvent('session-save-title-canceled');
-            return;
-          }
-          title = normalizeSessionTitle(input);
-          sessionTitle.value = title;
+  const saveSessionWithTitle = () => exportSession(null, {
+    resolveTitle: () => {
+      let title = normalizeSessionTitle(sessionTitle.value);
+      if (!title) {
+        const input = prompt('Session title', '');
+        if (input === null) {
+          recordSessionLifecycleEvent('session-save-title-canceled');
+          return null;
         }
-        sessionSavePending.value = true;
-        recordSessionLifecycleEvent('session-save-pending-published');
-        await nextTick();
-        await afterPaint();
-        recordSessionLifecycleEvent('session-save-paint-opportunity-completed');
-
-        recordSessionLifecycleEvent('session-save-catalog-preparation-start');
-        const committedSession = getCommittedCanonicalSession();
-        let catalog = null;
-        let error = '';
-        // A committed request already owns its record selections and resources.
-        // Catalog discovery is only needed while projecting an uncommitted draft.
-        if (!committedSession) {
-          const comparisonPlanSnapshot = mode.value === 'linear'
-            ? linearComparisonResolution.value
-            : null;
-          ({ catalog, error } = await prepareLinearRecordCatalog(
-            comparisonPlanSnapshot?.hasComparisonIntent
-          ));
-          await afterPaint();
-        }
-        recordSessionLifecycleEvent('session-save-catalog-preparation-end', {
-          reusedCommittedSession: Boolean(committedSession)
-        });
-        if (error) throw new Error(error);
-        return await exportSession(title, { linearRecordCatalog: catalog });
-      } catch (error) {
-        errorLog.value = normalizeUserFacingError(error);
-        recordSessionLifecycleEvent('session-save-error');
-        return { status: 'error' };
+        title = normalizeSessionTitle(input);
+        sessionTitle.value = title;
       }
-    });
-
-    sessionSaveInFlight = operation.finally(() => {
-      sessionSavePending.value = false;
-      sessionSaveInFlight = null;
-      recordSessionLifecycleEvent('session-save-pending-cleared');
-    });
-    return sessionSaveInFlight;
-  };
+      return title;
+    },
+    beforeExport: async () => {
+      await nextTick();
+      await afterPaint();
+      recordSessionLifecycleEvent('session-save-paint-opportunity-completed');
+      recordSessionLifecycleEvent('session-save-catalog-preparation-start');
+      const committedSession = getCommittedCanonicalSession();
+      let catalog = null;
+      let error = '';
+      if (!committedSession) {
+        const comparisonPlanSnapshot = mode.value === 'linear'
+          ? linearComparisonResolution.value : null;
+        ({ catalog, error } = await prepareLinearRecordCatalog(
+          comparisonPlanSnapshot?.hasComparisonIntent, { privateCandidate: true }
+        ));
+        await afterPaint();
+      }
+      recordSessionLifecycleEvent('session-save-catalog-preparation-end', {
+        reusedCommittedSession: Boolean(committedSession)
+      });
+      if (error) throw error;
+      return { linearRecordCatalog: catalog };
+    },
+    onError: (error) => { errorLog.value = normalizeUserFacingError(error); }
+  });
 
   const openFeatureEditorFromList = (feat, event) => {
     return openFeatureEditorForFeature(feat, event);
@@ -3186,8 +3899,17 @@ export const createAppSetup = () => {
     return `${normalized} (${String(matched.record_id || '').trim() || 'Unknown'})`;
   };
 
+  const circularRecordDiscoveryState = computed(getCircularRecordDiscoveryState);
+  const circularRecordInspectionEnabled = computed(() => semanticMutationAvailable.value
+    && mode.value === 'circular'
+    && circularRecordDiscoveryState.value.hasInput
+    && circularRecordDiscoveryState.value.status !== 'loading'
+    && !state.semanticFileWatchersSuppressed.value);
+  const inspectCircularSourceRecords = () => sessionOperationAvailability() || (circularRecordInspectionEnabled.value
+    ? refreshCircularRecordOrder()
+    : Promise.resolve({ status: 'unavailable', reason: 'Source inspection is unavailable.' }));
   const circularRecordPresentationEntries = () => buildDisambiguatedRecordEntries(
-    (Array.isArray(circularRecordList.value) ? circularRecordList.value : []).map(
+    circularRecordDiscoveryState.value.records.map(
       (record) => ({
         ...record,
         recordId: record?.record_id ?? record?.recordId,
@@ -3200,7 +3922,7 @@ export const createAppSetup = () => {
     const entries = circularRecordPresentationEntries();
     const current = String(form.circular_record_selector || '').trim();
     const selection = resolveDisambiguatedRecordSelection(entries, current);
-    const automaticLabel = entries.length > 1
+    const automaticLabel = entries.length > 1 || adv.circular_grouping_intent === 'batch'
       ? 'All records (separate diagrams)'
       : 'Automatic (only record)';
     return [
@@ -3222,7 +3944,7 @@ export const createAppSetup = () => {
 
   const circularRecordPresentationError = computed(() => {
     const current = String(form.circular_record_selector || '').trim();
-    if (!current) return '';
+    if (!current || circularRecordDiscoveryState.value.status !== 'ready') return '';
     const selection = resolveDisambiguatedRecordSelection(
       circularRecordPresentationEntries(),
       current
@@ -3237,20 +3959,62 @@ export const createAppSetup = () => {
   });
 
   const circularSingleRecordPresentationEnabled = computed(() => {
-    if (form.multi_record_canvas) return false;
+    if (mode.value !== 'circular' || form.multi_record_canvas
+      || adv.circular_grouping_intent === 'batch'
+      || circularRecordDiscoveryState.value.status !== 'ready') return false;
     const entries = circularRecordPresentationEntries();
-    if (entries.length === 1) return true;
-    const current = String(form.circular_record_selector || '').trim();
-    if (!current && entries.length !== 1) return false;
-    if (entries.length === 0) return Boolean(current);
-    return resolveDisambiguatedRecordSelection(entries, current).status === 'resolved';
+    const selection = resolveDisambiguatedRecordSelection(entries, form.circular_record_selector);
+    return selection.status === 'resolved'
+      || (selection.status === 'unspecified' && entries.length === 1);
   });
 
+  const circularRecordSelectionEnabled = computed(() => semanticMutationAvailable.value
+    && mode.value === 'circular'
+    && !form.multi_record_canvas && circularRecordDiscoveryState.value.status === 'ready');
   const setCircularRecordPresentationSelector = (value) => {
+    const busy = sessionOperationAvailability();
+    if (busy) return busy;
+    if (!circularRecordSelectionEnabled.value) return { status: 'unavailable' };
     const normalized = String(value || '').trim();
     form.circular_record_selector = normalized;
     adv.circular_grouping_intent = normalized ? 'single' : 'auto';
+    return { status: 'ok' };
   };
+  const showCircularCanvasSetting = async () => {
+    const control = document.querySelector('[data-circular-canvas-setting]');
+    if (!control || mode.value !== 'circular' || !form.multi_record_canvas) {
+      return { status: 'unavailable' };
+    }
+    for (let section = control.closest('details'); section; section = section.parentElement?.closest('details')) {
+      section.open = true;
+    }
+    await nextTick();
+    control.focus();
+    control.scrollIntoView({ block: 'nearest' });
+    return { status: 'ok' };
+  };
+  watch(() => [mode.value, circularSingleRecordPresentationEnabled.value,
+    circularRecordDiscoveryState.value.primaryFile, circularRecordDiscoveryState.value.pairedFile,
+    form.circular_record_selector], async (current, previous = []) => {
+    if (!current[1] || current.every((value, index) => Object.is(value, previous[index]))) return;
+    const origin = document.activeElement;
+    const pane = document.querySelector('.settings-scroll');
+    const scrollOwner = pane && getComputedStyle(pane).overflowY !== 'visible'
+      ? pane : document.scrollingElement;
+    const anchored = pane?.contains(origin) && origin.getClientRects().length;
+    const top = anchored ? origin.getBoundingClientRect().top : null;
+    const scrollTop = scrollOwner?.scrollTop;
+    await nextTick();
+    if (!circularSingleRecordPresentationEnabled.value
+      || circularRecordDiscoveryState.value.primaryFile !== current[2]
+      || circularRecordDiscoveryState.value.pairedFile !== current[3]) return;
+    if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = true;
+    await afterPaint();
+    if (scrollOwner && document.activeElement === origin) {
+      scrollOwner.scrollTop = anchored && origin.isConnected
+        ? scrollOwner.scrollTop + origin.getBoundingClientRect().top - top : scrollTop;
+    }
+  }, { flush: 'sync' });
 
   const buildDefaultCircularRecordPositions = () => {
     const selectors = Array.isArray(circularRecordList.value)
@@ -3294,6 +4058,8 @@ export const createAppSetup = () => {
   };
 
   const setCircularRecordRow = (index, rowValue) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= adv.multi_record_positions.length) return;
     const target = adv.multi_record_positions[idx];
@@ -3322,6 +4088,8 @@ export const createAppSetup = () => {
   };
 
   const moveCircularRecordOrderUp = (index) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!canMoveCircularRecordOrderUp(idx)) return;
     const next = [...adv.multi_record_positions];
@@ -3332,6 +4100,8 @@ export const createAppSetup = () => {
   };
 
   const moveCircularRecordOrderDown = (index) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!canMoveCircularRecordOrderDown(idx)) return;
     const next = [...adv.multi_record_positions];
@@ -3342,14 +4112,22 @@ export const createAppSetup = () => {
   };
 
   const resetCircularRecordOrder = () => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const defaults = buildDefaultCircularRecordPositions();
     adv.multi_record_positions.splice(0, adv.multi_record_positions.length, ...defaults);
   };
 
   const applyLinearSeqMutation = (
     items,
-    { preserveLosatCacheInfo = false, layoutEntries = linearRecordRows } = {}
+    {
+      preserveLosatCacheInfo = false,
+      layoutEntries = linearRecordRows,
+      alignmentMutation = 'source set changed.'
+    } = {}
   ) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const depthWidth = linearDepthLogicalWidth();
     const next = normalizeLinearSeqList(items);
     if (depthWidth > 0) {
@@ -3357,7 +4135,10 @@ export const createAppSetup = () => {
         seq.depth = padDepthFileSlots(seq.depth, depthWidth);
       });
     }
-    linearSeqs.splice(0, linearSeqs.length, ...next);
+    // Removing a File can remove the last source of a Depth series.
+    linearTrackSlotEditor.changeLinearDepthSources(() => {
+      linearSeqs.splice(0, linearSeqs.length, ...next);
+    });
     const activeUids = new Set(next.map((seq) => seq.uid));
     pendingLinearRecordExpansions.forEach((uid) => {
       if (!activeUids.has(uid)) pendingLinearRecordExpansions.delete(uid);
@@ -3373,28 +4154,113 @@ export const createAppSetup = () => {
     );
     invalidateLinearComparisonArtifacts({ preserveLosatCacheInfo });
     linearReorderNotice.value = '';
+    if (alignmentMutation === 'stable-reorder') {
+      similarityAlignmentActions?.retainForStableReorder?.(
+        linearSeqs.map((sequence) => sequence.uid)
+      );
+    } else {
+      similarityAlignmentActions?.clearForMutation?.(alignmentMutation);
+    }
   };
 
   const addLinearSeq = () => {
-    applyLinearSeqMutation([...linearSeqs, createLinearSeq()]);
+    return applyLinearSeqMutation([...linearSeqs, createLinearSeq()]);
   };
 
-  const removeLinearSeqAt = (index) => {
-    const idx = Number(index);
-    if (!Number.isInteger(idx) || idx < 0 || idx >= linearSeqs.length) return;
-    const current = Array.from(linearSeqs);
-    const next = current.filter((_, currentIndex) => currentIndex !== idx);
-    applyLinearSeqMutation(next);
+  const restoreLinearSourceRemovalFocus = async () => {
+    await nextTick();
+    const target = linearSourceRemovalReturnFocus.value;
+    linearSourceRemovalReturnFocus.value = null;
+    if (target?.isConnected && typeof target.focus === 'function') target.focus();
   };
-
-  const removeLastLinearSeq = () => {
-    if (linearSeqs.length <= 1) return;
-    const group = linearSourceGroups.value.at(-1);
-    const removed = new Set(group.records.map(({ sequence }) => sequence.uid));
-    applyLinearSeqMutation(linearSeqs.filter((seq) => !removed.has(seq.uid)));
+  const closeLinearSourceRemovalDialog = ({ restoreFocus = true } = {}) => {
+    linearSourceRemovalDialog.open = false;
+    linearSourceRemovalDialog.sourceUid = '';
+    linearSourceRemovalDialog.origin = '';
+    if (restoreFocus) void restoreLinearSourceRemovalFocus();
+    else linearSourceRemovalReturnFocus.value = null;
+  };
+  const focusLinearSourceRemovalDialog = async () => {
+    await nextTick();
+    document.querySelector('[data-linear-source-removal-primary]')?.focus();
+  };
+  const trapLinearSourceRemovalFocus = (event) => {
+    const dialog = document.querySelector('[data-linear-source-removal-dialog]');
+    const controls = Array.from(dialog?.querySelectorAll('button:not(:disabled)') || []);
+    if (!controls.length) return;
+    const first = controls[0];
+    const last = controls.at(-1);
+    if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+  const focusLinearSourceAfterRemoval = async (sourceIndex) => {
+    await nextTick();
+    const cards = document.querySelectorAll('[data-linear-source-card]');
+    const targetIndex = Math.max(0, Math.min(Number(sourceIndex) || 0, cards.length - 1));
+    const target = cards[targetIndex]?.querySelector('.upload-zone[tabindex="0"]')
+      || document.querySelector('[data-linear-file-add]');
+    if (typeof target?.focus === 'function') target.focus();
+  };
+  const openLinearSourceRemovalDialog = (source, origin, returnFocus = null) => {
+    if (!source?.uid) return false;
+    linearSourceRemovalDialog.sourceUid = source.uid;
+    linearSourceRemovalDialog.origin = origin;
+    linearSourceRemovalDialog.open = true;
+    linearSourceRemovalReturnFocus.value = returnFocus;
+    void focusLinearSourceRemovalDialog();
+    return true;
+  };
+  const cancelLinearSourceRemoval = () => closeLinearSourceRemovalDialog();
+  const applyLinearSourceRemoval = async (intent) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
+    if (linearSourceRemovalDialog.origin === 'global' && intent !== 'delete') return false;
+    const plan = planLinearSourceRemoval({
+      sequences: linearSeqs,
+      sourceUid: linearSourceRemovalDialog.sourceUid,
+      intent
+    });
+    if (!plan.allowed) {
+      closeLinearSourceRemovalDialog();
+      return false;
+    }
+    const next = [...plan.retainedSequences];
+    if (intent === 'clear') next.splice(plan.insertionIndex, 0, createLinearSeq());
+    const operation = await history.runUndoable(
+      intent === 'clear' ? 'Clear Linear File' : 'Delete Linear File',
+      () => applyLinearSeqMutation(next)
+    );
+    closeLinearSourceRemovalDialog({ restoreFocus: false });
+    await focusLinearSourceAfterRemoval(plan.sourceIndex);
+    return operation;
+  };
+  const requestLinearSourceRemoval = (source, returnFocus = null) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
+    if (!source || !linearSourceHasPrimaryInput(source)) return false;
+    return openLinearSourceRemovalDialog(source, 'card', returnFocus);
+  };
+  const removeLastLinearSeq = (event = null) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
+    const source = linearSourceGroups.value.at(-1);
+    if (!source || linearSourceGroups.value.length <= 1) return false;
+    if (isPristineLinearSource(source)) {
+      linearSourceRemovalDialog.sourceUid = source.uid;
+      linearSourceRemovalDialog.origin = 'global';
+      return applyLinearSourceRemoval('delete');
+    }
+    return openLinearSourceRemovalDialog(source, 'global', event?.currentTarget || null);
   };
 
   const setLinearSeqPrimaryFile = (index, field, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0 || idx >= linearSeqs.length) return;
     if (!['gb', 'gff', 'fasta'].includes(field)) return;
@@ -3418,7 +4284,7 @@ export const createAppSetup = () => {
     applyLinearSeqMutation(linearSeqs.flatMap((entry) => (
       entry.uid === group.uid ? (keepSource ? [replacement] : [])
         : members.has(entry.uid) ? [] : [entry]
-    )));
+    )), { alignmentMutation: 'source replaced.' });
     if (keepSource) pendingLinearRecordExpansions.add(replacement.uid);
     if (keepSource && field === 'gb') pendingLinearMetadataInference.add(replacement.uid);
   };
@@ -3439,18 +4305,74 @@ export const createAppSetup = () => {
   );
 
   const moveLinearSource = (sourceIndex, direction) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     const plan = linearSourceMovePlan(sourceIndex, direction);
     if (!plan.allowed) return;
     const next = moveLinearSourceGroup(linearSeqs, sourceIndex, direction);
     return history.runUndoable('Move File', () => {
       applyLinearSeqMutation(next, {
         preserveLosatCacheInfo: true,
-        layoutEntries: plan.rows
+        layoutEntries: plan.rows,
+        alignmentMutation: 'stable-reorder'
       });
     });
   };
 
+  const setLinearRecordSelector = (sequence, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
+    if (!sequence) return false;
+    const next = String(value || '');
+    if (String(sequence.region_record_id || '') === next) return false;
+    similarityAlignmentActions?.clearForMutation?.('record selector changed.');
+    sequence.region_record_id = next;
+    // The inferred definition follows the record the row now selects (D-12).
+    if (lInputType.value === 'gb' && linearRecordSelector.statusFor(sequence) === 'ready') {
+      sequence.inferred_definition = inferredDefinitionForRecord(linearRecordSelector.recordsFor(sequence), next);
+    }
+    return true;
+  };
+
+  const setMode = (value) => {
+    const busy = sessionOperationAvailability();
+    if (busy) return busy;
+    mode.value = value;
+    return { status: 'ok' };
+  };
+  const setCircularInputType = (value) => {
+    const busy = sessionOperationAvailability();
+    if (busy) return busy;
+    cInputType.value = value;
+    return { status: 'ok' };
+  };
+
+  const setLinearInputType = (value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
+    const next = value === 'gff' ? 'gff' : 'gb';
+    if (lInputType.value === next) return false;
+    similarityAlignmentActions?.clearForMutation?.('source type changed.');
+    lInputType.value = next;
+    return true;
+  };
+
+  const setLinearRecordCrop = (sequence, field, value) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
+    if (!sequence || !['region_start', 'region_end'].includes(field)) return false;
+    const next = value === '' || value === null || value === undefined
+      ? null
+      : Number(value);
+    if (Object.is(sequence[field], next)) return false;
+    similarityAlignmentActions?.clearForMutation?.('record crop changed.');
+    sequence[field] = next;
+    return true;
+  };
+
   const resetLinearRecordDefinition = (seq) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (!seq) return;
     history.runUndoable('Reset record definition', () => {
       seq.definition = '';
@@ -3458,6 +4380,8 @@ export const createAppSetup = () => {
   };
 
   const resetLinearRecordSubtitle = (seq) => {
+    const sessionBusy = sessionOperationAvailability();
+    if (sessionBusy) return sessionBusy;
     if (!seq) return;
     history.runUndoable('Reset record subtitle', () => {
       seq.record_subtitle = '';
@@ -3466,19 +4390,45 @@ export const createAppSetup = () => {
 
   return {
     recordDisplayControls,
+    featureRecordRotationDraft: featureRecordRotation.draft,
+    recordActionsExpanded,
+    toggleRecordActions,
+    cancelRecordActions,
+    setFeatureRecordRotationAnchor: featureRecordRotation.setAnchor,
+    setFeatureRecordRotationOffset: featureRecordRotation.setOffset,
+    setFeatureRecordRotationOrientForward: featureRecordRotation.setOrientForward,
+    placeFeatureAtRecordEnd: featureRecordRotation.placeAtFeatureEnd,
+    applyFeatureRecordRotation: featureRecordRotation.apply,
+    closeFeaturePopup,
     featurePlacementActions: featureActions.placementActions,
+    sessionSaveNeedsGenerate,
     processing,
     processingStatus,
     sessionImportPending,
     sessionSavePending,
+    semanticMutationAvailable,
+    sessionSaveAvailable,
+    sessionLoadAvailable,
+    sessionBusyReason,
     generationCancelRequested,
     errorLog,
     errorDisplay,
+    canRetryInteractiveSvgExport,
+    reloadAfterOperationError,
+    setDiagramMode,
+    canRetrySpecificRuleFailure: featureActions.canRetrySpecificRuleFailure,
+    canEditSpecificRuleFailure: featureActions.canEditSpecificRuleFailure,
+    canRetryLabelImportFailure: featureActions.canRetryLabelImportFailure,
+    retryLabelImportFailure: undoableAction('Load label edits', featureActions.retryLabelImportFailure),
+    editLabelImportFailure: featureActions.editLabelImportFailure,
+    retrySpecificRuleFailure: featureActions.retrySpecificRuleFailure,
+    editSpecificRuleFailure: featureActions.editSpecificRuleFailure,
     sessionTitle,
     sessionTitleLabel,
     results,
     selectedResultIndex,
     failedGeneratePreservedResult,
+    generationFailureRecovery,
     importedComparisonIntent,
     importedComparisonNeedsResolution,
     importedComparisonCanInherit,
@@ -3489,6 +4439,8 @@ export const createAppSetup = () => {
     selectResult,
     resultPanelTab,
     lastRunInfo,
+    annotationWarnings,
+    comparisonWarnings,
     runInfoCopyStatus,
     exactReplayCopyStatus,
     svgContent,
@@ -3505,6 +4457,8 @@ export const createAppSetup = () => {
     sidebarWidth,
     startResizing,
     mode,
+    setMode,
+    setCircularInputType,
     cInputType,
     lInputType,
     losatProgram,
@@ -3520,6 +4474,8 @@ export const createAppSetup = () => {
     addSelectedFeatureAnnotations: annotationEditor.addSelectedFeatures,
     removeAnnotation: annotationEditor.removeAnnotation,
     setAnnotationTargetKind: annotationEditor.setAnnotationTargetKind,
+    annotationImportNotice,
+    specificRuleNotice,
     importAnnotationTableFile: undoableAction('Import annotations', annotationEditor.importAnnotationTableFile),
     renameAnnotation: annotationEditor.renameAnnotation,
     setAnnotationStyle: annotationEditor.setAnnotationStyle,
@@ -3546,6 +4502,8 @@ export const createAppSetup = () => {
     depthTrackRows,
     circularDepthTrackRows,
     linearDepthTrackRows,
+    linearSourceDepthRows,
+    linearSourceDepthSummary,
     linearDepthTrackCoverageLabel,
     linearDepthTrackIndexOptions,
     hasCircularDepthFiles,
@@ -3569,6 +4527,8 @@ export const createAppSetup = () => {
     setCircularDepthFile,
     getLinearDepthFile,
     setLinearDepthFile,
+    setLinearSourceDepthFile,
+    clearLinearSourceDepthFile,
     linearSeqs,
     linearSourceGroups,
     linearRecordLayoutEnabled,
@@ -3578,6 +4538,7 @@ export const createAppSetup = () => {
     linearComparisonResolution,
     linearComparisonGlobalAction,
     linearComparisonUi,
+    canRunLinearLosat,
     hasLinearComparisonIntent,
     hasActiveLinearLosatIntent,
     hasActiveLinearUploadIntent,
@@ -3613,7 +4574,18 @@ export const createAppSetup = () => {
     linearReorderNotice,
     addLinearSeq,
     removeLastLinearSeq,
+    requestLinearSourceRemoval,
+    applyLinearSourceRemoval,
+    cancelLinearSourceRemoval,
+    trapLinearSourceRemovalFocus,
+    linearSourceRemovalDialog,
+    linearSourceRemovalTarget,
+    linearSourceRemovalTargetName,
+    linearSourceRemovalCanDelete,
     setLinearSeqPrimaryFile,
+    setLinearInputType,
+    setLinearRecordSelector,
+    setLinearRecordCrop,
     linearSourceMoveBlockedReason,
     canMoveLinearSource,
     moveLinearSource,
@@ -3654,6 +4626,7 @@ export const createAppSetup = () => {
     toggleLinearTrackSlotsPanel,
     circularTrackRenderers: circularTrackSlotEditor.circularTrackRenderers,
     circularTrackSlotEditorKey: circularTrackSlotEditor.circularTrackSlotEditorKey,
+    updateCircularTrackSlotMeasure: circularTrackSlotEditor.updateCircularTrackSlotMeasure,
     circularTrackRendererLabel: circularTrackSlotEditor.circularTrackRendererLabel,
     resetCircularTrackSlotsFromSimpleControls: circularTrackSlotEditor.resetCircularTrackSlotsFromSimpleControls,
     resetCircularTrackSlotsToPreset: circularTrackSlotEditor.resetCircularTrackSlotsToPreset,
@@ -3716,7 +4689,6 @@ export const createAppSetup = () => {
     linearTrackSlotEditorKey: linearTrackSlotEditor.linearTrackSlotEditorKey,
     linearTrackRendererLabel: linearTrackSlotEditor.linearTrackRendererLabel,
     resetLinearTrackSlotsFromSimpleControls: linearTrackSlotEditor.resetLinearTrackSlotsFromSimpleControls,
-    ensureLinearTrackDepthSlots: linearTrackSlotEditor.ensureLinearTrackDepthSlots,
     setLinearTrackSlotsEnabled: linearTrackSlotEditor.setLinearTrackSlotsEnabled,
     addLinearTrackSlot: linearTrackSlotEditor.addLinearTrackSlot,
     canAddLinearTrackRenderer: linearTrackSlotEditor.canAddLinearTrackRenderer,
@@ -3770,7 +4742,6 @@ export const createAppSetup = () => {
     losatThreadingStatus,
     orthogroups,
     featureOrthogroupIndex,
-    selectedOrthogroupAlignmentFeature,
     orthogroupNameOverrides,
     orthogroupDescriptionOverrides,
     selectedOrthogroupId,
@@ -3779,7 +4750,6 @@ export const createAppSetup = () => {
     showRightDrawer,
     rightDrawerTab,
     orthogroupCount: orthogroupActions.orthogroupCount,
-    selectedAlignmentTargetLabel: orthogroupActions.selectedAlignmentTargetLabel,
     filteredOrthogroups: orthogroupActions.filteredOrthogroups,
     selectedOrthogroup: orthogroupActions.selectedOrthogroup,
     selectedOrthogroupMembersByRecord: orthogroupActions.selectedOrthogroupMembersByRecord,
@@ -3787,6 +4757,7 @@ export const createAppSetup = () => {
     resolveOrthogroupDescription: orthogroupActions.resolveOrthogroupDescription,
     orthogroupScope: orthogroupActions.orthogroupScope,
     orthogroupScopeLabel: orthogroupActions.orthogroupScopeLabel,
+    orthogroupRows: orthogroupActions.orthogroupRows,
     isOrthogroupRenamed: orthogroupActions.isOrthogroupRenamed,
     getOrthogroupSequenceCount: orthogroupActions.getOrthogroupSequenceCount,
     hasOrthogroupSequence: orthogroupActions.hasOrthogroupSequence,
@@ -3800,8 +4771,51 @@ export const createAppSetup = () => {
     setOrthogroupNameOverride: orthogroupActions.setOrthogroupNameOverride,
     setOrthogroupDescriptionOverride: orthogroupActions.setOrthogroupDescriptionOverride,
     resetOrthogroupRename: orthogroupActions.resetOrthogroupRename,
+    orthogroupDormantNames: orthogroupActions.orthogroupDormantNames,
+    clearOrthogroupDormantOverrides: orthogroupActions.clearOrthogroupDormantOverrides,
     highlightOrthogroupById: orthogroupActions.highlightOrthogroupById,
-    alignOrthogroupById: orthogroupActions.alignOrthogroupById,
+    similarityAlignmentDraft: similarityAlignmentActions.draft,
+    similarityAlignmentStatus: similarityAlignmentActions.status,
+    similarityAlignmentBusy: similarityAlignmentActions.busy,
+    similarityAlignmentError: similarityAlignmentActions.error,
+    similarityAlignmentSummary: similarityAlignmentActions.summary,
+    similarityAlignmentNotice: similarityAlignmentActions.notice,
+    similarityAlignmentRepair: similarityAlignmentActions.repair,
+    similarityAlignmentDialogOpen: similarityAlignmentActions.dialogOpen,
+    similarityAlignmentUnresolvedCount: similarityAlignmentActions.unresolvedCount,
+    similarityAlignmentApplyDisabledReason: similarityAlignmentActions.applyDisabledReason,
+    similarityAlignmentDrawerReferenceKey: similarityAlignmentActions.drawerReferenceKey,
+    similarityAlignmentPlanInspector: similarityAlignmentActions.activePlanInspector,
+    canApplySimilarityAlignment: similarityAlignmentActions.canApply,
+    resetSimilarityAlignment: similarityAlignmentActions.resetAlignment,
+    reselectSimilarityAlignmentReference,
+    startSimilarityAlignmentFromPopup: similarityAlignmentActions.startFromPopup,
+    startSimilarityAlignmentFromDrawer,
+    similarityAlignmentDrawerReferenceOptions: similarityAlignmentActions.drawerReferenceOptions,
+    setSimilarityAlignmentDrawerReference: similarityAlignmentActions.setDrawerReference,
+    similarityAlignmentDrawerDisabledReason: similarityAlignmentActions.drawerDisabledReason,
+    selectSimilarityAlignmentCandidate: similarityAlignmentActions.selectCandidate,
+    skipSimilarityAlignmentRecord: similarityAlignmentActions.skipRecord,
+    similarityAlignmentDirectionPreview: similarityAlignmentActions.directionPreview,
+    setSimilarityAlignmentDirectionMode: similarityAlignmentActions.setDirectionMode,
+    setSimilarityAlignmentCustomDirection: similarityAlignmentActions.setCustomDirection,
+    similarityAlignmentResetPreview: similarityAlignmentActions.resetPreview,
+    similarityAlignmentResetDialogOpen: similarityAlignmentActions.resetDialogOpen,
+    similarityAlignmentResetScope: similarityAlignmentActions.resetScope,
+    openSimilarityAlignmentReset,
+    cancelSimilarityAlignmentReset: similarityAlignmentActions.cancelReset,
+    applySimilarityAlignmentReset: () => applySimilarityAlignmentDialog(true),
+    applySimilarityAlignmentDraft: () => applySimilarityAlignmentDialog(),
+    cancelSimilarityAlignmentDraft: cancelSimilarityAlignmentDialog,
+    cancelSimilarityAlignmentDialog,
+    similarityAlignmentPaletteRef,
+    similarityAlignmentPaletteStyle,
+    similarityAlignmentCompact,
+    similarityAlignmentEditorDisabledReason,
+    similarityAlignmentCanvasHover,
+    startSimilarityAlignmentPaletteDrag,
+    previewSimilarityAlignmentCandidate: similarityAlignmentActions.previewCandidate,
+    clearSimilarityAlignmentCandidatePreview: similarityAlignmentActions.clearCandidatePreview,
     isRightDrawerTabAvailable: rightDrawerActions.isRightDrawerTabAvailable,
     openRightDrawerTab: rightDrawerActions.openRightDrawerTab,
     toggleRightDrawer: rightDrawerActions.toggleRightDrawer,
@@ -3809,10 +4823,16 @@ export const createAppSetup = () => {
     openOrthogroupInDrawer,
     circularRecordList,
     refreshCircularRecordOrder,
-    waitForAuxiliaryFileImport,
+    waitForAuxiliaryFileImport, canRetryAuxiliaryImportFailure,
+    retryAuxiliaryImportFailure: () => history.runUndoableCheckpoint('Change uploaded file', retryAuxiliaryImportFailure, { shouldCommit: result => result !== false }),
     circularRecordPresentationOptions,
     circularRecordPresentationError,
     circularSingleRecordPresentationEnabled,
+    circularRecordDiscoveryState,
+    circularRecordInspectionEnabled,
+    inspectCircularSourceRecords,
+    circularRecordSelectionEnabled,
+    showCircularCanvasSetting,
     setCircularRecordPresentationSelector,
     paletteDefinitions,
     paletteNames,
@@ -3844,6 +4864,10 @@ export const createAppSetup = () => {
     filterMode,
     manualBlacklist,
     manualWhitelist,
+    setLabelFilterMode,
+    addWhitelistRule,
+    removeWhitelistRule,
+    removePriorityRule,
     featureKeys,
     defaultColorKeys,
     newColorFeat,
@@ -3869,6 +4893,8 @@ export const createAppSetup = () => {
     moveSpecificRuleUp,
     removeSpecificRule,
     setSpecificRuleField,
+    specificRulePattern, specificRulePatternDraft, specificRulePatternFieldId,
+    editSpecificRulePattern, retrySpecificRulePattern, revertSpecificRulePattern,
     extractedFeatures,
     featureEditorStatus,
     featureEditorStatusText,
@@ -3896,8 +4922,6 @@ export const createAppSetup = () => {
     previewFeatureSearchCanSearch: previewFeatureSearch.previewFeatureSearchCanSearch,
     previewFeatureSearchStatusText: previewFeatureSearch.previewFeatureSearchStatusText,
     previewFeatureSearchActiveDetail: previewFeatureSearch.previewFeatureSearchActiveDetail,
-    previewFeatureSearchStyle: previewFeatureSearch.previewFeatureSearchStyle,
-    startPreviewFeatureSearchDrag: previewFeatureSearch.startDrag,
     applyPreviewFeatureSearch: previewFeatureSearch.applySearch,
     goToNextPreviewFeatureSearchMatch: previewFeatureSearch.goToNext,
     goToPreviousPreviewFeatureSearchMatch: previewFeatureSearch.goToPrevious,
@@ -3924,6 +4948,7 @@ export const createAppSetup = () => {
     applySelectedFeatureVisibility,
     applySelectedFeatureStroke,
     visibleFeatureRows,
+    featureRecordPickerVisible,
     featureListTopSpacerPx,
     featureListBottomSpacerPx,
     isFeatureDrawerMounted,
@@ -3936,7 +4961,6 @@ export const createAppSetup = () => {
     labelTextBulkOverrides,
     labelTextFeatureOverrideSources,
     labelVisibilityOverrides,
-    labelOverrideContextKey,
     labelOverrideBuildWarning,
     autoLabelReflowEnabled,
     labelReflowProcessing,
@@ -3947,7 +4971,6 @@ export const createAppSetup = () => {
     featureVisibilityRules,
     featureVisibilityOverrides,
     featureStrokeOverrides,
-    labelLayoutDirtyReason,
     addFeatureVisibilityRule: addFeatureVisibilityRuleWithHistory,
     downloadFeatureVisibilityRulesTsv,
     featureVisibilityFeatureSuggestions,
@@ -3993,7 +5016,6 @@ export const createAppSetup = () => {
     alignByClickedOrthogroup,
     highlightClickedOrthogroup,
     clearOrthogroupHighlight,
-    resetOrthogroupAlignment,
     openClickedOrthogroupInEditor,
     specificRuleLegendOptions,
     updateClickedFeatureColor: updateClickedFeatureColorWithHistory,
@@ -4038,7 +5060,7 @@ export const createAppSetup = () => {
     moveLegendEntryDown,
     sortLegendEntries,
     sortLegendEntriesByDefault,
-    resetLegendPosition,
+    resetLegendPosition: undoableAction('Reset legend position', resetLegendPosition),
     getLegendEntryStrokeColor,
     getLegendEntryStrokeWidth,
     setLegendEntryStrokeColorValue: setLegendEntryStrokeColorValueWithHistory,
@@ -4046,12 +5068,17 @@ export const createAppSetup = () => {
     updateLegendEntryStrokeWidth,
     resetLegendEntryStroke,
     resetAllStrokes,
-    resetAllPositions,
-    resetLayout,
+    resetAllPositions: undoableAction('Reset positions', resetAllPositions),
+    resetLayout: undoableAction('Reset layout', resetLayout),
     canvasPadding,
     showCanvasControls,
     resetCanvasPadding,
     definitionLineStyleRows,
+    linearLabelVisibilitySummary,
+    linearLabelAutoFields,
+    linearLabelAutoDisclosure,
+    focusLinearLabelVisibility,
+    legendPositionLabel,
     getDefinitionLineStyleSize,
     setDefinitionLineStyleSize,
     getDefinitionLineStyleWeight,

@@ -21,6 +21,8 @@ identity lookup by matching a public protein label.
 
 Interactive SVG adds embedded controls, searchable metadata, feature and match popups, group inspection, and supported sequence downloads. Static SVG may retain semantic groups without embedding the interactive application.
 
+Interactive SVG search uses the same fields as [Feature Search in the Web app](web-app.md#preview-search-and-editor): **All** does not search nucleotide or amino-acid sequences or `/translation` values, and **Location** matches the displayed 1-based INSDC location. Feature popups show each part of a split or origin-spanning location and the summed length. A file keeps the runtime it was exported with; export it again to get these rules.
+
 Generated interactive output sanitizes input-derived text and markup. Untrusted input must not become executable `<script>` content or `on*` event-handler attributes. Species text accepts the documented limited markup for display, not arbitrary HTML execution.
 
 The [SVG ID and attribute inventory](../SVG_SEMANTIC_HOOKS.md) lists the exact

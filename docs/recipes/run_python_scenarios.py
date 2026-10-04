@@ -33,6 +33,7 @@ from gbdraw.api import (
     PreparedDiagramRequest,
     RequestRenderResult,
     ScalarSpec,
+    SimilarityAlignmentPlan,
     SessionDocument,
     load_session_document,
 )
@@ -302,6 +303,15 @@ def _validate_migrated_tutorial(
             raise RecipeContractError(
                 "T-PY-05 changed the Similarity-group link set."
             )
+        plan = namespace["diagram"].request.similarity_alignment
+        if (
+            not isinstance(plan, SimilarityAlignmentPlan)
+            or plan.group_id != "og_1"
+            or any(decision.status.value == "skipped" for decision in plan.records)
+        ):
+            raise RecipeContractError(
+                "T-PY-05 must align every record on og_1."
+            )
     elif scenario_id == "T-PY-06":
         options = namespace.get("options")
         if (
@@ -399,7 +409,7 @@ def _validate_interactive_handoff_tutorial(
         interactive_root.attrib.get("data-gbdraw-interactive-svg") != "true"
         or len(feature_ids) != 37
         or len(metadata) != 1
-        or metadata[0].attrib.get("data-schema") != "3"
+        or metadata[0].attrib.get("data-schema") != "4"
         or "COX1" not in interactive_source
         or "gbdraw-feature-search-controls" not in interactive_source
     ):
@@ -1304,6 +1314,12 @@ def _assert_losatn_matches(
     chapter: dict[str, object], *, output_path: Path
 ) -> None:
     expected_source = output_path.parent / "lambda-de3.losatn.tsv"
+    if not expected_source.is_file() and chapter.get("id") == "T-PY-04":
+        # T-PY-04 runs LOSATN itself; its result must reproduce the GUI table.
+        expected_source = (
+            Path(__file__).resolve().parents[2] / "gbdraw" / "web" / "tutorial-data"
+            / "lambda-de3-comparison" / "lambda-de3.losatn.tsv"
+        )
     if not expected_source.is_file():
         raise RecipeContractError("H-PY-02 lost its copied LOSATN evidence.")
     expected_matches = {

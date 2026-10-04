@@ -1,0 +1,775 @@
+{
+ "budget": {
+  "visibleP95Ms": 100,
+  "visibleMaxMs": 250,
+  "compareSettleP95Ms": 200,
+  "taskMs": 100
+ },
+ "rows": [
+  {
+   "target": "candidate",
+   "state": "post-generate-override",
+   "op": "compare",
+   "direction": "to-losat",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 24.7,
+    "p95": 85.1,
+    "max": 85.5
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 24.7,
+    "p95": 85.5,
+    "max": 167.8
+   },
+   "maxLoafMs": 86,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate-override",
+   "op": "compare",
+   "direction": "to-none",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 21.3,
+    "p95": 23.3,
+    "max": 61.5
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 21.3,
+    "p95": 278.7,
+    "max": 759.8
+   },
+   "maxLoafMs": 241.5,
+   "samplesWithTaskAtLeast100Ms": 2,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "FAIL",
+    "failures": [
+     "settle p95 278.7 > 200",
+     "2 samples with a >=100 ms frame"
+    ]
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate-override",
+   "op": "generate",
+   "direction": "repeat",
+   "temperature": "warm",
+   "pages": 3,
+   "visibleMs": {
+    "n": 3,
+    "p50": 17.1,
+    "p95": 17.6,
+    "max": 17.7
+   },
+   "settleMs": {
+    "n": 3,
+    "p50": 4558.3,
+    "p95": 4660.1,
+    "max": 4671.4
+   },
+   "generateTotalMs": {
+    "n": 3,
+    "p50": 4558.3,
+    "p95": 4660.1,
+    "max": 4671.4
+   },
+   "maxLoafMs": 595.1,
+   "samplesWithTaskAtLeast100Ms": 3,
+   "unsettled": 0,
+   "diagramWorkerRuns": 3,
+   "diagramWorkerHelpers": 3,
+   "diagramWorkerConstructions": 0
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate-override",
+   "op": "input-blur",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 18.5,
+    "p95": 25.9,
+    "max": 29.8
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 18.5,
+    "p95": 25.9,
+    "max": 29.8
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate-override",
+   "op": "input-key",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 15.5,
+    "p95": 20.1,
+    "max": 20.2
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 15.5,
+    "p95": 20.1,
+    "max": 20.2
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate-override",
+   "op": "program",
+   "direction": "to-LOSATN",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 25.5,
+    "p95": 28.5,
+    "max": 29.7
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 30.9,
+    "p95": 31.4,
+    "max": 31.5
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate-override",
+   "op": "program",
+   "direction": "to-LOSATP",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 25.7,
+    "p95": 29,
+    "max": 29.5
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 31,
+    "p95": 31.6,
+    "max": 31.7
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate",
+   "op": "compare",
+   "direction": "to-losat",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 23.3,
+    "p95": 43.2,
+    "max": 43.2
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 23.3,
+    "p95": 43.2,
+    "max": 43.2
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate",
+   "op": "compare",
+   "direction": "to-none",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 20,
+    "p95": 42.5,
+    "max": 44.6
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 20,
+    "p95": 42.5,
+    "max": 44.6
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate",
+   "op": "generate",
+   "direction": "repeat",
+   "temperature": "warm",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 15.7,
+    "p95": 17.1,
+    "max": 17.7
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 4200.2,
+    "p95": 5976,
+    "max": 8334.5
+   },
+   "generateTotalMs": {
+    "n": 21,
+    "p50": 4200.2,
+    "p95": 5976,
+    "max": 8334.5
+   },
+   "maxLoafMs": 1037.6,
+   "samplesWithTaskAtLeast100Ms": 21,
+   "unsettled": 0,
+   "diagramWorkerRuns": 21,
+   "diagramWorkerHelpers": 21,
+   "diagramWorkerConstructions": 0
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate",
+   "op": "input-blur",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 19.1,
+    "p95": 24.9,
+    "max": 25.4
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 19.1,
+    "p95": 24.9,
+    "max": 25.4
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate",
+   "op": "input-key",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 12,
+    "p95": 15.4,
+    "max": 19.7
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 12,
+    "p95": 15.4,
+    "max": 19.7
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate",
+   "op": "program",
+   "direction": "to-LOSATN",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 24.7,
+    "p95": 51.5,
+    "max": 57.6
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 31.1,
+    "p95": 51.5,
+    "max": 57.6
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "post-generate",
+   "op": "program",
+   "direction": "to-LOSATP",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 25.7,
+    "p95": 54,
+    "max": 59.8
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 31.1,
+    "p95": 54,
+    "max": 60.8
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "pre-generate",
+   "op": "compare",
+   "direction": "to-losat",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 16.6,
+    "p95": 19.2,
+    "max": 23.3
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 16.6,
+    "p95": 19.2,
+    "max": 23.3
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "pre-generate",
+   "op": "compare",
+   "direction": "to-none",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 15.7,
+    "p95": 16.3,
+    "max": 17.2
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 15.7,
+    "p95": 16.3,
+    "max": 17.2
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "pre-generate",
+   "op": "generate",
+   "direction": "first",
+   "temperature": "cold",
+   "pages": 3,
+   "visibleMs": {
+    "n": 3,
+    "p50": 21.2,
+    "p95": 21.9,
+    "max": 22
+   },
+   "settleMs": {
+    "n": 3,
+    "p50": 12831.6,
+    "p95": 13286.2,
+    "max": 13336.7
+   },
+   "generateTotalMs": {
+    "n": 3,
+    "p50": 12831.6,
+    "p95": 13286.2,
+    "max": 13336.7
+   },
+   "maxLoafMs": 608.3,
+   "samplesWithTaskAtLeast100Ms": 3,
+   "unsettled": 0,
+   "diagramWorkerRuns": 3,
+   "diagramWorkerHelpers": 3,
+   "diagramWorkerConstructions": 3
+  },
+  {
+   "target": "candidate",
+   "state": "pre-generate",
+   "op": "input-blur",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 14.4,
+    "p95": 19.7,
+    "max": 23
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 14.4,
+    "p95": 19.7,
+    "max": 23
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "pre-generate",
+   "op": "input-key",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 13.3,
+    "p95": 18.9,
+    "max": 19
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 13.3,
+    "p95": 18.9,
+    "max": 19
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "pre-generate",
+   "op": "program",
+   "direction": "to-LOSATN",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 20.2,
+    "p95": 21.6,
+    "max": 22.4
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 30.6,
+    "p95": 31.6,
+    "max": 31.7
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "pre-generate",
+   "op": "program",
+   "direction": "to-LOSATP",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 20.5,
+    "p95": 21.5,
+    "max": 21.9
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 31.4,
+    "p95": 31.8,
+    "max": 31.8
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "vnig-generated",
+   "op": "generate",
+   "direction": "repeat",
+   "temperature": "warm",
+   "pages": 3,
+   "visibleMs": {
+    "n": 3,
+    "p50": 15.6,
+    "p95": 16,
+    "max": 16
+   },
+   "settleMs": {
+    "n": 3,
+    "p50": 4863.6,
+    "p95": 4939.4,
+    "max": 4947.8
+   },
+   "generateTotalMs": {
+    "n": 3,
+    "p50": 4863.6,
+    "p95": 4939.4,
+    "max": 4947.8
+   },
+   "maxLoafMs": 371.7,
+   "samplesWithTaskAtLeast100Ms": 3,
+   "unsettled": 0,
+   "diagramWorkerRuns": 3,
+   "diagramWorkerHelpers": 3,
+   "diagramWorkerConstructions": 0
+  },
+  {
+   "target": "candidate",
+   "state": "vnig-saved-preview",
+   "op": "generate",
+   "direction": "first",
+   "temperature": "cold",
+   "pages": 3,
+   "visibleMs": {
+    "n": 3,
+    "p50": 113.7,
+    "p95": 115.7,
+    "max": 115.9
+   },
+   "settleMs": {
+    "n": 3,
+    "p50": 12352.9,
+    "p95": 12372.1,
+    "max": 12374.2
+   },
+   "generateTotalMs": {
+    "n": 3,
+    "p50": 12352.9,
+    "p95": 12372.2,
+    "max": 12374.3
+   },
+   "maxLoafMs": 389.2,
+   "samplesWithTaskAtLeast100Ms": 3,
+   "unsettled": 0,
+   "diagramWorkerRuns": 3,
+   "diagramWorkerHelpers": 3,
+   "diagramWorkerConstructions": 3
+  },
+  {
+   "target": "candidate",
+   "state": "vnig-saved-preview",
+   "op": "input-blur",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 20.2,
+    "p95": 30.4,
+    "max": 30.5
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 20.2,
+    "p95": 30.4,
+    "max": 30.5
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  },
+  {
+   "target": "candidate",
+   "state": "vnig-saved-preview",
+   "op": "input-key",
+   "direction": "any",
+   "temperature": "n/a",
+   "pages": 3,
+   "visibleMs": {
+    "n": 21,
+    "p50": 12,
+    "p95": 17.8,
+    "max": 18.1
+   },
+   "settleMs": {
+    "n": 21,
+    "p50": 12,
+    "p95": 17.8,
+    "max": 18.1
+   },
+   "maxLoafMs": 0,
+   "samplesWithTaskAtLeast100Ms": 0,
+   "unsettled": 0,
+   "diagramWorkerRuns": 0,
+   "diagramWorkerHelpers": 0,
+   "diagramWorkerConstructions": 0,
+   "proposedBudget": {
+    "verdict": "PASS"
+   },
+   "sampleCountMeetsPlan": true
+  }
+ ],
+ "coverage": {}
+}

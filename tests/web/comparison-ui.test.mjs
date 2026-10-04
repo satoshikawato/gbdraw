@@ -25,6 +25,15 @@ await Promise.all([
   cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.generated.js'),
     join(tempRoot, 'js', 'mode-profiles.generated.js')
+  ),
+  // mode-profiles.js evaluates comparison thresholds with these dependency-free modules.
+  cp(
+    join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'error-normalization.js'),
+    join(tempRoot, 'js', 'services', 'error-normalization.js')
+  ),
+  cp(
+    join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'optional-positive-number.js'),
+    join(tempRoot, 'js', 'utils', 'optional-positive-number.js')
   )
 ]);
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
@@ -78,8 +87,9 @@ test('fresh Linear state projects No comparison', () => {
   assert.deepEqual(projection.sourceBreakdown, {
     key: 'none', losat: 0, upload: 0, label: 'No active pairs'
   });
-  assert.equal(projection.currentStatusLabel, 'Current: No comparison');
-  assert.equal(projection.summaryText, 'No comparison');
+  // The pressed action shows the intent; no status or summary text is projected.
+  assert.equal(Object.hasOwn(projection, 'currentStatusLabel'), false);
+  assert.equal(Object.hasOwn(projection, 'summaryText'), false);
   assert.deepEqual(projection.sectionKeys.settings, []);
   assert.deepEqual(projection.sectionKeys.selectedPairs, []);
   assert.deepEqual(projection.sectionKeys.advanced, ['record-layout']);
@@ -95,7 +105,8 @@ test('adjacent LOSAT keeps selection intent separate from resolved work', () => 
   assert.deepEqual(projection.sourceBreakdown, {
     key: 'losat', losat: 2, upload: 0, label: '2 LOSAT'
   });
-  assert.match(projection.summaryText, /^LOSATN · 2 adjacent pairs · E-value <= /);
+  assert.equal(projection.activeLosatModeLabel, 'LOSATN');
+  assert.match(projection.filterSummary, /^E-value <= /);
 
   const oneRecordResolution = resolveLinearComparisonPlan({
     plan,
@@ -114,7 +125,6 @@ test('adjacent LOSAT keeps selection intent separate from resolved work', () => 
   assert.equal(oneRecord.activePairCount, 0);
   assert.equal(oneRecord.sourceBreakdown.key, 'none');
   assert.equal(oneRecord.topologyPairLabel, '0 adjacent pairs');
-  assert.match(oneRecord.summaryText, /^LOSATN · 0 adjacent pairs/);
 });
 
 test('adjacent upload summary uses only resolver-active uploads', () => {
@@ -140,11 +150,7 @@ test('adjacent upload summary uses only resolver-active uploads', () => {
   assert.deepEqual(projection.sourceBreakdown, {
     key: 'upload', losat: 0, upload: 2, label: '2 upload'
   });
-  assert.equal(
-    projection.currentStatusLabel,
-    'Current: Upload BLAST TSV for all adjacent pairs'
-  );
-  assert.match(projection.summaryText, /^Upload BLAST TSV · 2 adjacent pairs/);
+  assert.equal(projection.topologyPairLabel, '2 adjacent pairs');
   assert(projection.sectionKeys.settings.includes('upload-readiness'));
   assert(!projection.sectionKeys.settings.includes('losat-mode'));
 });
@@ -165,7 +171,6 @@ test('selected upload and mixed plans project custom intent and active source co
   assert.deepEqual(selectedUpload.sourceBreakdown, {
     key: 'upload', losat: 0, upload: 1, label: '1 upload'
   });
-  assert.equal(selectedUpload.currentStatusLabel, 'Current: Selected pairs (1; 1 upload)');
   assert(!selectedUpload.sectionKeys.settings.includes('losat-mode'));
 
   const mixedPlan = {
@@ -187,10 +192,6 @@ test('selected upload and mixed plans project custom intent and active source co
   assert.deepEqual(mixed.sourceBreakdown, {
     key: 'mixed', losat: 1, upload: 1, label: '1 LOSAT, 1 upload'
   });
-  assert.equal(
-    mixed.currentStatusLabel,
-    'Current: Selected pairs (2; 1 LOSAT, 1 upload)'
-  );
   assert(mixed.sectionKeys.settings.includes('losat-mode'));
   assert(mixed.sectionKeys.settings.includes('upload-readiness'));
 });
@@ -300,18 +301,14 @@ test('LOSAT and LOSATP modes project only their active Settings and Advanced con
     losatProgram: 'blastp',
     blastpMode: 'orthogroup'
   });
-  assert.match(
-    similarityGroups.summaryText,
-    /^LOSATP · Similarity groups · 2 adjacent pairs/
-  );
+  assert.deepEqual([similarityGroups.activeLosatModeLabel, similarityGroups.activeLosatpModeLabel],
+    ['LOSATP', 'Similarity groups']);
   const collinear = project(plan, {
     losatProgram: 'blastp',
     blastpMode: 'collinear'
   });
-  assert.match(
-    collinear.summaryText,
-    /^LOSATP · Collinear blocks · 2 adjacent pairs/
-  );
+  assert.deepEqual([collinear.activeLosatModeLabel, collinear.activeLosatpModeLabel],
+    ['LOSATP', 'Collinear blocks']);
 });
 
 test('selected topology blocks only grouping and collinear LOSATP modes without changing the plan', () => {

@@ -1,0 +1,38 @@
+{
+  "base": "968d08211ce2315c274be14d879ef9ceb332bb66",
+  "referenceMapSha256": "dfd88850f67162f6046542e53d3136f51818e127a1320ecbf589b6cf97e14885",
+  "exactMappedReferences": [
+    {
+      "ref": "tests/web/contracts/session-regenerate-intent.playwright.spec.js::no-draft session preserves preview, active config, canonical request, and catalog",
+      "checkpointRefs": [
+        "JRN-RENDER-001:fresh-result",
+        "JRN-RENDER-001:roundtrip-regeneration"
+      ],
+      "sensitivity": "DIRECT_ASSERTION",
+      "execution": "DEV_STAGING",
+      "residualRisk": "The browser contract exercises one representative current no-draft Session during dev staging; alternate modes, migrations, and every request field are not exhaustively covered here."
+    },
+    {
+      "ref": "tests/web/contracts/session-regenerate-intent.playwright.spec.js::no-draft session preserves preview, active config, canonical request, and catalog",
+      "checkpointRefs": [
+        "JRN-REGEN-001:current-result-admission",
+        "JRN-REGEN-001:generate-start",
+        "JRN-REGEN-001:post-regeneration-continuation",
+        "JRN-REGEN-001:preview-ready",
+        "JRN-REGEN-001:saved-preview"
+      ],
+      "sensitivity": "DIRECT_ASSERTION",
+      "execution": "DEV_STAGING",
+      "residualRisk": "The browser contract covers one representative current no-draft Session; alternate modes, migrations, cancellation, and every continuation remain covered separately."
+    }
+  ],
+  "candidateChangedPaths": [
+    "tests/web/contracts/session-regenerate-intent.playwright.spec.js"
+  ],
+  "originalMappedFileSha256": "4b0f6e83c04ecfd75f245725c99335cd1d5ae587789b1f45b9af5a5de329a7a1",
+  "candidateMappedFileSha256": "732892b8d9c780cc4713fc41f4d28032e171860f5a176cb1b0bc49a1bf5693c7",
+  "bodyChanges": "Existing Save helper checks each busy and explicitly retries within original deadline. Divergent case retains pre-Save snapshot only after existing availability and current-mounted SVG agree following asynchronous capture; raw checkpoints attached before unchanged strict comparison.",
+  "referenceUpdateRequired": false,
+  "authorityReferenceReason": "Exact path::test-name strings and authority checkpoint/execution/sensitivity records unchanged; no reference amendment is proposed. Prior evidence-only trusted integration is required before dependent S05 runtime.",
+  "authority": "PD-OI-045 and existing Web live-edit boundary jointly require reflow busy and explicit retry with preserved draft/Result. No new outcome, retirement, risk, Worker allowance, or performance budget is selected."
+}

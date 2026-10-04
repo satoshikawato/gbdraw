@@ -52,12 +52,12 @@ The workflow creates these files:
 ## Step 1: Upload the five source records
 
 Select **Linear**. Under **Input Genomes**, keep **GenBank** selected and
-confirm the fresh **Current: No comparison** status below the record list.
+confirm that **No comparison** is pressed in the **Comparison** command group.
 
-1. In the first **GenBank File** control, choose `AP027078.gb`.
-2. Select **Add sequence** in the **Input Genomes** header, then choose
+1. In the first **GenBank / DDBJ File** control, choose `AP027078.gb`.
+2. Select **Add sequence** below the File list, then choose
    `AP027131.gb` in the new card.
-3. Repeat the header **Add sequence** action for `AP027133.gb`, `AP027132.gb`, and
+3. Repeat the **Add sequence** action for `AP027133.gb`, `AP027132.gb`, and
    `NZ_CP006932.gb`, in that order.
 
 Keep all optional regions empty so every row uses its complete record. Confirm
@@ -72,8 +72,7 @@ under **Selected pairs**.*
 
 ## Step 2: Generate the five-record baseline
 
-Select **Generate Diagram** while the status remains **Current: No
-comparison**. The first Linear result contains 2,994 rendered feature elements. Select **Zoom
+Select **Generate Diagram** while **No comparison** is still pressed. The first Linear result contains 2,994 rendered feature elements. Select **Zoom
 out** six times to reach **40%**, then drag the preview horizontally until the
 complete diagram is centered. Use this overview to verify all five rows and the
 absence of ribbons.
@@ -97,32 +96,43 @@ and find **Comparison boundary: display row 4 to 5**. Confirm that its pair
 connects sequence 4 (`AP027132.gb`) to sequence 5 (`NZ_CP006932.gb`), then
 close the disclosure.
 
-Open **Settings**, choose the **LOSATP** button in **LOSAT Mode**, and choose
-**Collinear blocks** from the **LOSATP mode** menu. Under **Comparison
-appearance**, set **Match style** to **Curve**, then set the primary search and
-filter values. Continue past **Generate Diagram**, open **Advanced comparison
-and layout**, and set the runtime and advanced Collinear values.
+Open **Settings** and choose the **LOSATP** button in **LOSAT Mode**. Choose
+**Pairwise matches** from the **LOSATP mode** menu and set **Match style** to
+**Curve** under **Comparison appearance**; Collinear blocks keeps that style but
+hides the control. Then choose **Collinear blocks** from the **LOSATP mode**
+menu, select **Infer orthogroups with self-comparisons**, clear **Max target
+seqs** so it shows **Unbounded**, and set the remaining block, runtime, and
+result-filter values. Continue past **Generate Diagram**, open **Advanced
+comparison and layout**, and set the advanced Collinear values.
 
-Fresh and Reset Collinear settings default **Evidence scope** to **Adjacent
-pairs**, which is also the value used by this checked recipe and output.
+Fresh Web Collinear settings leave **Infer orthogroups with self-comparisons**
+off and set **Max target seqs** to `5`. The Gallery figure and the
+command-line and Python workflows infer orthogroups with self-comparisons from
+an unbounded search, so change both values to reproduce it. Fresh and Reset
+Collinear settings default **Evidence scope** to **Adjacent pairs**, which is
+also the value used by this checked recipe and output.
 
 | Section | Control | Value |
 | --- | --- | --- |
 | Settings | LOSAT Mode | LOSATP |
+| Settings / Comparison appearance | Match style (set in Pairwise matches) | Curve |
 | Settings | LOSATP mode | Collinear blocks |
-| Settings / Comparison appearance | Match style | Curve |
+| Settings / Runtime and reproducibility | Execution | Auto |
+| Settings / Runtime and reproducibility | Total threads | Safe |
+| Settings / Runtime and reproducibility | Parallel runs | Auto |
+| Settings / Runtime and reproducibility | Threads per run | Auto |
+| Settings | Max target seqs | Blank (**Unbounded**) |
+| Settings | Member hits per protein | `5` |
+| Settings | Infer orthogroups with self-comparisons | Selected |
 | Settings | Max unit gap | `0` |
 | Settings | Min block genes | `1` |
 | Settings | Color mode | Orientation + identity |
 | Settings | Evidence scope | Adjacent pairs |
 | Settings / Result filters | Bitscore / E-value | `50` / `0.01` |
 | Settings / Result filters | Minimum identity / length | `0` / `0` |
-| Advanced comparison and layout | Execution | Auto |
-| Advanced comparison and layout | Total threads | Safe |
-| Advanced comparison and layout | Parallel runs | Auto |
-| Advanced comparison and layout | Threads per run | Auto |
 | Advanced comparison and layout / Advanced collinear search | Diagonal drift | `0` |
 | Advanced comparison and layout / Advanced collinear search | Merge conflicts | `1` |
+| Advanced comparison and layout / Advanced collinear search | Paralog links per group | `2` |
 | Basic | Output Prefix | `losatp_collinear` |
 
 Set **Track Layout** to **Features on axis**, center the records, separate

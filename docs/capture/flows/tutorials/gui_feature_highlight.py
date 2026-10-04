@@ -22,7 +22,6 @@ from flows.how_to.presentation import (
     _inspect_downloaded_presentation_svg,
     _inspect_presentation_svg,
     _open_human_circular,
-    _park_feature_search,
     _wait_for_preview_transform,
     CaptureResult,
 )
@@ -34,10 +33,12 @@ from flows.how_to.tracks import (
     _track_slot_snapshot,
 )
 from flows.web_capture import (
+    toggle_disclosure,
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
     generate_and_wait_for_result,
+    open_ancestor_details,
     open_browser_capture,
     wait_for_app_shell,
 )
@@ -128,9 +129,7 @@ def _remove_slot_if_present(page: Page, slot_id: str) -> None:
 
 
 def _configure_slots(page: Page) -> tuple[dict[str, Any], ...]:
-    page.get_by_role(
-        "button", name=re.compile(r"Custom Track Slots$"), exact=False
-    ).click()
+    open_ancestor_details(page.get_by_title("Open Custom Track Slots", exact=True)).click()
     page.get_by_role("checkbox", name="Use custom stack", exact=True).check()
     _remove_slot_if_present(page, "gc_content")
     _remove_slot_if_present(page, "gc_skew")
@@ -164,13 +163,16 @@ def _configure_slots(page: Page) -> tuple[dict[str, Any], ...]:
     annotation.get_by_label("Annotation placement", exact=True).select_option(
         "inside"
     )
-    annotation.get_by_label(
+    slot_id = annotation.get_by_label(
         "Circular track slot id annotations", exact=True
-    ).fill("mitochondrial_regions")
+    )
+    slot_id.fill("mitochondrial_regions")
     annotation = page.get_by_role(
         "group", name="Circular track slot mitochondrial_regions", exact=True
     )
-    annotation.get_by_title("Width", exact=True).fill("24px")
+    annotation.get_by_role(
+        "textbox", name="Circular track slot mitochondrial_regions Width value", exact=True
+    ).fill("24px")
     annotation.get_by_label("Show annotation labels", exact=True).check()
     annotation.locator('select:has(option[value="compress"])').select_option(
         "compress"
@@ -241,7 +243,7 @@ def _assert_highlight_svg(report: Mapping[str, Any]) -> None:
     expected_fills = {"#3b82f6", "#ef4444", "#f59e0b", "#8b5cf6", "#10b981"}
     if not expected_fills <= fills:
         raise AssertionError(
-            f"Missing feature-presentation fills: {sorted(expected_fills - fills)}"
+            f"Missing feature-presentation fills: {sorted(expected_fills - fills)}; actual: {sorted(str(fill) for fill in fills)}"
         )
     if _slot_pairs(report) != EXPECTED_SLOTS:
         raise AssertionError(f"Unexpected rendered slots: {_slot_pairs(report)!r}")
@@ -378,15 +380,19 @@ def capture_gui_feature_highlight(
         page.get_by_label("Separate Strands", exact=True).uncheck()
 
         colors = page.get_by_label("Colors", exact=True)
-        colors.click()
+        toggle_disclosure(colors)
         expect(page.get_by_label("Palette", exact=True)).to_have_value("default")
         page.get_by_label("Specific Table (-t)", exact=True).set_input_files(
             tables["colors"]
         )
-        colors.click()
+        page.wait_for_function(
+            "() => window.__GBDRAW_APP__.manualSpecificRules.length === 5",
+            timeout=ACTION_TIMEOUT_MS,
+        )
+        toggle_disclosure(colors)
 
         features = page.get_by_label("Features", exact=True)
-        features.click()
+        toggle_disclosure(features)
         page.get_by_label("Rendering for CDS", exact=True).select_option("arrow")
         page.get_by_label("Rendering for rRNA", exact=True).select_option(
             "rectangle"
@@ -404,10 +410,10 @@ def capture_gui_feature_highlight(
         )
         page.get_by_label("Line stroke color", exact=True).fill("#9CA3AF")
         page.get_by_label("Line Stroke Width", exact=True).fill("1.5")
-        features.click()
+        toggle_disclosure(features)
 
         labels = page.get_by_label("Labels", exact=True)
-        labels.click()
+        toggle_disclosure(labels)
         page.get_by_label("Label Mode", exact=True).select_option("both")
         page.get_by_role("button", name="Whitelist", exact=True).click()
         page.get_by_label("Whitelist File", exact=True).set_input_files(
@@ -419,34 +425,37 @@ def capture_gui_feature_highlight(
         page.get_by_text("Label Rendering", exact=True).locator(
             "xpath=.."
         ).locator("select").select_option("auto")
-        labels.click()
+        toggle_disclosure(labels)
 
         annotations = page.get_by_label("Region Annotations", exact=True)
-        annotations.click()
-        page.get_by_label("Import TSV", exact=True).set_input_files(
-            tables["regions"]
-        )
+        toggle_disclosure(annotations)
+        with page.expect_file_chooser() as chooser:
+            open_ancestor_details(page.get_by_role("button", name="Import TSV", exact=True)).click()
+        chooser.value.set_files(tables["regions"])
         expect(page.get_by_label("Annotation set id", exact=True)).to_have_value(
             "mitochondrial_regions"
         )
-        annotations.click()
+        toggle_disclosure(annotations)
         slots = _configure_slots(page)
 
         axis = page.locator("summary").filter(has_text="Axis & Scale")
-        axis.click()
+        toggle_disclosure(axis)
         page.get_by_label("Axis stroke color mode", exact=True).select_option(
             "color"
         )
         page.get_by_label("Axis stroke color", exact=True).fill("#374151")
         page.get_by_label("Axis Stroke Width", exact=True).fill("4")
-        axis.click()
+        toggle_disclosure(axis)
 
-        title = page.get_by_label("Title & Legend", exact=True)
-        title.click()
-        page.get_by_label("Plot Title", exact=True).fill(TITLE)
+        title = page.get_by_label("Titles and Record Labels", exact=True)
+        toggle_disclosure(title)
+        page.get_by_role("textbox", name="Plot Title", exact=True).fill(TITLE)
         page.get_by_label("Plot Title Position", exact=True).select_option("top")
-        page.get_by_label("Legend Position", exact=True).select_option("right")
-        title.click()
+        toggle_disclosure(title)
+        legend = page.get_by_label("Legend settings", exact=True)
+        toggle_disclosure(legend)
+        page.get_by_label("Legend position", exact=True).select_option("right")
+        toggle_disclosure(legend)
 
         page.get_by_role(
             "group", name="Circular track slot mitochondrial_regions", exact=True
@@ -456,6 +465,10 @@ def capture_gui_feature_highlight(
               const children = Array.from(panel.children);
               for (const child of children.slice(0, 3)) child.style.display = 'none';
               panel.parentElement?.scrollIntoView({ block: 'start' });
+              // Rows put their buttons on a second line; start at the ticks
+              // row so the whole annotation row stays in view.
+              panel.querySelector("[data-capture='circular-track-slot-ticks']")
+                ?.scrollIntoView({ block: 'start' });
             }"""
         )
         screenshot_bytes[SCREENSHOT_NAMES[0]] = capture_screenshot(
@@ -470,12 +483,10 @@ def capture_gui_feature_highlight(
         _assert_control_state(final_report)
         _assert_highlight_svg(final_report)
 
-        _park_feature_search(page)
         _fit_circular_preview(
             page,
-            target_zoom="70%",
-            pan_left_ratio=0.19,
-            pan_up_ratio=0.026,
+            target_zoom="40%",
+            pan_left_ratio=0.0,
         )
         _wait_for_preview_transform(page)
         screenshot_bytes[SCREENSHOT_NAMES[1]] = capture_screenshot(

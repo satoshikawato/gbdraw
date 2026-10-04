@@ -1,10 +1,10 @@
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
 import {
+  applyCanvasPaddingToSvg,
   bindCompositionMetadata,
   compositionUserDeltas
 } from './composition-actions.js';
 
-export const createLegendCanvasActions = ({ state }) => {
+export const createLegendCanvasActions = ({ state, previewRuntime = null }) => {
   const {
     svgContainer,
     canvasPadding,
@@ -16,68 +16,32 @@ export const createLegendCanvasActions = ({ state }) => {
     legendCurrentOffset,
     plotTitleAutoTransform,
     plotTitleUserOffset,
-    generatedLegendPosition,
-    selectedResultIndex,
-    results,
-    skipCaptureBaseConfig,
-    skipPositionReapply
+    generatedLegendPosition
   } = state;
 
   const currentSvg = () => svgContainer.value?.querySelector?.('svg') || null;
 
-  const persistCurrentSvg = (svg = currentSvg()) => {
-    const index = selectedResultIndex.value;
-    if (!svg || index < 0 || index >= results.value.length) return false;
-    skipCaptureBaseConfig.value = true;
-    skipPositionReapply.value = true;
-    const nextResults = [...results.value];
-    nextResults[index] = {
-      ...results.value[index],
-      content: serializeCleanSvg(svg)
-    };
-    results.value = nextResults;
-    return true;
-  };
-
+  // One canvas padding applies to every Result (D-09, PD-OI-064): Generate
+  // applies it before the candidate is published, and a displayed Result
+  // receives the current value. Applying the same padding twice is a no-op.
   const applyCanvasPadding = () => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
     const svg = currentSvg();
-    if (!svg) return;
+    if (!svg) return false;
     bindCompositionMetadata(svg);
-    const currentViewBox = svg.dataset.originalViewBox || svg.getAttribute('viewBox');
-    if (!svg.dataset.originalViewBox) svg.dataset.originalViewBox = currentViewBox;
-    const [baseX, baseY, baseWidth, baseHeight] = String(svg.dataset.originalViewBox)
-      .trim().split(/\s+/).map(Number);
-    if ([baseX, baseY, baseWidth, baseHeight].some((value) => !Number.isFinite(value))) {
-      throw new Error('The SVG base viewBox is invalid. Regenerate the diagram.');
-    }
-    const originalWidth = Number.parseFloat(svg.dataset.originalWidth || svg.getAttribute('width')) || baseWidth;
-    const originalHeight = Number.parseFloat(svg.dataset.originalHeight || svg.getAttribute('height')) || baseHeight;
-    if (!svg.dataset.originalWidth) {
-      svg.dataset.originalWidth = String(originalWidth);
-      svg.dataset.originalHeight = String(originalHeight);
-    }
-    const width = baseWidth + canvasPadding.left + canvasPadding.right;
-    const height = baseHeight + canvasPadding.top + canvasPadding.bottom;
-    svg.setAttribute('viewBox', `${baseX - canvasPadding.left} ${baseY - canvasPadding.top} ${width} ${height}`);
-    svg.setAttribute('width', `${originalWidth * (width / baseWidth)}px`);
-    svg.setAttribute('height', `${originalHeight * (height / baseHeight)}px`);
-    persistCurrentSvg(svg);
+    if (!applyCanvasPaddingToSvg(svg, canvasPadding)) return false;
+    return Boolean(previewRuntime?.commitActiveResultEdit('canvas-padding'));
   };
 
   const resetCanvasPadding = () => {
+    const busy = state.sessionOperationAvailability?.();
+    if (busy) return busy;
     canvasPadding.top = 0;
     canvasPadding.right = 0;
     canvasPadding.bottom = 0;
     canvasPadding.left = 0;
-    const svg = currentSvg();
-    if (!svg) return;
-    bindCompositionMetadata(svg);
-    if (svg.dataset.originalViewBox) svg.setAttribute('viewBox', svg.dataset.originalViewBox);
-    if (svg.dataset.originalWidth) {
-      svg.setAttribute('width', `${svg.dataset.originalWidth}px`);
-      svg.setAttribute('height', `${svg.dataset.originalHeight}px`);
-    }
-    persistCurrentSvg(svg);
+    return applyCanvasPadding();
   };
 
   const captureOriginalStroke = () => {
@@ -145,7 +109,6 @@ export const createLegendCanvasActions = ({ state }) => {
     applyCanvasPadding,
     captureBaseConfig,
     captureOriginalStroke,
-    persistCurrentSvg,
     resetCanvasPadding
   };
 };

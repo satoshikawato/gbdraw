@@ -36,12 +36,10 @@ from gbdraw.analysis.depth_tracks import (  # type: ignore[reportMissingImports]
     index_depth_track_row,
     normalize_depth_tracks,
     representative_depth_tracks,
-    sync_depth_track_legend_entries,
 )
 from gbdraw.analysis.conservation import (  # type: ignore[reportMissingImports]
     ConservationLoadResult,
     ConservationTrack,
-    conservation_track_gradient_colors,
     load_conservation_sources,
     normalize_conservation_reference,
     normalize_conservation_tracks_for_record,
@@ -57,7 +55,6 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     build_pairwise_protein_blastp_comparisons,
     build_rbh_orthogroup_protein_blastp_comparisons,
     normalize_orthogroup_membership_mode,
-    normalize_protein_blastp_mode,
 )
 from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     CollinearityBlock,
@@ -86,12 +83,17 @@ from gbdraw.api.options import (  # type: ignore[reportMissingImports]
     DepthTrackInput,
     LinearDiagramOptions,
     LinearMultiRecordOptions,
+    LosatRuntimeOptions,
+    LosatSearchOptions,
+    losatp_analysis_mode,
     resolve_circular_diagram_options,
     resolve_linear_diagram_options,
 )
-from gbdraw.linear_comparison import LinearComparison
+from gbdraw.comparisons.losat_runtime import AUTOMATIC_LOSAT_BIN
+from gbdraw.linear_comparison import ComparisonRecordIdWarning, LinearComparison
 from gbdraw.layout.linear_multi_record import record_pairs_between_adjacent_rows
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
+from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
 from gbdraw.layout.record_placement import resolve_record_row_positions
 from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator  # type: ignore[reportMissingImports]
 from gbdraw.config.models import (  # type: ignore[reportMissingImports]
@@ -102,6 +104,7 @@ from gbdraw.config.models import (  # type: ignore[reportMissingImports]
 from gbdraw.config.models.labels import LabelsFilteringConfig  # type: ignore[reportMissingImports]
 from gbdraw.io.colors import load_default_colors, read_color_table  # type: ignore[reportMissingImports]
 from gbdraw.labels.filtering import (  # type: ignore[reportMissingImports]
+    DERIVED_LABEL_FILTERING_KEYS,
     read_filter_list_file,
     read_label_override_file,
     read_qualifier_priority_file,
@@ -115,10 +118,12 @@ from gbdraw.configurators import (  # type: ignore[reportMissingImports]
     GcSkewConfigurator,
     LegendDrawingConfigurator,
 )
-from gbdraw.core.sequence import create_dict_for_sequence_lengths, check_feature_presence  # type: ignore[reportMissingImports]
+from gbdraw.core.sequence import create_dict_for_sequence_lengths  # type: ignore[reportMissingImports]
 from gbdraw.diagrams.circular.assemble import (  # type: ignore[reportMissingImports]
     CircularAssemblyResult,
     _assemble_circular_diagram_result,
+    build_circular_legend_table,
+    plan_circular_annotation_slots,
 )
 from gbdraw.diagrams.linear import assemble_linear_diagram  # type: ignore[reportMissingImports]
 from gbdraw.features.placement import ResolvedPlacementInputs
@@ -138,10 +143,8 @@ from gbdraw.mode_profiles import (
     LINEAR_MODE_PROFILE,
 )
 from gbdraw.annotations import ResolvedAnnotationBundle, resolve_annotations
-from gbdraw.features.colors import precompute_used_color_rules  # type: ignore[reportMissingImports]
 from gbdraw.legend.table import (  # type: ignore[reportMissingImports]
     configure_pairwise_identity_legend_from_comparisons,
-    prepare_legend_table,
 )
 from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup  # type: ignore[reportMissingImports]
 from gbdraw.render.composition import (
@@ -161,6 +164,7 @@ from gbdraw.tracks import (  # type: ignore[reportMissingImports]
     parse_linear_track_slots,
     parse_nonnegative_integer,
 )
+from gbdraw.tracks.parsing import slot_dinucleotide  # type: ignore[reportMissingImports]
 
 from .prepared import ResolvedFeatureInputs, resolve_feature_inputs
 
@@ -177,6 +181,7 @@ class LinearDiagramMetadata:
     linear_comparisons: tuple[LinearComparison, ...] = ()
     orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None
     collinearity_result: CollinearityResult | None = None
+    comparison_warnings: tuple[ComparisonRecordIdWarning, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -282,14 +287,16 @@ def _resolve_diagram_options_config(
         return cfg
 
     filtering = copy.deepcopy(cfg.labels.filtering.as_dict())
+    # Maps compiled by a previous render (for example, persisted in a CLI
+    # Session config) would otherwise shadow the attached tables.
+    for derived_key in DERIVED_LABEL_FILTERING_KEYS:
+        filtering.pop(derived_key, None)
     if whitelist_given:
         filtering["whitelist_df"] = whitelist
     if priority_given:
         filtering["qualifier_priority_df"] = priority
     if override_given:
         filtering["label_override_df"] = label_override
-        # A previous render may have compiled a different table on this config.
-        filtering.pop("label_override_rules", None)
     cfg = replace(
         cfg,
         labels=replace(
@@ -377,10 +384,7 @@ def _dinucleotides_from_circular_slots(
     for slot in slots or []:
         if not slot.enabled or str(slot.renderer) not in {"dinucleotide_content", "dinucleotide_skew"}:
             continue
-        params = slot.params or {}
-        nt = str(params.get("nt", params.get("dinucleotide", default_nt)) or default_nt).upper()
-        if len(nt) >= 2:
-            nts.add(nt)
+        nts.add(slot_dinucleotide(slot.params, default_nt))
     return nts
 
 
@@ -698,8 +702,6 @@ def _validate_depth_config(depth_config) -> None:
         raise ValidationError("depth_large_tick_interval must be > 0")
     if depth_config.small_tick_interval is not None and float(depth_config.small_tick_interval) <= 0:
         raise ValidationError("depth_small_tick_interval must be > 0")
-    if depth_config.tick_font_size is not None and float(depth_config.tick_font_size) <= 0:
-        raise ValidationError("depth_tick_font_size must be > 0")
 
 
 def _validate_gc_content_config(gc_content_config) -> None:
@@ -716,7 +718,6 @@ def _validate_gc_content_config(gc_content_config) -> None:
     for attr, label in (
         ("large_tick_interval", "gc_content_large_tick_interval"),
         ("small_tick_interval", "gc_content_small_tick_interval"),
-        ("tick_font_size", "gc_content_tick_font_size"),
     ):
         value = getattr(gc_content_config, attr, None)
         if value is not None and (not math.isfinite(float(value)) or float(value) <= 0):
@@ -1460,22 +1461,28 @@ def _web_normalize_cache_label(label: object, fallback: str) -> str:
 
 def _linear_losat_cache_filenames(
     records: Sequence[SeqRecord],
+    pairs: Sequence[tuple[int, int]] | None = None,
 ) -> tuple[str, ...]:
-    def label(record: SeqRecord, fallback: str) -> str:
+    """Raw TSV names of the displayed pairs (consecutive records by default)."""
+
+    def label(index: int) -> str:
+        record = records[index]
         annotations = getattr(record, "annotations", {}) or {}
-        return (
+        fallback = f"seq_{index + 1}"
+        return _web_normalize_cache_label(
             str(annotations.get("gbdraw_record_label") or "").strip()
             or str(record.id or "").strip()
-            or fallback
+            or fallback,
+            fallback,
         )
 
+    displayed = (
+        pairs
+        if pairs is not None
+        else tuple((index, index + 1) for index in range(max(0, len(records) - 1)))
+    )
     return tuple(
-        (
-            f"{_web_normalize_cache_label(label(records[index], f'seq_{index + 1}'), f'seq_{index + 1}')}"
-            f".{_web_normalize_cache_label(label(records[index + 1], f'seq_{index + 2}'), f'seq_{index + 2}')}"
-            ".losatp.tsv"
-        )
-        for index in range(max(0, len(records) - 1))
+        f"{label(query)}.{label(subject)}.losatp.tsv" for query, subject in displayed
     )
 
 
@@ -1505,12 +1512,14 @@ def _invoke_protein_analysis_helper(
     protein_extraction: ProteinExtractionResult | None,
     feature_visibility_rules: list[dict[str, object]] | None,
     cache_filenames: Sequence[str] | None,
+    pairwise_pairs: Sequence[tuple[int, int]] | None = None,
 ) -> ProteinBlastpResult | CollinearityResult:
     """Translate resolved typed values into one real analysis-helper call."""
 
     if mode == "pairwise":
         return build_pairwise_protein_blastp_comparisons(
             records,
+            pairs=pairwise_pairs,
             losatp_bin=losatp_bin,
             ncbi_blastp_bin=ncbi_blastp_bin,
             losatp_threads=losatp_threads,
@@ -1581,8 +1590,7 @@ def assemble_linear_diagram_from_records(
     layout: LinearMultiRecordOptions | None = None,
     protein_comparisons: Sequence[DataFrame] | None = None,
     orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None,
-    protein_blastp_mode: ProteinBlastpMode | str = "none",
-    protein_comparison_pairs: Sequence[tuple[int, int]] | None = None,
+    losat_search: LosatSearchOptions | None = None,
     pairwise_match_style: Literal["ribbon", "curve"] | str = "ribbon",
     collinearity_blocks: CollinearityResult | Sequence[CollinearityBlock] | None = None,
     collinearity_params: LosslessCollinearityParameters | None = None,
@@ -1590,18 +1598,12 @@ def assemble_linear_diagram_from_records(
     collinearity_anchor_mode: CollinearityAnchorMode | str = "rbh",
     collinearity_search_scope: CollinearitySearchScope | str = "adjacent",
     collinearity_color_mode: CollinearityColorMode | str = "orientation",
-    losatp_bin: str = "losat",
-    ncbi_blastp_bin: str | None = None,
-    losatp_threads: int | None = None,
-    protein_blastp_max_hits: int = 5,
-    protein_blastp_candidate_limit: int | None = None,
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     orthogroup_membership_mode: OrthogroupMembershipMode | str = "anchor_core_v1",
-    orthogroup_member_max_hits: int | None = None,
     collinear_infer_orthogroups: bool = True,
     collinear_max_paralog_links_per_orthogroup: int = 2,
-    align_orthogroup_feature: str | None = None,
+    similarity_alignment: SimilarityAlignmentPlan | None = None,
     color_table: Optional[DataFrame] = None,
     color_table_file: str | None = None,
     default_colors: DataFrame | None = None,
@@ -1645,6 +1647,8 @@ def assemble_linear_diagram_from_records(
     _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _return_build_result: bool = False,
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _alignment_anchor_centers: Sequence[float | None] | None = None,
+    _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing | LinearDiagramBuildResult:
     """Builds and assembles a linear diagram for the given records.
 
@@ -1674,24 +1678,27 @@ def assemble_linear_diagram_from_records(
         isinstance(item, LinearComparison) for item in linear_comparisons
     ):
         raise ValidationError("linear_comparisons must contain LinearComparison values")
+    if losat_search is not None and not isinstance(losat_search, LosatSearchOptions):
+        raise ValidationError("losat_search must be LosatSearchOptions or None")
+    if losat_search is not None and losat_search.program != "losatp":
+        raise ValidationError(
+            f"A {losat_search.program} search is resolved by the request planner; "
+            "render it with gbdraw.api.render_request().",
+            diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN"},
+        )
+    normalized_protein_blastp_mode = losatp_analysis_mode(losat_search)
+    runtime = losat_search.runtime if losat_search is not None else LosatRuntimeOptions()
     normalized_protein_pairs: tuple[tuple[int, int], ...] | None = None
-    if protein_comparison_pairs is not None:
+    if losat_search is not None and losat_search.pairs is not None:
         normalized_pairs: list[tuple[int, int]] = []
-        for pair in protein_comparison_pairs:
-            if (
-                not isinstance(pair, Sequence)
-                or len(pair) != 2
-                or not all(isinstance(index, int) and not isinstance(index, bool) for index in pair)
-            ):
-                raise ValidationError("protein_comparison_pairs must contain integer index pairs")
-            query_index, subject_index = int(pair[0]), int(pair[1])
-            if query_index < 0 or subject_index < 0 or query_index >= len(records) or subject_index >= len(records):
-                raise ValidationError("protein_comparison_pairs contains an out-of-range record index")
+        for query_index, subject_index in losat_search.pairs:
+            if query_index >= len(records) or subject_index >= len(records):
+                raise ValidationError("pairs contains an out-of-range record index")
             if query_index == subject_index:
-                raise ValidationError("protein_comparison_pairs cannot compare a record to itself")
+                raise ValidationError("pairs cannot compare a record to itself")
             normalized_pairs.append((query_index, subject_index))
         if len(set(normalized_pairs)) != len(normalized_pairs):
-            raise ValidationError("protein_comparison_pairs must not contain duplicates")
+            raise ValidationError("pairs must not contain duplicates")
         normalized_protein_pairs = tuple(normalized_pairs)
         _ordered_indices, pair_rows = resolve_record_row_positions(
             records,
@@ -1700,15 +1707,12 @@ def assemble_linear_diagram_from_records(
         for query_index, subject_index in normalized_protein_pairs:
             if abs(pair_rows[query_index] - pair_rows[subject_index]) != 1:
                 raise ValidationError(
-                    "protein_comparison_pairs must connect records in adjacent rows: "
+                    "pairs must connect records in adjacent rows: "
                     f"query=#{query_index + 1} row={pair_rows[query_index] + 1}, "
                     f"subject=#{subject_index + 1} row={pair_rows[subject_index] + 1}."
                 )
-    normalized_protein_blastp_mode = normalize_protein_blastp_mode(protein_blastp_mode)
-    if normalized_protein_pairs is not None and normalized_protein_blastp_mode != "pairwise":
-        raise ValidationError("protein_comparison_pairs requires protein_blastp_mode='pairwise'")
     if normalized_protein_pairs is not None and linear_comparisons:
-        raise ValidationError("Pass either protein_comparison_pairs or linear_comparisons, not both")
+        raise ValidationError("Pass either losat_search pairs or linear_comparisons, not both")
     normalized_pairwise_match_style = normalize_pairwise_match_style(pairwise_match_style)
     normalized_collinearity_anchor_mode = normalize_collinearity_anchor_mode(
         str(collinearity_anchor_mode)
@@ -1727,41 +1731,25 @@ def assemble_linear_diagram_from_records(
         )
         if len(set(collinearity_rows)) < len(records):
             collinearity_comparison_pairs = record_pairs_between_adjacent_rows(collinearity_rows)
-    if int(protein_blastp_max_hits) <= 0:
-        raise ValidationError("protein_blastp_max_hits must be > 0")
-    if orthogroup_member_max_hits is not None and int(orthogroup_member_max_hits) <= 0:
-        raise ValidationError("orthogroup_member_max_hits must be > 0 or None")
     if int(collinear_max_paralog_links_per_orthogroup) <= 0:
         raise ValidationError("collinear_max_paralog_links_per_orthogroup must be > 0")
-    if losatp_threads is not None and int(losatp_threads) <= 0:
-        raise ValidationError("losatp_threads must be > 0 or None")
-    if protein_blastp_candidate_limit is not None and int(protein_blastp_candidate_limit) <= 0:
-        raise ValidationError("protein_blastp_candidate_limit must be > 0 or None")
     if normalized_protein_blastp_mode != "none" and protein_comparisons is not None:
-        raise ValidationError("Pass either protein_blastp_mode or protein_comparisons, not both.")
+        raise ValidationError("Pass either a LOSATP losat_search or protein_comparisons, not both.")
     if collinearity_blocks is not None and (
         normalized_protein_blastp_mode != "none" or protein_comparisons is not None or blast_files
     ):
         raise ValidationError(
-            "Pass collinearity_blocks without protein_blastp_mode, protein_comparisons, or blast_files."
+            "Pass collinearity_blocks without a LOSATP losat_search, protein_comparisons, or blast_files."
         )
     if normalized_protein_blastp_mode != "none" and blast_files:
-        raise ValidationError("protein_blastp_mode cannot be used with blast_files.")
+        raise ValidationError("A LOSATP losat_search cannot be used with blast_files.")
     if normalized_protein_blastp_mode != "none" and len(records) < 2:
-        raise ValidationError("protein_blastp_mode requires at least two records")
-    has_precomputed_comparisons = bool(
-        blast_files
-        or linear_comparisons
-        or protein_comparisons is not None
-        or collinearity_blocks is not None
-    )
-    if (
-        align_orthogroup_feature
-        and normalized_protein_blastp_mode != "orthogroup"
-        and not has_precomputed_comparisons
+        raise ValidationError("A LOSATP losat_search requires at least two records")
+    if similarity_alignment is not None and not isinstance(
+        similarity_alignment, SimilarityAlignmentPlan
     ):
         raise ValidationError(
-            "align_orthogroup_feature requires protein_blastp_mode='orthogroup'."
+            "similarity_alignment must be SimilarityAlignmentPlan or None."
         )
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
@@ -1891,19 +1879,26 @@ def assemble_linear_diagram_from_records(
         mode: ProteinBlastpMode,
         analysis_records: Sequence[SeqRecord],
         *,
-        analysis_extraction: ProteinExtractionResult | None = protein_extraction,
         analysis_cache_filenames: Sequence[str] | None = losat_cache_filenames,
+        pairwise_pairs: Sequence[tuple[int, int]] | None = None,
     ) -> ProteinBlastpResult | CollinearityResult:
         return _invoke_protein_analysis_helper(
             mode,
             analysis_records,
-            losatp_bin=losatp_bin,
-            ncbi_blastp_bin=ncbi_blastp_bin,
-            losatp_threads=losatp_threads,
-            pairwise_max_hits=int(protein_blastp_max_hits),
-            candidate_limit=protein_blastp_candidate_limit,
+            pairwise_pairs=pairwise_pairs,
+            losatp_bin=runtime.losat_executable or AUTOMATIC_LOSAT_BIN,
+            ncbi_blastp_bin=runtime.ncbi_blast_executable,
+            losatp_threads=runtime.threads,
+            pairwise_max_hits=(
+                losat_search.losatp_max_hits if losat_search is not None else 5
+            ),
+            candidate_limit=(
+                losat_search.losatp_max_target_seqs if losat_search is not None else None
+            ),
             orthogroup_membership_mode=normalized_orthogroup_membership_mode,
-            orthogroup_member_max_hits=orthogroup_member_max_hits,
+            orthogroup_member_max_hits=(
+                losat_search.losatp_member_max_hits if losat_search is not None else None
+            ),
             max_paralog_links_per_orthogroup=int(
                 collinear_max_paralog_links_per_orthogroup
             ),
@@ -1918,7 +1913,7 @@ def assemble_linear_diagram_from_records(
             collinear_infer_orthogroups=collinear_infer_orthogroups,
             collinearity_comparison_pairs=collinearity_comparison_pairs,
             losatp_cache=losatp_cache,
-            protein_extraction=analysis_extraction,
+            protein_extraction=protein_extraction,
             feature_visibility_rules=feature_visibility_rules,
             cache_filenames=analysis_cache_filenames,
         )
@@ -1939,36 +1934,24 @@ def assemble_linear_diagram_from_records(
     elif normalized_protein_blastp_mode == "pairwise":
         pair_inputs = normalized_protein_pairs
         if pair_inputs is not None:
-            for query_index, subject_index in pair_inputs:
-                pair_extraction = (
-                    replace(
-                        protein_extraction,
-                        proteins_by_record=[
-                            protein_extraction.proteins_by_record[query_index],
-                            protein_extraction.proteins_by_record[subject_index],
-                        ],
-                    )
-                    if protein_extraction is not None
-                    else None
-                )
-                protein_blastp_result = cast(
-                    ProteinBlastpResult,
-                    invoke_protein_analysis(
-                        "pairwise",
-                        (records[query_index], records[subject_index]),
-                        analysis_extraction=pair_extraction,
-                        analysis_cache_filenames=_linear_losat_cache_filenames(
-                            (records[query_index], records[subject_index])
-                        ),
+            # One plan for every pair, so records of one file share a database.
+            protein_blastp_result = cast(
+                ProteinBlastpResult,
+                invoke_protein_analysis(
+                    "pairwise",
+                    records,
+                    analysis_cache_filenames=_linear_losat_cache_filenames(
+                        records, pair_inputs
                     ),
+                    pairwise_pairs=pair_inputs,
+                ),
+            )
+            resolved_linear_comparisons.extend(
+                LinearComparison(query_index, subject_index, matches)
+                for (query_index, subject_index), matches in zip(
+                    pair_inputs, protein_blastp_result.comparisons, strict=True
                 )
-                resolved_linear_comparisons.append(
-                    LinearComparison(
-                        query_index,
-                        subject_index,
-                        protein_blastp_result.comparisons[0],
-                    )
-                )
+            )
         else:
             protein_blastp_result = cast(
                 ProteinBlastpResult,
@@ -2114,7 +2097,7 @@ def assemble_linear_diagram_from_records(
         record_depth_tracks=record_depth_tracks,
         linear_track_slots=parsed_linear_track_slots,
         linear_track_axis_index=resolved_linear_track_axis_index,
-        annotations=annotation_options,
+        annotations=_resolved_annotations if _resolved_annotations is not None else annotation_options,
         plot_title=normalized_plot_title or None,
         plot_title_position=normalized_plot_title_position,
         plot_title_font_size=resolved_plot_title_font_size,
@@ -2122,7 +2105,8 @@ def assemble_linear_diagram_from_records(
         linear_comparisons=resolved_linear_comparisons or None,
         linear_layout=layout,
         orthogroups=resolved_orthogroups,
-        align_orthogroup_feature=align_orthogroup_feature,
+        similarity_alignment=similarity_alignment,
+        alignment_anchor_centers=_alignment_anchor_centers,
     )
     build_result = LinearDiagramBuildResult(
         drawing=canvas,
@@ -2135,6 +2119,7 @@ def assemble_linear_diagram_from_records(
             linear_comparisons=tuple(resolved_linear_comparisons),
             orthogroups=resolved_orthogroups,
             collinearity_result=resolved_collinearity_result,
+            comparison_warnings=getattr(canvas, "_gbdraw_comparison_record_id_warnings", ()),
         ),
     )
     return build_result if _return_build_result else canvas
@@ -2211,6 +2196,9 @@ def assemble_circular_diagram_from_record(
     If default_colors is None, it loads the built-in default palette.
     If color_table is None and color_table_file is provided, it is loaded.
     If selected_features_set is None, it uses the CLI default feature list.
+    The private ``_precomputed_depth_tracks`` is None when the canvas has no
+    depth input; ``[]`` means depth input without a cell for this record, which
+    keeps the record's depth slot.
     """
     if not isinstance(cfg, GbdrawConfig):
         raise ValidationError("cfg must be GbdrawConfig")
@@ -2585,7 +2573,7 @@ def assemble_circular_diagram_from_record(
         conservation_min_identity=float(identity),
         circular_track_slots=parsed_circular_track_slots,
         circular_track_axis_index=circular_track_axis_index,
-        annotations=_resolved_annotations or annotation_options,
+        annotations=_resolved_annotations if _resolved_annotations is not None else annotation_options,
         annotation_record_index=_annotation_record_index,
         dinucleotide_content_dataframes=dinucleotide_content_dataframes,
         dinucleotide_skew_dataframes=dinucleotide_skew_dataframes,
@@ -2662,6 +2650,7 @@ def assemble_circular_diagram_from_records(
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
     """Build and assemble a circular diagram grid from multiple records."""
     if not isinstance(cfg, GbdrawConfig):
@@ -2678,7 +2667,10 @@ def assemble_circular_diagram_from_records(
     bitscore = thresholds.bitscore
     identity = thresholds.identity
     alignment_length = thresholds.alignment_length
-    resolved_annotations = resolve_annotations(annotation_options, records, mode="circular", record_transforms=_record_transforms)
+    resolved_annotations = (
+        _resolved_annotations if _resolved_annotations is not None else
+        resolve_annotations(annotation_options, records, mode="circular", record_transforms=_record_transforms)
+    )
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
     _validate_positive_float_optional("conservation_ring_width", conservation_ring_width)
@@ -2894,7 +2886,11 @@ def assemble_circular_diagram_from_records(
         mode=normalized_multi_record_size_mode,
         min_radius_ratio=normalized_multi_record_min_radius_ratio,
     )
-    record_depth_track_data: list[list[DepthTrackData]] = [[] for _ in records]
+    # None means no depth input at all; [] means depth input without a cell
+    # for that record, which still reserves the record's depth slot.
+    record_depth_track_data: list[list[DepthTrackData]] | None = (
+        None if record_depth_tracks is None else [[] for _ in records]
+    )
     if cfg.canvas.show_depth and record_depth_tracks is not None:
         record_depth_window_steps: list[tuple[int, int]] = []
         for record in records:
@@ -2991,8 +2987,16 @@ def assemble_circular_diagram_from_records(
             alignment_length=alignment_length,
             _definition_profile=record_definition_profile,
             _tick_track_channel_override=tick_track_channel_override,
-            _precomputed_depth_tracks=record_depth_track_data[record_index],
-            _precomputed_depth_track_count=available_depth_track_count,
+            _precomputed_depth_tracks=(
+                record_depth_track_data[record_index]
+                if record_depth_track_data is not None
+                else None
+            ),
+            _precomputed_depth_track_count=(
+                available_depth_track_count
+                if record_depth_track_data is not None
+                else None
+            ),
             _precomputed_conservation_tracks=record_conservation_tracks,
             _resolved_feature_inputs=resolved_feature_inputs,
             _resolved_placement_inputs=(_resolved_placement_inputs[record_index],) if _resolved_placement_inputs else (),
@@ -3096,66 +3100,37 @@ def assemble_circular_diagram_from_records(
             default_color_map=resolved_feature_inputs.default_color_map,
             canvas_config=legend_canvas_config,
         )
-        color_map = feature_config.specific_color_rules
-        default_color_map = feature_config.default_color_map
-        features_present = check_feature_presence(
-            list(records),
-            list(selected_features_set),
-            feature_visibility_rules=feature_config.feature_visibility_rules,
-            specific_color_rules=color_map,
-        )
-        used_color_rules, default_used_features = precompute_used_color_rules(
-            list(records),
-            color_map,
-            default_color_map,
-            set(feature_config.selected_features_set),
-            feature_visibility_rules=feature_config.feature_visibility_rules,
-        )
-        legend_table = prepare_legend_table(
-            gc_config,
-            skew_config,
-            feature_config,
-            features_present,
-            used_color_rules=used_color_rules,
-            default_used_features=default_used_features,
-            depth_config=depth_config if depth_track_data_count(record_depth_track_data) == 1 else None,
+        legend_slots, legend_annotations = plan_circular_annotation_slots(
+            resolved_annotations,
+            records,
+            parsed_circular_track_slots,
+            show_ticks=bool(cfg.objects.scale.show),
+            show_depth=bool(profile.show_depth and depth_config is not None),
             show_gc=profile.show_gc,
             show_skew=profile.show_skew,
-            show_depth=bool(
-                profile.show_depth
-                and depth_track_data_count(record_depth_track_data) == 1
-            ),
+            depth_track_count=max(1, available_depth_track_count),
         )
-        if profile.show_depth:
-            legend_table = sync_depth_track_legend_entries(
-                legend_table,
-                representative_depth_tracks(record_depth_track_data),
-            )
-        if first_record_conservation_tracks:
-            if any(track.track_color for track in first_record_conservation_tracks):
-                for track in first_record_conservation_tracks:
-                    min_color, max_color = conservation_track_gradient_colors(
-                        track.track_color,
-                        default_min_color=cfg.objects.conservation.min_color,
-                        default_max_color=cfg.objects.conservation.max_color,
-                    )
-                    legend_table[track.track_label] = {
-                        "type": "gradient",
-                        "min_color": min_color,
-                        "max_color": max_color,
-                        "stroke": "none",
-                        "width": 0,
-                        "min_value": float(identity),
-                    }
-            else:
-                legend_table["Conservation identity"] = {
-                    "type": "gradient",
-                    "min_color": cfg.objects.conservation.min_color,
-                    "max_color": cfg.objects.conservation.max_color,
-                    "stroke": "none",
-                    "width": 0,
-                    "min_value": float(identity),
-                }
+        legend_depth_tracks = representative_depth_tracks(record_depth_track_data)
+        legend_depth_track_zero = index_depth_track_row(legend_depth_tracks).get(0)
+        legend_table = build_circular_legend_table(
+            records,
+            feature_config=feature_config,
+            gc_config=gc_config,
+            skew_config=skew_config,
+            profile=profile,
+            depth_config=depth_config,
+            depth_df=(
+                legend_depth_track_zero.df
+                if legend_depth_track_zero is not None
+                else None
+            ),
+            depth_tracks=legend_depth_tracks,
+            depth_track_count_value=depth_track_data_count(record_depth_track_data),
+            circular_track_slots=legend_slots,
+            annotations=legend_annotations,
+            conservation_tracks=first_record_conservation_tracks,
+            conservation_min_identity=float(identity),
+        )
         if legend_table:
             legend_config = LegendDrawingConfigurator(
                 color_table=color_table,
@@ -3220,8 +3195,17 @@ def assemble_circular_diagram_from_records(
             record_index=record_index,
             used_ids=used_ids,
             bind_record_identity=(
-                len({record.id for record in records}) != len(records)
-                or bool(_record_transforms and any(t.start_coordinate is not None for t in _record_transforms))
+                len(records) > 1
+                and (
+                    len({record.id for record in records}) != len(records)
+                    or bool(
+                        _record_transforms
+                        and any(
+                            transform.start_coordinate is not None
+                            for transform in _record_transforms
+                        )
+                    )
+                )
             ),
         )
         for definition in copied_definitions:
@@ -3323,6 +3307,7 @@ def build_circular_diagram(
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _record_transform: RecordDisplayTransform | None = None,
+    _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
     """Build a circular diagram using mode-specific typed options."""
 
@@ -3363,7 +3348,9 @@ def build_circular_diagram(
         depth_track_large_tick_intervals=options.depth_track_large_tick_intervals,
         depth_track_small_tick_intervals=options.depth_track_small_tick_intervals,
         depth_track_tick_font_sizes=options.depth_track_tick_font_sizes,
-        conservation_blast_files=options.conservation_blast_files,
+        conservation_blast_files=(
+            options.conservation_search_results or options.conservation_blast_files
+        ),
         conservation_dataframes=options.conservation_dataframes,
         conservation_reference=options.conservation_reference,
         conservation_labels=options.conservation_labels,
@@ -3388,6 +3375,7 @@ def build_circular_diagram(
         circular_track_slots=tracks.circular_track_slots if tracks else None,
         circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
         annotation_options=options.annotations,
+        _resolved_annotations=_resolved_annotations,
         _precomputed_depth_track_specs=_precomputed_depth_track_specs,
         _precomputed_depth_track_count=_precomputed_depth_track_count,
         _resolved_feature_inputs=_resolved_feature_inputs,
@@ -3401,12 +3389,15 @@ def _build_linear_diagram(
     *,
     options: LinearDiagramOptions | None = None,
     layout: LinearMultiRecordOptions | None = None,
+    similarity_alignment: SimilarityAlignmentPlan | None = None,
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _return_build_result: bool = False,
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _alignment_anchor_centers: Sequence[float | None] | None = None,
+    _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing | LinearDiagramBuildResult:
     """Build a linear diagram using mode-specific typed options."""
 
@@ -3427,8 +3418,7 @@ def _build_linear_diagram(
         layout=layout,
         protein_comparisons=options.protein_comparisons,
         orthogroups=options.orthogroups,
-        protein_blastp_mode=options.protein_blastp_mode,
-        protein_comparison_pairs=options.protein_comparison_pairs,
+        losat_search=options.losat_search,
         pairwise_match_style=options.pairwise_match_style,
         collinearity_blocks=options.collinearity_blocks,
         collinearity_params=options.collinearity_params,
@@ -3436,18 +3426,12 @@ def _build_linear_diagram(
         collinearity_anchor_mode=normalized_collinearity_anchor_mode,
         collinearity_search_scope=options.collinearity_search_scope,
         collinearity_color_mode=options.collinearity_color_mode,
-        losatp_bin=options.losatp_bin,
-        ncbi_blastp_bin=options.ncbi_blastp_bin,
-        losatp_threads=options.losatp_threads,
-        protein_blastp_max_hits=options.protein_blastp_max_hits,
-        protein_blastp_candidate_limit=options.protein_blastp_candidate_limit,
         losatp_cache=losatp_cache,
         protein_extraction=protein_extraction,
         orthogroup_membership_mode=options.orthogroup_membership_mode,
-        orthogroup_member_max_hits=options.orthogroup_member_max_hits,
         collinear_infer_orthogroups=options.collinear_infer_orthogroups,
         collinear_max_paralog_links_per_orthogroup=options.collinear_max_paralog_links_per_orthogroup,
-        align_orthogroup_feature=options.align_orthogroup_feature,
+        similarity_alignment=similarity_alignment,
         color_table=colors.color_table if colors else None,
         color_table_file=colors.color_table_file if colors else None,
         default_colors=colors.default_colors if colors else None,
@@ -3480,6 +3464,7 @@ def _build_linear_diagram(
         linear_track_slots=tracks.linear_track_slots if tracks else None,
         linear_track_axis_index=tracks.linear_track_axis_index if tracks else None,
         annotation_options=options.annotations,
+        _resolved_annotations=_resolved_annotations,
         plot_title=options.plot_title,
         plot_title_position=(
             output.plot_title_position
@@ -3494,6 +3479,7 @@ def _build_linear_diagram(
         _resolved_feature_inputs=_resolved_feature_inputs,
         _resolved_placement_inputs=_resolved_placement_inputs,
         _record_transforms=_record_transforms,
+        _alignment_anchor_centers=_alignment_anchor_centers,
         _return_build_result=_return_build_result,
     )
 
@@ -3503,11 +3489,14 @@ def build_linear_diagram(
     *,
     options: LinearDiagramOptions | None = None,
     layout: LinearMultiRecordOptions | None = None,
+    similarity_alignment: SimilarityAlignmentPlan | None = None,
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _alignment_anchor_centers: Sequence[float | None] | None = None,
+    _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
     """Build a linear diagram using mode-specific typed options."""
 
@@ -3515,11 +3504,14 @@ def build_linear_diagram(
         records,
         options=options,
         layout=layout,
+        similarity_alignment=similarity_alignment,
         losatp_cache=losatp_cache,
         protein_extraction=protein_extraction,
         _resolved_feature_inputs=_resolved_feature_inputs,
+        _resolved_annotations=_resolved_annotations,
         _resolved_placement_inputs=_resolved_placement_inputs,
         _record_transforms=_record_transforms,
+        _alignment_anchor_centers=_alignment_anchor_centers,
     )
     return cast(Drawing, result)
 
@@ -3529,11 +3521,14 @@ def build_linear_diagram_result(
     *,
     options: LinearDiagramOptions | None = None,
     layout: LinearMultiRecordOptions | None = None,
+    similarity_alignment: SimilarityAlignmentPlan | None = None,
     losatp_cache: LosatpCacheManager | None = None,
     protein_extraction: ProteinExtractionResult | None = None,
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _alignment_anchor_centers: Sequence[float | None] | None = None,
+    _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> LinearDiagramBuildResult:
     """Build a Linear drawing with its computed analysis metadata."""
 
@@ -3541,11 +3536,14 @@ def build_linear_diagram_result(
         records,
         options=options,
         layout=layout,
+        similarity_alignment=similarity_alignment,
         losatp_cache=losatp_cache,
         protein_extraction=protein_extraction,
         _resolved_feature_inputs=_resolved_feature_inputs,
+        _resolved_annotations=_resolved_annotations,
         _resolved_placement_inputs=_resolved_placement_inputs,
         _record_transforms=_record_transforms,
+        _alignment_anchor_centers=_alignment_anchor_centers,
         _return_build_result=True,
     )
     if not isinstance(result, LinearDiagramBuildResult):  # pragma: no cover
@@ -3561,6 +3559,7 @@ def build_circular_multi_diagram(
     _resolved_feature_inputs: ResolvedFeatureInputs | None = None,
     _resolved_placement_inputs: tuple[ResolvedPlacementInputs, ...] = (),
     _record_transforms: Sequence[RecordDisplayTransform] | None = None,
+    _resolved_annotations: ResolvedAnnotationBundle | None = None,
 ) -> Drawing:
     """Build a circular grid using mode-specific typed options."""
 
@@ -3578,7 +3577,9 @@ def build_circular_multi_diagram(
     return assemble_circular_diagram_from_records(
         records,
         cfg=cfg,
-        conservation_blast_files=options.conservation_blast_files,
+        conservation_blast_files=(
+            options.conservation_search_results or options.conservation_blast_files
+        ),
         conservation_dataframes=options.conservation_dataframes,
         conservation_reference=options.conservation_reference,
         conservation_labels=options.conservation_labels,
@@ -3632,6 +3633,7 @@ def build_circular_multi_diagram(
         circular_track_slots=tracks.circular_track_slots if tracks else None,
         circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
         annotation_options=options.annotations,
+        _resolved_annotations=_resolved_annotations,
         evalue=options.evalue,
         bitscore=options.bitscore,
         identity=options.identity,

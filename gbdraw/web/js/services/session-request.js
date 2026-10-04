@@ -1,3 +1,4 @@
+import { writeCanonicalRecordReverseComplement } from '../app/record-display-options.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
 export { canonicalFeaturePlacements } from './feature-placement.js';
 import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../app/color-utils.js';
@@ -29,6 +30,8 @@ import {
   normalizeCircularTrackSlot,
   parseCircularTrackSlotSpecs
 } from '../app/circular-track-slots.js';
+import { countGenBankRecords } from '../app/genbank-header.js';
+import { projectCircularMeasureDraft } from '../app/circular-track-slots/measure-editor.js';
 import {
   buildLinearTrackSlotPayload,
   LINEAR_TRACK_RENDERERS,
@@ -43,6 +46,7 @@ import {
 } from '../app/depth-track-state.js';
 import {
   buildDisambiguatedRecordEntries,
+  resolveCircularRequestRecordSet,
   resolveDisambiguatedRecordSelection
 } from '../app/record-options.js';
 import {
@@ -54,12 +58,20 @@ import {
   resolveLinearRecordEffectiveSubtitle
 } from '../app/linear-sources.js';
 import {
+  linearRecordLayoutHasSharedRow,
+  resolveEffectiveLinearRecordRows
+} from '../app/linear-record-layout.js';
+import { resolveLinearLabelVisibility } from '../app/linear-label-visibility.js';
+import {
   assertValidCustomTrackPlan,
+  parseOptionalPixel,
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
 } from '../app/track-slot-validation.js';
 import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
-import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
+import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
+import { diagnosticError } from './error-normalization.js';
+import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import {
   arrowHeadLengthRatioForState,
   defaultFeatureRendering,
@@ -73,9 +85,14 @@ import {
   effectiveLinearAxisColor,
   MODE_DEFAULT_FEATURE_TYPES,
   modeProfile,
+  resolveComparisonThresholds,
   trackDefaultsForMode
 } from '../mode-profiles.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
+import {
+  createDefaultLayoutPreferences,
+  updateActiveLayoutPreference
+} from '../app/layout-preferences.js';
 import {
   migratePersistedCircularMultiRecordSizeMode,
   migratePersistedLinearLabelPlacement,
@@ -134,12 +151,152 @@ import {
 } from './resource-payload-owner.js';
 import { sha256Hex } from './byte-utils.js';
 import { cloneJsonData } from './json-clone.js';
-import { recordDisplayKey, requestedRecordDisplay } from '../app/record-display-options.js';
+import { isCanonicalResourceReferenceField } from './canonical-resource-references.js';
+import { recordStructuralMetric } from './runtime-test-hooks.js';
+import { recordDisplayKey, requestedRecordTransform } from '../app/record-display-options.js';
 
-export const CANONICAL_REQUEST_SCHEMA = 7;
+export const CANONICAL_REQUEST_SCHEMA = 8;
 const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
-  1, 2, 5, 6, CANONICAL_REQUEST_SCHEMA
+  1, 2, 5, 6, 7, CANONICAL_REQUEST_SCHEMA
 ]);
+
+const requireExactCanonicalKeys = (value, keys, path) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${path} must be an object.`);
+  }
+  const expected = [...keys].sort();
+  const actual = Object.keys(value).sort();
+  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) {
+    throw new Error(`${path} contains missing or unknown fields.`);
+  }
+  return value;
+};
+
+const requireCanonicalText = (value, path) => {
+  if (typeof value !== 'string' || !value.trim() || value.includes('\0')) {
+    throw new Error(`${path} must be non-empty text without NUL.`);
+  }
+  return value.trim();
+};
+
+const canonicalAlignmentAnchor = (value, path) => {
+  const anchor = requireExactCanonicalKeys(value, [
+    'recordKey',
+    'biologicalFeatureId',
+    'sourceFeatureIndex',
+    'stableFeatureSvgId'
+  ], path);
+  if (anchor.sourceFeatureIndex !== null && (
+    !Number.isSafeInteger(anchor.sourceFeatureIndex) || anchor.sourceFeatureIndex < 0
+  )) throw new Error(`${path}.sourceFeatureIndex must be a non-negative integer or null.`);
+  if (anchor.stableFeatureSvgId !== null) {
+    requireCanonicalText(anchor.stableFeatureSvgId, `${path}.stableFeatureSvgId`);
+  }
+  return {
+    recordKey: requireCanonicalText(anchor.recordKey, `${path}.recordKey`),
+    biologicalFeatureId: requireCanonicalText(
+      anchor.biologicalFeatureId,
+      `${path}.biologicalFeatureId`
+    ),
+    sourceFeatureIndex: anchor.sourceFeatureIndex,
+    stableFeatureSvgId: anchor.stableFeatureSvgId === null
+      ? null
+      : anchor.stableFeatureSvgId.trim()
+  };
+};
+
+const canonicalSimilarityAlignment = (value, recordKeys, path) => {
+  if (value === null) return null;
+  const plan = requireExactCanonicalKeys(value, [
+    'schema', 'groupId', 'reference', 'records'
+  ], path);
+  if (plan.schema !== 2) throw new Error(`${path}.schema must be 2.`);
+  if (!Array.isArray(plan.records) || plan.records.length === 0) {
+    throw new Error(`${path}.records must be a non-empty array.`);
+  }
+  const reference = canonicalAlignmentAnchor(plan.reference, `${path}.reference`);
+  const records = plan.records.map((raw, index) => {
+    const decisionPath = `${path}.records[${index}]`;
+    const decision = requireExactCanonicalKeys(raw, [
+      'recordKey', 'status', 'rationale', 'anchor'
+    ], decisionPath);
+    const recordKey = requireCanonicalText(decision.recordKey, `${decisionPath}.recordKey`);
+    const anchor = decision.anchor === null
+      ? null
+      : canonicalAlignmentAnchor(decision.anchor, `${decisionPath}.anchor`);
+    if (anchor && anchor.recordKey !== recordKey) {
+      throw new Error(`${decisionPath}.anchor belongs to another record.`);
+    }
+    const alignedRationales = new Set([
+      'user_selected', 'only_usable_candidate', 'unique_direct_rbh'
+    ]);
+    const skippedRationales = new Set([
+      'skipped_by_user', 'skipped_no_candidate', 'skipped_unmappable'
+    ]);
+    const valid = decision.status === 'reference'
+      ? anchor !== null && decision.rationale === 'reference'
+      : decision.status === 'aligned'
+        ? anchor !== null && alignedRationales.has(decision.rationale)
+        : decision.status === 'skipped'
+          ? anchor === null && skippedRationales.has(decision.rationale)
+          : false;
+    if (!valid) throw new Error(`${decisionPath} contains an invalid plan combination.`);
+    return {
+      recordKey,
+      status: decision.status,
+      rationale: decision.rationale,
+      anchor
+    };
+  });
+  const decisionKeys = records.map((decision) => decision.recordKey);
+  if (new Set(decisionKeys).size !== decisionKeys.length) {
+    throw new Error(`${path}.records contains duplicate record keys.`);
+  }
+  const references = records.filter((decision) => decision.status === 'reference');
+  if (references.length !== 1 || references[0].recordKey !== reference.recordKey ||
+      JSON.stringify(references[0].anchor) !== JSON.stringify(reference)) {
+    throw new Error(`${path}.reference must match exactly one reference decision.`);
+  }
+  const expected = new Set(recordKeys);
+  const actual = new Set(decisionKeys);
+  if (expected.size !== actual.size || [...expected].some((key) => !actual.has(key))) {
+    throw new Error(`${path}.records does not cover the displayed record keys.`);
+  }
+  return {
+    schema: 2,
+    groupId: requireCanonicalText(plan.groupId, `${path}.groupId`),
+    reference,
+    records
+  };
+};
+
+const canonicalRecordTranslations = (value, recordKeys, path, { requireCoverage = false } = {}) => {
+  if (!Array.isArray(value)) throw new Error(`${path} must be an array.`);
+  const translations = value.map((raw, index) => {
+    const itemPath = `${path}[${index}]`;
+    const item = requireExactCanonicalKeys(raw, ['recordKey', 'x', 'y'], itemPath);
+    if (!Number.isFinite(item.x) || !Number.isFinite(item.y)) {
+      throw new Error(`${itemPath} x and y must be finite numbers.`);
+    }
+    return {
+      recordKey: requireCanonicalText(item.recordKey, `${itemPath}.recordKey`),
+      x: Number(item.x),
+      y: Number(item.y)
+    };
+  });
+  const keys = translations.map((item) => item.recordKey);
+  if (new Set(keys).size !== keys.length) {
+    throw new Error(`${path} contains duplicate record keys.`);
+  }
+  if (requireCoverage || translations.length > 0) {
+    const expected = new Set(recordKeys);
+    const actual = new Set(keys);
+    if (expected.size !== actual.size || [...expected].some((key) => !actual.has(key))) {
+      throw new Error(`${path} does not cover the displayed record keys.`);
+    }
+  }
+  return translations;
+};
 
 const canonicalRecordDisplay = (raw) => {
   if (!raw || Object.keys(raw).sort().join(',') !== 'isCircular,startCoordinate'
@@ -267,6 +424,15 @@ const MODE_LABEL_SCOPE_PATHS = Object.freeze({
   circular: 'labels.circular.scope',
   linear: 'labels.linear.scope'
 });
+
+const labelScopeOverride = (form, circular) => (circular
+  ? ({ none: 'none', out: 'outer', both: 'both' }[form.labels_mode] || 'none')
+  : form.show_labels_linear);
+
+const labelBlacklistOverride = (state) => (state.filterMode.value === 'Blacklist'
+  ? String(state.manualBlacklist.value || '').split(/[,\n]/)
+    .map((keyword) => keyword.trim()).filter(Boolean)
+  : []);
 
 const LINEAR_DEFINITION_STYLE_PATHS = Object.freeze(
   Object.fromEntries(
@@ -403,15 +569,15 @@ const renderOutputPayload = (prefix) => ({
   interactiveMetadataPolicy: 'auto'
 });
 
-const optionalNumber = (value) => {
-  if (value === null || value === undefined || String(value).trim() === '') return null;
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
-};
-
-const optionalPositiveInteger = (value) => {
-  const numeric = optionalNumber(value);
-  return Number.isInteger(numeric) && numeric > 0 ? numeric : null;
+const projectComparisonThresholds = ({ evalue, bitscore, identity, alignmentLength }) => ({
+  evalue: Number(evalue), bitscore, identity, alignmentLength
+});
+// An integer setting that the current request does not use for rendering
+// (a mode-inactive protein parameter or a LOSAT execution choice) keeps its
+// documented fallback; projected render values use projectOptionalNumber.
+const integerSettingOr = (value, fallback, minimum) => {
+  const { value: numeric } = classifyOptionalNumber(value);
+  return Number.isInteger(numeric) && numeric >= minimum ? numeric : fallback;
 };
 
 // A record label or subtitle is saved resolved. Sessions written since file
@@ -422,15 +588,6 @@ const resolveSavedRecordOverride = ({ savedOverride, fileDefault, resolved }) =>
   if (savedOverride !== undefined && savedOverride !== null) return String(savedOverride);
   if (!fileDefault) return resolved;
   return resolved === fileDefault ? '' : resolved;
-};
-
-const canonicalOptionalPositiveNumber = (value, fieldName) => {
-  if (value === null || value === undefined || String(value).trim() === '') return null;
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric <= 0) {
-    throw new Error(`${fieldName} must be null or a positive finite number.`);
-  }
-  return numeric;
 };
 
 const validateProjectedDepthSources = (depthRows, logicalTrackCount) => {
@@ -468,7 +625,21 @@ const normalizeOriginalResourceName = (name) => {
   return basename.slice(0, 1024);
 };
 
-const createResourceBuilder = () => {
+const generatedResourceValues = new WeakMap();
+const canonicalTypedResourceBackings = new WeakMap();
+
+// The analysis helper supplies the bytes already emitted by the Python typed codec.
+export const bindCanonicalTypedResource = (value, descriptor) => {
+  const expectedKind = value?.kind === "result" ? "collinearity-result" : "orthogroup-result";
+  if (!value || value.schema !== 3 || !["result", "orthogroupResult"].includes(value.kind)
+    || descriptor?.kind !== expectedKind || descriptor.encoding !== "base64"
+    || descriptor.type !== "application/json" || typeof descriptor.data !== "string"
+    || !Number.isSafeInteger(descriptor.size) || descriptor.size < 0) {
+    throw new Error("Analysis canonical resource backing is invalid.");
+  }
+  canonicalTypedResourceBackings.set(value, descriptor);
+};
+const createResourceBuilder = ({ encode = true } = {}) => {
   const resources = {};
   const resourceOriginalNames = {};
   const fileResourceIds = new Map();
@@ -512,6 +683,11 @@ const createResourceBuilder = () => {
   const addText = (resourceId, kind, name, text) => {
     if (resources[resourceId]) return resourceId;
     const normalized = String(text || '');
+    if (!encode) {
+      resources[resourceId] = { kind };
+      generatedResourceValues.set(resources[resourceId], normalized);
+      return resourceId;
+    }
     const bytes = textToBytes(normalized);
     resources[resourceId] = {
       kind,
@@ -520,13 +696,26 @@ const createResourceBuilder = () => {
       size: bytes.byteLength,
       lastModified: 0,
       encoding: 'base64',
-      data: textToBase64(normalized)
+      data: bytesToBase64(bytes)
     };
+    generatedResourceValues.set(resources[resourceId], normalized);
     return resourceId;
   };
 
   const addJson = (resourceId, kind, name, value) => {
     if (resources[resourceId]) return resourceId;
+    if (!encode) {
+      resources[resourceId] = { kind };
+      generatedResourceValues.set(resources[resourceId], { bindings: [value] });
+      return resourceId;
+    }
+    const backing = canonicalTypedResourceBackings.get(value);
+    if (backing) {
+      if (backing.kind !== kind) throw new Error("Analysis canonical resource kind does not match.");
+      resources[resourceId] = { ...backing, name: normalizeResourceName(resourceId, name) };
+      generatedResourceValues.set(resources[resourceId], { bindings: [value] });
+      return resourceId;
+    }
     const normalized = JSON.stringify(value);
     const bytes = textToBytes(normalized);
     resources[resourceId] = {
@@ -536,8 +725,9 @@ const createResourceBuilder = () => {
       size: bytes.byteLength,
       lastModified: 0,
       encoding: 'base64',
-      data: textToBase64(normalized)
+      data: bytesToBase64(bytes)
     };
+    generatedResourceValues.set(resources[resourceId], { bindings: [value] });
     return resourceId;
   };
 
@@ -631,13 +821,14 @@ const presentationPayload = ({
   label = null,
   subtitle = null,
   reverseComplement = false,
-  gridRow = null
+  gridRow = null,
+  gridColumn = null
 } = {}) => ({
   label: String(label || '').trim() || null,
   subtitle: String(subtitle || '').trim() || null,
   reverseComplement: Boolean(reverseComplement),
   gridRow,
-  gridColumn: null
+  gridColumn
 });
 
 const circularPresentationPayload = (form, { hasRegion = false } = {}) => (
@@ -686,11 +877,11 @@ const circularRecordKey = (record) => {
 };
 
 const linearRegionPayload = (seq) => {
-  const start = optionalPositiveInteger(seq?.region_start);
-  const end = optionalPositiveInteger(seq?.region_end);
+  const start = projectOptionalNumber(seq?.region_start, { field: 'region' });
+  const end = projectOptionalNumber(seq?.region_end, { field: 'region' });
   if (start === null && end === null) return null;
   if (start === null || end === null) {
-    throw new Error('Canonical linear regions require both start and end coordinates.');
+    throw diagnosticError('REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' });
   }
   return {
     selector: selectorPayload(seq?.region_record_id),
@@ -702,9 +893,14 @@ const linearRegionPayload = (seq) => {
 
 const buildRecords = ({ state, filesData, resources }) => {
   if (state.mode.value === 'linear') {
-    const resolvedRows = state.linearRecordLayoutEnabled?.value
-      ? resolvedLinearRecordRows(filesData.linearSeqs, state.linearRecordRows)
-      : [];
+    const resolvedRows = resolveEffectiveLinearRecordRows(
+      filesData.linearSeqs,
+      state.linearRecordRows,
+      { enabled: Boolean(state.linearRecordLayoutEnabled?.value) }
+    );
+    const canonicalCardinalityByUid = new Map(
+      (state.linearRecordRows || []).map((entry) => [entry.uid, entry.canonicalCardinality])
+    );
     const records = (filesData.linearSeqs || []).map((seq, index) => {
       const source = state.lInputType.value === 'gff'
         ? {
@@ -720,7 +916,8 @@ const buildRecords = ({ state, filesData, resources }) => {
       const selector = region ? null : selectorPayload(seq.region_record_id);
       return {
         recordKey: String(seq.uid || `record-${index + 1}`),
-        cardinality: seq.cardinality || (selector || region ? 'exactly_one' : 'all'),
+        cardinality: canonicalCardinalityByUid.get(seq.uid)
+          || seq.cardinality || (selector || region ? 'exactly_one' : 'all'),
         source,
         selector,
         region,
@@ -728,7 +925,12 @@ const buildRecords = ({ state, filesData, resources }) => {
           ...presentationPayload({
             label: resolveLinearRecordEffectiveDefinition(seq),
             subtitle: resolveLinearRecordEffectiveSubtitle(seq),
-            gridRow: resolvedRows[index] ?? null
+            gridRow: state.linearRecordLayoutEnabled?.value
+              ? (resolvedRows[index]?.row ?? null)
+              : null,
+            gridColumn: state.linearRecordLayoutEnabled?.value
+              ? (resolvedRows[index]?.canonicalColumn ?? null)
+              : null
           }),
           reverseComplement: region ? false : Boolean(seq.region_reverse)
         }
@@ -782,9 +984,9 @@ const buildRecords = ({ state, filesData, resources }) => {
           : null
       );
       if (knownRecords.length > 0 && !selectedKnownRecord) {
-        const reason = selection.status === 'ambiguous' ? 'is ambiguous' : 'was not found';
-        const label = requestedSelector || '(automatic)';
-        throw new Error(`Circular record selector '${label}' ${reason} in the current input.`);
+        throw diagnosticError('RECORD_SELECTION', {
+          reason: !requestedSelector ? 'SELECT_ONE' : selection.status === 'ambiguous' ? 'AMBIGUOUS' : 'NO_MATCH'
+        });
       }
       const selected = selectedKnownRecord || {
         value: requestedSelector,
@@ -818,38 +1020,18 @@ const buildRecords = ({ state, filesData, resources }) => {
         kind: 'genbank',
         resourceId: resources.addFile('record-1-genbank', 'genbank', filesData.c_gb)
       };
-  const knownRecords = Array.isArray(state.circularRecordList.value)
-    ? state.circularRecordList.value
-    : [];
-  const recordSelectors = buildDisambiguatedRecordEntries(
-    knownRecords.map((record) => ({
-      ...record,
-      recordId: record?.record_id ?? record?.recordId
-    }))
-  );
-  const requestedSelector = String(state.form.circular_record_selector || '').trim();
-  const selection = resolveDisambiguatedRecordSelection(
-    recordSelectors,
-    requestedSelector
-  );
-  const singlePresentationRequested = (
-    !state.form.multi_record_canvas &&
-    state.adv.circular_grouping_intent !== 'batch'
-  );
-  if (
-    singlePresentationRequested &&
-    requestedSelector &&
-    selection.status !== 'resolved'
-  ) {
-    const reason = selection.status === 'ambiguous' ? 'is ambiguous' : 'was not found';
-    throw new Error(`Circular record selector '${requestedSelector}' ${reason} in the current input.`);
-  }
-  const selectedRecords = singlePresentationRequested && selection.record
-    ? [selection.record]
-    : (recordSelectors.length > 0 ? recordSelectors : [null]);
+  const recordSet = resolveCircularRequestRecordSet({
+    records: state.circularRecordList.value,
+    selector: state.form.circular_record_selector,
+    multiRecordCanvas: state.form.multi_record_canvas,
+    groupingIntent: state.adv.circular_grouping_intent
+  });
+  if (recordSet.selectionFailure) throw diagnosticError('RECORD_SELECTION', { reason: recordSet.selectionFailure });
+  const { recordSelectors } = recordSet;
+  const selectedRecords = recordSet.records.length > 0 ? recordSet.records : [null];
   const singleJourney = (
     selectedRecords.length === 1 &&
-    singlePresentationRequested
+    recordSet.singlePresentation
   );
   const records = selectedRecords.map((record, index) => {
     const region = singleJourney
@@ -884,11 +1066,15 @@ const buildConfigOverrides = (
   state,
   {
     depthRequested = Boolean(state.form.show_depth),
-    hasComparisonIntent = false
+    hasComparisonIntent = false,
+    linearHasSharedRow = false
   } = {}
 ) => {
   const { form, adv } = state;
   const circular = state.mode.value === 'circular';
+  // R7: a config leaf is projected literally; Python validates its domain.
+  const leaf = (configPath, value) => projectOptionalNumber(value, { configPath });
+  const sharedLeaf = (path, value) => leaf(`${path}.short`, value);
   const linearLabelPlacement = circular
     ? null
     : requireCurrentLinearLabelPlacement(adv.label_placement);
@@ -899,7 +1085,7 @@ const buildConfigOverrides = (
     ? classifyOptionalPositiveNumber(adv.comparison_height)
     : null;
   if (comparisonHeight?.status === 'invalid') {
-    throw new Error('Pairwise Match Height must be Auto or a positive finite number.');
+    throw diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' });
   }
   const linearAxisManaged = state.modeProfileStateManager?.isManaged?.(
     adv,
@@ -926,83 +1112,82 @@ const buildConfigOverrides = (
       ? !form.suppress_skew
       : Boolean(form.show_skew),
     [CONFIG_OVERRIDE_PATHS.showDepth]: Boolean(depthRequested),
-    [MODE_LABEL_SCOPE_PATHS[state.mode.value]]: circular
-      ? ({ none: 'none', out: 'outer', both: 'both' }[form.labels_mode] || 'none')
-      : form.show_labels_linear,
+    [MODE_LABEL_SCOPE_PATHS[state.mode.value]]: labelScopeOverride(form, circular),
     [CONFIG_OVERRIDE_PATHS.strandedness]: Boolean(form.separate_strands),
     [CONFIG_OVERRIDE_PATHS.resolveOverlaps]: Boolean(adv.resolve_overlaps),
     [CONFIG_OVERRIDE_PATHS.featureOverlapToleranceBp]: adv.feature_overlap_tolerance_bp ?? 0,
     [CONFIG_OVERRIDE_PATHS.gcContentMode]: adv.gc_content_mode || 'deviation',
-    [CONFIG_OVERRIDE_PATHS.gcContentMinPercent]: optionalNumber(adv.gc_content_min_percent),
-    [CONFIG_OVERRIDE_PATHS.gcContentMaxPercent]: optionalNumber(adv.gc_content_max_percent),
+    [CONFIG_OVERRIDE_PATHS.gcContentMinPercent]: leaf(CONFIG_OVERRIDE_PATHS.gcContentMinPercent, adv.gc_content_min_percent),
+    [CONFIG_OVERRIDE_PATHS.gcContentMaxPercent]: leaf(CONFIG_OVERRIDE_PATHS.gcContentMaxPercent, adv.gc_content_max_percent),
     [CONFIG_OVERRIDE_PATHS.gcContentShowAxis]: Boolean(adv.gc_content_show_axis),
     [CONFIG_OVERRIDE_PATHS.gcContentShowTicks]: Boolean(adv.gc_content_show_ticks),
     [CONFIG_OVERRIDE_PATHS.gcContentLargeTickInterval]:
-      optionalNumber(adv.gc_content_tick_interval),
+      leaf(CONFIG_OVERRIDE_PATHS.gcContentLargeTickInterval, adv.gc_content_tick_interval),
     [CONFIG_OVERRIDE_PATHS.gcContentSmallTickInterval]:
-      optionalNumber(adv.gc_content_small_tick_interval),
+      leaf(CONFIG_OVERRIDE_PATHS.gcContentSmallTickInterval, adv.gc_content_small_tick_interval),
     [CONFIG_OVERRIDE_PATHS.gcContentTickFontSize]:
-      optionalNumber(adv.gc_content_tick_font_size),
+      leaf(CONFIG_OVERRIDE_PATHS.gcContentTickFontSize, adv.gc_content_tick_font_size),
     [CONFIG_OVERRIDE_PATHS.depthColor]: adv.depth_color || null,
-    [CONFIG_OVERRIDE_PATHS.depthMin]: optionalNumber(adv.depth_min),
-    [CONFIG_OVERRIDE_PATHS.depthMax]: optionalNumber(adv.depth_max),
+    [CONFIG_OVERRIDE_PATHS.depthMin]: leaf(CONFIG_OVERRIDE_PATHS.depthMin, adv.depth_min),
+    [CONFIG_OVERRIDE_PATHS.depthMax]: leaf(CONFIG_OVERRIDE_PATHS.depthMax, adv.depth_max),
     [CONFIG_OVERRIDE_PATHS.depthNormalize]: Boolean(adv.depth_normalize),
     [CONFIG_OVERRIDE_PATHS.depthShowAxis]: Boolean(adv.depth_show_axis),
     [CONFIG_OVERRIDE_PATHS.depthShowTicks]: Boolean(adv.depth_show_ticks),
     [CONFIG_OVERRIDE_PATHS.depthLargeTickInterval]:
-      optionalNumber(adv.depth_large_tick_interval),
+      leaf(CONFIG_OVERRIDE_PATHS.depthLargeTickInterval, adv.depth_large_tick_interval),
     [CONFIG_OVERRIDE_PATHS.depthSmallTickInterval]:
-      optionalNumber(adv.depth_small_tick_interval),
-    [CONFIG_OVERRIDE_PATHS.depthTickFontSize]: optionalNumber(adv.depth_tick_font_size),
+      leaf(CONFIG_OVERRIDE_PATHS.depthSmallTickInterval, adv.depth_small_tick_interval),
+    [CONFIG_OVERRIDE_PATHS.depthTickFontSize]: leaf(CONFIG_OVERRIDE_PATHS.depthTickFontSize, adv.depth_tick_font_size),
     [CONFIG_OVERRIDE_PATHS.depthShareAxis]: Boolean(adv.depth_share_axis),
     [CONFIG_OVERRIDE_PATHS.showScale]: form.show_scale !== false,
-    [CONFIG_OVERRIDE_PATHS.scaleInterval]: optionalNumber(adv.scale_interval),
-    [CONFIG_OVERRIDE_PATHS.labelBlacklist]: state.filterMode.value === 'Blacklist'
-      ? String(state.manualBlacklist.value || '').split(/[,\n]/)
-        .map((keyword) => keyword.trim()).filter(Boolean)
-      : [],
+    [CONFIG_OVERRIDE_PATHS.scaleInterval]: leaf(CONFIG_OVERRIDE_PATHS.scaleInterval, adv.scale_interval),
+    [CONFIG_OVERRIDE_PATHS.labelBlacklist]: labelBlacklistOverride(state),
     ...(circular
       ? {
           [CONFIG_OVERRIDE_PATHS.circularAxisStrokeColor]:
             adv.axis_stroke_color || null,
           [CONFIG_OVERRIDE_PATHS.circularDefinitionFontSize]:
-            optionalNumber(adv.def_font_size),
-          [CONFIG_OVERRIDE_PATHS.circularDefinitionInterval]: optionalNumber(adv.circular_definition_interval),
+            leaf(CONFIG_OVERRIDE_PATHS.circularDefinitionFontSize, adv.def_font_size),
+          [CONFIG_OVERRIDE_PATHS.circularDefinitionInterval]: leaf(CONFIG_OVERRIDE_PATHS.circularDefinitionInterval, adv.circular_definition_interval),
           [CONFIG_OVERRIDE_PATHS.plotTitleFontSize]:
-            optionalNumber(adv.plot_title_font_size),
+            leaf(CONFIG_OVERRIDE_PATHS.plotTitleFontSize, adv.plot_title_font_size),
           [CONFIG_OVERRIDE_PATHS.circularLabelSpacing]:
-            optionalNumber(adv.circular_label_spacing),
+            leaf(CONFIG_OVERRIDE_PATHS.circularLabelSpacing, adv.circular_label_spacing),
           [CONFIG_OVERRIDE_PATHS.circularLabelPlacement]:
             adv.circular_label_placement || 'horizontal',
           [CONFIG_OVERRIDE_PATHS.trackType]: form.track_type,
           [CONFIG_OVERRIDE_PATHS.tickLabelFontSize]:
-            optionalNumber(adv.tick_label_font_size),
+            leaf(CONFIG_OVERRIDE_PATHS.tickLabelFontSize, adv.tick_label_font_size),
           [CONFIG_OVERRIDE_PATHS.outerLabelXRadiusOffset]:
-            optionalNumber(adv.outer_label_x_offset),
+            leaf(CONFIG_OVERRIDE_PATHS.outerLabelXRadiusOffset, adv.outer_label_x_offset),
           [CONFIG_OVERRIDE_PATHS.outerLabelYRadiusOffset]:
-            optionalNumber(adv.outer_label_y_offset),
+            leaf(CONFIG_OVERRIDE_PATHS.outerLabelYRadiusOffset, adv.outer_label_y_offset),
           [CONFIG_OVERRIDE_PATHS.innerLabelXRadiusOffset]:
-            optionalNumber(adv.inner_label_x_offset),
+            leaf(CONFIG_OVERRIDE_PATHS.innerLabelXRadiusOffset, adv.inner_label_x_offset),
           [CONFIG_OVERRIDE_PATHS.innerLabelYRadiusOffset]:
-            optionalNumber(adv.inner_label_y_offset)
+            leaf(CONFIG_OVERRIDE_PATHS.innerLabelYRadiusOffset, adv.inner_label_y_offset)
         }
       : {
           [CONFIG_OVERRIDE_PATHS.linearAxisStrokeColor]: linearAxisStrokeColor,
           [CONFIG_OVERRIDE_PATHS.linearDefinitionShowReplicon]:
             Boolean(adv.linear_show_replicon),
           [CONFIG_OVERRIDE_PATHS.linearDefinitionShowAccession]:
-            Boolean(adv.linear_show_accession),
+            resolveLinearLabelVisibility(adv.linear_accession_visibility, {
+              hasSharedRow: linearHasSharedRow
+            }),
           [CONFIG_OVERRIDE_PATHS.linearDefinitionShowLength]:
-            Boolean(adv.linear_show_length),
+            resolveLinearLabelVisibility(adv.linear_length_visibility, {
+              hasSharedRow: linearHasSharedRow
+            }),
           [CONFIG_OVERRIDE_PATHS.linearLabelSpacing]:
-            optionalNumber(adv.linear_label_spacing),
+            leaf(CONFIG_OVERRIDE_PATHS.linearLabelSpacing, adv.linear_label_spacing),
           [CONFIG_OVERRIDE_PATHS.labelPlacement]: linearLabelPlacement,
-          [CONFIG_OVERRIDE_PATHS.labelRotation]: optionalNumber(adv.label_rotation),
+          [CONFIG_OVERRIDE_PATHS.labelRotation]: leaf(CONFIG_OVERRIDE_PATHS.labelRotation, adv.label_rotation),
           [CONFIG_OVERRIDE_PATHS.alignCenter]: Boolean(form.align_center),
           [CONFIG_OVERRIDE_PATHS.keepDefinitionLeftAligned]:
             Boolean(form.keep_definition_left_aligned),
           [CONFIG_OVERRIDE_PATHS.linearTrackLayout]: linearTrackLayout,
-          [CONFIG_OVERRIDE_PATHS.linearTrackAxisGap]: optionalNumber(adv.track_axis_gap),
+          [CONFIG_OVERRIDE_PATHS.linearTrackAxisGap]: leaf(CONFIG_OVERRIDE_PATHS.linearTrackAxisGap, adv.track_axis_gap),
           [CONFIG_OVERRIDE_PATHS.linearRulerOnAxis]: Boolean(form.linear_ruler_on_axis),
           ...(hasComparisonIntent
             ? {
@@ -1011,43 +1196,43 @@ const buildConfigOverrides = (
                 [CONFIG_OVERRIDE_PATHS.pairwiseMatchStyle]: adv.pairwise_match_style
               }
             : {}),
-          [CONFIG_OVERRIDE_PATHS.gcHeight]: optionalNumber(adv.gc_height),
-          [CONFIG_OVERRIDE_PATHS.depthHeight]: optionalNumber(adv.depth_height),
+          [CONFIG_OVERRIDE_PATHS.gcHeight]: leaf(CONFIG_OVERRIDE_PATHS.gcHeight, adv.gc_height),
+          [CONFIG_OVERRIDE_PATHS.depthHeight]: leaf(CONFIG_OVERRIDE_PATHS.depthHeight, adv.depth_height),
           [CONFIG_OVERRIDE_PATHS.scaleStyle]: form.scale_style,
           [CONFIG_OVERRIDE_PATHS.scaleStrokeColor]: adv.scale_stroke_color || null,
           [CONFIG_OVERRIDE_PATHS.scaleLabelColor]: adv.ruler_label_color || null,
           [CONFIG_OVERRIDE_PATHS.scaleStrokeWidth]:
-            optionalNumber(adv.scale_stroke_width),
+            leaf(CONFIG_OVERRIDE_PATHS.scaleStrokeWidth, adv.scale_stroke_width),
           [CONFIG_OVERRIDE_PATHS.normalizeLength]: Boolean(form.normalize_length)
         })
   };
   const sharedLengthValues = {
     [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.blockStrokeWidth]:
-      optionalNumber(adv.block_stroke_width),
+      sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.blockStrokeWidth, adv.block_stroke_width),
     [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.lineStrokeWidth]:
-      optionalNumber(adv.line_stroke_width),
+      sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.lineStrokeWidth, adv.line_stroke_width),
     [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendBoxSize]:
-      optionalNumber(adv.legend_box_size),
+      sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendBoxSize, adv.legend_box_size),
     [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendFontSize]:
-      optionalNumber(adv.legend_font_size),
+      sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.legendFontSize, adv.legend_font_size),
     ...(circular
       ? {
           [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.circularAxisStrokeWidth]:
-            optionalNumber(adv.axis_stroke_width),
-          'labels.font_size': optionalNumber(adv.label_font_size)
+            sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.circularAxisStrokeWidth, adv.axis_stroke_width),
+          'labels.font_size': sharedLeaf('labels.font_size', adv.label_font_size)
         }
       : {
           [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearAxisStrokeWidth]:
-            optionalNumber(adv.axis_stroke_width),
+            sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearAxisStrokeWidth, adv.axis_stroke_width),
           [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearDefinitionFontSize]:
-            optionalNumber(adv.def_font_size),
+            sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.linearDefinitionFontSize, adv.def_font_size),
           [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.defaultCdsHeight]:
-            optionalNumber(adv.feature_height),
+            sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.defaultCdsHeight, adv.feature_height),
           [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.scaleFontSize]:
-            optionalNumber(adv.scale_font_size),
+            sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.scaleFontSize, adv.scale_font_size),
           [SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.rulerLabelFontSize]:
-            optionalNumber(adv.ruler_label_font_size),
-          'labels.font_size.linear': optionalNumber(adv.label_font_size)
+            sharedLeaf(SHARED_LENGTH_CONFIG_OVERRIDE_PATHS.rulerLabelFontSize, adv.ruler_label_font_size),
+          'labels.font_size.linear': sharedLeaf('labels.font_size.linear', adv.label_font_size)
         })
   };
   for (const [path, value] of Object.entries(sharedLengthValues)) {
@@ -1082,7 +1267,29 @@ const buildConfigOverrides = (
   };
 };
 
-const addGeneratedTableResources = (state, resources, diagramOptions) => {
+const ALL_GENERATED_TABLES = Object.freeze({
+  colors: true, visibility: true, whitelist: true, priority: true, labelOverrides: true
+});
+
+const addGeneratedTableResources = (
+  state, resources, diagramOptions, tables = ALL_GENERATED_TABLES
+) => {
+  recordStructuralMetric('generatedTableBuildCount');
+  if (tables.colors) addColorTableResources(state, resources, diagramOptions);
+  if (tables.visibility) {
+    const visibility = serializeFeatureVisibilityRules(state.featureVisibilityRules?.value || []);
+    if (visibility.trim()) {
+      diagramOptions.featureVisibilityTableFile = fileRef(resources.addText(
+        'feature-visibility-table-file', 'feature-visibility-table-file', 'feature-visibility.tsv', visibility
+      ));
+    }
+  }
+  if (tables.whitelist) addLabelWhitelistResource(state, resources, diagramOptions);
+  if (tables.priority) addQualifierPriorityResource(state, resources, diagramOptions);
+  if (tables.labelOverrides) addLabelOverrideResource(state, resources, diagramOptions);
+};
+
+const addColorTableResources = (state, resources, diagramOptions) => {
   const paletteName = String(state.selectedPalette.value || 'default');
   const paletteColors = state.canonicalPublicationFiles && !state.canonicalPublicationFiles.d_color ? {}
     : state.normalizePaletteColors(state.paletteDefinitions.value?.[paletteName]
@@ -1113,13 +1320,10 @@ const addGeneratedTableResources = (state, resources, diagramOptions) => {
     defaultColorsFile:
       defaultColorsFile?.representation === 'canonicalTsv' ? null : defaultColorsFile
   };
+};
 
-  const visibility = serializeFeatureVisibilityRules(state.featureVisibilityRules?.value || []);
-  if (visibility.trim()) {
-    diagramOptions.featureVisibilityTableFile = fileRef(resources.addText(
-      'feature-visibility-table-file', 'feature-visibility-table-file', 'feature-visibility.tsv', visibility
-    ));
-  }
+const addLabelWhitelistResource = (state, resources, diagramOptions) => {
+  const publicationFiles = state.canonicalPublicationFiles || {};
   const preservedWhitelist = publicationFileRef(
     resources, publicationFiles, 'whitelist', 'label-whitelist-file'
   );
@@ -1136,6 +1340,10 @@ const addGeneratedTableResources = (state, resources, diagramOptions) => {
       ));
     }
   }
+};
+
+const addQualifierPriorityResource = (state, resources, diagramOptions) => {
+  const publicationFiles = state.canonicalPublicationFiles || {};
   const priority = state.manualPriorityRules
     .filter((rule) => rule?.feat && rule?.order)
     .map((rule) => `${rule.feat}\t${rule.order}`)
@@ -1153,17 +1361,22 @@ const addGeneratedTableResources = (state, resources, diagramOptions) => {
       'qualifier-priority-file', 'qualifier-priority-file', 'qualifier-priority.tsv', `${priority}\n`
     ));
   }
-  const labelOverride = buildLabelOverrideTsv(
-    state.labelTextFeatureOverrides,
-    state.labelTextBulkOverrides,
-    {
-      editableLabels: state.editableLabels?.value || [],
-      extractedFeatures: state.extractedFeatures.value,
-      featureOverrideSources: state.labelTextFeatureOverrideSources,
-      visibilityOverrides: state.labelVisibilityOverrides
-    }
-  );
-  const labelOverrideTsv = serializeLabelOverrideRows(state.canonicalLabelOverrideRows?.value) || labelOverride.tsv;
+};
+
+const addLabelOverrideResource = (state, resources, diagramOptions) => {
+  // Generate supplies the table it already built for this operation (CW-02).
+  const labelOverrideTsv = serializeLabelOverrideRows(state.canonicalLabelOverrideRows?.value)
+    || (typeof state.generatedLabelOverrideTsv === 'string' ? state.generatedLabelOverrideTsv
+      : buildLabelOverrideTsv(
+        state.labelTextFeatureOverrides,
+        state.labelTextBulkOverrides,
+        {
+          editableLabels: state.editableLabels?.value || [],
+          extractedFeatures: state.extractedFeatures.value,
+          featureOverrideSources: state.labelTextFeatureOverrideSources,
+          visibilityOverrides: state.labelVisibilityOverrides
+        }
+      ).tsv);
   if (labelOverrideTsv) {
     diagramOptions.labelOverrideFile = fileRef(resources.addText(
       'label-override-file', 'label-override-file', 'label-overrides.tsv', labelOverrideTsv
@@ -1234,23 +1447,11 @@ const buildDepthResources = ({ state, filesData, resources, diagramOptions, reco
       label: String(track.label || (logicalTrackCount === 1 ? 'Depth' : `Depth ${trackIndex + 1}`)),
       color: String(track.color || state.adv.depth_color || '#4A90E2'),
       height: state.mode.value === 'linear'
-        ? canonicalOptionalPositiveNumber(
-            track.height,
-            `depthTracks[${trackIndex}].height`
-          )
+        ? projectOptionalNumber(track.height, { field: 'height', seriesIndex: trackIndex })
         : null,
-      largeTickInterval: canonicalOptionalPositiveNumber(
-        track.large_tick_interval,
-        `depthTracks[${trackIndex}].largeTickInterval`
-      ),
-      smallTickInterval: canonicalOptionalPositiveNumber(
-        track.small_tick_interval,
-        `depthTracks[${trackIndex}].smallTickInterval`
-      ),
-      tickFontSize: canonicalOptionalPositiveNumber(
-        track.tick_font_size,
-        `depthTracks[${trackIndex}].tickFontSize`
-      )
+      largeTickInterval: projectOptionalNumber(track.large_tick_interval, { field: 'large_tick_interval', seriesIndex: trackIndex }),
+      smallTickInterval: projectOptionalNumber(track.small_tick_interval, { field: 'small_tick_interval', seriesIndex: trackIndex }),
+      tickFontSize: projectOptionalNumber(track.tick_font_size, { field: 'tick_font_size', seriesIndex: trackIndex })
     };
   });
 };
@@ -1320,6 +1521,14 @@ const automaticCircularAnnotationSlots = (state) => {
     });
   return slots;
 };
+
+const conservationDiagramOptions = (conservation, entries, referenceDefault) => ({
+  conservationReference: String(conservation.reference || referenceDefault),
+  conservationLabels: entries.map((entry) => entry.label),
+  conservationColors: entries.map((entry) => entry.color),
+  conservationRingWidth: projectOptionalNumber(conservation.ring_width, { field: 'conservation_ring_width' }),
+  conservationRingGap: projectOptionalNumber(conservation.ring_gap, { field: 'conservation_ring_gap' })
+});
 
 const conservationSeriesForValidation = ({
   state,
@@ -1399,7 +1608,7 @@ const buildTrackPlan = ({
         circularTrackAxisIndex: validation.emittedAxisIndex,
         linearTrackSlots: null,
         linearTrackAxisIndex: null,
-        centerReservedRadius: optionalNumber(state.adv.center_reserved_radius)
+        centerReservedRadius: projectOptionalNumber(state.adv.center_reserved_radius, { field: 'center_reserved_radius' })
       }
     };
   }
@@ -1473,7 +1682,7 @@ const buildTrackPlan = ({
           circularTrackAxisIndex: validation.emittedAxisIndex,
           linearTrackSlots: null,
           linearTrackAxisIndex: null,
-          centerReservedRadius: optionalNumber(state.adv.center_reserved_radius)
+          centerReservedRadius: projectOptionalNumber(state.adv.center_reserved_radius, { field: 'center_reserved_radius' })
         }
       };
     }
@@ -1486,19 +1695,17 @@ const buildTrackPlan = ({
       circularTrackAxisIndex: null,
       linearTrackSlots: null,
       linearTrackAxisIndex: null,
-      centerReservedRadius: circular ? optionalNumber(state.adv.center_reserved_radius) : null
+      centerReservedRadius: circular ? projectOptionalNumber(state.adv.center_reserved_radius, { field: 'center_reserved_radius' }) : null
     }
   };
 };
 
 const generatedProteinSettings = (state, baseline = {}) => {
+  const { alignOrthogroupFeature: _legacyAlignment, ...currentBaseline } = baseline;
   const blastp = state.losat.blastp || {};
   const blastpMode = requireCurrentProteinBlastpMode(blastp.mode);
-  const positiveInteger = (value, fallback) => optionalPositiveInteger(value) ?? fallback;
-  const nonNegativeInteger = (value, fallback) => {
-    const numeric = optionalNumber(value);
-    return Number.isInteger(numeric) && numeric >= 0 ? numeric : fallback;
-  };
+  const positiveInteger = (value, fallback) => integerSettingOr(value, fallback, 1);
+  const nonNegativeInteger = (value, fallback) => integerSettingOr(value, fallback, 0);
   const rawCollinearityUnitMode = String(blastp.collinearUnitMode || '').trim().toLowerCase();
   const collinearityUnitMode = blastpMode === 'collinear'
     ? requireCurrentCollinearUnitMode(rawCollinearityUnitMode)
@@ -1531,7 +1738,7 @@ const generatedProteinSettings = (state, baseline = {}) => {
     ? baselineCollinearity.parameters
     : {};
   return {
-    ...baseline,
+    ...currentBaseline,
     collinearityParams: {
       ...baselineCollinearity,
       kind: baselineCollinearity.kind || 'lossless',
@@ -1565,7 +1772,7 @@ const generatedProteinSettings = (state, baseline = {}) => {
     collinearityColorMode,
     losatpBin: baseline.losatpBin || 'losat',
     ncbiBlastpBin: baseline.ncbiBlastpBin ?? null,
-    losatpThreads: optionalPositiveInteger(state.losat.threadsPerJob),
+    losatpThreads: integerSettingOr(state.losat.threadsPerJob, null, 1),
     proteinBlastpMaxHits: blastpMode === 'pairwise'
       ? requireCurrentProteinBlastpMaxHits(blastp.maxHits)
       : positiveInteger(blastp.maxHits, 5),
@@ -1577,15 +1784,13 @@ const generatedProteinSettings = (state, baseline = {}) => {
       : normalizeOrthogroupMembershipMode(blastp.orthogroupMembershipMode),
     orthogroupMemberMaxHits: ['orthogroup', 'collinear'].includes(blastpMode)
       ? requireCurrentOrthogroupMemberMaxHits(blastp.orthogroupMemberMaxHits)
-      : optionalPositiveInteger(blastp.orthogroupMemberMaxHits),
+      : integerSettingOr(blastp.orthogroupMemberMaxHits, null, 1),
     collinearMaxParalogLinksPerOrthogroup:
       blastpMode === 'collinear'
         ? requireCurrentCollinearMaxParalogLinks(
             blastp.collinearMaxParalogLinksPerOrthogroup
           )
-        : positiveInteger(blastp.collinearMaxParalogLinksPerOrthogroup, 2),
-    alignOrthogroupFeature:
-      String(state.selectedOrthogroupAlignmentFeature.value || '').trim() || null
+        : positiveInteger(blastp.collinearMaxParalogLinksPerOrthogroup, 2)
   };
 };
 
@@ -1950,31 +2155,31 @@ const buildComparisons = ({
   return comparisons;
 };
 
-const resolvedLinearRecordRows = (sequences, layoutRows) => {
-  const rowsByUid = new Map(
-    (Array.isArray(layoutRows) ? layoutRows : [])
-      .map((entry) => [String(entry?.uid || ''), Number(entry?.row)])
-  );
-  return (Array.isArray(sequences) ? sequences : []).map((sequence, index) => {
-    const row = rowsByUid.get(String(sequence?.uid || ''));
-    return Number.isInteger(row) && row > 0 ? row : index + 1;
-  });
-};
-
-export const linearRecordLayoutHasSharedRow = (sequences, layoutRows) => {
-  const seenRows = new Set();
-  return resolvedLinearRecordRows(sequences, layoutRows).some((row) => {
-    if (seenRows.has(row)) return true;
-    seenRows.add(row);
-    return false;
-  });
-};
-
 const buildLayout = (state, filesData, records = []) => {
   if (state.mode.value === 'linear') {
-    if (!state.linearRecordLayoutEnabled?.value && !records.some((record) => record.presentation.gridRow != null)) return {};
+    const recordKeys = records.map((record) => requireCanonicalText(
+      record.recordKey,
+      'renderRequest.records[].recordKey'
+    ));
+    const plan = canonicalSimilarityAlignment(
+      state.similarityAlignmentPlan?.value ?? null,
+      recordKeys,
+      'renderRequest.layout.similarityAlignment'
+    );
+    const translations = canonicalRecordTranslations(
+      state.linearRecordTranslations?.value || [],
+      recordKeys,
+      'renderRequest.layout.recordTranslations',
+      { requireCoverage: plan !== null }
+    );
+    if (!state.linearRecordLayoutEnabled?.value &&
+        !records.some((record) => record.presentation.gridRow != null) &&
+        plan === null && translations.length === 0) return {};
     return {
-      recordGapPx: Math.max(0, Number(state.linearRecordGap?.value) || 0)
+      recordGapPx: Math.max(0, Number(state.linearRecordGap?.value) || 0),
+      multiRecordPositions: null,
+      recordTranslations: translations,
+      similarityAlignment: plan
     };
   }
   if (!state.form.multi_record_canvas) return {};
@@ -1991,9 +2196,10 @@ const buildLayout = (state, filesData, records = []) => {
     multiRecordSizeMode: requireCurrentCircularMultiRecordSizeMode(
       state.adv.multi_record_size_mode
     ),
-    multiRecordMinRadiusRatio: Number(state.adv.multi_record_min_radius_ratio) || 0.55,
-    multiRecordColumnGapRatio: Number(state.adv.multi_record_column_gap_ratio) || 0,
-    multiRecordRowGapRatio: Number(state.adv.multi_record_row_gap_ratio) || 0,
+    // Blank is the documented default (Python's); any number is sent literally.
+    multiRecordMinRadiusRatio: projectOptionalNumber(state.adv.multi_record_min_radius_ratio, { field: 'multi_record_min_radius_ratio' }) ?? 0.55,
+    multiRecordColumnGapRatio: projectOptionalNumber(state.adv.multi_record_column_gap_ratio, { field: 'multi_record_column_gap_ratio' }) ?? 0.10,
+    multiRecordRowGapRatio: projectOptionalNumber(state.adv.multi_record_row_gap_ratio, { field: 'multi_record_row_gap_ratio' }) ?? 0.05,
     multiRecordPositions: positions.length > 0 ? positions : null
   };
 };
@@ -2016,6 +2222,17 @@ export const buildCanonicalRequestState = ({ session, projection, config,
     && JSON.stringify(activeColors) !== JSON.stringify(pythonColors(projection.config?.colors));
   if (colorOverridesChanged) delete canonicalPublicationFiles.d_color;
   const features = session?.features || {}, layout = config?.linearRecordLayout || {};
+  const canonicalLayout = projection.config?.linearRecordLayout || {};
+  const legacyAlignment = projection.pipelineState?.legacySimilarityAlignment;
+  const materializedLegacyPlan = legacyAlignment
+      ? canonicalSimilarityAlignment(materializeLegacySimilarityAlignment({
+        target: legacyAlignment.target,
+        records: session?.renderRequest?.records || [],
+        featureCatalog: session?.editorState?.featureCatalog || null,
+        legacyOrthogroupState: session?.orthogroupState || null
+      }), (session?.renderRequest?.records || []).map((record) => record.recordKey),
+      'renderRequest.layout.similarityAlignment')
+    : null;
   const palette = String(config?.palette || 'default');
   const records = session?.renderRequest?.records || [];
   const circularRecordList = records.length === 1 && !records[0]?.selector
@@ -2037,8 +2254,15 @@ export const buildCanonicalRequestState = ({ session, projection, config,
     canonicalLabelOverrideRows: publicationClone(features.labelOverrideRows || []), editableLabels: [],
     extractedFeatures: features.extractedFeatures || [],
     losatProgram: config.losatProgram || 'blastn',
-    selectedOrthogroupAlignmentFeature: session?.orthogroupState?.selectedOrthogroupAlignmentFeature || '',
-    linearRecordLayoutEnabled: Boolean(layout.enabled), linearRecordGap: layout.recordGap ?? 24
+    linearRecordLayoutEnabled: Boolean(layout.enabled),
+    linearRecordGap: layout.recordGap ?? 24,
+    similarityAlignmentPlan: materializedLegacyPlan ||
+      canonicalLayout.similarityAlignment || null,
+    linearRecordTranslations: materializedLegacyPlan
+      ? (session?.renderRequest?.records || []).map((record) => ({
+          recordKey: String(record.recordKey || ''), x: 0, y: 0
+        }))
+      : publicationClone(canonicalLayout.recordTranslations || [])
   };
   return {
     ...Object.fromEntries(Object.entries(refs).map(([key, value]) => [key, publicationRef(value)])),
@@ -2047,19 +2271,21 @@ export const buildCanonicalRequestState = ({ session, projection, config,
     labelTextFeatureOverrides: publicationClone(features.labelTextFeatureOverrides || {}), labelTextBulkOverrides: publicationClone(features.labelTextBulkOverrides || {}),
     labelTextFeatureOverrideSources: publicationClone(features.labelTextFeatureOverrideSources || {}), labelVisibilityOverrides: publicationClone(features.labelVisibilityOverrides || {}),
     circularConservation: conservation, losat: publicationClone(config.losat || { blastp: {} }),
-    linearRecordRows: publicationClone(layout.rows || []), linearComparisonPlan: normalizeLinearComparisonPlan(config.linearComparisonPlan || { mode: 'none', defaultSource: 'losat', edges: [] }),
+    linearRecordRows: publicationClone(layout.rows || []), linearComparisonPlan: normalizeLinearComparisonPlan(config.linearComparisonPlan),
     annotationSets: publicationClone(config.annotationSets || []),
     recordDisplayDrafts: publicationClone(config.recordDisplayDrafts || []),
     featurePlacementOverrides: publicationClone(config.featurePlacementOverrides || {}), canonicalPublicationFiles
   };
 };
-export const buildCanonicalRenderRequest = ({
+const projectCanonicalRenderInput = ({
   state,
   filesData,
   comparisonPlanSnapshot = null,
   resolvedComparisons = [],
-  resolvedCircularConservation = []
+  resolvedCircularConservation = [],
+  resources = createResourceBuilder()
 }) => {
+  recordStructuralMetric('canonicalRequestProjectionCount');
   requireCurrentWebStateFieldNames(state);
   requireCurrentCircularMultiRecordSizeMode(state.adv.multi_record_size_mode);
   requireCurrentLinearTrackLayout(state.form.linear_track_layout);
@@ -2082,7 +2308,6 @@ export const buildCanonicalRenderRequest = ({
   const comparisonOptionsRequested = (
     state.mode.value === 'circular' || hasLinearComparisonIntent
   );
-  const resources = createResourceBuilder();
   const webFiles = {};
   const recordPlan = buildRecords({ state, filesData, resources });
   const drafts = state.recordDisplayDrafts || [];
@@ -2095,27 +2320,37 @@ export const buildCanonicalRenderRequest = ({
     const selector = record.region?.selector || record.selector;
     const selectedRows = sourceRows.filter((row) => !selector
       || (selector.kind === 'recordIndex' ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value));
-    const displayFor = (row) => requestedRecordDisplay(row,
+    const transformFor = (row) => requestedRecordTransform(row,
       drafts.find((draft) => recordDisplayKey(draft) === row.key) || {}, { ...row, cropped: Boolean(record.region) });
     if (record.cardinality === 'all' && selectedRows.length > 1) {
-      const displays = selectedRows.map(displayFor);
-      if (new Set(displays.map((display) => JSON.stringify(display))).size > 1) {
+      const transforms = selectedRows.map(transformFor);
+      if (new Set(transforms.map((transform) => JSON.stringify(transform))).size > 1) {
         sourceInputIndexes.push(...selectedRows.map(() => index));
         return selectedRows.map((row, rowIndex) => ({ ...record,
           recordKey: `${record.recordKey}:${Number(row.selector.slice(1))}`,
           cardinality: 'exactly_one', selector: { kind: 'recordIndex', index: Number(row.selector.slice(1)) - 1 },
-          presentation: { ...record.presentation, gridRow: record.presentation.gridRow ?? index + 1 },
-          display: displays[rowIndex] }));
+          presentation: { ...record.presentation,
+            reverseComplement: record.region ? false : transforms[rowIndex].reverseComplement,
+            gridRow: record.presentation.gridRow ?? index + 1 },
+          display: transforms[rowIndex].display }));
       }
     }
     const selected = selectedRows[0];
     const savedDraft = drafts.find((draft) => draft.scope === state.mode.value && draft.sourceUid === sourceUid
       && (selector?.kind === 'recordIndex' ? draft.selector === `#${selector.index + 1}`
         : selector?.kind === 'recordId' ? draft.recordId === selector.value : true));
+    const transform = selected ? transformFor(selected) : {
+      display: record.display || { isCircular: savedDraft?.topologyOverride ?? null,
+        startCoordinate: savedDraft?.startCoordinate ?? null },
+      reverseComplement: record.region
+        ? Boolean(record.region.reverseComplement)
+        : savedDraft?.reverseComplementOverride ?? Boolean(record.presentation?.reverseComplement)
+    };
     sourceInputIndexes.push(index);
-    return [{ ...record, display: selected ? displayFor(selected)
-      : record.display || { isCircular: savedDraft?.topologyOverride ?? null,
-        startCoordinate: savedDraft?.startCoordinate ?? null } }];
+    return [{ ...record,
+      presentation: { ...record.presentation,
+        reverseComplement: record.region ? false : transform.reverseComplement },
+      display: transform.display }];
   });
   if (state.mode.value === 'linear' && records.length !== recordPlan.records.length) {
     records.forEach((record, index) => { record.presentation.gridRow ??= sourceInputIndexes[index] + 1; });
@@ -2196,7 +2431,12 @@ export const buildCanonicalRenderRequest = ({
     featurePlacements: canonicalFeaturePlacements(state.featurePlacementOverrides || {}, state.mode.value),
     configOverrides: buildConfigOverrides(state, {
       depthRequested: trackPlan.depthRequested,
-      hasComparisonIntent: hasLinearComparisonIntent
+      hasComparisonIntent: hasLinearComparisonIntent,
+      linearHasSharedRow: state.mode.value === 'linear' && linearRecordLayoutHasSharedRow(
+        filesData.linearSeqs,
+        state.linearRecordRows,
+        { enabled: Boolean(state.linearRecordLayoutEnabled?.value) }
+      )
     }),
     tracks: trackPlan.tracks,
     output: {
@@ -2209,19 +2449,14 @@ export const buildCanonicalRenderRequest = ({
       ...normalizeFeatureRenderingMap(state.adv.feature_shapes || {})
     },
     dinucleotide: String(state.adv.nt || 'GC').toUpperCase(),
-    window: optionalPositiveInteger(state.adv.window_size),
-    step: optionalPositiveInteger(state.adv.step_size),
-    depthWindow: optionalPositiveInteger(state.adv.depth_window_size),
-    depthStep: optionalPositiveInteger(state.adv.depth_step_size),
+    window: projectOptionalNumber(state.adv.window_size, { field: 'window' }),
+    step: projectOptionalNumber(state.adv.step_size, { field: 'step' }),
+    depthWindow: projectOptionalNumber(state.adv.depth_window_size, { field: 'depth_window' }),
+    depthStep: projectOptionalNumber(state.adv.depth_step_size, { field: 'depth_step' }),
     plotTitle: String(state.form.plot_title || '').trim() || null,
-    plotTitleFontSize: optionalNumber(state.adv.plot_title_font_size),
+    plotTitleFontSize: projectOptionalNumber(state.adv.plot_title_font_size, { field: 'plot_title_font_size' }),
     ...(comparisonOptionsRequested
-      ? {
-          evalue: Number(state.adv.evalue),
-          bitscore: Number(state.adv.min_bitscore),
-          identity: Number(state.adv.identity),
-          alignmentLength: Number(state.adv.alignment_length) || 0
-        }
+      ? projectComparisonThresholds(resolveComparisonThresholds(state.adv, state.mode.value))
       : {})
   };
   if (Array.isArray(state.annotationSets) && state.annotationSets.length > 0) {
@@ -2271,11 +2506,7 @@ export const buildCanonicalRenderRequest = ({
             : null
         ));
       }
-      diagramOptions.conservationReference = String(state.circularConservation.reference || 'auto');
-      diagramOptions.conservationLabels = conservationEntries.map((entry) => entry.label);
-      diagramOptions.conservationColors = conservationEntries.map((entry) => entry.color);
-      diagramOptions.conservationRingWidth = optionalNumber(state.circularConservation.ring_width);
-      diagramOptions.conservationRingGap = optionalNumber(state.circularConservation.ring_gap);
+      Object.assign(diagramOptions, conservationDiagramOptions(state.circularConservation, conservationEntries, 'auto'));
       if (conservationBlastsAreDerived) {
         webFiles.conservationBlastSource = 'losat-cache';
       }
@@ -2325,21 +2556,11 @@ export const buildCanonicalRenderRequest = ({
       if (comparisonFastas.some(Boolean)) {
         diagramOptions.conservationFastaFiles = comparisonFastas;
       }
-      diagramOptions.conservationReference = String(
-        state.circularConservation.reference || 'subject'
-      );
-      diagramOptions.conservationLabels = resolvedCircularConservation.map(
-        (entry, index) => String(entry?.label || `Comparison ${index + 1}`)
-      );
-      diagramOptions.conservationColors = resolvedCircularConservation.map(
-        (entry) => String(entry?.color || '#D9EAF7')
-      );
-      diagramOptions.conservationRingWidth = optionalNumber(
-        state.circularConservation.ring_width
-      );
-      diagramOptions.conservationRingGap = optionalNumber(
-        state.circularConservation.ring_gap
-      );
+      Object.assign(diagramOptions, conservationDiagramOptions(state.circularConservation,
+        resolvedCircularConservation.map((entry, index) => ({
+          label: String(entry?.label || `Comparison ${index + 1}`),
+          color: String(entry?.color || '#D9EAF7')
+        })), 'subject'));
       webFiles.conservationBlastSource = 'losat-cache';
     }
   } else if (hasLinearComparisonIntent) {
@@ -2381,7 +2602,7 @@ export const buildCanonicalRenderRequest = ({
     webFiles.linearRecordMetadata = sourceInputIndexes.map((sourceIndex, index) => {
       const entry = {
         recordKey: String(records[index]?.recordKey || filesData.linearSeqs[sourceIndex]?.uid || `record-${index + 1}`),
-        losatGencode: optionalPositiveInteger(filesData.linearSeqs[sourceIndex]?.losat_gencode) || 1
+        losatGencode: integerSettingOr(filesData.linearSeqs[sourceIndex]?.losat_gencode, 1, 1)
       };
       const fileDefinition = String(filesData.linearSeqs[sourceIndex]?.file_definition || '').trim();
       const fileSubtitle = String(filesData.linearSeqs[sourceIndex]?.file_subtitle || '').trim();
@@ -2419,6 +2640,80 @@ export const buildCanonicalRenderRequest = ({
     webFiles
   };
 };
+
+// The request writer and the inexpensive comparison use the same projection.
+// The latter retains bindings and generated table text, never resource bytes.
+const generationResourceIdentity = (resource) => {
+  if (!resource) return null;
+  if (generatedResourceValues.has(resource)) {
+    const value = generatedResourceValues.get(resource);
+    return typeof value === 'string' ? { text: value } : value;
+  }
+  const owner = getResourcePayloadOwner(resource);
+  const backing = getSessionResourceSource(owner);
+  if (backing?.descriptors) {
+    return { bindings: backing.descriptors.map((entry) => entry.descriptor) };
+  }
+  if (backing?.descriptor) return { bindings: [backing.descriptor] };
+  if (typeof owner?.arrayBuffer === 'function'
+    || (typeof owner?.data === 'string' && owner?.encoding)) {
+    return { bindings: [owner] };
+  }
+  return { bindings: null };
+};
+
+// Successful render/import already validates these backings. Compare immutable
+// owners or their encoded payloads, without another genome read or digest.
+const compositionSourceIdentity = (source, resources) => {
+  if (!source || typeof source !== 'object') return null;
+  const fields = Object.keys(source).sort();
+  const identity = fields.map((key) => {
+    if (!isCanonicalResourceReferenceField(key)) return [key, source[key]];
+    const descriptor = resources?.[source[key]];
+    if (!descriptor) return [key, null];
+    const parts = generationResourceIdentity(descriptor)?.bindings;
+    if (!Array.isArray(parts) || !parts.length) return [key, null];
+    return [key, parts.map(part => ({
+      payload: typeof part?.data === 'string' ? part.data : part,
+      size: part?.size,
+      encoding: part?.encoding || 'file'
+    }))];
+  });
+  return identity;
+};
+
+export const projectCompositionRecordIdentity = (canonical, keys) => {
+  const request = canonical?.renderRequest;
+  if (!request || !Array.isArray(keys) || !keys.length || new Set(keys).size !== keys.length) return null;
+  const records = [];
+  for (const key of [...keys].sort()) {
+    // The renderer's validated catalog expands an ALL source as
+    // <recordKey>:<one-based biological source selector>. This is a source
+    // record binding, never a Result index or display order.
+    const matches = (request.records || []).flatMap(record => {
+      if (record.recordKey === key) {
+        // With no region/selector, successful EXACTLY_ONE selects the sole
+        // source record; FIRST selects #1, and unexpanded ALL also proves one.
+        const selector = record.selector ?? (!record.region && ['exactly_one', 'first', 'all'].includes(record.cardinality)
+          ? { kind: 'recordIndex', index: 0 } : null);
+        return [{ record, selector }];
+      }
+      const suffix = key.startsWith(`${record.recordKey}:`) ? key.slice(record.recordKey.length + 1) : '';
+      if (record.cardinality !== 'all' || !/^[1-9]\d*$/.test(suffix)) return [];
+      return [{ record, selector: { kind: 'recordIndex', index: Number(suffix) - 1 } }];
+    });
+    if (matches.length !== 1) return null;
+    const { record, selector } = matches[0];
+    const source = compositionSourceIdentity(record.source, canonical.resources);
+    if (!source || source.some(([field, value]) => isCanonicalResourceReferenceField(field)
+      && (!value || value.some(part => !part.payload || !Number.isSafeInteger(part.size))))) return null;
+    records.push({ key, source, selector: publicationClone(selector),
+      region: publicationClone(record.region ?? null) });
+  }
+  return { mode: request.mode, grouping: request.grouping, records };
+};
+
+export const buildCanonicalRenderRequest = (args) => projectCanonicalRenderInput(args);
 
 const recordSourceResourceId = (record, field) => {
   const source = record?.source || {};
@@ -2608,12 +2903,13 @@ const applyWebFileBindings = (
       fasta: webBindingValueAsLegacyFile(resources, sequence?.fasta, resolveBinding, bindings.schema),
       depth: webBindingValueAsLegacyFile(resources, sequence?.depth, resolveBinding, bindings.schema),
       blast: webBindingValueAsLegacyFile(resources, sequence?.blast, resolveBinding, bindings.schema),
-      losat_gencode: optionalPositiveInteger(sequence?.losat_gencode) || 1,
+      losat_gencode: integerSettingOr(sequence?.losat_gencode, 1, 1),
       losat_filename: String(sequence?.losat_filename || ''),
       definition: String(sequence?.definition || ''),
       record_subtitle: String(sequence?.record_subtitle || ''),
       file_definition: String(sequence?.file_definition || ''),
       file_subtitle: String(sequence?.file_subtitle || ''),
+      inferred_definition: String(sequence?.inferred_definition || ''),
       region_record_id: String(sequence?.region_record_id || ''),
       region_start: sequence?.region_start ?? null,
       region_end: sequence?.region_end ?? null,
@@ -2706,7 +3002,7 @@ const resolvePipelineCollinearInference = (settings, mode) =>
 
 const projectGeneratedProteinPipeline = (
   comparison,
-  { adoptCanonicalPayloads = false } = {}
+  { adoptCanonicalPayloads = false, requestSchema = CANONICAL_REQUEST_SCHEMA } = {}
 ) => {
   if (
     !comparison ||
@@ -2716,14 +3012,27 @@ const projectGeneratedProteinPipeline = (
     Array.isArray(comparison.settings)
   ) return null;
   const settings = comparison.settings;
+  if (requestSchema >= 8 && Object.hasOwn(settings, 'alignOrthogroupFeature')) {
+    throw new Error('Current canonical protein settings cannot contain legacy alignment state.');
+  }
+  let legacySimilarityAlignment = null;
+  if (requestSchema <= 7 && settings.alignOrthogroupFeature !== null &&
+      settings.alignOrthogroupFeature !== undefined) {
+    legacySimilarityAlignment = {
+      target: requireCanonicalText(
+        settings.alignOrthogroupFeature,
+        'renderRequest.comparisons[].settings.alignOrthogroupFeature'
+      ),
+      sourceSchema: requestSchema
+    };
+  }
   const parameters = settings.collinearityParams?.parameters || {};
   const mode = String(comparison.mode || 'orthogroup');
   return {
     generatedProteinComparison: adoptCanonicalPayloads
       ? comparison
       : cloneCanonicalJsonValue(comparison),
-    selectedOrthogroupAlignmentFeature:
-      String(settings.alignOrthogroupFeature || '').trim(),
+    legacySimilarityAlignment,
     config: {
       blastSource: 'losat',
       losatProgram: 'blastp',
@@ -2954,7 +3263,7 @@ export const readCanonicalResourceRecordCount = async (resources, resourceId, ki
       ? await readFileText(owner)
       : decodeCanonicalResourceText(resources, resourceId);
     counts = {
-      genbank: (text.match(/^LOCUS\s+/gm) || []).length,
+      genbank: countGenBankRecords(text),
       fasta: (text.match(/^>/gm) || []).length
     };
     // Immutable File/view identity outlives transferred bytes. Retain only counts;
@@ -2967,6 +3276,21 @@ export const readCanonicalResourceRecordCount = async (resources, resourceId, ki
 const resourceTextFromRef = (resources, ref) => (
   ref?.resourceId ? decodeCanonicalResourceText(resources, ref.resourceId) : null
 );
+
+// Whether the committed Session drew with the given Feature visibility rules
+// (TSV), compared after normalization. Reusing resolved protein comparisons is
+// valid only when it holds (CO-02); an unreadable committed table declines.
+export const committedFeatureVisibilityMatches = (committedSession, activeRulesTsv) => {
+  const normalize = (text) => serializeFeatureVisibilityRules(parseFeatureVisibilityRules(String(text ?? '')).rules);
+  try {
+    return normalize(resourceTextFromRef(
+      committedSession?.resources,
+      committedSession?.renderRequest?.diagramOptions?.featureVisibilityTableFile
+    )) === normalize(activeRulesTsv);
+  } catch {
+    return false;
+  }
+};
 
 const nestedConfigValue = (config, path) => {
   let current = config;
@@ -3158,31 +3482,33 @@ const projectCircularConservationConfig = (options, files) => {
     reference: String(options.conservationReference || 'auto'),
     labels: series.map((entry) => entry.label).join(','),
     series,
-    ring_width: optionalNumber(options.conservationRingWidth),
-    ring_gap: optionalNumber(options.conservationRingGap)
+    ring_width: projectOptionalNumber(options.conservationRingWidth, { field: 'conservation_ring_width' }),
+    ring_gap: projectOptionalNumber(options.conservationRingGap, { field: 'conservation_ring_gap' })
   };
 };
 
-const projectCanonicalCircularMeasure = (measure) => {
-  if (measure === null || measure === undefined) return null;
-  if (!measure || typeof measure !== 'object' || Array.isArray(measure)) return measure;
-  const value = Number(measure.value);
-  if (!Number.isFinite(value)) return measure;
-  const unit = String(measure.unit || '').trim().toLowerCase();
-  if (!unit || unit === 'factor') return String(value);
-  return `${value}${unit}`;
+const projectCanonicalCircularPixel = (measure) => {
+  // Historical structured gaps/spacing are physical pixels, including zero.
+  if (measure && typeof measure === 'object' && !Array.isArray(measure)) {
+    if (String(measure.unit || '').trim().toLowerCase() !== 'px') {
+      throw new Error('Circular gap/spacing must use pixels.');
+    }
+    measure = measure.value;
+  }
+  const value = parseOptionalPixel(measure, 'Circular gap/spacing', { allowZero: true });
+  return value === null ? null : String(value);
 };
 
 const projectCanonicalCircularSlot = (slot) => ({
   ...slot,
-  width: projectCanonicalCircularMeasure(slot?.width),
-  radius: projectCanonicalCircularMeasure(slot?.radius),
-  inner_gap_px: projectCanonicalCircularMeasure(
+  width: projectCircularMeasureDraft(slot?.width),
+  radius: projectCircularMeasureDraft(slot?.radius),
+  inner_gap_px: projectCanonicalCircularPixel(
     slot?.innerGapPx ?? slot?.inner_gap_px
-  )?.replace?.(/px$/i, ''),
-  outer_gap_px: projectCanonicalCircularMeasure(
+  ),
+  outer_gap_px: projectCanonicalCircularPixel(
     slot?.outerGapPx ?? slot?.outer_gap_px
-  )?.replace?.(/px$/i, '')
+  )
 });
 
 const projectCurrentCanonicalCircularSlot = (slot) => {
@@ -3192,14 +3518,20 @@ const projectCurrentCanonicalCircularSlot = (slot) => {
       Object.prototype.hasOwnProperty.call(slot, field)
     ))
   ) throw new Error('Current canonical circular track slot uses an obsolete shape.');
+  for (const field of ['innerGapPx', 'outerGapPx']) {
+    const value = slot[field];
+    if (value !== null && value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) {
+      throw new Error(`Canonical Circular track ${field} must be a nonnegative finite number or null.`);
+    }
+  }
   const projected = projectCanonicalCircularSlot(slot);
   return {
     id: String(projected.id || ''),
     renderer: String(projected.renderer || ''),
     enabled: projected.enabled !== false,
     width: projected.width ?? null, radius: projected.radius ?? null,
-    inner_gap_px: projected.inner_gap_px ?? null,
-    outer_gap_px: projected.outer_gap_px ?? null,
+    inner_gap_px: slot.innerGapPx == null ? null : String(slot.innerGapPx),
+    outer_gap_px: slot.outerGapPx == null ? null : String(slot.outerGapPx),
     side: projected.side ?? null, z: Number(projected.z) || 0,
     params: cloneCanonicalJsonValue(projected.params || {})
   };
@@ -3207,7 +3539,7 @@ const projectCurrentCanonicalCircularSlot = (slot) => {
 const projectLegacyCanonicalCircularSlot = (slot) => {
   const projected = projectCanonicalCircularSlot(slot);
   if (Object.prototype.hasOwnProperty.call(slot, 'spacing')) {
-    projected.spacing = projectCanonicalCircularMeasure(slot.spacing);
+    projected.spacing = projectCanonicalCircularPixel(slot.spacing);
   }
   return migrateLegacyCircularTrackSlot(projected);
 };
@@ -3365,6 +3697,7 @@ export const projectCanonicalSessionRequest = ({
   webFiles = {},
   legacyFiles = null,
   storedConfig = null,
+  initializeCliInputs = false,
   fileBindings = [],
   linearTrackSlotSchemaVersion = LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   repairInvalidComparisonHeight = false,
@@ -3396,6 +3729,50 @@ export const projectCanonicalSessionRequest = ({
       .map((sourceIndex) => values?.[sourceIndex])
   );
   if (records.length === 0) throw new Error('Canonical renderRequest records are required.');
+  let similarityAlignment = null;
+  let recordTranslations = [];
+  if (renderRequest.mode === 'linear' && renderRequest.schema >= 8) {
+    const layout = renderRequest.layout || {};
+    if (Object.keys(layout).length > 0) {
+      requireExactCanonicalKeys(layout, [
+        'recordGapPx', 'multiRecordPositions', 'recordTranslations', 'similarityAlignment'
+      ], 'renderRequest.layout');
+      if (!Number.isFinite(layout.recordGapPx) || layout.recordGapPx < 0) {
+        throw new Error('renderRequest.layout.recordGapPx must be a finite non-negative number.');
+      }
+      if (layout.multiRecordPositions !== null && (
+        !Array.isArray(layout.multiRecordPositions) ||
+        layout.multiRecordPositions.some((token) => typeof token !== 'string' || !token.trim())
+      )) throw new Error(
+        'renderRequest.layout.multiRecordPositions must be null or an array of non-empty text.'
+      );
+      if (layout.multiRecordPositions?.length && sourceRecords.some(
+        (record) => record.presentation?.gridRow != null
+      )) throw new Error(
+        'Linear row placement must use record presentation or layout positions, not both.'
+      );
+      const recordKeys = sourceRecords.map((record, index) => requireCanonicalText(
+        record.recordKey,
+        `renderRequest.records[${index}].recordKey`
+      ));
+      similarityAlignment = canonicalSimilarityAlignment(
+        layout.similarityAlignment,
+        recordKeys,
+        'renderRequest.layout.similarityAlignment'
+      );
+      recordTranslations = canonicalRecordTranslations(
+        layout.recordTranslations,
+        recordKeys,
+        'renderRequest.layout.recordTranslations',
+        { requireCoverage: similarityAlignment !== null }
+      );
+    }
+  } else if (renderRequest.mode === 'linear' && (
+    Object.hasOwn(renderRequest.layout || {}, 'recordTranslations') ||
+    Object.hasOwn(renderRequest.layout || {}, 'similarityAlignment')
+  )) {
+    throw new Error('Typed similarity alignment requires canonical schema 8.');
+  }
   const grouping = canonicalGrouping(renderRequest, records);
   const sourceOutputPrefixes = canonicalOutputPrefixes(
     renderRequest,
@@ -3405,10 +3782,56 @@ export const projectCanonicalSessionRequest = ({
   const outputPrefixes = grouping === 'batch'
     ? reorderRecordIndexedValues(sourceOutputPrefixes)
     : sourceOutputPrefixes;
-  const webMetadata = webFiles && typeof webFiles === 'object' && !Array.isArray(webFiles)
+  let webMetadata = webFiles && typeof webFiles === 'object' && !Array.isArray(webFiles)
     ? webFiles
     : {};
-  const explicitBindings = validateWebFileBindings(webMetadata, canonicalResources);
+  let explicitBindings = validateWebFileBindings(webMetadata, canonicalResources);
+  // A CLI sidecar has no saved Web draft. Its empty writer slots are initial
+  // values, not a user's cleared inputs. Keep real original CLI bindings (in
+  // particular GFF + FASTA), and initialize absent slots from the typed request.
+  // A saved Web draft, including explicit null/[] inputs, always wins unchanged.
+  if (initializeCliInputs && storedConfig == null && explicitBindings) {
+    const originalInputFields = renderRequest.mode === 'circular'
+      ? ['c_gb', 'c_gff', 'c_fasta']
+      : ['linearSeqs'];
+    const hasOriginalInputs = originalInputFields.some((field) => (
+      Array.isArray(explicitBindings[field])
+        ? explicitBindings[field].length > 0
+        : explicitBindings[field] != null
+    ));
+    explicitBindings = Object.fromEntries(Object.entries(explicitBindings).filter(
+      ([field, value]) => (hasOriginalInputs && originalInputFields.includes(field))
+        || (value != null && (!Array.isArray(value) || value.length > 0))
+    ));
+    // A CLI binding uid (`cli-seq-N`) is only an initial value. The committed
+    // request owns record identity, so each Linear file takes the recordKey
+    // that Inherit matches against. A multi-record file, which Python expands
+    // as `<fileKey>:<n>`, becomes one row per record with the `#n` selector.
+    const recordKeysByFile = new Map();
+    sourceRecords.forEach((record) => {
+      const key = String(record.recordKey || '');
+      const fileKey = key.replace(/:[1-9]\d*$/, '');
+      recordKeysByFile.set(fileKey, [...(recordKeysByFile.get(fileKey) || []), key]);
+    });
+    const fileRecordKeys = [...recordKeysByFile.keys()];
+    if (renderRequest.mode === 'linear' && Array.isArray(explicitBindings.linearSeqs)
+      && fileRecordKeys.every(Boolean)
+      && fileRecordKeys.length === explicitBindings.linearSeqs.length) {
+      explicitBindings = {
+        ...explicitBindings,
+        linearSeqs: explicitBindings.linearSeqs.flatMap((sequence, index) => (
+          recordKeysByFile.get(fileRecordKeys[index]).map((uid) => ({
+            ...sequence,
+            uid,
+            ...(uid === fileRecordKeys[index] ? {} : {
+              region_record_id: `#${uid.slice(fileRecordKeys[index].length + 1)}`
+            })
+          }))
+        ))
+      };
+    }
+    webMetadata = { ...webMetadata, bindings: explicitBindings };
+  }
   const storedResourceOriginalNames = webMetadata.resourceOriginalNames;
   const originalNameHints = {
     ...legacyResourceOriginalNames({ renderRequest, legacyFiles, fileBindings }),
@@ -3466,11 +3889,31 @@ export const projectCanonicalSessionRequest = ({
     (renderRequest.comparisons || []).find(
       (comparison) => comparison?.kind === 'generatedProteinComparison'
     ),
-    { adoptCanonicalPayloads }
+    { adoptCanonicalPayloads, requestSchema: renderRequest.schema }
   );
   const comparisonsContainGeneratedProteinPipeline = (
     renderRequest.comparisons || []
   ).some((comparison) => comparison?.kind === 'generatedProteinComparison');
+  // A CLI sidecar has no Web comparison draft, so its plan is the Web default
+  // (No comparison) unless the projection states one. Its editable protein
+  // pipeline is the adjacent LOSATP comparison the CLI drew. Without -b or a
+  // protein mode the CLI still writes its protein settings as a disabled
+  // pipeline (mode `none`, no pairs): that draft selects no LOSATP program. A
+  // read-only comparison (-b) reaches this projection as an empty list.
+  const committedComparisons = renderRequest.comparisons || [];
+  const cliLinearSidecar = initializeCliInputs && storedConfig == null
+    && renderRequest.mode === 'linear';
+  const cliDraftWithoutComparison = cliLinearSidecar && committedComparisons.length > 0
+    && committedComparisons.every((comparison) => (
+      comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'none'
+      && !comparison.pairs?.length
+    ));
+  const cliProteinPlan = cliLinearSidecar && projectedProteinPipeline && !cliDraftWithoutComparison
+    ? { linearComparisonPlan: normalizeLinearComparisonPlan({ mode: 'adjacent' }) }
+    : {};
+  const {
+    blastSource: _cliBlastSource, losatProgram: _cliLosatProgram, ...cliProteinSettings
+  } = projectedProteinPipeline?.config || {};
   const files = { linearSeqs: [] };
   if (renderRequest.mode === 'circular') {
     files.circularRecords = records.map((record) => {
@@ -3539,9 +3982,7 @@ export const projectCanonicalSessionRequest = ({
           : null,
         depth: null,
         blast: null,
-        losat_gencode: optionalPositiveInteger(
-          savedMetadata.losatGencode ?? savedMetadata.losat_gencode
-        ) || 1,
+        losat_gencode: integerSettingOr(savedMetadata.losatGencode ?? savedMetadata.losat_gencode, 1, 1),
         losat_filename: String(
           savedMetadata.losatFilename ?? savedMetadata.losat_filename ?? ''
         ),
@@ -3907,7 +4348,7 @@ export const projectCanonicalSessionRequest = ({
   const comparisonHeight = classifyOptionalPositiveNumber(overrides.comparison_height);
   if (renderRequest.mode === 'linear' && comparisonHeight.status === 'invalid') {
     if (!repairInvalidComparisonHeight) {
-      throw new Error('Pairwise Match Height must be Auto or a positive finite number.');
+      throw diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' });
     }
   }
   const tracks = options.tracks || {};
@@ -4000,10 +4441,10 @@ export const projectCanonicalSessionRequest = ({
     (_, index) => ({
       label: String(options.depthTrackLabels?.[index] ?? (index === 0 ? 'Depth' : `Depth ${index + 1}`)),
       color: String(options.depthTrackColors?.[index] || (index === 0 ? overrides.depth_color : '') || '#4A90E2'),
-      height: optionalNumber(options.depthTrackHeights?.[index]),
-      large_tick_interval: optionalNumber(options.depthTrackLargeTickIntervals?.[index]),
-      small_tick_interval: optionalNumber(options.depthTrackSmallTickIntervals?.[index]),
-      tick_font_size: optionalNumber(options.depthTrackTickFontSizes?.[index])
+      height: projectOptionalNumber(options.depthTrackHeights?.[index], { field: 'height' }),
+      large_tick_interval: projectOptionalNumber(options.depthTrackLargeTickIntervals?.[index], { field: 'large_tick_interval' }),
+      small_tick_interval: projectOptionalNumber(options.depthTrackSmallTickIntervals?.[index], { field: 'small_tick_interval' }),
+      tick_font_size: projectOptionalNumber(options.depthTrackTickFontSizes?.[index], { field: 'tick_font_size' })
     })
   );
   const circularPresentationRecord = (
@@ -4019,8 +4460,10 @@ export const projectCanonicalSessionRequest = ({
       webMetadata.circularOutputPrefixExplicit
     ),
     plot_title: options.plotTitle || '',
-    legend: options.output?.legend || 'right',
-    multi_record_canvas: renderRequest.mode === 'circular' && grouping === 'grid',
+    // A Linear request has no Circular grouping; keep the fresh default.
+    multi_record_canvas: renderRequest.mode === 'circular'
+      ? grouping === 'grid'
+      : WEB_UX_PROFILE.circular.gridByDefault,
     circular_record_selector: circularPresentationRecord
       ? (canonicalRecordSelector(circularPresentationRecord) || '')
       : '',
@@ -4103,7 +4546,6 @@ export const projectCanonicalSessionRequest = ({
     linear_label_spacing: renderRequest.mode === 'linear'
       ? (overrides.linear_label_spacing ?? null)
       : null,
-    plot_title_position: options.output?.plotTitlePosition || (renderRequest.mode === 'linear' ? 'bottom' : 'none'),
     plot_title_font_size: options.plotTitleFontSize ?? overrides.plot_title_font_size ?? null,
     def_font_size: renderRequest.mode === 'circular'
       ? (overrides.circular_definition_font_size ?? null)
@@ -4141,8 +4583,11 @@ export const projectCanonicalSessionRequest = ({
     track_axis_gap: overrides.linear_track_axis_gap ?? null,
     linear_definition_line_styles: overrides.linear_definition_line_styles || {},
     linear_show_replicon: Boolean(overrides.linear_definition_show_replicon),
-    linear_show_accession: overrides.linear_definition_show_accession !== false,
-    linear_show_length: overrides.linear_definition_show_length !== false,
+    // A Circular request has no Linear display values; keep the fresh Auto.
+    linear_accession_visibility: renderRequest.mode !== 'linear' ? 'auto'
+      : overrides.linear_definition_show_accession !== false ? 'show' : 'hide',
+    linear_length_visibility: renderRequest.mode !== 'linear' ? 'auto'
+      : overrides.linear_definition_show_length !== false ? 'show' : 'hide',
     keep_full_definition_with_plot_title: Boolean(options.keepFullDefinitionWithPlotTitle),
     gc_content_mode: overrides.gc_content_mode || 'deviation',
     gc_content_min_percent: overrides.gc_content_min_percent ?? 0,
@@ -4208,11 +4653,26 @@ export const projectCanonicalSessionRequest = ({
       return { selector: String(token).slice(0, split), row: Number(String(token).slice(split + 1)) };
     })
   };
-  const linearLayoutRows = renderRequest.schema >= 6
-    ? records.map((record, index) => ({
-        uid: files.linearSeqs[index]?.uid || '',
-        row: Number(record.presentation?.gridRow) || index + 1
-      }))
+  const presentationOwnsLinearRows = renderRequest.schema >= 6 && records.some(
+    (record) => record.presentation?.gridRow != null
+  );
+  const linearLayoutRows = presentationOwnsLinearRows
+    ? records.map((record, index) => {
+        const row = Number(record.presentation?.gridRow) || index + 1;
+        const sourceColumn = sourceRecords[
+          normalizedRecordOrdering.sourceIndexByProjectedIndex[index]
+        ]?.presentation?.gridColumn;
+        return {
+          uid: files.linearSeqs[index]?.uid || '', row,
+          ...(initializeCliInputs && storedConfig == null
+            && sourceRecords[normalizedRecordOrdering.sourceIndexByProjectedIndex[index]]?.cardinality === 'exactly_one'
+            ? { canonicalCardinality: 'exactly_one' } : {}),
+          ...(initializeCliInputs && storedConfig == null
+            && Number.isInteger(sourceColumn) && sourceColumn > 0
+            ? { canonicalRow: row, canonicalColumn: sourceColumn }
+            : {})
+        };
+      })
     : (renderRequest.layout?.multiRecordPositions || []).map((token, index) => {
         const split = String(token).lastIndexOf('@');
         return {
@@ -4223,10 +4683,13 @@ export const projectCanonicalSessionRequest = ({
   const linearLayout = renderRequest.mode === 'linear' && renderRequest.schema >= 2
     ? {
         enabled: renderRequest.schema >= 6
-          ? records.some((record) => record.presentation?.gridRow != null)
+          ? presentationOwnsLinearRows ||
+            (renderRequest.layout?.multiRecordPositions || []).length > 0
           : Object.keys(renderRequest.layout || {}).length > 0,
         recordGap: renderRequest.layout?.recordGapPx ?? 24,
-        rows: linearLayoutRows
+        rows: linearLayoutRows,
+        recordTranslations,
+        similarityAlignment
       }
     : undefined;
   const projectedBlacklistText = Array.isArray(overrides.label_blacklist)
@@ -4241,14 +4704,29 @@ export const projectCanonicalSessionRequest = ({
       : files.linearSeqs[0];
     if (!source?.gb && source?.gff && source?.fasta) inputType = 'gff';
   }
+  // Legend and plot-title positions are layout preferences, not form fields:
+  // the committed request sets the slot of its own mode and grouping.
+  const layoutPreferences = createDefaultLayoutPreferences();
+  updateActiveLayoutPreference(
+    layoutPreferences,
+    renderRequest.mode,
+    renderRequest.mode === 'circular' && grouping === 'grid',
+    {
+      legend: options.output?.legend || 'right',
+      plotTitlePosition: options.output?.plotTitlePosition
+        || (renderRequest.mode === 'linear' ? 'bottom' : 'none')
+    }
+  );
   return {
     mode: renderRequest.mode,
     inputType,
     files,
+    layoutPreferences,
     config: {
       form,
       adv,
-      ...(projectedProteinPipeline?.config || {}),
+      ...(cliDraftWithoutComparison ? cliProteinSettings : projectedProteinPipeline?.config || {}),
+      ...cliProteinPlan,
       colors: projectedDefaultColors,
       colorsAreOverrides: true,
       palette: options.colors?.defaultColorsPalette || 'default',
@@ -4267,7 +4745,9 @@ export const projectCanonicalSessionRequest = ({
         selector: record.selector?.kind === 'recordIndex' ? `#${record.selector.index + 1}` : '#1',
         recordId: record.selector?.kind === 'recordId' ? record.selector.value : '',
         topologyOverride: record.display?.isCircular ?? null,
-        startCoordinate: record.display?.startCoordinate ?? null
+        startCoordinate: record.display?.startCoordinate ?? null,
+        reverseComplementOverride: null,
+        anchorIntent: null
       }] : []),
       featurePlacementOverrides: Object.fromEntries(canonicalFeaturePlacements(
         options.featurePlacements || [], renderRequest.mode
@@ -4285,8 +4765,8 @@ export const projectCanonicalSessionRequest = ({
       ? {
           generatedProteinComparison:
             projectedProteinPipeline.generatedProteinComparison,
-          selectedOrthogroupAlignmentFeature:
-            projectedProteinPipeline.selectedOrthogroupAlignmentFeature
+          legacySimilarityAlignment:
+            projectedProteinPipeline.legacySimilarityAlignment
         }
       : null
   };
@@ -4367,11 +4847,14 @@ const firstPublicationDiff = (expected, actual, path = '$') => {
   }
   return null;
 };
-export const promoteCanonicalRenderRequestToCurrent = (request) => {
+export const promoteCanonicalRenderRequestToCurrent = (
+  request,
+  { featureCatalog = null, legacyOrthogroupState = null } = {}
+) => {
   const promoted = cloneCanonicalJsonValue(request);
   if (promoted.schema === CANONICAL_REQUEST_SCHEMA) return promoted;
-  if (![5, 6].includes(promoted.schema)) {
-    throw new Error('Only canonical renderRequest schemas 5 and 6 can be promoted to schema 7.');
+  if (![5, 6, 7].includes(promoted.schema)) {
+    throw new Error('Only canonical renderRequest schemas 5, 6, and 7 can be promoted to schema 8.');
   }
   const sourceSchema = promoted.schema;
   const linearRows = promoted.mode === 'linear'
@@ -4382,21 +4865,352 @@ export const promoteCanonicalRenderRequestToCurrent = (request) => {
     : [];
   promoted.schema = CANONICAL_REQUEST_SCHEMA;
   (promoted.records || []).forEach((record, index) => {
-    record.display = { isCircular: null, startCoordinate: null };
+    if (sourceSchema < 7) record.display = { isCircular: null, startCoordinate: null };
     if (sourceSchema === 5) record.cardinality = promoted.mode === 'linear' &&
       !record.selector && !record.region
       ? 'all'
       : 'exactly_one';
     if (linearRows[index]) record.presentation.gridRow = linearRows[index];
   });
-  promoted.diagramOptions = { ...promoted.diagramOptions, featurePlacements: [] };
-  if (promoted.mode === 'linear' && promoted.layout) {
-    delete promoted.layout.multiRecordPositions;
+  if (sourceSchema < 7) {
+    promoted.diagramOptions = { ...promoted.diagramOptions, featurePlacements: [] };
+  }
+  if (promoted.mode === 'linear') {
+    const generated = (promoted.comparisons || []).find(
+      (comparison) => comparison?.kind === 'generatedProteinComparison'
+    );
+    const rawLegacy = generated?.settings?.alignOrthogroupFeature;
+    const similarityAlignment = rawLegacy === null || rawLegacy === undefined
+      ? null
+      : canonicalSimilarityAlignment(materializeLegacySimilarityAlignment({
+          target: rawLegacy,
+          records: promoted.records || [],
+          featureCatalog,
+          legacyOrthogroupState
+        }), (promoted.records || []).map((record) => record.recordKey),
+        'renderRequest.layout.similarityAlignment');
+    if (generated?.settings) delete generated.settings.alignOrthogroupFeature;
+    const hadLayout = Object.keys(promoted.layout || {}).length > 0;
+    if (hadLayout || similarityAlignment !== null) {
+      const recordGapPx = Number(promoted.layout?.recordGapPx ?? 24);
+      promoted.layout = {
+        recordGapPx: Number.isFinite(recordGapPx) && recordGapPx >= 0 ? recordGapPx : 24,
+        multiRecordPositions: null,
+        recordTranslations: (promoted.records || []).map((record) => ({
+          recordKey: String(record.recordKey || ''),
+          x: 0,
+          y: 0
+        })),
+        similarityAlignment
+      };
+    } else {
+      promoted.layout = {};
+    }
   }
   return promoted;
 };
+
+const sameCanonicalValue = (left, right) => (
+  JSON.stringify(left) === JSON.stringify(right)
+);
+
+const materializedRecordSelector = (selector) => {
+  const match = String(selector || '').match(/^#([1-9]\d*)$/);
+  if (!match) {
+    throw new Error('Target record materialization requires an exact record selector.');
+  }
+  return { kind: 'recordIndex', index: Number(match[1]) - 1 };
+};
+
+const validateRecordTransformTarget = (target, transform, mode) => {
+  if (!target || target.scope !== mode || typeof target.recordKey !== 'string'
+    || !target.recordKey || typeof target.canonicalRecordKey !== 'string'
+    || !target.canonicalRecordKey || !target.source || typeof target.source !== 'object') {
+    throw new Error('Record transform target is stale or incomplete.');
+  }
+  if (target.cropped) {
+    throw new Error('A cropped record cannot be rotated from a feature.');
+  }
+  if (target.effectiveCircular !== true) {
+    throw new Error('Feature-based record rotation requires a circular record.');
+  }
+  const recordLength = Number(target.recordLength);
+  if (!Number.isSafeInteger(recordLength) || recordLength < 1
+    || Number(transform?.recordLength) !== recordLength) {
+    throw new Error('The target record length changed after the feature popup opened.');
+  }
+  if (!Number.isSafeInteger(transform?.startCoordinate)
+    || transform.startCoordinate < 1 || transform.startCoordinate > recordLength
+    || typeof transform?.reverseComplement !== 'boolean') {
+    throw new Error('Resolved record transform is invalid for the target record.');
+  }
+};
+
+const materializeCanonicalRecordCollection = (record, target, recordIndex) => {
+  const members = Array.isArray(target.members) ? target.members : [];
+  const identities = new Set();
+  const selectors = new Set();
+  const materialized = members.map((member) => {
+    const selector = materializedRecordSelector(member?.selector);
+    const recordKey = String(member?.recordKey || '');
+    if (!recordKey || identities.has(recordKey) || selectors.has(selector.index)
+      || member?.canonicalRecordKey !== target.canonicalRecordKey
+      || !Number.isSafeInteger(Number(member?.recordLength))
+      || Number(member.recordLength) < 1
+      || !member?.committedDisplay || typeof member.committedDisplay !== 'object'
+      || typeof member?.committedReverseComplement !== 'boolean') {
+      throw new Error('Committed record collection cannot be materialized safely.');
+    }
+    identities.add(recordKey);
+    selectors.add(selector.index);
+    return {
+      ...cloneCanonicalJsonValue(record),
+      recordKey,
+      cardinality: 'exactly_one',
+      selector,
+      display: cloneCanonicalJsonValue(member.committedDisplay),
+      presentation: {
+        ...(cloneCanonicalJsonValue(record.presentation) || {}),
+        reverseComplement: member.committedReverseComplement,
+        gridRow: record.presentation?.gridRow ?? recordIndex + 1
+      }
+    };
+  });
+  if (materialized.length < 1
+    || materialized.filter((entry) => entry.recordKey === target.recordKey).length !== 1) {
+    throw new Error('Target record collection does not resolve to exactly one record.');
+  }
+  return materialized;
+};
+
+const shiftCanonicalComparisonIndexes = (comparisons, recordIndex, expansion) => (
+  (Array.isArray(comparisons) ? comparisons : []).map((comparison) => {
+    const shifted = cloneCanonicalJsonValue(comparison);
+    for (const field of ['queryRecordIndex', 'subjectRecordIndex']) {
+      const index = Number(shifted?.[field]);
+      if (Number.isInteger(index) && index > recordIndex) shifted[field] = index + expansion;
+    }
+    if (Array.isArray(shifted?.pairs)) {
+      shifted.pairs = shifted.pairs.map((pair) => {
+        const next = { ...pair };
+        for (const field of ['queryRecordIndex', 'subjectRecordIndex']) {
+          const index = Number(next[field]);
+          if (Number.isInteger(index) && index > recordIndex) next[field] = index + expansion;
+        }
+        return next;
+      });
+    }
+    return shifted;
+  })
+);
+
+const requireCurrentCommittedRequest = (committed, request) => {
+  if (!request || request.schema !== CANONICAL_REQUEST_SCHEMA
+    || !['circular', 'linear'].includes(request.mode)
+    || !committed?.resources || typeof committed.resources !== 'object') {
+    throw new Error('A current committed canonical Session is required.');
+  }
+};
+
+/**
+ * Clone the last committed canonical Session and overlay one record transform.
+ * No live form state participates in this projection.
+ */
+export const projectCommittedRecordTransform = ({ committed, target, transform }) => {
+  const request = committed?.renderRequest;
+  requireCurrentCommittedRequest(committed, request);
+  validateRecordTransformTarget(target, transform, request.mode);
+  const matchingIndexes = request.records
+    .map((record, index) => ({ record, index }))
+    .filter(({ record }) => record?.recordKey === target.canonicalRecordKey);
+  if (matchingIndexes.length !== 1) {
+    throw new Error('Target record does not resolve uniquely in the committed request.');
+  }
+  const { record: sourceRecord, index: sourceIndex } = matchingIndexes[0];
+  if (!sameCanonicalValue(sourceRecord.source, target.source)) {
+    throw new Error('Target record resource binding is stale.');
+  }
+  if (sourceRecord.region || target.cropped) {
+    throw new Error('A cropped record cannot be rotated from a feature.');
+  }
+
+  const candidate = cloneCanonicalJsonValue(committed);
+  let records = candidate.renderRequest.records;
+  let targetIndex = sourceIndex;
+  let materialized = false;
+  if (sourceRecord.cardinality === 'all') {
+    const replacements = materializeCanonicalRecordCollection(
+      sourceRecord,
+      target,
+      sourceIndex
+    );
+    records.splice(sourceIndex, 1, ...replacements);
+    targetIndex = sourceIndex + replacements.findIndex(
+      (entry) => entry.recordKey === target.recordKey
+    );
+    const expansion = replacements.length - 1;
+    candidate.renderRequest.comparisons = shiftCanonicalComparisonIndexes(
+      candidate.renderRequest.comparisons,
+      sourceIndex,
+      expansion
+    );
+    const depthFiles = candidate.renderRequest.diagramOptions?.depthTrackFiles;
+    if (Array.isArray(depthFiles) && depthFiles.length === request.records.length) {
+      depthFiles.splice(
+        sourceIndex,
+        1,
+        ...replacements.map(() => cloneCanonicalJsonValue(depthFiles[sourceIndex]))
+      );
+    }
+    const metadata = candidate.webFiles?.linearRecordMetadata;
+    if (Array.isArray(metadata) && metadata.length === request.records.length) {
+      const sourceMetadata = metadata[sourceIndex] || {};
+      metadata.splice(sourceIndex, 1, ...replacements.map((entry) => ({
+        ...cloneCanonicalJsonValue(sourceMetadata),
+        recordKey: entry.recordKey
+      })));
+    }
+    materialized = true;
+  } else if (sourceRecord.cardinality !== 'exactly_one'
+    || target.recordKey !== target.canonicalRecordKey) {
+    throw new Error('Target record identity is stale.');
+  }
+
+  const candidateTarget = records[targetIndex];
+  candidateTarget.display = {
+    ...(candidateTarget.display || { isCircular: null }),
+    startCoordinate: transform.startCoordinate
+  };
+  candidateTarget.presentation = {
+    ...(candidateTarget.presentation || {}),
+    reverseComplement: transform.reverseComplement
+  };
+
+  projectCanonicalSessionRequest({
+    renderRequest: candidate.renderRequest,
+    resources: candidate.resources,
+    webFiles: candidate.webFiles || {},
+    storedConfig: candidate.config || null,
+    deferResourceContent: true
+  });
+  return {
+    canonical: candidate,
+    receipt: Object.freeze({
+      recordKey: target.recordKey,
+      canonicalRecordKey: target.canonicalRecordKey,
+      recordIndex: targetIndex,
+      materialized,
+      startCoordinate: transform.startCoordinate,
+      reverseComplement: transform.reverseComplement
+    })
+  };
+};
+
+const COMMITTED_EDITOR_TABLE_OPTIONS = Object.freeze({
+  colors: ['colors'],
+  visibility: ['featureVisibilityTableFile'],
+  whitelist: ['labelWhitelistFile'],
+  labelOverrides: ['labelOverrideFile']
+});
+
+const referencedResourceIds = (value, ids = new Set()) => {
+  if (Array.isArray(value)) value.forEach((entry) => referencedResourceIds(entry, ids));
+  else if (value && typeof value === 'object') {
+    Object.entries(value).forEach(([key, entry]) => {
+      if (key === 'resourceId' && typeof entry === 'string' && entry) ids.add(entry);
+      else referencedResourceIds(entry, ids);
+    });
+  }
+  return ids;
+};
+
+/**
+ * Clone the last committed canonical Session and replace only the tables of
+ * live editor intent: feature colors (rules and the applied palette), feature
+ * visibility, and label overrides. A label reflow renders this request, so no
+ * other draft setting reaches the Result before Generate (R1(c), N-16). The
+ * Enable Labels choice also carries its label selection: the label scope,
+ * blacklist, and whitelist.
+ */
+export const projectCommittedEditorIntent = ({
+  committed,
+  state,
+  labelSelection = false,
+  promotion = {}
+}) => {
+  // A Session loaded from an older supported request schema keeps that request
+  // until the next Generate; promote it the way Save does before overlaying.
+  const request = [5, 6, 7].includes(committed?.renderRequest?.schema)
+    ? promoteCanonicalRenderRequestToCurrent(committed.renderRequest, promotion)
+    : committed?.renderRequest;
+  requireCurrentCommittedRequest(committed, request);
+  const candidate = {
+    ...committed,
+    renderRequest: cloneCanonicalJsonValue(request),
+    resources: { ...committed.resources }
+  };
+  const options = candidate.renderRequest.diagramOptions || {};
+  candidate.renderRequest.diagramOptions = options;
+  const tables = {
+    colors: true, visibility: true, whitelist: labelSelection, priority: false, labelOverrides: true
+  };
+  const retired = new Set();
+  Object.entries(COMMITTED_EDITOR_TABLE_OPTIONS).forEach(([table, keys]) => {
+    if (!tables[table]) return;
+    keys.forEach((key) => {
+      referencedResourceIds(options[key], retired);
+      delete options[key];
+    });
+  });
+  const stillReferenced = referencedResourceIds(candidate.renderRequest);
+  retired.forEach((resourceId) => {
+    if (!stillReferenced.has(resourceId)) delete candidate.resources[resourceId];
+  });
+  const resources = createResourceBuilder();
+  addGeneratedTableResources(state, resources, options, tables);
+  Object.assign(candidate.resources, resources.resources);
+  if (labelSelection) {
+    const circular = request.mode === 'circular';
+    options.configOverrides = {
+      ...(options.configOverrides || {}),
+      [MODE_LABEL_SCOPE_PATHS[request.mode]]: labelScopeOverride(state.form, circular),
+      [CONFIG_OVERRIDE_PATHS.labelBlacklist]: labelBlacklistOverride(state)
+    };
+  }
+  projectCanonicalSessionRequest({
+    renderRequest: candidate.renderRequest,
+    resources: candidate.resources,
+    webFiles: candidate.webFiles || {},
+    storedConfig: candidate.config || null,
+    deferResourceContent: true
+  });
+  return candidate;
+};
+
+/** Project only alignment-owned fields of the last committed canonical artifact. */
+export const projectCommittedSimilarityAlignment = ({ committed, plan, translations, orientations }) => {
+  if (committed?.renderRequest?.schema !== CANONICAL_REQUEST_SCHEMA
+    || committed.renderRequest.mode !== 'linear' || !committed.resources) {
+    throw new Error('Alignment requires a committed canonical Linear artifact.');
+  }
+  const canonical = { ...committed, renderRequest: cloneCanonicalJsonValue(committed.renderRequest) };
+  const request = canonical.renderRequest;
+  const keys = request.records.map(({ recordKey }) => recordKey);
+  const byKey = new Map((orientations || []).map((entry) => [entry.recordKey, entry.reverseComplement]));
+  if (byKey.size !== keys.length || orientations.length !== keys.length
+    || keys.some(key => typeof byKey.get(key) !== 'boolean')) {
+    throw new Error('Alignment orientation coverage changed.');
+  }
+  request.records.forEach(record => writeCanonicalRecordReverseComplement(record, byKey.get(record.recordKey)));
+  request.layout = { recordGapPx: 24, multiRecordPositions: null, ...request.layout,
+    similarityAlignment: cloneCanonicalJsonValue(plan ?? null),
+    recordTranslations: cloneCanonicalJsonValue(translations) };
+  projectCanonicalSessionRequest({ ...canonical, deferResourceContent: true });
+  return canonical;
+};
+
 const normalizePublicationRequestAliases = (request) => {
-  const normalized = [5, 6].includes(request?.schema)
+  const normalized = [5, 6, 7].includes(request?.schema)
     ? promoteCanonicalRenderRequestToCurrent(request)
     : cloneCanonicalJsonValue(request);
   for (const comparison of normalized.comparisons || []) {

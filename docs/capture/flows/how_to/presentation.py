@@ -14,11 +14,14 @@ from playwright.sync_api import BrowserType, Page, expect
 from assertions.svg_semantics import assert_static_svg_safety, inspect_svg_file
 from config import ACTION_TIMEOUT_MS
 from flows.web_capture import (
+    toggle_disclosure,
     assert_fixture_identity,
     assert_output_paths,
     capture_screenshot,
     generate_and_inspect,
+    open_ancestor_details,
     open_browser_capture,
+    release_pointer_and_focus,
     wait_for_app_shell,
 )
 
@@ -634,29 +637,32 @@ def _open_human_circular(page: Page, prefix: str) -> None:
     output_prefix = page.get_by_label("Output Prefix", exact=True)
     output_prefix.fill(prefix)
     expect(output_prefix).to_have_value(prefix)
-    track_preset = page.get_by_label("Track Preset", exact=True)
+    track_preset = open_ancestor_details(page.get_by_label("Track Preset", exact=True))
     track_preset.select_option("middle")
     expect(track_preset).to_have_value("middle")
 
 
 def _set_plot_title(page: Page, title: str) -> None:
-    title_panel = page.get_by_label("Title & Legend", exact=True)
-    title_panel.click()
-    plot_title = page.get_by_label("Plot Title", exact=True)
+    title_panel = page.get_by_label("Titles and Record Labels", exact=True)
+    toggle_disclosure(title_panel)
+    plot_title = page.get_by_role("textbox", name="Plot Title", exact=True)
     plot_title.fill(title)
     expect(plot_title).to_have_value(title)
     title_position = page.get_by_label("Plot Title Position", exact=True)
     title_position.select_option("top")
     expect(title_position).to_have_value("top")
-    legend_position = page.get_by_label("Legend Position", exact=True)
-    legend_position.select_option("right")
-    expect(legend_position).to_have_value("right")
     keep_definition = page.get_by_label(
         "Keep Full Definition with Plot Title", exact=True
     )
     keep_definition.check()
     expect(keep_definition).to_be_checked()
-    title_panel.click()
+    toggle_disclosure(title_panel)
+    legend_panel = page.get_by_label("Legend settings", exact=True)
+    toggle_disclosure(legend_panel)
+    legend_position = page.get_by_label("Legend position", exact=True)
+    legend_position.select_option("right")
+    expect(legend_position).to_have_value("right")
+    toggle_disclosure(legend_panel)
 
 
 def _fit_finished_circular_preview(page: Page) -> None:
@@ -705,6 +711,7 @@ def _pan_preview_left(page: Page, distance_ratio: float = 0.27) -> None:
     page.evaluate("() => window.getSelection()?.removeAllRanges()")
     if page.evaluate("() => window.getSelection()?.rangeCount ?? 0") != 0:
         raise AssertionError("Circular preview retained a text selection after panning")
+    release_pointer_and_focus(page)
 
 
 def _wait_for_preview_transform(page: Page) -> None:
@@ -769,7 +776,7 @@ def capture_gui_styling(
         expect(separate_strands).to_be_checked()
 
         colors_panel = page.get_by_label("Colors", exact=True)
-        colors_panel.click()
+        toggle_disclosure(colors_panel)
         palette = page.get_by_label("Palette", exact=True)
         palette.select_option("soft_pastels")
         expect(palette).to_have_value("soft_pastels")
@@ -781,10 +788,10 @@ def capture_gui_styling(
                 "group", name="Override File (-d) selection", exact=True
             )
         ).to_contain_text(DEFAULT_COLOR_RULE_PATH.name)
-        colors_panel.click()
+        toggle_disclosure(colors_panel)
 
         labels_panel = page.get_by_label("Labels", exact=True)
-        labels_panel.click()
+        toggle_disclosure(labels_panel)
         label_mode = page.get_by_label("Label Mode", exact=True)
         label_mode.select_option("out")
         expect(label_mode).to_have_value("out")
@@ -803,7 +810,7 @@ def capture_gui_styling(
                 "group", name="Priority File (TSV) selection", exact=True
             )
         ).to_contain_text(GENE_PRIORITY_RULE_PATH.name)
-        labels_panel.click()
+        toggle_disclosure(labels_panel)
         _set_plot_title(page, STYLE_TITLE)
 
         final_report = generate_and_inspect(
@@ -816,7 +823,7 @@ def capture_gui_styling(
             page.get_by_role("button", name="Reset zoom", exact=True)
         ).to_contain_text("90%")
         _wait_for_preview_transform(page)
-        labels_panel.click()
+        toggle_disclosure(labels_panel)
         page.get_by_role(
             "group", name="Priority File (TSV) selection", exact=True
         ).scroll_into_view_if_needed()
@@ -826,7 +833,7 @@ def capture_gui_styling(
         screenshot_bytes["style-settings.png"] = capture_screenshot(
             page, output_paths["style-settings.png"], "Circular"
         )
-        labels_panel.click()
+        toggle_disclosure(labels_panel)
         _fit_finished_circular_preview(page)
         _pan_preview_left(page, distance_ratio=0.17)
         _wait_for_preview_transform(page)
@@ -905,7 +912,7 @@ def capture_gui_feature_presentation(
         expect(resolve_overlaps).to_be_checked()
 
         features_panel = page.get_by_label("Features", exact=True)
-        features_panel.click()
+        toggle_disclosure(features_panel)
         page.get_by_label("Rendering for CDS", exact=True).select_option("arrow")
         page.get_by_label("Rendering for rRNA", exact=True).select_option(
             "rectangle"
@@ -957,7 +964,7 @@ def capture_gui_feature_presentation(
         screenshot_bytes["presentation-settings.png"] = capture_screenshot(
             page, output_paths["presentation-settings.png"], "Circular"
         )
-        features_panel.click()
+        toggle_disclosure(features_panel)
         _fit_finished_circular_preview(page)
         _pan_preview_left(page, 0.06)
         _wait_for_preview_transform(page)

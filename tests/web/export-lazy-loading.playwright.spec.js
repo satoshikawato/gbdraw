@@ -23,8 +23,15 @@ const installRequestCounter = (page) => {
   return (path) => counts.get(path) || 0;
 };
 
+const displayedErrorOperation = (page) => page.evaluate(
+  () => window.__GBDRAW_APP__.errorDisplay?.operation || null
+);
+
+// The fixture is a legacy imported SVG without composition metadata. Mounting
+// it must leave the displayed error unchanged.
 const mountExportFixture = async (page, { interactive = false } = {}) => {
   await page.waitForFunction(() => window.__GBDRAW_APP__);
+  const errorBeforeMount = await displayedErrorOperation(page);
   await page.evaluate(async ({ interactive }) => {
     const { state } = await import('/gbdraw/web/js/state.js');
     const { admitLegacyImportedResults, createLegacyImportResultSource } = await import(
@@ -57,7 +64,7 @@ const mountExportFixture = async (page, { interactive = false } = {}) => {
     state.selectedResultIndex.value = 0;
     state.downloadDpi.value = 96;
     state.featureCatalog.value = interactive ? {
-      schema: 3,
+      schema: 4,
       items: [{
         resultIndex: 0,
         resultName: 'lazy-export.svg',
@@ -73,15 +80,21 @@ const mountExportFixture = async (page, { interactive = false } = {}) => {
           type: 'CDS',
           start: 0,
           end: 9,
+          anchorProfile: {
+            precision: 'exact', operator: 'single', partOrder: 'source-forward', strand: 'unstranded'
+          },
           product: 'Lazy export feature'
         }],
         orthogroups: [],
         annotations: [],
         comparisonMatches: []
       }]
-    } : { schema: 3, items: [] };
+    } : { schema: 4, items: [] };
   }, { interactive });
   await expect(page.locator('.origin-top svg')).toBeAttached();
+  // The preview binds the mounted root in microtasks; two frames cover it.
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  expect(await displayedErrorOperation(page)).toBe(errorBeforeMount);
 };
 
 const expectNoPdfOrInteractiveRequests = (requestCount) => {
@@ -96,7 +109,7 @@ for (const failedAsset of [JSPDF_PATH, SVG2PDF_PATH]) {
     await page.goto('/gbdraw/web/index.html');
     await mountExportFixture(page);
     await page.route(`**${failedAsset}`, (route) => route.abort());
-    expect(await page.evaluate(() => window.__GBDRAW_APP__.downloadPDF())).toEqual({ status: 'error' });
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.downloadPDF())).toMatchObject({ status: 'error', error: {code:'PDF_LIBRARY',operation:'export-pdf'} });
     await page.unroute(`**${failedAsset}`);
     const pending = page.waitForEvent('download');
     await page.evaluate(() => window.__GBDRAW_APP__.downloadPDF());
@@ -205,11 +218,11 @@ test('PDF library load failures are shown to the user', async ({ page }) => {
     };
   });
 
-  expect(outcome.result).toEqual({ status: 'error' });
-  expect(outcome.summary).toContain('PDF export failed');
-  expect(outcome.summary).toContain('Failed to load the vendored jsPDF library');
-  await expect(page.getByRole('alert', { name: 'Generation Error' }))
-    .toContainText('PDF export failed');
+  expect(outcome.result.status).toBe('error');
+  expect(outcome.result.error).toMatchObject({code:'PDF_LIBRARY',operation:'export-pdf',stage:'initialization'});
+  expect(outcome.summary).toContain('PDF libraries could not start');
+  await expect(page.getByRole('alert', { name: 'PDF export error' }))
+    .toContainText('PDF libraries could not start');
 });
 
 test('export failures are shown to the user', async ({ page }) => {
@@ -224,9 +237,29 @@ test('export failures are shown to the user', async ({ page }) => {
     };
   });
 
-  expect(outcome.result).toEqual({ status: 'error' });
-  expect(outcome.summary).toContain('SVG export failed');
-  expect(outcome.summary).toContain('No SVG result is available for export');
-  await expect(page.getByRole('alert', { name: 'Generation Error' }))
-    .toContainText('No SVG result is available for export');
+  expect(outcome.result.status).toBe('error');
+  expect(outcome.result.error).toMatchObject({code:'EXPORT_INPUT',operation:'export-svg',stage:'export-capture'});
+  expect(outcome.summary).toContain('current diagram could not be prepared for export');
+  await expect(page.getByRole('alert', { name: 'SVG export error' }))
+    .toContainText('current diagram could not be prepared for export');
+});
+
+
+test('Interactive SVG retry keeps the actual standalone export operation',async({page})=>{
+  await page.goto('/gbdraw/web/index.html');
+  await mountExportFixture(page);
+  const failure=await page.evaluate(()=>window.__GBDRAW_APP__.downloadInteractiveSVG());
+  expect(failure).toMatchObject({status:'error',error:{code:'EXPORT_INPUT',operation:'export-svg',stage:'export-capture'}});
+  const alert=page.getByRole('alert',{name:'SVG export error'});
+  await expect(alert.getByRole('button',{name:'Retry Interactive SVG export',exact:true})).toBeVisible();
+  await expect(alert.getByRole('button',{name:'Retry SVG export',exact:true})).toHaveCount(0);
+  await mountExportFixture(page,{interactive:true});
+  const pending=page.waitForEvent('download');
+  await alert.getByRole('button',{name:'Retry Interactive SVG export',exact:true}).click();
+  const downloaded=await pending;
+  expect(downloaded.suggestedFilename()).toBe('lazy-export.interactive.svg');
+  const stream=await downloaded.createReadStream();const chunks=[];
+  for await(const chunk of stream)chunks.push(chunk);
+  expect(Buffer.concat(chunks).toString()).toContain('id="gbdraw-interactive-feature-script"');
+  await expect(alert).toHaveCount(0);
 });

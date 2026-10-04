@@ -1,6 +1,8 @@
 import { normalizeCollinearSearchScope } from './losat-normalization.js';
-import { groupLinearSourceRecords } from './linear-sources.js';
+import { buildLosatJobSpecs } from './linear-comparisons.js';
+import { losatRecordGencode, planLosatSourceJobs } from './linear-sources.js';
 import { getLosatHardwareThreads, resolveLosatThreadPlan } from '../services/losat-thread-plan.js';
+import { losatThreadingPrecondition } from '../services/losat.js';
 
 const { computed, ref, watch, onMounted } = window.Vue;
 
@@ -45,39 +47,33 @@ export const createLosatSettings = ({ state }) => {
 
   const losatThreadsPerJobFixed = computed(() => losatProgram.value !== 'blastp' || losat.executionMode === 'serial');
 
+  // Generate plans its jobs with the same two functions (N-10). Only the
+  // translation tables vary per record, so they are the only arguments that
+  // can split a source batch.
   const losatEstimatedJobCount = computed(() => {
     const resolution = linearComparisonResolution?.value || linearComparisonResolution || {};
     if (resolution.valid === false || !resolution.hasLosatIntent) return 0;
-    const sources = new Map();
-    groupLinearSourceRecords(linearSeqs).forEach((group) => {
-      group.records.forEach(({ index }) => sources.set(index, group.uid));
-    });
-    const excludeSelfComparisons = losatProgram.value === 'blastp'
-      && losat.blastp?.mode === 'collinear' && losat.blastp?.collinearInferOrthogroups === false;
-    const jobs = new Set();
-    const addPair = (query, subject) => jobs.add(JSON.stringify([
-      sources.get(query), sources.get(subject),
-      ...(excludeSelfComparisons && sources.get(query) === sources.get(subject) ? [query, subject] : []),
-      ...(losatProgram.value === 'tblastx'
-        ? [linearSeqs[query]?.losat_gencode, linearSeqs[subject]?.losat_gencode] : [])
-    ]));
-    const edges = (resolution.edges || []).filter((edge) => edge.source === 'losat');
-    edges.forEach((edge) => addPair(edge.queryIndex, edge.subjectIndex));
-    const blastpMode = String(losat.blastp?.mode || 'orthogroup').trim().toLowerCase();
-    if (losatProgram.value === 'blastp' && ['orthogroup', 'collinear'].includes(blastpMode)
-      && resolution.mode === 'adjacent' && resolution.defaultSource === 'losat') {
-      const includeSelf = blastpMode === 'orthogroup' || losat.blastp?.collinearInferOrthogroups !== false;
-      if (includeSelf) linearSeqs.forEach((_, index) => addPair(index, index));
-      if (blastpMode === 'orthogroup'
-        || normalizeCollinearSearchScope(losat.blastp?.collinearSearchScope) === 'all') {
-        linearSeqs.forEach((_, query) => linearSeqs.forEach((__, subject) => {
-          if (includeSelf || query !== subject) addPair(query, subject);
-        }));
-      } else {
-        edges.forEach((edge) => addPair(edge.subjectIndex, edge.queryIndex));
-      }
+    const program = losatProgram.value;
+    try {
+      const specs = buildLosatJobSpecs({
+        resolution,
+        recordCount: linearSeqs.length,
+        recordUids: linearSeqs.map((sequence) => sequence?.uid),
+        program,
+        blastpMode: String(losat.blastp?.mode || 'orthogroup'),
+        collinearInferOrthogroups: losat.blastp?.collinearInferOrthogroups !== false,
+        collinearSearchScope: normalizeCollinearSearchScope(losat.blastp?.collinearSearchScope)
+      });
+      return planLosatSourceJobs({
+        sequences: linearSeqs,
+        specs,
+        buildArgs: (query, subject) => (program === 'tblastx'
+          ? [losatRecordGencode(linearSeqs[query]), losatRecordGencode(linearSeqs[subject])]
+          : [])
+      }).jobs.length;
+    } catch {
+      return 0;
     }
-    return jobs.size;
   });
 
   const losatThreadPlan = computed(() => resolveLosatThreadPlan({
@@ -128,6 +124,12 @@ export const createLosatSettings = ({ state }) => {
     return 'serial';
   });
 
+  // Threaded stays strict (PD-OI-018); the option says when this browser
+  // environment cannot run it.
+  const losatThreadedOptionLabel = computed(() => (
+    losatThreadingPrecondition().state === 'available' ? 'Threaded' : 'Threaded (unavailable here)'
+  ));
+
   const losatThreadingPlanSummary = computed(() =>
     'By default, LOSAT can use up to half the number of cores available.'
   );
@@ -162,6 +164,7 @@ export const createLosatSettings = ({ state }) => {
     losatThreadOptions,
     losatEffectiveThreadsPerJob,
     losatEffectiveExecutionMode,
+    losatThreadedOptionLabel,
     losatEstimatedJobCount,
     losatMaxPairWorkers,
     losatAutoPairWorkers,

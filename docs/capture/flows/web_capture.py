@@ -216,6 +216,34 @@ def wait_for_app_shell(page: Page, *, timeout_ms: int = GENERATION_TIMEOUT_MS) -
         raise AssertionError("Capture page is not cross-origin isolated")
 
 
+def toggle_disclosure(summary: Locator) -> None:
+    """Click a disclosure summary at its marker.
+
+    A summary can hold a help-tip button, which a click at the summary's
+    center may hit; the tip then opens instead of the disclosure.
+    """
+
+    summary.click(position={"x": 4, "y": 4})
+
+
+def open_ancestor_details(locator: Locator) -> Locator:
+    """Open every closed disclosure that contains one control."""
+
+    for details in locator.locator("xpath=ancestor::details").all():
+        if details.get_attribute("open") is None:
+            toggle_disclosure(details.locator(":scope > summary"))
+    return locator
+
+
+def expect_circular_source_status(page: Page, text: str) -> None:
+    """Wait until the Circular Source records status shows the documented text."""
+
+    status = page.get_by_role("region", name="Source records", exact=True).get_by_role(
+        "status"
+    )
+    expect(status).to_have_text(text)
+
+
 def generate_and_wait_for_result(
     page: Page,
     *,
@@ -438,6 +466,103 @@ def fit_complete_linear_preview(
     page.evaluate("() => window.getSelection()?.removeAllRanges()")
 
 
+def _visible_preview_frame(page: Page) -> dict[str, float]:
+    """Return the Result Preview area between its export row and zoom controls."""
+
+    region_box = page.get_by_role(
+        "region", name="Result Preview", exact=True
+    ).bounding_box()
+    export_box = page.get_by_role("button", name="SVG", exact=True).bounding_box()
+    zoom_box = page.get_by_role("button", name="Reset zoom", exact=True).bounding_box()
+    if region_box is None or export_box is None or zoom_box is None:
+        raise AssertionError("Could not resolve the visible Result Preview frame")
+    top = export_box["y"] + export_box["height"]
+    return {
+        "x": region_box["x"],
+        "y": top,
+        "width": region_box["width"],
+        "height": zoom_box["y"] - top,
+    }
+
+
+def _preview_diagram_box(page: Page) -> dict[str, float]:
+    """Return the bounds of the largest rendered SVG inside Result Preview."""
+
+    box = page.get_by_role("region", name="Result Preview", exact=True).evaluate(
+        """
+        (region) => {
+          let largest = null;
+          for (const svg of region.getElementsByTagName('svg')) {
+            const bounds = svg.getBoundingClientRect();
+            const area = bounds.width * bounds.height;
+            if (!largest || area > largest.area) {
+              largest = {
+                area,
+                x: bounds.x,
+                y: bounds.y,
+                width: bounds.width,
+                height: bounds.height
+              };
+            }
+          }
+          return largest;
+        }
+        """
+    )
+    if box is None or box["width"] <= 0 or box["height"] <= 0:
+        raise AssertionError("Could not resolve the rendered Result Preview diagram")
+    return box
+
+
+def center_preview_diagram(page: Page, *, label: str) -> dict[str, float]:
+    """Pan the current zoom until the whole diagram is centered and unclipped.
+
+    The frame lies between the export row and the floating zoom controls. The
+    drag is symmetric about the frame center so both ends stay inside the
+    preview, and the pointer then leaves the preview so no hover hint remains.
+    """
+
+    frame = _visible_preview_frame(page)
+    diagram = _preview_diagram_box(page)
+    if diagram["width"] > frame["width"] or diagram["height"] > frame["height"]:
+        raise AssertionError(
+            f"The documented zoom does not fit the complete {label}: "
+            f"diagram={diagram!r}; frame={frame!r}"
+        )
+    frame_center_x = frame["x"] + (frame["width"] / 2)
+    frame_center_y = frame["y"] + (frame["height"] / 2)
+    delta_x = frame_center_x - (diagram["x"] + (diagram["width"] / 2))
+    delta_y = frame_center_y - (diagram["y"] + (diagram["height"] / 2))
+    if abs(delta_x) >= frame["width"] or abs(delta_y) >= frame["height"]:
+        raise AssertionError(
+            f"Centering the {label} requires an unsafe drag: "
+            f"diagram={diagram!r}; frame={frame!r}"
+        )
+    page.mouse.move(frame_center_x - (delta_x / 2), frame_center_y - (delta_y / 2))
+    page.mouse.down()
+    page.mouse.move(
+        frame_center_x + (delta_x / 2),
+        frame_center_y + (delta_y / 2),
+        steps=12,
+    )
+    page.mouse.up()
+    page.mouse.move(VIEWPORT_WIDTH - 40, VIEWPORT_HEIGHT - 20)
+    page.wait_for_timeout(250)
+
+    centered = _preview_diagram_box(page)
+    if (
+        centered["x"] < frame["x"]
+        or centered["y"] < frame["y"]
+        or centered["x"] + centered["width"] > frame["x"] + frame["width"]
+        or centered["y"] + centered["height"] > frame["y"] + frame["height"]
+    ):
+        raise AssertionError(
+            f"The complete {label} is clipped by the Result Preview frame: "
+            f"diagram={centered!r}; frame={frame!r}"
+        )
+    return centered
+
+
 def set_feature_search_visible(page: Page, *, visible: bool) -> None:
     """Keep the floating search palette from covering a tutorial figure."""
 
@@ -458,6 +583,31 @@ def set_feature_search_visible(page: Page, *, visible: bool) -> None:
         raise AssertionError(
             f"Feature-search palette visibility did not change: {display!r}"
         )
+
+
+def release_pointer_and_focus(page: Page) -> None:
+    """Clear the hover and focus ring left on a clicked preview control.
+
+    A click on Zoom out leaves the pointer over the button (hover background),
+    and a later key press such as Escape makes its focus ring visible. Blur the
+    focused control and park the pointer on the header's blank top edge so the
+    screenshot shows the controls at rest.
+    """
+
+    page.evaluate(
+        """
+        () => {
+          const active = document.activeElement;
+          if (active && active !== document.body) active.blur();
+        }
+        """
+    )
+    page.mouse.move(640, 4)
+    page.wait_for_timeout(250)
+    if page.evaluate(
+        "() => document.activeElement && document.activeElement !== document.body"
+    ):
+        raise AssertionError("A control kept keyboard focus after release")
 
 
 def capture_screenshot(page: Page, path: Path, mode_name: str) -> int:

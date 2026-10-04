@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { join } = require('node:path');
-const { openApp, generateAndWaitForResult, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, openApp, generateAndWaitForResult, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
 
 const loadSession = async (page) => {
   await openApp(page);
@@ -37,7 +37,7 @@ test('Python-only color rules commit atomically, retain History and agree with G
   expect(await fills(page)).toEqual(matched);
   const stable = await page.evaluate(() => ({ rules: JSON.stringify(window.__GBDRAW_APP__.manualSpecificRules), svg: window.__GBDRAW_APP__.svgContent }));
   await page.evaluate(() => window.__GBDRAW_APP__.setSpecificRuleField(0, 'val', '(?<enzyme>NADH)'));
-  expect(messages.join('\n')).toMatch(/(unknown extension|Invalid rule)/);
+  expect(await page.evaluate(() => { const a = window.__GBDRAW_APP__; return a.specificRulePatternDraft(a.manualSpecificRules[0]).error; })).toMatchObject({code:'REGEX_SYNTAX',context:{reason:'UNKNOWN_EXTENSION'}});
   expect(await page.evaluate(() => ({ rules: JSON.stringify(window.__GBDRAW_APP__.manualSpecificRules), svg: window.__GBDRAW_APP__.svgContent }))).toEqual(stable);
   await page.evaluate(() => window.__GBDRAW_APP__.setSpecificRuleField(0, 'val', '(?P<enzyme>NADH)'));
   expect(await fills(page)).toEqual(matched);
@@ -63,7 +63,7 @@ test('Python label TSV syntax is validated before replacing live overrides', asy
   expect(await page.locator('.origin-top svg text').filter({ hasText: /^MATCHED$/ }).count()).toBe(7);
   const snapshot = await page.evaluate(() => ({ svg: window.__GBDRAW_APP__.svgContent, overrides: JSON.stringify(window.__GBDRAW_APP__.labelTextFeatureOverrides) }));
   await importLabel('(?<enzyme>NADH)', 'INVALID');
-  expect(messages.at(-1)).toMatch(/(unknown extension|Failed to load label)/);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({code:'REGEX_SYNTAX',context:{reason:'UNKNOWN_EXTENSION'}});
   expect(await page.evaluate(() => ({ svg: window.__GBDRAW_APP__.svgContent, overrides: JSON.stringify(window.__GBDRAW_APP__.labelTextFeatureOverrides) }))).toEqual(snapshot);
   await generateAndWaitForResult(page);
   expect(await page.locator('.origin-top svg text').filter({ hasText: /^MATCHED$/ }).count()).toBe(7);
@@ -119,7 +119,7 @@ test('Session preview stays lazy and saved Python rules remain editable and rege
   await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
   expect(await fills(page)).toHaveLength(7);
   const download = page.waitForEvent('download');
-  await page.evaluate(() => window.__GBDRAW_APP__.saveSessionWithTitle());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const file = await (await download).path();
   const context = await browser.newContext();
   const fresh = await context.newPage();
@@ -185,7 +185,7 @@ test('Python preset rules update the legend and invalid replacements preserve th
   const snapshot = await page.evaluate(() => ({ rules: JSON.stringify(window.__GBDRAW_APP__.manualSpecificRules), svg: window.__GBDRAW_APP__.svgContent }));
   body = 'CDS\tproduct\t(?<enzyme>NADH)\t#abcdef\tInvalid\n';
   await page.evaluate(() => window.__GBDRAW_APP__.applySpecificRulePreset());
-  expect(messages.at(-1)).toMatch(/Invalid rule/);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({code:'REGEX_SYNTAX',context:{reason:'UNKNOWN_EXTENSION'}});
   expect(await page.evaluate(() => ({ rules: JSON.stringify(window.__GBDRAW_APP__.manualSpecificRules), svg: window.__GBDRAW_APP__.svgContent }))).toEqual(snapshot);
   await page.evaluate(() => window.__GBDRAW_APP__.undoHistory());
   expect(await fills(page)).toEqual([]);
@@ -211,7 +211,7 @@ test('invalid color TSV preserves the selected file, preview, rules and History'
   const before = await inspect();
   await upload.setInputFiles({ name: 'invalid.tsv', mimeType: 'text/plain', buffer: Buffer.from('CDS\tproduct\t(?<enzyme>NADH)\t#abcdef\tInvalid\n') });
   await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
-  await expect.poll(() => messages.at(-1)).toMatch(/Failed to load rules file/);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({code:'REGEX_SYNTAX',context:{reason:'UNKNOWN_EXTENSION'}});
   await expect.poll(inspect).toEqual(before);
   await generateAndWaitForResult(page);
   expect(await fills(page)).toHaveLength(7);

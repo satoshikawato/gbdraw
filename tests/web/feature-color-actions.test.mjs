@@ -1,6 +1,6 @@
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -9,31 +9,15 @@ const repoRoot = process.cwd();
 const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js');
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-color-actions-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-await mkdir(join(tempDir, 'app', 'feature-editor'), { recursive: true });
-await mkdir(join(tempDir, 'services'), { recursive: true });
+await cp(sourceDir, tempDir, { recursive: true });
 const colorActionsSource = await readFile(join(sourceDir, 'app', 'feature-editor', 'color-actions.js'), 'utf8');
-await writeFile(
-  join(tempDir, 'app', 'feature-editor', 'color-actions.js'),
-  colorActionsSource,
-  'utf8'
-);
-await writeFile(join(tempDir, 'app', 'rule-matching.js'), await readFile(join(sourceDir, 'app', 'rule-matching.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'app', 'feature-utils.js'), await readFile(join(sourceDir, 'app', 'feature-utils.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'app', 'feature-selector.js'), await readFile(join(sourceDir, 'app', 'feature-selector.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'app', 'color-utils.js'), await readFile(join(sourceDir, 'app', 'color-utils.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'app', 'losat-normalization.js'), await readFile(join(sourceDir, 'app', 'losat-normalization.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'services', 'svg-serialization.js'), await readFile(join(sourceDir, 'services', 'svg-serialization.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'services', 'feature-catalog.js'), await readFile(join(sourceDir, 'services', 'feature-catalog.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'services', 'feature-identity.js'), await readFile(join(sourceDir, 'services', 'feature-identity.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'services', 'orthogroup-feature-metadata.js'), await readFile(join(sourceDir, 'services', 'orthogroup-feature-metadata.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'services', 'runtime-test-hooks.js'), await readFile(join(sourceDir, 'services', 'runtime-test-hooks.js'), 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'services', 'feature-override-identity.js'), await readFile(join(sourceDir, 'services', 'feature-override-identity.js'), 'utf8'), 'utf8');
 
 const { createFeatureColorActions } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-editor', 'color-actions.js'))
 );
 const { getFeatureGenerationHash } = await import(pathToFileURL(join(tempDir, 'app', 'feature-utils.js')));
 const { resolveFeatureLabelSelector } = await import(pathToFileURL(join(tempDir, 'app', 'feature-selector.js')));
+const { legendRowRules } = await import(pathToFileURL(join(tempDir, 'app', 'specific-color-rules.js')));
 
 assert.doesNotMatch(colorActionsSource, /serializeCleanSvg|results\.value\[[^\]]+\]\s*=/);
 
@@ -79,6 +63,8 @@ const manualSpecificRules = [
   { feat: 'CDS', qual: 'hash', val: 'hash-z', color: '#444444', cap: 'Other' }
 ];
 const featureColorOverrides = {};
+const legendColorOverrides = {};
+const committedLegendIntents = [];
 const extractedFeatures = ref([featureA, featureB, hashOnlyFeature]);
 const biologicalFeatures = ref([featureA, featureB, hashOnlyFeature]);
 const legendEntries = ref([{ caption: 'Core', color: '#111111', featureIds: ['hash-a', 'hash-b', 'hash-c'] }]);
@@ -111,39 +97,28 @@ const updateLegendEntryColorOptions = [];
 const previewFillColors = new Map();
 const featureElementsById = new Map();
 let previewFillApplyCount = 0;
-let previewFlushCount = 0;
-let previewDirty = false;
+let previewCommitCount = 0;
 const svgContainer = ref(null);
 const clickedFeature = ref(null);
 const originalSvgStroke = ref({ color: null, width: null });
 const featureStrokeOverrides = {};
 const legendStrokeOverrides = {};
+// The rule commit shows its fills itself (svg-styles); the color action
+// commits only its own DOM edits.
+const applyRulePreviewFill = (featureId, color) => {
+  if (previewFillColors.get(featureId) === color) return;
+  previewFillColors.set(featureId, color);
+  previewFillApplyCount += 1;
+};
 const previewRuntime = {
-  applyFeatureFillChanges: (changes) => {
-    let updated = false;
-    for (const change of changes) {
-      if (previewFillColors.get(change.featureId) === change.color) continue;
-      previewFillColors.set(change.featureId, change.color);
-      previewFillApplyCount += 1;
-      updated = true;
-    }
-    if (updated) previewDirty = true;
-    return updated;
-  },
-  flushActiveResult: () => {
-    if (!previewDirty) return false;
-    previewDirty = false;
-    previewFlushCount += 1;
-    return true;
-  },
-  getActiveRuntime: () => ({ dirty: previewDirty }),
-  markActiveResultDirty: () => {
-    previewDirty = true;
+  commitActiveResultEdit: () => {
+    previewCommitCount += 1;
     return true;
   }
 };
 
-const { createRulePreparation } = await import(pathToFileURL(join(tempDir, 'app', 'rule-matching.js')));
+const { featureOverrideKey } = await import(pathToFileURL(join(tempDir, 'services', 'feature-override-identity.js')));
+const { createRulePreparation, firstMatchingRule } = await import(pathToFileURL(join(tempDir, 'app', 'rule-matching.js')));
 const actions = createFeatureColorActions({
   rulePreparation: createRulePreparation({ state: { extractedFeatures, biologicalFeatures, manualSpecificRules }, evaluate: evaluatePythonRules }),
   state: {
@@ -161,7 +136,7 @@ const actions = createFeatureColorActions({
     legendRenameDialog: {},
     legendEntries,
     legendStrokeOverrides,
-    legendColorOverrides: {},
+    legendColorOverrides,
     originalLegendOrder: ref([]),
     originalLegendColors: ref({}),
     originalSvgStroke,
@@ -201,6 +176,24 @@ const actions = createFeatureColorActions({
     }
   },
   ruleActions: {
+    commitSpecificRules: async (rules, _label, {afterCommit = () => {}, previousLegendIntents = []} = {}) => {
+      committedLegendIntents.push(previousLegendIntents);
+      const preparation = createRulePreparation({state:{extractedFeatures,biologicalFeatures,manualSpecificRules},evaluate:evaluatePythonRules});
+      const candidate = await preparation.prepareCandidate(rules);
+      if (!candidate) return false;
+      manualSpecificRules.splice(0,manualSpecificRules.length,...candidate.rules);
+      legendEntries.value = candidate.intents.map(entry=>({...entry}));
+      for (const feature of extractedFeatures.value) {
+        const rule=firstMatchingRule(feature,manualSpecificRules);
+        if(rule) {
+          featureColorOverrides[featureOverrideKey(feature)]={color:rule.color,caption:rule.cap};
+          applyRulePreviewFill(feature.svg_id, rule.color);
+        }else delete featureColorOverrides[featureOverrideKey(feature)];
+      }
+      applySpecificRulesCount++;
+      afterCommit(candidate);
+      return true;
+    },
     countFeaturesMatchingRule: () => 0,
     findExistingColorForCaption: () => null,
     findFeaturesWithSameDisplayedLabel: (currentFeature, label) => extractedFeatures.value.filter(
@@ -213,17 +206,10 @@ const actions = createFeatureColorActions({
     findMatchingRegexRule: () => specificRule,
     getDisplayedFeatureLabel: (feature) => feature.displayLabel || feature.product || '',
     getEffectiveLegendCaption: () => 'Core',
+    getLegendRowRules: (caption) => legendRowRules(caption, { rules: manualSpecificRules, legendEntries: legendEntries.value }),
     getIndividualFeatureLabel: (feature) => feature.product || '',
-    getFeatureQualifier: (feature) => {
-      const generationHash = getFeatureGenerationHash(feature);
-      const collisionCount = extractedFeatures.value.filter(
-        (candidate) => candidate.type === feature.type && getFeatureGenerationHash(candidate) === generationHash
-      ).length;
-      return {
-        qual: 'hash',
-        val: collisionCount > 1 ? feature.svg_id : generationHash
-      };
-    },
+    // FE-09 (D-14): "This feature only" always writes the stable hash.
+    getFeatureQualifier: (feature) => ({ qual: 'hash', val: getFeatureGenerationHash(feature) }),
     getLabelSpecificRule: (feature, label) => {
       const selector = resolveFeatureLabelSelector(feature, label);
       return selector
@@ -232,7 +218,6 @@ const actions = createFeatureColorActions({
     }
   },
   featureSvgActions: {
-    applyInstantPreview: () => {},
     getFeatureElements: (_svg, featureId) => featureElementsById.get(featureId) || [],
     getFeatureFillElements: (_svg, featureId) => featureElementsById.get(featureId) || []
   },
@@ -243,7 +228,7 @@ await actions.handleColorScopeChoice('caption');
 
 assert.equal(addLegendEntryCount, 0);
 assert.equal(applySpecificRulesCount, 1);
-assert.equal(specificRule.color, '#abcdef');
+assert.equal(manualSpecificRules.find(rule => rule.qual === 'gene_kind').color, '#abcdef');
 assert.equal(legendEntries.value[0].color, '#abcdef');
 assert.equal(manualSpecificRules.some((rule) => rule.qual === 'hash' && rule.val === 'hash-a'), false);
 assert.equal(manualSpecificRules.some((rule) => rule.qual === 'hash' && rule.val === 'hash-b'), false);
@@ -253,6 +238,27 @@ assert.deepEqual(featureColorOverrides['feature-a'], { color: '#abcdef', caption
 assert.deepEqual(featureColorOverrides['feature-b'], { color: '#abcdef', caption: 'Core' });
 assert.deepEqual(featureColorOverrides['feature-c'], { color: '#abcdef', caption: 'Core' });
 
+// Replacing an inherited caption requires every existing contributor.
+manualSpecificRules.splice(0);
+legendEntries.value = [{ caption: 'Core', color: '#111111' }];
+Object.assign(featureStyleScopeDialog, { show: true, feat: featureA, color: '#abcdef', legendName: 'Core' });
+await actions.handleColorScopeChoice('caption');
+assert.deepEqual(committedLegendIntents.at(-1), [{ caption: 'Core', color: '#111111' }]);
+assert.equal(legendColorOverrides.Core, '#abcdef');
+
+// A partial group or a new caption cannot adopt an unrelated existing row.
+manualSpecificRules.splice(0);
+legendEntries.value = [{ caption: 'Core', color: '#111111' }];
+delete legendColorOverrides.Core;
+await actions.setFeatureColor(featureA, '#abcdef', 'Core');
+assert.deepEqual(committedLegendIntents.at(-1), []);
+assert.equal(legendColorOverrides.Core, undefined);
+manualSpecificRules.splice(0);
+legendEntries.value = [{ caption: 'Manual row', color: '#111111' }];
+await actions.setFeatureColor(featureA, '#abcdef', 'Manual row');
+assert.deepEqual(committedLegendIntents.at(-1), []);
+assert.equal(legendColorOverrides['Manual row'], undefined);
+
 const labelFeatureA = {
   id: 'label-feature-a',
   svg_id: 'f11111111_record_1',
@@ -261,7 +267,7 @@ const labelFeatureA = {
   type: 'CDS',
   product: 'wsv360-like protein',
   qualifiers: { product: ['wsv360-like protein'] },
-  selector: { hash: 'faaaaaaaa', qualifiers: { product: ['wsv360-like protein'] } }
+  selector: { hash: 'f11111111', qualifiers: { product: ['wsv360-like protein'] } }
 };
 const labelFeatureB = {
   id: 'label-feature-b',
@@ -271,7 +277,7 @@ const labelFeatureB = {
   type: 'CDS',
   product: 'wsv360-like protein',
   qualifiers: { product: ['wsv360-like protein'] },
-  selector: { hash: 'fbbbbbbbb', qualifiers: { product: ['wsv360-like protein'] } }
+  selector: { hash: 'f22222222', qualifiers: { product: ['wsv360-like protein'] } }
 };
 
 manualSpecificRules.splice(
@@ -357,16 +363,20 @@ assert.equal(getFeatureGenerationHash(labelFeatureA), 'f11111111');
 
 legendEntries.value = [{ caption: 'single feature', color: '#123456', featureIds: ['f11111111_record_1'] }];
 const noOpFillCount = previewFillApplyCount;
-const noOpFlushCount = previewFlushCount;
+const noOpCommitCount = previewCommitCount;
 assert.equal(await actions.setFeatureColor(labelFeatureA, '#123456', 'single feature'), false);
 assert.equal(previewFillApplyCount, noOpFillCount);
-assert.equal(previewFlushCount, noOpFlushCount);
+assert.equal(previewCommitCount, noOpCommitCount);
 
-const compoundFlushCount = previewFlushCount;
+const compoundCommitCount = previewCommitCount;
+const compoundFillCount = previewFillApplyCount;
 assert.equal(await actions.setFeatureColor(labelFeatureA, '#654321', 'renamed feature'), true);
-assert.equal(previewFlushCount - compoundFlushCount, 1);
-assert.equal(addLegendEntryOptions.at(-1)?.commit, false);
-assert.equal(removeLegendEntryOptions.at(-1)?.commit, false);
+assert.ok(previewFillApplyCount > compoundFillCount);
+assert.equal(previewCommitCount, compoundCommitCount);
+assert.equal(addLegendEntryCount, 0);
+assert.equal(removeLegendEntryOptions.length, 0);
+assert.equal(manualSpecificRules[0].cap, 'renamed feature');
+assert.equal(legendEntries.value[0].caption, 'renamed feature');
 legendEntries.value = [];
 
 const outsideLabelGroup = {
@@ -403,7 +413,7 @@ const conflictingFeatureA = {
   ...labelFeatureA,
   qualifiers: { product: ['wsv360-like protein'], gene: ['wsv360'] },
   selector: {
-    hash: 'faaaaaaaa',
+    hash: 'f11111111',
     record_location: 'RecA:0..90:+',
     qualifiers: { product: ['wsv360-like protein'], gene: ['wsv360'] }
   }
@@ -412,7 +422,7 @@ const conflictingFeatureB = {
   ...labelFeatureB,
   qualifiers: { product: ['wsv360-like protein'], gene: ['wsv360'] },
   selector: {
-    hash: 'fbbbbbbbb',
+    hash: 'f22222222',
     record_location: 'RecB:0..90:+',
     qualifiers: { product: ['wsv360-like protein'], gene: ['wsv360'] }
   }
@@ -455,7 +465,7 @@ const geneLabelFeature = {
   gene: 'wsv360-like protein',
   displayLabel: 'wsv360-like protein',
   qualifiers: { gene: ['wsv360-like protein'] },
-  selector: { hash: 'fbbbbbbbb', qualifiers: { gene: ['wsv360-like protein'] } }
+  selector: { hash: 'f22222222', qualifiers: { gene: ['wsv360-like protein'] } }
 };
 manualSpecificRules.splice(0);
 extractedFeatures.value = [labelFeatureA, geneLabelFeature];
@@ -496,8 +506,14 @@ manualSpecificRules.splice(0, manualSpecificRules.length, {
 extractedFeatures.value = [duplicateFeatureA, duplicateFeatureB];
 biologicalFeatures.value = [duplicateFeatureA, duplicateFeatureB];
 await actions.setFeatureColor(duplicateFeatureA, '#112233', 'one duplicate');
-assert.equal(manualSpecificRules[0].val, 'f44444444_record_1');
-assert.equal(manualSpecificRules[1].val, 'f44444444');
+// Duplicate records share the stable hash Python matches, so the edit replaces
+// the shared rule and colors both copies (D-14 accepted residual risk).
+assert.deepEqual(
+  manualSpecificRules.map(({ feat, qual, val, color, cap }) => ({ feat, qual, val, color, cap })),
+  [{ feat: 'CDS', qual: 'hash', val: 'f44444444', color: '#112233', cap: 'one duplicate' }]
+);
+await actions.setFeatureColorValue(duplicateFeatureB, null);
+assert.deepEqual(manualSpecificRules, []);
 
 const sharedHashCds = {
   ...labelFeatureA,
@@ -539,6 +555,8 @@ const stableColorFeature = {
   biologicalFeatureId: 'biological-a'
 };
 const stableColorKey = 'record-key-a\u0000biological-a';
+extractedFeatures.value = [stableColorFeature];
+biologicalFeatures.value = [stableColorFeature];
 manualSpecificRules.splice(0);
 featureColorOverrides[stableColorKey] = {
   color: '#123456',
@@ -590,25 +608,25 @@ clickedFeature.value = {
 };
 originalSvgStroke.value = { color: '#111111', width: 1 };
 
-const sameStrokeFlushCount = previewFlushCount;
+const sameStrokeCommitCount = previewCommitCount;
 assert.equal(await actions.updateClickedFeatureStroke('#111111', 1), false);
 assert.equal(strokeMutationCount, 0);
-assert.equal(previewFlushCount, sameStrokeFlushCount);
+assert.equal(previewCommitCount, sameStrokeCommitCount);
 
 assert.equal(await actions.updateClickedFeatureStroke('#222222', 2), true);
 assert.equal(strokeMutationCount, 2);
-assert.equal(previewFlushCount - sameStrokeFlushCount, 1);
-const changedStrokeFlushCount = previewFlushCount;
+assert.equal(previewCommitCount - sameStrokeCommitCount, 1);
+const changedStrokeCommitCount = previewCommitCount;
 assert.equal(await actions.updateClickedFeatureStroke('#222222', 2), false);
 assert.equal(strokeMutationCount, 2);
-assert.equal(previewFlushCount, changedStrokeFlushCount);
+assert.equal(previewCommitCount, changedStrokeCommitCount);
 
 assert.equal(await actions.resetClickedFeatureStroke(), true);
 const resetStrokeMutationCount = strokeMutationCount;
-const resetStrokeFlushCount = previewFlushCount;
+const resetStrokeCommitCount = previewCommitCount;
 assert.equal(await actions.resetClickedFeatureStroke(), false);
 assert.equal(strokeMutationCount, resetStrokeMutationCount);
-assert.equal(previewFlushCount, resetStrokeFlushCount);
+assert.equal(previewCommitCount, resetStrokeCommitCount);
 assert.equal(await actions.applyStrokeToSelectedFeatures([strokeFeature], '#111111', 1), false);
 const siblingStrokeAttributes = [featureB, hashOnlyFeature].map((feature) => {
   const attributes = new Map([
@@ -641,7 +659,7 @@ assert.equal(featureStyleScopeDialog.strokeWidth, 2.5);
 assert.equal(clickedFeature.value, null);
 assert.equal(strokeAttributes.get('stroke'), '#111111');
 assert.equal(strokeAttributes.get('stroke-width'), '1');
-assert.equal(previewFlushCount, resetStrokeFlushCount);
+assert.equal(previewCommitCount, resetStrokeCommitCount);
 assert.equal(await actions.handleFeatureStyleScopeChoice('cancel'), false);
 assert.equal(featureStyleScopeDialog.show, false);
 
@@ -669,7 +687,7 @@ assert.deepEqual(legendStrokeOverrides.Core, {
   strokeColor: '#445566',
   strokeWidth: 1
 });
-assert.equal(previewFlushCount, resetStrokeFlushCount + 1);
+assert.equal(previewCommitCount, resetStrokeCommitCount + 1);
 
 // Rule scope uses Python's wildcard feature type and inline flags too.
 const wildcardRule = { feat: '*', qual: 'gene_kind', val: '(?i)core', color: '#111111', cap: '' };
@@ -712,9 +730,202 @@ await actions.renameLegendEntry(0, 'Oxidative phosphorylation');
 assert.equal(legendGeometryChangedCount, 1);
 assert.equal(legendText.textContent, 'Oxidative phosphorylation');
 assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation');
-assert.equal(addLegendEntryOptions.length > 0, true);
-assert.equal(removeLegendEntryOptions.length > 0, true);
-assert.equal(updateLegendEntryColorOptions.length > 0, true);
-assert.equal(addLegendEntryOptions.every((options) => options.commit === false), true);
-assert.equal(removeLegendEntryOptions.every((options) => options.commit === false), true);
-assert.equal(updateLegendEntryColorOptions.every((options) => options.commit === false), true);
+assert.equal(addLegendEntryOptions.length, 0);
+assert.equal(removeLegendEntryOptions.length, 0);
+assert.equal(updateLegendEntryColorOptions.length, 0);
+
+// FE-10: Reset fill uses the palette default of the feature being reset. A
+// canceled or completed Reset dialog of another feature type must not leave a
+// color behind for a later Reset that has no dialog.
+{
+  const feature = (svgId, type, product, start, end) => ({
+    id: svgId, svg_id: svgId, type, product, qualifiers: { product: [product] }, start, end
+  });
+  const trnaA = feature('trna-a', 'tRNA', 'tRNA-Leu', 1, 70);
+  const trnaB = feature('trna-b', 'tRNA', 'tRNA-Leu', 80, 150);
+  const rrna = feature('rrna-s', 'rRNA', 's-rRNA', 200, 900);
+  const resetRules = [{ feat: 'rRNA', qual: 'product', val: '^s-rRNA$', color: '#ff00ff', cap: 'small rRNA' }];
+  const committed = [];
+  const resetDialog = { show: false, caption: '', siblingCount: 0 };
+  const resetClicked = ref(null);
+  const resetFeatures = ref([trnaA, trnaB, rrna]);
+  const resetPreparation = createRulePreparation({
+    state: { extractedFeatures: resetFeatures, biologicalFeatures: resetFeatures, manualSpecificRules: resetRules },
+    evaluate: evaluatePythonRules
+  });
+  const resetActions = createFeatureColorActions({
+    rulePreparation: resetPreparation,
+    state: {
+      results: ref([]),
+      selectedResultIndex: ref(0),
+      appliedPaletteColors: ref({ tRNA: '#e8b441', rRNA: '#71ee7d' }),
+      manualSpecificRules: resetRules,
+      extractedFeatures: resetFeatures,
+      biologicalFeatures: resetFeatures,
+      featureColorOverrides: {},
+      svgContainer: ref({ querySelector: () => null }),
+      clickedFeature: resetClicked,
+      featureStyleScopeDialog: {},
+      resetColorDialog: resetDialog,
+      legendRenameDialog: {},
+      legendEntries: ref([]),
+      legendStrokeOverrides: {},
+      legendColorOverrides: {},
+      originalLegendOrder: ref([]),
+      originalLegendColors: ref({}),
+      originalSvgStroke: ref({ color: null, width: null }),
+      featureStrokeOverrides: {},
+      skipCaptureBaseConfig: ref(false),
+      skipExtractOnSvgChange: ref(false),
+      addedLegendCaptions: ref(new Set())
+    },
+    nextTick: async () => {},
+    legendActions: {},
+    svgActions: {},
+    ruleActions: {
+      commitSpecificRules: async (rules) => {
+        committed.push(rules.map((rule) => ({ ...rule })));
+        return true;
+      },
+      getEffectiveLegendCaption: (feature) => feature.type,
+      getLegendRowRules: (caption) => legendRowRules(caption, { rules: resetRules }),
+      getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
+      findFeaturesWithSameLegendItem: () => [],
+      findFeaturesWithSameDisplayedLabel: () => [],
+      findFeaturesWithSameIndividualLabel: () => [],
+      getDisplayedFeatureLabel: (feature) => feature.product,
+      getIndividualFeatureLabel: (feature) => feature.product,
+      getLabelSpecificRule: () => null
+    },
+    featureSvgActions: { getFeatureElements: () => [], getFeatureFillElements: () => [] },
+    previewRuntime: null
+  });
+  for (const choice of ['cancel', 'this']) {
+    committed.length = 0;
+    resetClicked.value = { svg_id: trnaA.svg_id, feat: trnaA };
+    await resetActions.resetClickedFeatureFillColor();
+    assert.equal(resetDialog.show, true, 'a tRNA with a sibling opens the Reset dialog');
+    assert.equal(Object.hasOwn(resetDialog, 'defaultColor'), false, 'the dialog holds display values only');
+    await resetActions.handleResetColorChoice(choice);
+    resetClicked.value = { svg_id: rrna.svg_id, feat: rrna };
+    await resetActions.resetClickedFeatureFillColor();
+    const rrnaReset = committed.at(-1).find((rule) => rule.qual === 'hash' && rule.val === rrna.svg_id);
+    assert.equal(rrnaReset?.color, '#71ee7d', `Reset after a ${choice} dialog uses the rRNA default`);
+  }
+}
+
+// PV-02 and PV-04 (D-06, PD-OI-061): Legend editor renames.
+{
+  const { compileDirectEditorMutationPlan } = await import(pathToFileURL(join(tempDir, 'app', 'candidate-render.js')));
+  const trna = { id: 't1', svg_id: 't1', type: 'tRNA', product: 'tRNA-Leu', qualifiers: { product: ['tRNA-Leu'] }, start: 1, end: 70 };
+  const fakeEntry = (caption) => {
+    const attributes = new Map([['data-legend-key', caption]]);
+    const text = { textContent: caption };
+    return {
+      getAttribute: (name) => attributes.get(name) || null,
+      setAttribute: (name, value) => attributes.set(name, value),
+      querySelector: (selector) => selector === 'text' ? text : null,
+      querySelectorAll: () => []
+    };
+  };
+  const build = ({ entries, order, rules = [], features = [] }) => {
+    const groupEntries = new Map(entries.map((entry) => [entry.caption, fakeEntry(entry.caption)]));
+    const legendGroup = {
+      querySelector: (selector) => [...groupEntries].find(([caption]) => selector.includes(`"${caption}"`))?.[1] || null
+    };
+    const svgRoot = { legendGroups: [legendGroup] };
+    const committed = [];
+    const legendRenameDialog = {};
+    const stateLegendEntries = ref(entries.map((entry) => ({ featureIds: [], originalCaption: entry.caption, ...entry })));
+    const originalOrder = ref([...order]);
+    const featureList = ref(features);
+    const renameActions = createFeatureColorActions({
+      rulePreparation: createRulePreparation({
+        state: { extractedFeatures: featureList, biologicalFeatures: featureList, manualSpecificRules: rules },
+        evaluate: evaluatePythonRules
+      }),
+      state: {
+        results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ tRNA: '#e8b441' }),
+        manualSpecificRules: rules, extractedFeatures: featureList, biologicalFeatures: featureList,
+        featureColorOverrides: {}, svgContainer: ref({ querySelector: (selector) => selector === 'svg' ? svgRoot : null }),
+        clickedFeature: ref(null), featureStyleScopeDialog: {}, resetColorDialog: {}, legendRenameDialog,
+        legendEntries: stateLegendEntries, legendStrokeOverrides: {}, legendColorOverrides: {},
+        originalLegendOrder: originalOrder, originalLegendColors: ref({}), originalSvgStroke: ref({ color: null, width: null }),
+        featureStrokeOverrides: {}, skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false),
+        addedLegendCaptions: ref(new Set())
+      },
+      nextTick: async () => {},
+      legendActions: {
+        compactLegendEntries: () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
+        getAllFeatureLegendGroups: (svg) => svg?.legendGroups || []
+      },
+      svgActions: {},
+      ruleActions: {
+        commitSpecificRules: async (nextRules) => { committed.push(nextRules.map((rule) => ({ ...rule }))); return true; },
+        getEffectiveLegendCaption: (feature) => rules.find((rule) => rule.feat === feature.type)?.cap || feature.type,
+        getLegendRowRules: (caption) => legendRowRules(caption, {
+          rules, legendEntries: stateLegendEntries.value, originalLegendOrder: originalOrder.value
+        }),
+        getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
+        findFeaturesWithSameLegendItem: () => [], findFeaturesWithSameDisplayedLabel: () => [],
+        findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: (feature) => feature.product,
+        getIndividualFeatureLabel: (feature) => feature.product, getLabelSpecificRule: () => null
+      },
+      featureSvgActions: { getFeatureElements: () => [], getFeatureFillElements: () => [] },
+      previewRuntime: null
+    });
+    return { renameActions, committed, legendRenameDialog, stateLegendEntries, originalOrder };
+  };
+
+  // PV-02: a renamed renderer-generated row keeps its generated identity, so
+  // Generate replays the rename.
+  const gc = build({
+    entries: [{ caption: 'CDS', color: '#54bcf8' }, { caption: 'GC content', color: '#a1a1a1' }],
+    order: ['CDS', 'GC content']
+  });
+  await gc.renameActions.renameLegendEntry(1, 'GC percent');
+  assert.equal(gc.stateLegendEntries.value[1].caption, 'GC percent');
+  assert.equal(gc.stateLegendEntries.value[1].originalCaption, 'GC content');
+  assert.deepEqual(gc.originalOrder.value, ['CDS', 'GC content']);
+  const gcPlan = compileDirectEditorMutationPlan({
+    catalogAdmission: { resultNames: ['a.svg'], renderedTargetsByOverrideKey: new Map(), resultIndexesByRenderedId: new Map() },
+    legendEntries: gc.stateLegendEntries.value,
+    originalLegendOrder: gc.originalOrder.value
+  });
+  assert.deepEqual(gcPlan.operationsByResult[0].legendRenames.map(({ from, to }) => [from, to]), [['GC content', 'GC percent']]);
+
+  // PV-04: renaming a feature row onto another caption of a different color
+  // asks Merge, Suffix, or Cancel before any rule commit.
+  const collide = () => build({
+    entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }, { caption: 'rRNA', color: '#71ee7d' }],
+    order: ['tRNA', 'rRNA'],
+    features: [trna]
+  });
+  const merge = collide();
+  await merge.renameActions.renameLegendEntry(0, 'rRNA');
+  assert.equal(merge.legendRenameDialog.show, true);
+  assert.equal(merge.legendRenameDialog.mode, 'target');
+  assert.equal(merge.committed.length, 0);
+  await merge.renameActions.handleLegendRenameChoice('merge');
+  assert.deepEqual(merge.committed.at(-1).map(({ cap, color }) => [cap, color]), [['rRNA', '#71ee7d']]);
+  const suffix = collide();
+  await suffix.renameActions.renameLegendEntry(0, 'rRNA');
+  await suffix.renameActions.handleLegendRenameChoice('suffix');
+  assert.deepEqual(suffix.committed.at(-1).map(({ cap, color }) => [cap, color]), [['rRNA (1)', '#e8b441']]);
+  const cancel = collide();
+  await cancel.renameActions.renameLegendEntry(0, 'rRNA');
+  await cancel.renameActions.handleLegendRenameChoice('cancel');
+  assert.equal(cancel.committed.length, 0);
+  assert.equal(cancel.legendRenameDialog.show, false);
+
+  // A target owned by a specific-color rule keeps PD-OI-042 disambiguation.
+  const ruleOwned = build({
+    entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }, { caption: 'Special', color: '#ff0000' }],
+    order: ['tRNA', 'Special'],
+    rules: [{ feat: 'rRNA', qual: 'product', val: '.*', color: '#ff0000', cap: 'Special' }],
+    features: [trna]
+  });
+  await ruleOwned.renameActions.renameLegendEntry(0, 'Special');
+  assert.notEqual(ruleOwned.legendRenameDialog.show, true);
+  assert.equal(ruleOwned.committed.length, 1);
+}

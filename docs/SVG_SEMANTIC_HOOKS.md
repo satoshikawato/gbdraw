@@ -29,6 +29,7 @@ carries both attributes.
 | Element | Supported attributes | Meaning |
 |---|---|---|
 | Record group | `data-gbdraw-record-id`, `data-gbdraw-record-index` | Source record identity and displayed instance |
+| Linear record group of a cropped or reverse-complemented record | `data-gbdraw-record-source-start`, `data-gbdraw-record-source-end`, `data-gbdraw-record-source-step` | Input-file span shown by the record (1-based, inclusive) and its direction (`1` or `-1`); record-local base `x` is source `start + x - 1` (step `1`) or `end - x + 1` (step `-1`). Absent when the record shows its input file one to one |
 | Record definition | `data-gbdraw-role="record-definition"` or `"record-definition-row"`, `data-gbdraw-definition-part`, record ID/index | Main record text or a row-level definition. A row emits `record-definition-row` only when some text describes the whole row, so do not assume one per row |
 | Plot title | `data-gbdraw-role="plot-title"` | Shared Circular title |
 | Comparison legend | `data-gbdraw-role="comparison-legend"`, `data-gbdraw-orientation` | Identity legend; orientation is `h`, `v`, or `circular` |

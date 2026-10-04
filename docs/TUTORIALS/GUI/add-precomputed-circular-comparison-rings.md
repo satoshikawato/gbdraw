@@ -86,7 +86,7 @@ Keep the ring order and enter the labels shown in the input table. Set **Label
 Mode** to **Out** and load `cds_gene_qualifier_priority.tsv` as **Priority File
 (TSV)**. Set the title to
 `Precomputed TLOSATX rings around Homo sapiens mtDNA`, and the legend to the
-right. Set **Plot Title Position** to **Bottom**.
+right in the separate Legend section. Set **Plot Title Position** to **Bottom**.
 
 ![Three TLOSATX tables and companion FASTA files configured as Circular rings](../../images/t-gui-06/03-ring-settings.png)
 
@@ -109,11 +109,12 @@ Select **SVG** to save `precomputed_circular_rings.svg`.
 ## Variant: run TLOSATX in the browser
 
 To compute the three rings instead of uploading frozen tables, keep the same
-displayed reference, comparison FASTA order, labels, and filters. Under
-**Pairwise Comparisons**, select **Run LOSAT** and **TLOSATX**. Set the
-reference gencode to `2`; use subject gencodes `2`, `5`, and `5` for zebrafish,
-fruit fly, and nematode, respectively. The displayed human record is the
-TLOSATX subject.
+displayed reference, comparison file order, labels, and filters. Under
+**Pairwise Comparisons**, select **Run LOSAT** and **TLOSATX**, and add each
+comparison file with **Add Seq**; FASTA, GenBank, and DDBJ files are accepted.
+Set **Reference gencode** to `2` and each row's **Comparison gencode** to `2`,
+`5`, and `5` for zebrafish, fruit fly, and nematode, respectively. The
+displayed human record is the TLOSATX subject.
 
 The 106-HSP check in Step 4 applies only to the precomputed tables. See
 [filters and direction](../../REFERENCE/comparison-programs-thresholds-and-results.md#filters-and-direction)

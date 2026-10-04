@@ -137,17 +137,17 @@ class AuditSimplePathWorker {
     }
     if (message.type === 'run') {
       const response = workerResponses.shift();
-      queueMicrotask(() => this.emit('message', {
+      Promise.resolve(response).then((payload) => queueMicrotask(() => this.emit('message', {
         type: 'run',
         requestId: message.requestId,
         ok: true,
-        results: structuredClone(response)
-      }));
+        results: structuredClone(payload)
+      })));
       return;
     }
     if (message.type === 'helper') {
       const response = workerHelperResponses.shift();
-      if (!response) throw new Error('missing helper worker response');
+      if (!response) throw new Error(`missing helper worker response for ${message.operation}`);
       Promise.resolve(response).then((payload) => this.emit('message', {
         type: 'helper',
         requestId: message.requestId,
@@ -163,7 +163,13 @@ class AuditSimplePathWorker {
 
 globalThis.Worker = AuditSimplePathWorker;
 
-const { afterFrame, afterPaint, createRunAnalysis } = await import('../../gbdraw/web/js/app/run-analysis.js');
+const {
+  afterFrame,
+  afterPaint,
+  buildLosatCachePayload,
+  createRunAnalysis,
+  executeCanonicalRenderCandidate
+} = await import('../../gbdraw/web/js/app/run-analysis.js');
 const {
   resolveLinearComparisonPlan
 } = await import('../../gbdraw/web/js/app/linear-comparisons.js');
@@ -311,7 +317,7 @@ const result = (name, marker) => ({
 });
 
 const validCatalog = (name) => ({
-  schema: 3,
+  schema: 4,
   items: [{
     resultIndex: 0,
     resultName: name,
@@ -333,6 +339,9 @@ const validCatalog = (name) => ({
       start: 0,
       end: 9,
       strand: 1,
+      anchorProfile: {
+        precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+'
+      },
       qualifiers: { product: ['audit protein'] }
     }],
     orthogroups: [],
@@ -343,7 +352,12 @@ const validCatalog = (name) => ({
 
 const response = (logicalResult, featureCatalog) => ({
   results: [logicalResult],
-  metadata: featureCatalog === undefined ? {} : { featureCatalog }
+  metadata: featureCatalog === undefined ? {} : { featureCatalog, annotationWarnings: [{
+    code: 'feature_selector_unmatched', setId: 's', annotationId: 'missing',
+    recordId: 'record-1', recordIndex: 0, missingCount: 1,
+    message: 'Skipped annotation: 1 feature selector(s) unmatched.',
+    resultIndex: 0, resultName: logicalResult.name
+  }] }
 });
 
 const storedZipEntries = async (blob) => {
@@ -369,6 +383,7 @@ const storedZipEntries = async (blob) => {
 
 const committedFeatureState = () => structuredClone({
   results: state.results.value,
+  annotationWarnings: state.annotationWarnings.value,
   selectedResultIndex: state.selectedResultIndex.value,
   featureCatalog: state.featureCatalog.value,
   extractedFeatures: state.extractedFeatures.value,
@@ -436,6 +451,47 @@ test('afterFrame crosses one post-bind frame before resolving', async () => {
   assert.equal(resolved, true);
 });
 
+test('superseded canonical execution stops before catalog and SVG admission', async () => {
+  let admissions = 0;
+  let commits = 0;
+  const outcome = await executeCanonicalRenderCandidate({
+    canonical: { renderRequest: { schema: 7 }, resources: {} },
+    mode: 'circular',
+    kind: 'target-record-transform',
+    generationExecutor: async () => ({ results: [], metadata: { annotationWarnings: ["stale-invalid-warning"] } }),
+    shouldAdmit: () => false,
+    catalogAdmission: () => { admissions += 1; },
+    prepareCommit: () => { commits += 1; }
+  });
+  assert.equal(outcome.status, 'superseded');
+  assert.equal(admissions, 0);
+  assert.equal(commits, 0);
+});
+
+test('canonical execution carries the Worker comparison table ID warnings to the committed Result', async () => {
+  const warning = {
+    code: 'comparison_record_id_unmatched', queryRecordIndex: 0, subjectRecordIndex: 1,
+    queryRecordId: 'R2', subjectRecordId: 'R3', rowCount: 1, exampleIds: ['contig_A'],
+    message: 'Comparison between query record #1 \'R2\' and subject record #2 \'R3\': 1 row(s) use sequence IDs that match no displayed record (\'contig_A\'); these rows are drawn on the records assigned by position.',
+    resultIndex: 0, resultName: 'out.svg'
+  };
+  const run = (metadata) => executeCanonicalRenderCandidate({
+    canonical: { renderRequest: { schema: 7 }, resources: {} },
+    mode: 'linear',
+    generationExecutor: async () => ({ results: [{ name: 'out.svg', content: '<svg/>' }], metadata }),
+    catalogAdmission: () => ({ catalog: null }),
+    prepareCommit: () => ({})
+  });
+  const carried = await run({ comparisonWarnings: [warning] });
+  assert.equal(carried.status, 'ok');
+  assert.deepEqual(carried.comparisonWarnings, [warning]);
+  assert.deepEqual((await run({})).comparisonWarnings, []);
+  await assert.rejects(
+    run({ comparisonWarnings: [{ ...warning, resultName: 'stale.svg' }] }),
+    /Result metadata schema/
+  );
+});
+
 test('audit-5 owner: direct simple createRunAnalysis path is worker-only and catalog-transactional', async () => {
   const structuralMetrics = {};
   const lifecycleEvents = [];
@@ -449,7 +505,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       lifecycleEvents.push(name);
     }
   };
-  const primary = new AuditFile(['LOCUS audit\nORIGIN\n//\n'], 'active.gb', {
+  const primary = new AuditFile(['LOCUS       audit\nORIGIN\n//\n'], 'active.gb', {
     type: 'text/plain',
     lastModified: 7
   });
@@ -506,9 +562,12 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   });
 
   let adoptedArtifacts = 0;
+  let lastAdoptedCanonical = null;
   let failArtifactAdoption = false;
   let cancelDuringPreview = false;
   let failCandidateAdmission = false;
+  let failDecorationCorrespondence = false;
+  let failDecorationSnapshot = false;
   const activationOwnerSets = [];
   const captureForHistory = (...args) => {
     assert.equal(state.processing.value, true);
@@ -566,16 +625,27 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       generationHistory.runUndoableArtifactReplacement(...args)
     ),
     state,
+    captureDecorationContinuity: () => {
+      if (failDecorationSnapshot) throw Object.assign(new Error('Invalid offset'), { code: 'DECORATION_CONTINUITY' });
+      const mismatch = failDecorationCorrespondence;
+      return mismatch ? () => {
+        throw Object.assign(new Error('Cannot preserve title placement. Reset Layout.'), {
+          code: 'DECORATION_CONTINUITY', stage: 'result-admission',
+          context: { field: 'title', inputOrdinal: 1, reason: 'DECORATION_TARGET' }
+        });
+      } : null;
+    },
     serializeCanonicalFiles: () => {
       assert.equal(state.processingStatus.value, 'Preparing render inputs and session...');
       return serializeActiveRenderFiles(state.mode.value, state);
     },
     canonicalSessionVersion: SESSION_VERSION,
-    adoptCanonicalRenderArtifacts: () => {
+    adoptCanonicalRenderArtifacts: (canonical) => {
       if (failArtifactAdoption) {
         throw new Error('forced late canonical artifact adoption failure');
       }
       adoptedArtifacts += 1;
+      lastAdoptedCanonical = structuredClone(canonical);
     },
     prepareCandidateCommit: ({
       results,
@@ -670,7 +740,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const replay = JSON.parse(replayEntry.text);
   assert.equal(replay.format, 'gbdraw-session');
   assert.equal(replay.version, SESSION_VERSION);
-  assert.equal(replay.renderRequest.schema, 7);
+  assert.equal(replay.renderRequest.schema, 8);
   assert.ok(Object.keys(replay.resources).length > 0);
 
   const firstRunPayload = workerMessages.find(({ type }) => type === 'run').payload;
@@ -678,13 +748,104 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.ok(firstRunPayload.resourceManifest.length > 0);
   assert.ok(firstRunPayload.stagedResources.every(({ bytes }) => bytes instanceof ArrayBuffer));
 
-  const committedState = committedFeatureState();
-  const committedExtractedFeatureIdentity = state.extractedFeatures.value;
-  const committedBiologicalFeatureIdentity = state.biologicalFeatures.value;
+  let committedState = committedFeatureState();
+  let committedExtractedFeatureIdentity = state.extractedFeatures.value;
+  let committedBiologicalFeatureIdentity = state.biologicalFeatures.value;
+
+  const targetCandidate = structuredClone(lastAdoptedCanonical);
+  targetCandidate.renderRequest.records[0].display.startCoordinate = 3;
+  targetCandidate.renderRequest.records[0].presentation.reverseComplement = true;
+  const committedOutputPrefix = targetCandidate.renderRequest.output.prefix;
+  state.form.prefix = 'unrelated-pending-prefix';
+  let targetIntent = {
+    startCoordinate: null,
+    reverseComplementOverride: null,
+    anchorIntent: null
+  };
+  const targetResult = result('target-only.svg', 'target-only');
+  workerResponses.push(response(targetResult, validCatalog(targetResult.name)));
+  const historyCountBeforeTarget = generationHistory.getUndoCount();
+  let targetLosatExecutorJobs = 0;
+  globalThis.__GBDRAW_LOSAT_EXECUTOR__ = async (jobs) => {
+    targetLosatExecutorJobs += jobs.length;
+    return [];
+  };
+  state.errorLog.value = { summary: 'Previous candidate failed; retry remains available.' };
+  state.failedGeneratePreservedResult.value = true;
+  assert.deepEqual(await runner.runCommittedCanonicalCandidate({
+    canonical: targetCandidate,
+    captureIntentCheckpoint: () => structuredClone(targetIntent),
+    restoreIntentCheckpoint: (checkpoint) => { targetIntent = structuredClone(checkpoint); },
+    commitIntent: () => {
+      targetIntent = {
+        startCoordinate: 3,
+        reverseComplementOverride: true,
+        anchorIntent: { schema: 1, recordKey: 'record-1' }
+      };
+    }
+  }), { status: 'ok' });
+  delete globalThis.__GBDRAW_LOSAT_EXECUTOR__;
+  assert.equal(targetLosatExecutorJobs, 0);
+  assert.equal(state.errorLog.value, null);
+  assert.equal(state.failedGeneratePreservedResult.value, false);
+  assert.equal(generationHistory.getUndoCount(), historyCountBeforeTarget + 1);
+  assert.equal(state.form.prefix, 'unrelated-pending-prefix');
+  assert.equal(targetIntent.startCoordinate, 3);
+  assert.deepEqual(state.results.value, [targetResult]);
+  const targetRunPayload = workerMessages.filter(({ type }) => type === 'run').at(-1).payload;
+  assert.equal(targetRunPayload.request.output.prefix, committedOutputPrefix);
+  assert.notEqual(targetRunPayload.request.output.prefix, state.form.prefix);
+  assert.equal(structuralMetrics.canonicalCandidateExecutionCount, 2);
+  await generationHistory.undo();
+  assert.deepEqual(state.results.value, [committedResult]);
+  assert.equal(targetIntent.startCoordinate, null);
+  await generationHistory.redo();
+  assert.deepEqual(state.results.value, [targetResult]);
+  assert.equal(targetIntent.startCoordinate, 3);
+  assert.equal(state.errorLog.value, null);
+  assert.equal(state.failedGeneratePreservedResult.value, false);
+  committedState = committedFeatureState();
+  committedExtractedFeatureIdentity = state.extractedFeatures.value;
+  committedBiologicalFeatureIdentity = state.biologicalFeatures.value;
+
+  const targetHistoryCount = generationHistory.getUndoCount();
+  const targetStateBeforeFailure = committedFeatureState();
+  workerResponses.push(response(result('target-rejected.svg', 'rejected'), undefined));
+  const rejectedTarget = await runner.runCommittedCanonicalCandidate({
+    canonical: targetCandidate,
+    captureIntentCheckpoint: () => structuredClone(targetIntent),
+    restoreIntentCheckpoint: (checkpoint) => { targetIntent = structuredClone(checkpoint); },
+    commitIntent: () => { throw new Error('must not commit rejected target intent'); }
+  });
+  assert.equal(rejectedTarget.status, 'error');
+  assert.equal(rejectedTarget.error.code, 'FEATURE_METADATA');
+  assert.equal(rejectedTarget.error.stage, 'result-admission');
+  assert.equal(rejectedTarget.recovery, 'preserved');
+  assert.deepEqual(committedFeatureState(), targetStateBeforeFailure);
+  assert.equal(targetIntent.startCoordinate, 3);
+  assert.equal(generationHistory.getUndoCount(), targetHistoryCount);
+
+  const canceledTargetResult = result('target-canceled.svg', 'canceled');
+  workerResponses.push(response(canceledTargetResult, validCatalog(canceledTargetResult.name)));
+  cancelDuringPreview = true;
+  assert.deepEqual(await runner.runCommittedCanonicalCandidate({
+    canonical: targetCandidate,
+    captureIntentCheckpoint: () => structuredClone(targetIntent),
+    restoreIntentCheckpoint: (checkpoint) => { targetIntent = structuredClone(checkpoint); },
+    commitIntent: () => { throw new Error('must not commit canceled target intent'); }
+  }), { status: 'canceled' });
+  cancelDuringPreview = false;
+  assert.deepEqual(committedFeatureState(), targetStateBeforeFailure);
+  assert.equal(targetIntent.startCoordinate, 3);
+  assert.equal(generationHistory.getUndoCount(), targetHistoryCount);
+
+  state.form.prefix = 'audit-simple';
 
   workerResponses.push(response(result('missing.svg', 'missing'), undefined));
   const metricsBeforePreActivationFailure = { ...structuralMetrics };
-  assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
+  const failedRun = await runner.runAnalysis();
+  assert.equal(failedRun.status, 'error');
+  assert.equal(failedRun.error, state.errorLog.value);
   assert.equal(state.failedGeneratePreservedResult.value, true);
   assert.match(
     state.errorLog.value?.summary || '',
@@ -708,6 +869,32 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     metricsBeforePreActivationFailure.generatedArtifactRollbackCount || 0
   );
 
+  const decorationFailureState = committedFeatureState();
+  const decorationRequest = lastAdoptedCanonical;
+  const decorationHistoryCount = generationHistory.getUndoCount();
+  const decorationActivationCount = structuralMetrics.generatedArtifactActivationCount;
+  failDecorationCorrespondence = true;
+  const unmatchedResult = result('unmatched.svg', 'unmatched');
+  workerResponses.push(response(unmatchedResult, validCatalog(unmatchedResult.name)));
+  const unmatched = await runner.runAnalysis();
+  failDecorationCorrespondence = false;
+  assert.equal(unmatched.status, 'error');
+  assert.equal(unmatched.error.code, 'DECORATION_CONTINUITY');
+  assert.match(unmatched.error.summary, /Reset Layout.*Result 1.*title.*missing/);
+  assert.deepEqual(committedFeatureState(), decorationFailureState);
+  assert.equal(lastAdoptedCanonical, decorationRequest);
+  assert.equal(generationHistory.getUndoCount(), decorationHistoryCount);
+  assert.equal(structuralMetrics.generatedArtifactActivationCount, decorationActivationCount);
+
+  failDecorationSnapshot = true;
+  const snapshotFailure = await runner.runAnalysis();
+  failDecorationSnapshot = false;
+  assert.equal(snapshotFailure.status, 'error');
+  assert.equal(snapshotFailure.recovery, 'preserved');
+  assert.equal(state.failedGeneratePreservedResult.value, true);
+  assert.deepEqual(committedFeatureState(), decorationFailureState);
+  assert.equal(generationHistory.getUndoCount(), decorationHistoryCount);
+
   const admissionFailureState = committedFeatureState();
   const metricsBeforeAdmissionFailure = { ...structuralMetrics };
   failCandidateAdmission = true;
@@ -716,12 +903,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     rejectedAdmissionResult,
     validCatalog(rejectedAdmissionResult.name)
   ));
-  assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
+  assert.equal((await runner.runAnalysis()).status, 'error');
   failCandidateAdmission = false;
-  assert.match(
-    state.errorLog.value?.summary || '',
-    /forced current Result admission failure/
-  );
+  assert.equal(state.errorLog.value?.code, 'UNKNOWN');
+  assert.doesNotMatch(JSON.stringify(state.errorLog.value), /forced current Result admission failure/);
   assert.deepEqual(committedFeatureState(), admissionFailureState);
   for (const metric of [
     'generatedArtifactCandidateBuildCount',
@@ -741,7 +926,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     result('malformed.svg', 'malformed'),
     { schema: 2, items: [] }
   ));
-  assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
+  assert.equal((await runner.runAnalysis()).status, 'error');
   assert.equal(state.failedGeneratePreservedResult.value, true);
   assert.match(
     state.errorLog.value?.summary || '',
@@ -752,6 +937,24 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   state.zoom.value = 1.7;
   state.canvasPan.x = 31;
   state.canvasPan.y = -12;
+  const bindFailureState = committedFeatureState();
+  const bindHistoryCount = generationHistory.getUndoCount();
+  const registerReadiness = readinessRuntime.registerReadinessExpectation;
+  readinessRuntime.registerReadinessExpectation = options => {
+    const expectation = registerReadiness(options);
+    const promise = Promise.reject(new Error('forced candidate bind failure'));
+    void promise.catch(() => {});
+    return { ...expectation, promise };
+  };
+  const bindFailureResult = result('bind-failure.svg', 'bind-failure');
+  workerResponses.push(response(bindFailureResult, validCatalog(bindFailureResult.name)));
+  const bindFailure = await runner.runAnalysis();
+  readinessRuntime.registerReadinessExpectation = registerReadiness;
+  assert.equal(bindFailure.status, 'error');
+  assert.equal(bindFailure.recovery, 'restored');
+  assert.deepEqual(committedFeatureState(), bindFailureState);
+  assert.equal(generationHistory.getUndoCount(), bindHistoryCount);
+
   const lateFailureState = committedFeatureState();
   const metricsBeforeLateFailure = { ...structuralMetrics };
   failArtifactAdoption = true;
@@ -760,12 +963,12 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     lateFailureResult,
     validCatalog(lateFailureResult.name)
   ));
-  assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
+  const rolledBack = await runner.runAnalysis();
+  assert.equal(rolledBack.status, 'error');
+  assert.equal(rolledBack.recovery, 'restored');
   failArtifactAdoption = false;
-  assert.match(
-    state.errorLog.value?.summary || '',
-    /forced late canonical artifact adoption failure/
-  );
+  assert.equal(state.errorLog.value?.code, 'UNKNOWN');
+  assert.doesNotMatch(JSON.stringify(state.errorLog.value), /forced late canonical artifact adoption failure/);
   assert.deepEqual(committedFeatureState(), lateFailureState);
   assert.equal(state.extractedFeatures.value, committedExtractedFeatureIdentity);
   assert.equal(state.biologicalFeatures.value, committedBiologicalFeatureIdentity);
@@ -791,6 +994,24 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       < lateFailureEvents.indexOf('test.preview-restore-ready')
   );
   assert.equal(lateFailureEvents.includes('artifact.finalization-completed'), false);
+
+  // A failed readiness restoration must retain the initiating cause, and must
+  // never advertise completed rollback merely because the old Results exist.
+  const originalRestore = readinessRuntime.restorePreviousSelectedResult;
+  const checkpointBeforeRestoreFailure = await artifactSnapshots.captureGeneratedArtifactHandle();
+  readinessRuntime.restorePreviousSelectedResult = async () => { throw new Error('PRIVATE_ROLLBACK_SENTINEL'); };
+  failArtifactAdoption = true;
+  const restoreFailureResult = result('restore-failure.svg', 'restore-failure');
+  workerResponses.push(response(restoreFailureResult, validCatalog(restoreFailureResult.name)));
+  const failedRestore = await runner.runAnalysis();
+  assert.equal(failedRestore.status, 'error');
+  assert.equal(failedRestore.recovery, 'restore-failed');
+  assert.equal(failedRestore.error.code, 'UNKNOWN');
+  assert.equal(state.failedGeneratePreservedResult.value, false);
+  assert.doesNotMatch(JSON.stringify(failedRestore.error), /PRIVATE_ROLLBACK_SENTINEL/);
+  readinessRuntime.restorePreviousSelectedResult = originalRestore;
+  failArtifactAdoption = false;
+  await artifactSnapshots.restoreGeneratedArtifactHandle(checkpointBeforeRestoreFailure);
 
   const canceledState = committedFeatureState();
   const canceledResultIdentity = state.results.value;
@@ -821,10 +1042,12 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     metricsBeforePreviewCancel.generatedArtifactFinalizeCount
   );
 
+  // GE-09: a Cancel with no Worker request keeps the warm Worker and its staged
+  // primary source, so later runs do not read the file again.
   assert.equal(activePrimaryReads, 1);
   assert.equal(inactiveFileReads, 0);
-  assert.equal(adoptedArtifacts, 1);
-  assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 6);
+  assert.equal(adoptedArtifacts, 2);
+  assert.equal(workerMessages.filter(({ type }) => type === 'run').length, 12); // Includes the explicit failed-restoration attempt.
   assert.equal(workerMessages.filter(({ type }) => type === 'feature-extraction').length, 0);
 
   state.form.multi_record_canvas = true;
@@ -840,7 +1063,56 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   workerResponses.push(response(readyResult, validCatalog(readyResult.name)));
   assert.deepEqual(await runner.runAnalysis(), { status: 'ok' });
   assert.equal(state.failedGeneratePreservedResult.value, false);
-  assert.equal(activePrimaryReads, 2);
+  assert.equal(activePrimaryReads, 1);
+
+  // Cancel requested while preparation is pending ends before rendering.
+  const runCount = () => workerMessages.filter(({ type }) => type === 'run').length;
+  const runsBeforePreparedCancel = runCount();
+  let releasePreparation;
+  const canceledDuringPreparation = runner.runAnalysis(null, null, null, {
+    prepareGenerate: () => new Promise((resolve) => { releasePreparation = resolve; })
+  });
+  while (!releasePreparation) await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(state.processing.value, true);
+  runner.cancelRunAnalysis();
+  releasePreparation({ status: 'ready', comparisonPlanSnapshot: null, comparisonExecution: null });
+  assert.deepEqual(await canceledDuringPreparation, { status: 'canceled' });
+  assert.equal(runCount(), runsBeforePreparedCancel);
+  assert.equal(state.processing.value, false);
+  assert.equal(state.failedGeneratePreservedResult.value, true);
+
+  // A preparation that settles after a newer Generate is discarded as stale.
+  let releaseStalePreparation;
+  const stalePreparation = runner.runAnalysis(null, null, null, {
+    prepareGenerate: () => new Promise((resolve) => { releaseStalePreparation = resolve; })
+  });
+  while (!releaseStalePreparation) await new Promise((resolve) => setImmediate(resolve));
+  const newerResult = result('newer.svg', 'newer');
+  workerResponses.push(response(newerResult, validCatalog(newerResult.name)));
+  assert.deepEqual(await runner.runAnalysis(), { status: 'ok' });
+  const runsAfterNewer = runCount();
+  releaseStalePreparation({ status: 'ready', comparisonPlanSnapshot: null, comparisonExecution: null });
+  assert.deepEqual(await stalePreparation, { status: 'stale' });
+  assert.equal(runCount(), runsAfterNewer);
+  assert.deepEqual(state.results.value, [newerResult]);
+  assert.equal(state.processing.value, false);
+
+  // A later operation owns the notification while this Worker response is held.
+  const { normalizeUserFacingError } = await import('../../gbdraw/web/js/services/error-normalization.js');
+  let releaseOlderFailure;
+  workerResponses.push(new Promise(resolve => { releaseOlderFailure = resolve; }));
+  const runsBeforeOlderFailure = workerMessages.filter(message => message.type === 'run').length;
+  const olderFailure = runner.runAnalysis();
+  while (workerMessages.filter(message => message.type === 'run').length === runsBeforeOlderFailure) {
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+  const laterAlert = normalizeUserFacingError({ code: 'PDF_GLYPH', operation: 'export-pdf',
+    stage: 'font-validation', context: { codepoint: 945 } });
+  state.errorLog.value = laterAlert;
+  releaseOlderFailure({ error: { code: 'REGEX_SYNTAX', operation: 'generate', stage: 'rule-validation',
+    context: { reason: 'UNTERMINATED_SET' }, message: 'PRIVATE_OLDER_FAILURE' } });
+  assert.deepEqual(await olderFailure, { status: 'stale' });
+  assert.equal(state.errorLog.value, laterAlert);
 
   Object.assign(state.circularRecordDiscovery, {
     status: 'idle',
@@ -858,9 +1130,9 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     .length;
   workerHelperResponses.push({
     ok: false,
-    error: { name: 'Error', message: 'injected record discovery helper failure' }
+    error: { code: 'INPUT_UNREADABLE', operation: 'listSequenceRecords', stage: 'helper', message: 'PRIVATE_DISCOVERY_SENTINEL' }
   });
-  assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
+  assert.equal((await runner.runAnalysis()).status, 'error');
   assert.equal(
     workerMessages.filter(({ type }) => type === 'helper').length,
     workerHelperCountBeforeDiscoveryFailure + 1
@@ -871,7 +1143,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   );
   assert.match(
     state.errorLog.value?.summary || '',
-    /Could not read records from the circular input file/
+    /input could not be read/i
   );
   assert.doesNotMatch(
     JSON.stringify(state.errorLog.value),
@@ -900,7 +1172,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     ok: false,
     error: { name: 'Error', message: 'injected depth record discovery failure' }
   });
-  assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
+  assert.equal((await runner.runAnalysis()).status, 'error');
   assert.equal(
     workerMessages.filter(({ type }) => type === 'run').length,
     workerRunCountBeforeDiscoveryFailure
@@ -938,35 +1210,55 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const identities = [{ selector: '#1', record_id: 'audit', recordKey: 'record-1' }];
   assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, identities);
 
+  // IN-05 (OIPC-C06): an inactive Circular source keeps its records and the
+  // Multi-Record Canvas order through a mode round trip without rereading them.
+  state.adv.multi_record_positions.splice(
+    0,
+    state.adv.multi_record_positions.length,
+    { selector: '#1', row: 3 }
+  );
+  const circularStateBeforeRoundTrip = structuredClone({
+    records: state.circularRecordList.value,
+    positions: state.adv.multi_record_positions,
+    discovery: { ...state.circularRecordDiscovery }
+  });
+  const helperRequestsBeforeRoundTrip = workerMessages.filter(({ type }) => type === 'helper').length;
   state.mode.value = 'linear';
   await runner.refreshCircularRecordOrder();
-  assert.equal(state.files.c_gb, fallbackPrimary);
-  assert.deepEqual(state.circularRecordList.value, []);
-  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, identities);
+  await runner.refreshCircularRecordOrder({ automatic: true });
   state.mode.value = 'circular';
-  workerHelperResponses.push({ ok: true, result: {
-    records: [{ selector: '#1', record_id: 'audit', record_length: 10 }]
-  } });
-  await runner.refreshCircularRecordOrder();
+  await runner.refreshCircularRecordOrder({ automatic: true });
+  assert.deepEqual(structuredClone({
+    records: state.circularRecordList.value,
+    positions: state.adv.multi_record_positions,
+    discovery: { ...state.circularRecordDiscovery }
+  }), circularStateBeforeRoundTrip);
+  assert.equal(
+    workerMessages.filter(({ type }) => type === 'helper').length,
+    helperRequestsBeforeRoundTrip
+  );
   assert.equal(state.circularRecordList.value[0].recordKey, 'record-1');
   assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, identities);
 
   // Equal biological names on a different source cannot inherit the retired key,
   // even if replacement/removal happens while Circular is inactive.
   state.mode.value = 'linear';
-  state.files.c_gb = new AuditFile(['LOCUS audit 10 bp DNA circular\n//\n'], 'replacement.gb');
+  state.files.c_gb = new AuditFile(['LOCUS       audit 10 bp DNA circular\n//\n'], 'replacement.gb');
   await runner.refreshCircularRecordOrder();
-  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
   state.mode.value = 'circular';
-  await runner.refreshCircularRecordOrder();
+  await runner.refreshCircularRecordOrder({ automatic: true });
   assert.equal(state.circularRecordList.value[0].record_id, 'audit');
   assert.equal(state.circularRecordList.value[0].recordKey, undefined);
+  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
   state.mode.value = 'linear';
   state.files.c_gb = null;
   await runner.refreshCircularRecordOrder();
-  assert.deepEqual(state.circularRecordList.value, []);
-  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
+  assert.equal(state.circularRecordList.value[0].record_id, 'audit');
   state.mode.value = 'circular';
+  await runner.refreshCircularRecordOrder({ automatic: true });
+  assert.deepEqual(state.circularRecordList.value, []);
+  assert.deepEqual(state.adv.multi_record_positions, []);
+  assert.deepEqual(state.circularRecordDiscovery.canonicalRecordIdentities, []);
   state.files.c_gb = fallbackPrimary;
 
   state.form.multi_record_canvas = true;
@@ -1063,27 +1355,42 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     ''
   ].join('\n');
   const referenceFasta = '>reference-a\nACGTACGT\n';
+  // The LOSAT query of each ring: the shared Python reader's canonical FASTA.
   const comparisonTexts = [
     '>comparison-b\nTTTTAAAA\n',
     '>comparison-c\nAAAATTTT\n',
     '>comparison-d\nCCCCGGGG\n'
+  ];
+  // Ring files as uploaded: a non-canonical FASTA, a GenBank flat file and a
+  // canonical FASTA. Each gives the same raw key as its canonical FASTA (D12).
+  const comparisonFileTexts = [
+    '>comparison-b first ring\r\nttttaaaa\r\n',
+    [
+      'LOCUS       comparison-c 8 bp DNA',
+      'DEFINITION  comparison c.',
+      'ORIGIN',
+      '        1 aaaatttt',
+      '//',
+      ''
+    ].join('\n'),
+    comparisonTexts[2]
   ];
   const resourceTable = adoptCurrentSessionResources({
     'reference-a': encodedResource('genbank', 'reference-a.gb', referenceText),
     'comparison-b': encodedResource(
       'conservation-fasta-file',
       'comparison-b.fasta',
-      comparisonTexts[0]
+      comparisonFileTexts[0]
     ),
     'comparison-c': encodedResource(
       'conservation-fasta-file',
-      'comparison-c.fasta',
-      comparisonTexts[1]
+      'comparison-c.gbk',
+      comparisonFileTexts[1]
     ),
     'comparison-d': encodedResource(
       'conservation-fasta-file',
       'comparison-d.fasta',
-      comparisonTexts[2]
+      comparisonFileTexts[2]
     )
   });
   const referenceView = createSessionResourceFileView(resourceTable, 'reference-a');
@@ -1182,18 +1489,22 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
 
   let failLateArtifactAdoption = false;
   let committedRenderRequest = null;
+  let committedCanonicalSession = null;
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
-    serializeCanonicalFiles: () => serializeActiveRenderFiles(state.mode.value, state),
+    serializeCanonicalFiles: (_snapshot, _catalog, runState) => serializeActiveRenderFiles(runState.mode.value, runState),
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: (canonical) => {
       if (failLateArtifactAdoption) {
         throw new Error('injected LOSAT late artifact adoption failure');
       }
       committedRenderRequest = canonical.renderRequest;
+      committedCanonicalSession = canonical;
     },
-    getCommittedCanonicalRenderRequest: () => committedRenderRequest,
+    getCommittedCanonicalSession: () => (committedCanonicalSession
+      ? { ...committedCanonicalSession, renderRequest: committedRenderRequest }
+      : null),
     prepareLinearRecordCatalog: async () => ({
       catalog: { mode: 'linear', status: 'ready', records: [] },
       error: ''
@@ -1226,6 +1537,16 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
 
   try {
     const circularResult = result('lazy-circular.svg', 'lazy-circular');
+    const helperMessageCount = workerMessages.filter(({ type }) => type === 'helper').length;
+    comparisonTexts.forEach((fasta, index) => workerHelperResponses.push({
+      ok: true,
+      result: {
+        fasta,
+        format: index === 1 ? 'genbank' : 'fasta',
+        label: '',
+        recordIds: [fasta.slice(1).split('\n')[0]]
+      }
+    }));
     workerResponses.push(response(circularResult, validCatalog(circularResult.name)));
     assert.deepEqual(
       await runner.runAnalysis(),
@@ -1233,10 +1554,23 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       JSON.stringify(state.errorLog.value)
     );
     assert.equal(losatCalls, 0, 'verified circular cache entries must prevent LOSAT execution');
+    // Every ring file goes through the one Python reader (no JavaScript reader).
+    assert.deepEqual(
+      workerMessages.filter(({ type }) => type === 'helper').slice(helperMessageCount)
+        .map(({ operation }) => operation),
+      ['readComparisonSequence', 'readComparisonSequence', 'readComparisonSequence']
+    );
+    assert.equal(workerHelperResponses.length, 0);
     assert.deepEqual(
       resourceMetrics.filter(({ name }) => name === 'resourceTextReadCount')
         .map(({ resourceId }) => resourceId),
-      ['reference-a', 'comparison-b', 'comparison-c', 'comparison-d']
+      ['reference-a']
+    );
+    assert.deepEqual(
+      resourceMetrics.filter(({ name }) => name === 'resourceByteReadCount')
+        .map(({ resourceId }) => resourceId)
+        .filter((resourceId) => resourceId.startsWith('comparison-')),
+      ['comparison-b', 'comparison-c', 'comparison-d']
     );
     assert.deepEqual(
       workerMessages.filter(({ type }) => type === 'run').at(-1)
@@ -1263,10 +1597,10 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       primaryFile: invalidFile,
       pairedFile: null
     });
-    assert.deepEqual(await runner.runAnalysis(), { status: 'error' });
+    assert.equal((await runner.runAnalysis()).status, 'error');
     assert.match(
       state.errorLog.value?.summary || '',
-      /A File-like object with arrayBuffer\(\) or text\(\) is required/
+      /Input resource preparation failed/
     );
 
     resourceMetrics.splice(0);
@@ -1384,13 +1718,11 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       losatProgram: state.losatProgram.value,
       blastpMode: state.losat.blastp.mode
     });
+    state.linearSeqs.find(({uid})=>uid==='middle').region_reverse=true;
+    state.recordDisplayRows = { value: [{ scope: 'linear', sourceUid: 'middle',
+      key: JSON.stringify(['linear', 'middle', '#1']), selector: '#1', recordId: 'MIDDLE', recordLength: 8,
+      reverse: true, cropped: false, detectedTopology: 'linear' }] };
     const linearResult = result('lazy-linear.svg', 'lazy-linear');
-    workerHelperResponses.push({
-      ok: true,
-      result: {
-        tsv: 'MIDDLE\tTHIRD\t100\t8\t0\t0\t1\t8\t1\t8\t1e-10\t20\n'
-      }
-    });
     workerResponses.push(response(linearResult, validCatalog(linearResult.name)));
     assert.deepEqual(
       await runner.runAnalysis(comparisonPlanSnapshot),
@@ -1400,14 +1732,34 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal(losatCalls, 1);
     assert.ok(capturedSequences.includes('>MIDDLE\nCCCCGGGG\n'));
     assert.ok(capturedSequences.includes('>THIRD\nTTTTAAAA\n'));
-    const conversionRequest = workerMessages.findLast((message) => (
-      message.type === 'helper' &&
-      message.operation === 'convertLosatNucleotideToDisplayTsv'
-    ));
-    assert.deepEqual(conversionRequest?.payload.queryViewTransform, {
-      length: 8,
-      reverse: false
-    });
+    // D9/D10: each searched raw entry records the Web runtime identity, which
+    // is not part of its key; Run Info lists the runtime of the displayed rows.
+    const searchedEntries = Array.from(state.losatCache.value.entries());
+    assert.ok(searchedEntries.length > 0);
+    for (const [key, entry] of searchedEntries) {
+      assert.deepEqual(entry.runtime, { kind: 'losat', source: 'wasm', version: null, program: 'blastn' });
+      const { runtime: _runtime, ...withoutRuntime } = entry;
+      assert.equal(key, await sha256Text(JSON.stringify(buildLosatCachePayload(withoutRuntime))));
+      assert.equal(key, await sha256Text(JSON.stringify(buildLosatCachePayload(entry))));
+    }
+    assert.deepEqual(state.lastRunInfo.value.losatRuntimes, [{
+      program: 'blastn',
+      kind: 'losat',
+      version: null,
+      source: 'wasm',
+      path: null,
+      text: 'blastn: LOSAT, version not recorded (wasm)'
+    }]);
+    // Generated LOSATN rows stay in the search frame; the Python planner
+    // projects the reversed record (PD-OI-073), so no Web conversion runs.
+    assert.equal(workerMessages.some(({ type, operation }) => (
+      type === 'helper' && /nucleotide/i.test(String(operation || ''))
+    )), false);
+    const projectedRun = workerMessages.findLast(({ type }) => type === 'run').payload.request;
+    assert.equal(projectedRun.records.find(({ recordKey }) => recordKey === 'middle')
+      .presentation.reverseComplement, true);
+    assert.equal(state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
+    delete state.recordDisplayRows;
     assert.equal(
       resourceMetrics.filter(({ name }) => name === 'resourceByteReadCount').length,
       3
@@ -1483,13 +1835,12 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       failedLinearResult,
       validCatalog(failedLinearResult.name)
     ));
-    assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'error' });
+    assert.equal((await runner.runAnalysis(comparisonPlanSnapshot)).status, 'error');
+    assert.equal(state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
     failLateArtifactAdoption = false;
     state.losat.blastn.task = 'megablast';
-    assert.match(
-      state.errorLog.value?.summary || '',
-      /injected LOSAT late artifact adoption failure/
-    );
+    assert.equal(state.errorLog.value?.code, 'UNKNOWN');
+    assert.doesNotMatch(JSON.stringify(state.errorLog.value), /injected LOSAT late artifact adoption failure/);
     assert.equal(state.losatCache.value, committedLosatCache);
     assert.deepEqual(
       Array.from(state.losatCache.value.entries()),
@@ -1569,7 +1920,113 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     );
     assert.equal(losatCalls, 2, 'resolved protein artifacts must bypass further LOSAT execution');
     assert.deepEqual(state.losatCacheInfo.value, warmCacheInfo);
+    committedRenderRequest = {
+      ...committedRenderRequest,
+      comparisons: [{ kind: 'precomputedProteinComparison' }, {
+        kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: warmSettings
+      }]
+    };
+
+    const alignmentAnchor = (recordKey, featureId, sourceFeatureIndex) => ({
+      recordKey,
+      biologicalFeatureId: featureId,
+      sourceFeatureIndex,
+      stableFeatureSvgId: `stable-${featureId}`
+    });
+    const alignmentReference = alignmentAnchor('multi', 'reference-feature', 0);
+    const alignmentTarget = alignmentAnchor('middle', 'target-feature', 1);
+    const alignmentPlan = {
+      schema: 2,
+      groupId: 'og-web-action',
+      reference: alignmentReference,
+      records: [
+        {
+          recordKey: 'multi', status: 'reference', rationale: 'reference',
+          anchor: alignmentReference
+        },
+        {
+          recordKey: 'middle', status: 'aligned', rationale: 'only_usable_candidate',
+          anchor: alignmentTarget
+        },
+        {
+          recordKey: 'third', status: 'skipped', rationale: 'skipped_no_candidate',
+          anchor: null
+        }
+      ]
+    };
+    const alignmentTranslations = ['multi', 'middle', 'third'].map((recordKey) => ({
+      recordKey, x: 0, y: 0
+    }));
+    const alignmentOrientations = ['multi', 'middle', 'third'].map((recordKey) => ({
+      recordKey,
+      reverseComplement: recordKey !== 'third'
+    }));
+    const helperRequestsBeforeAlignment = workerMessages.filter(({ type }) => type === 'helper')
+      .length;
+    const alignedResult = result('lazy-linear-aligned.svg', 'lazy-linear-aligned');
+    workerResponses.push(response(alignedResult, validCatalog(alignedResult.name)));
+    assert.deepEqual(
+      await runner.runCommittedCanonicalCandidate({
+        canonical:runner.projectCommittedSimilarityAlignment({committed:committedCanonicalSession,plan:alignmentPlan,translations:alignmentTranslations,orientations:alignmentOrientations}),
+        label:'Align Similarity Group',
+        commitIntent:()=>alignmentOrientations.forEach(({recordKey,reverseComplement})=>{state.linearSeqs.find(s=>s.uid===recordKey).region_reverse=reverseComplement;})
+      }),
+      { status: 'ok' },
+      JSON.stringify(state.errorLog.value)
+    );
+    assert.equal(losatCalls, 2, 'alignment Apply must reuse committed protein evidence');
+    assert.deepEqual(state.similarityAlignmentPlan.value, alignmentPlan);
+    assert.deepEqual(state.linearRecordTranslations.value, alignmentTranslations);
+    const alignedRunRequest = workerMessages.filter(({ type }) => type === 'run').at(-1)
+      .payload.request;
+    assert.deepEqual(alignedRunRequest.layout.similarityAlignment, alignmentPlan);
+    assert.deepEqual(alignedRunRequest.layout.recordTranslations, alignmentTranslations);
+    const alignedOrientation = Object.fromEntries(alignedRunRequest.records.map((record) => [
+      record.recordKey,
+      Boolean(record.region?.reverseComplement ?? record.presentation?.reverseComplement)
+    ]));
+    assert.equal(alignedOrientation.middle, true);
+    assert.equal(
+      state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse,
+      true,
+      'successful admission must install the materialized base orientation'
+    );
+    assert.equal(
+      workerMessages.filter(({ type }) => type === 'helper').length,
+      helperRequestsBeforeAlignment,
+      'alignment Apply must not schedule protein extraction or group inference'
+    );
+
+    const committedAlignedResult = state.results.value;
+    const committedAlignmentPlan = state.similarityAlignmentPlan.value;
+    committedRenderRequest = {
+      ...committedRenderRequest,
+      comparisons: [{ kind: 'precomputedProteinComparison' }, {
+        kind: 'generatedProteinComparison', mode: 'none', pairs: [], settings: warmSettings
+      }]
+    };
+    failLateArtifactAdoption = true;
+    const rejectedAlignedResult = result(
+      'lazy-linear-aligned-rejected.svg',
+      'lazy-linear-aligned-rejected'
+    );
+    workerResponses.push(response(
+      rejectedAlignedResult,
+      validCatalog(rejectedAlignedResult.name)
+    ));
+    assert.deepEqual(
+      (await runner.runCommittedCanonicalCandidate({canonical:runner.projectCommittedSimilarityAlignment({committed:committedCanonicalSession,plan:{...alignmentPlan,groupId:'og-rejected-candidate'},translations:alignmentTranslations,orientations:alignmentOrientations})})).status,
+      'error'
+    );
+    failLateArtifactAdoption = false;
+    assert.equal(state.errorLog.value?.code, 'UNKNOWN');
+    assert.doesNotMatch(JSON.stringify(state.errorLog.value), /injected LOSAT late artifact adoption failure/);
+    assert.equal(state.results.value, committedAlignedResult);
+    assert.equal(state.similarityAlignmentPlan.value, committedAlignmentPlan);
+    assert.equal(losatCalls, 2, 'failed alignment admission must not schedule LOSATP');
   } finally {
+    state.similarityAlignmentPlan.value = null;
+    state.linearRecordTranslations.value = [];
     if (previousTestHooks === undefined) {
       delete globalThis.__GBDRAW_TEST_HOOKS__;
     } else {
@@ -1766,11 +2223,11 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
-    serializeCanonicalFiles: (snapshot, recordCatalog) => {
+    serializeCanonicalFiles: (snapshot, recordCatalog, runState) => {
       serializeCalls += 1;
       serializedSnapshot = snapshot;
       serializedRecordCatalog = recordCatalog;
-      return serializeActiveRenderFiles(state.mode.value, state, snapshot);
+      return serializeActiveRenderFiles(runState.mode.value, runState, snapshot);
     },
     prepareLinearRecordCatalog: (...args) => prepareLinearRecordCatalogImpl(...args),
     canonicalSessionVersion: SESSION_VERSION,
@@ -1890,8 +2347,9 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   );
 
   annotationValidationError = 'injected annotation target failure';
-  assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'error' });
-  assert.match(state.errorLog.value?.summary || '', /injected annotation target failure/);
+  assert.equal((await runner.runAnalysis(comparisonPlanSnapshot)).status, 'error');
+  assert.equal(state.errorLog.value?.code, 'UNKNOWN');
+  assert.doesNotMatch(JSON.stringify(state.errorLog.value), /injected annotation target failure/);
   assert.equal(serializeCalls, 1, 'invalid annotations must fail before serialization');
   assert.equal(
     workerMessages.filter(({ type }) => type === 'run').length,
@@ -1905,6 +2363,9 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   });
   const committedResults = state.results.value;
   const workerRunsBeforeCancel = workerMessages.filter(({ type }) => type === 'run').length;
+  const priorOrientations = state.linearSeqs.map(({ uid, region_reverse }) => ({
+    recordKey: uid, reverseComplement: Boolean(region_reverse)
+  }));
   const canceledRun = runner.runAnalysis(comparisonPlanSnapshot);
   for (let turn = 0; turn < 4 && typeof releaseRecordCatalog !== 'function'; turn += 1) {
     await Promise.resolve();
@@ -1912,6 +2373,9 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   await runner.cancelRunAnalysis();
   releaseRecordCatalog({ catalog: preparedRecordCatalog, error: '' });
   assert.deepEqual(await canceledRun, { status: 'canceled' });
+  assert.deepEqual(state.linearSeqs.map(({ uid, region_reverse }) => ({
+    recordKey: uid, reverseComplement: Boolean(region_reverse)
+  })), priorOrientations);
   assert.equal(state.results.value, committedResults);
   assert.deepEqual(state.results.value, committedResults);
   assert.equal(state.results.value[0], committedResults[0]);
@@ -1926,8 +2390,9 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   prepareLinearRecordCatalogImpl = async () => {
     throw new Error('injected record catalog failure');
   };
-  assert.deepEqual(await runner.runAnalysis(comparisonPlanSnapshot), { status: 'error' });
-  assert.match(state.errorLog.value?.summary || '', /injected record catalog failure/);
+  assert.equal((await runner.runAnalysis(comparisonPlanSnapshot)).status, 'error');
+  assert.equal(state.errorLog.value?.code, 'UNKNOWN');
+  assert.doesNotMatch(JSON.stringify(state.errorLog.value), /injected record catalog failure/);
   assert.equal(state.processing.value, false);
 
   prepareLinearRecordCatalogImpl = async () => ({
@@ -1956,7 +2421,35 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   assert.deepEqual(state.results.value, [newestResult]);
   releaseSupersededCatalog({ catalog: preparedRecordCatalog, error: '' });
   assert.deepEqual(await supersededRun, { status: 'stale' });
+  assert.deepEqual(state.linearSeqs.map(({ uid, region_reverse }) => ({
+    recordKey: uid, reverseComplement: Boolean(region_reverse)
+  })), priorOrientations);
   assert.deepEqual(state.results.value, [newestResult]);
   assert.equal(state.failedGeneratePreservedResult.value, false);
   assert.equal(state.processing.value, false);
+});
+
+
+test('decoration candidate transform runs once after catalog validation for every candidate kind', async () => {
+  for (const kind of ['generate', 'reflow', 'target-record-transform']) {
+    const generatedResult = result('decoration.svg', 'candidate');
+    const canonical = { renderRequest: { mode: 'linear' }, resources: {} };
+    let transforms = 0;
+    const candidate = await executeCanonicalRenderCandidate({ canonical, mode: 'linear', kind,
+      generationExecutor: async () => response(generatedResult, validCatalog(generatedResult.name)),
+      decorationContinuity: (actual, admission) => {
+        assert.equal(actual, canonical);
+        assert.equal(admission.catalog.items[0].resultName, generatedResult.name);
+        transforms++;
+        return [svg => { svg.decoration = [40, 20]; }];
+      },
+      prepareCommit: ({ resultTransforms }) => {
+        const svg = { recordDelta: [9, 7] };
+        resultTransforms?.[0](svg);
+        return { svg };
+      }
+    });
+    assert.equal(transforms, 1, kind);
+    assert.deepEqual(candidate.commit.svg, { recordDelta: [9, 7], decoration: [40, 20] });
+  }
 });

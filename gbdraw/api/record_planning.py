@@ -11,14 +11,19 @@ from typing import Callable, Hashable, Literal, Sequence
 import pandas as pd
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
 
+from gbdraw.analysis.protein_colinearity import (
+    OrthogroupGraphResult,
+    OrthogroupMember,
+    OrthogroupResult,
+)
 from gbdraw.exceptions import ValidationError
-from gbdraw.core.record_metadata import _read_coord_map
+from gbdraw.core.record_metadata import _iter_source_features, _read_coord_map, _source_feature_index
 from gbdraw.io.cli_tables import (
     read_comparisons_table,
     read_conservation_table,
     read_records_table,
 )
-from gbdraw.io.comparisons import COMPARISON_COLUMNS
+from gbdraw.io.comparisons import read_comparison_table
 from gbdraw.io.genome import load_gbks, load_gff_fasta
 from gbdraw.io.record_select import (
     RecordSelector,
@@ -28,6 +33,13 @@ from gbdraw.io.record_select import (
 from gbdraw.io.regions import RegionSpec, apply_region_specs, parse_region_spec
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.record_placement import resolve_record_row_positions
+from gbdraw.layout.similarity_alignment import (
+    AlignmentAnchorIdentity,
+    AlignmentDecisionStatus,
+    AlignmentEvidenceEdge,
+    SimilarityAlignmentCandidate,
+    SimilarityAlignmentPlan,
+)
 from gbdraw.linear_comparison import LinearComparison
 
 from .options import (
@@ -37,6 +49,7 @@ from .options import (
     LinearMultiRecordOptions,
 )
 from gbdraw.features.source import SourceFeatureIdentity, build_source_feature_catalog
+from gbdraw.features.ids import compute_feature_hash_from_location_parts
 
 from .prepared import (
     ParsedRecordInputs,
@@ -198,6 +211,334 @@ class ResolvedRecordCollection:
         object.__setattr__(self, "transforms", tuple(transforms))
 
 
+def project_source_bound_comparisons(
+    options: LinearDiagramOptions, collection: ResolvedRecordCollection,
+) -> LinearDiagramOptions:
+    """Reproject existing source-bound evidence into the requested record views.
+
+    View hashes must match this source/crop's current or opposite orientation.
+    Source identities, scores and block membership remain unchanged. Coordinates
+    are record-local; the existing renderer alone applies a circular display cut.
+    """
+    frames = [comparison.matches for comparison in options.linear_comparisons or ()]
+    frames.extend(options.protein_comparisons or ())
+    required = {f"{role}_{name}" for role in ("query", "subject")
+                for name in ("feature_index", "feature_svg_id")}
+    if not any(not frame.empty and required <= set(frame.columns) for frame in frames):
+        return options
+    bindings = []
+    for record, provenance in zip(collection.records, collection.provenance, strict=True):
+        current, opposite = {}, {}
+        for ordinal, feature in enumerate(_iter_source_features(record.features)):
+            if feature.location is None:
+                continue
+            index = _source_feature_index(feature)
+            index = ordinal if index is None else index
+            for target, location in ((current, feature.location),
+                                     (opposite, feature.location._flip(len(record)))):
+                target[index] = compute_feature_hash_from_location_parts(
+                    feature.type,
+                    [(int(part.start), int(part.end), part.strand) for part in location.parts],
+                    record_id=record.id,
+                )
+        source = {feature.source_feature_index: feature.stable_feature_id
+                  for feature in provenance.source_feature_catalog or ()}
+        bindings.append((source, current, opposite, len(record)))
+
+    def project(frame: pd.DataFrame, query_index: int, subject_index: int) -> pd.DataFrame:
+        required = {f"{role}_{name}" for role in ("query", "subject")
+                    for name in ("feature_index", "feature_svg_id")}
+        if frame.empty or not required <= set(frame.columns):
+            return frame
+        updated = None
+        for row_index, row in frame.iterrows():
+            flips = []
+            for role, record_index, prefix in (("query", query_index, "q"), ("subject", subject_index, "s")):
+                if not 0 <= record_index < len(bindings):
+                    raise ValidationError("Comparison record endpoint is outside the resolved collection.")
+                source, current, opposite, length = bindings[record_index]
+                try:
+                    indices = [int(value) for value in str(row[f"{role}_feature_index"]).split(";")]
+                except ValueError:
+                    raise ValidationError("Comparison source feature indexes must be integers.") from None
+                source_ids = str(row[f"{role}_feature_svg_id"]).split(";")
+                view_ids = str(row.get(f"{role}_view_feature_svg_id", row[f"{role}_feature_svg_id"])).split(";")
+                if not len(indices) == len(source_ids) == len(view_ids):
+                    raise ValidationError("Comparison source feature binding has inconsistent coverage.")
+                if any(source.get(index) != source_id for index, source_id in zip(indices, source_ids, strict=True)):
+                    raise ValidationError("Comparison source feature index conflicts with its source feature ID.")
+                current_ids, opposite_ids = ([views.get(index) for index in indices] for views in (current, opposite))
+                flip = view_ids != current_ids
+                if flip and view_ids != opposite_ids:
+                    raise ValidationError("Comparison view feature IDs do not match the current source/crop binding.")
+                flips.append(flip)
+                if not flip:
+                    continue
+                if updated is None:
+                    updated = frame.copy(deep=True)
+                for coordinate_field in (f"{prefix}start", f"{prefix}end"):
+                    coordinate = row[coordinate_field]
+                    if not 1 <= coordinate <= length or int(coordinate) != coordinate:
+                        raise ValidationError("Comparison view coordinate must be a finite genomic base within its record.")
+                    updated.at[row_index, coordinate_field] = length + 1 - int(coordinate)
+                updated.at[row_index, f"{role}_view_feature_svg_id"] = ";".join(current_ids)
+            if updated is not None and flips[0] != flips[1] and "collinearity_orientation" in frame.columns:
+                orientation = row["collinearity_orientation"]
+                if orientation in ("plus", "minus"):
+                    updated.at[row_index, "collinearity_orientation"] = "minus" if orientation == "plus" else "plus"
+        return frame if updated is None else updated
+
+    explicit = tuple(replace(comparison, matches=project(comparison.matches,
+        comparison.query_record_index, comparison.subject_record_index))
+        for comparison in options.linear_comparisons or ())
+    protein = None if options.protein_comparisons is None else tuple(
+        project(frame, index, index + 1) for index, frame in enumerate(options.protein_comparisons))
+    changed = any(before.matches is not after.matches for before, after in
+                  zip(options.linear_comparisons or (), explicit, strict=True))
+    changed = changed or (protein is not None and any(before is not after for before, after in
+                         zip(options.protein_comparisons or (), protein, strict=True)))
+    return replace(options, linear_comparisons=explicit, protein_comparisons=protein) if changed else options
+
+
+def project_similarity_alignment_centers(
+    collection: ResolvedRecordCollection,
+    plan: SimilarityAlignmentPlan | None,
+) -> tuple[float | None, ...]:
+    """Project selected anchor centers from already resolved record orientations."""
+
+    if plan is None:
+        return tuple(None for _ in collection.records)
+    record_keys = tuple(item.record_key for item in collection.provenance)
+    plan.validate_record_coverage(record_keys)
+    decisions = {decision.record_key: decision for decision in plan.records}
+    return tuple(
+        _project_alignment_anchor_center(
+            decision.anchor,
+            provenance=provenance,
+            transform=transform,
+            displayed_length=len(record),
+        )
+        if decision.status is not AlignmentDecisionStatus.SKIPPED
+        else None
+        for record, provenance, transform, decision in zip(
+            collection.records,
+            collection.provenance,
+            collection.transforms,
+            (decisions[key] for key in record_keys),
+            strict=True,
+        )
+    )
+
+
+def _project_alignment_anchor_center(
+    anchor: AlignmentAnchorIdentity | None,
+    *,
+    provenance: ResolvedRecordProvenance,
+    transform: RecordDisplayTransform,
+    displayed_length: int,
+) -> float:
+    feature = _alignment_source_feature(anchor, provenance)
+    center = (
+        min(part[0] for part in feature.location_parts)
+        + max(part[1] for part in feature.location_parts)
+    ) / 2.0
+    projected = transform.source_position_to_display_offset(center)
+    if not 0.0 <= projected <= float(displayed_length):
+        raise ValidationError(
+            "Similarity alignment anchor is outside the current crop for record "
+            f"{provenance.record_key!r}."
+        )
+    return projected
+
+
+
+def _alignment_source_feature(
+    anchor: AlignmentAnchorIdentity | None,
+    provenance: ResolvedRecordProvenance,
+) -> SourceFeatureIdentity:
+    if anchor is None:
+        raise ValidationError(
+            f"Similarity alignment record {provenance.record_key!r} has no anchor."
+        )
+    catalog = provenance.source_feature_catalog
+    if catalog is None:
+        raise ValidationError(
+            f"Similarity alignment record {provenance.record_key!r} has no source feature catalog."
+        )
+    if anchor.source_feature_index is not None:
+        matches = [
+            feature
+            for feature in catalog
+            if feature.source_feature_index == anchor.source_feature_index
+        ]
+    elif anchor.stable_feature_svg_id is not None:
+        matches = [
+            feature
+            for feature in catalog
+            if feature.stable_feature_id == anchor.stable_feature_svg_id
+        ]
+    else:
+        matches = [
+            feature
+            for feature in catalog
+            if anchor.biological_feature_id
+            in {feature.biological_feature_id, feature.stable_feature_id}
+        ]
+    if (
+        len(matches) == 1
+        and anchor.stable_feature_svg_id is not None
+        and matches[0].stable_feature_id != anchor.stable_feature_svg_id
+    ):
+        matches = []
+    if len(matches) != 1:
+        raise ValidationError(
+            "Similarity alignment anchor must resolve to exactly one source feature "
+            f"for record {provenance.record_key!r}."
+        )
+    return matches[0]
+
+
+@dataclass(frozen=True)
+class AlignmentAnchorDisplayFact:
+    """Source-bound anchor geometry in one already resolved display transform."""
+
+    source_start: int
+    source_end: int
+    source_strand: int | None
+    displayed_strand: int | None
+    display_center: float | None
+
+
+def project_similarity_alignment_anchor_fact(
+    collection: ResolvedRecordCollection,
+    anchor: AlignmentAnchorIdentity,
+) -> AlignmentAnchorDisplayFact:
+    """Use the same source identity and center projection as the renderer."""
+
+    matches = [i for i, item in enumerate(collection.provenance)
+               if item.record_key == anchor.record_key]
+    if len(matches) != 1:
+        raise ValidationError("Alignment anchor record coverage is invalid.")
+    index = matches[0]
+    provenance = collection.provenance[index]
+    feature = _alignment_source_feature(anchor, provenance)
+    if anchor.biological_feature_id not in {feature.biological_feature_id, feature.stable_feature_id}:
+        raise ValidationError("Alignment anchor biological identity changed.")
+    strands = {part[2] for part in feature.location_parts}
+    strand = next(iter(strands)) if len(strands) == 1 and strands <= {-1, 1} else None
+    try:
+        center = _project_alignment_anchor_center(
+            anchor, provenance=provenance, transform=collection.transforms[index],
+            displayed_length=len(collection.records[index]),
+        )
+    except ValidationError:
+        center = None  # An exact source anchor outside the crop is unusable.
+    return AlignmentAnchorDisplayFact(
+        min(part[0] for part in feature.location_parts),
+        max(part[1] for part in feature.location_parts),
+        strand, None if strand is None else strand * collection.transforms[index].source_step, center,
+    )
+
+def similarity_alignment_evidence_edges(
+    collection: ResolvedRecordCollection,
+    orthogroups: OrthogroupResult | OrthogroupGraphResult | None,
+    group_id: str,
+) -> tuple[AlignmentEvidenceEdge, ...]:
+    """Bind one group's direct ortholog edges to the current source anchors.
+
+    An endpoint is bound only when its record index names the member's source
+    record and its feature resolves uniquely there. Edges with an unbound
+    endpoint are omitted, so missing or stale graph evidence is never guessed.
+    """
+
+    if orthogroups is None:
+        return ()
+    identity_by_protein: dict[str, tuple[int, AlignmentAnchorIdentity]] = {}
+    for member in orthogroups.orthogroups.get(group_id, ()):
+        if not 0 <= member.record_index < len(collection.records):
+            continue
+        provenance = collection.provenance[member.record_index]
+        if member.record_id and member.record_id != provenance.source_record_id:
+            continue
+        candidate = _similarity_candidate_from_orthogroup_member(collection, member)
+        if candidate.identity_is_unique:
+            identity_by_protein[member.protein_id] = (member.record_index, candidate.anchor)
+    edges = []
+    for edge in orthogroups.ortholog_edges_by_orthogroup_id.get(group_id, ()):
+        query = identity_by_protein.get(edge.query_protein_id)
+        subject = identity_by_protein.get(edge.subject_protein_id)
+        if query is None or subject is None or (query[0], subject[0]) != (
+            edge.query_record_index, edge.subject_record_index,
+        ):
+            continue
+        edges.append(AlignmentEvidenceEdge(
+            group_id=group_id, query=query[1], subject=subject[1], edge_kind=str(edge.edge_kind),
+        ))
+    return tuple(edges)
+
+
+def _similarity_candidate_from_orthogroup_member(
+    collection: ResolvedRecordCollection,
+    member: OrthogroupMember,
+) -> SimilarityAlignmentCandidate:
+    provenance = collection.provenance[member.record_index]
+    catalog = provenance.source_feature_catalog or ()
+    matches = [
+        feature
+        for feature in catalog
+        if member.feature_svg_id is not None
+        and feature.stable_feature_id == member.feature_svg_id
+    ]
+    if not matches:
+        matches = [
+            feature
+            for feature in catalog
+            if feature.source_feature_index == member.feature_index
+        ]
+    identity_is_unique = len(matches) == 1
+    feature = matches[0] if identity_is_unique else None
+    anchor = AlignmentAnchorIdentity(
+        record_key=provenance.record_key,
+        biological_feature_id=(
+            feature.biological_feature_id
+            if feature is not None
+            else str(member.feature_svg_id or member.protein_id)
+        ),
+        source_feature_index=(
+            feature.source_feature_index if feature is not None else member.feature_index
+        ),
+        stable_feature_svg_id=(
+            feature.stable_feature_id
+            if feature is not None
+            else member.feature_svg_id
+        ),
+    )
+    display_center: float | None = None
+    if feature is not None:
+        source_center = (
+            min(part[0] for part in feature.location_parts)
+            + max(part[1] for part in feature.location_parts)
+        ) / 2.0
+        projected = collection.transforms[
+            member.record_index
+        ].source_position_to_display_offset(source_center)
+        if 0.0 <= projected <= float(len(collection.records[member.record_index])):
+            display_center = projected
+    return SimilarityAlignmentCandidate(
+        group_id=member.orthogroup_id,
+        anchor=anchor,
+        displayed_strand=member.strand if member.strand in (-1, 1) else None,
+        center_mappable=display_center is not None,
+        display_center=display_center,
+        identity_is_unique=identity_is_unique,
+        representative=member.representative,
+        role=str(member.role),
+        source_start=member.start,
+        source_end=member.end,
+        display_name=member.gene or member.product or member.label or member.protein_id,
+    )
+
+
 def _detected_topology(record: SeqRecord, source_kind: str):
     value = str(record.annotations.get("topology", "")).strip().lower()
     return value if source_kind != "gff_fasta" and value in {"circular", "linear"} else "unknown"
@@ -211,6 +552,8 @@ class RecordInputManifest:
     record_options: RecordCollectionOptions
     source_paths: tuple[str, ...]
     multi_record_positions: tuple[str, ...] = ()
+    # Records-table ``losat_gencode`` per record input; empty without values.
+    losat_gencodes: tuple[int | None, ...] = ()
 
 
 def _expanded_cli_track_values(
@@ -855,6 +1198,11 @@ def record_input_manifest_from_table(path: str) -> RecordInputManifest:
         record_options=RecordCollectionOptions(),
         source_paths=tuple(source_paths),
         multi_record_positions=tuple(table.multi_record_positions()),
+        losat_gencodes=(
+            tuple(row.losat_gencode for row in table.rows)
+            if any(row.losat_gencode is not None for row in table.rows)
+            else ()
+        ),
     )
 
 
@@ -865,14 +1213,20 @@ def resolve_circular_options(
 
     if options.conservation_table_file is None:
         return options
-    table = read_conservation_table(options.conservation_table_file)
+    losat = options.losat_search is not None
+    table = read_conservation_table(options.conservation_table_file, losat=losat)
     return replace(
         options,
         conservation_table_file=None,
-        conservation_blast_files=tuple(table.conservation_blast_files),
-        conservation_fasta_files=(
-            tuple(table.comparison_fasta_files)
-            if table.comparison_fasta_files is not None
+        conservation_blast_files=None if losat else tuple(table.conservation_blast_files),
+        conservation_losat_gencodes=(
+            tuple(table.losat_gencodes)
+            if losat and table.losat_gencodes is not None
+            else None
+        ),
+        conservation_sequence_files=(
+            tuple(table.comparison_sequence_files)
+            if table.comparison_sequence_files is not None
             else None
         ),
         conservation_labels=(
@@ -937,10 +1291,19 @@ def resolve_linear_options(
             "-b/--blast is ambiguous when a Linear row contains multiple records; "
             "use a comparison table with explicit query and subject selectors."
         )
+    adjacent_pairs = max(len(records) - 1, 0)
+    if options.blast_files and len(options.blast_files) > adjacent_pairs:
+        # A file past the last pair would name a record that is not loaded.
+        raise ValidationError(
+            f"Too many -b/--blast files (expected at most {adjacent_pairs}): each file "
+            f"belongs to one adjacent pair of the {len(records)} loaded record(s).",
+            diagnostic={"code": "COMPARISON_INPUT"},
+        )
     if options.comparison_table_file is None:
         return options
     table = read_comparisons_table(options.comparison_table_file)
     comparisons: list[LinearComparison] = []
+    losat_pairs: list[tuple[int, int]] = []
     for row in table.rows:
         query_index = _resolve_linear_comparison_selector(
             records,
@@ -974,25 +1337,45 @@ def resolve_linear_options(
                 f"query row {query_row + 1} and subject row "
                 f"{subject_row + 1} must be in {topology}."
             )
+        if row.source == "losat":
+            losat_pairs.append((query_index, subject_index))
+            continue
         try:
-            matches = pd.read_csv(
-                row.blast,
-                sep="\t",
-                comment="#",
-                names=COMPARISON_COLUMNS,
-            )
-        except (OSError, UnicodeError, pd.errors.ParserError) as exc:
+            matches = read_comparison_table(row.blast)
+        except ValidationError as exc:
             raise ValidationError(
-                f"{table.table_path}: row {row.row_number}, column 'blast': "
-                f"could not parse {row.blast}."
+                f"{table.table_path}: row {row.row_number}, column 'blast': {exc}"
             ) from exc
         comparisons.append(
             LinearComparison(query_index, subject_index, matches)
+        )
+    search = options.losat_search
+    if losat_pairs and search is None:
+        row_number = next(row.row_number for row in table.rows if row.source == "losat")
+        raise ValidationError(
+            f"{table.table_path}: row {row_number} has source=losat; pass --losat "
+            "(Python: losat_search) to run the search.",
+            diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN", "row": row_number},
+        )
+    if search is not None and not losat_pairs:
+        raise ValidationError(
+            f"{table.table_path}: --losat is set but no comparisons table row has "
+            "source=losat.",
+            diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN"},
+        )
+    if search is not None and search.pairs is not None:
+        raise ValidationError(
+            "Pass LOSAT record pairs either in the comparisons table or as "
+            "losat_search pairs, not both.",
+            diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN"},
         )
     return replace(
         options,
         comparison_table_file=None,
         linear_comparisons=tuple(comparisons),
+        losat_search=(
+            replace(search, pairs=tuple(losat_pairs)) if search is not None else None
+        ),
     )
 
 

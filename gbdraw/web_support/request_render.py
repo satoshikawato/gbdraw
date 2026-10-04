@@ -15,11 +15,13 @@ from gbdraw.api.request_render import (
     _capture_request_render_diagnostics,
     render_request,
 )
+from gbdraw.api.session_compat import materialize_legacy_similarity_alignment_request
 from gbdraw.api.prepared import (
     PreparedBiologicalInputCache,
     PreparedResourceIdentity,
 )
 from gbdraw.exceptions import ValidationError
+from gbdraw.web_support.error_adapter import web_error_stage
 from gbdraw.render.formats import SVG_FORMAT, resolve_format_output_path
 from gbdraw.render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
@@ -44,22 +46,23 @@ def _web_render_diagnostic_phase(
     diagnostics: MutableMapping[str, Any] | None,
     name: str,
 ) -> Iterator[None]:
-    if diagnostics is None:
-        yield
-        return
+    stage = {"decode": "request-validation", "renderRequest": "render"}.get(name, "result-admission")
     started_at = perf_counter()
     try:
-        yield
+        with web_error_stage(stage):
+            yield
     finally:
-        timings = diagnostics.setdefault("timingsMs", {})
-        timings[name] = float(timings.get(name, 0.0)) + (
-            perf_counter() - started_at
-        ) * 1000.0
+        if diagnostics is not None:
+            timings = diagnostics.setdefault("timingsMs", {})
+            timings[name] = float(timings.get(name, 0.0)) + (
+                perf_counter() - started_at
+            ) * 1000.0
 
 
 def _attach_exception_note(error: BaseException, note: str) -> None:
     """Attach a diagnostic on Python versions before BaseException.add_note."""
 
+    error._web_error_secondary = [{"code": "CLEANUP_FAILED", "stage": "cleanup"}]
     add_note = getattr(error, "add_note", None)
     if callable(add_note):
         add_note(note)
@@ -164,6 +167,7 @@ def _render_canonical_web_request(
             resource_paths=resource_paths,
             output_directory=output_root,
         )
+        request = materialize_legacy_similarity_alignment_request(request)
     with _web_render_diagnostic_phase(diagnostics, "renderRequest"):
         rendered = render_request(request, include_feature_catalog=True)
     items: tuple[RequestRenderResult, ...]
@@ -205,7 +209,8 @@ def _render_canonical_web_request(
                 )
             )
     if not results:
-        raise ValidationError("The canonical Web request did not produce an SVG.")
+        with web_error_stage("result-admission"):
+            raise ValidationError("The canonical Web request did not produce an SVG.")
     with _web_render_diagnostic_phase(diagnostics, "geometryMetadata"):
         metadata = build_track_slot_geometry_run_metadata(
             mode=rendered.mode,
@@ -213,6 +218,39 @@ def _render_canonical_web_request(
         )
     with _web_render_diagnostic_phase(diagnostics, "featureCatalog"):
         metadata["featureCatalog"] = build_feature_catalog(feature_catalog_items)
+    metadata["annotationWarnings"] = [
+        {
+            "code": warning.code,
+            "setId": warning.set_id,
+            "annotationId": warning.annotation_id,
+            "recordId": warning.record_id,
+            "recordIndex": warning.record_index,
+            "missingCount": warning.missing_count,
+            "message": warning.message,
+            "resultIndex": result_index,
+            "resultName": results[result_index]["name"],
+        }
+        for result_index, item in enumerate(items)
+        for warning in item.annotation_warnings
+    ]
+    # Browser execution discards logging, so table-ID warnings travel as metadata.
+    metadata["comparisonWarnings"] = [
+        {
+            "code": warning.code,
+            "queryRecordIndex": warning.query_record_index,
+            "subjectRecordIndex": warning.subject_record_index,
+            "queryRecordId": warning.query_record_id,
+            "subjectRecordId": warning.subject_record_id,
+            "rowCount": warning.row_count,
+            "exampleIds": list(warning.example_ids),
+            "message": warning.message,
+            "resultIndex": result_index,
+            "resultName": results[result_index]["name"],
+        }
+        for result_index, item in enumerate(items)
+        if item.linear_metadata is not None
+        for warning in item.linear_metadata.comparison_warnings
+    ]
     return {
         "results": results,
         "metadata": metadata,
@@ -321,6 +359,7 @@ def render_staged_canonical_web_request(
     )
 
 
+@web_error_stage("resource-staging")
 def _render_staged_canonical_web_request_with_prepared_inputs(
     payload: Mapping[str, Any],
     *,

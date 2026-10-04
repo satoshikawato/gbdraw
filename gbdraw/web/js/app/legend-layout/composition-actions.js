@@ -719,13 +719,67 @@ const wireBounds = (bounds) => ({
   y: wireNumber(bounds.y)
 });
 
-const editorPadding = (value) => {
-  if (!isPlainObject(value)) return null;
-  const padding = Object.fromEntries(['top', 'right', 'bottom', 'left'].map((side) => {
-    const number = Number(value[side]);
+const CANVAS_PADDING_SIDES = Object.freeze(['top', 'right', 'bottom', 'left']);
+
+/** Normalize editor canvas padding; invalid or negative sides are 0. */
+export const normalizeCanvasPadding = (value) => Object.fromEntries(
+  CANVAS_PADDING_SIDES.map((side) => {
+    const number = Number(value?.[side]);
     return [side, Number.isFinite(number) && number >= 0 ? number : 0];
-  }));
-  return Object.values(padding).some((number) => number !== 0) ? padding : null;
+  })
+);
+
+export const hasCanvasPadding = (value) => (
+  Object.values(normalizeCanvasPadding(value)).some((number) => number !== 0)
+);
+
+const setRootAttribute = (svg, name, value) => {
+  if (svg.getAttribute(name) === value) return false;
+  svg.setAttribute(name, value);
+  return true;
+};
+
+/**
+ * Apply editor canvas padding around the unpadded canvas of one SVG root. The
+ * unpadded viewBox and size are recorded once on the root, so applying the
+ * same padding again changes nothing. Returns whether the root changed.
+ */
+export const applyCanvasPaddingToSvg = (svg, value) => {
+  const padding = normalizeCanvasPadding(value);
+  const padded = Object.values(padding).some((number) => number !== 0);
+  const recordedBase = svg.getAttribute('data-original-view-box');
+  if (!recordedBase && !padded) return false;
+  const base = recordedBase || svg.getAttribute('viewBox');
+  const [x, y, width, height] = String(base || '').trim().split(/[\s,]+/).map(Number);
+  if (![x, y, width, height].every(Number.isFinite) || width <= 0 || height <= 0) {
+    throw new Error('The SVG base viewBox is invalid. Regenerate the diagram.');
+  }
+  const baseWidth = svg.getAttribute('data-original-width')
+    || String(Number.parseFloat(svg.getAttribute('width')) || width);
+  const baseHeight = svg.getAttribute('data-original-height')
+    || String(Number.parseFloat(svg.getAttribute('height')) || height);
+  let changed = false;
+  if (!recordedBase) {
+    changed = setRootAttribute(svg, 'data-original-view-box', base) || changed;
+    changed = setRootAttribute(svg, 'data-original-width', baseWidth) || changed;
+    changed = setRootAttribute(svg, 'data-original-height', baseHeight) || changed;
+  }
+  if (!padded) {
+    changed = setRootAttribute(svg, 'viewBox', base) || changed;
+    changed = setRootAttribute(svg, 'width', `${baseWidth}px`) || changed;
+    return setRootAttribute(svg, 'height', `${baseHeight}px`) || changed;
+  }
+  const paddedWidth = width + padding.left + padding.right;
+  const paddedHeight = height + padding.top + padding.bottom;
+  const scaled = (size, extent, paddedExtent) => {
+    const number = Number.parseFloat(size);
+    return number === extent ? paddedExtent : number * (paddedExtent / extent);
+  };
+  changed = setRootAttribute(svg, 'viewBox', [
+    x - padding.left, y - padding.top, paddedWidth, paddedHeight
+  ].map(wireNumber).join(' ')) || changed;
+  changed = setRootAttribute(svg, 'width', `${wireNumber(scaled(baseWidth, width, paddedWidth))}px`) || changed;
+  return setRootAttribute(svg, 'height', `${wireNumber(scaled(baseHeight, height, paddedHeight))}px`) || changed;
 };
 
 export const applyCompositionEdit = (svg, options = {}) => {
@@ -825,72 +879,13 @@ export const applyCompositionEdit = (svg, options = {}) => {
   };
   const baseWidth = wireNumber(plan.width);
   const baseHeight = wireNumber(plan.height);
-  if (svg.dataset) {
-    svg.dataset.originalViewBox = `0 0 ${baseWidth} ${baseHeight}`;
-    svg.dataset.originalWidth = String(baseWidth);
-    svg.dataset.originalHeight = String(baseHeight);
-  }
-  const padding = editorPadding(options.canvasPadding);
-  if (padding) {
-    const width = baseWidth + padding.left + padding.right;
-    const height = baseHeight + padding.top + padding.bottom;
-    svg.setAttribute('viewBox', `${-padding.left} ${-padding.top} ${wireNumber(width)} ${wireNumber(height)}`);
-    svg.setAttribute('width', `${wireNumber(width)}px`);
-    svg.setAttribute('height', `${wireNumber(height)}px`);
-  } else {
-    svg.setAttribute('viewBox', `0 0 ${baseWidth} ${baseHeight}`);
-    svg.setAttribute('width', `${baseWidth}px`);
-    svg.setAttribute('height', `${baseHeight}px`);
-  }
+  svg.setAttribute('data-original-view-box', `0 0 ${baseWidth} ${baseHeight}`);
+  svg.setAttribute('data-original-width', String(baseWidth));
+  svg.setAttribute('data-original-height', String(baseHeight));
+  applyCanvasPaddingToSvg(svg, options.canvasPadding);
   svg.setAttribute(COMPOSITION_SCHEMA_ATTRIBUTE, String(COMPOSITION_SCHEMA_VERSION));
   svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(nextMetadata));
   return bindCompositionMetadata(svg);
-};
-
-export const reconcileCompositionTitle = (
-  svg,
-  titleTarget,
-  titleSide = 'none',
-  { canvasPadding = null } = {}
-) => {
-  const metadata = parseCompositionMetadata(svg);
-  if (!TITLE_SIDES.has(titleSide)) fail(`Unknown title side ${JSON.stringify(titleSide)}.`);
-
-  targetsFor(svg, ROLE_SELECTORS.title).forEach((target) => {
-    if (target !== titleTarget) target.removeAttribute(COMPOSITION_ROLE_ATTRIBUTE);
-  });
-
-  let titlePayload = null;
-  if (titleTarget) {
-    if (titleSide !== 'none') titleTarget.removeAttribute('display');
-    let leading = readLeadingTranslate(titleTarget.getAttribute?.('transform') || '');
-    if (!leading.found) {
-      titleTarget.setAttribute(
-        'transform',
-        prependTranslate(titleTarget.getAttribute?.('transform'), 0, 0)
-      );
-      leading = readLeadingTranslate(titleTarget.getAttribute('transform'));
-    }
-    titleTarget.setAttribute(COMPOSITION_ROLE_ATTRIBUTE, 'title');
-    titlePayload = metadata.title || targetPayload(
-      'title',
-      wireTranslation([leading.x, leading.y]),
-      'localBounds',
-      wireBounds(measureCompositionTargetLocalBounds(titleTarget))
-    );
-  }
-
-  const nextMetadata = {
-    ...metadata,
-    title: titlePayload,
-    titleSide: titleTarget ? titleSide : 'none'
-  };
-  svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(nextMetadata));
-  return applyCompositionEdit(svg, {
-    titleSide: nextMetadata.titleSide,
-    titleLocalBounds: titleTarget ? measureCompositionTargetLocalBounds(titleTarget) : null,
-    canvasPadding
-  });
 };
 
 export const resetCompositionUserDeltas = (svg) => {
@@ -1153,3 +1148,123 @@ export const normalizeLegacyComposition = (
 };
 
 export const compositionUserDeltas = (svg) => userDeltas(bindCompositionMetadata(svg));
+
+const stableFeatureIds = (target) => new Set(
+  Array.from(target.querySelectorAll?.('[data-gbdraw-stable-feature-id]') || [])
+    .map((feature) => String(
+      feature.getAttribute?.('data-gbdraw-stable-feature-id') || ''
+    ).trim())
+    .filter(Boolean)
+);
+
+const legacyRecordKey = (target, decisions) => {
+  const available = stableFeatureIds(target);
+  if (available.size === 0) return '';
+  const matches = decisions.filter((decision) => {
+    const anchor = decision?.anchor;
+    return anchor && [anchor.stableFeatureSvgId, anchor.biologicalFeatureId]
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+      .some((value) => available.has(value));
+  });
+  if (matches.length > 1) {
+    fail('Legacy composition metadata binds one record group to multiple alignment records.');
+  }
+  return matches.length === 1 ? String(matches[0].recordKey || '') : '';
+};
+
+const legacyRenderedTranslation = (target, fallbackValue) => {
+  // Before record-keyed translation metadata, ordinary Linear output stored
+  // the final X translation as the record group's second translate. Y was the
+  // renderer's row position, so the keyed Y baseline remains authoritative.
+  // Grid output already had data-record-key; it is intentionally rejected by
+  // this legacy-only path because its second translate also contains grid X.
+  const outer = readLeadingTranslate(target.getAttribute?.('transform') || '');
+  const inner = outer.found ? readLeadingTranslate(outer.tail) : { found: false };
+  if (!inner.found) {
+    fail('Legacy record composition has no materializable record translation.');
+  }
+  return { x: inner.x, y: fallbackValue.y };
+};
+
+// This is the only bridge from SVG composition placement to the record-keyed
+// translation owner. Current SVGs bind directly by recordKey. Released
+// pre-recordKey SVGs bind once through the active plan's stable feature IDs;
+// DOM order, row number, rendered record ID, and array position never become
+// persisted identity.
+export const materializeRecordTranslations = (
+  svg,
+  baseTranslations = [],
+  recordKeys = [],
+  activePlan = null
+) => {
+  const binding = bindCompositionMetadata(svg);
+  const deltas = userDeltas(binding).primary;
+  const fallback = new Map(
+    (Array.isArray(baseTranslations) ? baseTranslations : []).map((entry) => [
+      String(entry?.recordKey || ''),
+      { x: Number(entry?.x), y: Number(entry?.y) }
+    ])
+  );
+  const decisions = Array.isArray(activePlan?.records) ? activePlan.records : [];
+  const decisionByRecord = new Map(
+    decisions.map((decision) => [String(decision?.recordKey || ''), decision])
+  );
+  const byRecord = new Map();
+  binding.primary.targets.forEach((target, index) => {
+    const explicitRecordKey = String(
+      target.getAttribute?.('data-record-key') || ''
+    ).trim();
+    const recordKey = explicitRecordKey || legacyRecordKey(target, decisions);
+    if (!recordKey) return;
+    if (byRecord.has(recordKey)) {
+      fail(`Composition metadata binds duplicate record key ${JSON.stringify(recordKey)}.`);
+    }
+    const fallbackValue = fallback.get(recordKey) || { x: 0, y: 0 };
+    const rawRenderedX = target.getAttribute?.('data-record-translation-x');
+    const rawRenderedY = target.getAttribute?.('data-record-translation-y');
+    const renderedX = rawRenderedX === null ? Number.NaN : Number(rawRenderedX);
+    const renderedY = rawRenderedY === null ? Number.NaN : Number(rawRenderedY);
+    if ((rawRenderedX === null) !== (rawRenderedY === null)) {
+      fail(`Composition metadata has an incomplete translation for record ${JSON.stringify(recordKey)}.`);
+    }
+    let rendered = { x: fallbackValue.x, y: fallbackValue.y };
+    if (Number.isFinite(renderedX) && Number.isFinite(renderedY)) {
+      rendered = { x: renderedX, y: renderedY };
+    } else if (rawRenderedX !== null || rawRenderedY !== null) {
+      fail(`Composition metadata has a non-finite translation for record ${JSON.stringify(recordKey)}.`);
+    } else if (!explicitRecordKey && activePlan) {
+      rendered = legacyRenderedTranslation(target, fallbackValue);
+    } else if (explicitRecordKey && activePlan) {
+      fail(`Composition metadata cannot materialize record ${JSON.stringify(recordKey)}. Regenerate the diagram.`);
+    }
+    const [deltaX, deltaY] = deltas[index] || [0, 0];
+    byRecord.set(recordKey, {
+      recordKey,
+      x: rendered.x + deltaX,
+      y: rendered.y + deltaY
+    });
+  });
+  const orderedKeys = Array.isArray(recordKeys) && recordKeys.length > 0
+    ? recordKeys.map((key) => String(key || ''))
+    : [...byRecord.keys()];
+  return orderedKeys.map((recordKey) => {
+    const materialized = byRecord.get(recordKey) || fallback.get(recordKey);
+    const decision = decisionByRecord.get(recordKey);
+    if (
+      activePlan
+      && decision?.status !== 'skipped'
+      && !byRecord.has(recordKey)
+    ) {
+      fail(`Composition metadata cannot bind alignment record ${JSON.stringify(recordKey)}.`);
+    }
+    if (!materialized || !Number.isFinite(materialized.x) || !Number.isFinite(materialized.y)) {
+      fail(`Composition metadata has no translation for record ${JSON.stringify(recordKey)}.`);
+    }
+    return {
+      recordKey,
+      x: Number(materialized.x),
+      y: Number(materialized.y)
+    };
+  });
+};

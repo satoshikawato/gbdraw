@@ -131,6 +131,17 @@ export const resolveColorToHex = (colorValue) => {
   return resolveBrowserNamedColor(trimmed) || trimmed;
 };
 
+// Specific-color table domain, shared with Python's read_color_table:
+// `none`, #RGB, #RRGGBB, or a color name. The browser resolves a name to hex;
+// without a DOM the name is left for Python to validate.
+export const normalizeSpecificRuleColor = (colorValue) => {
+  const color = String(colorValue ?? '').trim().toLowerCase();
+  if (color === 'none' || /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/.test(color)) return color;
+  if (!/^[a-z]+$/.test(color)) return null;
+  if (!globalThis.document?.createElement) return color;
+  return resolveBrowserNamedColor(color)?.toLowerCase() || null;
+};
+
 export const colorValueMode = (colorValue) => {
   if (colorValue === null || colorValue === undefined || String(colorValue).trim() === '') {
     return 'auto';

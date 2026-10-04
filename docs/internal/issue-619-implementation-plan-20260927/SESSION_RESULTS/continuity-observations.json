@@ -1,0 +1,144 @@
+{
+  "sourceSha": "eef7c9469912af22a07eb0eaece5d6e9a8a06497",
+  "snapshotRuntimeMatchesCheckout": true,
+  "fixture": "gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json",
+  "fixtureSha256": "d70eb5bba1796df80733792af1f81cfd210bbfe042eaf6c71a3abc710affcc17",
+  "runtimeTreeSha256": "4c1f77c0109f6318fac612449d6b1e60c0879612144e314e3977a07d27da1410",
+  "wheelSha256": "81278bffd43eb41211fc65188abbd3b6b6cddf99a29efc490215e15a0bf98ea5",
+  "pythonVersion": "3.13.3",
+  "playwrightVersion": "1.61.0",
+  "browserVersion": "149.0.7827.55",
+  "observations": [],
+  "variants": [
+    {
+      "name": "disabled",
+      "saveAccepted": true,
+      "loadAccepted": true,
+      "native": {
+        "accepted": true,
+        "width": {
+          "value": "1.",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "1e-3",
+          "unit": "factor"
+        }
+      },
+      "width": {
+        "value": "1.",
+        "unit": "px"
+      },
+      "radius": {
+        "value": "1e-3",
+        "unit": "factor"
+      },
+      "restoredFlags": {
+        "enabled": false,
+        "useSlots": true
+      },
+      "requestAndResultPreserved": true,
+      "sourceConfigPresent": true,
+      "downloadSha256": "90ac52aaaf7430d5d161274dc37eba74c7d4a6bf485c531d93887909a7b6478e"
+    },
+    {
+      "name": "inactive",
+      "saveAccepted": true,
+      "loadAccepted": true,
+      "native": {
+        "accepted": true,
+        "width": {
+          "value": "1.",
+          "unit": "px"
+        },
+        "radius": {
+          "value": "1e-3",
+          "unit": "factor"
+        }
+      },
+      "width": {
+        "value": "1.",
+        "unit": "px"
+      },
+      "radius": {
+        "value": "1e-3",
+        "unit": "factor"
+      },
+      "restoredFlags": {
+        "enabled": true,
+        "useSlots": false
+      },
+      "requestAndResultPreserved": true,
+      "sourceConfigPresent": true,
+      "downloadSha256": "39088a8ce70bb14f8a8924ca2f3ae786f4705b1365a708b252806fc049558869"
+    },
+    {
+      "name": "settings-only",
+      "saveAccepted": false,
+      "error": {
+        "summary": "Save Session could not validate the session data.",
+        "details": []
+      },
+      "consoleErrors": [
+        "Session writer validation failed. Error: Settings-only Session cannot contain committed render artifacts.\n    at validateSettingsOnlyDocument (http://127.0.0.1:43909/gbdraw/web/js/services/session-authority.js:298:11)\n    at validateSessionAuthorityInventory (http://127.0.0.1:43909/gbdraw/web/js/services/session-authority.js:449:51)\n    at exportSession (http://127.0.0.1:43909/gbdraw/web/js/services/config.js:4205:5)\n    at async http://127.0.0.1:43909/gbdraw/web/js/app/app-setup.js:3562:16"
+      ],
+      "width": {
+        "value": "1.",
+        "unit": "px"
+      },
+      "radius": {
+        "value": "1e-3",
+        "unit": "factor"
+      },
+      "requestAndResultPreserved": true
+    },
+    {
+      "name": "settings-only-control",
+      "saveAccepted": false,
+      "error": {
+        "summary": "Save Session could not validate the session data.",
+        "details": []
+      },
+      "consoleErrors": [
+        "Session writer validation failed. Error: Settings-only Session cannot contain committed render artifacts.\n    at validateSettingsOnlyDocument (http://127.0.0.1:43909/gbdraw/web/js/services/session-authority.js:298:11)\n    at validateSessionAuthorityInventory (http://127.0.0.1:43909/gbdraw/web/js/services/session-authority.js:449:51)\n    at exportSession (http://127.0.0.1:43909/gbdraw/web/js/services/config.js:4205:5)\n    at async http://127.0.0.1:43909/gbdraw/web/js/app/app-setup.js:3562:16",
+        "Session writer validation failed. Error: Settings-only Session cannot contain committed render artifacts.\n    at validateSettingsOnlyDocument (http://127.0.0.1:43909/gbdraw/web/js/services/session-authority.js:298:11)\n    at validateSessionAuthorityInventory (http://127.0.0.1:43909/gbdraw/web/js/services/session-authority.js:449:51)\n    at exportSession (http://127.0.0.1:43909/gbdraw/web/js/services/config.js:4205:5)\n    at async http://127.0.0.1:43909/gbdraw/web/js/app/app-setup.js:3562:16"
+      ],
+      "width": null,
+      "radius": null,
+      "requestAndResultPreserved": true
+    },
+    {
+      "name": "cli-origin",
+      "saveAccepted": true,
+      "loadAccepted": true,
+      "native": {
+        "accepted": true,
+        "configPresent": true
+      },
+      "width": {
+        "$absent": true
+      },
+      "radius": {
+        "$absent": true
+      },
+      "restoredFlags": {
+        "enabled": null,
+        "useSlots": false
+      },
+      "requestAndResultPreserved": true,
+      "sourceConfigPresent": false,
+      "downloadSha256": "57875b565715e5ac54f2a5b2f68182d0624b50e048e45d759803fc394dfdcda4"
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [
+    "Session writer validation failed. Error: Settings-only Session cannot contain committed render artifacts.\n    at validateSettingsOnlyDocument (http://127.0.0.1:43909/gbdraw/web/js/services/session-authority.js:298:11)\n    at validateSessionAuthorityInventory (http://127.0.0.1:43909/gbdraw/web/js/services/session-authority.js:449:51)\n    at exportSession (http://127.0.0.1:43909/gbdraw/web/js/services/config.js:4205:5)\n    at async http://127.0.0.1:43909/gbdraw/web/js/app/app-setup.js:3562:16",
+    "Session writer validation failed. Error: Settings-only Session cannot contain committed render artifacts.\n    at validateSettingsOnlyDocument (http://127.0.0.1:43909/gbdraw/web/js/services/session-authority.js:298:11)\n    at validateSessionAuthorityInventory (http://127.0.0.1:43909/gbdraw/web/js/services/session-authority.js:449:51)\n    at exportSession (http://127.0.0.1:43909/gbdraw/web/js/services/config.js:4205:5)\n    at async http://127.0.0.1:43909/gbdraw/web/js/app/app-setup.js:3562:16"
+  ],
+  "externalRequests": [],
+  "limits": [
+    "No new controls, selector/IME transaction, Generate geometry, SVG download/replay or Auto unit lifetime was implemented or tested.",
+    "Fixture scalar changes call the existing History manager in a real app; they do not prove future DOM input transaction wiring.",
+    "Native acceptance alone is not Web draft admission. NaN/Infinity JSON bytes are deliberately nonstandard negative reader inputs."
+  ]
+}

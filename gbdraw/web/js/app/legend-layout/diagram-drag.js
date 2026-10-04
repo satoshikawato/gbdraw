@@ -9,12 +9,15 @@ import {
   isMultiRecordCanvasSvg,
   isRecordGroup
 } from '../record-groups.js';
-import { serializeCleanSvg } from '../../services/svg-serialization.js';
+import { setClassToken } from '../../services/svg-serialization.js';
 
-export const createDiagramDragActions = ({ state, history = null }) => {
+export const createDiagramDragActions = ({
+  state,
+  history = null,
+  previewRuntime = null,
+  similarityAlignmentLifecycle = null
+}) => {
   const {
-    results,
-    selectedResultIndex,
     svgContainer,
     diagramElements,
     diagramElementIds,
@@ -31,8 +34,7 @@ export const createDiagramDragActions = ({ state, history = null }) => {
     plotTitleAutoTransform,
     plotTitleUserOffset,
     layoutRepositionMode,
-    zoom,
-    skipCaptureBaseConfig
+    zoom
   } = state;
 
   const LEGEND_GROUP_IDS = new Set([
@@ -80,19 +82,10 @@ export const createDiagramDragActions = ({ state, history = null }) => {
   };
 
   const beginDragTransaction = (label) => {
+    // Each drag gesture owns its transaction and settles a focused control's (N-18).
     diagramDragTxPromise = history?.begin
-      ? history.begin(label, { source: 'diagram-drag' })
+      ? history.begin(label, { source: 'diagram-drag', owner: Symbol(label) })
       : null;
-  };
-
-  const persistCurrentSvg = () => {
-    const svg = svgContainer.value?.querySelector?.('svg');
-    const idx = selectedResultIndex.value;
-    if (!svg || idx < 0 || results.value.length <= idx) return;
-    skipCaptureBaseConfig.value = true;
-    const nextResults = [...results.value];
-    nextResults[idx] = { ...results.value[idx], content: serializeCleanSvg(svg) };
-    results.value = nextResults;
   };
 
   const isLengthBarGroup = (group) => (group?.id || '') === 'length_bar';
@@ -245,11 +238,16 @@ export const createDiagramDragActions = ({ state, history = null }) => {
       }
     });
 
-    setElementCursor(lengthBarElement.value, enabled ? 'grab' : '');
-    setElementCursor(plotTitleElement.value, enabled ? 'grab' : '');
+    [lengthBarElement.value, plotTitleElement.value].forEach((element) => {
+      setClassToken(element, 'gbdraw-preview-layout-target', true);
+      setElementCursor(element, activeDragElements.includes(element) && diagramDragging.value
+        ? 'grabbing' : enabled ? 'grab' : 'help');
+    });
   };
 
   const startLengthBarDrag = (e, group) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!isLayoutRepositionModeEnabled()) return;
     if (!group) return;
 
@@ -268,12 +266,15 @@ export const createDiagramDragActions = ({ state, history = null }) => {
     activeDragOriginalTransforms = new Map([[group, parseTransform(group.getAttribute('transform'))]]);
     group.style.opacity = '0.8';
     group.style.willChange = 'transform';
+    setElementCursor(group, 'grabbing');
 
     document.addEventListener('mousemove', onDiagramDrag);
     document.addEventListener('mouseup', endDiagramDrag);
   };
 
   const startPlotTitleDrag = (e, group) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!isLayoutRepositionModeEnabled()) return;
     if (!group) return;
 
@@ -292,12 +293,15 @@ export const createDiagramDragActions = ({ state, history = null }) => {
     activeDragOriginalTransforms = new Map([[group, parseTransform(group.getAttribute('transform'))]]);
     group.style.opacity = '0.8';
     group.style.willChange = 'transform';
+    setElementCursor(group, 'grabbing');
 
     document.addEventListener('mousemove', onDiagramDrag);
     document.addEventListener('mouseup', endDiagramDrag);
   };
 
   const startDiagramDrag = (e) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!isLayoutRepositionModeEnabled()) return;
     if (e.shiftKey) return;
     if (
@@ -349,6 +353,9 @@ export const createDiagramDragActions = ({ state, history = null }) => {
     cancelDiagramDragFrame();
     pendingDiagramPointer = null;
     beginDragTransaction(activeDragMode === 'record' ? 'Move record' : 'Move diagram');
+    if (activeDragMode === 'record') {
+      similarityAlignmentLifecycle?.beforeRecordDrag?.();
+    }
     diagramDragging.value = true;
     plotTitleDragging.value = false;
     diagramDragStart.x = e.clientX;
@@ -361,6 +368,7 @@ export const createDiagramDragActions = ({ state, history = null }) => {
       activeDragOriginalTransforms.set(el, parseTransform(el.getAttribute('transform')));
       el.style.opacity = '0.8';
       el.style.willChange = 'transform';
+      setElementCursor(el, 'grabbing');
     });
 
     document.addEventListener('mousemove', onDiagramDrag);
@@ -372,6 +380,8 @@ export const createDiagramDragActions = ({ state, history = null }) => {
   };
 
   const applyDiagramDragPosition = (clientX, clientY) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     if (!diagramDragging.value || activeDragElements.length === 0) return;
 
     const dragStart = getActiveDragStart();
@@ -440,13 +450,20 @@ export const createDiagramDragActions = ({ state, history = null }) => {
       el.style.opacity = '1';
       el.style.willChange = '';
     });
+    const completedDragMode = activeDragMode;
     activeDragElements = [];
     activeDragOriginalTransforms = new Map();
     activeDragMode = 'group';
     activeLengthBarOffsetStart = { x: lengthBarUserOffset.x, y: lengthBarUserOffset.y };
     activePlotTitleOffsetStart = { x: plotTitleUserOffset.x, y: plotTitleUserOffset.y };
     pendingDiagramPointer = null;
-    persistCurrentSvg();
+    refreshDiagramDragAffordances();
+    if (completedDragMode === 'record') {
+      similarityAlignmentLifecycle?.afterRecordDrag?.({
+        moved: Math.abs(deltaX) > 1e-9 || Math.abs(deltaY) > 1e-9
+      });
+    }
+    previewRuntime?.commitActiveResultEdit('diagram-drag');
     const tx = diagramDragTxPromise ? await diagramDragTxPromise : null;
     diagramDragTxPromise = null;
     if (tx && history?.commit) await history.commit(tx);

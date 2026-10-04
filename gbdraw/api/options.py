@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, replace
 import math
 from numbers import Integral, Real
 from pathlib import Path
+from types import MappingProxyType
 from typing import Literal, Mapping, Sequence, cast
 
 from pandas import DataFrame  # type: ignore[reportMissingImports]
@@ -28,14 +29,15 @@ from gbdraw.analysis.collinearity_units import (  # type: ignore[reportMissingIm
     normalize_collinearity_unit_mode,
 )
 from gbdraw.analysis.conservation import (  # type: ignore[reportMissingImports]
+    ConservationSearchResult,
     normalize_conservation_reference,
 )
 from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
     OrthogroupResult,
     OrthogroupGraphResult,
     normalize_orthogroup_membership_mode,
-    normalize_protein_blastp_mode,
 )
+from gbdraw.comparisons.losat_runtime import AUTOMATIC_LOSAT_BIN
 from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
 from gbdraw.config.models.objects import (  # type: ignore[reportMissingImports]
     normalize_pairwise_match_style,
@@ -51,6 +53,7 @@ from gbdraw.mode_profiles import (
     DiagramMode,
     get_mode_profile,
     resolve_mode_profile_overrides,
+    validate_dinucleotide,
 )
 from gbdraw.tracks import (  # type: ignore[reportMissingImports]
     CircularTrackSlot,
@@ -281,19 +284,28 @@ def _validate_center_reserved_radius(value: object, *, field_name: str) -> float
     return radius
 
 
+def _invalid_input(field_name: str, reason: str) -> dict[str, str]:
+    return {
+        "code": "INPUT_INVALID",
+        "field": field_name.rsplit(".", 1)[-1],
+        "reason": reason,
+    }
+
+
 def _validate_positive_real(value: object, *, field_name: str) -> float | None:
     if value is None:
         return None
-    if isinstance(value, bool) or not isinstance(value, Real):
-        raise ValidationError(f"{field_name} must be a finite number > 0 or None.")
-    try:
-        normalized = float(value)
-    except (OverflowError, TypeError, ValueError) as exc:
-        raise ValidationError(
-            f"{field_name} must be a finite number > 0 or None."
-        ) from exc
+    normalized = math.nan
+    if not isinstance(value, bool) and isinstance(value, Real):
+        try:
+            normalized = float(value)
+        except (OverflowError, TypeError, ValueError):
+            normalized = math.nan
     if not math.isfinite(normalized) or normalized <= 0:
-        raise ValidationError(f"{field_name} must be a finite number > 0 or None.")
+        raise ValidationError(
+            f"{field_name} must be a finite number > 0 or None.",
+            diagnostic=_invalid_input(field_name, "POSITIVE_OR_AUTO"),
+        )
     return normalized
 
 
@@ -307,7 +319,13 @@ def _validate_positive_int(
         return None
     if isinstance(value, bool) or not isinstance(value, Integral) or int(value) <= 0:
         suffix = " or None" if allow_none else ""
-        raise ValidationError(f"{field_name} must be a positive integer{suffix}.")
+        raise ValidationError(
+            f"{field_name} must be a positive integer{suffix}.",
+            diagnostic=_invalid_input(
+                field_name,
+                "POSITIVE_INTEGER_OR_AUTO" if allow_none else "POSITIVE_INTEGER",
+            ),
+        )
     return int(value)
 
 
@@ -504,7 +522,8 @@ class CircularMultiRecordOptions:
             or min_radius_ratio > 1
         ):
             raise ValidationError(
-                "multi_record_min_radius_ratio must be a finite number in (0, 1]."
+                "multi_record_min_radius_ratio must be a finite number in (0, 1].",
+                diagnostic=_invalid_input("multi_record_min_radius_ratio", "POSITIVE_UNIT_INTERVAL"),
             )
         for field_name, value in (
             ("multi_record_column_gap_ratio", column_gap_ratio),
@@ -534,11 +553,44 @@ class CircularMultiRecordOptions:
 
 
 @dataclass(frozen=True)
+class LinearRecordTranslation:
+    """Persistent base translation for one displayed Linear record."""
+
+    record_key: str
+    x: float = 0.0
+    y: float = 0.0
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.record_key, str)
+            or not self.record_key.strip()
+            or "\0" in self.record_key
+        ):
+            raise ValidationError(
+                "record_key must be a non-empty string without NUL."
+            )
+        object.__setattr__(self, "record_key", self.record_key.strip())
+        for field_name in ("x", "y"):
+            value = getattr(self, field_name)
+            if isinstance(value, bool) or not isinstance(value, Real):
+                raise ValidationError(
+                    f"{field_name} must be a finite number."
+                )
+            normalized = float(value)
+            if not math.isfinite(normalized):
+                raise ValidationError(
+                    f"{field_name} must be a finite number."
+                )
+            object.__setattr__(self, field_name, normalized)
+
+
+@dataclass(frozen=True)
 class LinearMultiRecordOptions:
     """Layout values used only by Linear multi-record rows."""
 
     record_gap_px: float = 24.0
     multi_record_positions: Sequence[str] | None = None
+    record_translations: Sequence[LinearRecordTranslation] = ()
 
     def __post_init__(self) -> None:
         if isinstance(self.record_gap_px, bool) or not isinstance(
@@ -565,6 +617,252 @@ class LinearMultiRecordOptions:
             if not all(isinstance(item, str) and item.strip() for item in positions):
                 raise ValidationError("multi_record_positions must contain non-empty strings.")
             object.__setattr__(self, "multi_record_positions", positions)
+        if isinstance(self.record_translations, (str, bytes)) or not isinstance(
+            self.record_translations,
+            Sequence,
+        ):
+            raise ValidationError(
+                "record_translations must be a sequence of LinearRecordTranslation values."
+            )
+        translations = tuple(self.record_translations)
+        if not all(
+            isinstance(item, LinearRecordTranslation) for item in translations
+        ):
+            raise ValidationError(
+                "record_translations must contain LinearRecordTranslation values."
+            )
+        keys = [item.record_key for item in translations]
+        if len(set(keys)) != len(keys):
+            raise ValidationError(
+                "record_translations must not contain duplicate record keys."
+            )
+        object.__setattr__(self, "record_translations", translations)
+
+
+LosatProgram = Literal["losatn", "tlosatx", "losatp"]
+LosatpMode = Literal["similarity_groups", "collinear", "pairwise"]
+LosatnTask = Literal["megablast", "blastn", "dc-megablast"]
+_LOSAT_PROGRAMS: tuple[str, ...] = ("losatn", "tlosatx", "losatp")
+LOSATN_TASKS: tuple[str, ...] = ("megablast", "blastn", "dc-megablast")
+DEFAULT_LOSATN_TASK = "megablast"
+
+# The one table between a typed LOSATP display mode and its persisted
+# ``generatedProteinComparison.mode`` spelling, which is also the protein
+# analysis spelling (design D3, D6). ``"none"`` keeps the search settings of
+# protein evidence that a request already carries (a resolved request); no
+# search runs.
+LOSATP_MODE_WIRE: Mapping[str, str] = MappingProxyType(
+    {
+        "similarity_groups": "orthogroup",
+        "collinear": "collinear",
+        "pairwise": "pairwise",
+        "none": "none",
+    }
+)
+
+
+@dataclass(frozen=True)
+class LosatRuntimeOptions:
+    """Executable choice and thread count for LOSAT searches.
+
+    ``None`` executables select the runtime automatically. The NCBI BLAST+
+    executable is the one for the selected program.
+    """
+
+    losat_executable: str | None = None
+    ncbi_blast_executable: str | None = None
+    threads: int | None = None
+
+    def __post_init__(self) -> None:
+        for name in ("losat_executable", "ncbi_blast_executable"):
+            value = getattr(self, name)
+            if value is None:
+                continue
+            if not isinstance(value, str) or not value.strip() or "\0" in value:
+                raise ValidationError(
+                    f"{name} must be a non-empty string or None.",
+                    diagnostic={"code": "COMPARISON_INPUT"},
+                )
+            normalized: str | None = value.strip()
+            if name == "losat_executable" and normalized == AUTOMATIC_LOSAT_BIN:
+                normalized = None
+            object.__setattr__(self, name, normalized)
+        if (
+            self.losat_executable is not None
+            and self.ncbi_blast_executable is not None
+        ):
+            raise ValidationError(
+                "Pass either losat_executable or ncbi_blast_executable, not both.",
+                diagnostic={"code": "COMPARISON_INPUT"},
+            )
+        object.__setattr__(
+            self,
+            "threads",
+            _validate_positive_int(
+                self.threads,
+                field_name="threads",
+                allow_none=True,
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class LosatSearchOptions:
+    """One LOSAT comparison search for a diagram.
+
+    ``losatp_mode`` is required for ``losatp``. ``losatn_task`` applies to
+    ``losatn`` (default ``megablast``). ``record_gencodes`` applies to
+    ``tlosatx``: empty uses the runtime default table (1) for every record, one
+    value applies to every record input, otherwise one value (or ``None``) per
+    record input. ``pairs`` lists explicit ``(query, subject)`` record indexes;
+    ``None`` compares adjacent rows.
+    """
+
+    program: LosatProgram
+    pairs: Sequence[tuple[int, int]] | None = None
+    losatp_mode: LosatpMode | Literal["none"] | None = None
+    losatn_task: LosatnTask | None = None
+    record_gencodes: Sequence[int | None] = ()
+    losatp_max_hits: int = 5
+    losatp_max_target_seqs: int | None = None
+    losatp_member_max_hits: int | None = None
+    runtime: LosatRuntimeOptions = field(default_factory=LosatRuntimeOptions)
+
+    def _option_program_error(self, field_name: str) -> ValidationError:
+        return ValidationError(
+            f"{field_name} does not apply to LOSAT program {self.program!r}.",
+            diagnostic={
+                "code": "COMPARISON_INPUT",
+                "reason": "LOSAT_OPTION_PROGRAM",
+                "field": field_name,
+                "program": self.program,
+            },
+        )
+
+    def __post_init__(self) -> None:
+        if self.program not in _LOSAT_PROGRAMS:
+            raise ValidationError(
+                "program must be one of: " + ", ".join(_LOSAT_PROGRAMS) + ".",
+                diagnostic={"code": "COMPARISON_INPUT"},
+            )
+        if self.program == "losatp":
+            self._validate_losatp()
+        else:
+            self._validate_nucleotide()
+        if self.pairs is not None:
+            object.__setattr__(self, "pairs", _normalize_record_pairs(self.pairs))
+            if self.program == "losatp" and self.losatp_mode != "pairwise":
+                raise ValidationError(
+                    "pairs requires losatp_mode 'pairwise'.",
+                    diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN"},
+                )
+        if not isinstance(self.runtime, LosatRuntimeOptions):
+            raise ValidationError(
+                "runtime must be LosatRuntimeOptions.",
+                diagnostic={"code": "COMPARISON_INPUT"},
+            )
+
+    def _validate_losatp(self) -> None:
+        for name in ("losatn_task", "record_gencodes"):
+            if getattr(self, name):
+                raise self._option_program_error(name)
+        object.__setattr__(self, "record_gencodes", ())
+        if self.losatp_mode is None:
+            raise ValidationError(
+                "losatp_mode is required when program is 'losatp'.",
+                diagnostic={"code": "COMPARISON_INPUT"},
+            )
+        if self.losatp_mode not in LOSATP_MODE_WIRE:
+            raise ValidationError(
+                "losatp_mode must be one of: similarity_groups, collinear, pairwise.",
+                diagnostic={"code": "COMPARISON_INPUT"},
+            )
+        object.__setattr__(
+            self,
+            "losatp_max_hits",
+            _validate_positive_int(self.losatp_max_hits, field_name="losatp_max_hits"),
+        )
+        for name in ("losatp_max_target_seqs", "losatp_member_max_hits"):
+            object.__setattr__(
+                self,
+                name,
+                _validate_positive_int(
+                    getattr(self, name),
+                    field_name=name,
+                    allow_none=True,
+                ),
+            )
+
+    def _validate_nucleotide(self) -> None:
+        if self.losatp_mode is not None:
+            raise self._option_program_error("losatp_mode")
+        for name, default in (
+            ("losatp_max_hits", 5),
+            ("losatp_max_target_seqs", None),
+            ("losatp_member_max_hits", None),
+        ):
+            if getattr(self, name) != default:
+                raise self._option_program_error(name)
+        if self.program == "losatn":
+            if self.record_gencodes:
+                raise self._option_program_error("record_gencodes")
+            task = DEFAULT_LOSATN_TASK if self.losatn_task is None else self.losatn_task
+            if task not in LOSATN_TASKS:
+                raise ValidationError(
+                    "losatn_task must be one of: " + ", ".join(LOSATN_TASKS) + ".",
+                    diagnostic={"code": "COMPARISON_INPUT", "field": "losatn_task"},
+                )
+            object.__setattr__(self, "losatn_task", task)
+            object.__setattr__(self, "record_gencodes", ())
+            return
+        if self.losatn_task is not None:
+            raise self._option_program_error("losatn_task")
+        gencodes = self.record_gencodes
+        if isinstance(gencodes, (str, bytes)) or not isinstance(gencodes, Sequence):
+            raise ValidationError(
+                "record_gencodes must be a sequence of positive integers or None.",
+                diagnostic={"code": "COMPARISON_INPUT", "field": "record_gencodes"},
+            )
+        object.__setattr__(
+            self,
+            "record_gencodes",
+            tuple(
+                None
+                if value is None
+                else _validate_positive_int(value, field_name="record_gencodes")
+                for value in gencodes
+            ),
+        )
+
+
+def _normalize_record_pairs(
+    pairs: object,
+) -> tuple[tuple[int, int], ...]:
+    if isinstance(pairs, (str, bytes)) or not isinstance(pairs, Sequence):
+        raise ValidationError("pairs must contain integer index pairs", diagnostic={"code": "COMPARISON_INPUT"})
+    normalized: list[tuple[int, int]] = []
+    for pair in pairs:
+        if (
+            isinstance(pair, (str, bytes))
+            or not isinstance(pair, Sequence)
+            or len(pair) != 2
+            or any(isinstance(item, bool) or not isinstance(item, Integral) for item in pair)
+            or any(int(item) < 0 for item in pair)
+        ):
+            raise ValidationError("pairs must contain integer index pairs", diagnostic={"code": "COMPARISON_INPUT"})
+        normalized.append((int(pair[0]), int(pair[1])))
+    return tuple(normalized)
+
+
+def losatp_analysis_mode(search: LosatSearchOptions | None) -> str:
+    """Return the protein-analysis mode a LOSAT search requests.
+
+    ``"none"`` means that no LOSATP search runs.
+    """
+
+    if search is None or search.program != "losatp":
+        return "none"
+    return LOSATP_MODE_WIRE[str(search.losatp_mode)]
 
 
 @dataclass(frozen=True)
@@ -751,6 +1049,29 @@ class _ModeDiagramOptions:
             field_name="depth_track_files",
             element_type=str,
         )
+        object.__setattr__(
+            self,
+            "dinucleotide",
+            validate_dinucleotide(self.dinucleotide),
+        )
+        for field_name in ("window", "step", "depth_window", "depth_step"):
+            object.__setattr__(
+                self,
+                field_name,
+                _validate_positive_int(
+                    getattr(self, field_name),
+                    field_name=field_name,
+                    allow_none=True,
+                ),
+            )
+        object.__setattr__(
+            self,
+            "plot_title_font_size",
+            _validate_positive_real(
+                self.plot_title_font_size,
+                field_name="plot_title_font_size",
+            ),
+        )
         thresholds = ComparisonThresholds(
             evalue=0.0 if self.evalue is None else self.evalue,
             bitscore=0.0 if self.bitscore is None else self.bitscore,
@@ -775,7 +1096,7 @@ class CircularDiagramOptions(_ModeDiagramOptions):
     tracks: CircularRequestTrackOptions | None = None
     output: CircularOutputOptions | None = None
     conservation_blast_files: Sequence[str] | None = None
-    conservation_fasta_files: Sequence[str | None] | None = None
+    conservation_sequence_files: Sequence[str | None] | None = None
     conservation_dataframes: Sequence[DataFrame] | None = None
     conservation_reference: Literal["query", "subject", "auto"] = "auto"
     conservation_labels: Sequence[str] | None = None
@@ -786,6 +1107,9 @@ class CircularDiagramOptions(_ModeDiagramOptions):
     species: str | None = None
     strain: str | None = None
     conservation_table_file: str | None = None
+    losat_search: LosatSearchOptions | None = None
+    conservation_losat_gencodes: Sequence[int] | None = None
+    conservation_search_results: Sequence[ConservationSearchResult] | None = None
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -826,8 +1150,8 @@ class CircularDiagramOptions(_ModeDiagramOptions):
             element_type=str,
         )
         _validate_sequence_elements(
-            self.conservation_fasta_files,
-            field_name="conservation_fasta_files",
+            self.conservation_sequence_files,
+            field_name="conservation_sequence_files",
             element_type=str,
             allow_none=True,
         )
@@ -853,10 +1177,12 @@ class CircularDiagramOptions(_ModeDiagramOptions):
                 value is not None
                 for value in (
                     self.conservation_blast_files,
-                    self.conservation_fasta_files,
+                    self.conservation_sequence_files,
                     self.conservation_dataframes,
                     self.conservation_labels,
                     self.conservation_colors,
+                    self.conservation_losat_gencodes,
+                    self.conservation_search_results,
                 )
             ):
                 raise ValidationError(
@@ -883,6 +1209,144 @@ class CircularDiagramOptions(_ModeDiagramOptions):
                 ),
             )
 
+        _validate_sequence_elements(
+            self.conservation_search_results,
+            field_name="conservation_search_results",
+            element_type=ConservationSearchResult,
+        )
+        if self.conservation_search_results is not None and any(
+            value is not None
+            for value in (self.conservation_blast_files, self.conservation_dataframes)
+        ):
+            raise ValidationError(
+                "conservation_search_results cannot be combined with "
+                "conservation_blast_files or conservation_dataframes.",
+                diagnostic={"code": "COMPARISON_INPUT", "field": "conservation_search_results"},
+            )
+        self._validate_ring_losat()
+
+    def _validate_ring_losat(self) -> None:
+        """Circular LOSATN / TLOSATX ring intent (design 3.3, 3.4)."""
+
+        search = self.losat_search
+        gencodes = self.conservation_losat_gencodes
+        if gencodes is not None:
+            if isinstance(gencodes, (str, bytes)) or not isinstance(gencodes, Sequence):
+                raise ValidationError(
+                    "conservation_losat_gencodes must be a sequence of positive integers.",
+                    diagnostic={"code": "COMPARISON_INPUT", "field": "conservation_losat_gencodes"},
+                )
+            object.__setattr__(
+                self,
+                "conservation_losat_gencodes",
+                tuple(
+                    _validate_positive_int(value, field_name="conservation_losat_gencodes")
+                    for value in gencodes
+                ),
+            )
+            gencodes = self.conservation_losat_gencodes
+        if search is None:
+            if gencodes is not None:
+                raise ValidationError(
+                    "conservation_losat_gencodes requires losat_search with program 'tlosatx'.",
+                    diagnostic={
+                        "code": "COMPARISON_INPUT",
+                        "reason": "LOSAT_OPTION_PROGRAM",
+                        "field": "conservation_losat_gencodes",
+                    },
+                )
+            return
+        if not isinstance(search, LosatSearchOptions):
+            raise ValidationError(
+                "losat_search must be LosatSearchOptions or None.",
+                diagnostic={"code": "COMPARISON_INPUT", "field": "losat_search"},
+            )
+        if search.program not in {"losatn", "tlosatx"}:
+            raise ValidationError(
+                "Circular similarity rings run LOSATN or TLOSATX; "
+                f"{search.program} is not available for rings.",
+                diagnostic={
+                    "code": "COMPARISON_INPUT",
+                    "reason": "RING_LOSAT_PROGRAM",
+                    "field": "program",
+                    "program": search.program,
+                },
+            )
+        if search.pairs is not None:
+            raise ValidationError(
+                "Circular rings compare each comparison genome with the displayed "
+                "records; losat_search.pairs applies to Linear diagrams only.",
+                diagnostic={"code": "COMPARISON_INPUT", "reason": "RING_LOSAT_INPUT", "field": "pairs"},
+            )
+        if len(tuple(search.record_gencodes)) > 1:
+            raise ValidationError(
+                "A Circular ring search takes one reference translation table "
+                f"(losat_search.record_gencodes); got {len(tuple(search.record_gencodes))}.",
+                diagnostic={"code": "COMPARISON_INPUT", "field": "record_gencodes"},
+            )
+        if gencodes is not None and search.program != "tlosatx":
+            raise ValidationError(
+                "conservation_losat_gencodes applies to TLOSATX rings only.",
+                diagnostic={
+                    "code": "COMPARISON_INPUT",
+                    "reason": "LOSAT_OPTION_PROGRAM",
+                    "field": "conservation_losat_gencodes",
+                    "program": search.program,
+                },
+            )
+
+        def ring_input_error(message: str, field_name: str) -> ValidationError:
+            return ValidationError(
+                message,
+                diagnostic={
+                    "code": "COMPARISON_INPUT",
+                    "reason": "RING_LOSAT_INPUT",
+                    "field": field_name,
+                },
+            )
+
+        for field_name in (
+            "conservation_blast_files",
+            "conservation_dataframes",
+            "conservation_search_results",
+        ):
+            if getattr(self, field_name) is not None:
+                raise ring_input_error(
+                    f"{field_name} cannot be combined with a ring LOSAT search; the "
+                    "search produces the ring rows from conservation_sequence_files.",
+                    field_name,
+                )
+        if self.conservation_reference == "query":
+            raise ring_input_error(
+                "A ring LOSAT search uses the displayed records as the subject; "
+                "conservation_reference must be 'auto' or 'subject'.",
+                "conservation_reference",
+            )
+        if self.conservation_table_file is not None:
+            return
+        sequences = tuple(self.conservation_sequence_files or ())
+        if not sequences or any(not value for value in sequences):
+            raise ring_input_error(
+                "A ring LOSAT search needs one comparison sequence file per ring "
+                "(conservation_sequence_files).",
+                "conservation_sequence_files",
+            )
+        for field_name in ("conservation_labels", "conservation_colors"):
+            values = getattr(self, field_name)
+            if values is not None and len(tuple(values)) != len(sequences):
+                raise ring_input_error(
+                    f"{field_name} must give one value per comparison sequence file "
+                    f"({len(sequences)}); got {len(tuple(values))}.",
+                    field_name,
+                )
+        if gencodes is not None and len(gencodes) not in {1, len(sequences)}:
+            raise ring_input_error(
+                "conservation_losat_gencodes must give one translation table for all "
+                f"rings or one per comparison sequence file ({len(sequences)}); got "
+                f"{len(gencodes)}.",
+                "conservation_losat_gencodes",
+            )
+
 
 @dataclass(frozen=True)
 class LinearDiagramOptions(_ModeDiagramOptions):
@@ -895,13 +1359,7 @@ class LinearDiagramOptions(_ModeDiagramOptions):
     linear_comparisons: Sequence[LinearComparison] | None = None
     protein_comparisons: Sequence[DataFrame] | None = None
     orthogroups: OrthogroupResult | OrthogroupGraphResult | None = None
-    protein_blastp_mode: Literal[
-        "none",
-        "pairwise",
-        "orthogroup",
-        "collinear",
-    ] = "none"
-    protein_comparison_pairs: Sequence[tuple[int, int]] | None = None
+    losat_search: LosatSearchOptions | None = None
     pairwise_match_style: Literal["ribbon", "curve"] = "ribbon"
     collinearity_blocks: (
         CollinearityResult | Sequence[CollinearityBlock] | None
@@ -911,18 +1369,11 @@ class LinearDiagramOptions(_ModeDiagramOptions):
     collinearity_anchor_mode: CollinearityAnchorMode | str = "rbh"
     collinearity_search_scope: CollinearitySearchScope | str = "adjacent"
     collinearity_color_mode: CollinearityColorMode | str = "orientation"
-    losatp_bin: str = "losat"
-    ncbi_blastp_bin: str | None = None
-    losatp_threads: int | None = None
-    protein_blastp_max_hits: int = 5
-    protein_blastp_candidate_limit: int | None = None
     orthogroup_membership_mode: Literal[
         "anchor_core_v1"
     ] | str = "anchor_core_v1"
-    orthogroup_member_max_hits: int | None = None
     collinear_infer_orthogroups: bool = True
     collinear_max_paralog_links_per_orthogroup: int = 2
-    align_orthogroup_feature: str | None = None
     comparison_table_file: str | None = None
 
     def __post_init__(self) -> None:
@@ -989,11 +1440,14 @@ class LinearDiagramOptions(_ModeDiagramOptions):
             "pairwise_match_style",
             normalize_pairwise_match_style(self.pairwise_match_style),
         )
-        object.__setattr__(
-            self,
-            "protein_blastp_mode",
-            normalize_protein_blastp_mode(self.protein_blastp_mode),
-        )
+        if self.losat_search is not None and not isinstance(
+            self.losat_search,
+            LosatSearchOptions,
+        ):
+            raise ValidationError(
+                "losat_search must be LosatSearchOptions or None.",
+                diagnostic={"code": "COMPARISON_INPUT"},
+            )
         object.__setattr__(
             self,
             "collinearity_unit_mode",
@@ -1025,28 +1479,14 @@ class LinearDiagramOptions(_ModeDiagramOptions):
         )
         if not isinstance(self.collinear_infer_orthogroups, bool):
             raise ValidationError("collinear_infer_orthogroups must be a boolean")
-        for field_name in (
-            "protein_blastp_max_hits",
+        object.__setattr__(
+            self,
             "collinear_max_paralog_links_per_orthogroup",
-        ):
-            object.__setattr__(
-                self,
-                field_name,
-                _validate_positive_int(
-                    getattr(self, field_name),
-                    field_name=field_name,
-                ),
-            )
-        for field_name in ("losatp_threads", "protein_blastp_candidate_limit", "orthogroup_member_max_hits"):
-            object.__setattr__(
-                self,
-                field_name,
-                _validate_positive_int(
-                    getattr(self, field_name),
-                    field_name=field_name,
-                    allow_none=True,
-                ),
-            )
+            _validate_positive_int(
+                self.collinear_max_paralog_links_per_orthogroup,
+                field_name="collinear_max_paralog_links_per_orthogroup",
+            ),
+        )
 
 
 def _resolve_options_for_mode(
@@ -1126,10 +1566,15 @@ __all__ = [
     "CircularRequestTrackOptions",
     "CircularTrackOptions",
     "LinearMultiRecordOptions",
+    "LinearRecordTranslation",
     "LinearDiagramOptions",
     "LinearOutputOptions",
     "LinearRequestTrackOptions",
     "LinearTrackOptions",
+    "LosatProgram",
+    "LosatRuntimeOptions",
+    "LosatSearchOptions",
+    "LosatpMode",
     "AnnotationOptions",
     "ColorOptions",
     "DepthTrackInput",

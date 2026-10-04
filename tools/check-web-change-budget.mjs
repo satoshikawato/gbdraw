@@ -698,6 +698,12 @@ const policyContractions = [];
 const policyExpansions = [];
 const missingPolicyKeys = [];
 const addedPolicyKeys = [];
+// A capability key that this (trusted) detector does not define authorizes nothing.
+const retiredPolicyKeys = [];
+const detectedCapabilityKeys = new Set(WEB_PRIVILEGED_CAPABILITY_KEYS);
+const isRetiredPolicyKey = (section, name) => (
+  section === 'allowedPrivilegedOwners' && !detectedCapabilityKeys.has(name)
+);
 let policyTopLevelKeysMatch = true;
 if (basePolicySource !== null && changed.has(policyPath)) {
   proposedPolicy = parsePolicy(readHeadFile(policyPath), head || 'working tree');
@@ -710,7 +716,8 @@ if (basePolicySource !== null && changed.has(policyPath)) {
     });
     Object.entries(policy[section]).forEach(([name, allowedPaths]) => {
       if (!Object.hasOwn(proposedPolicy[section], name)) {
-        missingPolicyKeys.push(`${section}.${name}`);
+        (isRetiredPolicyKey(section, name) ? retiredPolicyKeys : missingPolicyKeys)
+          .push(`${section}.${name}`);
       }
       const proposedPaths = new Set(proposedPolicy[section][name] || []);
       allowedPaths.forEach((path) => {
@@ -1004,8 +1011,22 @@ const changedProductImpactAuthorityPaths = [
   productDecisionAuthorityPath
 ].filter((path) => changed.has(path));
 const productContractAuthorityChanged = changed.has(productContractAuthorityPath);
+const productContractCompanionPaths = changedPaths
+  .filter((path) => path !== productContractAuthorityPath);
+// WEB_CHANGE_POLICY.md "Static Product Contract co-change": the exact Contract,
+// modified in place, is the only changed guard or authority, and no checker
+// implementation changes. Human Review, not the checker, verifies its receipt.
+const staticProductContractCoChange = Boolean(
+  changed.get(productContractAuthorityPath) === 'M'
+  && productContractCompanionPaths.length
+  && changedGuards.length === 1
+  && changedGuards[0] === productContractAuthorityPath
+  && changedAuthorities.length === 1
+  && changedAuthorities[0] === productContractAuthorityPath
+  && !changedCheckerImplementations.length
+);
 const candidateAuthorityCompanionPaths = productContractAuthorityChanged
-  ? changedPaths.filter((path) => path !== productContractAuthorityPath)
+  ? (staticProductContractCoChange ? [] : productContractCompanionPaths)
   : changedProductImpactAuthorityPaths.length
     ? changedPaths.filter((path) => !narrowAuthorityBundlePaths.has(path))
     : [];
@@ -1291,6 +1312,7 @@ const pureSafePolicyContraction = Boolean(
   && policyContractions.length
   && !policyExpansions.length
   && !missingPolicyKeys.length
+  && !retiredPolicyKeys.length
   && !addedPolicyKeys.length
   && policyTopLevelKeysMatch
   && !unapprovedCapabilities.length
@@ -1447,6 +1469,14 @@ if (changedSessionContractPaths.length) {
     `Material behavior/output risk: registered session or compatibility paths changed (${changedSessionContractPaths.join(', ')})`
   );
 }
+if (staticProductContractCoChange) {
+  reviewReasons.push(
+    'Governance and authority: static Product Contract co-change requires human review '
+    + 'that each changed record serializes the explicit Product Decision Owner receipt and '
+    + 'that the companion runtime, tests, and documentation realize exactly that outcome; '
+    + 'the Gate does not verify Contract prose'
+  );
+}
 if (changedProductImpactAuthorityPaths.length) {
   reviewReasons.push(
     'Governance and authority: Product Impact authority changed for future revisions '
@@ -1496,7 +1526,12 @@ if (addedBinaryRuntimePaths.length) {
 if (changedVendorPaths.length) {
   blockingViolations.push('changes under gbdraw/web/vendor/ are not allowed');
 }
-if (productionPaths.length && changedGuards.length && !pureSafePolicyContraction) {
+if (
+  productionPaths.length
+  && changedGuards.length
+  && !pureSafePolicyContraction
+  && !staticProductContractCoChange
+) {
   blockingViolations.push('production runtime files and Web guard/CI files changed together');
 }
 if (changedCheckerImplementations.length && changedAuthorities.length) {
@@ -1815,7 +1850,7 @@ const renderDecisionPack = (result, concern) => {
     `  - Lost affordance/compatibility requirements: ${result.lostRequirementRefs.length ? result.lostRequirementRefs.map(inlineCode).join(', ') : 'None'}`,
     '- Route meanings:',
     '  - `PR_LOCAL_ALLOWED`: Product Decision Owner response -> Codex serializes an exact-head PR-body decision.',
-    '  - `DURABLE_AUTHORITY_REQUIRED`: Product Decision Owner response -> Codex prepares a narrow authority-only PR -> merge -> rebase implementation.',
+    '  - `DURABLE_AUTHORITY_REQUIRED`: Product Decision Owner response -> Codex prepares a narrow authority-only PR -> merge -> rebase implementation; a static Product Contract record may instead serialize the receipt in a reviewed co-change with its implementation.',
     '  - `EVIDENCE_REQUIRED`: stop the runtime convergence and collect evidence or merge an evidence-only PR.',
     '  - `NOT_ALLOWED`: revise the implementation; product authority cannot waive the failing boundary.',
     '- The Product Decision Owner returns this short response to Codex. The human does not edit JSON, SHA, requirement refs, or evidence refs; Codex serializes only the explicit choice and the trusted checker validates it.',
@@ -1944,8 +1979,11 @@ const productImpactReportLines = productImpactReportUseful ? [
   `- Runtime context: ${productImpactRuntimeStatus}`,
   '- Runtime authority: trusted base map, decisions, architecture rules, detectors, and checker only.',
   `- Base authority validation: ${productImpactBaseErrors.length ? 'INVALID' : 'VALID'}`,
-  `- Candidate authority validation: ${candidateProductImpactMapValid && candidateProductDecisionAuthorityValid ? 'VALID (inert data only)' : 'INVALID'}`,
+  `- Candidate authority validation: ${candidateProductImpactMapValid && candidateProductDecisionAuthorityValid ? 'VALID (inert map and decision data only)' : 'INVALID'}`,
   `- Candidate authority separation: ${candidateAuthorityCompanionPaths.length ? 'INVALID' : 'VALID'}`,
+  `- Static Product Contract: ${!productContractAuthorityChanged ? 'unchanged'
+    : staticProductContractCoChange ? 'co-change with its implementation; human Review verifies the receipt, and the text is not machine authority'
+      : candidateAuthorityCompanionPaths.length ? 'INVALID companion changes' : 'isolated change for human Review'}`,
   `- Runtime result count: ${productImpactResults.length}`,
   ...(productImpactRuntimeStatus === 'NOT_AUTHORITATIVE_CANDIDATE' ? [
     '- This pull request context is non-authoritative and emits no runtime admission packet.'
@@ -1957,7 +1995,7 @@ const productImpactReportLines = productImpactReportUseful ? [
     `- Changed Product Impact authority paths: ${changedProductImpactAuthorityPaths.length ? changedProductImpactAuthorityPaths.map(inlineCode).join(', ') : 'None'}`,
     `- Candidate map: ${candidateProductImpactMapValid ? 'VALID' : 'INVALID'}`,
     `- Candidate decision registry: ${candidateProductDecisionAuthorityValid ? 'VALID' : 'INVALID'}`,
-    '- Runtime effect: validation-only future preauthorization; candidate data does not alter this head runtime admission.'
+    '- Runtime effect: validation-only future preauthorization; candidate data does not alter this head runtime admission. A static Product Contract change is reviewed by a human and never becomes machine authority.'
   ] : []),
   ...productImpactDecisionDeclarationIssues.flatMap((issue) => [
     '',
@@ -2075,6 +2113,10 @@ const report = [
   '## Missing base privileged allowlist keys',
   '',
   ...list(missingPolicyKeys),
+  '',
+  '## Removed retired privileged allowlist keys',
+  '',
+  ...list(retiredPolicyKeys),
   '',
   '## Added privileged allowlist keys',
   '',

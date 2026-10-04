@@ -117,8 +117,8 @@
           "dataDependent": true,
           "media": {
             "src": "./media/hepatoplasmataceae_orthogroup/manual-03-01-browser-losat.webp",
-            "alt": "Comparison card with Run LOSAT active, Current: Run LOSAT status, closed Settings, and Selected pairs 4.",
-            "caption": "Choose Run LOSAT for all four adjacent comparisons; the status confirms the active command."
+            "alt": "Comparison card with Run LOSAT pressed, closed Settings, and Selected pairs 4.",
+            "caption": "Choose Run LOSAT for all four adjacent comparisons; the pressed command confirms it."
           },
           "capture": {
             "source": "webapp",
@@ -132,7 +132,8 @@
                 "type": "evaluate",
                 "script": "async () => { const app = window.__GBDRAW_APP__; app.sidebarWidth = 480; await app.setLinearComparisonGlobalAction('losat'); app.setLinearComparisonLosatMode('blastp'); app.setLinearComparisonLosatpMode('orthogroup'); }"
               },
-              {"type": "wait", "ms": 300}
+              {"type": "wait", "ms": 300},
+              {"type": "evaluate", "script": "() => { const settings = document.querySelector(\"[data-linear-comparison-disclosure='settings']\"); if (settings) settings.open = false; }"}
             ],
             "selector": "[data-linear-comparison-card]",
             "cropPadding": 14,
@@ -143,7 +144,7 @@
               "linearComparisonPlan.defaultSource": "losat",
               "losatProgram": "blastp"
             },
-            "visibleText": ["Comparison", "Run LOSAT", "Current: Run LOSAT", "Settings", "Selected pairs (4)"]
+            "visibleText": ["Comparison", "Run LOSAT", "Settings", "Selected pairs (4)"]
           }
         },
         {
@@ -504,7 +505,11 @@
             "actions": [
               {
                 "type": "evaluate",
-                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (!app?.svgContainer || !document.querySelector('[data-gbdraw-stable-feature-id=fe826bac7]')) throw new Error('DnaA feature target is unavailable.'); app.resultPanelTab = 'preview'; app.zoom = 1.15; app.svgContainer.style.transform = 'translate(-90px, -30px) scale(1.15)';"
+                "script": "document.querySelector('.preview-feature-search')?.style.setProperty('display', 'none', 'important'); document.querySelector('.preview-controls')?.style.setProperty('display', 'none', 'important'); document.querySelector('footer')?.style.setProperty('display', 'none', 'important'); const app = window.__GBDRAW_APP__; if (!app?.svgContainer || !document.querySelector('[data-gbdraw-stable-feature-id=fe826bac7]')) throw new Error('DnaA feature target is unavailable.'); app.resultPanelTab = 'preview'; app.zoom = 1.15; if (app.canvasPan) { app.canvasPan.x = 240; app.canvasPan.y = 10; }"
+              },
+              {
+                "type": "wait",
+                "ms": 500
               },
               {
                 "type": "click",
@@ -517,7 +522,7 @@
               },
               {
                 "type": "evaluate",
-                "script": "const popup = document.querySelector('.feature-popup'); const target = document.querySelector(\"[data-gbdraw-stable-feature-id='fe826bac7']\"); const app = window.__GBDRAW_APP__; if (!popup || !target) throw new Error('DnaA popup bounds are unavailable.'); popup.style.width = '600px'; if (app?.clickedFeature) app.clickedFeature.activeTab = 'details'; if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 12; app.clickedFeaturePos.y = 70; }"
+                "script": "const popup = document.querySelector('.feature-popup'); const target = document.querySelector(\"[data-gbdraw-stable-feature-id='fe826bac7']\"); const app = window.__GBDRAW_APP__; if (!popup || !target) throw new Error('DnaA popup bounds are unavailable.'); popup.style.width = '600px'; if (app?.clickedFeature) app.clickedFeature.activeTab = 'details'; if (app?.clickedFeaturePos) { app.clickedFeaturePos.x = 12; app.clickedFeaturePos.y = 185; }"
               },
               {
                 "type": "wait",

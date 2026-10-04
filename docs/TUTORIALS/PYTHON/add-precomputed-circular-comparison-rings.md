@@ -159,6 +159,48 @@ direction, ring widths, gaps, labels, colors, and order with your SVG.
 The saved SVG should keep the ordered ring labels, the subject-reference
 mapping, and 106 retained HSPs across the three companion sequences.
 
+## Step 4: Run the TLOSATX searches directly
+
+With a LOSAT runtime, `ComparisonRingOptions(losat="tlosatx")` runs the three
+searches instead of reading the tables. Each track names its comparison
+genome with `comparison_sequence_source` (FASTA, GenBank, or DDBJ) and no
+`source`; the displayed human record is the subject. `reference_gencode` and
+each track's `losat_gencode` set the TLOSATX tables (default 1). Replace
+`rings` in the program with:
+
+```python
+rings = ComparisonRingOptions(
+    losat="tlosatx",
+    reference_gencode=2,
+    tracks=(
+        ComparisonRingTrackOptions(
+            comparison_sequence_source="NC_002333.2.fna",
+            losat_gencode=2,
+            label="Danio rerio (NC_002333.2)",
+            color="#4E79A7",
+        ),
+        ComparisonRingTrackOptions(
+            comparison_sequence_source="NC_024511.2.fna",
+            losat_gencode=5,
+            label="Drosophila melanogaster (NC_024511.2)",
+            color="#F28E2B",
+        ),
+        ComparisonRingTrackOptions(
+            comparison_sequence_source="NC_001328.1.fna",
+            losat_gencode=5,
+            label="Caenorhabditis elegans (NC_001328.1)",
+            color="#59A14F",
+        ),
+    ),
+    ring_width=18,
+    ring_gap=4,
+)
+```
+
+With the LOSAT runtime that produced the frozen tables, the SVG matches Step 2.
+`losat_executable`, `ncbi_blast_executable`, and `threads` choose the runtime;
+by default gbdraw resolves one.
+
 ## Next steps
 
 - [Python API technical documentation](../../REFERENCE/python-api.md)

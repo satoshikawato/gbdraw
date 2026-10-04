@@ -14,7 +14,6 @@ const OPAQUE_LANGUAGE = Object.freeze([
   { label: 'cutover', pattern: /\bcut[ -]?over\b/i }
 ]);
 
-const SUMMARY_HEADING = /^[ \t]{0,3}##[ \t]+Plain-language summary[ \t]*$/i;
 const MARKDOWN_HEADING = /^[ \t]{0,3}#{1,6}[ \t]+\S/;
 
 const fenceAt = (line) => {
@@ -28,17 +27,16 @@ const closesFence = (line, fence) => {
     && [...trimmed].every((character) => character === fence.character);
 };
 
-export const extractPlainLanguageSummary = (body) => {
+export const extractOpeningSummary = (body) => {
   if (typeof body !== 'string') return null;
 
   const lines = body.split(/\r?\n/);
   const summary = [];
   let fence = null;
-  let found = false;
 
   for (const line of lines) {
     if (fence) {
-      if (found) summary.push(line);
+      summary.push(line);
       if (closesFence(line, fence)) fence = null;
       continue;
     }
@@ -46,12 +44,7 @@ export const extractPlainLanguageSummary = (body) => {
     const openingFence = fenceAt(line);
     if (openingFence) {
       fence = openingFence;
-      if (found) summary.push(line);
-      continue;
-    }
-
-    if (!found) {
-      if (SUMMARY_HEADING.test(line)) found = true;
+      summary.push(line);
       continue;
     }
 
@@ -59,7 +52,8 @@ export const extractPlainLanguageSummary = (body) => {
     summary.push(line);
   }
 
-  return found ? summary.join('\n').trim() : null;
+  const opening = summary.join('\n').trim();
+  return opening || null;
 };
 
 const stripFencedCode = (text) => {
@@ -147,14 +141,14 @@ export const validateTitle = (title) => {
 };
 
 export const validateBody = (body) => {
-  const summary = extractPlainLanguageSummary(body);
+  const summary = extractOpeningSummary(body);
   if (summary === null) {
-    return ['PR body is missing "## Plain-language summary". Add it first and explain what changes, why, and what differs after merge.'];
+    return ['PR body is missing an opening summary. Begin with concrete prose explaining what changes, why, and what differs after merge.'];
   }
   if (isPlaceholder(summary)) {
-    return ['Plain-language summary is empty or placeholder text. Write 2-4 concrete sentences covering what changes, why, and the post-merge result.'];
+    return ['PR opening is placeholder text. Write concrete prose covering what changes, why, and the post-merge result.'];
   }
-  return opaqueErrors('Plain-language summary', summary);
+  return opaqueErrors('PR opening', summary);
 };
 
 export const validateProposal = ({ title, body }) => [

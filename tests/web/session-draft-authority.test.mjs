@@ -1,3 +1,4 @@
+import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
@@ -23,6 +24,8 @@ globalThis.File = class File extends Blob {
 const alerts = [];
 globalThis.alert = (message) => alerts.push(String(message));
 
+installSessionImportWorker();
+
 const {
   buildConfigData,
   buildEditorStateData,
@@ -43,6 +46,12 @@ const {
   buildCanonicalRenderRequest,
   projectCanonicalSessionRequest
 } = await import('../../gbdraw/web/js/services/session-request.js');
+state.selectedOrthogroupAlignmentFeature.value = 'legacy-selection';
+assert.equal(
+  Object.hasOwn(buildOrthogroupStateData(), 'selectedOrthogroupAlignmentFeature'),
+  false
+);
+state.selectedOrthogroupAlignmentFeature.value = '';
 const {
   COMPOSITION_METADATA_ATTRIBUTE,
   COMPOSITION_SCHEMA_ATTRIBUTE
@@ -207,6 +216,8 @@ const storedConfig = {
   },
   adv: {
     ...projectedConfig.adv,
+    linear_accession_visibility: 'auto',
+    linear_length_visibility: 'auto',
     circular_track_slots: [disabledDraft, canonicalFeature],
     circular_track_slots_axis_index: 2,
     linear_track_slots_enabled: false,
@@ -361,6 +372,8 @@ const divergentSession = JSON.parse(await readFile(
   'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json',
   'utf8'
 ));
+// This test isolates comparison draft behavior from the unreleased schema-1 Gallery plan.
+divergentSession.renderRequest.layout.similarityAlignment = null;
 const committedComparisonCount = divergentSession.renderRequest.comparisons.length;
 assert.ok(committedComparisonCount > 0);
 divergentSession.config.linearComparisonPlan = {
@@ -715,6 +728,7 @@ activeIntentSession.features = {
   labelTextBulkOverrides: {},
   labelTextFeatureOverrideSources: { [activeFeatureId]: 'Original label' },
   labelVisibilityOverrides: { [activeFeatureId]: 'off' },
+  // A current reader ignores this retired writer field.
   labelOverrideContextKey: 'saved-active-context'
 };
 activeIntentSession.editorState = {
@@ -880,10 +894,8 @@ try {
   console.error = consoleErrorBeforeInvalidActiveConfig;
 }
 assert.equal(invalidActiveConfigImport.status, 'error');
-assert.match(
-  invalidActiveConfigImport.error?.message || '',
-  /Linear track layout must be one of: above, middle, below/
-);
+assert.equal(invalidActiveConfigImport.error.code, 'INPUT_INVALID');
+assert.deepEqual(invalidActiveConfigImport.error.context, {field:'linear_track_layout',reason:'LINEAR_TRACK_LAYOUT'});
 assert.deepEqual(compactActiveIntentSnapshot(), stateBeforeInvalidActiveConfig.activeIntent);
 assert.strictEqual(state.results.value, stateBeforeInvalidActiveConfig.results);
 assert.strictEqual(state.featureCatalog.value, stateBeforeInvalidActiveConfig.featureCatalog);
@@ -891,8 +903,8 @@ assert.strictEqual(state.files.c_gb, stateBeforeInvalidActiveConfig.primaryFile)
 assert.strictEqual(state.svgContainer.value, stateBeforeInvalidActiveConfig.svgContainer);
 assert.equal(state.sessionTitle.value, stateBeforeInvalidActiveConfig.sessionTitle);
 assert.equal(invalidActiveConfigEvent.target.value, '');
-assert.equal(alerts.length, 1);
-assert.match(alerts[0], /^Failed to load session: Linear track layout must be one of/);
+assert.deepEqual(state.errorLog.value, invalidActiveConfigImport.error);
+assert.equal(alerts.length, 0);
 
 const legacyActiveIntent = {
   form: {
@@ -988,7 +1000,6 @@ Object.assign(state.canvasPadding, { top: 7, right: 8, bottom: 9, left: 10 });
 Object.assign(state.canvasPan, { x: 27, y: 28 });
 state.zoom.value = 1.25;
 state.skipCaptureBaseConfig.value = false;
-state.skipPositionReapply.value = false;
 state.suppressCircularMultiRecordDefaults.value = true;
 state.linearReorderNotice.value = 'keep reorder notice';
 state.showRightDrawer.value = true;
@@ -1029,7 +1040,6 @@ Object.assign(state.featureSelectionDrag, {
 });
 state.labelReflowLastError.value = { summary: 'keep reflow error' };
 state.labelOverrideBuildWarning.value = 'keep override warning';
-state.labelLayoutDirtyReason.value = 'keep dirty reason';
 const clickedFeature = { id: 'keep-feature' };
 const clickedPairwiseMatch = { id: 'keep-match' };
 const clickedLabel = { key: 'keep-label' };
@@ -1121,7 +1131,6 @@ const rollbackState = () => ({
   semanticFileWatchersSuppressed: state.semanticFileWatchersSuppressed.value,
   sessionImportRollbackInProgress: state.sessionImportRollbackInProgress.value,
   skipCaptureBaseConfig: state.skipCaptureBaseConfig.value,
-  skipPositionReapply: state.skipPositionReapply.value,
   suppressCircularMultiRecordDefaults: state.suppressCircularMultiRecordDefaults.value,
   linearReorderNotice: state.linearReorderNotice.value,
   showRightDrawer: state.showRightDrawer.value,
@@ -1150,7 +1159,6 @@ const rollbackState = () => ({
   featureSelectionDrag: structuredClone(state.featureSelectionDrag),
   labelReflowLastError: state.labelReflowLastError.value,
   labelOverrideBuildWarning: state.labelOverrideBuildWarning.value,
-  labelLayoutDirtyReason: state.labelLayoutDirtyReason.value,
   clickedFeature: state.clickedFeature.value,
   clickedPairwiseMatch: state.clickedPairwiseMatch.value,
   clickedLabel: state.clickedLabel.value,
@@ -1215,6 +1223,16 @@ assert.deepEqual(
   recordDiscoveryDerivedState,
   expectedRecordDiscoveryDerivedState
 );
+// F-1 (R11): the rollback installs the captured state as it was, so unset
+// slot sides, lane directions, and axis indexes stay unset and the Result's
+// named stroke color stays named.
+state.adv.circular_track_slots.forEach((slot) => {
+  slot.side = null;
+  delete slot.params.lane_direction;
+});
+state.adv.circular_track_slots_axis_index = null;
+state.adv.linear_track_slots_axis_index = null;
+state.originalSvgStroke.value = { color: 'gray', width: 1 };
 const stateBeforeFailedImport = rollbackState();
 
 const malformedCompositionSvg = {
@@ -1270,8 +1288,50 @@ try {
 }
 
 assert.equal(failedImport.status, 'error');
-assert.match(failedImport.error?.message || '', /composition metadata is not valid JSON/);
+assert.equal(failedImport.error.code, 'INPUT_INVALID');
+assert.deepEqual(failedImport.error.context, {field:'schema',reason:'JSON_FORMAT'});
 assert.deepEqual(rollbackState(), stateBeforeFailedImport);
-assert.equal(alerts.length, 1);
-assert.match(alerts[0], /^Failed to load session: .*composition metadata is not valid JSON/);
+assert.equal(alerts.length, 0);
+assert.deepEqual(state.errorLog.value, failedImport.error);
 assert.equal(failedImportEvent.target.value, '');
+
+
+// A late failed Session read cannot replace a notification from a later action.
+const { normalizeUserFacingError } = await import('../../gbdraw/web/js/services/error-normalization.js');
+const beforeLateRead = rollbackState();
+const lateFile = new File(['{}'], 'PRIVATE_LATE_SESSION.json');
+let failLateRead;
+// File methods do not cross structured clone. Hold the actual Worker reply
+// boundary so this fixture exercises a late transport failure, not an ignored
+// main-thread stream override.
+const SessionWorker = globalThis.Worker;
+globalThis.Worker = class extends SessionWorker {
+  postMessage(message) {
+    if (message.file === lateFile) {
+      failLateRead = () => this.emit('error', { message: 'PRIVATE_LATE_READ_SENTINEL' });
+    } else super.postMessage(message);
+  }
+};
+const lateRead = importSession({target:{files:[lateFile],value:'selected'}});
+while (!failLateRead) await new Promise(resolve=>setTimeout(resolve,0));
+globalThis.Worker = SessionWorker;
+const laterAlert = normalizeUserFacingError({code:'PDF_LIBRARY',operation:'export-pdf',stage:'initialization'});
+state.errorLog.value = laterAlert;
+failLateRead();
+assert.deepEqual(await lateRead,{status:'stale'});
+assert.equal(state.errorLog.value,laterAlert);
+assert.deepEqual(rollbackState(),beforeLateRead);
+
+// The same sole Session owner keeps a late Save error from replacing a newer alert.
+const { exportSession } = await import('../../gbdraw/web/js/services/config.js');
+let failLateSave;
+const lateSave = exportSession('late save', { beforeExport: () => new Promise((_, reject) => {
+  failLateSave = reject;
+}), onError: () => assert.fail('A stale Save must not publish its error') });
+while (!failLateSave) await new Promise(resolve => setTimeout(resolve, 0));
+const saveLaterAlert = normalizeUserFacingError({ code: 'PDF_LIBRARY', operation: 'export-pdf', stage: 'initialization' });
+state.errorLog.value = saveLaterAlert;
+failLateSave(new Error('PRIVATE_LATE_SAVE_SENTINEL'));
+assert.deepEqual(await lateSave, { status: 'stale' });
+assert.equal(state.errorLog.value, saveLaterAlert);
+assert.equal(state.sessionSavePending.value, false);

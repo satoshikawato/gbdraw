@@ -482,3 +482,15 @@ class TestSVGComparison:
 
         result = compare_svgs(svg1, svg2)
         assert result.equal
+
+    def test_explicit_nonvisual_attribute_tolerance(self):
+        """Ignore only attributes named by a comparison owner."""
+        svg1 = '<svg><line stroke="red"/></svg>'
+        svg2 = '<svg><line data-binding="feature-1" stroke="red"/></svg>'
+
+        assert not compare_svgs(svg1, svg2).equal
+        assert compare_svgs(
+            svg1,
+            svg2,
+            ignored_attributes={"data-binding"},
+        ).equal

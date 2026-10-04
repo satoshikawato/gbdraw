@@ -1,4 +1,7 @@
-import { resolveColorToHex } from './color-utils.js';
+import { normalizeSpecificRuleColor, resolveColorToHex } from './color-utils.js';
+import { diagnosticError } from '../services/error-normalization.js';
+
+const SPECIFIC_RULE_COLUMNS = Object.freeze(['feature_type', 'qualifier', 'pattern', 'color']);
 
 export const parseColorTable = (text) => {
   const colors = {};
@@ -39,21 +42,18 @@ export const parseSpecificRules = (text) => {
     ) continue;
 
     if (parts.length < 4 || parts.length > 5) {
-      throw new Error(`Invalid specific-color TSV at line ${lineNo}: expected 4 or 5 columns.`);
+      throw diagnosticError('TABLE_INVALID', { row: lineNo, reason: 'SPECIFIC_COLUMNS' });
     }
 
     const [feat, qual, val, colorRaw, captionRaw = ''] = parts.map((part) => part.trim());
     const required = [feat, qual, val, colorRaw];
     const missingIndex = required.findIndex((value) => !value);
     if (missingIndex >= 0) {
-      throw new Error(
-        `Invalid specific-color TSV at line ${lineNo}: column ${missingIndex + 1} is required.`
-      );
+      throw diagnosticError('TABLE_INVALID', { row: lineNo, field: SPECIFIC_RULE_COLUMNS[missingIndex], reason: 'REQUIRED' });
     }
-    const color = String(resolveColorToHex(colorRaw) || '').toLowerCase();
-    const domFreeNamedColor = !globalThis.document?.createElement && /^[a-z]+$/i.test(color);
-    if (!domFreeNamedColor && !/^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/.test(color)) {
-      throw new Error(`Invalid specific-color value at line ${lineNo}: ${colorRaw}`);
+    const color = normalizeSpecificRuleColor(colorRaw);
+    if (!color) {
+      throw diagnosticError('TABLE_INVALID', { row: lineNo, field: 'color', reason: 'COLOR' });
     }
 
     const rule = {

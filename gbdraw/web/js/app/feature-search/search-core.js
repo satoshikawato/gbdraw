@@ -1,4 +1,5 @@
 import {
+  formatFeatureLocation,
   isInternalProteinDisplayId,
   resolveDisplayProteinId,
   resolveInternalProteinId
@@ -248,24 +249,6 @@ const getLabelSearchItems = (feature) => {
   return items;
 };
 
-const buildFeatureLocation = (feature) => {
-  const direct = String(feature?.location || '').trim();
-  if (direct) return direct;
-  const parts = Array.isArray(feature?.location_parts) ? feature.location_parts : [];
-  const partText = parts
-    .map((part) => String(part?.display || '').trim())
-    .filter(Boolean)
-    .join(', ');
-  if (partText) return partText;
-  const start = Number(feature?.start);
-  const end = Number(feature?.end);
-  const startText = Number.isFinite(start) ? String(start + 1) : String(feature?.start ?? '');
-  const endText = Number.isFinite(end) ? String(end) : String(feature?.end ?? '');
-  const range = `${startText}..${endText}`;
-  const strand = String(feature?.strand || '').trim();
-  return strand ? `${range} (${strand})` : range;
-};
-
 const orthogroupIdFor = (source) => {
   const ids = new Set([
     source?.id,
@@ -352,9 +335,7 @@ const featureSearchItems = (
     return items;
   }
   if (selectedField === 'location') {
-    appendSearchItems(items, 'Location', buildFeatureLocation(feature));
-    appendSearchItems(items, 'Start', feature?.start);
-    appendSearchItems(items, 'End', feature?.end);
+    appendSearchItems(items, 'Location', formatFeatureLocation(feature));
     return items;
   }
   if (selectedField === 'strand') {
@@ -385,16 +366,15 @@ const featureSearchItems = (
   appendSearchItems(items, 'Record ID', feature?.recordId);
   appendSearchItems(items, 'Record ID', feature?.displayRecordId);
   appendSearchItems(items, 'Feature type', feature?.type);
-  appendSearchItems(items, 'Location', buildFeatureLocation(feature));
+  appendSearchItems(items, 'Location', formatFeatureLocation(feature));
   appendSearchItems(items, 'Strand', feature?.strand);
   items.push(...getOrthogroupSearchItems(feature, orthogroupsById));
   if (normalizeFeatureSearchPopupMode(popupMode) !== 'simple') {
+    // All excludes sequence content; the Nucleotide and Amino acid fields search it (D-01).
     appendSearchItems(items, 'Qualifier key', Object.keys(qualifiers));
     Object.keys(qualifiers).sort().forEach((key) => {
-      appendSearchItems(items, `Qualifier ${key}`, qualifiers[key]);
+      if (key.toLowerCase() !== 'translation') appendSearchItems(items, `Qualifier ${key}`, qualifiers[key]);
     });
-    appendSearchItems(items, 'Nucleotide sequence', feature?.nucleotide_sequence || feature?.nucleotideSequence, { alphabet: 'nucleotide' });
-    appendSearchItems(items, 'Amino acid sequence', resolveFeatureAminoAcidSequence(feature), { alphabet: 'amino-acid' });
   }
   return items;
 };
@@ -426,7 +406,7 @@ const compileFeatureSearchMatcher = (query, useRegex) => {
         })
       };
     } catch {
-      return { active: true, error: 'Invalid regex', match: () => '', test: () => false };
+      return { active: true, error: 'Invalid JavaScript regular expression. Turn off Regex to return to word search.', match: () => '', test: () => false };
     }
   }
 

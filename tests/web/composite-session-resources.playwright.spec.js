@@ -5,7 +5,7 @@ const { gunzipSync } = require('node:zlib');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const path = require('node:path');
-const { openApp } = require('./helpers/app-lifecycle.cjs');
+const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 
 const seed = 'gbdraw/web/gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz';
 const loadTimeout = 300_000;
@@ -128,7 +128,7 @@ const save = async (page, testInfo, label) => {
 
 const prepareSeed = async (journey, testInfo) => {
   const bytes = await fs.readFile(seed);
-  expect(hash(bytes)).toBe('11009dd28a1d98afa79e8b5d22b94217f61d9f53cb6353010095c983c3a9d90e');
+  expect(hash(bytes)).toBe('112c63cd0bb6396a886208b74893879b0800ce50438b9cdd3886b7b6a2e4a0a7');
   const session = JSON.parse(gunzipSync(bytes));
   if (journey !== 'minimal') return { file: seed, session };
 
@@ -183,10 +183,11 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
       }
       await generate(page);
       if (journey === 'grid-batch-grid') {
-        await page.getByRole('checkbox', { name: 'Multi-Record Canvas', exact: true }).uncheck();
+        const multiRecordCanvas = await reveal(page.getByRole('checkbox', { name: 'Multi-Record Canvas', exact: true, includeHidden: true }));
+        await multiRecordCanvas.uncheck();
         await generate(page);
         expect((await snapshot(page)).results).toHaveLength(recordCount);
-        await page.getByRole('checkbox', { name: 'Multi-Record Canvas', exact: true }).check();
+        await multiRecordCanvas.check();
         await generate(page);
       }
       const generated = await snapshot(page);
@@ -194,7 +195,7 @@ for (const journey of ['minimal', 'grid-batch-grid']) {
       expect(generated.results).toHaveLength(1);
       expect(generated.components).toEqual(original.components);
       const { saved, session, metrics } = await save(page, testInfo, 'generated');
-      expect([session.version, session.webFiles.bindings.schema, session.renderRequest.schema]).toEqual([42, 2, 7]);
+      expect([session.version, session.webFiles.bindings.schema, session.renderRequest.schema]).toEqual([44, 2, 8]);
       const composite = session.webFiles.bindings.c_gb;
       expect(composite.kind).toBe('composite');
       expect(composite.components).toHaveLength(recordCount);
@@ -285,7 +286,7 @@ test('Session CLI sidecar preserves the six-source draft for fresh Web Load and 
     });
     await fs.writeFile(testInfo.outputPath('cli.log'), stdout + stderr);
     const replayed = JSON.parse(gunzipSync(await fs.readFile(sidecar)));
-    expect([replayed.version, replayed.webFiles.bindings.schema, replayed.renderRequest.schema]).toEqual([42, 2, 7]);
+    expect([replayed.version, replayed.webFiles.bindings.schema, replayed.renderRequest.schema]).toEqual([44, 2, 8]);
     const expected = session.webFiles.bindings.c_gb;
     const actual = replayed.webFiles.bindings.c_gb;
     expect(actual.components).toHaveLength(6);
@@ -325,11 +326,11 @@ test('Session import rejects malformed composite bindings without replacing exis
     const seedPath = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
     const { page, external } = await load(browser, seedPath, contexts);
     const before = await snapshot(page);
+    const beforeHistory = await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount());
     const seedSession = JSON.parse(await fs.readFile(seedPath));
     const resourceId = seedSession.renderRequest.records[0].source.resourceId;
     const leaf = { resourceId, name: 'part.gb', type: 'text/plain', lastModified: 0 };
-    const dialogs = [];
-    page.on('dialog', dialog => { dialogs.push(dialog.message()); });
+
     const mutations = {
       schema: s => { s.webFiles.bindings.schema = 99; },
       kind: s => { s.webFiles.bindings.c_gb.kind = 'unknown'; },
@@ -352,15 +353,19 @@ test('Session import rejects malformed composite bindings without replacing exis
         components: [structuredClone(leaf), structuredClone(leaf)],
         name: 'logical.gb', type: 'text/plain', lastModified: 0 } };
       mutate(invalid);
-      const previous = dialogs.length;
+      await page.evaluate(()=>{window.__PREVIOUS_SESSION_IMPORT_ERROR__=window.__GBDRAW_APP__.errorLog;});
       await page.locator('input[accept^=".json,"]').setInputFiles({
         name: `${label}.gbdraw-session.json`, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(invalid))
       });
-      await expect.poll(() => dialogs.length, { timeout: loadTimeout }).toBe(previous + 1);
+      await page.waitForFunction(()=>window.__GBDRAW_APP__.errorLog!==window.__PREVIOUS_SESSION_IMPORT_ERROR__,{},{timeout:loadTimeout});
       await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending), { timeout: loadTimeout }).toBe(false);
-      expect(dialogs.at(-1)).toMatch(/^Failed to load session:/);
-      expect(await snapshot(page)).toEqual(before);
-      rejected.push({ label, error: dialogs.at(-1) });
+      const error=await page.evaluate(()=>window.__GBDRAW_APP__.errorLog);
+      expect(error).toMatchObject({code:'INPUT_INVALID',stage:'request-validation'});
+      await expect(page.getByRole('alert',{name:'Operation error'})).toBeVisible();
+      expect(JSON.stringify(error)).not.toMatch(/logical\.gb|part\.gb|missing/);
+      expect(await snapshot(page)).toEqual({ ...before, error });
+      expect(await page.evaluate(()=>window.__GBDRAW_HISTORY__.getUndoCount())).toBe(beforeHistory);
+      rejected.push({ label, error });
     }
     expect(external).toEqual([]);
     await fs.writeFile(testInfo.outputPath('transactional-rejections.json'), JSON.stringify(rejected, null, 2));

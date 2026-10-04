@@ -55,12 +55,14 @@ const PRIVILEGED_CAPABILITY_SPECS = Object.freeze([
     operatorPattern: /\b(?:sanitizeSvgContent|ingestSvgResult|markCommitted)\b/g
   }),
   Object.freeze({
-    name: 'Mounted SVG/Result replacement',
-    importTargets: Object.freeze([
-      'services/svg-serialization.js',
-      'app/preview-runtime.js'
-    ]),
-    operatorPattern: /\b(?:serializeCleanSvg|flushActiveResult)\s*\(|\b(?:results|state\.results)\.value(?:\[[^\]]+\])?\s*=(?!=)/g
+    name: 'Result content commit',
+    importTargets: Object.freeze(['app/preview-runtime.js']),
+    operatorPattern: /\bflushActiveResult\s*\(|\b(?:results|state\.results)\.value(?:\[[^\]]+\])?\s*=(?!=)/g
+  }),
+  Object.freeze({
+    name: 'SVG serialization',
+    importTargets: Object.freeze(['services/svg-serialization.js']),
+    operatorPattern: /\bserializeCleanSvg\s*\(/g
   }),
   Object.freeze({
     name: 'History',
@@ -142,8 +144,71 @@ export const isWebSessionSourcePath = (path) => SESSION_SOURCE_PATHS.has(
   normalizeModulePath(path)
 );
 
+// In-memory snapshot constructors (for example the Session-import rollback
+// snapshot) copy live state for a later restore. Their object keys are not
+// Session schema fields, so the Session object-key inventory skips their bodies.
+// The owner construct is the declaration, recognized by its name shape:
+// capture<Name> or clone<Name>State.
+const SNAPSHOT_DECLARATION_PATTERN =
+  /\b(?:(?:const|let|var)\s+(?:capture[A-Z][\w$]*|clone[A-Z][\w$]*State)\s*=|function\s+(?:capture[A-Z][\w$]*|clone[A-Z][\w$]*State)\s*(?=\())/g;
+
+const matchingClose = (code, openIndex) => {
+  const open = code[openIndex];
+  const close = open === '(' ? ')' : '}';
+  let depth = 0;
+  for (let index = openIndex; index < code.length; index += 1) {
+    if (code[index] === open) depth += 1;
+    else if (code[index] === close) {
+      depth -= 1;
+      if (!depth) return index;
+    }
+  }
+  return -1;
+};
+
+const maskSnapshotDeclarationBodies = (code) => {
+  const masked = code.split('');
+  for (const match of code.matchAll(SNAPSHOT_DECLARATION_PATTERN)) {
+    let index = match.index + match[0].length;
+    const skipSpace = () => {
+      while (index < code.length && /\s/.test(code[index])) index += 1;
+    };
+    skipSpace();
+    if (code.startsWith('async', index) && /\s/.test(code[index + 5] || '')) {
+      index += 5;
+      skipSpace();
+    }
+    if (code.startsWith('function', index)) {
+      index += 'function'.length;
+      skipSpace();
+      while (index < code.length && code[index] !== '(') index += 1;
+    }
+    if (code[index] !== '(') continue;
+    const paramsEnd = matchingClose(code, index);
+    if (paramsEnd < 0) continue;
+    index = paramsEnd + 1;
+    skipSpace();
+    if (code.startsWith('=>', index)) {
+      index += 2;
+      skipSpace();
+      if (code[index] === '(') {
+        index += 1;
+        skipSpace();
+      }
+    }
+    if (code[index] !== '{') continue;
+    const bodyEnd = matchingClose(code, index);
+    if (bodyEnd < 0) continue;
+    for (let at = index; at <= bodyEnd; at += 1) {
+      if (masked[at] !== '\n' && masked[at] !== '\r') masked[at] = ' ';
+    }
+  }
+  return masked.join('');
+};
+
 export const detectReportOnlySourceFacts = (source = '') => {
   const code = maskJavaScript(source);
+  const objectKeyCode = maskSnapshotDeclarationBodies(code);
   const exportedNames = new Set();
   for (const match of code.matchAll(
     /^\s*export\s+(?:async\s+)?(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/gm
@@ -173,7 +238,7 @@ export const detectReportOnlySourceFacts = (source = '') => {
     )),
     watcherCount: matches(code, /\bwatch(?:Effect)?\s*\(/g).length,
     objectKeys: Object.freeze(unique(
-      [...code.matchAll(/(?:^|[,{]\s*)([A-Za-z_$][\w$]*)\s*:/gm)]
+      [...objectKeyCode.matchAll(/(?:^|[,{]\s*)([A-Za-z_$][\w$]*)\s*:/gm)]
         .map((match) => match[1])
     )),
     compatibilityNames: Object.freeze(unique(

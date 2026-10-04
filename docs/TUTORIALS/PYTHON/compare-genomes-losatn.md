@@ -8,8 +8,9 @@
 | --- | --- | --- |
 | [Web app](../GUI/compare-genomes-losatn.md) | [Command line](../CLI/compare-genomes-losatn.md) | **Python API** |
 
-Use the public `LinearComparisonOptions` type to attach the same six-row
-LOSATN table used by the GUI and CLI variants.
+Use the public `LinearComparisonOptions` type to run LOSATN on the two records
+and draw the six-row comparison of the GUI and CLI variants. Step 3 shows the
+same figure from the saved LOSATN table.
 
 ## What you'll need
 
@@ -17,13 +18,15 @@ LOSATN table used by the GUI and CLI variants.
 | --- | --- | --- |
 | Download | `NC_001416.gb` ([NCBI accession NC_001416.1](https://www.ncbi.nlm.nih.gov/nuccore/NC_001416.1)) | Download the complete Lambda GenBank record and save it as `NC_001416.gb`. |
 | Download | `NC_042057.1.gb` ([NCBI accession NC_042057.1](https://www.ncbi.nlm.nih.gov/nuccore/NC_042057.1)) | Download the complete DE3 GenBank record and save it as `NC_042057.1.gb`. |
-| Download | [`lambda-de3.losatn.tsv`](../../../gbdraw/web/tutorial-data/lambda-de3-comparison/lambda-de3.losatn.tsv) | Save the supplied LOSATN result as `lambda-de3.losatn.tsv`. |
+| Download | [`lambda-de3.losatn.tsv`](../../../gbdraw/web/tutorial-data/lambda-de3-comparison/lambda-de3.losatn.tsv) | Table variant only: save the supplied LOSATN result as `lambda-de3.losatn.tsv`. |
 | Create | `lambda_de3_losatn.py` | Save the complete Python program from Step 2 with this filename. |
 | Generated | `python_lambda_de3_losatn.svg` | The program writes this comparison SVG. |
 | Reference result | [`python_lambda_de3_losatn.svg`](../../images/t-py-04/python_lambda_de3_losatn.svg) | Compare your Generated SVG with this versioned result. |
 
-Install gbdraw in the active Python environment before starting. The LOSATN
-table is a frozen comparison input for this project.
+Install gbdraw in the active Python environment before starting.
+`losat="losatn"` needs a LOSAT runtime or NCBI BLAST+ `blastn`; see the
+[command-line reference](../../REFERENCE/command-line.md) for the resolution
+order. The LOSATN table is a frozen comparison input for the table variant.
 
 ## Step 1: Prepare the working directory
 
@@ -64,7 +67,7 @@ assert [(record.id, len(record)) for record in records] == [
 
 options = LinearOptions(
     comparisons=LinearComparisonOptions(
-        blast_files=("lambda-de3.losatn.tsv",),
+        losat="losatn",
     ),
     thresholds=Thresholds(
         bitscore=50,
@@ -111,6 +114,17 @@ lengths, record order, six retained matches, and 120 px comparison band.
 
 The validator checks the record order, source lengths, six retained matches,
 comparison height, and standard-SVG safety.
+
+### Draw from the saved LOSATN table
+
+Without LOSAT, replace `losat="losatn"` with the table the GUI produced; the
+SVG is byte-identical:
+
+```python
+comparisons=LinearComparisonOptions(
+    blast_files=("lambda-de3.losatn.tsv",),
+),
+```
 
 ## Next steps
 

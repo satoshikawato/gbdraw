@@ -35,13 +35,14 @@ def place_linear_definition(
     keep_left: bool,
     text_anchor: str = "middle",
     sequence_width: float | None = None,
+    column_left: float = 0.0,
 ) -> LinearDefinitionPlacement:
-    """Share definition positioning between SVG drawing and collision planning."""
+    """Place text from the final shared column or its own displayed sequence."""
     if sequence_width is not None:
         x = record_x + 0.5 * sequence_width
         text_anchor = "middle"
     elif keep_left:
-        x = -(column_width or width) - gap
+        x = column_left - (column_width or width) - gap
         text_anchor = "start"
     else:
         # The default shares the reserved column's center. Explicit non-middle

@@ -15,10 +15,12 @@ const modulePath = join(tempDir, 'js', 'app', 'run-info.js');
 
 const {
   buildRunInfo,
+  LOSAT_DATABASE_SCOPE_NOTE,
   buildSourceRecipe,
   isCliInvocationSessionExportable,
   quoteShellArg,
-  reproducibilityLabel
+  reproducibilityLabel,
+  summarizeLosatRuntimes
 } = await import(pathToFileURL(modulePath));
 const { adoptCurrentSessionResources, createSessionResourceFileView } = await import(
   pathToFileURL(join(tempDir, 'js', 'services', 'session-resource-backing.js'))
@@ -289,7 +291,6 @@ test('source recipe counts survive transfer and follow same-name source replacem
         }
         let reads = 0;
         let decodes = 0;
-        const nativeAtob = globalThis.atob;
         const file = input === 'native'
           ? new class extends File {
             async arrayBuffer() {
@@ -305,9 +306,11 @@ test('source recipe counts survive transfer and follow same-name source replacem
           )
         });
         setResourcePayloadOwner(descriptor, file);
-        globalThis.atob = (encoded) => {
-          if (encoded === descriptor.data) decodes += 1;
-          return nativeAtob(encoded);
+        // Count decodes through the resource owner, independent of the decoder API.
+        globalThis.__GBDRAW_TEST_HOOKS__ = {
+          onStructuralMetric: ({ name, resourceId }) => {
+            if (name === 'base64DecodeCount' && resourceId === 'source') decodes += 1;
+          }
         };
         try {
           assert.equal(await readFileText(file), text);
@@ -338,15 +341,19 @@ test('source recipe counts survive transfer and follow same-name source replacem
           assert.equal(reads, input === 'native' ? 2 : 0);
           assert.equal(decodes, input === 'lazy' ? 2 : 0);
         } finally {
-          globalThis.atob = nativeAtob;
+          delete globalThis.__GBDRAW_TEST_HOOKS__;
         }
       }
     }
   }
-  const resources = { source: resource('genbank', 'mutable.gb', 'LOCUS one\n//\n') };
+  const locus = (id) => `LOCUS       ${id}                    10 bp    DNA     linear   UNK 01-JAN-2000\n//\n`;
+  const resources = { source: resource('genbank', 'mutable.gb', locus('one')) };
   assert.equal(await readCanonicalResourceRecordCount(resources, 'source', 'genbank'), 1);
-  Object.assign(resources.source, resource('genbank', 'mutable.gb', 'LOCUS one\n//\nLOCUS two\n//\n'));
+  Object.assign(resources.source, resource('genbank', 'mutable.gb', `${locus('one')}${locus('two')}`));
   assert.equal(await readCanonicalResourceRecordCount(resources, 'source', 'genbank'), 2);
+  // Biopython starts a record only at "LOCUS" plus seven spaces, so this malformed line is not one.
+  Object.assign(resources.source, resource('genbank', 'mutable.gb', `${locus('one')}LOCUS AB1 100 bp DNA\n//\n`));
+  assert.equal(await readCanonicalResourceRecordCount(resources, 'source', 'genbank'), 1);
 });
 
 test('source recipe preserves selectedFeaturesSet empty, invalid, and non-empty semantics', async () => {
@@ -565,6 +572,23 @@ const circularCanonical = canonical({
   }
 });
 
+test('circular source recipe names comparison genomes with --conservation_sequence', async () => {
+  const session = structuredClone(circularCanonical);
+  session.renderRequest.diagramOptions.conservationBlastFiles = [
+    { resourceId: 'conservation-blast-files-1', representation: 'file' }
+  ];
+  session.renderRequest.diagramOptions.conservationFastaFiles = [
+    { resourceId: 'conservation-fasta-files-1', representation: 'file' }
+  ];
+  session.resources['conservation-blast-files-1'] = resource('conservation-blast-file', 'ring.tsv', '');
+  session.resources['conservation-fasta-files-1'] = resource('conservation-fasta-file', 'ring.gb', 'LOCUS       ring\n//\n');
+  const sourceRecipe = await buildSourceRecipe(session);
+  assert.equal(sourceRecipe.available, true, sourceRecipe.unavailableReason);
+  assert.ok(sourceRecipe.args.includes('--conservation_sequence'));
+  assert.ok(!sourceRecipe.args.includes('--conservation_fasta'));
+  assertCliParserAccepts(sourceRecipe);
+});
+
 {
   const sourceRecipe = await buildSourceRecipe(circularCanonical);
   assert.equal(sourceRecipe.available, true);
@@ -691,6 +715,40 @@ const linearCanonical = canonical({
     }
   }
 });
+
+{
+  const positioned = structuredClone(linearCanonical);
+  positioned.renderRequest.schema = 8;
+  positioned.renderRequest.records.forEach((record) => {
+    record.display = { isCircular: null, startCoordinate: null };
+  });
+  positioned.renderRequest.layout = {
+    recordGapPx: 24,
+    multiRecordPositions: ['#1@1', '#2@2'],
+    recordTranslations: [],
+    similarityAlignment: null
+  };
+  const directPositions = await buildSourceRecipe(positioned);
+  assert.equal(directPositions.available, true, directPositions.unavailableReason);
+  assertCliParserAccepts(directPositions);
+  assert.deepEqual(directPositions.args.filter((arg) => /^#[12]@/.test(arg)), ['#1@1', '#2@2']);
+  positioned.renderRequest.records[0].presentation.gridColumn = 1;
+  const tablePositions = await buildSourceRecipe(positioned);
+  assert.equal(tablePositions.available, true, tablePositions.unavailableReason);
+  assert.match(tablePositions.generatedFiles.find((file) => file.name === 'records.tsv').data, /alpha\.gbk.*\t1\t1\t\t\n/);
+  positioned.renderRequest.layout.recordTranslations = [
+    { recordKey: 'alpha', x: 1, y: 0 }, { recordKey: 'beta', x: 0, y: 0 }
+  ];
+  const shifted = await buildSourceRecipe(positioned);
+  assert.equal(shifted.available, false);
+  assert.match(shifted.unavailableReason, /record translations/);
+  const partialRows = structuredClone(linearCanonical);
+  partialRows.renderRequest.records[0].presentation.gridRow = 2;
+  const partialRecipe = await buildSourceRecipe(partialRows);
+  assert.equal(partialRecipe.available, true, partialRecipe.unavailableReason);
+  assert.ok(partialRecipe.args.includes('#1@2'));
+  assert.equal(partialRecipe.args.includes('#2@2'), false);
+}
 
 {
   const direct = await buildSourceRecipe(linearCanonical);
@@ -1038,3 +1096,125 @@ for (const mode of ['circular', 'linear']) {
     assert.match(recipe.unavailableReason, /display/);
   }
 }
+
+// TR-07: a slot legend label that the CLI slot grammar cannot carry must make
+// the recipe unavailable instead of producing a command the CLI rejects.
+test('slot legend labels with a comma or an inline comment marker stay lossless (TR-07)', async () => {
+  const outcomes = [];
+  for (const label of ['GC skew (1 kb, AT-rich)', 'a #b']) {
+    const session = structuredClone(circularGallerySession);
+    session.renderRequest.diagramOptions.tracks.circularTrackSlots = [{
+      kind: 'circularTrackSlot', id: 'ticks', renderer: 'ticks', enabled: true, side: null,
+      radius: null, width: null, z: 0,
+      params: { tick_label_layout: 'label_out_tick_in', legend_label: label },
+      innerGapPx: null, outerGapPx: null
+    }];
+    session.renderRequest.diagramOptions.tracks.circularTrackAxisIndex = 0;
+    const recipe = await buildSourceRecipe(session);
+    outcomes.push(recipe.available
+      ? { label, token: recipe.args[recipe.args.indexOf('--circular_track_slot') + 1] }
+      : { label, unavailable: true });
+  }
+  const tokens = outcomes.filter(({ token }) => token).map(({ token }) => token);
+  const parsed = spawnSync(process.env.PYTHON || 'python', ['-c', [
+    'import json, sys',
+    'from gbdraw.tracks.circular import parse_circular_track_slot',
+    'def label(token):',
+    '    try:',
+    '        return parse_circular_track_slot(token).params.get("legend_label")',
+    '    except ValueError as error:',
+    '        return f"rejected: {error}"',
+    'print(json.dumps([label(token) for token in json.loads(sys.argv[1])]))'
+  ].join('\n'), JSON.stringify(tokens)], { cwd: repoRoot, encoding: 'utf8' });
+  assert.equal(parsed.status, 0, parsed.stderr);
+  const labels = JSON.parse(parsed.stdout);
+  outcomes.filter(({ token }) => token).forEach((outcome, index) => { outcome.parsed = labels[index]; });
+  for (const outcome of outcomes) {
+    assert.ok(outcome.unavailable || outcome.parsed === outcome.label, JSON.stringify(outcome));
+  }
+  assert.deepEqual(outcomes.map(({ unavailable }) => Boolean(unavailable)), [true, true]);
+  // A label the CLI grammar can carry still yields a lossless token.
+  const plain = structuredClone(circularGallerySession);
+  plain.renderRequest.diagramOptions.tracks.circularTrackSlots = [{
+    kind: 'circularTrackSlot', id: 'ticks', renderer: 'ticks', enabled: true, side: null,
+    radius: null, width: null, z: 0,
+    params: { tick_label_layout: 'label_out_tick_in', legend_label: 'GC skew 1 kb#AT=rich' },
+    innerGapPx: null, outerGapPx: null
+  }];
+  plain.renderRequest.diagramOptions.tracks.circularTrackAxisIndex = 0;
+  const plainRecipe = await buildSourceRecipe(plain);
+  assert.equal(plainRecipe.available, true, plainRecipe.unavailableReason);
+});
+
+// GE-03 (Linear): with the scale font set and no ruler-label font, the CLI makes
+// the ruler labels follow the scale font while the Web keeps the configured
+// ruler-label defaults, so the recipe is unavailable with a reason.
+test('a Linear scale font without a ruler-label font is not a lossless recipe (GE-03)', async () => {
+  const session = structuredClone(linearGallerySession);
+  Object.assign(session.renderRequest.diagramOptions.configOverrides, {
+    'objects.scale.style': 'ruler',
+    'objects.scale.font_size.short': 10,
+    'objects.scale.font_size.long': 10
+  });
+  const recipe = await buildSourceRecipe(session);
+  assert.equal(recipe.available, false, JSON.stringify(recipe.args || []));
+  assert.match(recipe.unavailableReason, /ruler/i);
+  // Linked fonts send both sizes, so the CLI receives both flags.
+  Object.assign(session.renderRequest.diagramOptions.configOverrides, {
+    'objects.scale.ruler_label_font_size.short': 10,
+    'objects.scale.ruler_label_font_size.long': 10
+  });
+  const linked = await buildSourceRecipe(session);
+  assert.equal(linked.available, true, linked.unavailableReason);
+  for (const flag of ['--scale_font_size', '--ruler_label_font_size']) {
+    assert.equal(linked.args[linked.args.indexOf(flag) + 1], '10', JSON.stringify(linked.args));
+  }
+});
+
+// PD-OI-018 revision 4 and D-40: Run Info states the LOSAT E-value database.
+test('Run Info states the LOSAT search database only when LOSAT comparisons are present', () => {
+  const recipe = { mode: 'linear', available: true, args: ['--gbk', '/a.gb'], fileMetadata: [] };
+  const withLosat = buildRunInfo({ mode: 'linear', sourceRecipe: recipe, losatComparisons: true });
+  assert(withLosat.reproducibility.notes.includes(LOSAT_DATABASE_SCOPE_NOTE));
+  assert.match(LOSAT_DATABASE_SCOPE_NOTE, /subject source file/);
+  // The CLI and Python API search the same databases (design D7).
+  assert.doesNotMatch(LOSAT_DATABASE_SCOPE_NOTE, /CLI/);
+  const without = buildRunInfo({ mode: 'linear', sourceRecipe: recipe });
+  assert(!without.reproducibility.notes.includes(LOSAT_DATABASE_SCOPE_NOTE));
+});
+
+test('Run Info lists the search runtime of Web, CLI and unrecorded raw entries (D9/D10)', () => {
+  const cacheMap = new Map([
+    ['web', { program: 'blastn', runtime: { kind: 'losat', source: 'wasm', version: null, program: 'blastn' } }],
+    ['web-copy', { program: 'blastn', runtime: { kind: 'losat', source: 'wasm', version: null, program: 'blastn' } }],
+    ['cli', {
+      program: 'tblastx',
+      runtime: {
+        kind: 'losat', version: '0.1.0', source: 'bundled',
+        path: 'gbdraw/bin/linux-x86_64/losat', program: 'tblastx', cli: 'v1'
+      }
+    }],
+    ['ncbi', { program: 'blastp', runtime: { kind: 'ncbi-blast', version: '2.16.0+', source: 'path', path: '/usr/bin/blastp', program: 'blastp' } }],
+    ['old', { program: 'blastn' }],
+    ['hidden', { program: 'blastp', runtime: { kind: 'losat', source: 'wasm', version: null, program: 'blastp' } }]
+  ]);
+  const info = ['web', 'web-copy', 'cli', 'ncbi', 'old'].map((key) => ({ key, display: true }))
+    .concat([{ key: 'hidden', display: false }, { key: 'missing', display: true }]);
+  assert.deepEqual(summarizeLosatRuntimes(info, cacheMap).map(({ text }) => text), [
+    'blastn: LOSAT, version not recorded (wasm)',
+    'tblastx: LOSAT 0.1.0 (bundled, gbdraw/bin/linux-x86_64/losat)',
+    'blastp: NCBI BLAST+ 2.16.0+ (path, /usr/bin/blastp)',
+    'blastn: runtime not recorded'
+  ]);
+  const runInfo = buildRunInfo({
+    mode: 'linear',
+    sourceRecipe: { available: true, args: ['--gbk', 'a.gb'], generatedFiles: [] },
+    losatRuntimes: summarizeLosatRuntimes(info.slice(2, 3), cacheMap)
+  });
+  assert.deepEqual(runInfo.losatRuntimes, [{
+    program: 'tblastx', kind: 'losat', version: '0.1.0', source: 'bundled',
+    path: 'gbdraw/bin/linux-x86_64/losat',
+    text: 'tblastx: LOSAT 0.1.0 (bundled, gbdraw/bin/linux-x86_64/losat)'
+  }]);
+  assert.deepEqual(buildRunInfo({ mode: 'circular' }).losatRuntimes, []);
+});

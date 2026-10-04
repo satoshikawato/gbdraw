@@ -8,9 +8,10 @@ const normalizedOrthogroupCount = (value) => {
   return Number.isFinite(count) && count > 0 ? count : 0;
 };
 
-const orthogroupCountFromState = (state) => uniqueOrthogroupEntries(
-  state.orthogroups?.value
-).length;
+const orthogroupTabContentCountFromState = (state) => (
+  uniqueOrthogroupEntries(state.orthogroups?.value).length
+  + Number(Boolean(state.similarityAlignmentPlan?.value))
+);
 
 const isRightDrawerTabAvailable = (tab, orthogroupCount = 0) => {
   if (ALWAYS_AVAILABLE_TABS.has(tab)) return true;
@@ -30,7 +31,7 @@ export const captureRightDrawerState = (state) => ({
 
 const reconcileRightDrawerState = (
   state,
-  orthogroupCount = orthogroupCountFromState(state)
+  orthogroupCount = orthogroupTabContentCountFromState(state)
 ) => {
   const resolvedTab = resolveRightDrawerTab(
     state.rightDrawerTab.value,
@@ -45,7 +46,7 @@ const reconcileRightDrawerState = (
 const openRightDrawerState = (
   state,
   tab = state.rightDrawerTab.value,
-  orthogroupCount = orthogroupCountFromState(state)
+  orthogroupCount = orthogroupTabContentCountFromState(state)
 ) => {
   const resolvedTab = resolveRightDrawerTab(tab, orthogroupCount);
   state.rightDrawerTab.value = resolvedTab;
@@ -65,7 +66,7 @@ export const resetRightDrawerState = (state) => {
 export const restoreRightDrawerState = (
   state,
   snapshot,
-  orthogroupCount = orthogroupCountFromState(state)
+  orthogroupCount = orthogroupTabContentCountFromState(state)
 ) => {
   state.rightDrawerTab.value = resolveRightDrawerTab(
     snapshot?.rightDrawerTab,
@@ -74,9 +75,15 @@ export const restoreRightDrawerState = (
   state.showRightDrawer.value = Boolean(snapshot?.showRightDrawer);
 };
 
-export const createRightDrawerController = ({ state, watch }) => {
-  const currentOrthogroupCount = () => orthogroupCountFromState(state);
-  const isTabAvailable = (tab) => isRightDrawerTabAvailable(
+export const createRightDrawerController = ({
+  state,
+  watch,
+  getOpenDisabledReason = () => '',
+  onClose = () => {},
+  focusReturn = null
+}) => {
+  const currentOrthogroupCount = () => orthogroupTabContentCountFromState(state);
+  const isTabAvailable = (tab) => ALWAYS_AVAILABLE_TABS.has(tab) || isRightDrawerTabAvailable(
     tab,
     currentOrthogroupCount()
   );
@@ -84,13 +91,22 @@ export const createRightDrawerController = ({ state, watch }) => {
     state,
     currentOrthogroupCount()
   );
-  const openRightDrawerTab = (tab = state.rightDrawerTab.value) => openRightDrawerState(
-    state,
-    tab,
-    currentOrthogroupCount()
-  );
-  const closeRightDrawer = () => closeRightDrawerState(state);
-  const resetRightDrawer = () => resetRightDrawerState(state);
+  const openRightDrawerTab = (tab = state.rightDrawerTab.value) => {
+    if (getOpenDisabledReason()) return false;
+    return openRightDrawerState(state, tab, currentOrthogroupCount());
+  };
+  // Closing returns keyboard focus from inside the drawer to the Editor toggle
+  // (PD-OI-038); focus elsewhere stays where it is.
+  const closeRightDrawer = () => {
+    onClose();
+    const returnFocus = Boolean(focusReturn?.isFocusInDrawer?.());
+    closeRightDrawerState(state);
+    if (returnFocus) focusReturn.focusToggle();
+  };
+  const resetRightDrawer = () => {
+    onClose();
+    resetRightDrawerState(state);
+  };
   const toggleRightDrawer = () => {
     if (state.showRightDrawer.value) {
       closeRightDrawer();

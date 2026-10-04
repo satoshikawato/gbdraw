@@ -15,6 +15,8 @@ const modulePaths = [
   'gbdraw/web/js/app/feature-utils.js',
   'gbdraw/web/js/app/feature-sequence-fasta.js',
   'gbdraw/web/js/app/match-sequences.js',
+  'gbdraw/web/js/app/record-source-coordinates.js',
+  'gbdraw/web/js/app/genbank-header.js',
   'gbdraw/web/js/app/conservation-series.js',
   'gbdraw/web/js/app/color-utils.js',
   'gbdraw/web/js/app/losat-normalization.js',

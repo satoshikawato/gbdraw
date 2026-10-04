@@ -13,7 +13,9 @@ await cp(
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
 const {
+  linearRecordLayoutHasSharedRow,
   reconcileLinearRecordLayout,
+  resolveEffectiveLinearRecordRows,
   linearRecordPositionTokens,
   moveLinearRecordInRow,
   planLinearSourceRowMove,
@@ -23,6 +25,24 @@ const {
 const sequences = [{ uid: 'a' }, { uid: 'b' }, { uid: 'c' }];
 const layout = reconcileLinearRecordLayout(sequences, [{ uid: 'a', row: 1 }, { uid: 'b', row: 1 }]);
 assert.deepEqual(layout, [{ uid: 'a', row: 1 }, { uid: 'b', row: 1 }, { uid: 'c', row: 3 }]);
+assert.equal(linearRecordLayoutHasSharedRow(sequences, layout), true);
+assert.equal(linearRecordLayoutHasSharedRow(sequences, layout, { enabled: false }), false);
+assert.deepEqual(resolveEffectiveLinearRecordRows(sequences, layout, { enabled: false }), [
+  { uid: 'a', row: 1 }, { uid: 'b', row: 2 }, { uid: 'c', row: 3 }
+]);
+const fourSequences = ['a', 'b', 'c', 'd'].map((uid) => ({ uid }));
+assert.equal(linearRecordLayoutHasSharedRow(fourSequences, [
+  { uid: 'a', row: 1 }, { uid: 'b', row: 2 },
+  { uid: 'c', row: 3 }, { uid: 'd', row: 4 }
+]), false, 'four records on four rendered rows are not shared');
+assert.equal(linearRecordLayoutHasSharedRow(fourSequences, [
+  { uid: 'a', row: 1 }, { uid: 'b', row: 1 },
+  { uid: 'c', row: 2 }, { uid: 'd', row: 3 }
+]), true, 'rows 1,1,2,3 contain a shared rendered row');
+assert.equal(linearRecordLayoutHasSharedRow(fourSequences, [
+  { uid: 'a', row: 1 }, { uid: 'b', row: 1 },
+  { uid: 'c', row: 2 }, { uid: 'd', row: 3 }
+], { enabled: false }), false, 'disabled layout ignores dormant shared rows');
 setLinearRecordRow(layout, 'c', 2);
 assert.deepEqual(linearRecordPositionTokens(sequences, layout), ['#1@1', '#2@1', '#3@2']);
 

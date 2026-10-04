@@ -55,7 +55,7 @@ def test_comparison_evidence_manifest_entries_are_complete() -> None:
         ),
         "H-CLI-06": (
             ["aminoglycoside-bgc-five"],
-            ["cli_losatp_pairwise.tsv", "cli_losatp_pairwise.svg"],
+            ["losatp.raw.tsv", "cli_losatp_pairwise.svg"],
         ),
         "H-CLI-07": (
             ["aminoglycoside-bgc-five"],
@@ -165,14 +165,15 @@ def test_losatp_recipes_use_five_whole_records_and_distinct_modes() -> None:
     )
     for recipe in recipes.values():
         assert expected_input in recipe
-        assert "--losatp_threads 1" in recipe
+        assert "--losat_threads 1" in recipe
         assert "--identity 30" in recipe
-    assert "--protein_blastp_mode pairwise" in recipes["H-CLI-06"]
-    assert "--protein_blastp_max_hits 1" in recipes["H-CLI-06"]
-    assert "--protein_blastp_output cli_losatp_pairwise.tsv" in recipes["H-CLI-06"]
-    assert "--protein_blastp_mode orthogroup" in recipes["H-CLI-07"]
-    assert "--align_orthogroup_feature CAG38695.1" in recipes["H-CLI-07"]
-    assert "--protein_blastp_mode collinear" in recipes["H-CLI-08"]
+    assert "--losat losatp" in recipes["H-CLI-06"]
+    assert "--losatp_mode pairwise" in recipes["H-CLI-06"]
+    assert "--losatp_max_hits 1" in recipes["H-CLI-06"]
+    assert "--losat_output_dir ." in recipes["H-CLI-06"]
+    assert "--losatp_mode similarity_groups" in recipes["H-CLI-07"]
+    assert "--similarity_alignment_feature CAG38695.1" in recipes["H-CLI-07"]
+    assert "--losatp_mode collinear" in recipes["H-CLI-08"]
     assert "--collinear_search_scope adjacent" in recipes["H-CLI-08"]
     assert "--collinear_min_anchors 2" in recipes["H-CLI-08"]
 
@@ -210,7 +211,7 @@ def test_technical_documentation_distinguishes_pairwise_and_similarity_groups() 
 
 
 def test_published_pairwise_raw_evidence_is_hydrated_and_complete() -> None:
-    path = PUBLISHED_IMAGE_ROOT / "h-cli-06" / "cli_losatp_pairwise.tsv"
+    path = PUBLISHED_IMAGE_ROOT / "h-cli-06" / "losatp.raw.tsv"
     source = path.read_text(encoding="utf-8")
     rows = [
         line.split("\t")

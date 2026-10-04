@@ -35,7 +35,7 @@ def test_first_circular_tutorial_controls_have_stable_accessible_selectors() -> 
         ("Output Prefix", "output-prefix"),
         ("Species", "circular-species"),
         ("Track Preset", "circular-track-preset"),
-        ("Legend Position", "legend-position"),
+        ("Legend position", "legend-position"),
         ("Label Mode", "circular-label-mode"),
     ):
         assert f'<label for="{control_id}"' in index, label
@@ -44,12 +44,19 @@ def test_first_circular_tutorial_controls_have_stable_accessible_selectors() -> 
     for name in ("Separate Strands", "Hide GC Content", "Hide GC Skew"):
         assert f'aria-label="{name}"' in index
 
-    assert '<summary aria-label="Title &amp; Legend">' in index
+    assert '<summary aria-label="Titles and Record Labels">' in index
+    assert '<summary aria-label="Legend settings">' in index
     assert '<summary aria-label="Labels">' in index
     assert 'aria-label="Generate Diagram" @click="runAnalysis"' in index
     assert 'role="region" aria-label="Result Preview"' in index
     assert 'aria-label="SVG" @click="downloadSVG"' in index
-    assert 'cursor-help" aria-hidden="true"' in index
+    # PD-OI-057: every help tip is one focusable disclosure button.
+    tip_start = index.index('<script type="text/x-template" id="help-tip-template">')
+    tip_template = index[tip_start : index.index("</script>", tip_start)]
+    assert tip_template.count("<button") == 1
+    assert 'v-else' not in tip_template
+    assert ':aria-expanded="visible"' in tip_template
+    assert '@keydown.esc.stop="close"' in tip_template
 
 
 def test_first_linear_tutorial_controls_have_stable_accessible_selectors() -> None:
@@ -80,7 +87,9 @@ def test_first_linear_tutorial_controls_have_stable_accessible_selectors() -> No
             index.index('aria-label="Set all adjacent comparisons"'),
         )
     ]
-    assert "aria-pressed" not in command_group
+    # The pressed command shows the comparison state; no status line repeats it.
+    for action in ("losat", "none", "upload"):
+        assert f":aria-pressed=\"linearComparisonGlobalAction === '{action}'\"" in command_group
     assert 'role="status" aria-live="polite"' in index
     assert 'data-linear-comparison-disclosure="settings"' in index
     assert 'aria-label="Comparison Settings"' in index
@@ -95,8 +104,13 @@ def test_first_linear_tutorial_controls_have_stable_accessible_selectors() -> No
     assert '@change="setLinearComparisonLosatpMode($event.target.value)"' in index
     assert "sectionKeys.settings.includes('losatp-mode')" in index
     assert 'Comparison search method' not in index
-    assert 'role="alert" aria-label="Generation Error"' in index
-    assert 'aria-label="Add sequence" @click="addLinearSeq()"' in index
+    assert 'role="alert" :aria-label="title"' in index
+    assert ':error="errorLog"' in index
+    assert (
+        'aria-label="Add sequence" data-linear-file-add '
+        '@click="addLinearSeq()"'
+    ) in index
+    assert index.count('aria-label="Add sequence"') == 1
 
 
 def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order() -> None:
@@ -145,17 +159,17 @@ def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order
         'pair.edgeKey)"' in index
     )
 
-    header_add = index.index('aria-label="Add sequence"')
+    add_action = index.index('aria-label="Add sequence"')
     record_list = index.index("data-linear-record-list")
     comparison = index.index("data-linear-comparison-card")
     timeline = index.index("data-linear-comparison-timeline")
     basic = index.index('<div class="card basic-settings">')
     generate = index.index('<div class="generate-bar')
     advanced = index.index("data-linear-advanced-comparison")
-    assert header_add < record_list < comparison < timeline < basic < generate < advanced
+    assert record_list < add_action < comparison < timeline < basic < generate < advanced
     assert index.count('aria-label="Generate Diagram" @click="runAnalysis"') == 1
 
-    first_record_uploader = index.index('label="GenBank File"', record_list)
+    first_record_uploader = index.index('label="GenBank / DDBJ File"', record_list)
     first_record_options = index.index(':data-linear-record-options="seq.uid"')
     assert first_record_uploader < first_record_options < comparison
 
@@ -177,6 +191,59 @@ def test_linear_input_comparison_and_generate_controls_follow_semantic_dom_order
     assert advanced < raw_results
 
 
+def test_phase_one_web_ergonomics_are_encoded_in_the_template() -> None:
+    index = WEB_INDEX.read_text(encoding="utf-8")
+    app_setup = (WEB_INDEX.parent / "js" / "app" / "app-setup.js").read_text(
+        encoding="utf-8"
+    )
+
+    assert '<details :open="mode === \'linear\'">' in index
+    assert '<details open class="mt-2' not in index
+    assert (
+        '<details v-if="linearSeqs.some((seq) => hasLinearDepthFiles(seq))" '
+        'data-linear-depth-settings' in index
+    )
+    assert 'v-if="linearSourceGroups.length > 1" class="flex shrink-0' in index
+    assert (
+        '<button v-if="linearSourceGroups.length > 1" type="button" '
+        'aria-label="Remove last sequence"' in index
+    )
+    assert 'class="btn btn-primary min-w-0 w-full bg-blue-600' in index
+    assert 'class="linear-secondary-summary"' in index
+    assert 'label="GenBank / DDBJ File"' in index
+    assert '{{ linearSourceDepthSummary(source) }}' in index
+    assert "if (attachedCount === 0) return 'No depth track attached';" in app_setup
+    assert 'Attached to all records' in index
+    assert 'Requires at least 2 loaded sequences to compare' in index
+    assert 'v-if="linearComparisonUi.intentKey !== \'none\'"' not in index
+    assert 'v-if="linearComparisonUi.intentKey === \'custom\'"' in index
+    assert 'placeholder="e.g., <i>' not in index
+    assert "'e.g., <i>" not in index
+    assert '[class~="text-[9px]"]' in index
+    assert '[class~="text-[10px]"]' in index
+    assert index.count(
+        '<help-tip id="help-linear-separate-strands" text="Display features on '
+        'separate strands for better distinction."></help-tip>'
+    ) == 1
+
+    def option_has_tip(start: int) -> bool:
+        after_label = index[index.index("</label>", start) + len("</label>"):]
+        return after_label.lstrip().startswith("<help-tip")
+
+    for name in (
+        "Resolve Overlaps",
+        "Multi-Record Canvas",
+        "Hide GC Content",
+        "Hide GC Skew",
+    ):
+        assert not option_has_tip(index.index(f"<span>{name}</span>")), name
+    # Only the Linear Show Depth option carries a tip.
+    first_depth = index.index("<span>Show Depth</span>")
+    second_depth = index.index("<span>Show Depth</span>", first_depth + 1)
+    assert index.count("<span>Show Depth</span>") == 2
+    assert sorted([option_has_tip(first_depth), option_has_tip(second_depth)]) == [False, True]
+
+
 def test_file_uploader_exposes_a_native_keyboard_trigger() -> None:
     index = WEB_INDEX.read_text(encoding="utf-8")
 
@@ -185,10 +252,11 @@ def test_file_uploader_exposes_a_native_keyboard_trigger() -> None:
     )
     template = index[template_start : index.index("</script>", template_start)]
     assert 'role="button"' in template
-    assert 'tabindex="0"' in template
+    assert ':tabindex="uploadAvailable ? 0 : -1"' in template
+    assert ':aria-disabled="!uploadAvailable"' in template
     assert ':aria-label="`Choose ${$attrs[\'data-input-aria-label\'] || label}`"' in template
-    assert '@keydown.enter.prevent="$refs.input.click()"' in template
-    assert '@keydown.space.prevent="$refs.input.click()"' in template
+    assert '@keydown.enter.prevent="uploadAvailable && $refs.input.click()"' in template
+    assert '@keydown.space.prevent="uploadAvailable && $refs.input.click()"' in template
     assert '.upload-zone:focus-visible' in index
 
 

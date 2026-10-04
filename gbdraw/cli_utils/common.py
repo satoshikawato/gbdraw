@@ -169,6 +169,40 @@ def _add_overwrite_arg(parser: argparse.ArgumentParser) -> None:
         action='store_true')
 
 
+class _RetiredOptionAction(argparse.Action):
+    """Reject a retired flag and name its replacement (exit status 2)."""
+
+    def __init__(self, option_strings, dest, *, retired, **kwargs) -> None:
+        self.retired = retired
+        super().__init__(option_strings, dest, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None) -> None:
+        parser.error(self.retired.message(values))
+
+
+def _add_retired_option_args(
+    parser: argparse.ArgumentParser,
+    *,
+    mode: str,
+) -> None:
+    """Register the retired flags of one mode from the shared retired table."""
+
+    from gbdraw.session_io import RETIRED_CLI_OPTIONS
+
+    for retired in RETIRED_CLI_OPTIONS.values():
+        if mode not in retired.modes:
+            continue
+        parser.add_argument(
+            retired.option,
+            action=_RetiredOptionAction,
+            retired=retired,
+            **({"nargs": retired.nargs} if retired.nargs is not None else {}),
+            dest=f"_retired_{retired.option.lstrip('-')}",
+            default=argparse.SUPPRESS,
+            help=argparse.SUPPRESS,
+        )
+
+
 def _add_gc_skew_toggle_args(
     parser: argparse.ArgumentParser,
     *,
@@ -427,7 +461,7 @@ def add_analysis_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         '-n',
         '--nt',
-        help='dinucleotide (default: GC). ',
+        help='dinucleotide: two letters from A, C, G, T, and U; case-insensitive, U counts as T (default: GC).',
         type=str,
         default="GC")
     parser.add_argument(

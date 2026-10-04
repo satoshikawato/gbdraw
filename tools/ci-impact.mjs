@@ -13,6 +13,7 @@ import {
   classifyChanges,
   createImpactPlan,
   isFullObjectId,
+  isDocumentationOnly,
   knownJobsFor,
   requiresFullCoverage,
   validateGateResults
@@ -309,6 +310,19 @@ export const buildImpactPlan = async ({
     });
   }
 
+  if (configuration.profile === 'pr' && isDocumentationOnly(classification.capabilities)) {
+    return Object.freeze({
+      plan: createImpactPlan(planFields({
+        configuration,
+        classification,
+        decision: 'selective',
+        basis: 'DOCUMENTATION_ONLY_PR',
+        inheritedEvidence: null
+      })),
+      classification
+    });
+  }
+
   const contract = EVIDENCE_CONTRACTS[configuration.profile];
   let evidence;
   try {
@@ -321,6 +335,14 @@ export const buildImpactPlan = async ({
     });
   } catch (error) {
     if (!(error instanceof PromotionReadinessError)) throw error;
+    // A dev push falls back to the full dev tier; Gallery publication keeps failing closed.
+    if (configuration.profile === 'gallery'
+        && isDocumentationOnly(classification.capabilities)
+        && !classification.capabilities.includes('metadata')) {
+      fail('DOCUMENTATION_BASE_EVIDENCE_UNAVAILABLE',
+        'Documentation-only changes cannot inherit the required baseline CI evidence.',
+        { evidenceCode: error.code });
+    }
     return Object.freeze({
       plan: createImpactPlan(planFields({
         configuration,

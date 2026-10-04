@@ -22,6 +22,8 @@ import pytest
 from PIL import Image
 
 from gbdraw.session_io import (
+    CURRENT_FEATURE_CATALOG_SCHEMA,
+    CURRENT_SESSION_VERSION,
     LOSAT_DERIVED_CACHE_SCHEMA,
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
@@ -49,7 +51,7 @@ BROWSER_WHEEL_FORBIDDEN_PREFIXES = (
     "gbdraw/web/vendor/",
     "gbdraw/web/wasm/",
 )
-BUNDLED_REQUEST_SCHEMAS = frozenset({5, CANONICAL_REQUEST_SCHEMA})
+BUNDLED_REQUEST_SCHEMAS = frozenset({5, 7, CANONICAL_REQUEST_SCHEMA})
 BROWSER_WHEEL_FORBIDDEN_FILES = {
     "gbdraw/web/index.html",
     "gbdraw/web/open-source-notices.html",
@@ -481,7 +483,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         "<i>Nicotiana tabacum</i> chloroplast genome regions",
         "<i>Vibrio nigripulchritudo</i> TUMSAT-TG-2018",
         "Hepatoplasmataceae collinear protein-match blocks",
-        "<i>Vibrio</i> Harveyi group multi-record collinearity",
+        "<i>Vibrio parahaemolyticus</i> and <i>V. alginolyticus</i> collinearity",
         "Hepatoplasmataceae CDS protein-similarity links",
         "Aminoglycoside biosynthetic gene clusters from <i>Streptomyces</i> spp.",
         "Majanivirus CDS protein-similarity links",
@@ -551,7 +553,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
             assert 'data-popup-mode="rich"' in svg_source
             assert "data-gbdraw-original-viewbox" in svg_source
             payload = _gallery_svg_metadata(svg_source)
-            assert payload["schema"] == 3
+            assert payload["schema"] == 4
             assert len(payload["items"]) == 1
             item = payload["items"][0]
             biological_features = item["biologicalFeatures"]
@@ -617,7 +619,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
     collinear = next(
         entry for entry in examples if entry["id"] == "hepatoplasmataceae_collinear"
     )
-    assert collinear["command"].count("--losatp_threads") == 1
+    assert collinear["command"].count("--losat_threads") == 1
 
 
 @pytest.mark.gallery
@@ -652,6 +654,75 @@ def test_runnable_gallery_support_downloads_exist() -> None:
         assert hrefs <= tutorial_hrefs
         for href in hrefs:
             assert (GALLERY_ROOT / href.removeprefix("./")).is_file()
+
+
+GITHUB_MAIN_BLOB = "https://github.com/satoshikawato/gbdraw/blob/main/"
+
+
+def _collect_tutorial_links(value: object) -> list[str]:
+    if isinstance(value, dict):
+        links = []
+        for key, item in value.items():
+            if key in {"href", "src", "poster"} and isinstance(item, str):
+                links.append(item)
+            else:
+                links.extend(_collect_tutorial_links(item))
+        return links
+    if isinstance(value, list):
+        return [link for item in value for link in _collect_tutorial_links(item)]
+    return []
+
+
+def _markdown_heading_slugs(path: Path) -> set[str]:
+    slugs: set[str] = set()
+    seen: dict[str, int] = {}
+    in_fence = False
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.lstrip().startswith(("```", "~~~")):
+            in_fence = not in_fence
+            continue
+        match = None if in_fence else re.match(r"^#{1,6}\s+(.*?)\s*#*\s*$", line)
+        if not match:
+            continue
+        text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", match.group(1))
+        slug = re.sub(r"[^\w\- ]", "", text.replace("`", "").lower()).replace(" ", "-")
+        count = seen.get(slug, 0)
+        seen[slug] = count + 1
+        slugs.add(slug if count == 0 else f"{slug}-{count}")
+    return slugs
+
+
+def test_gallery_tutorial_links_resolve() -> None:
+    example_ids = {
+        entry["id"]
+        for entry in json.loads((GALLERY_ROOT / "examples.json").read_text(encoding="utf-8"))
+    }
+    broken = []
+    for tutorial_path in sorted((GALLERY_ROOT / "tutorials").glob("*.json")):
+        tutorial = json.loads(tutorial_path.read_text(encoding="utf-8"))
+        for link in _collect_tutorial_links(tutorial):
+            if link.startswith(GITHUB_MAIN_BLOB):
+                path_text, _, anchor = link.removeprefix(GITHUB_MAIN_BLOB).partition("#")
+                target = REPO_ROOT / path_text
+                if not target.is_file():
+                    broken.append((tutorial_path.name, link, "missing repository file"))
+                elif anchor and anchor not in _markdown_heading_slugs(target):
+                    broken.append((tutorial_path.name, link, "missing heading anchor"))
+            elif link.startswith(("https://", "http://")):
+                continue
+            elif link.startswith("./#"):
+                if link.removeprefix("./#") not in example_ids:
+                    broken.append((tutorial_path.name, link, "unknown Gallery example"))
+            elif link.startswith(("./", "../")):
+                # Tutorials render at /gallery/; the host root is gbdraw/web/.
+                target = (GALLERY_ROOT / link.partition("#")[0]).resolve()
+                if not target.is_relative_to(WEB_ROOT.resolve()):
+                    broken.append((tutorial_path.name, link, "outside the web host root"))
+                elif not (target.is_file() or (target / "index.html").is_file()):
+                    broken.append((tutorial_path.name, link, "missing hosted file"))
+            else:
+                broken.append((tutorial_path.name, link, "unsupported link form"))
+    assert broken == []
 
 
 def test_index_includes_preprint_citation() -> None:
@@ -693,7 +764,12 @@ def test_gallery_sessions_ship_resumable_state_without_duplicate_files(
         ), session_name
         assert "files" not in session, session_name
         assert results, session_name
-        assert feature_catalog.get("schema") == 3, session_name
+        expected_catalog_schema = (
+            CURRENT_FEATURE_CATALOG_SCHEMA
+            if session.get("version") == CURRENT_SESSION_VERSION
+            else 3
+        )
+        assert feature_catalog.get("schema") == expected_catalog_schema, session_name
         assert [
             (item.get("resultIndex"), item.get("resultName")) for item in catalog_items
         ] == [
@@ -993,20 +1069,15 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(
         not in remote_assets
     )
     assert (
-        remote_assets[
-            "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
-        ]
-        == f"{remote_base}gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
+        "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz"
+        not in remote_assets
     )
-    assert (
-        remote_assets["gallery/examples/vibrio-harveyi-group-collinear.svg"]
-        == f"{remote_base}gallery/examples/vibrio-harveyi-group-collinear.svg"
-    )
+    assert "gallery/examples/vibrio-harveyi-group-collinear.svg" not in remote_assets
     assert all("/main/" not in url for url in remote_assets.values())
     assert not (
         bundle_path / "gallery" / "examples" / "Vnig_TUMSAT-TG-2018.svg"
     ).exists()
-    assert not (
+    assert (
         bundle_path / "gallery" / "examples" / "vibrio-harveyi-group-collinear.svg"
     ).exists()
     assert (
@@ -1015,7 +1086,7 @@ def test_cloudflare_bundle_includes_google_analytics_and_hosted_notice(
         / "sessions"
         / "Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz"
     ).exists()
-    assert not (
+    assert (
         bundle_path
         / "gallery"
         / "sessions"
@@ -1192,6 +1263,17 @@ def test_conda_build_prepares_browser_wheel_before_install() -> None:
     assert "python-build" not in meta_yaml
     assert re.search(r"^\s+- setuptools\s*$", meta_yaml, re.MULTILINE)
     assert re.search(r"^\s+- wheel\s*$", meta_yaml, re.MULTILINE)
+
+
+def test_losat_installation_ownership_is_split_between_conda_and_pypi() -> None:
+    meta_yaml = (REPO_ROOT / "recipe" / "meta.yaml").read_text(encoding="utf-8")
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    install_guide = (REPO_ROOT / "docs" / "INSTALL.md").read_text(encoding="utf-8")
+
+    assert re.search(r"^\s+- losat ==0\.1\.0\s*$", meta_yaml, re.MULTILINE)
+    assert re.search(r"^\s+- losat --version\s*$", meta_yaml, re.MULTILINE)
+    assert "losat" not in pyproject.split("[project.urls]", 1)[0].lower()
+    assert "gbdraw setup-losat" in install_guide
 
 
 def test_hosted_web_uses_cloudflare_and_retains_browser_verification() -> None:

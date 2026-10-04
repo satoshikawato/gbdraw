@@ -15,10 +15,25 @@ from gbdraw.config.modify import (
 )
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.exceptions import ValidationError
+from gbdraw.labels.filtering import DERIVED_LABEL_FILTERING_KEYS
+from gbdraw.web_support.error_adapter import serialize_web_error
+
+
+_RAW_FILTERING_PATH = "labels.filtering.raw"
+
+
+def _without_derived_filtering(raw: object) -> object:
+    if not isinstance(raw, Mapping):
+        return raw
+    return {
+        key: value
+        for key, value in raw.items()
+        if key not in DERIVED_LABEL_FILTERING_KEYS
+    }
 
 
 def _raw_config_leaf(config: Mapping[str, Any], path: str) -> object:
-    if path == "labels.filtering.raw":
+    if path == _RAW_FILTERING_PATH:
         return config["labels"]["filtering"]
     current: object = config
     for key in path.split("."):
@@ -77,6 +92,10 @@ def validate_and_project_web_config_overrides(
     managed = frozenset(managed_paths)
     explicit = dict(overrides or {})
     validated = dict(validate_config_overrides(explicit))
+    if _RAW_FILTERING_PATH in validated:
+        validated[_RAW_FILTERING_PATH] = _without_derived_filtering(
+            validated[_RAW_FILTERING_PATH]
+        )
 
     if require_unmanaged_only:
         dual_owned = sorted(set(validated) & managed)
@@ -104,14 +123,19 @@ def validate_and_project_web_config_overrides(
         for path in canonical_paths
         if _raw_config_leaf(effective_raw, path) != _raw_config_leaf(default_raw, path)
     }
-    # The aggregate raw alias must not duplicate changes owned by GUI leaf controls.
+    # The aggregate raw alias must not duplicate changes owned by GUI leaf
+    # controls, and compiled label maps are render artifacts, not settings.
+    effective_filtering = effective_raw["labels"]["filtering"]
+    default_filtering = default_raw["labels"]["filtering"]
     filtering_changes = {
-        key for key in effective_raw["labels"]["filtering"].keys() | default_raw["labels"]["filtering"].keys()
-        if effective_raw["labels"]["filtering"].get(key)
-        != default_raw["labels"]["filtering"].get(key)
+        key
+        for key in (effective_filtering.keys() | default_filtering.keys())
+        - DERIVED_LABEL_FILTERING_KEYS
+        if effective_filtering.get(key) != default_filtering.get(key)
     }
     if all(f"labels.filtering.{key}" in managed for key in filtering_changes):
-        candidates.discard("labels.filtering.raw")
+        candidates.discard(_RAW_FILTERING_PATH)
+        validated.pop(_RAW_FILTERING_PATH, None)
     candidates.update(validated)
 
     projected: dict[str, object] = {}
@@ -120,6 +144,8 @@ def validate_and_project_web_config_overrides(
             projected[path] = validated[path]
         else:
             value = _raw_config_leaf(effective_raw, path)
+            if path == _RAW_FILTERING_PATH:
+                value = _without_derived_filtering(value)
             try:
                 options_type(config_overrides={path: value})
             except ValidationError:
@@ -154,10 +180,10 @@ def validate_web_config_overrides_json(
             require_unmanaged_only=bool(require_unmanaged_only),
         )
     except ValidationError as exc:
-        return json.dumps({"error": str(exc)}, ensure_ascii=False)
-    except (KeyError, TypeError, ValueError):
+        return json.dumps({"error": serialize_web_error(exc, operation="validateConfigOverrides", stage="helper")}, ensure_ascii=False)
+    except (KeyError, TypeError, ValueError) as exc:
         return json.dumps(
-            {"error": "Web config override payload is invalid."},
+            {"error": serialize_web_error(exc, operation="validateConfigOverrides", stage="helper")},
             ensure_ascii=False,
         )
     return json.dumps({"overrides": projected}, ensure_ascii=False)

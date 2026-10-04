@@ -44,6 +44,8 @@ const featureVisibilityScopeDialog = {};
 const selectedResultIndex = ref(0);
 const resultGenerationKey = ref('generation-1');
 const appliedPreviewChanges = [];
+// F-3: each visibility edit hands the feature's label to the label owner.
+const labelVisibilityCalls = [];
 
 const actions = createFeatureVisibilityActions({
   state: {
@@ -55,7 +57,6 @@ const actions = createFeatureVisibilityActions({
     featureVisibilityOverrides,
     featureVisibilitySelectorCache: {},
     featureVisibilityScopeDialog,
-    labelLayoutDirtyReason: ref(''),
     resultGenerationKey,
     results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
     selectedResultIndex,
@@ -69,12 +70,17 @@ const actions = createFeatureVisibilityActions({
       return true;
     }
   },
+  labelActions: {
+    applyFeatureVisibilityToLabels: (reason, options = {}) => {
+      labelVisibilityCalls.push([reason, options.reflow !== false]);
+      return true;
+    }
+  },
   previewRuntime: {
     selectResult: (index) => {
       selectedResultIndex.value = index;
       return true;
-    },
-    flushActiveResult: () => assert.fail('visibility actions must not flush Results directly')
+    }
   }
 });
 
@@ -94,6 +100,10 @@ assert.deepEqual(
 assert.equal(await command.revert(), true);
 assert.deepEqual(featureVisibilityOverrides, {});
 assert.equal(appliedPreviewChanges.length, 2);
+assert.deepEqual(labelVisibilityCalls, [
+  ['bulk-feature-visibility-apply', true],
+  ['bulk-feature-visibility-undo', true]
+]);
 assert.deepEqual(
   appliedPreviewChanges[1].changes.map((change) => [change.featureId, change.mode]),
   [['feature-a', 'on'], ['feature-b', 'on']]
@@ -105,6 +115,8 @@ assert.equal(actions.setFeatureVisibility(featureA, 'off', {
 }), true);
 assert.equal(featureVisibilityOverrides['feature-a'], 'off');
 assert.equal(appliedPreviewChanges.length, 3);
+assert.deepEqual(labelVisibilityCalls.at(-1), ['feature-visibility', false],
+  'the label follows the feature even when the caller declines the reflow');
 assert.deepEqual(
   appliedPreviewChanges[2].changes.map((change) => [change.featureId, change.mode]),
   [['feature-a', 'off']]
@@ -268,5 +280,56 @@ resultGenerationKey.value = 'generation-2';
 assert.equal(await command.apply(), false);
 assert.deepEqual(featureVisibilityOverrides, {});
 assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
+
+// FE-04: an Exact product hide is committed as an editor qualifier rule. The
+// reconcile that History runs after Undo/Redo resolves it with the action's
+// matcher (case-insensitive, like Python), so the feature stays hidden.
+{
+  const nd1 = { svg_id: 'nd1', type: 'CDS', qualifiers: { product: ['NADH dehydrogenase subunit 1'] } };
+  const nd1Case = { svg_id: 'nd1-case', type: 'CDS', qualifiers: { product: ['nadh DEHYDROGENASE subunit 1'] } };
+  const nd2 = { svg_id: 'nd2', type: 'CDS', qualifiers: { product: ['NADH dehydrogenase subunit 2'] } };
+  const geneRna = { svg_id: 'nd1-rna', type: 'tRNA', qualifiers: { product: ['NADH dehydrogenase subunit 1'] } };
+  const manualRules = [];
+  const overrides = {};
+  const reconciled = [];
+  const scopeDialog = {};
+  const productActions = createFeatureVisibilityActions({
+    state: {
+      clickedFeature: ref({ svg_id: nd1.svg_id, featureVisibility: 'default', feat: nd1 }),
+      extractedFeatures: ref([nd1, nd1Case, nd2, geneRna]),
+      orthogroups: ref([]),
+      featureVisibilityManualRules: manualRules,
+      featureVisibilityRules: ref([]),
+      featureVisibilityOverrides: overrides,
+      featureVisibilitySelectorCache: {},
+      featureVisibilityScopeDialog: scopeDialog,
+      resultGenerationKey: ref('generation-1'),
+      results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
+      selectedResultIndex: ref(0),
+      svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) })
+    },
+    featureSvgActions: {
+      applyVisibilityPreviewChanges: (changes) => {
+        reconciled.push(Object.fromEntries(changes.map((change) => [change.featureId, change.mode])));
+        return true;
+      }
+    },
+    previewRuntime: { selectResult: () => true }
+  });
+  productActions.updateClickedFeatureVisibility('off');
+  assert.equal(scopeDialog.show, true);
+  assert.equal(productActions.handleFeatureVisibilityScopeChoice('product'), true);
+  assert.deepEqual(reconciled.at(-1), { nd1: 'off', 'nd1-case': 'off' });
+  assert.equal(manualRules.length, 1);
+  assert.equal(productActions.reconcileFeatureVisibility(), true);
+  assert.deepEqual(reconciled.at(-1), { nd1: 'off', 'nd1-case': 'off', nd2: 'on', 'nd1-rna': 'on' });
+  overrides['nd1-case'] = 'on';
+  productActions.reconcileFeatureVisibility();
+  assert.equal(reconciled.at(-1)['nd1-case'], 'on', 'a per-feature override takes precedence');
+  manualRules.splice(0, manualRules.length, { ...manualRules[0], source: 'manual' });
+  delete overrides['nd1-case'];
+  productActions.reconcileFeatureVisibility();
+  assert.equal(reconciled.at(-1).nd1, 'on', 'a manual product rule applies on Generate only');
+}
 
 console.log('feature visibility action tests passed');

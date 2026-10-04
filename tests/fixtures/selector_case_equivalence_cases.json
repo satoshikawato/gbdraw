@@ -1,0 +1,41 @@
+{
+  "description": "Selector uniqueness uses the same case-insensitive equivalence as Python label and color matching. 'expected' is the selector the Web emits for 'target'; every 'rejected' selector matches more than one feature in Python.",
+  "cases": [
+    {
+      "id": "gene-differs-only-in-case",
+      "record_id": "CASE1",
+      "priority": ["gene", "product"],
+      "features": [
+        { "svg_id": "case-a", "type": "CDS", "start": 100, "end": 700, "strand": 1, "qualifiers": { "gene": ["orfA"], "product": ["alpha protein"] } },
+        { "svg_id": "case-b", "type": "CDS", "start": 1500, "end": 2100, "strand": -1, "qualifiers": { "gene": ["ORFA"], "product": ["beta protein"] } }
+      ],
+      "target": "case-a",
+      "expected": { "qualifier": "product", "value": "alpha protein" },
+      "rejected": [{ "qualifier": "gene", "value": "orfA" }]
+    },
+    {
+      "id": "locus-tag-differs-only-in-case",
+      "record_id": "CASE1",
+      "priority": ["locus_tag", "gene"],
+      "features": [
+        { "svg_id": "case-a", "type": "CDS", "start": 100, "end": 700, "strand": 1, "qualifiers": { "locus_tag": ["case1_0001"], "gene": ["orfA"] } },
+        { "svg_id": "case-b", "type": "CDS", "start": 1500, "end": 2100, "strand": -1, "qualifiers": { "locus_tag": ["CASE1_0001"], "gene": ["orfB"] } }
+      ],
+      "target": "case-b",
+      "expected": { "qualifier": "gene", "value": "orfB" },
+      "rejected": [{ "qualifier": "locus_tag", "value": "CASE1_0001" }]
+    },
+    {
+      "id": "distinct-values-keep-first-priority",
+      "record_id": "CASE1",
+      "priority": ["gene", "product"],
+      "features": [
+        { "svg_id": "case-a", "type": "CDS", "start": 100, "end": 700, "strand": 1, "qualifiers": { "gene": ["orfA"], "product": ["alpha protein"] } },
+        { "svg_id": "case-b", "type": "CDS", "start": 1500, "end": 2100, "strand": -1, "qualifiers": { "gene": ["orfB"], "product": ["alpha protein"] } }
+      ],
+      "target": "case-a",
+      "expected": { "qualifier": "gene", "value": "orfA" },
+      "rejected": [{ "qualifier": "product", "value": "alpha protein" }]
+    }
+  ]
+}

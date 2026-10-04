@@ -1,6 +1,7 @@
 const { expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { load: loadSeed, popup } = require('./mode-transition.cjs');
+const { reveal } = require('./app-lifecycle.cjs');
 
 const semantics = (page, content) => page.evaluate(async content => {
   const { svgVisualSemantics } = await import('/tests/web/helpers/svg-visual-semantics.mjs');
@@ -61,12 +62,6 @@ const agree = async (page, info, name) => {
   const observation = await capture(page, info, name);
   await assertCoherent(observation, name, true);
   return observation;
-};
-const reveal = async locator => {
-  for (const details of await locator.locator('xpath=ancestor::details').all()) {
-    if (await details.getAttribute('open') === null) await details.locator(':scope > summary').click();
-  }
-  return locator;
 };
 const check = async (page, name, enabled) => {
   await (await reveal(page.getByLabel(name, { exact: true }))).setChecked(enabled);

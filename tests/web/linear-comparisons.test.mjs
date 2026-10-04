@@ -95,13 +95,16 @@ const normalized = normalizeLinearComparisonPlan({
     losatFilename: 'retained.losat.tsv'
   }]
 });
-assert.equal(normalized.mode, 'adjacent');
+// B15: an unknown or absent mode is the Web default, never a comparison the
+// writer did not state.
+assert.equal(normalized.mode, 'none');
 assert.equal(normalized.defaultSource, 'losat');
 assert.equal(
   normalizeLinearComparisonPlan({ defaultSource: 'upload', edges: [] }).mode,
-  'adjacent',
-  'a missing persisted mode keeps the legacy normalizer fallback'
+  'none',
+  'a missing mode is the Web default (No comparison)'
 );
+assert.deepEqual(normalizeLinearComparisonPlan(undefined), createDefaultLinearComparisonPlan());
 assert.deepEqual(normalized.edges[0], {
   id: 'draft',
   queryUid: 'a',

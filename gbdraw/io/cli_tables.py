@@ -37,7 +37,8 @@ class ConservationTableRow:
     blast: str
     label: str
     color: str
-    comparison_fasta: str = ""
+    comparison_sequence: str = ""
+    losat_gencode: int | None = None
 
 
 @dataclass(frozen=True)
@@ -47,7 +48,7 @@ class ConservationTable:
     has_label_column: bool
     has_color_column: bool
     path_dependencies: tuple[TablePathDependency, ...]
-    has_comparison_fasta_column: bool = False
+    has_comparison_sequence_column: bool = False
 
     @property
     def conservation_blast_files(self) -> list[str]:
@@ -66,10 +67,18 @@ class ConservationTable:
         return [row.color for row in self.rows]
 
     @property
-    def comparison_fasta_files(self) -> list[str | None] | None:
-        if not self.has_comparison_fasta_column:
+    def losat_gencodes(self) -> list[int] | None:
+        """Per-ring TLOSATX tables when the column sets any (empty cells use 1)."""
+
+        if not any(row.losat_gencode is not None for row in self.rows):
             return None
-        return [row.comparison_fasta or None for row in self.rows]
+        return [row.losat_gencode or 1 for row in self.rows]
+
+    @property
+    def comparison_sequence_files(self) -> list[str | None] | None:
+        if not self.has_comparison_sequence_column:
+            return None
+        return [row.comparison_sequence or None for row in self.rows]
 
     @property
     def dependency_paths(self) -> tuple[str, ...]:
@@ -80,9 +89,11 @@ class ConservationTable:
 class ComparisonTableRow:
     row_index: int
     row_number: int
+    # Empty for a ``source=losat`` row.
     blast: str
     query: str
     subject: str
+    source: str = "table"
 
 
 @dataclass(frozen=True)
@@ -121,6 +132,7 @@ class RecordsTableRow:
     column: int | None
     topology: str | None = None
     display_start: int | None = None
+    losat_gencode: int | None = None
 
 
 @dataclass(frozen=True)
@@ -209,8 +221,11 @@ class _TrackRow:
     values: dict[str, str]
 
 
-_CONSERVATION_COLUMNS = frozenset({"blast", "label", "color", "comparison_fasta"})
-_COMPARISON_COLUMNS = frozenset({"blast", "query", "subject"})
+_CONSERVATION_COLUMNS = frozenset({"blast", "label", "color", "comparison_sequence", "losat_gencode"})
+# Retired conservation-table columns (design D18, OD-2) -> replacement.
+_RETIRED_CONSERVATION_COLUMNS = {"comparison_fasta": "comparison_sequence"}
+_COMPARISON_COLUMNS = frozenset({"blast", "query", "subject", "source"})
+_COMPARISON_SOURCES = frozenset({"table", "losat"})
 _CIRCULAR_TRACK_COLUMNS = frozenset(
     {
         "id",
@@ -239,6 +254,7 @@ _RECORDS_COLUMNS = frozenset(
         "order",
         "row",
         "column",
+        "losat_gencode",
     }
 )
 _BOOLEAN_TRUE = {"1", "true", "yes", "y", "on"}
@@ -271,29 +287,78 @@ _CIRCULAR_TRACK_STRUCTURAL_PARAM_KEYS = frozenset(
 _FEATURE_LANE_PARAM_KEYS = frozenset({"lane_direction", "lanes"})
 
 
-def read_conservation_table(path: str) -> ConservationTable:
+def read_conservation_table(path: str, *, losat: bool = False) -> ConservationTable:
+    """Read a ring manifest.
+
+    Precomputed rings need ``blast``. With ``losat`` (``--losat``) the search
+    builds each ring from ``comparison_sequence``, so ``blast`` is rejected; the
+    optional ``losat_gencode`` column sets each TLOSATX ring's table.
+    """
+
     table_path, header, rows = _read_tsv_table(
         path,
-        allowed_columns=_CONSERVATION_COLUMNS,
+        allowed_columns=_CONSERVATION_COLUMNS | frozenset(_RETIRED_CONSERVATION_COLUMNS),
         table_name="conservation table",
     )
-    _require_columns(table_path, header, ("blast",))
+    for retired, replacement in _RETIRED_CONSERVATION_COLUMNS.items():
+        if retired in header:
+            raise ValidationError(
+                f"{table_path}: conservation table column {retired} was retired; "
+                f"use {replacement} (FASTA, GenBank, or DDBJ).",
+                diagnostic={"code": "TABLE_INVALID", "field": retired},
+            )
+    if losat:
+        if "blast" in header:
+            raise ValidationError(
+                f"{table_path}: conservation table column blast cannot be combined with "
+                "--losat; the search builds each ring from comparison_sequence.",
+                diagnostic={
+                    "code": "COMPARISON_INPUT",
+                    "reason": "RING_LOSAT_INPUT",
+                    "field": "blast",
+                },
+            )
+        _require_columns(table_path, header, ("comparison_sequence",))
+    else:
+        _require_columns(table_path, header, ("blast",))
     if not rows:
         raise ValidationError(f"{table_path}: conservation table has no data rows.")
 
     parsed_rows: list[ConservationTableRow] = []
     dependencies: list[TablePathDependency] = []
     for row in rows:
-        blast_raw = row.values.get("blast", "").strip()
-        if not blast_raw:
+        required = "comparison_sequence" if losat else "blast"
+        if not row.values.get(required, "").strip():
             raise ValidationError(
-                _cell_error(table_path, row.row_number, "blast", "value is required")
+                _cell_error(table_path, row.row_number, required, "value is required"),
+                diagnostic={"code": "TABLE_INVALID", "reason": "REQUIRED", "field": required, "row": row.row_number},
             )
-        blast_path = _resolve_table_path(table_path, blast_raw)
-        comparison_fasta_raw = row.values.get("comparison_fasta", "").strip()
-        comparison_fasta_path = (
-            _resolve_table_path(table_path, comparison_fasta_raw)
-            if comparison_fasta_raw
+        blast_raw = row.values.get("blast", "").strip()
+        blast_path = _resolve_table_path(table_path, blast_raw) if blast_raw else ""
+        gencode_raw = row.values.get("losat_gencode", "").strip()
+        losat_gencode: int | None = None
+        if gencode_raw:
+            try:
+                losat_gencode = int(gencode_raw)
+            except ValueError:
+                losat_gencode = 0
+            if losat_gencode <= 0:
+                raise ValidationError(
+                    _cell_error(
+                        table_path, row.row_number, "losat_gencode",
+                        "must be a positive integer",
+                    ),
+                    diagnostic={
+                        "code": "TABLE_INVALID",
+                        "reason": "POSITIVE_INTEGER",
+                        "field": "losat_gencode",
+                        "row": row.row_number,
+                    },
+                )
+        comparison_sequence_raw = row.values.get("comparison_sequence", "").strip()
+        comparison_sequence_path = (
+            _resolve_table_path(table_path, comparison_sequence_raw)
+            if comparison_sequence_raw
             else ""
         )
         parsed_rows.append(
@@ -303,24 +368,26 @@ def read_conservation_table(path: str) -> ConservationTable:
                 blast=blast_path,
                 label=row.values.get("label", "").strip(),
                 color=row.values.get("color", "").strip(),
-                comparison_fasta=comparison_fasta_path,
+                comparison_sequence=comparison_sequence_path,
+                losat_gencode=losat_gencode,
             )
         )
-        dependencies.append(
-            TablePathDependency(
-                row_index=row.row_index,
-                row_number=row.row_number,
-                column="blast",
-                path=blast_path,
-            )
-        )
-        if comparison_fasta_path:
+        if blast_path:
             dependencies.append(
                 TablePathDependency(
                     row_index=row.row_index,
                     row_number=row.row_number,
-                    column="comparison_fasta",
-                    path=comparison_fasta_path,
+                    column="blast",
+                    path=blast_path,
+                )
+            )
+        if comparison_sequence_path:
+            dependencies.append(
+                TablePathDependency(
+                    row_index=row.row_index,
+                    row_number=row.row_number,
+                    column="comparison_sequence",
+                    path=comparison_sequence_path,
                 )
             )
 
@@ -329,7 +396,7 @@ def read_conservation_table(path: str) -> ConservationTable:
         rows=tuple(parsed_rows),
         has_label_column="label" in header,
         has_color_column="color" in header,
-        has_comparison_fasta_column="comparison_fasta" in header,
+        has_comparison_sequence_column="comparison_sequence" in header,
         path_dependencies=tuple(dependencies),
     )
 
@@ -537,6 +604,7 @@ def read_records_table(path: str) -> RecordsTable:
                 column=column,
                 topology=topology if topology in {"circular", "linear"} else None,
                 display_start=display_start,
+                losat_gencode=_parse_optional_positive_int(table_path, row, "losat_gencode"),
             )
         )
 
@@ -588,13 +656,30 @@ def read_comparisons_table(path: str) -> ComparisonTable:
         blast_raw = values.get("blast", "").strip()
         query = values.get("query", "").strip()
         subject = values.get("subject", "").strip()
-        for column, value in (("blast", blast_raw), ("query", query), ("subject", subject)):
+        source = values.get("source", "").strip().lower() or "table"
+        if source not in _COMPARISON_SOURCES:
+            raise ValidationError(
+                _cell_error(table_path, row.row_number, "source", "expected table or losat"),
+                diagnostic={"code": "TABLE_INVALID", "field": "source", "row": row.row_number},
+            )
+        required_cells = (("query", query), ("subject", subject))
+        if source == "table":
+            required_cells = (("blast", blast_raw), *required_cells)
+        elif blast_raw:
+            raise ValidationError(
+                _cell_error(
+                    table_path, row.row_number, "blast",
+                    "must be empty in a source=losat row; gbdraw runs the search",
+                ),
+                diagnostic={"code": "COMPARISON_INPUT", "reason": "LOSAT_PLAN", "row": row.row_number},
+            )
+        for column, value in required_cells:
             if not value:
                 raise ValidationError(
                     _cell_error(table_path, row.row_number, column, "value is required")
                 )
-        blast = _resolve_table_path(table_path, blast_raw)
-        if not Path(blast).is_file():
+        blast = _resolve_table_path(table_path, blast_raw) if blast_raw else ""
+        if blast and not Path(blast).is_file():
             raise ValidationError(
                 _cell_error(table_path, row.row_number, "blast", f"file does not exist: {blast}")
             )
@@ -607,14 +692,15 @@ def read_comparisons_table(path: str) -> ComparisonTable:
                     "query and subject must identify different records",
                 )
             )
-        dependencies.append(
-            TablePathDependency(
-                row_index=row.row_index,
-                row_number=row.row_number,
-                column="blast",
-                path=blast,
+        if blast:
+            dependencies.append(
+                TablePathDependency(
+                    row_index=row.row_index,
+                    row_number=row.row_number,
+                    column="blast",
+                    path=blast,
+                )
             )
-        )
         parsed.append(
             ComparisonTableRow(
                 row_index=row.row_index,
@@ -622,6 +708,7 @@ def read_comparisons_table(path: str) -> ComparisonTable:
                 blast=blast,
                 query=query,
                 subject=subject,
+                source=source,
             )
         )
     return ComparisonTable(

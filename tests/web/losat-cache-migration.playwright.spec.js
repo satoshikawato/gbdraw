@@ -9,6 +9,7 @@ const {
 const { tmpdir } = require('node:os');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
+const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const repoRoot = resolve(process.env.GBDRAW_REPO || process.cwd());
 const fixtureDir = join(repoRoot, 'tests', 'fixtures', 'sessions');
@@ -20,8 +21,8 @@ const expected = JSON.parse(readFileSync(join(
   fixtureDir,
   'BGC0000708-BGC0000713.schema-v2.expected.json'
 ), 'utf8'));
-const CURRENT_SESSION_VERSION = 42;
-const CURRENT_RENDER_REQUEST_SCHEMA = 7;
+const CURRENT_SESSION_VERSION = 44;
+const CURRENT_RENDER_REQUEST_SCHEMA = 8;
 const CURRENT_PROTEIN_RAW_SCHEMA = 4;
 const CURRENT_PROTEIN_DERIVED_SCHEMA = 3;
 
@@ -50,7 +51,7 @@ const importSession = async (page, path) => {
 
 const saveSession = async (page) => {
   const downloadPromise = page.waitForEvent('download', { timeout: 120000 });
-  const outcome = await page.evaluate(async () => ({
+  const outcome = await evaluateWithRetainedPromise(page, async () => ({
     result: await window.__GBDRAW_APP__.saveSessionWithTitle(),
     errorLog: window.__GBDRAW_APP__.errorLog
   }));
@@ -325,7 +326,7 @@ const assertCurrentProteinArtifacts = (session) => {
 
 };
 
-const generateWithTelemetry = async (page) => page.evaluate(async () => {
+const generateWithTelemetry = async (page) => evaluateWithRetainedPromise(page, async () => {
   const app = window.__GBDRAW_APP__;
   const result = await app.runAnalysis();
   return {
@@ -355,12 +356,12 @@ const migrationUiSnapshot = async (page) => page.evaluate(async () => {
   }));
 });
 
-const cancelDuringRender = async (page) => page.evaluate(async () => {
+const cancelDuringRender = async (page) => evaluateWithRetainedPromise(page, async () => {
   const contract = await import('/tests/web/helpers/losat-cache-render-boundary.mjs');
   return contract.cancelDuringRender();
 });
 
-const failRendererAfterMigration = async (page) => page.evaluate(async () => {
+const failRendererAfterMigration = async (page) => evaluateWithRetainedPromise(page, async () => {
   const contract = await import('/tests/web/helpers/losat-cache-render-boundary.mjs');
   return contract.failRendererAfterMigration();
 });

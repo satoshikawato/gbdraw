@@ -23,6 +23,7 @@ const copyModule = async (sourceRelative, targetRelative) => {
 await copyModule('gbdraw/web/js/app/feature-utils.js', 'app/feature-utils.js');
 await copyModule('gbdraw/web/js/app/feature-sequence-fasta.js', 'app/feature-sequence-fasta.js');
 await copyModule('gbdraw/web/js/app/losat-normalization.js', 'app/losat-normalization.js');
+await copyModule('gbdraw/web/js/app/record-source-coordinates.js', 'app/record-source-coordinates.js');
 await copyModule('gbdraw/web/js/app/feature-search/search-core.js', 'app/feature-search/search-core.js');
 await copyModule(
   'gbdraw/web/js/services/standalone-interactivity-assets.js',
@@ -37,6 +38,8 @@ await copyModule(
   'services/orthogroup-feature-metadata.js'
 );
 await copyModule('gbdraw/web/js/services/feature-identity.js', 'services/feature-identity.js');
+await copyModule('gbdraw/web/js/services/feature-catalog.js', 'services/feature-catalog.js');
+await copyModule('gbdraw/web/js/services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
 await copyModule('gbdraw/web/js/services/text-download.js', 'services/text-download.js');
 await copyModule('gbdraw/web/js/utils/clipboard.js', 'utils/clipboard.js');
 const standaloneSource = await readFile(
@@ -1012,7 +1015,7 @@ assert.equal(
 const catalogSelectionItem = { resultIndex: 0, resultName: 'result-zero' };
 assert.equal(
   selectStandaloneCatalogItem({
-    featureCatalog: { schema: 3, items: [catalogSelectionItem] },
+    featureCatalog: { schema: 4, items: [catalogSelectionItem] },
     catalogResultIndex: '0',
     catalogResultName: 'result-zero'
   }),
@@ -1026,7 +1029,7 @@ for (const invalidCatalogIndex of [
 ]) {
   assert.equal(
     selectStandaloneCatalogItem({
-      featureCatalog: { schema: 3, items: [catalogSelectionItem] },
+      featureCatalog: { schema: 4, items: [catalogSelectionItem] },
       catalogResultIndex: invalidCatalogIndex,
       catalogResultName: 'result-zero'
     }),
@@ -1856,3 +1859,19 @@ assert.equal(visibleElement.getAttribute('stroke'), '#111111');
 assert.equal(visibleElement.getAttribute('stroke-width'), '0.5');
 
 console.log('orthogroup stable identity tests passed');
+
+// Resolving one member must not read or normalize every unrelated source sequence.
+{
+  const unrelated = { recordKey: 'unrelated-record', biologicalFeatureId: 'unrelated-feature',
+    fileIdx: 3, stable_svg_id: 'unrelated-stable' };
+  Object.defineProperty(unrelated, 'nucleotide_sequence', {
+    get() { throw new Error('Unrelated sequence must not be materialized'); }
+  });
+  const lazyState = { ...state,
+    biologicalFeatures: ref([...originalBiologicalFeatures, unrelated]) };
+  const lazyEditor = createOrthogroupEditor({ state: lazyState });
+  const member = lazyEditor.getEnrichedOrthogroupMembers({ id: 'selected-only',
+    members: [{ recordKey: 'record-key-c', biologicalFeatureId: 'biological-c' }] })[0];
+  assert.equal(member.nucleotideSequence, 'GGGG');
+  assert.equal(member.aminoAcidSequence, 'MQ');
+}

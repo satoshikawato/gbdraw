@@ -3,7 +3,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from numbers import Integral
-from typing import Any, Collection, Literal, Sequence
+from typing import Any, Collection, Literal, Mapping, Sequence
+
+from gbdraw.mode_profiles import validate_dinucleotide
 
 
 @dataclass
@@ -138,6 +140,25 @@ def normalize_dinucleotide_skew_color_params(params: dict) -> dict:
     return params
 
 
+def slot_dinucleotide(params: Mapping[str, Any] | None, default: str) -> str:
+    """Return a numeric slot's validated pair; an unset ``nt`` uses ``default``."""
+
+    raw = (params or {}).get("nt", (params or {}).get("dinucleotide"))
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        raw = default
+    return validate_dinucleotide(raw, field_name="nt")
+
+
+def normalize_dinucleotide_params(params: dict) -> dict:
+    """Store an explicit slot pair once, as validated ``nt``."""
+
+    if "dinucleotide" in params and "nt" not in params:
+        params["nt"] = params.pop("dinucleotide")
+    if "nt" in params:
+        params["nt"] = validate_dinucleotide(params["nt"], field_name="nt")
+    return params
+
+
 def strip_inline_comment(raw: str) -> str:
     for marker in (" #", "\t#"):
         index = raw.find(marker)
@@ -148,9 +169,11 @@ def strip_inline_comment(raw: str) -> str:
 
 __all__ = [
     "CircularTrackSlotParseError",
+    "normalize_dinucleotide_params",
     "parse_bool",
     "parse_nonnegative_integer",
     "parse_track_slot_text",
+    "slot_dinucleotide",
     "split_kv_list",
     "validate_overlay_annotation_anchors",
 ]

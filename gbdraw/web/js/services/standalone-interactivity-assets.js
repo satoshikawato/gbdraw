@@ -44,6 +44,7 @@ export const STANDALONE_INTERACTIVE_STYLE = `
 }
 .gbdraw-interactive-pairwise-match {
   cursor: pointer;
+  outline: none;
   transition: opacity 120ms ease, filter 120ms ease, stroke 120ms ease, stroke-width 120ms ease, stroke-opacity 120ms ease;
 }
 .gbdraw-interactive-pairwise-match.gbdraw-interactive-pairwise-match--hover {
@@ -62,7 +63,6 @@ export const STANDALONE_INTERACTIVE_STYLE = `
   stroke-opacity: 1;
   stroke-width: 2.5;
   paint-order: stroke fill markers;
-  outline: none;
 }
 .gbdraw-interactive-pairwise-match:focus-visible {
   outline: 2px solid #2563eb;
@@ -1686,7 +1686,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       metadataText = await new Response(decompressed).text();
     }
     payload = JSON.parse(metadataText);
-    if (payload && payload.schema === 3 && Array.isArray(payload.items)) {
+    if (payload && payload.schema === 4 && Array.isArray(payload.items)) {
       payload = decodeCatalogPayload(payload);
     }
   } catch (error) {
@@ -2411,23 +2411,6 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return items;
   }
 
-  function buildFeatureLocation(feature) {
-    var direct = String(feature && feature.location || '').trim();
-    if (direct) return direct;
-    var parts = Array.isArray(feature && feature.location_parts) ? feature.location_parts : [];
-    var partText = parts.map(function (part) {
-      return String(part && part.display || '').trim();
-    }).filter(Boolean).join(', ');
-    if (partText) return partText;
-    var start = Number(feature && feature.start);
-    var end = Number(feature && feature.end);
-    var startText = Number.isFinite(start) ? String(start + 1) : String(feature && feature.start != null ? feature.start : '');
-    var endText = Number.isFinite(end) ? String(end) : String(feature && feature.end != null ? feature.end : '');
-    var range = startText + '..' + endText;
-    var strand = String(feature && feature.strand || '').trim();
-    return strand ? range + ' (' + strand + ')' : range;
-  }
-
   function getOrthogroupById(orthogroupId) {
     var id = String(orthogroupId || '').trim();
     if (!id) return null;
@@ -2619,9 +2602,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       return items;
     }
     if (selectedField === 'location') {
-      appendSearchItems(items, 'Location', buildFeatureLocation(feature));
-      appendSearchItems(items, 'Start', feature && feature.start);
-      appendSearchItems(items, 'End', feature && feature.end);
+      appendSearchItems(items, 'Location', locationText(feature));
       return items;
     }
     if (selectedField === 'strand') {
@@ -2652,16 +2633,14 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     appendSearchItems(items, 'Record ID', feature && feature.recordId);
     appendSearchItems(items, 'Record ID', feature && feature.displayRecordId);
     appendSearchItems(items, 'Feature type', feature && feature.type);
-    appendSearchItems(items, 'Location', buildFeatureLocation(feature));
+    appendSearchItems(items, 'Location', locationText(feature));
     appendSearchItems(items, 'Strand', feature && feature.strand);
     Array.prototype.push.apply(items, getOrthogroupSearchItems(feature));
     if (popupMode !== 'simple') {
       appendSearchItems(items, 'Qualifier key', Object.keys(qualifiers));
       Object.keys(qualifiers).sort().forEach(function (key) {
-        appendSearchItems(items, 'Qualifier ' + key, qualifiers[key]);
+        if (key.toLowerCase() !== 'translation') appendSearchItems(items, 'Qualifier ' + key, qualifiers[key]);
       });
-      appendSearchItems(items, 'Nucleotide sequence', feature && (feature.nucleotide_sequence || feature.nucleotideSequence), { alphabet: 'nucleotide' });
-      appendSearchItems(items, 'Amino acid sequence', featureAminoAcidSequence(feature), { alphabet: 'amino-acid' });
     }
     return items;
   }
@@ -2695,7 +2674,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
           }
         };
       } catch (error) {
-        return { active: true, error: 'Invalid regex', test: function () { return false; } };
+        return { active: true, error: 'Invalid JavaScript regular expression. Turn off Regex to return to word search.', test: function () { return false; } };
       }
     }
     var needle = normalizeSearchText(trimmedQuery);
@@ -3332,13 +3311,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       'aria-label': 'Qualifier key for qualifier value search',
       'data-search-qualifier': 'true'
     });
-    var regexLabel = createXhtmlNode('label', { className: 'gfs-toggle' });
+    var regexLabel = createXhtmlNode('label', { className: 'gfs-toggle', title: 'JavaScript regular expression, case-insensitive. Turn off Regex to return to word search.' });
     var regexInput = createXhtmlNode('input', {
       type: 'checkbox',
       'data-search-regex': 'true'
     });
     regexLabel.appendChild(regexInput);
-    regexLabel.appendChild(document.createTextNode('Regex'));
+    regexLabel.appendChild(document.createTextNode('Regex (JavaScript, i)'));
     var prevButton = createXhtmlNode('button', {
       type: 'button',
       className: 'gfs-button',
@@ -4472,13 +4451,23 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     }, 0);
   }
 
+  // Mirrors app/feature-utils.js formatFeatureLocation/formatFeatureLength.
+  function featureLocationParts(feature) {
+    return feature && Array.isArray(feature.location_parts) && feature.location_parts.length
+      ? feature.location_parts
+      : [feature];
+  }
+
   function locationText(feature) {
-    if (feature.location) return String(feature.location);
-    var start = Number(feature.start);
-    var end = Number(feature.end);
-    var text = (Number.isFinite(start) ? start + 1 : '') + '..' + (Number.isFinite(end) ? end : '');
-    if (feature.strand) text += ' (' + feature.strand + ')';
-    return text;
+    var range = featureLocationParts(feature).map(function (part) {
+      var display = String(part && part.display || '').trim();
+      if (display) return display;
+      var start = Number(part && part.start);
+      var end = Number(part && part.end);
+      return Number.isFinite(start) && Number.isFinite(end) ? String(start + 1) + '..' + String(end) : '';
+    }).filter(Boolean).join(', ');
+    var strand = String(feature && feature.strand || '').trim();
+    return range && strand ? range + ' (' + strand + ')' : range;
   }
 
   function strandText(strand) {
@@ -5063,7 +5052,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
         'Feature'
       ),
       record: firstDisplayText(feature.record_id, fallback && fallback.recordId),
-      location: firstDisplayText(feature.location, feature && locationText(feature), fallback && fallback.interval),
+      location: firstDisplayText(feature && locationText(feature), fallback && fallback.interval),
       proteinId: proteinId,
       locusId: locusId,
       displayName: displayName,
@@ -5228,7 +5217,13 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var sequence = sourceSequence.slice(low - 1, high);
     if (orientation === '-') sequence = reverseComplementMatchSequence(sequence);
     var matchId = safeMatchFilenamePart(match && match.id, 'match');
-    var header = matchId + '_' + role + '|record=' + recordId + '|coords=' + start + '..' + end + '|strand=' + orientation;
+    var sourceStart = Number(match && match[prefix + 'source_start']);
+    var sourceEnd = Number(match && match[prefix + 'source_end']);
+    var hasSource = Number.isInteger(sourceStart) && Number.isInteger(sourceEnd) && sourceStart >= 1 && sourceEnd >= 1;
+    var coordStart = hasSource ? sourceStart : start;
+    var coordEnd = hasSource ? sourceEnd : end;
+    var strand = hasSource ? (sourceStart <= sourceEnd ? '+' : '-') : orientation;
+    var header = matchId + '_' + role + '|record=' + recordId + '|coords=' + coordStart + '..' + coordEnd + '|strand=' + strand;
     var fasta = '>' + header + '\\n' + wrapMatchFasta(sequence) + '\\n';
     return {
       role: role,
@@ -5236,12 +5231,12 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       recordId: recordId,
       start: start,
       end: end,
-      orientation: orientation,
+      orientation: strand,
       length: high - low + 1,
       available: true,
       reason: '',
       fasta: fasta,
-      filename: matchId + '_' + role + '_' + safeMatchFilenamePart(recordId, 'record') + '_' + start + '-' + end + '.fna'
+      filename: matchId + '_' + role + '_' + safeMatchFilenamePart(recordId, 'record') + '_' + coordStart + '-' + coordEnd + '.fna'
     };
   }
 
@@ -5270,13 +5265,18 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     var orthogroupId = orthogroupIds[0] || '';
     var group = orthogroupsById.get(orthogroupId) || null;
     var displayName = firstDisplayText(group && (group.display_name || group.displayName || group.name), orthogroupId);
-    var qInterval = [match.qstart, match.qend].filter(function (value) { return String(value || '').trim(); }).join('..');
-    var sInterval = [match.sstart, match.send].filter(function (value) { return String(value || '').trim(); }).join('..');
+    var intervalOf = function (start, end) {
+      return [start, end].filter(function (value) { return String(value || '').trim(); }).join('..');
+    };
+    var qInterval = intervalOf(match.qsource_start, match.qsource_end) || intervalOf(match.qstart, match.qend);
+    var sInterval = intervalOf(match.ssource_start, match.ssource_end) || intervalOf(match.sstart, match.send);
     var summaryRows = [];
     addMaterializedMatchRow(summaryRows, 'Query record', match.query_record_id);
     addMaterializedMatchRow(summaryRows, 'Subject record', match.subject_record_id);
     addMaterializedMatchRow(summaryRows, 'Query interval', qInterval);
+    addMaterializedMatchRow(summaryRows, 'Query table interval', match.qtable_interval);
     addMaterializedMatchRow(summaryRows, 'Subject interval', sInterval);
+    addMaterializedMatchRow(summaryRows, 'Subject table interval', match.stable_interval);
     addMaterializedMatchRow(summaryRows, 'Orientation', match.orientation);
     if (kind === 'homology') {
       addMaterializedMatchRow(summaryRows, 'Ring label', match.track_label);
@@ -5763,10 +5763,15 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   }
 
   function featureLengthText(feature) {
-    var start = Number(feature && feature.start);
-    var end = Number(feature && feature.end);
-    if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '';
-    return String(Math.round(end - start).toLocaleString()) + ' bp';
+    var parts = featureLocationParts(feature);
+    var length = 0;
+    for (var index = 0; index < parts.length; index += 1) {
+      var start = Number(parts[index] && parts[index].start);
+      var end = Number(parts[index] && parts[index].end);
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return '';
+      length += end - start;
+    }
+    return String(Math.round(length).toLocaleString()) + ' bp';
   }
 
   function getFeatureDisplayColor(feature, svgId) {

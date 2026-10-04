@@ -264,7 +264,7 @@ def test_nucleotide_capture_accessibility_labels_are_in_the_public_ui() -> None:
         'aria-label="Pairwise Comparisons"',
         'aria-label="Circular reference gencode"',
         "Comparison ring label ${row.index + 1}",
-        "Comparison subject gencode ${row.index + 1}",
+        "Comparison gencode ${row.index + 1}",
         'aria-label="Circular comparison minimum alignment length"',
         'aria-label="Circular comparison ring width"',
         'aria-label="Circular comparison ring gap"',
@@ -303,7 +303,8 @@ def test_nucleotide_manifest_records_the_executable_evidence() -> None:
 
     faq = FAQ_PATH.read_text(encoding="utf-8")
     assert "**Comparison** command" in faq
-    assert "**Current:** status" in faq
+    assert "button that matches the effective plan is pressed" in faq
+    assert "**Current:**" not in faq
     assert "**Selected pairs" in faq
     assert "Fresh Linear pages and **Reset Settings** start with **No comparison**" in faq
     assert "**Apply to all adjacent gaps**" not in faq

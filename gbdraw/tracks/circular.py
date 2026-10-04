@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from math import isfinite
 from typing import Any, Literal, Mapping, Sequence
 
 from .parsing import (
     CircularTrackSlotParseError,
+    normalize_dinucleotide_params,
     normalize_dinucleotide_skew_color_params as _normalize_dinucleotide_skew_color_params,
     parse_bool,
     parse_nonnegative_integer,
@@ -13,7 +13,7 @@ from .parsing import (
     split_kv_list,
     validate_overlay_annotation_anchors,
 )
-from .scalars import ScalarSpec
+from .scalars import ScalarSpec, parse_optional_pixel
 from gbdraw.annotations.models import AnnotationTrackParams, annotation_track_params_from_mapping
 
 
@@ -212,18 +212,6 @@ def _normalize_renderer(raw: str) -> str:
 
 
 
-def _parse_gap_px(raw: object, *, field_name: str) -> float:
-    text = str(raw).strip()
-    if not text:
-        raise ValueError(f"{field_name} must be a numeric pixel value")
-    if text.endswith("px") or text.endswith("%"):
-        raise ValueError(f"{field_name} must be a numeric pixel value without a unit")
-    value = float(text)
-    if not isfinite(value) or value < 0:
-        raise ValueError(f"{field_name} must be a nonnegative numeric pixel value")
-    return value
-
-
 def _normalize_side_value(raw: object, *, field_name: str = "side") -> str:
     side = str(raw).strip().lower()
     if side not in _SIDE_VALUES:
@@ -340,9 +328,13 @@ def parse_circular_track_slot(
                         )
                     legacy_spacing = ScalarSpec.parse(value)
                 elif key == "inner_gap_px":
-                    inner_gap_px = _parse_gap_px(value, field_name="inner_gap_px")
+                    inner_gap_px = parse_optional_pixel(
+                        value, field_name="inner_gap_px", allow_zero=True
+                    )
                 elif key == "outer_gap_px":
-                    outer_gap_px = _parse_gap_px(value, field_name="outer_gap_px")
+                    outer_gap_px = parse_optional_pixel(
+                        value, field_name="outer_gap_px", allow_zero=True
+                    )
                 elif key in _OBSOLETE_GEOMETRY_KEYS:
                     raise ValueError(f"'{key}' is no longer supported; use r=<radius> with w=<width>")
                 elif key in {"innerradius", "outerradius"}:
@@ -359,7 +351,7 @@ def parse_circular_track_slot(
                             f"'{key}' is no longer supported; geometry and reservation are derived from side"
                         )
                 elif key in {"nt", "dinucleotide"}:
-                    params["nt"] = value.upper()
+                    params["nt"] = value
                 elif key.startswith("_"):
                     raise ValueError(
                         f"private circular track parameter '{raw_key}' is not supported"
@@ -373,6 +365,13 @@ def parse_circular_track_slot(
 
     if not slot_id:
         raise CircularTrackSlotParseError("missing circular track slot id", original)
+    if renderer in {"dinucleotide_content", "dinucleotide_skew"}:
+        try:
+            params = normalize_dinucleotide_params(params)
+        except Exception as exc:
+            raise CircularTrackSlotParseError(str(exc), original) from exc
+    elif "nt" in params:
+        params["nt"] = str(params["nt"]).upper()
     if renderer == "dinucleotide_skew":
         params = _normalize_dinucleotide_skew_color_params(params)
 
@@ -422,6 +421,11 @@ def parse_circular_track_slots(
                         if isinstance(legacy_spacing_raw, ScalarSpec)
                         else ScalarSpec.parse(legacy_spacing_raw)
                     )
+            if renderer in {"dinucleotide_content", "dinucleotide_skew"}:
+                try:
+                    params = normalize_dinucleotide_params(params)
+                except Exception as exc:
+                    raise CircularTrackSlotParseError(str(exc), str(item.id)) from exc
             if renderer == "dinucleotide_skew":
                 params = _normalize_dinucleotide_skew_color_params(params)
             slot = replace(item, renderer=renderer, params=params)
@@ -636,6 +640,8 @@ def _normalize_circular_track_slots(
                 raise ValueError("sequence_conservation slots cannot use side=overlay")
         elif renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS:
             side = _normalize_side_value(slot.side) if slot.side is not None else "inside"
+            if renderer in {"dinucleotide_content", "dinucleotide_skew"}:
+                params = normalize_dinucleotide_params(params)
             if renderer == "dinucleotide_skew":
                 params = _normalize_dinucleotide_skew_color_params(params)
             elif renderer == "depth" and "track_index" in params:
@@ -666,12 +672,16 @@ def _normalize_circular_track_slots(
             else False
         )
         inner_gap_px = (
-            _parse_gap_px(slot.inner_gap_px, field_name="inner_gap_px")
+            parse_optional_pixel(
+                slot.inner_gap_px, field_name="inner_gap_px", allow_zero=True
+            )
             if slot.inner_gap_px is not None
             else None
         )
         outer_gap_px = (
-            _parse_gap_px(slot.outer_gap_px, field_name="outer_gap_px")
+            parse_optional_pixel(
+                slot.outer_gap_px, field_name="outer_gap_px", allow_zero=True
+            )
             if slot.outer_gap_px is not None
             else None
         )

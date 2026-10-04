@@ -2,6 +2,7 @@
 # coding: utf-8
 
 from ....svg.text_path import generate_text_path
+from ...label_binding import bind_label_part
 
 
 class LabelDrawer:
@@ -23,6 +24,7 @@ class LabelDrawer:
         )
         if rotation_deg != 0.0:
             label_path.rotate(rotation_deg, center=(middle_x, middle_y))
+        bind_label_part(label_path, label_entry["feature_id"], complete=True)
         group.add(label_path)
         return group
 

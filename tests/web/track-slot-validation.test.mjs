@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -17,9 +17,15 @@ await cp(
   join(tempRoot, 'utils'),
   { recursive: true }
 );
+// circular-track-slots.js reports through the dependency-free wording owner.
+await cp(
+  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'error-normalization.js'),
+  join(tempRoot, 'services', 'error-normalization.js')
+);
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
 const {
+  parseOptionalPixel,
   CustomTrackPlanValidationError,
   assertValidCustomTrackPlan,
   validateCustomTrackPlan
@@ -28,11 +34,14 @@ const {
 );
 const {
   buildLinearTrackSlotPayload,
+  buildLinearTrackSlotSpec,
+  normalizeLinearTrackSlots,
+  parseLinearTrackSlotSpec,
   createLinearTrackSlotEditor
 } = await import(
   pathToFileURL(join(tempRoot, 'app', 'linear-track-slots.js'))
 );
-const { buildCircularTrackSlotPayload } = await import(
+const { buildCircularTrackSlotPayload, buildCircularTrackSlotSpec, normalizeCircularTrackSlot, parseCircularTrackSlotSpec } = await import(
   pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js'))
 );
 
@@ -542,6 +551,48 @@ test('validates Depth binding and allows disabling an invalid row', () => {
   assert.equal(disabled.rowIssues.size, 0);
 });
 
+// PD-OI-083: a logical series inside the count can still lack a source; the
+// row issue matches the one for a stack with no Depth series.
+test('reports an enabled Depth row on a series without a source in both modes', () => {
+  for (const mode of ['circular', 'linear']) {
+    const label = mode === 'circular' ? 'Circular' : 'Linear';
+    const side = mode === 'circular' ? 'inside' : 'below';
+    const plan = validate({
+      mode,
+      slots: [feature(), depth('depth', 0, { side }), depth('depth_2', 1, { side })],
+      depthTrackCount: 2,
+      depthSourcedTrackIndexes: [1]
+    });
+    assert.deepEqual(rowCodes(plan, 1), ['depth_source_missing']);
+    assert.deepEqual(rowCodes(plan, 2), []);
+    const empty = validate({ mode, slots: [feature(), depth('depth', 0, { side })], depthTrackCount: 0 });
+    assert.deepEqual(
+      plan.rowIssues.get(1).map((issue) => issue.message),
+      [`${label} Depth track 'depth' has no logical Depth source.`]
+    );
+    assert.deepEqual(
+      empty.rowIssues.get(1).map((issue) => issue.message),
+      plan.rowIssues.get(1).map((issue) => issue.message)
+    );
+  }
+  const withoutInventory = validate({ slots: [feature(), depth('depth', 0)], depthTrackCount: 2 });
+  assert.equal(withoutInventory.rowIssues.size, 0);
+});
+
+test('Linear editor shows the row issue after a File clear keeps the series', () => {
+  const slots = [feature(), depth('depth_1', 0, { custom: 'manual' }), depth('depth_2', 1)];
+  const editor = createLinearTrackSlotEditor({
+    state: {
+      form: { linear_track_layout: 'middle', show_depth: true },
+      adv: { linear_track_slots: slots, linear_track_slots_axis_index: 0, nt: 'GC', depth_tracks: [] },
+      linearSeqs: [{ depth: [null, { name: 'b.depth.tsv' }] }],
+      annotationSets: []
+    }
+  });
+  assert.equal(editor.linearTrackSlotIssue(slots[1], 1), "Linear Depth track 'depth_1' has no logical Depth source.");
+  assert.equal(editor.linearTrackSlotIssue(slots[2], 2), '');
+});
+
 test('validates Annotation set inventory and advanced params', () => {
   const plan = validate({
     slots: [
@@ -714,4 +765,70 @@ test('throws the typed summary only at an explicit boundary', () => {
       /Depth/.test(error.message)
     )
   );
+});
+
+const pixelCorpus = JSON.parse(await readFile(join(repoRoot, 'tests/fixtures/pixel-track-inputs.json'), 'utf8'));
+for (const [index, entry] of pixelCorpus.entries()) {
+  for (const [mode, field, allowZero] of [
+    ['linear', 'height', false], ['linear', 'spacing', true],
+    ['circular', 'inner_gap_px', true], ['circular', 'outer_gap_px', true]
+  ]) {
+    test(`shared pixel corpus ${index}: ${mode} ${field} raw/draft/payload/text parity`, () => {
+      const value = entry.numberToken ? Number(entry.numberToken) : entry.value;
+      const expected = entry[allowZero ? 'gap' : 'height'];
+      const slot = { id: 'gc', renderer: 'dinucleotide_content', side: mode === 'linear' ? 'below' : 'inside', enabled: true, params: {}, z: 0, [field]: value };
+      const normalize = mode === 'linear' ? row => normalizeLinearTrackSlots([row])[0] : row => normalizeCircularTrackSlot(row);
+      const payload = mode === 'linear' ? buildLinearTrackSlotPayload : buildCircularTrackSlotPayload;
+      const spec = mode === 'linear' ? buildLinearTrackSlotSpec : buildCircularTrackSlotSpec;
+      const parseSpec = mode === 'linear' ? parseLinearTrackSlotSpec : parseCircularTrackSlotSpec;
+      const plan = validate({ mode, slots: [slot], axisIndex: 0 });
+      const normalized = normalize(slot);
+      const normalizedPlan = validate({ mode, slots: [normalized], axisIndex: 0 });
+      if (expected === 'invalid') {
+        const error = new RegExp(`${field} must be ${allowZero ? 'nonnegative' : 'positive'} finite`);
+        assert.throws(() => parseOptionalPixel(value, field, { allowZero }), error);
+        assert.ok(plan.rowIssues.get(0)?.some(issue => issue.code === 'geometry_invalid'));
+        assert.ok(normalizedPlan.rowIssues.get(0)?.some(issue => issue.code === 'geometry_invalid'));
+        assert.deepEqual(normalized[field], value, 'invalid draft must survive normalization');
+        assert.throws(() => payload(normalized), error);
+        assert.throws(() => spec(normalized), error);
+      } else {
+        assert.equal(parseOptionalPixel(value, field, { allowZero }), expected);
+        assert.equal(plan.rowIssues.size, 0);
+        assert.equal(normalizedPlan.rowIssues.size, 0);
+        const outputField = field === 'inner_gap_px' ? 'innerGapPx' : field === 'outer_gap_px' ? 'outerGapPx' : field;
+        const canonicalValue = expected === null ? null : mode === 'linear' ? { value: expected, unit: 'px' } : expected;
+        assert.deepEqual(payload(normalized)[outputField], canonicalValue);
+        assert.deepEqual(payload(parseSpec(spec(normalized)))[outputField], canonicalValue);
+      }
+      if (typeof value === 'string') {
+        const text = `gc:dinucleotide_content@side=${slot.side},${field}=${value}`;
+        if (expected === 'invalid') assert.throws(() => parseSpec(text));
+        else assert.deepEqual(payload(parseSpec(text)), payload(normalized));
+      }
+    });
+  }
+}
+
+test('omitted pixel fields remain auto and disabled valid drafts retain geometry', () => {
+  assert.equal(parseOptionalPixel(undefined, 'height', { allowZero: false }), null);
+  const linear = normalizeLinearTrackSlots([{ ...feature(), enabled: false, height: '10PX', spacing: '0px' }])[0];
+  const circular = normalizeCircularTrackSlot({ ...feature(), side: 'inside', enabled: false, inner_gap_px: '10PX', outer_gap_px: '0px' });
+  assert.deepEqual(buildLinearTrackSlotPayload(linear).height, { value: 10, unit: 'px' });
+  assert.equal(buildCircularTrackSlotPayload(circular).innerGapPx, 10);
+  assert.equal(buildCircularTrackSlotPayload(circular).enabled, false);
+});
+
+test('invalid depth height remains editable without overwriting its last valid config', () => {
+  const slot = depth('depth', 0, { height: '10px' });
+  const state = { form: { linear_track_layout: 'middle' }, adv: { linear_track_slots: [slot], depth_tracks: [{ height: 10 }] }, files: { linearSeqs: [] }, annotationSets: [] };
+  const editor = createLinearTrackSlotEditor({ state });
+  editor.setLinearTrackSlotHeight(slot, 'px');
+  assert.equal(slot.height, 'px');
+  assert.equal(editor.linearTrackSlotHeightValue(slot), 'px');
+  assert.equal(state.adv.depth_tracks[0].height, 10);
+  assert.throws(() => buildLinearTrackSlotPayload(slot), /height must be positive finite/);
+  editor.setLinearTrackSlotHeight(slot, '1e1PX');
+  assert.equal(state.adv.depth_tracks[0].height, 10);
+  assert.deepEqual(buildLinearTrackSlotPayload(slot).height, { value: 10, unit: 'px' });
 });

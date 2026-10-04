@@ -39,6 +39,7 @@ from gbdraw.api import (
     session_to_request,
     normalize_request_records,
 )
+from gbdraw.api.options import losatp_analysis_mode
 from gbdraw.session_io import CURRENT_SESSION_VERSION
 
 
@@ -450,7 +451,7 @@ def test_web_depth_writer_payload_decodes_with_python_codec(tmp_path: Path) -> N
 
 
 @pytest.mark.browser
-def test_web_resolved_protein_writer_preserves_alignment_settings(
+def test_web_resolved_protein_writer_preserves_typed_alignment_layout(
     tmp_path: Path,
 ) -> None:
     node = shutil.which("node")
@@ -475,7 +476,7 @@ def test_web_resolved_protein_writer_preserves_alignment_settings(
             "renderRequest": canonical["renderRequest"],
             "resources": canonical["resources"],
             "results": [],
-            "editorState": {"featureCatalog": None},
+            "editorState": {"featureCatalog": None, "alignmentResetReceipt": None},
         }
     )
 
@@ -483,10 +484,21 @@ def test_web_resolved_protein_writer_preserves_alignment_settings(
         request = session_to_request(materialized)
 
     assert isinstance(request, LinearDiagramRequest)
-    assert request.options.protein_blastp_mode == "none"
+    assert losatp_analysis_mode(request.options.losat_search) == "none"
     assert request.options.linear_comparisons is not None
     assert len(request.options.linear_comparisons) == 1
-    assert request.options.align_orthogroup_feature == "resolved-feature-anchor"
+    assert not hasattr(request.options, "align_orthogroup_feature")
+    assert request.similarity_alignment is not None
+    assert request.similarity_alignment.group_id == "og-resolved"
+    assert request.similarity_alignment.schema == 2
+    assert request.similarity_alignment.records[2].status.value == "aligned"
+    assert request.records[2].presentation.reverse_complement is False
+    assert request.layout is not None
+    assert [item.record_key for item in request.layout.record_translations] == [
+        "first",
+        "second",
+        "third",
+    ]
 
 
 @pytest.mark.parametrize("collinearity_value_kind", ("result", "blocks"))
@@ -771,7 +783,7 @@ def _record_local_collinear_session(tmp_path: Path, search_scope: str = "adjacen
         "results": web["results"], "editorState": {"featureCatalog": web["metadata"]["featureCatalog"]},
     })
     reloaded = load_session_document(session_path)
-    assert reloaded.version == saved.version == CURRENT_SESSION_VERSION == 42
+    assert reloaded.version == saved.version == CURRENT_SESSION_VERSION == 44
     assert reloaded.to_dict()["editorState"]["featureCatalog"] == web["metadata"]["featureCatalog"]
     with materialize_session(reloaded, output_directory=tmp_path / "reload") as materialized:
         restored = session_to_request(materialized)

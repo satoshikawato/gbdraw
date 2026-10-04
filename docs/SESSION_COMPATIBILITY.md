@@ -8,6 +8,149 @@ session files, canonical render requests, and saved LOSAT results. The concise
 documents current support. Tutorials and the FAQ describe what a user should
 do; release notes record when a format changed.
 
+## Unreleased: value checks, derived label maps, and definition spacing
+
+Session version 44 and request schema 8 are unchanged. Replaying a Session, or
+generating from it, applies the value checks shared with the CLI and Python API:
+window, step, and depth window or step must be positive integers, the
+dinucleotide must be two letters from `A`, `C`, `G`, `T`, and `U` (`U` counts
+as `T`), font sizes must be greater than zero, and stroke widths must be zero
+or greater. A Session holding another value fails with the field or setting
+named instead of drawing an empty or flat track. The Web app sends these values
+as typed and no longer replaces a rejected value with Auto or a default.
+
+A Web Session older than Session 40 loads with its saved preview, but its Result
+has no current feature metadata. **Save Session** then asks for one **Generate
+Diagram** and offers it; after that Generate, Save writes Session 44. Loading
+such a Session and saving it directly, as 0.13.0 allowed, is retired. Session
+40 and later Sessions save unchanged.
+
+CLI Sessions and Sessions saved from `main` can contain the label maps
+`whitelist_map`, `priority_map`, and `label_override_rules` under
+`labels.filtering`. They are compiled from the label tables during a render and
+are not settings. Load no longer keeps them as a preserved
+`labels.filtering.raw` setting, and attaching a label table recompiles them, so
+Qualifier Priority and whitelist edits take effect.
+
+Web Sessions no longer write `features.labelOverrideContextKey`. Readers ignore
+it in Session 44 files that contain it; label edits no longer depend on which
+Result was displayed when the Session was saved.
+
+A Circular request that sets `objects.definition.circular.font_size` without
+`objects.definition.circular.interval` uses the font size plus 2, truncated to
+an integer, as the definition line interval. This restores the 0.13.0 Web and
+CLI spacing. The rule is applied when the overrides are applied, so the stored
+request is unchanged and replay writes the same overrides back.
+
+## Unreleased: CLI and Python LOSATN / TLOSATX results
+
+Session version 44 and request schema 8 are unchanged. A Linear run with
+`--losat losatn` or `--losat tlosatx` (Python `losat_search` with those
+programs) saves what the web app saves: one `nucleotideBlast` resource per
+compared record pair with the raw search-frame rows, and one schema 2
+`losatCache` entry per pair with the web raw key and the non-key `runtime`
+record. Entries that the web app searches carry `runtime` too, as
+`{kind: "losat", source: "wasm", version: null, program}`. The saved request carries the resolved comparisons, not the search
+intent, so replay needs no LOSAT runtime. A request that still carries the
+search intent cannot be encoded; resolve or render it first.
+
+## Unreleased: one LOSAT cache entry per raw key
+
+Session version 44 is unchanged. The Web app saved a raw key once per row, so a
+Session with two Circular rings of one sequence repeated the key and could not
+be loaded. It now saves one `losatCache` entry per raw key, named by the first
+row, as the CLI does. After a load, the cache list shows one row per raw key
+until the next Generate. A version 39 or later Session that repeats a raw key
+is rejected with an `INPUT_INVALID` Session diagnostic.
+
+## Unreleased: comparison rows in the search frame
+
+Session version 44 and request schema 8 are unchanged. Comparison rows stored
+in a Session (`nucleotideBlast` resources, uploaded tables, generated LOSATN
+text, and `linear_comparisons`) use the search frame of each record as the
+Session persists it: the selected and cropped record, 1-based, on its source
+strand. A record saved with `presentation.reverseComplement` or a reversed
+region keeps its rows in the search frame, and the planner projects the
+orientation when it draws. A stored row outside 1..L of its record stops the
+replay with a `COMPARISON_INPUT` error whose reason is `SEARCH_FRAME`.
+
+Sessions saved from `main` (version 42 and older) stored the rows of a
+reverse-complemented Linear record after the reverse complement. Both readers
+convert them once at Load with `x -> L + 1 - x`, where L is the length of the
+selected and cropped record:
+
+- CLI replay (`--session`) converts the rows of the adapted request.
+- The Web app rewrites the stored table bytes, both uploaded tables and
+  generated LOSATN text, so a Session saved after Load is current. A table
+  downloaded from that Session therefore differs from the file first uploaded
+  to `main`. Saved LOSAT raw cache entries were already in the search frame
+  and are unchanged.
+
+A CLI sidecar of `-b` with `--reverse_complement` or a reversed region embeds
+the reversed record as a sequence without `reverseComplement`, so the writer
+stores the `-b` table rewritten into that sequence's coordinates; replay draws
+the ribbons of the original run. CLI sidecars written by `main` already stored
+the rows that way and replay unchanged.
+
+Linear Sessions saved by the `main` Web app write
+`orthogroupState.selectedOrthogroupAlignmentFeature: ""` when no alignment
+target is selected. Readers now treat the empty string as no target instead of
+rejecting the Session.
+
+## Session 44: typed Similarity alignment display state
+
+The current Session 44 writer uses canonical request schema 8 to move
+Linear Similarity Group alignment out of generated-protein pipeline settings. The Linear request layout now owns
+finite `x` and `y` base translations keyed by `recordKey`, plus an optional
+resolved `SimilarityAlignmentPlan`. The plan records the exact reference feature,
+one validated decision per displayed record, and its rationale. Record
+presentation or region state owns orientation, and anchor centers are projected
+from the resolved record display. The nested plan is schema 2. Its unreleased
+schema-1 predecessor has no current reader; the Session remains version 44 and
+the canonical request remains schema 8.
+
+Current writers never emit `align_orthogroup_feature`,
+`alignOrthogroupFeature`, or the former Session-only
+`selectedOrthogroupAlignmentFeature` copy. A Python
+`SimilarityAlignmentReference` is resolved before saving; the Session stores
+only its resolved plan. Supported request schemas 1, 2, 5,
+6, and 7 retain a version-bounded reader for the old string. The reader keeps
+that value private
+until the historical selection can be materialized from saved stable feature and
+orthogroup metadata; a successful save writes only schema-8 plan and translation
+state. Loading a saved preview remains Worker-lazy.
+
+## Session 44: feature anchors and independent record transforms
+
+Session 44 stores source feature anchor capability metadata in feature catalog
+schema 4 and preserves per-record display start, absolute orientation, and
+feature-anchor provenance in one editable record-display draft. Released
+Session 42/catalog 3 documents remain readable. Exact single-part locations
+are migrated conservatively; ambiguous compound locations require Generate
+again before feature-based rotation. Development-only Session 43 is rejected.
+
+Session 44 also stores the selected visibility mode for Linear **Accession** and
+**Length / Coordinates** independently. Each field is `auto`, `show`, or `hide`.
+Auto shows the field while every effective rendered row contains one record and
+hides that field diagram-wide when any row contains two or more records.
+Disabled Record Layout ignores dormant shared-row values, and changing row
+placement does not rewrite the selected mode.
+
+Session 44 mode profiles also hold the per-mode Plot Title, Plot Title font
+size, and Definition font size. A flat value without a per-mode entry, as in
+Session 42 and earlier Session 44 files, belongs to the active mode only; the
+inactive mode starts from fresh defaults. In every accepted version a missing
+`config.linearRecordLayout` means Arrange in rows is on, and a missing
+`ui.linearTypographyLinked` means linked while both font sizes are equal.
+
+Canonical request schema 8 retains the effective booleans introduced in schema 7.
+Version-42 editable `true` values migrate to Show, `false` values migrate to
+Hide, and missing booleans migrate to historical Show. A selected-mode field,
+when present, takes precedence over the retired boolean. Current writers emit
+only the selected fields. Saved Results and committed render requests are not
+regenerated during Load; the migrated selection takes effect on the next
+Generate.
+
 ## Session 42: settings before the first source
 
 Web **Save Session** can preserve settings before any biological input is loaded.
@@ -37,14 +180,18 @@ Current writers emit one session and request format:
 
 | Format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 42 | 27–33 and 39–42 |
-| Canonical `renderRequest` | 7 | 1, 2, 5, 6, and 7 |
-| Web file bindings | 2 | 1; 2 in sessions 41–42 |
+| gbdraw session | 44 | 27–33, 39–42, and 44 |
+| Canonical `renderRequest` | 8 | 1, 2, 5, 6, 7, and 8 |
+| Web file bindings | 2 | 1; 2 in sessions 41–42 and 44 |
+
+Previously written Session 44 documents with request schema 7 and feature
+catalog schema 4 remain readable. Current saves write request schema 8;
+the saved preview is retained until the next Generate.
 
 Session versions 34–38 and canonical request schemas 3–4 were development-only
 formats. They were never released on the supported history and are rejected.
 
-The public typed-session bridge can convert full session versions 31–33 and 39–42 to
+The public typed-session bridge can convert full session versions 31–33, 39–42, and 44 to
 a typed request. Versions 27–30 remain supported only as CLI replay inputs
 because they do not contain a canonical `renderRequest`. Use the same
 `circular` or `linear` subcommand that created the session.
@@ -69,7 +216,7 @@ has one output object. A Circular batch has one resolved output object per
 record. `renderRequest.output.prefix` is the output-prefix owner.
 
 The Web projects a selectorless Linear schema-5 card to explicit `all` when it
-is saved with schemas 6 and 7. Legacy multi-record Web inputs already have explicit
+is saved with schemas 6–8. Legacy multi-record Web inputs already have explicit
 selectors, so this preserves the embedded source records shown by the card.
 
 Current sessions keep mode-specific layout values under
@@ -104,13 +251,18 @@ absent legacy layout retains the old adjacent LOSAT/upload behavior, an enabled
 explicit list becomes `selected`, and an authoritative empty explicit list
 becomes `none`. Legacy per-record uploads and custom filenames are attached to
 their original positional gap by stable record UID. CLI-only replay sessions
-do not gain a synthetic Web comparison draft. The accepted session versions
-remain 27–33 and 39–42.
+do not gain a synthetic Web comparison draft: they load with **No comparison**.
+A CLI-only session written with `--losat` keeps the adjacent
+LOSATP comparison its CLI drew. The accepted session versions remain 27–33,
+39–42, and 44.
 
 ## Retired inputs
 
 Fresh CLI and Python requests reject these retired names or values. Supported
 older sessions and canonical request schemas 1–2 migrate them before replay.
+Retired CLI flags exit with status 2 and name their replacement. Retired Python
+fields raise `TypeError`; no alias is accepted. Persisted Session names do not
+change.
 
 | Retired input | Current input |
 |---|---|
@@ -122,6 +274,29 @@ older sessions and canonical request schemas 1–2 migrate them before replay.
 | `--collinear_max_gene_gap` | `--collinear_max_unit_gap` |
 | Circular slot `spacing` | `inner_gap_px` and `outer_gap_px` |
 | Circular slot `strict`, `compress`, or `reserve` | No direct replacement; geometry and reservation are derived from `side` |
+| Linear `--protein_blastp_mode pairwise` / `orthogroup` / `collinear` | `--losat losatp --losatp_mode pairwise` / `similarity_groups` / `collinear` |
+| Linear `--protein_blastp_mode none` | Omit it; without `--losat` no protein comparison runs |
+| Linear `--losatp_bin` (`--losatp-bin`) | `--losat_bin` |
+| Linear `--ncbi_blastp_bin` (`--ncbi-blastp-bin`) | `--ncbi_blast_bin` |
+| Linear `--losatp_threads` (`--losatp-threads`) | `--losat_threads` |
+| Linear `--protein_blastp_max_hits` | `--losatp_max_hits` |
+| Linear `--protein_blastp_candidate_limit` | `--losatp_max_target_seqs` |
+| Linear `--align_orthogroup_feature` | `--similarity_alignment_feature` |
+| Linear `--protein_blastp_output FILE` | `--losat_output_dir DIR`, which writes `DIR/losatp.raw.tsv` |
+| `LinearComparisonOptions(protein_mode=...)` | `losat="losatp"` with `losatp_mode="similarity_groups"` / `"collinear"` / `"pairwise"`; `"none"` becomes `losat=None` |
+| `LinearComparisonOptions(blastp_executable=...)` | `ncbi_blast_executable` |
+| `LinearComparisonOptions(candidate_limit=...)` | `max_target_seqs` |
+| `LinearComparisonOptions(orthogroup_member_max_hits=...)` | `member_max_hits` |
+| `LinearComparisonOptions(losat_executable="losat")` | `losat_executable=None` (the new default) |
+| `LinearDiagramOptions(protein_blastp_mode=...)` | `losat_search=LosatSearchOptions(program="losatp", losatp_mode=...)`; `"orthogroup"` becomes `"similarity_groups"` |
+| `LinearDiagramOptions(protein_comparison_pairs=...)` | `LosatSearchOptions(pairs=...)` |
+| `LinearDiagramOptions(losatp_bin=...)` / `ncbi_blastp_bin` / `losatp_threads` | `LosatSearchOptions(runtime=LosatRuntimeOptions(losat_executable=..., ncbi_blast_executable=..., threads=...))` |
+| `LinearDiagramOptions(protein_blastp_max_hits=...)` | `LosatSearchOptions(losatp_max_hits=...)` |
+| `LinearDiagramOptions(protein_blastp_candidate_limit=...)` | `LosatSearchOptions(losatp_max_target_seqs=...)` |
+| `LinearDiagramOptions(orthogroup_member_max_hits=...)` | `LosatSearchOptions(losatp_member_max_hits=...)` |
+| Circular `--conservation_fasta` | `--conservation_sequence` (FASTA, GenBank, or DDBJ); recorded invocations are rewritten |
+| Circular `--conservation_table` column `comparison_fasta` | `comparison_sequence`; Sessions store the resolved table, so they need no rewrite |
+| `CircularDiagramOptions(conservation_fasta_files=...)` | `conservation_sequence_files`; the Session field stays `conservationFastaFiles` |
 
 Current multiword long options use underscore spelling except for the documented
 active aliases. `--annotation-table` remains an alias for
@@ -158,8 +333,8 @@ Current sessions use these independent payload schemas:
 Typed resource readers 1 and 2 preserve their saved ortholog path tuples as
 explicit collections in the current model. Schema 3 writers store lossless DAGs
 for newly inferred paths and explicit collections for supplied legacy corpora.
-Counts are exact decimal strings. Session 42, request 7, and derived envelope 3
-remain unchanged; derived identity includes `pathRepresentation` to prevent
+Counts are exact decimal strings. Request 8 and derived envelope 3 remain
+unchanged; derived identity includes `pathRepresentation` to prevent
 reusing an old analysis payload as a current helper result. Older releases that
 only support typed schemas 1 and 2 cannot read the new typed resources.
 

@@ -1,5 +1,10 @@
+import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
+import { validateComparisonWarnings } from '../services/comparison-warnings.js';
+import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadata.js';
+import { resolveLinearRegionBounds } from './feature-metadata-extraction.js';
+import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
-import { prepareLosatSourceBatches, splitLosatSourceResult } from './linear-sources.js';
+import { losatRecordGencode, prepareLosatSourceBatches, splitLosatSourceResult } from './linear-sources.js';
 import {
   cancelDiagramGeneration,
   DIAGRAM_HELPER_OPERATIONS,
@@ -9,7 +14,14 @@ import {
   runDiagramHelperOperation
 } from '../services/diagram-generation.js';
 import {
+  projectCompositionRecordIdentity,
   buildCanonicalRenderRequest,
+  bindCanonicalTypedResource,
+  committedFeatureVisibilityMatches,
+  projectCommittedEditorIntent,
+  projectCommittedRecordTransform,
+  projectCommittedSimilarityAlignment,
+  promoteCanonicalRenderRequestToCurrent,
   readCanonicalResourceRecordCount
 } from '../services/session-request.js';
 import {
@@ -35,8 +47,8 @@ import {
 } from './linear-track-slots.js';
 import { getDepthTrackFallbackLabel } from './depth-tracks.js';
 import {
+  activeDepthTrackIndices,
   depthFileSlotsFromValue,
-  depthSlotTrackIndex,
   depthTrackCoverageCount,
   depthTrackMatrixWidth,
   isRecordMajorDepthFileMatrix,
@@ -46,11 +58,16 @@ import {
 } from './depth-track-state.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import {
+  CustomTrackPlanValidationError,
+  customTrackPlanIssues,
+  validateCustomTrackPlan
+} from './track-slot-validation.js';
+import {
   normalizeCollinearSearchScope
 } from './losat-normalization.js';
-import { buildRunInfo, buildSourceRecipe } from './run-info.js';
+import { buildRunInfo, buildSourceRecipe, summarizeLosatRuntimes } from './run-info.js';
 import {
-  buildPairwiseLosatJobSpecs,
+  buildLosatJobSpecs,
   resolveLinearComparisonPlan
 } from './linear-comparisons.js';
 import {
@@ -61,21 +78,24 @@ import { serializeSpecificRules } from './file-imports.js';
 import {
   buildFeatureVisibilitySelectorCache,
   preserveFeatureVisibilitySelectorCacheForOverrides,
-  reconcileFeatureVisibilityOverrides,
+  pruneUnmatchedFeatureOverrides,
   serializeFeatureVisibilityRules
 } from './feature-visibility.js';
 import {
   normalizeDefinitionLineStyleState
 } from './definition-line-style-state.js';
+import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
 import { createZipBlob } from '../utils/zip.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
+import { bytesToBase64, bytesToText } from '../services/byte-utils.js';
 import { downloadBlob, downloadTextFile } from '../services/text-download.js';
 import {
   normalizeCircularPlotTitlePosition,
   normalizeLinearPlotTitlePosition
 } from './plot-title-position.js';
 import {
+  normalizeCurrentPairwiseMatchStyle,
   requireCurrentCircularMultiRecordSizeMode,
   requireCurrentCollinearAnchorMode,
   requireCurrentCollinearColorMode,
@@ -97,9 +117,12 @@ import {
   requireCurrentProteinBlastpMode
 } from './current-option-values.js';
 import {
+  circularDiscoveryForInput,
   discoverGffFastaRecords,
-  discoverSequenceRecords
+  discoverSequenceRecords,
+  discoveryErrorIsFinal
 } from './record-discovery.js';
+import { genbankHeaderIds } from './genbank-header.js';
 import {
   LOSAT_DERIVED_CACHE_SCHEMA,
   NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
@@ -115,10 +138,12 @@ import {
   releaseValidatedProteinIdentityIndex,
   sameLosatArgs,
   transitionLegacyProteinCandidate,
-  validateDerivedProteinReferences
+  losatEdgeFilename,
+  validateDerivedProteinReferences,
+  webLosatRuntimeRecord
 } from './losat-cache.js';
-import { comparisonFiltersForMode } from '../mode-profiles.js';
-import { normalizeUserFacingError } from '../services/error-normalization.js';
+import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
+import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../services/error-normalization.js';
 import {
   cloneFileBytesForTransfer,
   readFileBytes,
@@ -141,9 +166,6 @@ import {
   inheritCommittedComparisonIntent
 } from '../services/imported-comparison-intent.js';
 
-const DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS = Object.freeze(
-  comparisonFiltersForMode('circular')
-);
 const DEFAULT_LINEAR_BLAST_FILTERS = Object.freeze(
   comparisonFiltersForMode('linear')
 );
@@ -212,7 +234,7 @@ export const confirmHydratedLosatExport = (
   ))
 );
 
-const buildLosatCachePayload = ({
+export const buildLosatCachePayload = ({
   identityKind,
   flow,
   program,
@@ -335,6 +357,7 @@ export const buildLosatDerivedPayloadCachePayload = ({
   collinearInferOrthogroups = true,
   orthogroupMembershipMode,
   orthogroupMemberMaxHits,
+  explicitDisplayPairs = false,
   recordPayloads,
   pairPayloads
 }) => {
@@ -369,7 +392,9 @@ export const buildLosatDerivedPayloadCachePayload = ({
         pairIndex: Number(pair?.pairIndex),
         queryIndex: Number(pair?.queryIndex),
         subjectIndex: Number(pair?.subjectIndex),
-        cacheKey: String(pair?.cacheKey || '')
+        cacheKey: String(pair?.cacheKey || ''),
+        // The converter returns the pairs flagged here, in this direction.
+        displayPair: pair?.displayPair === true
       }))
   };
   if (normalizedMode === 'pairwise') {
@@ -395,7 +420,9 @@ export const buildLosatDerivedPayloadCachePayload = ({
       maxConflictsInMergeGap: String(collinearMaxConflictsInMergeGap),
       maxParalogLinksPerOrthogroup: String(collinearMaxParalogLinksPerOrthogroup),
       inferOrthogroups: requireCurrentCollinearInferOrthogroups(collinearInferOrthogroups),
-      searchScope: String(collinearSearchScope || 'adjacent')
+      searchScope: String(collinearSearchScope || 'adjacent'),
+      // With the search scope 'all' the CLI grid row layout limits the output to the displayed pairs.
+      explicitDisplayPairs: explicitDisplayPairs === true
     };
   }
   return payload;
@@ -457,10 +484,11 @@ const sameNumber = (left, right) => Number(left) === Number(right);
 
 const canReuseResolvedProteinArtifacts = ({
   canonicalComparisons,
-  committedRequest,
+  committedSession,
   sequences,
   active
 }) => {
+  const committedRequest = committedSession?.renderRequest || null;
   const persisted = Array.isArray(canonicalComparisons) ? canonicalComparisons : [];
   const committed = Array.isArray(committedRequest?.comparisons)
     ? committedRequest.comparisons
@@ -472,6 +500,8 @@ const canReuseResolvedProteinArtifacts = ({
     comparison?.kind === 'generatedProteinComparison' && comparison.mode === 'none'
   ));
   if (!persistedMarker || !committedMarker || !active) return false;
+  // Selected proteins follow the Feature visibility rules (CO-02).
+  if (!committedFeatureVisibilityMatches(committedSession, active.featureVisibility)) return false;
 
   // Derived rows carry view coordinates and feature IDs. Raw LOSATP evidence
   // remains reusable, but a reversed view needs these rows to be projected again.
@@ -541,11 +571,10 @@ const canReuseResolvedProteinArtifacts = ({
 };
 
 const stripRuntimeCacheStats = (payload) => {
-  const cloned = cloneJsonData(payload);
-  if (cloned && typeof cloned === 'object' && !Array.isArray(cloned)) {
-    delete cloned.cache;
-  }
-  return cloned;
+  // Canonical comparison data is read-only across rendering and cache reuse.
+  // Only the transient statistics owner differs; do not duplicate the full result.
+  const { cache: _cache, ...stored } = payload;
+  return stored;
 };
 
 const LEGACY_PROTEIN_REFERENCE_RE = /p_[A-Za-z0-9._%+-]+?_\d+_\d+_(?:-1|0|1)_[0-9a-f]{12}(?:_[2-9][0-9]*)?/g;
@@ -629,6 +658,37 @@ const setLosatDerivedCacheEntry = (cacheMap, key, { mode, payload, manifest }) =
 const makeSafeFilename = (name) => {
   const cleaned = String(name || '').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
   return cleaned || 'losat';
+};
+// The deferred replay builder outlives its Generate through the CLI helper
+// files. Build it outside that scope so it retains only the published artifact,
+// not the pre-Generate rollback handle and, through it, every earlier artifact.
+const createCanonicalReplayTextBuilder = ({
+  version,
+  startedAtIso,
+  renderRequest,
+  resources,
+  publishedArtifact
+}) => () => {
+  recordSessionLifecycleEvent('canonical-replay-json-start');
+  const replayText = JSON.stringify({
+    format: 'gbdraw-session',
+    version,
+    createdAt: startedAtIso || new Date().toISOString(),
+    renderRequest,
+    resources,
+    // Export only after successful generation; reuse the published artifact.
+    results: publishedArtifact.results,
+    editorState: { featureCatalog: publishedArtifact.featureCatalog },
+    losatCache: { entries: [] },
+    losatDerivedCache: { entries: [] },
+    proteinIdentityManifest: emptyProteinIdentityManifest()
+  });
+  recordStructuralMetric('canonicalReplayFullSerializationCount');
+  recordSessionLifecycleEvent('canonical-replay-json-end');
+  recordSessionLifecycleEvent('canonical-replay-json-characters', {
+    value: replayText.length
+  });
+  return replayText;
 };
 const normalizeRecordSelectorText = (value) => {
   const normalized = String(value ?? '').trim();
@@ -728,13 +788,10 @@ const parseGenbankRecordsFast = (text) => {
   const recordChunks = String(text || '').split(/^\/\/\s*$/m);
   recordChunks.forEach((chunk) => {
     const originMatch = chunk.match(/\nORIGIN\b([\s\S]*)$/i);
-    if (!originMatch) return;
-    const locusMatch = chunk.match(/^LOCUS\s+(\S+)/m);
-    const accessionMatch = chunk.match(/^ACCESSION\s+(\S+)/m);
-    const versionMatch = chunk.match(/^VERSION\s+(\S+)/m);
-    const id = versionMatch?.[1] || accessionMatch?.[1] || locusMatch?.[1] || `record_${records.length + 1}`;
+    const header = originMatch ? genbankHeaderIds(chunk) : null;
+    if (!header) return;
     const sequence = originMatch[1].replace(/[^A-Za-z]/g, '').toUpperCase();
-    if (sequence) records.push({ id, sequence });
+    if (sequence) records.push({ id: header.recordId, sequence });
   });
   return records;
 };
@@ -803,7 +860,7 @@ const logPostGbdrawTimings = (entries) => {
   });
   console.groupEnd();
 };
-const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelector, reverseFlag }) => {
+export const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recordSelector, reverseFlag }) => {
   const sourceText = typeof text === 'string' ? text : await readFileText(file);
   const records = fmt === 'genbank' ? parseGenbankRecordsFast(sourceText) : parseFastaRecordsFast(sourceText);
   const selected = selectParsedRecord(records, recordSelector);
@@ -830,29 +887,6 @@ const buildConservationSeries = (sourceFiles, circularConservation) => {
     color: entry.color
   }));
 };
-const normalizeMultiRecordMinRadiusRatio = (value) => {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) && numeric > 0 && numeric <= 1 ? numeric : 0.55;
-};
-const normalizeMultiRecordColumnGapRatio = (value) => {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0.10;
-};
-const normalizeMultiRecordRowGapRatio = (value) => {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) && numeric >= 0 ? numeric : 0.05;
-};
-const normalizeBlastThresholdNumber = (value, defaultValue, { integer = false } = {}) => {
-  if (value === null || value === undefined || value === '') return defaultValue;
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric) || numeric < 0) return defaultValue;
-  if (integer && !Number.isInteger(numeric)) return defaultValue;
-  return numeric;
-};
-const normalizeBlastThresholdText = (value, defaultValue) => {
-  const normalized = String(value ?? '').trim();
-  return normalized === '' ? defaultValue : normalized;
-};
 const normalizeBlastpMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['pairwise', 'orthogroup', 'collinear'].includes(normalized) ? normalized : 'orthogroup';
@@ -864,10 +898,6 @@ const normalizeCircularConservationLosatProgram = (value) => {
 const normalizePositiveInteger = (value, fallback = 1) => {
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-};
-const normalizePairwiseMatchStyle = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  return ['ribbon', 'curve'].includes(normalized) ? normalized : 'ribbon';
 };
 const normalizeMultiRecordPositions = (value, { maxRow = Number.POSITIVE_INFINITY } = {}) => {
   if (!Array.isArray(value)) return [];
@@ -953,14 +983,102 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
     normalizeMultiRecordPositions(nextPositions, { maxRow: availableSelectors.length })
   );
 };
+
+export const executeCanonicalRenderCandidate = async ({
+  canonical,
+  mode,
+  kind = 'generate',
+  onProgress = null,
+  shouldAdmit = () => true,
+  generationExecutor = null,
+  catalogAdmission = admitFeatureCatalog,
+  prepareCommit = prepareCandidateRenderCommit,
+  prepareCommitInput = {},
+  decorationContinuity = null,
+  timingEntries = []
+}) => {
+  if (!canonical?.renderRequest || !canonical?.resources) {
+    throw new Error('Canonical candidate execution requires a request and resources.');
+  }
+  recordStructuralMetric('canonicalCandidateExecutionCount', 1, { kind });
+  const startedAt = getNow();
+  const generationResponse = generationExecutor
+    ? await generationExecutor({
+        request: canonical.renderRequest,
+        resources: canonical.resources
+      }, { onProgress })
+    : await runDiagramGeneration({
+        request: canonical.renderRequest,
+        resources: canonical.resources
+      }, { onProgress: onProgress });
+  const results = generationResponse.results;
+  if (!shouldAdmit()) {
+    return { status: 'superseded', generationResponse, elapsedMs: getNow() - startedAt };
+  }
+  if (results?.error) {
+    return {
+      status: 'engine-error',
+      generationResponse,
+      engineError: results.error,
+      elapsedMs: getNow() - startedAt
+    };
+  }
+  if (!Array.isArray(results)) {
+    throw new Error('The diagram engine returned an invalid Result list.');
+  }
+  const metadata = generationResponse.metadata
+    && typeof generationResponse.metadata === 'object'
+    && !Array.isArray(generationResponse.metadata)
+    ? generationResponse.metadata
+    : {};
+  const annotationWarnings = validateAnnotationWarnings(metadata.annotationWarnings, results);
+  const comparisonWarnings = validateComparisonWarnings(metadata.comparisonWarnings, results);
+  recordSessionLifecycleEvent('candidate-result-validation-start');
+  const catalogState = catalogAdmission(metadata.featureCatalog, results, {
+    adopt: true,
+    mode
+  });
+  recordSessionLifecycleEvent('candidate-result-validation-end');
+  recordSessionLifecycleEvent('result-admission-start');
+  const commit = measureTiming(
+    timingEntries,
+    kind === 'reflow'
+      ? 'run-analysis commit sanitized reflow results'
+      : 'run-analysis sanitize and reapply editor overrides',
+    () => prepareCommit({
+      generationResponse,
+      catalogAdmission: catalogState,
+      results,
+      catalog: catalogState.catalog,
+      mode,
+      ...prepareCommitInput,
+      resultTransforms: decorationContinuity?.(canonical, catalogState) || []
+    })
+  );
+  recordSessionLifecycleEvent('result-admission-end');
+  return {
+    status: 'ok',
+    generationResponse,
+    generationMetadata: metadata,
+    annotationWarnings,
+    comparisonWarnings,
+    results,
+    catalogAdmission: catalogState,
+    catalog: catalogState.catalog,
+    commit,
+    elapsedMs: getNow() - startedAt
+  };
+};
+
 export const createRunAnalysis = ({
   state,
+  rulePreparation = null,
   isCurrentFeature,
   serializeCanonicalFiles,
   canonicalSessionVersion,
   adoptCanonicalRenderArtifacts,
-  getCommittedCanonicalRenderRequest = null,
   getCommittedCanonicalSession = null,
+  captureDecorationContinuity = () => null,
   captureGeneratedArtifactHandle,
   captureGeneratedArtifactOwnerSet,
   installGeneratedArtifactOwnerSet,
@@ -975,7 +1093,12 @@ export const createRunAnalysis = ({
   resetPreviewViewport,
   validateAnnotationTargets = null,
   prepareLinearRecordCatalog = null,
+  // D12: ring rows added just before Generate are named before it reads them.
+  settleComparisonRecordLabels = async () => {},
+  // services/config.js owns the active-mode input check shared with Save.
+  assertActiveModeInputs = null,
   losatExecutor = runLosatPairsParallel,
+  executeCanonicalCandidate = executeCanonicalRenderCandidate,
   prepareCandidateCommit = prepareCandidateRenderCommit,
   prepareReflowCommit = prepareReflowResultCommit
 }) => {
@@ -986,6 +1109,7 @@ export const createRunAnalysis = ({
     results,
     selectedResultIndex,
     failedGeneratePreservedResult,
+    generationFailureRecovery,
     resultGenerationKey,
     resultPanelTab,
     lastRunInfo,
@@ -997,7 +1121,6 @@ export const createRunAnalysis = ({
     zoom,
     canvasPan,
     skipCaptureBaseConfig,
-    skipPositionReapply,
     matchSequenceRegistry,
     featureColorOverrides,
     featureVisibilityOverrides,
@@ -1036,6 +1159,7 @@ export const createRunAnalysis = ({
     selectedOrthogroupAlignmentFeature,
     orthogroupNameOverrides,
     orthogroupDescriptionOverrides,
+    orthogroupDormantOverrides,
     selectedOrthogroupId,
     circularRecordList,
     circularRecordDiscovery,
@@ -1099,6 +1223,7 @@ export const createRunAnalysis = ({
   let pendingReflowReason = 'label-edit';
   let featureExtractionRequestId = 0;
   let latestGenerationToken = 0;
+  let latestOperationId = 0;
   let circularRecordRefreshGeneration = 0;
   let activeCircularRecordRefresh = null;
   let activeLosatAbortController = null;
@@ -1167,7 +1292,16 @@ export const createRunAnalysis = ({
     },
     async restore(handle) {
       recordStructuralMetric('generatedArtifactRollbackCount', 1);
-      await restoreGeneratedArtifactHandle(handle);
+      const currentAlert = errorLog.value;
+      try {
+        await restoreGeneratedArtifactHandle(handle);
+      } finally {
+        // Snapshot restoration clones presentation. Retain the notification
+        // that owned the rollback boundary, without deriving its cause here.
+        const restoredAlert = handle.mutableIntent?.presentation?.errorLog;
+        if (JSON.stringify(normalizeUserFacingError(errorLog.value))
+          === JSON.stringify(normalizeUserFacingError(restoredAlert))) errorLog.value = currentAlert;
+      }
     }
   });
   const recordDiscoverySuppressed = () => Boolean(
@@ -1243,35 +1377,30 @@ export const createRunAnalysis = ({
     downloadBlob(createZipBlob(materializedFiles), latestCliHelperArchiveName);
   };
 
-  const extractCircularTrackSlotError = (err) => {
-    const texts = [
-      err?.message,
-      err?.stderr,
-      err?.stdout,
-      err?.traceback
-    ];
-    for (const text of texts) {
-      const lines = String(text || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-      for (const line of lines) {
-        const cleaned = line.replace(/^(ValueError|RuntimeError|ValidationError):\s*/, '');
-        if (/^Circular track slot '.+' cannot fit inside\b/.test(cleaned)) {
-          return cleaned;
-        }
-      }
+  const formatError = (cause, operation = 'generate', stage = 'request-validation') =>
+    normalizeUserFacingError(cause || { code: 'UNKNOWN' }, { operation, stage });
+  const failOperation = async (cause, { handle, restore = null, operation = 'generate',
+    stage = 'render', isCurrent = () => true, isCurrentOperation = () => true, recovery = null } = {}) => {
+    if (!isCurrentOperation()) return { status: 'stale' };
+    const error = formatError(cause, operation, stage);
+    const previousResults = handle?.ownerSet?.results || [];
+    if (!recovery) {
+      try {
+        const restored = restore ? await restore() : false;
+        const currentResults = captureGeneratedArtifactOwnerSet().results;
+        const unchanged = currentResults.length === previousResults.length
+          && currentResults.every((result, index) => result === previousResults[index]);
+        recovery = !handle ? (results.value.length ? 'restore-failed' : 'no-result')
+          : previousResults.length === 0 ? 'no-result'
+          : restored ? 'restored' : unchanged ? 'preserved' : 'restore-failed';
+      } catch (_) { recovery = 'restore-failed'; }
     }
-    return '';
+    if (!isCurrent()) return { status: 'stale' };
+    errorLog.value = error;
+    if (generationFailureRecovery) generationFailureRecovery.value = recovery;
+    failedGeneratePreservedResult.value = ['preserved', 'restored'].includes(recovery);
+    return { status: 'error', error, recovery };
   };
-
-  const formatPythonError = (err) => {
-    const circularTrackSlotError = extractCircularTrackSlotError(err);
-    return normalizeUserFacingError(
-      circularTrackSlotError
-        ? { type: err?.type || 'ValidationError', message: circularTrackSlotError, notes: err?.notes }
-        : err
-    );
-  };
-
-  const formatJsError = (err) => normalizeUserFacingError(err);
 
   // Raw searches finish before the artifact transaction. Keep only the latest
   // search's entries for retry, without changing the saved Result. Cache owner
@@ -1319,15 +1448,20 @@ export const createRunAnalysis = ({
     });
   };
 
-  const pruneOrthogroupOverrides = (groupIds, { clearAll = false } = {}) => {
-    const validIds = new Set(Array.isArray(groupIds) ? groupIds.map((id) => String(id || '').trim()).filter(Boolean) : []);
-    const pruneMap = (overrideMap) => {
-      Object.keys(overrideMap).forEach((id) => {
-        if (clearAll || !validIds.has(id)) delete overrideMap[id];
-      });
-    };
-    pruneMap(orthogroupNameOverrides);
-    pruneMap(orthogroupDescriptionOverrides);
+  // D-21: names follow the exact member set; the rest stay dormant.
+  const rekeyCommittedOrthogroupOverrides = (previousGroups, candidateGroups) => {
+    const next = rekeyOrthogroupOverrides({
+      previousGroups,
+      candidateGroups,
+      names: orthogroupNameOverrides,
+      descriptions: orthogroupDescriptionOverrides,
+      dormant: orthogroupDormantOverrides
+    });
+    [[orthogroupNameOverrides, next.names], [orthogroupDescriptionOverrides, next.descriptions],
+      [orthogroupDormantOverrides, next.dormant]].forEach(([target, values]) => {
+      Object.keys(target).forEach((key) => delete target[key]);
+      Object.assign(target, values);
+    });
   };
 
   const setFeatureEditorStatus = (updates = {}) => {
@@ -1352,24 +1486,15 @@ export const createRunAnalysis = ({
     return '';
   };
 
-  const normalizeLabel = (label, fallback) => {
-    const base = String(label || '').trim() || String(fallback || '');
-    const dotted = base.replace(/[\\s/]+/g, '.').replace(/\.+/g, '.').replace(/^\.|\.$/g, '');
-    const safe = makeSafeFilename(dotted);
-    return safe || makeSafeFilename(String(fallback || 'losat'));
-  };
-
   const buildLosatSuffix = () => {
     if (losatProgram.value === 'blastn') return 'losatn';
     if (losatProgram.value === 'blastp') return 'losatp';
     return 'tlosatx';
   };
 
-  const buildLosatFilename = (leftLabel, rightLabel) => {
-    const left = normalizeLabel(leftLabel, 'seq_1');
-    const right = normalizeLabel(rightLabel, 'seq_2');
-    return `${left}.${right}.${buildLosatSuffix()}.tsv`;
-  };
+  const buildLosatFilename = (leftLabel, rightLabel) => (
+    losatEdgeFilename(leftLabel, rightLabel, buildLosatSuffix())
+  );
 
   const getResolvedLinearEdge = (edgeKey) => {
     const normalizedKey = String(edgeKey || '').trim();
@@ -1444,18 +1569,6 @@ export const createRunAnalysis = ({
     return ['embedded_only', 'external_only'].includes(normalized) ? normalized : 'auto';
   };
 
-  const normalizePositiveNumberOrNull = (value) => {
-    if (value === null || value === undefined || value === '') return null;
-    const numeric = Number(value);
-    return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
-  };
-
-  const normalizeNonNegativeNumberOrNull = (value) => {
-    if (value === null || value === undefined || value === '') return null;
-    const numeric = Number(value);
-    return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
-  };
-
   const hydrateLosatDownloadText = async (cacheKey, cached) => {
     if (classifyRawLosatCacheEntry(cached) !== 'protein-current') {
       return {
@@ -1497,9 +1610,11 @@ export const createRunAnalysis = ({
       customName,
       entry.filename || defaultName || `losat_pair_${fallbackOrdinal + 1}.tsv`
     );
-    losatCacheInfo.value = losatCacheInfo.value.map((candidate) => (
-      candidate === entry ? { ...candidate, filename } : candidate
-    ));
+    if (!state.sessionOperationAvailability?.()) {
+      losatCacheInfo.value = losatCacheInfo.value.map((candidate) => (
+        candidate === entry ? { ...candidate, filename } : candidate
+      ));
+    }
     const hydrated = await hydrateLosatDownloadText(entry.key, cached);
     downloadTextFile(
       filename || 'losat.tsv',
@@ -1509,6 +1624,8 @@ export const createRunAnalysis = ({
   };
 
   const setLosatPairFilename = (edgeKey, customName) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const entry = getLosatCacheInfoEntry(edgeKey);
     if (!entry) return;
     const defaultName = getLosatPairDefaultName(entry.edgeKey || edgeKey);
@@ -1533,16 +1650,7 @@ export const createRunAnalysis = ({
     labelTextScopeDialog.matchingCount = 0;
   };
 
-  const circularDiscoveryTargetsCurrentInput = () => {
-    const inputType = cInputType.value;
-    const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
-    const pairedFile = inputType === 'gff' ? files.c_fasta : null;
-    return (
-      circularRecordDiscovery.inputType === inputType &&
-      circularRecordDiscovery.primaryFile === primaryFile &&
-      circularRecordDiscovery.pairedFile === pairedFile
-    );
-  };
+  const circularDiscoveryTargetsCurrentInput = () => circularDiscoveryForInput(state).current;
 
   const circularDiscoveryMatchesCurrentInput = () => (
     circularRecordDiscovery.status === 'ready' &&
@@ -1550,21 +1658,19 @@ export const createRunAnalysis = ({
   );
 
   const validateDepthInputPresence = () => {
-    const customDepthRequested = mode.value === 'linear'
-      ? (
-          adv.linear_track_slots_enabled === true &&
-          (Array.isArray(adv.linear_track_slots) ? adv.linear_track_slots : []).some((slot) => (
-            slot?.enabled !== false && String(slot?.renderer || '') === 'depth'
-          ))
-        )
-      : (
-          adv.circular_track_slots_enabled === true &&
-          (Array.isArray(adv.circular_track_slots) ? adv.circular_track_slots : []).some((slot) => (
-            slot?.enabled !== false && String(slot?.renderer || '') === 'depth'
-          ))
+    const linear = mode.value === 'linear';
+    const slots = linear ? adv.linear_track_slots : adv.circular_track_slots;
+    const customDepthRequested = (
+      (linear ? adv.linear_track_slots_enabled : adv.circular_track_slots_enabled) === true &&
+      (Array.isArray(slots) ? slots : []).some((slot) => (
+        slot?.enabled !== false && String(slot?.renderer || '') === 'depth'
+      ))
     );
     if (!form.show_depth && !customDepthRequested) return '';
-    if (mode.value === 'circular') {
+    let rows;
+    if (linear) {
+      rows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
+    } else {
       const discoveredCount = (
         circularDiscoveryMatchesCurrentInput() &&
         Array.isArray(circularRecordList.value)
@@ -1578,36 +1684,52 @@ export const createRunAnalysis = ({
               ? Math.max(1, files.c_depth.length)
               : 1
           );
-      const rows = normalizeRecordMajorDepthFileRows(files.c_depth, recordCount);
       if (isRecordMajorDepthFileMatrix(files.c_depth) && files.c_depth.length !== recordCount) {
         return `Circular Depth matrix has ${files.c_depth.length} record rows; expected ${recordCount}.`;
       }
-      if (!rows.some((row) => row.some(Boolean))) {
-        return 'Please upload a Depth TSV file or disable Show depth track.';
-      }
-      const logicalWidth = depthTrackMatrixWidth(rows);
-      for (let trackIndex = 0; trackIndex < logicalWidth; trackIndex += 1) {
-        if (depthTrackCoverageCount(rows, trackIndex) > 0) continue;
-        return `Depth series #${trackIndex + 1} (logical track index ${trackIndex}) has no TSV source in any record. Add a TSV or remove the series.`;
-      }
-      return '';
+      rows = normalizeRecordMajorDepthFileRows(files.c_depth, recordCount);
     }
-
-    const depthFileSlots = (value) => (Array.isArray(value) ? value.slice() : (value ? [value] : []));
-    const perRecordDepthFiles = linearSeqs.map((seq) => depthFileSlots(seq.depth));
-    const depthCount = perRecordDepthFiles.reduce((sum, items) => sum + items.filter(Boolean).length, 0);
-    if (depthCount === 0) {
-      return 'Please upload at least one Depth TSV file or disable Show depth track.';
+    if (customDepthRequested) {
+      // An enabled Depth row must reference a logical series with a source in
+      // some record; Generate stops on the row issue the track editor shows
+      // (PD-OI-083).
+      const issues = customTrackPlanIssues(validateCustomTrackPlan({
+        mode: mode.value,
+        slots,
+        depthTrackCount: depthTrackMatrixWidth(rows),
+        depthSourcedTrackIndexes: activeDepthTrackIndices(rows)
+      })).filter((issue) => String(issue.code || '').startsWith('depth_'));
+      if (issues.length > 0) return new CustomTrackPlanValidationError(issues);
     }
-    const logicalWidth = depthTrackMatrixWidth(perRecordDepthFiles);
+    if (!rows.some((row) => row.some(Boolean))) {
+      return linear
+        ? 'Please upload at least one Depth TSV file or disable Show depth track.'
+        : 'Please upload a Depth TSV file or disable Show depth track.';
+    }
+    const logicalWidth = depthTrackMatrixWidth(rows);
     for (let trackIndex = 0; trackIndex < logicalWidth; trackIndex += 1) {
-      if (depthTrackCoverageCount(perRecordDepthFiles, trackIndex) > 0) continue;
+      if (depthTrackCoverageCount(rows, trackIndex) > 0) continue;
       return `Depth series #${trackIndex + 1} (logical track index ${trackIndex}) has no TSV source in any record. Add a TSV or remove the series.`;
     }
     return '';
   };
 
-  const runCircularRecordRefresh = async ({ suppress = false } = {}) => {
+  const runCircularRecordRefresh = async ({ suppress = false, automatic = false, reuseFinalError = false } = {}) => {
+    // An inactive Circular source keeps its records and Multi-Record Canvas
+    // order; only a read still running for it is superseded.
+    if (mode.value !== 'circular') {
+      if (circularRecordDiscovery.status === 'loading') {
+        circularRecordRefreshGeneration += 1;
+        circularRecordDiscovery.status = 'idle';
+      }
+      return;
+    }
+    if (automatic && circularDiscoveryTargetsCurrentInput()
+      && ['deferred', 'ready', 'error'].includes(circularRecordDiscovery.status)) return;
+    // Generate reports a final error of these exact files without reading them
+    // again; Retry source inspection still reads.
+    if (reuseFinalError && circularDiscoveryTargetsCurrentInput()
+      && circularRecordDiscovery.status === 'error' && discoveryErrorIsFinal(circularRecordDiscovery.error)) return;
     const refreshGeneration = ++circularRecordRefreshGeneration;
     if (suppress || recordDiscoverySuppressed()) return;
     if (!Array.isArray(adv.multi_record_positions)) {
@@ -1617,7 +1739,6 @@ export const createRunAnalysis = ({
     const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
     const pairedFile = inputType === 'gff' ? files.c_fasta : null;
     const hasCompleteInput = Boolean(primaryFile && (inputType !== 'gff' || pairedFile));
-    const hasActiveInput = mode.value === 'circular' && hasCompleteInput;
     const preserveCanonicalRecordKeys = circularDiscoveryTargetsCurrentInput();
     const preservedRecordKeys = new Map();
     if (preserveCanonicalRecordKeys) {
@@ -1637,7 +1758,7 @@ export const createRunAnalysis = ({
         });
     }
     Object.assign(circularRecordDiscovery, {
-      status: hasActiveInput ? 'loading' : 'idle',
+      status: hasCompleteInput ? 'loading' : 'idle',
       error: '',
       inputType,
       primaryFile: primaryFile || null,
@@ -1646,10 +1767,8 @@ export const createRunAnalysis = ({
         ? circularRecordDiscovery.canonicalRecordIdentities
         : []
     });
-    if (
-      !hasActiveInput
-    ) {
-      circularRecordList.value = [];
+    circularRecordList.value = [];
+    if (!hasCompleteInput) {
       adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
       return;
     }
@@ -1664,16 +1783,8 @@ export const createRunAnalysis = ({
 
     try {
       const records = inputType === 'gff'
-        ? await discoverGffFastaRecords({
-            gffFile: primaryFile,
-            fastaFile: pairedFile,
-            readText: readFileText
-          })
-        : await discoverSequenceRecords({
-            file: primaryFile,
-            format: 'genbank',
-            readText: readFileText
-          });
+        ? await discoverGffFastaRecords({ gffFile: primaryFile, fastaFile: pairedFile })
+        : await discoverSequenceRecords({ file: primaryFile, format: 'genbank' });
       if (
         refreshGeneration !== circularRecordRefreshGeneration ||
         recordDiscoverySuppressed() ||
@@ -1682,6 +1793,12 @@ export const createRunAnalysis = ({
         (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
         (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
       ) return;
+      const busy = state.sessionOperationAvailability?.();
+      if (busy) {
+        circularRecordDiscovery.status = 'deferred';
+        circularRecordDiscovery.primaryFile = null;
+        return busy;
+      }
       const nextRecords = records.map((entry) => {
         const recordKey = preservedRecordKeys.get(String(entry.selector || '').trim())
           || preservedRecordKeys.get(String(entry.recordId || '').trim())
@@ -1711,15 +1828,23 @@ export const createRunAnalysis = ({
         (inputType === 'gff' ? files.c_gff : files.c_gb) !== primaryFile ||
         (inputType === 'gff' ? files.c_fasta : null) !== pairedFile
       ) return;
-      console.warn('Failed to refresh circular record order:', error);
+      const busy = state.sessionOperationAvailability?.();
+      if (busy) {
+        circularRecordDiscovery.status = 'deferred';
+        circularRecordDiscovery.primaryFile = null;
+        return busy;
+      }
+
       circularRecordList.value = [];
       circularRecordDiscovery.status = 'error';
-      circularRecordDiscovery.error = 'Could not read records from the circular input file(s).';
+      circularRecordDiscovery.error = formatError(error, inputType === 'gff' ? 'listGffFastaRecords' : 'listSequenceRecords', 'helper');
       adv.multi_record_positions.splice(0, adv.multi_record_positions.length);
     }
   };
 
   const refreshCircularRecordOrder = (options = {}) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const inputType = cInputType.value;
     const fingerprint = [
       Boolean(options.suppress || recordDiscoverySuppressed()),
@@ -1746,17 +1871,20 @@ export const createRunAnalysis = ({
   };
 
   const runAnalysisInternal = async ({
-    runMode = 'manual',
-    requestId = 0,
+    decorationContinuity = null,
     comparisonPlanSnapshot = null,
     generatedArtifactHandle = null,
-    comparisonExecution = null
+    comparisonExecution = null,
+    isCurrentOperation = () => true,
+    isCurrentAlert = () => true
   } = {}) => {
-    const isReflow = runMode === 'reflow';
-    if (!isReflow) {
-      recordSessionLifecycleEvent('generate-start');
-      recordSessionLifecycleEvent('generation-input-resolution-start');
-    }
+    const runState = { ...state };
+    const { linearSeqs } = runState;
+    let colorCandidate = null;
+    let candidateRules = manualSpecificRules;
+    let failureStage = 'request-validation';
+    recordSessionLifecycleEvent('generate-start');
+    recordSessionLifecycleEvent('generation-input-resolution-start');
     const useCommittedComparison = comparisonExecution?.mode === 'inherit';
     const forceEmptyComparison = useCommittedComparison || comparisonExecution?.mode === 'clear';
     const activeComparisonPlanSnapshot = mode.value === 'linear'
@@ -1784,9 +1912,7 @@ export const createRunAnalysis = ({
     let canceledAttemptOwnsPresentation = false;
     let generationAbortController = null;
     let generationAbortSignal = null;
-    const committedArtifactHandle = isReflow
-      ? null
-      : (generatedArtifactHandle || await captureGeneratedArtifactHandle());
+    const committedArtifactHandle = generatedArtifactHandle || await captureGeneratedArtifactHandle();
     let activatedGeneratedArtifactCandidate = null;
     let acceptedCandidateReadyReceipt = null;
     let workingProteinIdentityManifest = committedArtifactHandle?.ownerSet
@@ -1802,9 +1928,10 @@ export const createRunAnalysis = ({
     let workingBiologicalFeatures = committedArtifactHandle?.ownerSet?.biologicalFeatures
       ?? biologicalFeatures?.value;
     const hasSourceBoundEditorIntent = Object.keys(featureVisibilityOverrides).length > 0
+      || Object.keys(labelTextFeatureOverrides).length > 0 || Object.keys(labelVisibilityOverrides).length > 0
       || Object.keys(legendColorOverrides).length > 0 || Object.keys(legendStrokeOverrides).length > 0
       || legendEntries.value.some(entry => entry.originalCaption && entry.originalCaption !== entry.caption);
-    const sourceReplaced = !isReflow && hasSourceBoundEditorIntent
+    const sourceReplaced = hasSourceBoundEditorIntent
       && [...new Map((workingBiologicalFeatures || []).map(feature => [feature.record_key, feature])).values()]
         .some(feature => !isCurrentFeature(feature));
     let workingLosatCacheInfo = committedArtifactHandle?.ownerSet?.losatCacheInfo
@@ -1813,6 +1940,7 @@ export const createRunAnalysis = ({
     let workingSelectedOrthogroupAlignmentFeature = selectedOrthogroupAlignmentFeature.value;
     const restoreCommittedArtifact = async () => {
       if (!committedArtifactHandle || !activatedGeneratedArtifactCandidate) return false;
+      if (captureGeneratedArtifactOwnerSet().results !== activatedGeneratedArtifactCandidate.ownerSet.results) return false;
       if (acceptedCandidateReadyReceipt) {
         previewRuntime.invalidateReadyReceipt(
           acceptedCandidateReadyReceipt,
@@ -1835,37 +1963,41 @@ export const createRunAnalysis = ({
       return true;
     };
     const finishCanceledManualRun = async () => {
-      if (latestGenerationToken !== generationToken + 1) {
+      if (!isCurrentOperation() || latestGenerationToken !== generationToken + 1) {
         return { status: 'stale' };
       }
       canceledAttemptOwnsPresentation = true;
       await restoreCommittedArtifact();
-      errorLog.value = null;
+      if (!isCurrentOperation()) return { status: 'stale' };
+      if (isCurrentAlert()) errorLog.value = null;
       processingStatus.value = 'Canceled.';
       generationCancelRequested.value = false;
       return { status: 'canceled' };
     };
     const setProcessingStatus = (message) => {
-      if (!isReflow && generationToken === latestGenerationToken) {
+      if (generationToken === latestGenerationToken) {
         processingStatus.value = String(message || '');
       }
     };
+    const onDiagramProgress = ({ stage }) => {
+      const message = {
+        'preparing-runtime': 'Preparing diagram runtime (first use)...',
+        'preparing-resources': 'Preparing diagram input resources...',
+        rendering: 'Rendering diagram...',
+        finalizing: 'Finalizing diagram results...'
+      }[stage];
+      if (message) setProcessingStatus(message);
+    };
     const throwIfGenerationCanceled = () => {
-      if (!isReflow && generationCancelRequested.value) {
+      if (generationCancelRequested.value) {
         throw new DiagramGenerationCanceledError();
       }
     };
-    if (isReflow && mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
-      return { status: 'skipped' };
-    }
-    generationAbortController =
-      !isReflow && typeof AbortController === 'function' ? new AbortController() : null;
+    generationAbortController = typeof AbortController === 'function' ? new AbortController() : null;
     generationAbortSignal = generationAbortController?.signal || null;
-    if (!isReflow) activeLosatAbortController = generationAbortController;
+    activeLosatAbortController = generationAbortController;
     if (mode.value === 'linear' && typeof prepareLinearRecordCatalog === 'function') {
-      if (!isReflow) {
-        processingStatus.value = 'Reading input records...';
-      }
+      processingStatus.value = 'Reading input records...';
       let prepared;
       try {
         prepared = await prepareLinearRecordCatalog(
@@ -1874,14 +2006,14 @@ export const createRunAnalysis = ({
       } catch (error) {
         prepared = {
           catalog: null,
-          error: error?.message || 'Could not read records from the Linear input file(s).'
+          error
         };
       } finally {
-        if (!isReflow && generationToken === latestGenerationToken) {
+        if (generationToken === latestGenerationToken) {
           processingStatus.value = 'Preparing input files...';
         }
       }
-      if (!isReflow && generationToken !== latestGenerationToken) {
+      if (generationToken !== latestGenerationToken) {
         if (activeLosatAbortController === generationAbortController) {
           activeLosatAbortController = null;
         }
@@ -1890,20 +2022,16 @@ export const createRunAnalysis = ({
           : { status: 'stale' };
       }
       if (prepared?.error) {
-        const message = String(prepared.error);
-        if (isReflow) labelReflowLastError.value = message;
-        else {
-          await restoreCommittedArtifact();
-          errorLog.value = formatJsError(new Error(message));
-        }
+        const error = formatError(prepared.error);
         if (activeLosatAbortController === generationAbortController) {
           activeLosatAbortController = null;
         }
-        return { status: 'error' };
+        return failOperation(error, { handle: committedArtifactHandle,
+          restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
       }
       linearRecordCatalog = prepared?.catalog || null;
     }
-    if (!isReflow && mode.value === 'circular') {
+    if (mode.value === 'circular') {
       const inputType = cInputType.value;
       const primaryFile = inputType === 'gff' ? files.c_gff : files.c_gb;
       const pairedFile = inputType === 'gff' ? files.c_fasta : null;
@@ -1914,7 +2042,7 @@ export const createRunAnalysis = ({
       ) {
         processingStatus.value = 'Reading input records...';
         try {
-          await refreshCircularRecordOrder();
+          await refreshCircularRecordOrder({ reuseFinalError: true });
         } finally {
           if (generationToken === latestGenerationToken) {
             processingStatus.value = 'Preparing input files...';
@@ -1929,28 +2057,24 @@ export const createRunAnalysis = ({
             : { status: 'stale' };
         }
         if (!circularDiscoveryMatchesCurrentInput()) {
-          const message = circularRecordDiscovery.error || 'Could not read records from the circular input file(s).';
-          await restoreCommittedArtifact();
-          errorLog.value = formatJsError(new Error(message));
+          const message = circularRecordDiscovery.error || diagnosticError('INPUT_UNREADABLE');
+          const outcome = await failOperation(message, { handle: committedArtifactHandle,
+            restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
           if (activeLosatAbortController === generationAbortController) {
             activeLosatAbortController = null;
           }
-          return { status: 'error' };
+          return outcome;
         }
       }
     }
     const depthInputError = validateDepthInputPresence();
     if (depthInputError) {
-      if (isReflow) {
-        labelReflowLastError.value = depthInputError;
-      } else {
-        await restoreCommittedArtifact();
-        errorLog.value = formatJsError(new Error(depthInputError));
-      }
+      const error = formatError(depthInputError);
       if (activeLosatAbortController === generationAbortController) {
         activeLosatAbortController = null;
       }
-      return { status: 'error' };
+      return failOperation(error, { handle: committedArtifactHandle,
+        restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
     }
     const previousSelectedResultIndex = selectedResultIndex.value;
     const editableLabelsSnapshot = Array.isArray(editableLabels.value)
@@ -1968,34 +2092,33 @@ export const createRunAnalysis = ({
         String(modeValue || '')
       ])
     );
-    const activeRunColors = isReflow ? appliedPaletteColors.value : currentColors.value;
-    const manualRunStartedAt = isReflow ? null : getNow();
-    const manualRunStartedAtIso = isReflow ? null : new Date().toISOString();
+    const activeRunColors = currentColors.value;
+    const manualRunStartedAt = getNow();
+    const manualRunStartedAtIso = new Date().toISOString();
     let structuredLosatTelemetry = null;
     const legacyPromotionTransaction = [];
     let legacyPromotionCommitted = false;
     let commitProteinMigration = null;
     let pendingLosatCacheCommit = null;
 
-    if (isReflow) {
-      labelReflowProcessing.value = true;
-      labelReflowLastError.value = null;
-      skipCaptureBaseConfig.value = true;
-      skipPositionReapply.value = true;
-    } else {
-      featureExtractionRequestId += 1;
-      processingStatus.value = 'Preparing input files...';
-      resultPanelTab.value = 'preview';
-      errorLog.value = null;
-      skipCaptureBaseConfig.value = false;
-      skipPositionReapply.value = false;
-      resetLabelScopeDialogState();
-      window._origPairwiseMin = activeRunColors.pairwise_match_min || '#FFE7E7';
-      window._origPairwiseMax = activeRunColors.pairwise_match_max || '#FF7272';
-    }
+    featureExtractionRequestId += 1;
+    processingStatus.value = 'Preparing input files...';
+    resultPanelTab.value = 'preview';
+    if (isCurrentAlert()) errorLog.value = null;
+    skipCaptureBaseConfig.value = false;
+    resetLabelScopeDialogState();
+    window._origPairwiseMin = activeRunColors.pairwise_match_min || '#FFE7E7';
+    window._origPairwiseMax = activeRunColors.pairwise_match_max || '#FF7272';
     labelOverrideBuildWarning.value = '';
 
     try {
+      if (rulePreparation) {
+        colorCandidate = await rulePreparation.prepareCandidate(manualSpecificRules, { onProgress: onDiagramProgress });
+        throwIfGenerationCanceled();
+        if (!colorCandidate || generationToken !== latestGenerationToken) return { status: 'stale' };
+        candidateRules = colorCandidate.rules;
+        runState.manualSpecificRules = candidateRules;
+      }
       if (mode.value === 'linear') {
         if (!activeComparisonPlanSnapshot || !Array.isArray(activeComparisonPlanSnapshot.edges)) {
           throw new Error('A resolved Linear comparison plan is required.');
@@ -2011,7 +2134,7 @@ export const createRunAnalysis = ({
         const annotationError = validateAnnotationTargets({
           loadComparison: annotationLoadComparison
         });
-        if (annotationError) throw new Error(annotationError);
+        if (annotationError) throw diagnosticError(annotationError.code, annotationError.context);
       }
       let regionSpecs = [];
       let recordSelectors = [];
@@ -2125,7 +2248,7 @@ export const createRunAnalysis = ({
       const normalizedOutputPrefix = String(form.prefix || '').trim();
 
       const activePaletteName = String(
-        isReflow ? appliedPaletteName.value : (selectedPalette?.value || appliedPaletteName.value || 'default')
+        selectedPalette?.value || appliedPaletteName.value || 'default'
       ).trim() || 'default';
       const paletteBaseColors = normalizePaletteColors(
         paletteDefinitions.value?.[activePaletteName] ||
@@ -2140,7 +2263,7 @@ export const createRunAnalysis = ({
         stageTextFile('/combined_d.tsv', `${dContent}\n`);
       }
 
-      const tContent = serializeSpecificRules(manualSpecificRules);
+      const tContent = serializeSpecificRules(candidateRules);
       if (tContent.trim() !== '') {
         stageTextFile('/combined_t.tsv', tContent);
       }
@@ -2170,13 +2293,19 @@ export const createRunAnalysis = ({
         stageTextFile('/priority.tsv', pContent);
       }
 
-      const labelOverride = buildLabelOverrideTsv(labelTextFeatureOverrides, labelTextBulkOverrides, {
-        editableLabels: editableLabelsSnapshot,
-        extractedFeatures: workingExtractedFeatures,
-        featureOverrideSources: featureOverrideSourcesSnapshot,
-        visibilityOverrides: visibilityOverridesSnapshot
-      });
-      const effectiveLabelOverrideTsv = serializeLabelOverrideRows(canonicalLabelOverrideRows.value) || labelOverride.tsv;
+      // One label table per Generate: the staged copy and the canonical
+      // request both use this value (CW-02); imported rows need no build.
+      const canonicalLabelOverrideTsv = serializeLabelOverrideRows(canonicalLabelOverrideRows.value);
+      const labelOverride = canonicalLabelOverrideTsv
+        ? { tsv: canonicalLabelOverrideTsv, skippedMissingSourceCount: 0 }
+        : buildLabelOverrideTsv(labelTextFeatureOverrides, labelTextBulkOverrides, {
+          editableLabels: editableLabelsSnapshot,
+          extractedFeatures: workingExtractedFeatures,
+          featureOverrideSources: featureOverrideSourcesSnapshot,
+          visibilityOverrides: visibilityOverridesSnapshot
+        });
+      const effectiveLabelOverrideTsv = labelOverride.tsv;
+      runState.generatedLabelOverrideTsv = effectiveLabelOverrideTsv;
       if (labelOverride.skippedMissingSourceCount > 0) {
         labelOverrideBuildWarning.value = `${labelOverride.skippedMissingSourceCount} feature override row(s) were skipped due to missing source label context.`;
       }
@@ -2202,20 +2331,6 @@ export const createRunAnalysis = ({
           Number(adv.depth_min) > Number(adv.depth_max)
         ) {
           throw new Error('Depth minimum must be less than or equal to depth maximum.');
-        }
-        if (
-          adv.depth_window_size !== null &&
-          adv.depth_window_size !== undefined &&
-          adv.depth_window_size !== ''
-        ) {
-          if (Number(adv.depth_window_size) <= 0) throw new Error('Depth window must be greater than 0.');
-        }
-        if (
-          adv.depth_step_size !== null &&
-          adv.depth_step_size !== undefined &&
-          adv.depth_step_size !== ''
-        ) {
-          if (Number(adv.depth_step_size) <= 0) throw new Error('Depth step must be greater than 0.');
         }
         if (
           adv.depth_large_tick_interval !== null &&
@@ -2296,21 +2411,6 @@ export const createRunAnalysis = ({
           slots,
           depthTracks: adv.depth_tracks,
           activeCount: trackCount
-        });
-      };
-      const validateEnabledDepthSlots = (slots, activeCount, kind) => {
-        const count = Math.max(0, Number(activeCount) || 0);
-        let fallbackIndex = 0;
-        (Array.isArray(slots) ? slots : []).forEach((slot) => {
-          if (!slot || slot.enabled === false || String(slot.renderer || '') !== 'depth') return;
-          const trackIndex = depthSlotTrackIndex(slot, fallbackIndex);
-          fallbackIndex += 1;
-          if (trackIndex !== null && trackIndex >= 0 && trackIndex < count) return;
-          const slotId = String(slot.id || 'depth').trim() || 'depth';
-          const indexText = trackIndex === null ? 'unknown' : String(trackIndex);
-          throw new Error(
-            `${kind} depth slot '${slotId}' references removed depth track index ${indexText}. Select an existing Depth TSV or remove the slot.`
-          );
         });
       };
       const linearDepthRepresentativeFiles = () => {
@@ -2413,26 +2513,13 @@ export const createRunAnalysis = ({
             circularTrackSlots.length
           );
         }
-        const hasPlotTitleFontSize =
-          adv.plot_title_font_size !== null &&
-          adv.plot_title_font_size !== undefined &&
-          adv.plot_title_font_size !== '';
-        const parsedPlotTitleFontSize = hasPlotTitleFontSize
-          ? Number(adv.plot_title_font_size)
-          : null;
-        const normalizedPlotTitleFontSize =
-          parsedPlotTitleFontSize !== null &&
-          Number.isFinite(parsedPlotTitleFontSize) &&
-          parsedPlotTitleFontSize > 0
-            ? parsedPlotTitleFontSize
-            : null;
+        // Numeric settings (plot title font size, center radius, label
+        // spacing, multi-record ratios, ring geometry) are projected literally
+        // by the request and validated by Python; Generate keeps the draft.
         const keepFullDefinitionWithPlotTitle = Boolean(adv.keep_full_definition_with_plot_title);
-        const normalizedCenterReservedRadius = normalizeNonNegativeNumberOrNull(adv.center_reserved_radius);
         form.plot_title = normalizedCircularPlotTitle;
         adv.plot_title_position = normalizedPlotTitlePosition;
-        adv.plot_title_font_size = normalizedPlotTitleFontSize;
         adv.keep_full_definition_with_plot_title = keepFullDefinitionWithPlotTitle;
-        adv.center_reserved_radius = normalizedCenterReservedRadius;
 
         const labelsModeRaw =
           typeof form.labels_mode === 'string'
@@ -2451,27 +2538,14 @@ export const createRunAnalysis = ({
             circularRecordList.value,
             adv.multi_record_positions
           );
-          const normalizedSizeMode = requireCurrentCircularMultiRecordSizeMode(
-            adv.multi_record_size_mode
-          );
-          const normalizedMinRatio = normalizeMultiRecordMinRadiusRatio(adv.multi_record_min_radius_ratio);
-          const normalizedColumnGapRatio = normalizeMultiRecordColumnGapRatio(adv.multi_record_column_gap_ratio);
-          const normalizedRowGapRatio = normalizeMultiRecordRowGapRatio(adv.multi_record_row_gap_ratio);
-          adv.multi_record_size_mode = normalizedSizeMode;
-          adv.multi_record_min_radius_ratio = normalizedMinRatio;
-          adv.multi_record_column_gap_ratio = normalizedColumnGapRatio;
-          adv.multi_record_row_gap_ratio = normalizedRowGapRatio;
+          requireCurrentCircularMultiRecordSizeMode(adv.multi_record_size_mode);
           adv.multi_record_positions.splice(
             0,
             adv.multi_record_positions.length,
             ...effectiveRecordPositions
           );
-          adv.plot_title_position = normalizedPlotTitlePosition;
-          adv.plot_title_font_size = normalizedPlotTitleFontSize;
         }
 
-        const normalizedCircularLabelSpacing = normalizePositiveNumberOrNull(adv.circular_label_spacing);
-        adv.circular_label_spacing = normalizedCircularLabelSpacing;
         const discoveredCircularRecordCount = (
           circularDiscoveryMatchesCurrentInput() &&
           Array.isArray(circularRecordList.value)
@@ -2507,7 +2581,6 @@ export const createRunAnalysis = ({
             circularTrackSlots,
             representativeDepthFiles(circularDepthRows)
           );
-          validateEnabledDepthSlots(circularTrackSlots, circularDepthEntries.length, 'Circular');
         }
         const hasCircularDepthFile = circularDepthEntries.length > 0;
         const circularSlotNeedsDepth = useCircularTrackSlots && hasEnabledCircularTrackRenderer(circularTrackSlots, 'depth');
@@ -2524,11 +2597,7 @@ export const createRunAnalysis = ({
           validateDepthStyleSettings();
         }
 
-        if (cInputType.value === 'gb') {
-          if (!files.c_gb) throw new Error('Please upload a GenBank file.');
-        } else {
-          if (!files.c_gff || !files.c_fasta) throw new Error('GFF3 and FASTA are required.');
-        }
+        assertActiveModeInputs?.('circular', state);
 
         const sourceMode = String(circularConservation.source || '').trim().toLowerCase() === 'upload'
           ? 'upload'
@@ -2541,31 +2610,9 @@ export const createRunAnalysis = ({
 
         if (shouldDrawCircularPairwiseComparisons) {
           setProcessingStatus('Preparing conservation comparisons...');
-          circularConservation.ring_width = normalizePositiveNumberOrNull(
-            circularConservation.ring_width
-          );
-          circularConservation.ring_gap = normalizePositiveNumberOrNull(
-            circularConservation.ring_gap
-          );
-          const normalizeConservationState = () => {
-            adv.min_bitscore = normalizeBlastThresholdNumber(
-              adv.min_bitscore,
-              DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS.bitscore
-            );
-            adv.evalue = normalizeBlastThresholdText(
-              adv.evalue,
-              DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS.evalue
-            );
-            adv.identity = normalizeBlastThresholdNumber(
-              adv.identity,
-              DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS.identity
-            );
-            adv.alignment_length = normalizeBlastThresholdNumber(
-              adv.alignment_length,
-              DEFAULT_CIRCULAR_CONSERVATION_BLAST_FILTERS.alignment_length,
-              { integer: true }
-            );
-          };
+          // Thresholds are evaluated before conservation work; the request
+          // projects the same resolution, and the draft keeps what was typed.
+          resolveComparisonThresholds(adv, 'circular');
 
           const runCircularLosatConservation = async (comparisonEntries) => {
             const circularLosatProgram = normalizeCircularConservationLosatProgram(
@@ -2573,7 +2620,6 @@ export const createRunAnalysis = ({
             );
             circularConservation.losat_program = circularLosatProgram;
             const subjectGencode = normalizePositiveInteger(circularConservation.subject_gencode, 1);
-            circularConservation.subject_gencode = subjectGencode;
             const buildExtraArgs = (comparisonGencode) => {
               if (circularLosatProgram === 'tblastx') {
                 return [
@@ -2607,10 +2653,14 @@ export const createRunAnalysis = ({
               throwIfGenerationCanceled();
               const comparisonEntry = comparisonEntries[index];
               const fileObj = comparisonEntry?.file || comparisonEntry;
-              const queryFasta = await readFileText(fileObj);
-              if (getFastaSequenceLength(queryFasta) <= 0) {
-                throw new Error(`Pairwise comparison FASTA #${index + 1} has no sequence data.`);
-              }
+              // One sequence reader (D12): the Python helper reads FASTA, GenBank
+              // or DDBJ and returns the query FASTA that the CLI ring hashes.
+              const sequenceResponse = await runDiagramHelperOperation(
+                DIAGRAM_HELPER_OPERATIONS.READ_COMPARISON_SEQUENCE,
+                { files: [{ role: 'source', bytes: await cloneFileBytesForTransfer(fileObj) }] }
+              );
+              if (sequenceResponse.result?.error) throw sequenceResponse.result.error;
+              const queryFasta = String(sequenceResponse.result?.fasta || '');
               const queryHash = await hashText(queryFasta);
               const querySequenceKey = `circular-query:${queryHash}`;
               sequenceEntriesByKey.set(querySequenceKey, queryFasta);
@@ -2660,7 +2710,7 @@ export const createRunAnalysis = ({
             if (losatJobs.length > 0) {
               setProcessingStatus('Preparing comparison search runtime...');
               const runtime = await prepareLosatRuntime({ includeThreaded: executionMode !== 'serial' }).catch((error) => {
-                console.warn('LOSAT runtime warmup failed; execution will report the error.', error);
+                console.warn('LOSAT runtime warmup failed; execution will report the error.', formatError(error));
                 return null;
               });
               if (runtime?.threaded && losatThreadingStatus) {
@@ -2695,7 +2745,8 @@ export const createRunAnalysis = ({
                   outfmt: String(losat.outfmt || '6'),
                   args: job?.extraArgs || [],
                   queryCanonicalHash: job?.queryCanonicalHash || '',
-                  subjectCanonicalHash: job?.subjectCanonicalHash || ''
+                  subjectCanonicalHash: job?.subjectCanonicalHash || '',
+                  runtime: webLosatRuntimeRecord(circularLosatProgram)
                 });
               });
             } else {
@@ -2723,7 +2774,6 @@ export const createRunAnalysis = ({
             return resolved;
           };
 
-          normalizeConservationState();
           if (sourceMode === 'upload') {
             const blastFiles = circularConservationSourceFiles;
             if (blastFiles.length === 0) {
@@ -2737,7 +2787,7 @@ export const createRunAnalysis = ({
           } else {
             const comparisonFiles = circularConservationSourceFiles;
             if (comparisonFiles.length === 0) {
-              throw new Error('Please upload at least one comparison FASTA file for Pairwise Comparisons.');
+              throw new Error('Please upload at least one comparison sequence file for Pairwise Comparisons.');
             }
             const conservationEntries = orderedConservationSources(comparisonFiles, circularConservation);
             const conservationSeries = buildConservationSeries(comparisonFiles, circularConservation);
@@ -2773,9 +2823,6 @@ export const createRunAnalysis = ({
           linearSlotNeedsDepth = linearTrackSlots.some(
             (slot) => slot.enabled !== false && slot.renderer === 'depth'
           );
-          const depthTrackCount = depthTrackMatrixWidth(
-            linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth))
-          );
           let nextDepthIndex = 0;
           linearTrackSlots.forEach((slot) => {
             if (slot.renderer !== 'depth') return;
@@ -2795,7 +2842,6 @@ export const createRunAnalysis = ({
             linearTrackSlots,
             linearDepthRepresentativeFiles()
           );
-          validateEnabledDepthSlots(linearTrackSlots, depthTrackCount, 'Linear');
           linearTrackSlotAxisIndex = clampLinearTrackAxisIndex(
             adv.linear_track_slots_axis_index,
             linearTrackSlots.length
@@ -2825,22 +2871,15 @@ export const createRunAnalysis = ({
         const useCollinearBlastp = useProteinBlastp && blastpMode === 'collinear';
         if (hasComparisonIntent) {
           setProcessingStatus('Preparing comparisons...');
-          adv.pairwise_match_style = normalizePairwiseMatchStyle(adv.pairwise_match_style);
-          adv.min_bitscore = normalizeBlastThresholdNumber(
-            adv.min_bitscore,
-            DEFAULT_LINEAR_BLAST_FILTERS.bitscore
-          );
-          adv.evalue = normalizeBlastThresholdText(adv.evalue, DEFAULT_LINEAR_BLAST_FILTERS.evalue);
-          adv.identity = normalizeBlastThresholdNumber(
-            adv.identity,
-            DEFAULT_LINEAR_BLAST_FILTERS.identity
-          );
-          adv.alignment_length = normalizeBlastThresholdNumber(
-            adv.alignment_length,
-            DEFAULT_LINEAR_BLAST_FILTERS.alignment_length,
-            { integer: true }
+          adv.pairwise_match_style = normalizeCurrentPairwiseMatchStyle(
+            adv.pairwise_match_style,
+            'ribbon'
           );
         }
+        // One resolution per Generate feeds LOSAT post-processing and caches.
+        const comparisonThresholds = hasComparisonIntent
+          ? resolveComparisonThresholds(adv, 'linear')
+          : null;
 
         const blastpMaxHits = usePairwiseBlastp
           ? requireCurrentProteinBlastpMaxHits(losat.blastp?.maxHits)
@@ -2903,16 +2942,14 @@ export const createRunAnalysis = ({
           && canReuseResolvedProteinArtifacts({
             canonicalComparisons: files.linearCanonicalComparisons,
             sequences: linearSeqs,
-            committedRequest: typeof getCommittedCanonicalRenderRequest === 'function'
-              ? getCommittedCanonicalRenderRequest()
+            committedSession: typeof getCommittedCanonicalSession === 'function'
+              ? getCommittedCanonicalSession()
               : null,
             active: {
+              featureVisibility: featureVisibilityCacheKey,
               mode: blastpMode,
               candidateLimit: blastpCandidateLimit,
-              bitscore: adv.min_bitscore,
-              evalue: adv.evalue,
-              identity: adv.identity,
-              alignmentLength: adv.alignment_length,
+              ...comparisonThresholds,
               maxHits: blastpMaxHits,
               orthogroupMembershipMode,
               memberMaxHits: orthogroupMemberMaxHits,
@@ -2959,24 +2996,18 @@ export const createRunAnalysis = ({
 
         const normalizedPlotTitle = String(form.plot_title || '').trim();
         const normalizedPlotTitlePosition = normalizeLinearPlotTitlePosition(adv.plot_title_position);
-        const hasPlotTitleFontSize =
-          adv.plot_title_font_size !== null &&
-          adv.plot_title_font_size !== undefined &&
-          adv.plot_title_font_size !== '';
-        const parsedPlotTitleFontSize = hasPlotTitleFontSize ? Number(adv.plot_title_font_size) : null;
-        const normalizedPlotTitleFontSize =
-          parsedPlotTitleFontSize !== null &&
-          Number.isFinite(parsedPlotTitleFontSize) &&
-          parsedPlotTitleFontSize > 0
-            ? parsedPlotTitleFontSize
-            : null;
         adv.linear_show_replicon = adv.linear_show_replicon === true;
-        adv.linear_show_accession = adv.linear_show_accession !== false;
-        adv.linear_show_length = adv.linear_show_length !== false;
+        adv.linear_accession_visibility = requireLinearLabelVisibilityMode(
+          adv.linear_accession_visibility,
+          'Linear Accession visibility'
+        );
+        adv.linear_length_visibility = requireLinearLabelVisibilityMode(
+          adv.linear_length_visibility,
+          'Linear Length / Coordinates visibility'
+        );
         adv.linear_definition_line_styles = normalizeDefinitionLineStyleState(adv.linear_definition_line_styles);
         form.plot_title = normalizedPlotTitle;
         adv.plot_title_position = normalizedPlotTitlePosition;
-        adv.plot_title_font_size = normalizedPlotTitleFontSize;
 
         const normalizedLabelPlacement = requireCurrentLinearLabelPlacement(
           adv.label_placement
@@ -2986,39 +3017,23 @@ export const createRunAnalysis = ({
           normalizedLabelRendering = 'auto';
         }
         adv.label_rendering = normalizedLabelRendering;
-        const normalizedLinearLabelSpacing = normalizePositiveNumberOrNull(adv.linear_label_spacing);
-        adv.linear_label_spacing = normalizedLinearLabelSpacing;
         if (hasComparisonIntent) {
           const comparisonHeight = classifyOptionalPositiveNumber(adv.comparison_height);
           if (comparisonHeight.status === 'invalid') {
-            throw new Error('Pairwise Match Height must be Auto or a positive finite number.');
+            throw diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' });
           }
         }
 
         const viewTransformSpecs = [];
         const buildRegionSpec = (seq, idx) => {
-          const hasStart = seq.region_start !== null && seq.region_start !== undefined && seq.region_start !== '';
-          const hasEnd = seq.region_end !== null && seq.region_end !== undefined && seq.region_end !== '';
           const recordIdRaw = seq.region_record_id ? String(seq.region_record_id).trim() : '';
           const wantsReverse = Boolean(seq.region_reverse);
-          if (hasStart !== hasEnd) {
-            throw new Error(`Sequence #${idx + 1}: Provide both Region start and end, or leave both empty.`);
-          }
+          const bounds = resolveLinearRegionBounds(seq, idx);
 
           recordSelectors.push(recordIdRaw || '');
 
-          if (hasStart && hasEnd) {
-            const start = Number(seq.region_start);
-            const end = Number(seq.region_end);
-            if (!Number.isFinite(start) || !Number.isFinite(end)) {
-              throw new Error(`Sequence #${idx + 1}: Region start/end must be numbers.`);
-            }
-            if (!Number.isInteger(start) || !Number.isInteger(end)) {
-              throw new Error(`Sequence #${idx + 1}: Region start/end must be integers.`);
-            }
-            if (start < 1 || end < 1) {
-              throw new Error(`Sequence #${idx + 1}: Region start/end must be >= 1.`);
-            }
+          if (bounds) {
+            const { start, end } = bounds;
             const canonicalStart = Math.min(start, end);
             const canonicalEnd = Math.max(start, end);
             const coordinateReverse = start > end;
@@ -3099,7 +3114,7 @@ export const createRunAnalysis = ({
               }
               return runtime;
             }).catch((error) => {
-              console.warn('LOSAT runtime warmup failed; execution will report the error if LOSAT is used.', error);
+              console.warn('LOSAT runtime warmup failed; execution will report the error if LOSAT is used.', formatError(error));
               return null;
             })
           : null;
@@ -3203,7 +3218,7 @@ export const createRunAnalysis = ({
                 }
               );
               const res = response.result;
-              if (res.error) throw new Error(res.error);
+              if (res.error) throw res.error;
               const fastaHash = await hashText(res.fasta || '');
               const proteinCacheKey = String(res.display_binding_hash || '');
               entry = {
@@ -3249,7 +3264,7 @@ export const createRunAnalysis = ({
                   }
                 );
                 const res = response.result;
-                if (res.error) throw new Error(res.error);
+                if (res.error) throw res.error;
                 entry = {
                   fasta: res.fasta,
                   recordId: res.record_id || `seq_${idx + 1}`,
@@ -3257,7 +3272,7 @@ export const createRunAnalysis = ({
                 };
                 if (losatTiming) {
                   losatTiming.fastaWorkerFallbacks += 1;
-                  console.warn('LOSAT browser FASTA extraction fell back to the diagram Worker:', fastError);
+                  console.warn('LOSAT browser FASTA extraction fell back to the diagram Worker.', formatError(fastError));
                 }
               }
             }
@@ -3378,7 +3393,7 @@ export const createRunAnalysis = ({
           );
           const result = response.result;
           if (result.status === 'error') {
-            throw new Error(result.error || 'Legacy protein cache migration failed.');
+            throw result.error || new Error('Legacy protein cache migration failed.');
           }
           const candidateIndex = Number(result.candidateIndex);
           if (
@@ -3460,14 +3475,6 @@ export const createRunAnalysis = ({
           }
         };
 
-        const getGencode = (idx) => {
-          const raw = linearSeqs[idx]?.losat_gencode;
-          if (raw === null || raw === undefined || raw === '') return null;
-          const num = Number(raw);
-          if (!Number.isFinite(num)) return null;
-          return num;
-        };
-
         const getBlastpCandidateLimit = () => {
           if (!useProteinBlastp) return null;
           return blastpCandidateLimit;
@@ -3478,8 +3485,8 @@ export const createRunAnalysis = ({
           if (losatProgram.value === 'blastn') {
             pushArg(args, '--task', losat.blastn.task);
           } else if (losatProgram.value === 'tblastx') {
-            pushArg(args, '--query-gencode', getGencode(queryIdx));
-            pushArg(args, '--db-gencode', getGencode(subjectIdx));
+            pushArg(args, '--query-gencode', losatRecordGencode(linearSeqs[queryIdx]));
+            pushArg(args, '--db-gencode', losatRecordGencode(linearSeqs[subjectIdx]));
           } else {
             if (!useOrthogroupBlastp && !useCollinearBlastp) {
               pushArg(args, '--max-hsps-per-subject', 1);
@@ -3496,10 +3503,10 @@ export const createRunAnalysis = ({
             : new Set(comparisonResolution.edges
                 .filter((edge) => edge.source === 'losat')
                 .flatMap((edge) => [edge.queryIndex, edge.subjectIndex]));
+          assertActiveModeInputs?.('linear', state);
           for (let i = 0; i < linearSeqs.length; i++) {
             const seq = linearSeqs[i];
             if (lInputType.value === 'gb') {
-              if (!seq.gb) throw new Error(`Sequence #${i + 1}: Missing GenBank file.`);
               if (useLosat && losatRecordIndexes.has(i)) {
                 await prepareLinearFile(seq.gb, `/seq_${i}.gb`, {
                   cacheText: true,
@@ -3507,7 +3514,6 @@ export const createRunAnalysis = ({
                 });
               }
             } else {
-              if (!seq.gff || !seq.fasta) throw new Error(`Sequence #${i + 1}: GFF3 and FASTA are required.`);
               if (useLosat && losatRecordIndexes.has(i)) {
                 await prepareLinearFile(seq.gff, `/seq_${i}.gff`, {
                   slot: `files.linearSeqs[${i}].gff`
@@ -3560,9 +3566,7 @@ export const createRunAnalysis = ({
             );
             const result = response.result;
             if (result.status !== 'resolved' || !result.proteinIdMap) {
-              throw new Error(
-                result.error || 'Legacy protein UI reference migration failed.'
-              );
+              throw result.error || new Error('Legacy protein UI reference migration failed.');
             }
             const proteinIdMap = result.proteinIdMap;
             workingOrthogroups = rewriteMappedProteinReferences(
@@ -3603,62 +3607,15 @@ export const createRunAnalysis = ({
           const fastaExtractionBeforeJobBuild = losatTiming.fastaExtractionMs;
           const cacheHashBeforeJobBuild = losatTiming.cacheHashMs;
 
-          const jobSpecs = [];
-          const resolvedLosatEdges = comparisonResolution.edges.filter(
-            (edge) => edge.source === 'losat'
-          );
-          const edgeForOrdinal = (ordinal) => (
-            resolvedLosatEdges.find((edge) => edge.ordinal === ordinal) ||
-            resolvedLosatEdges[Math.max(0, Math.min(ordinal, resolvedLosatEdges.length - 1))]
-          );
-          const pushExpandedJobSpec = (queryIndex, subjectIndex, ordinal) => {
-            const edge = resolvedLosatEdges.find((candidate) => (
-              candidate.queryIndex === queryIndex && candidate.subjectIndex === subjectIndex
-            )) || edgeForOrdinal(ordinal);
-            jobSpecs.push({
-              edgeKey: edge?.edgeKey || '',
-              ordinal: edge?.ordinal ?? ordinal,
-              queryUid: linearSeqs[queryIndex].uid,
-              subjectUid: linearSeqs[subjectIndex].uid,
-              queryIndex,
-              subjectIndex,
-              program: losatProgram.value
-            });
-          };
-          if (useOrthogroupBlastp) {
-            for (let i = 0; i < linearSeqs.length; i++) {
-              pushExpandedJobSpec(i, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-              for (let j = i + 1; j < linearSeqs.length; j++) {
-                pushExpandedJobSpec(i, j, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-                pushExpandedJobSpec(j, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-              }
-            }
-          } else if (useCollinearBlastp) {
-            if (collinearInferOrthogroups) {
-              for (let i = 0; i < linearSeqs.length; i++) {
-                pushExpandedJobSpec(i, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-              }
-            }
-            if (collinearSearchScope === 'all') {
-              for (let i = 0; i < linearSeqs.length - 1; i++) {
-                for (let j = i + 1; j < linearSeqs.length; j++) {
-                  pushExpandedJobSpec(i, j, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-                  pushExpandedJobSpec(j, i, Math.min(i, Math.max(0, resolvedLosatEdges.length - 1)));
-                }
-              }
-            } else {
-              resolvedLosatEdges.forEach((edge) => {
-                pushExpandedJobSpec(edge.queryIndex, edge.subjectIndex, edge.ordinal);
-                pushExpandedJobSpec(edge.subjectIndex, edge.queryIndex, edge.ordinal);
-              });
-            }
-          } else {
-            jobSpecs.push(...buildPairwiseLosatJobSpecs({
-              resolution: comparisonResolution,
-              program: losatProgram.value,
-              blastpMode
-            }));
-          }
+          const jobSpecs = buildLosatJobSpecs({
+            resolution: comparisonResolution,
+            recordCount: linearSeqs.length,
+            recordUids: linearSeqs.map((seq) => seq.uid),
+            program: losatProgram.value,
+            blastpMode,
+            collinearInferOrthogroups,
+            collinearSearchScope
+          });
 
           const sourcePlan = await prepareLosatSourceBatches({
             sequences: linearSeqs,
@@ -3666,8 +3623,7 @@ export const createRunAnalysis = ({
             getEntry: getSeqEntry,
             buildArgs: buildLosatArgs,
             hashText,
-            protein: useProteinBlastp,
-            excludeSelfComparisons: useCollinearBlastp && !collinearInferOrthogroups
+            protein: useProteinBlastp
           });
           const preparedJobs = [];
           for (const spec of jobSpecs) {
@@ -3706,7 +3662,7 @@ export const createRunAnalysis = ({
               || result.keys.length !== preparedJobs.length
               || result.keys.some((key) => !/^[0-9a-f]{64}$/.test(key))
             ) {
-              throw new Error(result.error || 'Protein cache key generation failed.');
+              throw result.error || new Error('Protein cache key generation failed.');
             }
             proteinCacheKeys = result.keys;
           }
@@ -3721,6 +3677,16 @@ export const createRunAnalysis = ({
           if (useProteinBlastp && preparedJobs.length > 0 && !identityIndex) {
             throw new Error('Protein comparison identity manifest is invalid.');
           }
+          // CLI Sessions can specify a complete two-dimensional row layout.
+          // For collinearity, every pair across adjacent rows is displayed;
+          // the Web comparison-plan edges alone do not represent those pairs.
+          const canonicalGridRows = useCollinearBlastp && linearRecordLayoutEnabled.value
+            ? linearSeqs.map((seq) => linearRecordRows.find((entry) => entry.uid === seq.uid))
+            : null;
+          const hasCanonicalGridRows = canonicalGridRows?.length > 1
+            && canonicalGridRows.every((entry) => entry?.canonicalRow === entry.row
+              && Number.isInteger(entry.canonicalColumn) && entry.canonicalColumn > 0
+              && entry.canonicalCardinality === 'exactly_one');
           try {
             for (const [jobIndex, { spec, losatArgs, cacheMetadata, batch }] of preparedJobs.entries()) {
               throwIfGenerationCanceled();
@@ -3766,11 +3732,16 @@ export const createRunAnalysis = ({
               const resolvedEdge = comparisonResolution.edges.find(
                 (edge) => edge.edgeKey === spec.edgeKey
               );
-              const isResolvedDisplayPair = Boolean(
-                resolvedEdge &&
-                spec.queryIndex === resolvedEdge.queryIndex &&
-                spec.subjectIndex === resolvedEdge.subjectIndex
-              );
+              const isResolvedDisplayPair = hasCanonicalGridRows
+                ? spec.queryIndex < spec.subjectIndex && Math.abs(
+                    canonicalGridRows[spec.queryIndex].row
+                    - canonicalGridRows[spec.subjectIndex].row
+                  ) === 1
+                : Boolean(
+                    resolvedEdge &&
+                    spec.queryIndex === resolvedEdge.queryIndex &&
+                    spec.subjectIndex === resolvedEdge.subjectIndex
+                  );
               const pair = {
                 pairIndex: spec.ordinal,
                 ordinal: spec.ordinal,
@@ -3863,6 +3834,8 @@ export const createRunAnalysis = ({
           losatTiming.jobBuildMs += Math.max(0, jobBuildWallMs - nestedFastaMs - nestedHashMs);
 
           if (sourceJobs.length > 0) {
+            // A failure while searching is reported as a LOSAT failure (CO-01).
+            failureStage = 'losat';
             setProcessingStatus('Preparing comparison search runtime...');
             const runtimeWaitStartedAt = getNow();
             await waitForCancelablePromise(losatRuntimeWarmup, generationAbortSignal);
@@ -3886,6 +3859,7 @@ export const createRunAnalysis = ({
               }
             });
             throwIfGenerationCanceled();
+            failureStage = 'request-validation';
             losatTiming.executionMs += getNow() - executionStartedAt;
             const losatResults = sourceResults.flatMap((result) => {
               const job = sourceJobs.find((item) => item.cacheKey === result.cacheKey);
@@ -3922,7 +3896,8 @@ export const createRunAnalysis = ({
                   : {
                       queryCanonicalHash: job?.queryCanonicalHash || '',
                       subjectCanonicalHash: job?.subjectCanonicalHash || ''
-                    })
+                    }),
+                runtime: webLosatRuntimeRecord(losatProgram.value)
               };
               cacheMap.set(result.cacheKey, rawEntry);
             });
@@ -3996,10 +3971,7 @@ export const createRunAnalysis = ({
               const derivedCachePayload = buildLosatDerivedPayloadCachePayload({
                 mode: blastpMode,
                 maxHits: blastpMaxHits,
-                bitscore: adv.min_bitscore,
-                evalue: adv.evalue,
-                identity: adv.identity,
-                alignmentLength: adv.alignment_length,
+                ...comparisonThresholds,
                 collinearMinAnchors,
                 collinearMaxUnitGap,
                 collinearUnitMode,
@@ -4013,6 +3985,7 @@ export const createRunAnalysis = ({
                 collinearInferOrthogroups,
                 orthogroupMembershipMode,
                 orthogroupMemberMaxHits,
+                explicitDisplayPairs: Boolean(hasCanonicalGridRows),
                 recordPayloads,
                 pairPayloads
               });
@@ -4055,10 +4028,7 @@ export const createRunAnalysis = ({
                   ],
                   mode: blastpMode,
                   maxHits: blastpMaxHits,
-                  bitscore: adv.min_bitscore,
-                  evalue: adv.evalue,
-                  identity: adv.identity,
-                  alignmentLength: adv.alignment_length,
+                  ...comparisonThresholds,
                   collinearMinAnchors,
                   collinearMaxUnitGap,
                   collinearUnitMode,
@@ -4071,10 +4041,24 @@ export const createRunAnalysis = ({
                   collinearSearchScope,
                   collinearInferOrthogroups,
                   orthogroupMembershipMode,
-                  orthogroupMemberMaxHits
+                  orthogroupMemberMaxHits,
+                  explicitDisplayPairs: Boolean(hasCanonicalGridRows)
                 }
               );
               convertedPayload = response.result;
+              if (["orthogroup", "collinear"].includes(blastpMode)) {
+                const resourceKey = blastpMode === "collinear" ? "collinearityResult" : "orthogroupResult";
+                const canonical = convertedPayload.canonicalResource;
+                if (!(canonical?.bytes instanceof Uint8Array) || canonical.bytes.byteLength !== canonical.size) {
+                  throw new Error("Analysis canonical resource bytes are missing.");
+                }
+                convertedPayload[resourceKey] = JSON.parse(bytesToText(canonical.bytes));
+                bindCanonicalTypedResource(convertedPayload[resourceKey], {
+                  kind: canonical.kind, type: "application/json", size: canonical.size,
+                  lastModified: 0, encoding: "base64", data: bytesToBase64(canonical.bytes)
+                });
+                delete convertedPayload.canonicalResource;
+              }
               if (useDerivedProteinPayloadCache && !convertedPayload?.error) {
                 setLosatDerivedCacheEntry(derivedCacheMap, derivedCacheKey, {
                   mode: blastpMode,
@@ -4083,7 +4067,7 @@ export const createRunAnalysis = ({
                 });
               }
             }
-            if (convertedPayload.error) throw new Error(convertedPayload.error);
+            if (convertedPayload.error) throw convertedPayload.error;
             if (!hasRequiredCanonicalAnalysisResource(blastpMode, convertedPayload)) {
               throw new Error(
                 'Protein comparison analysis did not return its canonical typed result.'
@@ -4142,17 +4126,8 @@ export const createRunAnalysis = ({
             for (const pair of losatPairs) {
               throwIfGenerationCanceled();
               const cached = cacheMap.get(pair.cacheKey);
-              const blastText = isCurrentRawLosatCacheEntry(cached) ? cached.text : '';
-              const response = await runDiagramHelperOperation(
-                DIAGRAM_HELPER_OPERATIONS.CONVERT_LOSAT_NUCLEOTIDE_TO_DISPLAY_TSV,
-                {
-                  blastText,
-                  queryViewTransform: await getViewTransform(pair.queryIndex),
-                  subjectViewTransform: await getViewTransform(pair.subjectIndex)
-                }
-              );
-              const converted = response.result;
-              if (converted.error) throw new Error(converted.error);
+              // Raw search-frame rows; the Python planner projects orientation (PD-OI-073).
+              const blastText = isCurrentRawLosatCacheEntry(cached) ? String(cached.text || '') : '';
               const blastPath = `/blast_${pair.pairIndex}.txt`;
               const blastName = pair.filename || getPayloadName(blastPath);
               const blastSlot = `generatedFiles.losat_blasts[${pair.pairIndex}]`;
@@ -4161,7 +4136,7 @@ export const createRunAnalysis = ({
                 slot: blastSlot,
                 kind: 'generated'
               });
-              recordGeneratedCliFile(blastPath, converted.tsv || '', {
+              recordGeneratedCliFile(blastPath, blastText, {
                 name: blastName,
                 slot: blastSlot
               });
@@ -4171,7 +4146,7 @@ export const createRunAnalysis = ({
                 ordinal: pair.ordinal,
                 queryRecordIndex: pair.queryIndex,
                 subjectRecordIndex: pair.subjectIndex,
-                text: converted.tsv || '',
+                text: blastText,
               });
             }
           }
@@ -4330,7 +4305,6 @@ export const createRunAnalysis = ({
             }
           }
           validateDepthStyleSettings();
-          adv.depth_height = normalizePositiveNumberOrNull(adv.depth_height);
         }
       }
 
@@ -4343,19 +4317,18 @@ export const createRunAnalysis = ({
 
       throwIfGenerationCanceled();
       setProcessingStatus('Preparing render inputs and session...');
-      if (!isReflow) {
-        await nextTick();
-        await waitForAfterPaint();
-        throwIfGenerationCanceled();
-      }
+      await nextTick();
+      await waitForAfterPaint();
+      throwIfGenerationCanceled();
       if (typeof serializeCanonicalFiles !== 'function') {
         throw new Error('Canonical input serialization is unavailable.');
       }
-      if (!isReflow) recordSessionLifecycleEvent('generation-input-resolution-end');
+      recordSessionLifecycleEvent('generation-input-resolution-end');
       recordSessionLifecycleEvent('serialize-canonical-files-start');
       const serializedFiles = await serializeCanonicalFiles(
         activeComparisonPlanSnapshot,
-        linearRecordCatalog
+        linearRecordCatalog,
+        runState
       );
       recordSessionLifecycleEvent('serialize-canonical-files-end');
       throwIfGenerationCanceled();
@@ -4367,7 +4340,7 @@ export const createRunAnalysis = ({
         fasta: candidateFiles.c_conservation_fastas?.[entry.sourceIndex] || null
       }));
       const candidateRequestState = {
-        ...state,
+        ...runState,
         selectedOrthogroupAlignmentFeature: {
           value: workingSelectedOrthogroupAlignmentFeature
         }
@@ -4384,9 +4357,20 @@ export const createRunAnalysis = ({
         if (typeof getCommittedCanonicalSession !== 'function') {
           throw new Error('The preserved comparison owner is unavailable.');
         }
+        // The candidate is a current-schema request; an older committed
+        // request (for example a v42 CLI sidecar) is promoted before reuse.
+        const committedSession = getCommittedCanonicalSession();
         inheritCommittedComparisonIntent({
           candidate: canonical,
-          committed: getCommittedCanonicalSession()
+          committed: committedSession?.renderRequest
+            ? {
+                ...committedSession,
+                renderRequest: promoteCanonicalRenderRequestToCurrent(
+                  committedSession.renderRequest,
+                  { featureCatalog: featureCatalog?.value || null }
+                )
+              }
+            : committedSession
         });
       }
       recordSessionLifecycleEvent('canonical-request-construction-end');
@@ -4427,28 +4411,14 @@ export const createRunAnalysis = ({
       const canonicalReplayName = makeSafeFilename(
         `${normalizedOutputPrefix || 'out'}.gbdraw-session.json`
       );
-      const buildCanonicalReplayText = () => {
-        recordSessionLifecycleEvent('canonical-replay-json-start');
-        const replayText = JSON.stringify({
-          format: 'gbdraw-session',
-          version: canonicalSessionVersion,
-          createdAt: manualRunStartedAtIso || new Date().toISOString(),
-          renderRequest: canonical.renderRequest,
-          resources: canonical.resources,
-          // Export only after successful generation; reuse the published artifact.
-          results: candidateCommit.results,
-          editorState: { featureCatalog: candidateCatalog },
-          losatCache: { entries: [] },
-          losatDerivedCache: { entries: [] },
-          proteinIdentityManifest: emptyProteinIdentityManifest()
-        });
-        recordStructuralMetric('canonicalReplayFullSerializationCount');
-        recordSessionLifecycleEvent('canonical-replay-json-end');
-        recordSessionLifecycleEvent('canonical-replay-json-characters', {
-          value: replayText.length
-        });
-        return replayText;
-      };
+      const publishedReplayArtifact = { results: null, featureCatalog: null };
+      const buildCanonicalReplayText = createCanonicalReplayTextBuilder({
+        version: canonicalSessionVersion,
+        startedAtIso: manualRunStartedAtIso,
+        renderRequest: canonical.renderRequest,
+        resources: canonical.resources,
+        publishedArtifact: publishedReplayArtifact
+      });
       registerRunInfoFile(canonicalReplayPath, {
         name: canonicalReplayName,
         slot: 'generatedFiles.canonical_render_session',
@@ -4463,7 +4433,7 @@ export const createRunAnalysis = ({
           + 65_536
       });
       let sourceRecipe = null;
-      if (!isReflow && manualRunStartedAt !== null) {
+      if (manualRunStartedAt !== null) {
         const generatedFileNameHints = new Map();
         generatedCliFileMap.forEach((file) => {
           const slot = String(file?.slot || '').trim();
@@ -4482,138 +4452,72 @@ export const createRunAnalysis = ({
         });
         throwIfGenerationCanceled();
       }
-      const gbdrawStartedAt = getNow();
-      const generationResponse = await runDiagramGeneration({
-        request: canonical.renderRequest,
-        resources: canonical.resources
-      }, {
-        onProgress: ({ stage }) => {
-          const message = {
-            'preparing-runtime': 'Preparing diagram runtime (first use)...',
-            'preparing-resources': 'Preparing diagram input resources...',
-            rendering: 'Rendering diagram...',
-            finalizing: 'Finalizing diagram results...'
-          }[stage];
-          if (message) setProcessingStatus(message);
-        }
+      const postGbdrawTimingEntries = [];
+      failureStage = 'render';
+      const canonicalExecution = await executeCanonicalCandidate({
+        canonical,
+        decorationContinuity,
+        mode: mode.value,
+        kind: 'generate',
+        shouldAdmit: () => (!colorCandidate || rulePreparation.isCurrent(colorCandidate.snapshot))
+          && generationToken === latestGenerationToken
+          && !generationCancelRequested.value,
+        onProgress: onDiagramProgress,
+        prepareCommit: prepareCandidateCommit,
+        prepareCommitInput: {
+          sourceReplaced,
+          featureColorOverrides: colorCandidate?.featureColorOverrides || featureColorOverrides,
+          featureStrokeOverrides,
+          featureVisibilityOverrides,
+          labelTextFeatureOverrides,
+          labelVisibilityOverrides,
+          legendEntries: legendEntries.value,
+          deletedLegendEntries: deletedLegendEntries.value,
+          originalLegendOrder: originalLegendOrder.value,
+          addedLegendCaptions: addedLegendCaptions.value,
+          legendColorOverrides,
+          legendStrokeOverrides,
+          manualSpecificRules: candidateRules
+        },
+        timingEntries: postGbdrawTimingEntries
       });
-      console.info(`gbdraw ${mode.value} typed request render: ${formatDuration(getNow() - gbdrawStartedAt)}.`);
+      console.info(`gbdraw ${mode.value} typed request render: ${formatDuration(canonicalExecution.elapsedMs)}.`);
       setProcessingStatus('Preparing preview...');
       await nextTick();
       await waitForAfterPaint();
       throwIfGenerationCanceled();
-      const postGbdrawTimingEntries = [];
-      const res = generationResponse.results;
-      const generationMetadata = (
-        generationResponse.metadata &&
-        typeof generationResponse.metadata === 'object' &&
-        !Array.isArray(generationResponse.metadata)
-      )
-        ? generationResponse.metadata
-        : {};
-      if (generationToken !== latestGenerationToken) {
-        if (!isReflow && generationAbortSignal?.aborted) {
+      if (canonicalExecution.status === 'superseded'
+        || generationToken !== latestGenerationToken) {
+        if (generationAbortSignal?.aborted) {
           return finishCanceledManualRun();
         }
         return { status: 'stale' };
       }
-      if (res?.error) {
+      if (canonicalExecution.status === 'engine-error') {
         logPostGbdrawTimings(postGbdrawTimingEntries);
-        if (isReflow) {
-          labelReflowLastError.value = formatPythonError(res.error)?.summary || 'Auto reflow failed';
-          return { status: 'error' };
-        }
-        await restoreCommittedArtifact();
-        errorLog.value = formatPythonError(res.error);
-        return { status: 'error' };
+        return await failOperation(canonicalExecution.engineError, { handle: committedArtifactHandle,
+          restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
       }
-      if (!Array.isArray(res)) {
-        throw new Error('The diagram engine returned an invalid Result list.');
-      }
-
-      if (isReflow && requestId !== pendingReflowRequestId) {
-        return { status: 'stale' };
-      }
-
-      if (isReflow) {
-        skipCaptureBaseConfig.value = true;
-        skipPositionReapply.value = true;
-      }
-
-      recordSessionLifecycleEvent('candidate-result-validation-start');
-      const candidateCatalogAdmission = admitFeatureCatalog(
-        generationMetadata.featureCatalog,
-        res,
-        { adopt: true, mode: mode.value }
-      );
-      const candidateCatalog = candidateCatalogAdmission.catalog;
-      recordSessionLifecycleEvent('candidate-result-validation-end');
-      recordSessionLifecycleEvent('result-admission-start');
-      const candidateCommit = isReflow
-        ? measureTiming(
-            postGbdrawTimingEntries,
-            'run-analysis commit sanitized reflow results',
-            () => prepareReflowCommit({
-              generationResponse,
-              catalogAdmission: candidateCatalogAdmission,
-              results: res,
-              featureColorOverrides,
-              featureStrokeOverrides,
-              featureVisibilityOverrides,
-              labelTextFeatureOverrides,
-              labelVisibilityOverrides,
-              legendEntries: legendEntries.value,
-              deletedLegendEntries: deletedLegendEntries.value,
-              originalLegendOrder: originalLegendOrder.value,
-              addedLegendCaptions: addedLegendCaptions.value,
-              legendColorOverrides,
-              legendStrokeOverrides,
-              manualSpecificRules
-            })
-          )
-        : measureTiming(
-            postGbdrawTimingEntries,
-            'run-analysis sanitize and reapply editor overrides',
-            () => prepareCandidateCommit({
-              generationResponse,
-              sourceReplaced,
-              catalogAdmission: candidateCatalogAdmission,
-              results: res,
-              catalog: candidateCatalog,
-              mode: mode.value,
-              featureColorOverrides,
-              featureStrokeOverrides,
-              featureVisibilityOverrides,
-              labelTextFeatureOverrides,
-              labelVisibilityOverrides,
-              legendEntries: legendEntries.value,
-              deletedLegendEntries: deletedLegendEntries.value,
-              originalLegendOrder: originalLegendOrder.value,
-              addedLegendCaptions: addedLegendCaptions.value,
-              legendColorOverrides,
-              legendStrokeOverrides,
-              manualSpecificRules
-            })
-          );
-      recordSessionLifecycleEvent('result-admission-end');
+      const {
+        generationResponse,
+        generationMetadata,
+        catalogAdmission: candidateCatalogAdmission,
+        catalog: candidateCatalog,
+        commit: candidateCommit
+      } = canonicalExecution;
+      publishedReplayArtifact.results = candidateCommit.results;
+      publishedReplayArtifact.featureCatalog = candidateCatalog;
 
       if (generationToken !== latestGenerationToken) {
-        if (!isReflow && generationAbortSignal?.aborted) {
+        if (generationAbortSignal?.aborted) {
           return finishCanceledManualRun();
         }
         return { status: 'stale' };
       }
 
-      if (isReflow && requestId !== pendingReflowRequestId) {
-        return { status: 'stale' };
-      }
-
-      measureTiming(postGbdrawTimingEntries, 'run-analysis assign results', () => {
-        if (isReflow) results.value = candidateCommit.results;
-      });
       let candidateRunInfo = null;
       let candidateCliHelpers = null;
-      if (!isReflow && manualRunStartedAt !== null) {
+      if (manualRunStartedAt !== null) {
         candidateRunInfo = buildRunInfo({
           mode: mode.value,
           sourceRecipe,
@@ -4621,7 +4525,12 @@ export const createRunAnalysis = ({
           fileMetadata: runInfoFileMap,
           elapsedMs: getNow() - manualRunStartedAt,
           resultCount: candidateCommit.results.length,
-          startedAtIso: manualRunStartedAtIso
+          startedAtIso: manualRunStartedAtIso,
+          losatComparisons: mode.value === 'linear' && activeComparisonPlanSnapshot?.hasLosatIntent === true,
+          losatRuntimes: summarizeLosatRuntimes(
+            pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo,
+            pendingLosatCacheCommit?.cacheMap || losatCache.value
+          )
         });
         sourceRecipe.generatedFiles.forEach((file) => {
           recordGeneratedCliFile(
@@ -4640,217 +4549,227 @@ export const createRunAnalysis = ({
         );
       }
       logPostGbdrawTimings(postGbdrawTimingEntries);
-      if (isReflow) {
-        if (res.length > 0) {
-          const safeIndex = Math.max(0, Math.min(previousSelectedResultIndex, res.length - 1));
-          selectedResultIndex.value = safeIndex;
-        }
+      await validateSimilarityAlignmentResetReceipt(
+        state.similarityAlignmentResetReceipt?.value, canonical
+      );
+      recordSessionLifecycleEvent('preview-result-commit-start');
+      const candidateGroups = Array.isArray(candidateCommit.featureState.orthogroups)
+        ? candidateCommit.featureState.orthogroups
+        : [];
+      const candidateOrthogroupIndex = candidateCommit.featureState.featureOrthogroupIndex;
+      const candidateExtractedFeatures = candidateCommit.featureState.extractedFeatures;
+      const candidateBiologicalFeatures = candidateCommit.featureState.biologicalFeatures;
+      const currentOwnerSet = captureGeneratedArtifactOwnerSet();
+      let candidateOwnerSet = {
+        ...currentOwnerSet,
+        results: candidateCommit.results,
+        featureCatalog: candidateCatalog,
+        extractedFeatures: candidateExtractedFeatures,
+        biologicalFeatures: candidateBiologicalFeatures,
+        featureSelectorSafetyScope: candidateCommit.featureState.featureSelectorSafetyScope,
+        featureRecordIds: candidateCommit.featureState.featureRecordIds,
+        orthogroups: candidateGroups,
+        featureOrthogroupIndex: candidateOrthogroupIndex,
+        collinearGroups: Array.isArray(candidateCommit.featureState.collinearGroups)
+          ? candidateCommit.featureState.collinearGroups
+          : [],
+        trackSlotResolvedGeometry: generationMetadata.trackSlotGeometry || null,
+        annotationWarnings: canonicalExecution.annotationWarnings,
+        comparisonWarnings: canonicalExecution.comparisonWarnings,
+        specificRules: candidateRules,
+        fileLegendCaptions: new Set(candidateRules.filter(rule => rule.fromFile && rule.cap).map(rule => rule.cap)),
+        proteinIdentityManifest: workingProteinIdentityManifest,
+        legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
+        legacyProteinDerivedEvidence: workingLegacyProteinDerivedEvidence,
+        losatCache: pendingLosatCacheCommit?.cacheMap || losatCache.value,
+        losatDerivedCache:
+          pendingLosatCacheCommit?.derivedCacheMap || losatDerivedCache.value,
+        losatCacheInfo: pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo,
+        matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
+          candidateCommit.featureState.sequenceSources
+        ) || currentOwnerSet.matchSequenceOwner,
+        lastRunInfo: candidateRunInfo,
+        pairwiseMatchFactors: { ...(pairwiseMatchFactors?.value || {}) },
+        editableLabels: [],
+        generatedLegendPosition: form.legend,
+        generatedMode: mode.value,
+        generatedMultiRecordCanvas:
+          mode.value === 'circular' ? Boolean(form.multi_record_canvas) : false,
+        generatedCircularPlotTitlePosition: mode.value === 'circular'
+          ? normalizeCircularPlotTitlePosition(adv.plot_title_position)
+          : currentOwnerSet.generatedCircularPlotTitlePosition,
+        appliedPaletteName: String(
+          selectedPalette?.value || appliedPaletteName.value || 'default'
+        ),
+        appliedPaletteColors: { ...currentColors.value },
+        pendingPaletteName: '',
+        pendingPaletteColors: {}
+      };
+      let migratedSelectedAlignmentFeature = workingSelectedOrthogroupAlignmentFeature;
+      if (commitProteinMigration) {
+        const migrated = commitProteinMigration(candidateOwnerSet);
+        candidateOwnerSet = migrated.ownerSet;
+        migratedSelectedAlignmentFeature = migrated.selectedOrthogroupAlignmentFeature;
       }
-
-      if (!isReflow) {
-        recordSessionLifecycleEvent('preview-result-commit-start');
-        const candidateGroups = Array.isArray(candidateCommit.featureState.orthogroups)
-          ? candidateCommit.featureState.orthogroups
-          : [];
-        const candidateOrthogroupIndex = candidateCommit.featureState.featureOrthogroupIndex;
-        const candidateExtractedFeatures = candidateCommit.featureState.extractedFeatures;
-        const candidateBiologicalFeatures = candidateCommit.featureState.biologicalFeatures;
-        const currentOwnerSet = captureGeneratedArtifactOwnerSet();
-        let candidateOwnerSet = {
-          ...currentOwnerSet,
-          results: candidateCommit.results,
-          featureCatalog: candidateCatalog,
-          extractedFeatures: candidateExtractedFeatures,
-          biologicalFeatures: candidateBiologicalFeatures,
-          featureSelectorSafetyScope: candidateCommit.featureState.featureSelectorSafetyScope,
-          featureRecordIds: candidateCommit.featureState.featureRecordIds,
-          orthogroups: candidateGroups,
-          featureOrthogroupIndex: candidateOrthogroupIndex,
-          collinearGroups: Array.isArray(candidateCommit.featureState.collinearGroups)
-            ? candidateCommit.featureState.collinearGroups
-            : [],
-          trackSlotResolvedGeometry: generationMetadata.trackSlotGeometry || null,
-          proteinIdentityManifest: workingProteinIdentityManifest,
-          legacyProteinRawCandidates: workingLegacyProteinRawCandidates,
-          legacyProteinDerivedEvidence: workingLegacyProteinDerivedEvidence,
-          losatCache: pendingLosatCacheCommit?.cacheMap || losatCache.value,
-          losatDerivedCache:
-            pendingLosatCacheCommit?.derivedCacheMap || losatDerivedCache.value,
-          losatCacheInfo: pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo,
-          matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
-            candidateCommit.featureState.sequenceSources
-          ) || currentOwnerSet.matchSequenceOwner,
-          lastRunInfo: candidateRunInfo,
-          pairwiseMatchFactors: { ...(pairwiseMatchFactors?.value || {}) },
-          editableLabels: [],
-          generatedLegendPosition: form.legend,
-          generatedMode: mode.value,
-          generatedMultiRecordCanvas:
-            mode.value === 'circular' ? Boolean(form.multi_record_canvas) : false,
-          generatedCircularPlotTitlePosition: mode.value === 'circular'
-            ? normalizeCircularPlotTitlePosition(adv.plot_title_position)
-            : currentOwnerSet.generatedCircularPlotTitlePosition,
-          appliedPaletteName: String(
-            selectedPalette?.value || appliedPaletteName.value || 'default'
-          ),
-          appliedPaletteColors: { ...currentColors.value },
-          pendingPaletteName: '',
-          pendingPaletteColors: {}
-        };
-        let migratedSelectedAlignmentFeature = workingSelectedOrthogroupAlignmentFeature;
-        if (commitProteinMigration) {
-          const migrated = commitProteinMigration(candidateOwnerSet);
-          candidateOwnerSet = migrated.ownerSet;
-          migratedSelectedAlignmentFeature = migrated.selectedOrthogroupAlignmentFeature;
-        }
-        const generatedArtifactCandidate = generatedArtifactTransactionOwner.build(
-          candidateOwnerSet,
-          {
-            runtimeState: {
-              files: candidateCliHelpers?.files,
-              archiveName: candidateCliHelpers?.archiveName,
-              losatTelemetry: cloneJsonData(structuredLosatTelemetry)
-            }
+      const generatedArtifactCandidate = generatedArtifactTransactionOwner.build(
+        candidateOwnerSet,
+        {
+          runtimeState: {
+            files: candidateCliHelpers?.files,
+            archiveName: candidateCliHelpers?.archiveName,
+            losatTelemetry: cloneJsonData(structuredLosatTelemetry)
           }
-        );
-        const nextSelectedResultIndex = Math.max(
-          0,
-          Math.min(previousSelectedResultIndex, Math.max(0, candidateCommit.results.length - 1))
-        );
-        const selectedCandidateResult = candidateCommit.results[nextSelectedResultIndex] || null;
-        if (!selectedCandidateResult) {
-          throw new Error('The generated artifact has no selected preview Result.');
         }
-        const selectedMutationOperations = (
-          candidateCommit.mutationPlan?.operationsByResult?.[nextSelectedResultIndex]
-          || null
-        );
-        const optionalLabelFeatureIds = new Set(
-          (selectedMutationOperations?.labelVisibility || [])
-            .filter((operation) => operation?.mode === 'off')
-            .map((operation) => String(operation?.renderedId || '').trim())
-            .filter(Boolean)
-        );
-        const requiredLabelFeatureIds = Object.freeze([
-          ...new Set([
-            ...(selectedMutationOperations?.labelText || []),
-            ...(selectedMutationOperations?.labelVisibility || [])
-          ].map((operation) => String(operation?.renderedId || '').trim()).filter(
-            (renderedId) => renderedId && !optionalLabelFeatureIds.has(renderedId)
-          ))
-        ]);
-        const candidatePreviewReadiness = previewRuntime.registerReadinessExpectation({
-          result: selectedCandidateResult,
-          resultIndex: nextSelectedResultIndex,
-          artifactIdentity: generationResponse.artifactIdentity,
-          generationToken: String(generationToken),
-          catalogState: candidateCatalogAdmission,
-          phase: 'generate',
-          bindingOptions: {
-            isIncrementalEdit: false,
-            requiredLabelFeatureIds,
-            optionalLabelFeatureIds: Object.freeze([...optionalLabelFeatureIds])
-          },
-          isCurrent: () => (
-            latestGenerationToken === generationToken
-            && !generationCancelRequested.value
-            && Number(selectedResultIndex.value) === nextSelectedResultIndex
-          )
-        });
-        activatedGeneratedArtifactCandidate = generatedArtifactCandidate;
-        generatedArtifactTransactionOwner.activate(generatedArtifactCandidate, {
-          selectedResultIndex: nextSelectedResultIndex
-        });
-        if (resultGenerationKey) resultGenerationKey.value += 1;
-        selectedFeatureRecordIdx.value = 0;
-        selectedOrthogroupAlignmentFeature.value = migratedSelectedAlignmentFeature;
-        const candidateGroupIds = candidateGroups
-          .map((group) => String(group?.id || '').trim())
-          .filter(Boolean);
-        pruneOrthogroupOverrides(candidateGroupIds);
-        if (
-          !workingSelectedOrthogroupId
-          || !candidateGroupIds.includes(String(workingSelectedOrthogroupId || '').trim())
-        ) {
-          workingSelectedOrthogroupId = candidateGroupIds[0] || '';
+      );
+      const nextSelectedResultIndex = Math.max(
+        0,
+        Math.min(previousSelectedResultIndex, Math.max(0, candidateCommit.results.length - 1))
+      );
+      const selectedCandidateResult = candidateCommit.results[nextSelectedResultIndex] || null;
+      if (!selectedCandidateResult) {
+        throw new Error('The generated artifact has no selected preview Result.');
+      }
+      const selectedMutationOperations = (
+        candidateCommit.mutationPlan?.operationsByResult?.[nextSelectedResultIndex]
+        || null
+      );
+      const optionalLabelFeatureIds = new Set(
+        (selectedMutationOperations?.labelVisibility || [])
+          .filter((operation) => operation?.mode === 'off')
+          .map((operation) => String(operation?.renderedId || '').trim())
+          .filter(Boolean)
+      );
+      const requiredLabelFeatureIds = Object.freeze([
+        ...new Set([
+          ...(selectedMutationOperations?.labelText || []),
+          ...(selectedMutationOperations?.labelVisibility || [])
+        ].map((operation) => String(operation?.renderedId || '').trim()).filter(
+          (renderedId) => renderedId && !optionalLabelFeatureIds.has(renderedId)
+        ))
+      ]);
+      const candidatePreviewReadiness = previewRuntime.registerReadinessExpectation({
+        result: selectedCandidateResult,
+        resultIndex: nextSelectedResultIndex,
+        artifactIdentity: generationResponse.artifactIdentity,
+        generationToken: String(generationToken),
+        catalogState: candidateCatalogAdmission,
+        phase: 'generate',
+        bindingOptions: {
+          isIncrementalEdit: false,
+          requiredLabelFeatureIds,
+          optionalLabelFeatureIds: Object.freeze([...optionalLabelFeatureIds])
+        },
+        isCurrent: () => (
+          latestGenerationToken === generationToken
+          && !generationCancelRequested.value
+          && Number(selectedResultIndex.value) === nextSelectedResultIndex
+        )
+      });
+      activatedGeneratedArtifactCandidate = generatedArtifactCandidate;
+      const previousOrthogroups = orthogroups.value;
+      generatedArtifactTransactionOwner.activate(generatedArtifactCandidate, {
+        selectedResultIndex: nextSelectedResultIndex
+      });
+      if (resultGenerationKey) resultGenerationKey.value += 1;
+      selectedFeatureRecordIdx.value = 0;
+      selectedOrthogroupAlignmentFeature.value = migratedSelectedAlignmentFeature;
+      const candidateGroupIds = candidateGroups
+        .map((group) => String(group?.id || '').trim())
+        .filter(Boolean);
+      rekeyCommittedOrthogroupOverrides(previousOrthogroups, candidateGroups);
+      if (
+        !workingSelectedOrthogroupId
+        || !candidateGroupIds.includes(String(workingSelectedOrthogroupId || '').trim())
+      ) {
+        workingSelectedOrthogroupId = candidateGroupIds[0] || '';
+      }
+      selectedOrthogroupId.value = workingSelectedOrthogroupId;
+      featureExtractionPending.value = false;
+      featureExtractionError.value = null;
+      Object.keys(featureColorOverrides).forEach((key) => delete featureColorOverrides[key]);
+      Object.assign(
+        featureColorOverrides,
+        cloneJsonValue(candidateCommit.featureColorOverrides, {})
+      );
+      Object.keys(featureStrokeOverrides).forEach((key) => delete featureStrokeOverrides[key]);
+      Object.assign(
+        featureStrokeOverrides,
+        cloneJsonValue(candidateCommit.featureStrokeOverrides, {})
+      );
+      setFeatureEditorStatus({
+        status: candidateExtractedFeatures.length ? 'summary-ready' : 'idle',
+        generationId: featureExtractionRequestId,
+        error: null,
+        summaryCount: candidateExtractedFeatures.length,
+        detailsCacheSize: 0
+      });
+      resultPanelTab.value = 'preview';
+      if (typeof resetPreviewViewport === 'function') {
+        resetPreviewViewport({ resetZoom: true });
+      } else {
+        zoom.value = 1.0;
+      }
+      recordSessionLifecycleEvent('preview-result-commit-end');
+      acceptedCandidateReadyReceipt = await candidatePreviewReadiness.promise;
+      if (generationToken !== latestGenerationToken || generationCancelRequested.value) {
+        if (generationAbortSignal?.aborted || generationCancelRequested.value) {
+          return finishCanceledManualRun();
         }
-        selectedOrthogroupId.value = workingSelectedOrthogroupId;
-        featureExtractionPending.value = false;
-        featureExtractionError.value = null;
-        Object.keys(featureColorOverrides).forEach((key) => delete featureColorOverrides[key]);
-        Object.assign(
-          featureColorOverrides,
-          cloneJsonValue(candidateCommit.featureColorOverrides, {})
-        );
-        Object.keys(featureStrokeOverrides).forEach((key) => delete featureStrokeOverrides[key]);
-        Object.assign(
-          featureStrokeOverrides,
-          cloneJsonValue(candidateCommit.featureStrokeOverrides, {})
-        );
-        setFeatureEditorStatus({
-          status: candidateExtractedFeatures.length ? 'summary-ready' : 'idle',
-          generationId: featureExtractionRequestId,
-          error: null,
-          summaryCount: candidateExtractedFeatures.length,
-          detailsCacheSize: 0
-        });
-        resultPanelTab.value = 'preview';
-        if (typeof resetPreviewViewport === 'function') {
-          resetPreviewViewport({ resetZoom: true });
-        } else {
-          zoom.value = 1.0;
+        await restoreCommittedArtifact();
+        return { status: 'stale' };
+      }
+      await waitForPostBindFrame();
+      recordStructuralMetric('previewPostBindFrameCount', 1, { phase: 'generate' });
+      recordSessionLifecycleEvent('preview.post-bind-frame-completed', {
+        resultIndex: nextSelectedResultIndex,
+        rootGeneration: acceptedCandidateReadyReceipt.rootGeneration
+      });
+      if (generationToken !== latestGenerationToken || generationCancelRequested.value) {
+        if (generationAbortSignal?.aborted || generationCancelRequested.value) {
+          return finishCanceledManualRun();
         }
-        recordSessionLifecycleEvent('preview-result-commit-end');
-        acceptedCandidateReadyReceipt = await candidatePreviewReadiness.promise;
-        if (generationToken !== latestGenerationToken || generationCancelRequested.value) {
-          if (generationAbortSignal?.aborted || generationCancelRequested.value) {
-            return finishCanceledManualRun();
-          }
-          await restoreCommittedArtifact();
-          return { status: 'stale' };
-        }
-        await waitForPostBindFrame();
-        recordStructuralMetric('previewPostBindFrameCount', 1, { phase: 'generate' });
-        recordSessionLifecycleEvent('preview.post-bind-frame-completed', {
-          resultIndex: nextSelectedResultIndex,
-          rootGeneration: acceptedCandidateReadyReceipt.rootGeneration
-        });
-        if (generationToken !== latestGenerationToken || generationCancelRequested.value) {
-          if (generationAbortSignal?.aborted || generationCancelRequested.value) {
-            return finishCanceledManualRun();
-          }
-          await restoreCommittedArtifact();
-          return { status: 'stale' };
-        }
-        const removedVisibilityTargets = sourceReplaced && reconcileFeatureVisibilityOverrides(
-          featureVisibilityOverrides,
-          candidateBiologicalFeatures,
-          workingExtractedFeatures,
-          state.featureVisibilitySelectorCache
-        );
-        if (removedVisibilityTargets > 0) {
-          state.replaceFeatureVisibilitySelectorCacheOwner(preserveFeatureVisibilitySelectorCacheForOverrides(
-            buildFeatureVisibilitySelectorCache(candidateExtractedFeatures, candidateCommit.featureState.featureSelectorSafetyScope),
-            state.featureVisibilitySelectorCache,
-            featureVisibilityOverrides
+        await restoreCommittedArtifact();
+        return { status: 'stale' };
+      }
+      const removedVisibilityTargets = sourceReplaced && pruneUnmatchedFeatureOverrides(
+        featureVisibilityOverrides,
+        candidateBiologicalFeatures,
+        workingExtractedFeatures,
+        state.featureVisibilitySelectorCache
+      );
+      if (sourceReplaced) {
+        // D-10: drop only the label edits whose feature is gone; bulk label
+        // overrides stay as text matchers.
+        [labelTextFeatureOverrides, labelTextFeatureOverrideSources, labelVisibilityOverrides]
+          .forEach((overrides) => pruneUnmatchedFeatureOverrides(
+            overrides, candidateBiologicalFeatures, workingExtractedFeatures
           ));
-        }
-        if (typeof setGeneratedArtifactIdentity === 'function') {
-          setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {
-            results: candidateCommit.results
-          });
-        }
-        if (typeof adoptCanonicalRenderArtifacts === 'function') {
-          adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
-        }
-        if (!useCommittedComparison && importedComparisonIntent) {
-          Object.assign(
-            importedComparisonIntent,
-            createImportedComparisonIntentState(),
-            { disposition: IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE }
-          );
-        }
       }
+      if (removedVisibilityTargets > 0) {
+        state.replaceFeatureVisibilitySelectorCacheOwner(preserveFeatureVisibilitySelectorCacheForOverrides(
+          buildFeatureVisibilitySelectorCache(candidateExtractedFeatures, candidateCommit.featureState.featureSelectorSafetyScope),
+          state.featureVisibilitySelectorCache,
+          featureVisibilityOverrides
+        ));
+      }
+      if (typeof setGeneratedArtifactIdentity === 'function') {
+        setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {
+          results: candidateCommit.results
+        });
+      }
+      if (typeof adoptCanonicalRenderArtifacts === 'function') {
+        // The committed request keeps the computed typed analysis resource, so
+        // target-only renders and Similarity alignment use it without LOSATP.
+        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
+      }
+      if (!useCommittedComparison && importedComparisonIntent) {
+        Object.assign(
+          importedComparisonIntent,
+          createImportedComparisonIntentState(),
+          { disposition: IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE }
+        );
+      }
+      if (colorCandidate) rulePreparation.notifyChanges(colorCandidate);
       return {
         status: 'ok',
         generatedArtifactCandidate: activatedGeneratedArtifactCandidate
@@ -4862,34 +4781,20 @@ export const createRunAnalysis = ({
         });
       }
       if (isDiagramGenerationCanceled(e)) {
-        if (isReflow) {
-          labelReflowLastError.value = null;
-        } else {
-          return finishCanceledManualRun();
-        }
-        return { status: 'canceled' };
+        return finishCanceledManualRun();
       }
-      if (!isReflow && generationToken !== latestGenerationToken) {
+      if (generationToken !== latestGenerationToken) {
         await restoreCommittedArtifact();
         return { status: 'stale' };
       }
-      if (isReflow) {
-        labelReflowLastError.value = formatJsError(e)?.summary || 'Auto reflow failed';
-        return { status: 'error' };
-      }
-      await restoreCommittedArtifact();
-      errorLog.value = formatJsError(e);
-      return { status: 'error' };
+      return await failOperation(e, { handle: committedArtifactHandle, stage: failureStage,
+        restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
     } finally {
-      if (isReflow) {
-        labelReflowProcessing.value = false;
-      } else {
-        if (activeLosatAbortController === generationAbortController) {
-          activeLosatAbortController = null;
-        }
-        if (generationToken === latestGenerationToken || canceledAttemptOwnsPresentation) {
-          generationCancelRequested.value = false;
-        }
+      if (activeLosatAbortController === generationAbortController) {
+        activeLosatAbortController = null;
+      }
+      if (generationToken === latestGenerationToken || canceledAttemptOwnsPresentation) {
+        generationCancelRequested.value = false;
       }
     }
   };
@@ -4897,29 +4802,58 @@ export const createRunAnalysis = ({
   const runAnalysis = async (
     comparisonPlanSnapshot = null,
     generatedArtifactHandle = null,
-    comparisonExecution = null
+    comparisonExecution = null,
+    { prepareGenerate = null, afterGenerate = null } = {}
   ) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     let outcome = null;
+    const operationId = ++latestOperationId;
+    const isCurrentOperation = () => operationId === latestOperationId;
+    const previousAlert = errorLog.value;
+    const isCurrentAlert = () => isCurrentOperation()
+      && (errorLog.value === previousAlert || errorLog.value === null);
+    let beforeHandle = null;
+    const initialResults = results.value;
+    let historyRecovery = null;
     processing.value = true;
     processingStatus.value = 'Preparing input files...';
     generationCancelRequested.value = false;
     recordSessionLifecycleEvent('generate.processing-published');
     try {
+      const decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity);
       await nextTick();
       await waitForAfterPaint();
+      if (!isCurrentOperation()) return { status: 'stale' };
       recordSessionLifecycleEvent('generate.paint-opportunity-completed');
-      if (generationCancelRequested.value) {
+      // Cancel is honored before rendering, including during preparation.
+      const cancelBeforeRender = () => {
+        if (!generationCancelRequested.value) return null;
         processingStatus.value = 'Canceled.';
         outcome = { status: 'canceled' };
         failedGeneratePreservedResult.value = results.value.length > 0;
         return outcome;
+      };
+      if (cancelBeforeRender()) return outcome;
+      await settleComparisonRecordLabels();
+      if (!isCurrentOperation()) return { status: 'stale' };
+      if (cancelBeforeRender()) return outcome;
+      if (prepareGenerate) {
+        const prepared = await prepareGenerate();
+        // A preparation that finishes after supersession or Cancel is discarded.
+        if (!isCurrentOperation()) return { status: 'stale' };
+        if (cancelBeforeRender()) return outcome;
+        if (prepared.status !== 'ready') return prepared;
+        comparisonPlanSnapshot = prepared.comparisonPlanSnapshot;
+        comparisonExecution = prepared.comparisonExecution;
       }
-      const execute = (beforeHandle) => runAnalysisInternal({
-        runMode: 'manual',
-        comparisonPlanSnapshot,
-        generatedArtifactHandle: beforeHandle || generatedArtifactHandle,
-        comparisonExecution
-      });
+      const execute = (handle) => {
+        beforeHandle = handle || generatedArtifactHandle;
+        return runAnalysisInternal({
+          decorationContinuity, comparisonPlanSnapshot, generatedArtifactHandle: beforeHandle,
+          comparisonExecution, isCurrentOperation, isCurrentAlert
+        });
+      };
       outcome = typeof runGeneratedArtifactReplacement === 'function'
         ? await runGeneratedArtifactReplacement(
             'Generate diagram',
@@ -4928,6 +4862,7 @@ export const createRunAnalysis = ({
               shouldCommit: (result) => result?.status === 'ok',
               onCheckpointCapture: onGeneratedArtifactCheckpointCapture,
               restoreAppliedArtifact: async (beforeHandle) => {
+                historyRecovery = 'restore-failed';
                 const activeReceipt = previewRuntime.getActiveRuntime?.()?.readyReceipt || null;
                 if (activeReceipt) {
                   previewRuntime.invalidateReadyReceipt(
@@ -4946,6 +4881,7 @@ export const createRunAnalysis = ({
                 recordSessionLifecycleEvent('artifact.rollback-completed', {
                   phase: 'history-finalization'
                 });
+                historyRecovery = beforeHandle.ownerSet.results.length ? 'restored' : 'no-result';
               }
             }
           )
@@ -4956,25 +4892,348 @@ export const createRunAnalysis = ({
         recordSessionLifecycleEvent('generate.completed');
       }
       if (Object.prototype.hasOwnProperty.call(outcome || {}, 'generatedArtifactCandidate')) {
-        outcome = { status: outcome.status };
+        const { generatedArtifactCandidate, ...publicOutcome } = outcome;
+        outcome = publicOutcome;
       }
-      if (['error', 'canceled'].includes(outcome?.status)) {
+      if (outcome?.status === 'canceled' && isCurrentOperation()) {
         failedGeneratePreservedResult.value = results.value.length > 0;
       } else if (outcome?.status === 'ok') {
         failedGeneratePreservedResult.value = false;
+        if (generationFailureRecovery) generationFailureRecovery.value = null;
       }
+      await afterGenerate?.(outcome);
+      return outcome;
+    } catch (cause) {
+      outcome = await failOperation(cause, { handle: beforeHandle, isCurrent: isCurrentAlert, isCurrentOperation,
+        recovery: cause?.artifactRestoreFailed ? 'restore-failed'
+          : historyRecovery || (!beforeHandle && results.value === initialResults && initialResults.length ? 'preserved' : null) });
       return outcome;
     } finally {
-      if (outcome?.status !== 'canceled') processingStatus.value = '';
-      generationCancelRequested.value = false;
-      processing.value = false;
-      recordSessionLifecycleEvent('generate.processing-cleared', {
-        status: outcome?.status || 'error'
+      if (isCurrentOperation()) {
+        if (outcome?.status !== 'canceled') processingStatus.value = '';
+        generationCancelRequested.value = false;
+        processing.value = false;
+        recordSessionLifecycleEvent('generate.processing-cleared', {
+          status: outcome?.status || 'error'
+        });
+      }
+    }
+  };
+
+  const runCommittedCanonicalCandidateInternal = async ({
+    canonical,
+    decorationContinuity = null,
+    generatedArtifactHandle = null,
+    commitIntent = null,
+    alignmentResetBefore = null,
+    alignmentResetReceipt = undefined,
+    operation = 'generate',
+    isCurrentOperation = () => true,
+    isCurrentAlert = () => true
+  }) => {
+    const generationToken = ++latestGenerationToken;
+    const generationAbortController = typeof AbortController === 'function'
+      ? new AbortController()
+      : null;
+    const generationAbortSignal = generationAbortController?.signal || null;
+    activeLosatAbortController = generationAbortController;
+    const committedArtifactHandle = generatedArtifactHandle
+      || await captureGeneratedArtifactHandle();
+    let activatedCandidate = null;
+    let acceptedReadyReceipt = null;
+    const restoreCommittedArtifact = async () => {
+      if (!activatedCandidate) return false;
+      if (captureGeneratedArtifactOwnerSet().results !== activatedCandidate.ownerSet.results) return false;
+      if (acceptedReadyReceipt) {
+        previewRuntime.invalidateReadyReceipt(
+          acceptedReadyReceipt,
+          'The target-only candidate entered rollback.'
+        );
+      } else {
+        previewRuntime.invalidateReadinessExpectation(
+          String(generationToken),
+          new Error('The target-only candidate entered rollback.')
+        );
+      }
+      recordSessionLifecycleEvent('artifact.rollback-started');
+      await previewRuntime.restorePreviousSelectedResult({
+        handle: committedArtifactHandle,
+        restore: () => generatedArtifactTransactionOwner.restore(committedArtifactHandle)
       });
+      activatedCandidate = null;
+      acceptedReadyReceipt = null;
+      recordSessionLifecycleEvent('artifact.rollback-completed');
+      return true;
+    };
+    const finishCanceled = async () => {
+      if (!isCurrentOperation()) return { status: 'stale' };
+      await restoreCommittedArtifact();
+      if (!isCurrentOperation()) return { status: 'stale' };
+      if (isCurrentAlert()) errorLog.value = null;
+      processingStatus.value = 'Canceled.';
+      return { status: 'canceled' };
+    };
+    try {
+      const timingEntries = [];
+      const execution = await executeCanonicalCandidate({
+        canonical,
+        decorationContinuity,
+        mode: canonical.renderRequest.mode,
+        kind: 'target-record-transform',
+        shouldAdmit: () => generationToken === latestGenerationToken
+          && !generationCancelRequested.value,
+        onProgress: ({ stage }) => {
+          const message = {
+            'preparing-runtime': 'Preparing diagram runtime (first use)...',
+            'preparing-resources': 'Preparing diagram input resources...',
+            rendering: 'Rendering diagram...',
+            finalizing: 'Finalizing diagram results...'
+          }[stage];
+          if (message && generationToken === latestGenerationToken) {
+            processingStatus.value = message;
+          }
+        },
+        prepareCommit: prepareCandidateCommit,
+        prepareCommitInput: {
+          sourceReplaced: false,
+          featureColorOverrides,
+          featureStrokeOverrides,
+          featureVisibilityOverrides,
+          labelTextFeatureOverrides,
+          labelVisibilityOverrides,
+          legendEntries: legendEntries.value,
+          deletedLegendEntries: deletedLegendEntries.value,
+          originalLegendOrder: originalLegendOrder.value,
+          addedLegendCaptions: addedLegendCaptions.value,
+          legendColorOverrides,
+          legendStrokeOverrides,
+          manualSpecificRules
+        },
+        timingEntries
+      });
+      if (execution.status === 'superseded'
+        || generationToken !== latestGenerationToken) {
+        if (generationAbortSignal?.aborted || generationCancelRequested.value) {
+          return finishCanceled();
+        }
+        return { status: 'stale' };
+      }
+      if (execution.status === 'engine-error') {
+        return await failOperation(execution.engineError, { handle: committedArtifactHandle, operation,
+          restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
+      }
+      processingStatus.value = 'Preparing preview...';
+      const candidateCommit = execution.commit;
+      const candidateCatalogAdmission = execution.catalogAdmission;
+      const candidateCatalog = execution.catalog;
+      const candidateGroups = Array.isArray(candidateCommit.featureState.orthogroups)
+        ? candidateCommit.featureState.orthogroups
+        : [];
+      const receipt = alignmentResetBefore
+        ? await buildSimilarityAlignmentResetReceipt({before:alignmentResetBefore, after:canonical})
+        : alignmentResetReceipt === undefined ? state.similarityAlignmentResetReceipt?.value
+          : alignmentResetReceipt;
+      await validateSimilarityAlignmentResetReceipt(receipt, canonical);
+      const currentOwnerSet = captureGeneratedArtifactOwnerSet();
+      const candidateOwnerSet = {
+        ...currentOwnerSet,
+        similarityAlignmentPlan: canonical.renderRequest.layout?.similarityAlignment ?? null,
+        linearRecordTranslations: canonical.renderRequest.layout?.recordTranslations || [],
+        similarityAlignmentResetReceipt: receipt ?? null,
+        results: candidateCommit.results,
+        featureCatalog: candidateCatalog,
+        extractedFeatures: candidateCommit.featureState.extractedFeatures,
+        biologicalFeatures: candidateCommit.featureState.biologicalFeatures,
+        featureSelectorSafetyScope:
+          candidateCommit.featureState.featureSelectorSafetyScope,
+        featureRecordIds: candidateCommit.featureState.featureRecordIds,
+        orthogroups: candidateGroups,
+        featureOrthogroupIndex: candidateCommit.featureState.featureOrthogroupIndex,
+        collinearGroups: Array.isArray(candidateCommit.featureState.collinearGroups)
+          ? candidateCommit.featureState.collinearGroups
+          : [],
+        trackSlotResolvedGeometry:
+          execution.generationMetadata.trackSlotGeometry || null,
+        annotationWarnings: execution.annotationWarnings,
+        comparisonWarnings: execution.comparisonWarnings,
+        matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
+          candidateCommit.featureState.sequenceSources
+        ) || currentOwnerSet.matchSequenceOwner,
+        editableLabels: []
+      };
+      const preservedRuntimeState = captureGeneratedArtifactRuntimeState();
+      const generatedCandidate = generatedArtifactTransactionOwner.build(
+        candidateOwnerSet,
+        { runtimeState: {
+          files: preservedRuntimeState.latestCliHelperFiles,
+          archiveName: preservedRuntimeState.latestCliHelperArchiveName,
+          losatTelemetry: preservedRuntimeState.losatTelemetry
+        } }
+      );
+      const nextSelectedResultIndex = Math.max(
+        0,
+        Math.min(
+          selectedResultIndex.value,
+          Math.max(0, candidateCommit.results.length - 1)
+        )
+      );
+      const selectedCandidateResult = candidateCommit.results[nextSelectedResultIndex];
+      if (!selectedCandidateResult) {
+        throw new Error('The generated artifact has no selected preview Result.');
+      }
+      const candidatePreviewReadiness = previewRuntime.registerReadinessExpectation({
+        result: selectedCandidateResult,
+        resultIndex: nextSelectedResultIndex,
+        artifactIdentity: execution.generationResponse.artifactIdentity,
+        generationToken: String(generationToken),
+        catalogState: candidateCatalogAdmission,
+        phase: 'target-record-transform',
+        bindingOptions: { isIncrementalEdit: false },
+        isCurrent: () => generationToken === latestGenerationToken
+          && !generationCancelRequested.value
+          && Number(selectedResultIndex.value) === nextSelectedResultIndex
+      });
+      activatedCandidate = generatedCandidate;
+      generatedArtifactTransactionOwner.activate(generatedCandidate, {
+        selectedResultIndex: nextSelectedResultIndex
+      });
+      if (resultGenerationKey) resultGenerationKey.value += 1;
+      featureExtractionPending.value = false;
+      featureExtractionError.value = null;
+      setFeatureEditorStatus({
+        status: candidateOwnerSet.extractedFeatures.length ? 'summary-ready' : 'idle',
+        generationId: featureExtractionRequestId,
+        error: null,
+        summaryCount: candidateOwnerSet.extractedFeatures.length,
+        detailsCacheSize: 0
+      });
+      resultPanelTab.value = 'preview';
+      acceptedReadyReceipt = await candidatePreviewReadiness.promise;
+      if (generationToken !== latestGenerationToken || generationCancelRequested.value) {
+        if (generationAbortSignal?.aborted || generationCancelRequested.value) {
+          return finishCanceled();
+        }
+        await restoreCommittedArtifact();
+        return { status: 'stale' };
+      }
+      await waitForPostBindFrame();
+      if (generationToken !== latestGenerationToken || generationCancelRequested.value) {
+        if (generationAbortSignal?.aborted || generationCancelRequested.value) {
+          return finishCanceled();
+        }
+        await restoreCommittedArtifact();
+        return { status: 'stale' };
+      }
+      if (typeof setGeneratedArtifactIdentity === 'function') {
+        setGeneratedArtifactIdentity(execution.generationResponse.artifactIdentity, {
+          results: candidateCommit.results
+        });
+      }
+      if (typeof adoptCanonicalRenderArtifacts === 'function') {
+        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
+      }
+      if (typeof commitIntent === 'function') await commitIntent();
+      if (isCurrentAlert()) errorLog.value = null;
+      failedGeneratePreservedResult.value = false;
+      if (generationFailureRecovery) generationFailureRecovery.value = null;
+      logPostGbdrawTimings(timingEntries);
+      return { status: 'ok', generatedArtifactCandidate: activatedCandidate };
+    } catch (error) {
+      if (isDiagramGenerationCanceled(error)) return finishCanceled();
+      if (generationToken !== latestGenerationToken) {
+        await restoreCommittedArtifact();
+        return { status: 'stale' };
+      }
+      return await failOperation(error, { handle: committedArtifactHandle, operation,
+        restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
+    } finally {
+      if (activeLosatAbortController === generationAbortController) {
+        activeLosatAbortController = null;
+      }
+      if (generationToken === latestGenerationToken) {
+        generationCancelRequested.value = false;
+      }
+    }
+  };
+
+  const runCommittedCanonicalCandidate = async ({
+    canonical,
+    label = 'Rotate record to feature',
+    captureIntentCheckpoint = null,
+    restoreIntentCheckpoint = null,
+    commitIntent = null,
+    alignmentResetBefore = null,
+    alignmentResetReceipt = undefined,
+    operation = 'generate'
+  }) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
+    let outcome = null;
+    const operationId = ++latestOperationId;
+    const isCurrentOperation = () => operationId === latestOperationId;
+    const previousAlert = errorLog.value;
+    const isCurrentAlert = () => isCurrentOperation()
+      && (errorLog.value === previousAlert || errorLog.value === null);
+    let beforeHandle = null;
+    const initialResults = results.value;
+    let historyRecovery = null;
+    processing.value = true;
+    processingStatus.value = 'Preparing target record...';
+    generationCancelRequested.value = false;
+    try {
+      const decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity);
+      await nextTick();
+      await waitForAfterPaint();
+      if (!isCurrentOperation()) return { status: 'stale' };
+      const execute = (handle) => {
+        beforeHandle = handle;
+        return runCommittedCanonicalCandidateInternal({
+          canonical, decorationContinuity, generatedArtifactHandle: beforeHandle,
+          commitIntent, alignmentResetBefore, alignmentResetReceipt, operation, isCurrentOperation, isCurrentAlert
+        });
+      };
+      outcome = typeof runGeneratedArtifactReplacement === 'function'
+        ? await runGeneratedArtifactReplacement(label, execute, {
+            shouldCommit: (result) => result?.status === 'ok',
+            captureIntentCheckpoint,
+            restoreIntentCheckpoint,
+            onCheckpointCapture: onGeneratedArtifactCheckpointCapture,
+            restoreAppliedArtifact: async (beforeHandle) => {
+              historyRecovery = 'restore-failed';
+              await previewRuntime.restorePreviousSelectedResult({
+                handle: beforeHandle,
+                phase: 'target-history-finalization-rollback',
+                restore: () => generatedArtifactTransactionOwner.restore(beforeHandle)
+              });
+              historyRecovery = beforeHandle.ownerSet.results.length ? 'restored' : 'no-result';
+            }
+          })
+        : await execute(await captureGeneratedArtifactHandle());
+      if (outcome?.status === 'ok' && outcome.generatedArtifactCandidate) {
+        generatedArtifactTransactionOwner.finalize();
+      }
+      if (Object.prototype.hasOwnProperty.call(outcome || {}, 'generatedArtifactCandidate')) {
+        const { generatedArtifactCandidate, ...publicOutcome } = outcome;
+        outcome = publicOutcome;
+      }
+      return outcome;
+    } catch (cause) {
+      outcome = await failOperation(cause, { handle: beforeHandle, operation, isCurrent: isCurrentAlert, isCurrentOperation,
+        recovery: cause?.artifactRestoreFailed ? 'restore-failed'
+          : historyRecovery || (!beforeHandle && results.value === initialResults && initialResults.length ? 'preserved' : null) });
+      return outcome;
+    } finally {
+      if (isCurrentOperation()) {
+        if (outcome?.status !== 'canceled') processingStatus.value = '';
+        generationCancelRequested.value = false;
+        processing.value = false;
+      }
     }
   };
 
   const cancelRunAnalysis = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     const canceledGenerationToken = latestGenerationToken;
     latestGenerationToken += 1;
     generationCancelRequested.value = true;
@@ -4991,21 +5250,144 @@ export const createRunAnalysis = ({
     return cancelDiagramGeneration();
   };
 
+  // A label reflow re-renders the committed Session with the current editor
+  // tables (R1(c), N-16): it never reads the settings draft. The Enable Labels
+  // choice also commits its label selection with the reflowed Result.
+  const runLabelReflowCandidate = async ({ requestId, reason, decorationContinuity }) => {
+    if (mode.value === 'circular' && shouldDeferCircularPreviewUpdates.value) {
+      return { status: 'skipped' };
+    }
+    const committed = getCommittedCanonicalSession?.();
+    if (!committed) {
+      labelReflowLastError.value = liveEditFailure(formatError(diagnosticError('LIVE_EDIT_REQUIRES_GENERATE')));
+      return { status: 'skipped' };
+    }
+    const generationToken = ++latestGenerationToken;
+    const labelSelection = reason === 'global-off-label-apply';
+    let colorCandidate = null;
+    labelReflowLastError.value = null;
+    labelOverrideBuildWarning.value = '';
+    skipCaptureBaseConfig.value = true;
+    const isCurrent = () => generationToken === latestGenerationToken && requestId === pendingReflowRequestId;
+    try {
+      let candidateRules = manualSpecificRules;
+      if (rulePreparation) {
+        colorCandidate = await rulePreparation.prepareCandidate(manualSpecificRules);
+        if (!colorCandidate || !isCurrent()) return { status: 'stale' };
+        candidateRules = colorCandidate.rules;
+      }
+      const canonicalLabelOverrideTsv = serializeLabelOverrideRows(canonicalLabelOverrideRows.value);
+      const labelOverride = canonicalLabelOverrideTsv
+        ? { tsv: canonicalLabelOverrideTsv, skippedMissingSourceCount: 0 }
+        : buildLabelOverrideTsv(labelTextFeatureOverrides, labelTextBulkOverrides, {
+          editableLabels: editableLabels.value || [],
+          extractedFeatures: extractedFeatures.value,
+          featureOverrideSources: labelTextFeatureOverrideSources,
+          visibilityOverrides: labelVisibilityOverrides
+        });
+      if (labelOverride.skippedMissingSourceCount > 0) {
+        labelOverrideBuildWarning.value = `${labelOverride.skippedMissingSourceCount} feature override row(s) were skipped due to missing source label context.`;
+      }
+      const canonical = projectCommittedEditorIntent({
+        committed,
+        labelSelection,
+        promotion: {
+          featureCatalog: featureCatalog?.value ?? null,
+          legacyOrthogroupState: { groups: cloneJsonData(orthogroups.value || []) }
+        },
+        state: {
+          ...state,
+          selectedPalette: appliedPaletteName,
+          currentColors: appliedPaletteColors,
+          manualSpecificRules: candidateRules,
+          generatedLabelOverrideTsv: labelOverride.tsv
+        }
+      });
+      const timingEntries = [];
+      const execution = await executeCanonicalCandidate({
+        canonical,
+        decorationContinuity,
+        mode: canonical.renderRequest.mode,
+        kind: 'reflow',
+        shouldAdmit: () => (!colorCandidate || rulePreparation.isCurrent(colorCandidate.snapshot)) && isCurrent(),
+        prepareCommit: prepareReflowCommit,
+        prepareCommitInput: {
+          featureColorOverrides: colorCandidate?.featureColorOverrides || featureColorOverrides,
+          featureStrokeOverrides,
+          featureVisibilityOverrides,
+          labelTextFeatureOverrides,
+          labelVisibilityOverrides,
+          legendEntries: legendEntries.value,
+          deletedLegendEntries: deletedLegendEntries.value,
+          originalLegendOrder: originalLegendOrder.value,
+          addedLegendCaptions: addedLegendCaptions.value,
+          legendColorOverrides,
+          legendStrokeOverrides,
+          manualSpecificRules: candidateRules
+        },
+        timingEntries
+      });
+      console.info(`gbdraw ${canonical.renderRequest.mode} typed request render: ${formatDuration(execution.elapsedMs)}.`);
+      if (execution.status === 'superseded' || !isCurrent()) return { status: 'stale' };
+      if (execution.status === 'engine-error') {
+        logPostGbdrawTimings(timingEntries);
+        const error = formatError(execution.engineError, 'generate', 'render');
+        labelReflowLastError.value = liveEditFailure(error);
+        return { status: 'error', error };
+      }
+      const previousSelectedResultIndex = selectedResultIndex.value;
+      skipCaptureBaseConfig.value = true;
+      results.value = execution.commit.results;
+      if (execution.commit.results.length > 0) {
+        selectedResultIndex.value = Math.max(
+          0, Math.min(previousSelectedResultIndex, execution.commit.results.length - 1)
+        );
+      }
+      if (labelSelection && typeof adoptCanonicalRenderArtifacts === 'function') {
+        adoptCanonicalRenderArtifacts(canonical, { adoptOwnedRequest: true });
+      }
+      logPostGbdrawTimings(timingEntries);
+      if (colorCandidate) rulePreparation.notifyChanges(colorCandidate);
+      return { status: 'ok' };
+    } catch (e) {
+      if (isDiagramGenerationCanceled(e)) {
+        labelReflowLastError.value = null;
+        return { status: 'canceled' };
+      }
+      const error = formatError(e, 'generate', 'render');
+      labelReflowLastError.value = liveEditFailure(error);
+      return { status: 'error', error };
+    }
+  };
+
   const runLabelReflow = async (reason = 'label-edit') => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     pendingReflowRequestId += 1;
     pendingReflowReason = String(reason || 'label-edit');
     if (activeReflowRequestId !== 0) return;
 
-    while (activeReflowRequestId < pendingReflowRequestId) {
-      activeReflowRequestId = pendingReflowRequestId;
-      await runAnalysisInternal({
-        runMode: 'reflow',
-        requestId: activeReflowRequestId,
-        reason: pendingReflowReason
-      });
+    labelReflowProcessing.value = true;
+    try {
+      while (activeReflowRequestId < pendingReflowRequestId) {
+        activeReflowRequestId = pendingReflowRequestId;
+        let decorationContinuity;
+        try {
+          decorationContinuity = captureDecorationContinuity(getCommittedCanonicalSession?.(), projectCompositionRecordIdentity);
+        } catch (error) {
+          labelReflowLastError.value = liveEditFailure(formatError(error));
+          return;
+        }
+        await runLabelReflowCandidate({
+          decorationContinuity,
+          requestId: activeReflowRequestId,
+          reason: pendingReflowReason
+        });
+      }
+    } finally {
+      activeReflowRequestId = 0;
+      labelReflowProcessing.value = false;
     }
-
-    activeReflowRequestId = 0;
   };
 
   const downloadLosatCache = async () => {
@@ -5040,6 +5422,8 @@ export const createRunAnalysis = ({
   };
 
   const clearLosatCache = () => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
     completedLosatSearch = null;
     losatCache.value = new Map();
     losatDerivedCache.value = new Map();
@@ -5051,6 +5435,9 @@ export const createRunAnalysis = ({
 
   return {
     runAnalysis,
+    runCommittedCanonicalCandidate,
+    projectCommittedRecordTransform,
+    projectCommittedSimilarityAlignment,
     cancelRunAnalysis,
     captureGeneratedArtifactRuntimeState,
     restoreGeneratedArtifactRuntimeState,

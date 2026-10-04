@@ -37,70 +37,65 @@ const parseSlotZIndex = (value, fieldName) => {
   return numeric;
 };
 
-const parseOptionalLinearPx = (value, fieldName, { allowZero }) => {
-  if (value === null || value === undefined || value === '') return null;
-  if (typeof value === 'boolean' || (typeof value !== 'number' && typeof value !== 'string')) {
-    throw new Error(`${fieldName} must be a number of pixels.`);
+// Pure physical-pixel text grammar; factor/% scalars keep their separate owner.
+const PIXEL_TEXT = /^([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)(?:\s*px)?$/i;
+
+export const parseOptionalPixel = (value, fieldName, { allowZero }) => {
+  if (value === null || value === undefined) return null;
+  const invalid = () => new Error(
+    `${fieldName} must be ${allowZero ? 'nonnegative' : 'positive'} finite number of pixels (px optional).`
+  );
+  let numeric;
+  if (typeof value === 'number') {
+    numeric = value;
+  } else if (typeof value === 'string') {
+    const text = value.trim();
+    if (!text) return null;
+    const match = PIXEL_TEXT.exec(text);
+    if (!match) throw invalid();
+    numeric = Number(match[1]);
+  } else {
+    throw invalid();
   }
-  const text = String(value).trim();
-  if (!text || /%$/i.test(text)) {
-    throw new Error(`${fieldName} only accepts px or unitless px values.`);
+  if (!Number.isFinite(numeric) || numeric < 0 || (!allowZero && numeric === 0)) {
+    throw invalid();
   }
-  const numericText = /px$/i.test(text) ? text.slice(0, -2).trim() : text;
-  const numeric = Number(numericText);
-  if (!Number.isFinite(numeric)) {
-    throw new Error(`${fieldName} must be a number of pixels.`);
-  }
-  if (numeric < 0 || (!allowZero && numeric === 0)) {
-    throw new Error(`${fieldName} must be ${allowZero ? 'nonnegative' : 'positive'}.`);
-  }
-  return numeric;
+  return numeric === 0 ? 0 : numeric;
 };
 
-const parseOptionalCircularScalar = (value, fieldName) => {
+export const parseOptionalCircularScalar = (value, fieldName = 'Circular measure') => {
   if (value === null || value === undefined || value === '') return null;
+  const invalid = () => new Error(`${fieldName} must be a positive finite px or factor scalar.`);
   if (value && typeof value === 'object' && !Array.isArray(value)) {
+    if (typeof value.value !== 'number' && typeof value.value !== 'string') throw invalid();
     const numeric = Number(value.value);
     const unit = normalizedString(value.unit);
     if (!Number.isFinite(numeric) || numeric <= 0 || !['px', 'factor'].includes(unit)) {
-      throw new Error(`${fieldName} must be a positive finite px or factor scalar.`);
+      throw invalid();
     }
-    return numeric;
+    return { value: numeric, unit };
   }
   if (typeof value === 'boolean' || (typeof value !== 'number' && typeof value !== 'string')) {
-    throw new Error(`${fieldName} must be a positive finite px or factor scalar.`);
+    throw invalid();
   }
   const text = String(value).trim();
+  const isPx = /px$/i.test(text);
+  const isPercent = /%$/.test(text);
   let numericText = text;
-  if (/px$/i.test(text)) numericText = text.slice(0, -2).trim();
-  else if (/%$/.test(text)) numericText = text.slice(0, -1).trim();
+  if (isPx) numericText = text.slice(0, -2).trim();
+  else if (isPercent) numericText = text.slice(0, -1).trim();
   const numeric = Number(numericText);
-  if (!text || !Number.isFinite(numeric) || numeric <= 0) {
-    throw new Error(`${fieldName} must be a positive finite px or factor scalar.`);
+  const resolved = isPercent ? numeric / 100 : numeric;
+  if (!text || !Number.isFinite(resolved) || resolved <= 0) {
+    throw invalid();
   }
-  return numeric;
-};
-
-const parseOptionalCircularGap = (value, fieldName) => {
-  if (value === null || value === undefined || value === '') return null;
-  if (typeof value === 'boolean' || (typeof value !== 'number' && typeof value !== 'string')) {
-    throw new Error(`${fieldName} must be a nonnegative numeric pixel value.`);
-  }
-  const text = String(value).trim();
-  if (!text || /(?:px|%)$/i.test(text)) {
-    throw new Error(`${fieldName} must be a numeric pixel value without a unit.`);
-  }
-  const numeric = Number(text);
-  if (!Number.isFinite(numeric) || numeric < 0) {
-    throw new Error(`${fieldName} must be a nonnegative numeric pixel value.`);
-  }
-  return numeric;
+  return { value: resolved, unit: isPx ? 'px' : 'factor' };
 };
 
 const validateSlotGeometry = (slot, id, layoutKind) => {
   if (layoutKind === 'linear') {
-    parseOptionalLinearPx(slot.height, `Linear track slot '${id}' height`, { allowZero: false });
-    parseOptionalLinearPx(slot.spacing, `Linear track slot '${id}' spacing`, { allowZero: true });
+    parseOptionalPixel(slot.height, `Linear track slot '${id}' height`, { allowZero: false });
+    parseOptionalPixel(slot.spacing, `Linear track slot '${id}' spacing`, { allowZero: true });
     return;
   }
   if (layoutKind !== 'circular') {
@@ -117,13 +112,15 @@ const validateSlotGeometry = (slot, id, layoutKind) => {
   }
   parseOptionalCircularScalar(slot.radius, `Circular track slot '${id}' radius`);
   parseOptionalCircularScalar(slot.width, `Circular track slot '${id}' width`);
-  parseOptionalCircularGap(
+  parseOptionalPixel(
     slot.inner_gap_px,
-    `Circular track slot '${id}' inner_gap_px`
+    `Circular track slot '${id}' inner_gap_px`,
+    { allowZero: true }
   );
-  parseOptionalCircularGap(
+  parseOptionalPixel(
     slot.outer_gap_px,
-    `Circular track slot '${id}' outer_gap_px`
+    `Circular track slot '${id}' outer_gap_px`,
+    { allowZero: true }
   );
 };
 
@@ -571,6 +568,7 @@ const collectCustomTrackIssues = ({
   axisIndex,
   trackType,
   depthTrackCount,
+  depthSourcedTrackIndexes,
   annotationSetIds,
   visibleFeatureUnderlays,
   conservationSeries
@@ -623,6 +621,10 @@ const collectCustomTrackIssues = ({
     !depthCountProvided ||
     (Number.isSafeInteger(depthTrackCount) && depthTrackCount >= 0)
   );
+  // A logical series inside the count may still have no source in any record.
+  const sourcedDepthIndexes = Array.isArray(depthSourcedTrackIndexes)
+    ? new Set(depthSourcedTrackIndexes)
+    : null;
   if (!validDepthCount) {
     globalIssues.push(globalIssue({
       code: 'depth_count_invalid',
@@ -885,19 +887,19 @@ const collectCustomTrackIssues = ({
         });
       }
       if (trackIndex !== null && validDepthCount && depthCountProvided) {
-        if (depthTrackCount === 0) {
-          addRowIssue(rowIssues, index, {
-            code: 'depth_source_missing',
-            field: 'params.track_index',
-            slotId: id || null,
-            message: `${modeLabel} Depth track ${slotLabel} has no logical Depth source.`
-          });
-        } else if (trackIndex >= depthTrackCount) {
+        if (trackIndex >= depthTrackCount && depthTrackCount > 0) {
           addRowIssue(rowIssues, index, {
             code: 'depth_track_index_range',
             field: 'params.track_index',
             slotId: id || null,
             message: `${modeLabel} Depth track ${slotLabel} references index ${trackIndex}; available indexes are 0..${depthTrackCount - 1}.`
+          });
+        } else if (depthTrackCount === 0 || (sourcedDepthIndexes && !sourcedDepthIndexes.has(trackIndex))) {
+          addRowIssue(rowIssues, index, {
+            code: 'depth_source_missing',
+            field: 'params.track_index',
+            slotId: id || null,
+            message: `${modeLabel} Depth track ${slotLabel} has no logical Depth source.`
           });
         }
       }
@@ -1176,6 +1178,7 @@ export const validateCustomTrackPlan = (options = {}) => collectCustomTrackIssue
   axisIndex: options.axisIndex,
   trackType: options.trackType,
   depthTrackCount: options.depthTrackCount,
+  depthSourcedTrackIndexes: options.depthSourcedTrackIndexes,
   annotationSetIds: options.annotationSetIds,
   visibleFeatureUnderlays: options.visibleFeatureUnderlays,
   conservationSeries: options.conservationSeries

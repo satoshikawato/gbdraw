@@ -66,7 +66,7 @@ assert.doesNotMatch(repositionSource, /data-horizontal-viewbox|data-vertical-vie
 assert.doesNotMatch(repositionSource, /0\.025|0\.85|0\.875|0\.75/);
 assert.match(
   legendLayoutSource,
-  /resetAllPositions[\s\S]+resetCompositionUserDeltas[\s\S]+persistCurrentSvg\(svg\)/
+  /resetAllPositions[\s\S]+resetCompositionUserDeltas[\s\S]+commitActiveResultEdit\('layout-position-reset'\)/
 );
 assert.match(entryActionsSource, /setLegendGeometryChangedHandler/);
 assert.ok((entryActionsSource.match(/onLegendGeometryChanged\(\);/g) || []).length >= 4);
@@ -79,7 +79,7 @@ assert.match(
   /bindComposition\(context\)[\s\S]+captureBaseConfig\(\)/
 );
 assert.doesNotMatch(watchersSource, /captureBaseConfig/);
-assert.match(configSource, /skipCaptureBaseConfig\.value = true;\s+state\.skipPositionReapply\.value = true;\s+applyResultsData/);
+assert.match(configSource, /skipCaptureBaseConfig\.value = true;\s+applyResultsData/);
 const sessionLegendSyncSource = appSetupSource.match(
   /adoptLegend\(context\)[\s\S]*?\n    bindComposition/
 )?.[0] || '';
@@ -111,21 +111,13 @@ assert.deepEqual(second, {
   unchanged: [{ caption: 'Shared', color: '#112233' }]
 });
 
-assert.deepEqual(
-  buildLegendIntents([
-    { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'Historical' },
-    { feat: 'CDS', qual: 'gene', val: 'b', color: '#445566', cap: 'Historical' }
-  ], { conflictPolicy: 'last-wins' }),
-  {
-    intents: [{ caption: 'Historical', color: '#445566' }],
-    conflicts: [{
-      caption: 'Historical',
-      previousColor: '#112233',
-      nextColor: '#445566',
-      ruleIndex: 1
-    }]
-  }
-);
+assert.deepEqual(buildLegendIntents([
+  { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'Historical [#112233]' },
+  { feat: 'CDS', qual: 'gene', val: 'b', color: '#445566', cap: 'Historical [#445566]' }
+]).intents, [
+  { caption: 'Historical [#112233]', color: '#112233' },
+  { caption: 'Historical [#445566]', color: '#445566' }
+]);
 
 class MockElement {
   constructor(tagName, attributes = {}, textContent = '') {
@@ -229,7 +221,7 @@ const mockLegendEntry = (caption, color, x) => {
       updatePairwiseLegendPositions: () => { layoutRefreshes += 1; }
     },
     previewRuntime: {
-      applyLegendChanges: () => {
+      commitActiveResultEdit: () => {
         dirtyMarks += 1;
         return true;
       }
@@ -302,6 +294,16 @@ const mockLegendEntry = (caption, color, x) => {
     'the sanitized mounted legend remains visual authority and mismatched metadata is ignored'
   );
 
+  const capturedOwners = actions.captureLegendEntryOwners();
+  featureLegend.children[0].setAttribute('data-legend-owner', 'specific-color-file');
+  featureLegend.children[0].querySelector('path').setAttribute('fill', '#112233');
+  assert.equal(actions.reconcileLegendEntries({ restoreColorState: true, entryOwners: capturedOwners }), true);
+  assert.equal(featureLegend.children[0].getAttribute('data-legend-owner'), null);
+  assert.equal(featureLegend.children[0].querySelector('path').getAttribute('fill'), '#abcdef',
+    'History restores the captured swatch, even when the original palette differs');
+  assert.equal(state.legendEntries.value[0].color, '#abcdef');
+  assert.equal(Object.hasOwn(state.legendEntries.value[0], 'owner'), false);
+
   const noOpDirtyMarks = dirtyMarks;
   assert.equal(actions.updateLegendEntryColor(0, '#abcdef'), false);
   assert.equal(actions.updateLegendEntryCaption(0, 'Beta'), false);
@@ -313,7 +315,7 @@ const mockLegendEntry = (caption, color, x) => {
   const strokeActions = createLegendStrokeActions({
     state,
     previewRuntime: {
-      markActiveResultDirty: () => {
+      commitActiveResultEdit: () => {
         dirtyMarks += 1;
         return true;
       }
@@ -329,6 +331,9 @@ const mockLegendEntry = (caption, color, x) => {
   assert.equal(dirtyMarks, strokeWidthDirtyMarks);
 
   const betaSwatch = featureLegend.children[0].querySelector('path');
+  betaSwatch.setAttribute('fill', '#aabbcc');
+  assert.equal(actions.updateLegendEntryColorByCaption('Beta', '#abc', {commit:false}), false);
+  assert.equal(betaSwatch.getAttribute('fill'), '#aabbcc');
   betaSwatch.setAttribute('stroke', '#222222');
   betaSwatch.setAttribute('stroke-width', '2');
   assert.equal(strokeActions.resetLegendEntryStroke(0), true);
@@ -402,4 +407,149 @@ const mockLegendEntry = (caption, color, x) => {
   actions.extractLegendEntries({ replaceGeneratedInventory: true });
   assert.deepEqual(state.originalLegendOrder.value, ['Beta', 'Deleted']);
   assert.deepEqual(state.legendEntries.value.map(e => e.caption), ['Beta', 'Manual']);
+}
+
+{
+  // D-08 (PD-OI-063): without an order edit, Generate shows the renderer's
+  // order, including a category it adds between existing ones, and the next
+  // Generate replays no order. An edited order keeps being replayed.
+  const { compileDirectEditorMutationPlan } = await import(
+    pathToFileURL(join(tempRoot, 'app', 'candidate-render.js'))
+  );
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const legend = new MockElement('g', { id: 'legend' });
+  const featureLegend = new MockElement('g', { id: 'feature_legend' });
+  legend.appendChild(featureLegend);
+  svg.appendChild(legend);
+  const render = (...captions) => {
+    featureLegend.children.forEach(entry => { entry.parentElement = null; });
+    featureLegend.children = [];
+    captions.forEach((caption, index) => featureLegend.appendChild(mockLegendEntry(caption, '#112233', index * 70)));
+  };
+  const state = {
+    results: ref([{ name: 'diagram.svg', content: 'unchanged' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: () => svg }),
+    adv: {},
+    legendEntries: ref([]),
+    deletedLegendEntries: ref([]),
+    originalLegendOrder: ref([]),
+    originalLegendColors: ref({}),
+    newLegendCaption: ref(''),
+    newLegendColor: ref('#808080'),
+    legendStrokeOverrides: {},
+    legendColorOverrides: {},
+    manualSpecificRules: [],
+    skipCaptureBaseConfig: ref(false)
+  };
+  const actions = createLegendEntryActions({
+    state,
+    layoutActions: { compactLegendEntries: () => {}, reflowDualLegendLayout: () => {}, updatePairwiseLegendPositions: () => {} },
+    previewRuntime: { commitActiveResultEdit: () => true }
+  });
+  const generate = (...rendered) => {
+    const replayed = compileDirectEditorMutationPlan({
+      catalogAdmission: { resultNames: ['diagram.svg'], renderedTargetsByOverrideKey: new Map(), resultIndexesByRenderedId: new Map() },
+      legendEntries: state.legendEntries.value,
+      originalLegendOrder: state.originalLegendOrder.value
+    }).operationsByResult[0].legendOrder.map(({ captions }) => [...captions]);
+    render(...rendered);
+    actions.extractLegendEntries({ replaceGeneratedInventory: true });
+    return replayed;
+  };
+
+  assert.deepEqual(generate('Core', 'Other'), []);
+  assert.deepEqual(state.originalLegendOrder.value, ['Core', 'Other']);
+  assert.deepEqual(generate('Core', 'Added', 'Other'), []);
+  assert.deepEqual(state.originalLegendOrder.value, ['Core', 'Added', 'Other']);
+  assert.deepEqual(generate('Core', 'Added', 'Other'), [], 'an unedited Legend order replays no order');
+
+  // Sort Z-A, then Generate replays it; a new category follows the edited order.
+  render('Other', 'Core', 'Added');
+  actions.extractLegendEntries();
+  assert.deepEqual(generate('Other', 'Core', 'Added', 'Late'), [['Other', 'Core', 'Added']]);
+  assert.deepEqual(state.originalLegendOrder.value, ['Core', 'Added', 'Other', 'Late']);
+  assert.deepEqual(generate('Other', 'Core', 'Added', 'Late'), [['Other', 'Core', 'Added', 'Late']]);
+
+  // B20 (D-07): a displayed batch Result that may still show an earlier edited
+  // order receives the default order; Generate still replays none.
+  render('Core', 'Added', 'Other', 'Late');
+  actions.extractLegendEntries();
+  const compile = (options) => compileDirectEditorMutationPlan({
+    catalogAdmission: { resultNames: ['diagram.svg'], renderedTargetsByOverrideKey: new Map(), resultIndexesByRenderedId: new Map() },
+    legendEntries: state.legendEntries.value,
+    originalLegendOrder: ['Core', 'Added', 'Other', 'Late'],
+    ...options
+  }).operationsByResult[0].legendOrder.map(({ captions }) => [...captions]);
+  assert.deepEqual(compile({}), []);
+  assert.deepEqual(compile({ replayDefaultLegendOrder: true }), [['Core', 'Added', 'Other', 'Late']]);
+}
+
+{
+  // B19 (D-07, D-08): a History step made on another batch Result projects its
+  // shared Legend intent onto the displayed Result, which never gains an entry
+  // only the other Result draws and keeps its own entries.
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const legend = new MockElement('g', { id: 'legend' });
+  const featureLegend = new MockElement('g', { id: 'feature_legend' });
+  legend.appendChild(featureLegend);
+  svg.appendChild(legend);
+  const render = (...captions) => {
+    featureLegend.children.forEach(entry => { entry.parentElement = null; });
+    featureLegend.children = [];
+    captions.forEach((caption, index) => featureLegend.appendChild(mockLegendEntry(caption, '#112233', index * 70)));
+  };
+  const drawn = () => featureLegend.children.map((entry) => entry.getAttribute('data-legend-key'));
+  const listed = () => state.legendEntries.value.map((entry) => entry.caption);
+  const list = (...captions) => captions.map((caption) => ({ caption, originalCaption: caption, color: '#112233' }));
+  const state = {
+    results: ref([{ name: 'r1.svg', content: 'unchanged' }, { name: 'r2.svg', content: 'unchanged' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: () => svg }),
+    adv: {},
+    legendEntries: ref([]),
+    deletedLegendEntries: ref([]),
+    originalLegendOrder: ref(['Alpha', 'Beta']),
+    originalLegendColors: ref({}),
+    newLegendCaption: ref(''),
+    newLegendColor: ref('#808080'),
+    legendStrokeOverrides: {},
+    legendColorOverrides: {},
+    manualSpecificRules: [],
+    skipCaptureBaseConfig: ref(false)
+  };
+  let commits = 0;
+  const actions = createLegendEntryActions({
+    state,
+    layoutActions: { compactLegendEntries: () => {}, reflowDualLegendLayout: () => {}, updatePairwiseLegendPositions: () => {} },
+    previewRuntime: {
+      commitActiveResultEdit: () => { commits += 1; return true; },
+      getActiveRuntime: () => ({ resultIdentity: 'result-1' })
+    }
+  });
+  // Result 1 draws Own1; Result 2 drew Only2 and was sorted Z-A, which Result 1
+  // shows. Undo restores Result 2's list from before the sort.
+  render('Beta', 'Alpha', 'Own1');
+  state.legendEntries.value = list('Alpha', 'Beta', 'Only2');
+  assert.equal(actions.reconcileLegendEntries({ restoreColorState: true, from: list('Only2', 'Beta', 'Alpha') }), true);
+  assert.deepEqual(drawn(), ['Alpha', 'Beta', 'Own1'], 'Undo orders Result 1 without the Result 2 entry');
+  assert.deepEqual(listed(), ['Alpha', 'Beta', 'Own1'], 'the Legend panel lists Result 1');
+  assert.equal(commits, 1);
+
+  // Redo of a deletion made on Result 2 removes the entry here too, and its
+  // Undo returns this Result's entry; Only2 never appears.
+  state.legendEntries.value = list('Alpha', 'Only2');
+  actions.reconcileLegendEntries({ restoreColorState: true, from: list('Alpha', 'Beta', 'Only2') });
+  assert.deepEqual(drawn(), ['Alpha', 'Own1']);
+  state.legendEntries.value = list('Alpha', 'Beta', 'Only2');
+  actions.reconcileLegendEntries({ restoreColorState: true, from: list('Alpha', 'Only2') });
+  assert.deepEqual(drawn(), ['Alpha', 'Beta', 'Own1'], 'Undo returns the deleted entry to Result 1');
+  assert.deepEqual(listed(), ['Alpha', 'Beta', 'Own1']);
+
+  // A list that describes the displayed Result installs as is.
+  state.legendEntries.value = list('Own1', 'Beta', 'Alpha');
+  actions.reconcileLegendEntries({ restoreColorState: true, from: list('Alpha', 'Beta', 'Own1') });
+  assert.deepEqual(drawn(), ['Own1', 'Beta', 'Alpha']);
 }

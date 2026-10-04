@@ -1,0 +1,9 @@
+
+Running 2 tests using 1 worker
+
+(node:1080750) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 [chromium] › tests/web/python-rule-parity.playwright.spec.js:18:1 › Python-only color rules commit atomically, retain History and agree with Generate (10.0s)
+  ✓  2 [chromium] › tests/web/python-rule-parity.playwright.spec.js:49:1 › Python label TSV syntax is validated before replacing live overrides (9.5s)
+
+  2 passed (21.6s)
