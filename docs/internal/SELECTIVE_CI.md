@@ -11,7 +11,7 @@ classification rules.
 | --- | --- | --- |
 | PR | Every PR into `dev` | Changed subsystem, cross-layer smoke, architecture/Product policy; all functional Playwright in eight shards for Web runtime, session, Gallery, LOSAT, shared-test, and unknown changes; Python 3.11 primary |
 | Integrated dev | Every push to `dev`; `Tests` dispatch with `tier=dev` | Core on Python 3.10/3.11/3.12; recipes, Gallery, browser/package integration, offline GUI, LOSAT cache, all functional Playwright in eight shards, performance smoke on 3.11 |
-| Release / S11 | Explicit `Tests` dispatch on `dev` with `tier=release` | Every dev functional job, additional recipe/Gallery/browser acceptance on 3.10/3.12, exhaustive non-browser slow tests on all three versions, exact-candidate Gallery readiness |
+| Release / S11 | Explicit `Tests` dispatch on `dev` with `tier=release` | Every dev functional job, additional recipe/Gallery/browser acceptance on 3.10/3.12, exhaustive non-browser slow tests on all three versions, Vibrio full generation (`vibrio-generate-release`), exact-candidate Gallery readiness |
 
 PR feedback targets 5–8 minutes without functional Playwright and 15–20 minutes
 with it. Integrated functional validation targets 15–20 minutes where practical.
@@ -40,6 +40,11 @@ All non-browser slow tests move to S11, except the three package-build integrati
 checks in `test_web_packaging.py`, which also run in the dev Browser job. Offline
 GUI browser contracts remain on dev, including real Linear LOSAT generation;
 recent integrated runs found failures uniquely in that path.
+
+`npm run test:web:vibrio-generate` (one real Vibrio generation test, up to 20
+minutes) runs in the release-only `vibrio-generate-release` job and in the
+main-push `deploy_web.yml` verification. Before this, only main saw it, so a
+stale expectation (T13, request schema 7) surfaced after promotion.
 
 ## Changed paths → capabilities → required jobs
 

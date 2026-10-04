@@ -36,7 +36,8 @@ procedure and the checklist. The admission rules for a `PROMOTION` stay in
 ## Procedure
 
 1. Dispatch `Tests` on `dev` with `tier=release` (the existing release stage;
-   see [`SELECTIVE_CI.md`](SELECTIVE_CI.md)).
+   see [`SELECTIVE_CI.md`](SELECTIVE_CI.md)); it includes the
+   `Vibrio full generation` job that otherwise only runs on `main`.
 2. Run every recipe check, including the LOSATP recipes that the `recipe`
    pytest marker skips:
 

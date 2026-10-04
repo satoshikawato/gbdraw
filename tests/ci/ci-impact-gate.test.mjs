@@ -396,6 +396,7 @@ test('gate CLI emits a passing summary for a valid payload', async () => {
 test('release aggregate rejects any skipped or failed exhaustive matrix', () => {
   const release = plan({ profile: 'release', impact: 'full', decision: 'full', basis: 'MANUAL_FULL_RUN', inheritedEvidence: null });
   assert.equal(validate(release, needsFor(release)).ok, true);
+  assert.ok(release.requiredJobs.includes('vibrio-generate-release'), 'release evidence must cover Vibrio generation');
   for (const jobId of release.requiredJobs) {
     for (const result of ['skipped', 'failure', 'cancelled']) {
       const needs = needsFor(release);

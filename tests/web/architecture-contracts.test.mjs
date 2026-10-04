@@ -21,6 +21,7 @@ import {
 } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { knownJobsFor } from '../../tools/ci-impact-policy.mjs';
 import {
   detectPrivilegedWebCapabilities,
   detectReportOnlySourceFacts,
@@ -1482,6 +1483,7 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
     'playwright-performance',
     'acceptance-supported-main',
     'slow-main',
+    'vibrio-generate-release',
     'losat-cache-browser-acceptance'
   ]) {
     const job = workflowJob(jobId);
@@ -1577,6 +1579,7 @@ test('exact dev staging routes every job through the protected-branch plan', () 
     'playwright-performance',
     'acceptance-supported-main',
     'slow-main',
+    'vibrio-generate-release',
     'lint',
     'losat-cache-browser-acceptance'
   ]);
@@ -1880,7 +1883,7 @@ test('dev staging Web checks scope only the newly integrated change', () => {
 });
 
 test('supported-version and slow matrices are mandatory in explicit release acceptance', () => {
-  for (const jobName of ['acceptance-supported-main', 'slow-main']) {
+  for (const jobName of ['acceptance-supported-main', 'slow-main', 'vibrio-generate-release']) {
     const job = TEST_WORKFLOW.match(
       new RegExp(`\\n  ${jobName}:\\n[\\s\\S]*?(?=\\n  [a-z0-9-]+:\\n|$)`)
     )?.[0];
@@ -1900,6 +1903,25 @@ test('supported-version and slow matrices are mandatory in explicit release acce
   assert.match(gate, /CI_IMPACT_EXPECTED_PROFILE: release/);
   assert.match(gate, /Require exact candidate Gallery readiness/);
   assert.match(workflowJob('dev-staging-gate'), /inputs\.tier != 'release'/);
+});
+
+test('release acceptance runs the Vibrio full-generation suite that main deploy also keeps', () => {
+  const job = workflowJob('vibrio-generate-release');
+  assert.match(job, /\n    name: Vibrio full generation\n/);
+  assert.match(job, /\n {8}run: npm run test:web:vibrio-generate\n/);
+  assert.match(job, /python tools\/prepare_browser_wheel\.py/);
+  // The release profile requires it and the dev profile does not.
+  assert.deepEqual(knownJobsFor('release').filter((id) => !knownJobsFor('dev').includes(id)), [
+    'acceptance-supported-main',
+    'slow-main',
+    'vibrio-generate-release'
+  ]);
+  // Both aggregate gates list it, so a skipped or failed run blocks release evidence.
+  for (const gateId of ['release-gate', 'dev-staging-gate']) {
+    assert.match(workflowJob(gateId), /\n {6}- vibrio-generate-release\n/, gateId);
+  }
+  // The hosted-Web verification on main keeps its own run.
+  assert.match(DEPLOY_WORKFLOW, /npm run test:web:vibrio-generate/);
 });
 
 const CHANGE_BUDGET_CHECKER = join(REPOSITORY_ROOT, 'tools/check-web-change-budget.mjs');
