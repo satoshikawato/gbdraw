@@ -15,8 +15,21 @@ const DEFAULT_STYLE = Object.freeze({
 
 const cleanId = (value, fallback) => String(value || '').trim() || fallback;
 const clone = (value) => JSON.parse(JSON.stringify(value));
+const normalizeEnvelope = (value) => value === 'segments' ? 'segments' : 'outer_bounds';
+const normalizeCircularPath = (value) => ['forward', 'reverse'].includes(value) ? value : 'shortest';
 const normalizeTarget = (target) => {
   const source = target && typeof target === 'object' ? clone(target) : {};
+  // One feature named by its original-source identity (request schema 9,
+  // design Q4); Python resolves it after crop and reverse complement.
+  if (source.kind === 'featureIdentity') {
+    return {
+      kind: 'featureIdentity',
+      recordKey: String(source.recordKey || ''),
+      biologicalFeatureId: String(source.biologicalFeatureId || ''),
+      envelope: normalizeEnvelope(source.envelope),
+      circularPath: normalizeCircularPath(source.circularPath)
+    };
+  }
   if (source.kind === 'featureSpan') {
     return {
       kind: 'featureSpan',
@@ -25,8 +38,8 @@ const normalizeTarget = (target) => {
         key: selector?.key == null || selector.key === '' ? null : String(selector.key),
         value: String(selector?.value || '')
       })) : [],
-      envelope: source.envelope === 'segments' ? 'segments' : 'outer_bounds',
-      circularPath: ['forward', 'reverse'].includes(source.circularPath) ? source.circularPath : 'shortest'
+      envelope: normalizeEnvelope(source.envelope),
+      circularPath: normalizeCircularPath(source.circularPath)
     };
   }
   const start = Math.max(1, Number(source.start) || 1);

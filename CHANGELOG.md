@@ -117,8 +117,7 @@ decisions are in
   alone never shows a label. Edits whose feature is not drawn, including exact
   Feature placements whose feature the source does not have, no longer fail the
   render: they are reported as `feature_identity_notices` (Python API, Web
-  metadata, one CLI log line each). Schema-8 requests remain readable; the Web
-  app writes an empty array until it edits features by identity.
+  metadata, one CLI log line each). Schema-8 requests remain readable.
 - CLI and Python API: `gbdraw circular` and `gbdraw linear` accept
   `--feature_override_table`, and `CircularDiagramOptions` and
   `LinearDiagramOptions` accept `feature_override_table` (DataFrame) or
@@ -131,6 +130,16 @@ decisions are in
   Resolving `hash=` rows of feature placement and feature override tables no
   longer reads every feature of the record once per row (4,318 rows of
   `MG1655.gbk`: 145 s to 2.0 s).
+- Web per-feature edits: Feature visibility, Label visibility and label text
+  edits are kept by the feature's source identity and sent as
+  `diagramOptions.featureOverrides` rows, so an edit stays on its feature after
+  crop, reverse complement, record reordering and record copies, in the live
+  preview, after Generate, and through Save and Load. Session version 45 stores
+  them as `features.featureOverrides`; Session 44 and older Web Sessions move
+  their rendered-ID edits onto the feature they name, and Load reports how many
+  edits it could not match. A Generate that replaces a source removes the edits
+  of features the new source does not have; other unmatched edits stay until
+  **Remove N unmatched feature edits** (OV-01, OV-02, OV-04, OV-11, OV-12).
 - Comparison tables: every BLAST outfmt 6/7 reader (CLI `-b` and
   `--comparisons_table`, Web uploads, Circular similarity rings, and the LOSATP
   parser) now reads the first 12 columns by position and validates their types.

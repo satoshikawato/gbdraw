@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+const { CURRENT_FEATURE_CATALOG_SCHEMA } = require('./helpers/app-lifecycle.cjs');
 
 const EXPORT_MODULE_PATH = '/gbdraw/web/js/services/export.js';
 const STANDALONE_MODULE_PATH = '/gbdraw/web/js/services/standalone-interactivity.js';
@@ -32,7 +33,7 @@ const displayedErrorOperation = (page) => page.evaluate(
 const mountExportFixture = async (page, { interactive = false } = {}) => {
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   const errorBeforeMount = await displayedErrorOperation(page);
-  await page.evaluate(async ({ interactive }) => {
+  await page.evaluate(async ({ interactive, catalogSchema }) => {
     const { state } = await import('/gbdraw/web/js/state.js');
     const { admitLegacyImportedResults, createLegacyImportResultSource } = await import(
       '/gbdraw/web/js/services/svg-result-ingestion.js'
@@ -64,7 +65,7 @@ const mountExportFixture = async (page, { interactive = false } = {}) => {
     state.selectedResultIndex.value = 0;
     state.downloadDpi.value = 96;
     state.featureCatalog.value = interactive ? {
-      schema: 4,
+      schema: catalogSchema,
       items: [{
         resultIndex: 0,
         resultName: 'lazy-export.svg',
@@ -90,7 +91,7 @@ const mountExportFixture = async (page, { interactive = false } = {}) => {
         comparisonMatches: []
       }]
     } : { schema: 4, items: [] };
-  }, { interactive });
+  }, { interactive, catalogSchema: CURRENT_FEATURE_CATALOG_SCHEMA });
   await expect(page.locator('.origin-top svg')).toBeAttached();
   // The preview binds the mounted root in microtasks; two frames cover it.
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));

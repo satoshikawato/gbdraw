@@ -1,9 +1,5 @@
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
-import {
-  normalizeFeatureVisibilityRule,
-  normalizeVisibilityMode,
-  splitLegacyVisibilityRules
-} from '../app/feature-visibility.js';
+import { normalizeFeatureVisibilityRule } from '../app/feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { cloneJsonData } from './json-clone.js';
 import { replaceLayoutPreferences } from '../app/layout-preferences.js';
@@ -39,11 +35,8 @@ const buildFeatureIntentData = (features = {}) => ({
     : 0,
   featureColorOverrides: clonePlainObject(features.featureColorOverrides),
   featureVisibilityManualRules: cloneFeatureVisibilityRules(features.featureVisibilityManualRules),
-  featureVisibilityOverrides: cloneFeatureVisibilityOverrides(features.featureVisibilityOverrides),
-  labelTextFeatureOverrides: clonePlainObject(features.labelTextFeatureOverrides),
-  labelTextBulkOverrides: clonePlainObject(features.labelTextBulkOverrides),
-  labelTextFeatureOverrideSources: clonePlainObject(features.labelTextFeatureOverrideSources),
-  labelVisibilityOverrides: clonePlainObject(features.labelVisibilityOverrides)
+  featureOverrides: clonePlainObject(features.featureOverrides),
+  labelTextBulkOverrides: clonePlainObject(features.labelTextBulkOverrides)
 });
 
 const buildEditorIntentData = (editorState = {}) => ({
@@ -90,14 +83,7 @@ const applyFeatureIntentData = (state, features = {}) => {
     Number.isInteger(features.selectedFeatureRecordIdx) ? features.selectedFeatureRecordIdx : 0
   );
   replacePlainObject(state.featureColorOverrides, clonePlainObject(features.featureColorOverrides));
-  replaceFeatureVisibilityState(state, features);
-  replacePlainObject(state.labelTextFeatureOverrides, clonePlainObject(features.labelTextFeatureOverrides));
-  replacePlainObject(state.labelTextBulkOverrides, clonePlainObject(features.labelTextBulkOverrides));
-  replacePlainObject(
-    state.labelTextFeatureOverrideSources,
-    clonePlainObject(features.labelTextFeatureOverrideSources)
-  );
-  replacePlainObject(state.labelVisibilityOverrides, clonePlainObject(features.labelVisibilityOverrides));
+  replaceFeatureEditState(state, features);
 };
 
 const applyEditorIntentData = (state, editorState = {}) => {
@@ -162,44 +148,18 @@ const cloneFeatureVisibilityRules = (rules) => (
   Array.isArray(rules) ? rules.map((rule) => normalizeFeatureVisibilityRule(rule)) : []
 );
 
-const cloneFeatureVisibilityOverrides = (overrides) => {
-  const normalized = {};
-  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return normalized;
-  Object.entries(overrides).forEach(([featureIdRaw, modeRaw]) => {
-    const featureId = String(featureIdRaw || '').trim();
-    const mode = normalizeVisibilityMode(modeRaw);
-    if (!featureId || mode === 'default') return;
-    normalized[featureId] = mode;
-  });
-  return normalized;
-};
-
-const splitFeatureVisibilityState = (features = {}) => {
-  if (Array.isArray(features.featureVisibilityManualRules)) {
-    return {
-      manualRules: cloneFeatureVisibilityRules(features.featureVisibilityManualRules),
-      overrides: cloneFeatureVisibilityOverrides(features.featureVisibilityOverrides)
-    };
-  }
-  if (Array.isArray(features.featureVisibilityRules)) {
-    return splitLegacyVisibilityRules(features.featureVisibilityRules);
-  }
-  return {
-    manualRules: [],
-    overrides: cloneFeatureVisibilityOverrides(features.featureVisibilityOverrides)
-  };
-};
-
-const replaceFeatureVisibilityState = (state, features = {}) => {
-  const { manualRules, overrides } = splitFeatureVisibilityState(features);
+// Manual visibility rules, identity-keyed per-feature edits, and bulk label
+// edits: the feature edit intent History restores as captured (R11).
+const replaceFeatureEditState = (state, features = {}) => {
   if (Array.isArray(state.featureVisibilityManualRules)) {
     state.featureVisibilityManualRules.splice(
       0,
       state.featureVisibilityManualRules.length,
-      ...cloneFeatureVisibilityRules(manualRules)
+      ...cloneFeatureVisibilityRules(features.featureVisibilityManualRules)
     );
   }
-  replacePlainObject(state.featureVisibilityOverrides, overrides);
+  replacePlainObject(state.featureOverrides, clonePlainObject(features.featureOverrides));
+  replacePlainObject(state.labelTextBulkOverrides, clonePlainObject(features.labelTextBulkOverrides));
 };
 
 const setRef = (target, value) => {
@@ -362,35 +322,23 @@ const applyFallbackUiStateData = (state, ui = {}) => {
 
 const buildFallbackFeatureStateData = (state) => ({
   extractedFeatures: cloneJsonData(getRef(state.extractedFeatures, [])) || [],
-  featureSelectorSafetyScope: cloneJsonData(getRef(state.featureSelectorSafetyScope, [])) || [],
   featureRecordIds: cloneJsonData(getRef(state.featureRecordIds, [])) || [],
   selectedFeatureRecordIdx: getRef(state.selectedFeatureRecordIdx, 0),
   featureColorOverrides: clonePlainObject(state.featureColorOverrides),
   featureVisibilityManualRules: cloneFeatureVisibilityRules(state.featureVisibilityManualRules),
-  featureVisibilityOverrides: cloneFeatureVisibilityOverrides(state.featureVisibilityOverrides),
-  labelTextFeatureOverrides: clonePlainObject(state.labelTextFeatureOverrides),
-  labelTextBulkOverrides: clonePlainObject(state.labelTextBulkOverrides),
-  labelTextFeatureOverrideSources: clonePlainObject(state.labelTextFeatureOverrideSources),
-  labelVisibilityOverrides: clonePlainObject(state.labelVisibilityOverrides)
+  featureOverrides: clonePlainObject(state.featureOverrides),
+  labelTextBulkOverrides: clonePlainObject(state.labelTextBulkOverrides)
 });
 
 const applyFallbackFeatureStateData = (state, features = {}) => {
   setRef(state.extractedFeatures, cloneJsonData(features.extractedFeatures) || []);
-  setRef(state.featureSelectorSafetyScope, cloneJsonData(features.featureSelectorSafetyScope) || []);
   setRef(state.featureRecordIds, cloneJsonData(features.featureRecordIds) || []);
   setRef(
     state.selectedFeatureRecordIdx,
     Number.isInteger(features.selectedFeatureRecordIdx) ? features.selectedFeatureRecordIdx : 0
   );
   replacePlainObject(state.featureColorOverrides, clonePlainObject(features.featureColorOverrides));
-  replaceFeatureVisibilityState(state, features);
-  replacePlainObject(state.labelTextFeatureOverrides, clonePlainObject(features.labelTextFeatureOverrides));
-  replacePlainObject(state.labelTextBulkOverrides, clonePlainObject(features.labelTextBulkOverrides));
-  replacePlainObject(
-    state.labelTextFeatureOverrideSources,
-    clonePlainObject(features.labelTextFeatureOverrideSources)
-  );
-  replacePlainObject(state.labelVisibilityOverrides, clonePlainObject(features.labelVisibilityOverrides));
+  replaceFeatureEditState(state, features);
 };
 
 const buildFallbackOrthogroupStateData = (state) => ({
@@ -679,14 +627,6 @@ export const createHistorySnapshotService = ({
       featureCatalog: artifactOwnedValue(getGeneratedArtifactRef(state.featureCatalog, null)),
       extractedFeatures: artifactOwnedValue(getGeneratedArtifactRef(state.extractedFeatures, null)),
       biologicalFeatures: artifactOwnedValue(getGeneratedArtifactRef(state.biologicalFeatures, null)),
-      featureSelectorSafetyScope: artifactOwnedValue(
-        getGeneratedArtifactRef(state.featureSelectorSafetyScope, null)
-      ),
-      featureVisibilitySelectorCache: artifactOwnedValue(
-        typeof state.captureFeatureVisibilitySelectorCacheOwner === 'function'
-          ? state.captureFeatureVisibilitySelectorCacheOwner()
-          : state.featureVisibilitySelectorCache
-      ),
       featureRecordIds: artifactOwnedValue(getGeneratedArtifactRef(state.featureRecordIds, null)),
       orthogroups: artifactOwnedValue(getGeneratedArtifactRef(state.orthogroups, null)),
       featureOrthogroupIndex: artifactOwnedValue(
@@ -704,6 +644,9 @@ export const createHistorySnapshotService = ({
       ),
       linearRecordOrientations: artifactOwnedValue(captureLinearRecordOrientations()),
       annotationWarnings: artifactOwnedValue(getGeneratedArtifactRef(state.annotationWarnings, null)),
+      featureIdentityNotices: artifactOwnedValue(
+        getGeneratedArtifactRef(state.featureIdentityNotices, null)
+      ),
       comparisonWarnings: artifactOwnedValue(getGeneratedArtifactRef(state.comparisonWarnings, null)),
       specificRules: (state.manualSpecificRules || []).map(rule => ({ ...rule })),
       fileLegendCaptions: new Set(state.fileLegendCaptions?.value || []),
@@ -770,20 +713,6 @@ export const createHistorySnapshotService = ({
     setGeneratedArtifactRef(state.featureCatalog, ownerSet.featureCatalog ?? null);
     setGeneratedArtifactRef(state.extractedFeatures, ownerSet.extractedFeatures || []);
     setGeneratedArtifactRef(state.biologicalFeatures, ownerSet.biologicalFeatures || []);
-    setGeneratedArtifactRef(
-      state.featureSelectorSafetyScope,
-      ownerSet.featureSelectorSafetyScope || []
-    );
-    if (typeof state.replaceFeatureVisibilitySelectorCacheOwner === 'function') {
-      state.replaceFeatureVisibilitySelectorCacheOwner(
-        ownerSet.featureVisibilitySelectorCache || {}
-      );
-    } else {
-      replacePlainObject(
-        state.featureVisibilitySelectorCache,
-        ownerSet.featureVisibilitySelectorCache || {}
-      );
-    }
     setGeneratedArtifactRef(state.featureRecordIds, ownerSet.featureRecordIds || []);
     setGeneratedArtifactRef(state.orthogroups, ownerSet.orthogroups || []);
     setGeneratedArtifactRef(
@@ -805,6 +734,7 @@ export const createHistorySnapshotService = ({
     );
     installLinearRecordOrientations(ownerSet.linearRecordOrientations);
     setGeneratedArtifactRef(state.annotationWarnings, ownerSet.annotationWarnings || []);
+    setGeneratedArtifactRef(state.featureIdentityNotices, ownerSet.featureIdentityNotices || []);
     setGeneratedArtifactRef(state.comparisonWarnings, ownerSet.comparisonWarnings || []);
     if (state.manualSpecificRules && ownerSet.specificRules) {
       state.manualSpecificRules.splice(0, state.manualSpecificRules.length, ...ownerSet.specificRules.map(rule => ({ ...rule })));
@@ -891,8 +821,6 @@ export const createHistorySnapshotService = ({
       'featureCatalog',
       'extractedFeatures',
       'biologicalFeatures',
-      'featureSelectorSafetyScope',
-      'featureVisibilitySelectorCache',
       'featureRecordIds',
       'orthogroups',
       'featureOrthogroupIndex',
@@ -902,6 +830,7 @@ export const createHistorySnapshotService = ({
       'linearRecordTranslations',
       'trackSlotResolvedGeometry',
       'annotationWarnings',
+      'featureIdentityNotices',
       'comparisonWarnings',
       'proteinIdentityManifest',
       'legacyProteinRawCandidates',
@@ -936,12 +865,9 @@ export const createHistorySnapshotService = ({
         selectedFeatureRecordIdx: mutableIntent.features.selectedFeatureRecordIdx,
         featureColorOverrides: mutableIntent.features.featureColorOverrides,
         featureVisibilityManualRules: mutableIntent.features.featureVisibilityManualRules,
-        featureVisibilityOverrides: mutableIntent.features.featureVisibilityOverrides,
-        labelTextFeatureOverrides: mutableIntent.features.labelTextFeatureOverrides,
+        featureOverrides: mutableIntent.features.featureOverrides,
         labelOverrideRows: mutableIntent.features.labelOverrideRows,
-        labelTextBulkOverrides: mutableIntent.features.labelTextBulkOverrides,
-        labelTextFeatureOverrideSources: mutableIntent.features.labelTextFeatureOverrideSources,
-        labelVisibilityOverrides: mutableIntent.features.labelVisibilityOverrides
+        labelTextBulkOverrides: mutableIntent.features.labelTextBulkOverrides
       },
       editor: {
         legend: mutableIntent.editorState.legend,
@@ -978,18 +904,11 @@ export const createHistorySnapshotService = ({
       featureVisibilityManualRules: cloneFeatureVisibilityRules(
         state.featureVisibilityManualRules
       ),
-      featureVisibilityOverrides: cloneFeatureVisibilityOverrides(
-        state.featureVisibilityOverrides
-      ),
-      labelTextFeatureOverrides: clonePlainObject(state.labelTextFeatureOverrides),
+      featureOverrides: clonePlainObject(state.featureOverrides),
       labelOverrideRows: cloneJsonData(
         getGeneratedArtifactRef(state.canonicalLabelOverrideRows, [])
       ) || [],
-      labelTextBulkOverrides: clonePlainObject(state.labelTextBulkOverrides),
-      labelTextFeatureOverrideSources: clonePlainObject(
-        state.labelTextFeatureOverrideSources
-      ),
-      labelVisibilityOverrides: clonePlainObject(state.labelVisibilityOverrides)
+      labelTextBulkOverrides: clonePlainObject(state.labelTextBulkOverrides)
     };
     const editorState = {
       legend: {
@@ -1333,11 +1252,8 @@ export const createHistorySnapshotService = ({
       selectedFeatureRecordIdx: getRef(state.selectedFeatureRecordIdx, 0),
       featureColorOverrides: state.featureColorOverrides,
       featureVisibilityManualRules: state.featureVisibilityManualRules,
-      featureVisibilityOverrides: state.featureVisibilityOverrides,
-      labelTextFeatureOverrides: state.labelTextFeatureOverrides,
-      labelTextBulkOverrides: state.labelTextBulkOverrides,
-      labelTextFeatureOverrideSources: state.labelTextFeatureOverrideSources,
-      labelVisibilityOverrides: state.labelVisibilityOverrides
+      featureOverrides: state.featureOverrides,
+      labelTextBulkOverrides: state.labelTextBulkOverrides
     };
     const editorState = {
       legend: {

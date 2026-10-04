@@ -7,6 +7,7 @@ const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const {
   CURRENT_REQUEST_SCHEMA,
+  CURRENT_SESSION_VERSION,
   evaluateWithRetainedPromise,
   getDiagramWorkerActivity,
   openApp
@@ -209,8 +210,7 @@ const saveCurrentSession = async (page, title) => {
     const requestBefore = getCommittedCanonicalRenderRequest();
     const overridesBefore = JSON.stringify([
       state.featureColorOverrides, state.featureStrokeOverrides,
-      state.featureVisibilityOverrides, state.labelTextFeatureOverrides,
-      state.labelVisibilityOverrides, state.legendColorOverrides,
+      state.featureOverrides, state.legendColorOverrides,
       state.legendStrokeOverrides
     ]);
     const result = await window.__GBDRAW_APP__.saveSessionWithTitle();
@@ -221,8 +221,7 @@ const saveCurrentSession = async (page, title) => {
         requestUnchanged: getCommittedCanonicalRenderRequest() === requestBefore,
         overridesUnchanged: JSON.stringify([
           state.featureColorOverrides, state.featureStrokeOverrides,
-          state.featureVisibilityOverrides, state.labelTextFeatureOverrides,
-          state.labelVisibilityOverrides, state.legendColorOverrides,
+          state.featureOverrides, state.legendColorOverrides,
           state.legendStrokeOverrides
         ]) === overridesBefore,
         savePending: state.sessionSavePending.value,
@@ -263,7 +262,7 @@ const saveCurrentSession = async (page, title) => {
   const session = JSON.parse(gunzipSync(readFileSync(path)).toString('utf8'));
   expect(session).toMatchObject({
     format: 'gbdraw-session',
-    version: 44,
+    version: CURRENT_SESSION_VERSION,
     renderRequest: { schema: CURRENT_REQUEST_SCHEMA }
   });
   return { path, session };
@@ -340,6 +339,8 @@ const prepareLoadedPreviewDirectEditTarget = (page, expected = null) => page.eva
       || feature?.id
       || ''
     ).trim();
+    // The draft key of the feature's per-feature edits (design Q4).
+    const identityKey = (feature) => JSON.stringify([feature.record_key, feature.biological_feature_id]);
     const hasFeatureElement = (id) => Boolean(
       svg.querySelector(`[data-gbdraw-feature-id="${CSS.escape(id)}"]`)
       || svg.querySelector(`[data-gbdraw-rendered-feature-id="${CSS.escape(id)}"]`)
@@ -440,13 +441,16 @@ const prepareLoadedPreviewDirectEditTarget = (page, expected = null) => page.eva
       visibilityFeature,
       visibilityFeatureId: featureId(visibilityFeature),
       visibilityFeatureOverrideKey: featureOverrideKey(visibilityFeature),
+      visibilityFeatureIdentity: identityKey(visibilityFeature),
       fillLegendCaption: String(fillLegendEntry.caption || ''),
       labelFeature,
       labelFeatureId: labelFeature ? featureId(labelFeature) : String(
         expectedTarget?.labelFeatureId || ''
       ),
+      labelFeatureIdentity: labelFeature ? identityKey(labelFeature) : '',
       labelKey: String(labelEntry?.key || expectedTarget?.labelKey || ''),
       labelVisibilityFeature,
+      labelVisibilityFeatureIdentity: labelVisibilityFeature ? identityKey(labelVisibilityFeature) : '',
       labelVisibilityFeatureId: labelVisibilityFeature
         ? featureId(labelVisibilityFeature)
         : String(expectedTarget?.labelVisibilityFeatureId || ''),
@@ -470,10 +474,13 @@ const prepareLoadedPreviewDirectEditTarget = (page, expected = null) => page.eva
       biologicalFeatureId: target.biologicalFeatureId,
       visibilityFeatureId: target.visibilityFeatureId,
       visibilityFeatureOverrideKey: target.visibilityFeatureOverrideKey,
+      visibilityFeatureIdentity: target.visibilityFeatureIdentity,
       fillLegendCaption: target.fillLegendCaption,
       labelFeatureId: target.labelFeatureId,
+      labelFeatureIdentity: target.labelFeatureIdentity,
       labelKey: target.labelKey,
       labelVisibilityFeatureId: target.labelVisibilityFeatureId,
+      labelVisibilityFeatureIdentity: target.labelVisibilityFeatureIdentity,
       labelVisibilityKey: target.labelVisibilityKey,
       legendCaption: target.legendCaption
     };
@@ -533,9 +540,16 @@ const bindLoadedPreviewDirectEditLabel = (page, expected = null) => page.evaluat
     }
     target.labelFeature = resolved.labelFeature;
     target.labelFeatureId = featureId(resolved.labelFeature);
+    target.labelFeatureIdentity = JSON.stringify([
+      resolved.labelFeature.record_key, resolved.labelFeature.biological_feature_id
+    ]);
     target.labelKey = String(resolved.labelEntry.key || '');
     target.labelVisibilityFeature = resolved.labelVisibilityFeature;
     target.labelVisibilityFeatureId = featureId(resolved.labelVisibilityFeature);
+    target.labelVisibilityFeatureIdentity = JSON.stringify([
+      resolved.labelVisibilityFeature.record_key,
+      resolved.labelVisibilityFeature.biological_feature_id
+    ]);
     target.labelVisibilityKey = String(resolved.labelVisibilityEntry.key || '');
     target.baselineMountedContent = serializeCleanSvg(svg);
     target.loadedResultContent = String(
@@ -543,8 +557,10 @@ const bindLoadedPreviewDirectEditLabel = (page, expected = null) => page.evaluat
     );
     return {
       labelFeatureId: target.labelFeatureId,
+      labelFeatureIdentity: target.labelFeatureIdentity,
       labelKey: target.labelKey,
       labelVisibilityFeatureId: target.labelVisibilityFeatureId,
+      labelVisibilityFeatureIdentity: target.labelVisibilityFeatureIdentity,
       labelVisibilityKey: target.labelVisibilityKey
     };
   },
@@ -627,6 +643,9 @@ const captureLoadedPreviewDirectEditState = (page) => page.evaluate(async () => 
   );
   const target = window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_TARGET__;
   if (!target) throw new Error('The loaded-preview direct-edit target is not configured.');
+  // A per-feature edit by the identity key the target recorded; a hidden
+  // feature is no longer drawn after Generate (design Q4).
+  const featureEdit = (identityKey, field) => state.featureOverrides[identityKey]?.[field] ?? null;
   const svg = state.svgContainer.value?.querySelector?.('svg');
   if (!svg) throw new Error('The loaded SVG preview is no longer mounted.');
   const resultContent = String(
@@ -763,7 +782,7 @@ const captureLoadedPreviewDirectEditState = (page) => page.evaluate(async () => 
       label: labelAttributes(
         svg,
         target.labelFeatureId,
-        String(state.labelTextFeatureOverrides[target.labelFeatureId] || '')
+        String(featureEdit(target.labelFeatureIdentity, 'labelText') || '')
       ),
       labelVisibility: labelAttributes(svg, target.labelVisibilityFeatureId),
       legend: legendAttributes(svg)
@@ -774,7 +793,7 @@ const captureLoadedPreviewDirectEditState = (page) => page.evaluate(async () => 
       label: labelAttributes(
         resultSvg,
         target.labelFeatureId,
-        String(state.labelTextFeatureOverrides[target.labelFeatureId] || '')
+        String(featureEdit(target.labelFeatureIdentity, 'labelText') || '')
       ),
       labelVisibility: labelAttributes(resultSvg, target.labelVisibilityFeatureId),
       legend: legendAttributes(resultSvg)
@@ -782,10 +801,9 @@ const captureLoadedPreviewDirectEditState = (page) => page.evaluate(async () => 
     overrides: {
       fill: plain(state.featureColorOverrides[target.featureOverrideKey]),
       stroke: plain(state.featureStrokeOverrides[target.featureOverrideKey]),
-      visibility: state.featureVisibilityOverrides[target.visibilityFeatureId] ?? null,
-      labelText: state.labelTextFeatureOverrides[target.labelFeatureId] ?? null,
-      labelVisibility:
-        state.labelVisibilityOverrides[target.labelVisibilityFeatureId] ?? null,
+      visibility: featureEdit(target.visibilityFeatureIdentity, 'featureVisibility'),
+      labelText: featureEdit(target.labelFeatureIdentity, 'labelText'),
+      labelVisibility: featureEdit(target.labelVisibilityFeatureIdentity, 'labelVisibility'),
       legendColor: state.legendColorOverrides[target.legendCaption] ?? null,
       legendStroke: plain(state.legendStrokeOverrides[target.legendCaption])
     },
@@ -1027,9 +1045,7 @@ const capturePageEvidence = (page, savedSvg = null) => page.evaluate(async (save
       editorOverrides: {
         fills: sortedObject(state.featureColorOverrides),
         strokes: normalizeStrokeOverrides(state.featureStrokeOverrides),
-        visibility: sortedObject(state.featureVisibilityOverrides),
-        labelText: sortedObject(state.labelTextFeatureOverrides),
-        labelVisibility: sortedObject(state.labelVisibilityOverrides),
+        featureOverrides: sortedObject(state.featureOverrides),
         legendColors: sortedObject(state.legendColorOverrides),
         legendStrokes: normalizeStrokeOverrides(state.legendStrokeOverrides),
         orthogroupNames: sortedObject(state.orthogroupNameOverrides),
@@ -1230,7 +1246,9 @@ const applyDivergentDraft = async (page) => page.evaluate(async () => {
   app.clickedFeature.labelText = 'Saved direct label';
   app.clickedFeature.labelVisibility = 'off';
   await app.updateClickedFeatureLabelText();
-  const labelVisibilityApplied = state.labelVisibilityOverrides[labelFeatureId] === 'off';
+  const labelVisibilityApplied = state.featureOverrides[
+    JSON.stringify([labelFeature.record_key, labelFeature.biological_feature_id])
+  ]?.labelVisibility === 'off';
   const visibilityApplied = await app.setFeatureVisibility(
     feature,
     'off',
@@ -1254,7 +1272,9 @@ const applyDivergentDraft = async (page) => page.evaluate(async () => {
   ));
   return {
     featureId,
+    featureIdentity: JSON.stringify([feature.record_key, feature.biological_feature_id]),
     labelFeatureId,
+    labelFeatureIdentity: JSON.stringify([labelFeature.record_key, labelFeature.biological_feature_id]),
     fillOverrideKey,
     strokeOverrideKey,
     fillApplied,
@@ -1631,11 +1651,13 @@ test('loaded current preview supports direct edits before the first Generate', a
     }
     app.clickedFeature.labelVisibility = 'off';
     await app.updateClickedFeatureLabelText();
+    const edit = (drawn, field) => app.featureOverrides[
+      JSON.stringify([drawn?.record_key, drawn?.biological_feature_id])
+    ]?.[field];
     return {
       requested,
-      textOverride: app.labelTextFeatureOverrides[targetState.labelFeatureId],
-      visibilityOverride:
-        app.labelVisibilityOverrides[targetState.labelVisibilityFeatureId]
+      textOverride: edit(targetState.labelFeature, 'labelText'),
+      visibilityOverride: edit(targetState.labelVisibilityFeature, 'labelVisibility')
     };
   }, { text: DIRECT_LABEL_TEXT });
   expect(labelApplied).toEqual({
@@ -1716,9 +1738,11 @@ test('loaded current preview supports direct edits before the first Generate', a
     featureColorOverrides: {
       [target.featureOverrideKey]: { color: DIRECT_FILL }
     },
-    featureVisibilityOverrides: { [target.visibilityFeatureId]: 'off' },
-    labelTextFeatureOverrides: { [target.labelFeatureId]: DIRECT_LABEL_TEXT },
-    labelVisibilityOverrides: { [target.labelVisibilityFeatureId]: 'off' }
+    featureOverrides: {
+      [target.visibilityFeatureIdentity]: { featureVisibility: 'off' },
+      [target.labelFeatureIdentity]: { labelText: DIRECT_LABEL_TEXT },
+      [target.labelVisibilityFeatureIdentity]: { labelVisibility: 'off' }
+    }
   });
   expect(saved.session.editorState).toMatchObject({
     legend: {
@@ -1943,9 +1967,16 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
     strokes: {
       [actions.strokeOverrideKey]: expect.objectContaining({ strokeColor: '#111827' })
     },
-    visibility: { [actions.featureId]: 'off' },
-    labelText: { [actions.labelFeatureId]: 'Saved direct label' },
-    labelVisibility: { [actions.labelFeatureId]: 'off' }
+    featureOverrides: actions.featureIdentity === actions.labelFeatureIdentity
+      ? {
+          [actions.featureIdentity]: {
+            featureVisibility: 'off', labelText: 'Saved direct label', labelVisibility: 'off'
+          }
+        }
+      : {
+          [actions.featureIdentity]: { featureVisibility: 'off' },
+          [actions.labelFeatureIdentity]: { labelText: 'Saved direct label', labelVisibility: 'off' }
+        }
   });
 
   const divergentSave = await saveCurrentSession(page, 'intent-divergent-draft');

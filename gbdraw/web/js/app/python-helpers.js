@@ -167,7 +167,6 @@ def run_canonical_request_wrapper(
                 "interactiveContextCacheMissCount",
                 "interactiveContextBuildCount",
                 "interactiveFeatureTraversalCount",
-                "selectorSafetyScopeBuildCount",
                 "preparedInputCacheEvictionCount",
                 "preparedInputCacheRetainedBytes",
                 "preparedInputCacheMutationViolationCount",

@@ -831,12 +831,18 @@ of every Result and records the import as one **Undo** step. A Result that was n
 SVG in a saved Session until it is displayed or Generate runs. An undone legend
 rename or legend color reaches another Result at the next Generate.
 
-Label text and label visibility edits stay with their feature when the
-displayed Result, record, or visibility changes. Hiding a feature hides its
-label in the current Result, as Generate does; with **Auto Reflow** on, the
-remaining labels are placed again. After Generate replaces a
-source file, only the edits of features that no longer exist are removed; an
-edit that replaces every label with the same text stays.
+**Feature visibility**, **Label visibility**, and label text edits belong to
+the source feature, named by its record key and biological feature ID. They
+stay with that feature when the displayed Result, record, or visibility
+changes, and when crop, reverse complement, record order, or a second copy of
+the record changes how it is drawn; every drawn copy of the feature shows the
+edit. Hiding a feature hides its label in the current Result, as Generate does;
+with **Auto Reflow** on, the remaining labels are placed again. After Generate
+replaces a source file, only the edits of features that the new source does
+not have are removed; an edit that replaces every label with the same text
+stays. An edit of a feature outside the crop stays and applies again when the
+feature is drawn. When other edits name a feature that the source does not
+have, the notice above the diagram offers **Remove N unmatched feature edits**.
 
 **Label visibility** **On** or **Off** in the feature popup decides that
 feature's label whatever **Show Labels** and the label filters select. With

@@ -13,6 +13,7 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
+from gbdraw.session_io import CURRENT_FEATURE_CATALOG_SCHEMA
 from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
@@ -1073,7 +1074,7 @@ def test_current_typed_replay_retains_web_only_conservation_fastas(
 
     rewritten_web_files = rewritten["webFiles"]
     rewritten_resources = rewritten["resources"]
-    assert rewritten["editorState"]["featureCatalog"]["schema"] == 4
+    assert rewritten["editorState"]["featureCatalog"]["schema"] == CURRENT_FEATURE_CATALOG_SCHEMA
     assert all(
         "anchorProfile" in feature
         for item in rewritten["editorState"]["featureCatalog"]["items"]

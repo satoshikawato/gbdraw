@@ -90,9 +90,11 @@ const snapshot = page => page.evaluate(async () => {
   const result = s.results.value[s.selectedResultIndex.value];
   return {
     mode: s.mode.value, generation: s.resultGenerationKey.value,
-    labels: { ...s.labelTextFeatureOverrides }, bulkLabels: { ...s.labelTextBulkOverrides },
-    labelSources: { ...s.labelTextFeatureOverrideSources }, visibility: { ...s.labelVisibilityOverrides },
-    featureVisibility: { ...s.featureVisibilityOverrides }, visibilityRules: [...s.featureVisibilityManualRules],
+    // Per-feature edits by identity key, one map per edited field.
+    ...Object.fromEntries([['labels', 'labelText'], ['labelSources', 'labelSourceText'], ['visibility', 'labelVisibility'],
+      ['featureVisibility', 'featureVisibility']].map(([name, field]) => [name, Object.fromEntries(
+      Object.entries(s.featureOverrides).filter(([, row]) => row[field] !== null).map(([key, row]) => [key, row[field]]))])),
+    bulkLabels: { ...s.labelTextBulkOverrides }, visibilityRules: [...s.featureVisibilityManualRules],
     colors: { ...s.featureColorOverrides }, rules: s.manualSpecificRules.map(rule => ({ ...rule, fromFile: Boolean(rule.fromFile) })),
     featureCount: s.extractedFeatures.value.length,
     resultIdentity: ingestion.getCommittedSvgResultRuntimeIdentity(result),

@@ -16,7 +16,7 @@ globalThis.document = {
   body: { appendChild: () => {} },
   createElement: () => ({ addEventListener: () => {}, click: () => {}, parentNode: null })
 };
-const { exportSession, buildConfigData } = await import('../../gbdraw/web/js/services/config.js');
+const { SESSION_VERSION, exportSession, buildConfigData } = await import('../../gbdraw/web/js/services/config.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
 const { adoptCurrentSessionDocument } = await import('../../gbdraw/web/js/services/session-authority.js');
 
@@ -33,7 +33,7 @@ test('source-free Save emits no render metadata and preserves valid raw scalar d
   assert.equal(fresh.runMetadata, undefined);
   assert.deepEqual(fresh.config, JSON.parse(JSON.stringify(freshConfig)));
   assert.deepEqual(buildConfigData(), freshConfig);
-  assert.equal(adoptCurrentSessionDocument(fresh, 44).canonical, null);
+  assert.equal(adoptCurrentSessionDocument(fresh, SESSION_VERSION).canonical, null);
 
   state.adv.circular_track_slots_enabled = true;
   state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, {
@@ -48,11 +48,11 @@ test('source-free Save emits no render metadata and preserves valid raw scalar d
   assert.deepEqual(saved.results, []);
   assert.equal(saved.editorState.featureCatalog, null);
   assert.equal(saved.runMetadata, undefined);
-  assert.equal(adoptCurrentSessionDocument(saved, 44).canonical, null);
+  assert.equal(adoptCurrentSessionDocument(saved, SESSION_VERSION).canonical, null);
 
   const forbiddenMetadata = structuredClone(saved);
   forbiddenMetadata.runMetadata = { annotationWarnings: [] };
-  assert.throws(() => adoptCurrentSessionDocument(forbiddenMetadata, 44), /committed render artifacts/);
+  assert.throws(() => adoptCurrentSessionDocument(forbiddenMetadata, SESSION_VERSION), /committed render artifacts/);
   state.adv.circular_track_slots[0].width = { value: '1e', unit: 'px' };
   await assert.rejects(exportSession('unfinished settings'), /width|positive|scalar/i);
   assert.deepEqual(state.adv.circular_track_slots[0].width, { value: '1e', unit: 'px' });
@@ -83,7 +83,7 @@ test('current gzip writer/admission keeps S00 valid scalars and codec drafts, in
       slot.radius = structuredClone(scalar);
       const before = buildConfigData();
       const saved = await savedDocument(`scalar settings ${mode} ${enabled} ${index}`);
-      const adopted = adoptCurrentSessionDocument(saved, 44);
+      const adopted = adoptCurrentSessionDocument(saved, SESSION_VERSION);
       assert.equal(adopted.canonical, null);
       const restored = projectSettingsOnlySession(adopted.document);
       assert.deepEqual(restored.config, JSON.parse(JSON.stringify(before)));
@@ -119,7 +119,7 @@ test('writer and current admission reject invalid scalar drafts without altering
     const invalid = structuredClone(valid);
     invalid.config.adv.circular_track_slots[0].width = scalar;
     const invalidBefore = structuredClone(invalid);
-    assert.throws(() => adoptCurrentSessionDocument(invalid, 44), /width|positive|scalar/i);
+    assert.throws(() => adoptCurrentSessionDocument(invalid, SESSION_VERSION), /width|positive|scalar/i);
     assert.deepEqual(invalid, invalidBefore);
   }
 });

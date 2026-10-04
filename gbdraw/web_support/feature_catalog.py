@@ -33,8 +33,12 @@ from gbdraw.render.interactive_svg import (
     _validate_match_fragments,
 )
 
-FEATURE_CATALOG_SCHEMA = 4
+FEATURE_CATALOG_SCHEMA = 5
+# Schema 4 added source-anchor profiles; schema 5 adds each rendered feature's
+# drawn selector values (``drawnSelector``) for live rule matching.
+ANCHOR_FEATURE_CATALOG_SCHEMA = 4
 LEGACY_FEATURE_CATALOG_SCHEMA = 3
+_DRAWN_SELECTOR_FIELDS = frozenset({"hash", "location", "recordLocation"})
 
 _BIOLOGICAL_ALIAS_KEYS = {
     "id",
@@ -70,6 +74,7 @@ _BIOLOGICAL_REMOVED_KEYS = frozenset(
     | _ORTHOGROUP_FEATURE_KEYS
     | {
         "selector",
+        "drawn_selector",
         "nucleotide_fasta",
         "nucleotideFasta",
         "amino_acid_fasta",
@@ -174,14 +179,43 @@ def _legacy_exact_coordinate(value: object) -> int | None:
     return number if abs(number) <= 9_007_199_254_740_991 else None
 
 
+_MISSING = object()
+
+
+def _valid_drawn_selector(value: object) -> bool:
+    """A drawn selector is null (unknown) or the three drawn values."""
+
+    if value is None:
+        return True
+    return (
+        isinstance(value, Mapping)
+        and set(value) == _DRAWN_SELECTOR_FIELDS
+        and all(item is None or (isinstance(item, str) and item) for item in value.values())
+    )
+
+
+def _drawn_selector(feature: Mapping[str, object] | None) -> dict[str, str | None] | None:
+    raw = feature.get("drawn_selector") if isinstance(feature, Mapping) else None
+    if not isinstance(raw, Mapping):
+        return None
+    return {field: (_text(raw.get(field)) or None) for field in ("hash", "location", "recordLocation")}
+
+
 def promote_legacy_feature_catalog(
     catalog: Mapping[str, object],
 ) -> dict[str, object]:
-    """Promote schema 3 with only safely inferred source-anchor metadata."""
+    """Promote schema 3 or 4 without inventing values.
 
-    if catalog.get("schema") != LEGACY_FEATURE_CATALOG_SCHEMA:
+    Schema 3 gains only safely inferred source-anchor metadata. Rendered
+    features of schema 3 and 4 gain ``drawnSelector: None``: their drawn
+    selector values are unknown until the next Generate.
+    """
+
+    source_schema = catalog.get("schema")
+    if source_schema not in (LEGACY_FEATURE_CATALOG_SCHEMA, ANCHOR_FEATURE_CATALOG_SCHEMA):
         raise GbdrawError(
-            f"Feature catalog must use schema {LEGACY_FEATURE_CATALOG_SCHEMA}."
+            f"Feature catalog must use schema {LEGACY_FEATURE_CATALOG_SCHEMA} "
+            f"or {ANCHOR_FEATURE_CATALOG_SCHEMA}."
         )
     migrated = copy.deepcopy(dict(catalog))
     items = migrated.get("items")
@@ -191,6 +225,13 @@ def promote_legacy_feature_catalog(
     for item in items:
         if not isinstance(item, dict):
             raise GbdrawError("Feature catalog items must contain objects.")
+        # Item validation stays with select_feature_catalog_item.
+        rendered = item.get("features")
+        for feature in rendered if isinstance(rendered, list) else ():
+            if isinstance(feature, dict):
+                feature["drawnSelector"] = None
+        if source_schema == ANCHOR_FEATURE_CATALOG_SCHEMA:
+            continue
         features = item.get("biologicalFeatures")
         if not isinstance(features, list):
             raise GbdrawError(
@@ -1330,6 +1371,7 @@ def _normalized_rendered_features(
                 "recordKey": record_key,
                 "biologicalFeatureId": biological_feature_id,
                 "fillColor": resolved.entry.fill,
+                "drawnSelector": _drawn_selector(resolved.feature),
             }
         )
         references_by_svg_id[svg_id] = reference
@@ -2147,7 +2189,7 @@ def build_feature_catalog_item(
 def build_feature_catalog(
     items: Sequence[Mapping[str, object]],
 ) -> dict[str, object]:
-    """Wrap normalized logical-result items in the schema-4 envelope."""
+    """Wrap normalized logical-result items in the current schema envelope."""
 
     return {
         "schema": FEATURE_CATALOG_SCHEMA,
@@ -2168,7 +2210,11 @@ def select_feature_catalog_item(
     allowed_schemas = (
         {expected_schema}
         if expected_schema is not None
-        else {3, FEATURE_CATALOG_SCHEMA}
+        else {
+            LEGACY_FEATURE_CATALOG_SCHEMA,
+            ANCHOR_FEATURE_CATALOG_SCHEMA,
+            FEATURE_CATALOG_SCHEMA,
+        }
     )
     if (
         not isinstance(catalog, Mapping)
@@ -2177,7 +2223,7 @@ def select_feature_catalog_item(
         required = (
             str(expected_schema)
             if expected_schema is not None
-            else f"3 or {FEATURE_CATALOG_SCHEMA}"
+            else f"3, 4 or {FEATURE_CATALOG_SCHEMA}"
         )
         raise GbdrawError(
             f"Feature catalog must use schema {required}."
@@ -2391,6 +2437,13 @@ def select_feature_catalog_item(
             raise GbdrawError(
                 "Feature catalog contains an invalid rendered feature "
                 "reference."
+            )
+        if catalog_schema >= FEATURE_CATALOG_SCHEMA and not _valid_drawn_selector(
+            feature.get("drawnSelector", _MISSING)
+        ):
+            raise GbdrawError(
+                "Feature catalog contains an invalid rendered feature "
+                "drawn selector."
             )
         rendered_ids.add(svg_id)
 

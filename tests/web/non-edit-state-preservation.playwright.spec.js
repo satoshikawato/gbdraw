@@ -49,8 +49,8 @@ const editRecordBLabels = (page) => page.evaluate(async () => {
   await app.updateClickedFeatureLabelText();
   app.clickedFeature = null;
   return {
-    labels: JSON.parse(JSON.stringify(app.labelTextFeatureOverrides)),
-    visibility: JSON.parse(JSON.stringify(app.labelVisibilityOverrides))
+    labels: Object.values(app.featureOverrides).map((row) => row.labelText).filter((value) => value !== null),
+    visibility: Object.values(app.featureOverrides).map((row) => row.labelVisibility).filter((value) => value !== null)
   };
 });
 

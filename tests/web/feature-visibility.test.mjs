@@ -1,56 +1,19 @@
 import assert from 'node:assert/strict';
-import { readFile, writeFile, mkdtemp } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const repoRoot = process.cwd();
-const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-visibility.js');
-const selectorSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-selector.js');
-const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-visibility-'));
-await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-await writeFile(
-  join(tempDir, 'feature-visibility.js'),
-  await readFile(sourcePath, 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'feature-selector.js'),
-  await readFile(selectorSourcePath, 'utf8'),
-  'utf8'
-);
-await writeFile(
-  join(tempDir, 'feature-utils.js'),
-  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-utils.js'), 'utf8'),
-  'utf8'
-);
-
-const {
-  buildEditorFeatureVisibilityRule,
-  buildExactHashFeatureVisibilityRule,
+import {
   buildExactQualifierFeatureVisibilityRule,
   applyFeatureVisibilityOverrideChanges,
   buildFeatureVisibilityChanges,
-  buildFeatureVisibilityOverrideCache,
-  buildFeatureVisibilitySelectorCache,
-  deriveFeatureVisibilityRulesForBoundary,
   exactRegexValue,
   featureMatchesExactQualifier,
-  featureVisibilityOverridesToRules,
-  featureVisibilityRulesFromOverrideCache,
-  getEditorFeatureVisibilityMode,
   getFeatureVisibilityOverride,
   normalizeVisibilityMode,
   parseFeatureVisibilityRules,
-  preserveFeatureVisibilitySelectorCacheForOverrides,
-  removeEditorFeatureVisibilityRule,
   resolveEffectiveFeatureVisibility,
   serializeFeatureVisibilityRules,
   setFeatureVisibilityOverride,
   splitLegacyVisibilityRules,
-  upsertEditorQualifierFeatureVisibilityRule,
-  upsertEditorFeatureVisibilityRule
-} = await import(pathToFileURL(join(tempDir, 'feature-visibility.js')));
+  upsertEditorQualifierFeatureVisibilityRule
+} from '../../gbdraw/web/js/app/feature-visibility.js';
 
 assert.deepEqual(
   parseFeatureVisibilityRules('*\tCDS\tgene\t^geneA$\toff\n').rules.map((rule) => ({
@@ -104,63 +67,36 @@ assert.equal(normalizeVisibilityMode('suppress'), 'exclude_matching');
 assert.equal(normalizeVisibilityMode('default'), 'default');
 assert.equal(normalizeVisibilityMode('bad'), 'default');
 
+// Per-feature visibility is the identity row's `featureVisibility` (design Q4).
 {
+  const feature = (svgId, biologicalFeatureId) => ({ svg_id: svgId, record_key: 'rec', biological_feature_id: biologicalFeatureId });
+  const key = (biologicalFeatureId) => JSON.stringify(['rec', biologicalFeatureId]);
   const overrides = {};
-  assert.equal(getFeatureVisibilityOverride(overrides, 'f.1'), 'default');
-  setFeatureVisibilityOverride(overrides, 'f.1', 'off');
-  assert.deepEqual(overrides, { 'f.1': 'off' });
-  setFeatureVisibilityOverride(overrides, 'f.1', 'default');
+  assert.equal(getFeatureVisibilityOverride(overrides, feature('f.1_record_1', 'b1')), 'default');
+  setFeatureVisibilityOverride(overrides, feature('f.1_record_1', 'b1'), 'off');
+  assert.deepEqual(overrides, { [key('b1')]: {
+    recordKey: 'rec', biologicalFeatureId: 'b1', featureVisibility: 'off',
+    labelVisibility: null, labelText: null, labelSourceText: null
+  } });
+  // The same identity drawn with another rendered ID reads the same edit (OV-12).
+  assert.equal(getFeatureVisibilityOverride(overrides, feature('f.1_record_2', 'b1')), 'off');
+  setFeatureVisibilityOverride(overrides, feature('f.1_record_1', 'b1'), 'default');
   assert.deepEqual(overrides, {});
 
+  setFeatureVisibilityOverride(overrides, feature('f.1', 'b1'), 'off');
   const changes = buildFeatureVisibilityChanges(
-    [{ svg_id: 'f.1' }, { svg_id: 'f.2' }, { svg_id: 'f.2' }],
+    [feature('f.1', 'b1'), feature('f.2', 'b2'), feature('f.2', 'b2')],
     'exclude_matching',
-    { 'f.1': 'off' }
+    overrides
   );
   assert.deepEqual(changes, [
-    { featureId: 'f.1', before: 'off', after: 'exclude_matching' },
-    { featureId: 'f.2', before: 'default', after: 'exclude_matching' }
+    { recordKey: 'rec', biologicalFeatureId: 'b1', featureId: 'f.1', before: 'off', after: 'exclude_matching' },
+    { recordKey: 'rec', biologicalFeatureId: 'b2', featureId: 'f.2', before: 'default', after: 'exclude_matching' }
   ]);
-  applyFeatureVisibilityOverrideChanges(overrides, changes.map((change) => ({
-    featureId: change.featureId,
-    mode: change.after
-  })));
-  assert.deepEqual(overrides, { 'f.1': 'exclude_matching', 'f.2': 'exclude_matching' });
-}
-
-{
-  const hashRule = buildExactHashFeatureVisibilityRule(
-    { svg_id: 'f.1', label: 'Gene A', type: 'CDS', start: 10, end: 20 },
-    'exclude_matching'
-  );
-  assert.deepEqual(hashRule, {
-    id: hashRule.id,
-    source: 'editor',
-    featureId: 'f.1',
-    label: 'Gene A',
-    recordId: '*',
-    featureType: '*',
-    qualifier: 'hash',
-    value: '^f\\.1$',
-    action: 'exclude_matching'
-  });
-}
-
-{
-  const hashRule = buildExactHashFeatureVisibilityRule(
-    {
-      svg_id: 'ff51a6081_record_2',
-      stable_svg_id: 'ff51a6081',
-      selector: { hash: 'ff51a6081' },
-      label: 'penF transcript',
-      type: 'mRNA'
-    },
-    'off'
-  );
-  assert.equal(hashRule.featureId, 'ff51a6081_record_2');
-  assert.equal(hashRule.qualifier, 'hash');
-  assert.equal(hashRule.value, '^ff51a6081$');
-  assert.equal(hashRule.action, 'off');
+  applyFeatureVisibilityOverrideChanges(overrides, changes.map((change) => ({ ...change, mode: change.after })));
+  assert.deepEqual(Object.values(overrides).map((row) => [row.biologicalFeatureId, row.featureVisibility]), [
+    ['b1', 'exclude_matching'], ['b2', 'exclude_matching']
+  ]);
 }
 
 {
@@ -179,203 +115,17 @@ assert.equal(normalizeVisibilityMode('bad'), 'default');
 }
 
 {
-  const feat = {
-    svg_id: 'f.1',
-    label: 'Gene A',
-    record_id: 'rec1',
-    type: 'CDS',
-    selector: {
-      hash: 'f.1',
-      record_location: 'rec1:10..20:+',
-      qualifiers: {
-        protein_id: ['P1'],
-        locus_tag: ['L1']
-      }
-    }
-  };
-  const rule = buildEditorFeatureVisibilityRule(
-    feat,
-    {
-      selectorSafetyScope: [
-        { record_id: 'rec1', feature_type: 'CDS', selector: feat.selector }
-      ]
-    },
-    'exclude_matching'
-  );
-  assert.equal(rule.source, 'editor');
-  assert.equal(rule.featureId, 'f.1');
-  assert.equal(rule.recordId, 'rec1');
-  assert.equal(rule.featureType, 'CDS');
-  assert.equal(rule.qualifier, 'protein_id');
-  assert.equal(rule.value, '^P1$');
-  assert.equal(rule.action, 'exclude_matching');
-}
-
-{
-  const feat = {
-    svg_id: 'f.1',
-    label: 'Gene A',
-    record_id: 'rec1',
-    type: 'CDS',
-    selector: {
-      hash: 'f.1',
-      record_location: 'rec1:10..20:+',
-      qualifiers: { protein_id: ['P1'] }
-    }
-  };
-  const rule = buildEditorFeatureVisibilityRule(feat, {}, 'off');
-  assert.equal(rule.qualifier, 'hash');
-  assert.equal(rule.value, '^f\\.1$');
-}
-
-{
-  const feat = {
-    svg_id: 'f.1',
-    label: 'Gene A',
-    record_id: 'rec1',
-    type: 'CDS',
-    selector: {
-      hash: 'f.1',
-      record_location: 'rec1:10..20:+',
-      qualifiers: {
-        protein_id: ['P1']
-      }
-    }
-  };
-  const selectorCache = buildFeatureVisibilitySelectorCache(
-    [feat],
-    [{ record_id: 'rec1', feature_type: 'CDS', selector: feat.selector }]
-  );
-  assert.deepEqual(selectorCache['f.1'], {
-    recordId: 'rec1',
-    featureType: 'CDS',
-    qualifier: 'protein_id',
-    value: 'P1',
-    label: 'Gene A'
-  });
-
-  const manualRules = [
-    { source: 'manual', recordId: '*', featureType: 'CDS', qualifier: 'product', value: 'transposase', action: 'off' }
-  ];
-  const rules = deriveFeatureVisibilityRulesForBoundary(manualRules, { 'f.1': 'on' }, selectorCache);
-  assert.deepEqual(
-    rules.map((rule) => [rule.source, rule.featureId, rule.recordId, rule.featureType, rule.qualifier, rule.value, rule.action]),
-    [
-      ['editor', 'f.1', 'rec1', 'CDS', 'protein_id', '^P1$', 'show'],
-      ['manual', '', '*', 'CDS', 'product', 'transposase', 'off']
-    ]
-  );
-  assert.equal(
-    serializeFeatureVisibilityRules(rules),
-    'rec1\tCDS\tprotein_id\t^P1$\tshow\n*\tCDS\tproduct\ttransposase\toff\n'
-  );
-  assert.equal(featureVisibilityOverridesToRules({ 'f.missing': 'off' }, selectorCache)[0].qualifier, 'hash');
-}
-
-{
-  const feat = {
-    svg_id: 'ff51a6081_record_2',
-    stable_svg_id: 'ff51a6081',
-    label: 'penF transcript',
-    record_id: 'LC921558.1',
-    type: 'mRNA',
-    selector: {
-      hash: 'ff51a6081',
-      record_location: 'LC921558.1:775..13422:+',
-      qualifiers: { gene: ['penF'] }
-    }
-  };
-  const selectorCache = buildFeatureVisibilitySelectorCache(
-    [feat],
-    [
-      { record_id: 'LC921558.1', feature_type: 'mRNA', selector: feat.selector },
-      {
-        record_id: 'LC921558.1',
-        feature_type: 'mRNA',
-        selector: {
-          hash: 'f8468d457',
-          record_location: 'LC921558.1:775..13422:+',
-          qualifiers: { gene: ['penF'] }
-        }
-      }
-    ]
-  );
-  assert.deepEqual(selectorCache['ff51a6081_record_2'], {
-    recordId: 'LC921558.1',
-    featureType: 'mRNA',
-    qualifier: 'hash',
-    value: 'ff51a6081',
-    label: 'penF transcript'
-  });
-
-  const rules = deriveFeatureVisibilityRulesForBoundary([], { 'ff51a6081_record_2': 'off' }, selectorCache);
-  assert.equal(
-    serializeFeatureVisibilityRules(rules),
-    'LC921558.1\tmRNA\thash\t^ff51a6081$\toff\n'
-  );
-
-  assert.deepEqual(
-    preserveFeatureVisibilitySelectorCacheForOverrides({}, selectorCache, { 'ff51a6081_record_2': 'off' }),
-    selectorCache
-  );
-  assert.deepEqual(
-    preserveFeatureVisibilitySelectorCacheForOverrides({}, selectorCache, { 'ff51a6081_record_2': 'default' }),
-    {}
-  );
-}
-
-{
   const rules = [
     { source: 'manual', recordId: '*', featureType: 'CDS', qualifier: 'product', value: '.*', action: 'off' }
   ];
-  const feat = { svg_id: 'f.1', label: 'Gene A', type: 'CDS', start: 10, end: 20 };
-  upsertEditorFeatureVisibilityRule(rules, feat, 'exclude_matching');
-  assert.equal(rules[0].source, 'editor');
-  assert.equal(rules[0].value, '^f\\.1$');
-  assert.equal(rules[0].label, 'Gene A');
-  assert.equal(getEditorFeatureVisibilityMode(rules, 'f.1'), 'exclude_matching');
-  assert.deepEqual(buildFeatureVisibilityOverrideCache(rules), { 'f.1': 'exclude_matching' });
-
-  upsertEditorFeatureVisibilityRule(rules, feat, 'on');
-  assert.equal(rules.length, 2);
-  assert.equal(rules[0].action, 'show');
-
   upsertEditorQualifierFeatureVisibilityRule(
     rules,
     { featureType: 'CDS', qualifier: 'product', value: 'ORF1a polyprotein' },
     'off'
   );
-  assert.equal(rules[0].qualifier, 'hash');
-  assert.equal(rules[1].qualifier, 'product');
-  assert.equal(rules[2].source, 'manual');
-
-  removeEditorFeatureVisibilityRule(rules, 'f.1');
-  assert.equal(rules.length, 2);
-  assert.equal(getEditorFeatureVisibilityMode(rules, 'f.1'), 'default');
+  assert.equal(rules[0].qualifier, 'product');
+  assert.equal(rules[1].source, 'manual');
 }
-
-{
-  const rules = [{
-    source: 'editor',
-    featureId: 'f.1',
-    label: 'Gene A',
-    recordId: 'rec1',
-    featureType: 'CDS',
-    qualifier: 'locus_tag',
-    value: '^L1$',
-    action: 'off'
-  }];
-  assert.equal(getEditorFeatureVisibilityMode(rules, 'f.1'), 'off');
-  assert.deepEqual(buildFeatureVisibilityOverrideCache(rules), { 'f.1': 'off' });
-  removeEditorFeatureVisibilityRule(rules, 'f.1');
-  assert.equal(rules.length, 0);
-}
-
-assert.deepEqual(
-  featureVisibilityRulesFromOverrideCache({ abc: 'off', def: 'suppress', ignored: 'default' })
-    .map((rule) => [rule.featureId, rule.action]),
-  [['abc', 'off'], ['def', 'exclude_matching']]
-);
 
 {
   const split = splitLegacyVisibilityRules([
@@ -401,24 +151,12 @@ assert.deepEqual(
 }
 
 {
-  assert.equal(
-    resolveEffectiveFeatureVisibility(
-      'f.1',
-      {},
-      null,
-      [{ recordId: '*', featureType: '*', qualifier: 'hash', value: '^f\\.1$', action: 'off' }]
-    ),
-    'off'
-  );
-  assert.equal(
-    resolveEffectiveFeatureVisibility(
-      'f.1',
-      { 'f.1': 'on' },
-      null,
-      [{ recordId: '*', featureType: '*', qualifier: 'hash', value: '^f\\.1$', action: 'off' }]
-    ),
-    'on'
-  );
+  const hashRule = { recordId: '*', featureType: '*', qualifier: 'hash', value: '^f\\.1$', action: 'off' };
+  const feature = { svg_id: 'f.1', record_key: 'rec', biological_feature_id: 'b1' };
+  assert.equal(resolveEffectiveFeatureVisibility(feature, {}, [hashRule]), 'off');
+  const overrides = {};
+  setFeatureVisibilityOverride(overrides, feature, 'on');
+  assert.equal(resolveEffectiveFeatureVisibility(feature, overrides, [hashRule]), 'on');
 }
 
 {
@@ -426,13 +164,15 @@ assert.deepEqual(
     source: 'editor', recordId: '*', featureType: 'CDS', qualifier: 'product',
     value: '^NADH dehydrogenase subunit 1$', action: 'off'
   };
-  const nd1 = { svg_id: 'nd1', type: 'CDS', qualifiers: { product: ['nadh dehydrogenase SUBUNIT 1'] } };
-  assert.equal(resolveEffectiveFeatureVisibility('nd1', {}, null, [productRule], nd1), 'off');
-  assert.equal(resolveEffectiveFeatureVisibility('nd1', { nd1: 'on' }, null, [productRule], nd1), 'on');
-  assert.equal(resolveEffectiveFeatureVisibility('nd1', {}, null, [productRule]), 'on');
-  assert.equal(resolveEffectiveFeatureVisibility(
-    'nd1', {}, null, [{ ...productRule, featureType: 'tRNA' }], nd1
-  ), 'on');
+  const nd1 = {
+    svg_id: 'nd1', type: 'CDS', record_key: 'rec', biological_feature_id: 'nd1',
+    qualifiers: { product: ['nadh dehydrogenase SUBUNIT 1'] }
+  };
+  assert.equal(resolveEffectiveFeatureVisibility(nd1, {}, [productRule]), 'off');
+  const overrides = {};
+  setFeatureVisibilityOverride(overrides, nd1, 'on');
+  assert.equal(resolveEffectiveFeatureVisibility(nd1, overrides, [productRule]), 'on');
+  assert.equal(resolveEffectiveFeatureVisibility(nd1, {}, [{ ...productRule, featureType: 'tRNA' }]), 'on');
   assert.equal(featureMatchesExactQualifier(nd1, productRule), true);
   assert.equal(featureMatchesExactQualifier({ ...nd1, qualifiers: { product: 'other' } }, productRule), false);
 }

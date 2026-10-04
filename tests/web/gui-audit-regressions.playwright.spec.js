@@ -310,7 +310,7 @@ test('a delayed label TSV cannot replace the labels from a newer upload', async 
     await app.loadLabelOverrideTable({ target: input });
     release();
     await pending;
-    return Object.values(app.labelTextFeatureOverrides);
+    return Object.values(app.featureOverrides).map((row) => row.labelText).filter((text) => text !== null);
   });
   expect(outcome.length).toBeGreaterThan(0);
   expect(new Set(outcome)).toEqual(new Set(['NEWER']));

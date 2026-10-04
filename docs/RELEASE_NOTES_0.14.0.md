@@ -116,7 +116,7 @@ ranking, and multi-hop automatic selection are unsupported.
 
 ## Session / replay / save compatibility
 
-Current writers emit session version 44 and canonical `renderRequest` schema 9.
+Current writers emit session version 45 and canonical `renderRequest` schema 9.
 Save Session also preserves settings before the first source is loaded. Supported
 older Sessions and legacy settings JSON remain readable; settings-only Sessions
 need a biological source before rendering.

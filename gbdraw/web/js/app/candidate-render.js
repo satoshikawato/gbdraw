@@ -1,6 +1,7 @@
 import { resolveColorToHex } from './color-utils.js';
 import { defaultLegendEntryOrder, isLegendOrderEdited } from './legend/utils.js';
 import { cloneJsonValue } from '../services/json-clone.js';
+import { biologicalFeatureKey } from '../services/feature-catalog.js';
 import {
   admitCurrentGeneratedResults
 } from '../services/svg-result-ingestion.js';
@@ -87,6 +88,12 @@ const renderedResultIndexes = (catalogAdmission, renderedId) => (
   catalogAdmission.resultIndexesByRenderedId.get(renderedId) || new Set()
 );
 
+// Per-feature edits name a source identity; each Result draws it with its
+// own rendered ID (design Q4 6.2).
+const identityTargets = (catalogAdmission, row) => resolvedStableTargets(
+  catalogAdmission, biologicalFeatureKey(row?.recordKey, row?.biologicalFeatureId)
+);
+
 const normalizedLegendEntries = (entries) => (
   Array.isArray(entries)
     ? entries.map((entry) => ({
@@ -106,9 +113,7 @@ const compilePlanBundle = ({
   catalogAdmission,
   featureColorOverrides = {},
   featureStrokeOverrides = {},
-  featureVisibilityOverrides = {},
-  labelTextFeatureOverrides = {},
-  labelVisibilityOverrides = {},
+  featureOverrides = {},
   legendEntries = [],
   deletedLegendEntries = [],
   originalLegendOrder = [],
@@ -170,27 +175,25 @@ const compilePlanBundle = ({
     };
   });
 
-  Object.entries(featureVisibilityOverrides || {}).forEach(([renderedId, rawMode]) => {
-    const mode = text(rawMode).toLowerCase();
-    const indexes = renderedResultIndexes(catalogAdmission, renderedId);
-    if ((mode !== 'on' && mode !== 'off') || indexes.size === 0) return;
-    addToResults(operationsByResult, indexes, 'featureVisibility', { renderedId, mode });
-  });
-
-  Object.entries(labelTextFeatureOverrides || {}).forEach(([renderedId, value]) => {
-    const indexes = renderedResultIndexes(catalogAdmission, renderedId);
-    if (indexes.size === 0) return;
-    addToResults(operationsByResult, indexes, 'labelText', {
-      renderedId,
-      value: String(value ?? '')
+  const hiddenRenderedIds = new Set();
+  Object.values(featureOverrides || {}).forEach((row) => {
+    const targets = identityTargets(catalogAdmission, row);
+    const featureMode = text(row?.featureVisibility).toLowerCase();
+    const labelMode = text(row?.labelVisibility).toLowerCase();
+    targets.forEach(({ resultIndex, renderedId }) => {
+      const operations = operationsByResult[resultIndex];
+      if (!operations) return;
+      if (featureMode === 'on' || featureMode === 'off') {
+        operations.featureVisibility.push({ renderedId, mode: featureMode });
+        if (featureMode === 'off') hiddenRenderedIds.add(renderedId);
+      }
+      if (typeof row?.labelText === 'string') {
+        operations.labelText.push({ renderedId, value: row.labelText });
+      }
+      if (labelMode === 'on' || labelMode === 'off') {
+        operations.labelVisibility.push({ renderedId, mode: labelMode });
+      }
     });
-  });
-
-  Object.entries(labelVisibilityOverrides || {}).forEach(([renderedId, rawMode]) => {
-    const mode = text(rawMode).toLowerCase();
-    const indexes = renderedResultIndexes(catalogAdmission, renderedId);
-    if ((mode !== 'on' && mode !== 'off') || indexes.size === 0) return;
-    addToResults(operationsByResult, indexes, 'labelVisibility', { renderedId, mode });
   });
 
   const currentEntries = normalizedLegendEntries(legendEntries);
@@ -209,12 +212,6 @@ const compilePlanBundle = ({
   );
   const rendererDerivedCaptions = new Set(
     Array.from(addedLegendCaptions || []).map(text).filter(Boolean)
-  );
-  const hiddenRenderedIds = new Set(
-    Object.entries(featureVisibilityOverrides || {})
-      .filter(([, mode]) => text(mode).toLowerCase() === 'off')
-      .map(([renderedId]) => text(renderedId))
-      .filter(Boolean)
   );
   const renderedIdsByDirectCaption = new Map();
   Object.entries(featureColorOverrides || {}).forEach(([key, override]) => {

@@ -88,8 +88,6 @@ export const getFeatureHashCandidates = (feature) => {
   return [...new Set([generationId, renderedId].filter(Boolean))];
 };
 
-export const getFeatureGenerationHash = (feature) => getFeatureHashCandidates(feature)[0] || '';
-
 // The hash Python's color-rule `hash` qualifier matches (`compute_feature_hash`):
 // no record or instance suffix, so duplicates of one record share it (PD-OI-069).
 export const getFeatureColorRuleHash = (feature) => (

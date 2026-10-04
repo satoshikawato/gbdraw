@@ -8,6 +8,7 @@ from Bio.SeqRecord import SeqRecord
 import pandas as pd
 import pytest
 
+from gbdraw.web_support.feature_catalog import FEATURE_CATALOG_SCHEMA
 from gbdraw.api import (
     CircularBatchRequest,
     CircularDiagramRequest,
@@ -471,7 +472,7 @@ def test_web_request_returns_one_base_svg_and_compact_catalog(
         f"{output_prefix}.svg"
     ]
     catalog = response["metadata"]["featureCatalog"]
-    assert catalog["schema"] == 4
+    assert catalog["schema"] == FEATURE_CATALOG_SCHEMA
     assert len(catalog["items"]) == 1
     item = catalog["items"][0]
     assert item["resultIndex"] == 0

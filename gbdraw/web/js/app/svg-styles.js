@@ -1,4 +1,4 @@
-import { ruleMatchesReady, ruleMatchesFeature, firstMatchingRule } from './rule-matching.js';
+import { ruleMatchDeclined, ruleMatchesReady, ruleMatchesFeature, firstMatchingRule } from './rule-matching.js';
 import {
   estimateColorFactor,
   interpolateColor,
@@ -107,6 +107,8 @@ export const createSvgStyles = ({
 
       const paletteColor = colors[feat.type] || colors.default;
       if (!paletteColor) return;
+      // A declined live match keeps the color Generate drew (R4).
+      if (ruleMatchDeclined(feat, manualSpecificRules)) return;
 
       const hasSpecificRule = manualSpecificRules.some((rule) => ruleMatchesFeature(feat, rule));
 
@@ -368,6 +370,8 @@ export const createSvgStyles = ({
 
     extractedFeatures.value.forEach((feat) => {
       if (!feat.svg_id) return;
+      // A declined live match keeps the color Generate drew (R4).
+      if (ruleMatchDeclined(feat, manualSpecificRules)) return;
 
       const matchingRule = firstMatchingRule(feat, manualSpecificRules);
 

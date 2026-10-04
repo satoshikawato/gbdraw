@@ -41,9 +41,6 @@ export const cloneFeatureExtractionData = (data) => ({
       ))
     : [],
   record_ids: Array.isArray(data?.record_ids) ? [...data.record_ids] : [],
-  selector_safety_scope: Array.isArray(data?.selector_safety_scope)
-    ? cloneJsonValue(data.selector_safety_scope, [])
-    : [],
   error: data?.error
 });
 
@@ -311,7 +308,6 @@ export const extractFeatureMetadataForPreview = async ({
       return {
         extractedFeatures: [],
         biologicalFeatures: [],
-        featureSelectorSafetyScope: [],
         featureRecordIds: [],
         selectedFeatureRecordIdx: 0,
         errors
@@ -322,7 +318,6 @@ export const extractFeatureMetadataForPreview = async ({
       return {
         extractedFeatures: [],
         biologicalFeatures: [],
-        featureSelectorSafetyScope: [],
         featureRecordIds: [],
         selectedFeatureRecordIdx: 0,
         errors
@@ -332,9 +327,6 @@ export const extractFeatureMetadataForPreview = async ({
       extractedFeatures: featData.features.map((feature) => normalizeBiologicalFeature(feature)),
       biologicalFeatures: biologicalFeaturesFromExtraction(featData)
         .map((feature) => normalizeBiologicalFeature(feature)),
-      featureSelectorSafetyScope: Array.isArray(featData?.selector_safety_scope)
-        ? featData.selector_safety_scope
-        : [],
       featureRecordIds: featData?.record_ids || [],
       selectedFeatureRecordIdx: 0,
       errors
@@ -348,7 +340,6 @@ export const extractFeatureMetadataForPreview = async ({
       : buildLinearRegionExtractionContext(linearSeqs, lInputType);
     let allFeatures = [];
     let allBiologicalFeatures = [];
-    let allSelectorSafetyScope = [];
     const allRecordLabels = [];
     for (let i = 0; i < linearSeqs.length; i += 1) {
       const seq = linearSeqs[i] || {};
@@ -393,11 +384,6 @@ export const extractFeatureMetadataForPreview = async ({
       allFeatures = allFeatures.concat(features);
       allBiologicalFeatures = allBiologicalFeatures.concat(biologicalFeatures);
 
-      if (Array.isArray(featData.selector_safety_scope)) {
-        allSelectorSafetyScope = allSelectorSafetyScope.concat(
-          featData.selector_safety_scope.map((entry) => ({ ...entry, fileIdx: i }))
-        );
-      }
       (featData.record_ids || []).forEach((rid, ridx) => {
         allRecordLabels.push({ label: `File ${i + 1}: ${rid}`, fileIdx: i, recordIdx: ridx });
       });
@@ -406,7 +392,6 @@ export const extractFeatureMetadataForPreview = async ({
     return {
       extractedFeatures: allFeatures,
       biologicalFeatures: allBiologicalFeatures,
-      featureSelectorSafetyScope: allSelectorSafetyScope,
       featureRecordIds: allRecordLabels.map((record) => record.label),
       selectedFeatureRecordIdx: 0,
       errors
@@ -416,7 +401,6 @@ export const extractFeatureMetadataForPreview = async ({
   return {
     extractedFeatures: [],
     biologicalFeatures: [],
-    featureSelectorSafetyScope: [],
     featureRecordIds: [],
     selectedFeatureRecordIdx: 0,
     errors

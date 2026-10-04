@@ -160,9 +160,7 @@ for (const mode of MODES) {
         const live = await editProjection(page);
         const overrides = () => page.evaluate(() => JSON.stringify({
           colors: window.__GBDRAW_APP__.featureColorOverrides,
-          labels: window.__GBDRAW_APP__.labelTextFeatureOverrides,
-          labelVisibility: window.__GBDRAW_APP__.labelVisibilityOverrides,
-          visibility: window.__GBDRAW_APP__.featureVisibilityOverrides
+          featureOverrides: window.__GBDRAW_APP__.featureOverrides
         }));
         expect.soft(changes(previous, live), `${mode.name}: ${name} changed the live Result; overrides ${await overrides()}`)
           .not.toEqual({});

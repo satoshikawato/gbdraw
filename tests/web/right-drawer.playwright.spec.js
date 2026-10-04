@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { writeFileSync } = require('node:fs');
-const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_SESSION_VERSION, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { semantics, switchMode, snapshot: readSnapshot } = require('./helpers/mode-transition.cjs');
 const { semantics: svgSemantics } = require('./helpers/visual-state.cjs');
 
@@ -801,8 +801,8 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
       labelPartsHidden: labelParts.every((element) => element.getAttribute('display') === 'none'),
       resultLabelPartsHidden: resultLabelParts.length === labelParts.length
         && resultLabelParts.every((element) => element.getAttribute('display') === 'none'),
-      labelVisibilityOverride: app.labelVisibilityOverrides[labeledFeature.svg_id],
-      labelOverride: app.labelTextFeatureOverrides[labeledFeature.svg_id],
+      labelVisibilityOverride: ((feature) => app.featureOverrides[JSON.stringify([feature?.record_key, feature?.biological_feature_id])]?.labelVisibility ?? undefined)(app.extractedFeatures.find((item) => item.svg_id === labeledFeature.svg_id)),
+      labelOverride: ((feature) => app.featureOverrides[JSON.stringify([feature?.record_key, feature?.biological_feature_id])]?.labelText ?? undefined)(app.extractedFeatures.find((item) => item.svg_id === labeledFeature.svg_id)),
       legendFill,
       legendEntryColor: app.legendEntries[legendIndex]?.color,
       featureResultContent,
@@ -860,7 +860,7 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
     await expect(page.locator('[data-live-application-feedback]')).toContainText('Live edit failed');
     // B11: a Worker failure that changes no input keeps Retry.
     await expect(page.locator('[data-live-application-feedback]')).toContainText('Retry the live edit or use Generate.');
-    expect(await page.evaluate((id) => window.__GBDRAW_APP__.labelTextFeatureOverrides[id], target)).toBe('S05 direct label retained');
+    expect(await page.evaluate((id) => ((feature) => window.__GBDRAW_APP__.featureOverrides[JSON.stringify([feature?.record_key, feature?.biological_feature_id])]?.labelText ?? undefined)(window.__GBDRAW_APP__.extractedFeatures.find((item) => item.svg_id === id)), target)).toBe('S05 direct label retained');
     const retained = await snapshot(page);
     expect(retained.result).toContain('S05 direct label retained');
     await page.keyboard.press('Escape');
@@ -879,7 +879,7 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
       error: window.__GBDRAW_APP__.labelReflowLastError
     })), { timeout: 180000 }).toEqual({ busy: false, error: null });
     await expect(page.locator('[data-live-application-feedback]')).toHaveCount(0);
-    expect(await page.evaluate((id) => window.__GBDRAW_APP__.labelTextFeatureOverrides[id], target)).toBe('S05 retry label succeeds');
+    expect(await page.evaluate((id) => ((feature) => window.__GBDRAW_APP__.featureOverrides[JSON.stringify([feature?.record_key, feature?.biological_feature_id])]?.labelText ?? undefined)(window.__GBDRAW_APP__.extractedFeatures.find((item) => item.svg_id === id)), target)).toBe('S05 retry label succeeds');
     expect((await snapshot(page)).result).toContain('S05 retry label succeeds');
     await expect(page.locator('.right-drawer')).toHaveAttribute('aria-hidden', 'false');
   }
@@ -993,7 +993,7 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
   const download = await downloadPromise;
   const saved = readFileSync(await download.path());
   const document = JSON.parse(gunzipSync(saved).toString('utf8'));
-  expect(document.version).toBe(44);
+  expect(document.version).toBe(CURRENT_SESSION_VERSION);
   expect(document.editorState.featureCatalog.items[0].orthogroups.map((group) => group.id)).toEqual(['og_1', 'og_2']);
   expect(await importSession(saved, download.suggestedFilename())).toMatchObject({ status: 'ok' });
   expect(await verifyGroups()).toEqual(before);

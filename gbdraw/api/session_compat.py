@@ -32,7 +32,6 @@ from gbdraw.layout.similarity_alignment import (
     SimilarityAlignmentPlan,
 )
 from gbdraw.session_io import (
-    CURRENT_SESSION_VERSION,
     classify_raw_losat_cache_entry,
     empty_protein_identity_manifest,
     validate_session,
@@ -894,7 +893,8 @@ def promote_legacy_session_similarity_alignment_request(
     if (
         isinstance(session_version, bool)
         or not isinstance(session_version, int)
-        or session_version >= CURRENT_SESSION_VERSION
+        # Session 44 introduced the typed similarity alignment state.
+        or session_version >= 44
     ):
         raise ValidationError(
             "Current Sessions must store typed similarity alignment state."

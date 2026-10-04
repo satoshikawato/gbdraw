@@ -64,9 +64,14 @@ import { reconcileImportedLinearTypographyLink } from '../app/linear-typography.
 import {
   serializeFeatureVisibilityRules,
   normalizeFeatureVisibilityRule,
-  normalizeVisibilityMode,
   splitLegacyVisibilityRules
 } from '../app/feature-visibility.js';
+import { canonicalFeatureOverrides } from './feature-placement.js';
+import {
+  FEATURE_EDIT_MIGRATION_WARNING,
+  RENDERED_ID_FEATURE_EDIT_FIELDS,
+  migrateSessionFeatureEdits
+} from './feature-edit-migration.js';
 import {
   buildSessionFeatureRecoveryPlan,
   classifyFeatureMetadataState,
@@ -180,6 +185,7 @@ import {
   projectArtifactState,
   projectDocumentMetadata,
   projectWebOnlyEditorMetadata,
+  TYPED_DRAFT_SESSION_VERSION,
   validateSessionAuthorityInventory
 } from './session-authority.js';
 import { assertSafeObjectKeysForImport } from './safe-object-keys.js';
@@ -221,11 +227,11 @@ import {
 
 const { nextTick } = window.Vue;
 
-export const SESSION_VERSION = 44;
+export const SESSION_VERSION = 45;
 const CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40;
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
 const SUPPORTED_SESSION_VERSIONS = new Set([
-  27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, SESSION_VERSION
+  27, 28, 29, 30, 31, 32, 33, 39, 40, 41, 42, 44, SESSION_VERSION
 ]);
 const CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
@@ -279,43 +285,27 @@ const normalizeFeatureVisibilityRulesForSession = (rules) => (
   Array.isArray(rules) ? rules.map((rule) => normalizeFeatureVisibilityRule(rule)) : []
 );
 
-const normalizeFeatureVisibilityOverridesForSession = (overrides) => {
-  const normalized = {};
-  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return normalized;
-  Object.entries(overrides).forEach(([featureIdRaw, modeRaw]) => {
-    const featureId = String(featureIdRaw || '').trim();
-    const mode = normalizeVisibilityMode(modeRaw);
-    if (!featureId || mode === 'default') return;
-    normalized[featureId] = mode;
-  });
-  return normalized;
-};
-
-const splitFeatureVisibilityStateForSession = (features = {}) => {
-  if (Array.isArray(features.featureVisibilityManualRules)) {
-    return {
-      manualRules: normalizeFeatureVisibilityRulesForSession(features.featureVisibilityManualRules),
-      overrides: normalizeFeatureVisibilityOverridesForSession(features.featureVisibilityOverrides)
-    };
+// A Session before manual rules had their own field stored the editor's
+// per-feature rows among the rules (`featureVisibilityRules`); its rows keyed
+// by rendered ID join the other rendered-ID edits for migration.
+const splitLegacyFeatureVisibilityRules = (features = {}) => {
+  if (Array.isArray(features.featureVisibilityManualRules) || !Array.isArray(features.featureVisibilityRules)) {
+    return features;
   }
-  if (Array.isArray(features.featureVisibilityRules)) {
-    return splitLegacyVisibilityRules(features.featureVisibilityRules);
-  }
+  const { manualRules, overrides } = splitLegacyVisibilityRules(features.featureVisibilityRules);
   return {
-    manualRules: [],
-    overrides: normalizeFeatureVisibilityOverridesForSession(features.featureVisibilityOverrides)
+    ...features,
+    featureVisibilityManualRules: manualRules,
+    featureVisibilityOverrides: { ...overrides, ...(features.featureVisibilityOverrides || {}) }
   };
 };
 
-const replaceFeatureVisibilityState = (features = {}) => {
-  const { manualRules, overrides } = splitFeatureVisibilityStateForSession(features);
-  state.featureVisibilityManualRules.splice(
-    0,
-    state.featureVisibilityManualRules.length,
-    ...normalizeFeatureVisibilityRulesForSession(manualRules)
-  );
-  replacePlainObject(state.featureVisibilityOverrides, overrides);
-};
+// The identity-keyed per-feature edit draft; a Session or History value is
+// checked as the request rows are (services/feature-placement.js).
+const featureOverridesForState = (value) => Object.fromEntries(
+  canonicalFeatureOverrides(isPlainObject(value) ? value : {})
+    .map((row) => [JSON.stringify([row.recordKey, row.biologicalFeatureId]), row])
+);
 
 const sanitizeExtractedFeatureForSession = (feature) => {
   if (!feature || typeof feature !== 'object' || Array.isArray(feature)) return feature;
@@ -1609,10 +1599,10 @@ const preflightSessionImport = async (sessionData) => {
   )
     ? { ...data.renderRequest, comparisons: [] }
     : data.renderRequest;
-  let currentStoredConfig = sourceSessionVersion < SESSION_VERSION
+  let currentStoredConfig = sourceSessionVersion < TYPED_DRAFT_SESSION_VERSION
     ? withCurrentLinearLabelVisibility(data.config)
     : data.config;
-  if (sourceSessionVersion < SESSION_VERSION && isPlainObject(currentStoredConfig)
+  if (sourceSessionVersion < TYPED_DRAFT_SESSION_VERSION && isPlainObject(currentStoredConfig)
     && Object.prototype.hasOwnProperty.call(currentStoredConfig, 'recordDisplayDrafts')) {
     currentStoredConfig = {
       ...currentStoredConfig,
@@ -1680,7 +1670,7 @@ const preflightSessionImport = async (sessionData) => {
           )
         }
     : data.config;
-  if (sourceSessionVersion < SESSION_VERSION && restoredConfig) {
+  if (sourceSessionVersion < TYPED_DRAFT_SESSION_VERSION && restoredConfig) {
     restoredConfig = withCurrentLinearLabelVisibility(restoredConfig);
   }
   if (sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION && restoredConfig) {
@@ -3448,7 +3438,6 @@ const captureSessionImportTransientState = () => ({
   fileLegendCaptions: Array.from(state.fileLegendCaptions.value || []),
   featureSearch: state.featureSearch.value,
   labelSearch: state.labelSearch.value,
-  featureVisibilitySelectorCache: cloneJsonData(state.featureVisibilitySelectorCache),
   selectedFeatureIds: Array.from(state.selectedFeatureIds.value || []),
   selectedFeatureAnchorId: state.selectedFeatureAnchorId.value,
   featureSelectionStatus: state.featureSelectionStatus.value,
@@ -3508,16 +3497,6 @@ const restoreSessionImportTransientState = (snapshot) => {
   state.fileLegendCaptions.value = new Set(snapshot.fileLegendCaptions);
   state.featureSearch.value = snapshot.featureSearch;
   state.labelSearch.value = snapshot.labelSearch;
-  if (typeof state.replaceFeatureVisibilitySelectorCacheOwner === 'function') {
-    state.replaceFeatureVisibilitySelectorCacheOwner(
-      cloneJsonData(snapshot.featureVisibilitySelectorCache)
-    );
-  } else {
-    replacePlainObject(
-      state.featureVisibilitySelectorCache,
-      cloneJsonData(snapshot.featureVisibilitySelectorCache)
-    );
-  }
   state.selectedFeatureIds.value = new Set(snapshot.selectedFeatureIds);
   state.selectedFeatureAnchorId.value = snapshot.selectedFeatureAnchorId;
   state.featureSelectionStatus.value = snapshot.featureSelectionStatus;
@@ -3668,6 +3647,8 @@ const resetSessionBaseline = () => {
   state.lastRunInfo.value = null;
   state.trackSlotResolvedGeometry.value = null;
   state.annotationWarnings.value = [];
+  state.featureIdentityNotices.value = [];
+  state.featureEditRemovalCount.value = 0;
   state.comparisonWarnings.value = [];
   applyFiles(null);
   state.losatCache.value = new Map();
@@ -3686,23 +3667,14 @@ const resetSessionBaseline = () => {
   clearObject(state.orthogroupDormantOverrides);
   state.extractedFeatures.value = [];
   if (state.biologicalFeatures) state.biologicalFeatures.value = [];
-  state.featureSelectorSafetyScope.value = [];
   state.featureRecordIds.value = [];
   state.selectedFeatureRecordIdx.value = 0;
   clearObject(state.featureColorOverrides);
   state.featureVisibilityManualRules.splice(0);
-  clearObject(state.featureVisibilityOverrides);
-  if (typeof state.replaceFeatureVisibilitySelectorCacheOwner === 'function') {
-    state.replaceFeatureVisibilitySelectorCacheOwner({});
-  } else {
-    clearObject(state.featureVisibilitySelectorCache);
-  }
+  clearObject(state.featureOverrides);
   clearObject(state.featureStrokeOverrides);
-  clearObject(state.labelTextFeatureOverrides);
   state.canonicalLabelOverrideRows.value = [];
   clearObject(state.labelTextBulkOverrides);
-  clearObject(state.labelTextFeatureOverrideSources);
-  clearObject(state.labelVisibilityOverrides);
   state.labelOverrideBuildWarning.value = '';
   state.generatedMode.value = 'circular';
   state.generatedLegendPosition.value = 'left';
@@ -3858,17 +3830,13 @@ export const applyResultsData = (resultsData = [], ui = {}) => {
 export const buildFeatureStateData = () => ({
   extractedFeatures: sanitizeExtractedFeaturesForSession(state.extractedFeatures.value),
   biologicalFeatures: sanitizeExtractedFeaturesForSession(state.biologicalFeatures?.value),
-  featureSelectorSafetyScope: cloneJsonData(state.featureSelectorSafetyScope.value),
   featureRecordIds: cloneJsonData(state.featureRecordIds.value),
   selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
   featureColorOverrides: cloneJsonData(state.featureColorOverrides),
   featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(state.featureVisibilityManualRules),
-  featureVisibilityOverrides: normalizeFeatureVisibilityOverridesForSession(state.featureVisibilityOverrides),
-  labelTextFeatureOverrides: cloneJsonData(state.labelTextFeatureOverrides),
+  featureOverrides: featureOverridesForState(state.featureOverrides),
   labelOverrideRows: cloneJsonData(state.canonicalLabelOverrideRows.value),
-  labelTextBulkOverrides: cloneJsonData(state.labelTextBulkOverrides),
-  labelTextFeatureOverrideSources: cloneJsonData(state.labelTextFeatureOverrideSources),
-  labelVisibilityOverrides: cloneJsonData(state.labelVisibilityOverrides)
+  labelTextBulkOverrides: cloneJsonData(state.labelTextBulkOverrides)
 });
 
 export const applyFeatureStateData = (features = {}) => {
@@ -3880,9 +3848,6 @@ export const applyFeatureStateData = (features = {}) => {
       ? features.biologicalFeatures
       : [];
   }
-  state.featureSelectorSafetyScope.value = Array.isArray(features.featureSelectorSafetyScope)
-    ? features.featureSelectorSafetyScope
-    : [];
   state.featureRecordIds.value = Array.isArray(features.featureRecordIds)
     ? features.featureRecordIds
     : [];
@@ -3890,14 +3855,16 @@ export const applyFeatureStateData = (features = {}) => {
     ? features.selectedFeatureRecordIdx
     : 0;
   replacePlainObject(state.featureColorOverrides, cloneJsonObject(features.featureColorOverrides));
-  replaceFeatureVisibilityState(features);
-  replacePlainObject(state.labelTextFeatureOverrides, cloneStringMap(features.labelTextFeatureOverrides));
+  state.featureVisibilityManualRules.splice(
+    0,
+    state.featureVisibilityManualRules.length,
+    ...normalizeFeatureVisibilityRulesForSession(features.featureVisibilityManualRules || [])
+  );
+  replacePlainObject(state.featureOverrides, featureOverridesForState(features.featureOverrides));
   state.canonicalLabelOverrideRows.value = Array.isArray(features.labelOverrideRows)
     ? cloneJsonData(features.labelOverrideRows)
     : [];
   replacePlainObject(state.labelTextBulkOverrides, cloneStringMap(features.labelTextBulkOverrides));
-  replacePlainObject(state.labelTextFeatureOverrideSources, cloneStringMap(features.labelTextFeatureOverrideSources));
-  replacePlainObject(state.labelVisibilityOverrides, cloneJsonObject(features.labelVisibilityOverrides));
 };
 
 export const buildOrthogroupStateData = () => ({
@@ -4132,6 +4099,8 @@ const exportSessionDocument = async (
       ...(state.trackSlotResolvedGeometry.value
         ? { trackSlotGeometry: cloneJsonData(state.trackSlotResolvedGeometry.value) } : {}),
       annotationWarnings: cloneJsonData(state.annotationWarnings.value),
+      ...(state.featureIdentityNotices.value.length
+        ? { featureIdentityNotices: cloneJsonData(state.featureIdentityNotices.value) } : {}),
       ...(state.comparisonWarnings.value.length
         ? { comparisonWarnings: cloneJsonData(state.comparisonWarnings.value) } : {})
     } } : {}),
@@ -4139,12 +4108,9 @@ const exportSessionDocument = async (
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
       featureColorOverrides: cloneJsonData(state.featureColorOverrides),
       featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(state.featureVisibilityManualRules),
-      featureVisibilityOverrides: normalizeFeatureVisibilityOverridesForSession(state.featureVisibilityOverrides),
-      labelTextFeatureOverrides: cloneJsonData(state.labelTextFeatureOverrides),
+      featureOverrides: featureOverridesForState(state.featureOverrides),
       labelOverrideRows: cloneJsonData(state.canonicalLabelOverrideRows.value),
-      labelTextBulkOverrides: cloneJsonData(state.labelTextBulkOverrides),
-      labelTextFeatureOverrideSources: cloneJsonData(state.labelTextFeatureOverrideSources),
-      labelVisibilityOverrides: cloneJsonData(state.labelVisibilityOverrides)
+      labelTextBulkOverrides: cloneJsonData(state.labelTextBulkOverrides)
     },
     editorState,
     orthogroupState: {
@@ -4255,7 +4221,7 @@ const importSessionDocument = async (e, options = {}) => {
     const settingsOnly = isSettingsOnlySessionDocument(data);
     const currentSchemaSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
     const committedMode = projectionResult?.renderState.mode;
-    const savedCurrentWriterMode = sourceSessionVersion === SESSION_VERSION
+    const savedCurrentWriterMode = sourceSessionVersion >= TYPED_DRAFT_SESSION_VERSION
       ? data.ui?.mode
       : null;
     const ui = canonicalSession
@@ -4320,13 +4286,13 @@ const importSessionDocument = async (e, options = {}) => {
         'featureRecordIds'
       ].forEach((field) => delete artifactFeatureState[field]);
     }
-    const features = canonicalSession
+    let features = splitLegacyFeatureVisibilityRules(canonicalSession
       ? {
           ...projectionResult.renderState.semanticFeatureState,
           ...(currentCatalogFeatureState || {}),
           ...artifactFeatureState
         }
-      : (data.features || {});
+      : (data.features || {}));
     const catalogSequenceSources = currentSchemaSession
       ? (currentCatalogFeatureState?.sequenceSources || [])
       : [];
@@ -4452,6 +4418,40 @@ const importSessionDocument = async (e, options = {}) => {
         });
       } catch (error) {
         legacyFeatureRecoveryPlan = { status: 'failed', warning: normalizeUserFacingError(error).summary };
+      }
+    }
+    // Session 45 keys per-feature edits by source identity: an older Session's
+    // rendered-ID edits are mapped through its saved catalog, or without one
+    // through its recovered feature metadata, once (design Q4 4.3).
+    let droppedFeatureEditCount = 0;
+    if (sourceSessionVersion < SESSION_VERSION) {
+      const recovered = legacyFeatureRecoveryPlan?.recoveredFeatureState;
+      // Recovery realigns the old rendered IDs with the recovered metadata
+      // when it can; a map it could not realign keeps the saved keys.
+      const migration = migrateSessionFeatureEdits({
+        features: recovered ? {
+          ...features,
+          ...Object.fromEntries(RENDERED_ID_FEATURE_EDIT_FIELDS
+            .filter((field) => Object.keys(recovered[field] || {}).length > 0)
+            .map((field) => [field, recovered[field]]))
+        } : features,
+        catalog: validatedSessionCatalog,
+        legacy: validatedSessionCatalog ? null : {
+          features: [
+            recovered?.biologicalFeatures, recovered?.extractedFeatures,
+            features.biologicalFeatures, features.extractedFeatures
+          ].find((list) => Array.isArray(list) && list.length > 0) || [],
+          records: data.renderRequest?.records
+        }
+      });
+      features = migration.features;
+      droppedFeatureEditCount = migration.droppedCount;
+      if (recovered) {
+        legacyFeatureRecoveryPlan.recoveredFeatureState = {
+          ...recovered,
+          featureOverrides: features.featureOverrides,
+          labelOverrideRows: features.labelOverrideRows
+        };
       }
     }
     recordSessionLifecycleEvent('session-candidate-prepared');
@@ -4645,6 +4645,9 @@ const importSessionDocument = async (e, options = {}) => {
     state.annotationWarnings.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.annotationWarnings || []
     );
+    state.featureIdentityNotices.value = cloneJsonData(
+      projectionResult?.artifactState?.runMetadata?.featureIdentityNotices || []
+    );
     state.comparisonWarnings.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.comparisonWarnings || []
     );
@@ -4699,7 +4702,9 @@ const importSessionDocument = async (e, options = {}) => {
     if (!options.isCurrent()) throw new Error('Session loading was canceled.');
     await options.afterImport?.({ status: 'ok', decompressedCharacters: candidate.characters, isCurrent: options.isCurrent });
     if (!options.isCurrent()) throw new Error('Session loading was canceled.');
-    alert('Session loaded successfully!');
+    alert(droppedFeatureEditCount > 0
+      ? `Session loaded successfully! ${FEATURE_EDIT_MIGRATION_WARNING(droppedFeatureEditCount)}`
+      : 'Session loaded successfully!');
     return {
       status: 'ok',
       data,

@@ -1,9 +1,11 @@
 // CW-03 (docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#computation-ownership):
-// empty label and visibility overrides build no feature metadata or index.
+// without bulk label edits the label table projection reads no label or
+// feature input. Per-feature edits are identity rows (design Q4), which the
+// request carries without a table.
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const { buildLabelOverrideRows, buildLabelOverrideTsv } = await import(
+const { buildBulkLabelProjection } = await import(
   '../../gbdraw/web/js/app/feature-editor/label-override-table.js'
 );
 
@@ -11,54 +13,42 @@ const metrics = [];
 globalThis.__GBDRAW_TEST_HOOKS__ = { onStructuralMetric: (metric) => metrics.push(metric) };
 const buildCount = () => metrics.filter(({ name }) => name === 'labelOverrideTableBuildCount').length;
 
-// Any read of the feature inputs throws, so an eager metadata build cannot pass.
+// Any read of the label inputs throws, so an eager build cannot pass.
 const sentinel = () => new Proxy([], {
   get(target, key) {
     if (key === Symbol.iterator || key === 'length' || typeof key === 'string') {
-      throw new Error('CW-03: feature metadata input was read');
+      throw new Error('CW-03: label input was read');
     }
     return Reflect.get(target, key);
   }
 });
-const features = [
-  { svg_id: 'f1', record_id: 'rec', feature_type: 'CDS', qualifiers: { gene: ['alpha'], locus_tag: ['L1'] } },
-  { svg_id: 'f2', record_id: 'rec', feature_type: 'CDS', qualifiers: { gene: ['beta'], locus_tag: ['L2'] } }
-];
-const labels = [{ key: 'k1', featureId: 'f1', sourceText: 'alpha', text: 'alpha' }];
+const identity = (featureId) => JSON.stringify(['rec', featureId]);
+const labelTargets = [{ identityKey: identity('f1'), sourceText: 'alpha' }];
 
-test('the metadata sentinel is armed', () => {
-  assert.throws(() => buildLabelOverrideRows({ f1: 'renamed' }, {}, {
-    extractedFeatures: sentinel(), editableLabels: []
-  }), /CW-03: feature metadata input was read/);
+test('the input sentinel is armed', () => {
+  assert.throws(() => buildBulkLabelProjection({ alpha: 'ALPHA' }, {
+    labelTargets: sentinel(), featureOverrides: {}
+  }), /CW-03: label input was read/);
 });
 
-test('empty overrides return an empty table without reading feature inputs', () => {
+test('without bulk label edits the projection reads no input', () => {
   metrics.length = 0;
-  for (const visibilityOverrides of [undefined, {}]) {
-    const result = buildLabelOverrideTsv({}, {}, {
-      extractedFeatures: sentinel(), editableLabels: sentinel(), visibilityOverrides
-    });
-    assert.equal(result.tsv, '');
-    assert.deepEqual(result.rows, []);
-  }
+  const result = buildBulkLabelProjection({}, { labelTargets: sentinel(), featureOverrides: sentinel() });
+  assert.deepEqual(result, { bulkLabelText: {}, rows: [] });
   assert.equal(buildCount(), 0);
 });
 
-test('each non-empty override kind builds exactly once and emits its row', () => {
-  const cases = [
-    ['label text', { f1: 'renamed' }, {}, {}],
-    ['visibility', {}, {}, { f2: 'off' }],
-    ['bulk', {}, { alpha: 'ALPHA' }, {}]
-  ];
-  for (const [kind, featureOverrides, bulkOverrides, visibilityOverrides] of cases) {
-    metrics.length = 0;
-    const result = buildLabelOverrideTsv(featureOverrides, bulkOverrides, {
-      extractedFeatures: features, editableLabels: labels, visibilityOverrides
-    });
-    // Positive control: the probe is live and records the real construction.
-    assert.equal(buildCount(), 1, kind);
-    assert.equal(metrics[0].featureCount, features.length, kind);
-    assert.equal(result.rows.length > 0, true, kind);
-    assert.match(result.tsv, /\t/, kind);
-  }
+test('a bulk edit builds once: known labels take its text, the rest a table rule', () => {
+  metrics.length = 0;
+  const result = buildBulkLabelProjection({ alpha: 'ALPHA', gamma: 'GAMMA', delta: '' }, {
+    labelTargets,
+    featureOverrides: {
+      [identity('f2')]: { recordKey: 'rec', biologicalFeatureId: 'f2', labelSourceText: 'alpha' }
+    }
+  });
+  assert.equal(buildCount(), 1);
+  assert.equal(metrics[0].featureCount, labelTargets.length);
+  assert.deepEqual(result.bulkLabelText, { [identity('f1')]: 'ALPHA', [identity('f2')]: 'ALPHA' });
+  // A blank text hides labels; only the table rule says that.
+  assert.deepEqual(result.rows, ['*\t*\tlabel\t^delta$\t', '*\t*\tlabel\t^gamma$\tGAMMA']);
 });

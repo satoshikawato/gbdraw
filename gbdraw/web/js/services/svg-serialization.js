@@ -91,6 +91,19 @@ export const serializeCleanSvg = (svg, options = {}) => {
   return new XMLSerializer().serializeToString(clone);
 };
 
+// The standalone popup reads label text by rendered ID; each per-feature label
+// edit (identity-keyed, design Q4 6.4) is projected onto the rendered IDs of
+// the exported Result's catalog item.
+const renderedLabelTextOverrides = (state, resultIndex) => {
+  const overrides = {};
+  const item = state.featureCatalog?.value?.items?.[resultIndex];
+  (Array.isArray(item?.features) ? item.features : []).forEach((feature) => {
+    const text = state.featureOverrides?.[JSON.stringify([feature?.recordKey, feature?.biologicalFeatureId])]?.labelText;
+    if (typeof text === 'string' && text) overrides[feature.svgId] = text;
+  });
+  return overrides;
+};
+
 // Capture the selected Result before any lazy export modules or libraries load.
 export const captureSvgExport = (state, { interactive = false } = {}) => {
   const resultIndex = Number(state.selectedResultIndex.value);
@@ -109,7 +122,7 @@ export const captureSvgExport = (state, { interactive = false } = {}) => {
       editableLabels: (state.editableLabels?.value || []).map(({ featureId, text, sourceText }) => ({
         featureId, text, sourceText
       })),
-      labelTextFeatureOverrides: { ...state.labelTextFeatureOverrides },
+      labelTextFeatureOverrides: renderedLabelTextOverrides(state, resultIndex),
       labelTextBulkOverrides: { ...state.labelTextBulkOverrides },
       orthogroupNameOverrides: { ...state.orthogroupNameOverrides },
       orthogroupDescriptionOverrides: { ...state.orthogroupDescriptionOverrides }

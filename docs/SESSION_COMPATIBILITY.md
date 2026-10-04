@@ -8,6 +8,31 @@ session files, canonical render requests, and saved LOSAT results. The concise
 documents current support. Tutorials and the FAQ describe what a user should
 do; release notes record when a format changed.
 
+## Unreleased: Session 45 and Web feature edits by source identity
+
+Session version 45 stores the Web app's Feature visibility, Label visibility,
+and label text edits in `features.featureOverrides`: one row per
+original-source feature, named by `recordKey` and `biologicalFeatureId`, with
+the same fields as request `diagramOptions.featureOverrides` and the label's
+original text (`labelSourceText`). The four rendered-ID maps
+(`featureVisibilityOverrides`, `labelTextFeatureOverrides`,
+`labelTextFeatureOverrideSources`, `labelVisibilityOverrides`) are rejected in
+Session 45. The Web app now sends these rows in the request, loads a request
+whose `featureOverrides` array is not empty, and draws them in the live preview
+by identity.
+
+The feature catalog is schema 5. Each drawn feature records the hash,
+location, and record location it was drawn with (`drawnSelector`), which live
+rule matching uses. A schema 3 or 4 catalog reads as schema 5 with no selector
+values; until the next Generate, live matching then leaves rules on those
+fields to Generate.
+
+Loading a Session 44, or a Web Session 31–33, moves each rendered-ID edit onto
+its feature: a rendered ID in the saved feature catalog names its feature;
+otherwise its `_record_<n>` and `__instance_` suffixes are removed and the edit
+moves only when exactly one feature remains. Other edits are dropped and Load
+reports how many.
+
 ## Unreleased: request schema 9 and feature identity overrides
 
 Session version 44 is unchanged. Canonical request schema 9 adds the required

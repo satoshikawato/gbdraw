@@ -2,20 +2,32 @@
 
 # Session and request compatibility
 
-Current writers emit session version 44 and canonical `renderRequest` schema 9.
+Current writers emit session version 45 and canonical `renderRequest` schema 9.
 
 | Persisted format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 44 | 27–33, 39–42, and 44 |
+| gbdraw session | 45 | 27–33, 39–42, 44, and 45 |
 | Canonical `renderRequest` | 9 | 1, 2, 5, 6, 7, 8, and 9 |
-| Web file bindings | 2 | 1; 2 in sessions 41–42 and 44 |
+| Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 45 |
 
 Session 44 documents written with canonical request schema 7 or 8 remain
-readable. Current saves promote that request to schema 9 while retaining feature
-catalog schema 4 and the saved preview until the next Generate. Schema 9 adds
+readable. Current saves promote that request to schema 9 and the Session to 45,
+and keep the saved preview until the next Generate. Schema 9 adds
 `diagramOptions.featureOverrides` (see
 [Feature identity overrides](typed-requests.md#feature-identity-overrides));
 a schema-8 request reads as one without overrides.
+
+Session 45 stores the Web app's per-feature edits (Feature visibility, Label
+visibility, and label text) in `features.featureOverrides`, one row per
+original-source feature named by `recordKey` and `biologicalFeatureId`, as the
+request does. Its feature catalog is schema 5, which records the selector
+values each drawn feature had (`drawnSelector`). Loading a Session 44, or a
+Web Session 31–33, moves its edits keyed by rendered feature ID onto the
+feature they name: a rendered ID in the saved feature catalog names its
+feature; otherwise a copy or record suffix is removed when exactly one feature
+remains. An edit that names no feature is dropped, and the Web app reports how
+many. A catalog of schema 3 or 4 reads as schema 5 without selector values
+until the next Generate.
 
 Session versions 34–38 and request schemas 3–4 were development-only and are
 rejected. Do not change a version number, resource hash, or runtime binding by
@@ -97,7 +109,7 @@ its components for rendering.
 Schema-1 ordinary bindings and File arrays remain supported. Existing sessions
 without explicit bindings retain their request-derived source initialization;
 original components cannot be recovered if their membership was never saved.
-Schema 2 is accepted with sessions 41–42 and 44. Unknown or malformed bindings reject
+Schema 2 is accepted with sessions 41–42, 44, and 45. Unknown or malformed bindings reject
 before import replaces the current work. Older schema-1 readers reject new
 schema-2 documents; changing the schema number does not convert them.
 
@@ -186,9 +198,9 @@ this variant. Auxiliary files retain their ordinary resource bindings and bytes.
 Python can load and materialize a settings-only Session. CLI replay,
 `session_to_request()` and `render_session()` report that it has no biological
 render request. Existing supported full Sessions remain readable. Current
-settings-only writers emit session 44, while current readers also accept the
-released session-42 form. Readers whose maximum version is 42
-reject newly written session-44 files.
+settings-only writers emit session 45, while current readers also accept the
+session-42 and session-44 forms. Readers whose maximum version is 42 or 44
+reject newly written session-45 files.
 
 Older settings JSON without a `format` field (containing `form` or `adv`) still
 uses the legacy configuration import. It does not need a render request. This
@@ -214,7 +226,7 @@ request. Rendering that request alone does not replay saved comparison
 artifacts; use `render_session()` when those artifacts belong in the result.
 
 `render_request()` accepts current typed requests, not historical session
-envelopes. Public typed session conversion accepts full versions 31–33, 39–42, and 44;
+envelopes. Public typed session conversion accepts full versions 31–33, 39–42, 44, and 45;
 versions 27–30 are CLI replay inputs only. Canonical schema 9 retains schema 7's
 display values and schema 6's input cardinality, including selectorless `all`
 inputs. Resolve a typed request

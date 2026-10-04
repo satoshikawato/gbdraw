@@ -2661,10 +2661,14 @@
                                         <input :value="item.id" @change="renameAnnotation(set, item, $event.target.value)" aria-label="Annotation id" class="form-input px-1 py-0.5 text-[10px]" placeholder="annotation_id" :disabled="!semanticMutationAvailable">
                                         <select :value="item.target.kind" @change="setAnnotationTargetKind(item, $event.target.value)" aria-label="Annotation target kind" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable">
                                             <option value="coordinateSpan">Coordinates</option><option value="featureSpan">Feature</option>
+                                            <option v-if="item.target.kind === 'featureIdentity'" value="featureIdentity" disabled>Source feature</option>
                                         </select>
                                         <button type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotation(set, item)" title="Delete annotation" :disabled="!semanticMutationAvailable"><i class="ph ph-trash"></i></button>
                                     </div>
-                                    <div>
+                                    <p v-if="item.target.kind === 'featureIdentity'" class="text-[10px] text-slate-600" data-annotation-feature-identity>
+                                        Source feature <span class="font-mono">{{ item.target.biologicalFeatureId }}</span> of record <span class="font-mono">{{ item.target.recordKey }}</span>
+                                    </p>
+                                    <div v-if="item.target.kind !== 'featureIdentity'">
                                         <label class="mb-0.5 flex items-center gap-1 text-[9px] text-slate-500">
                                             Target record
                                             <span v-if="annotationRecordRequired()" class="font-semibold text-red-600">Required</span>
@@ -2689,7 +2693,7 @@
                                         <input type="number" min="1" v-model.number="item.target.start" aria-label="Annotation start (1-based)" class="form-input px-1 py-0.5 text-[10px]" placeholder="Start (1-based)" :disabled="!semanticMutationAvailable">
                                         <input type="number" min="1" v-model.number="item.target.end" aria-label="Annotation end (inclusive)" class="form-input px-1 py-0.5 text-[10px]" placeholder="End (inclusive)" :disabled="!semanticMutationAvailable">
                                     </div>
-                                    <div v-else class="grid grid-cols-2 gap-1">
+                                    <div v-else-if="item.target.kind === 'featureSpan'" class="grid grid-cols-2 gap-1">
                                         <input v-model.trim="item.target.selectors[0].key" aria-label="Annotation qualifier" class="form-input px-1 py-0.5 text-[10px]" placeholder="Qualifier (e.g. locus_tag)" :disabled="!semanticMutationAvailable">
                                         <input v-model.trim="item.target.selectors[0].value" aria-label="Annotation feature value" class="form-input px-1 py-0.5 text-[10px]" placeholder="Feature value" :disabled="!semanticMutationAvailable">
                                     </div>
@@ -4924,6 +4928,16 @@
                         {{ warning.setId }}/{{ warning.annotationId }} · record #{{ warning.recordIndex + 1 }} ({{ warning.recordId }}): {{ warning.message }}
                     </p>
                 </div>
+                <div v-if="featureIdentityNoticeSummary && !processing"
+                     role="status" aria-live="polite" aria-atomic="true" data-testid="feature-identity-notice"
+                     class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
+                    <p v-if="featureIdentityNoticeSummary.dormant">{{ featureIdentityNoticeSummary.dormant }} feature edit(s) apply to features outside the current crop or display; they apply again when those features are drawn.</p>
+                    <p v-if="featureIdentityNoticeSummary.removed">Removed {{ featureIdentityNoticeSummary.removed }} feature edit(s) whose feature the replaced source no longer has.</p>
+                    <p v-if="featureIdentityNoticeSummary.unmatched" class="flex flex-wrap items-center gap-2">
+                        <span>{{ featureIdentityNoticeSummary.unmatched }} feature edit(s) name a feature the source does not have.</span>
+                        <button type="button" class="btn btn-secondary text-xs h-7 px-2" @click="removeUnmatchedFeatureEdits" :disabled="!semanticMutationAvailable">Remove {{ featureIdentityNoticeSummary.unmatched }} unmatched feature edits</button>
+                    </p>
+                </div>
                 <div v-if="comparisonWarnings.length && !processing"
                      role="status" aria-live="polite" aria-atomic="true" data-testid="comparison-id-notice"
                      class="border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0 break-words">
@@ -5427,7 +5441,7 @@
                                     @change="updateClickedFeatureVisibility(clickedFeature.featureVisibility)"
                                     data-history-managed
                                     aria-label="Feature visibility"
-                                    class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :disabled="!semanticMutationAvailable">
+                                    class="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" :disabled="!semanticMutationAvailable || !clickedFeature.identityEditable">
                                 <option value="default">Default (follow feature filters)</option>
                                 <option value="on">On (force show)</option>
                                 <option value="off">Off (hide and exclude from matching)</option>
@@ -5435,6 +5449,9 @@
                             </select>
                             <p class="text-[10px] text-slate-400 mt-1">
                                 Choose a scope when similarity-group, product, or protein ID rules are available.
+                            </p>
+                            <p v-if="!clickedFeature.identityEditable" class="text-[10px] text-amber-700 mt-1">
+                                Generate the diagram again to edit this feature's visibility.
                             </p>
                         </div>
                         <div>

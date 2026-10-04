@@ -6,6 +6,13 @@ const { expect } = require('@playwright/test');
 const CURRENT_REQUEST_SCHEMA = Number(readFileSync(
   join(__dirname, '..', '..', '..', 'gbdraw', 'web', 'js', 'services', 'session-request.js'), 'utf8'
 ).match(/^export const CANONICAL_REQUEST_SCHEMA = (\d+);$/m)[1]);
+// The current Session writer version and feature catalog schema, from their owners.
+const CURRENT_SESSION_VERSION = Number(readFileSync(
+  join(__dirname, '..', '..', '..', 'gbdraw', 'session_io.py'), 'utf8'
+).match(/^CURRENT_SESSION_VERSION = (\d+)$/m)[1]);
+const CURRENT_FEATURE_CATALOG_SCHEMA = Number(readFileSync(
+  join(__dirname, '..', '..', '..', 'gbdraw', 'web', 'js', 'services', 'feature-catalog.js'), 'utf8'
+).match(/^export const FEATURE_CATALOG_SCHEMA = (\d+);$/m)[1]);
 
 const DEFAULT_APP_TIMEOUT_MS = 180_000;
 const pageDiagnostics = new WeakMap();
@@ -474,7 +481,7 @@ const snapshotUserOwnedState = (page) => page.evaluate(async () => {
   const editor = config.buildEditorStateData();
   delete editor.featureCatalog;
   const features = config.buildFeatureStateData();
-  for (const key of ['extractedFeatures', 'biologicalFeatures', 'featureSelectorSafetyScope']) {
+  for (const key of ['extractedFeatures', 'biologicalFeatures']) {
     delete features[key];
   }
   const orthogroups = config.buildOrthogroupStateData();
@@ -574,7 +581,9 @@ const assertSingleWorkerRun = async (page) => {
 };
 
 module.exports = {
+  CURRENT_FEATURE_CATALOG_SCHEMA,
   CURRENT_REQUEST_SCHEMA,
+  CURRENT_SESSION_VERSION,
   assertDiagramWorkerIdle,
   assertOperationHealth,
   readErrorSignature,

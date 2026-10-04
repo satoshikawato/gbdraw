@@ -90,6 +90,8 @@ in the same change.
 | Canonical request/session projection and equivalence | `js/services/session-request.js` |
 | Current active-config defaults, inventory, and validation | `js/services/session-active-config-contract.js` |
 | Historical Gallery session migration | `js/services/gallery-session-migration.js` |
+| Per-feature edits and Feature placements by source identity (draft key, row checks, request rows, notices) | `js/services/feature-placement.js` |
+| Rendered-ID feature edits of Sessions 31–33 and 44 onto identity rows | `js/services/feature-edit-migration.js` |
 | Gallery publication preparation, finalization, and readiness | `js/services/gallery-session-publication.js` |
 | Save/load coordination | `js/services/config.js` |
 | History transactions and availability | `js/services/history.js`, `js/app/history-inputs.js`, `js/services/history-snapshot.js` |
@@ -204,10 +206,14 @@ Guards:
 ### R2: Lifetime of editor intent
 
 Editor overrides are created, pruned, or deleted only by an explicit Reset or
-Import, Undo or Redo, a Session replacement, or the owner reconcile inside a
+Import, Undo or Redo, a Session replacement, the owner reconcile inside a
 successful source-replacing Generate (`pruneUnmatchedFeatureOverrides` in
-`app/feature-visibility.js`). Result selection, mount, record selection, mode
-change, hiding, and reflow never touch them.
+`app/feature-visibility.js`), or **Remove N unmatched feature edits**
+(`removeUnresolvedFeatureEdits`). Result selection, mount, record selection,
+mode change, hiding, and reflow never touch them. Per-feature edits
+(`state.featureOverrides`) and Feature placements are keyed by
+`JSON.stringify([recordKey, biologicalFeatureId])`; a request carries only the
+rows of its own records, and the other mode's rows stay in the draft.
 
 Guards: `tests/web/non-edit-state-preservation.playwright.spec.js` with
 `tests/web/non-edit-state-diff.test.mjs` (user-owned state is identical before
@@ -228,7 +234,10 @@ on another batch Result projects only its shared legend intent onto the
 displayed Result (`reconcileLegendEntries` with the step's other side, B19), so
 no Result gains or loses an entry that only one Result draws. The displayed
 population comes from the mounted Result's committed metadata
-(`renderedFeatureIdentities`), not from a second selection ref. A dialog's
+(`renderedFeatureIdentities`), not from a second selection ref. Per-feature
+edits reach a Result through its catalog features' identities
+(`resultRenderedFeatures` in `services/feature-catalog.js`), so every copy of
+a feature in every Result shows the same edit. A dialog's
 reactive object holds display values only, never a copy of an owner's data.
 
 Guards: `tests/web/gui-audit-20260930-editor.playwright.spec.js` (a Result shows
@@ -433,12 +442,11 @@ canonical request builder, generated-table serialization, or full feature
 metadata construction.
 
 Current owners in the initial automated scope:
-- The generated label-override table is owned by
-  `app/feature-editor/label-override-table.js` (`buildLabelOverrideRows`).
-  `services/session-request.js` (`addGeneratedTableResources`) serializes it
-  into the canonical request.
-- Feature-selector metadata and the uniqueness index are owned by
-  `app/feature-selector.js`.
+- The bulk label projection is owned by
+  `app/feature-editor/label-override-table.js` (`buildBulkLabelProjection`).
+  `services/session-request.js` builds it once per request
+  (`requestLabelProjection`) and writes its identity-row label text and its
+  `* * label` table rows into the canonical request.
 - Observation uses `services/runtime-test-hooks.js` (`recordStructuralMetric`),
   History `getDiagnostics()`, and the Worker tracking in
   `tests/web/helpers/app-lifecycle.cjs`.
@@ -454,6 +462,8 @@ state and the persisted/rendered model. It owns:
 - Linear record/group topology;
 - output-prefix and per-batch output projection;
 - explicit track-slot projection;
+- per-feature edit and Feature placement rows (`diagramOptions.featureOverrides`
+  and `featurePlacements`, built by `services/feature-placement.js`);
 - the current `ui.layoutPreferences` representation.
 
 `services/config.js` coordinates user-facing save and load actions. It must not

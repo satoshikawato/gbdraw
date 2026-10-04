@@ -2,10 +2,11 @@ import { createDefaultAdv, createDefaultCircularConservation, createDefaultForm,
 import { resolveActiveLayoutPreference } from '../app/layout-preferences.js';
 import { migrateLegacyLinearLabelVisibility } from '../app/linear-label-visibility.js';
 import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
-import { migrateLegacyFeatureCatalog } from './feature-catalog.js';
+import { FEATURE_CATALOG_SCHEMA, migrateLegacyFeatureCatalog } from './feature-catalog.js';
+import { migrateSessionFeatureEdits } from './feature-edit-migration.js';
 import { adoptCurrentSessionResources } from './session-resource-backing.js';
 import { defaultFeatureRendering } from '../utils/feature-rendering.js';
-const CURRENT_VERSION = 44, CURRENT_REQUEST_SCHEMA = 9, ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
+const CURRENT_VERSION = 45, CURRENT_REQUEST_SCHEMA = 9, ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
 const ARTIFACT_FIELDS = ['results', 'features', 'editorState', 'orthogroupState', 'runMetadata', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest'];
 // A published Gallery file carries no draft intent for its unused mode (GUI
 // remediation S00 decision 1). These fields, read only by the other mode, are
@@ -169,14 +170,20 @@ export const createGallerySessionPublication = (owners) => {
           } : {})
         }
       : session?.config,
-    editorState: session?.editorState?.featureCatalog?.schema === 3
+    editorState: [3, 4].includes(session?.editorState?.featureCatalog?.schema)
+      && session.editorState.featureCatalog.schema !== FEATURE_CATALOG_SCHEMA
       ? {
           ...session.editorState,
           featureCatalog: migrateLegacyFeatureCatalog(
             session.editorState.featureCatalog
           )
         }
-      : session?.editorState
+      : session?.editorState,
+    // Session 45 keys per-feature edits by source identity (design Q4 4.3).
+    features: migrateSessionFeatureEdits({
+      features: session?.features,
+      catalog: session?.editorState?.featureCatalog || null
+    }).features
   });
   const admit = (session) => {
     const version = Number(session?.version);
@@ -193,7 +200,7 @@ export const createGallerySessionPublication = (owners) => {
       }
       return isCliWritten(session) ? validateEnvelope(session) : validateCurrent(session);
     }
-    if ([40, 41, 42].includes(version)) return validateCurrent(promoteVisibilityState({ ...session, version: CURRENT_VERSION,
+    if ([40, 41, 42, 44].includes(version)) return validateCurrent(promoteVisibilityState({ ...session, version: CURRENT_VERSION,
       renderRequest: publicationCanonicalRequest(
         session.renderRequest,
         owners.promoteRequest,
@@ -202,7 +209,7 @@ export const createGallerySessionPublication = (owners) => {
           legacyOrthogroupState: session.orthogroupState || null
         }
       ) }));
-    if (!HISTORICAL_VERSIONS.has(version)) throw new Error(`Gallery publication supports current version 44 or historical versions 31-33/39-42; received ${String(session?.version)}.`);
+    if (!HISTORICAL_VERSIONS.has(version)) throw new Error(`Gallery publication supports current version ${CURRENT_VERSION} or historical versions 31-33/39-44; received ${String(session?.version)}.`);
     return validateCurrent(promoteVisibilityState(owners.promoteSession(session)));
   };
   const rebuild = (session) => rebuildIntent(session, owners);

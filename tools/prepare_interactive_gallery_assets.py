@@ -21,11 +21,19 @@ from gbdraw.render.export import convert_svg_with_cairosvg, get_cairosvg
 from gbdraw.render.interactive_svg import InteractiveSvgContext, enrich_svg
 from gbdraw.session_io import load_session, write_session_json
 from gbdraw.web_support.feature_catalog import (
+    ANCHOR_FEATURE_CATALOG_SCHEMA,
     FEATURE_CATALOG_SCHEMA,
+    LEGACY_FEATURE_CATALOG_SCHEMA,
     canonical_catalog_sequence_sources,
     materialize_catalog_nucleotide_sequence,
     promote_legacy_feature_catalog,
     select_feature_catalog_item,
+)
+
+# Interactive SVG metadata embeds one catalog item. Schema 5 adds drawn
+# selector values; published Gallery SVGs written before it carry schema 4.
+INTERACTIVE_CATALOG_SCHEMAS = frozenset(
+    {ANCHOR_FEATURE_CATALOG_SCHEMA, FEATURE_CATALOG_SCHEMA}
 )
 
 
@@ -485,7 +493,10 @@ def _session_feature_catalog(
     )
     if catalog is None:
         return None
-    if isinstance(catalog, dict) and catalog.get("schema") == 3:
+    if isinstance(catalog, dict) and catalog.get("schema") in (
+        LEGACY_FEATURE_CATALOG_SCHEMA,
+        ANCHOR_FEATURE_CATALOG_SCHEMA,
+    ):
         return promote_legacy_feature_catalog(catalog)
     if (
         not isinstance(catalog, dict)
@@ -493,7 +504,7 @@ def _session_feature_catalog(
         or not isinstance(catalog.get("items"), list)
     ):
         raise ValueError(
-            "Session contains an invalid schema-3/"
+            "Session contains an invalid schema-3, schema-4, or "
             f"schema-{FEATURE_CATALOG_SCHEMA} feature catalog."
         )
     return catalog
@@ -903,7 +914,7 @@ def _validate_interactive_orthogroup_payload(
     example: GallerySessionExample,
     payload: dict[str, Any],
 ) -> None:
-    if payload.get("schema") == FEATURE_CATALOG_SCHEMA:
+    if payload.get("schema") in INTERACTIVE_CATALOG_SCHEMAS:
         items = payload.get("items")
         if not isinstance(items, list) or len(items) != 1 or not isinstance(
             items[0], dict
@@ -1184,7 +1195,7 @@ def _interactive_svg_measurements(output: str) -> dict[str, int]:
     items = (
         payload.get("items", [])
         if isinstance(payload, dict)
-        and payload.get("schema") == FEATURE_CATALOG_SCHEMA
+        and payload.get("schema") in INTERACTIVE_CATALOG_SCHEMAS
         else []
     )
     if not isinstance(items, list):

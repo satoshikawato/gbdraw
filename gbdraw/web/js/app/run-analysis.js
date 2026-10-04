@@ -1,6 +1,10 @@
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
-import { nameFeaturePlacementFailure } from '../services/feature-placement.js';
+import {
+  nameFeaturePlacementFailure,
+  requestFeatureOverrides,
+  validateFeatureIdentityNotices
+} from '../services/feature-placement.js';
 import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadata.js';
 import { resolveLinearRegionBounds } from './feature-metadata-extraction.js';
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
@@ -23,12 +27,10 @@ import {
   projectCommittedRecordTransform,
   projectCommittedSimilarityAlignment,
   promoteCanonicalRenderRequestToCurrent,
-  readCanonicalResourceRecordCount
+  readCanonicalResourceRecordCount,
+  requestLabelProjection,
+  requestLabelTableTsv
 } from '../services/session-request.js';
-import {
-  buildLabelOverrideTsv,
-  serializeLabelOverrideRows
-} from './feature-editor/label-override-table.js';
 import { labelOnBlocker } from './feature-editor/label-actions.js';
 import {
   applyCircularSuppressControlsToSlots,
@@ -78,8 +80,6 @@ import {
 } from './color-utils.js';
 import { serializeSpecificRules } from './file-imports.js';
 import {
-  buildFeatureVisibilitySelectorCache,
-  preserveFeatureVisibilitySelectorCacheForOverrides,
   pruneUnmatchedFeatureOverrides,
   serializeFeatureVisibilityRules
 } from './feature-visibility.js';
@@ -518,7 +518,9 @@ const canReuseResolvedProteinArtifacts = ({
   ));
   if (!persistedMarker || !committedMarker || !active) return false;
   // Selected proteins follow the Feature visibility rules (CO-02).
-  if (!committedFeatureVisibilityMatches(committedSession, active.featureVisibility)) return false;
+  if (!committedFeatureVisibilityMatches(committedSession, active.featureVisibility, active.featureOverrides)) {
+    return false;
+  }
 
   // Derived rows carry view coordinates and feature IDs. Raw LOSATP evidence
   // remains reusable, but a reversed view needs these rows to be projected again.
@@ -1050,6 +1052,10 @@ export const executeCanonicalRenderCandidate = async ({
     : {};
   const annotationWarnings = validateAnnotationWarnings(metadata.annotationWarnings, results);
   const comparisonWarnings = validateComparisonWarnings(metadata.comparisonWarnings, results);
+  // Edits by source identity that a Result does not draw (design Q4 3.4).
+  const featureIdentityNotices = Array.isArray(metadata.featureIdentityNotices)
+    ? metadata.featureIdentityNotices : [];
+  validateFeatureIdentityNotices(featureIdentityNotices, results);
   recordSessionLifecycleEvent('candidate-result-validation-start');
   const catalogState = catalogAdmission(metadata.featureCatalog, results, {
     adopt: true,
@@ -1078,6 +1084,7 @@ export const executeCanonicalRenderCandidate = async ({
     generationResponse,
     generationMetadata: metadata,
     annotationWarnings,
+    featureIdentityNotices,
     comparisonWarnings,
     results,
     catalogAdmission: catalogState,
@@ -1140,7 +1147,7 @@ export const createRunAnalysis = ({
     skipCaptureBaseConfig,
     matchSequenceRegistry,
     featureColorOverrides,
-    featureVisibilityOverrides,
+    featureOverrides,
     featureVisibilityRules,
     featureStrokeOverrides,
     legendColorOverrides,
@@ -1195,7 +1202,7 @@ export const createRunAnalysis = ({
     extractedFeatures,
     biologicalFeatures,
     featureCatalog,
-    featureSelectorSafetyScope,
+    featureEditRemovalCount,
     featureEditorStatus,
     featureExtractionPending,
     featureExtractionError,
@@ -1203,11 +1210,8 @@ export const createRunAnalysis = ({
     selectedFeatureRecordIdx,
     editableLabels,
     labelTextScopeDialog,
-    labelTextFeatureOverrides,
     canonicalLabelOverrideRows,
     labelTextBulkOverrides,
-    labelTextFeatureOverrideSources,
-    labelVisibilityOverrides,
     labelOverrideBuildWarning,
     labelReflowProcessing,
     labelReflowLastError,
@@ -1943,13 +1947,20 @@ export const createRunAnalysis = ({
       ?? extractedFeatures.value;
     let workingBiologicalFeatures = committedArtifactHandle?.ownerSet?.biologicalFeatures
       ?? biologicalFeatures?.value;
-    const hasSourceBoundEditorIntent = Object.keys(featureVisibilityOverrides).length > 0
-      || Object.keys(labelTextFeatureOverrides).length > 0 || Object.keys(labelVisibilityOverrides).length > 0
+    const hasSourceBoundEditorIntent = Object.keys(featureOverrides).length > 0
+      || Object.keys(state.featurePlacementOverrides || {}).length > 0
       || Object.keys(legendColorOverrides).length > 0 || Object.keys(legendStrokeOverrides).length > 0
       || legendEntries.value.some(entry => entry.originalCaption && entry.originalCaption !== entry.caption);
-    const sourceReplaced = hasSourceBoundEditorIntent
-      && [...new Map((workingBiologicalFeatures || []).map(feature => [feature.record_key, feature])).values()]
-        .some(feature => !isCurrentFeature(feature));
+    // The committed records whose source this Generate replaces or drops.
+    const replacedRecordKeys = hasSourceBoundEditorIntent
+      ? [...new Map((workingBiologicalFeatures || []).map(feature => [feature.record_key, feature])).values()]
+        .filter(feature => !isCurrentFeature(feature)).map((feature) => String(feature.record_key || ''))
+      : [];
+    const sourceReplaced = replacedRecordKeys.length > 0;
+    const previousCommittedRequest = typeof getCommittedCanonicalSession === 'function'
+      ? getCommittedCanonicalSession()?.renderRequest : null;
+    const previousRequestRecords = previousCommittedRequest?.mode === mode.value
+      ? previousCommittedRequest.records || [] : [];
     let workingLosatCacheInfo = committedArtifactHandle?.ownerSet?.losatCacheInfo
       ?? losatCacheInfo.value;
     let workingSelectedOrthogroupId = selectedOrthogroupId.value;
@@ -2093,21 +2104,6 @@ export const createRunAnalysis = ({
         restore: restoreCommittedArtifact, isCurrent: isCurrentAlert, isCurrentOperation });
     }
     const previousSelectedResultIndex = selectedResultIndex.value;
-    const editableLabelsSnapshot = Array.isArray(editableLabels.value)
-      ? editableLabels.value.map((entry) => ({ ...entry }))
-      : [];
-    const featureOverrideSourcesSnapshot = Object.fromEntries(
-      Object.entries(labelTextFeatureOverrideSources || {}).map(([featureId, sourceText]) => [
-        String(featureId || ''),
-        String(sourceText ?? '')
-      ])
-    );
-    const visibilityOverridesSnapshot = Object.fromEntries(
-      Object.entries(labelVisibilityOverrides || {}).map(([featureId, modeValue]) => [
-        String(featureId || ''),
-        String(modeValue || '')
-      ])
-    );
     const activeRunColors = currentColors.value;
     const manualRunStartedAt = getNow();
     const manualRunStartedAtIso = new Date().toISOString();
@@ -2309,25 +2305,20 @@ export const createRunAnalysis = ({
         stageTextFile('/priority.tsv', pContent);
       }
 
-      // One label table per Generate: the staged copy and the canonical
-      // request both use this value (CW-02); imported rows need no build.
-      const canonicalLabelOverrideTsv = serializeLabelOverrideRows(canonicalLabelOverrideRows.value);
-      const labelOverride = canonicalLabelOverrideTsv
-        ? { tsv: canonicalLabelOverrideTsv, skippedMissingSourceCount: 0 }
-        : buildLabelOverrideTsv(labelTextFeatureOverrides, labelTextBulkOverrides, {
-          editableLabels: editableLabelsSnapshot,
-          extractedFeatures: workingExtractedFeatures,
-          featureOverrideSources: featureOverrideSourcesSnapshot,
-          visibilityOverrides: visibilityOverridesSnapshot
-        });
-      const effectiveLabelOverrideTsv = labelOverride.tsv;
-      runState.generatedLabelOverrideTsv = effectiveLabelOverrideTsv;
-      if (labelOverride.skippedMissingSourceCount > 0) {
-        labelOverrideBuildWarning.value = `${labelOverride.skippedMissingSourceCount} feature override row(s) were skipped due to missing source label context.`;
+      // The staged label table is the request's: label rules only; per-feature
+      // label edits travel as featureOverrides rows (design Q4). One projection
+      // per Generate serves the staged copy and the request (CW-02).
+      runState.generatedLabelProjection = requestLabelProjection(runState);
+      const labelTableTsv = requestLabelTableTsv(runState, runState.generatedLabelProjection);
+      if (labelTableTsv) {
+        stageTextFile('/web_label_table.tsv', labelTableTsv);
       }
-      if (effectiveLabelOverrideTsv) {
-        stageTextFile('/web_label_table.tsv', effectiveLabelOverrideTsv);
-      }
+      // Per-feature Feature visibility decides LOSATP's proteins as the rules do;
+      // the helper resolves one record's rows as Generate does (R4).
+      const proteinVisibilityRows = (recordKeys) => requestFeatureOverrides(
+        featureOverrides, recordKeys.map((recordKey) => ({ recordKey }))
+      ).filter((row) => row.featureVisibility !== null)
+        .map((row) => ({ ...row, labelVisibility: null, labelText: null }));
       let featureVisibilityTablePath = null;
       let featureVisibilityCacheKey = '';
       const featureVisibilityTsv = serializeFeatureVisibilityRules(featureVisibilityRules?.value || []);
@@ -2963,6 +2954,7 @@ export const createRunAnalysis = ({
               : null,
             active: {
               featureVisibility: featureVisibilityCacheKey,
+              featureOverrides: proteinVisibilityRows(linearSeqs.map((sequence) => String(sequence?.uid || ''))),
               mode: blastpMode,
               candidateLimit: blastpCandidateLimit,
               ...comparisonThresholds,
@@ -3176,6 +3168,7 @@ export const createRunAnalysis = ({
           const recordInstanceKey = useProteinBlastp
             ? (proteinRecordInstanceKeys[idx] || `r_${idx + 1}`)
             : '';
+          const recordVisibilityRows = useProteinBlastp ? proteinVisibilityRows([recordInstanceKey]) : [];
           const persistentCacheKey = useProteinBlastp
             ? JSON.stringify({
                 inputFormat: lInputType.value,
@@ -3185,6 +3178,7 @@ export const createRunAnalysis = ({
                 recordInstanceKey,
                 recordIndex: idx,
                 featureVisibility: featureVisibilityCacheKey,
+                featureOverrides: recordVisibilityRows,
                 proteinMapSchema: 4
               })
             : JSON.stringify({ fmt, regionSpec, recordSelector, reverseFlag });
@@ -3230,7 +3224,8 @@ export const createRunAnalysis = ({
                   recordSelector,
                   reverseFlag: reverseFlag === '1',
                   recordIndex: idx,
-                  recordInstanceKey
+                  recordInstanceKey,
+                  featureOverrides: recordVisibilityRows.length ? recordVisibilityRows : null
                 }
               );
               const res = response.result;
@@ -4484,9 +4479,7 @@ export const createRunAnalysis = ({
           sourceReplaced,
           featureColorOverrides: colorCandidate?.featureColorOverrides || featureColorOverrides,
           featureStrokeOverrides,
-          featureVisibilityOverrides,
-          labelTextFeatureOverrides,
-          labelVisibilityOverrides,
+          featureOverrides,
           legendEntries: legendEntries.value,
           deletedLegendEntries: deletedLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
@@ -4585,7 +4578,6 @@ export const createRunAnalysis = ({
         featureCatalog: candidateCatalog,
         extractedFeatures: candidateExtractedFeatures,
         biologicalFeatures: candidateBiologicalFeatures,
-        featureSelectorSafetyScope: candidateCommit.featureState.featureSelectorSafetyScope,
         featureRecordIds: candidateCommit.featureState.featureRecordIds,
         orthogroups: candidateGroups,
         featureOrthogroupIndex: candidateOrthogroupIndex,
@@ -4594,6 +4586,7 @@ export const createRunAnalysis = ({
           : [],
         trackSlotResolvedGeometry: generationMetadata.trackSlotGeometry || null,
         annotationWarnings: canonicalExecution.annotationWarnings,
+        featureIdentityNotices: canonicalExecution.featureIdentityNotices,
         comparisonWarnings: canonicalExecution.comparisonWarnings,
         specificRules: candidateRules,
         fileLegendCaptions: new Set(candidateRules.filter(rule => rule.fromFile && rule.cap).map(rule => rule.cap)),
@@ -4653,7 +4646,9 @@ export const createRunAnalysis = ({
         || null
       );
       const requiredLabelFeatureIds = forcedLabelFeatureIds(selectedMutationOperations, {
-        state, features: candidateExtractedFeatures, diagramOptions: canonical.renderRequest.diagramOptions
+        state,
+        features: [...(candidateCatalogAdmission.renderedFeaturesByResult[nextSelectedResultIndex]?.values() || [])],
+        diagramOptions: canonical.renderRequest.diagramOptions
       });
       const optionalLabelFeatureIds = new Set(labelOperationIds([
         ...(selectedMutationOperations?.labelText || []),
@@ -4743,27 +4738,18 @@ export const createRunAnalysis = ({
         await restoreCommittedArtifact();
         return { status: 'stale' };
       }
-      const removedVisibilityTargets = sourceReplaced && pruneUnmatchedFeatureOverrides(
-        featureVisibilityOverrides,
-        candidateBiologicalFeatures,
-        workingExtractedFeatures,
-        state.featureVisibilitySelectorCache
-      );
-      if (sourceReplaced) {
-        // D-10: drop only the label edits whose feature is gone; bulk label
-        // overrides stay as text matchers.
-        [labelTextFeatureOverrides, labelTextFeatureOverrideSources, labelVisibilityOverrides]
-          .forEach((overrides) => pruneUnmatchedFeatureOverrides(
-            overrides, candidateBiologicalFeatures, workingExtractedFeatures
-          ));
-      }
-      if (removedVisibilityTargets > 0) {
-        state.replaceFeatureVisibilitySelectorCacheOwner(preserveFeatureVisibilitySelectorCacheForOverrides(
-          buildFeatureVisibilitySelectorCache(candidateExtractedFeatures, candidateCommit.featureState.featureSelectorSafetyScope),
-          state.featureVisibilitySelectorCache,
-          featureVisibilityOverrides
-        ));
-      }
+      // Owner decision Q3 = A (design Q4 3.4, 6.3): a Generate that replaced a
+      // source removes only the edits whose feature that source no longer has,
+      // and the edits of records the request dropped; Python names them.
+      featureEditRemovalCount.value = sourceReplaced ? pruneUnmatchedFeatureOverrides({
+        featureOverrides,
+        featurePlacementOverrides: state.featurePlacementOverrides,
+        notices: canonicalExecution.featureIdentityNotices,
+        replacedRecordKeys,
+        previousRecords: previousRequestRecords,
+        currentRecords: canonical.renderRequest.records || [],
+        biologicalFeatures: candidateBiologicalFeatures
+      }) : 0;
       if (typeof setGeneratedArtifactIdentity === 'function') {
         setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {
           results: candidateCommit.results
@@ -5010,9 +4996,7 @@ export const createRunAnalysis = ({
           sourceReplaced: false,
           featureColorOverrides,
           featureStrokeOverrides,
-          featureVisibilityOverrides,
-          labelTextFeatureOverrides,
-          labelVisibilityOverrides,
+          featureOverrides,
           legendEntries: legendEntries.value,
           deletedLegendEntries: deletedLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
@@ -5056,8 +5040,6 @@ export const createRunAnalysis = ({
         featureCatalog: candidateCatalog,
         extractedFeatures: candidateCommit.featureState.extractedFeatures,
         biologicalFeatures: candidateCommit.featureState.biologicalFeatures,
-        featureSelectorSafetyScope:
-          candidateCommit.featureState.featureSelectorSafetyScope,
         featureRecordIds: candidateCommit.featureState.featureRecordIds,
         orthogroups: candidateGroups,
         featureOrthogroupIndex: candidateCommit.featureState.featureOrthogroupIndex,
@@ -5067,6 +5049,7 @@ export const createRunAnalysis = ({
         trackSlotResolvedGeometry:
           execution.generationMetadata.trackSlotGeometry || null,
         annotationWarnings: execution.annotationWarnings,
+        featureIdentityNotices: execution.featureIdentityNotices,
         comparisonWarnings: execution.comparisonWarnings,
         matchSequenceOwner: matchSequenceRegistry?.buildTrustedOwner?.(
           candidateCommit.featureState.sequenceSources
@@ -5268,7 +5251,10 @@ export const createRunAnalysis = ({
   const expectReflowLabelBindings = (commit, resultIndex, isCurrentReflow, diagramOptions) => {
     const result = commit.results[resultIndex];
     const featureIds = forcedLabelFeatureIds(commit.mutationPlan?.operationsByResult?.[resultIndex], {
-      state, features: extractedFeatures.value, diagramOptions
+      state,
+      features: [...(commit.featureState?.renderedFeaturesByResult?.[resultIndex]?.values()
+        || extractedFeatures.value || [])],
+      diagramOptions
     });
     if (!result || featureIds.length === 0) return;
     const readinessId = `label-reflow:${latestGenerationToken}`;
@@ -5320,18 +5306,6 @@ export const createRunAnalysis = ({
         if (!colorCandidate || !isCurrent()) return { status: 'stale' };
         candidateRules = colorCandidate.rules;
       }
-      const canonicalLabelOverrideTsv = serializeLabelOverrideRows(canonicalLabelOverrideRows.value);
-      const labelOverride = canonicalLabelOverrideTsv
-        ? { tsv: canonicalLabelOverrideTsv, skippedMissingSourceCount: 0 }
-        : buildLabelOverrideTsv(labelTextFeatureOverrides, labelTextBulkOverrides, {
-          editableLabels: editableLabels.value || [],
-          extractedFeatures: extractedFeatures.value,
-          featureOverrideSources: labelTextFeatureOverrideSources,
-          visibilityOverrides: labelVisibilityOverrides
-        });
-      if (labelOverride.skippedMissingSourceCount > 0) {
-        labelOverrideBuildWarning.value = `${labelOverride.skippedMissingSourceCount} feature override row(s) were skipped due to missing source label context.`;
-      }
       const canonical = projectCommittedEditorIntent({
         committed,
         promotion: {
@@ -5342,8 +5316,7 @@ export const createRunAnalysis = ({
           ...state,
           selectedPalette: appliedPaletteName,
           currentColors: appliedPaletteColors,
-          manualSpecificRules: candidateRules,
-          generatedLabelOverrideTsv: labelOverride.tsv
+          manualSpecificRules: candidateRules
         }
       });
       const timingEntries = [];
@@ -5357,9 +5330,7 @@ export const createRunAnalysis = ({
         prepareCommitInput: {
           featureColorOverrides: colorCandidate?.featureColorOverrides || featureColorOverrides,
           featureStrokeOverrides,
-          featureVisibilityOverrides,
-          labelTextFeatureOverrides,
-          labelVisibilityOverrides,
+          featureOverrides,
           legendEntries: legendEntries.value,
           deletedLegendEntries: deletedLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,

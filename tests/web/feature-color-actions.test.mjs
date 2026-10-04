@@ -15,7 +15,7 @@ const colorActionsSource = await readFile(join(sourceDir, 'app', 'feature-editor
 const { createFeatureColorActions } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-editor', 'color-actions.js'))
 );
-const { getFeatureGenerationHash } = await import(pathToFileURL(join(tempDir, 'app', 'feature-utils.js')));
+const { getFeatureColorRuleHash } = await import(pathToFileURL(join(tempDir, 'app', 'feature-utils.js')));
 const { resolveFeatureLabelSelector } = await import(pathToFileURL(join(tempDir, 'app', 'feature-selector.js')));
 const { legendRowRules } = await import(pathToFileURL(join(tempDir, 'app', 'specific-color-rules.js')));
 
@@ -209,7 +209,7 @@ const actions = createFeatureColorActions({
     getLegendRowRules: (caption) => legendRowRules(caption, { rules: manualSpecificRules, legendEntries: legendEntries.value }),
     getIndividualFeatureLabel: (feature) => feature.product || '',
     // FE-09 (D-14): "This feature only" always writes the stable hash.
-    getFeatureQualifier: (feature) => ({ qual: 'hash', val: getFeatureGenerationHash(feature) }),
+    getFeatureQualifier: (feature) => ({ qual: 'hash', val: getFeatureColorRuleHash(feature) }),
     getLabelSpecificRule: (feature, label) => {
       const selector = resolveFeatureLabelSelector(feature, label);
       return selector
@@ -359,7 +359,7 @@ assert.deepEqual(manualSpecificRules, [{
   color: '#123456',
   cap: 'single feature'
 }]);
-assert.equal(getFeatureGenerationHash(labelFeatureA), 'f11111111');
+assert.equal(getFeatureColorRuleHash(labelFeatureA), 'f11111111');
 
 legendEntries.value = [{ caption: 'single feature', color: '#123456', featureIds: ['f11111111_record_1'] }];
 const noOpFillCount = previewFillApplyCount;

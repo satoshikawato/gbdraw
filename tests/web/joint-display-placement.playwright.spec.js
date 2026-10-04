@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const zlib = require('node:zlib');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { CURRENT_REQUEST_SCHEMA, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { CURRENT_REQUEST_SCHEMA, CURRENT_SESSION_VERSION, openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 
 const replayEnv = { ...process.env };
 delete replayEnv.PYTHONPATH;
@@ -160,7 +160,7 @@ for (const mode of ['circular', 'linear']) {
     await download.saveAs(savedPath);
     const bytes = await fs.readFile(savedPath);
     const session = JSON.parse((bytes[0] === 0x1f ? zlib.gunzipSync(bytes) : bytes).toString());
-    expect(session.version).toBe(44);
+    expect(session.version).toBe(CURRENT_SESSION_VERSION);
     expect(session.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
     expect(session.renderRequest.records[0].display.startCoordinate).toBe(71);
     expect(session.renderRequest.diagramOptions.featurePlacements).toHaveLength(1);
@@ -207,7 +207,7 @@ test('historical v40/schema6 saves as the joint format without Generate', async 
   await download.saveAs(savedPath);
   const bytes = await fs.readFile(savedPath);
   const saved = JSON.parse(zlib.gunzipSync(bytes));
-  expect(saved.version).toBe(44);
+  expect(saved.version).toBe(CURRENT_SESSION_VERSION);
   expect(saved.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
   expect(saved.renderRequest.records.every((record) => record.display.isCircular === null
     && record.display.startCoordinate === null)).toBe(true);

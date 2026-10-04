@@ -17,6 +17,7 @@ import {
   schedulePreviewFeatureSearchClasses
 } from './preview-svg.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
+import { featureOverrideValue } from '../../services/feature-placement.js';
 
 export const createPreviewFeatureSearch = ({
   state,
@@ -85,7 +86,7 @@ export const createPreviewFeatureSearch = ({
             search_labels: [
               feature.search_labels,
               entry?.text,
-              state.labelTextFeatureOverrides?.[feature.svg_id],
+              featureOverrideValue(state.featureOverrides, feature, 'labelText'),
               ...sources.map((source) => state.labelTextBulkOverrides?.[source])
             ]
           };
@@ -351,7 +352,7 @@ export const createPreviewFeatureSearch = ({
   });
   watch([
     () => (state.editableLabels?.value || []).map((entry) => [entry.featureId, entry.sourceText, entry.text]),
-    () => state.labelTextFeatureOverrides,
+    () => Object.values(state.featureOverrides || {}).map((row) => [row.recordKey, row.biologicalFeatureId, row.labelText]),
     () => state.labelTextBulkOverrides,
     () => state.orthogroupNameOverrides,
     () => state.orthogroupDescriptionOverrides

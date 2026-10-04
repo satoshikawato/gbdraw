@@ -1,0 +1,354 @@
+// Design Q4 (docs/internal/web-gui-audit-20261004-override-precedence/
+// DESIGN-Q4-FEATURE-IDENTITY.md, PR-Q4-4): popup Feature visibility, Label
+// visibility, and label text edits name the original-source feature, so they
+// keep naming it after crop, reverse complement, reordering, and duplication,
+// and the Session replays the same diagram on the CLI. FINDINGS OV-01, OV-02,
+// OV-04, OV-05, OV-11, OV-12.
+const { test, expect } = require('@playwright/test');
+const { readFileSync } = require('node:fs');
+const { spawnSync } = require('node:child_process');
+const path = require('node:path');
+const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { BATCH_FIXTURE, openFresh, settle } = require('./helpers/audit-browser.cjs');
+const { download } = require('./helpers/mode-transition.cjs');
+
+const records = (file) => readFileSync(file, 'utf8').split(/^\/\/\s*$/m)
+  .map((chunk) => chunk.trim()).filter((chunk) => chunk.startsWith('LOCUS')).map((chunk) => `${chunk}\n//\n`);
+const [TESTA, TESTB] = records(BATCH_FIXTURE);
+// OV-01 repro B: the drawn hash of Y after the crop equals X's source hash.
+const [COLLIDE] = records('tests/fixtures/b_collide.gb');
+// OV-05: two CDS at the same coordinates (biological IDs <hash>~<source index>).
+const SAME_COORDINATES = TESTA.replace(
+  '     CDS             301..600\n',
+  '     CDS             301..600\n                     /locus_tag="TWIN_A"\n'
+    + '                     /product="twin product"\n     CDS             301..600\n'
+);
+
+const openLinear = async (page, texts, configure) => {
+  await openFresh(page);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
+  await page.evaluate(async (inputs) => {
+    const app = window.__GBDRAW_APP__;
+    while (app.linearSeqs.length < inputs.length) app.addLinearSeq();
+    inputs.forEach((text, index) => app.setLinearSeqPrimaryFile(index, 'gb', new File(
+      [text], `record-${index}.gb`, { type: 'text/plain', lastModified: 1000 + index }
+    )));
+    await window.Vue.nextTick();
+  }, texts);
+  await settle(page);
+  if (configure) await page.evaluate(configure);
+  await settle(page);
+};
+
+const catalog = (page) => page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.map((feature) => ({
+  svgId: feature.svg_id,
+  record: feature.record_id,
+  recordKey: feature.record_key,
+  identity: feature.biological_feature_id,
+  type: feature.type,
+  start: feature.start,
+  locusTag: feature.locus_tag || ''
+})));
+
+// One popup edit through the editor actions the controls call.
+const edit = (page, svgId, change) => page.evaluate(async ({ id, change: requested }) => {
+  const app = window.__GBDRAW_APP__;
+  const feature = app.extractedFeatures.find((item) => item.svg_id === id);
+  if (!feature) throw new Error(`no feature ${id}`);
+  await app.openFeatureEditorFromList(feature, null);
+  if (requested.labelText !== undefined || requested.labelVisibility) {
+    if (requested.labelText !== undefined) app.clickedFeature.labelText = requested.labelText;
+    if (requested.labelVisibility) app.clickedFeature.labelVisibility = requested.labelVisibility;
+    await app.updateClickedFeatureLabelText();
+    if (app.hiddenLabelTextDialog?.show) await app.handleHiddenLabelTextChoice('keep');
+  }
+  if (requested.visibility) {
+    app.clickedFeature.featureVisibility = requested.visibility;
+    await app.updateClickedFeatureVisibility(requested.visibility);
+    if (app.featureVisibilityScopeDialog.show) await app.handleFeatureVisibilityScopeChoice('feature');
+  }
+  app.clickedFeature = null;
+}, { id: svgId, change });
+
+// What the committed Result draws: feature paths and label texts by rendered ID.
+const drawn = (page, ids) => page.evaluate((renderedIds) => {
+  const app = window.__GBDRAW_APP__;
+  const root = new DOMParser().parseFromString(app.results[app.selectedResultIndex].content, 'image/svg+xml')
+    .documentElement;
+  return Object.fromEntries(renderedIds.map((id) => {
+    const paths = [...root.querySelectorAll(`[data-gbdraw-feature-id="${CSS.escape(id)}"]`)]
+      .filter((element) => element.localName === 'path' && element.getAttribute('display') !== 'none');
+    const labels = [...root.querySelectorAll(
+      `[data-label-feature-id="${CSS.escape(id)}"] text, text[data-label-feature-id="${CSS.escape(id)}"]`
+    )].filter((element) => !element.closest('[display="none"]'))
+      .map((element) => element.textContent.trim());
+    return [id, { drawn: paths.length > 0, labels }];
+  }));
+}, ids);
+
+const labelTextsInResult = (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  const root = new DOMParser().parseFromString(app.results[app.selectedResultIndex].content, 'image/svg+xml')
+    .documentElement;
+  return [...root.querySelectorAll('[data-label-feature-id] text, text[data-label-feature-id]')]
+    .map((element) => element.textContent.trim());
+});
+
+const replayOnCli = (sessionPath, outputPrefix) => {
+  const result = spawnSync(process.env.GBDRAW_PYTHON || 'python', [
+    '-c', 'import sys; from gbdraw.cli import main; sys.argv = ["gbdraw", *sys.argv[1:]]; main()',
+    'linear', '--session', sessionPath, '-o', outputPrefix, '-f', 'svg'
+  ], { encoding: 'utf8', env: { ...process.env } });
+  expect(result.status, result.stdout + result.stderr).toBe(0);
+  return readFileSync(`${outputPrefix}.svg`, 'utf8');
+};
+
+const cropTesta = () => {
+  const app = window.__GBDRAW_APP__;
+  app.setLinearRecordCrop(app.linearSeqs[0], 'region_start', 201);
+  app.setLinearRecordCrop(app.linearSeqs[0], 'region_end', 3800);
+  app.form.show_labels_linear = 'all';
+  if (!app.adv.features.includes('misc_feature')) app.adv.features.push('misc_feature');
+};
+
+test('OV-01: edits on a cropped record reach their feature, also on CLI replay', async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  await openLinear(page, [COLLIDE], cropTesta);
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const features = await catalog(page);
+  const at = (type, start) => features.find((feature) => feature.type === type && feature.start === start).svgId;
+  const [X, Y, TX, TY] = [at('misc_feature', 2400), at('misc_feature', 2600), at('tRNA', 2549), at('tRNA', 2749)];
+
+  await edit(page, X, { visibility: 'off' });
+  await settle(page);
+  await edit(page, TX, { labelText: 'EDITED_X' });
+  await settle(page);
+  await generateAndWaitForResult(page);
+  await settle(page);
+
+  const result = await drawn(page, [X, Y, TX, TY]);
+  expect(result[X].drawn).toBe(false);
+  expect(result[Y].drawn).toBe(true);
+  expect(result[TX].labels).toEqual(['EDITED_X']);
+  expect(result[TY].labels).not.toContain('EDITED_X');
+
+  const sessionPath = testInfo.outputPath('ov01.gbdraw-session.json');
+  await download(page, 'Save Session', sessionPath);
+  const replay = replayOnCli(sessionPath, testInfo.outputPath('ov01-replay'));
+  expect(replay.match(/EDITED_X/g) || []).toHaveLength(1);
+  expect(replay).toContain(`data-gbdraw-feature-id="${Y}"`);
+  expect(replay).not.toContain(`data-gbdraw-feature-id="${X}"`);
+});
+
+test('OV-02: a record_location color rule on a cropped record paints the same feature live and on Generate', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openLinear(page, [COLLIDE], cropTesta);
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const features = await catalog(page);
+  const X = features.find((feature) => feature.type === 'misc_feature' && feature.start === 2400).svgId;
+  const Y = features.find((feature) => feature.type === 'misc_feature' && feature.start === 2600).svgId;
+  // The CLI's record_location is the drawn record's: X at 2401..2500 is drawn
+  // at 2201..2300 after the crop that starts at 201.
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    Object.assign(app.newSpecRule, {
+      feat: 'misc_feature', qual: 'record_location', val: '^TESTA:2200\\.\\.2300:\\+$', color: '#00aa00', cap: 'drawn X'
+    });
+    return app.addSpecificRule();
+  });
+  await settle(page);
+  const fill = (id, source) => page.evaluate(({ renderedId, from }) => {
+    const app = window.__GBDRAW_APP__;
+    const root = from === 'mounted' ? app.svgContainer.querySelector('svg')
+      : new DOMParser().parseFromString(app.results[app.selectedResultIndex].content, 'image/svg+xml').documentElement;
+    return [...root.querySelectorAll(`path[data-gbdraw-feature-id="${CSS.escape(renderedId)}"]`)]
+      .map((element) => element.getAttribute('fill')).find((value) => value && value !== 'none') || null;
+  }, { renderedId: id, from: source });
+  expect((await fill(X, 'mounted'))?.toLowerCase()).toBe('#00aa00');
+  expect((await fill(Y, 'mounted'))?.toLowerCase()).not.toBe('#00aa00');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  expect((await fill(X, 'result'))?.toLowerCase()).toBe('#00aa00');
+  expect((await fill(Y, 'result'))?.toLowerCase()).not.toBe('#00aa00');
+});
+
+test('OV-04, OV-05: an edit of one copy or one same-coordinate feature reaches only it', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openLinear(page, [SAME_COORDINATES, TESTA], () => {
+    const app = window.__GBDRAW_APP__;
+    app.form.show_labels_linear = 'none';
+  });
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const features = await catalog(page);
+  const [firstKey, secondKey] = [...new Set(features.map((feature) => feature.recordKey))];
+  const copy = (recordKey, tag) => features.find((feature) => feature.recordKey === recordKey && feature.locusTag === tag);
+  const twins = features.filter((feature) => feature.recordKey === firstKey && feature.type === 'CDS' && feature.start === 300);
+  expect(twins).toHaveLength(2);
+  expect(new Set(twins.map((feature) => feature.identity.split('~')[0])).size).toBe(1);
+  expect(twins.every((feature) => /~\d+$/.test(feature.identity))).toBe(true);
+
+  await edit(page, copy(firstKey, 'TESTA_0002').svgId, { visibility: 'off' });
+  await settle(page);
+  await edit(page, copy(firstKey, 'TESTA_0006').svgId, { labelVisibility: 'on', labelText: 'COPY1_ONLY' });
+  await settle(page);
+  const twin = twins[1];
+  await edit(page, twin.svgId, { labelVisibility: 'on', labelText: 'TWIN_ONE' });
+  await settle(page);
+  await generateAndWaitForResult(page);
+  await settle(page);
+
+  const ids = [copy(firstKey, 'TESTA_0002').svgId, copy(secondKey, 'TESTA_0002').svgId];
+  const result = await drawn(page, ids);
+  expect(result[ids[0]].drawn).toBe(false);
+  expect(result[ids[1]].drawn).toBe(true);
+  const texts = await labelTextsInResult(page);
+  expect(texts.filter((text) => text === 'COPY1_ONLY')).toHaveLength(1);
+  expect(texts.filter((text) => text === 'TWIN_ONE')).toHaveLength(1);
+  expect((await drawn(page, [twin.svgId]))[twin.svgId].labels).toEqual(['TWIN_ONE']);
+});
+
+test('OV-11: edits stay on their feature after the crop and reverse complement change', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openLinear(page, [TESTA, TESTB], () => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearRecordCrop(app.linearSeqs[0], 'region_start', 201);
+    app.setLinearRecordCrop(app.linearSeqs[0], 'region_end', 3800);
+    app.linearSeqs[1].region_reverse = true;
+    app.form.show_labels_linear = 'all';
+    if (!app.adv.features.includes('misc_feature')) app.adv.features.push('misc_feature');
+  });
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const pick = (features, record, type) => features.find((feature) => feature.record === record && feature.type === type);
+  let features = await catalog(page);
+  const identities = {
+    hidden: pick(features, 'TESTA', 'misc_feature').identity,
+    text: pick(features, 'TESTA', 'tRNA').identity,
+    labelOff: pick(features, 'TESTB', 'tRNA').identity
+  };
+  await edit(page, pick(features, 'TESTA', 'misc_feature').svgId, { visibility: 'off' });
+  await settle(page);
+  await edit(page, pick(features, 'TESTA', 'tRNA').svgId, { labelText: 'PROBE_A_TRNA' });
+  await settle(page);
+  await edit(page, pick(features, 'TESTB', 'tRNA').svgId, { labelVisibility: 'off' });
+  await settle(page);
+  await generateAndWaitForResult(page);
+  await settle(page);
+
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearRecordCrop(app.linearSeqs[0], 'region_start', 101);
+    app.linearSeqs[1].region_reverse = false;
+  });
+  await settle(page);
+  await generateAndWaitForResult(page);
+  await settle(page);
+  features = await catalog(page);
+  const byIdentity = (identity) => features.find((feature) => feature.identity === identity);
+  expect(byIdentity(identities.hidden)).toBeUndefined();
+  const textFeature = byIdentity(identities.text);
+  const labelOffFeature = byIdentity(identities.labelOff);
+  const result = await drawn(page, [textFeature.svgId, labelOffFeature.svgId]);
+  expect(result[textFeature.svgId].labels).toEqual(['PROBE_A_TRNA']);
+  expect(result[labelOffFeature.svgId].drawn).toBe(true);
+  expect(result[labelOffFeature.svgId].labels).toEqual([]);
+});
+
+test('OV-12: after reordering records the popup shows the edit of the same feature', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openLinear(page, [TESTA, TESTB], () => {
+    window.__GBDRAW_APP__.form.show_labels_linear = 'all';
+  });
+  await generateAndWaitForResult(page);
+  await settle(page);
+  let features = await catalog(page);
+  const target = features.find((feature) => feature.record === 'TESTB' && feature.type === 'tRNA');
+  await edit(page, target.svgId, { labelVisibility: 'off' });
+  await settle(page);
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.setLinearRecordLayoutEnabled(true);
+    await window.Vue.nextTick();
+    const uid = app.linearSeqs[0].uid;
+    app.linearSeqs.forEach((seq) => app.setLinearRecordRow(seq.uid, 1));
+    await window.Vue.nextTick();
+    await app.moveLinearRecordWithinRow(uid, 1);
+  });
+  await settle(page);
+  await generateAndWaitForResult(page);
+  await settle(page);
+  features = await catalog(page);
+  const moved = features.find((feature) => feature.identity === target.identity && feature.recordKey === target.recordKey);
+  expect(moved.svgId).not.toBe(target.svgId);
+  const popup = await page.evaluate(async (id) => {
+    const app = window.__GBDRAW_APP__;
+    const feature = app.extractedFeatures.find((item) => item.svg_id === id);
+    await app.openFeatureEditorFromList(feature, null);
+    const value = app.clickedFeature.labelVisibility;
+    app.clickedFeature = null;
+    return value;
+  }, moved.svgId);
+  expect(popup).toBe('off');
+  expect((await drawn(page, [moved.svgId]))[moved.svgId].labels).toEqual([]);
+});
+
+// A Session before feature catalogs may restore no feature metadata until
+// Generate, so the load waits for the committed Result only.
+const loadSession = async (page, file) => {
+  await page.locator('input[accept^=".json,"]').setInputFiles(file);
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
+    && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
+  await settle(page);
+};
+
+// Design Q4 4.3: Sessions 44 and 33 written by first-parent main keep their
+// per-feature edits; Generate draws them on the same features.
+test('a Session 44 with crop and reverse complement keeps its feature edits', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openFresh(page);
+  await loadSession(page, 'tests/fixtures/sessions/feature-edits-crop-rc.v44.gbdraw-session.json.gz');
+  const rows = await page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    return Object.values(state.featureOverrides).map((row) => [row.biologicalFeatureId, row.featureVisibility,
+      row.labelVisibility, row.labelText]).sort();
+  });
+  expect(rows).toEqual([
+    ['f571eb983', null, null, 'PROBE_A_TRNA'],
+    ['f88047061', 'off', 'off', null],
+    ['fb5977f81', 'off', null, null]
+  ]);
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const features = await catalog(page);
+  expect(features.some((feature) => feature.identity === 'fb5977f81')).toBe(false);
+  expect(features.some((feature) => feature.identity === 'f88047061')).toBe(false);
+  const trna = features.find((feature) => feature.identity === 'f571eb983');
+  expect((await drawn(page, [trna.svgId]))[trna.svgId].labels).toEqual(['PROBE_A_TRNA']);
+});
+
+test('a Session 33 without a feature catalog keeps its feature edits', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openFresh(page);
+  await loadSession(page, 'tests/fixtures/sessions/feature-edits-circular.v33.gbdraw-session.json.gz');
+  await generateAndWaitForResult(page);
+  await settle(page);
+  const rows = await page.evaluate(async () => {
+    const { getCommittedCanonicalRenderRequest } = await import('/gbdraw/web/js/services/config.js');
+    return getCommittedCanonicalRenderRequest().diagramOptions.featureOverrides;
+  });
+  const recordKey = rows[0]?.recordKey;
+  expect(rows).toEqual([
+    { recordKey, biologicalFeatureId: 'f406d90f1', featureVisibility: 'off', labelVisibility: null, labelText: null },
+    { recordKey, biologicalFeatureId: 'f48b7bf2f', featureVisibility: null, labelVisibility: 'off', labelText: null },
+    { recordKey, biologicalFeatureId: 'fbe3a7c0c', featureVisibility: null, labelVisibility: null, labelText: 'V33_LABEL' }
+  ]);
+  const features = await catalog(page);
+  expect(features.some((feature) => feature.identity === 'f406d90f1')).toBe(false);
+  expect(features.every((feature) => feature.recordKey === recordKey)).toBe(true);
+  // The Session shows no labels (labels_mode none); text alone draws none.
+  expect(await labelTextsInResult(page)).not.toContain('V33_LABEL');
+});

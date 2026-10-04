@@ -89,12 +89,7 @@ const resetEditorDraftState = (state) => {
   const editorDefaults = createDefaultEditorDraftState();
   clearReactiveObject(state.featureColorOverrides);
   replaceReactiveArray(state.featureVisibilityManualRules);
-  clearReactiveObject(state.featureVisibilityOverrides);
-  if (typeof state.replaceFeatureVisibilitySelectorCacheOwner === 'function') {
-    state.replaceFeatureVisibilitySelectorCacheOwner({});
-  } else {
-    clearReactiveObject(state.featureVisibilitySelectorCache);
-  }
+  clearReactiveObject(state.featureOverrides);
   clearReactiveObject(state.featureStrokeOverrides);
   clearReactiveObject(state.legendColorOverrides);
   clearReactiveObject(state.legendStrokeOverrides);
@@ -104,10 +99,7 @@ const resetEditorDraftState = (state) => {
   state.addedLegendCaptions.value = new Set();
   state.fileLegendCaptions.value = new Set();
 
-  clearReactiveObject(state.labelTextFeatureOverrides);
   clearReactiveObject(state.labelTextBulkOverrides);
-  clearReactiveObject(state.labelTextFeatureOverrideSources);
-  clearReactiveObject(state.labelVisibilityOverrides);
   state.labelOverrideBuildWarning.value = '';
   state.autoLabelReflowEnabled.value = false;
   state.labelReflowLastError.value = null;

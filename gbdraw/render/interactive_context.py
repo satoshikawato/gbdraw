@@ -99,7 +99,6 @@ def build_interactive_svg_context(
         specific_color_rules=resolved_color_rules,
         linear_rendered_feature_ids=linear_rendered_feature_ids,
         include_biological_features=True,
-        include_selector_safety_scope=False,
     )
     features = payload.get("features", [])
     if mode == "circular" and len(record_list) > 1 and (

@@ -999,13 +999,9 @@ const createLayoutPreferences = () => ({
     selectedFeatureRecordIdx: ref(0),
     featureColorOverrides: { f1: { color: '#111111', caption: 'A' } },
     featureVisibilityManualRules: [],
-    featureVisibilityOverrides: {},
-    featureVisibilitySelectorCache: {},
+    featureOverrides: {},
     featureStrokeOverrides: {},
-    labelTextFeatureOverrides: {},
     labelTextBulkOverrides: {},
-    labelTextFeatureOverrideSources: {},
-    labelVisibilityOverrides: {},
     orthogroups: ref([]),
     selectedOrthogroupId: ref(''),
     selectedOrthogroupAlignmentFeature: ref(''),
@@ -1274,13 +1270,9 @@ const createLayoutPreferences = () => ({
     selectedFeatureRecordIdx: ref(0),
     featureColorOverrides: {},
     featureVisibilityManualRules: [],
-    featureVisibilityOverrides: {},
-    featureVisibilitySelectorCache: {},
+    featureOverrides: {},
     featureStrokeOverrides: {},
-    labelTextFeatureOverrides: {},
     labelTextBulkOverrides: {},
-    labelTextFeatureOverrideSources: {},
-    labelVisibilityOverrides: {},
     orthogroups: ref([]),
     selectedOrthogroupId: ref(''),
     selectedOrthogroupAlignmentFeature: ref(''),
@@ -1452,12 +1444,9 @@ const createLayoutPreferences = () => ({
     selectedFeatureRecordIdx: ref(0),
     featureColorOverrides: {},
     featureVisibilityManualRules: [],
-    featureVisibilityOverrides: {},
+    featureOverrides: {},
     featureStrokeOverrides: {},
-    labelTextFeatureOverrides: {},
     labelTextBulkOverrides: {},
-    labelTextFeatureOverrideSources: {},
-    labelVisibilityOverrides: {},
     orthogroups: ref([{ members: ['x'.repeat(100_000)] }]),
     selectedOrthogroupId: ref(''),
     selectedOrthogroupAlignmentFeature: ref(''),
@@ -1773,6 +1762,9 @@ const createLayoutPreferences = () => ({
   const losatCacheInfoA = [{ key: 'raw-a' }];
   const appliedPaletteColorsA = { CDS: '#54bcf8' };
   const pendingPaletteColorsA = {};
+  const noticesA = [{
+    recordKey: 'record-a', biologicalFeatureId: 'gone', status: 'unresolved', kinds: ['label_text'], resultIndex: 0
+  }];
   const state = {
     files: {},
     linearSeqs: [],
@@ -1785,20 +1777,15 @@ const createLayoutPreferences = () => ({
     extractedFeatures: ref(extractedA),
     biologicalFeatures: ref(biologicalA),
     featureCatalog: ref(catalogA),
-    featureSelectorSafetyScope: ref([]),
     featureRecordIds: ref(['record-a']),
     selectedFeatureRecordIdx: ref(0),
     featureColorOverrides: { 'feature-a': '#112233' },
     featureVisibilityManualRules: [],
-    featureVisibilityOverrides: {},
-    featureVisibilitySelectorCache: {
-      'feature-a': { qualifier: 'hash', value: 'feature-a' }
-    },
-    labelTextFeatureOverrides: {},
+    featureOverrides: {},
+    // Python's identity notices are an artifact-owned value (design Q4 6.3).
+    featureIdentityNotices: ref(noticesA),
     canonicalLabelOverrideRows: ref([]),
     labelTextBulkOverrides: {},
-    labelTextFeatureOverrideSources: {},
-    labelVisibilityOverrides: {},
     legendEntries: ref([{ caption: 'A', color: '#112233' }]),
     deletedLegendEntries: ref([]),
     originalLegendOrder: ref(['A']),
@@ -1857,14 +1844,6 @@ const createLayoutPreferences = () => ({
     trustedArtifactRestoreInProgress: ref(false),
     semanticFileWatchersSuppressed: ref(false)
   };
-  let featureVisibilitySelectorCacheOwner = state.featureVisibilitySelectorCache;
-  state.captureFeatureVisibilitySelectorCacheOwner = () => (
-    featureVisibilitySelectorCacheOwner
-  );
-  state.replaceFeatureVisibilitySelectorCacheOwner = (nextOwner) => {
-    featureVisibilitySelectorCacheOwner = nextOwner;
-    state.featureVisibilitySelectorCache = nextOwner;
-  };
   const captureAuthorityOwners = () => ({
     proteinIdentityManifest: state.proteinIdentityManifest.value,
     legacyProteinRawCandidates: state.legacyProteinRawCandidates.value,
@@ -1916,7 +1895,6 @@ const createLayoutPreferences = () => ({
     applyFeatureStateData: (features) => {
       state.extractedFeatures.value = features.extractedFeatures;
       state.biologicalFeatures.value = features.biologicalFeatures;
-      state.featureSelectorSafetyScope.value = features.featureSelectorSafetyScope;
       state.featureRecordIds.value = features.featureRecordIds;
       state.selectedFeatureRecordIdx.value = features.selectedFeatureRecordIdx;
       Object.assign(state.featureColorOverrides, features.featureColorOverrides);
@@ -1958,10 +1936,7 @@ const createLayoutPreferences = () => ({
   assert.equal(handleA.ownerSet.losatCacheInfo, losatCacheInfoA);
   assert.equal(handleA.ownerSet.appliedPaletteColors, appliedPaletteColorsA);
   assert.equal(handleA.ownerSet.pendingPaletteColors, pendingPaletteColorsA);
-  assert.equal(
-    handleA.ownerSet.featureVisibilitySelectorCache['feature-a'].value,
-    'feature-a'
-  );
+  assert.equal(handleA.ownerSet.featureIdentityNotices, noticesA);
   assert.ok(handleA.retainedBytes >= 400_000);
 
   state.resultGenerationKey.value += 1;
@@ -1997,10 +1972,8 @@ const createLayoutPreferences = () => ({
   Object.defineProperty(poisonResource, 'data', {
     get() { throw new Error('Resource payloads must not be read during capture.'); }
   });
-  const poisonSelectorCache = new Proxy({}, {
-    ownKeys() {
-      throw new Error('Selector cache entries must not be traversed during capture.');
-    }
+  const poisonNotices = new Proxy([], {
+    get() { throw new Error('Identity notices must not be traversed during capture.'); }
   });
   const structuralMetrics = [];
   const previousHooks = globalThis.__GBDRAW_TEST_HOOKS__;
@@ -2012,7 +1985,7 @@ const createLayoutPreferences = () => ({
   state.losatCache.value = poisonCache;
   state.losatDerivedCache.value = poisonCache;
   state.matchSequenceRegistry.replaceTrustedOwner(poisonSequenceOwner);
-  state.replaceFeatureVisibilitySelectorCacheOwner(poisonSelectorCache);
+  state.featureIdentityNotices.value = poisonNotices;
   state.files.c_gb = poisonResource;
   snapshots.setGeneratedArtifactRuntimeOwner({
     capture: () => ({ retainedBytes: 999, payload: poisonResource }),
@@ -2030,7 +2003,7 @@ const createLayoutPreferences = () => ({
   assert.equal(poisonHandle.ownerSet.featureCatalog, poisonCatalog);
   assert.equal(poisonHandle.ownerSet.losatCache, poisonCache);
   assert.equal(poisonHandle.ownerSet.matchSequenceOwner, poisonSequenceOwner);
-  assert.equal(poisonHandle.ownerSet.featureVisibilitySelectorCache, poisonSelectorCache);
+  assert.equal(poisonHandle.ownerSet.featureIdentityNotices, poisonNotices);
   assert.equal(
     poisonHandle.retainedBytes,
     123_456 + 654_321 + 999 + poisonHandle.identity.compactSignature.length * 2
@@ -2081,9 +2054,7 @@ const createLayoutPreferences = () => ({
   );
   state.results.value = [{ name: 'edited.svg', content: '<svg id="edited" />' }];
   state.featureColorOverrides['feature-a'] = '#abcdef';
-  state.replaceFeatureVisibilitySelectorCacheOwner({
-    'feature-a': { qualifier: 'hash', value: 'edited-feature' }
-  });
+  state.featureIdentityNotices.value = [{ recordKey: 'record-b', biologicalFeatureId: 'bio-b' }];
   state.legendEntries.value[0].caption = 'Edited current legend';
   state.extractedFeatures.value = [{ svg_id: 'feature-b' }];
   state.biologicalFeatures.value = [{ biological_feature_id: 'bio-b' }];
@@ -2120,10 +2091,7 @@ const createLayoutPreferences = () => ({
   assert.equal(handleA.ownerSet.results[0], resultA);
   assert.equal(handleA.mutableIntent.features.featureColorOverrides['feature-a'], '#112233');
   assert.equal(handleA.mutableIntent.editorState.legend.entries[0].caption, 'A');
-  assert.equal(
-    handleA.ownerSet.featureVisibilitySelectorCache['feature-a'].value,
-    'feature-a'
-  );
+  assert.equal(handleA.ownerSet.featureIdentityNotices, noticesA);
   assert.equal(handleB.ownerSet.results[0].name, 'edited.svg');
   assert.equal(handleB.ownerSet.proteinIdentityManifest, proteinIdentityManifestB);
   assert.equal(handleB.ownerSet.legacyProteinRawCandidates, legacyProteinRawCandidatesB);
@@ -2149,7 +2117,7 @@ const createLayoutPreferences = () => ({
   assert.equal(state.orthogroups.value, groupsA);
   assert.equal(state.featureColorOverrides['feature-a'], '#112233');
   assert.equal(state.legendEntries.value[0].caption, 'A');
-  assert.equal(state.featureVisibilitySelectorCache['feature-a'].value, 'feature-a');
+  assert.equal(state.featureIdentityNotices.value, noticesA);
   assertAuthorityOwners(authorityOwnersA);
   assert.equal(state.appliedPaletteColors.value, appliedPaletteColorsA);
   assert.equal(state.pendingPaletteColors.value, pendingPaletteColorsA);

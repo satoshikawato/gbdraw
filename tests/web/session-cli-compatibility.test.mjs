@@ -30,7 +30,7 @@ globalThis.alert = () => {};
 installSessionImportWorker();
 
 const {
-  importSession, getCommittedCanonicalRenderRequest, getCommittedCanonicalSession,
+  SESSION_VERSION, importSession, getCommittedCanonicalRenderRequest, getCommittedCanonicalSession,
   serializeActiveRenderFiles, setUnmanagedConfigOverrideValidator
 } = await import('../../gbdraw/web/js/services/config.js');
 const { CANONICAL_REQUEST_SCHEMA, buildCanonicalRenderRequest } = await import('../../gbdraw/web/js/services/session-request.js');
@@ -95,7 +95,7 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
         });
         const bytes = gunzipSync(await readFile(file));
         const session = JSON.parse(bytes);
-        assert.equal(session.version, 44);
+        assert.equal(session.version, SESSION_VERSION);
         assert.equal(session.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
         assert.equal(Object.hasOwn(session, 'config'), false);
         assert.equal(session.webFiles.bindings.schema, 2);

@@ -662,9 +662,6 @@ const buildRecoveredFeatureState = (snapshot, payload) => ({
   biologicalFeatures: Array.isArray(payload.biologicalFeatures)
     ? payload.biologicalFeatures
     : (Array.isArray(payload.extractedFeatures) ? payload.extractedFeatures : []),
-  featureSelectorSafetyScope: Array.isArray(payload.featureSelectorSafetyScope)
-    ? payload.featureSelectorSafetyScope
-    : [],
   featureRecordIds: Array.isArray(payload.featureRecordIds) ? payload.featureRecordIds : [],
   selectedFeatureRecordIdx: Number.isInteger(payload.selectedFeatureRecordIdx)
     ? payload.selectedFeatureRecordIdx

@@ -681,11 +681,11 @@ const waitForLabelReflow = (page) => expect.poll(async () => (
   await labelEditorState(page, 'labels.circular.scope')
 ).processing, { timeout: 300_000 }).toBe(false);
 
-// R6 safety net (OV-05): an On label that the diagram should draw but does not,
-// here one of two features with the same type and location, still names the
-// feature after the live reflow and after Generate, which restores the last
-// Result; Default lets Generate succeed again.
-test('a Label visibility On that the diagram does not draw names the feature', async ({ page }) => {
+// OV-05 (design Q4): Label visibility On for one of two features with the same
+// type and location is an identity row for that feature, so the live reflow and
+// Generate draw its label only. Before identity rows the shared hash row drew
+// neither label and Generate failed with LABEL_NOT_DRAWN.
+test('a Label visibility On for one of two same-location features draws only its label', async ({ page }) => {
   test.setTimeout(600_000);
   await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
     window.__GBDRAW_APP__.form.labels_mode = 'none';
@@ -693,45 +693,16 @@ test('a Label visibility On that the diagram does not draw names the feature', a
   await generate(page);
   const { dup } = await featureIdsByLocator(page);
   expect(dup).toContain('__instance_');
-  const located = `Feature: CDS 2701..2900, ID ${dup}.`;
   const labelState = () => labelEditorState(page, 'labels.circular.scope');
 
   expect(await applyPopupLabel(page, dup, null, 'on')).toEqual({ hint: true, asked: false });
-  await expect.poll(async () => {
-    const state = await labelState();
-    return state.processing ? null : [state.reflowError?.code, state.reflowError?.context?.featureId];
-  }, { timeout: 300_000 }).toEqual(['LABEL_NOT_DRAWN', dup]);
-  expect((await labelState()).reflowError.note).toContain(located);
-  await expect(page.locator('[data-live-application-feedback]')).toContainText(located);
-
-  await generateAndWaitForResult(page, { expectedStatus: 'error' });
-  const failed = await page.evaluate(async () => {
-    const { state } = await import('./js/state.js');
-    const error = state.errorLog.value;
-    return {
-      recovery: state.generationFailureRecovery.value,
-      code: error?.code,
-      operation: error?.operation,
-      stage: error?.stage,
-      featureId: error?.context?.featureId,
-      actions: error?.actions,
-      summary: error?.summary
-    };
-  });
-  expect(failed).toMatchObject({
-    recovery: 'restored', code: 'LABEL_NOT_DRAWN', operation: 'generate',
-    stage: 'render', featureId: dup, actions: ['edit-input']
-  });
-  expect(failed.summary).toContain(located);
-  expect(failed.summary).toContain('set Label visibility to Default');
-  const alert = page.getByRole('alert', { name: 'Generation Error' });
-  await expect(alert).toContainText(located);
-  await expect(page.getByRole('button', { name: 'Retry Generate', exact: true })).toHaveCount(0);
-
-  expect(await applyPopupLabel(page, dup, null, 'default')).toMatchObject({ asked: false });
   await waitForLabelReflow(page);
+  const live = await labelState();
+  expect(live.reflowError).toBeNull();
+  expect(live.labels.map(([featureId]) => featureId)).toEqual([dup]);
+
   await generate(page);
-  expect((await labelState()).reflowError).toBeNull();
+  expect(await labelState()).toMatchObject({ error: null, reflowError: null, labels: live.labels });
 });
 
 // Owner decisions Q1 and Q2 (2026-10-04; FINDINGS OV-06, OV-07, OV-10): an
@@ -740,12 +711,17 @@ test('a Label visibility On that the diagram does not draw names the feature', a
 // fail on an On that cannot be drawn, and draws it once it can.
 const labelOnFacts = (page) => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
+  // Per-feature edits by the rendered ID of the feature in view.
+  const edits = (field) => Object.fromEntries(state.extractedFeatures.value.flatMap((feature) => {
+    const value = state.featureOverrides[JSON.stringify([feature.record_key, feature.biological_feature_id])]?.[field];
+    return value === null || value === undefined ? [] : [[feature.svg_id, value]];
+  }));
   return {
     undo: window.__GBDRAW_HISTORY__.getUndoCount(),
     redo: window.__GBDRAW_HISTORY__.getRedoCount(),
-    labelVisibility: { ...state.labelVisibilityOverrides },
-    labelText: { ...state.labelTextFeatureOverrides },
-    featureVisibility: { ...state.featureVisibilityOverrides }
+    labelVisibility: edits('labelVisibility'),
+    labelText: edits('labelText'),
+    featureVisibility: edits('featureVisibility')
   };
 });
 

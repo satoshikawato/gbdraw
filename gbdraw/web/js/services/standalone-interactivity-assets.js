@@ -1686,7 +1686,8 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       metadataText = await new Response(decompressed).text();
     }
     payload = JSON.parse(metadataText);
-    if (payload && payload.schema === 4 && Array.isArray(payload.items)) {
+    // Feature catalog schema 5 adds drawn selector values, which the popup does not read.
+    if (payload && (payload.schema === 4 || payload.schema === 5) && Array.isArray(payload.items)) {
       payload = decodeCatalogPayload(payload);
     }
   } catch (error) {

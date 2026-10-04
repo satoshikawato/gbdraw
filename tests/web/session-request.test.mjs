@@ -398,10 +398,8 @@ const state = {
   manualBlacklist: ref(''),
   manualWhitelist: [],
   manualPriorityRules: [],
-  labelTextFeatureOverrides: {},
+  featureOverrides: {},
   labelTextBulkOverrides: {},
-  labelTextFeatureOverrideSources: {},
-  labelVisibilityOverrides: {},
   editableLabels: ref([]),
   extractedFeatures: ref([]),
   circularConservation: { reference: 'auto', labels: '', series: [] },
@@ -486,7 +484,8 @@ const canonical = buildCanonicalRenderRequest({ state, filesData });
 state.form.multi_record_canvas = false;
 assert.equal(canonical.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
 assert.equal(CANONICAL_REQUEST_SCHEMA, 9);
-// Schema 9 carries per-feature edits by source identity; the Web writes none yet (design Q4).
+// Schema 9 carries per-feature edits by source identity (design Q4); this
+// state has no edits.
 assert.deepEqual(canonical.renderRequest.diagramOptions.featureOverrides, []);
 const schema8Canonical = structuredClone(canonical.renderRequest);
 schema8Canonical.schema = 8;
@@ -500,10 +499,39 @@ withIdentityRows.renderRequest.diagramOptions.featureOverrides = [{
   labelVisibility: null,
   labelText: null
 }];
-assert.throws(
-  () => projectCanonicalSessionRequest(withIdentityRows),
-  { code: 'INPUT_INVALID', context: { field: 'featureOverrides', reason: 'FEATURE_IDENTITY_EDITS' } }
+// The Web reads a request's identity rows into its draft (PR-Q4-4).
+assert.deepEqual(
+  projectCanonicalSessionRequest(withIdentityRows).semanticFeatureState.featureOverrides,
+  { [JSON.stringify([canonical.renderRequest.records[0].recordKey, 'f1234abcd'])]: {
+    ...withIdentityRows.renderRequest.diagramOptions.featureOverrides[0], labelSourceText: null
+  } }
 );
+const malformedIdentityRows = structuredClone(withIdentityRows);
+malformedIdentityRows.renderRequest.diagramOptions.featureOverrides[0].labelVisibility = 'shown';
+assert.throws(
+  () => projectCanonicalSessionRequest(malformedIdentityRows),
+  { code: 'INPUT_INVALID', context: { field: 'schema', reason: 'FIELDS' } }
+);
+// The writer sends the draft rows of the request's records (R2).
+{
+  const recordKey = canonical.renderRequest.records[0].recordKey;
+  state.featureOverrides = {
+    [JSON.stringify([recordKey, 'f1234abcd'])]: {
+      recordKey, biologicalFeatureId: 'f1234abcd', featureVisibility: null,
+      labelVisibility: 'on', labelText: 'Renamed', labelSourceText: 'source'
+    },
+    [JSON.stringify(['linear-seq-other-mode', 'f1'])]: {
+      recordKey: 'linear-seq-other-mode', biologicalFeatureId: 'f1', featureVisibility: 'off',
+      labelVisibility: null, labelText: null, labelSourceText: null
+    }
+  };
+  state.form.multi_record_canvas = true;
+  assert.deepEqual(buildCanonicalRenderRequestRaw({ state, filesData }).renderRequest.diagramOptions.featureOverrides, [{
+    recordKey, biologicalFeatureId: 'f1234abcd', featureVisibility: null, labelVisibility: 'on', labelText: 'Renamed'
+  }]);
+  state.form.multi_record_canvas = false;
+  state.featureOverrides = {};
+}
 const schema8WithRows = structuredClone(canonical);
 schema8WithRows.renderRequest.schema = 8;
 assert.throws(
@@ -1296,7 +1324,8 @@ state.featureVisibilityRules.value = [{
   id: 'visibility-1', source: 'manual', recordId: '*', featureType: 'CDS',
   qualifier: 'gene', value: '^alpha$', action: 'off'
 }];
-state.labelTextFeatureOverrides.f1 = 'Renamed alpha';
+// A bulk label edit that no displayed label resolves stays a label-table rule.
+state.labelTextBulkOverrides.alpha = 'Renamed alpha';
 const semanticCanonical = buildCanonicalRenderRequest({
   state,
   filesData: {
@@ -1344,7 +1373,7 @@ state.filterMode.value = 'None';
 state.manualWhitelist.splice(0);
 state.manualPriorityRules.splice(0);
 state.featureVisibilityRules.value = [];
-delete state.labelTextFeatureOverrides.f1;
+delete state.labelTextBulkOverrides.alpha;
 
 const invalidCircularDepthIndex = structuredClone(canonical);
 invalidCircularDepthIndex.renderRequest.diagramOptions.tracks = {
@@ -2195,7 +2224,15 @@ for (const [label, targetPatch, transformPatch, requestPatch] of [
     }]),
     filterMode: ref('Whitelist'),
     manualWhitelist: [{ feat: 'CDS', qual: 'gene', key: 'alpha' }],
-    generatedLabelOverrideTsv: '*\t*\thash\t^f1$\tRenamed alpha\n'
+    // Live per-feature edits are identity rows; a bulk edit without a known
+    // label stays a label-table rule (design Q4).
+    featureOverrides: {
+      [JSON.stringify([committed.renderRequest.records[0].recordKey, 'f1'])]: {
+        recordKey: committed.renderRequest.records[0].recordKey, biologicalFeatureId: 'f1',
+        featureVisibility: 'off', labelVisibility: null, labelText: 'Renamed f1', labelSourceText: null
+      }
+    },
+    labelTextBulkOverrides: { alpha: 'Renamed alpha' }
   };
   const reflow = projectCommittedEditorIntent({ committed, state: draft });
   assert.deepEqual(committed, committedBefore, 'the committed Session is not modified');
@@ -2205,7 +2242,11 @@ for (const [label, targetPatch, transformPatch, requestPatch] of [
   assert.deepEqual(options.configOverrides, committedOptions.configOverrides);
   assert.match(text(reflow, options.colors.colorTableFile), /\^alpha\$/);
   assert.match(text(reflow, options.featureVisibilityTableFile), /\^beta\$/);
-  assert.match(text(reflow, options.labelOverrideFile), /Renamed alpha/);
+  assert.equal(text(reflow, options.labelOverrideFile), '*\t*\tlabel\t^alpha$\tRenamed alpha\n');
+  assert.deepEqual(options.featureOverrides, [{
+    recordKey: committed.renderRequest.records[0].recordKey, biologicalFeatureId: 'f1',
+    featureVisibility: 'off', labelVisibility: null, labelText: 'Renamed f1'
+  }]);
   assert.equal(options.labelWhitelistFile, committedOptions.labelWhitelistFile);
   Object.keys(committed.resources).forEach((resourceId) => {
     if (!/^(?:colors-|feature-visibility|label-override)/.test(resourceId)) {
@@ -5261,8 +5302,8 @@ const projectionState = {
   currentColors: ref({ CDS: '#abcdef' }), appliedPaletteColors: ref({ CDS: '#abcdef' }),
   selectedPalette: ref('default'), appliedPaletteName: ref('default'),
   canonicalLabelOverrideRows: ref([]), featureVisibilityRules: ref([]),
-  labelTextFeatureOverrides: {}, labelTextBulkOverrides: {}, labelTextFeatureOverrideSources: {},
-  labelVisibilityOverrides: {}, manualSpecificRules: [], manualWhitelist: [], manualPriorityRules: [],
+  featureOverrides: {}, labelTextBulkOverrides: {},
+  manualSpecificRules: [], manualWhitelist: [], manualPriorityRules: [],
   unmanagedConfigOverrides: { 'objects.definition.linear.text_anchor': 'start' },
   linearRecordLayoutEnabled: ref(false), linearRecordRows: []
 };

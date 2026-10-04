@@ -16,6 +16,7 @@ import {
   defaultFeatureRendering,
   normalizeFeatureRendering
 } from '../../utils/feature-rendering.js';
+import { featureOverrideValue } from '../../services/feature-placement.js';
 
 export const createFeatureRuleActions = ({ state, nextTick, legendActions, rulePreparation, history, svgActions, ref, computed, isPatternEditAvailable = () => true }) => {
   const {
@@ -35,7 +36,7 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     extractedFeatures,
     featureColorOverrides,
     editableLabels,
-    labelTextFeatureOverrides,
+    featureOverrides,
     labelTextBulkOverrides,
     addedLegendCaptions,
     fileLegendCaptions
@@ -231,15 +232,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
     const editableText = normalizeCaption(editableEntry?.text);
     if (editableText) return editableText;
 
-    const featureIdKey = normalizeFeatureIdKey(feat.svg_id || feat.id);
-    if (featureIdKey) {
-      for (const [overrideFeatureId, overrideText] of Object.entries(labelTextFeatureOverrides)) {
-        if (normalizeFeatureIdKey(overrideFeatureId) !== featureIdKey) continue;
-        const normalizedOverride = normalizeCaption(overrideText);
-        if (normalizedOverride) return normalizedOverride;
-        break;
-      }
-    }
+    const normalizedOverride = normalizeCaption(featureOverrideValue(featureOverrides, feat, 'labelText'));
+    if (normalizedOverride) return normalizedOverride;
 
     const sourceText = normalizeCaption(editableEntry?.sourceText);
     if (sourceText) {

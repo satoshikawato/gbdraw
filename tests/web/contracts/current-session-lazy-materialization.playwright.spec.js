@@ -4,6 +4,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const {
+  CURRENT_SESSION_VERSION,
   evaluateWithRetainedPromise,
   getDiagramWorkerActivity,
   openApp
@@ -1315,7 +1316,6 @@ test('render-only Generate reuses preparation and remains undoable', async ({ pa
     interactiveContextCacheMissCount: 1,
     interactiveContextBuildCount: 1,
     interactiveFeatureTraversalCount: 1,
-    selectorSafetyScopeBuildCount: 0,
     preparedInputCacheMutationViolationCount: 0
   });
   expect(secondPython?.metrics).toMatchObject({
@@ -1326,7 +1326,6 @@ test('render-only Generate reuses preparation and remains undoable', async ({ pa
     interactiveContextCacheHitCount: 1,
     interactiveContextBuildCount: 0,
     interactiveFeatureTraversalCount: 0,
-    selectorSafetyScopeBuildCount: 0,
     preparedInputCacheMutationViolationCount: 0,
     featureCatalogSvgParseCount: 1,
     featureCatalogFullDomTraversalCount: 1
@@ -1645,7 +1644,7 @@ test('a frozen v39 session round-trips through the legacy migration path', async
   expect(saveOutcome.result.status, JSON.stringify(saveOutcome.errorLog)).toBe('saved');
   const roundTripPath = await (await downloadPromise).path();
   const roundTrip = JSON.parse(gunzipSync(readFileSync(roundTripPath)).toString('utf8'));
-  expect(roundTrip.version).toBe(44);
+  expect(roundTrip.version).toBe(CURRENT_SESSION_VERSION);
   expect(roundTrip.results).toHaveLength(1);
   expect(roundTrip.editorState.featureCatalog).toBeTruthy();
 

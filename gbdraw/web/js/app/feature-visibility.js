@@ -1,14 +1,15 @@
+import { exactRegexValue } from './feature-selector.js';
 import {
-  buildSelectorSafetyUniquenessIndex,
-  exactRegexValue,
-  selectFeatureSelector
-} from './feature-selector.js';
-import { getFeatureGenerationHash } from './feature-utils.js';
+  featureIdentityKey,
+  featureIdentityKeyOf,
+  featureOverrideValue,
+  recordKeyBelongsToRequest,
+  updateFeatureOverride
+} from '../services/feature-placement.js';
 export { escapeRegexLiteral, exactRegexValue } from './feature-selector.js';
 
 const REQUIRED_COLUMNS = ['record_id', 'feature_type', 'qualifier', 'value', 'action'];
 const COMMON_QUALIFIERS = ['product', 'gene', 'protein_id', 'locus_tag', 'hash', 'location', 'record_location'];
-const EDITOR_FEATURE_SELECTOR_PRIORITY = ['protein_id', 'locus_tag', 'gene_id', 'old_locus_tag'];
 const SHOW_ACTIONS = new Set(['show', 'on']);
 const HIDE_ACTIONS = new Set(['hide', 'off', 'false', '0']);
 const EXCLUDE_MATCHING_ACTIONS = new Set(['exclude_matching', 'suppress']);
@@ -168,220 +169,152 @@ export const parseFeatureVisibilityRules = (text) => {
   return { rules, count: rules.length };
 };
 
-const firstText = (...values) => {
-  for (const value of values) {
-    if (Array.isArray(value)) {
-      const found = firstText(...value);
-      if (found) return found;
-      continue;
-    }
-    const normalized = normalizeCell(value);
-    if (normalized) return normalized;
-  }
-  return '';
-};
-
-const featureLabel = (feat = {}) => {
-  const qualifiers = feat.qualifiers && typeof feat.qualifiers === 'object' ? feat.qualifiers : {};
-  return firstText(
-    feat.label,
-    feat.product,
-    feat.gene,
-    feat.locus_tag,
-    qualifiers.product,
-    qualifiers.gene,
-    qualifiers.locus_tag,
-    feat.type && (feat.start || feat.end) ? `${feat.type} ${feat.start ?? '?'}..${feat.end ?? '?'}` : feat.type
-  );
-};
-
 const getFeatureId = (feat = {}) => normalizeCell(feat?.svg_id ?? feat?.svgId ?? feat?.featureId ?? feat?.feature_id ?? feat?.id);
-
-const getFeatureStableHashValue = (feat = {}) => normalizeCell(
-  feat?.selector?.hash ??
-  feat?.stable_svg_id ??
-  feat?.stableSvgId ??
-  feat?.stableFeatureSvgId ??
-  feat?.stable_feature_id ??
-  feat?.stableFeatureId ??
-  feat?.feature_hash ??
-  feat?.hash ??
-  getFeatureId(feat)
-);
-
-const getFeatureRecordId = (feat = {}) => normalizeCell(feat?.record_id ?? feat?.recordId ?? feat?.record) || '*';
 
 const getFeatureType = (feat = {}) => normalizeCell(feat?.type ?? feat?.featureType ?? feat?.feature_type) || '*';
 
-const getSelectorCacheEntry = (selectorCache, featureIdRaw) => {
-  const featureId = normalizeCell(featureIdRaw);
-  if (!featureId) return null;
-  if (selectorCache instanceof Map) return selectorCache.get(featureId) || null;
-  if (!selectorCache || typeof selectorCache !== 'object' || Array.isArray(selectorCache)) return null;
-  return selectorCache[featureId] || null;
-};
+// Feature visibility edits live in the identity-keyed featureOverrides draft
+// (design Q4); these read and write one feature's `featureVisibility`.
+export const getFeatureVisibilityOverride = (featureOverrides, feature) => normalizeVisibilityMode(
+  featureOverrideValue(featureOverrides, feature, 'featureVisibility')
+);
 
-const hasOverrideKey = (overrides, featureId) =>
-  Boolean(overrides && typeof overrides === 'object' && Object.prototype.hasOwnProperty.call(overrides, featureId));
-
-export const getFeatureVisibilityOverride = (overrides, featureIdRaw) => {
-  const featureId = normalizeCell(featureIdRaw);
-  if (!featureId || !hasOverrideKey(overrides, featureId)) return 'default';
-  return normalizeVisibilityMode(overrides[featureId]);
-};
-
-export const setFeatureVisibilityOverride = (overrides, featureIdRaw, modeRaw) => {
-  if (!overrides || typeof overrides !== 'object') return 'default';
-  const featureId = normalizeCell(featureIdRaw);
-  if (!featureId) return 'default';
-  const previous = getFeatureVisibilityOverride(overrides, featureId);
+export const setFeatureVisibilityOverride = (featureOverrides, feature, modeRaw) => {
+  const previous = getFeatureVisibilityOverride(featureOverrides, feature);
   const mode = normalizeVisibilityMode(modeRaw);
-  if (mode === 'default') {
-    delete overrides[featureId];
-  } else {
-    overrides[featureId] = mode;
-  }
+  updateFeatureOverride(featureOverrides, feature, { featureVisibility: mode === 'default' ? null : mode });
   return previous;
 };
 
-export const applyFeatureVisibilityOverrideChanges = (overrides, changes) => {
-  if (!overrides || typeof overrides !== 'object' || !Array.isArray(changes)) return 0;
+// One change per feature identity: {recordKey, biologicalFeatureId, featureId
+// (the rendered ID it is drawn with), before, after}.
+export const buildFeatureVisibilityChanges = (features, modeRaw, featureOverrides = {}) => {
+  const mode = normalizeVisibilityMode(modeRaw);
+  const seen = new Set();
+  const changes = [];
+  (Array.isArray(features) ? features : []).forEach((feature) => {
+    const key = featureIdentityKeyOf(feature);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    const before = getFeatureVisibilityOverride(featureOverrides, feature);
+    if (before === mode) return;
+    const [recordKey, biologicalFeatureId] = JSON.parse(key);
+    changes.push({ recordKey, biologicalFeatureId, featureId: getFeatureId(feature), before, after: mode });
+  });
+  return changes;
+};
+
+export const applyFeatureVisibilityOverrideChanges = (featureOverrides, changes) => {
+  if (!featureOverrides || !Array.isArray(changes)) return 0;
   let applied = 0;
   changes.forEach((change) => {
-    const featureId = normalizeCell(change?.featureId ?? change?.svgId ?? change?.id);
-    if (!featureId) return;
-    const mode = Object.prototype.hasOwnProperty.call(change || {}, 'mode')
-      ? change.mode
-      : change?.after;
-    setFeatureVisibilityOverride(overrides, featureId, mode);
+    if (!featureIdentityKey(change?.recordKey, change?.biologicalFeatureId)) return;
+    const mode = Object.prototype.hasOwnProperty.call(change || {}, 'mode') ? change.mode : change?.after;
+    setFeatureVisibilityOverride(featureOverrides, change, mode);
     applied += 1;
   });
   return applied;
 };
 
-export const buildFeatureVisibilityChanges = (features, modeRaw, currentOverrides = {}) => {
-  const mode = normalizeVisibilityMode(modeRaw);
-  const seen = new Set();
-  const changes = [];
-  (Array.isArray(features) ? features : []).forEach((feature) => {
-    const featureId = getFeatureId(feature);
-    if (!featureId || seen.has(featureId)) return;
-    seen.add(featureId);
-    const before = getFeatureVisibilityOverride(currentOverrides, featureId);
-    if (before === mode) return;
-    changes.push({ featureId, before, after: mode });
+const EDIT_FIELDS = ['featureVisibility', 'labelVisibility', 'labelText'];
+const KIND_FIELDS = Object.freeze({
+  feature_visibility: 'featureVisibility', label_visibility: 'labelVisibility', label_text: 'labelText'
+});
+
+// Python's `unresolved` notices by identity key: the edit kinds whose feature
+// the source does not have (design Q4 3.4).
+const unresolvedNoticeKinds = (notices, recordKeyFilter = () => true) => {
+  const unresolved = new Map();
+  (Array.isArray(notices) ? notices : []).forEach((notice) => {
+    if (notice?.status !== 'unresolved' || !recordKeyFilter(notice.recordKey)) return;
+    const key = featureIdentityKey(notice.recordKey, notice.biologicalFeatureId);
+    if (key) unresolved.set(key, new Set([...(unresolved.get(key) || []), ...(notice.kinds || [])]));
   });
-  return changes;
+  return unresolved;
 };
 
-export const buildFeatureVisibilitySelectorCache = (features, selectorSafetyScope) => {
-  const cache = {};
-  const selectorUniquenessIndex = buildSelectorSafetyUniquenessIndex(selectorSafetyScope);
-  (Array.isArray(features) ? features : []).forEach((feature) => {
-    const featureId = getFeatureId(feature);
-    if (!featureId || cache[featureId]) return;
-    const selector = selectFeatureSelector(
-      feature,
-      selectorUniquenessIndex,
-      {
-        priority: EDITOR_FEATURE_SELECTOR_PRIORITY,
-        requireSelector: true,
-        requireSafetyScope: true
-      }
-    );
-    const value = normalizeCell(selector?.value || featureId);
-    if (!value) return;
-    cache[featureId] = {
-      recordId: getFeatureRecordId(feature),
-      featureType: getFeatureType(feature),
-      qualifier: normalizeCell(selector?.qualifier || 'hash').toLowerCase() || 'hash',
-      value,
-      label: featureLabel(feature)
-    };
-  });
-  return cache;
-};
-
-export const preserveFeatureVisibilitySelectorCacheForOverrides = (
-  nextCache = {},
-  previousCache = {},
-  overrides = {}
-) => {
-  const merged = { ...(nextCache && typeof nextCache === 'object' && !Array.isArray(nextCache) ? nextCache : {}) };
-  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return merged;
-
-  Object.entries(overrides).forEach(([featureIdRaw, modeRaw]) => {
-    if (normalizeVisibilityMode(modeRaw) === 'default') return;
-    const featureId = normalizeCell(featureIdRaw);
-    if (!featureId || merged[featureId]) return;
-    const previous = getSelectorCacheEntry(previousCache, featureId);
-    if (previous) merged[featureId] = previous;
-  });
-
-  return merged;
-};
-
-// Prune feature-keyed editor overrides (visibility and labels) whose target no
-// longer exists in the source catalog, including hidden/cropped features. The
-// source-binding owner decides whether a successful Generate replaced a source.
-export const pruneUnmatchedFeatureOverrides = (
-  overrides,
-  biologicalFeatures,
-  previousFeatures = [],
-  selectorCache = {}
-) => {
-  const keys = Object.keys(overrides || {});
-  if (keys.length === 0) return 0;
-  const currentIds = new Set((biologicalFeatures || []).map(getFeatureStableHashValue));
-  const previousById = new Map((previousFeatures || []).map(feature => [getFeatureId(feature), feature]));
+// Removes edits from the identity-keyed drafts: every edit of a dropped
+// record, the unresolved edit kinds of an identity, and (`sourceGone`) the
+// label source text kept for a bulk edit. Returns the count of removed edits.
+const removeFeatureEdits = ({
+  featureOverrides = {},
+  featurePlacementOverrides = {},
+  unresolved = new Map(),
+  dropped = () => false,
+  sourceGone = () => false
+}) => {
   let removed = 0;
-  keys.forEach(featureId => {
-    const previous = previousById.get(featureId);
-    const cached = getSelectorCacheEntry(selectorCache, featureId);
-    const sourceId = previous
-      ? getFeatureStableHashValue(previous)
-      : (cached?.qualifier === 'hash' ? cached.value : getFeatureGenerationHash({ svg_id: featureId }));
-    if (sourceId && currentIds.has(sourceId)) return;
-    delete overrides[featureId];
+  Object.entries(featurePlacementOverrides || {}).forEach(([key, row]) => {
+    if (!dropped(row?.recordKey) && !unresolved.get(key)?.has('placement')) return;
+    delete featurePlacementOverrides[key];
     removed += 1;
+  });
+  Object.entries(featureOverrides || {}).forEach(([key, row]) => {
+    const edits = EDIT_FIELDS.filter((field) => row?.[field] !== null && row?.[field] !== undefined);
+    if (dropped(row?.recordKey)) {
+      removed += edits.length;
+      delete featureOverrides[key];
+      return;
+    }
+    const kinds = unresolved.get(key);
+    const gone = kinds ? edits.filter((field) => Object.entries(KIND_FIELDS)
+      .some(([kind, name]) => name === field && kinds.has(kind))) : [];
+    const source = sourceGone(key, row);
+    if (gone.length === 0 && !source) return;
+    removed += gone.length;
+    const patch = Object.fromEntries(gone.map((field) => [field, null]));
+    if (source) patch.labelSourceText = null;
+    updateFeatureOverride(featureOverrides, row, patch);
   });
   return removed;
 };
 
-const buildRuleFromSelectorCacheEntry = (featureIdRaw, modeRaw, selectorCache) => {
-  const featureId = normalizeCell(featureIdRaw);
-  const action = featureVisibilityModeToAction(modeRaw);
-  if (!featureId || !action) return null;
-  const cached = getSelectorCacheEntry(selectorCache, featureId) || {};
-  const qualifier = normalizeCell(cached.qualifier).toLowerCase() || 'hash';
-  const value = normalizeCell(cached.value) || featureId;
-  return normalizeFeatureVisibilityRule({
-    source: 'editor',
-    featureId,
-    label: normalizeCell(cached.label) || featureId,
-    recordId: normalizeCell(cached.recordId) || '*',
-    featureType: normalizeCell(cached.featureType) || '*',
-    qualifier,
-    value: exactRegexValue(value),
-    action
+// Owner decision Q3 = A (design Q4 3.4, 6.3). A successful Generate that
+// replaced a source removes the edits Python reported `unresolved` for a
+// replaced record (Feature placement rows included), and every edit of a
+// record that the previous request of this mode had and this request has not.
+// A label source text kept for a bulk edit goes with its feature. Edits of
+// features outside the crop or display stay dormant. Returns the count of
+// removed edits.
+export const pruneUnmatchedFeatureOverrides = ({
+  featureOverrides = {},
+  featurePlacementOverrides = {},
+  notices = [],
+  replacedRecordKeys = [],
+  previousRecords = [],
+  currentRecords = [],
+  biologicalFeatures = []
+} = {}) => {
+  const replaced = new Set(replacedRecordKeys);
+  const present = new Set((Array.isArray(biologicalFeatures) ? biologicalFeatures : [])
+    .map(featureIdentityKeyOf).filter(Boolean));
+  return removeFeatureEdits({
+    featureOverrides,
+    featurePlacementOverrides,
+    unresolved: unresolvedNoticeKinds(notices, (recordKey) => replaced.has(recordKey)),
+    dropped: (recordKey) => recordKeyBelongsToRequest(recordKey, previousRecords)
+      && !recordKeyBelongsToRequest(recordKey, currentRecords),
+    sourceGone: (key, row) => replaced.has(row?.recordKey) && !present.has(key)
   });
 };
 
-export const featureVisibilityOverridesToRules = (overrides, selectorCache = {}) => {
-  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return [];
-  return Object.entries(overrides)
-    .map(([featureId, mode]) => buildRuleFromSelectorCacheEntry(featureId, mode, selectorCache))
-    .filter(Boolean);
+// The unresolved edits the drafts still hold after a Generate that replaced no
+// source; "Remove N unmatched feature edits" removes them (an explicit Reset, R2).
+export const countUnresolvedFeatureEdits = ({ featureOverrides = {}, featurePlacementOverrides = {}, notices = [] } = {}) => {
+  let count = 0;
+  unresolvedNoticeKinds(notices).forEach((kinds, key) => {
+    if (kinds.has('placement') && featurePlacementOverrides?.[key]) count += 1;
+    const row = featureOverrides?.[key];
+    Object.entries(KIND_FIELDS).forEach(([kind, field]) => {
+      if (kinds.has(kind) && row?.[field] !== null && row?.[field] !== undefined) count += 1;
+    });
+  });
+  return count;
 };
 
-export const deriveFeatureVisibilityRulesForBoundary = (
-  manualRules = [],
-  overrides = {},
-  selectorCache = {}
-) => [
-  ...featureVisibilityOverridesToRules(overrides, selectorCache),
-  ...(Array.isArray(manualRules) ? manualRules.map((rule) => normalizeFeatureVisibilityRule(rule)) : [])
-];
+export const removeUnresolvedFeatureEdits = ({ featureOverrides = {}, featurePlacementOverrides = {}, notices = [] } = {}) => (
+  removeFeatureEdits({ featureOverrides, featurePlacementOverrides, unresolved: unresolvedNoticeKinds(notices) })
+);
 
 export const splitLegacyVisibilityRules = (rules) => {
   const overrides = {};
@@ -404,31 +337,18 @@ export const splitLegacyVisibilityRules = (rules) => {
   return { overrides, manualRules, warnings };
 };
 
-const getCacheValue = (cache, featureId) => {
-  if (cache instanceof Map) return cache.get(featureId);
-  if (!cache || typeof cache !== 'object' || Array.isArray(cache)) return undefined;
-  return cache[featureId];
-};
-
-// Feature visibility for the live preview: the per-feature override, then the
-// first matching manual rule. With the feature, the editor's exact-qualifier
-// rules match as Generate does, so an action and a later reconcile agree.
-export const resolveEffectiveFeatureVisibility = (
-  featureIdRaw,
-  overrides = {},
-  baseVisibilityCache = null,
-  manualRules = [],
-  feature = null
-) => {
-  const featureId = normalizeCell(featureIdRaw);
-  if (!featureId) return 'default';
-  const override = getFeatureVisibilityOverride(overrides, featureId);
+// Feature visibility for the live preview: the feature's identity-keyed
+// override, then the first matching manual rule. With the feature, the
+// editor's exact-qualifier rules match as Generate does, so an action and a
+// later reconcile agree.
+export const resolveEffectiveFeatureVisibility = (feature, featureOverrides = {}, manualRules = []) => {
+  const override = getFeatureVisibilityOverride(featureOverrides, feature);
   if (override !== 'default') return override;
-  const cached = normalizeVisibilityMode(getCacheValue(baseVisibilityCache, featureId));
-  if (cached !== 'default') return cached;
+  const featureId = getFeatureId(feature || {});
+  if (!featureId) return 'default';
   for (const rule of Array.isArray(manualRules) ? manualRules : []) {
     const normalized = normalizeFeatureVisibilityRule(rule);
-    if (feature && isEditorExactQualifierRule(normalized)) {
+    if (isEditorExactQualifierRule(normalized)) {
       if (featureMatchesExactQualifier(feature, normalized)) {
         return featureVisibilityActionToMode(normalized.action);
       }
@@ -445,13 +365,6 @@ export const resolveEffectiveFeatureVisibility = (
     }
   }
   return 'on';
-};
-
-const isEditorRuleForFeatureId = (rule, featureId) => {
-  const normalized = normalizeFeatureVisibilityRule(rule);
-  const expectedFeatureId = normalizeCell(featureId || normalized.featureId);
-  if (!expectedFeatureId) return false;
-  return normalized.source === 'editor' && normalized.featureId === expectedFeatureId;
 };
 
 const isEditorFeatureRule = (rule) => {
@@ -510,59 +423,6 @@ const reorderEditorVisibilityRules = (rules) => {
   rules.splice(0, rules.length, ...featureRules, ...qualifierRules, ...otherRules);
 };
 
-export const buildExactHashFeatureVisibilityRule = (feat, actionRaw) => {
-  const featureId = getFeatureId(feat);
-  const hashValue = getFeatureStableHashValue(feat);
-  const action = featureVisibilityModeToAction(actionRaw);
-  if (!featureId || !hashValue || !action) return null;
-  return normalizeFeatureVisibilityRule({
-    source: 'editor',
-    featureId,
-    label: featureLabel(feat),
-    recordId: '*',
-    featureType: '*',
-    qualifier: 'hash',
-    value: exactRegexValue(hashValue),
-    action
-  });
-};
-
-const resolveSelectorUniquenessIndex = (selectorContext = {}) => {
-  if (selectorContext?.selectorUniquenessIndex instanceof Map) {
-    return selectorContext.selectorUniquenessIndex;
-  }
-  return buildSelectorSafetyUniquenessIndex(selectorContext?.selectorSafetyScope);
-};
-
-export const buildEditorFeatureVisibilityRule = (feat, selectorContext = {}, mode) => {
-  const featureId = getFeatureId(feat);
-  const action = featureVisibilityModeToAction(mode);
-  if (!featureId || !action) return null;
-
-  const selector = selectFeatureSelector(
-    feat,
-    resolveSelectorUniquenessIndex(selectorContext),
-    {
-      priority: EDITOR_FEATURE_SELECTOR_PRIORITY,
-      requireSelector: true,
-      requireSafetyScope: true
-    }
-  );
-  const selectedValue = normalizeCell(selector?.value || featureId);
-  if (!selectedValue) return null;
-
-  return normalizeFeatureVisibilityRule({
-    source: 'editor',
-    featureId,
-    label: featureLabel(feat),
-    recordId: getFeatureRecordId(feat),
-    featureType: getFeatureType(feat),
-    qualifier: normalizeCell(selector?.qualifier || 'hash').toLowerCase() || 'hash',
-    value: exactRegexValue(selectedValue),
-    action
-  });
-};
-
 export const buildExactQualifierFeatureVisibilityRule = ({
   featureType,
   qualifier,
@@ -585,31 +445,6 @@ export const buildExactQualifierFeatureVisibilityRule = ({
     value: exactRegexValue(normalizedValue),
     action
   });
-};
-
-export const upsertEditorFeatureVisibilityRule = (rules, feat, actionRaw, selectorContext = {}) => {
-  if (!Array.isArray(rules)) return null;
-  const featureId = getFeatureId(feat);
-  if (!featureId) return null;
-  const action = featureVisibilityModeToAction(actionRaw);
-  if (!action) {
-    removeEditorFeatureVisibilityRule(rules, featureId);
-    return null;
-  }
-
-  const nextRule = buildEditorFeatureVisibilityRule(feat, selectorContext, action);
-  if (!nextRule) return null;
-  const existingIndex = rules.findIndex((rule) => normalizeFeatureVisibilityRule(rule).source === 'editor' &&
-    normalizeFeatureVisibilityRule(rule).featureId === featureId);
-
-  if (existingIndex >= 0) {
-    nextRule.id = normalizeFeatureVisibilityRule(rules[existingIndex]).id;
-    rules.splice(existingIndex, 1, nextRule);
-  } else {
-    rules.unshift(nextRule);
-  }
-  reorderEditorVisibilityRules(rules);
-  return nextRule;
 };
 
 export const upsertEditorQualifierFeatureVisibilityRule = (rules, ruleInput, actionRaw) => {
@@ -638,20 +473,6 @@ export const upsertEditorQualifierFeatureVisibilityRule = (rules, ruleInput, act
   return nextRule;
 };
 
-export const removeEditorFeatureVisibilityRule = (rules, featureIdRaw) => {
-  if (!Array.isArray(rules)) return 0;
-  const featureId = normalizeCell(featureIdRaw);
-  if (!featureId) return 0;
-  let removed = 0;
-  for (let index = rules.length - 1; index >= 0; index -= 1) {
-    const rule = normalizeFeatureVisibilityRule(rules[index]);
-    if (rule.source !== 'editor' || rule.featureId !== featureId) continue;
-    rules.splice(index, 1);
-    removed += 1;
-  }
-  return removed;
-};
-
 export const removeEditorQualifierFeatureVisibilityRule = (rules, ruleInput = {}) => {
   if (!Array.isArray(rules)) return 0;
   const featureType = normalizeCell(ruleInput.featureType);
@@ -671,47 +492,4 @@ export const removeEditorQualifierFeatureVisibilityRule = (rules, ruleInput = {}
     removed += 1;
   }
   return removed;
-};
-
-export const getEditorFeatureVisibilityMode = (rules, featureIdRaw) => {
-  const featureId = normalizeCell(featureIdRaw);
-  if (!featureId) return 'default';
-  for (const rule of Array.isArray(rules) ? rules : []) {
-    if (!isEditorRuleForFeatureId(rule, featureId)) continue;
-    return featureVisibilityActionToMode(rule.action);
-  }
-  return 'default';
-};
-
-export const buildFeatureVisibilityOverrideCache = (rules) => {
-  const cache = {};
-  for (const rule of Array.isArray(rules) ? rules : []) {
-    const normalized = normalizeFeatureVisibilityRule(rule);
-    if (!isEditorRuleForFeatureId(normalized, normalized.featureId)) continue;
-    const mode = featureVisibilityActionToMode(normalized.action);
-    if (mode === 'default') continue;
-    cache[normalized.featureId] = mode;
-  }
-  return cache;
-};
-
-export const featureVisibilityRulesFromOverrideCache = (overrides) => {
-  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) return [];
-  const rules = [];
-  Object.entries(overrides).forEach(([featureIdRaw, modeRaw]) => {
-    const featureId = normalizeCell(featureIdRaw);
-    const action = featureVisibilityModeToAction(modeRaw);
-    if (!featureId || !action) return;
-    rules.push(normalizeFeatureVisibilityRule({
-      source: 'editor',
-      featureId,
-      label: featureId,
-      recordId: '*',
-      featureType: '*',
-      qualifier: 'hash',
-      value: exactRegexValue(featureId),
-      action
-    }));
-  });
-  return rules;
 };

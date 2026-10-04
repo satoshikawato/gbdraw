@@ -83,7 +83,7 @@ export const reconcileAnnotationRecordBindings = (sets, catalog) => {
   const records = Array.isArray(catalog?.records) ? catalog.records : [];
   (Array.isArray(sets) ? sets : []).forEach((set) => {
     (Array.isArray(set?.annotations) ? set.annotations : []).forEach((annotation) => {
-      if (!annotation?.target) return;
+      if (!annotation?.target || annotation.target.kind === 'featureIdentity') return;
       const binding = bindingFor(annotation);
       const record = binding
         ? records.find((candidate) => candidate.key === binding)

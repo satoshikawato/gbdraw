@@ -246,7 +246,6 @@ def test_warm_and_render_only_generates_reuse_biological_preparation(
     assert cold_metrics["interactiveContextCacheMissCount"] == 1
     assert cold_metrics["interactiveContextBuildCount"] == 1
     assert cold_metrics["interactiveFeatureTraversalCount"] == 1
-    assert cold_metrics["selectorSafetyScopeBuildCount"] == 0
     assert cold_metrics["preparedInputCacheRetainedBytes"] > 0
 
     for diagnostics in (warm_diagnostics, render_only_diagnostics):
@@ -258,7 +257,6 @@ def test_warm_and_render_only_generates_reuse_biological_preparation(
         assert metrics["interactiveContextCacheHitCount"] == 1
         assert metrics["interactiveContextBuildCount"] == 0
         assert metrics["interactiveFeatureTraversalCount"] == 0
-        assert metrics["selectorSafetyScopeBuildCount"] == 0
         assert metrics["preparedInputCacheRetainedBytes"] > 0
         assert metrics["preparedInputCacheMutationViolationCount"] == 0
 

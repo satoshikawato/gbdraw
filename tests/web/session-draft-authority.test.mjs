@@ -138,9 +138,7 @@ const compactActiveIntentSnapshot = () => ({
   editorOverrides: {
     fills: structuredClone(state.featureColorOverrides),
     strokes: structuredClone(state.featureStrokeOverrides),
-    visibility: structuredClone(state.featureVisibilityOverrides),
-    labelText: structuredClone(state.labelTextFeatureOverrides),
-    labelVisibility: structuredClone(state.labelVisibilityOverrides),
+    featureOverrides: structuredClone(state.featureOverrides),
     legendColors: structuredClone(state.legendColorOverrides),
     legendStrokes: structuredClone(state.legendStrokeOverrides)
   }
@@ -649,7 +647,10 @@ const activeIntentSession = JSON.parse(await readFile(
   'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json',
   'utf8'
 ));
-const activeFeatureId = activeIntentSession.editorState.featureCatalog.items[0].features[0].svgId;
+const activeFeature = activeIntentSession.editorState.featureCatalog.items[0].features[0];
+const activeFeatureId = activeFeature.svgId;
+// The Session 44 rendered-ID edits migrate to the feature's identity row.
+const activeFeatureIdentity = JSON.stringify([activeFeature.recordKey, activeFeature.biologicalFeatureId]);
 Object.assign(activeIntentSession.config.form, {
   plot_title: 'Saved active draft',
   labels_mode: 'both',
@@ -797,9 +798,16 @@ const expectedActiveIntent = {
   editorOverrides: {
     fills: structuredClone(activeIntentSession.features.featureColorOverrides),
     strokes: structuredClone(activeIntentSession.editorState.featureStrokes.overrides),
-    visibility: structuredClone(activeIntentSession.features.featureVisibilityOverrides),
-    labelText: structuredClone(activeIntentSession.features.labelTextFeatureOverrides),
-    labelVisibility: structuredClone(activeIntentSession.features.labelVisibilityOverrides),
+    featureOverrides: {
+      [activeFeatureIdentity]: {
+        recordKey: activeFeature.recordKey,
+        biologicalFeatureId: activeFeature.biologicalFeatureId,
+        featureVisibility: 'off',
+        labelVisibility: 'off',
+        labelText: 'Saved feature label',
+        labelSourceText: 'Original label'
+      }
+    },
     legendColors: structuredClone(activeIntentSession.editorState.legend.colorOverrides),
     legendStrokes: structuredClone(activeIntentSession.editorState.legend.strokeOverrides)
   }
@@ -1023,9 +1031,6 @@ state.newLegendColor.value = '#654321';
 state.fileLegendCaptions.value = new Set(['Keep file legend']);
 state.featureSearch.value = 'keep feature search';
 state.labelSearch.value = 'keep label search';
-Object.assign(state.featureVisibilitySelectorCache, {
-  'keep-feature': { featureType: 'CDS', recordId: 'KEEP' }
-});
 state.selectedFeatureIds.value = new Set(['keep-feature-a', 'keep-feature-b']);
 state.selectedFeatureAnchorId.value = 'keep-feature-a';
 state.featureSelectionStatus.value = 'Keep selection';
@@ -1151,7 +1156,6 @@ const rollbackState = () => ({
   fileLegendCaptions: [...state.fileLegendCaptions.value],
   featureSearch: state.featureSearch.value,
   labelSearch: state.labelSearch.value,
-  featureVisibilitySelectorCache: structuredClone(state.featureVisibilitySelectorCache),
   selectedFeatureIds: [...state.selectedFeatureIds.value],
   selectedFeatureAnchorId: state.selectedFeatureAnchorId.value,
   featureSelectionStatus: state.featureSelectionStatus.value,

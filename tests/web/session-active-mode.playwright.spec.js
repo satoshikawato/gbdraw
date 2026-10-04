@@ -7,8 +7,12 @@ const { execFile } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { promisify } = require('node:util');
 const {
-  openApp, assertSessionLoadLeftWorkerIdle, getDiagramWorkerActivity,
-  generateAndWaitForResult, evaluateWithRetainedPromise
+  CURRENT_SESSION_VERSION,
+  assertSessionLoadLeftWorkerIdle,
+  evaluateWithRetainedPromise,
+  generateAndWaitForResult,
+  getDiagramWorkerActivity,
+  openApp
 } = require('./helpers/app-lifecycle.cjs');
 
 const fixture = path.join(process.cwd(), 'gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
@@ -87,7 +91,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
 
   const firstFile = info.outputPath('linear-draft.gbdraw-session.json.gz');
   const first = await save(page, firstFile);
-  expect(first.version).toBe(44);
+  expect(first.version).toBe(CURRENT_SESSION_VERSION);
   expect(first.ui.mode).toBe('linear');
   expect(first.config.modeProfiles.activeMode).toBe('linear');
   expect(first.renderRequest.mode).toBe('circular');

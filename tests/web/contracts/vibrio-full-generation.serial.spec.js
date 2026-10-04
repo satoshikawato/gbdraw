@@ -5,6 +5,7 @@ const { writeFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const {
+  CURRENT_FEATURE_CATALOG_SCHEMA,
   getDiagramWorkerActivity,
   openApp,
   evaluateWithRetainedPromise
@@ -243,9 +244,7 @@ const activeIntentSummary = (page) => page.evaluate(async () => {
   const overrides = {
     fills: plain(state.featureColorOverrides),
     strokes: plain(state.featureStrokeOverrides),
-    visibility: plain(state.featureVisibilityOverrides),
-    labelText: plain(state.labelTextFeatureOverrides),
-    labelVisibility: plain(state.labelVisibilityOverrides),
+    featureOverrides: plain(state.featureOverrides),
     legendColors: plain(state.legendColorOverrides),
     legendStrokes: plain(state.legendStrokeOverrides)
   };
@@ -501,9 +500,6 @@ const generationPhaseAttribution = (outcome, probe) => {
       ),
       interactiveFeatureTraversalCount: Number(
         pythonMetrics.interactiveFeatureTraversalCount || 0
-      ),
-      selectorSafetyScopeBuildCount: Number(
-        pythonMetrics.selectorSafetyScopeBuildCount || 0
       ),
       preparedInputCacheEvictionCount: Number(
         pythonMetrics.preparedInputCacheEvictionCount || 0
@@ -899,7 +895,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   expect(preflightStructural.proteinRawTextValidationCount).toBeGreaterThan(0);
   expect(loadProbe.metrics.currentWriterActiveConfigRestoreCount).toBe(1);
   expect(loadProbe.metrics.activeConfigCanonicalOverwriteCount || 0).toBe(0);
-  expect(await featureCatalogSummary(page)).toEqual({ schema: 4, itemCount: 1 });
+  expect(await featureCatalogSummary(page)).toEqual({ schema: CURRENT_FEATURE_CATALOG_SCHEMA, itemCount: 1 });
   expect(preFirstGenerateActiveIntent.linearComparisonPlan).toEqual({
     mode: 'adjacent',
     defaultSource: 'losat',
@@ -1292,7 +1288,6 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     interactiveContextCacheMissCount: 1,
     interactiveContextBuildCount: 1,
     interactiveFeatureTraversalCount: 1,
-    selectorSafetyScopeBuildCount: 0,
     preparedInputCacheMutationViolationCount: 0
   });
   expect(firstPhaseAttribution.preparedInputCacheStructural
@@ -1316,7 +1311,6 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     interactiveContextCacheMissCount: 0,
     interactiveContextBuildCount: 0,
     interactiveFeatureTraversalCount: 0,
-    selectorSafetyScopeBuildCount: 0,
     preparedInputCacheMutationViolationCount: 0
   });
   expect(secondPhaseAttribution.preparedInputCacheStructural
@@ -1369,7 +1363,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     .toBe(true);
   expect(artifactFingerprints[1]).toBe(artifactFingerprints[0]);
   expect(generatedFeatureCatalogDigest).toMatchObject({
-    schema: 4,
+    schema: CURRENT_FEATURE_CATALOG_SCHEMA,
     itemCount: 1
   });
   expect(generatedFeatureCatalogDigest.sha256).toMatch(/^[0-9a-f]{64}$/);

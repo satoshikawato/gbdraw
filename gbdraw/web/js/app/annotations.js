@@ -1,6 +1,6 @@
 import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets, uniqueAnnotationSetId } from './annotations/state.js';
 import { coordinateTarget, featureTarget, featureTargetsFromSelection } from './annotations/target-actions.js';
-import { encodeAnnotationTable, parseAnnotationTableWithNotice } from './annotations/table-codec.js';
+import { encodeAnnotationTableWithNotice, parseAnnotationTableWithNotice } from './annotations/table-codec.js';
 import {
   createAnnotationRecordSelector,
   reconcileAnnotationRecordBindings
@@ -124,7 +124,11 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
   const canDownloadAnnotationTable = () => state.annotationSets.some((set) => set.annotations.length > 0);
   const downloadAnnotationTable = () => {
     if (!canDownloadAnnotationTable()) return;
-    downloadTextFile('annotations.tsv', encodeAnnotationTable(state.annotationSets));
+    const { text, skippedFeatureIdentityCount } = encodeAnnotationTableWithNotice(state.annotationSets);
+    downloadTextFile('annotations.tsv', text);
+    if (skippedFeatureIdentityCount > 0) {
+      window.alert(`${skippedFeatureIdentityCount} annotation(s) target a source feature, which the annotation table cannot express; they were not exported.`);
+    }
   };
   const importAnnotationTableFile = async (event) => {
     const sessionBusy = state.sessionOperationAvailability?.();

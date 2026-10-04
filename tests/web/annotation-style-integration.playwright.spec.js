@@ -82,8 +82,8 @@ for (const width of [1440, 390]) {
           const a = window.__GBDRAW_APP__;
           const { encodeAnnotationTable, parseAnnotationTable } = await import('./js/app/annotations/table-codec.js');
           const { featureTarget } = await import('./js/app/annotations/target-actions.js');
-          const { getFeatureGenerationHash } = await import('./js/app/feature-utils.js');
-          const ids = a.extractedFeatures.filter(feature => feature.type === 'CDS').slice(0, 2).map(getFeatureGenerationHash);
+          const { getFeatureColorRuleHash } = await import('./js/app/feature-utils.js');
+          const ids = a.extractedFeatures.filter(feature => feature.type === 'CDS').slice(0, 2).map(getFeatureColorRuleHash);
           const sets = JSON.parse(JSON.stringify(a.annotationSets));
           if (!sets.length) sets.push(...parseAnnotationTable('set_id\tid\tmark\trecord\tstart\tend\tlabel\ncomparison_region\tanchor\tbracket\t#1\t1\t1000\tCluster start\n'));
           const record = sets[0].annotations[0].target.record;
