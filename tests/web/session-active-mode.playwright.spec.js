@@ -2,6 +2,7 @@ const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { gunzipSync } = require('node:zlib');
+const { promoteRequest } = require('./helpers/request-schema.cjs');
 const { execFile } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { promisify } = require('node:util');
@@ -112,7 +113,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(restored.config.adv.scale_font_size).toBe(19);
     expect(restored.circularSource).toEqual(before.circularSource);
     expect(restored.linearSource).toEqual(before.linearSource);
-    expect(restored.request).toEqual(before.request);
+    expect(restored.request).toEqual(await promoteRequest(fresh, before.request));
     expect(restored.results).toEqual(before.results);
     expect(restored.selectedResultIndex).toBe(before.selectedResultIndex);
     expect(restored.featurePanelTab).toBe(before.featurePanelTab);
