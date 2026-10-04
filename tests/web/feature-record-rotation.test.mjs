@@ -208,6 +208,33 @@ test('Apply re-resolves the stable popup identity and rejects a stale feature', 
   assert.equal(executions, 0);
 });
 
+test('a feature whose input differs from the Result input states the reason and the next step', async () => {
+  let executions = 0;
+  let staged = 0;
+  const action = createFeatureRecordRotationAction({
+    recordDisplayControls: {
+      targetForFeature: () => ({ row, target }),
+      setResolvedTransform: async () => { staged += 1; }
+    },
+    getCommittedSession: () => committed,
+    projectCommittedRecordTransform,
+    resolveCurrentFeature: () => feature,
+    isCurrentFeature: () => false,
+    runCommittedCanonicalCandidate: async () => {
+      executions += 1;
+      return { status: 'ok' };
+    }
+  });
+  const reason = "This feature's input file differs from the one the current Result was drawn from. "
+    + 'Generate Diagram to use the current file.';
+  const intent = { placement: 'anchor', anchor: 'five-prime', offsetBp: 0, orientForward: false };
+  assert.throws(() => action.resolve({ feature, intent }), { message: reason });
+  await assert.rejects(action.apply({ feature, intent }), { message: reason });
+  await assert.rejects(action.stage({ feature, intent }), { message: reason });
+  assert.equal(executions, 0);
+  assert.equal(staged, 0);
+});
+
 test('the record read uses the injected mode discovery and has no fallback reader', async () => {
   let reads = 0;
   const owners = {

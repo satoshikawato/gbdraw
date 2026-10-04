@@ -45,8 +45,11 @@ export const createFeatureRecordRotationAction = ({
     if (!resolved || !sameFeatureIdentity(resolved, identity)) {
       throw new Error('The popup feature is no longer present in the current Result.');
     }
+    // The bound input can differ before the popup opens (a File replaced
+    // after Generate, or a Session that needs one Generate), not only after.
     if (typeof isCurrentFeature === 'function' && !isCurrentFeature(resolved)) {
-      throw new Error('The popup feature source changed after the popup opened.');
+      throw new Error("This feature's input file differs from the one the current Result was drawn from. "
+        + 'Generate Diagram to use the current file.');
     }
     return resolved;
   };
