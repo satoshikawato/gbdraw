@@ -559,6 +559,14 @@ const hiddenLabelTextDialog = reactive({
   featureId: ''
 });
 
+// Label visibility On that the diagram cannot draw (Owner Q1, Q2): why, and
+// the feature type the dialog names. The label actions own the pending edit.
+const labelOnDialog = reactive({
+  show: false,
+  reason: '',
+  featureType: ''
+});
+
 const featureVisibilityScopeDialog = reactive({
   show: false,
   feat: null,
@@ -1008,6 +1016,7 @@ export const state = {
   labelTextScopeDialog,
   featureVisibilityScopeDialog,
   hiddenLabelTextDialog,
+  labelOnDialog,
   sidebarWidth,
   isResizing,
   legendEntries,

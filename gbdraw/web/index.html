@@ -5729,9 +5729,9 @@
                                 <p class="text-[10px] text-slate-400 mt-1">
                                     On and Off apply to this feature regardless of Show Labels and label filters.
                                 </p>
-                                <p v-if="clickedFeature.hasEditableLabel && clickedFeature.labelVisibility === 'default' && !clickedFeature.labelKey"
+                                <p v-if="clickedFeatureLabelHint" data-label-visibility-hint
                                    class="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2 py-1 mt-1">
-                                    This feature has no label in the current Result. Choose On to show it.
+                                    {{ clickedFeatureLabelHint }}
                                 </p>
                             </div>
                             <input type="text"
@@ -6315,6 +6315,55 @@
                                     <span>Keep hidden (apply text only)</span>
                                 </button>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Label Visibility On Dialog: Owner decisions Q1 and Q2 (2026-10-04) -->
+                    <div v-if="labelOnDialog.show"
+                         class="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center">
+                        <div role="dialog" aria-modal="true" aria-labelledby="label-on-dialog-title" aria-describedby="label-on-dialog-description"
+                             class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
+                            <h3 id="label-on-dialog-title" class="text-lg font-bold text-slate-800 mb-2">
+                                {{ labelOnDialog.reason === 'hidden' ? 'Feature Is Hidden' : (labelOnDialog.reason === 'underlay' ? 'Label Cannot Be Drawn' : 'Label Does Not Fit') }}
+                            </h3>
+                            <p id="label-on-dialog-description" class="text-sm text-slate-600 mb-4">
+                                <template v-if="labelOnDialog.reason === 'hidden'">
+                                    This feature is hidden, so its label is not drawn. "Show feature and label" sets this feature's "Feature visibility" and "Label visibility" to "On". "Keep feature hidden" saves "Label visibility" "On", which applies when the feature is shown.
+                                </template>
+                                <template v-else-if="labelOnDialog.reason === 'underlay'">
+                                    Labels are not drawn for features drawn as "Underlay" (<span class="font-mono">{{ labelOnDialog.featureType }}</span> in "Feature Types"). "Keep without label" saves "Label visibility" "On", which applies when the label can be drawn, for example after you choose another rendering for this feature type.
+                                </template>
+                                <template v-else>
+                                    With "Label Rendering" = "Embedded Only", a label is drawn only inside its feature, and this label does not fit. "Keep without label" saves "Label visibility" "On", which applies when the label can be drawn. "Cancel" restores the previous label settings.
+                                </template>
+                            </p>
+                            <div class="flex flex-col gap-2">
+                                <template v-if="labelOnDialog.reason === 'hidden'">
+                                    <button @click="handleLabelOnChoice('show')"
+                                            data-history-managed
+                                            class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
+                                        <i class="ph ph-eye text-lg" aria-hidden="true"></i>
+                                        <span>Show feature and label</span>
+                                    </button>
+                                    <button @click="handleLabelOnChoice('keep')"
+                                            data-history-managed
+                                            class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
+                                        <i class="ph ph-eye-slash text-lg" aria-hidden="true"></i>
+                                        <span>Keep feature hidden</span>
+                                    </button>
+                                </template>
+                                <button v-else @click="handleLabelOnChoice('keep')"
+                                        data-history-managed
+                                        class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
+                                    <i class="ph ph-tag text-lg" aria-hidden="true"></i>
+                                    <span>Keep without label</span>
+                                </button>
+                            </div>
+                            <button @click="handleLabelOnChoice('cancel')"
+                                    data-history-managed
+                                    class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
+                                Cancel
+                            </button>
                         </div>
                     </div>
 

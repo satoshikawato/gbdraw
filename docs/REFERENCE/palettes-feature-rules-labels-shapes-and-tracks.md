@@ -159,7 +159,10 @@ A per-feature override is a label-override row whose qualifier is `hash`. It
 decides one feature's label before the label filters and the label display
 scope (`--show_labels` or `--labels`, `labels.linear.scope`,
 `labels.circular.scope`): non-empty text shows the label, also on a record or
-with a scope that otherwise draws no labels, and empty text hides it. The Web
+with a scope that otherwise draws no labels, and empty text hides it. No label
+is drawn for a hidden feature, for a feature drawn as `underlay`, or, with
+`labels.rendering = "embedded_only"`, for a label that does not fit inside its
+feature, so such a row shows a label only once one of these changes. The Web
 feature popup writes these rows for **Label visibility** **On** and **Off**. A
 label text edit uses `locus_tag`, `gene`, or `record_location` when one of them
 identifies the feature, and falls back to `hash` only when none does.

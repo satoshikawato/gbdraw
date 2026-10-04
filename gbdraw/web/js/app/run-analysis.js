@@ -28,6 +28,7 @@ import {
   buildLabelOverrideTsv,
   serializeLabelOverrideRows
 } from './feature-editor/label-override-table.js';
+import { labelOnBlocker } from './feature-editor/label-actions.js';
 import {
   applyCircularSuppressControlsToSlots,
   applyCircularTrackOrderPlacements,
@@ -198,14 +199,19 @@ const hashText = async (text) => {
 };
 
 // Label visibility On draws the label whatever Show Labels and the label
-// filters select, so it must bind. Label text alone and Off follow those
-// settings, which may leave the feature without a label.
+// filters select, so it must bind, unless the request cannot draw it: a hidden
+// feature, a feature drawn as underlay, or Label Rendering = Embedded Only.
+// That On takes effect when the label can be drawn (Owner Q1, Q2). Label text
+// alone and Off follow those settings, which may leave the feature unlabeled.
 const labelOperationIds = (operations) => (operations || [])
   .map((operation) => String(operation?.renderedId || '').trim())
   .filter(Boolean);
-const forcedLabelFeatureIds = (operations) => Object.freeze([...new Set(labelOperationIds(
-  (operations?.labelVisibility || []).filter((operation) => operation?.mode === 'on')
-))]);
+const forcedLabelFeatureIds = (operations, { state, features, diagramOptions }) => {
+  const featuresById = new Map((features || []).map((feature) => [String(feature?.svg_id || '').trim(), feature]));
+  return Object.freeze([...new Set(labelOperationIds(
+    (operations?.labelVisibility || []).filter((operation) => operation?.mode === 'on')
+  ))].filter((featureId) => !labelOnBlocker(state, featureId, featuresById.get(featureId), diagramOptions)));
+};
 
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
 const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
@@ -4642,7 +4648,9 @@ export const createRunAnalysis = ({
         candidateCommit.mutationPlan?.operationsByResult?.[nextSelectedResultIndex]
         || null
       );
-      const requiredLabelFeatureIds = forcedLabelFeatureIds(selectedMutationOperations);
+      const requiredLabelFeatureIds = forcedLabelFeatureIds(selectedMutationOperations, {
+        state, features: candidateExtractedFeatures, diagramOptions: canonical.renderRequest.diagramOptions
+      });
       const optionalLabelFeatureIds = new Set(labelOperationIds([
         ...(selectedMutationOperations?.labelText || []),
         ...(selectedMutationOperations?.labelVisibility || [])
@@ -5253,9 +5261,11 @@ export const createRunAnalysis = ({
   // A reflow keeps the Result it draws, so the preview binder reports a forced
   // label that the Result does not draw instead of failing the binding, with
   // the diagnostic Generate raises for it (R6, OV-06).
-  const expectReflowLabelBindings = (commit, resultIndex, isCurrentReflow) => {
+  const expectReflowLabelBindings = (commit, resultIndex, isCurrentReflow, diagramOptions) => {
     const result = commit.results[resultIndex];
-    const featureIds = forcedLabelFeatureIds(commit.mutationPlan?.operationsByResult?.[resultIndex]);
+    const featureIds = forcedLabelFeatureIds(commit.mutationPlan?.operationsByResult?.[resultIndex], {
+      state, features: extractedFeatures.value, diagramOptions
+    });
     if (!result || featureIds.length === 0) return;
     const readinessId = `label-reflow:${latestGenerationToken}`;
     const resultIdentity = previewRuntime.getResultIdentity(result);
@@ -5368,7 +5378,9 @@ export const createRunAnalysis = ({
       const nextSelectedResultIndex = Math.max(
         0, Math.min(previousSelectedResultIndex, execution.commit.results.length - 1)
       );
-      expectReflowLabelBindings(execution.commit, nextSelectedResultIndex, isCurrent);
+      expectReflowLabelBindings(
+        execution.commit, nextSelectedResultIndex, isCurrent, canonical.renderRequest.diagramOptions
+      );
       skipCaptureBaseConfig.value = true;
       results.value = execution.commit.results;
       if (execution.commit.results.length > 0) {

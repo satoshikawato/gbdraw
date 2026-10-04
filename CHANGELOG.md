@@ -26,6 +26,14 @@ decisions are in
   takes effect there. **Enable Labels** is removed: **On** no longer changes
   **Show Labels** or the label filter. A label text edit on a feature without a
   label asks whether to show the label (**Label Not Shown**).
+- Labels (web app): applying **Label visibility** **On** now asks when the
+  diagram cannot draw the label: for a hidden feature (**Show feature and
+  label** or **Keep feature hidden**), for a feature drawn as **Underlay**
+  (**Keep without label**), and, after the label rerender, for a label that does
+  not fit with **Label Rendering** set to **Embedded Only** (**Keep without
+  label** or **Cancel**). A kept **On** applies when the label can be drawn, and
+  Generate no longer fails on it. The feature popup says why a feature has no
+  label instead of always suggesting **On**.
 - Comparison tables: every BLAST outfmt 6/7 reader (CLI `-b` and
   `--comparisons_table`, Web uploads, Circular similarity rings, and the LOSATP
   parser) now reads the first 12 columns by position and validates their types.
