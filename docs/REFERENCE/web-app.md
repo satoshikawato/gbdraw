@@ -839,6 +839,26 @@ the current Result, **Label Not Shown** offers **Show this label**, which sets
 **On**, or **Keep hidden (apply text only)**, which keeps the text for when the
 label is shown.
 
+**On** takes effect only when the diagram can draw the label, so applying it
+asks first when the diagram cannot:
+
+- For a hidden feature, **Feature Is Hidden** offers **Show feature and label**,
+  which sets the feature's **Feature visibility** and **Label visibility** to
+  **On**, or **Keep feature hidden**, which saves **On** for when the feature is
+  shown.
+- For a feature drawn as **Underlay**, **Label Cannot Be Drawn** offers **Keep
+  without label**, which saves **On** for when the label can be drawn, for
+  example after you choose another rendering for its feature type.
+- With **Label Rendering** set to **Embedded Only**, the label rerender runs
+  first. When the label does not fit inside its feature, **Label Does Not Fit**
+  offers **Keep without label**; **Cancel** restores the previous label settings.
+
+A choice is one **Undo** step, and **Cancel** changes nothing. No choice changes
+**Show Labels**, **Label Rendering**, or a feature rendering. Generate does not
+fail on an **On** label that the diagram cannot draw. Another **On** label that
+the diagram does not draw stops Generate with `LABEL_NOT_DRAWN`, which names the
+feature. When a feature has no label, its popup says why.
+
 On a narrow preview, the same **Editor** sits below the canvas.
 Its content scrolls independently, while its header, Close action, and tabs stay
 reachable. **Close** and **Escape** change visibility only and retain the selected

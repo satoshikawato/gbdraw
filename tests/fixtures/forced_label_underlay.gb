@@ -18,6 +18,10 @@ FEATURES             Location/Qualifiers
      CDS             complement(2001..2600)
                      /locus_tag="FL2"
                      /product="beta protein"
+     CDS             2701..2900
+                     /product="dup alpha"
+     CDS             2701..2900
+                     /product="dup beta"
 ORIGIN
         1 cagtgcctct gccaccgtgc ccacttcgac gtggggaagc cgtaccggtg acagggtttg
        61 tcgtaatgtg accggggtgc cgtttccatc acacgacagc agttccggag agaccataat

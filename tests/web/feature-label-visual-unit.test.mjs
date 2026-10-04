@@ -37,7 +37,8 @@ const buildHarness = ({
   featureId = 'feature:one/[a]',
   labelKey = 'label-1',
   visibilityOverrides = {},
-  rulePreparation = {}
+  rulePreparation = {},
+  diagramOptions = null
 } = {}) => {
   const mutations = { commit: 0 };
   const state = {
@@ -64,6 +65,8 @@ const buildHarness = ({
     }),
     labelTextScopeDialog: { show: false },
     hiddenLabelTextDialog: { show: false, featureId: '' },
+    labelOnDialog: { show: false, reason: '', featureType: '' },
+    featureVisibilityOverrides: {},
     labelTextFeatureOverrides: {},
     labelTextBulkOverrides: {},
     labelTextFeatureOverrideSources: {},
@@ -84,7 +87,8 @@ const buildHarness = ({
         return true;
       }
     },
-    rulePreparation
+    rulePreparation,
+    getCommittedRequest: () => (diagramOptions ? { diagramOptions } : null)
   });
   return { actions, mutations, state, svg };
 };
@@ -200,6 +204,67 @@ test('a text edit asks whether to show a label only when the feature has none', 
   assert.equal(harness.state.labelTextFeatureOverrides[featureId], 'Renamed again');
   assert.equal(harness.state.labelReflowForceRequestSeq.value, 1);
   assert.equal(harness.state.labelReflowRequestSeq.value, 0);
+});
+
+// Owner decisions Q1 and Q2 (2026-10-04): the popup note names why the
+// committed request draws no label, and On only where it can be drawn.
+test('the popup note names why the diagram draws no label for the feature', () => {
+  const featureId = 'feature:one/[a]';
+  const diagramOptions = { featureShapes: { repeat_region: 'underlay' }, configOverrides: { 'labels.rendering': 'auto' } };
+  const harness = buildHarness({ diagramOptions });
+  const { state, actions } = harness;
+  const clicked = state.clickedFeature.value;
+  const hint = () => actions.clickedFeatureLabelHint.value;
+  const none = 'This feature has no label in the current Result.';
+  const onDrawable = ' Its Label visibility "On" applies when the label can be drawn.';
+
+  clicked.labelKey = 'label-1';
+  assert.equal(hint(), '');
+  clicked.labelKey = '';
+  assert.equal(hint(), `${none} Choose On to show it.`);
+  clicked.labelVisibility = 'off';
+  assert.equal(hint(), '');
+  clicked.labelVisibility = 'on';
+  state.labelVisibilityOverrides[featureId] = 'on';
+  assert.equal(hint(), `${none}${onDrawable}`);
+
+  clicked.feat = { type: 'repeat_region' };
+  assert.equal(hint(), `${none} Labels are not drawn for features drawn as "Underlay".${onDrawable}`);
+  delete state.labelVisibilityOverrides[featureId];
+  clicked.labelVisibility = 'default';
+  assert.equal(hint(), `${none} Labels are not drawn for features drawn as "Underlay".`);
+
+  clicked.feat = { type: 'CDS' };
+  diagramOptions.configOverrides['labels.rendering'] = 'embedded_only';
+  assert.equal(hint(), `${none} With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.`);
+
+  // A hidden feature hides its label too, so the note shows with a label key.
+  state.featureVisibilityOverrides[featureId] = 'off';
+  state.labelVisibilityOverrides[featureId] = 'on';
+  clicked.labelKey = 'label-1';
+  assert.equal(hint(), `${none} The feature is hidden. Its Label visibility "On" applies when the feature is shown.`);
+});
+
+test('Label visibility On for an underlay feature waits for Keep without label or Cancel', async () => {
+  const featureId = 'feature:one/[a]';
+  const harness = buildHarness({ diagramOptions: { featureShapes: {}, configOverrides: {} } });
+  const { state, actions } = harness;
+  harness.state.editableLabels.value = [];
+  Object.assign(state.clickedFeature.value, { feat: { type: 'repeat_region' }, labelVisibility: 'on', labelText: 'RPT' });
+  const canceled = actions.updateClickedFeatureLabelText();
+  assert.deepEqual({ ...state.labelOnDialog }, { show: true, reason: 'underlay', featureType: 'repeat_region' });
+  actions.handleLabelOnChoice('cancel');
+  assert.equal(await canceled, false);
+  assert.equal(state.labelOnDialog.show, false);
+  assert.deepEqual([state.labelVisibilityOverrides, state.labelTextFeatureOverrides], [{}, {}]);
+  assert.equal(state.clickedFeature.value.labelVisibility, 'default');
+
+  Object.assign(state.clickedFeature.value, { labelVisibility: 'on', labelText: 'RPT' });
+  const kept = actions.updateClickedFeatureLabelText();
+  actions.handleLabelOnChoice('keep');
+  await kept;
+  assert.deepEqual([state.labelVisibilityOverrides, state.labelTextFeatureOverrides], [{ [featureId]: 'on' }, { [featureId]: 'RPT' }]);
+  assert.equal(state.labelReflowForceRequestSeq.value, 1);
 });
 
 for (const [name, options, labelKey] of [

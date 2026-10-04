@@ -19,9 +19,13 @@ export const createFeatureEditor = ({
   isPatternEditAvailable = () => true,
   previewTransformInteraction = null
 }) => {
-  const { ref, computed } = window.Vue;
+  const { ref, computed, watch } = window.Vue;
   const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions, rulePreparation, history, svgActions, ref, computed, isPatternEditAvailable });
-  const labelActions = createFeatureLabelActions({ state, previewRuntime, rulePreparation, ref, computed });
+  // Show feature and label (Owner Q2) sets Feature visibility through its owner.
+  const labelActions = createFeatureLabelActions({
+    state, previewRuntime, rulePreparation, ref, computed, watch, nextTick, getCommittedRequest,
+    setFeatureVisibility: (...args) => visibilityActions.setFeatureVisibility(...args)
+  });
   const featureSvgActions = createFeatureSvgActions({
     state,
     getFeatureColor: ruleActions.getFeatureColor,
@@ -144,6 +148,8 @@ export const createFeatureEditor = ({
     updateClickedFeatureLabelText: labelActions.updateClickedFeatureLabelText,
     handleLabelTextScopeChoice: labelActions.handleLabelTextScopeChoice,
     handleHiddenLabelTextChoice: labelActions.handleHiddenLabelTextChoice,
+    handleLabelOnChoice: labelActions.handleLabelOnChoice,
+    clickedFeatureLabelHint: labelActions.clickedFeatureLabelHint,
     requestLabelTextChangeByFeatureId: labelActions.requestLabelTextChangeByFeatureId,
     requestLabelTextChangeByKey: labelActions.requestLabelTextChangeByKey,
     reconcileLabelOverrides: labelActions.reconcileLabelOverrides,

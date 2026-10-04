@@ -664,27 +664,43 @@ test('a This feature only fill on a duplicated record survives Generate', async 
   expect((await fills())[0]).toBe('#c83366');
 });
 
-// OV-06 (R6, OIPC-C03): Label visibility On for a feature drawn as an underlay
-// asks for a label the diagram does not draw. The live reflow and Generate name
-// the feature and the popup choice that ends it instead of reporting UNKNOWN;
-// Generate restores the last Result, and Default lets Generate succeed again.
+const FORCED_LABEL_FIXTURE = 'tests/fixtures/forced_label_underlay.gb';
+
+const featureIdsByLocator = (page) => page.evaluate(() => {
+  const features = window.__GBDRAW_APP__.extractedFeatures;
+  const find = (predicate) => features.find(predicate)?.svg_id;
+  return {
+    fl1: find((item) => item.locus_tag === 'FL1'),
+    fl2: find((item) => item.locus_tag === 'FL2'),
+    repeat: find((item) => item.type === 'repeat_region'),
+    dup: find((item) => item.product === 'dup beta')
+  };
+});
+
+const waitForLabelReflow = (page) => expect.poll(async () => (
+  await labelEditorState(page, 'labels.circular.scope')
+).processing, { timeout: 300_000 }).toBe(false);
+
+// R6 safety net (OV-05): an On label that the diagram should draw but does not,
+// here one of two features with the same type and location, still names the
+// feature after the live reflow and after Generate, which restores the last
+// Result; Default lets Generate succeed again.
 test('a Label visibility On that the diagram does not draw names the feature', async ({ page }) => {
   test.setTimeout(600_000);
-  await openWithGenBank(page, 'tests/fixtures/forced_label_underlay.gb', () => {
-    window.__GBDRAW_APP__.form.labels_mode = 'out';
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
+    window.__GBDRAW_APP__.form.labels_mode = 'none';
   });
   await generate(page);
-  const repeat = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures
-    .find((item) => item.type === 'repeat_region')?.svg_id);
-  expect(repeat).toBeTruthy();
-  const located = `Feature: repeat_region 1001..1600, ID ${repeat}.`;
+  const { dup } = await featureIdsByLocator(page);
+  expect(dup).toContain('__instance_');
+  const located = `Feature: CDS 2701..2900, ID ${dup}.`;
   const labelState = () => labelEditorState(page, 'labels.circular.scope');
 
-  expect(await applyPopupLabel(page, repeat, null, 'on')).toEqual({ hint: true, asked: false });
+  expect(await applyPopupLabel(page, dup, null, 'on')).toEqual({ hint: true, asked: false });
   await expect.poll(async () => {
     const state = await labelState();
     return state.processing ? null : [state.reflowError?.code, state.reflowError?.context?.featureId];
-  }, { timeout: 300_000 }).toEqual(['LABEL_NOT_DRAWN', repeat]);
+  }, { timeout: 300_000 }).toEqual(['LABEL_NOT_DRAWN', dup]);
   expect((await labelState()).reflowError.note).toContain(located);
   await expect(page.locator('[data-live-application-feedback]')).toContainText(located);
 
@@ -704,7 +720,7 @@ test('a Label visibility On that the diagram does not draw names the feature', a
   });
   expect(failed).toMatchObject({
     recovery: 'restored', code: 'LABEL_NOT_DRAWN', operation: 'generate',
-    stage: 'render', featureId: repeat, actions: ['edit-input']
+    stage: 'render', featureId: dup, actions: ['edit-input']
   });
   expect(failed.summary).toContain(located);
   expect(failed.summary).toContain('set Label visibility to Default');
@@ -712,8 +728,201 @@ test('a Label visibility On that the diagram does not draw names the feature', a
   await expect(alert).toContainText(located);
   await expect(page.getByRole('button', { name: 'Retry Generate', exact: true })).toHaveCount(0);
 
-  expect(await applyPopupLabel(page, repeat, null, 'default')).toMatchObject({ asked: false });
-  await expect.poll(async () => (await labelState()).processing, { timeout: 300_000 }).toBe(false);
+  expect(await applyPopupLabel(page, dup, null, 'default')).toMatchObject({ asked: false });
+  await waitForLabelReflow(page);
   await generate(page);
   expect((await labelState()).reflowError).toBeNull();
+});
+
+// Owner decisions Q1 and Q2 (2026-10-04; FINDINGS OV-06, OV-07, OV-10): an
+// Apply of Label visibility On asks when the diagram cannot draw the label.
+// Each choice is one History step and Cancel records none; Generate does not
+// fail on an On that cannot be drawn, and draws it once it can.
+const labelOnFacts = (page) => page.evaluate(async () => {
+  const { state } = await import('./js/state.js');
+  return {
+    undo: window.__GBDRAW_HISTORY__.getUndoCount(),
+    redo: window.__GBDRAW_HISTORY__.getRedoCount(),
+    labelVisibility: { ...state.labelVisibilityOverrides },
+    labelText: { ...state.labelTextFeatureOverrides },
+    featureVisibility: { ...state.featureVisibilityOverrides }
+  };
+});
+
+// Applies Label visibility On (and optional text) in the feature popup. The
+// Apply settles after the dialog it opens is answered.
+const startLabelOn = (page, featureId, text = null) => page.evaluate(async (edit) => {
+  const app = window.__GBDRAW_APP__;
+  await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === edit.featureId), null);
+  await window.Vue.nextTick();
+  app.clickedFeature.labelVisibility = 'on';
+  if (edit.text !== null) app.clickedFeature.labelText = edit.text;
+  window.__labelOnApply = app.updateClickedFeatureLabelText();
+}, { featureId, text });
+
+const answerLabelOn = async (page, title, choice) => {
+  const dialog = page.getByRole('dialog', { name: title, exact: true });
+  await expect(dialog).toBeVisible({ timeout: 120_000 });
+  await dialog.getByRole('button', { name: choice, exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await page.evaluate(async () => {
+    await window.__labelOnApply;
+    window.__GBDRAW_APP__.clickedFeature = null;
+  });
+};
+
+// The popup note on why the feature has no label (requirement of Q1, Q2).
+const popupLabelHint = (page, featureId) => page.evaluate(async (id) => {
+  const app = window.__GBDRAW_APP__;
+  await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === id), null);
+  await window.Vue.nextTick();
+  const hint = document.querySelector('[data-label-visibility-hint]')?.textContent.trim() || '';
+  app.clickedFeature = null;
+  return hint;
+}, featureId);
+
+const hideFeature = (page, featureId) => page.evaluate(async (id) => {
+  const app = window.__GBDRAW_APP__;
+  await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === id), null);
+  app.clickedFeature.featureVisibility = 'off';
+  await app.updateClickedFeatureVisibility('off');
+  if (app.featureVisibilityScopeDialog.show) await app.handleFeatureVisibilityScopeChoice('feature');
+  app.clickedFeature = null;
+}, featureId);
+
+// Auto Reflow is off, so a hidden feature stays in the Result until a choice
+// below queues the label reflow, which draws it no more.
+test('Label visibility On for a hidden feature shows the feature and label or keeps the feature hidden', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
+    window.__GBDRAW_APP__.form.labels_mode = 'none';
+  });
+  await generate(page);
+  const { fl1, fl2 } = await featureIdsByLocator(page);
+  const labelState = () => labelEditorState(page, 'labels.circular.scope');
+  await hideFeature(page, fl1);
+  const hidden = await labelOnFacts(page);
+  expect(hidden.featureVisibility).toEqual({ [fl1]: 'off' });
+
+  await startLabelOn(page, fl1, 'FL1_SHOWN');
+  await answerLabelOn(page, 'Feature Is Hidden', 'Cancel');
+  expect(await labelOnFacts(page)).toEqual(hidden);
+
+  await startLabelOn(page, fl1, 'FL1_SHOWN');
+  await answerLabelOn(page, 'Feature Is Hidden', 'Show feature and label');
+  expect(await labelOnFacts(page)).toEqual({
+    ...hidden,
+    undo: hidden.undo + 1,
+    redo: 0,
+    labelVisibility: { [fl1]: 'on' },
+    labelText: { [fl1]: 'FL1_SHOWN' },
+    featureVisibility: { [fl1]: 'on' }
+  });
+  await waitForLabelReflow(page);
+  expect(await labelState()).toMatchObject({ reflowError: null, labels: [[fl1, 'FL1_SHOWN']] });
+
+  await hideFeature(page, fl2);
+  expect(await popupLabelHint(page, fl2)).toBe('This feature has no label in the current Result. The feature is hidden.');
+  const shown = await labelOnFacts(page);
+  await startLabelOn(page, fl2, 'FL2_KEPT');
+  await answerLabelOn(page, 'Feature Is Hidden', 'Keep feature hidden');
+  expect(await labelOnFacts(page)).toEqual({
+    ...shown,
+    undo: shown.undo + 1,
+    redo: 0,
+    labelVisibility: { [fl1]: 'on', [fl2]: 'on' },
+    labelText: { [fl1]: 'FL1_SHOWN', [fl2]: 'FL2_KEPT' },
+    featureVisibility: { [fl1]: 'on', [fl2]: 'off' }
+  });
+  await waitForLabelReflow(page);
+  expect(await labelState()).toMatchObject({ reflowError: null, labels: [[fl1, 'FL1_SHOWN']] });
+
+  await generate(page);
+  expect(await labelState()).toMatchObject({ error: null, reflowError: null, labels: [[fl1, 'FL1_SHOWN']] });
+});
+
+test('Label visibility On for an underlay feature is kept without a label until the rendering changes', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
+    window.__GBDRAW_APP__.form.labels_mode = 'none';
+  });
+  await generate(page);
+  const { repeat } = await featureIdsByLocator(page);
+  const labelState = () => labelEditorState(page, 'labels.circular.scope');
+  const before = await labelOnFacts(page);
+
+  await startLabelOn(page, repeat, 'RPT_FORCED');
+  await answerLabelOn(page, 'Label Cannot Be Drawn', 'Cancel');
+  expect(await labelOnFacts(page)).toEqual(before);
+
+  await startLabelOn(page, repeat, 'RPT_FORCED');
+  await answerLabelOn(page, 'Label Cannot Be Drawn', 'Keep without label');
+  expect(await labelOnFacts(page)).toEqual({
+    ...before,
+    undo: before.undo + 1,
+    redo: 0,
+    labelVisibility: { [repeat]: 'on' },
+    labelText: { [repeat]: 'RPT_FORCED' }
+  });
+  await waitForLabelReflow(page);
+  expect(await labelState()).toMatchObject({ reflowError: null, labels: [] });
+  expect(await popupLabelHint(page, repeat)).toBe(
+    'This feature has no label in the current Result. Labels are not drawn for features drawn as "Underlay". '
+    + 'Its Label visibility "On" applies when the label can be drawn.'
+  );
+
+  await generate(page);
+  expect(await labelState()).toMatchObject({ error: null, labels: [] });
+  await page.evaluate(() => window.__GBDRAW_APP__.setFeatureShape('repeat_region', 'rectangle'));
+  await generate(page);
+  expect(await labelState()).toMatchObject({ error: null, labels: [[repeat, 'RPT_FORCED']] });
+});
+
+// Generate keeps Label Rendering = Embedded Only only while Show Labels draws labels.
+test('Label visibility On that does not fit with Embedded Only asks after the reflow', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
+    const app = window.__GBDRAW_APP__;
+    app.form.labels_mode = 'out';
+    app.adv.label_rendering = 'embedded_only';
+  });
+  await generate(page);
+  const { fl1 } = await featureIdsByLocator(page);
+  const labelState = () => labelEditorState(page, 'labels.circular.scope');
+  const committedRendering = () => page.evaluate(async () => (await import('./js/services/config.js'))
+    .getCommittedCanonicalRenderRequest()?.diagramOptions?.configOverrides?.['labels.rendering']);
+  expect(await committedRendering()).toBe('embedded_only');
+  const initialLabels = (await labelState()).labels;
+  expect(initialLabels.some(([featureId]) => featureId === fl1)).toBe(true);
+  const longText = 'A_LABEL_TEXT_FAR_TOO_LONG_TO_FIT_INSIDE_ITS_FEATURE_'.repeat(4);
+  const before = await labelOnFacts(page);
+
+  // Cancel restores the label intent and redraws the label it showed before.
+  await startLabelOn(page, fl1, longText);
+  await answerLabelOn(page, 'Label Does Not Fit', 'Cancel');
+  expect(await labelOnFacts(page)).toEqual(before);
+  await waitForLabelReflow(page);
+  expect(await labelState()).toMatchObject({ reflowError: null, labels: initialLabels });
+
+  await startLabelOn(page, fl1, longText);
+  await answerLabelOn(page, 'Label Does Not Fit', 'Keep without label');
+  expect(await labelOnFacts(page)).toEqual({
+    ...before,
+    undo: before.undo + 1,
+    redo: 0,
+    labelVisibility: { [fl1]: 'on' },
+    labelText: { [fl1]: longText }
+  });
+  await waitForLabelReflow(page);
+  const kept = initialLabels.filter(([featureId]) => featureId !== fl1);
+  expect(await labelState()).toMatchObject({ reflowError: null, labels: kept });
+  expect(await popupLabelHint(page, fl1)).toBe(
+    'This feature has no label in the current Result. With "Label Rendering" = "Embedded Only", '
+    + 'a label is drawn only when it fits inside its feature. '
+    + 'Its Label visibility "On" applies when the label can be drawn.'
+  );
+
+  await generate(page);
+  expect(await labelState()).toMatchObject({ error: null, labels: kept });
+  expect(await committedRendering()).toBe('embedded_only');
 });
