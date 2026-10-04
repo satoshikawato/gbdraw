@@ -2292,7 +2292,8 @@ export const createAppSetup = () => {
       if (!context.bindingOptions.trustedRestore && (labelsChanged || shouldSyncMountedLabelEditor())) {
         featureActions.syncLabelEditor({
           requiredFeatureIds: context.bindingOptions.requiredLabelFeatureIds,
-          optionalFeatureIds: context.bindingOptions.optionalLabelFeatureIds
+          optionalFeatureIds: context.bindingOptions.optionalLabelFeatureIds,
+          reportedLabelBinding: context.bindingOptions.reportedLabelBinding
         });
       }
     },

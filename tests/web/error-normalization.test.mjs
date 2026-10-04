@@ -454,3 +454,64 @@ test('a live edit failure note offers Retry only when the same request can succe
   assert.deepEqual(generate.actions, ['generate']);
   assert.equal(generate.note, 'Live edit failed: direct edits already applied are kept; geometry may still need updating. Generate the diagram to update its label placement.');
 });
+
+// OV-05..OV-07, OV-13 (R6): a Label visibility On that the diagram does not
+// draw (an underlay feature, Embedded Only, a duplicate feature) names the
+// feature and the popup choice that ends it, instead of UNKNOWN. Two labels
+// bound to one feature repeat for the same inputs, so they are a render
+// failure that names the feature and offers Save Session.
+test('a forced label that the diagram does not draw names the feature (OV-06)', async () => {
+  const { requireUniqueEditableLabelBindings } = await import('../../gbdraw/web/js/app/feature-editor/label-actions.js');
+  const { liveEditFailure } = await import('../../gbdraw/web/js/services/error-normalization.js');
+  const label = (featureId) => ({ getAttribute: (name) => (name === 'data-label-feature-id' ? featureId : null) });
+  const features = [
+    { svg_id: 'f59dc64fc', type: 'repeat_region', start: 1000, end: 1600, note: 'PRIVATE_NOTE' },
+    { svg_id: 'f1aff4c2b__instance_5_ef2d127de37b942b', type: 'CDS', start: 3000, end: 3600, product: 'PRIVATE_PRODUCT' }
+  ];
+  const failure = (labels, required, options = {}) => {
+    try {
+      requireUniqueEditableLabelBindings(labels, required, { features, ...options });
+    } catch (error) {
+      return roundtrip(error);
+    }
+    return null;
+  };
+  const missing = failure([label('f9b3094c1')], ['f59dc64fc']);
+  assert.deepEqual([missing.code, missing.operation, missing.stage, missing.actions],
+    ['LABEL_NOT_DRAWN', 'generate', 'render', ['edit-input']]);
+  assert.deepEqual(missing.context, { reason: 'FORCED_LABEL', featureId: 'f59dc64fc',
+    featureType: 'repeat_region', featureStart: 1001, featureEnd: 1600 });
+  assert.equal(missing.summary, 'Label visibility is On for a feature, but this diagram does not draw its label.'
+    + ' Feature: repeat_region 1001..1600, ID f59dc64fc.'
+    + " Open the feature's popup and set Label visibility to Default, or change the setting that prevents its label.");
+  assert.match(missing.details[0].text, /\nfeatureId: f59dc64fc\n/);
+  const live = liveEditFailure(missing);
+  assert.deepEqual(live.actions, ['generate']);
+  assert.ok(live.note.includes(missing.summary));
+
+  const several = failure([], ['f1aff4c2b__instance_5_ef2d127de37b942b', 'f59dc64fc']);
+  assert.equal(several.code, 'LABEL_NOT_DRAWN');
+  assert.match(several.summary, / Feature: CDS 3001\.\.3600, ID f1aff4c2b__instance_5_ef2d127de37b942b\. Features affected: 2\. Open/);
+  assert.equal(failure([], ['f59dc64fc'], { allowMissing: true }), null);
+  assert.equal(failure([label('f59dc64fc')], ['f59dc64fc']), null);
+
+  const unknownFeature = failure([], ['f0000dead']);
+  assert.deepEqual(unknownFeature.context, { reason: 'FORCED_LABEL', featureId: 'f0000dead' });
+  assert.match(unknownFeature.summary, / Feature: ID f0000dead\. Open/);
+
+  for (const allowMissing of [false, true]) {
+    const ambiguous = failure([label('f59dc64fc'), label('f59dc64fc')], ['f59dc64fc'], { allowMissing });
+    assert.deepEqual([ambiguous.code, ambiguous.stage, ambiguous.actions], ['RENDER_FAILED', 'render', ['save-session']]);
+    assert.deepEqual(ambiguous.context, { featureId: 'f59dc64fc', featureType: 'repeat_region',
+      featureStart: 1001, featureEnd: 1600 });
+    assert.match(ambiguous.summary, / Feature: repeat_region 1001\.\.1600, ID f59dc64fc\.$/);
+  }
+  for (const model of [missing, several, live]) assert.doesNotMatch(JSON.stringify(model), /PRIVATE_/);
+
+  // The feature locator is bounded like every other context value.
+  assert.deepEqual(roundtrip({ code: 'LABEL_NOT_DRAWN', context: {
+    featureId: 'PRIVATE VALUE', featureType: `CDS${'x'.repeat(80)}`, featureStart: 0, featureEnd: 1.5, featureCount: -1
+  } }).context, {});
+  assert.deepEqual(roundtrip({ code: 'LABEL_NOT_DRAWN', context: { featureType: "5'UTR", featureStart: 1, featureEnd: 20000000 } }).context,
+    { featureType: "5'UTR", featureStart: 1, featureEnd: 20000000 });
+});

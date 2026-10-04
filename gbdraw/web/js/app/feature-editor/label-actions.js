@@ -1,4 +1,4 @@
-import { normalizeUserFacingError } from '../../services/error-normalization.js';
+import { diagnosticError, normalizeUserFacingError } from '../../services/error-normalization.js';
 import { ruleFeaturePayload } from '../rule-matching.js';
 import { resolveEffectiveFeatureVisibility } from '../feature-visibility.js';
 import {
@@ -27,26 +27,52 @@ const LABEL_BINDING_SCHEMA = '1';
 const LABEL_FEATURE_ID_ATTRIBUTE = 'data-label-feature-id';
 const LABEL_VISIBILITY_PREVIEW_ATTRIBUTE = 'data-gbdraw-label-visibility-preview';
 
+// The locator of a feature whose label binding failed: its rendered ID, type,
+// and one-based span from the displayed feature catalog (R6).
+const labelBindingLocator = (featureId, features, count) => {
+  const key = normalizeKeyToken(featureId);
+  const feature = (Array.isArray(features) ? features : [])
+    .find((item) => normalizeKeyToken(item?.svg_id) === key);
+  const start = Number(feature?.start);
+  const end = Number(feature?.end);
+  return {
+    featureId: String(feature?.svg_id || featureId).trim(),
+    ...(feature?.type ? { featureType: String(feature.type) } : {}),
+    ...(Number.isSafeInteger(start) && Number.isSafeInteger(end) ? { featureStart: start + 1, featureEnd: end } : {}),
+    ...(count > 1 ? { featureCount: count } : {})
+  };
+};
+
+// A required feature binds exactly one label, an optional one at most one.
+// A missing forced label is a setting the user can change (LABEL_NOT_DRAWN);
+// two labels for one feature repeat for the same inputs (RENDER_FAILED).
 export const requireUniqueEditableLabelBindings = (
   labelElements,
   requiredFeatureIds,
-  { allowMissing = false } = {}
+  { allowMissing = false, features = [] } = {}
 ) => {
-  const required = new Set(
-    Array.from(requiredFeatureIds || []).map(normalizeKeyToken).filter(Boolean)
-  );
-  if (required.size === 0) return;
-  const counts = new Map(Array.from(required, (featureId) => [featureId, 0]));
-  Array.from(labelElements || []).forEach((element) => {
-    const featureId = normalizeKeyToken(element?.getAttribute?.('data-label-feature-id'));
-    if (counts.has(featureId)) counts.set(featureId, counts.get(featureId) + 1);
+  const required = new Map();
+  Array.from(requiredFeatureIds || []).forEach((featureId) => {
+    const key = normalizeKeyToken(featureId);
+    if (key && !required.has(key)) required.set(key, String(featureId).trim());
   });
-  const invalid = Array.from(counts.values()).some(
-    (count) => count > 1 || (!allowMissing && count !== 1)
-  );
-  if (invalid) {
-    throw new Error('Sanitized SVG content is missing or ambiguously binds an editable Label.');
-  }
+  if (required.size === 0) return;
+  const counts = new Map(Array.from(required.keys(), (key) => [key, 0]));
+  Array.from(labelElements || []).forEach((element) => {
+    const key = normalizeKeyToken(element?.getAttribute?.(LABEL_FEATURE_ID_ATTRIBUTE));
+    if (counts.has(key)) counts.set(key, counts.get(key) + 1);
+  });
+  const failing = (predicate) => Array.from(counts).filter(([, count]) => predicate(count))
+    .map(([key]) => required.get(key));
+  const missing = allowMissing ? [] : failing((count) => count === 0);
+  const [code, featureIds] = missing.length
+    ? ['LABEL_NOT_DRAWN', missing]
+    : ['RENDER_FAILED', failing((count) => count > 1)];
+  if (featureIds.length === 0) return;
+  throw diagnosticError(code, {
+    ...(code === 'LABEL_NOT_DRAWN' ? { reason: 'FORCED_LABEL' } : {}),
+    ...labelBindingLocator(featureIds[0], features, featureIds.length)
+  }, { stage: 'render', operation: 'generate' });
 };
 
 const toNumber = (value, fallback = 0) => {
@@ -552,6 +578,7 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
   const syncLabelEditor = ({
     requiredFeatureIds = [],
     optionalFeatureIds = [],
+    reportedLabelBinding = null,
     queueIncompleteVisibility = true
   } = {}) => {
     // The retained Result can outlive its active mode. Keep its label intent
@@ -566,10 +593,11 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
     // this SVG shows, never which overrides exist (FE-01, R2).
     const featureGeometry = collectFeatureGeometry(svg);
     const labelElements = collectEditableLabelElements(svg, mode.value);
+    const features = extractedFeatures.value;
     requireUniqueEditableLabelBindings(
       labelElements,
       [...requiredFeatureIds, ...optionalFeatureIds],
-      { allowMissing: true }
+      { allowMissing: true, features }
     );
     const featureAssignments = assignFeatureIdsToLabels(svg, labelElements, featureGeometry, mode.value);
     labelElements.forEach((textEl, index) => {
@@ -587,14 +615,23 @@ export const createFeatureLabelActions = ({ state, previewRuntime = null, rulePr
         textEl.removeAttribute('data-label-feature-id');
       }
     });
-    requireUniqueEditableLabelBindings(labelElements, requiredFeatureIds);
+    requireUniqueEditableLabelBindings(labelElements, requiredFeatureIds, { features });
     requireUniqueEditableLabelBindings(
       labelElements,
       optionalFeatureIds,
-      { allowMissing: true }
+      { allowMissing: true, features }
     );
 
     projectLabelIntent(svg, { queueIncompleteVisibility });
+    // A label reflow keeps its Result: the same check reports to the reflow
+    // after the binding completes instead of failing it.
+    if (reportedLabelBinding) {
+      try {
+        requireUniqueEditableLabelBindings(labelElements, reportedLabelBinding.featureIds, { features });
+      } catch (error) {
+        reportedLabelBinding.report(error);
+      }
+    }
   };
 
   // One projection of the label intent onto the mounted Result, shared by a

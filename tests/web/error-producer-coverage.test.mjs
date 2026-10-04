@@ -13,17 +13,22 @@ const UNCLASSIFIED = new Set(['UNKNOWN', 'VALIDATION_UNCLASSIFIED']);
 const FILLS = ['', '0', '1', 'PRIVATE', '#1'];
 
 // Shrink-only: validation owner -> throw sites whose message normalizes to
-// UNKNOWN or VALIDATION_UNCLASSIFIED (mostly internal invariants today).
+// UNKNOWN or VALIDATION_UNCLASSIFIED (mostly internal invariants today). The
+// Result admission and preview binding owners are counted too, because a
+// failure there ends Generate (OV-13).
 const UNCLASSIFIED_THROW_BASELINE = {
   'app/annotations/table-codec.js': 13,
   'app/annotations/validation.js': 0,
   'app/annotations/record-catalog.js': 0,
+  'app/candidate-render.js': 3,
   'app/circular-track-slots.js': 2,
   'app/current-option-values.js': 7,
+  'app/feature-editor/label-actions.js': 0,
   'app/feature-metadata-extraction.js': 2,
   'app/file-imports.js': 0,
   'app/legend-layout/decoration-continuity.js': 0,
   'app/linear-track-slots.js': 34,
+  'app/preview-runtime.js': 7,
   'app/record-display-options.js': 23,
   'app/run-analysis.js': 18,
   'app/track-slot-validation.js': 31,
@@ -32,6 +37,7 @@ const UNCLASSIFIED_THROW_BASELINE = {
   'services/session-file.js': 6,
   'services/session-import-client.js': 0,
   'services/session-request.js': 94,
+  'services/svg-result-ingestion.js': 23,
   'utils/feature-rendering.js': 3,
   'utils/optional-positive-number.js': 0
 };
