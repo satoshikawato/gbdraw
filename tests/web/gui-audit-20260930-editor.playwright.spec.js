@@ -663,3 +663,57 @@ test('a This feature only fill on a duplicated record survives Generate', async 
   await settle(page);
   expect((await fills())[0]).toBe('#c83366');
 });
+
+// OV-06 (R6, OIPC-C03): Label visibility On for a feature drawn as an underlay
+// asks for a label the diagram does not draw. The live reflow and Generate name
+// the feature and the popup choice that ends it instead of reporting UNKNOWN;
+// Generate restores the last Result, and Default lets Generate succeed again.
+test('a Label visibility On that the diagram does not draw names the feature', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, 'tests/fixtures/forced_label_underlay.gb', () => {
+    window.__GBDRAW_APP__.form.labels_mode = 'out';
+  });
+  await generate(page);
+  const repeat = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures
+    .find((item) => item.type === 'repeat_region')?.svg_id);
+  expect(repeat).toBeTruthy();
+  const located = `Feature: repeat_region 1001..1600, ID ${repeat}.`;
+  const labelState = () => labelEditorState(page, 'labels.circular.scope');
+
+  expect(await applyPopupLabel(page, repeat, null, 'on')).toEqual({ hint: true, asked: false });
+  await expect.poll(async () => {
+    const state = await labelState();
+    return state.processing ? null : [state.reflowError?.code, state.reflowError?.context?.featureId];
+  }, { timeout: 300_000 }).toEqual(['LABEL_NOT_DRAWN', repeat]);
+  expect((await labelState()).reflowError.note).toContain(located);
+  await expect(page.locator('[data-live-application-feedback]')).toContainText(located);
+
+  await generateAndWaitForResult(page, { expectedStatus: 'error' });
+  const failed = await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const error = state.errorLog.value;
+    return {
+      recovery: state.generationFailureRecovery.value,
+      code: error?.code,
+      operation: error?.operation,
+      stage: error?.stage,
+      featureId: error?.context?.featureId,
+      actions: error?.actions,
+      summary: error?.summary
+    };
+  });
+  expect(failed).toMatchObject({
+    recovery: 'restored', code: 'LABEL_NOT_DRAWN', operation: 'generate',
+    stage: 'render', featureId: repeat, actions: ['edit-input']
+  });
+  expect(failed.summary).toContain(located);
+  expect(failed.summary).toContain('set Label visibility to Default');
+  const alert = page.getByRole('alert', { name: 'Generation Error' });
+  await expect(alert).toContainText(located);
+  await expect(page.getByRole('button', { name: 'Retry Generate', exact: true })).toHaveCount(0);
+
+  expect(await applyPopupLabel(page, repeat, null, 'default')).toMatchObject({ asked: false });
+  await expect.poll(async () => (await labelState()).processing, { timeout: 300_000 }).toBe(false);
+  await generate(page);
+  expect((await labelState()).reflowError).toBeNull();
+});

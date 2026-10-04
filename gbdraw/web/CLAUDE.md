@@ -276,9 +276,9 @@ A failure the user can fix is thrown with a code and a bounded context:
 `diagnosticError(code, context, { stage, operation })` in JavaScript,
 `GbdrawError(..., diagnostic=)` in Python. Wording lives only in the normalizer
 (`normalizeUserFacingError`). A locator in the context (Sequence N, Line N,
-Column N, Track row N, Depth series N, Available band) appears in the summary,
-and an offered action must be one the user can press. Never add a classifier that
-matches message text.
+Column N, Track row N, Depth series N, Available band, Feature) appears in the
+summary, and an offered action must be one the user can press. Never add a
+classifier that matches message text.
 
 Guards:
 

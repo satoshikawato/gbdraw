@@ -110,7 +110,8 @@ const REASONS = Object.freeze({
   SESSION_FORMAT: 'Choose a gbdraw Session file.',
   FORMAT: 'Use GenBank or the required GFF3 and FASTA inputs.', NO_PROTEINS: 'Choose input containing CDS proteins.',
   EMPTY_ENDPOINT: 'Check the comparison endpoints.', INDEX_ALIGNMENT: 'Check the comparison endpoints.',
-  SOURCE_INDEX: 'Check the comparison endpoints.', SOURCE_VIEW_CONFLICT: 'Check the comparison inputs and display transforms.'
+  SOURCE_INDEX: 'Check the comparison endpoints.', SOURCE_VIEW_CONFLICT: 'Check the comparison inputs and display transforms.',
+  FORCED_LABEL: 'Open the feature\'s popup and set Label visibility to Default, or change the setting that prevents its label.'
 });
 const DEFINITIONS = Object.freeze({
   SESSION_SIZE_LIMIT: ['The Session exceeds the browser size limit. Use a smaller Session file.', ['select-input', 'retry']],
@@ -122,6 +123,9 @@ const DEFINITIONS = Object.freeze({
   VALIDATION_UNCLASSIFIED: ['Input validation failed. Review the inputs before retrying.', ['review-input', 'retry']],
   // The engine output depends only on the request, so Retry would fail the same way.
   RENDER_FAILED: ['The diagram engine failed while drawing this diagram. Generating again with the same inputs and settings fails the same way. Change the inputs or settings, or save a Session for investigation.', ['save-session']],
+  // Python does not draw every forced label (an underlay feature, Embedded Only);
+  // Generate fails the same way until the feature's popup choice changes.
+  LABEL_NOT_DRAWN: ['Label visibility is On for a feature, but this diagram does not draw its label.', ['edit-input']],
   INPUT_INVALID: ['An input value is invalid.', ['edit-input', 'retry']],
   INPUT_REQUIRED: ['Supply GenBank input or matching GFF3 and FASTA inputs.', ['select-input', 'retry']],
   FASTA_REQUIRED: ['Supply a matching FASTA input for each GFF3 input.', ['select-input', 'retry']],
@@ -178,6 +182,9 @@ NotImplementedError RecursionError RuntimeError TypeError UnboundLocalError Name
 // Locators shown in the summary; indexes are zero-based, ordinals one-based.
 const ORDINAL_LABELS = Object.freeze({ DECORATION_CONTINUITY: 'Result', COMPARISON_INPUT: 'Comparison sequence' });
 const CONFIG_PATH = /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$/;
+// A rendered feature ID (gbdraw/svg/ids.py) and an INSDC or GFF3 feature type.
+const FEATURE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,159}$/;
+const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
 
 /**
  * The single JS producer contract for a user-correctable failure: a code and
@@ -394,6 +401,12 @@ const contextFor = (value) => {
   if (value.positionUnit === 'python-character') context.positionUnit = value.positionUnit;
   if (typeof value.configPath === 'string' && value.configPath.length <= 80 && CONFIG_PATH.test(value.configPath)) context.configPath = value.configPath;
   if (typeof value.exceptionType === 'string' && EXCEPTION_TYPES.has(value.exceptionType)) context.exceptionType = value.exceptionType;
+  if (typeof value.featureId === 'string' && FEATURE_ID.test(value.featureId)) context.featureId = value.featureId;
+  if (typeof value.featureType === 'string' && FEATURE_TYPE.test(value.featureType)) context.featureType = value.featureType;
+  // One-based feature span; genomes may exceed the other numeric bounds.
+  for (const key of ['featureStart', 'featureEnd', 'featureCount']) {
+    if (Number.isSafeInteger(value[key]) && value[key] >= 1 && value[key] <= 1e12) context[key] = value[key];
+  }
   for (const key of ['position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx']) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= (key === 'codepoint' ? 0x10ffff : 10000000)) {
       if (key !== 'position' || context.positionUnit === 'python-character') context[key] = value[key];
@@ -422,13 +435,19 @@ export const normalizeUserFacingError = (value, {
   }
   const [message, actions] = DEFINITIONS[result.code];
   const { inputOrdinal, row, column, slotIndex, seriesIndex, innerPx, outerPx, configPath } = result.context;
+  const { featureId, featureType, featureStart, featureEnd, featureCount } = result.context;
+  const featureSpan = featureStart !== undefined && featureEnd !== undefined ? `${featureStart}..${featureEnd}` : '';
+  const featureName = [[featureType, featureSpan].filter(Boolean).join(' '), featureId !== undefined ? `ID ${featureId}` : '']
+    .filter(Boolean).join(', ');
   const locators = [
     inputOrdinal !== undefined ? `${ORDINAL_LABELS[result.code] || 'Sequence'} ${inputOrdinal}.` : '',
     row !== undefined ? `Line ${row}.` : '',
     column !== undefined ? `Column ${column}.` : '',
     slotIndex !== undefined ? `Track row ${slotIndex + 1}.` : '',
     seriesIndex !== undefined ? `Depth series ${seriesIndex + 1}.` : '',
-    configPath !== undefined ? `Setting: ${configPath}.` : ''
+    configPath !== undefined ? `Setting: ${configPath}.` : '',
+    featureName ? `Feature: ${featureName}.` : '',
+    featureCount > 1 ? `Features affected: ${featureCount}.` : ''
   ].filter(Boolean).map((text) => ` ${text}`).join('');
   const band = innerPx !== undefined && outerPx !== undefined ? ` Available band: ${innerPx}–${outerPx} px.` : '';
   const guidance = REASONS[result.context.reason] || '';

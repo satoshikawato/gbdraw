@@ -197,6 +197,16 @@ const hashText = async (text) => {
   return `fnv1a-${(hash >>> 0).toString(16)}`;
 };
 
+// Label visibility On draws the label whatever Show Labels and the label
+// filters select, so it must bind. Label text alone and Off follow those
+// settings, which may leave the feature without a label.
+const labelOperationIds = (operations) => (operations || [])
+  .map((operation) => String(operation?.renderedId || '').trim())
+  .filter(Boolean);
+const forcedLabelFeatureIds = (operations) => Object.freeze([...new Set(labelOperationIds(
+  (operations?.labelVisibility || []).filter((operation) => operation?.mode === 'on')
+))]);
+
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
 const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
 const fastaExtractionCache = new WeakMap();
@@ -4632,16 +4642,7 @@ export const createRunAnalysis = ({
         candidateCommit.mutationPlan?.operationsByResult?.[nextSelectedResultIndex]
         || null
       );
-      // Label visibility On draws the label whatever Show Labels and the label
-      // filters select, so it must bind. Label text alone and Off follow those
-      // settings, which may leave the feature without a label.
-      const labelOperationIds = (operations) => (operations || [])
-        .map((operation) => String(operation?.renderedId || '').trim())
-        .filter(Boolean);
-      const requiredLabelFeatureIds = Object.freeze([...new Set(labelOperationIds(
-        (selectedMutationOperations?.labelVisibility || [])
-          .filter((operation) => operation?.mode === 'on')
-      ))]);
+      const requiredLabelFeatureIds = forcedLabelFeatureIds(selectedMutationOperations);
       const optionalLabelFeatureIds = new Set(labelOperationIds([
         ...(selectedMutationOperations?.labelText || []),
         ...(selectedMutationOperations?.labelVisibility || [])
@@ -5249,6 +5250,38 @@ export const createRunAnalysis = ({
     return cancelDiagramGeneration();
   };
 
+  // A reflow keeps the Result it draws, so the preview binder reports a forced
+  // label that the Result does not draw instead of failing the binding, with
+  // the diagnostic Generate raises for it (R6, OV-06).
+  const expectReflowLabelBindings = (commit, resultIndex, isCurrentReflow) => {
+    const result = commit.results[resultIndex];
+    const featureIds = forcedLabelFeatureIds(commit.mutationPlan?.operationsByResult?.[resultIndex]);
+    if (!result || featureIds.length === 0) return;
+    const readinessId = `label-reflow:${latestGenerationToken}`;
+    const resultIdentity = previewRuntime.getResultIdentity(result);
+    previewRuntime.registerReadinessExpectation({
+      result,
+      resultIndex,
+      artifactIdentity: readinessId,
+      generationToken: readinessId,
+      catalogState: featureCatalog?.value || null,
+      phase: 'label-reflow',
+      bindingOptions: {
+        reportedLabelBinding: Object.freeze({
+          featureIds,
+          report: (error) => {
+            if (!isCurrentReflow()) return;
+            labelReflowLastError.value = liveEditFailure(formatError(error, 'generate', 'render'));
+          }
+        })
+      },
+      isCurrent: () => (
+        previewRuntime.getResultIdentity(results.value[resultIndex]) === resultIdentity
+        && Number(selectedResultIndex.value) === resultIndex
+      )
+    });
+  };
+
   // A label reflow re-renders the committed Session with the current editor
   // tables (R1(c), N-16): it never reads the settings draft.
   const runLabelReflowCandidate = async ({ requestId, decorationContinuity }) => {
@@ -5332,12 +5365,14 @@ export const createRunAnalysis = ({
         return { status: 'error', error };
       }
       const previousSelectedResultIndex = selectedResultIndex.value;
+      const nextSelectedResultIndex = Math.max(
+        0, Math.min(previousSelectedResultIndex, execution.commit.results.length - 1)
+      );
+      expectReflowLabelBindings(execution.commit, nextSelectedResultIndex, isCurrent);
       skipCaptureBaseConfig.value = true;
       results.value = execution.commit.results;
       if (execution.commit.results.length > 0) {
-        selectedResultIndex.value = Math.max(
-          0, Math.min(previousSelectedResultIndex, execution.commit.results.length - 1)
-        );
+        selectedResultIndex.value = nextSelectedResultIndex;
       }
       logPostGbdrawTimings(timingEntries);
       if (colorCandidate) rulePreparation.notifyChanges(colorCandidate);

@@ -600,14 +600,14 @@ test('mounted Label binding accepts one target and rejects missing or ambiguous 
   ));
   assert.throws(
     () => requireUniqueEditableLabelBindings([], ['f0001']),
-    /missing or ambiguously binds an editable Label/
+    { code: 'LABEL_NOT_DRAWN', stage: 'render', context: { reason: 'FORCED_LABEL', featureId: 'f0001' } }
   );
   assert.throws(
     () => requireUniqueEditableLabelBindings(
       [label('f0001'), label('f0001')],
       ['f0001']
     ),
-    /missing or ambiguously binds an editable Label/
+    { code: 'RENDER_FAILED', stage: 'render', context: { featureId: 'f0001' } }
   );
   assert.doesNotThrow(() => requireUniqueEditableLabelBindings(
     [],
