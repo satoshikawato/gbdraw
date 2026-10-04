@@ -12,7 +12,12 @@ from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
 from gbdraw.api.options import CircularDiagramOptions, LinearDiagramOptions
-from gbdraw.api.request_render import build_request_diagram, plan_request, resolve_request
+from gbdraw.api.request_render import (
+    build_request_diagram,
+    plan_request,
+    read_request_feature_override_table,
+    resolve_request,
+)
 from gbdraw.api.requests import (
     CircularDiagramRequest,
     GffFastaInputSource,
@@ -155,6 +160,31 @@ def test_invalid_tables_name_the_table_and_row(table, pattern, row):
     assert "Feature override table" in str(caught.value)
     assert caught.value.diagnostic["code"] == "TABLE_INVALID"
     assert caught.value.diagnostic.get("row") == row
+
+
+def test_rows_naming_no_record_or_feature_are_listed_instead_of_failing():
+    # The Web's Load Feature Edits TSV (design Q4 6.4, Owner Q3 = A) reports a
+    # row whose record or feature the current records lack; every other defect
+    # still rejects the table, as the CLI does.
+    first, second, _third = _ids()
+    table = _table(
+        {"record": "#1", "feature_selector": f"hash={second}", "label_text": "Kept"},
+        {"record": "#2", "feature_selector": f"hash={first}", "feature_visibility": "off"},
+        {"record": "other", "feature_selector": f"hash={first}", "feature_visibility": "off"},
+        {"record": "#1", "feature_selector": "locus_tag=missing", "label_visibility": "on"},
+    )
+    unmatched: list[int] = []
+    rows = read_request_feature_override_table(_request(), table, unmatched=unmatched)
+    assert rows == (FeatureOverride("one", second, label_text="Kept"),)
+    assert unmatched == [3, 4, 5]
+    for defect, pattern in (
+        ({"feature_selector": "type=CDS", "label_visibility": "on"}, "row 2: .*matched 3"),
+        ({"record": "#0", "feature_selector": f"hash={first}", "label_visibility": "on"}, "row 2: Record index"),
+        ({"feature_selector": f"hash={first}", "feature_visibility": "hidden"}, "row 2: feature_visibility"),
+    ):
+        with pytest.raises(ValidationError, match=pattern) as caught:
+            read_request_feature_override_table(_request(), _table(defect), unmatched=[])
+        assert caught.value.diagnostic == {"code": "TABLE_INVALID", "row": 2}
 
 
 def test_unreadable_table_file_is_a_typed_error(tmp_path):

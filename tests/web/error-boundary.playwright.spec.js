@@ -276,8 +276,10 @@ test('Label TSV retry retains its real reselect input and accepted History', asy
   await page.waitForFunction(()=>!window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length);
   await page.evaluate(()=>window.__GBDRAW_APP__.openRightDrawerTab('features'));
   const before=await page.evaluate(()=>({svg:window.__GBDRAW_APP__.svgContent,history:window.__GBDRAW_HISTORY__.getUndoCount()}));
-  const input=page.locator('input[accept=".tsv,.txt,text/tab-separated-values,text/plain"]');
-  await input.setInputFiles({name:'PRIVATE_LABEL_SENTINEL.tsv',mimeType:'text/plain',buffer:Buffer.from('*\tCDS\tproduct\t(?<enzyme>NADH)\tPRIVATE_LABEL_SENTINEL\n')});
+  // The Features list has two TSV file inputs (Label TSV, feature edits TSV); its button opens this one.
+  const picker=page.waitForEvent('filechooser');
+  await page.getByRole('button',{name:'Load Label TSV',exact:true}).click();
+  await (await picker).setFiles({name:'PRIVATE_LABEL_SENTINEL.tsv',mimeType:'text/plain',buffer:Buffer.from('*\tCDS\tproduct\t(?<enzyme>NADH)\tPRIVATE_LABEL_SENTINEL\n')});
   const alert=page.getByRole('alert',{name:'Rule error'});
   await expect(alert).toContainText('Python regular expression is invalid',{timeout:180000});
   await page.evaluate(()=>window.__GBDRAW_APP__.retryLabelImportFailure());

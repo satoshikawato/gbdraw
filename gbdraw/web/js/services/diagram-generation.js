@@ -588,14 +588,15 @@ export const runDiagramHelperOperation = (operation, payload = {}, { onProgress 
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return Promise.reject(deserializeWorkerError({ code: 'HELPER_PROTOCOL', operation: normalizedOperation, stage: 'request-validation' }));
   }
-  const projection = normalizedOperation === DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT
-    && payload.projection !== undefined;
+  // Helpers that read the records of a committed request stage its resources.
+  const staging = normalizedOperation === DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE ? payload
+    : (normalizedOperation === DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT ? payload.projection : undefined);
   const { resources, ...helperPayload } = payload;
   return runAuxiliaryWorkerRequest({
     type: 'helper', operation: normalizedOperation,
-    payload: projection ? helperPayload : payload,
-    prepareResources: projection ? () => resourceTransport.prepare({
-      request: payload.projection.canonicalRequest, resources
+    payload: staging ? helperPayload : payload,
+    prepareResources: staging ? () => resourceTransport.prepare({
+      request: staging.canonicalRequest, resources
     }) : null,
     activeRequests: activeHelperRequests,
     onProgress

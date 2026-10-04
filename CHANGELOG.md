@@ -169,6 +169,13 @@ decisions are in
   edits it could not match. A Generate that replaces a source removes the edits
   of features the new source does not have; other unmatched edits stay until
   **Remove N unmatched feature edits** (OV-01, OV-02, OV-04, OV-11, OV-12).
+- Web per-feature edits: **Export Feature Edits TSV** and **Load Feature Edits
+  TSV** in the Features list write and read these edits as a
+  `--feature_override_table`, so a table from the web app runs with the CLI and
+  the Python API, and the reverse. Load replaces the edits of the current
+  diagram's records as one Undo step, counts rows whose record or feature the
+  diagram does not have without applying them, and rejects a malformed table
+  with the row it names.
 - Comparison tables: every BLAST outfmt 6/7 reader (CLI `-b` and
   `--comparisons_table`, Web uploads, Circular similarity rings, and the LOSATP
   parser) now reads the first 12 columns by position and validates their types.

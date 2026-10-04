@@ -22,7 +22,7 @@ from gbdraw.core.record_metadata import (
     _source_feature_location_parts,
 )
 from gbdraw.exceptions import ValidationError
-from gbdraw.io.record_select import parse_record_selector, select_record
+from gbdraw.io.record_select import RecordSelector, parse_record_selector, select_record
 from .ids import compute_feature_hash_from_location_parts, disambiguate_feature_ids
 from .selector_values import (
     matches_feature_selector,
@@ -264,6 +264,14 @@ def read_identity_table(
     return rows
 
 
+def _selects_no_record(records: Sequence[SeqRecord], selector: RecordSelector | None) -> bool:
+    if selector is None:
+        return not records
+    if selector.record_index is not None:
+        return selector.record_index >= len(records)
+    return all(record.id != selector.record_id for record in records)
+
+
 def resolve_identity_table_rows(
     rows: Sequence[tuple[str, str]],
     *,
@@ -272,24 +280,33 @@ def resolve_identity_table_rows(
     record_keys: Sequence[str],
     source_record_ids: Sequence[str],
     source_catalogs: Sequence[tuple[SourceFeatureIdentity, ...]],
-) -> tuple[FeatureIdentity, ...]:
+    unmatched: list[int] | None = None,
+) -> tuple[FeatureIdentity | None, ...]:
     """Resolve ``(record, feature_selector)`` cells to one identity per row.
 
     The record selector must select exactly one record and the feature selector
     exactly one original-source feature of it. Row numbers count the header as 1.
+    With ``unmatched`` (the Web's Load Feature Edits TSV, Owner Q3 = A), a row
+    that selects no record or no feature adds its row number there and resolves
+    to ``None``; every other defect still fails.
     """
     # Deferred: the annotations package imports the feature factory, which uses this module.
     from gbdraw.annotations.models import parse_feature_selector
 
     _record_key_indexes(records, record_keys, source_record_ids, source_catalogs)
-    identities: list[FeatureIdentity] = []
+    identities: list[FeatureIdentity | None] = []
     seen: set[FeatureIdentity] = set()
     # hash= rows (Run Info writes one per edited feature) look up an index built
     # once per record instead of scanning the catalog per row; same matches.
     hash_indexes: dict[int, dict[str, list[SourceFeatureIdentity]]] = {}
     for row_number, (record_cell, selector_cell) in enumerate(rows, start=2):
         try:
-            selected = select_record(records, parse_record_selector(record_cell))
+            record_selector = parse_record_selector(record_cell)
+            if unmatched is not None and _selects_no_record(records, record_selector):
+                unmatched.append(row_number)
+                identities.append(None)
+                continue
+            selected = select_record(records, record_selector)
             if len(selected) != 1:
                 raise ValueError("Record selector must match exactly one record; use #index.")
             index = next(i for i, record in enumerate(records) if record is selected[0])
@@ -310,6 +327,10 @@ def resolve_identity_table_rows(
                         key=selector.key, value=selector.value, record_id=source_record_ids[index]
                     )
                 ]
+            if not matched and unmatched is not None:
+                unmatched.append(row_number)
+                identities.append(None)
+                continue
             if len(matched) != 1:
                 raise ValueError(
                     "Feature selector must match exactly one source feature; "

@@ -13,6 +13,7 @@ export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   MEASURE_LEGEND_TEXT: 'measureLegendText',
   PROMOTE_LEGACY_LOSATP_CACHE: 'promoteLegacyLosatpCache',
   READ_COMPARISON_SEQUENCE: 'readComparisonSequence',
+  READ_FEATURE_OVERRIDE_TABLE: 'readFeatureOverrideTable',
   RESOLVE_LEGACY_PROTEIN_REFERENCES: 'resolveLegacyProteinReferences',
   RESOLVE_SIMILARITY_ALIGNMENT: 'resolveSimilarityAlignment',
   VALIDATE_CONFIG_OVERRIDES: 'validateConfigOverrides'

@@ -17,6 +17,7 @@ from gbdraw.web_support.rule_matching import evaluate_rules_json
 from gbdraw.web_support.config_overrides import validate_web_config_overrides_json
 from gbdraw.web_support.similarity_alignment import resolve_similarity_alignment_json
 from gbdraw.web_support.comparison_sequences import read_comparison_sequence_json
+from gbdraw.web_support.feature_override_table import read_feature_override_table_json
 
 _WEB_LOSATP_FILTERED_HIT_CACHE = {}
 _WEB_LOSATP_CONVERTED_PAYLOAD_CACHE = {}
@@ -1728,6 +1729,7 @@ _WEB_JSON_HELPERS = {
     "list_sequence_records": (list_sequence_records, "listSequenceRecords"),
     "list_gff_fasta_records": (list_gff_fasta_records, "listGffFastaRecords"),
     "read_comparison_sequence_json": (read_comparison_sequence_json, "readComparisonSequence"),
+    "read_feature_override_table_json": (read_feature_override_table_json, "readFeatureOverrideTable"),
     "measure_legend_text_json": (measure_legend_text_json, "measureLegendText"),
     "generate_legend_entry_svg": (generate_legend_entry_svg, "generateLegendEntrySvg"),
     "extract_features_from_genbank": (extract_features_from_genbank, "feature-extraction"),

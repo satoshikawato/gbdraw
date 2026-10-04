@@ -1265,7 +1265,7 @@ export const createFeatureLabelActions = ({
 
   // Export Label TSV writes the label rules the next Generate sends: a saved
   // label table, or the bulk label edits as `* * label` rows. Per-feature label
-  // edits are identity rows of the Session, not table rules (design Q4 6.4).
+  // edits are identity rows; Export Feature Edits TSV writes them (design Q4 6.4).
   const downloadLabelOverrideTable = () => {
     const savedTable = serializeLabelOverrideRows(state.canonicalLabelOverrideRows?.value);
     const rows = savedTable
@@ -1274,7 +1274,7 @@ export const createFeatureLabelActions = ({
         .map((sourceText) => `*\t*\tlabel\t^${escapeRegexLiteral(sourceText)}$\t${
           String(labelTextBulkOverrides[sourceText] ?? '').replace(/[\t\r\n]+/g, ' ').trim()}`);
     if (rows.length === 0) {
-      window.alert('No label rules to export. Per-feature label edits are kept in the Session.');
+      window.alert('No label rules to export. Export Feature Edits TSV writes per-feature label edits.');
       return;
     }
     const selectedIdx = selectedResultIndex.value;

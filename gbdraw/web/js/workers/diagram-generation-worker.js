@@ -270,6 +270,7 @@ const HELPER_FILE_NAMES = Object.freeze({
   fasta: 'source.fasta',
   pairs: 'pairs.json',
   visibility: 'feature-visibility.tsv',
+  featureOverrides: 'feature-overrides.tsv',
   rawTsv: 'raw-losatp.tsv'
 });
 
@@ -525,6 +526,20 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         jsonArgument(resourcePaths, {}), workspace
       ]);
     }
+  },
+  // Load Feature Edits TSV: Python reads the table against the records of the
+  // committed request, staged as Generate stages them (design Q4 6.4, R4).
+  [DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE]: {
+    keys: ['files', 'canonicalRequest', 'resourceManifest', 'stagedResources'],
+    fileRoles: ['featureOverrides'],
+    run: async (pyodide, payload, paths, operation, workspace) => callJsonHelper(
+      pyodide, 'read_feature_override_table_json', [
+        requireHelperFile(paths, 'featureOverrides', operation),
+        jsonArgument(payload.canonicalRequest, null),
+        jsonArgument(await prepareCanonicalResources(pyodide, `${workspace}/request`, payload), {}),
+        `${workspace}/output`
+      ]
+    )
   },
   [DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES]: {
     keys: ['features', 'rules', 'kind'],
