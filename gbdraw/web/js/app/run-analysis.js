@@ -4860,6 +4860,20 @@ export const createRunAnalysis = ({
             execute,
             {
               shouldCommit: (result) => result?.status === 'ok',
+              // A Generate that replaced a source removes the feature placements
+              // it no longer resolves (Q3 = A). Placements are draft intent, not
+              // part of the Result, so Undo and Redo restore them, and the
+              // removal count, with this step.
+              captureIntentCheckpoint: () => ({
+                placements: cloneJsonData(state.featurePlacementOverrides) || {},
+                removed: Number(featureEditRemovalCount.value) || 0
+              }),
+              restoreIntentCheckpoint: ({ placements, removed }) => {
+                Object.keys(state.featurePlacementOverrides)
+                  .forEach((key) => delete state.featurePlacementOverrides[key]);
+                Object.assign(state.featurePlacementOverrides, cloneJsonData(placements) || {});
+                featureEditRemovalCount.value = removed;
+              },
               onCheckpointCapture: onGeneratedArtifactCheckpointCapture,
               restoreAppliedArtifact: async (beforeHandle) => {
                 historyRecovery = 'restore-failed';

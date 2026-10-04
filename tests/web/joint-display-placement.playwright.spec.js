@@ -335,7 +335,7 @@ for (const mode of ['circular', 'linear']) {
 // feature placements; a Generate that replaced the source removes the rows
 // whose feature the new source no longer has and reports how many. The record
 // rotation draft still follows its source.
-test('paired GFF/FASTA replacement keeps placements until Generate removes the ones whose feature is gone', async ({ page }) => {
+test('paired GFF/FASTA replacement keeps placements; Generate applies survivors and removes the ones whose feature is gone', async ({ page }) => {
   test.setTimeout(180000);
   await openApp(page);
   await page.getByRole('radio', { name: 'GFF3 + FASTA', exact: true }).check();
@@ -364,6 +364,14 @@ test('paired GFF/FASTA replacement keeps placements until Generate removes the o
   await expect(start).toHaveValue('71');
   expect(await placements()).toBe(1);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content)).toBe(before);
+  // The feature survives a FASTA replacement (same record, type, and
+  // location), so the source-replacing Generate applies its placement.
+  await upload.setInputFiles({ name: 'same.fa', mimeType: 'text/plain', buffer: Buffer.from(fasta.replace('ACGT', 'TCGT')) });
+  await generateFromControl(page);
+  expect(await placements()).toBe(1);
+  expect(await page.evaluate(async () => (await import('./js/services/config.js'))
+    .getCommittedCanonicalRenderRequest().diagramOptions.featurePlacements.map((row) => row.placement))).toEqual([{ kind: 'main' }]);
+  await expect(page.getByTestId('feature-identity-notice')).toHaveCount(0);
   // The CDS moves, so the placed feature is not in the replacing source.
   await gffUpload.setInputFiles({ name: 'moved.gff', mimeType: 'text/plain', buffer: Buffer.from(gff.replace('\t21\t105\t', '\t31\t105\t')) });
   expect(await placements()).toBe(1);

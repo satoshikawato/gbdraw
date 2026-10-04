@@ -153,14 +153,25 @@ for (const committed of [false, true]) {
   });
 }
 
+// #494: replacing or removing the Circular source, also while its mode is
+// inactive, unbinds the old source identity. Owner decision Q3 = A (design Q4
+// 3.4, 6.3): the source change keeps the placement draft; the next Generate
+// that replaces the source removes the rows it no longer resolves and reports
+// how many. The replacement keeps the record ID, but a new file gets its own
+// record key (not the Session's `record-1`), so the old row reaches no request
+// and is removed; an unrelated file loaded after removal does not take it
+// either.
+const placementKeys = page => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides));
 for (const operation of ['replacement', 'removal']) {
-  test(`Circular source ${operation} invalidates old identity and placement after mode inactivity`, async ({ browser }) => {
+  test(`Circular source ${operation} after mode inactivity unbinds the old identity and Generate drops its placement`, async ({ browser }) => {
     test.setTimeout(180000);
     const page = await load(browser);
     try {
       await generate(page);
       await placement(page, 'outward');
       const before = await snapshot(page);
+      const placed = Object.keys(before.placements);
+      expect(placed).toEqual([JSON.stringify([before.feature.recordKey, before.feature.biologicalFeatureId])]);
       const source = await page.evaluate(async () => {
         const { state } = await import('./js/state.js');
         window.__MODE_SOURCE__ = state.files.c_gb;
@@ -169,17 +180,18 @@ for (const operation of ['replacement', 'removal']) {
       });
       await switchMode(page, 'linear');
       await switchMode(page, 'circular');
+      const upload = page.getByLabel('GenBank/DDBJ File', { exact: true });
+      const discovered = () => expect.poll(() => page.evaluate(async () =>
+        (await import('./js/state.js')).state.circularRecordDiscovery.status)).toBe('ready');
       if (operation === 'replacement') {
         // Keep the biological record ID: file/source identity must still invalidate its binding.
-        await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles({ name: 'replacement.gbk',
+        await upload.setInputFiles({ name: 'replacement.gbk',
           mimeType: 'text/plain', buffer: Buffer.from(source.replace(/Homo sapiens/g, 'Replacement source')) });
-        await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state.circularRecordDiscovery.status)).toBe('ready');
+        await discovered();
       } else {
-        await page.getByLabel('GenBank/DDBJ File', { exact: true })
-          .locator('xpath=ancestor::div[@role="group"]')
-          .getByRole('button', { name: /Remove/ }).click();
+        await upload.locator('xpath=ancestor::div[@role="group"]').getByRole('button', { name: /Remove/ }).click();
+        await expect.poll(async () => (await snapshot(page)).records).toEqual([]);
       }
-      await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides))).toEqual([]);
       const invalidation = await page.evaluate(async () => {
         const { state } = await import('./js/state.js');
         return { sameSource: state.files.c_gb === window.__MODE_SOURCE__,
@@ -191,8 +203,29 @@ for (const operation of ['replacement', 'removal']) {
       expect(invalidation.choices.every(choice => !choice.enabled)).toBe(true);
       const changed = await snapshot(page);
       expect(changed.records.some(record => record.recordKey === before.feature.recordKey)).toBe(false);
-      if (operation === 'replacement') await generate(page);
-      else expect(changed.records).toEqual([]);
+      // The source change itself removes no draft row (Q3 = A).
+      expect(await placementKeys(page)).toEqual(placed);
+      if (operation === 'removal') {
+        await upload.setInputFiles('tests/fixtures/regex_rules.gb');
+        await discovered();
+        expect(await placementKeys(page)).toEqual(placed);
+      }
+      await generate(page);
+      const generated = await snapshot(page);
+      expect(generated.committedPlacements).toEqual([]);
+      expect(await placementKeys(page)).toEqual([]);
+      await expect(page.getByTestId('feature-identity-notice')).toContainText(
+        'Removed 1 feature edit(s) whose feature the replaced source no longer has.'
+      );
+      // The removal is part of the Generate step: Undo restores the row and
+      // clears the count with the previous Result, and Redo removes it again.
+      const notice = page.getByTestId('feature-identity-notice');
+      await page.getByRole('button', { name: /^Undo/ }).first().click();
+      await expect.poll(() => placementKeys(page)).toEqual(placed);
+      await expect(notice).toHaveCount(0);
+      await page.getByRole('button', { name: /^Redo/ }).first().click();
+      await expect.poll(() => placementKeys(page)).toEqual([]);
+      await expect(notice).toContainText('Removed 1 feature edit(s)');
       expect(external.get(page)).toEqual([]);
     } finally { await page.context().close(); }
   });
