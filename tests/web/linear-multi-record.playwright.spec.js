@@ -3421,7 +3421,7 @@ test('@comparison-contract File source order moves multi-record blocks through p
 // The CLI draws each record of a multi-record file on its own row, so a CLI
 // Session loads File 2 (two records) on rows 2 and 3. Those are consecutive
 // rows of one File: File order stays available and moves the whole block.
-test('@comparison-contract CLI per-record rows keep File order available and move whole File blocks', async ({ page }, testInfo) => {
+test('CLI per-record rows keep File order available and move whole File blocks', async ({ page }, testInfo) => {
   test.setTimeout(300000);
   const session = testInfo.outputPath('cli-file-blocks.gbdraw-session.json.gz');
   await promisify(execFile)('python', [
