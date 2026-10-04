@@ -1085,7 +1085,10 @@ Source recipe reads each track-slot token back with the CLI split rules, so a
 slot legend label that contains `,` or ` #`, or a slot ID that contains `:`,
 `@` or ` #`, makes the recipe unavailable. A Linear scale font without a
 ruler-label font also makes it unavailable while ruler labels are drawn,
-because CLI ruler labels follow `--scale_font_size`.
+because CLI ruler labels follow `--scale_font_size`. Feature placements and
+per-feature edits become `--feature_placement_table` and
+`--feature_override_table` rows; one whose feature the source does not have
+makes the recipe unavailable.
 See [Replay boundaries](session-and-request-compatibility.md#replay-boundaries)
 for required files and the distinction from saving subsequent editor changes.
 Rotation may split one logical comparison match into several SVG paths. Popups

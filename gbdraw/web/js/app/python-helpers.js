@@ -569,7 +569,6 @@ def extract_cds_protein_fasta(path, fmt, fasta_path=None, region_spec=None, reco
             resolution = resolve_record_feature_inputs(
                 records=[record],
                 record_keys=[str(stable_record_key)],
-                source_record_ids=[str(record.id)],
                 source_catalogs=source_feature_catalogs[:1],
                 placements=(),
                 mode="linear",

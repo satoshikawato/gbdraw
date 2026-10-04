@@ -176,7 +176,11 @@ side and `level=1`. Final feature-slot geometry determines direction support.
 feature_visibility=None, label_visibility=None, label_text=None)` rows
 (`diagramOptions.featureOverrides`, request schema 9). `None` keeps the
 rule-based result, a row must set at least one value, and an identity may appear
-once. A row decides before the feature visibility and label tables:
+once. Instead of rows, pass a `feature_override_table` DataFrame or a
+`feature_override_table_file` path with the
+[feature override table](input-formats-and-tsv-schemas.md#feature-override-table)
+columns; the three inputs are mutually exclusive. A row decides before the
+feature visibility and label tables:
 
 | Field | Values and effect |
 |---|---|
@@ -188,8 +192,10 @@ once. A row decides before the feature visibility and label tables:
 is an annotation target for one such feature. A feature that is not drawn skips
 the annotation with the `feature_selector_unmatched` warning.
 
-The shared planner materializes tables before rendering or canonical encoding
-and resolves every identity once. A record key outside the request is an error.
+The shared planner turns both tables into exact rows when the records load,
+before rendering or canonical encoding, and resolves every identity once. A
+table row must name a feature of the source. A record key outside the request is
+an error.
 An edit whose feature a cropped record does not have (`crop_excluded`: outside
 the crop, or removed while loading), that an uncropped record does not have
 (`absent`, for example removed by a GFF3 type filter), or that is not in the

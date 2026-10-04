@@ -1282,6 +1282,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         selected_features_set=tuple(selected_features_set),
         feature_visibility_table_file=feature_table_path or None,
         feature_placement_table_file=args.feature_placement_table,
+        feature_override_table_file=args.feature_override_table,
         label_whitelist_file=label_whitelist or None,
         qualifier_priority_file=qualifier_priority_path or None,
         label_override_file=label_table_path or None,

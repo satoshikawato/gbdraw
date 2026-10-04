@@ -1187,6 +1187,7 @@ _COMMON_SINGLE_FILE_OPTIONS = {
     "--label_table": "files.cliInputs[]",
     "--feature_visibility_table": "files.cliInputs[]",
     "--feature_placement_table": "files.cliInputs[]",
+    "--feature_override_table": "files.cliInputs[]",
 }
 
 

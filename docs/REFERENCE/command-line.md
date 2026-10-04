@@ -138,6 +138,10 @@ each set to an `annotations` slot. Styling flags and tables follow the
 precedence in [Palettes, feature rules, labels, shapes, tracks, and
 layout](palettes-feature-rules-labels-shapes-and-tracks.md).
 
+`--feature_override_table` shows, hides, or relabels individual features named
+by exact selectors; its rows decide before the visibility and label tables (see
+[Feature override table](input-formats-and-tsv-schemas.md#feature-override-table)).
+
 ## Comparison boundary
 
 `--losat losatp` with `--losatp_mode` (`similarity_groups`, `collinear`, or

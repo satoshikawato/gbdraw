@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-import csv
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from numbers import Integral, Real
+from numbers import Integral
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from .objects import FeatureObject
 
-from pandas import DataFrame, isna
+from pandas import DataFrame
 
 from gbdraw.exceptions import ValidationError
 from .overrides import (
@@ -27,6 +26,7 @@ from .source import (
     FeatureIdentity,
     IdentityBinding,
     SourceFeatureIdentity,
+    read_identity_table,
     resolve_feature_identities,
     resolve_identity_table_rows,
 )
@@ -162,58 +162,17 @@ class ResolvedRecordFeatureInputs:
 class RecordFeatureResolution:
     """One request's identity-addressed feature inputs, resolved once."""
 
-    feature_placements: tuple[FeaturePlacementOverride, ...]
     records: tuple[ResolvedRecordFeatureInputs, ...]
     notices: tuple[FeatureIdentityNotice, ...]
     # Every requested identity, including annotation targets.
     bindings: Mapping[FeatureIdentity, IdentityBinding]
 
 
-def _placement_table_rows(table: DataFrame | str | Path) -> list[dict]:
-    if isinstance(table, DataFrame):
-        columns = list(table.columns)
-        rows = table.to_dict("records")
-    else:
-        try:
-            with open(table, encoding="utf-8-sig", newline="") as handle:
-                reader = csv.DictReader(handle, delimiter="\t")
-                columns = reader.fieldnames or []
-                rows = list(reader)
-        except (OSError, csv.Error) as exc:
-            raise ValidationError(
-                f"Cannot read feature placement table: {exc}"
-            ) from exc
-    if len(set(columns)) != len(columns) or set(columns) - {
-        "record",
-        "feature_selector",
-        "placement",
-        "level",
-    }:
-        raise ValidationError("Duplicate or unknown feature placement table columns.")
-    if not {"feature_selector", "placement"} <= set(columns):
-        raise ValidationError(
-            "Feature placement table requires feature_selector and placement columns."
-        )
-    if any(None in row for row in rows):
-        raise ValidationError(
-            "Feature placement table row has more values than columns."
-        )
-    return rows
+_PLACEMENT_TABLE = "Feature placement table"
 
 
-def _cell(value: object) -> str:
-    if isinstance(value, (Mapping, list, tuple, set)):
-        raise ValidationError("Feature placement table cells must be scalar values.")
-    if value is None or (not isinstance(value, str) and isna(value)):
-        return ""
-    return str(value).strip()
-
-
-def _table_target(row: dict, mode: str) -> FeaturePlacementTarget | None:
-    token, level = _cell(row.get("placement")).lower(), _cell(row.get("level"))
-    raw_level = row.get("level")
-    if isinstance(raw_level, Real) and not isinstance(raw_level, bool) and raw_level == 1:
-        level = "1"  # pandas promotes an integer column with blank cells to float.
+def _table_target(row: Mapping[str, str], mode: str) -> FeaturePlacementTarget | None:
+    token, level = row["placement"].lower(), row["level"]
     if token in ("auto", "main"):
         if level:
             raise ValidationError("Auto/Main placement must omit level.")
@@ -227,9 +186,8 @@ def _table_target(row: dict, mode: str) -> FeaturePlacementTarget | None:
     return target
 
 
-def _materialize_placements(
-    overrides: Sequence[FeaturePlacementOverride],
-    table: DataFrame | str | Path | None,
+def read_feature_placement_table(
+    table: DataFrame | str | Path,
     *,
     mode: str,
     records: Sequence,
@@ -237,50 +195,43 @@ def _materialize_placements(
     source_record_ids: Sequence[str],
     source_catalogs: Sequence[tuple[SourceFeatureIdentity, ...]],
 ) -> tuple[FeaturePlacementOverride, ...]:
-    exact = normalize_feature_placements(overrides)
-    if table is not None:
-        if exact:
+    """Resolve a feature placement table to exact placements; ``auto`` rows add none."""
+    rows = read_identity_table(
+        table, table_name=_PLACEMENT_TABLE,
+        columns=("record", "feature_selector", "placement", "level"),
+        required=("feature_selector", "placement"),
+    )
+    targets = []
+    for row_number, row in enumerate(rows, start=2):
+        try:
+            targets.append(_table_target(row, mode))
+        except (ValueError, ValidationError) as exc:
             raise ValidationError(
-                "Exact placements and placement table inputs are mutually exclusive."
-            )
-        targets, selectors = [], []
-        for row_number, row in enumerate(_placement_table_rows(table), start=2):
-            try:
-                targets.append(_table_target(row, mode))
-                selectors.append(
-                    (_cell(row.get("record")), _cell(row.get("feature_selector")))
-                )
-            except (ValueError, ValidationError) as exc:
-                raise ValidationError(
-                    f"Feature placement table row {row_number}: {exc}"
-                ) from exc
-        identities = resolve_identity_table_rows(
-            selectors,
-            table="Feature placement table",
-            records=records,
-            record_keys=record_keys,
-            source_record_ids=source_record_ids,
-            source_catalogs=source_catalogs,
-        )
-        exact = normalize_feature_placements([
-            FeaturePlacementOverride(identity.record_key, identity.biological_feature_id, target)
-            for identity, target in zip(identities, targets, strict=True)
-            if target is not None
-        ])
-    for item in exact:
-        item.target.validate_mode(mode)
-    return exact
+                f"{_PLACEMENT_TABLE} row {row_number}: {exc}",
+                diagnostic={"code": "TABLE_INVALID", "row": row_number},
+            ) from exc
+    identities = resolve_identity_table_rows(
+        [(row["record"], row["feature_selector"]) for row in rows],
+        table=_PLACEMENT_TABLE,
+        records=records,
+        record_keys=record_keys,
+        source_record_ids=source_record_ids,
+        source_catalogs=source_catalogs,
+    )
+    return normalize_feature_placements([
+        FeaturePlacementOverride(identity.record_key, identity.biological_feature_id, target)
+        for identity, target in zip(identities, targets, strict=True)
+        if target is not None
+    ])
 
 
 def resolve_record_feature_inputs(
     *,
     records: Sequence,
     record_keys: Sequence[str],
-    source_record_ids: Sequence[str],
     source_catalogs: Sequence[tuple[SourceFeatureIdentity, ...]],
     placements: Sequence[FeaturePlacementOverride],
     mode: str,
-    placement_table: DataFrame | str | Path | None = None,
     feature_overrides: Sequence[FeatureOverride] = (),
     target_identities: Iterable[FeatureIdentity] = (),
     selected_features: Sequence[str],
@@ -290,13 +241,14 @@ def resolve_record_feature_inputs(
 ) -> RecordFeatureResolution:
     """Bind placements, feature overrides and annotation targets in one pass.
 
-    Placement keeps its present/dormant classification; an edit whose identity is
-    not drawn becomes a notice instead of failing the render (Owner Q3 = A).
+    Tables are already exact rows (``read_feature_placement_table``,
+    ``read_feature_override_table``). Placement keeps its present/dormant
+    classification; an edit whose identity is not drawn becomes a notice instead
+    of failing the render (Owner Q3 = A).
     """
-    exact = _materialize_placements(
-        placements, placement_table, mode=mode, records=records, record_keys=record_keys,
-        source_record_ids=source_record_ids, source_catalogs=source_catalogs,
-    )
+    exact = normalize_feature_placements(placements)
+    for item in exact:
+        item.target.validate_mode(mode)
     rows = normalize_feature_overrides(feature_overrides)
     bindings = resolve_feature_identities(
         records=records,
@@ -364,7 +316,6 @@ def resolve_record_feature_inputs(
         if bindings[identity].status != "present"
     )
     return RecordFeatureResolution(
-        exact,
         tuple(
             ResolvedRecordFeatureInputs(key, tuple(items), record_overrides)
             for key, items, record_overrides in zip(record_keys, resolved, overrides, strict=True)
