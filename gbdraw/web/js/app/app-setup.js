@@ -4187,8 +4187,9 @@ export const createAppSetup = () => {
     await nextTick();
     document.querySelector('[data-linear-source-removal-primary]')?.focus();
   };
-  const trapLinearSourceRemovalFocus = (event) => {
-    const dialog = document.querySelector('[data-linear-source-removal-dialog]');
+  // Keeps Tab inside the modal dialog of the overlay that handles the keydown.
+  const trapDialogFocus = (event) => {
+    const dialog = event.currentTarget?.querySelector('[role="dialog"]');
     const controls = Array.from(dialog?.querySelectorAll('button:not(:disabled)') || []);
     if (!controls.length) return;
     const first = controls[0];
@@ -4580,7 +4581,7 @@ export const createAppSetup = () => {
     requestLinearSourceRemoval,
     applyLinearSourceRemoval,
     cancelLinearSourceRemoval,
-    trapLinearSourceRemovalFocus,
+    trapDialogFocus,
     linearSourceRemovalDialog,
     linearSourceRemovalTarget,
     linearSourceRemovalTargetName,

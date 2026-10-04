@@ -43,6 +43,12 @@ decisions are in
   placement to Auto or Main or to use a slot with that lane, instead of an
   unclassified render error. The CLI and Python API message names the record
   key and biological feature ID (OV-08, OV-09).
+- Web Feature placement: a change to **Track Preset**, **Track Layout**,
+  **Separate Strands**, or a custom features row's lane or placement that would
+  leave lane placements of the current mode without their lane now asks first.
+  **Reset N placements to Auto** applies the change and resets exactly those
+  placements in one undoable step; **Cancel change** keeps the setting and the
+  placements (OV-09).
 - Comparison tables: every BLAST outfmt 6/7 reader (CLI `-b` and
   `--comparisons_table`, Web uploads, Circular similarity rings, and the LOSATP
   parser) now reads the first 12 columns by position and validates their types.

@@ -145,7 +145,10 @@ const indexHtml = await readFile(indexPath, 'utf8');
   '@click="$refs.sessionInput.click()"',
   '@change="importSession"',
   // B22: the Add Seq step commits after the ring record label read.
-  '@change="addCircularConservationComparisonFile"'
+  '@change="addCircularConservationComparisonFile"',
+  // OV-09: a layout control and its placement dialog own one step (R10).
+  `@change="featurePlacementActions.changeLayoutSetting($event, 'separate_strands')"`,
+  `@click="featurePlacementActions.resolveLayoutChange('reset')"`
 ].forEach((handler) => {
   const escapedHandler = handler.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   assert.match(

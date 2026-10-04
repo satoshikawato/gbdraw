@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { readFileSync } = require('node:fs');
+const { gunzipSync } = require('node:zlib');
 const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
 const { load, generate, switchMode, download } = require('./helpers/mode-transition.cjs');
 
@@ -157,12 +158,13 @@ for (const mode of ['circular', 'linear']) {
 // mode keeps its own rows (R2) and the request carries only its own (OV-08).
 // An unsupported lane is a classified failure that names the feature (OV-09).
 const HMMT_SESSION = 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json';
-const placeOutward = (page) => page.evaluate(() => {
+const placeLane = (page, side) => page.evaluate(async (lane) => {
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
-  app.featurePlacementActions.setPlacement([feature], 'outward');
+  await app.featurePlacementActions.setPlacement([feature], lane);
   return { key: JSON.stringify([feature.record_key, feature.biological_feature_id]), product: feature.product };
-});
+}, side);
+const placeOutward = (page) => placeLane(page, 'outward');
 const placementState = (page, key) => page.evaluate(async (overrideKey) => {
   const { state } = await import('./js/state.js');
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
@@ -218,15 +220,122 @@ test('a Circular lane placement waits in Circular while Linear generates (OV-08)
   }
 });
 
-test('an unsupported lane after a Track Preset change names the feature (OV-09)', async ({ browser }) => {
+// Q3 (Owner, 2026-10-04): "Track type などを変える時点で "Reset N placements to
+// Auto" / 変更を取り消す を選ばせる。" A layout edit that would leave lane
+// placements undrawable asks first; Reset is one History step (R10, R11).
+const placementDialog = (page) => page.getByRole('dialog', { name: 'Reset Feature placements?', exact: true });
+const layoutState = (page, key) => page.evaluate(async (overrideKey) => {
+  const { state } = await import('./js/state.js');
+  return { trackType: state.form.track_type, separate: state.form.separate_strands,
+    row: state.featurePlacementOverrides[overrideKey]?.placement?.side || null,
+    undo: window.__GBDRAW_HISTORY__.getUndoCount() };
+}, key);
+const committedPlacements = (page) => page.evaluate(async () => {
+  const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
+  return getCommittedCanonicalRenderRequest().diagramOptions.featurePlacements;
+});
+
+test('a Track Preset change that drops a lane placement asks first (OV-09)', async ({ browser }, testInfo) => {
   test.setTimeout(240000);
   const page = await load(browser, HMMT_SESSION);
   try {
-    await generate(page);
-    const { product } = await placeOutward(page);
-    await generate(page);
+    const { key } = await placeOutward(page);
+    const placed = await layoutState(page, key);
+    expect(placed).toMatchObject({ trackType: 'middle', row: 'outward' });
     const preset = await reveal(page.locator('#circular-track-preset'));
+    const dialog = placementDialog(page);
+    const reset = dialog.getByRole('button', { name: 'Reset 1 placement to Auto', exact: true });
+    const cancel = dialog.getByRole('button', { name: 'Cancel change', exact: true });
+
+    // Cancel and Escape keep the preset and the placement and record no step.
     await preset.selectOption('spreadout');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('Changing Track Preset to Spreadout leaves 1 Feature placement without its lane.');
+    await expect(reset).toBeFocused();
+    await expect(preset).toHaveValue('middle');
+    await page.screenshot({ path: testInfo.outputPath('track-preset-dialog.png') });
+    await page.keyboard.press('Shift+Tab');
+    await expect(cancel).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(reset).toBeFocused();
+    await cancel.click();
+    await expect(dialog).toBeHidden();
+    await expect(preset).toBeFocused();
+    await expect(preset).toHaveValue('middle');
+    expect(await layoutState(page, key)).toEqual(placed);
+    await preset.selectOption('tuckin');
+    await expect(reset).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+    await expect(preset).toHaveValue('middle');
+    expect(await layoutState(page, key)).toEqual(placed);
+
+    // Reset applies the preset and removes the row as one undoable step.
+    await preset.selectOption('spreadout');
+    await reset.click();
+    await expect(dialog).toBeHidden();
+    await expect(preset).toHaveValue('spreadout');
+    const applied = { ...placed, trackType: 'spreadout', row: null, undo: placed.undo + 1 };
+    expect(await layoutState(page, key)).toEqual(applied);
+    await page.getByRole('button', { name: /^Undo/ }).first().click();
+    await expect(preset).toHaveValue('middle');
+    expect(await layoutState(page, key)).toEqual({ ...placed, undo: placed.undo });
+    await page.getByRole('button', { name: /^Redo/ }).first().click();
+    await expect(preset).toHaveValue('spreadout');
+    expect(await layoutState(page, key)).toEqual(applied);
+    await expect(dialog).toHaveCount(0);
+    await generate(page);
+    expect(await committedPlacements(page)).toEqual([]);
+  } finally {
+    await page.context().close();
+  }
+});
+
+test('Separate Strands on with an Above lane placement asks first (OV-09)', async ({ browser }) => {
+  test.setTimeout(240000);
+  const page = await load(browser, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json');
+  try {
+    const strands = await reveal(page.getByRole('checkbox', { name: 'Separate Strands', exact: true, includeHidden: true }));
+    await strands.click();
+    await expect(strands).not.toBeChecked();
+    const { key } = await placeLane(page, 'above');
+    const placed = await layoutState(page, key);
+    expect(placed).toMatchObject({ separate: false, row: 'above' });
+    const dialog = placementDialog(page);
+    await strands.click();
+    await expect(dialog).toContainText('Changing Separate Strands to On leaves 1 Feature placement without its lane.');
+    await expect(strands).not.toBeChecked();
+    await dialog.getByRole('button', { name: 'Cancel change', exact: true }).click();
+    await expect(strands).not.toBeChecked();
+    expect(await layoutState(page, key)).toEqual(placed);
+    await strands.click();
+    await dialog.getByRole('button', { name: 'Reset 1 placement to Auto', exact: true }).click();
+    await expect(dialog).toBeHidden();
+    await expect(strands).toBeChecked();
+    expect(await layoutState(page, key)).toEqual({ ...placed, separate: true, row: null, undo: placed.undo + 1 });
+    await generate(page);
+    expect(await committedPlacements(page)).toEqual([]);
+  } finally {
+    await page.context().close();
+  }
+});
+
+// A path that is not a user setting edit, here a Session load, asks nothing;
+// Generate keeps the classified diagnostic as the safety net (R6).
+test('an unsupported lane from a loaded Session names the feature on Generate (OV-09)', async ({ browser }, testInfo) => {
+  test.setTimeout(300000);
+  let page = await load(browser, HMMT_SESSION);
+  try {
+    const { product } = await placeOutward(page);
+    const saved = testInfo.outputPath('outward.gbdraw-session.json');
+    const session = JSON.parse(gunzipSync(await download(page, 'Save Session', saved)));
+    session.config.form.track_type = 'spreadout';
+    const edited = testInfo.outputPath('outward-spreadout.gbdraw-session.json');
+    await fs.writeFile(edited, JSON.stringify(session));
+    await page.context().close();
+    page = await load(browser, edited);
+    await expect(await reveal(page.locator('#circular-track-preset'))).toHaveValue('spreadout');
+    await expect(placementDialog(page)).toHaveCount(0);
     const before = await page.evaluate(async () => (await import('./js/state.js')).state.resultGenerationKey.value);
     await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
     await expect.poll(() => page.evaluate(async () => {
