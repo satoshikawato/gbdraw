@@ -3,9 +3,11 @@ from __future__ import annotations
 import base64
 from collections import Counter
 from collections.abc import Callable
+import csv
 import gzip
 import json
 from pathlib import Path
+import shlex
 import subprocess
 import sys
 from xml.etree import ElementTree as ET
@@ -378,6 +380,96 @@ def test_vibrio_gallery_session_retains_complete_compact_cache(
         )
         for entry in protein_entries
     } == VIBRIO_EXPECTED_RAW_PAIRS
+
+
+_GALLERY_ROOT = Path(__file__).parents[1] / "gbdraw" / "web" / "gallery"
+_GALLERY_ENTRIES = json.loads(
+    (_GALLERY_ROOT / "examples.json").read_text(encoding="utf-8")
+)
+_SEQUENCE_INPUT_SUFFIXES = frozenset(
+    {".gb", ".gbk", ".gbff", ".gff", ".gff3", ".fa", ".fas", ".fasta", ".fna"}
+)
+
+
+def _declared_input_names(entry: dict[str, object]) -> set[str]:
+    """The input files a Gallery entry declares: Files plus command inputs."""
+
+    declared = {str(name) for name in entry["featureSources"]}
+    args = shlex.split(str(entry["command"]))
+    declared.update(
+        Path(arg).name
+        for arg in args
+        if Path(arg).suffix.lower() in _SEQUENCE_INPUT_SUFFIXES
+    )
+    for flag, value in zip(args, args[1:]):
+        if flag != "--records_table":
+            continue
+        table = Path(__file__).parents[1] / value
+        with table.open(encoding="utf-8", newline="") as handle:
+            for row in csv.DictReader(handle, delimiter="\t"):
+                declared.update(
+                    Path(row[column]).name
+                    for column in ("gbk", "gff", "fasta")
+                    if row.get(column)
+                )
+    return declared
+
+
+def _record_source_original_names(session: dict[str, object]) -> list[str]:
+    resources = session["resources"]
+    original_names = (session.get("webFiles") or {}).get("resourceOriginalNames") or {}
+    resource_ids: list[str] = []
+    for record in session["renderRequest"]["records"]:
+        for field in ("resourceId", "gffResourceId", "fastaResourceId"):
+            resource_id = record["source"].get(field)
+            if resource_id and resource_id not in resource_ids:
+                resource_ids.append(resource_id)
+    names = []
+    for resource_id in resource_ids:
+        name = original_names.get(resource_id)
+        if name is None:
+            name = str(resources[resource_id].get("name") or "")
+            name = name.removeprefix(f"{resource_id}-")
+        names.append(name)
+    return names
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        pytest.param(
+            entry,
+            id=entry["id"],
+            marks=(
+                # Follow-up: the Circular multi-record Session still stores one
+                # resource per replicon (a composite File in the Web).
+                pytest.mark.xfail(
+                    strict=True,
+                    reason="Vnig stores one resource per record",
+                )
+                if entry["id"] == "Vnig_TUMSAT-TG-2018"
+                else ()
+            ),
+        )
+        for entry in _GALLERY_ENTRIES
+    ],
+)
+def test_gallery_session_record_sources_are_the_declared_input_files(
+    entry: dict[str, object],
+    load_cached_gallery_session: Callable[[Path], dict[str, object]],
+) -> None:
+    """One declared input file is one Session resource with its own name.
+
+    A Session that stores each record of a multi-record file as its own
+    resource names resources that no declared input has, or repeats one.
+    """
+
+    session = load_cached_gallery_session(_GALLERY_ROOT / str(entry["session"]))
+    names = _record_source_original_names(session)
+
+    assert names
+    assert len(names) == len(set(names)), names
+    assert set(names) <= _declared_input_names(entry), names
 
 
 def test_gallery_session_inventory_matches_files_and_examples() -> None:
@@ -799,6 +891,103 @@ def test_refresh_records_resolved_track_geometry(
     assert geometry["mode"] == "circular"
     assert geometry["source"] == "resolved"
     assert geometry["records"][0]["axisRadiusPx"] > 0
+
+
+def test_vibrio_gallery_session_is_built_from_its_declared_command() -> None:
+    from tools.prepare_interactive_gallery_assets import (
+        VIBRIO_HARVEYI_GROUP_COMMAND,
+    )
+
+    assert (
+        refresh_gallery_sessions_module._declared_session_command(
+            _session_path("vibrio-harveyi-group-collinear")
+        )
+        == VIBRIO_HARVEYI_GROUP_COMMAND
+    )
+    assert not refresh_gallery_sessions_module._declared_session_command(
+        _session_path("lambda_basic_linear")
+    )
+
+
+@pytest.mark.linear
+def test_declared_command_refresh_keeps_one_file_as_one_resource(
+    tmp_path: Path,
+) -> None:
+    """A Gallery Session built from a records table keeps two Files.
+
+    Each multi-record GenBank file is one resource named after it, and its
+    records are bound by record ID on the rows the table declares.
+    """
+
+    from tests.test_losatp_source_batching import _fake_losat
+
+    inputs = Path(__file__).parent / "test_inputs"
+    for name, members in (
+        ("left.gbk", ("BGC0000708.gbk", "BGC0000709.gbk")),
+        ("right.gbk", ("BGC0000711.gbk", "BGC0000712.gbk")),
+    ):
+        (tmp_path / name).write_text(
+            "".join((inputs / member).read_text(encoding="utf-8") for member in members),
+            encoding="utf-8",
+        )
+    table = tmp_path / "records.tsv"
+    table.write_text(
+        "gbk\trecord_id\trow\n"
+        "left.gbk\tBGC0000708\t1\nleft.gbk\tBGC0000709\t1\n"
+        "right.gbk\tBGC0000711\t2\nright.gbk\tBGC0000712\t2\n",
+        encoding="utf-8",
+    )
+    from tools.prepare_interactive_gallery_assets import (
+        VIBRIO_HARVEYI_GROUP_COMMAND,
+    )
+
+    # The Vibrio command with these inputs and a fake LOSAT runtime.
+    losat, _log = _fake_losat(tmp_path)
+    argv = shlex.split(VIBRIO_HARVEYI_GROUP_COMMAND)
+    for flag, value in (
+        ("--records_table", str(table)),
+        ("--losat_threads", "1"),
+        ("-o", "declared"),
+    ):
+        argv[argv.index(flag) + 1] = value
+    command = shlex.join([*argv, "--losat_bin", losat])
+    declared = tmp_path / "stage" / "declared.gbdraw-session.json"
+    declared.parent.mkdir()
+    destination = tmp_path / "published.gbdraw-session.json"
+
+    refresh_gallery_sessions_module._declared_command_session(
+        command, declared, env=refresh_gallery_sessions_module._cli_env()
+    )
+    _refresh_one_session(declared, destination_path=destination)
+    refresh_gallery_sessions_module._assert_declared_figure(declared, destination)
+
+    session = load_session(destination)
+    assert session["cliInvocation"]["args"] == shlex.split(command)[2:]
+    # The Web's configuration overrides, so Session Load needs no Worker.
+    options = session["renderRequest"]["diagramOptions"]
+    assert options.get("config") is None
+    assert options["configOverrides"]["objects.scale.interval"] == 750000
+    records = session["renderRequest"]["records"]
+    assert [
+        (
+            record["source"]["resourceId"],
+            record["selector"],
+            record["presentation"]["gridRow"],
+        )
+        for record in records
+    ] == [
+        ("record-1-genbank", {"kind": "recordId", "value": "BGC0000708"}, 1),
+        ("record-1-genbank", {"kind": "recordId", "value": "BGC0000709"}, 1),
+        ("record-3-genbank", {"kind": "recordId", "value": "BGC0000711"}, 2),
+        ("record-3-genbank", {"kind": "recordId", "value": "BGC0000712"}, 2),
+    ]
+    assert _record_source_original_names(session) == ["left.gbk", "right.gbk"]
+    genbank = [
+        base64.b64decode(resource["data"]).decode("utf-8")
+        for resource in session["resources"].values()
+        if resource["kind"] == "genbank"
+    ]
+    assert [text.count("\nLOCUS ") + text.startswith("LOCUS ") for text in genbank] == [2, 2]
 
 
 def test_linear_schema5_publication_preserves_materialized_cardinality_round_trip(

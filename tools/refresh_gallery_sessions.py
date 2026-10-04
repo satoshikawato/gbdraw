@@ -12,6 +12,7 @@ import json
 import math
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -1037,6 +1038,84 @@ def _canonicalize_recorded_cli_invocation(
     )
 
 
+def _cli_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env["PYTHONPATH"] = (
+        str(REPO_ROOT)
+        if not env.get("PYTHONPATH")
+        else f"{REPO_ROOT}{os.pathsep}{env['PYTHONPATH']}"
+    )
+    return env
+
+
+def _declared_command_session(
+    command: str,
+    session_path: Path,
+    *,
+    env: Mapping[str, str],
+) -> None:
+    """Write the CLI Session of a declared Gallery command to ``session_path``.
+
+    The command runs from the repository root, so its relative inputs resolve
+    as documented; only the output prefix moves next to ``session_path``. The
+    recorded invocation keeps the declared arguments.
+    """
+
+    argv = shlex.split(command)
+    if len(argv) < 3 or argv[0] != "gbdraw" or argv[1] not in {"circular", "linear"}:
+        raise ValueError(f"Gallery command must start with 'gbdraw circular|linear': {command}")
+    mode, args = argv[1], argv[2:]
+    output_indexes = [index + 1 for index, arg in enumerate(args) if arg in {"-o", "--output"}]
+    if len(output_indexes) != 1 or output_indexes[0] >= len(args):
+        raise ValueError(f"Gallery command must name one output prefix: {command}")
+    output_index = output_indexes[0]
+    staged_output = str(session_path.parent / args[output_index])
+    staged_args = [*args[:output_index], staged_output, *args[output_index + 1 :]]
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "gbdraw.cli",
+            mode,
+            *staged_args,
+            "--session_output",
+            str(session_path),
+        ],
+        cwd=REPO_ROOT,
+        env=dict(env),
+        check=True,
+    )
+    payload = session_path.read_bytes()
+    compressed = payload[:2] == b"\x1f\x8b"
+    session = json.loads(gzip.decompress(payload) if compressed else payload)
+    invocation = session["cliInvocation"]
+    invocation["args"] = [
+        args[output_index] if arg == staged_output else arg
+        for arg in invocation["args"]
+    ]
+    text = json.dumps(session, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    session_path.write_bytes(
+        gzip.compress(text, compresslevel=6, mtime=0) if compressed else text
+    )
+
+
+def _assert_declared_figure(declared_path: Path, published_path: Path) -> None:
+    """The published Session draws the figure of its declared command.
+
+    Publication writes the Web's configuration overrides in place of the CLI's
+    resolved configuration, so the replayed figure must equal the declared one.
+    """
+
+    declared, published = (
+        [result.get("content") for result in load_session(path).get("results") or []]
+        for path in (declared_path, published_path)
+    )
+    if not declared or declared != published:
+        raise ValueError(
+            f"{published_path.name} does not draw the figure of its declared command"
+        )
+
+
 def _refresh_one_session(
     session_path: Path,
     *,
@@ -1047,12 +1126,7 @@ def _refresh_one_session(
     if mode not in {"circular", "linear"}:
         raise RuntimeError(f"Could not determine gallery session mode: {session_path}")
 
-    env = os.environ.copy()
-    env["PYTHONPATH"] = (
-        str(REPO_ROOT)
-        if not env.get("PYTHONPATH")
-        else f"{REPO_ROOT}{os.pathsep}{env['PYTHONPATH']}"
-    )
+    env = _cli_env()
     with tempfile.TemporaryDirectory(prefix="gbdraw-gallery-session-") as tmpdir:
         staging_root = Path(tmpdir)
         prepared_path = staging_root / f"prepared-{session_path.name}"
@@ -1104,6 +1178,24 @@ def _refresh_one_session(
         del finalized
         gc.collect()
         shutil.move(str(finalized_path), destination_path or session_path)
+
+
+def _declared_session_command(session_path: Path) -> str:
+    """The declared command a Gallery Session is built from, if any."""
+
+    from tools.prepare_interactive_gallery_assets import EXAMPLES
+
+    return next(
+        (
+            example.command
+            for example in EXAMPLES
+            if example.session_from_command
+            and example.session_path.name == session_path.name
+        ),
+        "",
+    )
+
+
 def refresh_gallery_sessions(
     session_names: tuple[str, ...] | None = None,
 ) -> None:
@@ -1127,7 +1219,21 @@ def refresh_gallery_sessions(
         for index, session_path in enumerate(session_paths):
             print(f"Refreshing gallery session: {session_path.relative_to(REPO_ROOT)}")
             staged_path = staging_root / f"{index:02d}-{session_path.name}"
-            _refresh_one_session(session_path, destination_path=staged_path)
+            command = _declared_session_command(session_path)
+            if command:
+                with tempfile.TemporaryDirectory(
+                    prefix="gbdraw-gallery-command-"
+                ) as command_dir:
+                    declared_path = Path(command_dir) / session_path.name
+                    _declared_command_session(
+                        command, declared_path, env=_cli_env()
+                    )
+                    _refresh_one_session(
+                        declared_path, destination_path=staged_path
+                    )
+                    _assert_declared_figure(declared_path, staged_path)
+            else:
+                _refresh_one_session(session_path, destination_path=staged_path)
             staged_session = load_session(staged_path)
             _validate_staged_gallery_session(
                 session_path,

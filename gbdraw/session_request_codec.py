@@ -43,7 +43,7 @@ from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImpor
 from gbdraw.comparisons.losat_jobs import record_source_paths
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.placement import FeaturePlacementOverride
-from gbdraw.io.record_select import RecordSelector
+from gbdraw.io.record_select import RecordSelector, parse_record_selector
 from gbdraw.io.regions import RegionSpec
 from gbdraw.io.comparisons import read_comparison_table
 from gbdraw.io.filenames import safe_embedded_filename, unique_filename
@@ -918,6 +918,20 @@ def _genbank_bytes(records: Sequence[Any], *, index: int) -> bytes:
     return stream.getvalue().encode("utf-8")
 
 
+def _shared_record_selector(
+    record_id: str, *, record_index: int, unique: bool
+) -> RecordSelector:
+    """A record of a shared resource: its ID when unique and usable, else its index."""
+
+    if unique and not record_id.startswith("#"):
+        selector = parse_record_selector(record_id)
+        if selector is not None and selector.record_id == record_id:
+            return selector
+    return RecordSelector(
+        raw=f"#{record_index + 1}", record_id=None, record_index=record_index
+    )
+
+
 def _encode_records(
     records: Sequence[RecordInput],
     *,
@@ -927,10 +941,11 @@ def _encode_records(
 
     The planner projects each displayed record to an in-memory record. Records
     whose provenance names one source file are written to one GenBank resource
-    and selected by index, the shape the Web writes for one uploaded
-    multi-record file, so a replay keeps one file as one LOSAT source
-    (:func:`gbdraw.comparisons.losat_jobs.losat_source_ids`). Any other
-    in-memory record is its own source and keeps its own resource.
+    named after that file and selected by record ID (by index when an ID is
+    repeated or unusable), the shape the Web writes for one uploaded
+    multi-record file, so a replay or Web load keeps one file as one File and
+    one LOSAT source (:func:`gbdraw.comparisons.losat_jobs.losat_source_ids`).
+    Any other in-memory record is its own source and keeps its own resource.
     """
 
     groups: dict[tuple[str, ...], list[int]] = {}
@@ -940,26 +955,29 @@ def _encode_records(
             if paths:
                 groups.setdefault(paths, []).append(position)
     shared: dict[int, tuple[dict[str, Any], RecordSelector]] = {}
-    for members in groups.values():
+    for paths, members in groups.items():
         if len(members) < 2:
             continue
         first = members[0] + 1
+        members_records = [records[position].source.record for position in members]  # type: ignore[union-attr]
         resource_id = resources.add_bytes(
             f"record-{first}-genbank",
             kind="genbank",
-            name=f"record-{first}.gbk",
-            content=_genbank_bytes(
-                [records[position].source.record for position in members],  # type: ignore[union-attr]
-                index=first,
+            name=(
+                Path(paths[0]).name
+                if len(paths) == 1 and Path(paths[0]).name
+                else f"record-{first}.gbk"
             ),
+            content=_genbank_bytes(members_records, index=first),
         )
-        for record_index, position in enumerate(members):
+        ids = [str(record.id) for record in members_records]
+        for record_index, (position, record_id) in enumerate(zip(members, ids, strict=True)):
             shared[position] = (
                 {"kind": "genbank", "resourceId": resource_id},
-                RecordSelector(
-                    raw=f"#{record_index + 1}",
-                    record_id=None,
+                _shared_record_selector(
+                    record_id,
                     record_index=record_index,
+                    unique=ids.count(record_id) == 1,
                 ),
             )
     return [

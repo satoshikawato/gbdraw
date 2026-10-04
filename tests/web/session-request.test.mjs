@@ -5069,10 +5069,14 @@ if (projectSessionIndex >= 0) {
     assert.equal(projectedSession.config.adv.inner_label_y_offset, 0.975);
   }
   if (sessionPath.includes('vibrio-harveyi-group-collinear')) {
-    assert.equal(projectedSession.files.linearSeqs.length, 4);
-    assert.equal(
-      projectedSession.files.linearSeqs[0].gb.name,
-      'NC_004603.1__GCF_000196095.1_ASM19609v1_genomic.gbff'
+    assert.deepEqual(
+      projectedSession.files.linearSeqs.map((sequence) => sequence.gb.name),
+      [
+        'GCF_000196095.1_ASM19609v1_genomic.gbff',
+        'GCF_000196095.1_ASM19609v1_genomic.gbff',
+        'GCF_000354175.2_ASM35417v2_genomic.gbff',
+        'GCF_000354175.2_ASM35417v2_genomic.gbff'
+      ]
     );
     assert.equal(projectedSession.config.adv.block_stroke_width, 0);
     assert.equal(projectedSession.config.adv.line_stroke_width, 1);

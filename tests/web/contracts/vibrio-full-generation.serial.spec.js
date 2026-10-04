@@ -1004,7 +1004,8 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
     recordCount: 4,
     comparisonCount: 2,
     comparisonKinds: ['collinearityResult', 'generatedProteinComparison'],
-    recordCardinalities: Array(4).fill('all'),
+    // Each chromosome is one record of its multi-record File, selected by ID.
+    recordCardinalities: Array(4).fill('exactly_one'),
     recordRows: [1, 1, 2, 2],
     layout: {
       recordGapPx: 48
@@ -1114,9 +1115,10 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
   const loadedComparisonSummary = svgComparisonSummary(loaded.originalPreview);
   const firstComparisonSummary = svgComparisonSummary(firstGeneratedSvg);
   const secondComparisonSummary = svgComparisonSummary(secondGeneratedSvg);
+  // File-level LOSATP databases (PD-OI-018 revision 4) yield 114 blocks.
   expect(loadedComparisonSummary).toEqual({
     comparisonGroups: 4,
-    pairwiseMatches: 116,
+    pairwiseMatches: 114,
     comparisonLegends: 2
   });
   expect(firstComparisonSummary).toEqual(loadedComparisonSummary);
