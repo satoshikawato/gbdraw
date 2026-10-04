@@ -4531,6 +4531,7 @@ export const createAppSetup = () => {
     setAnnotationStyle: annotationEditor.setAnnotationStyle,
     canDownloadAnnotationTable: annotationEditor.canDownloadAnnotationTable,
     downloadAnnotationTable: annotationEditor.downloadAnnotationTable,
+    annotationFeatureCaption: annotationEditor.featureTargetCaption,
     annotationRecordOptions: annotationEditor.recordOptionsFor,
     annotationRecordValue: annotationEditor.recordValueFor,
     setAnnotationRecord: annotationEditor.setRecordValue,

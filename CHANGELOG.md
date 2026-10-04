@@ -169,6 +169,15 @@ decisions are in
   edits it could not match. A Generate that replaces a source removes the edits
   of features the new source does not have; other unmatched edits stay until
   **Remove N unmatched feature edits** (OV-01, OV-02, OV-04, OV-11, OV-12).
+- Region Annotations (web app): **Selected features** annotations name each
+  feature by its source identity (`featureIdentity` target), so Generate draws
+  them on the selected feature after crop, reverse complement, and record
+  copies. They used to name the source hash, which Generate compared with drawn
+  hashes: on a cropped record the annotation landed on another feature or was
+  skipped, and a feature of one copy of a duplicated record failed Generate. The
+  editor shows **Selected feature:** and the feature's caption. **Download TSV**
+  writes such an annotation as the current Result draws it (`record=#<n>`,
+  `feature_selector=hash=<drawn hash>`) and says so (OV-03).
 - Web per-feature edits: **Export Feature Edits TSV** and **Load Feature Edits
   TSV** in the Features list write and read these edits as a
   `--feature_override_table`, so a table from the web app runs with the CLI and

@@ -847,7 +847,16 @@ stays. An edit of a feature outside the crop stays and applies again when the
 feature is drawn. When other edits name a feature that the source does not
 have, the notice above the diagram offers **Remove N unmatched feature edits**.
 
-**Export Feature Edits TSV** in the Features list writes these edits for the
+**Region Annotations → Selected features** makes one annotation per selected
+feature that names the source feature the same way; the editor shows it as
+**Selected feature:** and the feature's caption. Generate draws it on that
+feature after crop, reverse complement, record order, or record copy changes.
+When the feature is not drawn, for example outside the crop, Generate skips
+the annotation and reports it in the annotation notice; the annotation stays.
+A request carries the annotation only while its record is drawn, so drawing
+another record or the other mode keeps it in the draft without drawing it.
+
+**Export Feature Edits TSV** in the Features list writes the feature edits for the
 records of the current diagram in the `--feature_override_table` format that
 the Source recipe uses (`#<index>` of the record and
 `hash=<biologicalFeatureId>`), so the CLI and the Python API read the same
