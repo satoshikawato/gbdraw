@@ -5344,6 +5344,7 @@
                         </div>
                         <section id="feature-record-actions" v-if="recordActionsExpanded && featureRecordRotationDraft.active"
                                  class="col-span-full mb-3 rounded-lg border border-slate-200 bg-slate-50 p-3"
+                                 :aria-busy="featureRecordRotationDraft.reading"
                                  aria-labelledby="feature-record-actions-heading"
                                  data-nodrag="true">
                             <div class="flex flex-wrap items-start justify-between gap-2 mb-2">
@@ -5353,6 +5354,7 @@
                                 </div>
                                 <span class="text-[10px] text-slate-500 rounded bg-white border border-slate-200 px-2 py-1">{{ featureRecordRotationDraft.placementLabel }}</span>
                             </div>
+                            <template v-if="!featureRecordRotationDraft.targetFailure">
                             <dl class="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-2 gap-y-1 text-xs mb-3">
                                 <dt class="text-slate-500">Record:</dt>
                                 <dd class="font-mono text-slate-700 break-all">{{ featureRecordRotationDraft.recordLabel || 'Unavailable' }}</dd>
@@ -5430,6 +5432,7 @@
                                 </div>
                                 <p id="feature-record-rotation-coordinate-note" class="mt-2 text-[10px] text-slate-500">Coordinates refer to the original record.</p>
                             </div>
+                            </template>
                             <p id="feature-record-rotation-reason"
                                v-if="featureRecordRotationDraft.disabledReason"
                                class="mt-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-800">{{ featureRecordRotationDraft.disabledReason }}</p>

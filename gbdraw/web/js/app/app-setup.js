@@ -2395,7 +2395,11 @@ export const createAppSetup = () => {
     projectCommittedRecordTransform,
     runCommittedCanonicalCandidate,
     resolveCurrentFeature: resolvePopupRotationFeature,
-    isCurrentFeature: recordDisplayControls.isCurrentFeature
+    isCurrentFeature: recordDisplayControls.isCurrentFeature,
+    // The same discovery that Generate and the File card run for the mode.
+    readRecords: () => (mode.value === 'linear'
+      ? linearRecordSelector.refresh()
+      : refreshCircularRecordOrder())
   });
   const featureRecordRotation = createFeatureRecordRotationWorkflow({
     action: featureRecordRotationAction,
@@ -2446,6 +2450,7 @@ export const createAppSetup = () => {
       });
     }
     recordActionsExpanded.value = !recordActionsExpanded.value;
+    if (recordActionsExpanded.value) featureRecordRotation.readRecords();
   };
   const cancelRecordActions = () => {
     featureRecordRotation.cancel();

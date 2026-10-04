@@ -502,6 +502,111 @@ test('both modes record rotation resolves the same circular source anchor', asyn
   expect(linear.anchorIntent.offsetBp).toBe(circular.anchorIntent.offsetBp);
 });
 
+// Session Load reads no record bytes (776a2f93). Opening Record actions is the
+// explicit record action that reads them, so no Generate is needed.
+const installRecordReadCounter = (page) => page.addInitScript(() => {
+  window.__GBDRAW_RECORD_RESOURCE_READS__ = 0;
+  window.__GBDRAW_TEST_HOOKS__ = {
+    onStructuralMetric(metric) {
+      if (metric.name === 'resourceByteReadCount') {
+        window.__GBDRAW_RECORD_RESOURCE_READS__ += metric.value;
+      }
+    }
+  };
+});
+
+const loadSessionFile = async (page, sessionPath) => {
+  const dialogPromise = page.waitForEvent('dialog');
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(sessionPath);
+  const dialog = await dialogPromise;
+  expect(dialog.message()).toBe('Session loaded successfully!');
+  await dialog.accept();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionImportPending))
+    .toBe(false);
+};
+
+const openLoadedRecordActions = async (page, { query, recordId }) => {
+  const recordReads = () => page.evaluate(() => window.__GBDRAW_RECORD_RESOURCE_READS__);
+  const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  expect(await recordReads()).toBe(0);
+  await page.evaluate(() => { window.__GBDRAW_APP__.adv.rich_feature_popup = true; });
+  const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
+  await search.fill(query);
+  await search.press('Enter');
+  await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
+  const disclosure = page.getByRole('button', { name: /Record actions · Rotate record/ });
+  await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+  expect(await recordReads()).toBe(0);
+
+  await disclosure.click();
+  const actions = page.getByRole('region', { name: 'Record actions' });
+  await expect(actions.getByText(recordId, { exact: true })).toBeVisible();
+  const expectedStart = await page.evaluate(() => {
+    const [part] = window.__GBDRAW_APP__.featureRecordRotationDraft.feature.location_parts;
+    return String(part.strand === '-' ? part.end : part.start + 1);
+  });
+  await expect(actions.getByText('New display start:').locator('xpath=following-sibling::strong'))
+    .toHaveText(expectedStart);
+  await expect(actions.getByRole('button', { name: 'Apply and regenerate' })).toBeEnabled();
+  await expect(actions.getByRole('button', { name: 'Place this feature at the end' })).toBeEnabled();
+  await expect(actions).not.toContainText('stale or ambiguous');
+  await expect(actions).not.toContainText('Unavailable');
+  expect(await recordReads()).toBe(1);
+  expect(await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length)).toBe(0);
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoCount);
+  return { actions, expectedStart: Number(expectedStart) };
+};
+
+test('Circular Record actions read a loaded Gallery Session without Generate', async ({ page }) => {
+  test.setTimeout(180000);
+  await installRecordReadCounter(page);
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await loadSessionFile(page, join(
+    process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'
+  ));
+  await openLoadedRecordActions(page, { query: 'tRNA', recordId: 'NC_012920.1' });
+});
+
+test('Linear Record actions rotate a circular record of a loaded Session without Generate', async ({
+  page
+}) => {
+  test.setTimeout(240000);
+  page.on('dialog', (dialog) => {
+    if (dialog.message() !== 'Session loaded successfully!') dialog.dismiss();
+  });
+  await installRecordReadCounter(page);
+  await installDiagramRequestObserver(page);
+  await openApp(page);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await page.getByTestId('linear-genbank-1').setInputFiles({
+    name: 'loaded-linear.gbk',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(makeCircularRecord('loaded_linear', 'loaded_gene', 41, 125))
+  });
+  await generateAndWaitForResult(page);
+  const pendingSave = page.waitForEvent('download');
+  await evaluateWithRetainedPromise(page, async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'record-actions-after-load';
+    await window.__GBDRAW_APP__.saveSessionWithTitle();
+  });
+  const savedPath = await (await pendingSave).path();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForAppShell(page);
+  await loadSessionFile(page, savedPath);
+
+  const { actions, expectedStart } = await openLoadedRecordActions(page, {
+    query: 'loaded_gene', recordId: 'loaded_linear'
+  });
+  await actions.getByRole('button', { name: 'Apply and regenerate' }).click();
+  await expect(actions.locator('[aria-live="polite"]')).toContainText(
+    'Record rotation applied and regenerated.', { timeout: 240000 }
+  );
+  const request = await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.at(-1));
+  expect(request.mode).toBe('linear');
+  expect(request.records.map((record) => record.display.startCoordinate)).toEqual([expectedStart]);
+});
+
 test('browser export embeds the exact selected schema-4 item and expands references', async ({
   page
 }, testInfo) => {
