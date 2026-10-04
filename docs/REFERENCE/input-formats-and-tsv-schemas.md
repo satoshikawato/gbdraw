@@ -252,3 +252,34 @@ Auto removes an override. Source-known cropped-out, hidden or underlay features
 retain dormant intent and reserve no foreground lane; restoring visibility or
 the crop reactivates it. Persist exact record/biological-feature identities,
 never an SVG fragment ID or a transient lane number.
+
+## Feature override table
+
+`--feature_override_table` sets the Feature visibility, Label visibility, and
+label text of individual features. It accepts UTF-8 TSV (including BOM);
+`feature_selector` is required and the other columns may be omitted:
+
+| Column | Meaning |
+|---|---|
+| `record` | Optional unique record ID or displayed `#index`; omission must resolve to one record |
+| `feature_selector` | Required exact selector, as in the feature placement table |
+| `feature_visibility` | `on`, `off`, `exclude_matching`, or blank |
+| `label_visibility` | `on`, `off`, or blank |
+| `label_text` | One line of label text, or blank |
+
+A blank cell sets nothing for that part, and each row must set at least one
+part. Visibility values ignore case. `label_text` is kept exactly, including
+leading and trailing spaces; a cell that contains `"` is quoted, with `""` for
+each `"`. The values mean what the `feature_overrides` rows of a typed request
+mean (see [Feature identity overrides](typed-requests.md#feature-identity-overrides)):
+a row decides before the feature visibility and label tables, and text alone
+never shows a label.
+
+Each selector must match exactly one original-source feature, so a row keeps
+naming its feature after crop and reverse complement. A selector that matches
+no feature or several features, two rows for one feature, an unknown or
+duplicate column, and an unsupported value are errors that name the table row.
+Run Info writes one row per edited feature in the `#<index>` and
+`hash=<biologicalFeatureId>` form. An edit or placement whose feature the
+source does not have cannot be written as a table row, so a Result with one has
+no Source recipe; **Exact replay** still reproduces it.

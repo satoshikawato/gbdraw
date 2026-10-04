@@ -4548,7 +4548,8 @@ export const createRunAnalysis = ({
           losatRuntimes: summarizeLosatRuntimes(
             pendingLosatCacheCommit?.cacheInfo || workingLosatCacheInfo,
             pendingLosatCacheCommit?.cacheMap || losatCache.value
-          )
+          ),
+          featureIdentityNotices: generationMetadata.featureIdentityNotices
         });
         sourceRecipe.generatedFiles.forEach((file) => {
           recordGeneratedCliFile(

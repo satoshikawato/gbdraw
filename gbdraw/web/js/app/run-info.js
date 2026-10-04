@@ -159,6 +159,38 @@ const tsv = (columns, rows) => `${[
   ...rows.map((row) => columns.map((column) => tsvCell(row[column])).join('\t'))
 ].join('\n')}\n`;
 
+// R12: identity-table rows must read back as the same rows through the CLI's one
+// reader (gbdraw/features/source.py::read_identity_table trims every cell except
+// label_text). hash=<biologicalFeatureId> names exactly one source feature; a bare
+// value would match the shared hash of identical features.
+const identityTableCells = (renderRequest, row, kind) => {
+  const index = renderRequest.records.findIndex((record) => record.recordKey === row.recordKey);
+  const id = row.biologicalFeatureId;
+  if (index < 0 || typeof id !== 'string' || !id || id !== id.trim() || /[\t\r\n\0]/.test(id)) {
+    throw new SourceRecipeUnavailable(
+      `Source recipe unavailable: a ${kind} names a feature identity that no table row can carry.`
+    );
+  }
+  return { record: `#${index + 1}`, feature_selector: `hash=${id}` };
+};
+
+// gbdraw/features/overrides.py::FEATURE_OVERRIDE_TABLE_COLUMNS
+const FEATURE_OVERRIDE_TABLE_COLUMNS = [
+  'record', 'feature_selector', 'feature_visibility', 'label_visibility', 'label_text'
+];
+const featureOverrideTableRow = (renderRequest, row) => {
+  const cells = identityTableCells(renderRequest, row, 'feature edit');
+  const { featureVisibility: feature, labelVisibility: label, labelText: text } = row;
+  if (![null, 'on', 'off', 'exclude_matching'].includes(feature) || ![null, 'on', 'off'].includes(label)
+    || (text !== null && (typeof text !== 'string' || !text.trim() || /[\t\r\n\0]/.test(text)))
+    || (feature === null && label === null && text === null)) {
+    throw new SourceRecipeUnavailable(
+      'Source recipe unavailable: a feature edit has a value that the feature override table cannot carry.'
+    );
+  }
+  return { ...cells, feature_visibility: feature ?? '', label_visibility: label ?? '', label_text: text ?? '' };
+};
+
 const collectBindingNameHints = (value, hints) => {
   if (Array.isArray(value)) {
     value.forEach((entry) => collectBindingNameHints(entry, hints));
@@ -468,11 +500,11 @@ const validateCurrentSemanticCoverage = (request) => {
     ...(request.schema >= 7 ? ['featurePlacements'] : []),
     ...(request.schema >= 9 ? ['featureOverrides'] : [])
   ]));
-  if ((options.featureOverrides || []).length) {
-    throw new SourceRecipeUnavailable(
-      'Source recipe unavailable: feature edits by source identity have no current CLI projection.'
-    );
-  }
+  (options.featureOverrides || []).forEach((row, index) => {
+    coverObject(coverage, row, `diagramOptions.featureOverrides[${index}]`, [
+      'recordKey', 'biologicalFeatureId', 'featureVisibility', 'labelVisibility', 'labelText'
+    ]);
+  });
   (options.featurePlacements || []).forEach((row, index) => {
     const path = `diagramOptions.featurePlacements[${index}]`;
     coverObject(coverage, row, path, ['recordKey', 'biologicalFeatureId', 'placement']);
@@ -1538,24 +1570,31 @@ export const buildSourceRecipe = async ({
     const args = [];
     const recordsTableUsed = await appendInputArgs(args, renderRequest, files);
     const placements = renderRequest.diagramOptions?.featurePlacements || [];
-    if (placements.length) {
+    const featureOverrides = renderRequest.diagramOptions?.featureOverrides || [];
+    if (placements.length || featureOverrides.length) {
       for (const record of renderRequest.records) {
         if (record.cardinality === 'exactly_one') continue;
         const source = sourceSpec(record);
         if (await files.resourceRecordCount(source.ids.at(-1), source.kind === 'genbank' ? 'genbank' : 'fasta') !== 1) {
-          throw new SourceRecipeUnavailable('Source recipe unavailable: placement record instances require exact materialized records.');
+          throw new SourceRecipeUnavailable(
+            'Source recipe unavailable: feature placements and feature edits require exact materialized records.'
+          );
         }
       }
-      const rows = placements.map((row) => {
-        const index = renderRequest.records.findIndex((record) => record.recordKey === row.recordKey);
-        if (index < 0) throw new SourceRecipeUnavailable('Source recipe unavailable: unknown placement record identity.');
-        // A bare value would match the shared hash of identical features.
-        return { record: `#${index + 1}`, feature_selector: `hash=${row.biologicalFeatureId}`,
-          placement: row.placement.kind === 'main' ? 'main' : row.placement.side,
-          level: row.placement.kind === 'main' ? '' : row.placement.level };
-      });
+    }
+    if (placements.length) {
+      const rows = placements.map((row) => ({
+        ...identityTableCells(renderRequest, row, 'placement'),
+        placement: row.placement.kind === 'main' ? 'main' : row.placement.side,
+        level: row.placement.kind === 'main' ? '' : row.placement.level
+      }));
       args.push('--feature_placement_table', files.generatedTextPath('feature-placements.tsv',
         tsv(['record', 'feature_selector', 'placement', 'level'], rows), 'generatedFiles.source_recipe.feature_placements'));
+    }
+    if (featureOverrides.length) {
+      const rows = featureOverrides.map((row) => featureOverrideTableRow(renderRequest, row));
+      args.push('--feature_override_table', files.generatedTextPath('feature-overrides.tsv',
+        tsv(FEATURE_OVERRIDE_TABLE_COLUMNS, rows), 'generatedFiles.source_recipe.feature_overrides'));
     }
     appendDiagramOptions(args, renderRequest, files);
     appendConfigOverrides(args, renderRequest);
@@ -1745,12 +1784,21 @@ export const buildRunInfo = ({
   startedAtIso,
   generatedBy = 'gbdraw-web',
   losatComparisons = false,
-  losatRuntimes = []
+  losatRuntimes = [],
+  featureIdentityNotices = []
 } = {}) => {
   const normalizedMode = String(mode || '').trim() === 'linear' ? 'linear' : 'circular';
-  let sourceAvailable = sourceRecipe?.available !== false;
-  let sourceUnavailableReason = String(sourceRecipe?.unavailableReason || 'Source recipe unavailable.');
-  const sourceMetadata = normalizeFileMetadata(
+  // R12: the CLI tables reject a row whose feature the source does not have,
+  // while the render reports it as an `unresolved` notice and draws without it.
+  const unresolvedIdentity = sourceRecipe?.available !== false
+    && (Array.isArray(featureIdentityNotices) ? featureIdentityNotices : [])
+      .some((notice) => notice?.status === 'unresolved');
+  if (unresolvedIdentity && Array.isArray(sourceRecipe?.generatedFiles)) sourceRecipe.generatedFiles.splice(0);
+  let sourceAvailable = sourceRecipe?.available !== false && !unresolvedIdentity;
+  let sourceUnavailableReason = unresolvedIdentity
+    ? 'Source recipe unavailable: a feature edit or placement names a feature that the source does not have.'
+    : String(sourceRecipe?.unavailableReason || 'Source recipe unavailable.');
+  const sourceMetadata = unresolvedIdentity ? new Map() : normalizeFileMetadata(
     sourceRecipe?.fileMetadata || fileMetadata
   );
   const allExactMetadata = normalizeFileMetadata(fileMetadata);

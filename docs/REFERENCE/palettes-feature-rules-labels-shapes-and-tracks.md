@@ -172,6 +172,11 @@ Feature visibility actions are `show`, `off`, and `exclude_matching`.
 input; `off` removes the glyph, its label, and the search input. The first matching
 visibility rule wins.
 
+A [feature override table](input-formats-and-tsv-schemas.md#feature-override-table)
+row (`--feature_override_table`, or typed `feature_overrides`) names one feature
+by its source identity and decides its Feature visibility, Label visibility,
+and label text before the visibility and label tables.
+
 Supported feature renderings include directional `arrow`, nondirectional
 `rectangle`, and full-band `underlay`. Underlays require an enabled feature
 anchor and render behind foreground glyphs. Block strokes, connector strokes,

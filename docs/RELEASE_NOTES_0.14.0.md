@@ -159,7 +159,8 @@ entry points.
 
 The CLI adds record display and placement controls through
 `--record_topology`, `--display_start_coordinate`, `--feature_placement_table`,
-and `--feature_overlap_tolerance_bp`. Use a records table for multiple display
+and `--feature_overlap_tolerance_bp`. `--feature_override_table` sets the
+Feature visibility, Label visibility, and label text of individual features. Use a records table for multiple display
 targets. The [command-line reference](./REFERENCE/command-line.md) includes a
 reproducible rotation/placement example and links to the generated option inventory.
 
