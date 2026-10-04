@@ -1,7 +1,7 @@
 import { normalizeUserFacingError } from '../../services/error-normalization.js';
 import { ruleMatchesFeature } from '../rule-matching.js';
 import { resolveColorToHex } from '../color-utils.js';
-import { getFeatureCaption, getFeatureHashCandidates } from '../feature-utils.js';
+import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } from '../feature-utils.js';
 import { exactRegexValue } from '../feature-selector.js';
 import {
   featureOverrideKey,
@@ -118,7 +118,7 @@ export const createFeatureColorActions = ({
     if (!isHashSpecificRule(rule) || rule?.feat !== feature?.type) return false;
     const ruleValue = String(rule?.val || '').trim();
     const candidates = getFeatureHashCandidates(feature);
-    const generationHash = candidates[0] || '';
+    const generationHash = getFeatureColorRuleHash(feature);
     const renderedId = candidates[candidates.length - 1] || '';
     const isExact = (candidate) => (
       Boolean(candidate) && (ruleValue === candidate || ruleValue === exactRegexValue(candidate))

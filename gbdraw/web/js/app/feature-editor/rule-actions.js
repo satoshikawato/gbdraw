@@ -3,7 +3,7 @@ import { normalizeUserFacingError } from '../../services/error-normalization.js'
 import { ruleMatchesFeature, firstMatchingRule, ruleMatchesReady } from '../rule-matching.js';
 import { resolveColorToHex } from '../color-utils.js';
 import { parseSpecificRules, serializeSpecificRules } from '../file-imports.js';
-import { getFeatureGenerationHash } from '../feature-utils.js';
+import { getFeatureColorRuleHash } from '../feature-utils.js';
 import { legendRowRules, ruleLegendCaption } from '../specific-color-rules.js';
 import { resolveFeatureLabelSelector } from '../feature-selector.js';
 import { downloadTextFile } from '../../services/text-download.js';
@@ -456,8 +456,8 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   // Python matches a single-feature color rule only by the stable generation
   // hash, so duplicate record instances that share one hash share the rule.
   const getFeatureQualifier = (feat) => {
-    const generationHash = getFeatureGenerationHash(feat);
-    return generationHash ? { qual: 'hash', val: generationHash } : null;
+    const colorRuleHash = getFeatureColorRuleHash(feat);
+    return colorRuleHash ? { qual: 'hash', val: colorRuleHash } : null;
   };
 
   const getLabelSpecificRule = (feat, label) => {

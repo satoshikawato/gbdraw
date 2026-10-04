@@ -2,7 +2,7 @@ import {
   normalizeSpecificRule, buildLegendIntents, createRuleLegendCaptions, rendererLegendRows
 } from './specific-color-rules.js';
 import { normalizeFeatureSelectorMetadata } from './feature-selector.js';
-import { getFeatureGenerationHash } from './feature-utils.js';
+import { getFeatureColorRuleHash } from './feature-utils.js';
 
 // Ephemeral Python results belong to feature objects, never a session or a SVG.
 // An absent result is pending, not a non-match.
@@ -39,7 +39,7 @@ export const ruleFeaturePayload = (feature, label = '') => {
     qualifiers: Object.fromEntries(Object.entries(feature.selector?.qualifiers || feature.qualifiers || metadata.qualifiers)
       .map(([key, values]) => [key, (Array.isArray(values) ? values : [values]).filter(value => value != null).map(String)])),
     selector: {
-      hash: getFeatureGenerationHash(feature) || metadata.stableFeatureId,
+      hash: getFeatureColorRuleHash(feature) || metadata.stableFeatureId,
       location: metadata.location,
       record_location: metadata.recordLocation || `${metadata.record}:${metadata.position}`
     },
