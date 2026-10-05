@@ -5,6 +5,7 @@ import {
   setFeatureVisibilityOverride
 } from '../../gbdraw/web/js/app/feature-visibility.js';
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
+import { resultCatalogFeatures } from '../../gbdraw/web/js/services/feature-catalog.js';
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 
 const ref = (value) => ({ value });
@@ -32,7 +33,8 @@ const featureVisibilityScopeDialog = {};
 const selectedResultIndex = ref(0);
 const resultGenerationKey = ref('generation-1');
 const appliedPreviewChanges = [];
-// F-3: each visibility edit hands the feature's label to the label owner.
+// F-3: each visibility edit hands the feature's label to the label owner,
+// through the port the composition root registers (R13).
 const labelVisibilityCalls = [];
 
 const actionState = {
@@ -60,7 +62,7 @@ const actions = createFeatureVisibilityActions({
       return true;
     }
   },
-  labelActions: {
+  ports: {
     applyFeatureVisibilityToLabels: (options = {}) => {
       labelVisibilityCalls.push(options.reflow !== false);
       return true;
@@ -272,7 +274,7 @@ assert.deepEqual(featureVisibilityOverrides, {});
 assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
 
 // FE-04: an Exact product hide is committed as an editor qualifier rule. The
-// reconcile that History runs after Undo/Redo resolves it with the action's
+// projection that History runs after Undo/Redo resolves it with the action's
 // resolver (Python's matches), so the feature stays hidden. R-2: every rule,
 // also one typed in the Features panel or loaded from a TSV, hides live as
 // Generate hides.
@@ -313,6 +315,7 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
         return true;
       }
     },
+    ports: { applyFeatureVisibilityToLabels: () => true },
     previewRuntime: { selectResult: () => true }
   });
   await productActions.updateClickedFeatureVisibility('off');
@@ -321,19 +324,201 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   const hidden = { nd1: 'off', 'nd1-case': 'off', nd2: 'on', 'nd1-rna': 'on' };
   assert.deepEqual(reconciled.at(-1), hidden);
   assert.equal(manualRules.length, 1);
-  assert.equal(productActions.reconcileFeatureVisibility(), true);
+  assert.equal(await productActions.projectFeatureVisibility(), true);
   assert.deepEqual(reconciled.at(-1), hidden);
   setFeatureVisibilityOverride(overrides, nd1Case, 'on');
-  productActions.reconcileFeatureVisibility();
+  await productActions.projectFeatureVisibility();
   assert.equal(reconciled.at(-1)['nd1-case'], 'on', 'a per-feature override takes precedence');
   clear(overrides);
   manualRules.splice(0, manualRules.length, {
     ...manualRules[0], source: 'file', recordId: '*', featureType: '*', qualifier: 'Product', value: 'subunit 2$'
   });
   assert.equal(await productPreparation.prepareDrawn(), true);
-  productActions.reconcileFeatureVisibility();
+  await productActions.projectFeatureVisibility();
   assert.deepEqual(reconciled.at(-1), { nd1: 'on', 'nd1-case': 'on', nd2: 'off', 'nd1-rna': 'on' },
     'a loaded rule hides live as Generate does');
+}
+
+// OV-19 (PD-OI-066, R10): every Features panel rule edit is one transition
+// that writes the rules and projects them onto the displayed Result as
+// Generate draws them. A table Generate rejects stays in the draft, changes
+// nothing, and reports Generate's error until an edit leaves a table Generate
+// accepts.
+{
+  const fl1 = { svg_id: 'fl1', type: 'CDS', qualifiers: { locus_tag: ['FL1'] }, ...identity('fl1') };
+  const fl2 = { svg_id: 'fl2', type: 'CDS', qualifiers: { locus_tag: ['FL2'] }, ...identity('fl2') };
+  const rules = [];
+  const shown = { fl1: 'on', fl2: 'on' };
+  const labelProjections = [];
+  const panelState = {
+    clickedFeature: ref(null),
+    extractedFeatures: ref([fl1, fl2]),
+    orthogroups: ref([]),
+    featureVisibilityManualRules: rules,
+    featureVisibilityRules: ref([]),
+    featureOverrides: {},
+    featureVisibilityScopeDialog: {},
+    resultGenerationKey: ref('generation-1'),
+    results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) }),
+    errorLog: ref(null)
+  };
+  const panel = createFeatureVisibilityActions({
+    state: panelState,
+    rulePreparation: rulePreparationFor(panelState),
+    getCommittedRequest: committedRequest(['CDS']),
+    featureSvgActions: {
+      applyVisibilityPreviewChanges: (changes) => changes.reduce((changed, { featureId, mode }) => {
+        if (shown[featureId] === mode) return changed;
+        shown[featureId] = mode;
+        return true;
+      }, false)
+    },
+    ports: { applyFeatureVisibilityToLabels: (options) => labelProjections.push(options) },
+    previewRuntime: { selectResult: () => true }
+  });
+  const field = (index, name, value) => panel.setFeatureVisibilityRuleField(index, name, value);
+
+  await panel.addFeatureVisibilityRule();
+  await field(0, 'qualifier', 'locus_tag');
+  assert.deepEqual(shown, { fl1: 'on', fl2: 'on' }, 'a rule without a value is not in the request');
+  await field(0, 'value', '^fl1$');
+  assert.deepEqual(shown, { fl1: 'off', fl2: 'on' }, 'a rule edit hides live');
+  assert.deepEqual(labelProjections, [{ rerender: false }], 'the labels follow the features the edit hides');
+  await field(0, 'action', 'show');
+  assert.deepEqual(shown, { fl1: 'on', fl2: 'on' });
+  await panel.addFeatureVisibilityRule();
+  await field(1, 'qualifier', 'locus_tag');
+  await field(1, 'value', '^fl');
+  assert.deepEqual(shown, { fl1: 'on', fl2: 'off' }, 'the first matching rule decides');
+  await panel.moveFeatureVisibilityRuleUp(1);
+  assert.deepEqual(rules.map((rule) => rule.value), ['^fl', '^fl1$']);
+  assert.deepEqual(shown, { fl1: 'off', fl2: 'off' });
+
+  await field(1, 'value', '^fl1(');
+  assert.equal(rules[1].value, '^fl1(', 'the draft keeps a regex Generate rejects');
+  assert.deepEqual(shown, { fl1: 'off', fl2: 'off' });
+  assert.equal(panelState.errorLog.value?.operation, 'evaluateRules');
+  await panel.removeFeatureVisibilityRule(0);
+  assert.deepEqual(shown, { fl1: 'off', fl2: 'off' }, 'no edit shows a table Generate rejects');
+  assert.notEqual(panelState.errorLog.value, null);
+  await field(0, 'value', '^fl1$');
+  assert.equal(panelState.errorLog.value, null, 'an edit that Generate accepts clears the report');
+  assert.deepEqual(shown, { fl1: 'on', fl2: 'on' });
+
+  assert.equal(await panel.removeFeatureVisibilityRule(5), false, 'an edit of no rule changes nothing');
+  assert.equal(await panel.moveFeatureVisibilityRuleDown(0), false);
+  assert.equal(rules.length, 1);
+}
+
+// R13, R3: the owner reaches the label owner through the one port the
+// composition root registers once the label owner exists. Its projection, which
+// History apply, the display of a Result, and Load Feature Edits TSV call
+// through `projectMountedEditorIntent`, hands the label owner every feature it
+// hides or shows (OV-35), asks for the rerender only when a History step or a
+// loaded table (`rerender`) must draw a feature the Result does not draw, and
+// after a loaded table (`reflow`) also places the labels. A later projection
+// supersedes one that still waits for its matches.
+{
+  const recordFeature = (id, start) => ({
+    recordKey: 'REC1', biologicalFeatureId: id, record_id: 'REC1', type: 'CDS', start, end: start + 30, strand: 1,
+    anchorProfile: { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' },
+    qualifiers: { locus_tag: [id] }
+  });
+  // The Result draws A; B is not drawn.
+  const catalog = {
+    schema: 5,
+    items: [{
+      resultIndex: 0,
+      resultName: 'result-0.svg',
+      recordKeys: ['REC1'],
+      biologicalFeatures: [recordFeature('A', 0), recordFeature('B', 100)],
+      features: [{
+        svgId: 'svg-A', recordKey: 'REC1', biologicalFeatureId: 'A', fillColor: '#000000',
+        drawnSelector: { hash: 'svg-A', location: null, recordLocation: null }
+      }],
+      orthogroups: [],
+      annotations: [],
+      comparisonMatches: []
+    }]
+  };
+  const overrides = {};
+  const mounted = { 'svg-A': 'on' };
+  let projections = 0;
+  const follows = [];
+  const portState = {
+    clickedFeature: ref(null),
+    extractedFeatures: ref([]),
+    orthogroups: ref([]),
+    featureVisibilityManualRules: [],
+    featureVisibilityRules: ref([]),
+    featureOverrides: overrides,
+    featureVisibilityScopeDialog: {},
+    featureCatalog: ref(catalog),
+    generatedMode: ref('circular'),
+    resultGenerationKey: ref('generation-1'),
+    results: ref([{ name: 'result-0.svg', content: '<svg />' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) }),
+    errorLog: ref(null)
+  };
+  const ports = {};
+  const owner = createFeatureVisibilityActions({
+    state: portState,
+    rulePreparation: rulePreparationFor(portState),
+    getCommittedRequest: committedRequest(['CDS']),
+    featureSvgActions: {
+      applyVisibilityPreviewChanges: (changes) => {
+        projections += 1;
+        return changes.reduce((changed, { featureId, mode }) => {
+          if (mounted[featureId] === mode) return changed;
+          mounted[featureId] = mode;
+          return true;
+        }, false);
+      }
+    },
+    ports,
+    previewRuntime: { selectResult: () => true }
+  });
+  // The root registers the port after both owners exist.
+  ports.applyFeatureVisibilityToLabels = (options) => follows.push(options);
+  const featureOf = (id) => resultCatalogFeatures(portState).biological
+    .find((feature) => feature.biological_feature_id === id);
+  setFeatureVisibilityOverride(overrides, featureOf('B'), 'off');
+
+  assert.equal(await owner.projectFeatureVisibility({ rerender: true }), false);
+  assert.deepEqual(follows, [], 'nothing to follow when the Result draws what Generate draws');
+
+  // OV-35: a Result display (or a History step) that hides A hides its label.
+  setFeatureVisibilityOverride(overrides, featureOf('A'), 'off');
+  assert.equal(await owner.projectFeatureVisibility(), true);
+  assert.deepEqual(mounted, { 'svg-A': 'off' });
+  assert.deepEqual(follows, [{ reflow: false, rerender: false }], 'the label follows the feature');
+
+  // B is shown, which the Result does not draw.
+  setFeatureVisibilityOverride(overrides, featureOf('A'), 'default');
+  setFeatureVisibilityOverride(overrides, featureOf('B'), 'on');
+  await owner.projectFeatureVisibility();
+  assert.deepEqual(follows.at(-1), { reflow: false, rerender: false }, 'a Result display does not rerender');
+  await owner.projectFeatureVisibility({ rerender: true });
+  assert.deepEqual(follows.at(-1), { reflow: false, rerender: true }, 'a History step rerenders to draw B');
+  await owner.projectFeatureVisibility({ rerender: true, reflow: true });
+  assert.deepEqual(follows.at(-1), { reflow: true, rerender: true }, 'a loaded table also places the labels');
+  setFeatureVisibilityOverride(overrides, featureOf('B'), 'off');
+  await owner.projectFeatureVisibility({ rerender: true, reflow: true });
+  assert.deepEqual(follows.at(-1), { reflow: true, rerender: false });
+
+  setFeatureVisibilityOverride(overrides, featureOf('A'), 'off');
+  const projectionsBefore = projections;
+  const followCount = follows.length;
+  const [waiting, latest] = await Promise.all([
+    owner.projectFeatureVisibility({ rerender: true }),
+    owner.projectFeatureVisibility({ rerender: true })
+  ]);
+  assert.deepEqual([waiting, latest], [false, true], 'the later projection supersedes the waiting one');
+  assert.equal(projections, projectionsBefore + 1);
+  assert.equal(follows.length, followCount + 1);
 }
 
 console.log('feature visibility action tests passed');
