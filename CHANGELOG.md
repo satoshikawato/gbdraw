@@ -122,6 +122,11 @@ decisions are in
   now returns these features at the record level too, so `draw_circular()` and
   `draw_linear()` draw them. For a reverse-complemented GFF3 record, the
   feature popup lists features in the drawn start order (OV-15).
+- GFF3: a per-feature override that shows a feature of a type the type filter
+  dropped no longer parses the GFF3 file a second time; one parse serves every
+  type filter, so the case takes about 30% less time. In the web app, changing
+  the selected feature types of a GFF3 record no longer parses the file again
+  either. The diagram is unchanged.
 - Feature placement: a lane placement made in one mode no longer breaks
   Generate in the other mode. Each mode keeps its own placements through mode
   switches, Undo/Redo, and Save/Load Session, and they apply again after you
