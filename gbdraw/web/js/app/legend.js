@@ -15,23 +15,28 @@ export const createLegendManager = ({
   commitLegendRowRules,
   beginHistoryTransaction = null,
   commitHistoryTransaction = null,
-  previewRuntime = null,
+  // R13: the preview owner's ports; the Legend owners never hold it.
+  commitActiveResultEdit = null,
+  readActiveResultIdentity = null,
   getCommittedRequest = () => null
 }) => {
   const layoutActions = createLegendLayoutActions({ state });
   const entryActions = createLegendEntryActions({
     state,
-    layoutActions,
-    previewRuntime,
+    updatePairwiseLegendPositions: layoutActions.updatePairwiseLegendPositions,
+    reflowDualLegendLayout: layoutActions.reflowDualLegendLayout,
+    compactLegendEntries: layoutActions.compactLegendEntries,
+    commitActiveResultEdit,
+    readActiveResultIdentity,
     getCommittedRequest
   });
   const sortActions = createLegendSortActions({
     state,
     extractLegendEntries: entryActions.extractLegendEntries,
     orderMountedLegend: entryActions.orderMountedLegend,
-    previewRuntime
+    commitActiveResultEdit
   });
-  const strokeActions = createLegendStrokeActions({ state, previewRuntime });
+  const strokeActions = createLegendStrokeActions({ state, commitActiveResultEdit });
   const rowRulesAt = (index) => legendRowRules(state.legendEntries.value[index]?.caption, {
     rules: state.manualSpecificRules,
     legendEntries: state.legendEntries.value,
@@ -42,7 +47,7 @@ export const createLegendManager = ({
     extractLegendEntries: entryActions.extractLegendEntries,
     beginHistoryTransaction,
     commitHistoryTransaction,
-    previewRuntime
+    commitActiveResultEdit
   });
 
   return {

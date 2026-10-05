@@ -17,19 +17,22 @@ export const createLegendLayout = ({
   previewRuntime = null,
   similarityAlignmentLifecycle = null
 }) => {
+  // R13: the drag, canvas, and position owners commit their edit through the
+  // preview owner's port; only this root holds the preview owner.
+  const commitActiveResultEdit = previewRuntime?.commitActiveResultEdit;
   const diagramActions = createDiagramDragActions({
     state,
     beginHistoryTransaction,
     commitHistoryTransaction,
-    previewRuntime,
+    commitActiveResultEdit,
     similarityAlignmentLifecycle
   });
-  const canvasActions = createLegendCanvasActions({ state, previewRuntime });
+  const canvasActions = createLegendCanvasActions({ state, commitActiveResultEdit });
   const repositionActions = createLegendRepositionActions({
     state,
     reflowDualLegendLayout,
     reflowSingleLegendLayout,
-    previewRuntime
+    commitActiveResultEdit
   });
 
   const resetAllPositions = () => {

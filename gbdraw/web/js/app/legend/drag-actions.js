@@ -12,7 +12,7 @@ export const createLegendDragActions = ({
   extractLegendEntries,
   beginHistoryTransaction = null,
   commitHistoryTransaction = null,
-  previewRuntime = null
+  commitActiveResultEdit = null
 }) => {
   const {
     svgContainer,
@@ -133,7 +133,7 @@ export const createLegendDragActions = ({
     legendDragging.value = false;
     legendDragContext = null;
 
-    if (completedDragContext?.svg) previewRuntime?.commitActiveResultEdit('legend-drag');
+    if (completedDragContext?.svg) commitActiveResultEdit?.('legend-drag');
 
     const tx = legendDragTxPromise ? await legendDragTxPromise : null;
     legendDragTxPromise = null;
@@ -172,7 +172,7 @@ export const createLegendDragActions = ({
     legendCurrentOffset.x = 0;
     legendCurrentOffset.y = 0;
 
-    previewRuntime?.commitActiveResultEdit('legend-position-reset');
+    commitActiveResultEdit?.('legend-position-reset');
   };
 
   const resetLegendPosition = () => {

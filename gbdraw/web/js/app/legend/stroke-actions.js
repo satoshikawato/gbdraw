@@ -125,7 +125,7 @@ export const applyStrokeOverridesToSvg = ({
   return changedCount;
 };
 
-export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
+export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null }) => {
   const {
     extractedFeatures,
     legendEntries,
@@ -148,7 +148,7 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
     };
   };
 
-  const persistStrokeEdit = (reason) => previewRuntime?.commitActiveResultEdit(reason);
+  const persistStrokeEdit = (reason) => commitActiveResultEdit?.(reason);
 
   const getLegendEntryStrokeColor = (idx) => {
     const entry = legendEntries.value[idx];

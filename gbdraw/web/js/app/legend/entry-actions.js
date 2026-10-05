@@ -56,8 +56,11 @@ const setLegendEntryColor = (entryGroup, color) => {
 
 export const createLegendEntryActions = ({
   state,
-  layoutActions,
-  previewRuntime = null,
+  updatePairwiseLegendPositions,
+  reflowDualLegendLayout,
+  compactLegendEntries,
+  commitActiveResultEdit = null,
+  readActiveResultIdentity = null,
   getCommittedRequest = () => null
 }) => {
   const {
@@ -75,7 +78,6 @@ export const createLegendEntryActions = ({
     legendColorOverrides
   } = state;
 
-  const { updatePairwiseLegendPositions, reflowDualLegendLayout, compactLegendEntries } = layoutActions;
   let legendGeometryChangedHandler = null;
   const retiredEntryTemplates = new Map();
 
@@ -101,7 +103,7 @@ export const createLegendEntryActions = ({
   const retiredEntriesByResult = new Map();
   const rememberResultEntry = (
     caption, targetGroup, targetIndex, entryGroup,
-    identity = previewRuntime?.getActiveRuntime?.()?.resultIdentity
+    identity = readActiveResultIdentity?.()
   ) => {
     if (!identity || !entryGroup?.cloneNode) return;
     const entries = retiredEntriesByResult.get(identity) || new Map();
@@ -157,7 +159,7 @@ export const createLegendEntryActions = ({
     return templates.get(targetGroupKey(targetGroup, targetIndex)) || templates.values().next().value || null;
   };
 
-  const persistLegendReconciliation = () => previewRuntime?.commitActiveResultEdit('history-legend-reconcile');
+  const persistLegendReconciliation = () => commitActiveResultEdit?.('history-legend-reconcile');
 
   const setLegendGeometryChangedHandler = (handler) => {
     legendGeometryChangedHandler = typeof handler === 'function' ? handler : null;
@@ -625,7 +627,7 @@ export const createLegendEntryActions = ({
     const removed = [...before.keys()].filter((caption) => !after.has(caption) && !renames.has(caption));
     const added = [...after.keys()].filter((caption) => !before.has(caption) && !renamed.has(caption));
     const orderChanged = [...before.keys()].join('\u0000') !== [...after.keys()].join('\u0000');
-    const identity = previewRuntime?.getActiveRuntime?.()?.resultIdentity;
+    const identity = readActiveResultIdentity?.();
     const retired = retiredEntriesByResult.get(identity);
     let changed = false;
     let removedEntry = false;
@@ -917,7 +919,7 @@ export const createLegendEntryActions = ({
           const candidateLegend = svg.getElementById('legend');
           if (mountedLegend && candidateLegend) mountedLegend.replaceWith(candidateLegend);
           onLegendGeometryChanged();
-          previewRuntime?.commitActiveResultEdit('legend-file-sync');
+          commitActiveResultEdit?.('legend-file-sync');
           extractLegendEntries();
         }
       };

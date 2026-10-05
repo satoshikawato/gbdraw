@@ -468,14 +468,6 @@ export const createAppSetup = () => {
     mutationAvailability: sessionOperationAvailability
   });
   let alignmentReviewBlocksEditor = () => false;
-  const rightDrawerActions = createRightDrawerController({ state, watch,
-    onClose: () => featureActions?.suspendSpecificRulePatternDrafts(),
-    focusReturn: {
-      isFocusInDrawer: () => Boolean(document.querySelector('.right-drawer')?.contains(document.activeElement)),
-      focusToggle: () => document.querySelector('.drawer-toggle')?.focus()
-    },
-    getOpenDisabledReason: () => alignmentReviewBlocksEditor()
-      ? 'Finish or cancel alignment review before opening Editor.' : '' });
 
   const comparisonHeightValidationError = computed(() => {
     if (
@@ -1302,7 +1294,8 @@ export const createAppSetup = () => {
     commitLegendRowRules: (...args) => legendRowRulePorts.commitLegendRowRules(...args),
     beginHistoryTransaction: history.begin,
     commitHistoryTransaction: history.commit,
-    previewRuntime,
+    commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
+    readActiveResultIdentity: () => previewRuntime.getActiveRuntime()?.resultIdentity,
     getCommittedRequest: getCommittedCanonicalRenderRequest
   });
   // History captures register once their owner exists (R13).
@@ -1359,12 +1352,23 @@ export const createAppSetup = () => {
     projectFeatureEdits: () => projectMountedEditorIntent({ visibility: true, rerender: true, reflow: true, labels: true })
   });
   legendRowRulePorts.commitLegendRowRules = featureActions.commitSpecificRules;
+  // R13: the drawer and the feature search come after the owners they react
+  // through, so each receives its ports directly.
+  const rightDrawerActions = createRightDrawerController({ state, watch,
+    onClose: featureActions.suspendSpecificRulePatternDrafts,
+    focusReturn: {
+      isFocusInDrawer: () => Boolean(document.querySelector('.right-drawer')?.contains(document.activeElement)),
+      focusToggle: () => document.querySelector('.drawer-toggle')?.focus()
+    },
+    getOpenDisabledReason: () => alignmentReviewBlocksEditor()
+      ? 'Finish or cancel alignment review before opening Editor.' : '' });
+  const orthogroupActions = createOrthogroupEditor({ state });
   const previewFeatureSearch = createPreviewFeatureSearch({
     state,
     watch,
     nextTick,
     computed,
-    previewRuntime,
+    isActiveResultReady: previewRuntime.isActiveResultReady,
     resolveOrthogroups: () => orthogroups.value.map((group) => ({
       ...group,
       display_name: orthogroupActions.resolveOrthogroupName(group),
@@ -2531,7 +2535,6 @@ export const createAppSetup = () => {
     nextTick,
     onMounted,
     legendActions,
-    svgActions,
     featureActions,
     legendLayout,
     resultsManager,
@@ -3199,7 +3202,6 @@ export const createAppSetup = () => {
 
   const cancelGeneration = () => cancelRunAnalysis();
 
-  const orthogroupActions = createOrthogroupEditor({ state });
   similarityAlignmentActions = createSimilarityAlignmentActions({
     state,
     getOrthogroupById: orthogroupActions.getOrthogroupById,

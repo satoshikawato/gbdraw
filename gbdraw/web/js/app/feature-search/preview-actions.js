@@ -26,7 +26,7 @@ export const createPreviewFeatureSearch = ({
   computed,
   openFeatureEditorForFeature,
   resolveOrthogroups = () => state.orthogroups.value,
-  previewRuntime = null
+  isActiveResultReady = null
 }) => {
   const {
     svgContainer,
@@ -344,13 +344,13 @@ export const createPreviewFeatureSearch = ({
         appliedSearchField = 'all';
       }
       invalidateSearchIndex();
-      if (queryIsActive() && previewRuntime?.isActiveResultReady?.()) scheduleRefreshSearch();
+      if (queryIsActive() && isActiveResultReady?.()) scheduleRefreshSearch();
     }
   );
   watch([featureList, orthogroups], () => {
     updateRenderedCount();
     invalidateSearchIndex();
-    if (queryIsActive() && previewRuntime?.isActiveResultReady?.()) scheduleRefreshSearch();
+    if (queryIsActive() && isActiveResultReady?.()) scheduleRefreshSearch();
   });
   watch([selectedResultIndex, svgContent], () => {
     invalidateFeatureElementIndex();
@@ -363,7 +363,7 @@ export const createPreviewFeatureSearch = ({
     () => state.orthogroupDescriptionOverrides
   ], () => {
     invalidateSearchIndex();
-    if (queryIsActive() && previewRuntime?.isActiveResultReady?.()) scheduleRefreshSearch();
+    if (queryIsActive() && isActiveResultReady?.()) scheduleRefreshSearch();
   }, { deep: true });
 
   updateRenderedCount();

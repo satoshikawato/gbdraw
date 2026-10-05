@@ -24,7 +24,7 @@ export const createLegendRepositionActions = ({
   state,
   reflowDualLegendLayout,
   reflowSingleLegendLayout,
-  previewRuntime = null
+  commitActiveResultEdit = null
 }) => {
   const {
     svgContent,
@@ -115,7 +115,7 @@ export const createLegendRepositionActions = ({
 
     const nextBinding = applyCompositionEdit(svg, { legendSide: newPosition, canvasPadding });
     syncStateFromComposition(svg, nextBinding);
-    previewRuntime?.commitActiveResultEdit('legend-position');
+    commitActiveResultEdit?.('legend-position');
     return true;
   };
 
