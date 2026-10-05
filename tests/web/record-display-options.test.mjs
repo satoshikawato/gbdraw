@@ -8,6 +8,7 @@ import {
   validateRecordDisplayDrafts
 } from '../../gbdraw/web/js/app/record-display-options.js';
 import { circularDiscoveryForInput, parseSequenceRecordText } from '../../gbdraw/web/js/app/record-discovery.js';
+import { isCurrentFeature } from '../../gbdraw/web/js/services/feature-identity.js';
 
 import { createFeaturePlacementActions } from '../../gbdraw/web/js/app/feature-editor/placement-actions.js';
 import { createDefaultForm, createDefaultAdv } from '../../gbdraw/web/js/services/session-active-config-contract.js';
@@ -177,8 +178,9 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
     watch: () => {}, linearRecordSelector: { recordsFor: seq => discovered ? [{selector:'#1',recordId:components[Number(seq.uid.slice(-1))-1].resourceId,recordLength:100,detectedTopology:'circular'}] : [],
       statusFor: () => linearDiscovery.status, errorFor: () => linearDiscovery.error }, history,
     getCommittedRequest, getCommittedSession: () => committed });
+  // The composition root's port: the pure check over the record display's binding.
   const actions = createFeaturePlacementActions({ state, history, getCommittedRequest,
-    isCurrentFeature: controls.isCurrentFeature });
+    isCurrentFeature: (feature) => isCurrentFeature(feature, controls.sourceBinding()) });
   const feature = { scope: state.mode.value, record_key: 'record-2', biological_feature_id: 'logical-feature' };
   return { state, actions, controls, feature, file, makeFile, linearDiscovery, history,
     enabled: () => actions.choices([feature]).filter((choice) => choice.enabled).map((choice) => choice.value),
@@ -352,6 +354,56 @@ test('same-name, same-content source replacement does not retain old feature cap
   assert.notEqual(model.state.files.c_gb, model.file);
   assert.deepEqual(model.enabled(), []);
   assert.throws(() => model.actions.setPlacement([model.feature], 'main'), /Unavailable/);
+});
+
+test('isCurrentFeature is a pure check of the committed record, its bound source, and the saved resource', () => {
+  const genbank = {};
+  const fasta = {};
+  const gff = {};
+  const request = { mode: 'linear', records: [
+    { recordKey: 'seq-a', cardinality: 'exactly_one', source: { kind: 'genbank', resourceId: 'a' }, selector: null },
+    { recordKey: 'seq-b', cardinality: 'all', source: { kind: 'gffFasta', gffResourceId: 'b-gff', fastaResourceId: 'b-fasta' },
+      selector: null },
+    { recordKey: 'seq-c:2', cardinality: 'exactly_one', source: { kind: 'genbank', resourceId: 'c' },
+      selector: { kind: 'recordIndex', index: 1 } }
+  ] };
+  const sources = [
+    { scope: 'linear', sourceUid: 'seq-a', source: genbank, paired: null },
+    { scope: 'linear', sourceUid: 'seq-b', source: gff, paired: fasta },
+    { scope: 'linear', sourceUid: 'seq-c', source: genbank, paired: null }
+  ];
+  const saved = new Map([['a', genbank], ['b-gff', gff], ['b-fasta', fasta], ['c', genbank]]);
+  const binding = { request, sources, boundSources: sources.map((entry) => ({ ...entry })),
+    matchesSavedSource: (file, resourceId) => saved.get(resourceId) === file };
+  const current = (recordKey, changes = {}) => isCurrentFeature({ record_key: recordKey }, { ...binding, ...changes });
+  assert.equal(current('seq-a'), true);
+  assert.equal(current('seq-b:3'), true, 'one record of a source drawn whole');
+  assert.equal(current('seq-c:2'), true, 'a record named by its index');
+  assert.equal(current('seq-b:0'), false);
+  assert.equal(current('seq-missing'), false);
+  assert.equal(current('seq-a', { request: null }), false);
+  assert.equal(current('seq-a', { request: { ...request, mode: 'circular' } }), false);
+  // A source replaced after the request was committed is not the bound one.
+  assert.equal(current('seq-a', { sources: [{ ...sources[0], source: {} }, ...sources.slice(1)] }), false);
+  assert.equal(current('seq-a', { boundSources: binding.boundSources.slice(1) }), false);
+  // Both the primary input and its paired FASTA match the committed Session.
+  assert.equal(current('seq-a', { matchesSavedSource: () => false }), false);
+  assert.equal(current('seq-b:1', { matchesSavedSource: (file, resourceId) => resourceId !== 'b-fasta' }), false);
+});
+
+test('the record display binding is refreshed for the committed request before the check reads it', async () => {
+  const model = compositeControls();
+  const before = model.controls.sourceBinding();
+  assert.equal(before.boundSources[0].source, model.file);
+  assert.equal(isCurrentFeature(model.feature, before), true);
+  model.state.files.c_gb = model.makeFile();
+  assert.equal(isCurrentFeature(model.feature, model.controls.sourceBinding()), false);
+  // A new committed request binds the inputs it was drawn from.
+  await model.commitCombined();
+  const after = model.controls.sourceBinding();
+  assert.notEqual(after.request, before.request);
+  assert.equal(after.boundSources[0].source, model.state.files.c_gb);
+  assert.equal(isCurrentFeature(model.feature, after), true);
 });
 
 test('unsupported draft lanes remain unavailable independently of current placement value', () => {

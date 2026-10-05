@@ -4,6 +4,7 @@ import { resolveFeatureAnchor } from './record-display/feature-anchor.js';
 import { matchesSessionResourceDescriptor } from '../services/session-resource-backing.js';
 import { cloneJsonData } from '../services/json-clone.js';
 import { featureIdentityKey, requestFeaturePlacements } from '../services/feature-placement.js';
+import { committedRecordForKey, committedRecordUsesSource } from '../services/feature-identity.js';
 import { circularDiscoveryForInput } from './record-discovery.js';
 import { RECORD_READ_ERROR_LABEL } from './linear-record-selector.js';
 
@@ -306,13 +307,6 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
     const expected = getCommittedSession()?.resources?.[resourceId];
     return matchesSessionResourceDescriptor(file, expected);
   };
-  const recordForKey = (key) => getCommittedRequest()?.records.find((record) => record.recordKey === key
-    || (record.cardinality === 'all' && key.startsWith(`${record.recordKey}:`)
-      && /^[1-9]\d*$/.test(key.slice(record.recordKey.length + 1))));
-  const recordUsesSource = (record, source) => source.scope === getCommittedRequest()?.mode
-    && (source.scope === 'circular' || record.recordKey === source.sourceUid
-      || (record.selector?.kind === 'recordIndex'
-        && record.recordKey === `${source.sourceUid}:${record.selector.index + 1}`));
   const refreshCommittedRows = () => {
     if (state.semanticFileWatchersSuppressed?.value || state.sessionImportPending?.value) return;
     const request = getCommittedRequest();
@@ -416,9 +410,10 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
   // The committed record's current sources have no read records: say whether
   // the read failed or has not happened, instead of calling the target stale.
   const unreadRecordsError = (recordKey) => {
-    const record = recordForKey(recordKey);
+    const request = getCommittedRequest();
+    const record = committedRecordForKey(request, recordKey);
     const discoveries = record ? sources.value
-      .filter((source) => source.source && recordUsesSource(record, source)).map(discoveryFor) : [];
+      .filter((source) => source.source && committedRecordUsesSource(request, record, source)).map(discoveryFor) : [];
     if (!discoveries.length || discoveries.some(({ status }) => status === 'ready')) return null;
     const failed = discoveries.find(({ status }) => status === 'error');
     return failed
@@ -518,15 +513,11 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
       if (!result.enabled) throw new Error(result.reason);
       return edit(row, { startCoordinate: result.start }, 'Use selected feature for record display start');
     },
-    isCurrentFeature: (feature) => {
+    // The data of isCurrentFeature (services/feature-identity.js), refreshed
+    // for the committed request before it is read (R13).
+    sourceBinding: () => {
       refreshCommittedRows();
-      const record = recordForKey(feature.record_key);
-      if (!record) return false;
-      return sources.value.some((source) => source.source && recordUsesSource(record, source)
-        && boundSources.some((bound) => bound.scope === source.scope && bound.sourceUid === source.sourceUid
-          && bound.source === source.source && bound.paired === source.paired)
-        && matchesSavedSource(source.source, record.source.resourceId || record.source.gffResourceId)
-        && (!source.paired || matchesSavedSource(source.paired, record.source.fastaResourceId)));
+      return { request: getCommittedRequest(), sources: sources.value, boundSources, matchesSavedSource };
     },
     rowsFor: (uid) => rows.value.filter((row) => row.sourceUid === uid),
     setTopology: (row, value) => edit(row, { topologyOverride: value }, 'Change record topology'),

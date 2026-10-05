@@ -7,6 +7,7 @@ import { isLegendOrderEdited } from './legend/utils.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
 import { createRecordDisplayControls } from './record-display-options.js';
+import { isCurrentFeature } from '../services/feature-identity.js';
 import {
   createFeatureRecordRotationAction,
   createFeatureRecordRotationWorkflow
@@ -1225,6 +1226,9 @@ export const createAppSetup = () => {
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch, linearRecordSelector, history, getCommittedRequest: getCommittedCanonicalRenderRequest, getCommittedSession: getCommittedCanonicalSession });
   state.recordDisplayRows = recordDisplayControls.allRows;
   window.__GBDRAW_HISTORY__ = history;
+  // R13: owners receive this port, not the record display controls. The check
+  // is pure (services/feature-identity.js) over the record display's binding.
+  const isCurrentResultFeature = (feature) => isCurrentFeature(feature, recordDisplayControls.sourceBinding());
   const canUndoHistory = computed(() => {
     void history.revision.value;
     return history.canUndo();
@@ -1320,7 +1324,7 @@ export const createAppSetup = () => {
     readFeatureOverrideTable: (payload) => runDiagramHelperOperation(
       DIAGRAM_HELPER_OPERATIONS.READ_FEATURE_OVERRIDE_TABLE, payload
     ),
-    isCurrentFeature: recordDisplayControls.isCurrentFeature,
+    isCurrentFeature: isCurrentResultFeature,
     isPatternEditAvailable: () => !sessionImportPending.value,
     nextTick,
     legendActions,
@@ -2359,7 +2363,7 @@ export const createAppSetup = () => {
     state,
     rulePreparation,
     settleComparisonRecordLabels,
-    isCurrentFeature: recordDisplayControls.isCurrentFeature,
+    isCurrentFeature: isCurrentResultFeature,
     serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog, runState) => (
       serializeActiveRenderFiles(runState.mode.value, runState, {
         comparisonPlan: comparisonPlanSnapshot,
@@ -2409,12 +2413,20 @@ export const createAppSetup = () => {
     return biologicalMatches.length === 1 ? biologicalMatches[0] : null;
   };
   const featureRecordRotationAction = createFeatureRecordRotationAction({
-    recordDisplayControls,
+    targetForFeature: recordDisplayControls.targetForFeature,
+    setResolvedTransform: recordDisplayControls.setResolvedTransform,
     getCommittedSession: getCommittedCanonicalSession,
     projectCommittedRecordTransform,
-    runCommittedCanonicalCandidate,
+    // R13: the root runs the candidate with the record display's target-draft
+    // checkpoint; the rotation owner holds neither owner.
+    runRecordRotation: ({ canonical, row, transform }) => runCommittedCanonicalCandidate({
+      canonical,
+      captureIntentCheckpoint: () => recordDisplayControls.captureTargetDraft(row),
+      restoreIntentCheckpoint: (checkpoint) => recordDisplayControls.restoreTargetDraft(checkpoint),
+      commitIntent: () => recordDisplayControls.commitResolvedTransform(row, transform)
+    }),
     resolveCurrentFeature: resolvePopupRotationFeature,
-    isCurrentFeature: recordDisplayControls.isCurrentFeature,
+    isCurrentFeature: isCurrentResultFeature,
     // The same discovery that Generate and the File card run for the mode.
     readRecords: () => (mode.value === 'linear'
       ? linearRecordSelector.refresh()
@@ -3164,8 +3176,12 @@ export const createAppSetup = () => {
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     getCommittedSession: getCommittedCanonicalSession,
     projectCommittedAlignment: projectCommittedSimilarityAlignment,
-    runCommittedCanonicalCandidate,
-    recordDisplayControls,
+    // R13: the root runs the candidate with the record display's orientation
+    // checkpoint; the alignment owner holds neither owner.
+    runRecordAlignment: ({ orientations, ...run }) => runCommittedCanonicalCandidate({ ...run,
+      captureIntentCheckpoint: () => recordDisplayControls.captureAlignmentOrientationIntent(orientations),
+      restoreIntentCheckpoint: (checkpoint) => recordDisplayControls.restoreAlignmentOrientationIntent(checkpoint),
+      commitIntent: () => recordDisplayControls.commitAlignmentOrientations(orientations) }),
     cancelRunAnalysis,
     runHelperOperation: runDiagramHelperOperation,
     resolveOperation: DIAGRAM_HELPER_OPERATIONS.RESOLVE_SIMILARITY_ALIGNMENT,

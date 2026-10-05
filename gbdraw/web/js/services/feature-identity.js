@@ -146,3 +146,30 @@ export const resolveUniqueOrthogroupMemberForFeature = (feature, members = []) =
   });
   return matches.length === 1 ? matches[0] : null;
 };
+
+// The committed request record that draws a record key: the record itself, or
+// one record of a source drawn whole (`cardinality: 'all'`, `<recordKey>:<n>`).
+export const committedRecordForKey = (request, key) => request?.records.find((record) => record.recordKey === key
+  || (record.cardinality === 'all' && key.startsWith(`${record.recordKey}:`)
+    && /^[1-9]\d*$/.test(key.slice(record.recordKey.length + 1))));
+
+// Whether an input source of the record display feeds a committed record.
+export const committedRecordUsesSource = (request, record, source) => source.scope === request?.mode
+  && (source.scope === 'circular' || record.recordKey === source.sourceUid
+    || (record.selector?.kind === 'recordIndex'
+      && record.recordKey === `${source.sourceUid}:${record.selector.index + 1}`));
+
+// Whether a feature's record still reads the input its committed Result was
+// drawn from. A pure check (R13): the composition root passes the record
+// display's source binding, refreshed for the committed request: `request`,
+// the current input `sources`, the `boundSources` captured when that request
+// was committed, and `matchesSavedSource(file, resourceId)` for its Session.
+export const isCurrentFeature = (feature, { request, sources, boundSources, matchesSavedSource }) => {
+  const record = committedRecordForKey(request, feature.record_key);
+  if (!record) return false;
+  return sources.some((source) => source.source && committedRecordUsesSource(request, record, source)
+    && boundSources.some((bound) => bound.scope === source.scope && bound.sourceUid === source.sourceUid
+      && bound.source === source.source && bound.paired === source.paired)
+    && matchesSavedSource(source.source, record.source.resourceId || record.source.gffResourceId)
+    && (!source.paired || matchesSavedSource(source.paired, record.source.fastaResourceId)));
+};

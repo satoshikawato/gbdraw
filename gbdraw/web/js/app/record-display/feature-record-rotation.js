@@ -17,20 +17,24 @@ const sameFeatureIdentity = (feature, identity) => {
 /**
  * Coordinate one explicit popup feature through the existing domain owners.
  * The controller owns no request editing, generation, admission, or History stack.
+ * It receives ports (R13): `targetForFeature` and `setResolvedTransform` of the
+ * record display, and `runRecordRotation({ canonical, row, transform })`, which
+ * the composition root wires to run the candidate and commit the target draft.
  */
 export const createFeatureRecordRotationAction = ({
-  recordDisplayControls,
+  targetForFeature,
+  setResolvedTransform,
   getCommittedSession,
   projectCommittedRecordTransform,
-  runCommittedCanonicalCandidate,
+  runRecordRotation,
   resolveCurrentFeature = null,
   isCurrentFeature = null,
   readRecords = null
 }) => {
-  if (!recordDisplayControls
+  if (typeof targetForFeature !== 'function'
     || typeof getCommittedSession !== 'function'
     || typeof projectCommittedRecordTransform !== 'function'
-    || typeof runCommittedCanonicalCandidate !== 'function') {
+    || typeof runRecordRotation !== 'function') {
     throw new Error('Feature record rotation owners are unavailable.');
   }
 
@@ -56,7 +60,7 @@ export const createFeatureRecordRotationAction = ({
 
   const resolve = ({ feature, intent }) => {
     const resolvedFeature = currentFeature(feature);
-    const { row, target } = recordDisplayControls.targetForFeature(resolvedFeature);
+    const { row, target } = targetForFeature(resolvedFeature);
     const resolved = resolveFeatureAnchor({
       recordLength: target.recordLength,
       effectiveCircular: target.effectiveCircular,
@@ -98,16 +102,10 @@ export const createFeatureRecordRotationAction = ({
         reverseComplement: resolved.reverseComplement
       }
     });
-    const outcome = await runCommittedCanonicalCandidate({
+    const outcome = await runRecordRotation({
       canonical: projection.canonical,
-      captureIntentCheckpoint: () => recordDisplayControls.captureTargetDraft(row),
-      restoreIntentCheckpoint: (checkpoint) => (
-        recordDisplayControls.restoreTargetDraft(checkpoint)
-      ),
-      commitIntent: () => recordDisplayControls.commitResolvedTransform(
-        row,
-        resolvedTransform(resolved)
-      )
+      row,
+      transform: resolvedTransform(resolved)
     });
     return { ...outcome, receipt: projection.receipt, resolved };
   };
@@ -117,7 +115,7 @@ export const createFeatureRecordRotationAction = ({
   // undoable step. No candidate runs and the Result is untouched.
   const stage = async ({ feature, intent }) => {
     const { row, resolved } = resolveEligible({ feature, intent });
-    const busy = await recordDisplayControls.setResolvedTransform(row, resolvedTransform(resolved));
+    const busy = await setResolvedTransform(row, resolvedTransform(resolved));
     return busy?.status === 'busy' ? busy : { status: 'ok', resolved };
   };
 

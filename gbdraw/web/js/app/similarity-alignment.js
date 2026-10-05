@@ -811,8 +811,7 @@ export const createSimilarityAlignmentActions = ({
   getRecordCatalog = null,
   getCommittedSession,
   projectCommittedAlignment,
-  runCommittedCanonicalCandidate,
-  recordDisplayControls,
+  runRecordAlignment,
   cancelRunAnalysis = null,
   runHelperOperation,
   resolveOperation,
@@ -828,7 +827,7 @@ export const createSimilarityAlignmentActions = ({
     || typeof getCommittedRequest !== 'function'
     || typeof getCommittedSession !== 'function'
     || typeof projectCommittedAlignment !== 'function'
-    || typeof runCommittedCanonicalCandidate !== 'function'
+    || typeof runRecordAlignment !== 'function'
     || typeof runHelperOperation !== 'function'
     || typeof resolveOperation !== 'string'
     || !resolveOperation
@@ -982,10 +981,9 @@ export const createSimilarityAlignmentActions = ({
     const changed = canonical.renderRequest.records.filter(record => (
       baseReverseComplement(record) !== baseReverseComplement(beforeRecords.get(record.recordKey))
     )).map(record => ({recordKey: record.recordKey, reverseComplement: baseReverseComplement(record)}));
-    return runCommittedCanonicalCandidate({ canonical, operation: 'align', label, alignmentResetBefore, alignmentResetReceipt,
-      captureIntentCheckpoint: () => recordDisplayControls.captureAlignmentOrientationIntent(changed),
-      restoreIntentCheckpoint: checkpoint => recordDisplayControls.restoreAlignmentOrientationIntent(checkpoint),
-      commitIntent: () => recordDisplayControls.commitAlignmentOrientations(changed) });
+    // R13 port: the root commits `orientations` to the record display intent.
+    return runRecordAlignment({ canonical, operation: 'align', label, alignmentResetBefore, alignmentResetReceipt,
+      orientations: changed });
   };
 
   const applyPlan = async (response, request, expectedActionId, projected) => {
