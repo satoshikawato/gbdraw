@@ -22,12 +22,12 @@ import pytest
 from PIL import Image
 
 from gbdraw.session_io import (
+    CURRENT_SESSION_VERSION,
     FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION,
     LOSAT_DERIVED_CACHE_SCHEMA,
     NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
     PROTEIN_IDENTITY_MANIFEST_SCHEMA,
     PROTEIN_LOSAT_CACHE_SCHEMA,
-    SUPPORTED_SESSION_VERSIONS,
 )
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 
@@ -50,7 +50,7 @@ BROWSER_WHEEL_FORBIDDEN_PREFIXES = (
     "gbdraw/web/vendor/",
     "gbdraw/web/wasm/",
 )
-BUNDLED_REQUEST_SCHEMAS = frozenset({5, 7, 8, CANONICAL_REQUEST_SCHEMA})
+BUNDLED_REQUEST_SCHEMAS = frozenset({CANONICAL_REQUEST_SCHEMA})
 BROWSER_WHEEL_FORBIDDEN_FILES = {
     "gbdraw/web/index.html",
     "gbdraw/web/open-source-notices.html",
@@ -534,7 +534,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
         assert '"format":"gbdraw-session"' in session_prefix
         version_match = re.search(r'"version":(\d+)', session_prefix)
         assert version_match is not None
-        assert int(version_match.group(1)) in SUPPORTED_SESSION_VERSIONS
+        assert int(version_match.group(1)) == CURRENT_SESSION_VERSION
         assert "gbdraw-gallery-interactive-script" not in svg_source
         assert "data-gbdraw-gallery" not in svg_source
         assert "window.parent" not in svg_source
@@ -552,7 +552,7 @@ def test_interactive_gallery_examples_are_wired() -> None:
             assert 'data-popup-mode="rich"' in svg_source
             assert "data-gbdraw-original-viewbox" in svg_source
             payload = _gallery_svg_metadata(svg_source)
-            assert payload["schema"] == 4
+            assert payload["schema"] == FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION[CURRENT_SESSION_VERSION]
             assert len(payload["items"]) == 1
             item = payload["items"][0]
             biological_features = item["biologicalFeatures"]

@@ -649,7 +649,7 @@ const activeIntentSession = JSON.parse(await readFile(
 ));
 const activeFeature = activeIntentSession.editorState.featureCatalog.items[0].features[0];
 const activeFeatureId = activeFeature.svgId;
-// The Session 44 rendered-ID edits migrate to the feature's identity row.
+// Session 45 keys per-feature edits by the feature's source identity.
 const activeFeatureIdentity = JSON.stringify([activeFeature.recordKey, activeFeature.biologicalFeatureId]);
 Object.assign(activeIntentSession.config.form, {
   plot_title: 'Saved active draft',
@@ -723,12 +723,18 @@ activeIntentSession.features = {
     [activeFeatureId]: { color: '#334455', caption: 'Saved feature fill' }
   },
   featureVisibilityManualRules: [],
-  featureVisibilityOverrides: { [activeFeatureId]: 'off' },
-  labelTextFeatureOverrides: { [activeFeatureId]: 'Saved feature label' },
+  featureOverrides: {
+    [activeFeatureIdentity]: {
+      recordKey: activeFeature.recordKey,
+      biologicalFeatureId: activeFeature.biologicalFeatureId,
+      featureVisibility: 'off',
+      labelVisibility: 'off',
+      labelText: 'Saved feature label',
+      labelSourceText: 'Original label'
+    }
+  },
   labelOverrideRows: [],
   labelTextBulkOverrides: {},
-  labelTextFeatureOverrideSources: { [activeFeatureId]: 'Original label' },
-  labelVisibilityOverrides: { [activeFeatureId]: 'off' },
   // A current reader ignores this retired writer field.
   labelOverrideContextKey: 'saved-active-context'
 };

@@ -55,13 +55,17 @@ const sessionNames = examples.map((example) => String(example.session).split('/'
 assert.equal(sessionNames.length, 10);
 assert.equal(new Set(sessionNames).size, 10);
 
-const loadSession = async (name) => {
-  const bytes = await readFile(`${sessionRoot}/${name}`);
+const loadSessionFile = async (path) => {
+  const bytes = await readFile(path);
   const decoded = bytes[0] === 0x1f && bytes[1] === 0x8b
     ? gunzipSync(bytes)
     : bytes;
   return JSON.parse(decoded.toString('utf8'));
 };
+const loadSession = (name) => loadSessionFile(`${sessionRoot}/${name}`);
+// The released Session 44 Gallery files (first-parent main fe6861f0), kept to
+// exercise the promotion of released Gallery Sessions to the current writer.
+const loadReleasedSession = (name) => loadSessionFile(`tests/fixtures/sessions/${name}`);
 
 for (const name of sessionNames) {
   const source = await loadSession(name);
@@ -69,7 +73,8 @@ for (const name of sessionNames) {
   const result = await prepareGallerySessionForPublication(source);
   assert.equal(result.session.version, CURRENT_SESSION_VERSION, name);
   assert.equal(result.session.editorState.featureCatalog.schema, FEATURE_CATALOG_SCHEMA, name);
-  assert.deepEqual(result.session.features.featureOverrides, {}, name);
+  // A Session written by the CLI carries no Web draft rows.
+  assert.deepEqual(result.session.features.featureOverrides ?? {}, {}, name);
   for (const field of ['featureVisibilityOverrides', 'labelVisibilityOverrides', 'labelTextFeatureOverrides',
     'labelTextFeatureOverrideSources']) assert.equal(Object.hasOwn(result.session.features, field), false, name);
   assert.equal(result.session.renderRequest.schema, CANONICAL_REQUEST_SCHEMA, name);
@@ -116,14 +121,14 @@ for (const name of sessionNames) {
   }
 }
 
-const lambda = await loadSession('lambda_basic_linear.gbdraw-session.json');
+const lambda = await loadReleasedSession('lambda_basic_linear.v44-schema8.gbdraw-session.json.gz');
 const admittedLambda = admitGallerySession(lambda);
 assert.equal(admittedLambda.version, CURRENT_SESSION_VERSION);
 assert.equal(admittedLambda.editorState.featureCatalog.schema, FEATURE_CATALOG_SCHEMA);
 assert.deepEqual(admittedLambda.results, lambda.results);
 assert.equal(lambda.version, 44);
 assert.equal(lambda.editorState.featureCatalog.schema, 4);
-const releasedCurrent = await loadSession('HmmtDNA_basic_circular.gbdraw-session.json');
+const releasedCurrent = await loadReleasedSession('HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz');
 assert.equal(releasedCurrent.version, 44);
 assert.equal(releasedCurrent.renderRequest.schema, 8);
 assert.equal(releasedCurrent.editorState.featureCatalog.schema, 4);

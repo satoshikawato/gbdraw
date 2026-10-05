@@ -66,10 +66,8 @@ from tools.refresh_gallery_sessions import (
 
 pytestmark = pytest.mark.gallery
 
-BUNDLED_REQUEST_SCHEMAS = frozenset({5, 6, 7, 8, CANONICAL_REQUEST_SCHEMA})
-# Session 44 Gallery files stay until the Gallery refresh after the Session 45
-# writer (design Q4 4.4).
-BUNDLED_SESSION_VERSIONS = frozenset({41, 42, 44, CURRENT_SESSION_VERSION})
+BUNDLED_REQUEST_SCHEMAS = frozenset({CANONICAL_REQUEST_SCHEMA})
+BUNDLED_SESSION_VERSIONS = frozenset({CURRENT_SESSION_VERSION})
 
 
 def test_default_refresh_inventory_covers_gallery_and_test_input_sessions() -> None:
@@ -363,6 +361,47 @@ def test_current_session_catalog_structure_rejects_duplicate_payloads(
         _validate_current_session_catalog_structure(session_path, session)
 
 
+def test_current_session_catalog_structure_accepts_drawn_selector(
+    tmp_path: Path,
+) -> None:
+    session_path = tmp_path / "current.gbdraw-session.json"
+    session = {
+        "resources": {},
+        "editorState": {
+            "featureCatalog": {
+                "schema": 5,
+                "items": [
+                    {
+                        "resultIndex": 0,
+                        "resultName": "result",
+                        "recordKeys": ["record-key"],
+                        "features": [
+                            {
+                                "svgId": "rendered",
+                                "recordKey": "record-key",
+                                "biologicalFeatureId": "biological",
+                                "fillColor": "#000000",
+                                "drawnSelector": {"hash": "abc"},
+                            }
+                        ],
+                        "biologicalFeatures": [
+                            {
+                                "recordKey": "record-key",
+                                "biologicalFeatureId": "biological",
+                            }
+                        ],
+                        "orthogroups": [],
+                        "annotations": [],
+                        "comparisonMatches": [],
+                    }
+                ],
+            }
+        },
+    }
+
+    _validate_current_session_catalog_structure(session_path, session)
+
+
 def test_vibrio_gallery_session_retains_complete_compact_cache(
     load_cached_gallery_session: Callable[[Path], dict[str, object]],
 ) -> None:
@@ -481,8 +520,6 @@ def test_all_bundled_sessions_use_supported_request_and_current_artifact_schemas
     assert len(paths) == 11
     for path in paths:
         session = load_cached_gallery_session(path)
-        # Published Sessions advance through canonical refreshes without forcing
-        # unrelated Gallery examples into the same asset-only change.
         assert session["version"] in BUNDLED_SESSION_VERSIONS, path
         assert session["renderRequest"]["schema"] in BUNDLED_REQUEST_SCHEMAS, path
         assert (
@@ -1852,15 +1889,11 @@ def test_orthogroup_gallery_preserves_session_members_and_rendered_ids(
         if element.get("id") == "gbdraw-interactive-feature-metadata"
     )
     payload = json.loads(metadata.text or "{}")
-    assert payload["schema"] == 4
+    assert payload["schema"] == feature_catalog_module.FEATURE_CATALOG_SCHEMA
     assert len(payload["items"]) == 1
     item = payload["items"][0]
     session_catalog = session["editorState"]["featureCatalog"]
-    if session_catalog["schema"] == 3:
-        session_catalog = feature_catalog_module.promote_legacy_feature_catalog(
-            session_catalog
-        )
-    assert session_catalog["schema"] == 4
+    assert session_catalog["schema"] == feature_catalog_module.FEATURE_CATALOG_SCHEMA
     session_item = session_catalog["items"][0]
     assert item == session_item
 

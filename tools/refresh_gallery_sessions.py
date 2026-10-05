@@ -628,6 +628,7 @@ def _validate_current_session_catalog_structure(
         "recordKey",
         "biologicalFeatureId",
         "fillColor",
+        "drawnSelector",
     }
     duplicated_payload_keys = {
         "qualifiers",
