@@ -11,7 +11,9 @@ import {
   buildRecordDisplayRows, requestedRecordDisplay, validateRecordDisplayDrafts
 } from '../../gbdraw/web/js/app/record-display-options.js';
 import { createFeaturePlacementActions } from '../../gbdraw/web/js/app/feature-editor/placement-actions.js';
-import { nameFeaturePlacementFailure } from '../../gbdraw/web/js/services/feature-placement.js';
+import {
+  featureIdentityKeyOf, nameFeaturePlacementFailure, restorePlacements
+} from '../../gbdraw/web/js/services/feature-placement.js';
 
 import { resolveLinearComparisonPlan } from '../../gbdraw/web/js/app/linear-comparisons.js';
 
@@ -135,6 +137,24 @@ test('the Web names the feature of a placement row that Python reports (OV-09)',
     assert.equal(nameFeaturePlacementFailure(unnamed, request, features), unnamed);
   }
   assert.equal(nameFeaturePlacementFailure(error, request, []), error);
+});
+
+test('a Generate intent checkpoint restores the placement draft through its owner (R13)', () => {
+  const lane = (scope, recordKey, side) => ({
+    scope, recordKey, biologicalFeatureId: 'feature', placement: { kind: 'lane', side, level: 1 }
+  });
+  const kept = lane('circular', 'record-1', 'outward');
+  const key = featureIdentityKeyOf(kept);
+  const checkpoint = { [key]: kept };
+  const removed = lane('linear', 'record-2', 'above');
+  const overrides = { [featureIdentityKeyOf(removed)]: removed };
+  restorePlacements(overrides, checkpoint);
+  assert.deepEqual(overrides, checkpoint);
+  // Undo and Redo restore the same checkpoint again, so the draft holds copies.
+  overrides[key].placement.side = 'inward';
+  assert.equal(checkpoint[key].placement.side, 'outward');
+  restorePlacements(overrides, null);
+  assert.deepEqual(overrides, {});
 });
 
 test('Main, resolved side, bulk Auto and history share one draft owner', async () => {

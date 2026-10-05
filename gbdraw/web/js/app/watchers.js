@@ -47,6 +47,9 @@ export const setupWatchers = ({
   refreshLinearRecordSelectors,
   resetPreviewViewport,
   resetRightDrawer,
+  // R13: the label owner's ports (app/feature-editor/label-actions.js).
+  closeLabelTextScopeDialog,
+  clearLabelBuildNotices,
   previewRuntime = null,
   preparePaletteDefinitions = null
 }) => {
@@ -84,12 +87,10 @@ export const setupWatchers = ({
     orthogroupSearch,
     labelTextBulkOverrides,
     canonicalLabelOverrideRows,
-    labelOverrideBuildWarning,
     isFeatureDrawerMounted,
     clickedFeature,
     clickedPairwiseMatch,
     clickedLabel,
-    labelTextScopeDialog,
     hiddenLabelTextDialog,
     files,
     currentColors,
@@ -317,17 +318,12 @@ export const setupWatchers = ({
       selectedOrthogroupAlignmentFeature.value = '';
       selectedOrthogroupId.value = '';
       orthogroupSearch.value = '';
-      labelOverrideBuildWarning.value = '';
+      clearLabelBuildNotices();
       labelSearch.value = '';
       featurePanelTab.value = 'colors';
       clickedPairwiseMatch.value = null;
       clickedLabel.value = null;
-      labelTextScopeDialog.show = false;
-      labelTextScopeDialog.labelKey = '';
-      labelTextScopeDialog.newText = '';
-      labelTextScopeDialog.sourceText = '';
-      labelTextScopeDialog.featureId = '';
-      labelTextScopeDialog.matchingCount = 0;
+      closeLabelTextScopeDialog();
       hiddenLabelTextDialog.show = false;
       hiddenLabelTextDialog.featureId = '';
       hiddenLabelTextDialog.reason = '';

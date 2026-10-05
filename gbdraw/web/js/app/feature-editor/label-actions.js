@@ -502,6 +502,15 @@ export const createFeatureLabelActions = ({
 
   const commitLabelEdit = () => previewRuntime?.commitActiveResultEdit('feature-label');
 
+  // R13: Generate and the label rerender clear the notices of the previous
+  // label build through this port when they start; a rerender also clears its
+  // last failure, as a queued request does. The rerender still reports its own
+  // failure (R1(c)).
+  const clearLabelBuildNotices = ({ rerender = false } = {}) => {
+    if (rerender) labelReflowLastError.value = null;
+    labelOverrideBuildWarning.value = '';
+  };
+
   const queueLabelReflow = (force = false) => {
     labelReflowLastError.value = null;
     if (force) {
@@ -1348,7 +1357,9 @@ export const createFeatureLabelActions = ({
 
   return {
     applyFeatureVisibilityToLabels,
+    clearLabelBuildNotices,
     clickedFeatureLabelHint,
+    closeLabelTextScopeDialog,
     hiddenLabelTextMessage,
     downloadLabelOverrideTable,
     loadLabelOverrideTable, canRetryLabelImportFailure, retryLabelImportFailure, editLabelImportFailure,

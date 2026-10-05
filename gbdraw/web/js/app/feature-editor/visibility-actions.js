@@ -29,10 +29,14 @@ export const createFeatureVisibilityActions = ({
   // R13: the composition root registers `applyFeatureVisibilityToLabels` once
   // the label owner exists; this owner only calls it.
   ports,
-  previewRuntime = null,
+  previewRuntime,
   rulePreparation = null,
   getCommittedRequest = () => null
 }) => {
+  // The preview owner selects the Result a History command targets (R13).
+  if (typeof previewRuntime?.selectResult !== 'function') {
+    throw new Error('createFeatureVisibilityActions requires PreviewRuntime Result selection.');
+  }
   const {
     clickedFeature,
     extractedFeatures,
@@ -263,11 +267,7 @@ export const createFeatureVisibilityActions = ({
     const resultCount = Array.isArray(results?.value) ? results.value.length : 0;
     if (targetIndex >= resultCount) return false;
     if (Number(selectedResultIndex?.value || 0) !== targetIndex) {
-      if (previewRuntime?.selectResult) {
-        previewRuntime.selectResult(targetIndex);
-      } else if (selectedResultIndex) {
-        selectedResultIndex.value = targetIndex;
-      }
+      previewRuntime.selectResult(targetIndex);
       await nextFrame();
     }
     return Boolean(svgContainer?.value?.querySelector?.('svg'));

@@ -1,5 +1,6 @@
 import { getFeatureCaption } from '../app/feature-utils.js';
 import { diagnosticError } from './error-normalization.js';
+import { cloneJsonData } from './json-clone.js';
 
 // Drafts keyed by original-source feature identity: Feature placement rows and
 // per-feature edits (design Q4). A request chooses its record keys, so both
@@ -113,6 +114,14 @@ const requestRow = ({ scope: _scope, ...row }) => row;
 export const requestFeaturePlacements = (overrides, mode, records = []) => canonicalFeaturePlacements(
   Object.fromEntries(Object.entries(overrides || {}).filter(([, row]) => rowBelongsToRequest(row, mode, records)))
 ).map(requestRow);
+
+// Replaces the Feature placement draft with copies of a checkpoint's draft rows:
+// Undo, Redo, and the rollback of a Generate restore the placements it removed
+// (Q3 = A).
+export const restorePlacements = (overrides, placements) => {
+  Object.keys(overrides).forEach((key) => delete overrides[key]);
+  Object.assign(overrides, cloneJsonData(placements) || {});
+};
 
 // Per-feature edits (request schema 9 `featureOverrides`). A null field keeps
 // the rule-based result; the draft row adds the Web-only `labelSourceText`,
