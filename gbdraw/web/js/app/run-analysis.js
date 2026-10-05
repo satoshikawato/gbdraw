@@ -4902,6 +4902,10 @@ export const createRunAnalysis = ({
       if (outcome?.status === 'ok' && outcome.generatedArtifactCandidate) {
         generatedArtifactTransactionOwner.finalize();
         completedLosatSearch = null;
+        // The committed Results draw every edit, so the last live edit failure
+        // no longer applies (OV-36). A failed Generate keeps the Result it
+        // could not replace, and the note with it.
+        clearLabelBuildNotices({ rerender: true });
         recordSessionLifecycleEvent('generate.completed');
       }
       if (Object.prototype.hasOwnProperty.call(outcome || {}, 'generatedArtifactCandidate')) {

@@ -610,9 +610,15 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       }
     }
   });
+  // OV-36: Generate's start clears only the label build warning; a Generate
+  // that commits its Results also clears the last live-edit failure.
+  const labelNoticeClears = [];
   let runner;
   runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
+    clearLabelBuildNotices: ({ rerender = false } = {}) => {
+      labelNoticeClears.push(rerender ? 'rerender' : 'build');
+    },
     captureGeneratedArtifactHandle: captureForHistory,
     installGeneratedArtifactOwnerSet: (ownerSet, options) => {
       activationOwnerSets.push(ownerSet);
@@ -689,6 +695,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     { status: 'ok' },
     JSON.stringify(state.errorLog.value)
   );
+  assert.deepEqual(labelNoticeClears.splice(0), ['build', 'rerender']);
   assert.equal(state.failedGeneratePreservedResult.value, false);
   assert.deepEqual(state.results.value, [committedResult]);
   assert.deepEqual(state.featureCatalog.value, committedCatalog);
@@ -852,8 +859,10 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
 
   workerResponses.push(response(result('missing.svg', 'missing'), undefined));
   const metricsBeforePreActivationFailure = { ...structuralMetrics };
+  labelNoticeClears.length = 0;
   const failedRun = await runner.runAnalysis();
   assert.equal(failedRun.status, 'error');
+  assert.deepEqual(labelNoticeClears, ['build']);
   assert.equal(failedRun.error, state.errorLog.value);
   assert.equal(state.failedGeneratePreservedResult.value, true);
   assert.match(
