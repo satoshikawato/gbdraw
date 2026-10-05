@@ -12,7 +12,7 @@ const setup = () => {
       { type: 'CDS', svg_id: 'a', qualifiers: { gene: ['a'] } },
       { type: 'CDS', svg_id: 'b', qualifiers: { gene: ['b'] } }
     ] },
-    featureColorOverrides: {}, results: { value: [{name:'figure',content:'before'}] },
+    featureColorOverrides: {}, featureOverrides: {}, results: { value: [{name:'figure',content:'before'}] },
     svgResultIdentity: { value:'before' }, fileLegendCaptions: { value:new Set() }, addedLegendCaptions: { value:new Set() },
     legendEntries: { value:[] }, files: {t_color:null},
     newSpecRule: {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared'}
@@ -21,9 +21,12 @@ const setup = () => {
   const preparation = createRulePreparation({state, evaluate:evaluatePythonRules, notify:message=>notices.push(message)});
   let prepareLegend = async () => {};
   let previousIntents = [];
+  let openTransaction = null;
+  const legendApplies = [];
   const transact = scope => async (label, commit) => {
     const before=JSON.stringify(state.manualSpecificRules);
-    await commit();
+    openTransaction = label;
+    try { await commit(); } finally { openTransaction = null; }
     if (before!==JSON.stringify(state.manualSpecificRules)) {
       transactions.push(label);
       transactionScopes.push(scope);
@@ -32,21 +35,17 @@ const setup = () => {
   const actions = createFeatureRuleActions({ref:value=>({value}),computed:get=>({get value(){return get();}}),state, rulePreparation:preparation, history:{
     runUndoableCheckpoint: transact('checkpoint'),
     runUndoable: transact('intent')
-  }, legendActions: {
-    syncFileLegendEntries: async (intents, {isCurrent,commit,previousFileIntents,transact = (_diff, apply) => apply()}) => {
-      previousIntents=previousFileIntents;
-      await prepareLegend(intents);
-      if (!isCurrent()) return false;
-      return transact(diffLegendIntents(state.legendEntries.value, intents), () => {
-        if (!isCurrent()) return false;
-        commit();
-        state.legendEntries.value=intents;
-        state.results.value=[{name:'figure',content:'after'}];
-        return true;
-      });
-    }
+  }, prepareFileLegendEntries: async (intents, {isCurrent,previousFileIntents}) => {
+    previousIntents=previousFileIntents;
+    await prepareLegend(intents);
+    if (!isCurrent()) return false;
+    return { diff: diffLegendIntents(state.legendEntries.value, intents), isCurrent: () => true, apply: () => {
+      legendApplies.push({ transaction: openTransaction, rules: state.manualSpecificRules.map(rule => rule.cap) });
+      state.legendEntries.value=intents;
+      state.results.value=[{name:'figure',content:'after'}];
+    } };
   }, svgActions:{applyPaletteToSvg(){},applySpecificRulesToSvg(){}}, nextTick:async()=>{}});
-  return {state,actions,preparation,notices,transactions,transactionScopes, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents};
+  return {state,actions,preparation,notices,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents};
 };
 const rules = [
   {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared',fromFile:true},
@@ -70,6 +69,8 @@ test('rule action admits full canonical rules and legend in one transaction afte
   assert.equal(s.state.manualSpecificRules[0].fromFile,true);
   assert.deepEqual([...s.state.fileLegendCaptions.value],['Shared [#112233]']);
   assert.equal(s.transactions.length,1);
+  assert.deepEqual(s.legendApplies,[{transaction:'Change specific color rules',rules:['Shared [#112233]','Shared [#445566]']}],
+    'the legend rows apply after the rule transition, inside its History step (R13)');
   assert.match(s.notices[0],/Updated 2/);
   await s.actions.setSpecificRuleField(1,'cap','Renamed');
   assert.equal(s.state.manualSpecificRules[1].cap,'Renamed');
@@ -125,6 +126,31 @@ test('complete caption recolor uses bounded intent while caption replacement ret
   assert.equal(await s.actions.commitSpecificRules(recolor.map(rule => ({ ...rule, cap: 'Renamed' }))), true);
   assert.deepEqual(s.transactionScopes, ['intent', 'checkpoint']);
   assert.deepEqual(s.state.legendEntries.value, [{ caption: 'Renamed', color: '#abcdef' }]);
+});
+
+// A rule commit draws a legend row only for a rule a shown, rendered feature
+// matches: not for an unmatched rule, a feature only the biological catalog
+// holds, or a hidden feature.
+test('biological safety rows and hidden rendered features do not create unused legends', async () => {
+  const s = setup();
+  s.state.biologicalFeatures = { value: [{ type: 'CDS', svg_id: 'unrendered', qualifiers: { gene: ['c'] } }] };
+  // Per-feature visibility is the feature's identity row (design Q4).
+  Object.assign(s.state.extractedFeatures.value[1], { scope: 'circular', record_key: 'record-1', biological_feature_id: 'bio-b' });
+  s.state.featureOverrides[JSON.stringify(['circular', 'record-1', 'bio-b'])] = {
+    scope: 'circular', recordKey: 'record-1', biologicalFeatureId: 'bio-b',
+    featureVisibility: 'off', labelVisibility: null, labelText: null, labelSourceText: null
+  };
+  let intents = null;
+  s.setLegendPreparation(async (next) => { intents = next; });
+  assert.equal(await s.actions.commitSpecificRules([
+    { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'Shared' },
+    { feat: 'CDS', qual: 'gene', val: 'b', color: '#445566', cap: 'Shared' },
+    { feat: 'CDS', qual: 'gene', val: 'c', color: '#778899', cap: 'Shared' },
+    { feat: 'CDS', qual: 'gene', val: 'absent', color: '#aabbcc', cap: 'Shared' }
+  ]), true);
+  assert.deepEqual(s.state.manualSpecificRules.map(rule => rule.cap),
+    ['Shared [#112233]', 'Shared [#445566]', 'Shared [#778899]', 'Shared [#aabbcc]']);
+  assert.deepEqual(intents, [{ caption: 'Shared [#112233]', color: '#112233' }]);
 });
 
 // F-2 (D-14, PD-OI-069): Generate matches a hash rule against the drawn
@@ -198,7 +224,7 @@ test('the Legend editor recolors the rule of a suffixed row, and only that row',
     legendStrokeOverrides: {}, legendColorOverrides: {}, adv: {}
   };
   const committed = [];
-  const legend = createLegendManager({ state, rulePreparation: {}, commitSpecificRules: (next, label) => {
+  const legend = createLegendManager({ state, commitLegendRowRules: (next, label) => {
     committed.push({ rules: next, label });
     return true;
   } });

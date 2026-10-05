@@ -90,10 +90,6 @@ test('full candidate normalizes captions on matching cache hits and retains prov
   const candidate = await preparation.prepareCandidate(source);
   assert.deepEqual(candidate.rules.map(r => r.cap), ['Shared [#112233]', 'Shared [#445566]', 'Shared [#778899]']);
   assert.equal(candidate.rules[0].fromFile, true);
-  assert.deepEqual(candidate.intents, [
-    { caption: 'Shared [#112233]', color: '#112233' },
-    { caption: 'Shared [#445566]', color: '#445566' }
-  ]);
   assert.equal(firstMatchingRule(features[0], candidate.rules).cap, 'Shared [#112233]');
   assert.equal(preparation.prepare(source), true, 'matching remains synchronous');
   preparation.notifyChanges(candidate);
@@ -144,21 +140,6 @@ test('historical rule-derived overrides rebind by source caption and color while
 });
 
 
-test('biological safety rows and hidden rendered features do not create unused legends',async()=>{
-  const {state,features,preparation}=setup();
-  state.biologicalFeatures={value:[{type:'CDS',svg_id:'unrendered',qualifiers:{product:['absent']}}]};
-  // Per-feature visibility is the feature's identity row (design Q4).
-  Object.assign(features[0],{scope:'circular',record_key:'record-1',biological_feature_id:'bio-0'});
-  state.featureOverrides={[JSON.stringify(['circular','record-1','bio-0'])]:{scope:'circular',recordKey:'record-1',biologicalFeatureId:'bio-0',
-    featureVisibility:'off',labelVisibility:null,labelText:null,labelSourceText:null}};
-  const candidate=await preparation.prepareCandidate([
-    {...rule('absent'),color:'#112233',cap:'Shared'}, {...rule('NADH'),color:'#445566',cap:'Shared'}
-  ]);
-  assert.deepEqual(candidate.rules.map(r=>r.cap),['Shared [#112233]','Shared [#445566]']);
-  assert.deepEqual(candidate.intents,[]);
-});
-
-
 test('Generate preparation forwards its progress observer through caption and membership evaluation', async () => {
   const observations = [];
   const options = { onProgress: event => observations.push(event) };
@@ -173,7 +154,7 @@ test('Generate preparation forwards its progress observer through caption and me
     { ...rule('NADH'), color: '#112233', cap: 'NADH' }
   ], options);
   assert.deepEqual(kinds, ['color-captions', 'color']);
-  assert.equal(candidate.intents[0].caption, 'NADH');
+  assert.equal(candidate.rules[0].cap, 'NADH');
   assert.equal(observations.length, 2);
 });
 

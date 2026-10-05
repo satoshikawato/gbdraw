@@ -4,7 +4,9 @@ import { ruleMatchesFeature, firstMatchingRule, ruleMatchesReady } from '../rule
 import { resolveColorToHex } from '../color-utils.js';
 import { parseSpecificRules, serializeSpecificRules } from '../file-imports.js';
 import { getFeatureColorRuleHash } from '../feature-utils.js';
-import { legendRowRules, ruleLegendCaption } from '../specific-color-rules.js';
+import {
+  buildLegendIntents, createRuleLegendCaptions, legendRowRules, rendererLegendRows, ruleLegendCaption
+} from '../specific-color-rules.js';
 import { resolveFeatureLabelSelector } from '../feature-selector.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import {
@@ -18,7 +20,7 @@ import {
 } from '../../utils/feature-rendering.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
 
-export const createFeatureRuleActions = ({ state, nextTick, legendActions, rulePreparation, history, svgActions, ref, computed, isPatternEditAvailable = () => true }) => {
+export const createFeatureRuleActions = ({ state, nextTick, prepareFileLegendEntries, rulePreparation, history, svgActions, ref, computed, isPatternEditAvailable = () => true }) => {
   const {
     currentColors,
     appliedPaletteColors,
@@ -66,42 +68,69 @@ export const createFeatureRuleActions = ({ state, nextTick, legendActions, ruleP
   const editSpecificRuleFailure = () => {
     if (canEditSpecificRuleFailure.value) ruleFailure.value.input.focus();
   };
+  // The legend rows the candidate rules draw on rendered features, and the rows
+  // the commit retires: those the current rules draw (so it retires the row
+  // Generate drew) and `retiredLegendIntents`, rows this commit replaces, which
+  // are no renderer rows for the N-06 caption allocation.
+  const candidateLegendIntents = (candidateRules, retiredLegendIntents) => {
+    const rendered = (extractedFeatures.value || []).filter(feature =>
+      featureOverrideValue(featureOverrides, feature, 'featureVisibility') !== 'off');
+    const used = new Set(rendered.map(feature => firstMatchingRule(feature, candidateRules)).filter(Boolean));
+    const rendererRows = rendererLegendRows({
+      legendEntries: state.legendEntries?.value,
+      originalLegendOrder: state.originalLegendOrder?.value,
+      rules: [...manualSpecificRules, ...candidateRules,
+        ...retiredLegendIntents.map(intent => ({ cap: intent?.caption, color: intent?.color }))]
+    });
+    const currentCaption = createRuleLegendCaptions(manualSpecificRules, rendererRows);
+    return {
+      intents: buildLegendIntents(candidateRules.filter(rule => used.has(rule)), rendererRows).intents,
+      previousIntents: [...manualSpecificRules.filter(rule => rule.cap)
+        .map(rule => ({ caption: currentCaption(rule), color: rule.color })), ...retiredLegendIntents]
+    };
+  };
   const commitSpecificRules = async (rules, label = 'Change specific color rules', { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], sourceRows = rules.map(rule => manualSpecificRules.includes(rule) ? rule : null) } = {}) => {
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
     const revision = ++preparationRevision;
-    const candidate = await rulePreparation.prepareCandidate(rules, {}, { retiredLegendIntents: previousLegendIntents });
+    const candidate = await rulePreparation.prepareCandidate(rules);
     if (!candidate) return false;
     const current = () => revision === preparationRevision && !state.sessionOperationAvailability?.() && isCurrent()
       && rulePreparation.isCurrent(candidate.snapshot);
     if (!current()) return false;
-    const previousIntents = [...candidate.previousIntents, ...previousLegendIntents];
+    const { intents, previousIntents } = candidateLegendIntents(candidate.rules, previousLegendIntents);
     const previousCaptions = new Set(previousIntents.map(intent => intent.caption));
-    let applied = false;
-    await legendActions.syncFileLegendEntries(candidate.intents.filter(intent => !(state.deletedLegendEntries?.value || [])
+    const legend = await prepareFileLegendEntries(intents.filter(intent => !(state.deletedLegendEntries?.value || [])
       .some(entry => (entry.originalCaption || entry.caption) === intent.caption)), {
       previousFileIntents: previousIntents,
-      isCurrent: current,
-      transact: (diff, apply) => (diff.add.length || diff.remove.length
-        ? history.runUndoableCheckpoint : history.runUndoable)(label, apply),
-      commit: () => {
-        manualSpecificRules.splice(0, manualSpecificRules.length, ...candidate.rules.map((rule, index) => {
-          const row = sourceRows[index];
-          if (!row) return rule;
-          Object.assign(row, rule);
-          if (!Object.hasOwn(rule, 'fromFile')) delete row.fromFile;
-          return row;
-        }));
-        patternDrafts.reconcile();
-        fileLegendCaptions.value = new Set(candidate.rules.filter(rule => rule.fromFile && rule.cap).map(rule => rule.cap));
-        addedLegendCaptions.value = new Set([
-          ...[...addedLegendCaptions.value].filter(caption => !previousCaptions.has(caption)),
-          ...candidate.intents.map(intent => intent.caption)
-        ]);
-        applyRulePreview();
-        afterCommit(candidate);
-        applied = true;
-      }
+      isCurrent: current
+    });
+    if (!legend) return false;
+    let applied = false;
+    // One History step: the rule transition first, then the legend rows it
+    // draws (R13); a checkpoint when the legend gains or loses a row.
+    const transact = legend.diff.add.length || legend.diff.remove.length
+      ? history.runUndoableCheckpoint : history.runUndoable;
+    await transact(label, () => {
+      if (!current() || !legend.isCurrent()) return false;
+      manualSpecificRules.splice(0, manualSpecificRules.length, ...candidate.rules.map((rule, index) => {
+        const row = sourceRows[index];
+        if (!row) return rule;
+        Object.assign(row, rule);
+        if (!Object.hasOwn(rule, 'fromFile')) delete row.fromFile;
+        return row;
+      }));
+      patternDrafts.reconcile();
+      fileLegendCaptions.value = new Set(candidate.rules.filter(rule => rule.fromFile && rule.cap).map(rule => rule.cap));
+      addedLegendCaptions.value = new Set([
+        ...[...addedLegendCaptions.value].filter(caption => !previousCaptions.has(caption)),
+        ...intents.map(intent => intent.caption)
+      ]);
+      applyRulePreview();
+      afterCommit(intents);
+      applied = true;
+      legend.apply();
+      return legend.diff;
     });
     if (applied) rulePreparation.notifyChanges(candidate);
     return applied;

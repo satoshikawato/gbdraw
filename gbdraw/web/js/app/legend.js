@@ -12,8 +12,7 @@ import { legendRowRules } from './specific-color-rules.js';
 
 export const createLegendManager = ({
   state,
-  rulePreparation,
-  commitSpecificRules,
+  commitLegendRowRules,
   beginHistoryTransaction = null,
   commitHistoryTransaction = null,
   previewRuntime = null,
@@ -49,25 +48,25 @@ export const createLegendManager = ({
   return {
     ...entryActions,
     // A row a rule draws, including its N-06 "<caption> [<hex>]" row, edits
-    // that rule; any other row is a legend-only edit.
+    // that rule through the rule owner's port (R13); any other row is a
+    // legend-only edit.
     updateLegendEntryColor: (index, color) => {
       const rowRules = rowRulesAt(index);
       if (rowRules.length) {
-        return commitSpecificRules(state.manualSpecificRules.map(rule => rowRules.includes(rule) ? { ...rule, color } : { ...rule }), 'Change legend color');
+        return commitLegendRowRules(state.manualSpecificRules.map(rule => rowRules.includes(rule) ? { ...rule, color } : { ...rule }), 'Change legend color');
       }
       return entryActions.updateLegendEntryColor(index, color);
     },
     updateLegendEntryCaption: (index, caption) => {
       const rowRules = rowRulesAt(index);
       if (rowRules.length) {
-        return commitSpecificRules(state.manualSpecificRules.map(rule => rowRules.includes(rule) ? { ...rule, cap: caption } : { ...rule }), 'Rename legend item');
+        return commitLegendRowRules(state.manualSpecificRules.map(rule => rowRules.includes(rule) ? { ...rule, cap: caption } : { ...rule }), 'Rename legend item');
       }
       return entryActions.updateLegendEntryCaption(index, caption);
     },
     ...layoutActions,
     ...sortActions,
     ...strokeActions,
-    captureOriginalStrokeValues: (...args) => rulePreparation.run(state.manualSpecificRules, () => strokeActions.captureOriginalStrokeValues(...args)),
     ...dragActions,
     getAllFeatureLegendGroups,
     getVisibleFeatureLegendGroup,

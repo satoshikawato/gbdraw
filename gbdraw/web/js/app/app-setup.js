@@ -1294,10 +1294,12 @@ export const createAppSetup = () => {
     evaluate: async (payload, options) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload, options)).result,
     visibilityRules: () => requestFeatureVisibilityRules(state.featureVisibilityManualRules)
   });
+  // R13: a Legend row a specific-color rule draws commits its edit through the
+  // rule owner; the root registers the port once the feature editor exists.
+  const legendRowRulePorts = { commitLegendRowRules: null };
   const legendActions = createLegendManager({
     state,
-    commitSpecificRules: (...args) => featureActions.commitSpecificRules(...args),
-    rulePreparation,
+    commitLegendRowRules: (...args) => legendRowRulePorts.commitLegendRowRules(...args),
     beginHistoryTransaction: history.begin,
     commitHistoryTransaction: history.commit,
     previewRuntime,
@@ -1327,13 +1329,17 @@ export const createAppSetup = () => {
     isCurrentFeature: isCurrentResultFeature,
     isPatternEditAvailable: () => !sessionImportPending.value,
     nextTick,
-    legendActions,
+    prepareFileLegendEntries: legendActions.prepareFileLegendEntries,
+    compactLegendEntries: legendActions.compactLegendEntries,
+    extractLegendEntries: legendActions.extractLegendEntries,
+    onLegendGeometryChanged: legendActions.onLegendGeometryChanged,
     svgActions,
     featureSelection,
     previewRuntime,
     previewTransformInteraction,
     projectFeatureEdits: () => projectMountedEditorIntent({ visibility: true, rerender: true, reflow: true, labels: true })
   });
+  legendRowRulePorts.commitLegendRowRules = featureActions.commitSpecificRules;
   const previewFeatureSearch = createPreviewFeatureSearch({
     state,
     watch,
