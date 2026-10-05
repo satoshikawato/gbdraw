@@ -44,14 +44,11 @@ const setup = ({ features = [{ type: 'CDS', svg_id: 'one', qualifiers: { product
   const actions = createFeatureRuleActions({ state, ref: value => ({ value }), computed: get => ({ get value() { return get(); } }),
     rulePreparation: preparation, isPatternEditAvailable: () => available, nextTick: async () => {},
     history: { runUndoableCheckpoint: transact, runUndoable: transact },
-    legendActions: { syncFileLegendEntries: async (_, { isCurrent, commit, transact: transaction }) => {
-      if (!isCurrent()) return;
-      await transaction({ add: [], remove: [] }, () => {
-        if (!isCurrent()) return;
-        commit();
-        state.results.value = [{ name: 'figure', content: JSON.stringify(state.manualSpecificRules) }];
-      });
-    } }, svgActions: { applyPaletteToSvg() {}, applySpecificRulesToSvg() {} }
+    prepareFileLegendEntries: async (_, { isCurrent }) => isCurrent() && {
+      diff: { add: [], remove: [] },
+      isCurrent: () => true,
+      apply: () => { state.results.value = [{ name: 'figure', content: JSON.stringify(state.manualSpecificRules) }]; }
+    }, svgActions: { applyPaletteToSvg() {}, applySpecificRulesToSvg() {} }
   });
   const row = state.manualSpecificRules[0];
   const stable = () => ({ canonical: JSON.stringify(state.manualSpecificRules), result: state.results.value, history: history.length });

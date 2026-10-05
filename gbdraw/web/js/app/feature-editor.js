@@ -16,7 +16,10 @@ export const createFeatureEditor = ({
   readFeatureOverrideTable = null,
   isCurrentFeature,
   nextTick,
-  legendActions,
+  prepareFileLegendEntries,
+  compactLegendEntries,
+  extractLegendEntries,
+  onLegendGeometryChanged,
   svgActions,
   featureSelection = null,
   previewRuntime = null,
@@ -25,7 +28,7 @@ export const createFeatureEditor = ({
   projectFeatureEdits
 }) => {
   const { ref, computed, watch, reactive } = window.Vue;
-  const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions, rulePreparation, history, svgActions, ref, computed, isPatternEditAvailable });
+  const ruleActions = createFeatureRuleActions({ state, nextTick, prepareFileLegendEntries, rulePreparation, history, svgActions, ref, computed, isPatternEditAvailable });
   // R13: the label owner's reactions, registered once it exists; the owners
   // created before it call them through this object only.
   const editorPorts = {};
@@ -43,7 +46,9 @@ export const createFeatureEditor = ({
     state,
     rulePreparation,
     nextTick,
-    legendActions,
+    compactLegendEntries,
+    extractLegendEntries,
+    onLegendGeometryChanged,
     svgActions,
     ruleActions,
     featureSvgActions,

@@ -23,7 +23,6 @@ const OWNER_GRAPH_BASELINE = {
   // owner-graph.injection-edge.v1
   'owner-graph.injection-edge.v1|app/app-setup.js|featureActions<-featureSelection': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|featureActions<-history': 1,
-  'owner-graph.injection-edge.v1|app/app-setup.js|featureActions<-legendActions': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|featureActions<-previewRuntime': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|featureActions<-previewTransformInteraction': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|featureActions<-rulePreparation': 1,
@@ -32,7 +31,6 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.injection-edge.v1|app/app-setup.js|history<-historyFileStore': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|historySnapshots<-historyFileStore': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|legendActions<-previewRuntime': 1,
-  'owner-graph.injection-edge.v1|app/app-setup.js|legendActions<-rulePreparation': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|legendLayout<-previewRuntime': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|previewFeatureSearch<-previewRuntime': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|recordDisplayControls<-history': 1,
@@ -41,7 +39,6 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.injection-edge.v1|app/app-setup.js|svgActions<-previewRuntime': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|svgActions<-rulePreparation': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|colorActions<-featureSvgActions': 1,
-  'owner-graph.injection-edge.v1|app/feature-editor.js|colorActions<-legendActions': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|colorActions<-previewRuntime': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|colorActions<-ruleActions': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|colorActions<-rulePreparation': 1,
@@ -53,7 +50,6 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.injection-edge.v1|app/feature-editor.js|labelActions<-previewRuntime': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|labelActions<-rulePreparation': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|ruleActions<-history': 1,
-  'owner-graph.injection-edge.v1|app/feature-editor.js|ruleActions<-legendActions': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|ruleActions<-rulePreparation': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|ruleActions<-svgActions': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|visibilityActions<-featureSvgActions': 1,
@@ -68,13 +64,11 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.injection-edge.v1|app/legend.js|sortActions<-previewRuntime': 1,
   'owner-graph.injection-edge.v1|app/legend.js|strokeActions<-previewRuntime': 1,
   // owner-graph.forward-closure.v1
-  'owner-graph.forward-closure.v1|app/app-setup.js|legendActions.commitSpecificRules->featureActions.commitSpecificRules': 1,
   'owner-graph.forward-closure.v1|app/app-setup.js|previewFeatureSearch.resolveOrthogroups->orthogroupActions.resolveOrthogroupDescription': 1,
   'owner-graph.forward-closure.v1|app/app-setup.js|previewFeatureSearch.resolveOrthogroups->orthogroupActions.resolveOrthogroupName': 1,
   'owner-graph.forward-closure.v1|app/app-setup.js|rightDrawerActions.onClose->featureActions.suspendSpecificRulePatternDrafts': 1,
   // owner-graph.whole-object-port.v1
   'owner-graph.whole-object-port.v1|app/feature-editor/color-actions.js|createFeatureColorActions|featureSvgActions': 1,
-  'owner-graph.whole-object-port.v1|app/feature-editor/color-actions.js|createFeatureColorActions|legendActions': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/color-actions.js|createFeatureColorActions|previewRuntime': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/color-actions.js|createFeatureColorActions|ruleActions': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/color-actions.js|createFeatureColorActions|rulePreparation': 1,
@@ -83,7 +77,6 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.whole-object-port.v1|app/feature-editor/label-actions.js|createFeatureLabelActions|rulePreparation': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/placement-actions.js|createFeaturePlacementActions|history': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/rule-actions.js|createFeatureRuleActions|history': 1,
-  'owner-graph.whole-object-port.v1|app/feature-editor/rule-actions.js|createFeatureRuleActions|legendActions': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/rule-actions.js|createFeatureRuleActions|rulePreparation': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/rule-actions.js|createFeatureRuleActions|svgActions': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/svg-actions.js|createFeatureSvgActions|featureSelection': 1,
@@ -118,7 +111,6 @@ const OWNER_GRAPH_BASELINE = {
   'heavy-derived.trigger-site.v1|rulePreparation|app/feature-editor/rule-actions.js': 1,
   'heavy-derived.trigger-site.v1|rulePreparation|app/feature-editor/svg-actions.js': 1,
   'heavy-derived.trigger-site.v1|rulePreparation|app/feature-editor/visibility-actions.js': 1,
-  'heavy-derived.trigger-site.v1|rulePreparation|app/legend.js': 1,
   'heavy-derived.trigger-site.v1|rulePreparation|app/run-analysis.js': 2,
   'heavy-derived.trigger-site.v1|rulePreparation|app/svg-styles.js': 1
 };
