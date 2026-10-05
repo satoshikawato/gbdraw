@@ -185,6 +185,10 @@ FloatingPointError OverflowError ArithmeticError AssertionError AttributeError I
 NotImplementedError RecursionError RuntimeError TypeError UnboundLocalError NameError ValueError Exception`.split(/\s+/));
 // Locators shown in the summary; indexes are zero-based, ordinals one-based.
 const ORDINAL_LABELS = Object.freeze({ DECORATION_CONTINUITY: 'Result', COMPARISON_INPUT: 'Comparison sequence' });
+// The tables a Session stores as text resources, as the documentation names them.
+export const SESSION_TABLE_LABELS = Object.freeze({ 'default-colors': 'Default colors', 'specific-colors': 'Specific colors',
+  'label-whitelist': 'Label whitelist', 'qualifier-priority': 'Qualifier priority', 'feature-visibility': 'Feature visibility',
+  'label-overrides': 'Label overrides' });
 const CONFIG_PATH = /^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$/;
 // A rendered feature ID (gbdraw/svg/ids.py) and an INSDC or GFF3 feature type.
 const FEATURE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,159}$/;
@@ -414,6 +418,7 @@ const contextFor = (value) => {
   // The Web names the feature of a reported placement row (nameFeaturePlacementFailure).
   const caption = typeof value.featureCaption === 'string' ? value.featureCaption.replace(/[\s\u0000-\u001f\u007f]+/g, ' ').trim().slice(0, 80).trimEnd() : '';
   if (caption) context.featureCaption = caption;
+  if (typeof value.sessionTable === 'string' && Object.hasOwn(SESSION_TABLE_LABELS, value.sessionTable)) context.sessionTable = value.sessionTable;
   for (const key of ['position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'placementIndex']) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= (key === 'codepoint' ? 0x10ffff : 10000000)) {
       if (key !== 'position' || context.positionUnit === 'python-character') context[key] = value[key];
@@ -441,12 +446,13 @@ export const normalizeUserFacingError = (value, {
     result.secondary.push({ code: 'CLEANUP_FAILED', stage: 'cleanup' });
   }
   const [message, actions] = DEFINITIONS[result.code];
-  const { inputOrdinal, row, column, slotIndex, seriesIndex, innerPx, outerPx, configPath, featureCaption } = result.context;
+  const { inputOrdinal, row, column, slotIndex, seriesIndex, innerPx, outerPx, configPath, featureCaption, sessionTable } = result.context;
   const { featureId, featureType, featureStart, featureEnd, featureCount } = result.context;
   const featureSpan = featureStart !== undefined && featureEnd !== undefined ? `${featureStart}..${featureEnd}` : '';
   const featureName = [[featureType, featureSpan].filter(Boolean).join(' '), featureId !== undefined ? `ID ${featureId}` : '']
     .filter(Boolean).join(', ');
   const locators = [
+    sessionTable !== undefined ? `Session table: ${SESSION_TABLE_LABELS[sessionTable]}.` : '',
     inputOrdinal !== undefined ? `${ORDINAL_LABELS[result.code] || 'Sequence'} ${inputOrdinal}.` : '',
     featureCaption !== undefined ? `Feature: ${featureCaption}.` : '',
     row !== undefined ? `Line ${row}.` : '',
@@ -475,7 +481,8 @@ export const normalizeUserFacingError = (value, {
     ...result.secondary.map((item) => `Secondary: ${item.code} / ${item.stage}`)].join('\n');
   result.details = [{ label: 'Diagnostics', text: detail.slice(0,
     Number.isSafeInteger(detailLimit) ? Math.max(0, Math.min(detailLimit, 4000)) : 4000) }].slice(0, 8);
-  result.actions = [...actions];
+  // A table stored in a Session is corrected in the Session file, not in this page.
+  result.actions = sessionTable !== undefined ? ['select-input'] : [...actions];
   return result;
 };
 

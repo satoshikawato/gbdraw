@@ -91,6 +91,7 @@ import {
 import {
   CANONICAL_REQUEST_SCHEMA,
   buildCanonicalRenderRequest,
+  legacyTableRowsNotice,
   managedConfigOverridePathsForMode,
   promoteCanonicalRenderRequestToCurrent,
   projectCanonicalSessionRequest,
@@ -1652,6 +1653,7 @@ const preflightSessionImport = async (sessionData) => {
           ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
           : LINEAR_TRACK_SLOT_SCHEMA_VERSION,
         repairInvalidComparisonHeight: sourceSessionVersion >= 31 && sourceSessionVersion <= 33,
+        repairLegacyTableRows: sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION,
         sessionResourceTable: currentResourceTable,
         deferResourceContent: currentSession,
         adoptCanonicalPayloads: currentSession
@@ -4753,7 +4755,8 @@ const importSessionDocument = async (e, options = {}) => {
     alert(['Session loaded successfully!',
       droppedFeatureEditCount > 0 ? FEATURE_EDIT_MIGRATION_WARNING(droppedFeatureEditCount) : '',
       narrowedFeatureVisibilityCount > 0 ? FEATURE_VISIBILITY_NARROWED_NOTICE(narrowedFeatureVisibilityCount) : '',
-      migratedAnnotationTargetCount > 0 ? ANNOTATION_TARGET_MIGRATION_NOTICE(migratedAnnotationTargetCount) : ''
+      migratedAnnotationTargetCount > 0 ? ANNOTATION_TARGET_MIGRATION_NOTICE(migratedAnnotationTargetCount) : '',
+      legacyTableRowsNotice(canonicalProjection?.legacyTableRepairs)
     ].filter(Boolean).join(' '));
     return {
       status: 'ok',

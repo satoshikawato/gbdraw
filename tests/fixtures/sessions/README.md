@@ -68,6 +68,14 @@ Sessions 33 have no feature catalog. They are the positive fixtures for the
 readers that move those edits onto source identities in Session 45. The steps,
 inputs, and hashes are in `feature-edits.provenance.json`.
 
+`whitelist-tab-keyword.v39.gbdraw-session.json.gz` is a Web **Save Session**
+download, kept unchanged, from first-parent `main` commit `17e2c9de`
+(Session 39). Its Label whitelist rule was typed with a tab in the keyword, and
+the Session 39 writer stored the row as four cells. It is the positive fixture
+for the reader that reads Session 31–39 Default colors, Label whitelist, and
+Qualifier priority rows as the current writer writes them. The steps, inputs,
+and hashes are in `whitelist-tab-keyword.provenance.json`.
+
 `selected-feature-annotations.v44.gbdraw-session.json.gz` is a Web **Save
 Session** download, kept unchanged, from first-parent `main` commit `fe6861f0`
 (Session 44). Its three Region Annotations were made from selected features,
