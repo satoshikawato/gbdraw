@@ -227,6 +227,7 @@ def load_default_colors(
                 read_literal_table(
                     user_defined_default_colors,
                     names=column_names,
+                    label="default colors file",
                     engine="c",
                 ).set_index("feature_type")
             )
@@ -255,6 +256,8 @@ def load_default_colors(
             raise InputFileError(
                 f"Override file '{user_defined_default_colors}' not found"
             )
+        except ParseError:
+            raise
         except Exception as exc:
             logger.error(
                 f"ERROR: failed to read '{user_defined_default_colors}' – {exc}"
@@ -291,9 +294,12 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
         df = read_literal_table(
             color_table_file,
             names=required_cols,
+            label="color table",
             keep_default_na=False,  # "None", "NA" and "null" are values, not blanks
             na_values=[""],
         )
+    except ParseError:
+        raise
     except pd.errors.ParserError as e:
         logger.error(f"ERROR: Malformed line in '{color_table_file}': {e}")
         raise ParseError(f"Malformed line in '{color_table_file}': {e}") from e
