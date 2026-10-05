@@ -809,17 +809,16 @@ export const createLegendEntryActions = ({
     return true;
   };
 
-  const syncFileLegendEntries = async (intents, { previousFileIntents = [], isCurrent = () => true, commit = () => {}, transact = (_diff, apply) => apply() } = {}) => {
+  // The legend rows the specific-color rules draw, prepared on a disposable copy
+  // of the mounted legend (R13). The rule owner runs its transition and then
+  // `apply` in one History step, while `isCurrent` holds; no rule mutation runs
+  // here. Resolves to false when the Result or the caller became stale.
+  const prepareFileLegendEntries = async (intents, { previousFileIntents = [], isCurrent = () => true } = {}) => {
     const mountedSvg = svgContainer.value?.querySelector('svg');
     const svg = mountedSvg?.cloneNode(true);
     const targetGroups = svg ? getAllFeatureLegendGroups(svg) : [];
     if (targetGroups.length === 0) {
-      const diff = { add: [], update: [], remove: [], unchanged: [] };
-      return transact(diff, () => {
-        if (!isCurrent()) return false;
-        commit();
-        return diff;
-      });
+      return { diff: { add: [], update: [], remove: [], unchanged: [] }, isCurrent: () => true, apply: () => {} };
     }
 
     let measurementHost;
@@ -909,18 +908,19 @@ export const createLegendEntryActions = ({
       document.body.appendChild(measurementHost);
       if (hasDualLegends) reflowDualLegendLayout(svg);
       else updatePairwiseLegendPositions(svg);
-      return await transact(diff, () => {
-        if (!isCurrent() || svgContainer.value.querySelector('svg') !== mountedSvg) return false;
-        // Rules, mounted geometry and Result commit synchronously inside History.
-        commit();
-        const mountedLegend = mountedSvg.getElementById('legend');
-        const candidateLegend = svg.getElementById('legend');
-        if (mountedLegend && candidateLegend) mountedLegend.replaceWith(candidateLegend);
-        onLegendGeometryChanged();
-        previewRuntime?.commitActiveResultEdit('legend-file-sync');
-        extractLegendEntries();
-        return diff;
-      });
+      return {
+        diff,
+        isCurrent: () => svgContainer.value.querySelector('svg') === mountedSvg,
+        // Mounted geometry and the Result commit synchronously inside History.
+        apply: () => {
+          const mountedLegend = mountedSvg.getElementById('legend');
+          const candidateLegend = svg.getElementById('legend');
+          if (mountedLegend && candidateLegend) mountedLegend.replaceWith(candidateLegend);
+          onLegendGeometryChanged();
+          previewRuntime?.commitActiveResultEdit('legend-file-sync');
+          extractLegendEntries();
+        }
+      };
     } finally {
       measurementHost?.remove();
     }
@@ -1188,11 +1188,11 @@ export const createLegendEntryActions = ({
     onLegendGeometryChanged,
     orderMountedLegend,
     prepareDisplayedResultLegend,
+    prepareFileLegendEntries,
     removeLegendEntry,
     reconcileLegendEntries,
     restoreDeletedLegendEntries,
     setLegendGeometryChangedHandler,
-    syncFileLegendEntries,
     updateLegendEntryCaption,
     updateLegendEntryColor,
     updateLegendEntryColorByCaption
