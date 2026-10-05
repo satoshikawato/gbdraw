@@ -189,6 +189,22 @@ No checker change.
 
 ### Phase B — make owner coupling measurable (detector-first)
 
+Revision after B1 (2026-10-05): schema version 1 of
+`tools/web-architecture-rules.json` caps the registry at four rules, admits
+two kinds, forbids a generic rule kind, and `evaluateArchitectureRuleResult`
+in `tools/web-architecture-evaluation.mjs` rejects `FROZEN` (the frozen-store
+mechanics are declared, not implemented). Rather than a schema plan, the
+baseline uses the design-rule guard mechanism of Phase A: R13 (Phase C)
+records the B1 characterization as two registered allowlist literals in
+`tests/web/owner-graph-baseline.test.mjs` (`OWNER_GRAPH_BASELINE`, a count
+map of `detector|subject`; `PROJECTION_SHAPE_BASELINE`, a count map per
+domain). The test fails on a new subject and on a fixed subject that is still
+recorded, so the baseline is exact and shrink-only; `design-rule.co-change`
+blocks an expansion in a runtime diff. B2 and B3 below are superseded by
+PR C1 plus the R13 entry in `tools/web-design-rule-guards.json`;
+`tools/web-owner-graph.json` and the rules-registry route stay available for
+a later schema plan.
+
 #### PR B1 — owner-graph detectors, fixtures, replay, report CLI (checker-only)
 
 Purpose: observe the unmeasured channels with versioned detectors, report-only,

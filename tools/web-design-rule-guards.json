@@ -152,6 +152,26 @@
         "tests/web/run-info.test.mjs"
       ],
       "allowlists": []
+    },
+    {
+      "id": "R13",
+      "heading": "R13: Owner layering and ports",
+      "guards": [
+        "tests/web/owner-graph-baseline.test.mjs",
+        "tests/web/owner-graph-detectors.test.mjs"
+      ],
+      "allowlists": [
+        {
+          "path": "tests/web/owner-graph-baseline.test.mjs",
+          "symbol": "OWNER_GRAPH_BASELINE",
+          "kind": "count-map"
+        },
+        {
+          "path": "tests/web/owner-graph-baseline.test.mjs",
+          "symbol": "PROJECTION_SHAPE_BASELINE",
+          "kind": "count-map"
+        }
+      ]
     }
   ]
 }
