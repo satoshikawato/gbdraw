@@ -1331,7 +1331,8 @@ export const createAppSetup = () => {
     svgActions,
     featureSelection,
     previewRuntime,
-    previewTransformInteraction
+    previewTransformInteraction,
+    projectFeatureEdits: () => projectMountedEditorIntent({ visibility: true, rerender: true, reflow: true, labels: true })
   });
   const previewFeatureSearch = createPreviewFeatureSearch({
     state,
@@ -2676,21 +2677,24 @@ export const createAppSetup = () => {
     hiddenLabelTextMessage,
     requestLabelTextChangeByFeatureId,
     requestLabelTextChangeByKey,
-    reconcileFeatureVisibility,
+    projectFeatureVisibility,
     reconcileLabelOverrides,
     resetAllLabelTextOverrides
   } = featureActions;
 
   // One projection of the canonical editor intent onto the mounted Result,
-  // shared by History apply and the display of another batch Result (D-07,
-  // R3). History restores the mounted Legend inventory; a newly displayed
-  // Result receives the diagram-wide Legend operations Generate applies.
+  // shared by History apply, the display of another batch Result, and Load
+  // Feature Edits TSV (D-07, R3). History restores the mounted Legend
+  // inventory; a newly displayed Result receives the diagram-wide Legend
+  // operations Generate applies. A loaded table (`reflow`) also places the
+  // labels, as a visibility edit does.
   const projectMountedEditorIntent = async ({
     palette = false,
     rules = false,
     prepareRules = rules,
     visibility = false,
     rerender = false,
+    reflow = false,
     legend = null,
     strokes = null,
     labels = false
@@ -2698,10 +2702,7 @@ export const createAppSetup = () => {
     if ((palette || rules) && prepareRules && !await rulePreparation.prepare()) return false;
     if (palette) svgActions.applyPaletteToSvg();
     if (rules) svgActions.applySpecificRulesToSvg();
-    if (visibility) {
-      await rulePreparation.prepareDrawn();
-      reconcileFeatureVisibility({ rerender });
-    }
+    if (visibility) await projectFeatureVisibility({ rerender, reflow });
     if (legend) reconcileLegendEntries(legend);
     if (strokes) reconcileStrokeOverrides(strokes);
     if (labels) reconcileLabelOverrides();
