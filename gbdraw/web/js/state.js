@@ -545,9 +545,11 @@ const labelTextScopeDialog = reactive({
 });
 
 // A label text edit on a feature that has no label in the displayed Result.
+// `reason` is the label absence reason (label-actions.js) the dialog words.
 const hiddenLabelTextDialog = reactive({
   show: false,
-  featureId: ''
+  featureId: '',
+  reason: ''
 });
 
 // Label visibility On that the diagram cannot draw (Owner Q1, Q2): why, and

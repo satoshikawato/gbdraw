@@ -330,6 +330,7 @@ export const setupWatchers = ({
       labelTextScopeDialog.matchingCount = 0;
       hiddenLabelTextDialog.show = false;
       hiddenLabelTextDialog.featureId = '';
+      hiddenLabelTextDialog.reason = '';
       resetRightDrawer();
       linearReorderNotice.value = '';
     }

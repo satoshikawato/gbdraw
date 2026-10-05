@@ -6300,7 +6300,7 @@
                         <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
                             <h3 class="text-lg font-bold text-slate-800 mb-2">Label Not Shown</h3>
                             <p class="text-sm text-slate-600 mb-4">
-                                This feature has no label in the current Result. With the current Show Labels and label filter settings, the edited text will not appear.
+                                {{ hiddenLabelTextMessage }}
                             </p>
                             <div class="flex flex-col gap-2">
                                 <button @click="handleHiddenLabelTextChoice('show')"

@@ -18,6 +18,7 @@ from pandas import DataFrame
 
 from ..core.color import normalize_hex_color
 from ..exceptions import InputFileError, ParseError, ValidationError
+from .table_text import read_literal_table
 
 logger = logging.getLogger(__name__)
 
@@ -223,12 +224,10 @@ def load_default_colors(
     if user_defined_default_colors:
         try:
             user_df = (
-                pd.read_csv(
+                read_literal_table(
                     user_defined_default_colors,
-                    sep="\t",
                     names=column_names,
-                    header=None,
-                    dtype=str,
+                    engine="c",
                 ).set_index("feature_type")
             )
             # Drop rows with missing colour cells
@@ -289,16 +288,11 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
         return None
 
     try:
-        df = pd.read_csv(
+        df = read_literal_table(
             color_table_file,
-            sep="\t",
-            header=None,
             names=required_cols,
-            dtype=str,
             keep_default_na=False,  # "None", "NA" and "null" are values, not blanks
             na_values=[""],
-            on_bad_lines="error",  # raise on any row with wrong number of fields
-            engine="python",  # required for on_bad_lines
         )
     except pd.errors.ParserError as e:
         logger.error(f"ERROR: Malformed line in '{color_table_file}': {e}")
