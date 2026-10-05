@@ -1465,7 +1465,6 @@ const createLayoutPreferences = () => ({
   const snapshots = createHistorySnapshotService({
     state,
     fileStore,
-    buildLegendEntryOwners: () => entryOwners,
     buildConfigData: () => ({ form: state.form, adv: state.adv }),
     buildFeatureStateData: () => {
       forbiddenArtifactBuilds += 1;
@@ -1484,8 +1483,23 @@ const createLayoutPreferences = () => ({
       throw new Error('Results must not be serialized for intent');
     }
   });
+  // R13: the Legend and composition owners are created after the snapshot
+  // service and register their captures once they exist. Until then the
+  // intent holds neither capture, as a service without those owners.
+  const unregisteredIntent = await snapshots.buildHistoryIntent();
+  assert.equal(Object.hasOwn(unregisteredIntent.editorState.legend, 'entryOwners'), false);
+  assert.equal(Object.hasOwn(unregisteredIntent.ui, 'compositionUserDeltas'), false);
+  assert.throws(() => snapshots.registerCapture('legendOrder', () => []), /Unknown History intent capture: legendOrder/);
+  snapshots.registerCapture('legend', () => entryOwners);
+  const compositionRecord = { 'result-2': { primary: [[4, 5]] } };
+  snapshots.registerCapture('composition', () => compositionRecord);
   const intent = await snapshots.buildHistoryIntent();
   assert.deepEqual(intent.editorState.legend.entries, [{ caption: 'tRNA', color: '#e8b441' }]);
+  assert.deepEqual(intent.ui.compositionUserDeltas, compositionRecord);
+  compositionRecord['result-2'].primary[0][0] = 9;
+  assert.deepEqual(intent.ui.compositionUserDeltas['result-2'].primary, [[4, 5]], 'the intent holds a copy of the capture');
+  snapshots.registerCapture('composition', null);
+  assert.equal(Object.hasOwn((await snapshots.buildHistoryIntent()).ui, 'compositionUserDeltas'), false);
   state.legendEntries.value = [{ caption: 'tRNA', color: '#c026d3' }];
   await snapshots.applyHistoryIntent(intent, { changes: [{ path: ['editorState'] }] });
   assert.deepEqual(state.legendEntries.value, [{ caption: 'tRNA', color: '#e8b441' }]);

@@ -14,7 +14,8 @@ export const createLegendManager = ({
   state,
   rulePreparation,
   commitSpecificRules,
-  history = null,
+  beginHistoryTransaction = null,
+  commitHistoryTransaction = null,
   previewRuntime = null,
   getCommittedRequest = () => null
 }) => {
@@ -28,6 +29,7 @@ export const createLegendManager = ({
   const sortActions = createLegendSortActions({
     state,
     extractLegendEntries: entryActions.extractLegendEntries,
+    orderMountedLegend: entryActions.orderMountedLegend,
     previewRuntime
   });
   const strokeActions = createLegendStrokeActions({ state, previewRuntime });
@@ -39,7 +41,8 @@ export const createLegendManager = ({
   const dragActions = createLegendDragActions({
     state,
     extractLegendEntries: entryActions.extractLegendEntries,
-    history,
+    beginHistoryTransaction,
+    commitHistoryTransaction,
     previewRuntime
   });
 

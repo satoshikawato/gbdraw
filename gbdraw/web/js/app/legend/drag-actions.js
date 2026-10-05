@@ -7,7 +7,13 @@ import {
 } from '../legend-layout/composition-actions.js';
 import { replaceLeadingTranslate } from '../legend-layout/transform-utils.js';
 
-export const createLegendDragActions = ({ state, extractLegendEntries, history = null, previewRuntime = null }) => {
+export const createLegendDragActions = ({
+  state,
+  extractLegendEntries,
+  beginHistoryTransaction = null,
+  commitHistoryTransaction = null,
+  previewRuntime = null
+}) => {
   const {
     svgContainer,
     legendDragging,
@@ -81,8 +87,8 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
     pendingLegendPointer = null;
     legendDragContext = { binding, svg };
     // The drag gesture owns its transaction and settles a focused control's (N-18).
-    legendDragTxPromise = history?.begin
-      ? history.begin('Move legend', { source: 'legend-drag', owner: Symbol('Move legend') })
+    legendDragTxPromise = beginHistoryTransaction
+      ? beginHistoryTransaction('Move legend', { source: 'legend-drag', owner: Symbol('Move legend') })
       : null;
     legendDragging.value = true;
     legendDragStart.x = e.clientX;
@@ -131,7 +137,7 @@ export const createLegendDragActions = ({ state, extractLegendEntries, history =
 
     const tx = legendDragTxPromise ? await legendDragTxPromise : null;
     legendDragTxPromise = null;
-    if (tx && history?.commit) await history.commit(tx);
+    if (tx && commitHistoryTransaction) await commitHistoryTransaction(tx);
   };
 
   const refreshLegendDragAffordances = () => {

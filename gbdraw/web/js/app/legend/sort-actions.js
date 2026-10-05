@@ -1,12 +1,7 @@
-import { getAllFeatureLegendGroups, orderLegendEntries } from './utils.js';
-
-export const createLegendSortActions = ({ state, extractLegendEntries, previewRuntime = null }) => {
-  const { svgContainer, legendEntries, originalLegendOrder } = state;
-
-  const getCurrentSvg = () => {
-    if (!svgContainer.value) return null;
-    return svgContainer.value.querySelector('svg');
-  };
+// Sort and Move compute the requested caption order; the Legend entry owner
+// orders the mounted Legend through the `orderMountedLegend` port (R3, R13).
+export const createLegendSortActions = ({ state, extractLegendEntries, orderMountedLegend, previewRuntime = null }) => {
+  const { legendEntries, originalLegendOrder } = state;
 
   const persistLegendOrder = () => {
     previewRuntime?.commitActiveResultEdit('legend-order');
@@ -16,16 +11,8 @@ export const createLegendSortActions = ({ state, extractLegendEntries, previewRu
   const applyLegendEntryOrder = (captionOrder) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const svg = getCurrentSvg();
-    if (!svg) return;
-
-    const targetGroups = getAllFeatureLegendGroups(svg);
-    if (targetGroups.length === 0) return;
-
-    let changed = false;
-    for (const targetGroup of targetGroups) {
-      changed = orderLegendEntries(targetGroup, captionOrder) || changed;
-    }
+    const changed = orderMountedLegend(captionOrder);
+    if (changed === null) return;
 
     if (!changed) {
       const currentOrder = legendEntries.value.map((entry) => entry.caption);

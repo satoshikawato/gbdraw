@@ -13,7 +13,8 @@ import { setClassToken } from '../../services/svg-serialization.js';
 
 export const createDiagramDragActions = ({
   state,
-  history = null,
+  beginHistoryTransaction = null,
+  commitHistoryTransaction = null,
   previewRuntime = null,
   similarityAlignmentLifecycle = null
 }) => {
@@ -83,8 +84,8 @@ export const createDiagramDragActions = ({
 
   const beginDragTransaction = (label) => {
     // Each drag gesture owns its transaction and settles a focused control's (N-18).
-    diagramDragTxPromise = history?.begin
-      ? history.begin(label, { source: 'diagram-drag', owner: Symbol(label) })
+    diagramDragTxPromise = beginHistoryTransaction
+      ? beginHistoryTransaction(label, { source: 'diagram-drag', owner: Symbol(label) })
       : null;
   };
 
@@ -466,7 +467,7 @@ export const createDiagramDragActions = ({
     previewRuntime?.commitActiveResultEdit('diagram-drag');
     const tx = diagramDragTxPromise ? await diagramDragTxPromise : null;
     diagramDragTxPromise = null;
-    if (tx && history?.commit) await history.commit(tx);
+    if (tx && commitHistoryTransaction) await commitHistoryTransaction(tx);
   };
 
   const setupDiagramDrag = (preserveOffset = false) => {

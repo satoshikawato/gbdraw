@@ -563,8 +563,6 @@ export const createHistorySnapshotService = ({
   applyConfigData = null,
   buildUiStateData = null,
   applyUiStateData = null,
-  buildCompositionIntent = null,
-  buildLegendEntryOwners = null,
   buildFeatureStateData = null,
   applyFeatureStateData = null,
   buildEditorStateData = null,
@@ -590,6 +588,15 @@ export const createHistorySnapshotService = ({
 
   const setAfterApplyHistoryIntent = (callback) => {
     afterApplyHistoryIntent = typeof callback === 'function' ? callback : null;
+  };
+
+  // Intent captures of owners created after this service (R13): the
+  // composition root registers each once its owner exists. An unregistered
+  // capture adds nothing to the intent, as for a service without that owner.
+  const captures = { legend: null, composition: null };
+  const registerCapture = (name, capture) => {
+    if (!Object.hasOwn(captures, name)) throw new Error(`Unknown History intent capture: ${name}`);
+    captures[name] = typeof capture === 'function' ? capture : null;
   };
 
   const setGeneratedArtifactRuntimeOwner = (owner) => {
@@ -1258,7 +1265,7 @@ export const createHistorySnapshotService = ({
     const editorState = {
       legend: {
         entries: getRef(state.legendEntries, []),
-        ...(typeof buildLegendEntryOwners === 'function' ? { entryOwners: buildLegendEntryOwners() } : {}),
+        ...(captures.legend ? { entryOwners: captures.legend() } : {}),
         deletedEntries: getRef(state.deletedLegendEntries, []),
         colorOverrides: state.legendColorOverrides,
         strokeOverrides: state.legendStrokeOverrides,
@@ -1275,9 +1282,7 @@ export const createHistorySnapshotService = ({
     };
 
     const uiIntent = buildUiIntentData(ui);
-    const compositionDeltas = typeof buildCompositionIntent === 'function'
-      ? cloneJsonData(buildCompositionIntent())
-      : null;
+    const compositionDeltas = captures.composition ? cloneJsonData(captures.composition()) : null;
     if (compositionDeltas) uiIntent.compositionUserDeltas = compositionDeltas;
 
     return cloneJsonData({
@@ -1465,6 +1470,7 @@ export const createHistorySnapshotService = ({
     compareGeneratedArtifactHandles,
     buildHistoryIntent,
     installGeneratedArtifactOwnerSet,
+    registerCapture,
     restoreGeneratedArtifactHandle,
     setGeneratedArtifactIdentity,
     setGeneratedArtifactRuntimeOwner,
