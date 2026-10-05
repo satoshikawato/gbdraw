@@ -398,6 +398,23 @@ corrected. Passing evidence does not make incorrect behavior normative.
 
 ## Product Decision records
 
+Record requirement from 2026-10-05 (`gbdraw/web/CLAUDE.md` R13): a decision
+in which one editor domain follows another (a hidden feature hides its label,
+a label action shows its feature, a slot input routes through placement)
+names, in its Choice and in its receipt's `Must preserve` or `Normative
+outcome`, the **reaction owner** (the module that owns the reaction), the
+**channel** (`port`, `root-projection`, or `event`), and the **projection
+function**. Records accepted before this date keep their text; their reaction
+owners are recorded by the runtime pull requests of the owner-coupling plan
+(`docs/internal/WEB_OWNER_COUPLING_PREVENTION_IMPLEMENTATION_PLAN_2026-10-05.md`,
+Phase E): F-3 and `PD-OI-066` label-follows-feature → `app/feature-editor/visibility-actions.js`,
+`port` (`applyFeatureVisibilityToLabels`), `projectFeatureVisibility`;
+Owner Q2 show-feature-and-label → `app/feature-editor/visibility-actions.js`,
+`port` (`setFeatureVisibility`), `projectFeatureVisibility`; Owner Q3
+slot inputs → `app/feature-editor/placement-actions.js`, `port`
+(`trackLayoutActions`), pending the E7 direction.
+
+
 ### PD-OI-001: LOSATP raw-search limit fresh defaults
 
 - Concern key: `diagram-generation.losatp-candidate-limit-default`
