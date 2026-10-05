@@ -28,6 +28,11 @@ write-up of a release.
   in CSV quotes now keeps those quotes in the value, so remove them from such
   files. The Feature override, Feature placement, and Annotation tables are
   unchanged.
+- Label whitelist, Qualifier priority, and Default colors file imports (web
+  app): a row with too many or too few tab-separated columns is now rejected
+  with a table error that names the row and the required column count. The
+  import used to skip a short row and ignore extra columns, so a file that the
+  CLI rejects was accepted with rows dropped.
 - Labels (web app): applying **Label visibility** **On** now asks **Feature Is
   Hidden** also for a feature that a **Feature Visibility** rule hides, for
   example a rule with a record ID, another qualifier, or a `hash`, `location`,

@@ -3,15 +3,24 @@ import { diagnosticError } from '../services/error-normalization.js';
 
 const SPECIFIC_RULE_COLUMNS = Object.freeze(['feature_type', 'qualifier', 'pattern', 'color']);
 
+// Python reads these tables with a fixed column count and rejects any other row
+// (gbdraw/io/table_text.py::read_literal_table), so the import does too (R4). The
+// diagnostic is the one the Label override parser uses.
+const requireColumnCount = (parts, columnCount, row) => {
+  if (parts.length !== columnCount) {
+    throw diagnosticError('TABLE_INVALID', { row, columnCount, reason: 'FIELDS' });
+  }
+};
+
 export const parseColorTable = (text) => {
   const colors = {};
   let count = 0;
   const lines = text.split(/\r?\n/);
 
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
     if (!line.trim() || line.trim().startsWith('#') || line.trim().startsWith('[')) continue;
     const parts = line.split('\t');
-    if (parts.length < 2) continue;
+    requireColumnCount(parts, 2, index + 1);
     const key = parts[0].trim();
     const color = parts[1].trim();
     if (key.toLowerCase() === 'feature_type' && color.toLowerCase() === 'color') continue;
@@ -95,10 +104,10 @@ export const parsePriorityRules = (text) => {
   const rules = [];
   const lines = text.split(/\r?\n/);
 
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
     if (!line.trim() || line.trim().startsWith('#')) continue;
     const parts = line.split('\t');
-    if (parts.length < 2) continue;
+    requireColumnCount(parts, 2, index + 1);
     if (
       parts[0].trim().toLowerCase() === 'feature_type' &&
       parts[1].trim().toLowerCase() === 'priorities'
@@ -113,10 +122,10 @@ export const parseWhitelistRules = (text) => {
   const rules = [];
   const lines = text.split(/\r?\n/);
 
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
     if (!line.trim() || line.trim().startsWith('#')) continue;
     const parts = line.split('\t');
-    if (parts.length < 3) continue;
+    requireColumnCount(parts, 3, index + 1);
     rules.push({
       feat: parts[0].trim(),
       qual: parts[1].trim(),

@@ -32,7 +32,7 @@ await writeFile(
   'utf8'
 );
 
-const { parseColorTable, parsePriorityRules, parseSpecificRules, serializeSpecificRules } = await import(
+const { parseColorTable, parsePriorityRules, parseSpecificRules, parseWhitelistRules, serializeSpecificRules } = await import(
   pathToFileURL(join(tempDir, 'file-imports.js'))
 );
 const {
@@ -202,3 +202,26 @@ assert.deepEqual(buildLegendIntents(canonicalRules).intents, [
     delete globalThis.document;
   }
 }
+
+// OV-28: the import parsers reject a row of the wrong width like Python does
+// (OV-25), with the diagnostic the Label override parser uses.
+const wrongWidthDiagnostic = (row, columnCount) => ({
+  code: 'TABLE_INVALID',
+  context: { row, columnCount, reason: 'FIELDS' }
+});
+for (const [name, parse, width, valid] of [
+  ['Label whitelist', parseWhitelistRules, 3, 'CDS\tproduct\tkinase'],
+  ['Qualifier priority', parsePriorityRules, 2, 'CDS\tgene,product'],
+  ['Default colors', parseColorTable, 2, 'CDS\t#54bcf8']
+]) {
+  const cells = valid.split('\t');
+  const longRow = [...cells, 'extra'].join('\t');
+  const shortRow = cells.slice(0, -1).join('\t');
+  assert.throws(() => parse(`${valid}\n${longRow}\n`), wrongWidthDiagnostic(2, width), `${name}: extra column`);
+  assert.throws(() => parse(`${longRow}\n${valid}\n`), wrongWidthDiagnostic(1, width), `${name}: extra column on the first row`);
+  assert.throws(() => parse(`${valid}\n\n${shortRow}\n`), wrongWidthDiagnostic(3, width), `${name}: short row`);
+  assert.throws(() => parse(`${valid}\r\n${longRow}\r\n`), wrongWidthDiagnostic(2, width), `${name}: CRLF`);
+  assert.doesNotThrow(() => parse(`\n${valid}\n\n${valid}\r\n`), `${name}: valid rows and blank lines`);
+}
+// A whitelist keyword may be empty; the row still has three cells.
+assert.deepEqual(parseWhitelistRules('CDS\tproduct\t\n').rules, [{ feat: 'CDS', qual: 'product', key: '' }]);
