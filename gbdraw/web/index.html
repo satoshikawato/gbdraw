@@ -1336,7 +1336,7 @@
         <button @click="cancelGeneration"
                 :disabled="generationCancelRequested"
                 class="btn mt-6 px-5 py-2 text-sm bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 disabled:opacity-60 disabled:cursor-wait flex items-center gap-2">
-            <i :class="generationCancelRequested ? 'ph ph-spinner animate-spin' : 'ph ph-x-circle'"></i>
+            <i :class="generationCancelRequested ? 'ph ph-spinner animate-spin' : 'ph ph-x-circle'" aria-hidden="true"></i>
             <span v-text="generationCancelRequested ? 'Canceling...' : 'Cancel'"></span>
         </button>
     </div>
@@ -1352,21 +1352,21 @@
                 <div class="app-toolbar flex items-center gap-2 min-w-0">
                 <div class="app-history-actions flex gap-0.5">
                     <button @click="undoHistory" :disabled="!canUndoHistory" data-history-ignore class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1.5 py-0.5 rounded border border-slate-200 bg-white flex items-center disabled:opacity-40 disabled:cursor-not-allowed" :title="undoHistoryTitle" aria-label="Undo">
-                        <i class="ph ph-arrow-u-up-left"></i>
+                        <i class="ph ph-arrow-u-up-left" aria-hidden="true"></i>
                     </button>
                     <button @click="redoHistory" :disabled="!canRedoHistory" data-history-ignore class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1.5 py-0.5 rounded border border-slate-200 bg-white flex items-center disabled:opacity-40 disabled:cursor-not-allowed" :title="redoHistoryTitle" aria-label="Redo">
-                        <i class="ph ph-arrow-u-up-right"></i>
+                        <i class="ph ph-arrow-u-up-right" aria-hidden="true"></i>
                     </button>
                 </div>
                 <div class="app-file-actions ml-2 flex gap-0.5 border-l border-slate-300 pl-2">
                     <button data-history-managed @click="resetSettings" class="app-config-button text-[11px] font-bold text-slate-500 hover:text-amber-700 px-1 py-0.5 rounded border border-amber-200 bg-amber-50 flex items-center gap-0.5" title="Reset Settings" aria-label="Reset Settings" :disabled="!semanticMutationAvailable">
-                        <i class="ph ph-arrow-clockwise"></i> Reset Settings
+                        <i class="ph ph-arrow-clockwise" aria-hidden="true"></i> Reset Settings
                     </button>
                     <button data-history-ignore @click="saveSessionWithTitle" :disabled="!sessionSaveAvailable" :aria-busy="sessionSavePending" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5 disabled:opacity-40 disabled:cursor-wait" title="Save the current Result and settings draft without generating" aria-label="Save Session" aria-describedby="session-save-help">
-                        <i :class="sessionSavePending ? 'ph ph-spinner animate-spin' : 'ph ph-archive'"></i> Save Session
+                        <i :class="sessionSavePending ? 'ph ph-spinner animate-spin' : 'ph ph-archive'" aria-hidden="true"></i> Save Session
                     </button>
                     <button data-history-managed @click="$refs.sessionInput.click()" :disabled="!sessionLoadAvailable" :aria-busy="sessionImportPending" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed" title="Load Session" aria-label="Load Session">
-                        <i class="ph ph-archive-tray"></i> Load Session
+                        <i class="ph ph-archive-tray" aria-hidden="true"></i> Load Session
                     </button>
                     <input data-history-managed type="file" ref="sessionInput" accept=".json,.gz,application/json,application/gzip" class="hidden" @change="importSession">
                     <span v-if="sessionBusyReason && !sessionSavePending && !sessionImportPending" data-session-busy-reason role="status" aria-live="polite" class="text-[10px] text-amber-700">{{ sessionBusyReason }}</span>
@@ -1377,14 +1377,14 @@
                 <div class="app-session-actions flex items-center gap-1 min-w-0">
                     <span class="app-session-label text-[10px] uppercase tracking-wide text-slate-400 font-semibold">Session</span>
                     <button @click="editSessionTitle" class="app-session-button text-[11px] font-semibold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-slate-200 bg-white flex items-center gap-0.5 w-32 min-w-0 justify-start" :disabled="!semanticMutationAvailable">
-                        <i class="ph ph-pencil-simple"></i>
+                        <i class="ph ph-pencil-simple" aria-hidden="true"></i>
                         <span class="truncate">{{ sessionTitleLabel }}</span>
                     </button>
                 </div>
 
                 <div class="mode-switch flex bg-slate-100 p-1 rounded-lg">
-                    <button type="button" aria-label="Circular" :aria-pressed="mode === 'circular'" @click="setDiagramMode('circular')" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!semanticMutationAvailable"><i class="ph ph-circle"></i> Circular</button>
-                    <button type="button" aria-label="Linear" :aria-pressed="mode === 'linear'" @click="setDiagramMode('linear')" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!semanticMutationAvailable"><i class="ph ph-ruler"></i> Linear</button>
+                    <button type="button" aria-label="Circular" :aria-pressed="mode === 'circular'" @click="setDiagramMode('circular')" :class="mode === 'circular' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!semanticMutationAvailable"><i class="ph ph-circle" aria-hidden="true"></i> Circular</button>
+                    <button type="button" aria-label="Linear" :aria-pressed="mode === 'linear'" @click="setDiagramMode('linear')" :class="mode === 'linear' ? 'bg-white text-blue-600 shadow ring-1 ring-black/5' : 'text-slate-500 hover:text-slate-700'" class="app-mode-button px-3 py-1 rounded-md text-sm font-bold transition-all flex items-center gap-1.5" :disabled="!semanticMutationAvailable"><i class="ph ph-ruler" aria-hidden="true"></i> Linear</button>
                 </div>
             </div>
         </div>
@@ -1399,7 +1399,7 @@
 
                 <div class="card border-l-4 border-l-blue-500">
                     <div class="card-header min-w-0">
-                        <i class="ph ph-folder-open text-xl"></i>
+                        <i class="ph ph-folder-open text-xl" aria-hidden="true"></i>
                         <span class="min-w-0 flex-1">Input Genomes</span>
                     </div>
 
@@ -1453,7 +1453,7 @@
                         </section>
                         <details ref="circularRecordPresentationPanel" data-circular-record-presentation class="rounded border border-slate-200 bg-white/70 p-2">
                             <summary aria-label="Circular record presentation" data-history-ignore>
-                                <i class="ph ph-selection"></i>
+                                <i class="ph ph-selection" aria-hidden="true"></i>
                                 Single-record crop, orientation and titles
                             </summary>
                             <div class="pt-2 space-y-2">
@@ -1484,7 +1484,7 @@
                                     </div>
                                     <div class="pt-1 border-t border-slate-200 border-dashed">
                                         <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
-                                            <i class="ph ph-crop"></i> Region (optional) <span class="text-[9px] font-normal">Applies on Generate</span>
+                                            <i class="ph ph-crop" aria-hidden="true"></i> Region (optional) <span class="text-[9px] font-normal">Applies on Generate</span>
                                             <help-tip id="help-circular-region" text="Use 1-based inclusive coordinates within the selected record. Both values are required and must be within record bounds."></help-tip>
                                         </div>
                                         <div class="grid grid-cols-2 gap-2">
@@ -1506,7 +1506,7 @@
                         </details>
                         <details class="rounded border border-slate-200 bg-white/70 p-2">
                             <summary aria-label="Depth TSV tracks">
-                                <i class="ph ph-chart-bar"></i>
+                                <i class="ph ph-chart-bar" aria-hidden="true"></i>
                                 Depth TSV tracks
                                 <span v-if="hasCircularDepthFiles" class="ml-auto text-[10px] font-semibold text-slate-400">{{ depthTrackCountLabel(files.c_depth) }}</span>
                             </summary>
@@ -1591,7 +1591,7 @@
                                     <div class="flex items-center justify-between gap-2">
                                         <div class="text-[10px] font-bold text-slate-500 truncate">#{{ track.index + 1 }} {{ track.config.label || 'Depth' }}</div>
                                         <button type="button" @click="removeCircularDepthTrack(track.index)" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1" :disabled="!semanticMutationAvailable">
-                                            <i class="ph ph-trash"></i> Remove
+                                            <i class="ph ph-trash" aria-hidden="true"></i> Remove
                                         </button>
                                     </div>
                                     <div class="grid grid-cols-[1fr_44px] gap-1.5 items-end">
@@ -1649,7 +1649,7 @@
                                     ></file-uploader>
                                 </div>
                                 <button type="button" @click="addCircularDepthTrack" class="btn btn-secondary text-xs w-full" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-plus"></i> Add TSV
+                                    <i class="ph ph-plus" aria-hidden="true"></i> Add TSV
                                 </button>
                             </div>
                         </details>
@@ -1661,11 +1661,11 @@
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" :checked="lInputType === 'gff'" @change="setLinearInputType('gff')" value="gff" class="text-blue-600" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
                         </div>
                         <div v-if="linearReorderNotice" class="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 flex items-start gap-1.5">
-                            <i class="ph ph-warning-circle text-sm mt-0.5"></i>
+                            <i class="ph ph-warning-circle text-sm mt-0.5" aria-hidden="true"></i>
                             <span>{{ linearReorderNotice }}</span>
                         </div>
                         <div v-if="linearSourceMoveBlockedReason" data-linear-source-move-blocked class="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 flex items-start gap-1.5">
-                            <i class="ph ph-warning-circle text-sm mt-0.5"></i>
+                            <i class="ph ph-warning-circle text-sm mt-0.5" aria-hidden="true"></i>
                             <span>{{ linearSourceMoveBlockedReason }}</span>
                         </div>
                         <div data-linear-record-list class="min-w-0 space-y-3">
@@ -1807,7 +1807,7 @@
                                             @click="clearLinearSourceDepthFile(source, track.index)"
                                             class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1"
                                          :disabled="!semanticMutationAvailable">
-                                            <i class="ph ph-trash"></i> Remove from all records
+                                            <i class="ph ph-trash" aria-hidden="true"></i> Remove from all records
                                         </button>
                                     </div>
                                     <button
@@ -1816,7 +1816,7 @@
                                         :aria-label="`Add Depth TSV series from file ${sourceIndex + 1}`"
                                         class="btn btn-secondary min-w-0 w-full text-xs"
                                      :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-plus"></i> Add Depth TSV series
+                                        <i class="ph ph-plus" aria-hidden="true"></i> Add Depth TSV series
                                     </button>
                                 </div>
                             </details>
@@ -1836,7 +1836,7 @@
                                 >
                             <details class="mt-2 min-w-0 rounded border border-slate-200 bg-white/70 p-2" :data-linear-record-options="seq.uid">
                                 <summary role="button" :aria-label="`Record options for sequence ${idx + 1}`" class="linear-secondary-summary">
-                                    <i class="ph ph-sliders-horizontal"></i>
+                                    <i class="ph ph-sliders-horizontal" aria-hidden="true"></i>
                                     <span v-if="source.records.length > 1" class="min-w-0 truncate" :title="linearComparisonRecordLabel(seq.uid)">{{ linearComparisonRecordLabel(seq.uid) }}</span>
                                     <span v-else>Record options</span>
                                     <span
@@ -1854,7 +1854,7 @@
 
                             <details v-if="source.records.length > 1" class="rounded border border-slate-200 bg-white/70 p-2">
                                 <summary>
-                                    <i class="ph ph-chart-bar"></i>
+                                    <i class="ph ph-chart-bar" aria-hidden="true"></i>
                                     Per-record Depth TSV
                                     <span v-if="hasLinearDepthFiles(seq)" class="ml-auto text-[10px] font-semibold text-slate-400">{{ depthTrackCountLabel(seq.depth) }}</span>
                                 </summary>
@@ -1892,7 +1892,7 @@
                             </div>
                             <div class="mt-2 pt-2 border-t border-slate-200 border-dashed">
                                 <div class="text-[10px] text-slate-500 font-bold mb-1 flex items-center gap-1">
-                                    <i class="ph ph-crop"></i> Region (optional) <span class="text-[9px] font-normal">Applies on Generate</span>
+                                    <i class="ph ph-crop" aria-hidden="true"></i> Region (optional) <span class="text-[9px] font-normal">Applies on Generate</span>
                                     <help-tip :id="`help-linear-region-${seq.uid}`" text="Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID or #index."></help-tip>
                                 </div>
                                 <div class="grid grid-cols-1 gap-2">
@@ -1951,12 +1951,12 @@
                             </section>
                         </div>
                         <div :class="linearSourceGroups.length > 1 ? 'grid-cols-2' : 'grid-cols-1'" class="grid min-w-0 gap-2" role="group" aria-label="Linear File actions">
-                            <button type="button" aria-label="Add sequence" data-linear-file-add @click="addLinearSeq()" class="btn btn-primary min-w-0 w-full bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700" :disabled="!semanticMutationAvailable"><i class="ph ph-plus"></i> Add sequence</button>
-                            <button v-if="linearSourceGroups.length > 1" type="button" aria-label="Remove last sequence" data-history-managed @click="removeLastLinearSeq($event)" class="btn btn-danger min-w-0 w-full py-2.5 text-sm font-bold" :disabled="!semanticMutationAvailable"><i class="ph ph-minus"></i> Remove</button>
+                            <button type="button" aria-label="Add sequence" data-linear-file-add @click="addLinearSeq()" class="btn btn-primary min-w-0 w-full bg-blue-600 py-2.5 text-sm font-bold text-white hover:bg-blue-700" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> Add sequence</button>
+                            <button v-if="linearSourceGroups.length > 1" type="button" aria-label="Remove last sequence" data-history-managed @click="removeLastLinearSeq($event)" class="btn btn-danger min-w-0 w-full py-2.5 text-sm font-bold" :disabled="!semanticMutationAvailable"><i class="ph ph-minus" aria-hidden="true"></i> Remove</button>
                         </div>
                         <details v-if="linearSeqs.some((seq) => hasLinearDepthFiles(seq))" data-linear-depth-settings class="min-w-0 rounded-xl border border-slate-200 bg-white p-3">
                             <summary role="button" aria-label="Depth track settings" class="linear-primary-label">
-                                <i class="ph ph-chart-bar"></i>
+                                <i class="ph ph-chart-bar" aria-hidden="true"></i>
                                 Depth track settings
                             </summary>
                             <p class="pt-1 text-[9px] leading-snug text-slate-400">These settings are shared by the same numbered series across every File and record.</p>
@@ -2034,7 +2034,7 @@
                                             <div class="text-[9px] text-slate-400">{{ linearDepthTrackCoverageLabel(track.index) }}</div>
                                         </div>
                                         <button type="button" @click="removeLinearDepthTrack(track.index)" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1" :disabled="!semanticMutationAvailable">
-                                            <i class="ph ph-trash"></i> Remove series
+                                            <i class="ph ph-trash" aria-hidden="true"></i> Remove series
                                         </button>
                                     </div>
                                     <div class="grid grid-cols-[1fr_64px_44px] gap-1.5 items-end">
@@ -2103,7 +2103,7 @@
                         </details>
                         <section data-linear-comparison-card class="min-w-0 rounded-xl border border-blue-200 bg-blue-50/30 p-3 space-y-3" aria-labelledby="linear-comparison-heading">
                             <div id="linear-comparison-heading" class="flex min-w-0 items-center gap-2 text-base font-bold text-slate-700">
-                                <i class="ph ph-arrows-left-right text-lg text-blue-600"></i>
+                                <i class="ph ph-arrows-left-right text-lg text-blue-600" aria-hidden="true"></i>
                                 <span class="min-w-0 flex-1">Comparison</span>
                             </div>
                             <div
@@ -2165,7 +2165,7 @@
                                 class="min-w-0 rounded-lg border border-slate-200 bg-white p-2"
                             >
                                 <summary role="button" aria-label="Comparison Settings" class="linear-primary-label">
-                                    <i class="ph ph-sliders-horizontal"></i>
+                                    <i class="ph ph-sliders-horizontal" aria-hidden="true"></i>
                                     Settings
                                     <span v-if="linearComparisonUi.errorDisclosureKeys.includes('settings')" class="ml-auto rounded bg-red-100 px-1.5 py-0.5 text-[10px] text-red-700">{{ linearComparisonUi.errorBadge?.label }}</span>
                                 </summary>
@@ -2258,7 +2258,7 @@
                                                 </select>
                                             </div>
                                         </div>
-                                        <div class="flex min-w-0 items-start gap-1 text-[10px] leading-snug text-slate-500"><i class="ph ph-cpu mt-0.5"></i><span>{{ losatThreadingPlanSummary }}</span></div>
+                                        <div class="flex min-w-0 items-start gap-1 text-[10px] leading-snug text-slate-500"><i class="ph ph-cpu mt-0.5" aria-hidden="true"></i><span>{{ losatThreadingPlanSummary }}</span></div>
                                     </section>
 
                                     <div v-if="linearComparisonUi.sectionKeys.settings.includes('record-genetic-codes')" class="rounded border border-slate-200 bg-slate-50 p-2 text-[10px] leading-snug text-slate-600">
@@ -2368,7 +2368,7 @@
                             class="min-w-0 rounded-lg border border-slate-200 bg-white p-2"
                         >
                             <summary role="button" aria-label="Selected pairs" class="linear-primary-label">
-                                <i class="ph ph-list-checks"></i>
+                                <i class="ph ph-list-checks" aria-hidden="true"></i>
                                 Selected pairs ({{ linearComparisonUi.activePairCount }})
                                 <span v-if="linearComparisonUi.retainedDormantDraftCount" class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800">{{ linearComparisonUi.retainedDormantDraftCount }} retained</span>
                                 <span v-if="linearComparisonUi.errorDisclosureKeys.includes('selected-pairs')" class="ml-auto rounded bg-red-100 px-1.5 py-0.5 text-[10px] text-red-700">{{ linearComparisonUi.errorBadge?.label }}</span>
@@ -2455,7 +2455,7 @@
                 </div>
 
                 <div class="card basic-settings">
-                    <div class="card-header"><i class="ph ph-sliders"></i> Basic</div>
+                    <div class="card-header"><i class="ph ph-sliders" aria-hidden="true"></i> Basic</div>
                     <div class="space-y-2">
                         <div>
                             <span class="input-label"><label for="output-prefix">Output Prefix</label> <help-tip id="help-output-prefix" :text="mode === 'circular' ? 'Prefix for output files. Leave empty to use record IDs; separate diagrams add deterministic suffixes when IDs collide.' : 'Prefix for output files. Leave empty to use out.'"></help-tip></span>
@@ -2489,19 +2489,19 @@
 
             <div class="generate-bar shrink-0 py-4 px-1 bg-white/95 backdrop-blur-sm border-y border-slate-100 z-30">
             <div v-if="circularConservationLayoutWarning" class="mb-3 flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800">
-                <i class="ph ph-warning-circle text-sm mt-0.5"></i>
+                <i class="ph ph-warning-circle text-sm mt-0.5" aria-hidden="true"></i>
                 <span>{{ circularConservationLayoutWarning }}</span>
             </div>
             <button data-history-managed type="button" aria-label="Generate Diagram" @click="runAnalysis" :disabled="!semanticMutationAvailable || (processing)"
                 class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
-                <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl"></i> Generate Diagram</span>
-                <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl"></i> {{ generationCancelRequested ? 'Canceling...' : 'Processing...' }}</span>
+                <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl" aria-hidden="true"></i> Generate Diagram</span>
+                <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl" aria-hidden="true"></i> {{ generationCancelRequested ? 'Canceling...' : 'Processing...' }}</span>
             </button>
             </div>
 
                 <div v-if="mode === 'linear'" data-linear-advanced-comparison class="card bg-slate-50/50">
                     <details data-linear-comparison-disclosure="advanced">
-                        <summary role="button" aria-label="Advanced comparison and layout"><i class="ph ph-gear-six"></i> Advanced comparison and layout</summary>
+                        <summary role="button" aria-label="Advanced comparison and layout"><i class="ph ph-gear-six" aria-hidden="true"></i> Advanced comparison and layout</summary>
                         <div class="mt-2 min-w-0 space-y-4 border-t border-slate-200 pt-3">
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('record-layout')" class="min-w-0 space-y-2">
                                 <div class="linear-primary-label">Record Layout</div>
@@ -2527,7 +2527,7 @@
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('losat-cache')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
                                 <div class="linear-primary-label">LOSAT cache</div>
                                 <p class="text-[10px] leading-snug text-slate-500">{{ losatCacheInfo.length }} cached raw result{{ losatCacheInfo.length === 1 ? '' : 's' }}. Matching canonical inputs and settings reuse cached TSV data.</p>
-                                <button type="button" @click="clearLosatCache" class="btn btn-danger w-full text-xs" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)"><i class="ph ph-trash"></i> Clear Cache</button>
+                                <button type="button" @click="clearLosatCache" class="btn btn-danger w-full text-xs" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)"><i class="ph ph-trash" aria-hidden="true"></i> Clear Cache</button>
                             </section>
 
                             <section v-if="linearComparisonUi.sectionKeys.advanced.includes('raw-results')" class="min-w-0 space-y-2 border-t border-slate-200 pt-3">
@@ -2568,7 +2568,7 @@
                                                         @click="downloadLosatPair(pair.edgeKey, pair.draft?.losatFilenameActive ? pair.draft.losatFilename : pair.resolved?.losatFilenameActive ? pair.resolved.losatFilename : '')"
                                                         class="btn btn-secondary min-w-0 w-full text-xs whitespace-normal"
                                                         :disabled="!linearLosatCacheInfoByEdgeKey[pair.edgeKey]"
-                                                    ><i class="ph ph-download-simple"></i> Save Raw LOSAT TSV</button>
+                                                    ><i class="ph ph-download-simple" aria-hidden="true"></i> Save Raw LOSAT TSV</button>
                                                 </template>
                                                 <div v-else class="flex min-w-0 flex-wrap items-center justify-between gap-1 rounded bg-amber-50 px-1.5 py-1 text-[10px] text-amber-800">
                                                     <span class="min-w-0 flex-1 truncate" :title="pair.draft.losatFilename">Retained, inactive filename: {{ pair.draft.losatFilename }}</span>
@@ -2638,10 +2638,10 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary aria-label="Region Annotations"><i class="ph ph-brackets-curly"></i> Region Annotations <help-tip text="Highlights render automatically behind the feature track. Line, Bracket, and Band render in a separate annotation lane. Custom Track Slots can override this automatic placement."></help-tip></summary>
+                        <summary aria-label="Region Annotations"><i class="ph ph-brackets-curly" aria-hidden="true"></i> Region Annotations <help-tip text="Highlights render automatically behind the feature track. Line, Bracket, and Band render in a separate annotation lane. Custom Track Slots can override this automatic placement."></help-tip></summary>
                         <div class="mt-2 space-y-2 pt-2 border-t border-slate-200">
                             <div class="flex gap-1">
-                                <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addAnnotationSet()" :disabled="!semanticMutationAvailable"><i class="ph ph-plus"></i> Add set</button>
+                                <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addAnnotationSet()" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> Add set</button>
                                 <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-1" @click="$refs.annotationTsvInput.click()" :disabled="!semanticMutationAvailable"><i aria-hidden="true" class="ph ph-upload-simple"></i> Import TSV</button>
                                 <input ref="annotationTsvInput" data-history-managed type="file" accept=".tsv,.tab,.txt,text/tab-separated-values,text/plain" class="hidden" @change="importAnnotationTableFile">
                                 <button type="button" data-history-ignore class="btn btn-secondary text-[10px] flex-1" @click="downloadAnnotationTable()" :disabled="!canDownloadAnnotationTable()" :aria-describedby="!canDownloadAnnotationTable() ? 'annotation-download-help' : null"><i aria-hidden="true" class="ph ph-download-simple"></i> Download TSV</button>
@@ -2652,8 +2652,8 @@
                             <div v-for="set in annotationSets" :key="set.id" class="rounded border border-slate-200 bg-white p-2 space-y-2">
                                 <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1">
                                     <input :value="set.id" @change="renameAnnotationSet(set, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]" aria-label="Annotation set id" :disabled="!semanticMutationAvailable">
-                                    <button type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="duplicateAnnotationSet(set)" title="Duplicate set"><i class="ph ph-copy"></i></button>
-                                    <button type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotationSet(set)" title="Delete set" :disabled="!semanticMutationAvailable"><i class="ph ph-trash"></i></button>
+                                    <button aria-label="Duplicate set" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="duplicateAnnotationSet(set)" title="Duplicate set"><i class="ph ph-copy" aria-hidden="true"></i></button>
+                                    <button aria-label="Delete set" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotationSet(set)" title="Delete set" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                 </div>
                                 <input v-model.trim="set.legendLabel" aria-label="Set legend label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Set legend label (optional)" :disabled="!semanticMutationAvailable">
                                 <div v-for="item in set.annotations" :key="item.id" class="rounded border p-1.5 space-y-1" :class="selectedAnnotation?.setId === set.id && selectedAnnotation?.id === item.id ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-200' : 'border-slate-200 bg-slate-50'">
@@ -2663,7 +2663,7 @@
                                             <option value="coordinateSpan">Coordinates</option><option value="featureSpan">Feature</option>
                                             <option v-if="item.target.kind === 'featureIdentity'" value="featureIdentity" disabled>Selected feature</option>
                                         </select>
-                                        <button type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotation(set, item)" title="Delete annotation" :disabled="!semanticMutationAvailable"><i class="ph ph-trash"></i></button>
+                                        <button aria-label="Delete annotation" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotation(set, item)" title="Delete annotation" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                     </div>
                                     <p v-if="item.target.kind === 'featureIdentity'" class="text-[10px] text-slate-600 break-words" data-annotation-feature-identity>Selected feature: {{ annotationFeatureCaption(item) }}</p>
                                     <div v-if="item.target.kind !== 'featureIdentity'">
@@ -2710,8 +2710,8 @@
                                     </div>
                                 </div>
                                 <div class="flex gap-1">
-                                    <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addCoordinateAnnotation(set)" :disabled="!semanticMutationAvailable"><i class="ph ph-plus"></i> Coordinates</button>
-                                    <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addSelectedFeatureAnnotations(set)" :disabled="!semanticMutationAvailable || (selectedFeatureCount === 0)"><i class="ph ph-selection"></i> Selected features</button>
+                                    <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addCoordinateAnnotation(set)" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i> Coordinates</button>
+                                    <button type="button" class="btn btn-secondary text-[10px] flex-1" @click="addSelectedFeatureAnnotations(set)" :disabled="!semanticMutationAvailable || (selectedFeatureCount === 0)"><i class="ph ph-selection" aria-hidden="true"></i> Selected features</button>
                                 </div>
                             </div>
                         </div>
@@ -2720,7 +2720,7 @@
 
                 <div v-if="mode === 'circular'" class="card bg-slate-50/50">
                     <details>
-                        <summary aria-label="Pairwise Comparisons"><i class="ph ph-arrows-left-right"></i> Pairwise Comparisons <help-tip text="Draw one circular pairwise comparison ring per uploaded BLAST outfmt 6/7 file or browser LOSATN/TLOSATX comparison sequence file (FASTA, GenBank, or DDBJ). Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits."></help-tip></summary>
+                        <summary aria-label="Pairwise Comparisons"><i class="ph ph-arrows-left-right" aria-hidden="true"></i> Pairwise Comparisons <help-tip text="Draw one circular pairwise comparison ring per uploaded BLAST outfmt 6/7 file or browser LOSATN/TLOSATX comparison sequence file (FASTA, GenBank, or DDBJ). Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex gap-4 text-sm font-bold">
                                 <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="circularConservation.source" value="losat" class="text-blue-600" :disabled="!semanticMutationAvailable"> Run LOSAT</label>
@@ -2769,10 +2769,10 @@
                                 </div>
                                 <div class="flex gap-2">
                                     <button @click="downloadLosatCache" class="btn btn-secondary text-xs w-full" :disabled="losatCacheInfo.length === 0">
-                                        <i class="ph ph-download-simple"></i> Save Raw LOSAT TSV
+                                        <i class="ph ph-download-simple" aria-hidden="true"></i> Save Raw LOSAT TSV
                                     </button>
                                     <button @click="clearLosatCache" class="btn btn-danger text-xs w-full" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)">
-                                        <i class="ph ph-trash"></i> Clear Cache
+                                        <i class="ph ph-trash" aria-hidden="true"></i> Clear Cache
                                     </button>
                                 </div>
                             </div>
@@ -2821,7 +2821,7 @@
                                     </div>
                                 </div>
                                 <div v-if="circularConservationLayoutWarning" class="flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-2.5 py-2 text-[11px] font-semibold text-amber-800">
-                                    <i class="ph ph-warning-circle text-sm mt-0.5"></i>
+                                    <i class="ph ph-warning-circle text-sm mt-0.5" aria-hidden="true"></i>
                                     <span>{{ circularConservationLayoutWarning }}</span>
                                 </div>
                             </div>
@@ -2848,9 +2848,9 @@
                                         </div>
                                     </div>
                                     <div class="flex items-center gap-0.5">
-                                        <button type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, -1)" :disabled="!semanticMutationAvailable || (!canMoveCircularConservationSeries(row.index, -1))" title="Move series outward"><i class="ph ph-arrow-up"></i></button>
-                                        <button type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, 1)" :disabled="!semanticMutationAvailable || (!canMoveCircularConservationSeries(row.index, 1))" title="Move series inward"><i class="ph ph-arrow-down"></i></button>
-                                        <button type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeCircularConservationSource(row.index)" title="Remove series" :disabled="!semanticMutationAvailable"><i class="ph ph-trash"></i></button>
+                                        <button aria-label="Move series outward" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, -1)" :disabled="!semanticMutationAvailable || (!canMoveCircularConservationSeries(row.index, -1))" title="Move series outward"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
+                                        <button aria-label="Move series inward" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="moveCircularConservationSeries(row.index, 1)" :disabled="!semanticMutationAvailable || (!canMoveCircularConservationSeries(row.index, 1))" title="Move series inward"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
+                                        <button aria-label="Remove series" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeCircularConservationSource(row.index)" title="Remove series" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                     </div>
                                 </div>
                                 <input
@@ -2863,7 +2863,7 @@
                                     class="hidden"
                                  :disabled="!semanticMutationAvailable">
                                 <button v-if="circularConservation.source === 'losat'" type="button" data-history-ignore class="btn btn-secondary text-xs w-full" @click="openCircularConservationComparisonFilePicker">
-                                    <i class="ph ph-plus"></i> Add Seq
+                                    <i class="ph ph-plus" aria-hidden="true"></i> Add Seq
                                 </button>
                             </div>
                         </div>
@@ -2876,7 +2876,7 @@
                     class="card border-blue-200 bg-blue-50/60"
                 >
                     <div class="flex items-start gap-2">
-                        <i class="ph ph-shield-check mt-0.5 text-blue-600"></i>
+                        <i class="ph ph-shield-check mt-0.5 text-blue-600" aria-hidden="true"></i>
                         <div class="min-w-0 flex-1">
                             <div class="text-xs font-bold text-slate-700">Preserved session settings</div>
                             <p class="mt-0.5 text-[10px] leading-snug text-slate-600">
@@ -2913,7 +2913,7 @@
 
                 <div class="card bg-slate-50/50">
                     <details :open="mode === 'linear'">
-                        <summary aria-label="Layout"><i class="ph ph-layout"></i> Layout <help-tip text="Control track placement and layout-related options."></help-tip></summary>
+                        <summary aria-label="Layout"><i class="ph ph-layout" aria-hidden="true"></i> Layout <help-tip text="Control track placement and layout-related options."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <template v-if="mode === 'linear'">
                                 <div class="text-[11px] text-slate-600 space-y-1" data-linear-label-auto-layout>
@@ -3009,7 +3009,7 @@
                                                 :title="linearTrackSlotsPanelOpen ? 'Close Custom Track Slots' : 'Open Custom Track Slots'"
                                                 @click="toggleLinearTrackSlotsPanel"
                                             >
-                                                <i class="ph" :class="linearTrackSlotsPanelOpen ? 'ph-caret-down' : 'ph-caret-right'"></i>
+                                                <i class="ph" :class="linearTrackSlotsPanelOpen ? 'ph-caret-down' : 'ph-caret-right'" aria-hidden="true"></i>
                                                 <span class="truncate">Custom Track Slots</span>
                                                 <span class="text-[9px] font-normal">Applies on Generate</span>
                                             </button>
@@ -3026,7 +3026,7 @@
                                                 @click="resetLinearTrackSlotsFromSimpleControls($event)"
                                                 title="Replace the current custom stack from the simple controls; this is the only action that regenerates it"
                                              :disabled="!semanticMutationAvailable">
-                                                <i class="ph ph-arrow-counter-clockwise"></i>
+                                                <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i>
                                                 Reset
                                             </button>
                                         </div>
@@ -3038,7 +3038,7 @@
                                         <div class="rounded border border-slate-200 bg-white/70 p-1.5 space-y-1">
                                             <div class="flex items-center justify-between gap-2 text-[10px]">
                                                 <div class="inline-flex min-w-0 items-center gap-1 font-semibold text-slate-600">
-                                                    <i class="ph ph-stack"></i>
+                                                    <i class="ph ph-stack" aria-hidden="true"></i>
                                                     <span class="truncate">Linear track stack</span>
                                                     <help-tip text="Rows before Axis render above it; rows after Axis render below it. A Depth slot selects one global series and does not control vertical order. Records with a blank TSV cell do not paint that series, while its stack space remains reserved."></help-tip>
                                                 </div>
@@ -3057,7 +3057,7 @@
                                                     class="flex items-center gap-2 rounded border border-slate-300 bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600"
                                                 >
                                                     <span class="h-px flex-1 bg-slate-300"></span>
-                                                    <span class="inline-flex items-center gap-1"><i class="ph ph-record"></i> Axis</span>
+                                                    <span class="inline-flex items-center gap-1"><i class="ph ph-record" aria-hidden="true"></i> Axis</span>
                                                     <span class="h-px flex-1 bg-slate-300"></span>
                                                 </div>
                                                 <div
@@ -3070,7 +3070,7 @@
                                                         class="flex items-center gap-2 rounded border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600"
                                                     >
                                                         <span class="h-px flex-1 bg-slate-300"></span>
-                                                        <span class="inline-flex items-center gap-1"><i class="ph ph-record"></i> Axis</span>
+                                                        <span class="inline-flex items-center gap-1"><i class="ph ph-record" aria-hidden="true"></i> Axis</span>
                                                         <span class="h-px flex-1 bg-slate-300"></span>
                                                     </div>
                                                     <div class="track-slot-row-head">
@@ -3080,13 +3080,13 @@
                                                             <option v-for="renderer in linearTrackRenderers" :key="renderer" :value="renderer">{{ linearTrackRendererLabel(renderer) }}</option>
                                                         </select>
                                                         <div class="track-slot-row-actions">
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlot(entry.index, entry.index - 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlot(entry.index, -1))" title="Move up within side"><i class="ph ph-arrow-up"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlot(entry.index, entry.index + 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlot(entry.index, 1))" title="Move down within side"><i class="ph ph-arrow-down"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotAbove(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotAbove(entry.index))" title="Move above Axis"><i class="ph ph-arrow-line-up"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotBelow(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotBelow(entry.index))" title="Move below Axis"><i class="ph ph-arrow-line-down"></i></button>
-                                                            <button v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotToAxis(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotToAxis(entry.index))" title="Track on Axis"><i class="ph ph-record"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateLinearTrackSlot(entry.index, $event)" :disabled="!canDuplicateLinearTrackSlot(entry.slot)" :title="canDuplicateLinearTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid'"><i class="ph ph-copy"></i></button>
-                                                            <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeLinearTrackSlot(entry.index, $event)" title="Delete" :disabled="!semanticMutationAvailable"><i class="ph ph-trash"></i></button>
+                                                            <button aria-label="Move up within side" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlot(entry.index, entry.index - 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlot(entry.index, -1))" title="Move up within side"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
+                                                            <button aria-label="Move down within side" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlot(entry.index, entry.index + 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlot(entry.index, 1))" title="Move down within side"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
+                                                            <button aria-label="Move above Axis" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotAbove(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotAbove(entry.index))" title="Move above Axis"><i class="ph ph-arrow-line-up" aria-hidden="true"></i></button>
+                                                            <button aria-label="Move below Axis" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotBelow(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotBelow(entry.index))" title="Move below Axis"><i class="ph ph-arrow-line-down" aria-hidden="true"></i></button>
+                                                            <button aria-label="Track on Axis" v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotToAxis(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotToAxis(entry.index))" title="Track on Axis"><i class="ph ph-record" aria-hidden="true"></i></button>
+                                                            <button type="button" aria-label="Duplicate" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateLinearTrackSlot(entry.index, $event)" :disabled="!canDuplicateLinearTrackSlot(entry.slot)" :title="canDuplicateLinearTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid'"><i class="ph ph-copy" aria-hidden="true"></i></button>
+                                                            <button aria-label="Delete" type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeLinearTrackSlot(entry.index, $event)" title="Delete" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                                         </div>
                                                     </div>
                                                     <div class="track-slot-geometry-grid">
@@ -3226,13 +3226,13 @@
                                                                 title="Positive skew color" aria-label="Positive skew color"
                                                             >
                                                             <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ linearTrackSlotHasSkewColorOverride(entry.slot, 'positive_color') ? 'Custom +' : 'Inherited +' }}</span>
-                                                            <button
+                                                            <button aria-label="Inherit positive skew color"
                                                                 type="button"
                                                                 class="btn btn-secondary h-6 w-6 p-0 text-[10px]"
                                                                 :disabled="!semanticMutationAvailable || (!linearTrackSlotHasSkewColorOverride(entry.slot, 'positive_color'))"
                                                                 @click="clearLinearTrackSlotSkewColor(entry.slot, 'positive_color')"
                                                                 title="Inherit positive skew color"
-                                                            ><i class="ph ph-x"></i></button>
+                                                            ><i class="ph ph-x" aria-hidden="true"></i></button>
                                                         </div>
                                                         <div class="flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1 py-0.5">
                                                             <input
@@ -3243,13 +3243,13 @@
                                                                 title="Negative skew color" aria-label="Negative skew color"
                                                             >
                                                             <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ linearTrackSlotHasSkewColorOverride(entry.slot, 'negative_color') ? 'Custom -' : 'Inherited -' }}</span>
-                                                            <button
+                                                            <button aria-label="Inherit negative skew color"
                                                                 type="button"
                                                                 class="btn btn-secondary h-6 w-6 p-0 text-[10px]"
                                                                 :disabled="!semanticMutationAvailable || (!linearTrackSlotHasSkewColorOverride(entry.slot, 'negative_color'))"
                                                                 @click="clearLinearTrackSlotSkewColor(entry.slot, 'negative_color')"
                                                                 title="Inherit negative skew color"
-                                                            ><i class="ph ph-x"></i></button>
+                                                            ><i class="ph ph-x" aria-hidden="true"></i></button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -3260,7 +3260,7 @@
                                                 <option v-for="renderer in linearTrackRenderers" :key="renderer" :value="renderer">{{ linearTrackRendererLabel(renderer) }}</option>
                                             </select>
                                             <button type="button" class="btn btn-secondary text-[10px] py-1 px-2 shrink-0" @click="addLinearTrackSlot(linearTrackNewRenderer, $event)" :disabled="!semanticMutationAvailable || (!canAddLinearTrackRenderer(linearTrackNewRenderer))" :title="canAddLinearTrackRenderer(linearTrackNewRenderer) ? 'Add track' : 'Add a required source first or remove the conflicting Features row'">
-                                                <i class="ph ph-plus"></i>
+                                                <i class="ph ph-plus" aria-hidden="true"></i>
                                                 Add track
                                             </button>
                                         </div>
@@ -3336,7 +3336,7 @@
                                                 :title="circularTrackSlotsPanelOpen ? 'Close Custom Track Slots' : 'Open Custom Track Slots'"
                                                 @click="toggleCircularTrackSlotsPanel"
                                             >
-                                                <i class="ph" :class="circularTrackSlotsPanelOpen ? 'ph-caret-down' : 'ph-caret-right'"></i>
+                                                <i class="ph" :class="circularTrackSlotsPanelOpen ? 'ph-caret-down' : 'ph-caret-right'" aria-hidden="true"></i>
                                                 <span class="truncate">Custom Track Slots</span>
                                                 <span class="text-[9px] font-normal">Applies on Generate</span>
                                             </button>
@@ -3353,7 +3353,7 @@
                                                 @click="resetCircularTrackSlotsFromSimpleControls($event)"
                                                 title="Replace the current custom stack from the simple controls; this is the only action that regenerates it"
                                              :disabled="!semanticMutationAvailable">
-                                                <i class="ph ph-arrow-counter-clockwise"></i>
+                                                <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i>
                                                 Reset
                                             </button>
                                         </div>
@@ -3374,7 +3374,7 @@
                                         </div>
                                         <div class="rounded border border-sky-200 bg-sky-50 px-2 py-1.5 text-[10px] leading-snug text-slate-600">
                                             <div class="flex items-center gap-1 font-semibold text-sky-800">
-                                                <i class="ph ph-eye"></i>
+                                                <i class="ph ph-eye" aria-hidden="true"></i>
                                                 <span>{{ circularTrackPresetSummary().label }}</span>
                                             </div>
                                             <div>{{ circularTrackPresetSummary().detail }}</div>
@@ -3388,7 +3388,7 @@
                                         <div class="rounded border border-slate-200 bg-white/70 p-1.5 space-y-1">
                                             <div class="flex items-center justify-between gap-2 text-[10px]">
                                                 <div class="inline-flex min-w-0 items-center gap-1 font-semibold text-slate-600">
-                                                    <i class="ph ph-stack"></i>
+                                                    <i class="ph ph-stack" aria-hidden="true"></i>
                                                     <span class="truncate">Radial track stack</span>
                                                     <help-tip text="Rows above Axis are outside the circular axis; rows below Axis are inside it. Arrow buttons reorder within the current side only. Use Move outside or Move inside to cross the Axis."></help-tip>
                                                 </div>
@@ -3409,7 +3409,7 @@
                                                     class="flex items-center gap-2 rounded border border-slate-300 bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-600"
                                                 >
                                                     <span class="h-px flex-1 bg-slate-300"></span>
-                                                    <span class="inline-flex items-center gap-1"><i class="ph ph-record"></i> Axis</span>
+                                                    <span class="inline-flex items-center gap-1"><i class="ph ph-record" aria-hidden="true"></i> Axis</span>
                                                     <span class="h-px flex-1 bg-slate-300"></span>
                                                 </div>
                                                 <div
@@ -3422,7 +3422,7 @@
                                                         class="flex items-center gap-2 rounded border border-slate-300 bg-white px-2 py-1 text-[10px] font-semibold text-slate-600"
                                                     >
                                                         <span class="h-px flex-1 bg-slate-300"></span>
-                                                        <span class="inline-flex items-center gap-1"><i class="ph ph-record"></i> Axis</span>
+                                                        <span class="inline-flex items-center gap-1"><i class="ph ph-record" aria-hidden="true"></i> Axis</span>
                                                         <span class="h-px flex-1 bg-slate-300"></span>
                                                     </div>
                                                     <div class="track-slot-row-head">
@@ -3447,17 +3447,17 @@
                                                             </option>
                                                         </select>
                                                         <div class="track-slot-row-actions">
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index - 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlot(entry.index, -1))" title="Move outward"><i class="ph ph-arrow-up"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index + 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlot(entry.index, 1))" title="Move inward"><i class="ph ph-arrow-down"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotOutside(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotOutside(entry.index))" title="Move outside Axis"><i class="ph ph-arrow-line-up"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotInside(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotInside(entry.index))" title="Move inside Axis"><i class="ph ph-arrow-line-down"></i></button>
-                                                            <button v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'ticks' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotToAxis(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotToAxis(entry.index))" title="Track on Axis"><i class="ph ph-record"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index, $event)" :disabled="!canDuplicateCircularTrackSlot(entry.slot)" :title="isManagedCircularConservationSlot(entry.slot) ? 'Comparison tracks are managed by Series' : (canDuplicateCircularTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid')"><i class="ph ph-copy"></i></button>
-                                                            <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(entry.index, $event)" :disabled="!semanticMutationAvailable || (isManagedCircularConservationSlot(entry.slot))" :title="isManagedCircularConservationSlot(entry.slot) ? 'Remove this source in Pairwise Comparisons' : 'Remove'"><i class="ph ph-trash"></i></button>
+                                                            <button aria-label="Move outward" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index - 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlot(entry.index, -1))" title="Move outward"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
+                                                            <button aria-label="Move inward" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index + 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlot(entry.index, 1))" title="Move inward"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
+                                                            <button aria-label="Move outside Axis" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotOutside(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotOutside(entry.index))" title="Move outside Axis"><i class="ph ph-arrow-line-up" aria-hidden="true"></i></button>
+                                                            <button aria-label="Move inside Axis" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotInside(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotInside(entry.index))" title="Move inside Axis"><i class="ph ph-arrow-line-down" aria-hidden="true"></i></button>
+                                                            <button aria-label="Track on Axis" v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'ticks' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotToAxis(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotToAxis(entry.index))" title="Track on Axis"><i class="ph ph-record" aria-hidden="true"></i></button>
+                                                            <button type="button" aria-label="Duplicate" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index, $event)" :disabled="!canDuplicateCircularTrackSlot(entry.slot)" :title="isManagedCircularConservationSlot(entry.slot) ? 'Comparison tracks are managed by Series' : (canDuplicateCircularTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid')"><i class="ph ph-copy" aria-hidden="true"></i></button>
+                                                            <button type="button" aria-label="Remove" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(entry.index, $event)" :disabled="!semanticMutationAvailable || (isManagedCircularConservationSlot(entry.slot))" :title="isManagedCircularConservationSlot(entry.slot) ? 'Remove this source in Pairwise Comparisons' : 'Remove'"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                                         </div>
                                                     </div>
                                                     <div v-if="circularTrackSlotHiddenBySuppress(entry.slot)" class="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-700">
-                                                        <i class="ph ph-eye-slash"></i>
+                                                        <i class="ph ph-eye-slash" aria-hidden="true"></i>
                                                         <span>{{ circularTrackSlotSuppressMessage(entry.slot) }}</span>
                                                     </div>
                                                     <div v-if="circularTrackSlotIssue(entry.slot, entry.index)" class="rounded border border-red-200 bg-red-50 px-1.5 py-1 text-[9px] text-red-700" role="alert">
@@ -3591,13 +3591,13 @@
                                                                 title="Positive skew color" aria-label="Positive skew color"
                                                             >
                                                             <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ circularTrackSlotHasSkewColorOverride(entry.slot, 'positive_color') ? 'Custom +' : 'Inherited +' }}</span>
-                                                            <button
+                                                            <button aria-label="Inherit positive skew color"
                                                                 type="button"
                                                                 class="btn btn-secondary h-6 w-6 p-0 text-[10px]"
                                                                 :disabled="!semanticMutationAvailable || (!circularTrackSlotHasSkewColorOverride(entry.slot, 'positive_color'))"
                                                                 @click="clearCircularTrackSlotSkewColor(entry.slot, 'positive_color')"
                                                                 title="Inherit positive skew color"
-                                                            ><i class="ph ph-x"></i></button>
+                                                            ><i class="ph ph-x" aria-hidden="true"></i></button>
                                                         </div>
                                                         <div class="flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1 py-0.5">
                                                             <input
@@ -3608,13 +3608,13 @@
                                                                 title="Negative skew color" aria-label="Negative skew color"
                                                             >
                                                             <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ circularTrackSlotHasSkewColorOverride(entry.slot, 'negative_color') ? 'Custom -' : 'Inherited -' }}</span>
-                                                            <button
+                                                            <button aria-label="Inherit negative skew color"
                                                                 type="button"
                                                                 class="btn btn-secondary h-6 w-6 p-0 text-[10px]"
                                                                 :disabled="!semanticMutationAvailable || (!circularTrackSlotHasSkewColorOverride(entry.slot, 'negative_color'))"
                                                                 @click="clearCircularTrackSlotSkewColor(entry.slot, 'negative_color')"
                                                                 title="Inherit negative skew color"
-                                                            ><i class="ph ph-x"></i></button>
+                                                            ><i class="ph ph-x" aria-hidden="true"></i></button>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -3632,7 +3632,7 @@
                                                     :disabled="!semanticMutationAvailable || (!canAddCircularTrackRenderer(circularTrackNewRenderer))"
                                                     :title="canAddCircularTrackRenderer(circularTrackNewRenderer) ? 'Add track' : 'Add a required source first or remove the conflicting Features row'"
                                                 >
-                                                    <i class="ph ph-plus"></i>
+                                                    <i class="ph ph-plus" aria-hidden="true"></i>
                                                     Add track
                                                 </button>
                                             </div>
@@ -3716,7 +3716,7 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary aria-label="Titles and Record Labels"><i class="ph ph-textbox"></i> Titles &amp; Record Labels <help-tip text="Adjust the plot title and record-label text."></help-tip></summary>
+                        <summary aria-label="Titles and Record Labels"><i class="ph ph-textbox" aria-hidden="true"></i> Titles &amp; Record Labels <help-tip text="Adjust the plot title and record-label text."></help-tip></summary>
                         <p class="mt-2 text-[10px] text-slate-500">Applies on Generate: plot title and record-label settings.</p>
                         <div class="mt-2 space-y-4 pt-2 border-t border-slate-200">
                             <section aria-labelledby="plot-title-settings-heading" class="space-y-2">
@@ -3812,7 +3812,7 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary aria-label="Legend settings"><i class="ph ph-list-bullets"></i> Legend · {{ legendPositionLabel(form.legend) }} <help-tip text="Adjust legend position and typography."></help-tip></summary>
+                        <summary aria-label="Legend settings"><i class="ph ph-list-bullets" aria-hidden="true"></i> Legend · {{ legendPositionLabel(form.legend) }} <help-tip text="Adjust legend position and typography."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
                                 <span class="input-label text-[10px] mb-1"><label for="legend-position">Position</label> <help-tip id="help-legend-position" text="Position of the legend. 'None' hides the legend."></help-tip></span>
@@ -3849,7 +3849,7 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary aria-label="Colors"><i class="ph ph-palette"></i> Colors <help-tip text="Customize palettes, default colors, and specific color rules."></help-tip></summary>
+                        <summary aria-label="Colors"><i class="ph ph-palette" aria-hidden="true"></i> Colors <help-tip text="Customize palettes, default colors, and specific color rules."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="bg-blue-50/60 border border-blue-200 rounded-lg p-3">
                                 <div class="flex items-center justify-between mb-2">
@@ -3862,7 +3862,7 @@
                                         <option v-for="p in specificRulePresets" :value="p.id">{{ p.label }}</option>
                                     </select>
                                     <button @click="applySpecificRulePreset" class="btn btn-primary text-xs h-7 px-3 shadow-md shadow-blue-200" :disabled="!semanticMutationAvailable || (!selectedSpecificPreset || specificRulePresetLoading)">
-                                        <i class="ph ph-magic-wand"></i>
+                                        <i class="ph ph-magic-wand" aria-hidden="true"></i>
                                         <span v-if="specificRulePresetLoading">Applying...</span>
                                         <span v-else>Apply</span>
                                     </button>
@@ -3915,7 +3915,7 @@
                                         <input type="color" v-model="newColorVal" aria-label="Add key color" class="h-8 w-10 p-0 border border-slate-300 rounded cursor-pointer">
                                     </div>
                                     <button @click.prevent="addCustomColor" class="btn btn-secondary text-xs h-8" :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-plus"></i> Add
+                                        <i class="ph ph-plus" aria-hidden="true"></i> Add
                                     </button>
                                 </div>
                                 <div class="mt-2">
@@ -3933,8 +3933,8 @@
                                 <div class="flex items-center justify-between mb-2">
                                     <h4 class="text-[11px] font-bold text-slate-500" aria-label="SPECIFIC RULES (-t)">SPECIFIC RULES (-t) <help-tip text="Color features matching qualifier values with case-insensitive Python regex. Examples: (?i)NADH and (?P&lt;name&gt;NADH). Choose a suggested qualifier or type any qualifier name."></help-tip></h4>
                                     <div v-if="manualSpecificRules.length > 0" class="flex items-center gap-2">
-                                        <button @click="downloadSpecificRulesTsv" class="text-[10px] text-blue-600 hover:text-blue-700 hover:underline"><i class="ph ph-download-simple"></i> TSV</button>
-                                        <button @click="clearAllSpecificRules" class="text-[10px] text-red-500 hover:text-red-700 hover:underline" :disabled="!semanticMutationAvailable"><i class="ph ph-trash"></i> Clear All</button>
+                                        <button @click="downloadSpecificRulesTsv" class="text-[10px] text-blue-600 hover:text-blue-700 hover:underline"><i class="ph ph-download-simple" aria-hidden="true"></i> TSV</button>
+                                        <button @click="clearAllSpecificRules" class="text-[10px] text-red-500 hover:text-red-700 hover:underline" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i> Clear All</button>
                                     </div>
                                 </div>
 
@@ -3952,9 +3952,9 @@
                                             <input :value="rule.qual" @change="setSpecificRuleField(i, 'qual', $event.target.value, $event.target)" list="specific-rule-qualifier-options" placeholder="Qualifier (choose or type)" aria-label="Qualifier name" class="form-input form-input-compact col-span-4" :disabled="!semanticMutationAvailable">
                                             <input type="color" :value="rule.color" @change="setSpecificRuleField(i, 'color', $event.target.value, $event.target)" :aria-label="`Color rule ${i + 1} color`" class="h-6 w-full p-0 border rounded cursor-pointer col-span-1" :disabled="!semanticMutationAvailable">
                                             <div class="col-span-3 flex items-center justify-end gap-0.5">
-                                                <button @click="moveSpecificRuleUp(i)" :disabled="!semanticMutationAvailable || (i === 0)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up"></i></button>
-                                                <button @click="moveSpecificRuleDown(i)" :disabled="!semanticMutationAvailable || (i === manualSpecificRules.length - 1)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down"></i></button>
-                                                <button @click="removeSpecificRule(i)" class="h-6 w-6 text-red-500 hover:text-red-700" title="Delete rule" :disabled="!semanticMutationAvailable"><i class="ph ph-trash"></i></button>
+                                                <button aria-label="Move rule up" @click="moveSpecificRuleUp(i)" :disabled="!semanticMutationAvailable || (i === 0)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
+                                                <button aria-label="Move rule down" @click="moveSpecificRuleDown(i)" :disabled="!semanticMutationAvailable || (i === manualSpecificRules.length - 1)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
+                                                <button aria-label="Delete rule" @click="removeSpecificRule(i)" class="h-6 w-6 text-red-500 hover:text-red-700" title="Delete rule" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                             </div>
                                         </div>
                                         <div class="grid grid-cols-12 gap-1">
@@ -3987,7 +3987,7 @@
                                     </div>
                                     <div class="flex gap-1">
                                         <input v-model="newSpecRule.cap" aria-label="New color rule legend caption" placeholder="Legend Caption (Optional)" class="form-input form-input-compact flex-grow">
-                                        <button @click="addSpecificRule" class="btn btn-secondary text-xs h-7 px-3" :disabled="!semanticMutationAvailable"><i class="ph ph-plus"></i></button>
+                                        <button aria-label="Add color rule" @click="addSpecificRule" class="btn btn-secondary text-xs h-7 px-3" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i></button>
                                     </div>
                                 </div>
 
@@ -4006,7 +4006,7 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary aria-label="Features"><i class="ph ph-shapes"></i> Features <help-tip text="Choose each feature type's rendering. Underlay removes it from feature lanes and labels, then highlights the full feature track behind foreground features."></help-tip></summary>
+                        <summary aria-label="Features"><i class="ph ph-shapes" aria-hidden="true"></i> Features <help-tip text="Choose each feature type's rendering. Underlay removes it from feature lanes and labels, then highlights the full feature track behind foreground features."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
                                 <span class="input-label adv-section-title">Feature Types <help-tip id="help-feature-feature-types" text="Select which feature types to draw."></help-tip></span>
@@ -4024,8 +4024,8 @@
                                             <option value="rectangle">Rectangle</option>
                                             <option value="underlay">Underlay</option>
                                         </select>
-                                        <button @click="removeFeature(f)" class="text-slate-400 hover:text-red-500 flex items-center justify-center w-4 h-4 rounded-full hover:bg-red-50 transition-colors" :disabled="!semanticMutationAvailable">
-                                            <i class="ph ph-x"></i>
+                                        <button :aria-label="`Remove ${f}`" @click="removeFeature(f)" class="text-slate-400 hover:text-red-500 flex items-center justify-center w-4 h-4 rounded-full hover:bg-red-50 transition-colors" :disabled="!semanticMutationAvailable">
+                                            <i class="ph ph-x" aria-hidden="true"></i>
                                         </button>
                                     </span>
                                     <span v-if="adv.features.length === 0" class="text-[10px] text-slate-400 italic py-1">No features selected</span>
@@ -4035,7 +4035,7 @@
                                         <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                                     </select>
                                     <button @click.prevent="addFeature" class="btn btn-secondary text-xs h-7 shrink-0" :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-plus"></i> Add
+                                        <i class="ph ph-plus" aria-hidden="true"></i> Add
                                     </button>
                                 </div>
                             </div>
@@ -4083,10 +4083,10 @@
                                             class="text-[10px] text-blue-600 hover:text-blue-700 hover:underline"
                                             title="Download TSV"
                                         >
-                                            <i class="ph ph-download-simple"></i> TSV
+                                            <i class="ph ph-download-simple" aria-hidden="true"></i> TSV
                                         </button>
                                         <button type="button" @click="addFeatureVisibilityRule" aria-label="Add feature visibility rule" class="btn btn-secondary text-xs h-7 px-2" :disabled="!semanticMutationAvailable">
-                                            <i class="ph ph-plus"></i>
+                                            <i class="ph ph-plus" aria-hidden="true"></i>
                                         </button>
                                     </div>
                                 </div>
@@ -4107,9 +4107,9 @@
                                                 </span>
                                             </div>
                                             <div class="flex items-center justify-end gap-0.5">
-                                                <button type="button" @click="moveFeatureVisibilityRuleUp(i)" :disabled="!semanticMutationAvailable || (i === 0)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up"></i></button>
-                                                <button type="button" @click="moveFeatureVisibilityRuleDown(i)" :disabled="!semanticMutationAvailable || (i === featureVisibilityManualRules.length - 1)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down"></i></button>
-                                                <button type="button" @click="removeFeatureVisibilityRule(i)" class="h-6 w-6 text-red-500 hover:text-red-700" title="Delete rule" :disabled="!semanticMutationAvailable"><i class="ph ph-trash"></i></button>
+                                                <button aria-label="Move rule up" type="button" @click="moveFeatureVisibilityRuleUp(i)" :disabled="!semanticMutationAvailable || (i === 0)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule up"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
+                                                <button aria-label="Move rule down" type="button" @click="moveFeatureVisibilityRuleDown(i)" :disabled="!semanticMutationAvailable || (i === featureVisibilityManualRules.length - 1)" class="h-6 w-6 text-slate-500 hover:text-blue-600 disabled:opacity-30" title="Move rule down"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
+                                                <button aria-label="Delete rule" type="button" @click="removeFeatureVisibilityRule(i)" class="h-6 w-6 text-red-500 hover:text-red-700" title="Delete rule" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                             </div>
                                         </div>
                                         <div class="grid grid-cols-12 gap-1 px-1 text-[9px] font-semibold uppercase text-slate-500">
@@ -4214,7 +4214,7 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary aria-label="Labels"><i class="ph ph-text-t"></i> Labels <help-tip text="Control label visibility, filtering, text settings, and circular label geometry."></help-tip></summary>
+                        <summary aria-label="Labels"><i class="ph ph-text-t" aria-hidden="true"></i> Labels <help-tip text="Control label visibility, filtering, text settings, and circular label geometry."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div v-if="mode === 'linear'">
                                 <span class="input-label text-[10px] mb-1"><label for="linear-show-labels">Show Labels</label> <help-tip id="help-label-show-labels" text="Display feature labels on the map. 'First' shows labels only for the top track. 'Top Similarity Group Record' requires LOSATP similarity-group or collinear mode."></help-tip></span>
@@ -4272,7 +4272,7 @@
                                         <div v-for="(rule, i) in manualPriorityRules" :key="i" class="flex items-center gap-1 bg-white p-1 rounded border border-slate-200 text-[10px]">
                                             <span class="w-16 font-bold truncate shrink-0" :title="rule.feat">{{rule.feat}}</span>
                                             <span class="flex-grow text-slate-600 truncate font-mono" :title="rule.order">{{rule.order}}</span>
-                                            <button @click="removePriorityRule(i)" :disabled="!semanticMutationAvailable" class="text-red-500 hover:text-red-700 px-1"><i class="ph ph-trash"></i></button>
+                                            <button aria-label="Remove priority rule" @click="removePriorityRule(i)" :disabled="!semanticMutationAvailable" class="text-red-500 hover:text-red-700 px-1"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                         </div>
                                         <div v-if="manualPriorityRules.length === 0" class="text-[10px] text-slate-400 italic text-center py-2">No priority rules defined</div>
                                     </div>
@@ -4283,7 +4283,7 @@
                                                 <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                                             </select>
                                             <input v-model="newPriorityRule.order" placeholder="product,gene,locus_tag" class="form-input text-xs p-1 h-7 flex-grow">
-                                            <button @click="addPriorityRule" class="btn btn-secondary text-xs h-7 px-3" :disabled="!semanticMutationAvailable"><i class="ph ph-plus"></i></button>
+                                            <button aria-label="Add priority rule" @click="addPriorityRule" class="btn btn-secondary text-xs h-7 px-3" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i></button>
                                         </div>
                                     </div>
 
@@ -4438,7 +4438,7 @@
 
                 <div v-if="mode === 'linear'" class="card bg-slate-50/50">
                     <details>
-                        <summary aria-label="Axis &amp; Scale"><i class="ph ph-ruler"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings plus the linear scale bar or ruler style."></help-tip></summary>
+                        <summary aria-label="Axis &amp; Scale"><i class="ph ph-ruler" aria-hidden="true"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings plus the linear scale bar or ruler style."></help-tip></summary>
                         <p class="mt-2 text-[10px] text-slate-500">Applies on Generate: scale visibility, style, interval, label sizes, and axis and scale line colors and widths.</p>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex items-center text-xs">
@@ -4578,7 +4578,7 @@
 
                 <div v-if="mode === 'circular'" class="card bg-slate-50/50">
                     <details>
-                        <summary aria-label="Axis &amp; Scale"><i class="ph ph-paint-brush"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings and the circular scale interval."></help-tip></summary>
+                        <summary aria-label="Axis &amp; Scale"><i class="ph ph-paint-brush" aria-hidden="true"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings and the circular scale interval."></help-tip></summary>
                         <p class="mt-2 text-[10px] text-slate-500">Applies on Generate: scale visibility, interval, label sizes, and axis line colors and widths.</p>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="flex items-center text-xs">
@@ -4646,7 +4646,7 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary aria-label="Dinucleotide content/skew"><i class="ph ph-dna"></i> Dinucleotide content/skew <help-tip text="Adjust dinucleotide content/skew calculation parameters and GC/skew track sizing."></help-tip></summary>
+                        <summary aria-label="Dinucleotide content/skew"><i class="ph ph-dna" aria-hidden="true"></i> Dinucleotide content/skew <help-tip text="Adjust dinucleotide content/skew calculation parameters and GC/skew track sizing."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="grid grid-cols-3 gap-1.5">
                                 <div>
@@ -4768,17 +4768,17 @@
 
                 <div class="card bg-slate-50/50">
                     <details>
-                        <summary><i class="ph ph-info"></i> About & Citation</summary>
+                        <summary><i class="ph ph-info" aria-hidden="true"></i> About & Citation</summary>
                         <div class="mt-4 space-y-4 pt-4 border-t border-slate-200 text-xs text-slate-600">
 
                             <div class="bg-blue-50 text-blue-800 p-2.5 rounded-lg border border-blue-100 leading-relaxed">
-                                <strong class="flex items-center gap-1 mb-1"><i class="ph ph-lock-key"></i> Privacy & Security</strong>
+                                <strong class="flex items-center gap-1 mb-1"><i class="ph ph-lock-key" aria-hidden="true"></i> Privacy & Security</strong>
                                 This tool runs <strong>entirely in your browser</strong> using WebAssembly (Pyodide). Uploaded genomic data is processed locally and never leaves your device.
                             </div>
                             <!-- GOOGLE_ANALYTICS_NOTICE -->
 
                             <div>
-                                <strong class="block mb-1 text-slate-700 flex items-center gap-1"><i class="ph ph-quotes"></i> How to cite</strong>
+                                <strong class="block mb-1 text-slate-700 flex items-center gap-1"><i class="ph ph-quotes" aria-hidden="true"></i> How to cite</strong>
                                 <p class="mb-1.5 text-[11px]">If you use gbdraw in your research, please cite the preprint:</p>
                                 <div class="bg-white p-2 rounded border border-slate-200 font-mono text-[10px] select-all text-slate-500 break-all">
                                     Kawato, S. (2026). gbdraw: a genome diagram generator for microbes and organelles. bioRxiv. https://doi.org/10.64898/2026.04.07.716863
@@ -4795,27 +4795,27 @@
                             </div>
 
                             <div>
-                                <strong class="block mb-1 text-slate-700 flex items-center gap-1"><i class="ph ph-scroll"></i> License & Notices</strong>
+                                <strong class="block mb-1 text-slate-700 flex items-center gap-1"><i class="ph ph-scroll" aria-hidden="true"></i> License & Notices</strong>
                                 <p class="mb-2 text-[11px]">
                                     gbdraw is released under the MIT License. Open source notices for the hosted app,
                                     vendored browser assets, and bundled fonts are available on a local static page.
                                 </p>
                                 <div class="flex gap-2">
                                     <a href="./open-source-notices.html" class="btn btn-secondary btn-sm justify-center flex-1">
-                                        <i class="ph ph-book-open-text text-lg"></i> Open Source Notices
+                                        <i class="ph ph-book-open-text text-lg" aria-hidden="true"></i> Open Source Notices
                                     </a>
                                     <a href="https://github.com/satoshikawato/gbdraw/blob/main/LICENSE.txt" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
-                                        <i class="ph ph-file-text text-lg"></i> MIT on GitHub
+                                        <i class="ph ph-file-text text-lg" aria-hidden="true"></i> MIT on GitHub
                                     </a>
                                 </div>
                             </div>
 
                             <div class="flex gap-2">
                                 <a href="https://github.com/satoshikawato/gbdraw" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
-                                    <i class="ph ph-github-logo text-lg"></i> GitHub
+                                    <i class="ph ph-github-logo text-lg" aria-hidden="true"></i> GitHub
                                 </a>
                                 <a href="https://github.com/satoshikawato/gbdraw/issues" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm justify-center flex-1">
-                                    <i class="ph ph-bug text-lg"></i> Issues
+                                    <i class="ph ph-bug text-lg" aria-hidden="true"></i> Issues
                                 </a>
                             </div>
                         </div>
@@ -4881,7 +4881,7 @@
                                       resultPanelTab === 'preview' ? 'bg-green-100 text-green-800' : 'text-slate-500 hover:bg-slate-50'
                                     ]"
                                     :aria-pressed="resultPanelTab === 'preview'">
-                                <i class="ph ph-image"></i>
+                                <i class="ph ph-image" aria-hidden="true"></i>
                                 <span>Preview</span>
                             </button>
                             <button type="button"
@@ -4893,7 +4893,7 @@
                                       !lastRunInfo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''
                                     ]"
                                     :aria-pressed="resultPanelTab === 'run-info'">
-                                <i class="ph ph-terminal-window"></i>
+                                <i class="ph ph-terminal-window" aria-hidden="true"></i>
                                 <span>Run info</span>
                             </button>
                         </div>
@@ -4911,10 +4911,10 @@
                                 <option value="600">600 (High)</option>
                             </select>
                         </div>
-                        <button type="button" aria-label="SVG" @click="downloadSVG" aria-describedby="session-export-help" class="btn btn-secondary text-sm" title="Download a static SVG for publication and conversion workflows"><i class="ph ph-download-simple"></i> SVG</button>
-                        <button @click="downloadInteractiveSVG" aria-describedby="session-export-help" class="btn btn-secondary text-sm" title="Browser-oriented SVG with embedded controls. Rich Feature Popup controls how much feature detail is embedded."><i class="ph ph-cursor-click"></i> Interactive SVG</button>
-                        <button @click="downloadPNG" aria-describedby="session-export-help" class="btn btn-primary text-sm"><i class="ph ph-download-simple"></i> PNG</button>
-                        <button @click="downloadPDF" aria-describedby="session-export-help" class="btn btn-secondary text-sm"><i class="ph ph-file-pdf"></i> PDF</button>
+                        <button type="button" aria-label="SVG" @click="downloadSVG" aria-describedby="session-export-help" class="btn btn-secondary text-sm" title="Download a static SVG for publication and conversion workflows"><i class="ph ph-download-simple" aria-hidden="true"></i> SVG</button>
+                        <button @click="downloadInteractiveSVG" aria-describedby="session-export-help" class="btn btn-secondary text-sm" title="Browser-oriented SVG with embedded controls. Rich Feature Popup controls how much feature detail is embedded."><i class="ph ph-cursor-click" aria-hidden="true"></i> Interactive SVG</button>
+                        <button @click="downloadPNG" aria-describedby="session-export-help" class="btn btn-primary text-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> PNG</button>
+                        <button @click="downloadPDF" aria-describedby="session-export-help" class="btn btn-secondary text-sm"><i class="ph ph-file-pdf" aria-hidden="true"></i> PDF</button>
                     </div>
                 </div>
 
@@ -5097,10 +5097,10 @@
                                     @pointerdown.stop.prevent="startFeatureSelectionToolbarDrag"
                                     title="Move selected feature controls"
                                     aria-label="Move selected feature controls">
-                                <i class="ph ph-arrows-out-cardinal"></i>
+                                <i class="ph ph-arrows-out-cardinal" aria-hidden="true"></i>
                             </button>
                             <span class="inline-flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-bold text-blue-700" role="status" aria-label="Selected feature count">
-                                <i class="ph ph-selection"></i>
+                                <i class="ph ph-selection" aria-hidden="true"></i>
                                 {{ selectedFeatureCount }} selected
                             </span>
                             <select data-history-managed aria-label="Selected feature placements" :disabled="!semanticMutationAvailable" value="" @change="featurePlacementActions.setPlacement(selectedFeatures, $event.target.value); $event.target.value = ''" class="rounded border p-1 text-xs">
@@ -5113,14 +5113,14 @@
                                     @click="clearFeatureSelection({ clearStatus: true })"
                                     title="Clear selected features"
                                     aria-label="Clear selected features" :disabled="!semanticMutationAvailable">
-                                <i class="ph ph-x"></i> Clear
+                                <i class="ph ph-x" aria-hidden="true"></i> Clear
                             </button>
                             <button type="button"
                                     class="btn btn-secondary btn-sm"
                                     @click="openFirstSelectedFeature($event)"
                                     title="Open the first selected feature"
                                     aria-label="Open first selected feature">
-                                <i class="ph ph-cursor-click"></i> Open
+                                <i class="ph ph-cursor-click" aria-hidden="true"></i> Open
                             </button>
                         </div>
                         <div class="mt-2 grid grid-cols-1 lg:grid-cols-3 gap-2">
@@ -5142,7 +5142,7 @@
                                         @click="applySelectedFeatureColor"
                                         title="Apply color and caption to selected features"
                                         aria-label="Apply color and caption to selected features" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-palette"></i>
+                                    <i class="ph ph-palette" aria-hidden="true"></i>
                                     <span>Apply</span>
                                 </button>
                             </div>
@@ -5162,7 +5162,7 @@
                                         @click="applySelectedFeatureVisibility"
                                         title="Apply visibility to selected features"
                                         aria-label="Apply visibility to selected features" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-eye"></i>
+                                    <i class="ph ph-eye" aria-hidden="true"></i>
                                     <span>Apply</span>
                                 </button>
                             </div>
@@ -5185,7 +5185,7 @@
                                         @click="applySelectedFeatureStroke"
                                         title="Apply stroke to selected features"
                                         aria-label="Apply stroke to selected features" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-line-segment"></i>
+                                    <i class="ph ph-line-segment" aria-hidden="true"></i>
                                     <span>Apply</span>
                                 </button>
                             </div>
@@ -5205,7 +5205,7 @@
                     <!-- Drag hint -->
                     <div v-if="svgContent && layoutRepositionMode" class="drag-hint absolute top-4 left-4 bg-white/90 shadow rounded-lg px-4 py-2 z-20 border border-slate-200">
                         <p class="text-sm text-slate-500 flex items-center gap-2">
-                            <i class="ph ph-hand-grabbing text-base"></i> Drag a record, legend, title, or Linear scale to reposition
+                            <i class="ph ph-hand-grabbing text-base" aria-hidden="true"></i> Drag a record, legend, title, or Linear scale to reposition
                         </p>
                     </div>
 
@@ -5228,7 +5228,7 @@
                                 <input type="number" v-model.number="canvasPadding.left" step="10" class="w-full text-xs border rounded px-1 py-0.5 text-center" :disabled="!semanticMutationAvailable">
                             </div>
                             <div class="flex items-center justify-center">
-                                <i class="ph ph-selection-background text-slate-300 text-lg"></i>
+                                <i class="ph ph-selection-background text-slate-300 text-lg" aria-hidden="true"></i>
                             </div>
                             <div>
                                 <label class="text-[9px] text-slate-400 block">Right</label>
@@ -5281,7 +5281,7 @@
                                 <div class="text-xs text-slate-500 mt-0.5 break-all" data-feature-popup-summary>{{ clickedFeatureSummary }}</div>
                             </div>
                             <button @click="closeFeaturePopup" class="text-slate-400 hover:text-slate-600 ml-auto text-xl shrink-0" aria-label="Close feature popup">
-                                <i class="ph ph-x"></i>
+                                <i class="ph ph-x" aria-hidden="true"></i>
                             </button>
                         </div>
                         <div v-if="adv.rich_feature_popup" class="grid grid-cols-4 gap-1 bg-slate-100 rounded-lg p-1 mb-3" data-nodrag="true">
@@ -5291,7 +5291,7 @@
                                       'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
                                       clickedFeature.activeTab === 'edit' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                                     ]">
-                                <i class="ph ph-sliders-horizontal shrink-0"></i>
+                                <i class="ph ph-sliders-horizontal shrink-0" aria-hidden="true"></i>
                                 <span class="truncate">Edit</span>
                             </button>
                             <button type="button"
@@ -5300,7 +5300,7 @@
                                       'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
                                       clickedFeature.activeTab === 'details' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                                     ]">
-                                <i class="ph ph-identification-card shrink-0"></i>
+                                <i class="ph ph-identification-card shrink-0" aria-hidden="true"></i>
                                 <span class="truncate">Details</span>
                             </button>
                             <button type="button"
@@ -5309,7 +5309,7 @@
                                       'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
                                       clickedFeature.activeTab === 'qualifiers' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                                     ]">
-                                <i class="ph ph-list-bullets shrink-0"></i>
+                                <i class="ph ph-list-bullets shrink-0" aria-hidden="true"></i>
                                 <span class="truncate">Qualifiers</span>
                             </button>
                             <button type="button"
@@ -5318,7 +5318,7 @@
                                       'min-w-0 px-2 py-1.5 text-xs rounded-md flex items-center justify-center gap-1',
                                       clickedFeature.activeTab === 'sequence' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
                                     ]">
-                                <i class="ph ph-text-columns shrink-0"></i>
+                                <i class="ph ph-text-columns shrink-0" aria-hidden="true"></i>
                                 <span class="truncate">Sequence</span>
                             </button>
                         </div>
@@ -5339,11 +5339,11 @@
                                        aria-label="Feature fill color"
                                        :class="['w-12 h-10 cursor-pointer border-2 border-slate-200 rounded-lg', canEditFeatureColor(clickedFeature.feat) ? '' : 'opacity-50 cursor-not-allowed']">
                                 <span class="text-sm font-mono text-slate-600 bg-slate-50 px-3 py-2 rounded-lg">{{ clickedFeature.color }}</span>
-                                <button @click="resetClickedFeatureFillColor"
+                                <button aria-label="Reset fill color to default" @click="resetClickedFeatureFillColor"
                                         data-history-managed
                                         class="text-slate-400 hover:text-slate-600 p-2 rounded-lg hover:bg-slate-100"
                                         title="Reset fill color to default" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-arrow-counter-clockwise text-lg"></i>
+                                    <i class="ph ph-arrow-counter-clockwise text-lg" aria-hidden="true"></i>
                                 </button>
                             </div>
                         </div>
@@ -5369,11 +5369,11 @@
                                        step="0.1"
                                        min="0"
                                        title="Stroke width">
-                                <button @click="resetClickedFeatureStroke"
+                                <button aria-label="Reset stroke to default" @click="resetClickedFeatureStroke"
                                         data-history-managed
                                         class="text-slate-400 hover:text-slate-600 p-2 rounded-lg hover:bg-slate-100"
                                         title="Reset stroke to default" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-arrow-counter-clockwise text-lg"></i>
+                                    <i class="ph ph-arrow-counter-clockwise text-lg" aria-hidden="true"></i>
                                 </button>
                             </div>
                         </div>
@@ -5617,13 +5617,13 @@
                             <button type="button" @click="openClickedOrthogroupInEditor"
                                     class="px-2 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1"
                                     title="Open similarity-group editor">
-                                <i class="ph ph-sidebar-simple"></i>
+                                <i class="ph ph-sidebar-simple" aria-hidden="true"></i>
                                 <span>Open</span>
                             </button>
                             <button type="button" @click="highlightClickedOrthogroup"
                                     class="px-2 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium flex items-center justify-center gap-1"
                                     title="Highlight similarity group">
-                                <i class="ph ph-target"></i>
+                                <i class="ph ph-target" aria-hidden="true"></i>
                                 <span>Highlight</span>
                             </button>
                             <div class="col-span-2 flex min-w-0 items-center gap-2">
@@ -5687,7 +5687,7 @@
                                           clickedOrthogroupDetail.ntSequenceCount ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                         ]"
                                         title="Download all member nucleotide FASTA">
-                                    <i class="ph ph-download-simple"></i>
+                                    <i class="ph ph-download-simple" aria-hidden="true"></i>
                                     <span>Download nt</span>
                                 </button>
                                 <button type="button"
@@ -5711,7 +5711,7 @@
                                           clickedOrthogroupDetail.aaSequenceCount ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                         ]"
                                         title="Download all member amino-acid FASTA">
-                                    <i class="ph ph-download-simple"></i>
+                                    <i class="ph ph-download-simple" aria-hidden="true"></i>
                                     <span>Download aa</span>
                                 </button>
                             </div>
@@ -5773,7 +5773,7 @@
                                                                   hasOrthogroupMemberSequence(member, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                                 ]"
                                                                 title="Download nucleotide FASTA">
-                                                            <i class="ph ph-download-simple"></i><span>nt</span>
+                                                            <i class="ph ph-download-simple" aria-hidden="true"></i><span>nt</span>
                                                         </button>
                                                         <button type="button"
                                                                 @click="copyOrthogroupMemberSequence(member, 'aa', clickedOrthogroupDetail.id, 'feature-popup')"
@@ -5795,7 +5795,7 @@
                                                                   hasOrthogroupMemberSequence(member, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                                 ]"
                                                                 title="Download amino-acid FASTA">
-                                                            <i class="ph ph-download-simple"></i><span>aa</span>
+                                                            <i class="ph ph-download-simple" aria-hidden="true"></i><span>aa</span>
                                                         </button>
                                                     </div>
                                                 </td>
@@ -5824,11 +5824,11 @@
                                      class="grid grid-cols-[7rem_minmax(0,1fr)_2rem] gap-2 items-start px-3 py-2 border-b border-slate-100 last:border-b-0">
                                     <div class="text-[10px] font-medium uppercase text-slate-400">{{ row.label }}</div>
                                     <div class="font-mono text-xs text-slate-700 break-all">{{ row.value }}</div>
-                                    <button type="button"
+                                    <button aria-label="Copy" type="button"
                                             @click="copyText(row.value)"
                                             class="w-7 h-7 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
                                             title="Copy">
-                                        <i class="ph ph-copy"></i>
+                                        <i class="ph ph-copy" aria-hidden="true"></i>
                                     </button>
                                 </div>
                             </div>
@@ -5841,11 +5841,11 @@
                                     <div class="bg-slate-50 px-3 py-2 flex items-center gap-2">
                                         <div class="font-mono text-xs font-semibold text-slate-600 truncate">{{ row.key }}</div>
                                         <span class="text-[10px] text-slate-400">{{ row.values.length }}</span>
-                                        <button type="button"
+                                        <button aria-label="Copy qualifier value" type="button"
                                                 @click="copyText(row.copyText)"
                                                 class="ml-auto w-7 h-7 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
                                                 title="Copy qualifier value">
-                                            <i class="ph ph-copy"></i>
+                                            <i class="ph ph-copy" aria-hidden="true"></i>
                                         </button>
                                     </div>
                                     <pre class="px-3 py-2 max-h-32 overflow-auto custom-scrollbar font-mono text-xs text-slate-700 whitespace-pre-wrap break-all">{{ row.displayValue }}</pre>
@@ -5866,7 +5866,7 @@
                             <div>
                                 <div class="flex items-center justify-between mb-1">
                                     <div class="text-xs font-bold text-slate-600 uppercase tracking-wider">Nucleotide</div>
-                                    <button type="button"
+                                    <button aria-label="Copy nucleotide sequence" type="button"
                                             @click="copyText(clickedFeature.nucleotideFasta)"
                                             :disabled="!clickedFeature.nucleotideFasta"
                                             :class="[
@@ -5874,7 +5874,7 @@
                                               clickedFeature.nucleotideFasta ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
                                             ]"
                                             title="Copy nucleotide sequence">
-                                        <i class="ph ph-copy"></i>
+                                        <i class="ph ph-copy" aria-hidden="true"></i>
                                     </button>
                                 </div>
                                 <pre v-if="clickedFeature.nucleotideFasta"
@@ -5886,7 +5886,7 @@
                             <div>
                                 <div class="flex items-center justify-between mb-1">
                                     <div class="text-xs font-bold text-slate-600 uppercase tracking-wider">Amino acid</div>
-                                    <button type="button"
+                                    <button aria-label="Copy amino acid sequence" type="button"
                                             @click="copyText(clickedFeature.aminoAcidFasta)"
                                             :disabled="!clickedFeature.aminoAcidFasta"
                                             :class="[
@@ -5894,7 +5894,7 @@
                                               clickedFeature.aminoAcidFasta ? 'text-slate-400 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
                                             ]"
                                             title="Copy amino acid sequence">
-                                        <i class="ph ph-copy"></i>
+                                        <i class="ph ph-copy" aria-hidden="true"></i>
                                     </button>
                                 </div>
                                 <pre v-if="clickedFeature.aminoAcidFasta"
@@ -5934,7 +5934,7 @@
                                     class="text-slate-400 hover:text-slate-600 ml-auto text-xl"
                                     aria-label="Close match popup"
                                     data-nodrag="true">
-                                <i class="ph ph-x"></i>
+                                <i class="ph ph-x" aria-hidden="true"></i>
                             </button>
                         </div>
                         <div class="pairwise-match-popup-body custom-scrollbar"
@@ -5965,14 +5965,14 @@
                                                 :disabled="!entry.available"
                                                 :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', entry.available ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']"
                                                 :title="entry.available ? `Copy ${entry.span.displayRole.toLowerCase()} span FASTA` : entry.unavailableReason">
-                                            <i class="ph ph-copy"></i><span>Copy</span>
+                                            <i class="ph ph-copy" aria-hidden="true"></i><span>Copy</span>
                                         </button>
                                         <button type="button"
                                                 @click="downloadText(entry.filename, entry.fasta, 'text/plain;charset=utf-8')"
                                                 :disabled="!entry.available"
                                                 :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', entry.available ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']"
                                                 :title="entry.available ? `Download ${entry.span.displayRole.toLowerCase()} span FASTA` : entry.unavailableReason">
-                                            <i class="ph ph-download-simple"></i><span>FASTA</span>
+                                            <i class="ph ph-download-simple" aria-hidden="true"></i><span>FASTA</span>
                                         </button>
                                     </div>
                                     <div v-if="!entry.available" class="mt-1 text-[10px] text-amber-700">
@@ -5986,13 +5986,13 @@
                                             @click="copyText(clickedPairwiseMatch.sequenceBundle.combinedFasta)"
                                             :disabled="!clickedPairwiseMatch.sequenceBundle.combinedFasta"
                                             :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', clickedPairwiseMatch.sequenceBundle.combinedFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']">
-                                        <i class="ph ph-copy"></i><span>Copy</span>
+                                        <i class="ph ph-copy" aria-hidden="true"></i><span>Copy</span>
                                     </button>
                                     <button type="button"
                                             @click="downloadText(clickedPairwiseMatch.sequenceBundle.combinedFilename, clickedPairwiseMatch.sequenceBundle.combinedFasta, 'text/plain;charset=utf-8')"
                                             :disabled="!clickedPairwiseMatch.sequenceBundle.combinedFasta"
                                             :class="['h-7 px-2 rounded-md text-[10px] flex items-center gap-1', clickedPairwiseMatch.sequenceBundle.combinedFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed']">
-                                        <i class="ph ph-download-simple"></i><span>FASTA</span>
+                                        <i class="ph ph-download-simple" aria-hidden="true"></i><span>FASTA</span>
                                     </button>
                                 </div>
                             </div>
@@ -6006,11 +6006,11 @@
                                          class="pairwise-match-popup-row">
                                         <div class="pairwise-match-popup-key">{{ row.label }}</div>
                                         <div class="pairwise-match-popup-value">{{ row.value }}</div>
-                                        <button type="button"
+                                        <button aria-label="Copy" type="button"
                                                 @click="copyText(row.value)"
                                                 class="w-7 h-7 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
                                                 title="Copy">
-                                            <i class="ph ph-copy"></i>
+                                            <i class="ph ph-copy" aria-hidden="true"></i>
                                         </button>
                                     </div>
                                 </template>
@@ -6045,11 +6045,11 @@
                                                 <td class="pairwise-match-feature-mono">{{ featureRow.location }}</td>
                                                 <td class="text-slate-700">{{ featureRow.product }}</td>
                                                 <td>
-                                                    <button type="button"
+                                                    <button aria-label="Copy feature row" type="button"
                                                             @click.stop="copyText(featureRow.copyText)"
                                                             class="w-7 h-7 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
                                                             title="Copy feature row">
-                                                        <i class="ph ph-copy"></i>
+                                                        <i class="ph ph-copy" aria-hidden="true"></i>
                                                     </button>
                                                 </td>
                                             </tr>
@@ -6105,7 +6105,7 @@
                                                       section.memberNtFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
                                                     ]"
                                                     title="Copy all member nucleotide FASTA">
-                                                <i class="ph ph-copy"></i><span>nt</span>
+                                                <i class="ph ph-copy" aria-hidden="true"></i><span>nt</span>
                                             </button>
                                             <button type="button"
                                                     @click="downloadText(section.memberNtFilename, section.memberNtFasta)"
@@ -6115,7 +6115,7 @@
                                                       section.memberNtFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
                                                     ]"
                                                     title="Download all member nucleotide FASTA">
-                                                <i class="ph ph-download-simple"></i><span>nt</span>
+                                                <i class="ph ph-download-simple" aria-hidden="true"></i><span>nt</span>
                                             </button>
                                             <button type="button"
                                                     @click="copyText(section.memberAaFasta)"
@@ -6125,7 +6125,7 @@
                                                       section.memberAaFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
                                                     ]"
                                                     title="Copy all member amino-acid FASTA">
-                                                <i class="ph ph-copy"></i><span>aa</span>
+                                                <i class="ph ph-copy" aria-hidden="true"></i><span>aa</span>
                                             </button>
                                             <button type="button"
                                                     @click="downloadText(section.memberAaFilename, section.memberAaFasta)"
@@ -6135,13 +6135,13 @@
                                                       section.memberAaFasta ? 'text-slate-500 hover:text-blue-600 hover:bg-blue-50' : 'text-slate-300 cursor-not-allowed'
                                                     ]"
                                                     title="Download all member amino-acid FASTA">
-                                                <i class="ph ph-download-simple"></i><span>aa</span>
+                                                <i class="ph ph-download-simple" aria-hidden="true"></i><span>aa</span>
                                             </button>
-                                            <button type="button"
+                                            <button aria-label="Copy member table" type="button"
                                                     @click="copyText(section.memberCopyText)"
                                                     class="w-7 h-7 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50 flex items-center justify-center"
                                                     title="Copy member table">
-                                                <i class="ph ph-table"></i>
+                                                <i class="ph ph-table" aria-hidden="true"></i>
                                             </button>
                                         </div>
                                     </div>
@@ -6178,7 +6178,7 @@
                                                                       member.ntFasta ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                                     ]"
                                                                     title="Copy nucleotide FASTA">
-                                                                <i class="ph ph-copy"></i><span>nt</span>
+                                                                <i class="ph ph-copy" aria-hidden="true"></i><span>nt</span>
                                                             </button>
                                                             <button type="button"
                                                                     @click="downloadText(member.ntFilename, member.ntFasta)"
@@ -6188,7 +6188,7 @@
                                                                       member.ntFasta ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                                     ]"
                                                                     title="Download nucleotide FASTA">
-                                                                <i class="ph ph-download-simple"></i><span>nt</span>
+                                                                <i class="ph ph-download-simple" aria-hidden="true"></i><span>nt</span>
                                                             </button>
                                                             <button type="button"
                                                                     @click="copyText(member.aaFasta)"
@@ -6198,7 +6198,7 @@
                                                                       member.aaFasta ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                                     ]"
                                                                     title="Copy amino-acid FASTA">
-                                                                <i class="ph ph-copy"></i><span>aa</span>
+                                                                <i class="ph ph-copy" aria-hidden="true"></i><span>aa</span>
                                                             </button>
                                                             <button type="button"
                                                                     @click="downloadText(member.aaFilename, member.aaFasta)"
@@ -6208,7 +6208,7 @@
                                                                       member.aaFasta ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                                     ]"
                                                                     title="Download amino-acid FASTA">
-                                                                <i class="ph ph-download-simple"></i><span>aa</span>
+                                                                <i class="ph ph-download-simple" aria-hidden="true"></i><span>aa</span>
                                                             </button>
                                                         </div>
                                                     </td>
@@ -6241,7 +6241,7 @@
                                         @click="handleFeatureVisibilityScopeChoice(scope.id)"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-start gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-funnel text-lg mt-0.5"></i>
+                                    <i class="ph ph-funnel text-lg mt-0.5" aria-hidden="true"></i>
                                     <span class="min-w-0">
                                         <span class="block truncate">{{ scope.label }}</span>
                                         <span class="block text-[11px] font-normal text-slate-500">{{ scope.description }}</span>
@@ -6269,13 +6269,13 @@
                                 <button @click="handleLabelTextScopeChoice('single')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-user text-lg"></i>
+                                    <i class="ph ph-user text-lg" aria-hidden="true"></i>
                                     <span>This label only</span>
                                 </button>
                                 <button @click="handleLabelTextScopeChoice('all')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-users text-lg"></i>
+                                    <i class="ph ph-users text-lg" aria-hidden="true"></i>
                                     <span>All matching source labels ({{ labelTextScopeDialog.matchingCount }})</span>
                                 </button>
                             </div>
@@ -6304,13 +6304,13 @@
                                 <button @click="handleHiddenLabelTextChoice('show')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-eye text-lg"></i>
+                                    <i class="ph ph-eye text-lg" aria-hidden="true"></i>
                                     <span>Show this label</span>
                                 </button>
                                 <button @click="handleHiddenLabelTextChoice('text_only')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-eye-slash text-lg"></i>
+                                    <i class="ph ph-eye-slash text-lg" aria-hidden="true"></i>
                                     <span>Keep hidden (apply text only)</span>
                                 </button>
                             </div>
@@ -6394,7 +6394,7 @@
                                         @click="handleFeatureStyleScopeChoice('rule')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-users text-lg"></i>
+                                    <i class="ph ph-users text-lg" aria-hidden="true"></i>
                                     <span>Apply to all "{{ featureStyleScopeDialog.matchingRule?.cap || featureStyleScopeDialog.matchingRule?.val }}" ({{ featureStyleScopeDialog.ruleMatchCount }})</span>
                                 </button>
 
@@ -6403,7 +6403,7 @@
                                         @click="handleFeatureStyleScopeChoice('caption')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-users-three text-lg"></i>
+                                    <i class="ph ph-users-three text-lg" aria-hidden="true"></i>
                                     <span>Apply to all "{{ featureStyleScopeDialog.legendName }}" ({{ featureStyleScopeDialog.siblingCount + 1 }})</span>
                                 </button>
 
@@ -6411,7 +6411,7 @@
                                 <button @click="handleFeatureStyleScopeChoice('single')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-user text-lg"></i>
+                                    <i class="ph ph-user text-lg" aria-hidden="true"></i>
                                     <span>This feature only</span>
                                 </button>
 
@@ -6424,7 +6424,7 @@
                                         @click="handleFeatureStyleScopeChoice('displayLabel')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-teal-100 hover:bg-teal-200 text-teal-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-users text-lg"></i>
+                                    <i class="ph ph-users text-lg" aria-hidden="true"></i>
                                     <span>Apply to all label "{{ featureStyleScopeDialog.displayLabel }}" ({{ featureStyleScopeDialog.displayLabelSiblingCount + 1 }})</span>
                                 </button>
 
@@ -6438,7 +6438,7 @@
                                         @click="handleFeatureStyleScopeChoice('annotationLabel')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-cyan-100 hover:bg-cyan-200 text-cyan-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-users text-lg"></i>
+                                    <i class="ph ph-users text-lg" aria-hidden="true"></i>
                                     <span>Apply to all source label "{{ featureStyleScopeDialog.annotationLabel }}" ({{ featureStyleScopeDialog.annotationLabelSiblingCount + 1 }})</span>
                                 </button>
 
@@ -6493,13 +6493,13 @@
                                 <button @click="handleLegendRenameChoice('single')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-user text-lg"></i>
+                                    <i class="ph ph-user text-lg" aria-hidden="true"></i>
                                     <span>This feature only</span>
                                 </button>
                                 <button @click="handleLegendRenameChoice('group')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-users-three text-lg"></i>
+                                    <i class="ph ph-users-three text-lg" aria-hidden="true"></i>
                                     <span>All current "{{ legendRenameDialog.oldCaption }}"</span>
                                 </button>
                             </div>
@@ -6508,13 +6508,13 @@
                                 <button @click="handleLegendRenameChoice('merge')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-arrows-merge text-lg"></i>
+                                    <i class="ph ph-arrows-merge text-lg" aria-hidden="true"></i>
                                     <span>Merge into existing "{{ legendRenameDialog.targetCaption }}" and adopt its color</span>
                                 </button>
                                 <button @click="handleLegendRenameChoice('suffix')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-text-t text-lg"></i>
+                                    <i class="ph ph-text-t text-lg" aria-hidden="true"></i>
                                     <span>Keep current color and add a suffix</span>
                                 </button>
                             </div>
@@ -6542,7 +6542,7 @@
                                 <button @click="handleResetColorChoice('all')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-users text-lg"></i>
+                                    <i class="ph ph-users text-lg" aria-hidden="true"></i>
                                     <span>Reset all "{{ resetColorDialog.caption }}" ({{ resetColorDialog.siblingCount + 1 }})</span>
                                 </button>
 
@@ -6550,7 +6550,7 @@
                                 <button @click="handleResetColorChoice('this_with_legend')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-purple-100 hover:bg-purple-200 text-purple-800 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-user-plus text-lg"></i>
+                                    <i class="ph ph-user-plus text-lg" aria-hidden="true"></i>
                                     <span>This only + add legend entry</span>
                                 </button>
 
@@ -6558,7 +6558,7 @@
                                 <button @click="handleResetColorChoice('this')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
-                                    <i class="ph ph-user text-lg"></i>
+                                    <i class="ph ph-user text-lg" aria-hidden="true"></i>
                                     <span>This feature only</span>
                                 </button>
                             </div>
@@ -6609,7 +6609,7 @@
                                         @click="copyRunCommand"
                                         class="px-3 py-1.5 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1"
                                         title="Copy command">
-                                    <i class="ph ph-copy"></i>
+                                    <i class="ph ph-copy" aria-hidden="true"></i>
                                     <span>{{ runInfoCopyStatus || 'Copy' }}</span>
                                 </button>
                             </div>
@@ -6628,7 +6628,7 @@
                                         @click="copyExactReplayCommand"
                                         class="px-3 py-1.5 rounded border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-semibold flex items-center gap-1"
                                         title="Copy exact replay command">
-                                    <i class="ph ph-copy"></i>
+                                    <i class="ph ph-copy" aria-hidden="true"></i>
                                     <span>{{ exactReplayCopyStatus || 'Copy' }}</span>
                                 </button>
                             </div>
@@ -6642,7 +6642,7 @@
                                         @click="downloadCliHelperFiles"
                                         class="px-3 py-1.5 rounded border border-emerald-200 bg-white hover:bg-emerald-100 text-emerald-700 text-xs font-semibold flex items-center gap-1"
                                         title="Download Source recipe helpers and the Exact replay file">
-                                    <i class="ph ph-download-simple"></i>
+                                    <i class="ph ph-download-simple" aria-hidden="true"></i>
                                     <span>Download reproducibility files</span>
                                 </button>
                             </div>
@@ -6668,9 +6668,10 @@
                         class="drawer-toggle absolute right-0 top-1/2 bg-slate-800 hover:bg-slate-900 text-white px-2 py-4 rounded-l-lg shadow-lg z-40 transition-all"
                         :aria-expanded="showRightDrawer"
                         :disabled="Boolean(similarityAlignmentEditorDisabledReason)"
-                        :aria-label="similarityAlignmentEditorDisabledReason || (showRightDrawer ? 'Close editor' : 'Open editor')"
+                        aria-label="Editor"
+                        :aria-description="similarityAlignmentEditorDisabledReason || null"
                         :title="similarityAlignmentEditorDisabledReason || (showRightDrawer ? 'Close editor' : 'Open editor')">
-                    <i class="ph ph-sidebar-simple text-lg"></i>
+                    <i class="ph ph-sidebar-simple text-lg" aria-hidden="true"></i>
                 </button>
 
                 <div v-if="svgContent && resultPanelTab === 'preview'"
@@ -6678,11 +6679,11 @@
                      :aria-hidden="!showRightDrawer">
                     <div class="px-4 py-3 border-b border-slate-200 flex items-center justify-between shrink-0 bg-slate-50">
                         <div class="flex items-center gap-2">
-                            <i class="ph ph-sliders-horizontal text-slate-600"></i>
+                            <i class="ph ph-sliders-horizontal text-slate-600" aria-hidden="true"></i>
                             <span class="font-bold text-slate-700">Editor</span>
                         </div>
                         <button @click="closeRightDrawer" class="text-slate-400 hover:text-slate-600" aria-label="Close editor">
-                            <i class="ph ph-x text-lg"></i>
+                            <i class="ph ph-x text-lg" aria-hidden="true"></i>
                         </button>
                     </div>
 
@@ -6692,7 +6693,7 @@
                                   'text-xs rounded px-2 py-1.5 flex items-center justify-center gap-1',
                                   rightDrawerTab === 'legend' ? 'bg-purple-100 text-purple-700 font-semibold' : 'text-slate-500 hover:bg-slate-100'
                                 ]">
-                            <i class="ph ph-list-bullets"></i>
+                            <i class="ph ph-list-bullets" aria-hidden="true"></i>
                             <span>Legend</span>
                         </button>
                         <button @click="openRightDrawerTab('features')"
@@ -6700,7 +6701,7 @@
                                   'text-xs rounded px-2 py-1.5 flex items-center justify-center gap-1',
                                   rightDrawerTab === 'features' ? 'bg-blue-100 text-blue-700 font-semibold' : 'text-slate-500 hover:bg-slate-100'
                                 ]">
-                            <i class="ph ph-paint-brush"></i>
+                            <i class="ph ph-paint-brush" aria-hidden="true"></i>
                             <span>Features</span>
                         </button>
                         <button @click="openRightDrawerTab('orthogroups')"
@@ -6710,7 +6711,7 @@
                                   rightDrawerTab === 'orthogroups' ? 'bg-emerald-100 text-emerald-700 font-semibold' : 'text-slate-500 hover:bg-slate-100',
                                   !isRightDrawerTabAvailable('orthogroups') ? 'opacity-40 cursor-not-allowed hover:bg-transparent' : ''
                                 ]">
-                            <i class="ph ph-tree-structure"></i>
+                            <i class="ph ph-tree-structure" aria-hidden="true"></i>
                             <span>Similarity groups</span>
                         </button>
                     </div>
@@ -6720,21 +6721,21 @@
                         <div class="px-3 py-2 border-b border-slate-100 bg-slate-50/50 shrink-0">
                             <div class="flex items-center justify-between">
                                 <span class="text-[10px] text-slate-500 flex items-center gap-1">
-                                    <i :class="layoutRepositionMode ? 'ph ph-hand-grabbing' : 'ph ph-arrows-out-cardinal'"></i>
+                                    <i :class="layoutRepositionMode ? 'ph ph-hand-grabbing' : 'ph ph-arrows-out-cardinal'" aria-hidden="true"></i>
                                     {{ layoutRepositionMode ? 'Drag legend to reposition' : 'Enable layout edit to reposition legend' }}
                                 </span>
                                 <div class="flex items-center gap-1">
-                                    <button @click="sortLegendEntries('asc')" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" title="Sort A-Z" :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-sort-ascending"></i>
+                                    <button aria-label="Sort A-Z" @click="sortLegendEntries('asc')" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" title="Sort A-Z" :disabled="!semanticMutationAvailable">
+                                        <i class="ph ph-sort-ascending" aria-hidden="true"></i>
                                     </button>
-                                    <button @click="sortLegendEntries('desc')" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" title="Sort Z-A" :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-sort-descending"></i>
+                                    <button aria-label="Sort Z-A" @click="sortLegendEntries('desc')" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" title="Sort Z-A" :disabled="!semanticMutationAvailable">
+                                        <i class="ph ph-sort-descending" aria-hidden="true"></i>
                                     </button>
-                                    <button @click="sortLegendEntriesByDefault" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" title="Sort by default" :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-list-numbers"></i>
+                                    <button aria-label="Sort by default" @click="sortLegendEntriesByDefault" class="text-[10px] text-slate-500 hover:text-slate-700 p-1 rounded hover:bg-slate-100" title="Sort by default" :disabled="!semanticMutationAvailable">
+                                        <i class="ph ph-list-numbers" aria-hidden="true"></i>
                                     </button>
                                     <button @click="resetLegendPosition" class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50" title="Reset legend position" :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-arrow-counter-clockwise"></i> Reset
+                                        <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> Reset
                                     </button>
                                 </div>
                             </div>
@@ -6744,20 +6745,20 @@
                             <div v-for="(entry, idx) in legendEntries" :key="idx" class="p-2 bg-slate-50 rounded border border-slate-100">
                                 <div class="flex items-center gap-1">
                                     <div class="flex flex-col shrink-0">
-                                        <button @click="moveLegendEntryUp(idx)" :disabled="!semanticMutationAvailable || (idx === 0)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move up">
-                                            <i class="ph ph-caret-up text-xs"></i>
+                                        <button aria-label="Move up" @click="moveLegendEntryUp(idx)" :disabled="!semanticMutationAvailable || (idx === 0)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move up">
+                                            <i class="ph ph-caret-up text-xs" aria-hidden="true"></i>
                                         </button>
-                                        <button @click="moveLegendEntryDown(idx)" :disabled="!semanticMutationAvailable || (idx === legendEntries.length - 1)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move down">
-                                            <i class="ph ph-caret-down text-xs"></i>
+                                        <button aria-label="Move down" @click="moveLegendEntryDown(idx)" :disabled="!semanticMutationAvailable || (idx === legendEntries.length - 1)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move down">
+                                            <i class="ph ph-caret-down text-xs" aria-hidden="true"></i>
                                         </button>
                                     </div>
                                     <div class="w-6 h-6 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: entry.color }" :title="entry.color"></div>
                                     <input type="text" :value="entry.caption" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0" :disabled="!semanticMutationAvailable">
-                                    <button @click="entry.showStroke = !entry.showStroke" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="entry.showStroke ? 'Hide stroke options' : 'Show stroke options'">
-                                        <i class="ph text-xs" :class="entry.showStroke ? 'ph-caret-up' : 'ph-sliders-horizontal'"></i>
+                                    <button aria-label="Stroke options" :aria-expanded="entry.showStroke ? 'true' : 'false'" @click="entry.showStroke = !entry.showStroke" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="entry.showStroke ? 'Hide stroke options' : 'Show stroke options'">
+                                        <i class="ph text-xs" :class="entry.showStroke ? 'ph-caret-up' : 'ph-sliders-horizontal'" aria-hidden="true"></i>
                                     </button>
-                                    <button @click="deleteLegendEntry(idx)" class="text-red-400 hover:text-red-600 shrink-0" title="Remove entry" :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-trash text-sm"></i>
+                                    <button aria-label="Remove entry" @click="deleteLegendEntry(idx)" class="text-red-400 hover:text-red-600 shrink-0" title="Remove entry" :disabled="!semanticMutationAvailable">
+                                        <i class="ph ph-trash text-sm" aria-hidden="true"></i>
                                     </button>
                                 </div>
                                 <div v-if="entry.showStroke" class="mt-2 pt-2 border-t border-slate-200 flex items-center gap-2 text-[10px]">
@@ -6770,8 +6771,8 @@
                                         class="w-28 shrink-0">
                                     </color-value-control>
                                     <input type="number" :value="getLegendEntryStrokeWidth(idx)" @change="updateLegendEntryStrokeWidth(idx, $event.target.value)" class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5" placeholder="Width" step="0.5" min="0" title="Stroke width" :disabled="!semanticMutationAvailable">
-                                    <button @click="resetLegendEntryStroke(idx)" class="text-slate-400 hover:text-slate-600 shrink-0" title="Reset stroke to default" :disabled="!semanticMutationAvailable">
-                                        <i class="ph ph-arrow-counter-clockwise text-xs"></i>
+                                    <button aria-label="Reset stroke to default" @click="resetLegendEntryStroke(idx)" class="text-slate-400 hover:text-slate-600 shrink-0" title="Reset stroke to default" :disabled="!semanticMutationAvailable">
+                                        <i class="ph ph-arrow-counter-clockwise text-xs" aria-hidden="true"></i>
                                     </button>
                                 </div>
                             </div>
@@ -6780,7 +6781,7 @@
 
                         <div class="px-3 py-2 border-t border-slate-200 shrink-0">
                             <button @click="resetAllStrokes" class="w-full text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded flex items-center justify-center gap-1" title="Reset all stroke colors and widths to default" :disabled="!semanticMutationAvailable">
-                                <i class="ph ph-arrow-counter-clockwise"></i>
+                                <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i>
                                 Reset All Strokes
                             </button>
                         </div>
@@ -6804,7 +6805,7 @@
                         </div>
                         <div ref="featureListScrollRef" class="flex-grow min-h-[64px] overflow-y-auto custom-scrollbar" @scroll="handleFeatureListScroll">
                             <div v-if="featureExtractionPending && extractedFeatures.length === 0" class="p-4 text-center text-slate-400 text-xs">
-                                <i class="ph ph-circle-notch animate-spin"></i> Preparing features...
+                                <i class="ph ph-circle-notch animate-spin" aria-hidden="true"></i> Preparing features...
                             </div>
                             <div v-if="featureListTopSpacerPx > 0" :style="{ height: `${featureListTopSpacerPx}px` }" aria-hidden="true"></div>
                             <div v-for="feat in visibleFeatureRows" :key="feat.id" @click="openFeatureEditorFromList(feat, $event)" class="px-3 py-2 min-h-[64px] border-b border-slate-100 text-xs hover:bg-blue-50 cursor-pointer transition-colors space-y-1">
@@ -6855,15 +6856,15 @@
                                     <span>Auto Reflow</span>
                                 </label>
                                 <span v-if="labelReflowProcessing" class="text-[10px] text-blue-600 flex items-center gap-1" aria-live="polite">
-                                    <i class="ph ph-circle-notch animate-spin"></i>
+                                    <i class="ph ph-circle-notch animate-spin" aria-hidden="true"></i>
                                     Reflowing label placement...
                                 </span>
                             </div>
                             <p v-if="labelReflowLastError" class="text-[10px] text-amber-600" :title="labelReflowLastError.summary">
-                                <i class="ph ph-warning"></i> Auto Reflow failed. Current diagram is kept.
+                                <i class="ph ph-warning" aria-hidden="true"></i> Auto Reflow failed. Current diagram is kept.
                             </p>
                             <p v-if="labelOverrideBuildWarning" class="text-[10px] text-amber-600" :title="labelOverrideBuildWarning">
-                                <i class="ph ph-warning"></i> {{ labelOverrideBuildWarning }}
+                                <i class="ph ph-warning" aria-hidden="true"></i> {{ labelOverrideBuildWarning }}
                             </p>
                         </div>
                     </div>
@@ -7080,7 +7081,7 @@
                                                   hasOrthogroupSequence(selectedOrthogroup, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                 ]"
                                                 title="Download all member nucleotide FASTA">
-                                            <i class="ph ph-download-simple"></i>
+                                            <i class="ph ph-download-simple" aria-hidden="true"></i>
                                             <span>Download nt</span>
                                         </button>
                                         <button type="button"
@@ -7104,7 +7105,7 @@
                                                   hasOrthogroupSequence(selectedOrthogroup, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                 ]"
                                                 title="Download all member amino-acid FASTA">
-                                            <i class="ph ph-download-simple"></i>
+                                            <i class="ph ph-download-simple" aria-hidden="true"></i>
                                             <span>Download aa</span>
                                         </button>
                                     </div>
@@ -7155,7 +7156,7 @@
                                                                       hasOrthogroupMemberSequence(member, 'nt') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                                     ]"
                                                                     title="Download nucleotide FASTA">
-                                                                <i class="ph ph-download-simple"></i><span>nt</span>
+                                                                <i class="ph ph-download-simple" aria-hidden="true"></i><span>nt</span>
                                                             </button>
                                                             <button type="button"
                                                                     @click="copyOrthogroupMemberSequence(member, 'aa', selectedOrthogroup)"
@@ -7177,7 +7178,7 @@
                                                                       hasOrthogroupMemberSequence(member, 'aa') ? 'bg-slate-100 hover:bg-slate-200 text-slate-700' : 'bg-slate-100 text-slate-300 cursor-not-allowed'
                                                                     ]"
                                                                     title="Download amino-acid FASTA">
-                                                                <i class="ph ph-download-simple"></i><span>aa</span>
+                                                                <i class="ph ph-download-simple" aria-hidden="true"></i><span>aa</span>
                                                             </button>
                                                         </div>
                                                     </td>
@@ -7191,10 +7192,10 @@
 
                         <div v-if="selectedOrthogroup" class="px-3 py-2 border-t border-slate-200 bg-slate-50 shrink-0 grid grid-cols-2 gap-2">
                             <button @click="highlightOrthogroupById(selectedOrthogroup.id)" class="text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded flex items-center justify-center gap-1">
-                                <i class="ph ph-target"></i> Highlight
+                                <i class="ph ph-target" aria-hidden="true"></i> Highlight
                             </button>
                             <button @click="clearOrthogroupHighlight" class="text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded flex items-center justify-center gap-1">
-                                <i class="ph ph-eraser"></i> Clear
+                                <i class="ph ph-eraser" aria-hidden="true"></i> Clear
                             </button>
                             <button type="button"
                                     data-history-managed
@@ -7217,7 +7218,7 @@
                                     title="Review alignment options for the selected exact feature"
                                     class="min-w-0 text-xs leading-tight px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600 disabled:text-slate-400 disabled:cursor-not-allowed">Review alignment options…</button>
                             <button @click="resetOrthogroupRename(selectedOrthogroup.id)" class="text-xs px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded flex items-center justify-center gap-1" :disabled="!semanticMutationAvailable">
-                                <i class="ph ph-text-aa"></i> Reset Rename
+                                <i class="ph ph-text-aa" aria-hidden="true"></i> Reset Rename
                             </button>
                         </div>
                     </div>
@@ -7229,7 +7230,7 @@
                                 class="flex items-center gap-2 px-3 py-2 bg-white shadow rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600 text-sm"
                                 title="Reset layout"
                                 aria-label="Reset layout" :disabled="!semanticMutationAvailable">
-                            <i class="ph ph-arrow-counter-clockwise"></i>
+                            <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i>
                             <span>Reset Layout</span>
                         </button>
                         <!-- Layout reposition mode toggle -->
@@ -7240,7 +7241,7 @@
                                 :aria-pressed="layoutRepositionMode"
                                 aria-label="Toggle layout edit mode"
                                 aria-describedby="preview-layout-help">
-                            <i class="ph ph-arrows-out-cardinal"></i>
+                            <i class="ph ph-arrows-out-cardinal" aria-hidden="true"></i>
                             <span>Layout edit</span>
                         </button>
                         <!-- Canvas size toggle -->
@@ -7249,14 +7250,14 @@
                                 :class="{ 'bg-blue-50 text-blue-600 border-blue-300': showCanvasControls }"
                                 title="Canvas padding controls"
                                 aria-label="Toggle canvas padding controls">
-                            <i class="ph ph-frame-corners"></i>
+                            <i class="ph ph-frame-corners" aria-hidden="true"></i>
                             <span>Canvas padding</span>
                         </button>
                         <!-- Zoom controls -->
                         <div data-history-ignore class="flex gap-1 bg-white shadow rounded-lg p-1.5 border border-slate-200">
-                            <button @click="zoom+=0.1" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" aria-label="Zoom in"><i class="ph ph-plus"></i></button>
+                            <button @click="zoom+=0.1" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" aria-label="Zoom in"><i class="ph ph-plus" aria-hidden="true"></i></button>
                             <button @click="zoom = 1.0" class="w-16 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-sm font-mono rounded" aria-label="Reset zoom">{{Math.round(zoom*100)}}%</button>
-                            <button @click="zoom = Math.max(0.1, zoom-0.1)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" aria-label="Zoom out"><i class="ph ph-minus"></i></button>
+                            <button @click="zoom = Math.max(0.1, zoom-0.1)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" aria-label="Zoom out"><i class="ph ph-minus" aria-hidden="true"></i></button>
                         </div>
                     </div>
 
@@ -7264,7 +7265,7 @@
             </div>
 
             <div v-else class="h-full flex flex-col items-center justify-center text-slate-300 border-4 border-dashed border-slate-200 rounded-3xl p-12 bg-slate-50/30">
-                <i class="ph ph-dna text-6xl mb-4 text-slate-200"></i>
+                <i class="ph ph-dna text-6xl mb-4 text-slate-200" aria-hidden="true"></i>
                 <p class="font-medium text-slate-400">Configure settings and click Generate</p>
             </div>
         </div>
@@ -7673,7 +7674,7 @@
     <div class="w-full" data-history-managed role="group" :aria-label="($attrs['data-input-aria-label'] || label) + ' selection'">
         <div class="flex justify-between items-end mb-1">
             <label :class="['input-label mb-0', small ? 'input-label-sm' : '']">{{ label }}</label>
-            <button v-if="hasSelection" @click.stop="clearFile" :disabled="!uploadAvailable" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash"></i> Remove</button>
+            <button v-if="hasSelection" @click.stop="clearFile" :disabled="!uploadAvailable" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash" aria-hidden="true"></i> Remove</button>
         </div>
         <div
             class="upload-zone cursor-pointer"
@@ -7688,11 +7689,11 @@
         >
             <input type="file" ref="input" :multiple="multiple" :disabled="!uploadAvailable" :accept="accept || '.gb,.gbk,.gbff,.genbank,.ddbj,.gff,.gff3,.fa,.fas,.fasta,.fna,.ffn,.faa,.tsv,.tab,.txt,.out,.blast,text/plain,text/tab-separated-values,text/*'" :aria-label="$attrs['data-input-aria-label'] || label" @change="handleFile" :data-testid="testId || undefined" class="hidden">
             <div v-if="!hasSelection" class="flex items-center justify-center gap-2 text-slate-400 group-hover:text-blue-600 transition-colors">
-                <i class="ph ph-upload-simple" :class="small ? 'text-base' : 'text-xl'"></i>
+                <i class="ph ph-upload-simple" :class="small ? 'text-base' : 'text-xl'" aria-hidden="true"></i>
                 <span :class="small ? 'text-[10px]' : 'text-xs font-bold'">Click to Browse</span>
             </div>
             <div v-else class="text-green-700 font-bold truncate w-full px-2 flex items-center justify-center gap-2" :class="small ? 'text-[10px]' : 'text-xs'">
-                <i class="ph ph-check-circle text-lg"></i>
+                <i class="ph ph-check-circle text-lg" aria-hidden="true"></i>
                 <span>{{ selectedLabel }}</span>
             </div>
         </div>
