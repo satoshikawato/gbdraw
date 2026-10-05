@@ -7,7 +7,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { spawnSync } = require('node:child_process');
 const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
-const { BATCH_FIXTURE, openFresh, openWithGenBank, settle } = require('./helpers/audit-browser.cjs');
+const { BATCH_FIXTURE, loadSessionFile, openFresh, openWithGenBank, settle } = require('./helpers/audit-browser.cjs');
 const { download } = require('./helpers/mode-transition.cjs');
 
 const records = (file) => readFileSync(file, 'utf8').split(/^\/\/\s*$/m)
@@ -111,7 +111,7 @@ test('OV-03: an annotation of a selected feature on a cropped record stays on it
   expect(await drawnAnnotations(page)).toEqual([{ id: 'feature_1', recordIndex: 0, segments: [[2200, 2300]] }]);
   expect(await annotationWarnings(page)).toEqual([]);
   expect(await annotationTargets(page)).toEqual([{
-    kind: 'featureIdentity', recordKey: X.recordKey, biologicalFeatureId: X.identity,
+    kind: 'featureIdentity', scope: 'linear', recordKey: X.recordKey, biologicalFeatureId: X.identity,
     envelope: 'outer_bounds', circularPath: 'shortest'
   }]);
   await expect(panel(page).locator('[data-annotation-feature-identity]'))
@@ -194,7 +194,7 @@ test('an annotation of one same-coordinate feature in one copy of a record stays
   await annotateSelection(page, [twin.svgId]);
   await generate(page);
   const target = {
-    kind: 'featureIdentity', recordKey: secondKey, biologicalFeatureId: twin.identity,
+    kind: 'featureIdentity', scope: 'linear', recordKey: secondKey, biologicalFeatureId: twin.identity,
     envelope: 'outer_bounds', circularPath: 'shortest'
   };
   expect(await annotationTargets(page)).toEqual([target]);
@@ -262,4 +262,58 @@ test('a Circular annotation of a selected feature waits in the draft while anoth
   await settle(page);
   await generate(page);
   expect(await drawnAnnotations(page)).toEqual([first]);
+});
+
+// R2, OV-21 of the override-precedence audit: a Gallery Session's Linear
+// record and a Circular grid of the same file both use the record key
+// `record-1`, so a feature has the same [recordKey, feature ID] in both modes.
+// An annotation of a feature selected in Circular names its mode: the Linear
+// request does not carry it, and it waits in the draft for Circular.
+test('OV-21: an annotation of a selected Circular feature stays out of Linear requests with the same record key', async ({ page }) => {
+  test.setTimeout(360_000);
+  const switchMode = async (mode) => {
+    await page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
+    await page.waitForFunction((expected) => window.__GBDRAW_APP__?.mode === expected, mode);
+    await settle(page);
+  };
+  const requestTargets = () => page.evaluate(async () => {
+    const { getCommittedCanonicalRenderRequest } = await import('/gbdraw/web/js/services/config.js');
+    const request = getCommittedCanonicalRenderRequest();
+    return {
+      mode: request.mode,
+      recordKeys: request.records.map((record) => record.recordKey),
+      targets: (request.diagramOptions.annotations?.sets || []).flatMap((set) => set.annotations.map((item) => item.target))
+    };
+  });
+  await openFresh(page);
+  await loadSessionFile(page, 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json');
+  await switchMode('circular');
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles('tests/test_inputs/NC_001416.gb');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBeGreaterThan(0);
+  // A one-record grid names its record `record-1`, as the Linear Session does.
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = true; });
+  await settle(page);
+  await generate(page);
+  const cds = (await catalog(page)).find((feature) => feature.type === 'CDS');
+  expect(cds.recordKey).toBe('record-1');
+  await annotateSelection(page, [cds.svgId]);
+  await generate(page);
+  const target = { kind: 'featureIdentity', recordKey: 'record-1', biologicalFeatureId: cds.identity,
+    envelope: 'outer_bounds', circularPath: 'shortest' };
+  expect(await requestTargets()).toEqual({ mode: 'circular', recordKeys: ['record-1'], targets: [target] });
+  const circularDrawn = await drawnAnnotations(page);
+  expect(circularDrawn).toMatchObject([{ id: 'feature_1', recordIndex: 0 }]);
+
+  await switchMode('linear');
+  await generate(page);
+  expect(await requestTargets()).toEqual({ mode: 'linear', recordKeys: ['record-1'], targets: [] });
+  expect(await drawnAnnotations(page)).toEqual([]);
+  expect(await annotationWarnings(page)).toEqual([]);
+  // A mode change and the Linear Generate keep the Circular target (R2).
+  expect(await annotationTargets(page)).toEqual([{ ...target, scope: 'circular' }]);
+
+  await switchMode('circular');
+  await generate(page);
+  expect(await requestTargets()).toEqual({ mode: 'circular', recordKeys: ['record-1'], targets: [target] });
+  expect(await drawnAnnotations(page)).toEqual(circularDrawn);
 });

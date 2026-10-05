@@ -1,4 +1,5 @@
-import { recordKeyBelongsToRequest } from '../../services/feature-placement.js';
+import { diagnosticError } from '../../services/error-normalization.js';
+import { featureIdentityKeyOf, rowBelongsToRequest } from '../../services/feature-placement.js';
 
 const DEFAULT_STYLE = Object.freeze({
   stroke: '#404040',
@@ -22,12 +23,17 @@ const normalizeCircularPath = (value) => ['forward', 'reverse'].includes(value) 
 const normalizeTarget = (target) => {
   const source = target && typeof target === 'object' ? clone(target) : {};
   // One feature named by its original-source identity (request schema 9,
-  // design Q4); Python resolves it after crop and reverse complement.
+  // design Q4); Python resolves it after crop and reverse complement. In the
+  // draft it also names the mode it was selected in (`scope`), as per-feature
+  // edits do (R2). The editor writes exact targets, so a malformed one can come
+  // only from a Session file.
   if (source.kind === 'featureIdentity') {
+    if (!featureIdentityKeyOf(source)) throw diagnosticError('INPUT_INVALID', { field: 'schema', reason: 'FIELDS' });
     return {
       kind: 'featureIdentity',
-      recordKey: String(source.recordKey || ''),
-      biologicalFeatureId: String(source.biologicalFeatureId || ''),
+      scope: source.scope,
+      recordKey: source.recordKey,
+      biologicalFeatureId: source.biologicalFeatureId,
       envelope: normalizeEnvelope(source.envelope),
       circularPath: normalizeCircularPath(source.circularPath)
     };
@@ -110,15 +116,30 @@ export const uniqueAnnotationSetId = (sets, base = 'annotations') => {
   return id;
 };
 
-// A selected-feature target names its record by key: a request carries only
-// the targets of its own records, and the others stay in the draft for the
-// records and mode that draw them (design Q4 3.2, R2).
-export const annotationOptionsPayload = (sets, records = []) => ({
+// A selected-feature target names its mode and record by key: a request
+// carries only the targets of its own mode and records, without the draft-only
+// `scope`, and the others stay in the draft for the records and mode that draw
+// them (design Q4 3.2, R2).
+export const annotationOptionsPayload = (sets, mode, records = []) => ({
   sets: normalizeAnnotationSets(sets).map((set) => ({
     ...set,
-    annotations: set.annotations.filter(({ target }) => target.kind !== 'featureIdentity'
-      || recordKeyBelongsToRequest(target.recordKey, records))
+    annotations: set.annotations.flatMap((item) => {
+      if (item.target.kind !== 'featureIdentity') return [item];
+      const { scope: _scope, ...target } = item.target;
+      return rowBelongsToRequest(item.target, mode, records) ? [{ ...item, target }] : [];
+    })
   })),
   table: null,
   tableFile: null
 });
+
+// The draft sets of a request's annotation sets, whose selected-feature targets
+// are of the request's mode.
+export const draftAnnotationSetsOfRequest = (sets, mode) => normalizeAnnotationSets(
+  (Array.isArray(sets) ? sets : []).map((set) => ({
+    ...set,
+    annotations: (Array.isArray(set?.annotations) ? set.annotations : []).map((item) => (
+      item?.target?.kind === 'featureIdentity' ? { ...item, target: { scope: mode, ...item.target } } : item
+    ))
+  }))
+);

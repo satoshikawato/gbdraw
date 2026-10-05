@@ -52,7 +52,9 @@ def read_qualifier_priority_file(filepath: str) -> Optional[DataFrame]:
     required_cols = ["feature_type", "priorities"]
 
     try:
-        df = read_literal_table(filepath, names=required_cols)
+        df = read_literal_table(filepath, names=required_cols, label="qualifier priority file")
+    except ParseError:
+        raise
     except pd.errors.ParserError as e:
         logger.error(f"ERROR: Malformed line in qualifier priority file '{filepath}': {e}")
         raise ParseError(
@@ -88,7 +90,14 @@ def read_filter_list_file(filepath: str) -> Optional[DataFrame]:
     required_cols = ["feature_type", "qualifier", "keyword"]
 
     try:
-        df = read_literal_table(table_text_stream(read_table_lines(filepath)), names=required_cols)
+        df = read_literal_table(
+            table_text_stream(read_table_lines(filepath)),
+            names=required_cols,
+            label="filter list file",
+            filepath=filepath,
+        )
+    except ParseError:
+        raise
     except pd.errors.ParserError as e:
         logger.error(f"ERROR: Malformed line in filter list file '{filepath}': {e}")
         raise ParseError(
@@ -129,26 +138,17 @@ def read_label_override_file(filepath: str) -> Optional[DataFrame]:
         logger.error(f"ERROR: Label override file not found: {e}")
         raise InputFileError(f"Label override file not found: {e}") from e
 
-    for line_no, raw_line in enumerate(lines, start=1):
-        if raw_line.strip() == "":
-            continue
-        if raw_line.rstrip("\r\n").count("\t") + 1 > len(required_cols):
-            logger.error(
-                f"ERROR: Malformed line in label override file '{filepath}' at line {line_no}: "
-                f"expected {len(required_cols)} columns."
-            )
-            raise ParseError(
-                f"Malformed line in label override file '{filepath}' at line {line_no}: "
-                f"expected {len(required_cols)} columns."
-            )
-
     try:
         df = read_literal_table(
             table_text_stream(lines),
             names=required_cols,
+            label="label override file",
+            filepath=filepath,
             keep_default_na=False,
             na_filter=False,
         )
+    except ParseError:
+        raise
     except pd.errors.ParserError as e:
         logger.error(f"ERROR: Malformed line in label override file '{filepath}': {e}")
         raise ParseError(

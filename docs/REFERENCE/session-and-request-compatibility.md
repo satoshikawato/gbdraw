@@ -21,8 +21,9 @@ Session 45 stores the Web app's per-feature edits (Feature visibility, Label
 visibility, and label text) in `features.featureOverrides`, one row per
 original-source feature named by `recordKey` and `biologicalFeatureId`, as the
 request does, and by the mode the edit belongs to (`scope`); Feature placement
-drafts name their mode the same way. Both modes can use the same record key, so
-a request carries only the rows of its own mode. Its feature catalog is schema 5, which records the selector
+drafts and the `featureIdentity` targets of annotations made from selected
+features name their mode the same way. Both modes can use the same record key, so
+a request carries only the rows and targets of its own mode. Its feature catalog is schema 5, which records the selector
 values each drawn feature had (`drawnSelector`). Loading a Session 44, or a
 Web Session 31–33, moves its edits keyed by rendered feature ID onto the
 feature they name: a rendered ID in the saved feature catalog names its

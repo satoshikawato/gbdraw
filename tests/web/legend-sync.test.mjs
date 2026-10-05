@@ -9,6 +9,7 @@ globalThis.CSS = { escape: (value) => String(value) };
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-legend-sync-'));
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'app'), join(tempRoot, 'app'), { recursive: true });
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'services'), join(tempRoot, 'services'), { recursive: true });
+await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'utils'), join(tempRoot, 'utils'), { recursive: true });
 await cp(join(repoRoot, 'gbdraw', 'web', 'js', 'config.js'), join(tempRoot, 'config.js'));
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
 

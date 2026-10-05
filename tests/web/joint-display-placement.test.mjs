@@ -217,9 +217,10 @@ for (const mode of ['circular', 'linear']) {
   });
 }
 
-// Q3 (Owner, 2026-10-04): a layout edit that would leave this mode's lane
-// placements undrawable asks first. Reset is one step that applies the edit and
-// removes exactly those rows; cancel records nothing (OV-09, R10, R11).
+// Q3 (Owner, 2026-10-04): a layout edit that would leave lane placements
+// undrawable asks first. Reset is one step that applies the edit and removes
+// exactly those rows; cancel records nothing (OV-09, R10, R11). The stack
+// editors' edits use the same transition (tests/web/track-layout-transition.test.mjs).
 test('a layout edit that drops lanes asks before it resets those placements', async () => {
   const lane = (scope, recordKey, side) => ({ scope, recordKey, biologicalFeatureId: 'f',
     placement: { kind: 'lane', side, level: 1 } });
@@ -232,56 +233,39 @@ test('a layout edit that drops lanes asks before it resets those placements', as
     history: { runUndoable: async (label, fn) => { steps.push(label); fn(); } } });
   const select = (value, label) => ({ target: { type: 'select-one', value, labels: [{ textContent: ` ${label} ` }],
     selectedOptions: [{ text: `${value[0].toUpperCase()}${value.slice(1)}` }] } });
-  const ask = async (event, field) => {
-    assert.equal(await actions.changeLayoutSetting(event, field), false);
+  const ask = (event, field) => {
+    assert.equal(actions.changeLayoutSetting(event, field), false);
     return { ...actions.layoutChange };
   };
 
-  const spreadout = select('spreadout', 'Track Preset');
-  assert.deepEqual(await ask(spreadout, 'track_type'),
-    { open: true, count: 1, setting: 'Track Preset', value: 'Spreadout' });
-  // The control shows the kept value while the dialog asks.
-  assert.equal(spreadout.target.value, 'middle');
+  assert.deepEqual(ask(select('spreadout', 'Track Preset'), 'track_type'),
+    { open: true, count: 1, setting: 'Track Preset', value: 'Spreadout', scope: '' });
   assert.equal(await actions.resolveLayoutChange('cancel'), false);
   assert.equal(actions.layoutChange.open, false);
   assert.equal(state.form.track_type, 'middle');
   assert.deepEqual(Object.keys(overrides), ['outward', 'above', 'main']);
   assert.deepEqual(steps, []);
 
-  await ask(select('tuckin', 'Track Preset'), 'track_type');
+  ask(select('tuckin', 'Track Preset'), 'track_type');
   await actions.resolveLayoutChange('reset');
   assert.equal(state.form.track_type, 'tuckin');
   // The other mode's lane and the Main row stay (R2).
   assert.deepEqual(Object.keys(overrides), ['above', 'main']);
   assert.deepEqual(steps, ['Change setting and reset Feature placements']);
-  // With no drawable lane to lose, the edit is one ordinary step.
-  await actions.changeLayoutSetting(select('middle', 'Track Preset'), 'track_type');
+  // With no drawable lane to lose, the edit applies now and the control's
+  // History adapter records it (R11).
+  actions.changeLayoutSetting(select('middle', 'Track Preset'), 'track_type');
   assert.equal(actions.layoutChange.open, false);
   assert.equal(state.form.track_type, 'middle');
-  assert.equal(steps.at(-1), 'Change setting');
-
-  // A custom slot's lane uses the same predicate and the slot editor's transition.
-  overrides.outward = lane('circular', 'c', 'outward');
-  state.adv.circular_track_slots_enabled = true;
-  const slot = { id: 'features', renderer: 'features', enabled: true, side: 'overlay', params: { lane_direction: 'split' } };
-  state.adv.circular_track_slots = [slot];
-  state.adv.circular_track_slots_axis_index = 0;
-  const updates = [];
-  const inside = { target: { type: 'select-one', value: 'inside', getAttribute: () => 'Feature lane features',
-    selectedOptions: [{ text: 'Feature inside axis' }] } };
-  assert.equal(await actions.changeFeatureSlotSide(inside, slot, (...args) => updates.push(args)), false);
-  assert.equal(actions.layoutChange.setting, 'Feature lane features');
-  assert.equal(inside.target.value, 'split');
-  await actions.resolveLayoutChange('reset');
-  assert.deepEqual(updates, [[slot, 'inside']]);
-  assert.deepEqual(Object.keys(overrides), ['above', 'main']);
+  assert.equal(steps.length, 1);
 
   state.mode.value = 'linear';
   state.adv = createDefaultAdv('linear');
   Object.assign(state.form, { linear_track_layout: 'middle', separate_strands: false });
   const strands = { target: { type: 'checkbox', checked: true, getAttribute: () => 'Separate Strands' } };
-  assert.equal(await actions.changeLayoutSetting(strands, 'separate_strands'), false);
-  assert.deepEqual({ ...actions.layoutChange }, { open: true, count: 1, setting: 'Separate Strands', value: 'On' });
+  assert.deepEqual(ask(strands, 'separate_strands'),
+    { open: true, count: 1, setting: 'Separate Strands', value: 'On', scope: '' });
+  // The checkbox shows the kept value while the dialog asks.
   assert.equal(strands.target.checked, false);
   await actions.resolveLayoutChange('reset');
   assert.equal(state.form.separate_strands, true);

@@ -10,7 +10,9 @@ await cp(join(process.cwd(), 'gbdraw', 'web', 'js'), join(tempRoot, 'js'), { rec
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 const load = (path) => import(pathToFileURL(join(tempRoot, 'js', path)));
 
-const { annotationOptionsPayload, createAnnotationSet, normalizeAnnotationSets } = await load('app/annotations/state.js');
+const {
+  annotationOptionsPayload, createAnnotationSet, draftAnnotationSetsOfRequest, normalizeAnnotationSets
+} = await load('app/annotations/state.js');
 const {
   annotationRecordSelector,
   annotationRecordSelectorFromValue,
@@ -210,9 +212,12 @@ test('selected annotations name each feature by its source identity', () => {
     { gene: 'duplicated', scope: 'linear', record_key: 'linear-seq-2', biological_feature_id: 'f1234~1',
       selector: { hash: 'f1234' } }
   ]);
+  // Each target names the mode of the Result it was selected on (R2, OV-21).
   assert.deepEqual(targets, [
-    { kind: 'featureIdentity', recordKey: 'mt', biologicalFeatureId: 'fcf4827e2', envelope: 'outer_bounds', circularPath: 'shortest' },
-    { kind: 'featureIdentity', recordKey: 'linear-seq-2', biologicalFeatureId: 'f1234~1', envelope: 'outer_bounds', circularPath: 'shortest' }
+    { kind: 'featureIdentity', scope: 'circular', recordKey: 'mt', biologicalFeatureId: 'fcf4827e2',
+      envelope: 'outer_bounds', circularPath: 'shortest' },
+    { kind: 'featureIdentity', scope: 'linear', recordKey: 'linear-seq-2', biologicalFeatureId: 'f1234~1',
+      envelope: 'outer_bounds', circularPath: 'shortest' }
   ]);
   // A Result without a feature catalog (a Session before 40) has no identities.
   assert.equal(featureTargetsFromSelection([{ selector: { hash: 'f1234' }, locus_tag: 'A_1' }]), null);
@@ -234,7 +239,7 @@ test('selected annotations name each feature by its source identity', () => {
 // Design Q4 6.4: the table writes a selected feature in its current placement.
 test('the TSV writes selected features by drawn record position and drawn hash, and counts the rest', () => {
   const identity = (recordKey, biologicalFeatureId) => ({
-    kind: 'featureIdentity', recordKey, biologicalFeatureId, envelope: 'segments', circularPath: 'reverse'
+    kind: 'featureIdentity', scope: 'linear', recordKey, biologicalFeatureId, envelope: 'segments', circularPath: 'reverse'
   });
   const sets = [createAnnotationSet({ id: 'marks', annotations: [
     { id: 'drawn', target: identity('linear-seq-2', 'fb5977f81'), mark: 'band' },
@@ -257,22 +262,87 @@ test('the TSV writes selected features by drawn record position and drawn hash, 
   assert.equal(encodeAnnotationTableWithNotice(sets).skippedFeatureIdentityCount, 2);
 });
 
-// A request carries the selected-feature targets of its own records only; the
-// draft keeps the others (design Q4 3.2, R2).
+// A request carries the selected-feature targets of its own mode and records
+// only; the draft keeps the others (design Q4 3.2, R2).
 test('the request carries only the selected-feature targets of its records', () => {
+  const identity = (recordKey, biologicalFeatureId) => ({
+    kind: 'featureIdentity', scope: 'linear', recordKey, biologicalFeatureId
+  });
   const sets = [createAnnotationSet({ id: 'marks', annotations: [
-    { id: 'here', target: { kind: 'featureIdentity', recordKey: 'linear-seq-1', biologicalFeatureId: 'fa' }, mark: 'band' },
-    { id: 'expanded', target: { kind: 'featureIdentity', recordKey: 'linear-seq-2:3', biologicalFeatureId: 'fb' }, mark: 'band' },
-    { id: 'circular', target: { kind: 'featureIdentity', recordKey: 'circular-A-#1', biologicalFeatureId: 'fc' }, mark: 'band' },
+    { id: 'here', target: identity('linear-seq-1', 'fa'), mark: 'band' },
+    { id: 'expanded', target: identity('linear-seq-2:3', 'fb'), mark: 'band' },
+    { id: 'circular', target: identity('circular-A-#1', 'fc'), mark: 'band' },
     { id: 'coordinates', target: coordinateTarget({ start: 1, end: 5 }), mark: 'band' }
   ] })];
   const records = [
     { recordKey: 'linear-seq-1', cardinality: 'exactly_one' },
     { recordKey: 'linear-seq-2', cardinality: 'all' }
   ];
-  const payload = annotationOptionsPayload(sets, records);
+  const payload = annotationOptionsPayload(sets, 'linear', records);
   assert.deepEqual(payload.sets[0].annotations.map((item) => item.id), ['here', 'expanded', 'coordinates']);
   assert.equal(sets[0].annotations.length, 4);
+});
+
+// R2, OV-21: both modes can use the same record key for the same feature
+// (`record-1` in a Gallery or Python Session). A selected-feature target names
+// the mode it was made in, a request carries only the targets of its own mode
+// (without the draft-only `scope`, as request schema 9 has it), and the other
+// mode's target stays in the draft.
+test('a selected-feature target reaches only the requests of its own mode (both ways)', () => {
+  const MODES = ['circular', 'linear'];
+  const records = [{ recordKey: 'record-1', cardinality: 'exactly_one' }];
+  const target = (scope) => ({
+    kind: 'featureIdentity', scope, recordKey: 'record-1', biologicalFeatureId: 'f1',
+    envelope: 'outer_bounds', circularPath: 'shortest'
+  });
+  const sets = [createAnnotationSet({ id: 'marks', annotations: MODES.map((scope) => ({
+    id: scope, target: target(scope), mark: 'highlight'
+  })) })];
+  const before = JSON.stringify(sets);
+  MODES.forEach((mode) => {
+    const payload = annotationOptionsPayload(sets, mode, records);
+    assert.deepEqual(payload.sets[0].annotations.map((item) => [item.id, item.target]), [[mode, {
+      kind: 'featureIdentity', recordKey: 'record-1', biologicalFeatureId: 'f1',
+      envelope: 'outer_bounds', circularPath: 'shortest'
+    }]]);
+    // A Session written from a request (CLI, Python) gives each target the
+    // request's mode, and the draft projects back onto the same request.
+    const draft = draftAnnotationSetsOfRequest(payload.sets, mode);
+    assert.deepEqual(draft[0].annotations.map((item) => item.target), [target(mode)]);
+    assert.deepEqual(annotationOptionsPayload(draft, mode, records), payload);
+    const other = mode === 'circular' ? 'linear' : 'circular';
+    assert.deepEqual(annotationOptionsPayload(draft, other, records).sets[0].annotations, []);
+  });
+  assert.equal(JSON.stringify(sets), before);
+});
+
+// The draft owner rejects a selected-feature target that names no mode, so a
+// path that writes one fails instead of dropping the annotation from every
+// request.
+test('a selected-feature target without a mode is invalid', () => {
+  const set = (target) => [{ id: 'marks', annotations: [{ id: 'one', target }] }];
+  const identity = { kind: 'featureIdentity', recordKey: 'record-1', biologicalFeatureId: 'f1' };
+  assert.throws(() => normalizeAnnotationSets(set(identity)), /schema|INPUT_INVALID|invalid/i);
+  assert.throws(() => normalizeAnnotationSets(set({ ...identity, scope: 'batch' })), /schema|INPUT_INVALID|invalid/i);
+  assert.throws(() => normalizeAnnotationSets(set({ ...identity, scope: 'linear', recordKey: '' })),
+    /schema|INPUT_INVALID|invalid/i);
+  assert.equal(normalizeAnnotationSets(set({ ...identity, scope: 'linear' }))[0].annotations[0].target.scope, 'linear');
+});
+
+// The editor names a target's feature from the current Results only in the
+// target's own mode: the Circular feature with the same identity is not it.
+test('the editor finds a selected-feature target only among features of its mode', () => {
+  const feature = { scope: 'circular', record_key: 'record-1', biological_feature_id: 'f1', type: 'CDS',
+    locus_tag: 'LT_1', start: 0, end: 30, strand: 1, record_idx: 0, drawnSelector: { hash: 'f1' } };
+  const actions = createAnnotationEditor({ state: {
+    annotationSets: [], selectedFeatures: { value: [] },
+    extractedFeatures: { value: [feature] }, biologicalFeatures: { value: [feature] }
+  } });
+  const item = (scope) => ({ target: {
+    kind: 'featureIdentity', scope, recordKey: 'record-1', biologicalFeatureId: 'f1'
+  } });
+  assert.doesNotMatch(actions.featureTargetCaption(item('circular')), /not in the current diagram/);
+  assert.equal(actions.featureTargetCaption(item('linear')), 'f1 (not in the current diagram)');
 });
 const created = editor.addAnnotationSet('review');
 const addedCoordinate = editor.addCoordinateAnnotation(created, { start: 5, end: 8 });
