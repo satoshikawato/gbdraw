@@ -3,6 +3,7 @@ import { ruleMatchesFeature } from '../rule-matching.js';
 import { resolveColorToHex } from '../color-utils.js';
 import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } from '../feature-utils.js';
 import { exactRegexValue } from '../feature-selector.js';
+import { getAllFeatureLegendGroups } from '../legend/utils.js';
 import {
   featureOverrideKey,
   getFeatureOverride
@@ -11,7 +12,9 @@ import {
 export const createFeatureColorActions = ({
   state,
   rulePreparation,
-  legendActions,
+  compactLegendEntries,
+  extractLegendEntries,
+  onLegendGeometryChanged,
   svgActions,
   ruleActions,
   featureSvgActions,
@@ -39,12 +42,6 @@ export const createFeatureColorActions = ({
     addedLegendCaptions
   } = state;
 
-  const {
-    compactLegendEntries,
-    extractLegendEntries,
-    getAllFeatureLegendGroups,
-    onLegendGeometryChanged
-  } = legendActions;
   const {
     countFeaturesMatchingRule,
     findExistingColorForCaption,
@@ -847,9 +844,9 @@ export const createFeatureColorActions = ({
     return ruleActions.commitSpecificRules(rules, 'Change feature color', {
       previousLegendIntents: replacesExistingGroup
         ? [{ caption: existingEntry.caption, color: existingEntry.color }] : [],
-      afterCommit: candidate => {
+      afterCommit: intents => {
         if (replacesExistingGroup) {
-          const intent = candidate.intents.find(entry => captionsMatch(entry.caption, caption)
+          const intent = intents.find(entry => captionsMatch(entry.caption, caption)
             && colorsMatch(entry.color, color));
           if (intent) legendColorOverrides[intent.caption] = intent.color;
         }

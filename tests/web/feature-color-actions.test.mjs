@@ -17,11 +17,18 @@ const { createFeatureColorActions } = await import(
 );
 const { getFeatureColorRuleHash } = await import(pathToFileURL(join(tempDir, 'app', 'feature-utils.js')));
 const { resolveFeatureLabelSelector } = await import(pathToFileURL(join(tempDir, 'app', 'feature-selector.js')));
-const { legendRowRules } = await import(pathToFileURL(join(tempDir, 'app', 'specific-color-rules.js')));
+const { buildLegendIntents, legendRowRules } = await import(pathToFileURL(join(tempDir, 'app', 'specific-color-rules.js')));
 
 assert.doesNotMatch(colorActionsSource, /serializeCleanSvg|results\.value\[[^\]]+\]\s*=/);
 
 const ref = (value) => ({ value });
+// The mounted SVG as `getAllFeatureLegendGroups` (app/legend/utils.js) reads it:
+// `#legend` holding one `#feature_legend` group, or no legend.
+const legendSvg = (featureLegend = null) => ({
+  getElementById: (id) => (id === 'legend' && featureLegend
+    ? { querySelector: (selector) => (selector === '#feature_legend' ? featureLegend : null) }
+    : null)
+});
 
 const featureA = {
   id: 'feature-a',
@@ -88,12 +95,8 @@ const featureStyleScopeDialog = {
   resolve: null
 };
 
-let addLegendEntryCount = 0;
 let applySpecificRulesCount = 0;
 let legendGeometryChangedCount = 0;
-const addLegendEntryOptions = [];
-const removeLegendEntryOptions = [];
-const updateLegendEntryColorOptions = [];
 const previewFillColors = new Map();
 const featureElementsById = new Map();
 let previewFillApplyCount = 0;
@@ -146,30 +149,11 @@ const actions = createFeatureColorActions({
     addedLegendCaptions: ref(new Set())
   },
   nextTick: async () => {},
-  legendActions: {
-    addLegendEntry: async (_caption, _color, options = {}) => {
-      addLegendEntryCount += 1;
-      addLegendEntryOptions.push(options);
-      return '';
-    },
-    removeLegendEntry: (_caption, options = {}) => {
-      removeLegendEntryOptions.push(options);
-      return false;
-    },
-    updateLegendEntryColorByCaption: (caption, color, options = {}) => {
-      updateLegendEntryColorOptions.push(options);
-      const entry = legendEntries.value.find((candidate) => candidate.caption === caption);
-      if (!entry || entry.color === color) return false;
-      entry.color = color;
-      return true;
-    },
-    compactLegendEntries: () => {},
-    onLegendGeometryChanged: () => {
-      legendGeometryChangedCount += 1;
-    },
-    extractLegendEntries: () => {},
-    getAllFeatureLegendGroups: (svg) => svg?.legendGroups || []
+  compactLegendEntries: () => {},
+  onLegendGeometryChanged: () => {
+    legendGeometryChangedCount += 1;
   },
+  extractLegendEntries: () => {},
   svgActions: {
     applySpecificRulesToSvg: () => {
       applySpecificRulesCount += 1;
@@ -181,8 +165,10 @@ const actions = createFeatureColorActions({
       const preparation = createRulePreparation({state:{extractedFeatures,biologicalFeatures,manualSpecificRules},evaluate:evaluatePythonRules});
       const candidate = await preparation.prepareCandidate(rules);
       if (!candidate) return false;
+      const drawn = new Set(extractedFeatures.value.map(feature => firstMatchingRule(feature, candidate.rules)));
+      const { intents } = buildLegendIntents(candidate.rules.filter(rule => drawn.has(rule)));
       manualSpecificRules.splice(0,manualSpecificRules.length,...candidate.rules);
-      legendEntries.value = candidate.intents.map(entry=>({...entry}));
+      legendEntries.value = intents.map(entry=>({...entry}));
       for (const feature of extractedFeatures.value) {
         const rule=firstMatchingRule(feature,manualSpecificRules);
         if(rule) {
@@ -191,7 +177,7 @@ const actions = createFeatureColorActions({
         }else delete featureColorOverrides[featureOverrideKey(feature)];
       }
       applySpecificRulesCount++;
-      afterCommit(candidate);
+      afterCommit(intents);
       return true;
     },
     countFeaturesMatchingRule: () => 0,
@@ -226,7 +212,6 @@ const actions = createFeatureColorActions({
 
 await actions.handleColorScopeChoice('caption');
 
-assert.equal(addLegendEntryCount, 0);
 assert.equal(applySpecificRulesCount, 1);
 assert.equal(manualSpecificRules.find(rule => rule.qual === 'gene_kind').color, '#abcdef');
 assert.equal(legendEntries.value[0].color, '#abcdef');
@@ -373,8 +358,6 @@ const compoundFillCount = previewFillApplyCount;
 assert.equal(await actions.setFeatureColor(labelFeatureA, '#654321', 'renamed feature'), true);
 assert.ok(previewFillApplyCount > compoundFillCount);
 assert.equal(previewCommitCount, compoundCommitCount);
-assert.equal(addLegendEntryCount, 0);
-assert.equal(removeLegendEntryOptions.length, 0);
 assert.equal(manualSpecificRules[0].cap, 'renamed feature');
 assert.equal(legendEntries.value[0].caption, 'renamed feature');
 legendEntries.value = [];
@@ -594,7 +577,7 @@ const strokeFeature = {
   type: 'CDS',
   product: 'Stroke feature'
 };
-const strokeSvg = { legendGroups: [] };
+const strokeSvg = legendSvg();
 svgContainer.value = { querySelector: (selector) => selector === 'svg' ? strokeSvg : null };
 featureElementsById.set(strokeFeature.svg_id, [strokeElement]);
 clickedFeature.value = {
@@ -719,7 +702,7 @@ const legendEntryGroup = {
 const legendFeatureGroup = {
   querySelector: (selector) => selector.includes('Short caption') ? legendEntryGroup : null
 };
-const svg = { legendGroups: [legendFeatureGroup] };
+const svg = legendSvg(legendFeatureGroup);
 svgContainer.value = { querySelector: (selector) => selector === 'svg' ? svg : null };
 legendEntries.value = [{ caption: 'Short caption', color: '#123456', featureIds: [] }];
 extractedFeatures.value = [];
@@ -730,9 +713,6 @@ await actions.renameLegendEntry(0, 'Oxidative phosphorylation');
 assert.equal(legendGeometryChangedCount, 1);
 assert.equal(legendText.textContent, 'Oxidative phosphorylation');
 assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation');
-assert.equal(addLegendEntryOptions.length, 0);
-assert.equal(removeLegendEntryOptions.length, 0);
-assert.equal(updateLegendEntryColorOptions.length, 0);
 
 // FE-10: Reset fill uses the palette default of the feature being reset. A
 // canceled or completed Reset dialog of another feature type must not leave a
@@ -780,7 +760,6 @@ assert.equal(updateLegendEntryColorOptions.length, 0);
       addedLegendCaptions: ref(new Set())
     },
     nextTick: async () => {},
-    legendActions: {},
     svgActions: {},
     ruleActions: {
       commitSpecificRules: async (rules) => {
@@ -833,7 +812,7 @@ assert.equal(updateLegendEntryColorOptions.length, 0);
     const legendGroup = {
       querySelector: (selector) => [...groupEntries].find(([caption]) => selector.includes(`"${caption}"`))?.[1] || null
     };
-    const svgRoot = { legendGroups: [legendGroup] };
+    const svgRoot = legendSvg(legendGroup);
     const committed = [];
     const legendRenameDialog = {};
     const stateLegendEntries = ref(entries.map((entry) => ({ featureIds: [], originalCaption: entry.caption, ...entry })));
@@ -855,10 +834,7 @@ assert.equal(updateLegendEntryColorOptions.length, 0);
         addedLegendCaptions: ref(new Set())
       },
       nextTick: async () => {},
-      legendActions: {
-        compactLegendEntries: () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
-        getAllFeatureLegendGroups: (svg) => svg?.legendGroups || []
-      },
+      compactLegendEntries: () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
       svgActions: {},
       ruleActions: {
         commitSpecificRules: async (nextRules) => { committed.push(nextRules.map((rule) => ({ ...rule }))); return true; },

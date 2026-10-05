@@ -1,9 +1,6 @@
-import {
-  normalizeSpecificRule, buildLegendIntents, createRuleLegendCaptions, rendererLegendRows
-} from './specific-color-rules.js';
+import { normalizeSpecificRule } from './specific-color-rules.js';
 import { normalizeFeatureSelectorMetadata } from './feature-selector.js';
 import { getFeatureColorRuleHash } from './feature-utils.js';
-import { featureOverrideValue } from '../services/feature-placement.js';
 
 // Ephemeral Python results belong to feature objects, never a session or a SVG.
 // An absent result is pending, not a non-match; a declined one (`matches:
@@ -212,30 +209,13 @@ export const createRulePreparation = ({
     return Promise.all([Promise.resolve(colors).catch(() => false), visibility])
       .then(([, outcome]) => outcome?.error ? outcome : true);
   };
-  // `retiredLegendIntents` are rows this commit replaces; they are no renderer
-  // rows for the N-06 caption allocation.
-  const prepareCandidate = async (rules = state.manualSpecificRules, options = {}, { retiredLegendIntents = [] } = {}) => {
+  const prepareCandidate = async (rules = state.manualSpecificRules, options = {}) => {
     const before = snapshot();
     const source = rules.map(rule => normalizeSpecificRule(rule));
     const response = await evaluate({ features: [], rules: source, kind: 'color-captions' }, options);
     if (!isCurrent(before)) return null;
     const normalized = response.rules;
     if (!await prepare(normalized, options) || !isCurrent(before)) return null;
-    const rendered = (state.extractedFeatures.value || []).filter(feature =>
-      featureOverrideValue(state.featureOverrides, feature, 'featureVisibility') !== 'off');
-    const used = new Set(rendered.map(feature => firstMatchingRule(feature, normalized)).filter(Boolean));
-    const current = state.manualSpecificRules || [];
-    const rendererRows = rendererLegendRows({
-      legendEntries: state.legendEntries?.value,
-      originalLegendOrder: state.originalLegendOrder?.value,
-      rules: [...current, ...normalized,
-        ...retiredLegendIntents.map(intent => ({ cap: intent?.caption, color: intent?.color }))]
-    });
-    const intents = buildLegendIntents(normalized.filter(rule => used.has(rule)), rendererRows).intents;
-    // The rows the current rules draw, so the commit retires the row Generate drew.
-    const currentCaption = createRuleLegendCaptions(current, rendererRows);
-    const previousIntents = current.filter(rule => rule.cap)
-      .map(rule => ({ caption: currentCaption(rule), color: rule.color }));
     const changes = normalized.flatMap((rule, index) => rule.cap !== source[index].cap
       ? [{ index, before: source[index].cap, after: rule.cap }] : []);
     // Rebind existing rule-derived overrides by their source row, never by suffix parsing.
@@ -244,7 +224,7 @@ export const createRulePreparation = ({
         && rule.color === String(override?.color || '').toLowerCase());
       return [key, index < 0 ? override : { ...override, caption: normalized[index].cap }];
     }));
-    return { rules: normalized, intents, previousIntents, changes, featureColorOverrides, snapshot: before };
+    return { rules: normalized, changes, featureColorOverrides, snapshot: before };
   };
   const notifyChanges = (candidate) => {
     if (candidate?.changes.length) notify(`Updated ${candidate.changes.length} specific-color caption(s) to distinguish their colors.`);

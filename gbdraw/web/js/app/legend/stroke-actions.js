@@ -1,4 +1,3 @@
-import { ruleMatchesFeature } from '../rule-matching.js';
 import { getFeatureCaption } from '../feature-utils.js';
 import {
   FEATURE_SELECTOR,
@@ -133,8 +132,7 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
     legendStrokeOverrides,
     featureStrokeOverrides,
     originalSvgStroke,
-    svgContainer,
-    manualSpecificRules
+    svgContainer
   } = state;
 
   const captureLegendSwatchStroke = (caption) => {
@@ -337,49 +335,6 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
       );
     }
     return updatedCount > 0 || overridesRemoved;
-  };
-
-  const captureOriginalStrokeValues = (caption) => {
-    if (!svgContainer.value) return { strokeColor: '#000000', strokeWidth: 0.5 };
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return { strokeColor: '#000000', strokeWidth: 0.5 };
-
-    const legendEntry = legendEntries.value.find((e) => e.caption === caption);
-    const legendFillColor = legendEntry?.color;
-
-    const matchingFeatures = extractedFeatures.value.filter((f) => getFeatureCaption(f) === caption);
-
-    const ruleMatch = manualSpecificRules.find((r) => r.cap === caption);
-    if (ruleMatch) {
-      const ruleFeatures = extractedFeatures.value.filter((f) => ruleMatchesFeature(f, ruleMatch));
-      matchingFeatures.push(...ruleFeatures);
-    }
-
-    for (const feat of matchingFeatures) {
-      const el = getFeatureElements(svg, feat.svg_id)[0] || null;
-      if (el) {
-        return {
-          strokeColor: el.getAttribute('stroke') || '#000000',
-          strokeWidth: parseFloat(el.getAttribute('stroke-width')) || 0.5
-        };
-      }
-    }
-
-    if (legendFillColor) {
-      const normalizedLegendColor = legendFillColor.toLowerCase();
-      const featurePaths = svg.querySelectorAll(FEATURE_SELECTOR);
-      for (const path of featurePaths) {
-        const fill = path.getAttribute('fill');
-        if (fill && fill.toLowerCase() === normalizedLegendColor) {
-          return {
-            strokeColor: path.getAttribute('stroke') || '#000000',
-            strokeWidth: parseFloat(path.getAttribute('stroke-width')) || 0.5
-          };
-        }
-      }
-    }
-
-    return { strokeColor: '#000000', strokeWidth: 0.5 };
   };
 
   const applyStrokeToFeaturesByCaption = (
@@ -617,7 +572,6 @@ export const createLegendStrokeActions = ({ state, previewRuntime = null }) => {
 
   return {
     applyStrokeToFeaturesByCaption,
-    captureOriginalStrokeValues,
     getLegendEntryStrokeColor,
     getLegendEntryStrokeWidth,
     reconcileStrokeOverrides,
