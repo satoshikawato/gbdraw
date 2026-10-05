@@ -14,10 +14,12 @@ import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 // gbdraw/features/visibility.py::should_render_feature, which Generate uses.
 const DRAWN = JSON.parse(readFileSync(new URL('../fixtures/feature_drawn_cases.json', import.meta.url), 'utf8'));
 
-// A rendered feature of the catalog, as the Web holds it.
+// A rendered feature of the catalog, as the Web holds it (admission stamps
+// the Result's mode as `scope`, which the identity key of an edit names).
 const catalogFeature = (name, index) => {
   const spec = DRAWN.features[name];
   return {
+    scope: 'circular',
     svg_id: spec.drawnSelector.hash,
     type: spec.type,
     record_id: spec.recordId,
