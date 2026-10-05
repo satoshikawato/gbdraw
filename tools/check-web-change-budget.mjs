@@ -27,6 +27,7 @@ import {
   validateProductImpactMap
 } from './web-product-impact-evaluation.mjs';
 import { literalImportSpecifiers, maskJavaScript } from './web-change-source.mjs';
+import { detectWebOwnerGraph, summarizeWebOwnerGraph } from './web-owner-graph-detectors.mjs';
 import {
   classifyWebChangeContext,
   isPullRequestEvent
@@ -383,12 +384,19 @@ const trustedWorkflowPath = '.github/workflows/web-base-policy.yml';
 // co-change").
 const webDesignRulesPath = 'gbdraw/web/CLAUDE.md';
 const designRuleGuardRegistryPath = 'tools/web-design-rule-guards.json';
+// The owner-graph registry (tools/web-owner-graph.json, implementation plan
+// Phase B2) is authority; its detectors are checker implementation and report
+// only until a rule references them.
+const ownerGraphRegistryPath = 'tools/web-owner-graph.json';
+const ownerGraphDetectorsPath = 'tools/web-owner-graph-detectors.mjs';
 const guardPaths = new Set([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   productImpactPolicyPath,
   productContractAuthorityPath,
   webDesignRulesPath,
   designRuleGuardRegistryPath,
+  ownerGraphRegistryPath,
+  ownerGraphDetectorsPath,
   '.github/pull_request_template.md',
   'tools/check-web-change-budget.mjs',
   'tools/web-architecture-detectors.mjs',
@@ -418,6 +426,7 @@ const changedGuards = [...changed.keys()].filter((path) => guardPaths.has(path))
 const checkerImplementationPaths = new Set([
   'tools/check-web-change-budget.mjs',
   'tools/web-architecture-detectors.mjs',
+  ownerGraphDetectorsPath,
   'tools/web-architecture-evaluation.mjs',
   productImpactEvaluationPath,
   productImpactDecisionSourcePath,
@@ -431,6 +440,7 @@ const authorityPaths = new Set([
   productContractAuthorityPath,
   webDesignRulesPath,
   designRuleGuardRegistryPath,
+  ownerGraphRegistryPath,
   'docs/internal/WEB_CHANGE_POLICY.md',
   architectureRulesPath,
   acceptedViolationsPath,
@@ -760,6 +770,46 @@ const baseProductionSources = new Map(
         ?? ''
   ])
 );
+
+// Owner-graph report (implementation plan Phase B1): report only. The
+// registry, when present, is read from the trusted base; the detectors run on
+// the base and the head sources.
+const readOwnerGraphRegistry = () => {
+  const source = readRevisionFile(base, ownerGraphRegistryPath);
+  if (source === null) return { registry: null, error: null };
+  try {
+    const parsed = JSON.parse(source);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? { registry: parsed, error: null }
+      : { registry: null, error: `${ownerGraphRegistryPath}: expected an object` };
+  } catch (error) {
+    return { registry: null, error: `${ownerGraphRegistryPath}: invalid JSON (${error.message})` };
+  }
+};
+const ownerGraphRegistryEvaluation = readOwnerGraphRegistry();
+const ownerGraphReport = (() => {
+  try {
+    const registry = ownerGraphRegistryEvaluation.registry;
+    const headResults = detectWebOwnerGraph(allProductionSources, registry);
+    const baseResults = detectWebOwnerGraph(baseProductionSources, registry);
+    const subjectDelta = (id) => {
+      const before = new Set(baseResults[id].subjects);
+      const after = new Set(headResults[id].subjects);
+      return {
+        added: [...after].filter((subject) => !before.has(subject)).sort(),
+        removed: [...before].filter((subject) => !after.has(subject)).sort()
+      };
+    };
+    return {
+      error: null,
+      head: summarizeWebOwnerGraph(headResults),
+      base: summarizeWebOwnerGraph(baseResults),
+      deltas: Object.fromEntries(Object.keys(headResults).map((id) => [id, subjectDelta(id)]))
+    };
+  } catch (error) {
+    return { error: error?.message || String(error), head: null, base: null, deltas: {} };
+  }
+})();
 
 const sourceInventory = (sources) => {
   const inventory = {
@@ -2435,6 +2485,24 @@ const report = [
     : designRuleRegistryErrors.length ? 'malformed' : 'absent (inert)'}`,
   ...designRuleAllowlistContractions.map((subject) => `- contraction: ${subject}`),
   ...designRuleAllowlistExpansions.map((subject) => `- expansion: ${subject}`),
+  '## Owner graph (report)',
+  '',
+  ...(ownerGraphReport.error
+    ? [`- Detector error: ${ownerGraphReport.error}`]
+    : [
+      `- Registry: ${ownerGraphRegistryEvaluation.registry
+        ? `${ownerGraphRegistryPath} from the trusted base`
+        : ownerGraphRegistryEvaluation.error ? `malformed (${ownerGraphRegistryEvaluation.error})` : 'defaults (registry absent)'}`,
+      ...['injectionEdges', 'forwardClosures', 'stateBackdoors', 'wholeObjectPorts', 'triggerSites', 'triggerModules']
+        .map((key) => `- ${key}: ${ownerGraphReport.base[key]} -> ${ownerGraphReport.head[key]}`),
+      ...Object.keys(ownerGraphReport.head.projectionShapes).map((domain) => (
+        `- shapes:${domain}: ${ownerGraphReport.base.projectionShapes[domain] ?? 0} -> ${ownerGraphReport.head.projectionShapes[domain]}`
+      )),
+      ...Object.entries(ownerGraphReport.deltas).flatMap(([id, { added, removed }]) => [
+        ...added.map((subject) => `- ${id}: NEW ${subject}`),
+        ...removed.map((subject) => `- ${id}: REMOVED ${subject}`)
+      ])
+    ]),
   ''
 ].join('\n');
 
