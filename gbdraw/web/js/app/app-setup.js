@@ -1,6 +1,8 @@
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan } from './candidate-render.js';
-import { countUnresolvedFeatureEdits, removeUnresolvedFeatureEdits } from './feature-visibility.js';
+import {
+  countUnresolvedFeatureEdits, removeUnresolvedFeatureEdits, requestFeatureVisibilityRules
+} from './feature-visibility.js';
 import { isLegendOrderEdited } from './legend/utils.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
@@ -1287,7 +1289,8 @@ export const createAppSetup = () => {
     state,
     pending: ruleMatchingPending,
     notify: notice => { specificRuleNotice.value = notice; },
-    evaluate: async (payload, options) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload, options)).result
+    evaluate: async (payload, options) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload, options)).result,
+    visibilityRules: () => requestFeatureVisibilityRules(state.featureVisibilityManualRules)
   });
   const legendActions = createLegendManager({
     state,
@@ -2662,7 +2665,10 @@ export const createAppSetup = () => {
     if ((palette || rules) && prepareRules && !await rulePreparation.prepare()) return false;
     if (palette) svgActions.applyPaletteToSvg();
     if (rules) svgActions.applySpecificRulesToSvg();
-    if (visibility) reconcileFeatureVisibility();
+    if (visibility) {
+      await rulePreparation.prepareDrawn();
+      reconcileFeatureVisibility();
+    }
     if (legend) reconcileLegendEntries(legend);
     if (strokes) reconcileStrokeOverrides(strokes);
     if (labels) reconcileLabelOverrides();

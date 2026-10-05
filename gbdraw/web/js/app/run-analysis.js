@@ -31,7 +31,7 @@ import {
   requestLabelProjection,
   requestLabelTableTsv
 } from '../services/session-request.js';
-import { labelOnBlocker } from './feature-editor/label-actions.js';
+import { labelDrawingBlocker } from './feature-editor/label-actions.js';
 import {
   applyCircularSuppressControlsToSlots,
   applyCircularTrackOrderPlacements,
@@ -200,18 +200,20 @@ const hashText = async (text) => {
 };
 
 // Label visibility On draws the label whatever Show Labels and the label
-// filters select, so it must bind, unless the request cannot draw it: a hidden
-// feature, a feature drawn as underlay, or Label Rendering = Embedded Only.
-// That On takes effect when the label can be drawn (Owner Q1, Q2). Label text
-// alone and Off follow those settings, which may leave the feature unlabeled.
+// filters select, so it must bind, unless the request cannot draw it: a feature
+// drawn as underlay, or Label Rendering = Embedded Only. That On takes effect
+// when the label can be drawn (Owner Q1, Q2). The operations reach only the
+// features the request's catalog lists as rendered, which Python draws
+// (should_render_feature), so a hidden feature has none. Label text alone and
+// Off follow those settings, which may leave the feature unlabeled.
 const labelOperationIds = (operations) => (operations || [])
   .map((operation) => String(operation?.renderedId || '').trim())
   .filter(Boolean);
-const forcedLabelFeatureIds = (operations, { state, features, diagramOptions }) => {
+const forcedLabelFeatureIds = (operations, { features, diagramOptions }) => {
   const featuresById = new Map((features || []).map((feature) => [String(feature?.svg_id || '').trim(), feature]));
   return Object.freeze([...new Set(labelOperationIds(
     (operations?.labelVisibility || []).filter((operation) => operation?.mode === 'on')
-  ))].filter((featureId) => !labelOnBlocker(state, featureId, featuresById.get(featureId), diagramOptions)));
+  ))].filter((featureId) => !labelDrawingBlocker(featuresById.get(featureId), diagramOptions)));
 };
 
 const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
@@ -4648,7 +4650,6 @@ export const createRunAnalysis = ({
         || null
       );
       const requiredLabelFeatureIds = forcedLabelFeatureIds(selectedMutationOperations, {
-        state,
         features: [...(candidateCatalogAdmission.renderedFeaturesByResult[nextSelectedResultIndex]?.values() || [])],
         diagramOptions: canonical.renderRequest.diagramOptions
       });
@@ -5267,7 +5268,6 @@ export const createRunAnalysis = ({
   const expectReflowLabelBindings = (commit, resultIndex, isCurrentReflow, diagramOptions) => {
     const result = commit.results[resultIndex];
     const featureIds = forcedLabelFeatureIds(commit.mutationPlan?.operationsByResult?.[resultIndex], {
-      state,
       features: [...(commit.featureState?.renderedFeaturesByResult?.[resultIndex]?.values()
         || extractedFeatures.value || [])],
       diagramOptions

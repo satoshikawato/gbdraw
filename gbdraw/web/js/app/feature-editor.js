@@ -54,7 +54,9 @@ export const createFeatureEditor = ({
     state,
     featureSvgActions,
     labelActions,
-    previewRuntime
+    previewRuntime,
+    rulePreparation,
+    getCommittedRequest
   });
   // A loaded table shows on the displayed Result as a History apply does (R3).
   const featureEditTableActions = createFeatureEditTableActions({

@@ -8,7 +8,21 @@ from pandas import DataFrame
 
 from gbdraw.features.colors import normalize_specific_color_captions, preprocess_color_tables
 from gbdraw.features.selector_values import iter_specific_color_rules
+from gbdraw.features.visibility import (
+    _first_matching_visibility_rule,
+    compile_feature_visibility_rules,
+)
 from gbdraw.labels.filtering import _build_label_override_rules, _resolve_label_override
+
+
+def _compile_visibility_row(rule: dict) -> dict | None:
+    """One draft row as Generate compiles the visibility table, or None for a
+    row that Generate skips as a header."""
+    compiled = compile_feature_visibility_rules(DataFrame([dict(
+        record_id=rule["recordId"], feature_type=rule["featureType"],
+        qualifier=rule["qualifier"], value=rule["value"], action=rule["action"],
+    )]))
+    return compiled[0] if compiled else None
 
 
 def evaluate_rules_json(features_json: str, rules_json: str, kind: str = "color") -> str:
@@ -49,6 +63,8 @@ def evaluate_rules_json(features_json: str, rules_json: str, kind: str = "color"
         ]
         defaults = DataFrame(columns=["feature_type", "color"])
         compiled, _ = preprocess_color_tables(DataFrame(rows), defaults)
+    elif kind == "visibility":
+        compiled = [_compile_visibility_row(r) for r in rules]
     elif kind == "label":
         rows = [dict(record_id=r["recordId"], feature_type=r["featureType"],
                      qualifier=r["qualifier"], value=r["valueRegex"], label_text=str(i))
@@ -71,6 +87,13 @@ def evaluate_rules_json(features_json: str, rules_json: str, kind: str = "color"
             priorities.append(ranks)
             matches.append(matched)
             winners.append(matched[0] if matched else -1)
+        elif kind == "visibility":
+            # Every rule this feature matches; the first in table order decides.
+            matches.append([
+                index for index, rule in enumerate(compiled)
+                if rule is not None
+                and _first_matching_visibility_rule(feature, [rule], record, selector=selector)
+            ])
         else:
             winner = _resolve_label_override(feature, feature.type, feature.qualifiers,
                                              item.get("label", ""), compiled, record, selector=selector)

@@ -241,20 +241,35 @@ def compile_feature_visibility_rules(
 
 
 
-def _rule_matches_feature(feature: Any, rule: dict[str, Any], record_id: Optional[str]) -> bool:
+def _rule_matches_feature(
+    feature: Any,
+    rule: dict[str, Any],
+    record_id: Optional[str],
+    selector: Optional[dict[str, Any]] = None,
+) -> bool:
+    """Match one rule; ``selector`` supplies the drawn feature's hash and
+    locations when the caller has them instead of the feature (the Web)."""
     qualifier_key = str(rule["qualifier_normalized"])
     pattern = rule["pattern"]
 
     if qualifier_key == "record_location":
-        feature_record_location = get_feature_record_location_str(feature, record_id)
+        feature_record_location = (
+            selector.get("record_location")
+            if selector is not None
+            else get_feature_record_location_str(feature, record_id)
+        )
         return bool(feature_record_location and pattern.search(feature_record_location))
 
     if qualifier_key == "hash":
-        feature_hash = get_feature_hash(feature, record_id)
+        feature_hash = (
+            selector.get("hash") if selector is not None else get_feature_hash(feature, record_id)
+        )
         return bool(feature_hash and pattern.search(feature_hash))
 
     if qualifier_key == "location":
-        feature_location = get_feature_location_str(feature)
+        feature_location = (
+            selector.get("location") if selector is not None else get_feature_location_str(feature)
+        )
         return bool(feature_location and pattern.search(feature_location))
 
     qualifiers = get_feature_qualifiers(feature)
@@ -266,6 +281,7 @@ def _first_matching_visibility_rule(
     feature: Any,
     feature_visibility_rules: Optional[list[dict[str, Any]]],
     record_id: Optional[str] = None,
+    selector: Optional[dict[str, Any]] = None,
 ) -> Optional[dict[str, Any]]:
     if not feature_visibility_rules:
         return None
@@ -278,7 +294,9 @@ def _first_matching_visibility_rule(
             continue
         if not _matches_constraint(str(rule["feature_type"]), feature_type):
             continue
-        if not _rule_matches_feature(feature, rule, record_id=resolved_record_id):
+        if not _rule_matches_feature(
+            feature, rule, record_id=resolved_record_id, selector=selector
+        ):
             continue
         return rule
     return None
