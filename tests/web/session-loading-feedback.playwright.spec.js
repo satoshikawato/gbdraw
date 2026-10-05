@@ -169,6 +169,40 @@ test('session loading is painted before import work and prevents duplicate adopt
   await expect(sessionInput).toHaveValue('');
 });
 
+// OV-40: the Session 39 Web writer stored a Label whitelist keyword typed with a
+// tab as an extra cell (tests/fixtures/sessions/whitelist-tab-keyword.provenance.json).
+// Load reads the row as the current writer writes it and names it in the notice.
+test('a Session 39 table row with extra cells loads with a notice that names it', async ({
+  page
+}) => {
+  test.setTimeout(180_000);
+  await openApp(page);
+  const dialogs = [];
+  page.on('dialog', async (dialog) => {
+    dialogs.push(dialog.message());
+    await dialog.accept();
+  });
+  await installLifecycleProbe(page);
+  await page.locator(sessionInputSelector).setInputFiles(join(
+    repoRoot, 'tests', 'fixtures', 'sessions', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz'
+  ));
+  await page.waitForFunction(() => (
+    window.__GBDRAW_SESSION_LOADING_EVENTS__.some(({ name }) => name === 'interactiveReady')
+    && window.__GBDRAW_APP__?.sessionImportPending === false
+  ), null, { timeout: 120_000 });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
+  expect(dialogs).toEqual(['Session loaded successfully! Some table rows of this older Session were read '
+    + 'as the current version writes them. Label whitelist: line 1 had extra cells, joined into the last column '
+    + 'with one space.']);
+  expect(await page.evaluate(() => ({
+    filterMode: window.__GBDRAW_APP__.filterMode,
+    whitelist: JSON.parse(JSON.stringify(window.__GBDRAW_APP__.manualWhitelist))
+  }))).toEqual({
+    filterMode: 'Whitelist',
+    whitelist: [{ feat: 'CDS', qual: 'product', key: 'cytochrome c oxidase' }]
+  });
+});
+
 test('failed session loading clears pending state and preserves the prior session', async ({
   page
 }) => {

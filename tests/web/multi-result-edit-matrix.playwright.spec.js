@@ -15,7 +15,7 @@
 // made on while another Result is shown (B17). The grid and Linear topologies
 // are in live-edit-generate-equivalence (G-A).
 const { test, expect } = require('@playwright/test');
-const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { editFeature, legendCaptions, openBatch, settle } = require('./helpers/audit-browser.cjs');
 const { download, load } = require('./helpers/mode-transition.cjs');
 
@@ -28,7 +28,7 @@ const EDITS = [
   ['annotation-label color scope', (page) => editFeature(page, 'TESTB_0001', { fill: RED, scope: 'annotationLabel' })],
   // "Exact product: spliced minus" covers TESTA_0004 and TESTB_0004.
   ['product visibility scope', (page) => editFeature(page, 'TESTB_0004', { visibility: 'off', visibilityScope: 'product' })],
-  ['legend entry color', (page) => page.evaluate((color) => {
+  ['legend entry color', (page) => evaluateWithRetainedPromise(page, (color) => {
     const app = window.__GBDRAW_APP__;
     return app.updateLegendEntryColor(app.legendEntries.findIndex((entry) => entry.caption === 'tRNA'), color);
   }, TEAL)],
@@ -225,7 +225,7 @@ test('Circular batch: a Label TSV imported on Result 1 reaches Result 2 live, th
   await show(page, 0);
   const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   const before = await undoCount();
-  await page.evaluate((tsv) => window.__GBDRAW_APP__.loadLabelOverrideTable({
+  await evaluateWithRetainedPromise(page, (tsv) => window.__GBDRAW_APP__.loadLabelOverrideTable({
     target: { files: [new File([tsv], 'labels.tsv')], value: 'labels.tsv' }
   }), LABEL_TSV);
   await settle(page);
@@ -233,12 +233,12 @@ test('Circular batch: a Label TSV imported on Result 1 reaches Result 2 live, th
   expect.soft(await labelViolations(page, 'import', ids, IMPORTED_LABELS)).toEqual([]);
 
   // Undo and Redo run while Result 2 is displayed; Result 1 follows when shown.
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   expect(await undoCount()).toBe(before);
   expect.soft(await labelViolations(page, 'Undo', ids, ORIGINAL_LABELS)).toEqual([]);
 
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
   await settle(page);
   expect.soft(await labelViolations(page, 'Redo', ids, IMPORTED_LABELS)).toEqual([]);
 
@@ -327,7 +327,7 @@ test('Circular batch: Undo and Redo of a Legend sort on Result 2 keep each Resul
   await show(page, 0);
   expect(await legendCaptions(page)).toEqual(shared(sorted));
 
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   expect.soft(await legendView(page), 'Undo on Result 1 gives its order before the sort, without the Result 2 entry')
     .toEqual(sameView(result1));
@@ -335,7 +335,7 @@ test('Circular batch: Undo and Redo of a Legend sort on Result 2 keep each Resul
   expect.soft(await legendView(page), 'after Undo, Result 2 shows its order before the sort').toEqual(sameView(result2));
 
   await show(page, 0);
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
   await settle(page);
   expect.soft(await legendView(page), 'Redo on Result 1 sorts it again, without the Result 2 entry')
     .toEqual(sameView(shared(sorted)));
@@ -418,7 +418,7 @@ const dragRole = (role, dx, dy) => (page) => page.evaluate(async ({ targetRole, 
   await new Promise((resolve) => setTimeout(resolve, 100));
 }, { targetRole: role, deltaX: dx, deltaY: dy });
 
-const onApp = (action, arg = null) => (page) => page.evaluate(action, arg);
+const onApp = (action, arg = null) => (page) => evaluateWithRetainedPromise(page, action, arg);
 const SWITCH_EDITS = [
   ['feature fill', (page) => editFeature(page, 'TESTB_0001', { fill: RED })],
   ['feature stroke', onApp(async () => {
@@ -483,7 +483,7 @@ test('Circular batch: each editor edit kind is committed when made, not by the R
   await dragRole('primary', -20, 10)(page);
   await settle(page);
   await show(page, 0);
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   for (const index of [0, 1]) {
     await show(page, index);
@@ -517,7 +517,7 @@ test('Circular batch: Undo and Redo of drags on Result 2 restore Result 2 while 
   await show(page, 0);
   expect.soft(await undoCount(), 'a Result switch records no Undo step').toBe(steps);
 
-  for (const _drag of ['legend', 'primary']) await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  for (const _drag of ['legend', 'primary']) await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   expect.soft(await page.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex), 'Undo keeps Result 1 shown').toBe(0);
   expect.soft(await offsets(page), 'Undo restores Result 2 and leaves Result 1').toEqual(undragged);
@@ -530,7 +530,7 @@ test('Circular batch: Undo and Redo of drags on Result 2 restore Result 2 while 
   await show(page, 0);
   expect.soft(await mountedOffsets(page), 'after Undo, Result 1 is shown unmoved').toEqual(undragged[0]);
 
-  for (const _drag of ['primary', 'legend']) await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  for (const _drag of ['primary', 'legend']) await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
   await settle(page);
   expect.soft(await offsets(page), 'Redo drags Result 2 again and leaves Result 1').toEqual(draggedOffsets);
   await show(page, 1);
