@@ -710,6 +710,12 @@ Retired names and their replacements are listed under
   and both spans. It showed "Match feature endpoint identity is invalid." under
   each span and offered no sequence actions; a one-anchor block was not
   affected. Gallery SVGs carry the fix after their next refresh.
+- Fixed: in a standalone interactive SVG, the popup of a Linear collinear block
+  with several anchors lists, for each Similarity group, only the anchors that
+  belong to that group under Query member and Subject member, and lists one row
+  per anchor under Query and Subject. It listed every anchor of the block for
+  every group and joined the anchors into one row; the Web popup was not
+  affected. Gallery SVGs carry the fix after their next refresh (OV-18).
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 

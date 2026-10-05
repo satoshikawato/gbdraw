@@ -5076,8 +5076,20 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   function materializedMatchFeatureRows(match, role, fallback) {
     if (match && match._gbdraw_catalog_endpoint_contract === true) {
       var resolvedFeature = resolvedCatalogMatchFeature(match, role);
-      if (!resolvedFeature) return [materializedMatchFeatureRow('', fallback)];
-      return [materializedMatchFeatureRow(resolvedFeature.svg_id, fallback, resolvedFeature)];
+      if (resolvedFeature) {
+        return [materializedMatchFeatureRow(resolvedFeature.svg_id, fallback, resolvedFeature)];
+      }
+      if (!catalogMatchEndpointResolved(match, role)) {
+        return [materializedMatchFeatureRow('', fallback)];
+      }
+      // A collinear block names several anchors: one row each, as in the Web popup.
+      return getOrthogroupIds(match[role + '_feature_svg_id']).map(function (svgId) {
+        return materializedMatchFeatureRow(
+          svgId,
+          { recordId: fallback && fallback.recordId },
+          featuresById.get(svgId)
+        );
+      });
     }
     var svgIds = match && match[role + '_feature_svg_id'];
     var ids = getOrthogroupIds(svgIds);
@@ -5089,17 +5101,21 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function materializedBlockMemberLabels(group, featureSvgIds) {
     if (!group) return '';
-    return getOrthogroupIds(featureSvgIds).map(function (svgId) {
+    var labels = [];
+    getOrthogroupIds(featureSvgIds).forEach(function (svgId) {
       var renderedFeature = featuresById.get(svgId) || null;
       var member = renderedFeature
         ? getFeatureOrthogroupMember(renderedFeature, group)
         : null;
-      return firstNonInternalDisplayText(
+      if (!member) return;
+      var label = firstNonInternalDisplayText(
         displayProteinId(featureForMember(member) || renderedFeature, member, ''),
-        member && member.label,
+        member.label,
         svgId
       );
-    }).filter(function (value) { return value; }).join('; ');
+      if (label && labels.indexOf(label) < 0) labels.push(label);
+    });
+    return labels.join('; ');
   }
 
   function reverseComplementMatchSequence(sequence) {
