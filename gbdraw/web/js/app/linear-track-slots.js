@@ -12,6 +12,7 @@ import {
   isManualSlotValue,
   normalizeOptionalText
 } from './track-slot-display.js';
+import { featureSlotEdits } from './track-slot-edits.js';
 import { requireCurrentLinearTrackLayout } from './current-option-values.js';
 import { parseOptionalPixel, validateCustomTrackPlan } from './track-slot-validation.js';
 import { visibleFeatureUnderlaysForState } from '../utils/feature-rendering.js';
@@ -819,9 +820,10 @@ const replaceObjectContents = (target, source) => {
   return target;
 };
 
-// `trackLayoutActions` is the feature placement owner's transition (R10, Q3):
-// every stack edit that can change the feature slot runs through it.
-export const createLinearTrackSlotEditor = ({ state, trackLayoutActions = (actions) => actions }) => {
+// `changeTrackLayout` is the feature placement owner's transition, injected as
+// a port (R10, Q3, R13): every stack edit that can change the feature slot
+// runs through it.
+export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply) => apply() }) => {
   const { adv, form } = state;
   const editorKeys = new WeakMap();
   let nextEditorKey = 1;
@@ -1616,7 +1618,7 @@ export const createLinearTrackSlotEditor = ({ state, trackLayoutActions = (actio
     linearTrackRendererLabel,
     normalizeLinearTrackSlots: normalizeCurrentSlots,
     changeLinearDepthSources,
-    ...trackLayoutActions({
+    ...featureSlotEdits(changeTrackLayout, {
       resetLinearTrackSlotsFromSimpleControls,
       setLinearTrackSlotsEnabled,
       addLinearTrackSlot,

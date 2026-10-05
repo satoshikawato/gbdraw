@@ -21,7 +21,6 @@ import { evaluateWebOwnerGraphAt } from '../../tools/report-web-owner-graph.mjs'
 // Print the current subjects with `node tools/report-web-owner-graph.mjs --at worktree`.
 const OWNER_GRAPH_BASELINE = {
   // owner-graph.injection-edge.v1
-  'owner-graph.injection-edge.v1|app/app-setup.js|circularTrackSlotEditor<-trackLayoutActions': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|featureActions<-featureSelection': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|featureActions<-history': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|featureActions<-legendActions': 1,
@@ -39,7 +38,6 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.injection-edge.v1|app/app-setup.js|legendLayout<-history': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|legendLayout<-legendActions': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|legendLayout<-previewRuntime': 1,
-  'owner-graph.injection-edge.v1|app/app-setup.js|linearTrackSlotEditor<-trackLayoutActions': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|previewFeatureSearch<-previewRuntime': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|recordDisplayControls<-history': 1,
   'owner-graph.injection-edge.v1|app/app-setup.js|recordDisplayControls<-linearRecordSelector': 1,
@@ -91,7 +89,6 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.state-backdoor.v1|app/app-setup.js|recordDisplayRows': 1,
   'owner-graph.state-backdoor.v1|app/app-setup.js|sessionPreparationBusyReason': 1,
   // owner-graph.whole-object-port.v1
-  'owner-graph.whole-object-port.v1|app/circular-track-slots.js|createCircularTrackSlotEditor|trackLayoutActions': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/color-actions.js|createFeatureColorActions|featureSvgActions': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/color-actions.js|createFeatureColorActions|legendActions': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/color-actions.js|createFeatureColorActions|previewRuntime': 1,
@@ -125,7 +122,6 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.whole-object-port.v1|app/legend/entry-actions.js|createLegendEntryActions|previewRuntime': 1,
   'owner-graph.whole-object-port.v1|app/legend/sort-actions.js|createLegendSortActions|previewRuntime': 1,
   'owner-graph.whole-object-port.v1|app/legend/stroke-actions.js|createLegendStrokeActions|previewRuntime': 1,
-  'owner-graph.whole-object-port.v1|app/linear-track-slots.js|createLinearTrackSlotEditor|trackLayoutActions': 1,
   'owner-graph.whole-object-port.v1|app/record-display-options.js|createRecordDisplayControls|history': 1,
   'owner-graph.whole-object-port.v1|app/record-display-options.js|createRecordDisplayControls|linearRecordSelector': 1,
   'owner-graph.whole-object-port.v1|app/record-display/feature-record-rotation.js|createFeatureRecordRotationAction|recordDisplayControls': 1,

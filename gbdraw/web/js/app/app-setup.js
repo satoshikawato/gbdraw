@@ -1440,9 +1440,10 @@ export const createAppSetup = () => {
     linearTrackSlotsPanelOpen.value = !linearTrackSlotsPanelOpen.value;
   };
   const circularConservationFastaInput = ref(null);
-  const { trackLayoutActions } = featureActions.placementActions;
-  const circularTrackSlotEditor = createCircularTrackSlotEditor({ state, trackLayoutActions });
-  const linearTrackSlotEditor = createLinearTrackSlotEditor({ state, trackLayoutActions });
+  // The stack editors receive the feature placement transition as one port (R10, R13).
+  const { changeTrackLayout } = featureActions.placementActions;
+  const circularTrackSlotEditor = createCircularTrackSlotEditor({ state, changeTrackLayout });
+  const linearTrackSlotEditor = createLinearTrackSlotEditor({ state, changeTrackLayout });
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
     state, getRecordCatalog: getAnnotationRecordCatalog,

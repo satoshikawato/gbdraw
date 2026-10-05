@@ -44,7 +44,7 @@ test('a stack edit that drops a lane asks, Cancel keeps the draft, and Reset is 
   const steps = [];
   const placement = createFeaturePlacementActions({ state, getCommittedRequest: () => null, isCurrentFeature: () => true,
     history: { runUndoable: async (label, fn) => { steps.push(label); fn(); } } });
-  const editor = createCircularTrackSlotEditor({ state, trackLayoutActions: placement.trackLayoutActions });
+  const editor = createCircularTrackSlotEditor({ state, changeTrackLayout: placement.changeTrackLayout });
   editor.normalizeCircularTrackSlots();
   createLinearTrackSlotEditor({ state }).normalizeLinearTrackSlots();
   Object.assign(state.featurePlacementOverrides, { c: lane('circular', 'outward'), l: lane('linear', 'above') });
@@ -112,6 +112,18 @@ const RECONCILE = new Set([
   'normalizeLinearTrackSlots', 'changeLinearDepthSources'
 ]);
 const EDITORS = { circular: createCircularTrackSlotEditor, linear: createLinearTrackSlotEditor };
+// The exports an editor routes through its `changeTrackLayout` port: each asks
+// the port first, so a port that never applies the edit names them.
+const transitionalExports = (mode) => {
+  let asked = false;
+  const editor = EDITORS[mode]({ state: draftState(mode), changeTrackLayout: () => { asked = true; } });
+  return Object.keys(editor).filter((name) => {
+    if (typeof editor[name] !== 'function') return false;
+    asked = false;
+    try { editor[name](); } catch { /* an unfit call */ }
+    return asked;
+  });
+};
 const STACK = {
   circular: { normalize: 'normalizeCircularTrackSlots', offAxis: 'moveCircularTrackSlotOutside' },
   linear: { normalize: 'normalizeLinearTrackSlots', offAxis: 'moveLinearTrackSlotAbove' }
@@ -124,37 +136,34 @@ for (const mode of MODES) {
       state.adv.linear_track_slots.push(
         { id: 'gc_content', renderer: 'dinucleotide_content', enabled: true, side: 'below', params: { nt: 'GC' } },
         { id: 'gap', renderer: 'spacer', enabled: true, side: 'below', height: '12px', params: {} });
-      let raw = null;
       const windows = [];
-      const editor = EDITORS[mode]({ state, trackLayoutActions: (actions) => {
-        raw = actions;
-        return Object.fromEntries(Object.entries(actions).map(([name, action]) => [name, (...args) => {
-          const entry = project(state);
-          try { return action(...args); } finally { windows.push([entry, project(state)]); }
-        }]));
+      // The port applies every edit and records the inputs around it.
+      const editor = EDITORS[mode]({ state, changeTrackLayout: (apply) => {
+        const entry = project(state);
+        try { return apply(); } finally { windows.push([entry, project(state)]); }
       } });
       editor[STACK[mode].normalize]();
-      if (offAxis) raw[STACK[mode].offAxis](state.adv[`${mode}_track_slots`].indexOf(slotOf(state, mode)));
+      if (offAxis) editor[STACK[mode].offAxis](state.adv[`${mode}_track_slots`].indexOf(slotOf(state, mode)));
       // The simple controls now differ from the stack, so Reset changes it.
       Object.assign(state.form, { track_type: 'tuckin', linear_track_layout: 'below' });
       windows.length = 0;
-      return { state, editor, raw, windows };
+      return { state, editor, windows };
     };
-    const transitional = Object.keys(fixture(false).raw);
-    assert.ok(transitional.length >= 10, 'the stack edits run through trackLayoutActions');
+    const transitional = transitionalExports(mode);
+    assert.ok(transitional.length >= 10, 'the stack edits run through changeTrackLayout');
     const changedBy = new Set();
     for (const offAxis of [false, true]) {
       const { editor: probe } = fixture(offAxis);
       for (const name of Object.keys(probe).filter((key) => typeof probe[key] === 'function')) {
         for (let call = 0; call < CALLS(fixture(offAxis).state, mode).length; call += 1) {
-          const { state, editor, raw, windows } = fixture(offAxis);
+          const { state, editor, windows } = fixture(offAxis);
           const args = CALLS(state, mode)[call];
           const lanes = laneSidesOf(state);
           const before = project(state);
           const whole = everything(state);
           const saved = saveTrackLayout(state);
           const label = `${mode} ${name} call ${call}${offAxis ? ' (feature row off the Axis)' : ''}`;
-          try { (transitional.includes(name) ? raw : editor)[name](...args); } catch { /* an unfit call */ }
+          try { editor[name](...args); } catch { /* an unfit call */ }
           if (transitional.includes(name)) {
             // Cancel restores every field the edit wrote (restoreTrackLayout).
             if (everything(state) !== whole) changedBy.add(name);
@@ -249,13 +258,7 @@ test('templates reach the feature-slot inputs only through the transition (R10, 
   for (const [, model] of html.matchAll(/v-model(?:\.\w+)*="([^"]*)"/g)) {
     assert.doesNotMatch(model.trim(), new RegExp(`^${inputs}$`), `v-model="${model}" writes a feature-slot input`);
   }
-  const names = new Set(['featurePlacementActions.changeLayoutSetting']);
-  for (const mode of MODES) {
-    EDITORS[mode]({ state: draftState(mode), trackLayoutActions: (actions) => {
-      Object.keys(actions).forEach((name) => names.add(name));
-      return actions;
-    } });
-  }
+  const names = new Set(['featurePlacementActions.changeLayoutSetting', ...MODES.flatMap(transitionalExports)]);
   // The whole tag of an attribute, read with quotes so `=>` does not end it.
   const tagAt = (index) => {
     let start = html.lastIndexOf('<', index);
@@ -290,5 +293,5 @@ test('the stack editors are created once, with the transition', () => {
   const sites = sources(`${WEB}/js`).flatMap((path) => [...readFileSync(path, 'utf8')
     .matchAll(/create(?:Circular|Linear)TrackSlotEditor\(\{([^}]*)\}\)/g)]
     .map((match) => [relative(`${WEB}/js`, path), match[1].replace(/\s+/g, ' ').trim()]));
-  assert.deepEqual(sites, [['app/app-setup.js', 'state, trackLayoutActions'], ['app/app-setup.js', 'state, trackLayoutActions']]);
+  assert.deepEqual(sites, [['app/app-setup.js', 'state, changeTrackLayout'], ['app/app-setup.js', 'state, changeTrackLayout']]);
 });
