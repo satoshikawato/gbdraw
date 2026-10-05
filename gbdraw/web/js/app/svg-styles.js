@@ -44,8 +44,10 @@ export const createSvgStyles = ({
   watch,
   nextTick,
   legendActions,
-  rulePreparation,
-  previewRuntime = null
+  previewRuntime = null,
+  // R13: the composition root's projection of the palette and the rules (R3),
+  // which prepares the rule matches and applies both through this owner.
+  projectPaletteAndRules
 }) => {
   const {
     svgContent,
@@ -486,11 +488,7 @@ export const createSvgStyles = ({
           'collinear_block_minus'
         ]
       );
-      nextTick(async () => {
-        if (!await rulePreparation.prepare()) return;
-        applyPaletteToSvg({ recolorPairwise, recolorCollinear });
-        applySpecificRulesToSvg();
-      });
+      nextTick(() => projectPaletteAndRules({ recolor: { recolorPairwise, recolorCollinear } }));
     },
     { deep: true }
   );

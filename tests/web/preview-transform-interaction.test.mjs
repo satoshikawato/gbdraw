@@ -85,6 +85,11 @@ await writeFile(
   'utf8'
 );
 await writeFile(
+  join(tempDir, 'app', 'rule-matching.js'),
+  'export const reportRuleRunFailure = (_state, _operation, run) => run();\n',
+  'utf8'
+);
+await writeFile(
   join(tempDir, 'app', 'feature-sequence-fasta.js'),
   'export const buildFeatureSequenceFastas = () => ({ nucleotideFasta: "", aminoAcidFasta: "" });\n',
   'utf8'

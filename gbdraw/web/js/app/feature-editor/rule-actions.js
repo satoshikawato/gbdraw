@@ -20,7 +20,10 @@ import {
 } from '../../utils/feature-rendering.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
 
-export const createFeatureRuleActions = ({ state, nextTick, prepareFileLegendEntries, rulePreparation, history, svgActions, ref, computed, isPatternEditAvailable = () => true }) => {
+// R13: `projectPaletteAndRules` is the composition root's projection of the
+// palette and the specific-color rules (R3); this owner calls it after a rule
+// commit, whose candidate rules it has prepared.
+export const createFeatureRuleActions = ({ state, nextTick, prepareFileLegendEntries, rulePreparation, history, projectPaletteAndRules, ref, computed, isPatternEditAvailable = () => true }) => {
   const {
     currentColors,
     appliedPaletteColors,
@@ -154,8 +157,7 @@ export const createFeatureRuleActions = ({ state, nextTick, prepareFileLegendEnt
   };
   const applyRulePreview = () => {
     refreshFeatureOverrides(extractedFeatures.value);
-    svgActions.applyPaletteToSvg();
-    svgActions.applySpecificRulesToSvg();
+    projectPaletteAndRules({ prepareRules: false });
   };
 
   const editSpecificRulePattern = (row, value) => {

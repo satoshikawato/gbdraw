@@ -1,5 +1,4 @@
-import { normalizeUserFacingError } from '../../services/error-normalization.js';
-import { ruleMatchesFeature } from '../rule-matching.js';
+import { reportRuleRunFailure, ruleMatchesFeature } from '../rule-matching.js';
 import { resolveColorToHex } from '../color-utils.js';
 import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } from '../feature-utils.js';
 import { exactRegexValue } from '../feature-selector.js';
@@ -11,11 +10,12 @@ import {
 
 export const createFeatureColorActions = ({
   state,
-  rulePreparation,
+  // R13: runs an action once the color rule matches it reads are prepared;
+  // the composition root injects the rule preparation's `run`.
+  runWithRuleMatches,
   compactLegendEntries,
   extractLegendEntries,
   onLegendGeometryChanged,
-  svgActions,
   ruleActions,
   featureSvgActions,
   previewRuntime = null
@@ -104,11 +104,9 @@ export const createFeatureColorActions = ({
           if (rule) candidates.push(rule);
         }
       });
-      return rulePreparation.run(candidates, () => runColorAction(() => action(...args)));
+      return runWithRuleMatches(candidates, () => runColorAction(() => action(...args)));
     };
-    const previousAlert = state.errorLog?.value;
-    const result = rulePreparation.run(manualSpecificRules, prepareTargets);
-    return result?.catch ? result.catch((error) => { state.errorLog && state.errorLog.value === previousAlert && (state.errorLog.value = normalizeUserFacingError(error, { operation: 'evaluateRules', stage: 'helper' })); }) : result;
+    return reportRuleRunFailure(state, 'evaluateRules', () => runWithRuleMatches(manualSpecificRules, prepareTargets));
   };
 
   const hashRuleTargetsFeatureExactly = (rule, feature) => {

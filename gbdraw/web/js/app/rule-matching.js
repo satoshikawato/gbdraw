@@ -1,6 +1,7 @@
 import { normalizeSpecificRule } from './specific-color-rules.js';
 import { normalizeFeatureSelectorMetadata } from './feature-selector.js';
 import { getFeatureColorRuleHash } from './feature-utils.js';
+import { normalizeUserFacingError } from '../services/error-normalization.js';
 
 // Ephemeral Python results belong to feature objects, never a session or a SVG.
 // An absent result is pending, not a non-match; a declined one (`matches:
@@ -91,6 +92,32 @@ export const ruleFeaturePayload = (feature, label = '') => {
   return { type: metadata.featureType, record: metadata.record, qualifiers, selector, label };
 };
 
+// The feature color overrides a rule drew follow the rule's normalized caption
+// (`prepareCandidate`): rebound by their source row, never by suffix parsing.
+// A direct override keeps its caption.
+export const rebindRuleColorOverrides = (overrides, rules, normalized) => {
+  const source = rules.map((rule) => normalizeSpecificRule(rule));
+  return Object.fromEntries(Object.entries(overrides || {}).map(([key, override]) => {
+    const index = source.findIndex((rule) => rule.cap === override?.caption
+      && rule.color === String(override?.color || '').toLowerCase());
+    return [key, index < 0 ? override : { ...override, caption: normalized[index].cap }];
+  }));
+};
+
+// A run (`run`, `runDrawn`) that fails, in its preparation or its commit,
+// shows its error as the caller's `operation`, unless another error replaced
+// the one shown when it started. Every owner that runs through the rule
+// preparation reports a failure this way.
+export const reportRuleRunFailure = (state, operation, run) => {
+  const previousAlert = state.errorLog?.value;
+  const result = run();
+  return result?.catch ? result.catch((error) => {
+    if (state.errorLog && state.errorLog.value === previousAlert) {
+      state.errorLog.value = normalizeUserFacingError(error, { operation, stage: 'helper' });
+    }
+  }) : result;
+};
+
 export const createRulePreparation = ({
   state, evaluate, pending = { value: false }, notify = () => {}, visibilityRules = () => []
 }) => {
@@ -163,7 +190,7 @@ export const createRulePreparation = ({
   // Python in table order, so a table Generate rejects (an invalid regex)
   // fails with Generate's error and row: its matches stay unknown, and the
   // preparation resolves to `{ error }`.
-  const prepareVisibility = (options = {}) => {
+  const prepareVisibility = () => {
     const draft = visibilityRules().map((rule) => ({
       recordId: rule.recordId, featureType: rule.featureType, qualifier: rule.qualifier,
       value: rule.value, action: rule.action
@@ -176,7 +203,7 @@ export const createRulePreparation = ({
     return Promise.resolve()
       .then(() => evaluate({
         features: targets.map((feature) => ruleFeaturePayload(feature)), rules: draft, kind: 'visibility'
-      }, options))
+      }))
       .then((result) => {
         targets.forEach((feature, index) => {
           const cache = cacheFor(feature);
@@ -189,26 +216,35 @@ export const createRulePreparation = ({
       }, (error) => ({ error }))
       .finally(() => { pending.value = --pendingCount > 0; });
   };
-  // `drawn` also prepares the visibility rule matches `resolveFeatureDrawn` reads.
-  const run = (rules, commit, { drawn = false } = {}) => {
+  // Runs `commit` once the matches it reads are prepared (`preparations`, the
+  // color rule matches first): at once when they are, after them when the
+  // color matches are still current, and not while a session operation runs.
+  // A failed color preparation rejects (`reportRuleRunFailure`).
+  const runPrepared = (preparations, commit) => {
     if (state.sessionOperationAvailability?.()) return state.sessionOperationAvailability();
-    const prepared = prepare(rules);
-    const visibility = drawn ? prepareVisibility() : true;
-    if (prepared === true && visibility === true) return commit();
-    return Promise.all([prepared, visibility]).then(([current]) =>
+    const prepared = preparations();
+    if (prepared.every((value) => value === true)) return commit();
+    return Promise.all(prepared).then(([current]) =>
       state.sessionOperationAvailability?.() || (current ? commit() : undefined));
   };
+  // `commit` reads the color rule matches of `rules`.
+  const run = (rules, commit) => runPrepared(() => [prepare(rules)], commit);
+  // `commit` reads what `resolveFeatureDrawn` reads (`prepareDrawn`).
+  const runDrawn = (commit) => runPrepared(() => [prepare(state.manualSpecificRules), prepareVisibility()], commit);
   // Everything `resolveFeatureDrawn` reads: the visibility rule matches and,
   // for a feature of a type the request does not select, the color rule
   // matches. Never rejects; what stays unknown is resolved as unknown. Resolves
   // to `{ error }` when Generate would reject the visibility rule table.
-  const prepareDrawn = (options = {}) => {
-    const colors = prepare(state.manualSpecificRules || [], options);
-    const visibility = prepareVisibility(options);
+  const prepareDrawn = () => {
+    const colors = prepare(state.manualSpecificRules || []);
+    const visibility = prepareVisibility();
     if (colors === true && visibility === true) return true;
     return Promise.all([Promise.resolve(colors).catch(() => false), visibility])
       .then(([, outcome]) => outcome?.error ? outcome : true);
   };
+  // The rules a commit or a run admits: Python's normalized captions, their
+  // matches prepared, and the captions it changed (`notifyChanges`). `options`
+  // are the caller's evaluation options (a run's progress observer).
   const prepareCandidate = async (rules = state.manualSpecificRules, options = {}) => {
     const before = snapshot();
     const source = rules.map(rule => normalizeSpecificRule(rule));
@@ -218,19 +254,13 @@ export const createRulePreparation = ({
     if (!await prepare(normalized, options) || !isCurrent(before)) return null;
     const changes = normalized.flatMap((rule, index) => rule.cap !== source[index].cap
       ? [{ index, before: source[index].cap, after: rule.cap }] : []);
-    // Rebind existing rule-derived overrides by their source row, never by suffix parsing.
-    const featureColorOverrides = Object.fromEntries(Object.entries(state.featureColorOverrides || {}).map(([key, override]) => {
-      const index = source.findIndex(rule => rule.cap === override?.caption
-        && rule.color === String(override?.color || '').toLowerCase());
-      return [key, index < 0 ? override : { ...override, caption: normalized[index].cap }];
-    }));
-    return { rules: normalized, changes, featureColorOverrides, snapshot: before };
+    return { rules: normalized, changes, snapshot: before };
   };
   const notifyChanges = (candidate) => {
     if (candidate?.changes.length) notify(`Updated ${candidate.changes.length} specific-color caption(s) to distinguish their colors.`);
   };
   return {
-    prepare, prepareDrawn, isPrepared, prepareCandidate, notifyChanges, run, evaluate, snapshot,
+    prepare, prepareDrawn, isPrepared, prepareCandidate, notifyChanges, run, runDrawn, evaluate, snapshot,
     isCurrent, pending
   };
 };
