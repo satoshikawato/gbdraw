@@ -66,6 +66,46 @@ def interactive_fixture(mode, reverse, start=41, manual=False):
     return ET.tostring(root, encoding="unicode"), standalone, catalog
 
 
+# Mounts the real Preview binder on a Result and its feature catalog; keeps its state on `window`.
+MOUNT_PREVIEW_SCRIPT = """async ({source, catalog, mode}) => {
+  const {createFeatureSvgActions} = await import('/gbdraw/web/js/app/feature-editor/svg-actions.js');
+  const {admitFeatureCatalog} = await import('/gbdraw/web/js/services/feature-catalog.js');
+  const {createSequenceSourceRegistry} = await import('/gbdraw/web/js/app/match-sequences.js');
+  const {copyTextToClipboard} = await import('/gbdraw/web/js/utils/clipboard.js');
+  const {downloadTextFile} = await import('/gbdraw/web/js/services/text-download.js');
+  const ref = value => ({value});
+  const results = [{name: 'interactive.svg', content: source}];
+  const admission = admitFeatureCatalog(catalog, results, {mode});
+  document.body.innerHTML = '<div id="preview"></div>';
+  const host = document.querySelector('#preview');
+  host.innerHTML = DOMPurify.sanitize(source, {USE_PROFILES: {svg: true, svgFilters: true}});
+  const state = {
+    results: ref(results), selectedResultIndex: ref(0), orthogroups: ref(admission.featureState.orthogroups), collinearGroups: ref(admission.featureState.collinearGroups),
+    orthogroupNameOverrides: {}, orthogroupDescriptionOverrides: {},
+    extractedFeatures: ref(admission.featureState.extractedFeatures),
+    biologicalFeatures: ref(admission.featureState.biologicalFeatures),
+    featuresBySvgId: ref(new Map(admission.featureState.extractedFeatures.map(feature => [feature.svg_id, feature]))),
+    featureColorOverrides: {}, featureVisibilityOverrides: {}, svgContainer: ref(host),
+    clickedFeature: ref(null), clickedFeaturePos: {}, clickedPairwiseMatch: ref(null), clickedPairwiseMatchPos: {},
+    matchSequenceRegistry: createSequenceSourceRegistry(catalog.items[0].sequenceSources),
+    selectedAnnotation: ref(null), featurePopupSize: {}, featureSelectionDrag: {active: false},
+    skipCaptureBaseConfig: ref(false), adv: {rich_feature_popup: true},
+  };
+  window.fixtureState = state;
+  window.fixtureActions = createFeatureSvgActions({state, getFeatureColor: () => '#123456', getEffectiveLegendCaption: () => ''});
+  window.fixtureActions.attachSvgFeatureHandlers();
+  window.fixtureClipboard = [];
+  Object.defineProperty(navigator, 'clipboard', {value: {writeText: async text => window.fixtureClipboard.push(text)}, configurable: true});
+  window.fixtureCopy = copyTextToClipboard;
+  window.fixtureDownload = downloadTextFile;
+  window.fixtureMount = content => {
+    results[0].content = content;
+    host.innerHTML = DOMPurify.sanitize(content, {USE_PROFILES: {svg: true, svgFilters: true}});
+    window.fixtureActions.attachSvgFeatureHandlers();
+  };
+}"""
+
+
 @pytest.mark.parametrize("mode,reverse,manual", [
     ("linear", False, False), ("circular", False, False),
     ("linear", True, False), ("circular", True, False),
@@ -101,43 +141,7 @@ def test_display_fragments_preview_and_standalone_source_actions(source_server, 
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.goto(source_server)
         page.add_script_tag(url=f"{source_server}/gbdraw/web/vendor/dompurify/purify.min.js")
-        page.evaluate("""async ({source, catalog, mode}) => {
-          const {createFeatureSvgActions} = await import('/gbdraw/web/js/app/feature-editor/svg-actions.js');
-          const {admitFeatureCatalog} = await import('/gbdraw/web/js/services/feature-catalog.js');
-          const {createSequenceSourceRegistry} = await import('/gbdraw/web/js/app/match-sequences.js');
-          const {copyTextToClipboard} = await import('/gbdraw/web/js/utils/clipboard.js');
-          const {downloadTextFile} = await import('/gbdraw/web/js/services/text-download.js');
-          const ref = value => ({value});
-          const results = [{name: 'interactive.svg', content: source}];
-          const admission = admitFeatureCatalog(catalog, results, {mode});
-          document.body.innerHTML = '<div id="preview"></div>';
-          const host = document.querySelector('#preview');
-          host.innerHTML = DOMPurify.sanitize(source, {USE_PROFILES: {svg: true, svgFilters: true}});
-          const state = {
-            results: ref(results), selectedResultIndex: ref(0), orthogroups: ref([]), collinearGroups: ref([]),
-            orthogroupNameOverrides: {}, orthogroupDescriptionOverrides: {},
-            extractedFeatures: ref(admission.featureState.extractedFeatures),
-            biologicalFeatures: ref(admission.featureState.biologicalFeatures),
-            featuresBySvgId: ref(new Map(admission.featureState.extractedFeatures.map(feature => [feature.svg_id, feature]))),
-            featureColorOverrides: {}, featureVisibilityOverrides: {}, svgContainer: ref(host),
-            clickedFeature: ref(null), clickedFeaturePos: {}, clickedPairwiseMatch: ref(null), clickedPairwiseMatchPos: {},
-            matchSequenceRegistry: createSequenceSourceRegistry(catalog.items[0].sequenceSources),
-            selectedAnnotation: ref(null), featurePopupSize: {}, featureSelectionDrag: {active: false},
-            skipCaptureBaseConfig: ref(false), adv: {rich_feature_popup: true},
-          };
-          window.fixtureState = state;
-          window.fixtureActions = createFeatureSvgActions({state, getFeatureColor: () => '#123456', getEffectiveLegendCaption: () => ''});
-          window.fixtureActions.attachSvgFeatureHandlers();
-          window.fixtureClipboard = [];
-          Object.defineProperty(navigator, 'clipboard', {value: {writeText: async text => window.fixtureClipboard.push(text)}, configurable: true});
-          window.fixtureCopy = copyTextToClipboard;
-          window.fixtureDownload = downloadTextFile;
-          window.fixtureMount = content => {
-            results[0].content = content;
-            host.innerHTML = DOMPurify.sanitize(content, {USE_PROFILES: {svg: true, svgFilters: true}});
-            window.fixtureActions.attachSvgFeatureHandlers();
-          };
-        }""", {"source": source, "catalog": catalog, "mode": mode})
+        page.evaluate(MOUNT_PREVIEW_SCRIPT, {"source": source, "catalog": catalog, "mode": mode})
         paths = page.locator('[data-gbdraw-match-id]')
         assert paths.count() == expected_count
         copied = []
@@ -275,6 +279,139 @@ def test_standalone_rejects_conflicting_fragment_or_source_identity(tmp_path, co
             assert page.locator('.gbdraw-interactive-pairwise-match--selected').count() == 0
             assert not page.locator('#gbdraw-feature-popup').is_visible()
         browser.close()
+
+
+def collinear_cluster_fixture(search_scope=None):
+    """A Linear figure whose only match is one multi-anchor collinear block."""
+    import pandas as pd
+    from Bio.Seq import Seq
+    from gbdraw.analysis.collinearity import (
+        build_orthogroup_collinearity_blocks_from_hits, convert_collinearity_blocks_to_comparisons,
+    )
+    from gbdraw.analysis.protein_colinearity import extract_cds_proteins
+    from gbdraw.io.comparisons import COMPARISON_COLUMNS
+    from tests.test_collinearity import _cds, _hit_row, _record
+
+    def block_record(name, proteins, offset):
+        item = _record(name, [
+            _cds(index * 300, index * 300 + 299,
+                 {"locus_tag": [protein], "protein_id": [protein], "translation": ["M" * 100]})
+            for index, protein in enumerate(proteins)
+        ])
+        item.seq = Seq("".join("ACGT"[(index * 7 + index // 5 + offset) % 4] for index in range(2700)))
+        item.annotations.update(molecule_type="DNA", topology="linear")
+        return item
+
+    items = [block_record("record_a", ["a0", "a1", "a2"], 0), block_record("record_b", ["b0", "b1", "b2"], 1)]
+    hits = {
+        (0, 1): pd.DataFrame.from_records([_hit_row(f"a{i}", f"b{i}", 300) for i in range(3)], columns=COMPARISON_COLUMNS),
+        (1, 0): pd.DataFrame.from_records([_hit_row(f"b{i}", f"a{i}", 300) for i in range(3)], columns=COMPARISON_COLUMNS),
+    }
+    result = build_orthogroup_collinearity_blocks_from_hits(hits, extract_cds_proteins(items), records=items)
+    frame = convert_collinearity_blocks_to_comparisons(result, records=items, search_scope=search_scope)[0]
+    plan, root = svg(request("linear", items, [None, None], linear_comparisons=[LinearComparison(0, 1, frame)]))
+    context = build_interactive_svg_context(
+        plan.records, mode="linear", linear_rendered_feature_ids=True, orthogroups=result.orthogroups,
+    )
+    source = ET.tostring(root, encoding="unicode")
+    return items, source, enrich_svg(source, context)
+
+
+@pytest.mark.parametrize("member", ["resolves", "is_missing"])
+def test_standalone_collinear_cluster_block_span_actions(tmp_path, member, sync_playwright):
+    """A block names its anchor features, yet its span is the block envelope on each record (OV-17)."""
+    items, _source, standalone = collinear_cluster_fixture()
+    if member == "is_missing":
+        root = ET.fromstring(standalone)
+        metadata = next(n for n in root.iter() if n.get("id") == "gbdraw-interactive-feature-metadata")
+        catalog = json.loads(metadata.text)
+        block = catalog["items"][0]["comparisonMatches"][0]
+        assert block["block_kind"] == "cluster" and len(block["queryFeatureReferences"]) == 3
+        block["queryFeatureReferences"][1]["biologicalFeatureId"] = "missing-feature"
+        metadata.text = json.dumps(catalog)
+        standalone = ET.tostring(root, encoding="unicode")
+    path = tmp_path / "cluster.svg"
+    path.write_text(standalone)
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page()
+        page.goto(path.as_uri())
+        page.evaluate("""() => {
+          window.fixtureClipboard = [];
+          Object.defineProperty(navigator, 'clipboard', {value: {writeText: async text => window.fixtureClipboard.push(text)}, configurable: true});
+        }""")
+        matches = page.locator('[data-gbdraw-interactive-match="true"]')
+        assert matches.count() == 1
+        matches.first.dispatch_event("click")
+        popup = page.locator('#gbdraw-feature-popup')
+        assert popup.is_visible()
+        assert "Collinearity block" in popup.text_content()
+        actions = popup.locator('.gfi-block-actions').filter(has_text="Both spans")
+        if member == "is_missing":
+            assert "Match feature endpoint identity is invalid." in popup.text_content()
+            assert actions.count() == 0
+        else:
+            assert "endpoint identity is invalid" not in popup.text_content()
+            for role, item in (("Query", items[0]), ("Subject", items[1])):
+                popup.locator('.gfi-block-title').filter(has_text=f"{role} span").get_by_role("button", name="Copy", exact=True).click()
+                fasta = page.evaluate("fixtureClipboard.at(-1)")
+                assert fasta.count(">") == 1
+                assert "".join(fasta.splitlines()[1:]) == str(item.seq)[0:899]
+            actions.get_by_role("button", name="Copy", exact=True).click()
+            both = page.evaluate("fixtureClipboard.at(-1)")
+            assert ["".join(part.splitlines()[1:]) for part in both.split(">")[1:]] == [
+                str(items[0].seq)[0:899], str(items[1].seq)[0:899],
+            ]
+        browser.close()
+
+
+# What a block popup lists, read from the Preview payload and from the standalone DOM alike.
+PREVIEW_BLOCK_ROWS = """() => {
+  const sections = fixtureState.clickedPairwiseMatch.value.sections;
+  const feature = role => sections.find(s => s.title === role).featureRows.map(r => [r.label, r.record, r.location]);
+  return {
+    groups: sections.flatMap(s => s.blockOrthogroups || []).map(g => [g.id, g.queryMember, g.subjectMember]),
+    features: [feature('Query'), feature('Subject')],
+  };
+}"""
+STANDALONE_BLOCK_ROWS = """() => {
+  const popup = document.querySelector('#gbdraw-feature-popup');
+  const text = (row, selector) => row.querySelector(selector).textContent;
+  return {
+    groups: [...popup.querySelectorAll('.gfi-block-og-row')].map(r => [0, 4, 5].map(i => r.children[i].textContent)),
+    features: [...popup.querySelectorAll('.gfi-match-feature-table')].map(table => (
+      [...table.querySelectorAll('tbody tr')].map(r => [text(r, '.gfi-match-feature-main'), r.children[1].textContent, r.children[2].textContent])
+    )),
+  };
+}"""
+
+
+@pytest.mark.parametrize("search_scope", ["all", "adjacent"])
+def test_collinear_block_popup_lists_group_members_and_anchors_like_preview(source_server, tmp_path, search_scope, sync_playwright):
+    """Each group row lists only its own anchors and each side one row per anchor, as in Preview (OV-18)."""
+    _items, source, standalone = collinear_cluster_fixture(search_scope)
+    catalog = json.loads(next(n.text for n in ET.fromstring(standalone).iter()
+                              if n.get("id") == "gbdraw-interactive-feature-metadata"))
+    path = tmp_path / "cluster.svg"
+    path.write_text(standalone)
+    expected = {
+        "groups": [[f"og_{i + 1}", f"a{i}", f"b{i}"] for i in range(3)],
+        "features": [[[f"{side}{i}", f"record_{side}", f"{i * 300 + 1}..{i * 300 + 299} (+)"] for i in range(3)] for side in "ab"],
+    }
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page()
+        page.goto(source_server)
+        page.add_script_tag(url=f"{source_server}/gbdraw/web/vendor/dompurify/purify.min.js")
+        page.evaluate(MOUNT_PREVIEW_SCRIPT, {"source": source, "catalog": catalog, "mode": "linear"})
+        page.locator('[data-gbdraw-match-id]').first.dispatch_event("click")
+        preview = page.evaluate(PREVIEW_BLOCK_ROWS)
+        page.goto(path.as_uri())
+        page.locator('[data-gbdraw-interactive-match="true"]').first.dispatch_event("click")
+        exported = page.evaluate(STANDALONE_BLOCK_ROWS)
+        browser.close()
+    assert preview == expected
+    assert exported == expected
 
 
 def test_circular_grid_match_actions_resolve_duplicate_record_instances(tmp_path, sync_playwright):

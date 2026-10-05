@@ -7,12 +7,21 @@ import { featureOverrideValue } from '../services/feature-placement.js';
 
 // Ephemeral Python results belong to feature objects, never a session or a SVG.
 // An absent result is pending, not a non-match; a declined one (`matches:
-// null`) is settled but unknown until the next Generate.
+// null`) is settled but unknown until the next Generate. A result is a fact of
+// one feature and one rule's content, so a later edit cannot make it stale.
+// A reactive copy of a feature reads the results of its raw catalog object.
 const matchesByFeature = new WeakMap();
+const rawFeature = (feature) => globalThis.window?.Vue?.toRaw?.(feature) ?? feature;
+const cacheOf = (feature) => matchesByFeature.get(rawFeature(feature));
+const cacheFor = (feature) => {
+  const raw = rawFeature(feature);
+  if (!matchesByFeature.has(raw)) matchesByFeature.set(raw, new Map());
+  return matchesByFeature.get(raw);
+};
 const ruleKey = (rule) => JSON.stringify([rule.feat, rule.qual, rule.val]);
 export const ruleMatchesFeature = (feature, rule) => {
   if (!rule || (rule.feat !== '*' && rule.feat !== feature?.type)) return false;
-  return matchesByFeature.get(feature)?.get(ruleKey(rule))?.matches ?? null;
+  return cacheOf(feature)?.get(ruleKey(rule))?.matches ?? null;
 };
 // A feature of a catalog before schema 5 has no drawn selector values. Where
 // its rendered ID carries its source hash, its record was drawn with the
@@ -27,12 +36,12 @@ export const drawnSelectorUnknown = (feature) => !feature?.drawnSelector
 const declinesLiveMatch = (feature, rule) => drawnSelectorUnknown(feature)
   && DRAWN_SELECTOR_QUALIFIERS.has(String(rule?.qual || '').toLowerCase());
 export const ruleMatchDeclined = (feature, rules) => rules
-  .some((rule) => matchesByFeature.get(feature)?.get(ruleKey(rule))?.declined === true);
+  .some((rule) => cacheOf(feature)?.get(ruleKey(rule))?.declined === true);
 export const firstMatchingRule = (feature, rules) => {
   let winner = null;
   let priority = Infinity;
   for (const rule of rules) {
-    const result = matchesByFeature.get(feature)?.get(ruleKey(rule));
+    const result = cacheOf(feature)?.get(ruleKey(rule));
     if (result?.matches && result.priority < priority) {
       winner = rule;
       priority = result.priority;
@@ -43,6 +52,25 @@ export const firstMatchingRule = (feature, rules) => {
 export const ruleMatchesReady = (features, rules) => features.every((feature) =>
   rules.every((rule) => ruleMatchesFeature(feature, rule) !== null || ruleMatchDeclined(feature, [rule]))
 );
+// Feature visibility rules (gbdraw/features/visibility.py) are matched by the
+// same Python helper on the same feature payloads; `resolveFeatureDrawn` in
+// app/feature-visibility.js reads the results (R4).
+const visibilityRuleKey = (rule) => JSON.stringify([
+  'visibility', rule.recordId, rule.featureType, rule.qualifier, rule.value
+]);
+export const visibilityRuleMatchesFeature = (feature, rule) => (
+  cacheOf(feature)?.get(visibilityRuleKey(rule))?.matches ?? null
+);
+// A catalog feature that Python did not render carries no drawn values (feature
+// catalog 5 has them on rendered features only), so a `hash`, `location`, or
+// `record_location` rule is not matched live for it.
+const DRAWN_VALUE_QUALIFIERS = new Set(['hash', ...DRAWN_SELECTOR_QUALIFIERS]);
+const declinesVisibilityMatch = (feature, rule) => {
+  const qualifier = String(rule?.qualifier || '').toLowerCase();
+  return Object.prototype.hasOwnProperty.call(feature || {}, 'drawnSelector')
+    ? drawnSelectorUnknown(feature) && DRAWN_SELECTOR_QUALIFIERS.has(qualifier)
+    : DRAWN_VALUE_QUALIFIERS.has(qualifier);
+};
 // Generate matches `hash`, `location`, and `record_location` rules against the
 // drawn feature (D-14, PD-OI-069): a cropped or reverse-complemented record
 // draws other coordinates than its source. The catalog gives those drawn
@@ -66,7 +94,9 @@ export const ruleFeaturePayload = (feature, label = '') => {
   return { type: metadata.featureType, record: metadata.record, qualifiers, selector, label };
 };
 
-export const createRulePreparation = ({ state, evaluate, pending = { value: false }, notify = () => {} }) => {
+export const createRulePreparation = ({
+  state, evaluate, pending = { value: false }, notify = () => {}, visibilityRules = () => []
+}) => {
   let validated = new Set();
   let pendingCount = 0;
   const features = () => [...new Set([
@@ -123,8 +153,7 @@ export const createRulePreparation = ({ state, evaluate, pending = { value: fals
         if (!isCurrent(before) || state.sessionOperationAvailability?.()) return false;
         validated = new Set(draft.map(ruleKey));
         targets.forEach((feature, index) => {
-          const cache = new Map();
-          matchesByFeature.set(feature, cache);
+          const cache = cacheFor(feature);
           const matches = new Set(result.matches[index]);
           draft.forEach((rule, ruleIndex) => cache.set(ruleKey(rule), declinesLiveMatch(feature, rule)
             ? { matches: null, declined: true, priority: Infinity }
@@ -133,12 +162,51 @@ export const createRulePreparation = ({ state, evaluate, pending = { value: fals
         return true;
       }).finally(() => { pending.value = --pendingCount > 0; });
   };
-  const run = (rules, commit) => {
+  // The visibility rule matches of every catalog feature. A rule Generate
+  // rejects fails the evaluation and leaves its matches unknown.
+  const prepareVisibility = (rules = visibilityRules(), options = {}) => {
+    const draft = [...new Map(rules.map((rule) => [visibilityRuleKey(rule), {
+      recordId: rule.recordId, featureType: rule.featureType, qualifier: rule.qualifier,
+      value: rule.value, action: rule.action
+    }])).values()];
+    if (draft.length === 0) return true;
+    const targets = features().filter((feature) => draft
+      .some((rule) => !cacheOf(feature)?.has(visibilityRuleKey(rule))));
+    if (targets.length === 0) return true;
+    pending.value = ++pendingCount > 0;
+    return Promise.resolve()
+      .then(() => evaluate({
+        features: targets.map((feature) => ruleFeaturePayload(feature)), rules: draft, kind: 'visibility'
+      }, options))
+      .then((result) => {
+        targets.forEach((feature, index) => {
+          const cache = cacheFor(feature);
+          const matches = new Set(result.matches[index]);
+          draft.forEach((rule, ruleIndex) => cache.set(visibilityRuleKey(rule), declinesVisibilityMatch(feature, rule)
+            ? { matches: null, declined: true }
+            : { matches: matches.has(ruleIndex) }));
+        });
+        return true;
+      }, () => false)
+      .finally(() => { pending.value = --pendingCount > 0; });
+  };
+  // `drawn` also prepares the visibility rule matches `resolveFeatureDrawn` reads.
+  const run = (rules, commit, { drawn = false } = {}) => {
     if (state.sessionOperationAvailability?.()) return state.sessionOperationAvailability();
     const prepared = prepare(rules);
-    if (prepared === true) return commit();
-    return Promise.resolve(prepared).then((current) =>
+    const visibility = drawn ? prepareVisibility() : true;
+    if (prepared === true && visibility === true) return commit();
+    return Promise.all([prepared, visibility]).then(([current]) =>
       state.sessionOperationAvailability?.() || (current ? commit() : undefined));
+  };
+  // Everything `resolveFeatureDrawn` reads: the visibility rule matches and,
+  // for a feature of a type the request does not select, the color rule
+  // matches. Never rejects; what stays unknown is resolved as unknown.
+  const prepareDrawn = (options = {}) => {
+    const colors = prepare(state.manualSpecificRules || [], options);
+    const visibility = prepareVisibility(undefined, options);
+    if (colors === true && visibility === true) return true;
+    return Promise.all([Promise.resolve(colors).catch(() => false), visibility]).then(() => true);
   };
   // `retiredLegendIntents` are rows this commit replaces; they are no renderer
   // rows for the N-06 caption allocation.
@@ -177,5 +245,8 @@ export const createRulePreparation = ({ state, evaluate, pending = { value: fals
   const notifyChanges = (candidate) => {
     if (candidate?.changes.length) notify(`Updated ${candidate.changes.length} specific-color caption(s) to distinguish their colors.`);
   };
-  return { prepare, isPrepared, prepareCandidate, notifyChanges, run, evaluate, snapshot, isCurrent };
+  return {
+    prepare, prepareVisibility, prepareDrawn, isPrepared, prepareCandidate, notifyChanges, run, evaluate, snapshot,
+    isCurrent
+  };
 };

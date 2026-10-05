@@ -883,7 +883,11 @@ asks first when the diagram cannot:
 - For a hidden feature, **Feature Is Hidden** offers **Show feature and label**,
   which sets the feature's **Feature visibility** and **Label visibility** to
   **On**, or **Keep feature hidden**, which saves **On** for when the feature is
-  shown.
+  shown. Whether a feature is hidden follows Generate: its **Feature
+  visibility** **On** or **Off** decides first, then the first **Feature
+  Visibility** rule that matches it, then **Feature Types**; a feature of a
+  type that **Feature Types** does not select is still drawn when a specific
+  color rule matches it.
 - For a feature drawn as **Underlay**, **Label Cannot Be Drawn** offers **Keep
   without label**, which saves **On** for when the label can be drawn, for
   example after you choose another rendering for its feature type.

@@ -4,11 +4,9 @@ import {
   applyFeatureVisibilityOverrideChanges,
   buildFeatureVisibilityChanges,
   exactRegexValue,
-  featureMatchesExactQualifier,
   getFeatureVisibilityOverride,
   normalizeVisibilityMode,
   parseFeatureVisibilityRules,
-  resolveEffectiveFeatureVisibility,
   serializeFeatureVisibilityRules,
   setFeatureVisibilityOverride,
   splitLegacyVisibilityRules,
@@ -154,33 +152,6 @@ assert.equal(normalizeVisibilityMode('bad'), 'default');
     ['manual', '', 'product'],
     ['editor', '', 'product']
   ]);
-}
-
-{
-  const hashRule = { recordId: '*', featureType: '*', qualifier: 'hash', value: '^f\\.1$', action: 'off' };
-  const feature = { svg_id: 'f.1', scope: 'circular', record_key: 'rec', biological_feature_id: 'b1' };
-  assert.equal(resolveEffectiveFeatureVisibility(feature, {}, [hashRule]), 'off');
-  const overrides = {};
-  setFeatureVisibilityOverride(overrides, feature, 'on');
-  assert.equal(resolveEffectiveFeatureVisibility(feature, overrides, [hashRule]), 'on');
-}
-
-{
-  const productRule = {
-    source: 'editor', recordId: '*', featureType: 'CDS', qualifier: 'product',
-    value: '^NADH dehydrogenase subunit 1$', action: 'off'
-  };
-  const nd1 = {
-    svg_id: 'nd1', type: 'CDS', scope: 'circular', record_key: 'rec', biological_feature_id: 'nd1',
-    qualifiers: { product: ['nadh dehydrogenase SUBUNIT 1'] }
-  };
-  assert.equal(resolveEffectiveFeatureVisibility(nd1, {}, [productRule]), 'off');
-  const overrides = {};
-  setFeatureVisibilityOverride(overrides, nd1, 'on');
-  assert.equal(resolveEffectiveFeatureVisibility(nd1, overrides, [productRule]), 'on');
-  assert.equal(resolveEffectiveFeatureVisibility(nd1, {}, [{ ...productRule, featureType: 'tRNA' }]), 'on');
-  assert.equal(featureMatchesExactQualifier(nd1, productRule), true);
-  assert.equal(featureMatchesExactQualifier({ ...nd1, qualifiers: { product: 'other' } }, productRule), false);
 }
 
 console.log('feature visibility tests passed');

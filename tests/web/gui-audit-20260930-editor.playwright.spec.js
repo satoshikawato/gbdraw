@@ -817,6 +817,79 @@ test('Label visibility On for a hidden feature shows the feature and label or ke
   expect(await labelState()).toMatchObject({ error: null, reflowError: null, labels: [[fl1, 'FL1_SHOWN']] });
 });
 
+// The given features that the mounted Result draws.
+const drawnFeatureIds = (page, featureIds) => page.evaluate((ids) => {
+  const root = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+  return ids.filter((id) => [...root.querySelectorAll(`[data-gbdraw-feature-id="${CSS.escape(id)}"]`)]
+    .some((element) => !element.closest('[display="none"]')));
+}, featureIds);
+
+// R-2 (FINDINGS, remaining issue of #764; Owner Q2, R3, R4): a visibility rule
+// that Generate applies hides the feature for the Label On dialog too. The
+// rules here, as a loaded visibility TSV can give them, name a record ID with a
+// locus_tag regex in another letter case, and the drawn hash in upper case.
+// The dialog, the popup note, the live preview, and Generate answer "is this
+// feature drawn?" with Python's rule.
+const addVisibilityRule = (page, fields) => page.evaluate(async (ruleFields) => {
+  const app = window.__GBDRAW_APP__;
+  await app.addFeatureVisibilityRule();
+  const index = app.featureVisibilityManualRules.length - 1;
+  for (const [field, value] of Object.entries(ruleFields)) await app.setFeatureVisibilityRuleField(index, field, value);
+}, fields);
+
+// The per-feature edits of one source feature, read by its identity.
+const identityEdits = (page, identity) => page.evaluate(async (key) => {
+  const { state } = await import('./js/state.js');
+  const row = state.featureOverrides[key] || {};
+  return { featureVisibility: row.featureVisibility ?? null, labelVisibility: row.labelVisibility ?? null };
+}, identity);
+
+test('Label visibility On for a feature that a visibility rule hides asks first, and live equals Generate', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
+    window.__GBDRAW_APP__.form.labels_mode = 'none';
+  });
+  await generate(page);
+  const { fl1, fl2 } = await featureIdsByLocator(page);
+  const fl2Identity = await page.evaluate((id) => {
+    const feature = window.__GBDRAW_APP__.extractedFeatures.find((item) => item.svg_id === id);
+    return JSON.stringify([feature.record_key, feature.biological_feature_id]);
+  }, fl2);
+  const labelState = () => labelEditorState(page, 'labels.circular.scope');
+  const shown = async () => ({ labels: (await labelState()).labels, drawn: await drawnFeatureIds(page, [fl1, fl2]) });
+
+  await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
+  const before = await labelOnFacts(page);
+  await startLabelOn(page, fl1, 'FL1_SHOWN');
+  await answerLabelOn(page, 'Feature Is Hidden', 'Show feature and label');
+  expect(await labelOnFacts(page)).toEqual({
+    ...before,
+    undo: before.undo + 1,
+    redo: 0,
+    labelVisibility: { [fl1]: 'on' },
+    labelText: { [fl1]: 'FL1_SHOWN' },
+    featureVisibility: { [fl1]: 'on' }
+  });
+  await waitForLabelReflow(page);
+  const live = await shown();
+  expect(live).toEqual({ labels: [[fl1, 'FL1_SHOWN']], drawn: [fl1, fl2] });
+  await generate(page);
+  expect((await labelState()).reflowError).toBeNull();
+  expect(await shown()).toEqual(live);
+
+  await addVisibilityRule(page, { recordId: '*', featureType: '*', qualifier: 'hash', value: `^${fl2.toUpperCase()}$`, action: 'off' });
+  expect(await popupLabelHint(page, fl2)).toBe('This feature has no label in the current Result. The feature is hidden.');
+  await startLabelOn(page, fl2, 'FL2_KEPT');
+  await answerLabelOn(page, 'Feature Is Hidden', 'Keep feature hidden');
+  expect(await identityEdits(page, fl2Identity)).toEqual({ featureVisibility: null, labelVisibility: 'on' });
+  await waitForLabelReflow(page);
+  const kept = await shown();
+  expect(kept).toEqual({ labels: [[fl1, 'FL1_SHOWN']], drawn: [fl1] });
+  await generate(page);
+  expect((await labelState()).reflowError).toBeNull();
+  expect(await shown()).toEqual(kept);
+});
+
 test('Label visibility On for an underlay feature is kept without a label until the rendering changes', async ({ page }) => {
   test.setTimeout(600_000);
   await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {

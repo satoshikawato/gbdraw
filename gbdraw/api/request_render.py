@@ -8,7 +8,7 @@ from contextvars import ContextVar
 import hashlib
 import json
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from time import perf_counter
 from typing import (
@@ -95,7 +95,8 @@ from .diagram import (
     build_circular_multi_diagram,
     build_linear_diagram_result,
 )
-from .io import load_gbks, load_gff_fasta
+from gbdraw.io.genome import parse_gff_fasta
+from .io import load_gbks
 from .options import (
     ColorOptions,
     CircularDiagramOptions,
@@ -124,6 +125,7 @@ from gbdraw.features.source import (
 )
 
 from .prepared import (
+    ParsedRecordInputs,
     PreparedResourceIdentity,
     ResolvedFeatureInputs,
     get_or_build_interactive_context,
@@ -142,6 +144,7 @@ from .record_planning import (
     ResolvedRecordDisplay,
     _detected_topology,
     ResolvedRecordProvenance,
+    _gff_feature_types,
     _load_source_records,
     _prepared_source_cache_spec,
     resolve_circular_batch_outputs,
@@ -427,6 +430,8 @@ class PreparedDiagramInputs:
     feature_identity_notices: tuple[FeatureIdentityNotice, ...] = ()
     # Annotation featureIdentity targets, keyed by (record key, feature ID).
     feature_bindings: Mapping[tuple[str, str], IdentityBinding] | None = None
+    # Source parses shared by the loads of one ``_load_request_records`` call.
+    parsed_sources: dict[tuple[object, ...], ParsedRecordInputs] | None = field(default=None, repr=False, compare=False)
 
 
 def _is_current_nucleotide_losat_entry(entry: Mapping[str, Any]) -> bool:
@@ -1255,13 +1260,14 @@ def _load_request_records(
     Tables resolve before the GFF3 check below, so a table row and an exact row
     load the same features.
     """
+    inputs = replace(inputs, parsed_sources={})
     collection = _coerce_resolved_collection(request, _normalize_request_records(request, inputs))
     request = _materialize_identity_tables(request, collection)
     shown_types = _gff_types_shown_by_overrides(request.options.feature_overrides, collection)
     if inputs.gff_keep_all_features or shown_types <= set(inputs.gff_candidate_features):
         return request, collection
     # A row can turn on a GFF3 feature whose type the type filter dropped. Load
-    # that type as well.
+    # that type as well, from the parse the first load made.
     return request, _coerce_resolved_collection(request, _normalize_request_records(request, replace(
         inputs,
         gff_candidate_features=tuple(sorted({*inputs.gff_candidate_features, *shown_types})),
@@ -1279,17 +1285,14 @@ def _normalize_request_records(
             gff_candidate_features=inputs.gff_candidate_features,
             gff_keep_all_features=inputs.gff_keep_all_features,
             genbank_loader=load_gbks,
-            gff_loader=load_gff_fasta,
+            gff_loader=parse_gff_fasta,
+            parsed_sources=inputs.parsed_sources,
         )
 
     if not prepared_input_cache_active():
         return resolve()
     source_specs = tuple(
-        _prepared_source_cache_spec(
-            record_input.source,
-            gff_candidate_features=inputs.gff_candidate_features,
-            gff_keep_all_features=inputs.gff_keep_all_features,
-        )
+        _prepared_source_cache_spec(record_input.source)
         for record_input in request.records
     )
     if any(spec is None for spec in source_specs):
@@ -1308,21 +1311,26 @@ def _normalize_request_records(
         seen_source_keys.add(source_key)
         _load_source_records(
             record_input.source,
-            gff_candidate_features=inputs.gff_candidate_features,
-            gff_keep_all_features=inputs.gff_keep_all_features,
             genbank_loader=load_gbks,
-            gff_loader=load_gff_fasta,
+            gff_loader=parse_gff_fasta,
         )
     resource_identities = frozenset(
         identity
         for _key, identities in typed_source_specs
         for identity in identities
     )
+    # A GFF3 source is cached with every type; the type filter shapes what resolves from it.
+    gff_types = (
+        _gff_feature_types(inputs.gff_candidate_features, inputs.gff_keep_all_features)
+        if any(isinstance(item.source, GffFastaInputSource) for item in request.records)
+        else frozenset()
+    )
     key = (
         "resolved-records-v1",
         tuple(source_key for source_key, _identities in typed_source_specs),
         tuple(_record_input_preparation_key(item) for item in request.records),
         _record_collection_preparation_key(request.record_options),
+        None if gff_types is None else tuple(sorted(gff_types)),
     )
     return get_or_build_resolved_records(key, resource_identities, resolve)
 

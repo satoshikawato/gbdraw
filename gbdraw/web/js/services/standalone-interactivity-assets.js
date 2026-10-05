@@ -5025,6 +5025,18 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return feature;
   }
 
+  // A match claims one endpoint feature, or several (a collinear block's anchors).
+  // Expansion resolves a plural claim as a whole; a single claim is re-checked
+  // against its rendered feature. A span is the match envelope either way.
+  function catalogMatchEndpointResolved(match, role) {
+    var references = match && match[role + 'FeatureReferences'];
+    if (Array.isArray(references) && references.length > 1) {
+      return match._gbdraw_catalog_endpoint_contract === true
+        && match['_gbdraw_' + role + '_endpoint_resolved'] === true;
+    }
+    return Boolean(resolvedCatalogMatchFeature(match, role));
+  }
+
   function materializedMatchFeatureRow(svgId, fallback, resolvedFeature) {
     var id = String(svgId || '').trim();
     var feature = resolvedFeature || featuresById.get(id) || {};
@@ -5064,8 +5076,20 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   function materializedMatchFeatureRows(match, role, fallback) {
     if (match && match._gbdraw_catalog_endpoint_contract === true) {
       var resolvedFeature = resolvedCatalogMatchFeature(match, role);
-      if (!resolvedFeature) return [materializedMatchFeatureRow('', fallback)];
-      return [materializedMatchFeatureRow(resolvedFeature.svg_id, fallback, resolvedFeature)];
+      if (resolvedFeature) {
+        return [materializedMatchFeatureRow(resolvedFeature.svg_id, fallback, resolvedFeature)];
+      }
+      if (!catalogMatchEndpointResolved(match, role)) {
+        return [materializedMatchFeatureRow('', fallback)];
+      }
+      // A collinear block names several anchors: one row each, as in the Web popup.
+      return getOrthogroupIds(match[role + '_feature_svg_id']).map(function (svgId) {
+        return materializedMatchFeatureRow(
+          svgId,
+          { recordId: fallback && fallback.recordId },
+          featuresById.get(svgId)
+        );
+      });
     }
     var svgIds = match && match[role + '_feature_svg_id'];
     var ids = getOrthogroupIds(svgIds);
@@ -5077,17 +5101,21 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
 
   function materializedBlockMemberLabels(group, featureSvgIds) {
     if (!group) return '';
-    return getOrthogroupIds(featureSvgIds).map(function (svgId) {
+    var labels = [];
+    getOrthogroupIds(featureSvgIds).forEach(function (svgId) {
       var renderedFeature = featuresById.get(svgId) || null;
       var member = renderedFeature
         ? getFeatureOrthogroupMember(renderedFeature, group)
         : null;
-      return firstNonInternalDisplayText(
+      if (!member) return;
+      var label = firstNonInternalDisplayText(
         displayProteinId(featureForMember(member) || renderedFeature, member, ''),
-        member && member.label,
+        member.label,
         svgId
       );
-    }).filter(function (value) { return value; }).join('; ');
+      if (label && labels.indexOf(label) < 0) labels.push(label);
+    });
+    return labels.join('; ');
   }
 
   function reverseComplementMatchSequence(sequence) {
@@ -5118,7 +5146,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       && match._gbdraw_catalog_endpoint_contract === true
       && kind !== 'homology'
       && match['_gbdraw_' + role + '_record_span'] !== true
-      && !resolvedCatalogMatchFeature(match, role)
+      && !catalogMatchEndpointResolved(match, role)
     ) {
       return { source: null, reason: 'Match feature endpoint identity is invalid.' };
     }

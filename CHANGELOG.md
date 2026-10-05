@@ -12,6 +12,15 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Labels (web app): applying **Label visibility** **On** now asks **Feature Is
+  Hidden** also for a feature that a **Feature Visibility** rule hides, for
+  example a rule with a record ID, another qualifier, or a `hash`, `location`,
+  or `record_location` value, as a loaded visibility TSV can give. The dialog,
+  the popup note, and the preview after Undo, Redo, or a Result switch decide
+  whether a feature is drawn as Generate does, with Python's regular
+  expressions; the preview used to apply only the popup's exact product and
+  protein ID rules. Such an **On** used to be saved without a dialog and was
+  not drawn.
 - Linear File order (web app): the File up and down buttons now work when
   each File uses its own consecutive rows, including a CLI Session that draws
   each record of a multi-record file on its own row. A move exchanges the
@@ -122,6 +131,11 @@ decisions are in
   now returns these features at the record level too, so `draw_circular()` and
   `draw_linear()` draw them. For a reverse-complemented GFF3 record, the
   feature popup lists features in the drawn start order (OV-15).
+- GFF3: a per-feature override that shows a feature of a type the type filter
+  dropped no longer parses the GFF3 file a second time; one parse serves every
+  type filter, so the case takes about 30% less time. In the web app, changing
+  the selected feature types of a GFF3 record no longer parses the file again
+  either. The diagram is unchanged.
 - Feature placement: a lane placement made in one mode no longer breaks
   Generate in the other mode. Each mode keeps its own placements through mode
   switches, Undo/Redo, and Save/Load Session, and they apply again after you
@@ -691,6 +705,17 @@ Retired names and their replacements are listed under
   a GenBank or DDBJ file restores its DEFINITION or organism label instead of
   the file name. The label read is part of the add's one History step; Undo,
   Redo, and Session save and load are unavailable until it answers (#747).
+- Fixed: in a standalone interactive SVG, the popup of a Linear collinear block
+  with several anchors now copies and downloads its Query span, Subject span,
+  and both spans. It showed "Match feature endpoint identity is invalid." under
+  each span and offered no sequence actions; a one-anchor block was not
+  affected. Gallery SVGs carry the fix after their next refresh.
+- Fixed: in a standalone interactive SVG, the popup of a Linear collinear block
+  with several anchors lists, for each Similarity group, only the anchors that
+  belong to that group under Query member and Subject member, and lists one row
+  per anchor under Query and Subject. It listed every anchor of the block for
+  every group and joined the anchors into one row; the Web popup was not
+  affected. Gallery SVGs carry the fix after their next refresh (OV-18).
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
