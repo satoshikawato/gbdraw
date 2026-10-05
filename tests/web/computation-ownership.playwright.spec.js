@@ -6,7 +6,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
-const { openApp, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { openApp, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const source = readFileSync(join(__dirname, '../test_inputs/HmmtDNA.gbk'), 'utf8');
 
@@ -78,7 +78,7 @@ const clickGenerate = async (page) => {
   await page.evaluate(() => { window.__CW__.events = window.__CW__.events.filter((name) => name !== 'generate.completed'); });
 };
 
-const applyVisibilityOverride = (page) => page.evaluate(async () => {
+const applyVisibilityOverride = (page) => evaluateWithRetainedPromise(page, async () => {
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((candidate) => candidate?.svg_id);
   app.openFeatureEditorFromList(feature, null);
@@ -89,7 +89,7 @@ const applyVisibilityOverride = (page) => page.evaluate(async () => {
 });
 
 // A bulk label edit: a Label TSV `* * label` row for a label's text.
-const applyBulkLabelEdit = (page) => page.evaluate(async () => {
+const applyBulkLabelEdit = (page) => evaluateWithRetainedPromise(page, async () => {
   const app = window.__GBDRAW_APP__;
   const { sourceText } = app.editableLabels.find((entry) => entry?.sourceText);
   const pattern = sourceText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

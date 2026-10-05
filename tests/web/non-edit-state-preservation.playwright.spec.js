@@ -9,7 +9,8 @@ const {
   expectNoSilentStateChange,
   generateAndWaitForResult,
   observeNonEditOperation,
-  reveal
+  reveal,
+  evaluateWithRetainedPromise
 } = require('./helpers/app-lifecycle.cjs');
 const {
   BATCH_FIXTURE,
@@ -26,7 +27,7 @@ test.describe.configure({ retries: 0 });
 const labelsOut = () => { window.__GBDRAW_APP__.form.labels_mode = 'out'; };
 
 const editFirstCdsLabel = async (page, text) => {
-  await page.evaluate(async (label) => {
+  await evaluateWithRetainedPromise(page, async (label) => {
     const app = window.__GBDRAW_APP__;
     const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
     await app.openFeatureEditorFromList(feature, null);
@@ -37,7 +38,7 @@ const editFirstCdsLabel = async (page, text) => {
   await settle(page);
 };
 
-const editRecordBLabels = (page) => page.evaluate(async () => {
+const editRecordBLabels = (page) => evaluateWithRetainedPromise(page, async () => {
   const app = window.__GBDRAW_APP__;
   const trna = app.extractedFeatures.find((feature) => feature.record_id === 'TESTB' && feature.type === 'tRNA');
   const hidden = app.extractedFeatures.find((feature) => feature.locus_tag === 'TESTB_0005');
@@ -153,9 +154,9 @@ const ROWS = [
       await editFirstCdsLabel(page, 'UNDO_REDO_LABEL');
     },
     operation: async (page) => {
-      await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+      await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
       await settle(page);
-      await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+      await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
       await settle(page);
     },
     check: (observation) => expect(observation.after.history).toEqual(observation.before.history)

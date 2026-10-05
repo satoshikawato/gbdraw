@@ -3294,12 +3294,12 @@ test('@comparison-contract File source order moves multi-record blocks through p
   expect(moved.cache.map(([edgeKey]) => edgeKey)).toEqual(before.cache.map(([edgeKey]) => edgeKey));
   expect(moved.cache).not.toEqual(before.cache);
 
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await expect.poll(() => page.evaluate(() => ({
     uids: window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.uid),
     rows: Object.fromEntries(window.__GBDRAW_APP__.linearRecordRows.map(({ uid, row }) => [uid, row]))
   }))).toEqual({ uids: before.uids, rows: before.rows });
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
   await expect.poll(() => page.evaluate(() => ({
     uids: window.__GBDRAW_APP__.linearSeqs.map((seq) => seq.uid),
     rows: Object.fromEntries(window.__GBDRAW_APP__.linearRecordRows.map(({ uid, row }) => [uid, row]))
@@ -3969,7 +3969,7 @@ test('@comparison-contract record rotation adds zero LOSATP source jobs and surv
   expect(popup.resources).toEqual(beforePopupRequest.resources);
   expect(popup.geometry).not.toBe(shifted.geometry);
   await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await expect.poll(() => page.evaluate(() => (
     window.__GBDRAW_APP__.recordDisplayControls
       .draftFor(window.__GBDRAW_APP__.recordDisplayControls

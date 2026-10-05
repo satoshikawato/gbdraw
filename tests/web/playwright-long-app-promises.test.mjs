@@ -13,8 +13,27 @@ import vm from 'node:vm';
 
 const { evaluateWithRetainedPromise } = createRequire(import.meta.url)('./helpers/app-lifecycle.cjs');
 
-// App operations that run a diagram render or a whole Session import or save.
-const LONG_OPERATIONS = ['runAnalysis', 'importSession', 'saveSessionWithTitle'];
+// App operations that run a diagram render, a whole Session import or save, a
+// Python rule match, or a History step (Undo and Redo rerender the Result and
+// rematch the rules). The editor actions await the same work as Generate does.
+const LONG_OPERATIONS = [
+  'runAnalysis',
+  'importSession',
+  'saveSessionWithTitle',
+  'openFeatureEditorFromList',
+  'updateClickedFeatureColor',
+  'updateClickedFeatureLabelText',
+  'updateClickedFeatureVisibility',
+  'handleFeatureStyleScopeChoice',
+  'handleFeatureVisibilityScopeChoice',
+  'addFeatureVisibilityRule',
+  'removeFeatureVisibilityRule',
+  'setFeatureVisibilityRuleField',
+  'loadFeatureEditTable',
+  'loadLabelOverrideTable',
+  'undo',
+  'redo'
+];
 const OPERATION = `[\\w$.?]*(?:${LONG_OPERATIONS.join('|')})\\(`;
 const AWAITED_OPERATION = [
   new RegExp(`\\b(?:await|return)\\s+${OPERATION}`),
@@ -102,6 +121,8 @@ test('the detector flags awaited long app operations and accepts retained or sta
     'await page.evaluate(async () => ({ result: await window.__GBDRAW_APP__.runAnalysis() }));',
     'await page.evaluate((file) => { return window.__GBDRAW_APP__.importSession(file); }, file);',
     'await run.page.evaluate(async () => { await window.__GBDRAW_APP__.saveSessionWithTitle(); });',
+    'await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());',
+    'await page.evaluate(async () => { await app.openFeatureEditorFromList(feature, null); });',
     [
       'await page.evaluate(() => { window.__RUN__ = window.__GBDRAW_APP__.runAnalysis(); });',
       'await page.evaluate(async () => ({ result: await window.__RUN__ }));'
@@ -113,6 +134,7 @@ test('the detector flags awaited long app operations and accepts retained or sta
   const accepted = [
     'await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());',
     'await evaluateWithRetainedPromise(page, async () => ({ result: await window.__RUN__ }));',
+    'await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());',
     'await page.evaluate(() => { window.__RUN__ = window.__GBDRAW_APP__.runAnalysis(); });',
     'await page.evaluate(() => { window.__GBDRAW_APP__.runAnalysis().then(done, fail); });',
     'await page.evaluate(() => window.__GBDRAW_APP__.results.length); // await runAnalysis()',
@@ -137,7 +159,7 @@ test('browser tests do not await long app operations inside page.evaluate', () =
   assert.deepEqual(
     offenders,
     [],
-    `Start ${LONG_OPERATIONS.join(', ')} with evaluateWithRetainedPromise from `
+    `Start the long app operations (${LONG_OPERATIONS.join(', ')}) with evaluateWithRetainedPromise from `
       + 'tests/web/helpers/app-lifecycle.cjs instead of awaiting it inside page.evaluate:\n'
       + offenders.join('\n')
   );

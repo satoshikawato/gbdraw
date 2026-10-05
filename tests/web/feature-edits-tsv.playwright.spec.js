@@ -8,7 +8,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync, writeFileSync } = require('node:fs');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
-const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { generateAndWaitForResult, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, openFresh, settle } = require('./helpers/audit-browser.cjs');
 
 test.describe.configure({ retries: 0 });
@@ -62,7 +62,7 @@ const features = (page) => page.evaluate(async () => {
 const pick = (list, record, type) => list.find((feature) => feature.record === record && feature.type === type);
 
 // One popup edit through the editor actions the controls call.
-const edit = (page, svgId, change) => page.evaluate(async ({ id, change: requested }) => {
+const edit = (page, svgId, change) => evaluateWithRetainedPromise(page, async ({ id, change: requested }) => {
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((item) => item.svg_id === id);
   await app.openFeatureEditorFromList(feature, null);
@@ -225,13 +225,13 @@ test('Export and Load Feature Edits TSV carry per-feature edits by identity, als
   expect(await draftRows(fresh)).toEqual(edits);
   await expectDrawsEdits(fresh, 'mounted');
 
-  await fresh.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(fresh, () => window.__GBDRAW_HISTORY__.undo());
   await settle(fresh);
   expect(await draftRows(fresh)).toEqual([]);
   list = await features(fresh);
   const trna = pick(list, 1, 'tRNA').svgId;
   expect((await drawn(fresh, [trna], 'mounted'))[trna].labels).toEqual(['tRNA-Leu']);
-  await fresh.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await evaluateWithRetainedPromise(fresh, () => window.__GBDRAW_HISTORY__.redo());
   await settle(fresh);
   expect(await draftRows(fresh)).toEqual(edits);
 

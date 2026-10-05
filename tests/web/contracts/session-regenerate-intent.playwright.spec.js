@@ -1154,7 +1154,7 @@ const expectSvgEquivalent = (left, right, label) => {
   return comparison;
 };
 
-const applyDivergentDraft = async (page) => page.evaluate(async () => {
+const applyDivergentDraft = async (page) => evaluateWithRetainedPromise(page, async () => {
   const { state } = await import('/gbdraw/web/js/state.js');
   const { createAnnotationSet } = await import('/gbdraw/web/js/app/annotations/state.js');
   const app = window.__GBDRAW_APP__;
@@ -1582,7 +1582,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   expect(afterFill.history.undoCount).toBeGreaterThan(initiallyLoaded.history.undoCount);
   await capturePreviewWorkerStage(page, 'after feature fill', previewWorkerStages, true);
 
-  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.undo())).toBe(true);
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo())).toBe(true);
   await settleMountedDom(page);
   const afterFillUndo = await captureLoadedPreviewDirectEditState(page);
   expectDirectEditFlushed(afterFill, afterFillUndo);
@@ -1590,7 +1590,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   expect(afterFillUndo.overrides.fill).toBeNull();
   await capturePreviewWorkerStage(page, 'after direct-edit Undo', previewWorkerStages, true);
 
-  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.redo())).toBe(true);
+  expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo())).toBe(true);
   await settleMountedDom(page);
   const afterFillRedo = await captureLoadedPreviewDirectEditState(page);
   expectDirectEditFlushed(afterFillUndo, afterFillRedo);
@@ -1631,7 +1631,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   expect(afterVisibility.overrides.visibility).toBe('off');
   await capturePreviewWorkerStage(page, 'after feature visibility', previewWorkerStages, true);
 
-  const labelApplied = await page.evaluate(async ({ text }) => {
+  const labelApplied = await evaluateWithRetainedPromise(page, async ({ text }) => {
     const app = window.__GBDRAW_APP__;
     const targetState = window.__GBDRAW_LOADED_PREVIEW_DIRECT_EDIT_TARGET__;
     const requested = await app.requestLabelTextChangeByFeatureId(
@@ -1841,7 +1841,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   const generatedWorker = await getDiagramWorkerActivity(freshPage);
   expectRulePreparationWorker(generatedWorker, 1);
 
-  expect(await freshPage.evaluate(() => window.__GBDRAW_HISTORY__.undo())).toBe(true);
+  expect(await evaluateWithRetainedPromise(freshPage, () => window.__GBDRAW_HISTORY__.undo())).toBe(true);
   await settleMountedDom(freshPage);
   const generatedUndo = await captureLoadedPreviewDirectEditState(freshPage);
   expect(generatedUndo.result.equalsLoadedResult).toBe(true);
@@ -1854,7 +1854,7 @@ test('loaded current preview supports direct edits before the first Generate', a
   const workerAfterGenerateUndo = await getDiagramWorkerActivity(freshPage);
   expectRulePreparationWorker(workerAfterGenerateUndo, 1);
 
-  expect(await freshPage.evaluate(() => window.__GBDRAW_HISTORY__.redo())).toBe(true);
+  expect(await evaluateWithRetainedPromise(freshPage, () => window.__GBDRAW_HISTORY__.redo())).toBe(true);
   await settleMountedDom(freshPage);
   const generatedRedo = await captureLoadedPreviewDirectEditState(freshPage);
   expect(generatedRedo.result.sha256).toBe(regenerated.result.sha256);
@@ -2064,7 +2064,7 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
       Number(beforeGenerateHistory.generatedArtifactFullCloneCount || 0)
   ).toBe(0);
 
-  const undoRedo = await freshPage.evaluate(async () => {
+  const undoRedo = await evaluateWithRetainedPromise(freshPage, async () => {
     const app = window.__GBDRAW_APP__;
     const history = window.__GBDRAW_HISTORY__;
     const content = () => String(app.results?.[app.selectedResultIndex]?.content || '');

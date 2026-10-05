@@ -292,7 +292,7 @@ test('a failed PDF font request can be retried without reloading the diagram', a
 test('a delayed label TSV cannot replace the labels from a newer upload', async ({ page }) => {
   test.setTimeout(180000);
   await session(page);
-  const outcome = await page.evaluate(async () => {
+  const outcome = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const older = new File(['*\t*\tproduct\t.*\tOLDER\n'], 'older.tsv');
     const newer = new File(['*\t*\tproduct\t.*\tNEWER\n'], 'newer.tsv');

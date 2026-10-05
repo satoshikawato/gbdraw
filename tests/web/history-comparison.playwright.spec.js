@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { load, generate } = require('./helpers/mode-transition.cjs');
+const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 test('comparison off has its own Undo step after a record definition edit', async ({ browser }) => {
   test.setTimeout(300000);
@@ -33,7 +34,7 @@ test('comparison off has its own Undo step after a record definition edit', asyn
     await losat.focus();
     await losat.press('Enter');
     await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(baseline + 3);
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
     expect(await page.evaluate(() => window.__GBDRAW_APP__.linearComparisonPlan.mode)).toBe('none');
     await expect(definition).toHaveValue('HISTORY_RECORD_TWO');
     expect(page.externalRequests).toEqual([]);

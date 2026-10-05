@@ -51,7 +51,7 @@ test('Python label TSV syntax is validated before replacing live overrides', asy
   const messages = [];
   page.on('dialog', async (dialog) => { messages.push(dialog.message()); await dialog.accept(); });
   await loadSession(page);
-  const importLabel = (pattern, label) => page.evaluate(async ({ pattern, label }) => {
+  const importLabel = (pattern, label) => evaluateWithRetainedPromise(page, async ({ pattern, label }) => {
     const input = { files: [new File([`*\tCDS\tproduct\t${pattern}\t${label}\n`], 'labels.tsv')], value: 'labels.tsv' };
     await window.__GBDRAW_APP__.loadLabelOverrideTable({ target: input });
   }, { pattern, label });
@@ -155,7 +155,7 @@ test('Unicode regex corpus has identical live and generated color/label targets'
     const ids = await fills(page);
     const tags = await page.evaluate(ids => window.__GBDRAW_APP__.extractedFeatures.filter(f => ids.includes(f.svg_id)).map(f => f.locus_tag).sort(), ids);
     expect(tags).toEqual(expected);
-    await page.evaluate(async (pattern) => {
+    await evaluateWithRetainedPromise(page, async (pattern) => {
       await window.__GBDRAW_APP__.loadLabelOverrideTable({ target: { files: [new File([`*\tCDS\tproduct\t${pattern}\tMATCH\n`], 'labels.tsv')], value: 'labels.tsv' } });
     }, pattern);
     expect(await page.locator('.origin-top svg text').filter({ hasText: /^MATCH$/ }).count()).toBe(expected.length);

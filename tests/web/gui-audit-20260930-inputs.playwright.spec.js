@@ -3,7 +3,7 @@
 // a current defect; the PR that fixes the audit ID removes the mark.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { generateAndWaitForResult, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const {
   BATCH_FIXTURE,
   HMMT,
@@ -372,7 +372,7 @@ test('Reset Settings clears Linear per-record display text and the alignment pla
   expect(after.subtitles.every((value) => value === '')).toBe(true);
   expect(after.alignmentPlan).toBe(false);
   // D-15: Undo restores the record display text and the alignment plan.
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   const restored = await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');

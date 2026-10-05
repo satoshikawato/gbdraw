@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { load, generate } = require('./helpers/mode-transition.cjs');
-const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { generateAndWaitForResult, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const region = page => page.evaluate(() => {
   const form = window.__GBDRAW_APP__.form;
@@ -27,10 +27,10 @@ test('Circular region restores number to Auto', async ({ browser }) => {
     await openPresentation(page);
     expect(await region(page)).toEqual([null, null]);
     await edit(page, 'Circular region start', '1000');
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
     expect(await region(page)).toEqual([null, null]);
     await expect(page.getByLabel('Circular region start', { exact: true })).toHaveValue('');
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
     expect(await region(page)).toEqual([1000, null]);
     expect(page.externalRequests).toEqual([]);
   } finally { await page.context().close(); }
@@ -49,8 +49,8 @@ test('rejected Circular region can Undo both edits back to valid Auto', async ({
     await edit(page, 'Circular region end', '500');
     await generateAndWaitForResult(page, { expectedStatus: 'error' });
     expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(before.undo + 2);
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
     expect(await region(page)).toEqual([null, null]);
     await expect(page.getByLabel('Circular region start', { exact: true })).toHaveValue('');
     await expect(page.getByLabel('Circular region end', { exact: true })).toHaveValue('');
