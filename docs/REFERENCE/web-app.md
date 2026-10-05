@@ -853,8 +853,10 @@ feature that names the source feature the same way; the editor shows it as
 feature after crop, reverse complement, record order, or record copy changes.
 When the feature is not drawn, for example outside the crop, Generate skips
 the annotation and reports it in the annotation notice; the annotation stays.
-A request carries the annotation only while its record is drawn, so drawing
-another record or the other mode keeps it in the draft without drawing it.
+The annotation belongs to the mode the feature was selected in. A request
+carries it only in that mode and while its record is drawn, so drawing another
+record or the other mode keeps it in the draft without drawing it, also when
+both modes name the record the same way.
 
 **Export Feature Edits TSV** in the Features list writes the feature edits for the
 records of the current diagram in the `--feature_override_table` format that

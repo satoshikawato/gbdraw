@@ -78,7 +78,7 @@ import {
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
 } from '../app/track-slot-validation.js';
-import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
+import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from '../app/annotations/state.js';
 import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
 import { diagnosticError } from './error-normalization.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
@@ -2491,7 +2491,7 @@ const projectCanonicalRenderInput = ({
       : {})
   };
   if (Array.isArray(state.annotationSets) && state.annotationSets.length > 0) {
-    diagramOptions.annotations = annotationOptionsPayload(state.annotationSets, records);
+    diagramOptions.annotations = annotationOptionsPayload(state.annotationSets, state.mode.value, records);
   }
   if (state.mode.value === 'circular') {
     diagramOptions.keepFullDefinitionWithPlotTitle = Boolean(state.adv.keep_full_definition_with_plot_title);
@@ -4789,7 +4789,7 @@ export const projectCanonicalSessionRequest = ({
       whitelist: projectedWhitelist,
       blacklistText: projectedBlacklistText,
       linearRecordLayout: linearLayout,
-      annotationSets: normalizeAnnotationSets(options.annotations?.sets),
+      annotationSets: draftAnnotationSetsOfRequest(options.annotations?.sets, renderRequest.mode),
       recordDisplayDrafts: records.flatMap((record, index) => (record.display?.isCircular != null || record.display?.startCoordinate != null) ? [{
         scope: renderRequest.mode,
         sourceUid: renderRequest.mode === 'linear' ? String(files.linearSeqs[index]?.uid || record.recordKey) : 'circular',
