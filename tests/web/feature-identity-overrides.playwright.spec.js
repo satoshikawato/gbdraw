@@ -397,13 +397,19 @@ test('a Linear Session 33 with crop and reverse complement keeps its feature edi
   expect(shown[unlabeled.svgId]).toEqual({ drawn: true, labels: [] });
 });
 
-// Design 4.3 rule 3: the Load notice counts exactly the edits it drops.
-test('loading an older Session counts only the feature edits it drops', async ({ page }, testInfo) => {
-  test.setTimeout(300_000);
+// The Linear Session 33 with one more edit that names no feature.
+const writeUnmatchedEditSession = (testInfo) => {
   const session = JSON.parse(gunzipSync(readFileSync(LINEAR_V33)));
   session.features.featureVisibilityOverrides.f00000000_record_2 = 'off';
   const file = testInfo.outputPath('linear-v33-unmatched-edit.gbdraw-session.json');
   writeFileSync(file, JSON.stringify(session));
+  return file;
+};
+
+// Design 4.3 rule 3: the Load notice counts exactly the edits it drops.
+test('loading an older Session counts only the feature edits it drops', async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  const file = writeUnmatchedEditSession(testInfo);
   const alerts = [];
   page.on('dialog', (dialog) => alerts.push(dialog.message()));
   await openFresh(page);
@@ -412,6 +418,53 @@ test('loading an older Session counts only the feature edits it drops', async ({
     'Session loaded successfully! 1 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.'
   ]);
   expect((await featureOverrideRows(page)).length).toBe(4);
+});
+
+// OV-39: an older Session without a feature catalog reads its sources again
+// through the diagram Worker. When the Worker cannot start, the Load fails with
+// the runtime diagnostic and keeps the previous Session; it does not drop the
+// older Session's edits as unmatched.
+test('an older Session whose sources cannot be read again fails to load and keeps the previous Session', async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  const file = writeUnmatchedEditSession(testInfo);
+  const alerts = [];
+  page.on('dialog', (dialog) => alerts.push(dialog.message()));
+  await openFresh(page);
+  const runtimeAssets = /pyodide\.asm\.(?:js|wasm)(?:\?|$)/;
+  await page.context().route(runtimeAssets, (route) => route.abort());
+  // A current Session loads without the diagram Worker.
+  await loadSession(page, 'tests/fixtures/sessions/feature-edits-crop-rc.v44.gbdraw-session.json.gz');
+  const loaded = () => page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { state } = await import('/gbdraw/web/js/state.js');
+    return { mode: app.mode, results: app.results.map((result) => result.content),
+      rows: Object.values(state.featureOverrides).map((row) => [row.biologicalFeatureId, row.featureVisibility,
+        row.labelVisibility, row.labelText]).sort(), records: app.linearSeqs.map((seq) => seq.gb?.name || null) };
+  });
+  const previous = await loaded();
+  expect(previous.rows.length).toBe(3);
+  alerts.length = 0;
+  await page.locator('input[accept^=".json,"]').setInputFiles(file);
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180_000 });
+  await settle(page);
+  expect(alerts).toEqual([]);
+  expect(await page.evaluate(async () => {
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const { code, stage, actions } = state.errorLog.value || {};
+    return { code, stage, actions };
+  })).toEqual({ code: 'WORKER_INIT', stage: 'initialization', actions: ['save-session', 'reload', 'retry'] });
+  await expect(page.getByRole('alert')).toContainText('The diagram runtime could not start.');
+  expect(await loaded()).toEqual(previous);
+  expect(await page.evaluate(() => [window.__GBDRAW_APP__.sessionSaveAvailable,
+    window.__GBDRAW_APP__.sessionLoadAvailable])).toEqual([true, true]);
+  // Retry once the runtime can start: the Load drops only the unmatched edit.
+  await page.context().unroute(runtimeAssets);
+  await loadSession(page, file);
+  expect(alerts).toEqual([
+    'Session loaded successfully! 1 feature edit(s) from an older Session could not be matched to a feature of its saved diagram and were dropped.'
+  ]);
+  expect((await featureOverrideRows(page)).length).toBe(4);
+  await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
 const importLabelTsv = (page, text) => page.evaluate(async (tsv) => {

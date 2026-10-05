@@ -76,6 +76,7 @@ const {
   alignRecoveredFeatureIdsToRenderedSvg,
   buildSessionFeatureRecoveryPlan,
   classifyFeatureMetadataState,
+  extractSessionSourceFeatures,
   migrateFeatureOverrideState,
   normalizeRecordIndex
 } = await import(pathToFileURL(join(tempDir, 'app', 'session-feature-metadata.js')));
@@ -88,7 +89,11 @@ const { admitLegacyImportedResults, createLegacyImportResultSource } = await imp
 const { extractFeatureMetadataForPreview } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-metadata-extraction.js'))
 );
-const { normalizeGenerationResponse } = await import(pathToFileURL(join(tempDir, 'services', 'diagram-generation.js')));
+const {
+  DiagramGenerationCanceledError,
+  deserializeWorkerError,
+  normalizeGenerationResponse
+} = await import(pathToFileURL(join(tempDir, 'services', 'diagram-generation.js')));
 
 {
   const gffFile = { name: 'record.gff3' };
@@ -704,6 +709,32 @@ for (const invalidRecordIndex of [
   assert.equal(plan.status, 'ready');
   assert.equal(plan.reason, 'not-needed');
   assert.equal(extractionCalls, 0);
+}
+
+// OV-39: a Session without a feature catalog reads its sources again. A source
+// that Python reports it cannot read falls back to the saved metadata (null);
+// a runtime failure (Worker start, transport, cancellation) fails the Load
+// instead of dropping the Session's feature edits as unmatched.
+{
+  const snapshot = { mode: 'linear', lInputType: 'gb', linearSeqs: [{ gb: { name: 'a.gb' } }] };
+  const reading = (read) => extractSessionSourceFeatures({ snapshot, readFeatureExtractionDataImpl: read });
+  const failing = (error) => reading(async () => { throw error; });
+  const read = await reading(async () => ({ features: [{ id: 'a', svg_id: 'stable-a', record_id: 'A' }], record_ids: ['A'] }));
+  assert.deepEqual(read.extractedFeatures.map((feature) => feature.svg_id), ['stable-a']);
+  assert.equal(await extractSessionSourceFeatures({ snapshot: { ...snapshot, linearSeqs: [{}] } }), null);
+  assert.equal(await reading(async () => ({ error: 'unreadable' })), null);
+  for (const [code, stage] of [['RECORD_SELECTION', 'helper'], ['REGION_INVALID', 'helper'], ['INPUT_UNREADABLE', 'helper'],
+    ['NO_RECORDS', 'helper'], ['VALIDATION_UNCLASSIFIED', 'helper'], ['RENDER_FAILED', 'render']]) {
+    assert.equal(await failing(deserializeWorkerError({ code, operation: 'feature-extraction', stage })), null, code);
+  }
+  for (const error of [
+    deserializeWorkerError({ code: 'WORKER_INIT', stage: 'initialization' }, { operation: 'feature-extraction' }),
+    deserializeWorkerError({ code: 'RESULT_INVALID', operation: 'feature-extraction', stage: 'result-admission' }),
+    deserializeWorkerError({ code: 'UNKNOWN', operation: 'feature-extraction', stage: 'unknown' }),
+    new DiagramGenerationCanceledError()
+  ]) {
+    await assert.rejects(failing(error), (thrown) => thrown === error, error.code || error.name);
+  }
 }
 
 console.log('session feature metadata tests passed');
