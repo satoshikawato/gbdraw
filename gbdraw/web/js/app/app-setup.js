@@ -459,7 +459,6 @@ export const createAppSetup = () => {
     filteredFeatures,
     featureListState
   } = state;
-  let featureActions = null;
   let similarityAlignmentActions = null;
   let refreshSimilarityAlignmentCanvas = () => {};
   const linearTypography = createLinearTypographyController({
@@ -1191,12 +1190,19 @@ export const createAppSetup = () => {
     buildRunStateData,
     applyRunStateData
   });
+  // R13: a History restore keeps the open specific-color pattern drafts. The
+  // feature editor takes History's undoable runs, so the root registers its
+  // capture and restore ports once both owners exist.
+  const specificRuleDraftPorts = {
+    captureSpecificRulePatternDrafts: null,
+    restoreSpecificRulePatternDrafts: null
+  };
   const restoreWithSpecificRuleDrafts = async (restore, ...args) => {
-    const drafts = featureActions?.captureSpecificRulePatternDrafts();
+    const drafts = specificRuleDraftPorts.captureSpecificRulePatternDrafts();
     try {
       return await restore(...args);
     } finally {
-      if (drafts) featureActions.restoreSpecificRulePatternDrafts(drafts);
+      if (drafts) specificRuleDraftPorts.restoreSpecificRulePatternDrafts(drafts);
     }
   };
   const history = createHistoryManager({
@@ -1332,7 +1338,7 @@ export const createAppSetup = () => {
   };
   paletteRulePorts.projectPaletteAndRules = projectPaletteAndRules;
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted });
-  featureActions = createFeatureEditor({
+  const featureActions = createFeatureEditor({
     state,
     rulePreparation,
     runUndoable: history.runUndoable,
@@ -1359,6 +1365,8 @@ export const createAppSetup = () => {
     projectFeatureEdits: () => projectMountedEditorIntent({ visibility: true, rerender: true, reflow: true, labels: true })
   });
   legendRowRulePorts.commitLegendRowRules = featureActions.commitSpecificRules;
+  specificRuleDraftPorts.captureSpecificRulePatternDrafts = featureActions.captureSpecificRulePatternDrafts;
+  specificRuleDraftPorts.restoreSpecificRulePatternDrafts = featureActions.restoreSpecificRulePatternDrafts;
   // R13: the drawer and the feature search come after the owners they react
   // through, so each receives its ports directly.
   const rightDrawerActions = createRightDrawerController({ state, watch,
@@ -2280,6 +2288,11 @@ export const createAppSetup = () => {
       if (slotsEnabled) circularTrackSlotEditor.syncCircularConservationSlots();
     }
   );
+  // R13: a moved record clears the alignment plan and keeps the aligned record
+  // positions. The alignment owner runs its candidate through Generate, which
+  // reads this layout owner, so the root registers both ports once the
+  // alignment owner exists.
+  const recordDragAlignmentPorts = { beforeRecordDrag: null, afterRecordDrag: null };
   const legendLayout = createLegendLayout({
     state,
     reflowDualLegendLayout: legendActions.reflowDualLegendLayout,
@@ -2288,8 +2301,8 @@ export const createAppSetup = () => {
     commitHistoryTransaction: history.commit,
     previewRuntime,
     similarityAlignmentLifecycle: {
-      beforeRecordDrag: () => similarityAlignmentActions?.beforeRecordDrag?.(),
-      afterRecordDrag: (options) => similarityAlignmentActions?.afterRecordDrag?.(options)
+      beforeRecordDrag: () => recordDragAlignmentPorts.beforeRecordDrag(),
+      afterRecordDrag: (options) => recordDragAlignmentPorts.afterRecordDrag(options)
     }
   });
   legendActions.setLegendGeometryChangedHandler(legendLayout.refreshLegendGeometry);
@@ -3231,6 +3244,8 @@ export const createAppSetup = () => {
     clearCandidatePreview: featureActions.clearAlignmentCandidatePreview,
     onError: (error) => { errorLog.value = error; }
   });
+  recordDragAlignmentPorts.beforeRecordDrag = similarityAlignmentActions.beforeRecordDrag;
+  recordDragAlignmentPorts.afterRecordDrag = similarityAlignmentActions.afterRecordDrag;
   const similarityAlignmentCanvasHover = ref(null);
   refreshSimilarityAlignmentCanvas = () => {
     if (!similarityAlignmentActions.dialogOpen.value
