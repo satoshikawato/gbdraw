@@ -1939,6 +1939,10 @@ const WEB_ARCHITECTURE_EVALUATION_MODULE = join(
   REPOSITORY_ROOT,
   'tools/web-architecture-evaluation.mjs'
 );
+const WEB_OWNER_GRAPH_DETECTOR_MODULE = join(
+  REPOSITORY_ROOT,
+  'tools/web-owner-graph-detectors.mjs'
+);
 const PRODUCT_IMPACT_EVALUATION_MODULE = join(
   REPOSITORY_ROOT,
   'tools/web-product-impact-evaluation.mjs'
@@ -2097,6 +2101,10 @@ const BUDGET_FIXTURE = Object.freeze({
     WEB_ARCHITECTURE_EVALUATION_MODULE,
     'utf8'
   ),
+  'tools/web-owner-graph-detectors.mjs': readFileSync(
+    WEB_OWNER_GRAPH_DETECTOR_MODULE,
+    'utf8'
+  ),
   'tools/web-product-impact-evaluation.mjs': readFileSync(
     PRODUCT_IMPACT_EVALUATION_MODULE,
     'utf8'
@@ -2154,12 +2162,14 @@ const BUDGET_FIXTURE = Object.freeze({
 });
 const WEB_DESIGN_RULES_PATH = 'gbdraw/web/CLAUDE.md';
 const DESIGN_RULE_GUARD_REGISTRY_PATH = 'tools/web-design-rule-guards.json';
+const OWNER_GRAPH_REGISTRY_PATH = 'tools/web-owner-graph.json';
 const FUTURE_GUARD_PATHS = Object.freeze([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   '.github/pull_request_template.md',
   'tools/web-architecture-violations.json',
   WEB_DESIGN_RULES_PATH,
   DESIGN_RULE_GUARD_REGISTRY_PATH
+  OWNER_GRAPH_REGISTRY_PATH
 ]);
 const PROTECTED_ARCHITECTURE_GUARD_PATHS = Object.freeze([
   ...FUTURE_GUARD_PATHS,
@@ -2171,6 +2181,7 @@ const FUTURE_AUTHORITY_PATHS = Object.freeze([
   'tools/web-architecture-violations.json',
   WEB_DESIGN_RULES_PATH,
   DESIGN_RULE_GUARD_REGISTRY_PATH
+  OWNER_GRAPH_REGISTRY_PATH
 ]);
 const PRODUCT_IMPACT_GUARD_PATHS = Object.freeze([
   'docs/internal/PRODUCT_IMPACT_RATCHET.md',
@@ -2427,6 +2438,10 @@ const TRUSTED_ARCHITECTURE_FIXTURE_FILES = Object.freeze({
   ),
   'tools/web-architecture-evaluation.mjs': readFileSync(
     WEB_ARCHITECTURE_EVALUATION_MODULE,
+    'utf8'
+  ),
+  'tools/web-owner-graph-detectors.mjs': readFileSync(
+    WEB_OWNER_GRAPH_DETECTOR_MODULE,
     'utf8'
   ),
   'tools/web-architecture-rules.json': WEB_ARCHITECTURE_RULES_SOURCE,
@@ -4494,6 +4509,7 @@ test('checker implementation and authority files cannot change together', () => 
     'tools/check-web-change-budget.mjs',
     'tools/web-change-source.mjs',
     'tools/web-architecture-detectors.mjs',
+    'tools/web-owner-graph-detectors.mjs',
     'tools/web-architecture-evaluation.mjs',
     'tools/web-product-impact-evaluation.mjs',
     'tools/web-product-impact-decision-source.mjs',
@@ -4512,6 +4528,7 @@ test('checker implementation and authority files cannot change together', () => 
     'tools/web-product-decisions.json',
     WEB_DESIGN_RULES_PATH,
     DESIGN_RULE_GUARD_REGISTRY_PATH,
+    OWNER_GRAPH_REGISTRY_PATH,
     '.github/workflows/gallery-publication.yml',
     '.github/workflows/deploy_web.yml',
     '.github/workflows/test.yml',
@@ -4538,6 +4555,7 @@ test('all checker implementations are separated from reserved future authority',
     'tools/check-web-change-budget.mjs',
     'tools/web-change-source.mjs',
     'tools/web-architecture-detectors.mjs',
+    'tools/web-owner-graph-detectors.mjs',
     'tools/web-architecture-evaluation.mjs',
     'tools/web-product-impact-evaluation.mjs',
     'tools/web-product-impact-decision-source.mjs',
@@ -5831,4 +5849,76 @@ test('the Web design rules and the guard registry are pre-registered guard and a
       });
     });
   }
+// Owner-graph report (implementation plan Phase B1): the checker prints the
+// detector summaries for the base and the head and the NEW and REMOVED
+// subjects, and nothing in that section affects the Gate until Phase B3.
+test('the owner-graph report lists base and head counts and new subjects without gating', () => {
+  const registry = JSON.stringify({
+    schemaVersion: 1,
+    compositionRoots: ['app/wiring.js'],
+    ownerObjectNames: ['store', 'legendOwner'],
+    stateModule: 'state.js',
+    projectionDomains: [],
+    heavyProducers: []
+  });
+  const root = [
+    "import { createLegendOwner } from './legend-owner.js';",
+    "import { createStore } from '../services/store.js';",
+    'export const createWiring = () => {',
+    '  const store = createStore({ state });',
+    '  const legendOwner = createLegendOwner({ state, store });',
+    '  return { store, legendOwner };',
+    '};',
+    ''
+  ].join('\n');
+  const withClosure = root.replace(
+    '  const store = createStore({ state });',
+    '  const store = createStore({ state, buildLegendEntryOwners: () => legendOwner.captureLegendEntryOwners() });'
+  );
+  withChangeBudgetRepository(({ commit, execute, write }) => {
+    write(OWNER_GRAPH_REGISTRY_PATH, `${registry}\n`);
+    write('gbdraw/web/js/app/wiring.js', root);
+    write('gbdraw/web/js/app/legend-owner.js', 'export const createLegendOwner = ({ state, store }) => ({ state, store });\n');
+    write('gbdraw/web/js/services/store.js', 'export const createStore = ({ state }) => ({ state });\n');
+    commit('baseline composition');
+    const unchanged = execute();
+    assert.equal(unchanged.status, 0, unchanged.output);
+    assert.match(unchanged.output, /## Owner graph \(report\)\n\n- Registry: tools\/web-owner-graph\.json from the trusted base\n- injectionEdges: 1 -> 1\n- forwardClosures: 0 -> 0\n- stateBackdoors: 0 -> 0\n- wholeObjectPorts: 1 -> 1/);
+    write('gbdraw/web/js/app/wiring.js', withClosure);
+    write('gbdraw/web/js/app/legend-owner.js', "export const createLegendOwner = ({ state, store }) => { state.legendRows = () => []; return { state, store }; };\n");
+    const result = execute();
+    assert.equal(result.status, 0, result.output);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.match(result.output, /- forwardClosures: 0 -> 1\n/);
+    assert.match(result.output, /- stateBackdoors: 0 -> 1\n/);
+    assert.match(result.output, /- owner-graph\.forward-closure\.v1: NEW app\/wiring\.js\|store\.buildLegendEntryOwners->legendOwner\.captureLegendEntryOwners/);
+    assert.match(result.output, /- owner-graph\.state-backdoor\.v1: NEW app\/legend-owner\.js\|legendRows/);
+    assert.doesNotMatch(result.output, /Blocking violations\n\n- .*owner-graph/);
+  });
+});
+
+test('the owner-graph registry is pre-registered authority and is read from the trusted base', () => {
+  const checker = readFileSync(CHANGE_BUDGET_CHECKER, 'utf8');
+  assert.match(checker, /const ownerGraphRegistryPath = 'tools\/web-owner-graph\.json';/);
+  assert.match(checker, /const ownerGraphDetectorsPath = 'tools\/web-owner-graph-detectors\.mjs';/);
+  const guardBlock = checker.match(/const guardPaths = new Set\(\[([\s\S]*?)\]\);/)[1];
+  const authorityBlock = checker.match(/const authorityPaths = new Set\(\[([\s\S]*?)\]\);/)[1];
+  const implementationBlock = checker.match(/const checkerImplementationPaths = new Set\(\[([\s\S]*?)\]\);/)[1];
+  assert.match(guardBlock, /ownerGraphRegistryPath/);
+  assert.match(guardBlock, /ownerGraphDetectorsPath/);
+  assert.match(authorityBlock, /ownerGraphRegistryPath/);
+  assert.match(implementationBlock, /ownerGraphDetectorsPath/);
+  assert.match(checker, /readRevisionFile\(base, ownerGraphRegistryPath\)/);
+  withChangeBudgetRepository(({ commit, execute, write }) => {
+    write(OWNER_GRAPH_REGISTRY_PATH, '{"schemaVersion":1,"compositionRoots":["app/app-setup.js"]}\n');
+    commit('register owner graph');
+    write(OWNER_GRAPH_REGISTRY_PATH, '{ malformed\n');
+    const result = execute();
+    assert.match(result.output, /- Registry: tools\/web-owner-graph\.json from the trusted base/);
+  });
+  const malformed = runChangeBudgetCase((write) => {
+    write(OWNER_GRAPH_REGISTRY_PATH, '{ malformed\n');
+  });
+  // An uncommitted registry is read from the base (absent) and reported as defaults.
+  assert.match(malformed.output, /- Registry: defaults \(registry absent\)/);
 });
