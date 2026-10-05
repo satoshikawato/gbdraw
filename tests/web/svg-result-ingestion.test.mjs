@@ -528,6 +528,7 @@ test('a renderer-derived Legend style may be absent when no current binding rema
   }));
 });
 
+// R6: the admission owner classifies the failure; Generate never reports UNKNOWN.
 test('an unexplained missing Legend binding remains rejected', () => {
   const { response, admission } = currentFixture('<svg>missing-legend</svg>');
   const plan = compileDirectEditorMutationPlan(planOptions.Legend(admission));
@@ -538,7 +539,7 @@ test('an unexplained missing Legend binding remains rejected', () => {
       sanitizer: { sanitize: (value) => value },
       parser: FakeDomParser
     }),
-    /missing a Legend binding/
+    { code: 'RESULT_INVALID', stage: 'result-admission' }
   );
 });
 

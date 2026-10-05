@@ -288,21 +288,26 @@ const compilePlanBundle = ({
       ? entry.featureIds : [...(renderedIdsByDirectCaption.get(caption) || [])];
     const allowMissing = !entry || (sourceReplaced && isOriginal) || (rendererDerivedCaptions.has(caption)
       && (legendRenderedIds.length === 0 || legendRenderedIds.every(id => hiddenRenderedIds.has(id))));
+    // Each Result styles only the category features it renders. A batch Result
+    // that renders none of them draws no row for the category (OV-45).
+    const renderedIdsIn = (resultIndex) => legendRenderedIds
+      .filter(id => renderedResultIndexes(catalogAdmission, id).has(resultIndex));
+    const allowMissingIn = (resultIndex) => allowMissing
+      || (legendRenderedIds.length > 0 && renderedIdsIn(resultIndex).length === 0);
     if (hasOwn(legendColorOverrides, caption)) {
       const color = normalizePaint(legendColorOverrides[caption], 'legend color');
-      if (color) addToResults(operationsByResult, allResultIndexes, 'legendFills', {
-        caption: targetCaption, color, allowMissing
+      if (color) operationsByResult.forEach((operations, resultIndex) => {
+        operations.legendFills.push({ caption: targetCaption, color, allowMissing: allowMissingIn(resultIndex) });
       });
     }
     const stroke = legendStrokeOverrides[caption];
     if (stroke && typeof stroke === 'object') {
       const strokeColor = hasOwn(stroke, 'strokeColor') ? normalizePaint(stroke.strokeColor, 'legend stroke color') : '';
       const strokeWidth = hasOwn(stroke, 'strokeWidth') ? normalizeStrokeWidth(stroke.strokeWidth) : null;
-      // Each Result strokes only the category features it renders.
       if (strokeColor || strokeWidth !== null) operationsByResult.forEach((operations, resultIndex) => {
         operations.legendStrokes.push({
-          caption: targetCaption, strokeColor, strokeWidth, allowMissing,
-          renderedIds: legendRenderedIds.filter(id => renderedResultIndexes(catalogAdmission, id).has(resultIndex))
+          caption: targetCaption, strokeColor, strokeWidth, allowMissing: allowMissingIn(resultIndex),
+          renderedIds: renderedIdsIn(resultIndex)
         });
       });
     }
