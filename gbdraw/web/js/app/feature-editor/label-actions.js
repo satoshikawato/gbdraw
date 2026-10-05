@@ -99,6 +99,7 @@ export const LABEL_ABSENCE_REASONS = Object.freeze({
   underlay: ' Labels are not drawn for features drawn as "Underlay".',
   scope_none: ' Labels are set to "None" ("Show Labels" or "Label Mode"), so only a feature with Label visibility "On" has one.',
   scope_first: ' "Show Labels" is "First Record Only", so labels are drawn only in the first record unless a feature has Label visibility "On".',
+  scope_orthogroup_top: ' "Show Labels" is "Top Similarity Group Record", so labels are drawn only for the features that setting selects, unless a feature has Label visibility "On".',
   whitelist: ' A label whitelist is set, and labels are drawn only for the features it lists.',
   blacklist: ' A label blacklist is set, and a label whose text contains one of its keywords is not drawn.',
   embedded_only: ' With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.'
@@ -116,6 +117,9 @@ const labelScopeFilterReason = (feature, diagramOptions) => {
   const scope = overrides['labels.circular.scope'] ?? overrides['labels.linear.scope'];
   if (scope === 'none') return 'scope_none';
   if (scope === 'first' && Number(feature?.record_idx) > 0) return 'scope_first';
+  // Python picks the selected features (orthogroup_label_eligibility); the Web
+  // names the setting and does not repeat that rule.
+  if (scope === 'orthogroup_top') return 'scope_orthogroup_top';
   if (diagramOptions?.labelWhitelistFile) return 'whitelist';
   const blacklist = overrides['labels.filtering.blacklist_keywords'];
   return Array.isArray(blacklist) && blacklist.length > 0 ? 'blacklist' : '';

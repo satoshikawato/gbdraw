@@ -236,6 +236,8 @@ const absenceCases = [
     ' Labels are set to "None" ("Show Labels" or "Label Mode"), so only a feature with Label visibility "On" has one.'],
   ['scope_first', { scope: 'first', recordIdx: 1 },
     ' "Show Labels" is "First Record Only", so labels are drawn only in the first record unless a feature has Label visibility "On".'],
+  ['scope_orthogroup_top', { scope: 'orthogroup_top' },
+    ' "Show Labels" is "Top Similarity Group Record", so labels are drawn only for the features that setting selects, unless a feature has Label visibility "On".'],
   ['whitelist', { whitelist: true }, ' A label whitelist is set, and labels are drawn only for the features it lists.'],
   ['blacklist', { blacklist: ['putative'] },
     ' A label blacklist is set, and a label whose text contains one of its keywords is not drawn.'],
