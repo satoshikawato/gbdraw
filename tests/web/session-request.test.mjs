@@ -5448,3 +5448,70 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   assert.throws(() => bindCanonicalTypedResource(typed, { ...backing, kind: 'orthogroup-result' }), /backing is invalid/);
   assert.throws(() => bindCanonicalTypedResource(typed, { ...backing, size: -1 }), /backing is invalid/);
 }
+
+// OV-40: the Session 39 Web writer stored a Label whitelist keyword typed with a
+// tab as an extra cell (tests/fixtures/sessions/whitelist-tab-keyword.provenance.json).
+// Sessions 31–39 read that row as the current writer writes it and report it;
+// any other Session table failure names the table and the Session.
+{
+  const { legacyTableRowsNotice } = await import(
+    pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
+  );
+  const { normalizeUserFacingError } = await import(
+    pathToFileURL(join(tempRoot, 'js', 'services', 'error-normalization.js'))
+  );
+  const session = JSON.parse(gunzipSync(await readFile(join(
+    repoRoot, 'tests', 'fixtures', 'sessions', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz'
+  ))));
+  assert.equal(session.version, 39);
+  const project = (document, repairLegacyTableRows) => projectCanonicalSessionRequest({
+    renderRequest: document.renderRequest, resources: document.resources, webFiles: document.webFiles || {},
+    storedConfig: document.config, repairLegacyTableRows
+  });
+  const repaired = project(session, true);
+  assert.deepEqual(repaired.config.whitelist, [{ feat: 'CDS', qual: 'product', key: 'cytochrome c oxidase' }]);
+  assert.equal(repaired.config.filterMode, 'Whitelist');
+  assert.deepEqual(repaired.legacyTableRepairs, [{ table: 'label-whitelist', row: 1, repair: 'joined' }]);
+  assert.equal(legacyTableRowsNotice(repaired.legacyTableRepairs),
+    'Some table rows of this older Session were read as the current version writes them. '
+    + 'Label whitelist: line 1 had extra cells, joined into the last column with one space.');
+  assert.equal(legacyTableRowsNotice([
+    ...[3, 4, 5, 6, 7, 9, 12].map((row) => ({ table: 'qualifier-priority', row, repair: 'dropped' })),
+    { table: 'label-whitelist', row: 2, repair: 'dropped' }
+  ]), 'Some table rows of this older Session were read as the current version writes them. '
+    + 'Qualifier priority: lines 3, 4, 5, 6, 7, and 2 more lacked a required column and were dropped. '
+    + 'Label whitelist: line 2 lacked a required column and was dropped.');
+  assert.equal(legacyTableRowsNotice([]), '');
+  const sessionTableFailure = (document, repairLegacyTableRows) => {
+    try {
+      project(document, repairLegacyTableRows);
+    } catch (error) {
+      return normalizeUserFacingError(error);
+    }
+    return null;
+  };
+  // The strict reader of every other caller names the table.
+  assert.deepEqual(sessionTableFailure(session, false), {
+    ...sessionTableFailure(session, false),
+    code: 'TABLE_INVALID',
+    context: { sessionTable: 'label-whitelist', reason: 'FIELDS', row: 1, columnCount: 3 },
+    summary: 'The table is invalid. Session table: Label whitelist. Line 1. Check the required fields. Required columns: 3.',
+    actions: ['select-input']
+  });
+  // A Specific colors row with an invalid color still fails Load, naming the table.
+  const specificColors = structuredClone(session);
+  const text = 'CDS\tproduct\tkinase\tnot-a-color\n';
+  specificColors.resources['colors-color-table-file'] = {
+    kind: 'colors-color-table-file', name: 'colors-color-table-file-specific-colors.tsv',
+    type: 'text/tab-separated-values', size: Buffer.byteLength(text), lastModified: 0,
+    encoding: 'base64', data: Buffer.from(text).toString('base64')
+  };
+  specificColors.renderRequest.diagramOptions.colors.colorTableFile = {
+    resourceId: 'colors-color-table-file', representation: 'file'
+  };
+  const specificFailure = sessionTableFailure(specificColors, true);
+  assert.equal(specificFailure?.code, 'TABLE_INVALID');
+  assert.deepEqual(specificFailure.context, { sessionTable: 'specific-colors', field: 'color', reason: 'COLOR', row: 1 });
+  assert.equal(specificFailure.summary, 'The table is invalid. Session table: Specific colors. Line 1. Field: color. '
+    + 'Use none, a supported named color, or a hex color with 3 or 6 digits.');
+}
