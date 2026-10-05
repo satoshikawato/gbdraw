@@ -21,21 +21,20 @@ export const createFeatureEditor = ({
   featureSelection = null,
   previewRuntime = null,
   isPatternEditAvailable = () => true,
-  previewTransformInteraction = null
+  previewTransformInteraction = null,
+  projectFeatureEdits
 }) => {
   const { ref, computed, watch, reactive } = window.Vue;
   const ruleActions = createFeatureRuleActions({ state, nextTick, legendActions, rulePreparation, history, svgActions, ref, computed, isPatternEditAvailable });
-  // Show feature and label (Owner Q2) sets Feature visibility through its owner.
-  const labelActions = createFeatureLabelActions({
-    state, previewRuntime, rulePreparation, ref, computed, watch, nextTick, getCommittedRequest,
-    setFeatureVisibility: (...args) => visibilityActions.setFeatureVisibility(...args)
-  });
+  // R13: the label owner's reactions, registered once it exists; the owners
+  // created before it call them through this object only.
+  const editorPorts = {};
   const featureSvgActions = createFeatureSvgActions({
     state,
     getFeatureColor: ruleActions.getFeatureColor,
     getEffectiveLegendCaption: ruleActions.getEffectiveLegendCaption,
     rulePreparation,
-    onFeaturePopupOpened: labelActions.syncLabelEditor,
+    onFeaturePopupOpened: (...args) => editorPorts.syncLabelEditor(...args),
     featureSelection,
     previewRuntime,
     previewTransformInteraction
@@ -50,22 +49,28 @@ export const createFeatureEditor = ({
     featureSvgActions,
     previewRuntime
   });
+  // The visibility owner comes before the label owner, which receives its
+  // transition as a port: Show feature and label (Owner Q2) sets Feature
+  // visibility through it.
   const visibilityActions = createFeatureVisibilityActions({
     state,
     featureSvgActions,
-    labelActions,
+    ports: editorPorts,
     previewRuntime,
     rulePreparation,
     getCommittedRequest
   });
-  // A loaded table shows on the displayed Result as a History apply does (R3).
+  const labelActions = createFeatureLabelActions({
+    state, previewRuntime, rulePreparation, ref, computed, watch, nextTick, getCommittedRequest,
+    setFeatureVisibility: visibilityActions.setFeatureVisibility
+  });
+  editorPorts.applyFeatureVisibilityToLabels = labelActions.applyFeatureVisibilityToLabels;
+  editorPorts.syncLabelEditor = labelActions.syncLabelEditor;
+  // A loaded table shows on the displayed Result as a History apply does (R3):
+  // the root's projection (`projectFeatureEdits`) projects it.
   const featureEditTableActions = createFeatureEditTableActions({
     state, ref, computed, getCommittedSession, readResourceRecordCount, readFeatureOverrideTable,
-    projectFeatureEdits: () => {
-      visibilityActions.reconcileFeatureVisibility({ rerender: true });
-      labelActions.reconcileLabelOverrides();
-      labelActions.applyFeatureVisibilityToLabels();
-    }
+    projectFeatureEdits
   });
   const openFeatureEditorForFeature = (feat, eventLike = null) => {
     return featureSvgActions.openFeatureEditorForFeature(feat, eventLike);
@@ -113,7 +118,7 @@ export const createFeatureEditor = ({
     downloadFeatureVisibilityRulesTsv: visibilityActions.downloadFeatureVisibilityRulesTsv,
     featureVisibilityQualifierSuggestions: visibilityActions.featureVisibilityQualifierSuggestions,
     featureVisibilityRuleDetail: visibilityActions.featureVisibilityRuleDetail,
-    reconcileFeatureVisibility: visibilityActions.reconcileFeatureVisibility,
+    projectFeatureVisibility: visibilityActions.projectFeatureVisibility,
     handleFeatureVisibilityScopeChoice: visibilityActions.handleFeatureVisibilityScopeChoice,
     moveFeatureVisibilityRuleDown: visibilityActions.moveFeatureVisibilityRuleDown,
     moveFeatureVisibilityRuleUp: visibilityActions.moveFeatureVisibilityRuleUp,

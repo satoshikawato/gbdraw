@@ -8,6 +8,7 @@ import pytest
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 from pandas import DataFrame
 
+from gbdraw.exceptions import ParseError
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.selector_values import build_feature_selector_values, find_specific_color_rule
 from gbdraw.features.visibility import (
@@ -127,3 +128,18 @@ def test_visibility_helper_matches_the_rules_generate_matches(case):
     native = [index for index, rule in enumerate(compiled)
               if _first_matching_visibility_rule(feature, [rule], spec["recordId"])]
     assert matches == native
+
+
+def test_visibility_helper_rejects_a_table_with_the_error_and_row_generate_reports():
+    """OV-19: a rule edit reports what Generate reports for the same table."""
+    rules = [
+        dict(recordId="*", featureType="CDS", qualifier="locus_tag", value="^fl", action="off"),
+        dict(recordId="*", featureType="CDS", qualifier="locus_tag", value="^fl1(", action="show"),
+    ]
+    table = DataFrame([dict(record_id=r["recordId"], feature_type=r["featureType"], qualifier=r["qualifier"],
+                            value=r["value"], action=r["action"]) for r in rules])
+    with pytest.raises(ParseError, match="at row 2:") as generate:
+        compile_feature_visibility_rules(table)
+    with pytest.raises(ParseError) as helper:
+        evaluate_rules_json("[]", json.dumps(rules), "visibility")
+    assert str(helper.value) == str(generate.value)
