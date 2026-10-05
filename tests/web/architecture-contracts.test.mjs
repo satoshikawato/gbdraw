@@ -2168,7 +2168,7 @@ const FUTURE_GUARD_PATHS = Object.freeze([
   '.github/pull_request_template.md',
   'tools/web-architecture-violations.json',
   WEB_DESIGN_RULES_PATH,
-  DESIGN_RULE_GUARD_REGISTRY_PATH
+  DESIGN_RULE_GUARD_REGISTRY_PATH,
   OWNER_GRAPH_REGISTRY_PATH
 ]);
 const PROTECTED_ARCHITECTURE_GUARD_PATHS = Object.freeze([
@@ -2180,7 +2180,7 @@ const FUTURE_AUTHORITY_PATHS = Object.freeze([
   'tools/web-architecture-rules.json',
   'tools/web-architecture-violations.json',
   WEB_DESIGN_RULES_PATH,
-  DESIGN_RULE_GUARD_REGISTRY_PATH
+  DESIGN_RULE_GUARD_REGISTRY_PATH,
   OWNER_GRAPH_REGISTRY_PATH
 ]);
 const PRODUCT_IMPACT_GUARD_PATHS = Object.freeze([
@@ -5849,6 +5849,8 @@ test('the Web design rules and the guard registry are pre-registered guard and a
       });
     });
   }
+});
+
 // Owner-graph report (implementation plan Phase B1): the checker prints the
 // detector summaries for the base and the head and the NEW and REMOVED
 // subjects, and nothing in that section affects the Gate until Phase B3.

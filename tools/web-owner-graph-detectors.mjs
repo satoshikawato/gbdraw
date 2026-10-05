@@ -117,7 +117,8 @@ const lineOf = (source, index) => {
   const end = source.indexOf('\n', index);
   return source.slice(start, end < 0 ? source.length : end);
 };
-const identifierPattern = (names) => names.map((name) => name.replace(/\$/g, '\\$')).join('|');
+const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const identifierPattern = (names) => names.map(escapeRegExp).join('|');
 
 // Top-level argument slices of a `{ ... }` object literal: `key: value` pairs
 // and shorthand identifiers, split at depth-0 commas.
@@ -332,13 +333,14 @@ const detectWholeObjectPortsV1 = (sources, registryInput) => {
 // Distinct call shapes of each projection domain's functions outside its
 // owners. A shape is the normalized source line of the call.
 const normalizeShape = (line) => line.trim().replace(/\s+/g, ' ');
-const isDeclarationOrMapping = (line, fn) => (
-  new RegExp(`^(?:export\\s+)?(?:const|let|function)\\s+${fn}\\b`).test(line)
-  || new RegExp(`^${fn}\\s*,?$`).test(line)
-  || new RegExp(`^${fn}\\s*:\\s*[\\w.]+\\s*,?$`).test(line)
-  || new RegExp(`^\\w+\\s*:\\s*(?:\\w+\\.)?${fn}\\s*,?$`).test(line)
-  || /^(?:import|export)\b/.test(line)
-);
+const isDeclarationOrMapping = (line, fnRaw) => {
+  const fn = escapeRegExp(fnRaw);
+  return new RegExp(`^(?:export\\s+)?(?:const|let|function)\\s+${fn}\\b`).test(line)
+    || new RegExp(`^${fn}\\s*,?$`).test(line)
+    || new RegExp(`^${fn}\\s*:\\s*[\\w.]+\\s*,?$`).test(line)
+    || new RegExp(`^\\w+\\s*:\\s*(?:\\w+\\.)?${fn}\\s*,?$`).test(line)
+    || /^(?:import|export)\b/.test(line);
+};
 const detectProjectionCallShapesV1 = (sources, registryInput) => {
   const registry = resolveRegistry(registryInput);
   const entries = sourceEntries(sources);
@@ -377,7 +379,7 @@ const detectHeavyDerivedTriggerSitesV1 = (sources, registryInput) => {
   const entries = sourceEntries(sources);
   const observed = [];
   registry.heavyProducers.forEach((producer) => {
-    const pattern = new RegExp(`\\b${producer.name}\\s*\\??\\.\\s*(${identifierPattern(producer.methods)})\\s*\\??\\.?\\s*\\(`, 'g');
+    const pattern = new RegExp(`\\b${escapeRegExp(producer.name)}\\s*\\??\\.\\s*(${identifierPattern(producer.methods)})\\s*\\??\\.?\\s*\\(`, 'g');
     entries.forEach(([path, source]) => {
       if (path === producer.owner) return;
       const code = maskJavaScript(source);
