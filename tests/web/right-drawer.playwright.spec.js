@@ -561,6 +561,9 @@ test('a remembered unavailable Similarity groups tab reopens as Features', async
 test('preview similarity-group copy actions report isolated accessible outcomes', async ({
   page
 }) => {
+  // The first feature popup after a Session load waits for Python rule
+  // matching, which starts the diagram Worker (about 5 s on an idle machine).
+  test.setTimeout(180000);
   const imported = await loadGallerySession(
     page,
     'majanivirus_orthogroup.gbdraw-session.json.gz'
