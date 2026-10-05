@@ -503,6 +503,40 @@ test('a label reflow leaves Applies on Generate draft settings out of the Result
   }
 });
 
+// OV-36 (R1(c), Owner-delegated recommended choice): a successful Generate
+// draws every edit, so it clears the note of an earlier failed live edit. A
+// failed Generate leaves the Result as it was, so the note stays.
+test('a successful Generate clears the note of a failed live edit, and a failed Generate keeps it', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openBatch(page);
+  const note = page.locator('[data-live-application-feedback]');
+  const resultContents = () => page.evaluate(() => window.__GBDRAW_APP__.results.map((result) => result.content));
+  const reflowFailed = () => page.evaluate(() => Boolean(window.__GBDRAW_APP__.labelReflowLastError));
+  await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => {
+      throw new Error('OV-36 forced failure');
+    };
+    state.labelReflowForceRequestSeq.value += 1;
+  });
+  await expect.poll(reflowFailed, { timeout: 120_000 }).toBe(true);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.labelReflowProcessing)).toBe(false);
+  await expect(note).toContainText('Live edit failed');
+  const shown = await resultContents();
+  expect(await evaluateWithRetainedPromise(page, async () => (
+    (await window.__GBDRAW_APP__.runAnalysis())?.status
+  ))).toBe('error');
+  await settle(page);
+  expect(await resultContents()).toEqual(shown);
+  expect(await reflowFailed()).toBe(true);
+  await expect(note).toContainText('Live edit failed');
+  await page.evaluate(() => { delete window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse; });
+  await generateAndWaitForResult(page);
+  await settle(page);
+  expect(await reflowFailed()).toBe(false);
+  await expect(note).toHaveCount(0);
+});
+
 // Owner request (2026-10-04): a Label visibility choice in the feature popup
 // applies whatever Show Labels selects. The live reflow and Generate draw the
 // same labels (N-16, PD-OI-066).
