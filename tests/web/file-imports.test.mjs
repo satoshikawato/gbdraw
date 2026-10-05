@@ -10,6 +10,12 @@ const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-file-imports-'));
 const tempDir = join(tempRoot, 'app');
 await mkdir(tempDir);
 await mkdir(join(tempRoot, 'services'));
+await mkdir(join(tempRoot, 'utils'));
+await writeFile(
+  join(tempRoot, 'utils', 'tsv-cell.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'tsv-cell.js'), 'utf8'),
+  'utf8'
+);
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
 await writeFile(
   join(tempRoot, 'services', 'error-normalization.js'),

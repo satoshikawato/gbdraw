@@ -59,26 +59,17 @@ def read_feature_visibility_file(filepath: str) -> Optional[DataFrame]:
         logger.error(f"ERROR: Feature visibility file not found: {e}")
         raise InputFileError(f"Feature visibility file not found: {e}") from e
 
-    for line_no, raw_line in enumerate(lines, start=1):
-        if raw_line.strip() == "":
-            continue
-        if raw_line.rstrip("\r\n").count("\t") + 1 > len(required_cols):
-            logger.error(
-                f"ERROR: Malformed line in feature visibility file '{filepath}' at line {line_no}: "
-                f"expected {len(required_cols)} columns."
-            )
-            raise ParseError(
-                f"Malformed line in feature visibility file '{filepath}' at line {line_no}: "
-                f"expected {len(required_cols)} columns."
-            )
-
     try:
         df = read_literal_table(
             table_text_stream(lines),
             names=required_cols,
+            label="feature visibility file",
+            filepath=filepath,
             keep_default_na=False,
             na_filter=False,
         )
+    except ParseError:
+        raise
     except pd.errors.ParserError as e:
         logger.error(f"ERROR: Malformed line in feature visibility file '{filepath}': {e}")
         raise ParseError(

@@ -1,5 +1,6 @@
 import { normalizeSpecificRuleColor, resolveColorToHex } from './color-utils.js';
 import { diagnosticError } from '../services/error-normalization.js';
+import { normalizeTsvCell } from '../utils/tsv-cell.js';
 
 const SPECIFIC_RULE_COLUMNS = Object.freeze(['feature_type', 'qualifier', 'pattern', 'color']);
 
@@ -83,8 +84,6 @@ export const parseSpecificRules = (text) => {
   return { rules, rulesWithCaptions, count: rules.length };
 };
 
-const normalizeTsvCell = (value) => String(value ?? '').replace(/[\t\r\n]+/g, ' ').trim();
-
 export const serializeSpecificRules = (rules) => {
   const rows = (Array.isArray(rules) ? rules : [])
     .map((rule) => [
@@ -95,6 +94,24 @@ export const serializeSpecificRules = (rules) => {
       normalizeTsvCell(rule?.cap)
     ])
     .filter((fields) => fields.slice(0, 4).every(Boolean))
+    .map((fields) => fields.join('\t'));
+
+  return rows.length > 0 ? `${rows.join('\n')}\n` : '';
+};
+
+export const serializeLabelWhitelistRules = (rules) => {
+  const rows = (Array.isArray(rules) ? rules : [])
+    .map((rule) => [rule?.feat, rule?.qual, rule?.key].map(normalizeTsvCell))
+    .filter(([feat, qual]) => feat && qual)
+    .map((fields) => fields.join('\t'));
+
+  return rows.length > 0 ? `${rows.join('\n')}\n` : '';
+};
+
+export const serializeQualifierPriorityRules = (rules) => {
+  const rows = (Array.isArray(rules) ? rules : [])
+    .map((rule) => [rule?.feat, rule?.order].map(normalizeTsvCell))
+    .filter((fields) => fields.every(Boolean))
     .map((fields) => fields.join('\t'));
 
   return rows.length > 0 ? `${rows.join('\n')}\n` : '';

@@ -1,11 +1,11 @@
 import { escapeRegexLiteral } from '../feature-selector.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
+import { normalizeTsvCell } from '../../utils/tsv-cell.js';
 
 const LABEL_OVERRIDE_COLUMN_COUNT = 5;
 const PRIMARY_HEADER = ['record_id', 'feature_type', 'qualifier', 'value', 'label_text'];
 const LEGACY_HEADER = ['record', 'feature_type', 'qualifier_key', 'qualifier_value_regex', 'label_text'];
 
-const normalizeTsvCell = (value) => String(value ?? '').replace(/[\t\r\n]+/g, ' ').trim();
 const toSortedKeys = (obj) =>
   Object.keys(obj || {}).sort((a, b) => String(a || '').localeCompare(String(b || '')));
 
