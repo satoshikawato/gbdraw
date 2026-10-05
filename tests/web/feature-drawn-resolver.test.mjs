@@ -81,9 +81,12 @@ test('resolveFeatureDrawn is unknown until Python has matched the rule it reache
   assert.equal(resolveFeatureDrawn(feature, contextFor(state)), false);
   assert.equal(preparation.prepareDrawn(), true, 'prepared matches are reused synchronously');
   assert.equal(calls, 1);
-  // A rule Generate rejects leaves its matches unknown.
-  state.featureVisibilityManualRules.unshift(offRule('product', '('));
-  assert.equal(await preparation.prepareDrawn(), true);
+  // A rule Generate rejects leaves its matches unknown, and the preparation
+  // resolves to Generate's error, which names the table row (OV-19).
+  state.featureVisibilityManualRules.push(offRule('product', '('));
+  const rejected = await preparation.prepareDrawn();
+  assert.match(String(rejected.error?.message), /Invalid regex in feature visibility table at row 2:/);
+  state.featureVisibilityManualRules.reverse();
   assert.equal(resolveFeatureDrawn(feature, contextFor(state)), null);
 });
 
