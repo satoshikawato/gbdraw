@@ -58,7 +58,8 @@ export const createFeatureSvgActions = ({
   // `runDrawn`.
   runWithDrawnMatches = (commit) => commit(),
   featureSelection = null,
-  previewRuntime = null,
+  // R13: the preview owner's projection of feature visibility changes.
+  applyFeatureVisibilityChanges = null,
   previewTransformInteraction = null
 }) => {
   const {
@@ -664,7 +665,7 @@ export const createFeatureSvgActions = ({
       }))
       .filter((change) => change.featureId);
     if (normalizedChanges.length === 0) return false;
-    return previewRuntime?.applyFeatureVisibilityChanges(normalizedChanges, { reason }) === true;
+    return applyFeatureVisibilityChanges?.(normalizedChanges, { reason }) === true;
   };
 
   const applyVisibilityPreviewBySvgId = (svgId, modeRaw) => (

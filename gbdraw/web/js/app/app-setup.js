@@ -1213,7 +1213,12 @@ export const createAppSetup = () => {
     makeRef: ref,
     mutationAvailability: sessionOperationAvailability
   });
-  const recordDisplayControls = createRecordDisplayControls({ state, computed, watch, linearRecordSelector, history, getCommittedRequest: getCommittedCanonicalRenderRequest, getCommittedSession: getCommittedCanonicalSession });
+  const recordDisplayControls = createRecordDisplayControls({ state, computed, watch,
+    linearRecordsFor: linearRecordSelector.recordsFor,
+    linearRecordStatusFor: linearRecordSelector.statusFor,
+    linearRecordErrorFor: linearRecordSelector.errorFor,
+    runUndoable: history.runUndoable,
+    getCommittedRequest: getCommittedCanonicalRenderRequest, getCommittedSession: getCommittedCanonicalSession });
   window.__GBDRAW_HISTORY__ = history;
   // R13: owners receive this port, not the record display controls. The check
   // is pure (services/feature-identity.js) over the record display's binding.
@@ -1307,8 +1312,7 @@ export const createAppSetup = () => {
     state,
     ref, computed, watch,
     nextTick,
-    legendActions,
-    previewRuntime,
+    commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     projectPaletteAndRules: (...args) => paletteRulePorts.projectPaletteAndRules(...args)
   });
   // The palette and the specific-color rules on the mounted Result (R3): the
@@ -1331,7 +1335,8 @@ export const createAppSetup = () => {
   featureActions = createFeatureEditor({
     state,
     rulePreparation,
-    history,
+    runUndoable: history.runUndoable,
+    runUndoableCheckpoint: history.runUndoableCheckpoint,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     getCommittedSession: getCommittedCanonicalSession,
     readResourceRecordCount: readCommittedResourceRecordCount,
@@ -1346,7 +1351,9 @@ export const createAppSetup = () => {
     extractLegendEntries: legendActions.extractLegendEntries,
     onLegendGeometryChanged: legendActions.onLegendGeometryChanged,
     featureSelection,
-    previewRuntime,
+    commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
+    applyFeatureVisibilityChanges: previewRuntime.applyFeatureVisibilityChanges,
+    selectResult,
     previewTransformInteraction,
     projectPaletteAndRules,
     projectFeatureEdits: () => projectMountedEditorIntent({ visibility: true, rerender: true, reflow: true, labels: true })

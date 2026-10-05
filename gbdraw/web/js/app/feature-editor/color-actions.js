@@ -17,8 +17,11 @@ export const createFeatureColorActions = ({
   extractLegendEntries,
   onLegendGeometryChanged,
   ruleActions,
-  featureSvgActions,
-  previewRuntime = null
+  // R13: the mounted feature element lookups and the preview owner's commit
+  // of an edit to the displayed Result.
+  getFeatureElements,
+  getFeatureFillElements,
+  commitActiveResultEdit = null
 }) => {
   const {
     appliedPaletteColors,
@@ -56,7 +59,6 @@ export const createFeatureColorActions = ({
     getLabelSpecificRule,
     getLegendRowRules
   } = ruleActions;
-  const { getFeatureElements, getFeatureFillElements } = featureSvgActions;
   const normalizeCaption = (value) => String(value || '').trim();
   const normalizeCaptionKey = (value) => normalizeCaption(value).toLowerCase();
   const normalizeColor = (value) => String(value || '').trim().toLowerCase();
@@ -78,7 +80,7 @@ export const createFeatureColorActions = ({
       if (colorActionDepth === 0 && pendingCommitReason) {
         const reason = pendingCommitReason;
         pendingCommitReason = '';
-        previewRuntime?.commitActiveResultEdit(reason);
+        commitActiveResultEdit?.(reason);
       }
     }
   };

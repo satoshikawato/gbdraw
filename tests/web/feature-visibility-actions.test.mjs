@@ -56,11 +56,9 @@ const actions = createFeatureVisibilityActions({
   state: actionState,
   rulePreparation: rulePreparationFor(actionState),
   getCommittedRequest: committedRequest(['CDS']),
-  featureSvgActions: {
-    applyVisibilityPreviewChanges: (changes, options = {}) => {
-      appliedPreviewChanges.push({ changes, reason: options.reason });
-      return true;
-    }
+  applyVisibilityPreviewChanges: (changes, options = {}) => {
+    appliedPreviewChanges.push({ changes, reason: options.reason });
+    return true;
   },
   ports: {
     applyFeatureVisibilityToLabels: (options = {}) => {
@@ -68,11 +66,9 @@ const actions = createFeatureVisibilityActions({
       return true;
     }
   },
-  previewRuntime: {
-    selectResult: (index) => {
-      selectedResultIndex.value = index;
-      return true;
-    }
+  selectResult: (index) => {
+    selectedResultIndex.value = index;
+    return true;
   }
 });
 
@@ -309,14 +305,12 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     state: productState,
     rulePreparation: productPreparation,
     getCommittedRequest: committedRequest(['CDS', 'tRNA']),
-    featureSvgActions: {
-      applyVisibilityPreviewChanges: (changes) => {
-        reconciled.push(Object.fromEntries(changes.map((change) => [change.featureId, change.mode])));
-        return true;
-      }
+    applyVisibilityPreviewChanges: (changes) => {
+      reconciled.push(Object.fromEntries(changes.map((change) => [change.featureId, change.mode])));
+      return true;
     },
     ports: { applyFeatureVisibilityToLabels: () => true },
-    previewRuntime: { selectResult: () => true }
+    selectResult: () => true
   });
   await productActions.updateClickedFeatureVisibility('off');
   assert.equal(scopeDialog.show, true);
@@ -368,15 +362,13 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     state: panelState,
     rulePreparation: rulePreparationFor(panelState),
     getCommittedRequest: committedRequest(['CDS']),
-    featureSvgActions: {
-      applyVisibilityPreviewChanges: (changes) => changes.reduce((changed, { featureId, mode }) => {
-        if (shown[featureId] === mode) return changed;
-        shown[featureId] = mode;
-        return true;
-      }, false)
-    },
+    applyVisibilityPreviewChanges: (changes) => changes.reduce((changed, { featureId, mode }) => {
+      if (shown[featureId] === mode) return changed;
+      shown[featureId] = mode;
+      return true;
+    }, false),
     ports: { applyFeatureVisibilityToLabels: (options) => labelProjections.push(options) },
-    previewRuntime: { selectResult: () => true }
+    selectResult: () => true
   });
   const field = (index, name, value) => panel.setFeatureVisibilityRuleField(index, name, value);
 
@@ -468,18 +460,16 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     state: portState,
     rulePreparation: rulePreparationFor(portState),
     getCommittedRequest: committedRequest(['CDS']),
-    featureSvgActions: {
-      applyVisibilityPreviewChanges: (changes) => {
-        projections += 1;
-        return changes.reduce((changed, { featureId, mode }) => {
-          if (mounted[featureId] === mode) return changed;
-          mounted[featureId] = mode;
-          return true;
-        }, false);
-      }
+    applyVisibilityPreviewChanges: (changes) => {
+      projections += 1;
+      return changes.reduce((changed, { featureId, mode }) => {
+        if (mounted[featureId] === mode) return changed;
+        mounted[featureId] = mode;
+        return true;
+      }, false);
     },
     ports,
-    previewRuntime: { selectResult: () => true }
+    selectResult: () => true
   });
   // The root registers the port after both owners exist.
   ports.applyFeatureVisibilityToLabels = (options) => follows.push(options);

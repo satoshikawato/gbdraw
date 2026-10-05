@@ -32,10 +32,10 @@ const setup = () => {
       transactionScopes.push(scope);
     }
   };
-  const actions = createFeatureRuleActions({ref:value=>({value}),computed:get=>({get value(){return get();}}),state, rulePreparation:preparation, history:{
+  const actions = createFeatureRuleActions({ref:value=>({value}),computed:get=>({get value(){return get();}}),state, rulePreparation:preparation,
     runUndoableCheckpoint: transact('checkpoint'),
-    runUndoable: transact('intent')
-  }, prepareFileLegendEntries: async (intents, {isCurrent,previousFileIntents}) => {
+    runUndoable: transact('intent'),
+    prepareFileLegendEntries: async (intents, {isCurrent,previousFileIntents}) => {
     previousIntents=previousFileIntents;
     await prepareLegend(intents);
     if (!isCurrent()) return false;

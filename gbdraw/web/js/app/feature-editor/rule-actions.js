@@ -23,7 +23,7 @@ import { featureOverrideValue } from '../../services/feature-placement.js';
 // R13: `projectPaletteAndRules` is the composition root's projection of the
 // palette and the specific-color rules (R3); this owner calls it after a rule
 // commit, whose candidate rules it has prepared.
-export const createFeatureRuleActions = ({ state, nextTick, prepareFileLegendEntries, rulePreparation, history, projectPaletteAndRules, ref, computed, isPatternEditAvailable = () => true }) => {
+export const createFeatureRuleActions = ({ state, nextTick, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ref, computed, isPatternEditAvailable = () => true }) => {
   const {
     currentColors,
     appliedPaletteColors,
@@ -113,7 +113,7 @@ export const createFeatureRuleActions = ({ state, nextTick, prepareFileLegendEnt
     // One History step: the rule transition first, then the legend rows it
     // draws (R13); a checkpoint when the legend gains or loses a row.
     const transact = legend.diff.add.length || legend.diff.remove.length
-      ? history.runUndoableCheckpoint : history.runUndoable;
+      ? runUndoableCheckpoint : runUndoable;
     await transact(label, () => {
       if (!current() || !legend.isCurrent()) return false;
       manualSpecificRules.splice(0, manualSpecificRules.length, ...candidate.rules.map((rule, index) => {

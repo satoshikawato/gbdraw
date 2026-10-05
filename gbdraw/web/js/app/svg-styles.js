@@ -11,7 +11,7 @@ import {
   getFeatureIdentity
 } from './feature-editor/svg-actions.js';
 import { isFeatureFillTarget } from './feature-dom.js';
-import { PAIRWISE_LEGEND_SELECTOR, parseTransformXY } from './legend/utils.js';
+import { getAllFeatureLegendGroups, PAIRWISE_LEGEND_SELECTOR, parseTransformXY } from './legend/utils.js';
 import { getFeatureOverride } from '../services/feature-override-identity.js';
 import { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
@@ -43,8 +43,8 @@ export const createSvgStyles = ({
   state,
   watch,
   nextTick,
-  legendActions,
-  previewRuntime = null,
+  // R13: the preview owner's commit of an edit to the displayed Result.
+  commitActiveResultEdit = null,
   // R13: the composition root's projection of the palette and the rules (R3),
   // which prepares the rule matches and applies both through this owner.
   projectPaletteAndRules
@@ -63,8 +63,6 @@ export const createSvgStyles = ({
     mode,
     form
   } = state;
-
-  const { getAllFeatureLegendGroups } = legendActions;
 
   const updatePairwiseLegendGradientStops = (pairwiseLegend, colors) => {
     let updated = false;
@@ -353,7 +351,7 @@ export const createSvgStyles = ({
       });
     }
 
-    if (updatedCount > 0) previewRuntime?.commitActiveResultEdit('palette');
+    if (updatedCount > 0) commitActiveResultEdit?.('palette');
   };
 
   const applySpecificRulesToSvg = () => {
@@ -392,7 +390,7 @@ export const createSvgStyles = ({
     });
 
     if (updatedCount > 0) {
-      previewRuntime?.commitActiveResultEdit('specific-rules');
+      commitActiveResultEdit?.('specific-rules');
       console.log(`Applied specific rules: updated ${updatedCount} elements`);
     }
   };
@@ -462,7 +460,7 @@ export const createSvgStyles = ({
     }
 
     if (updated) {
-      previewRuntime?.commitActiveResultEdit('track-visibility');
+      commitActiveResultEdit?.('track-visibility');
       console.log('Track visibility updated');
     }
   };
