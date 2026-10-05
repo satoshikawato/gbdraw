@@ -183,3 +183,70 @@ def test_cli_label_table_row_keeps_inline_hash_in_the_label_text(tmp_path: Path)
     root = ET.fromstring(svg)
     texts = ["".join(node.itertext()) for node in root.iter("{http://www.w3.org/2000/svg}text")]
     assert "Gene #1" in texts
+
+
+# OV-26 / OV-27: the Specific colors, Default colors, Qualifier priority, and
+# Annotation tables skip whole-line comments by the same rule.
+def _read_default_colors(path: str) -> Any:
+    from gbdraw.io.colors import load_default_colors
+
+    return load_default_colors(path).set_index("feature_type")
+
+
+def _read_annotation_labels(path: str) -> list[str]:
+    from gbdraw.annotations.io import read_annotation_table
+
+    return [item.label for item in read_annotation_table(path)[0].annotations]
+
+
+_COMMENT_LINES = ["# a comment", "   # an indented comment\twith\ttabs", "\t# tab-indented", "#" + "\t".join(["x", "y"])]
+
+
+def test_specific_colors_skip_comment_lines_and_keep_inline_hash(tmp_path: Path) -> None:
+    from gbdraw.io.colors import read_color_table
+
+    path = _write(
+        tmp_path / "t.tsv",
+        [_COMMENT_LINES[0], "CDS\tproduct\tGene #1\t#ff0000\tCaption #2", _COMMENT_LINES[1], '"CDS\tproduct\t"lead\t#00ff00'],
+    )
+    frame = read_color_table(path)
+    assert frame.values.tolist() == [
+        ["CDS", "product", "Gene #1", "#ff0000", "Caption #2"],
+        ['"CDS', "product", '"lead', "#00ff00", ""],
+    ]
+
+
+def test_default_colors_skip_comment_lines_and_keep_inline_hash(tmp_path: Path) -> None:
+    path = _write(tmp_path / "d.tsv", [_COMMENT_LINES[0], "CDS\t#ff0000", _COMMENT_LINES[1], '"my#type\t#00ff00'])
+    frame = _read_default_colors(path)
+    assert frame.loc["CDS", "color"] == "#ff0000"
+    assert frame.loc['"my#type', "color"] == "#00ff00"
+
+
+def test_qualifier_priority_skips_comment_lines_and_keeps_inline_hash(tmp_path: Path) -> None:
+    from gbdraw.labels.filtering import read_qualifier_priority_file
+
+    path = _write(tmp_path / "p.tsv", [_COMMENT_LINES[0], "CDS\tgene,product", _COMMENT_LINES[1], 'tRNA\t"note#1'])
+    assert read_qualifier_priority_file(path).values.tolist() == [["CDS", "gene,product"], ["tRNA", '"note#1']]
+
+
+@pytest.mark.parametrize("comment", _COMMENT_LINES)
+def test_annotation_table_skips_comment_lines_and_keeps_inline_hash(tmp_path: Path, comment: str) -> None:
+    path = _write(
+        tmp_path / "a.tsv",
+        [
+            comment,
+            "set_id\tid\tmark\tstart\tend\tlabel",
+            comment,
+            "s\ta\tband\t1\t8\tGene #1",
+            "s\tb\tband\t9\t12\t\"lead",
+            "s\tc\tband\t13\t15\t#hash first",
+        ],
+    )
+    assert _read_annotation_labels(path) == ["Gene #1", '"lead', "#hash first"]
+
+
+def test_comment_before_the_annotation_header_with_a_bom(tmp_path: Path) -> None:
+    path = tmp_path / "bom.tsv"
+    path.write_bytes(b"\xef\xbb\xbf# comment\nset_id\tid\tmark\tstart\tend\tlabel\ns\ta\tband\t1\t8\tx\n")
+    assert _read_annotation_labels(str(path)) == ["x"]

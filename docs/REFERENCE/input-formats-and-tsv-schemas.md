@@ -183,6 +183,8 @@ are replaced with spaces.
 The table is not CSV: a `"` is part of the cell value and never quotes a field,
 so a `label` of `"quoted"` keeps its quotes and `"lead` is a valid label. The
 Web download and import and `read_annotation_table()` read cells the same way.
+A line whose first non-blank character is `#` is a comment and is skipped, also
+before the header; a `#` after other text is part of the cell value.
 
 ## Styling tables
 
@@ -198,8 +200,8 @@ also accept their documented header row.
 | Label overrides | `record_id`, `feature_type`, `qualifier`, `value`, `label_text` |
 | Feature visibility | `record_id`, `feature_type`, `qualifier`, `value`, `action` |
 
-In the Label whitelist, Label overrides, and Feature visibility tables, a line
-whose first non-blank character is `#` is a comment. A `#` after other text is
+In every table in the list above, a line whose first non-blank character is `#`
+is a comment. A `#` after other text is
 part of the cell value, so `foo#bar` and `Gene #1` are read as written.
 
 These tables are not CSV: a `"` is part of the cell value and never quotes a

@@ -13,6 +13,7 @@ from pandas import DataFrame  # type: ignore[reportMissingImports]
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import parse_record_selector
+from gbdraw.io.table_text import read_table_lines
 
 from .models import (
     AnnotationSet,
@@ -296,18 +297,18 @@ def read_annotation_table(
     """Read a UTF-8 TSV annotation table into typed annotation sets."""
 
     try:
-        with Path(path).open(encoding="utf-8-sig", newline="") as handle:
-            # A ``"`` is part of the cell value, as in the other TSV tables (OV-24).
-            reader = csv.reader(handle, delimiter="\t", quoting=csv.QUOTE_NONE)
-            rows = (row for row in reader if any(cell.strip() for cell in row))
-            header = _validate_header(next(rows, []))
-            values = []
-            for row_number, row in enumerate(rows, start=2):
-                if len(row) != len(header):
-                    raise ValidationError(
-                        f"Annotation table row {row_number}: expected {len(header)} columns, got {len(row)}."
-                    )
-                values.append(row)
+        # A ``"`` is part of the cell value and a whole-line ``#`` comment is skipped,
+        # as in the other TSV tables (OV-24, OV-26).
+        reader = csv.reader(read_table_lines(str(path)), delimiter="\t", quoting=csv.QUOTE_NONE)
+        rows = (row for row in reader if any(cell.strip() for cell in row))
+        header = _validate_header(next(rows, []))
+        values = []
+        for row_number, row in enumerate(rows, start=2):
+            if len(row) != len(header):
+                raise ValidationError(
+                    f"Annotation table row {row_number}: expected {len(header)} columns, got {len(row)}."
+                )
+            values.append(row)
     except ValidationError:
         raise
     except (OSError, UnicodeError, csv.Error) as exc:

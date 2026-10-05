@@ -26,6 +26,13 @@
     "ignored": []
   },
   {
+    "name": "comment lines are skipped and an inline # is data",
+    "valid": true,
+    "table": "# exported by hand\nset_id\tid\tmark\tstart\tend\tlabel\n   # indented comment\ns\ta\tband\t1\t8\tGene #1\n\t# tab-indented comment\ns\tb\tband\t9\t12\t\"lead\n",
+    "control": "set_id\tid\tmark\tstart\tend\tlabel\ns\ta\tband\t1\t8\tGene #1\ns\tb\tband\t9\t12\t\"lead\n",
+    "ignored": []
+  },
+  {
     "name": "typo alone",
     "valid": true,
     "table": "set_id\tid\tmark\tstart\tend\tfill_colour\ns\ta\tband\t1\t8\tred\n",
