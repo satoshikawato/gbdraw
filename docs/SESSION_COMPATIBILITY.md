@@ -24,9 +24,15 @@ Session 45. The Web app now sends these rows in the request, loads a request
 whose `featureOverrides` array is not empty, and draws them in the live preview
 by identity. An annotation made from selected features is saved with a
 `featureIdentity` target that names its mode the same way (`scope`); the
-request target has no `scope`. Annotation targets of older Sessions, including
-`hash=` feature selectors made from a selection, load unchanged and keep their
-meaning: the hash of the drawn feature.
+request target has no `scope`. Loading a Session 40–44 moves an annotation
+target with one `hash=` feature selector, as a selection made it, to a
+`featureIdentity` target in the mode of the Session's diagram only when the
+figure cannot change: the record the target binds is drawn without a crop,
+reverse complement, or rotation, and the hash names exactly one feature of the
+Session's saved feature catalog, in that record. Load reports how many targets
+moved. Every other annotation target of an older Session, including one of a
+Session without a saved catalog, loads unchanged and keeps its meaning: the
+hash of the drawn feature.
 
 The feature catalog is schema 5. Each drawn feature records the hash,
 location, and record location it was drawn with (`drawnSelector`), which live

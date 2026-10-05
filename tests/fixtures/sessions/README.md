@@ -68,6 +68,15 @@ Sessions 33 have no feature catalog. They are the positive fixtures for the
 readers that move those edits onto source identities in Session 45. The steps,
 inputs, and hashes are in `feature-edits.provenance.json`.
 
+`selected-feature-annotations.v44.gbdraw-session.json.gz` is a Web **Save
+Session** download, kept unchanged, from first-parent `main` commit `fe6861f0`
+(Session 44). Its three Region Annotations were made from selected features,
+so each names its feature by `hash=`: a feature whose hash names one source
+feature, one of two CDS at the same coordinates, and a feature of a
+reverse-complemented record. It is the positive fixture for the reader that
+moves such targets onto source identities in Session 45. The steps, inputs,
+and hashes are in `selected-feature-annotations.provenance.json`.
+
 `lambda_basic_linear.v44-schema8.gbdraw-session.json.gz` and
 `HmmtDNA_basic_circular.v44-schema8.gbdraw-session.json.gz` preserve the released
 version 44, request schema 8, feature catalog schema 4 Gallery Sessions from

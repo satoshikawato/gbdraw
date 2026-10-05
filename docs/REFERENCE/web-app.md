@@ -856,7 +856,12 @@ the annotation and reports it in the annotation notice; the annotation stays.
 The annotation belongs to the mode the feature was selected in. A request
 carries it only in that mode and while its record is drawn, so drawing another
 record or the other mode keeps it in the draft without drawing it, also when
-both modes name the record the same way.
+both modes name the record the same way. Loading a Session saved before this
+form (Session 40–44) turns a `hash=` annotation into such an annotation only
+when its record is drawn without a crop, reverse complement, or rotation and
+the hash names one feature, so the figure does not change, and reports how
+many it turned; the others keep naming the drawn hash
+([compatibility](session-and-request-compatibility.md)).
 
 **Export Feature Edits TSV** in the Features list writes the feature edits for the
 records of the current diagram in the `--feature_override_table` format that

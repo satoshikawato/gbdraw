@@ -8,9 +8,11 @@ import { test } from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import {
   migrateRenderedIdFeatureEdits,
+  migrateSessionAnnotationTargets,
   migrateSessionFeatureEdits
 } from '../../gbdraw/web/js/services/feature-edit-migration.js';
 import { canonicalFeatureOverrides } from '../../gbdraw/web/js/services/feature-placement.js';
+import { annotationOptionsPayload, normalizeAnnotationSets } from '../../gbdraw/web/js/app/annotations/state.js';
 
 const fixture = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url))));
 // Migrated rows name the mode of the Session's diagram (R2).
@@ -228,4 +230,183 @@ test('v31-33 Linear: saved metadata names features only of records drawn untrans
   assert.deepEqual(featureOverrides, {
     [key('seq-c', 'fplain')]: row('seq-c', 'fplain', { featureVisibility: 'off' })
   });
+});
+
+// R-7, Owner decision 2026-10-05: a Session before 45 named a selected feature
+// in an annotation by `hash=<hash>` (a featureSpan target), which the renderer
+// matches in the drawn record. Load moves such a target to the feature's
+// source identity only when the figure cannot change: its record is drawn
+// without a crop, reverse complement, or rotation, and the hash names exactly
+// one feature of the saved catalog, in the record the target binds. Every
+// other target stays as saved.
+const hashTarget = (hash, record = null, extra = {}) => ({
+  kind: 'featureSpan', record, selectors: [{ key: 'hash', value: hash }],
+  envelope: 'segments', circularPath: 'reverse', ...extra
+});
+const annotationSets = (targets) => [{
+  id: 'marks', defaultStyle: {}, legendLabel: null,
+  annotations: targets.map((target, index) => ({
+    id: `a${index + 1}`, target, label: `L${index + 1}`, mark: 'band', lane: null, style: null, legendLabel: null,
+    metadata: { kept: String(index) }
+  }))
+}];
+const byId = (recordId) => ({ kind: 'recordId', value: recordId });
+const byIndex = (index) => ({ kind: 'recordIndex', index });
+const identity = (recordKey, biologicalFeatureId) => ({
+  kind: 'featureIdentity', scope: 'linear', recordKey, biologicalFeatureId, envelope: 'segments', circularPath: 'reverse'
+});
+// Three records drawn in one Result: `plain` untransformed, `copy` the same
+// record (ID A) again, and `other` (ID B). `plain` has two CDS at the same
+// coordinates (f2~1, f2~2); f3 is in both copies of A.
+const synthetic = ({ records: recordOverrides = {}, recordKeys = ['plain', 'copy', 'other'] } = {}) => ({
+  catalog: {
+    schema: 4,
+    items: [{
+      recordKeys,
+      features: [],
+      biologicalFeatures: [
+        { recordKey: 'plain', record_id: 'A', biologicalFeatureId: 'f1', sourceFeatureIndex: 1 },
+        { recordKey: 'plain', record_id: 'A', biologicalFeatureId: 'f2~2', sourceFeatureIndex: 2 },
+        { recordKey: 'plain', record_id: 'A', biologicalFeatureId: 'f2~3', sourceFeatureIndex: 3 },
+        { recordKey: 'plain', record_id: 'A', biologicalFeatureId: 'f3', sourceFeatureIndex: 4 },
+        { recordKey: 'copy', record_id: 'A', biologicalFeatureId: 'f3', sourceFeatureIndex: 4 },
+        { recordKey: 'other', record_id: 'B', biologicalFeatureId: 'f4', sourceFeatureIndex: 1 },
+        { recordKey: 'other', record_id: 'B', biologicalFeatureId: 'f5', sourceFeatureIndex: 2 }
+      ].filter((feature) => recordKeys.includes(feature.recordKey))
+    }]
+  },
+  records: recordKeys.map((recordKey) => ({
+    recordKey, cardinality: 'exactly_one', region: null,
+    presentation: { reverseComplement: false }, display: { isCircular: null, startCoordinate: null },
+    ...recordOverrides[recordKey]
+  }))
+});
+const migrate = (targets, context = synthetic(), mode = 'linear') => {
+  const sets = annotationSets(targets);
+  const before = JSON.stringify(sets);
+  const result = migrateSessionAnnotationTargets({ annotationSets: sets, mode, ...context });
+  assert.equal(JSON.stringify(sets), before, 'the saved sets are not changed in place');
+  return { ...result, targets: result.annotationSets[0].annotations.map((item) => item.target) };
+};
+
+test('R-7: a hash target of one feature of an untransformed record moves to its identity', () => {
+  const { targets, migratedCount, annotationSets: migrated } = migrate([
+    hashTarget('f1', byId('B')),
+    hashTarget('f4', byId('B')),
+    hashTarget('f5', byIndex(2)),
+    hashTarget('f5')
+  ], synthetic({ recordKeys: ['other'] }));
+  // a1 names f1, which record B does not have: the renderer skipped it.
+  assert.deepEqual(targets, [hashTarget('f1', byId('B')), identity('other', 'f4'),
+    hashTarget('f5', byIndex(2)), identity('other', 'f5')]);
+  assert.equal(migratedCount, 2);
+  // Only the target changes; the annotation keeps its ID, label, style, and metadata.
+  assert.deepEqual({ ...migrated[0].annotations[1], target: null }, {
+    id: 'a2', target: null, label: 'L2', mark: 'band', lane: null, style: null, legendLabel: null, metadata: { kept: '1' }
+  });
+  // The draft owner accepts the target, and the Linear request carries it.
+  const records = [{ recordKey: 'other', cardinality: 'exactly_one' }];
+  const payload = annotationOptionsPayload(normalizeAnnotationSets(migrated), 'linear', records);
+  assert.deepEqual(payload.sets[0].annotations[1].target, {
+    kind: 'featureIdentity', recordKey: 'other', biologicalFeatureId: 'f4', envelope: 'segments', circularPath: 'reverse'
+  });
+  assert.deepEqual(annotationOptionsPayload(normalizeAnnotationSets(migrated), 'circular', records)
+    .sets[0].annotations.map((item) => item.id), ['a1', 'a3']);
+});
+
+test('R-7: the record the target binds is read as the renderer reads it', () => {
+  const kept = [
+    // The renderer binds #1 (plain), which lacks f4, or no record (#4).
+    hashTarget('f4', byIndex(0)),
+    hashTarget('f4', byIndex(3)),
+    // Records plain and copy have ID A.
+    hashTarget('f1', byId('A')),
+    // Without a record selector several records are ambiguous.
+    hashTarget('f4')
+  ];
+  const { targets, migratedCount } = migrate([hashTarget('f4', byIndex(2)), hashTarget('f4', byId('B')), ...kept]);
+  assert.deepEqual(targets, [identity('other', 'f4'), identity('other', 'f4'), ...kept]);
+  assert.equal(migratedCount, 2);
+});
+
+test('R-7: a cropped, reverse-complemented, or rotated record keeps its hash targets', () => {
+  const targets = [hashTarget('f4', byId('B'))];
+  for (const transform of [
+    { region: { selector: null, start: 1, end: 4000, reverseComplement: false } },
+    { presentation: { reverseComplement: true } },
+    { display: { isCircular: null, startCoordinate: 101 } }
+  ]) {
+    const result = migrate(targets, synthetic({ records: { other: transform } }));
+    assert.deepEqual(result.targets, targets, JSON.stringify(transform));
+    assert.equal(result.migratedCount, 0);
+  }
+  // A transform of another record does not matter.
+  assert.equal(migrate(targets, synthetic({ records: { plain: { presentation: { reverseComplement: true } } } }))
+    .migratedCount, 1);
+});
+
+test('R-7: a hash that names no feature or several features keeps its target', () => {
+  const kept = [
+    hashTarget('f9', byIndex(0)),
+    // Two CDS at the same coordinates share the hash (f2~2, f2~3).
+    hashTarget('f2', byIndex(0)),
+    hashTarget('f2~2', byIndex(0)),
+    // f3 is in both copies of record A.
+    hashTarget('f3', byIndex(0))
+  ];
+  const { targets, migratedCount } = migrate(kept);
+  assert.deepEqual(targets, kept);
+  assert.equal(migratedCount, 0);
+});
+
+test('R-7: only a featureSpan with one hash selector moves', () => {
+  const kept = [
+    { ...hashTarget('f4', byId('B')), selectors: [{ key: 'locus_tag', value: 'B_1' }] },
+    { ...hashTarget('f4', byId('B')), selectors: [{ key: 'hash', value: 'f4' }, { key: 'hash', value: 'f5' }] },
+    { ...hashTarget('f4', byId('B')), selectors: [{ key: null, value: 'f4' }] },
+    { kind: 'coordinateSpan', record: byId('B'), start: 1, end: 5, coordinateSpace: 'source', wrapsOrigin: false, outOfBounds: 'clip' },
+    identity('other', 'f5')
+  ];
+  const { targets, migratedCount } = migrate(kept);
+  assert.deepEqual(targets, kept);
+  assert.equal(migratedCount, 0);
+  // Without a saved catalog nothing names a source feature.
+  assert.equal(migrate([hashTarget('f4', byId('B'))], { catalog: null, records: [] }).migratedCount, 0);
+});
+
+test('R-7: a record of an ALL input is read through its request record', () => {
+  const context = synthetic({ recordKeys: ['all-input:1', 'all-input:2'] });
+  context.catalog.items[0].biologicalFeatures = [
+    { recordKey: 'all-input:1', record_id: 'A', biologicalFeatureId: 'f1', sourceFeatureIndex: 1 },
+    { recordKey: 'all-input:2', record_id: 'B', biologicalFeatureId: 'f4', sourceFeatureIndex: 1 }
+  ];
+  context.records = [{ recordKey: 'all-input', cardinality: 'all', region: null,
+    presentation: { reverseComplement: false }, display: { isCircular: null, startCoordinate: null } }];
+  assert.deepEqual(migrate([hashTarget('f4', byId('B'))], context).targets, [identity('all-input:2', 'f4')]);
+  context.records[0].presentation.reverseComplement = true;
+  assert.equal(migrate([hashTarget('f4', byId('B'))], context).migratedCount, 0);
+});
+
+// The Session 44 positive fixture (selected-feature-annotations.provenance.json):
+// feature_1 names one feature of an untransformed record, feature_2 one of two
+// CDS at the same coordinates, feature_3 a feature of a reverse-complemented
+// record.
+test('R-7: the Session 44 fixture moves only the annotation whose feature is certain', () => {
+  const session = fixture('selected-feature-annotations.v44.gbdraw-session.json.gz');
+  assert.equal(session.version, 44);
+  const [testa] = session.renderRequest.records.map((record) => record.recordKey);
+  const { annotationSets: migrated, migratedCount } = migrateSessionAnnotationTargets({
+    annotationSets: session.config.annotationSets,
+    mode: session.renderRequest.mode,
+    catalog: session.editorState.featureCatalog,
+    records: session.renderRequest.records
+  });
+  assert.equal(migratedCount, 1);
+  const saved = session.config.annotationSets[0].annotations;
+  assert.deepEqual(migrated[0].annotations.map((item) => item.target), [
+    { kind: 'featureIdentity', scope: 'linear', recordKey: testa, biologicalFeatureId: 'fef810304',
+      envelope: 'outer_bounds', circularPath: 'shortest' },
+    saved[1].target,
+    saved[2].target
+  ]);
 });
