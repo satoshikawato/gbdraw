@@ -19,6 +19,16 @@ Guidance for automated agents working in this repository.
   same-named remote work branch.
 - Never commit directly to, or push directly to, `main` or `dev` unless the user
   explicitly authorizes that exact direct target in the current request.
+- Open every pull request against `dev`. Open a pull request that depends on
+  another only after that one has merged, rebased onto `origin/dev`. Never merge
+  a pull request into another work branch; confirm `base` is `dev` before
+  enabling auto-merge or merging.
+- Before opening or merging a pull request, confirm that every file its
+  Changes section names is in its diff (`gh pr diff <n> --name-only`).
+- Do not enable auto-merge on, or merge, a pull request that expands authority
+  (Web design rule text that permits more, a guard registration removed, or an
+  entry added to a registered baseline or allowlist). Wait for the Owner's
+  approval.
 
 ## Project Summary
 

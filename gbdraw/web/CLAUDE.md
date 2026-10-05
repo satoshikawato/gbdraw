@@ -368,9 +368,11 @@ are looked up by identity (`slotId`), never by position.
 
 Every edit of a feature-slot input (Track Preset, Track Layout, Separate
 Strands, Use custom stack, and the custom stack rows) runs through one
-transition in `app/feature-editor/placement-actions.js`: the stack editors
-receive it as `trackLayoutActions`, and a template passes `$event` so Cancel
-restores the control. An edit that would leave a lane Feature placement of
+transition in `app/feature-editor/placement-actions.js`: the composition root
+passes it to the stack editors as the `changeTrackLayout` port, each editor
+routes its feature-slot edits through it (`featureSlotEdits` in
+`app/track-slot-edits.js`), and a template passes `$event` so Cancel restores
+the control. An edit that would leave a lane Feature placement of
 either mode undrawable asks first (Owner decision Q3); Reset applies the edit
 and removes those rows as one History step. The control's History adapter
 records an edit that loses no lane, and restores install state as is (R11).
@@ -507,6 +509,15 @@ WEB_CHANGE_POLICY.md "Design-rule co-change"). The detectors are
 closures, state backdoors, whole-object ports, projection call shapes, heavy
 derived trigger sites); `node tools/report-web-owner-graph.mjs --at worktree`
 prints the current subjects.
+
+Run `node --test tests/web/owner-graph-baseline.test.mjs` before and after a
+change to `gbdraw/web/js`. A new subject means the change couples owners:
+restructure it instead of recording the subject. Renaming a parameter or a call
+so that a subject disappears is not a fix; the pull request states which owner
+no longer holds which object, and which port replaced it. A reaction of one
+editor domain to another follows the decision record's Reaction owner, Channel,
+and Projection (`docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md`); without
+a record, ask the Owner before implementing it.
 
 Guards: `tests/web/owner-graph-baseline.test.mjs` (every observed subject is in
 the baseline with a count no higher than recorded, per detector) and
