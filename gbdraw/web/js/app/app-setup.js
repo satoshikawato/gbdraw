@@ -1307,14 +1307,33 @@ export const createAppSetup = () => {
   });
   // History captures register once their owner exists (R13).
   historySnapshots.registerCapture('legend', legendActions.captureLegendEntryOwners);
+  // R13: the palette watcher reacts through the root's palette and rules
+  // projection, registered once the style owner it applies through exists.
+  const paletteRulePorts = { projectPaletteAndRules: null };
   const svgActions = createSvgStyles({
     state,
-    rulePreparation,
     ref, computed, watch,
     nextTick,
     legendActions,
-    previewRuntime
+    previewRuntime,
+    projectPaletteAndRules: (...args) => paletteRulePorts.projectPaletteAndRules(...args)
   });
+  // The palette and the specific-color rules on the mounted Result (R3): the
+  // one call of their projection, shared by `projectMountedEditorIntent`, the
+  // palette watcher, and a rule commit. It prepares the rule matches first
+  // unless the caller prepared them (`prepareRules: false`, which applies at
+  // once), and resolves to false when the rules changed meanwhile.
+  const projectPaletteAndRules = ({ recolor = {}, prepareRules = true } = {}) => {
+    const project = () => {
+      svgActions.applyPaletteToSvg(recolor);
+      svgActions.applySpecificRulesToSvg();
+      return true;
+    };
+    return prepareRules
+      ? Promise.resolve(rulePreparation.prepare()).then((prepared) => (prepared ? project() : false))
+      : project();
+  };
+  paletteRulePorts.projectPaletteAndRules = projectPaletteAndRules;
   const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted });
   featureActions = createFeatureEditor({
     state,
@@ -1333,10 +1352,10 @@ export const createAppSetup = () => {
     compactLegendEntries: legendActions.compactLegendEntries,
     extractLegendEntries: legendActions.extractLegendEntries,
     onLegendGeometryChanged: legendActions.onLegendGeometryChanged,
-    svgActions,
     featureSelection,
     previewRuntime,
     previewTransformInteraction,
+    projectPaletteAndRules,
     projectFeatureEdits: () => projectMountedEditorIntent({ visibility: true, rerender: true, reflow: true, labels: true })
   });
   legendRowRulePorts.commitLegendRowRules = featureActions.commitSpecificRules;
@@ -2697,11 +2716,11 @@ export const createAppSetup = () => {
   // Feature Edits TSV (D-07, R3). History restores the mounted Legend
   // inventory; a newly displayed Result receives the diagram-wide Legend
   // operations Generate applies. A loaded table (`reflow`) also places the
-  // labels, as a visibility edit does.
+  // labels, as a visibility edit does. The palette and the rules (`colors`)
+  // project through `projectPaletteAndRules`.
   const projectMountedEditorIntent = async ({
-    palette = false,
-    rules = false,
-    prepareRules = rules,
+    colors = false,
+    prepareRules = colors,
     visibility = false,
     rerender = false,
     reflow = false,
@@ -2709,9 +2728,7 @@ export const createAppSetup = () => {
     strokes = null,
     labels = false
   } = {}) => {
-    if ((palette || rules) && prepareRules && !await rulePreparation.prepare()) return false;
-    if (palette) svgActions.applyPaletteToSvg();
-    if (rules) svgActions.applySpecificRulesToSvg();
+    if (colors && !await projectPaletteAndRules({ prepareRules })) return false;
     if (visibility) await projectFeatureVisibility({ rerender, reflow });
     if (legend) reconcileLegendEntries(legend);
     if (strokes) reconcileStrokeOverrides(strokes);
@@ -2744,8 +2761,7 @@ export const createAppSetup = () => {
       path?.length === 3 && path[0] === 'editorState' && path[1] === 'legend' && path[2] === 'entries'
     ));
     const projected = await projectMountedEditorIntent({
-      palette: colors,
-      rules: colors,
+      colors,
       prepareRules: changedDomains.has('features') || rulesChanged || !rulePreparation.isPrepared(),
       visibility: changedDomains.has('features'),
       rerender: true,
@@ -2869,7 +2885,7 @@ export const createAppSetup = () => {
     });
     if (!projects) return;
     try {
-      await projectMountedEditorIntent({ palette: colors, rules: colors, visibility });
+      await projectMountedEditorIntent({ colors, visibility });
       const legendChanged = legendActions.prepareDisplayedResultLegend(context.root, legend);
       previewRuntime.applyEditorOperations(hasOperations ? operations : null, {
         afterApply: (root) => { if (legendChanged) legendActions.compactLegendEntries(root); }

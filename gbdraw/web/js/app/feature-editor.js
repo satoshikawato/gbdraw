@@ -20,15 +20,15 @@ export const createFeatureEditor = ({
   compactLegendEntries,
   extractLegendEntries,
   onLegendGeometryChanged,
-  svgActions,
   featureSelection = null,
   previewRuntime = null,
   isPatternEditAvailable = () => true,
   previewTransformInteraction = null,
+  projectPaletteAndRules,
   projectFeatureEdits
 }) => {
   const { ref, computed, watch, reactive } = window.Vue;
-  const ruleActions = createFeatureRuleActions({ state, nextTick, prepareFileLegendEntries, rulePreparation, history, svgActions, ref, computed, isPatternEditAvailable });
+  const ruleActions = createFeatureRuleActions({ state, nextTick, prepareFileLegendEntries, rulePreparation, history, projectPaletteAndRules, ref, computed, isPatternEditAvailable });
   // R13: the label owner's reactions, registered once it exists; the owners
   // created before it call them through this object only.
   const editorPorts = {};
@@ -36,7 +36,9 @@ export const createFeatureEditor = ({
     state,
     getFeatureColor: ruleActions.getFeatureColor,
     getEffectiveLegendCaption: ruleActions.getEffectiveLegendCaption,
-    rulePreparation,
+    // R13: the rule preparation's runs reach the owners that read its matches
+    // as ports; they never hold the preparation.
+    runWithDrawnMatches: rulePreparation.runDrawn,
     onFeaturePopupOpened: (...args) => editorPorts.syncLabelEditor(...args),
     featureSelection,
     previewRuntime,
@@ -44,12 +46,11 @@ export const createFeatureEditor = ({
   });
   const colorActions = createFeatureColorActions({
     state,
-    rulePreparation,
+    runWithRuleMatches: rulePreparation.run,
     nextTick,
     compactLegendEntries,
     extractLegendEntries,
     onLegendGeometryChanged,
-    svgActions,
     ruleActions,
     featureSvgActions,
     previewRuntime

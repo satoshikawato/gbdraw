@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createRulePreparation, ruleMatchesFeature, firstMatchingRule } from '../../gbdraw/web/js/app/rule-matching.js';
+import { createRulePreparation, ruleMatchesFeature, firstMatchingRule, rebindRuleColorOverrides } from '../../gbdraw/web/js/app/rule-matching.js';
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 
 const setup = (evaluate = evaluatePythonRules) => {
@@ -132,10 +132,9 @@ test('canceled caption helper cannot admit rules or emit a notification', async 
 test('historical rule-derived overrides rebind by source caption and color while direct overrides survive',async()=>{
   const {state,preparation}=setup();
   state.featureColorOverrides={a:{caption:'Shared',color:'#112233'},b:{caption:'Shared',color:'#445566'},direct:{caption:'Manual',color:'#abcdef'}};
-  const candidate=await preparation.prepareCandidate([
-    {...rule('NADH'),cap:'Shared',color:'#112233'}, {...rule('other'),cap:'Shared',color:'#445566'}
-  ]);
-  assert.deepEqual(candidate.featureColorOverrides,{a:{caption:'Shared [#112233]',color:'#112233'},b:{caption:'Shared [#445566]',color:'#445566'},direct:state.featureColorOverrides.direct});
+  const source=[{...rule('NADH'),cap:'Shared',color:'#112233'}, {...rule('other'),cap:'Shared',color:'#445566'}];
+  const candidate=await preparation.prepareCandidate(source);
+  assert.deepEqual(rebindRuleColorOverrides(state.featureColorOverrides,source,candidate.rules),{a:{caption:'Shared [#112233]',color:'#112233'},b:{caption:'Shared [#445566]',color:'#445566'},direct:state.featureColorOverrides.direct});
   assert.equal(state.featureColorOverrides.a.caption,'Shared');
 });
 

@@ -1,5 +1,5 @@
-import { normalizeUserFacingError } from '../../services/error-normalization.js';
 import { resolveColorToHex } from '../color-utils.js';
+import { reportRuleRunFailure } from '../rule-matching.js';
 import {
   formatFeatureLength,
   formatFeatureLocation,
@@ -53,7 +53,10 @@ export const createFeatureSvgActions = ({
   getFeatureColor,
   getEffectiveLegendCaption,
   onFeaturePopupOpened = null,
-  rulePreparation,
+  // R13: runs the popup's opening once the rule matches `resolveFeatureDrawn`
+  // reads are prepared; the composition root injects the rule preparation's
+  // `runDrawn`.
+  runWithDrawnMatches = (commit) => commit(),
   featureSelection = null,
   previewRuntime = null,
   previewTransformInteraction = null
@@ -437,13 +440,10 @@ export const createFeatureSvgActions = ({
     return clickedFeature.value;
   };
 
-  const openFeatureEditorForFeature = (feat, eventLike = null) => {
-    const previousAlert = state.errorLog?.value;
-    const opened = () => openPreparedFeatureEditor(feat, eventLike);
-    // The popup states whether the feature is drawn (resolveFeatureDrawn).
-    const result = rulePreparation ? rulePreparation.run(state.manualSpecificRules, opened, { drawn: true }) : opened();
-    return result?.catch ? result.catch((error) => { state.errorLog && state.errorLog.value === previousAlert && (state.errorLog.value = normalizeUserFacingError(error, { operation: 'feature-extraction', stage: 'helper' })); }) : result;
-  };
+  // The popup states whether the feature is drawn (resolveFeatureDrawn).
+  const openFeatureEditorForFeature = (feat, eventLike = null) => reportRuleRunFailure(
+    state, 'feature-extraction', () => runWithDrawnMatches(() => openPreparedFeatureEditor(feat, eventLike))
+  );
 
   const hoverSummaryIsAllowed = () => {
     if (clickedFeature.value) return false;

@@ -44,7 +44,7 @@ const setup = () => {
       state.legendEntries.value=intents;
       state.results.value=[{name:'figure',content:'after'}];
     } };
-  }, svgActions:{applyPaletteToSvg(){},applySpecificRulesToSvg(){}}, nextTick:async()=>{}});
+  }, projectPaletteAndRules:()=>true, nextTick:async()=>{}});
   return {state,actions,preparation,notices,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents};
 };
 const rules = [
