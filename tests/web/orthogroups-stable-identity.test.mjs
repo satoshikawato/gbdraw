@@ -426,12 +426,16 @@ const catalogEndpointRuntime = new Function('featuresById', 'sequenceSources', `
     'featureRecordIdentity',
     'biologicalFeatureStableSvgId',
     'resolvedCatalogMatchFeature',
+    'catalogMatchEndpointResolved',
     'matchSourceAliases',
     'resolveEmbeddedMatchSource'
   ].map(embeddedFunctionSource).join('\n')}
   return { resolvedCatalogMatchFeature, resolveEmbeddedMatchSource };
 `)(
-  new Map([['rendered-a', expandedCatalogItem.features[0]]]),
+  new Map([
+    ['rendered-a', expandedCatalogItem.features[0]],
+    ['rendered-b', expandedDuplicateLocationCatalog.features[1]]
+  ]),
   [{ origin: 'linear-record', recordIndex: 0, recordId: 'record-a', sequence: 'ACGT' }]
 );
 assert.equal(
@@ -447,6 +451,33 @@ assert.equal(
     'query'
   ).source.sequence,
   'ACGT'
+);
+// A collinear block names several anchor features; its span is the envelope
+// on the record, so a plural claim that resolves as a whole may copy it.
+const collinearBlockCatalog = (references) => catalogRuntime.expandCatalogItem({
+  ...duplicateLocationCatalog,
+  comparisonMatches: [{
+    ...duplicateLocationCatalog.comparisonMatches[0],
+    match_kind: 'collinear',
+    queryFeatureReferences: references
+  }]
+}, 'rich').matches[0];
+const collinearBlock = collinearBlockCatalog(
+  duplicateLocationCatalog.comparisonMatches[0].queryFeatureReferences
+);
+assert.equal(collinearBlock._gbdraw_query_endpoint_resolved, true);
+assert.equal(
+  catalogEndpointRuntime.resolveEmbeddedMatchSource(collinearBlock, 'query').source.sequence,
+  'ACGT'
+);
+const collinearBlockMissingMember = collinearBlockCatalog([
+  duplicateLocationCatalog.comparisonMatches[0].queryFeatureReferences[0],
+  { recordKey: 'record-a', biologicalFeatureId: 'missing-feature' }
+]);
+assert.equal(collinearBlockMissingMember._gbdraw_query_endpoint_resolved, false);
+assert.equal(
+  catalogEndpointRuntime.resolveEmbeddedMatchSource(collinearBlockMissingMember, 'query').source,
+  null
 );
 assert.equal(
   catalogEndpointRuntime.resolvedCatalogMatchFeature(
