@@ -13,7 +13,7 @@ const SIDES = { circular: ['outward', 'inward'], linear: ['above', 'below'] };
 // predicate of the popup choices and of a layout change (R3, R10). It resolves
 // the draft through the same slot owner used by request projection; Result
 // geometry continues to describe the last successful Generate.
-const draftPlacementTargets = ({ mode, form, adv }) => {
+export const draftPlacementTargets = ({ mode, form, adv }) => {
   const trackType = mode === 'circular' ? form.track_type : form.linear_track_layout;
   const slot = adv[`${mode}_track_slots_enabled`]
     ? validateCustomTrackPlan({
@@ -27,6 +27,32 @@ const draftPlacementTargets = ({ mode, form, adv }) => {
     : effectiveLinearSlotPlacement(slot) === 'overlay' && !form.separate_strands;
   return [{ kind: 'main' }, ...(bidirectional
     ? SIDES[mode].map((side) => ({ kind: 'lane', side, level: 1 })) : [])];
+};
+
+// The draft inputs of draftPlacementTargets, saved and restored in place so
+// the stack rows keep their identity (R10).
+const LAYOUT_FORM_FIELDS = ['track_type', 'linear_track_layout', 'separate_strands'];
+const copy = (value) => (Array.isArray(value) ? value.map(copy) : value && typeof value === 'object'
+  ? Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, copy(entry)])) : value);
+export const saveTrackLayout = ({ form, adv }) => ({
+  form: Object.fromEntries(LAYOUT_FORM_FIELDS.map((field) => [field, form[field]])),
+  stacks: Object.keys(SIDES).map((mode) => {
+    const slots = adv[`${mode}_track_slots`];
+    return { mode, slots, enabled: adv[`${mode}_track_slots_enabled`], axis: adv[`${mode}_track_slots_axis_index`],
+      rows: (Array.isArray(slots) ? slots : []).map((slot) => [slot, copy(slot)]) };
+  })
+});
+export const restoreTrackLayout = ({ form, adv }, saved) => {
+  Object.assign(form, saved.form);
+  for (const { mode, slots, enabled, axis, rows } of saved.stacks) {
+    Object.assign(adv, { [`${mode}_track_slots_enabled`]: enabled, [`${mode}_track_slots_axis_index`]: axis,
+      [`${mode}_track_slots`]: slots });
+    for (const [slot, content] of rows) {
+      Object.keys(slot).forEach((key) => delete slot[key]);
+      Object.assign(slot, content);
+    }
+    if (Array.isArray(slots)) slots.splice(0, slots.length, ...rows.map(([slot]) => slot));
+  }
 };
 
 export const createFeaturePlacementActions = ({
@@ -73,34 +99,46 @@ export const createFeaturePlacementActions = ({
     });
   };
 
-  // Q3 (Owner, 2026-10-04): a layout edit that would leave this mode's lane
-  // placements undrawable asks first. Reset applies the edit and removes those
-  // rows as one History step; cancel keeps the setting and records no step. The
-  // other mode's rows wait for their mode (R2). Session load, Undo/Redo, and
-  // Reset Settings do not come here; Generate names what they leave (R6).
-  const layoutChange = reactive({ open: false, count: 0, setting: '', value: '' });
+  // Q3 (Owner, 2026-10-04) and R10: the one transition for an edit of a draft
+  // feature-slot input. It applies the edit and, when a lane placement of
+  // either mode loses its lane, restores the inputs and asks. Reset applies the
+  // edit and removes those rows as one History step; Cancel keeps the control's
+  // value and records none. The control's own History adapter records an edit
+  // that loses nothing (R11). Restores (Undo/Redo, Session load, Import, Reset
+  // Settings) install state as is; Generate names what they leave (R6).
+  const layoutChange = reactive({ open: false, count: 0, setting: '', value: '', scope: '' });
   let pendingLayout = null;
-  const lostLaneKeys = (next) => {
-    const sides = (entry) => draftPlacementTargets(entry).map((target) => target.side).filter(Boolean);
-    const [had, has] = [sides(draft()), sides(next(draft()))];
+  const laneSides = () => Object.fromEntries(Object.keys(SIDES).map((mode) => [mode,
+    draftPlacementTargets({ mode, form: state.form, adv: state.adv }).map((target) => target.side).filter(Boolean)]));
+  const lostLaneKeys = (before) => {
+    const after = laneSides();
     return Object.keys(state.featurePlacementOverrides).filter((key) => {
-      const row = state.featurePlacementOverrides[key];
-      return row?.scope === state.mode.value && had.includes(row.placement?.side) && !has.includes(row.placement?.side);
+      const { scope, placement } = state.featurePlacementOverrides[key] || {};
+      return before[scope]?.includes(placement?.side) && !after[scope].includes(placement?.side);
     });
   };
   const focusAfterRender = (find) => nextTick().then(() => find()?.focus?.());
-  // R10: the control's own transition reconciles the rows before it commits.
-  const changeLayout = (control, previous, next, apply) => {
+  const changeTrackLayout = (apply, control = null) => {
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    const count = lostLaneKeys(next).length;
-    if (!count) return history.runUndoable('Change setting', apply);
-    const checkbox = control.type === 'checkbox';
-    const value = checkbox ? (control.checked ? 'On' : 'Off') : control.selectedOptions?.[0]?.text;
-    control[checkbox ? 'checked' : 'value'] = previous;
-    pendingLayout = { control, next, apply };
-    Object.assign(layoutChange, { open: true, count, value,
-      setting: control.getAttribute?.('aria-label') || control.labels?.[0]?.textContent.trim() || 'the setting' });
+    if (!Object.values(state.featurePlacementOverrides).some((row) => row?.placement?.kind === 'lane')) return apply();
+    const before = laneSides();
+    const saved = saveTrackLayout(state);
+    const result = apply();
+    const lost = lostLaneKeys(before);
+    if (!lost.length) return result;
+    restoreTrackLayout(state, saved);
+    const checkbox = control?.type === 'checkbox';
+    const value = checkbox ? (control.checked ? 'On' : 'Off') : control?.selectedOptions?.[0]?.text || '';
+    // The checkbox shows the kept value again; a bound select re-renders to it.
+    if (checkbox) control.checked = !control.checked;
+    const scopes = [...new Set(lost.map((key) => state.featurePlacementOverrides[key].scope))]
+      .filter((scope) => scope !== state.mode.value);
+    pendingLayout = { control, apply };
+    Object.assign(layoutChange, { open: true, count: lost.length, value,
+      scope: scopes.map((scope) => `${scope[0].toUpperCase()}${scope.slice(1)} `).join(''),
+      setting: control?.getAttribute?.('aria-label') || control?.labels?.[0]?.textContent.trim()
+        || (control?.tagName === 'BUTTON' && control.textContent.trim()) || control?.title || 'This change' });
     void focusAfterRender(() => globalThis.document?.querySelector('[data-placement-layout-primary]'));
     return false;
   };
@@ -110,9 +148,9 @@ export const createFeaturePlacementActions = ({
     layoutChange.open = false;
     if (!change) return false;
     const result = choice === 'reset' && await history.runUndoable('Change setting and reset Feature placements', () => {
-      const lost = lostLaneKeys(change.next);
+      const before = laneSides();
       change.apply();
-      for (const key of lost) delete state.featurePlacementOverrides[key];
+      for (const key of lostLaneKeys(before)) delete state.featurePlacementOverrides[key];
     });
     void focusAfterRender(() => change.control);
     return result;
@@ -120,24 +158,18 @@ export const createFeaturePlacementActions = ({
   const changeLayoutSetting = (event, field) => {
     const control = event.target;
     const value = control.type === 'checkbox' ? control.checked : control.value;
-    return changeLayout(control, state.form[field],
-      (entry) => ({ ...entry, form: { ...entry.form, [field]: value } }),
-      () => { state.form[field] = value; });
+    return changeTrackLayout(() => { state.form[field] = value; }, control);
   };
-  // A custom slot's side; `update` is the slot editor's transition.
-  const changeFeatureSlotSide = (event, slot, update) => {
-    const { value } = event.target;
-    const mode = state.mode.value;
-    const slots = `${mode}_track_slots`;
-    const changed = mode === 'circular'
-      ? { ...slot, side: null, params: { ...slot.params, lane_direction: value || undefined } }
-      : { ...slot, side: value };
-    return changeLayout(event.target, mode === 'circular' ? slot.params?.lane_direction ?? '' : slot.side,
-      (entry) => ({ ...entry, adv: { ...entry.adv, [slots]: entry.adv[slots].map((item) => item === slot ? changed : item) } }),
-      () => update(slot, value));
-  };
+  // The track stack editors' edits; a DOM event passed last names the control
+  // (its listener's element, not an icon inside a button).
+  const trackLayoutActions = (actions) => Object.fromEntries(Object.entries(actions).map(([name, action]) => [
+    name, (...args) => {
+      const event = typeof Event === 'function' && args.at(-1) instanceof Event ? args.pop() : null;
+      return changeTrackLayout(() => action(...args), event?.currentTarget);
+    }
+  ]));
 
-  return { choices, setPlacement, layoutChange, resolveLayoutChange, changeLayoutSetting, changeFeatureSlotSide,
+  return { choices, setPlacement, layoutChange, resolveLayoutChange, changeLayoutSetting, trackLayoutActions,
     valueFor: (feature) => {
       // The control lists this mode's placements; a feature of the other
       // mode's Result reads as Auto until that mode is active (R2).

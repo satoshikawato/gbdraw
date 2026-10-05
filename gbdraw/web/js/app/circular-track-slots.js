@@ -1404,7 +1404,9 @@ const circularGeometryShortcutsForState = (state) => ({
   gcSkewRadius: state?.adv?.gc_skew_radius_circular
 });
 
-export const createCircularTrackSlotEditor = ({ state }) => {
+// `trackLayoutActions` is the feature placement owner's transition (R10, Q3):
+// every stack edit that can change the feature slot runs through it.
+export const createCircularTrackSlotEditor = ({ state, trackLayoutActions = (actions) => actions }) => {
   const editorKeys = new WeakMap();
   let nextEditorKey = 1;
   const circularTrackSlotEditorKey = (slot) => {
@@ -1810,8 +1812,6 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, ...normalized);
     syncCircularConservationSlots();
   };
-
-  const applyCircularTrackPreset = (preset) => resetCircularTrackSlotsToPreset(preset);
 
   const setCircularTrackSlotsEnabled = (enabled) => {
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -2441,34 +2441,35 @@ export const createCircularTrackSlotEditor = ({ state }) => {
     circularTrackRendererLabel,
     normalizeCircularTrackSlots: normalizeSlotsInPlace,
     syncCircularConservationSlots,
-    resetCircularTrackSlotsFromSimpleControls,
     changeCircularDepthSources,
-    resetCircularTrackSlotsToPreset,
-    applyCircularTrackPreset,
-    setCircularTrackSlotsEnabled,
+    ...trackLayoutActions({
+      resetCircularTrackSlotsFromSimpleControls,
+      resetCircularTrackSlotsToPreset,
+      setCircularTrackSlotsEnabled,
+      addCircularTrackSlot,
+      duplicateCircularTrackSlot,
+      removeCircularTrackSlot,
+      setCircularTrackSlotEnabled,
+      moveCircularTrackSlot,
+      moveCircularTrackSlotOutside,
+      moveCircularTrackSlotInside,
+      moveCircularTrackSlotToAxis,
+      updateCircularTrackSlotRenderer,
+      updateCircularTrackSlotPlacement,
+      updateCircularTrackFeatureLane
+    }),
     setCircularGcSuppressed,
     setCircularSkewSuppressed,
-    addCircularTrackSlot,
     canAddCircularTrackRenderer,
-    duplicateCircularTrackSlot,
     canDuplicateCircularTrackSlot,
-    removeCircularTrackSlot,
-    setCircularTrackSlotEnabled,
     circularTrackSlotEffectiveEnabled,
     circularTrackSlotHiddenBySuppress,
     circularTrackSlotSuppressMessage,
-    moveCircularTrackSlot,
     canMoveCircularTrackSlot,
-    moveCircularTrackSlotOutside,
-    moveCircularTrackSlotInside,
-    moveCircularTrackSlotToAxis,
     canMoveCircularTrackSlotOutside,
     canMoveCircularTrackSlotInside,
     canMoveCircularTrackSlotToAxis,
     updateCircularTrackSlotMeasure,
-    updateCircularTrackSlotRenderer,
-    updateCircularTrackSlotPlacement,
-    updateCircularTrackFeatureLane,
     circularTrackSlotIssue,
     circularTrackGlobalIssues,
     circularAnnotationAnchorOptions,

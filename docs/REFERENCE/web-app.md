@@ -1092,13 +1092,16 @@ coordinates, is shown once in place of the controls.
 Open the feature popup and choose **Feature placement** in its **Layout**
 group: Auto, Main, or an available directional lane 1. Bulk selection uses
 **Selected feature placements**.
-When a change to **Track Preset**, **Track Layout**, **Separate Strands**, or the
-lane or placement of a custom features row would leave placements of the current
-mode without their lane, a dialog asks first. **Reset N placements to Auto**
-applies the change and sets exactly those placements to Auto as one undoable
-step; **Cancel change**, Escape, or a click outside keeps the setting and the
-placements. Loading a Session, Undo, and Redo do not ask; if their result has a
-lane the slot cannot draw, Generate names the feature.
+When a change to **Track Preset**, **Track Layout**, **Separate Strands** (in
+either mode's panel), **Use custom stack**, a custom stack Reset, or a custom
+stack row (adding, deleting, enabling, moving, or changing its renderer, lane, or
+placement) would leave placements without their lane, a dialog asks first. It
+names the mode when the placements belong to the other mode. **Reset N
+placements to Auto** applies the change and sets exactly those placements to
+Auto as one undoable step; **Cancel change**, Escape, or a click outside keeps
+the setting and the placements. Loading a Session, Undo, Redo, and **Reset
+Settings** (which also clears placements) do not ask; if their result has a lane
+the slot cannot draw, Generate names the feature.
 The [resolved-layout and resolver tables](palettes-feature-rules-labels-shapes-and-tracks.md#manual-feature-placement)
 explain availability and conflicts. **Feature overlap tolerance (bp)** defaults
 to 0. Generate applies these drafts together; Undo/Redo and Save/Load retain the
