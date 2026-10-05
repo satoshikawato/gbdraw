@@ -661,7 +661,7 @@ test('preview similarity-group copy actions report isolated accessible outcomes'
   await toggle.click();
   await expect(groupAaCopy).toHaveText(/Copy aa/);
 
-  const openedFeaturePopup = await page.evaluate(async () => {
+  const openedFeaturePopup = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const feature = app.extractedFeatures.find((candidate) => (
       candidate?.orthogroupId && candidate?.type === 'CDS'
@@ -683,7 +683,7 @@ test('preview similarity-group copy actions report isolated accessible outcomes'
   await expect(popupMemberAaCopy).toHaveText(/^\s*aa\s*$/);
   await featurePopup.getByRole('button', { name: 'Close feature popup' }).click();
 
-  expect(await page.evaluate(async () => {
+  expect(await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const feature = app.extractedFeatures.find((candidate) => (
       candidate?.orthogroupId && candidate?.type === 'CDS'
@@ -718,7 +718,7 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
     await centerPreview(page);
     assertMobileGeometry(await readOverlayGeometry(page), true);
   }
-  const result = await page.evaluate(async () => {
+  const result = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const svg = document.querySelector('.origin-top svg');
     const { getFeatureFillElements } = await import(

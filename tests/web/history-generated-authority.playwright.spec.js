@@ -86,7 +86,7 @@ test('Undo Generate restores request A and Result A while preserving draft B thr
     expect(b.request).not.toEqual(a.request);
     expect(b.selected).not.toBe(a.selected);
 
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
     const restored = await inspect(page, testInfo, 'undo');
     await noDerivedStatus(page);
     expectArtifact(restored, a);
@@ -110,13 +110,13 @@ test('Undo Generate restores request A and Result A while preserving draft B thr
       expect(fresh.externalRequests).toEqual([]);
     } finally { await fresh.context().close(); }
 
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
     const redone = await inspect(page, testInfo, 'redo');
     await noDerivedStatus(page);
     expectArtifact(redone, b);
     expect(redone.editable).toEqual(b.editable);
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
     await expect(labels).toHaveValue('out');
     await generate(page);
     expectArtifact(await inspect(page, testInfo, 'undo-setting-generate'), a);
@@ -395,10 +395,10 @@ for (const mode of ['circular', 'linear']) {
       const generated=await inspect(fresh,info,`${mode}-generated`);
       expect((await snapshot(fresh)).mounted).toContain('S04 retained label');
       expect((await snapshot(fresh)).mounted).toContain('#123456');
-      await fresh.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+      await evaluateWithRetainedPromise(fresh, () => window.__GBDRAW_HISTORY__.undo());
       expectArtifact(await inspect(fresh,info,`${mode}-undo`),loaded);
       await noDerivedStatus(fresh);
-      await fresh.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+      await evaluateWithRetainedPromise(fresh, () => window.__GBDRAW_HISTORY__.redo());
       const redone=await inspect(fresh,info,`${mode}-redo`);
       expect(redone.selected).toBe(generated.selected);
       expect(redone.request).toEqual(generated.request);
@@ -690,7 +690,7 @@ test('Undo and Redo are busy during Generate and leave the committed request unc
     await page.keyboard.press('Control+z');
     await page.keyboard.press('Control+y');
     await page.keyboard.press('Control+Shift+z');
-    expect(await page.evaluate(async () => [
+    expect(await evaluateWithRetainedPromise(page, async () => [
       await window.__GBDRAW_HISTORY__.undo(),
       await window.__GBDRAW_HISTORY__.redo()
     ])).toEqual([{ status: 'busy', reason }, { status: 'busy', reason }]);

@@ -9,7 +9,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { gunzipSync } = require('node:zlib');
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
-const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { generateAndWaitForResult, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, openFresh, settle } = require('./helpers/audit-browser.cjs');
 const { download } = require('./helpers/mode-transition.cjs');
 
@@ -53,7 +53,7 @@ const catalog = (page) => page.evaluate(() => window.__GBDRAW_APP__.extractedFea
 })));
 
 // One popup edit through the editor actions the controls call.
-const edit = (page, svgId, change) => page.evaluate(async ({ id, change: requested }) => {
+const edit = (page, svgId, change) => evaluateWithRetainedPromise(page, async ({ id, change: requested }) => {
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((item) => item.svg_id === id);
   if (!feature) throw new Error(`no feature ${id}`);
@@ -285,7 +285,7 @@ test('OV-12: after reordering records the popup shows the edit of the same featu
   features = await catalog(page);
   const moved = features.find((feature) => feature.identity === target.identity && feature.recordKey === target.recordKey);
   expect(moved.svgId).not.toBe(target.svgId);
-  const popup = await page.evaluate(async (id) => {
+  const popup = await evaluateWithRetainedPromise(page, async (id) => {
     const app = window.__GBDRAW_APP__;
     const feature = app.extractedFeatures.find((item) => item.svg_id === id);
     await app.openFeatureEditorFromList(feature, null);
@@ -467,7 +467,7 @@ test('an older Session whose sources cannot be read again fails to load and keep
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
-const importLabelTsv = (page, text) => page.evaluate(async (tsv) => {
+const importLabelTsv = (page, text) => evaluateWithRetainedPromise(page, async (tsv) => {
   await window.__GBDRAW_APP__.loadLabelOverrideTable({
     target: { files: [new File([tsv], 'labels.tsv')], value: 'labels.tsv' }
   });

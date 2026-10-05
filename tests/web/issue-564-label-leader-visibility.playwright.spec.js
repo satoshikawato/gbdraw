@@ -57,7 +57,7 @@ const findCurrentLabelTarget = (page, { leaderCount = null, embedded = false } =
   }, { requiredLeaders: leaderCount, requireEmbedded: embedded })
 );
 
-const setVisibility = (page, featureId, mode) => page.evaluate(async ({ targetId, nextMode }) => {
+const setVisibility = (page, featureId, mode) => evaluateWithRetainedPromise(page, async ({ targetId, nextMode }) => {
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((candidate) => candidate.svg_id === targetId);
   if (!feature) throw new Error(`Feature ${targetId} is unavailable.`);
@@ -241,7 +241,7 @@ test('fresh Circular two-segment leader visibility is atomic without forced rege
   }
 });
 
-const prepareLegacyTarget = (page) => page.evaluate(async () => {
+const prepareLegacyTarget = (page) => evaluateWithRetainedPromise(page, async () => {
   const app = window.__GBDRAW_APP__;
   app.syncLabelEditor();
   const entry = app.editableLabels.find((candidate) => candidate.kind === 'regular'
@@ -339,7 +339,7 @@ test('metadata-free refresh failure retains the old visual and canonical overrid
       window.__GBDRAW_APP__.autoLabelReflowEnabled = false;
       window.__GBDRAW_APP__.clickedFeature.labelVisibility = 'off';
     });
-    await page.evaluate(() => window.__GBDRAW_APP__.updateClickedFeatureLabelText());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.updateClickedFeatureLabelText());
     await expect.poll(() => page.evaluate(() => ({
       processing: window.__GBDRAW_APP__.labelReflowProcessing,
       error: window.__GBDRAW_APP__.labelReflowLastError?.summary ?? null

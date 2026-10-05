@@ -6,6 +6,7 @@
 const { test, expect } = require('@playwright/test');
 const { openWithGenBank, settle } = require('./helpers/audit-browser.cjs');
 const { generate } = require('./helpers/mode-transition.cjs');
+const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -95,12 +96,12 @@ test('a hidden feature stays listed; its checkbox shows it again, live and after
   await expect(visibilityBox(page, 'alpha protein')).toBeChecked();
 
   // Undo reverts the toggle: FL1 is hidden again and its box unchecked.
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   await waitForRerender(page);
   expect(await drawnFeatures(page)).toEqual(hidden);
   await expect(visibilityBox(page, 'alpha protein')).not.toBeChecked();
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
   await settle(page);
   await waitForRerender(page);
   expect(await drawnFeatures(page)).toEqual(live);
@@ -143,7 +144,7 @@ test('Search features finds a hidden feature; Open shows its popup with the hidd
   const desktop = page.viewportSize();
   await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     await app.openFeatureEditorFromList(app.filteredFeatures.find((feature) => feature.locus_tag === 'FL2'), null);
   });
@@ -183,7 +184,7 @@ test('a Label On kept with Keep feature hidden is drawn when the checkbox shows 
   expect(await labels(page)).toEqual([]);
 
   // Label On for the hidden FL2 from its popup; keep the feature hidden.
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const fl2 = app.filteredFeatures.find((feature) => feature.locus_tag === 'FL2');
     await app.openFeatureEditorFromList(fl2, null);
@@ -195,7 +196,7 @@ test('a Label On kept with Keep feature hidden is drawn when the checkbox shows 
   const dialog = page.getByRole('dialog', { name: 'Feature Is Hidden', exact: true });
   await expect(dialog).toBeVisible({ timeout: 120_000 });
   await dialog.getByRole('button', { name: 'Keep feature hidden', exact: true }).click();
-  await page.evaluate(async () => {
+  await evaluateWithRetainedPromise(page, async () => {
     await window.__labelOnApply;
     window.__GBDRAW_APP__.clickedFeature = null;
   });

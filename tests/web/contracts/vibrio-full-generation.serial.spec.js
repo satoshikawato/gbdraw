@@ -1429,7 +1429,7 @@ test('real Vibrio preview regenerates after a derived-only mutation', async ({
       redoCountAfter: second.outcome.redoCountAfter
     });
   } else {
-    historyRoundTrip = await page.evaluate(async ({ firstSvg, secondSvg }) => {
+    historyRoundTrip = await evaluateWithRetainedPromise(page, async ({ firstSvg, secondSvg }) => {
       const history = window.__GBDRAW_HISTORY__;
       const app = window.__GBDRAW_APP__;
       const undoCountBefore = history.getUndoCount();

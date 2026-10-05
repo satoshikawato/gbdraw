@@ -3,7 +3,7 @@ const { readFileSync, writeFileSync } = require('node:fs');
 const { resolve } = require('node:path');
 const { gunzipSync } = require('node:zlib');
 const { execFileSync } = require('node:child_process');
-const { openApp, reveal, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { openApp, reveal, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { promoteRequest } = require('./helpers/request-schema.cjs');
 
 const fixture = resolve('gbdraw/web/gallery/sessions/tobacco-chloroplast.gbdraw-session.json');
@@ -691,8 +691,8 @@ test('nonfinite numeric action writes are rejected before History; finite, Auto,
     }, kind);
     expect(await scalar(page)).toEqual(expected);
     const edited = await snapshot(page);
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
     expect(await scalar(page)).toEqual(expected);
     const restored = await snapshot(page);
     expect(restored).toEqual(edited);

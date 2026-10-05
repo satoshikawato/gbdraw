@@ -270,7 +270,7 @@ test('synthetic current session restores and exports without materializing resou
   expect(preview.structural).toEqual(ZERO_PREVIEW_METRICS);
   expect(preview.historyBaseline).toEqual(ZERO_ARTIFACT_HISTORY_BASELINE);
 
-  const intentHistory = await page.evaluate(async () => {
+  const intentHistory = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const history = window.__GBDRAW_HISTORY__;
     const loadedValue = Boolean(app.form.show_scale);

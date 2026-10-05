@@ -69,7 +69,7 @@ for (const composite of [false, true]) {
     };
     const close = () => page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
     const open = async (feature) => {
-      await page.evaluate((feature) => window.__GBDRAW_APP__.openFeatureEditorFromList(feature), feature);
+      await evaluateWithRetainedPromise(page, (feature) => window.__GBDRAW_APP__.openFeatureEditorFromList(feature), feature);
       return page.getByLabel('Feature placement', { exact: true });
     };
     const check = async (stage, enabled = allPlacements, targets = null) => {

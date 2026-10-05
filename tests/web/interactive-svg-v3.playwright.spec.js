@@ -211,7 +211,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   expect(transformedSvg).not.toBe(before.svg);
 
   await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(before.svg);
   expect(await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
@@ -224,7 +224,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
     .toBe('UNRELATED_PENDING_PREFIX');
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
     .toBe(before.history);
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(transformedSvg);
   expect(await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');

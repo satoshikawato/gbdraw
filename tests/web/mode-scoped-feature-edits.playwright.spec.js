@@ -5,7 +5,7 @@
 // Circular apply only to Circular requests; the Linear Generate draws the
 // feature with neither, and the edits wait in the draft for Circular.
 const { test, expect } = require('@playwright/test');
-const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { generateAndWaitForResult, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { openFresh, loadSessionFile, settle } = require('./helpers/audit-browser.cjs');
 
 const LINEAR_SESSION = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json';
@@ -43,7 +43,7 @@ test('a Circular Main placement and Feature visibility edit stay out of Linear r
   await settle(page);
   await generateAndWaitForResult(page);
 
-  const target = await page.evaluate(async () => {
+  const target = await evaluateWithRetainedPromise(page, async () => {
     const app = window.__GBDRAW_APP__;
     const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
     await app.featurePlacementActions.setPlacement([feature], 'main');

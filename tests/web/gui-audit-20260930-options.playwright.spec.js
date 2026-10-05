@@ -6,7 +6,7 @@ const { execFile } = require('node:child_process');
 const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const { promisify } = require('node:util');
-const { generateAndWaitForResult, reveal } = require('./helpers/app-lifecycle.cjs');
+const { generateAndWaitForResult, reveal, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const {
   BATCH_FIXTURE,
   HMMT,
@@ -145,11 +145,11 @@ test('removing the Depth file with the uploader Remove leaves a Generate-ready s
   await uploaderRemove(summary.locator('xpath=..')).click();
   await settle(page);
   expect((await slots(page)).filter(({ renderer, enabled }) => renderer === 'depth' && enabled)).toEqual([]);
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.getCircularDepthFile(0)?.name)).toBe('sampleA.depth.tsv');
   expect(await depthRows(page)).toEqual([{ id: 'depth', enabled: true, trackIndex: 0 }]);
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
   await settle(page);
   expect(await depthRows(page)).toEqual([]);
   await generateAndWaitForResult(page);
@@ -306,7 +306,7 @@ test('clicking the text of a checkbox label records an Undo step', async ({ page
   await settle(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.rich_feature_popup)).toBe(!before.value);
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(before.undo + 1);
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.rich_feature_popup)).toBe(before.value);
 });
@@ -326,7 +326,7 @@ test('a checkbox click while a text field has focus records its own Undo step', 
   await checkbox.click();
   await settle(page);
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(before.undo + 2);
-  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   expect(await page.evaluate(() => ({
     value: window.__GBDRAW_APP__.adv.rich_feature_popup, prefix: window.__GBDRAW_APP__.form.prefix

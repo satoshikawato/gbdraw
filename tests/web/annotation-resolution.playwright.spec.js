@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const { readFile, writeFile } = require('node:fs/promises');
 const { gunzipSync } = require('node:zlib');
 const { join } = require('node:path');
-const { openApp, generateAndWaitForResult, getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
+const { openApp, generateAndWaitForResult, getDiagramWorkerActivity, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 
 const panel = (page) => page.locator('details').filter({ has: page.locator('summary[aria-label="Region Annotations"]') });
 const artifact = (page) => page.evaluate(async () => {
@@ -73,10 +73,10 @@ for (const width of [1440, 390]) {
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(width);
     await page.screenshot({ path: testInfo.outputPath('selector-warning.png') });
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
     expect(await artifact(page)).toEqual(control);
     await expect(status).toHaveCount(0);
-    await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
     expect(await artifact(page)).toEqual(mixed);
     await expect(status).toContainText('Skipped 2 annotation row(s).');
 
