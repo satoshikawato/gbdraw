@@ -1,5 +1,6 @@
 import { exactRegexValue } from './feature-selector.js';
 import { ruleMatchesFeature, visibilityRuleMatchesFeature } from './rule-matching.js';
+import { stableFeatureOverrideKey as stableKeyOf } from '../services/feature-catalog.js';
 import {
   featureIdentityKey,
   featureIdentityKeyOf,
@@ -388,6 +389,37 @@ export const resolveFeatureDrawn = (feature, { featureOverrides, rules, selected
   const colorMatches = colorRules.map((rule) => ruleMatchesFeature(feature, rule));
   if (colorMatches.includes(true)) return true;
   return colorMatches.includes(null) ? null : false;
+};
+
+// Whether a Result draws a catalog feature (R-5): the resolver's answer, else
+// (unknown) whether the Result's catalog (`resultCatalogFeatures`) renders it,
+// which Python decided when it last rendered the Result; null without one.
+export const featureDrawnInResult = (feature, context, catalogFeatures) => (
+  resolveFeatureDrawn(feature, context)
+  ?? (catalogFeatures ? catalogFeatures.renderedByIdentity.has(stableKeyOf(feature)) : null)
+);
+
+// The Features list of one Result (Owner decision 2026-10-05, R-5): from the
+// Result's catalog features, each biological feature that is of a selected
+// type, has its own Feature visibility, or is drawn, with whether it is drawn.
+// A feature the Result draws is listed as its rendered feature.
+export const listFeatureRows = (catalogFeatures, context) => {
+  const rows = [];
+  const drawn = new Map();
+  const rendered = new Set();
+  const { selectedTypes, featureOverrides } = context;
+  catalogFeatures.biological.forEach((feature) => {
+    const shown = catalogFeatures.renderedByIdentity.get(stableKeyOf(feature));
+    const row = shown || feature;
+    const isDrawn = featureDrawnInResult(row, context, catalogFeatures);
+    if (!isDrawn
+      && selectedTypes?.size && !selectedTypes.has(String(feature.type ?? ''))
+      && getFeatureVisibilityOverride(featureOverrides, feature) === 'default') return;
+    rows.push(row);
+    drawn.set(row, isDrawn);
+    if (shown) rendered.add(row);
+  });
+  return { rows, drawn, rendered };
 };
 
 const isEditorFeatureRule = (rule) => {

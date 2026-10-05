@@ -465,7 +465,8 @@ export const buildFeatureSearchIndex = ({
   const qualifierFeatureIdsByKey = new Map();
 
   (Array.isArray(features) ? features : []).forEach((feature) => {
-    const svgId = String(feature?.svg_id || '').trim();
+    // A feature the Result does not draw is found by its `search_id` (R-5).
+    const svgId = String(feature?.search_id || feature?.svg_id || '').trim();
     if (!svgId || byId.has(svgId)) return;
     const qualifiers = getFeatureQualifiers(feature);
     const qualifierValuesByKey = new Map();

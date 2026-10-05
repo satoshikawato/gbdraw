@@ -5376,6 +5376,17 @@ export const createRunAnalysis = ({
         execution.commit, nextSelectedResultIndex, isCurrent, canonical.renderRequest.diagramOptions
       );
       skipCaptureBaseConfig.value = true;
+      // The rerender's catalog describes the Results it draws, so they replace
+      // the previous pair together: a feature it draws again or no more keeps
+      // its popup, label binding, Features list row, and History projection (R-5).
+      const { featureState } = execution.commit;
+      featureCatalog.value = execution.catalog;
+      extractedFeatures.value = featureState.extractedFeatures;
+      biologicalFeatures.value = featureState.biologicalFeatures;
+      featureRecordIds.value = featureState.featureRecordIds;
+      orthogroups.value = featureState.orthogroups;
+      state.featureOrthogroupIndex.value = featureState.featureOrthogroupIndex;
+      state.collinearGroups.value = featureState.collinearGroups;
       results.value = execution.commit.results;
       if (execution.commit.results.length > 0) {
         selectedResultIndex.value = nextSelectedResultIndex;
