@@ -9,12 +9,14 @@ globalThis.CSS ||= { escape: (value) => String(value) };
 
 const ref = (value) => ({ value });
 
-// Per-feature label and visibility edits are identity rows (design Q4).
+// Per-feature label and visibility edits are identity rows of the Result's
+// mode (design Q4, R2).
 const featureFor = (featureId, type = 'CDS') => ({
-  svg_id: featureId, type, record_key: 'record-1', biological_feature_id: `bio-${featureId}`
+  svg_id: featureId, type, scope: 'linear', record_key: 'record-1', biological_feature_id: `bio-${featureId}`
 });
-const keyFor = (featureId) => JSON.stringify(['record-1', `bio-${featureId}`]);
+const keyFor = (featureId) => JSON.stringify(['linear', 'record-1', `bio-${featureId}`]);
 const rowFor = (featureId, fields = {}) => ({
+  scope: 'linear',
   recordKey: 'record-1',
   biologicalFeatureId: `bio-${featureId}`,
   featureVisibility: null,

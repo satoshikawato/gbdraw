@@ -66,13 +66,14 @@ import {
   normalizeFeatureVisibilityRule,
   splitLegacyVisibilityRules
 } from '../app/feature-visibility.js';
-import { canonicalFeatureOverrides } from './feature-placement.js';
+import { canonicalFeatureOverrides, featureDraftMap } from './feature-placement.js';
 import {
   FEATURE_EDIT_MIGRATION_WARNING,
   FEATURE_VISIBILITY_NARROWED_NOTICE,
   RENDERED_ID_FEATURE_EDIT_FIELDS,
   hasRenderedIdFeatureEdits,
-  migrateSessionFeatureEdits
+  migrateSessionFeatureEdits,
+  migrateSessionFeaturePlacements
 } from './feature-edit-migration.js';
 import {
   buildSessionFeatureRecoveryPlan,
@@ -306,9 +307,8 @@ const splitLegacyFeatureVisibilityRules = (features = {}) => {
 
 // The identity-keyed per-feature edit draft; a Session or History value is
 // checked as the request rows are (services/feature-placement.js).
-const featureOverridesForState = (value) => Object.fromEntries(
+const featureOverridesForState = (value) => featureDraftMap(
   canonicalFeatureOverrides(isPlainObject(value) ? value : {})
-    .map((row) => [JSON.stringify([row.recordKey, row.biologicalFeatureId]), row])
 );
 
 const sanitizeExtractedFeatureForSession = (feature) => {
@@ -1613,6 +1613,14 @@ const preflightSessionImport = async (sessionData) => {
       recordDisplayDrafts: migrateLegacyRecordDisplayDrafts(
         currentStoredConfig.recordDisplayDrafts
       )
+    };
+  }
+  // Session 45 Feature placement drafts name their mode (R2).
+  if (sourceSessionVersion < SESSION_VERSION && isPlainObject(currentStoredConfig)
+    && Object.prototype.hasOwnProperty.call(currentStoredConfig, 'featurePlacementOverrides')) {
+    currentStoredConfig = {
+      ...currentStoredConfig,
+      featurePlacementOverrides: migrateSessionFeaturePlacements(currentStoredConfig.featurePlacementOverrides)
     };
   }
   const runtimeStoredConfig = currentSession && Object.prototype.hasOwnProperty.call(data, 'config')
@@ -3985,7 +3993,7 @@ const exportSessionDocument = async (
       editorState.featureCatalog = validateFeatureCatalog(
         editorState.featureCatalog,
         logicalResults,
-        { adopt: true, mode: state.mode.value }
+        { adopt: true, mode: state.generatedMode.value }
       );
     } catch (error) {
       console.warn('Session feature catalog validation failed.', normalizeUserFacingError(error));
@@ -4444,9 +4452,9 @@ const importSessionDocument = async (e, options = {}) => {
         : null;
       const migration = migrateSessionFeatureEdits({
         features,
+        mode: data.renderRequest?.mode || candidateMode,
         catalog: validatedSessionCatalog,
         legacy: validatedSessionCatalog ? null : {
-          mode: data.renderRequest?.mode || candidateMode,
           records: data.renderRequest?.records,
           features: [
             sourceFeatures?.extractedFeatures, recovered?.biologicalFeatures, recovered?.extractedFeatures,

@@ -713,7 +713,7 @@ const labelOnFacts = (page) => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
   // Per-feature edits by the rendered ID of the feature in view.
   const edits = (field) => Object.fromEntries(state.extractedFeatures.value.flatMap((feature) => {
-    const value = state.featureOverrides[JSON.stringify([feature.record_key, feature.biological_feature_id])]?.[field];
+    const value = state.featureOverrides[JSON.stringify([feature.scope, feature.record_key, feature.biological_feature_id])]?.[field];
     return value === null || value === undefined ? [] : [[feature.svg_id, value]];
   }));
   return {
@@ -851,9 +851,9 @@ test('Label visibility On for a feature that a visibility rule hides asks first,
   });
   await generate(page);
   const { fl1, fl2 } = await featureIdsByLocator(page);
-  const fl2Identity = await page.evaluate((id) => {
-    const feature = window.__GBDRAW_APP__.extractedFeatures.find((item) => item.svg_id === id);
-    return JSON.stringify([feature.record_key, feature.biological_feature_id]);
+  const fl2Identity = await page.evaluate(async (id) => {
+    const { featureIdentityKeyOf } = await import('./js/services/feature-placement.js');
+    return featureIdentityKeyOf(window.__GBDRAW_APP__.extractedFeatures.find((item) => item.svg_id === id));
   }, fl2);
   const labelState = () => labelEditorState(page, 'labels.circular.scope');
   const shown = async () => ({ labels: (await labelState()).labels, drawn: await drawnFeatureIds(page, [fl1, fl2]) });

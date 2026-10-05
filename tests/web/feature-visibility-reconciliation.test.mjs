@@ -11,8 +11,10 @@ import {
   removeUnresolvedFeatureEdits
 } from '../../gbdraw/web/js/app/feature-visibility.js';
 
-const key = (recordKey, featureId) => JSON.stringify([recordKey, featureId]);
+// The rows of a Linear request; R2 scopes each draft row to its mode.
+const key = (recordKey, featureId, scope = 'linear') => JSON.stringify([scope, recordKey, featureId]);
 const row = (recordKey, biologicalFeatureId, fields) => ({
+  scope: 'linear',
   recordKey,
   biologicalFeatureId,
   featureVisibility: null,
@@ -22,7 +24,7 @@ const row = (recordKey, biologicalFeatureId, fields) => ({
   ...fields
 });
 const placement = (recordKey, biologicalFeatureId) => ({
-  recordKey, biologicalFeatureId, placement: { kind: 'main' }
+  scope: 'linear', recordKey, biologicalFeatureId, placement: { kind: 'main' }
 });
 const notice = (recordKey, biologicalFeatureId, status, kinds) => ({
   recordKey, biologicalFeatureId, status, kinds, resultIndex: 0
@@ -46,10 +48,11 @@ test('source replacement removes only edits whose feature the new source does no
       notice('seq-a', 'gone', 'unresolved', ['placement', 'feature_visibility', 'label_text']),
       notice('seq-a', 'cropped', 'crop_excluded', ['feature_visibility'])
     ],
+    scope: 'linear',
     replacedRecordKeys: ['seq-a'],
     previousRecords: [{ recordKey: 'seq-a' }, { recordKey: 'seq-b' }],
     currentRecords: [{ recordKey: 'seq-a' }, { recordKey: 'seq-b' }],
-    biologicalFeatures: [{ record_key: 'seq-a', biological_feature_id: 'kept' }]
+    biologicalFeatures: [{ scope: 'linear', record_key: 'seq-a', biological_feature_id: 'kept' }]
   });
   assert.equal(removed, 3);
   assert.deepEqual(Object.keys(featureOverrides).sort(), [
@@ -61,20 +64,22 @@ test('source replacement removes only edits whose feature the new source does no
 test('a record the request dropped loses its edits; another mode keeps its own (R2)', () => {
   const featureOverrides = {
     [key('seq-a', 'f1')]: row('seq-a', 'f1', { featureVisibility: 'off', labelText: 'A' }),
-    [key('circular-x', 'f1')]: row('circular-x', 'f1', { labelVisibility: 'on' })
+    [key('seq-a', 'f1', 'circular')]: row('seq-a', 'f1', { scope: 'circular', labelVisibility: 'on' }),
+    [key('circular-x', 'f1', 'circular')]: row('circular-x', 'f1', { scope: 'circular', labelVisibility: 'on' })
   };
   const featurePlacementOverrides = { [key('seq-a', 'f1')]: placement('seq-a', 'f1') };
   const removed = pruneUnmatchedFeatureOverrides({
     featureOverrides,
     featurePlacementOverrides,
     notices: [],
+    scope: 'linear',
     replacedRecordKeys: ['seq-a'],
     previousRecords: [{ recordKey: 'seq-a' }, { recordKey: 'seq-b' }],
     currentRecords: [{ recordKey: 'seq-b' }],
     biologicalFeatures: []
   });
   assert.equal(removed, 3);
-  assert.deepEqual(Object.keys(featureOverrides), [key('circular-x', 'f1')]);
+  assert.deepEqual(Object.keys(featureOverrides), [key('seq-a', 'f1', 'circular'), key('circular-x', 'f1', 'circular')]);
   assert.deepEqual(featurePlacementOverrides, {});
 });
 
@@ -85,8 +90,9 @@ test('a kept label source text goes with a feature the replaced source lost', ()
   };
   assert.equal(pruneUnmatchedFeatureOverrides({
     featureOverrides,
+    scope: 'linear',
     replacedRecordKeys: ['seq-a'],
-    biologicalFeatures: [{ record_key: 'seq-a', biological_feature_id: 'kept' }]
+    biologicalFeatures: [{ scope: 'linear', record_key: 'seq-a', biological_feature_id: 'kept' }]
   }), 0);
   assert.deepEqual(Object.keys(featureOverrides), [key('seq-a', 'kept')]);
 });
@@ -95,11 +101,12 @@ test('without a replaced source unresolved edits stay until the user removes the
   const featureOverrides = { [key('seq-a', 'gone')]: row('seq-a', 'gone', { labelText: 'X', featureVisibility: 'off' }) };
   const featurePlacementOverrides = { [key('seq-a', 'gone')]: placement('seq-a', 'gone') };
   const notices = [notice('seq-a', 'gone', 'unresolved', ['placement', 'feature_visibility', 'label_text'])];
+  const scope = 'linear';
   assert.equal(pruneUnmatchedFeatureOverrides({
-    featureOverrides, featurePlacementOverrides, notices, replacedRecordKeys: []
+    featureOverrides, featurePlacementOverrides, notices, scope, replacedRecordKeys: []
   }), 0);
-  assert.equal(countUnresolvedFeatureEdits({ featureOverrides, featurePlacementOverrides, notices }), 3);
-  assert.equal(removeUnresolvedFeatureEdits({ featureOverrides, featurePlacementOverrides, notices }), 3);
+  assert.equal(countUnresolvedFeatureEdits({ featureOverrides, featurePlacementOverrides, notices, scope }), 3);
+  assert.equal(removeUnresolvedFeatureEdits({ featureOverrides, featurePlacementOverrides, notices, scope }), 3);
   assert.deepEqual([featureOverrides, featurePlacementOverrides], [{}, {}]);
-  assert.equal(countUnresolvedFeatureEdits({ featureOverrides, featurePlacementOverrides, notices }), 0);
+  assert.equal(countUnresolvedFeatureEdits({ featureOverrides, featurePlacementOverrides, notices, scope }), 0);
 });

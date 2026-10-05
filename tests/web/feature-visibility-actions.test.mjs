@@ -17,7 +17,7 @@ const rulePreparationFor = (state) => createRulePreparation({
 });
 const committedRequest = (selectedFeaturesSet) => () => ({ diagramOptions: { selectedFeaturesSet } });
 // Per-feature visibility is the identity row of the feature (design Q4).
-const identity = (id) => ({ record_key: 'record-1', biological_feature_id: `bio-${id}` });
+const identity = (id) => ({ scope: 'circular', record_key: 'record-1', biological_feature_id: `bio-${id}` });
 const modes = (overrides) => Object.fromEntries(Object.values(overrides)
   .filter((row) => row.featureVisibility !== null)
   .map((row) => [row.biologicalFeatureId.replace(/^bio-/, ''), row.featureVisibility]));

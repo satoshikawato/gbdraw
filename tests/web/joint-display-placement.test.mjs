@@ -67,7 +67,8 @@ for (const mode of ['circular', 'linear']) {
     state.adv.feature_overlap_tolerance_bp = 2;
     const recordKey = mode === 'circular' ? 'record-2' : 'card:2';
     const override = target(recordKey);
-    state.featurePlacementOverrides = { [JSON.stringify([recordKey, 'feature'])]: override };
+    const draftRow = { scope: mode, ...override };
+    state.featurePlacementOverrides = { [JSON.stringify([mode, recordKey, 'feature'])]: draftRow };
     const filesData = { c_gb: file, linearSeqs: [{ uid: 'card', gb: file }] };
     const result = buildCanonicalRenderRequest({ state, filesData, comparisonPlanSnapshot: mode === 'linear'
       ? resolveLinearComparisonPlan({ plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [], losatProgram: 'blastn', blastpMode: 'orthogroup' }) : null });
@@ -81,31 +82,46 @@ for (const mode of ['circular', 'linear']) {
     }
     const projected = projectCanonicalSessionRequest(result);
     assert.equal(projected.config.adv.feature_overlap_tolerance_bp, 2);
-    assert.deepEqual(Object.values(projected.config.featurePlacementOverrides), [override]);
+    assert.deepEqual(Object.values(projected.config.featurePlacementOverrides), [draftRow]);
     const old = structuredClone(result.renderRequest);
     old.schema = 6;
     assert.throws(() => projectCanonicalSessionRequest({ ...result, renderRequest: old }), /schema 7/);
   });
 }
 
-// OV-08 (R2): rows are keyed by mode-specific record keys, so the draft keeps
-// both modes' rows and a request carries only the rows of its own records.
+// OV-08, R-1 (R2): each draft row names its mode, so the draft keeps both
+// modes' rows and a request carries only the rows of its own mode and records,
+// also when the other mode uses the same record key.
 test('a request carries only its records\' placement rows and the draft keeps the other mode', () => {
-  const row = (recordKey, biologicalFeatureId, side) => ({ recordKey, biologicalFeatureId,
+  const row = (scope, recordKey, biologicalFeatureId, side) => ({ scope, recordKey, biologicalFeatureId,
     placement: side ? { kind: 'lane', side, level: 1 } : { kind: 'main' } });
-  const rows = [row('record-1', 'circular', 'outward'), row('card', 'above', 'above'), row('card', 'main'),
-    row('card', 'collision', 'inward'), row('removed', 'gone', 'below')];
-  const overrides = Object.fromEntries(rows.map((entry) => [JSON.stringify([entry.recordKey, entry.biologicalFeatureId]), entry]));
+  const rows = [row('circular', 'record-1', 'circular', 'outward'), row('linear', 'card', 'above', 'above'),
+    row('linear', 'card', 'main'), row('circular', 'card', 'collision', 'inward'), row('circular', 'card', 'main'),
+    row('linear', 'removed', 'gone', 'below')];
+  const overrides = Object.fromEntries(rows.map((entry) => [
+    JSON.stringify([entry.scope, entry.recordKey, entry.biologicalFeatureId]), entry]));
   assert.equal(canonicalFeaturePlacements(overrides).length, rows.length);
-  assert.throws(() => canonicalFeaturePlacements(overrides, 'linear'),
-    (error) => error.code === 'INPUT_INVALID' && error.context.field === 'schema');
+  // A draft lane is a side of its own mode.
+  assert.throws(() => canonicalFeaturePlacements({ ...overrides,
+    [JSON.stringify(['linear', 'card', 'wrong'])]: row('linear', 'card', 'wrong', 'inward') }),
+  (error) => error.code === 'INPUT_INVALID' && error.context.field === 'schema');
   const state = stateFor('linear');
   state.featurePlacementOverrides = overrides;
+  // Per-feature edits follow the same rule.
+  const edit = (scope, featureVisibility) => ({ scope, recordKey: 'card', biologicalFeatureId: 'main',
+    featureVisibility, labelVisibility: null, labelText: null, labelSourceText: null });
+  state.featureOverrides = { [JSON.stringify(['circular', 'card', 'main'])]: edit('circular', 'off'),
+    [JSON.stringify(['linear', 'card', 'main'])]: edit('linear', 'on') };
   const filesData = { linearSeqs: [{ uid: 'card', gb: file }] };
   const { renderRequest } = buildCanonicalRenderRequest({ state, filesData, comparisonPlanSnapshot:
     resolveLinearComparisonPlan({ plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [], losatProgram: 'blastn', blastpMode: 'orthogroup' }) });
-  assert.deepEqual(renderRequest.diagramOptions.featurePlacements, [rows[1], rows[2]]);
+  const requestRow = ({ scope: _scope, ...entry }) => entry;
+  assert.deepEqual(renderRequest.diagramOptions.featurePlacements, [requestRow(rows[1]), requestRow(rows[2])]);
+  assert.deepEqual(renderRequest.diagramOptions.featureOverrides, [
+    { recordKey: 'card', biologicalFeatureId: 'main', featureVisibility: 'on', labelVisibility: null, labelText: null }
+  ]);
   assert.equal(Object.keys(state.featurePlacementOverrides).length, rows.length);
+  assert.equal(Object.keys(state.featureOverrides).length, 2);
 });
 
 test('the Web names the feature of a placement row that Python reports (OV-09)', () => {
@@ -123,7 +139,7 @@ test('the Web names the feature of a placement row that Python reports (OV-09)',
 });
 
 test('Main, resolved side, bulk Auto and history share one draft owner', async () => {
-  const features = ['one', 'two'].map((id) => ({ record_key: 'card', biological_feature_id: id }));
+  const features = ['one', 'two'].map((id) => ({ scope: 'linear', record_key: 'card', biological_feature_id: id }));
   const overrides = {};
   const transactions = [];
   const state = { mode: { value: 'linear' }, selectedResultIndex: { value: 0 }, featurePlacementOverrides: overrides,
@@ -148,7 +164,7 @@ test('Main, resolved side, bulk Auto and history share one draft owner', async (
 
 for (const mode of ['circular', 'linear']) {
   test(`${mode} placement admission follows draft slots and preserves artifact geometry`, () => {
-    const feature = { record_key: 'record-1', biological_feature_id: 'feature' };
+    const feature = { scope: mode, record_key: 'record-1', biological_feature_id: 'feature' };
     const state = { mode: { value: mode }, form: createDefaultForm(), adv: createDefaultAdv(mode),
       featurePlacementOverrides: {}, featureCatalog: { value: { items: [{ recordKeys: ['record-1'] }] } },
       trackSlotResolvedGeometry: { value: { mode, records: [] } } };
@@ -205,9 +221,10 @@ for (const mode of ['circular', 'linear']) {
 // placements undrawable asks first. Reset is one step that applies the edit and
 // removes exactly those rows; cancel records nothing (OV-09, R10, R11).
 test('a layout edit that drops lanes asks before it resets those placements', async () => {
-  const lane = (recordKey, side) => ({ recordKey, biologicalFeatureId: 'f', placement: { kind: 'lane', side, level: 1 } });
-  const overrides = { outward: lane('c', 'outward'), above: lane('l', 'above'),
-    main: { recordKey: 'c', biologicalFeatureId: 'g', placement: { kind: 'main' } } };
+  const lane = (scope, recordKey, side) => ({ scope, recordKey, biologicalFeatureId: 'f',
+    placement: { kind: 'lane', side, level: 1 } });
+  const overrides = { outward: lane('circular', 'c', 'outward'), above: lane('linear', 'l', 'above'),
+    main: { scope: 'circular', recordKey: 'c', biologicalFeatureId: 'g', placement: { kind: 'main' } } };
   const state = { mode: { value: 'circular' }, form: { ...createDefaultForm(), track_type: 'middle' },
     adv: createDefaultAdv('circular'), featurePlacementOverrides: overrides };
   const steps = [];
@@ -244,7 +261,7 @@ test('a layout edit that drops lanes asks before it resets those placements', as
   assert.equal(steps.at(-1), 'Change setting');
 
   // A custom slot's lane uses the same predicate and the slot editor's transition.
-  overrides.outward = lane('c', 'outward');
+  overrides.outward = lane('circular', 'c', 'outward');
   state.adv.circular_track_slots_enabled = true;
   const slot = { id: 'features', renderer: 'features', enabled: true, side: 'overlay', params: { lane_direction: 'split' } };
   state.adv.circular_track_slots = [slot];

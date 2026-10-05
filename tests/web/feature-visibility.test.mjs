@@ -65,19 +65,24 @@ assert.equal(normalizeVisibilityMode('suppress'), 'exclude_matching');
 assert.equal(normalizeVisibilityMode('default'), 'default');
 assert.equal(normalizeVisibilityMode('bad'), 'default');
 
-// Per-feature visibility is the identity row's `featureVisibility` (design Q4).
+// Per-feature visibility is the identity row's `featureVisibility` (design Q4),
+// in the mode of the feature's Result (R2).
 {
-  const feature = (svgId, biologicalFeatureId) => ({ svg_id: svgId, record_key: 'rec', biological_feature_id: biologicalFeatureId });
-  const key = (biologicalFeatureId) => JSON.stringify(['rec', biologicalFeatureId]);
+  const feature = (svgId, biologicalFeatureId) => ({
+    svg_id: svgId, scope: 'circular', record_key: 'rec', biological_feature_id: biologicalFeatureId
+  });
+  const key = (biologicalFeatureId) => JSON.stringify(['circular', 'rec', biologicalFeatureId]);
   const overrides = {};
   assert.equal(getFeatureVisibilityOverride(overrides, feature('f.1_record_1', 'b1')), 'default');
   setFeatureVisibilityOverride(overrides, feature('f.1_record_1', 'b1'), 'off');
   assert.deepEqual(overrides, { [key('b1')]: {
-    recordKey: 'rec', biologicalFeatureId: 'b1', featureVisibility: 'off',
+    scope: 'circular', recordKey: 'rec', biologicalFeatureId: 'b1', featureVisibility: 'off',
     labelVisibility: null, labelText: null, labelSourceText: null
   } });
   // The same identity drawn with another rendered ID reads the same edit (OV-12).
   assert.equal(getFeatureVisibilityOverride(overrides, feature('f.1_record_2', 'b1')), 'off');
+  // The same identity in a Result of the other mode is another draft row.
+  assert.equal(getFeatureVisibilityOverride(overrides, { ...feature('f.1', 'b1'), scope: 'linear' }), 'default');
   setFeatureVisibilityOverride(overrides, feature('f.1_record_1', 'b1'), 'default');
   assert.deepEqual(overrides, {});
 
@@ -88,8 +93,9 @@ assert.equal(normalizeVisibilityMode('bad'), 'default');
     overrides
   );
   assert.deepEqual(changes, [
-    { recordKey: 'rec', biologicalFeatureId: 'b1', featureId: 'f.1', before: 'off', after: 'exclude_matching' },
-    { recordKey: 'rec', biologicalFeatureId: 'b2', featureId: 'f.2', before: 'default', after: 'exclude_matching' }
+    { scope: 'circular', recordKey: 'rec', biologicalFeatureId: 'b1', featureId: 'f.1', before: 'off', after: 'exclude_matching' },
+    { scope: 'circular', recordKey: 'rec', biologicalFeatureId: 'b2', featureId: 'f.2', before: 'default',
+      after: 'exclude_matching' }
   ]);
   applyFeatureVisibilityOverrideChanges(overrides, changes.map((change) => ({ ...change, mode: change.after })));
   assert.deepEqual(Object.values(overrides).map((row) => [row.biologicalFeatureId, row.featureVisibility]), [

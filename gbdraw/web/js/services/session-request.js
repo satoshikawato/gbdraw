@@ -2,6 +2,7 @@ import { writeCanonicalRecordReverseComplement } from '../app/record-display-opt
 import {
   canonicalFeatureOverrides,
   canonicalFeaturePlacements,
+  draftRowsOfRequest,
   featureIdentityKeyOf,
   requestFeatureOverrides,
   requestFeaturePlacements
@@ -2458,8 +2459,9 @@ const projectCanonicalRenderInput = ({
   const labelProjection = requestLabelProjection(state);
   const diagramOptions = {
     featurePlacements: requestFeaturePlacements(state.featurePlacementOverrides, state.mode.value, records),
-    // Per-feature edits by source identity (design Q4); other records' rows stay in the draft (R2).
-    featureOverrides: requestFeatureOverrides(state.featureOverrides, records, {
+    // Per-feature edits by source identity (design Q4); the rows of other
+    // records and of the other mode stay in the draft (R2).
+    featureOverrides: requestFeatureOverrides(state.featureOverrides, state.mode.value, records, {
       bulkLabelText: labelProjection.bulkLabelText
     }),
     configOverrides: buildConfigOverrides(state, {
@@ -4802,9 +4804,9 @@ export const projectCanonicalSessionRequest = ({
         reverseComplementOverride: null,
         anchorIntent: null
       }] : []),
-      featurePlacementOverrides: Object.fromEntries(canonicalFeaturePlacements(
+      featurePlacementOverrides: draftRowsOfRequest(canonicalFeaturePlacements(
         options.featurePlacements || [], renderRequest.mode
-      ).map((row) => [JSON.stringify([row.recordKey, row.biologicalFeatureId]), row])),
+      ), renderRequest.mode),
       circularConservation: renderRequest.mode === 'circular'
         ? projectCircularConservationConfig(options, files)
         : undefined
@@ -4813,9 +4815,9 @@ export const projectCanonicalSessionRequest = ({
       featureVisibilityManualRules: projectedFeatureVisibilityRules,
       // A request written without the Web draft (CLI, Python) carries its
       // per-feature edits only as these rows.
-      featureOverrides: Object.fromEntries(projectedFeatureOverrides.map((row) => [
-        JSON.stringify([row.recordKey, row.biologicalFeatureId]), { ...row, labelSourceText: null }
-      ])),
+      featureOverrides: draftRowsOfRequest(
+        projectedFeatureOverrides.map((row) => ({ ...row, labelSourceText: null })), renderRequest.mode
+      ),
       labelOverrideRows: projectedLabelOverrideRows
     },
     pipelineState: projectedProteinPipeline
@@ -5240,9 +5242,10 @@ export const projectCommittedEditorIntent = ({
   const resources = createResourceBuilder();
   const labelProjection = requestLabelProjection(state);
   // Per-feature edits are live editor intent too (design Q4).
-  options.featureOverrides = requestFeatureOverrides(state.featureOverrides, candidate.renderRequest.records, {
-    bulkLabelText: labelProjection.bulkLabelText
-  });
+  options.featureOverrides = requestFeatureOverrides(
+    state.featureOverrides, candidate.renderRequest.mode, candidate.renderRequest.records,
+    { bulkLabelText: labelProjection.bulkLabelText }
+  );
   addGeneratedTableResources(state, resources, options, tables, labelProjection);
   Object.assign(candidate.resources, resources.resources);
   projectCanonicalSessionRequest({

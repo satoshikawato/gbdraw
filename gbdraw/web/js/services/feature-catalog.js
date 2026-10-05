@@ -355,6 +355,8 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
   });
   expandedBiological.forEach((feature) => {
     feature.displayRecordId = displayRecordId(context, text(feature.recordKey));
+    // Record keys belong to the request's mode; per-feature edits name it (R2).
+    feature.scope = context.mode;
   });
   context.biologicalFeatures.push(...expandedBiological);
   context.scalarMetrics.biologicalFeatureCount += expandedBiological.length;

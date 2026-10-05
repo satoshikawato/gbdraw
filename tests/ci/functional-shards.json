@@ -56,6 +56,7 @@
     "tests/web/losat-thread-fault.playwright.spec.js": 0.06,
     "tests/web/mobile-feature-popup.playwright.spec.js": 0.96,
     "tests/web/mode-record-identity.playwright.spec.js": 4.76,
+    "tests/web/mode-scoped-feature-edits.playwright.spec.js": 0.38,
     "tests/web/mode-transition-editor-state.playwright.spec.js": 3.5,
     "tests/web/mode-transition-result.playwright.spec.js": 2.15,
     "tests/web/multi-result-edit-matrix.playwright.spec.js": 1.7,
@@ -91,21 +92,21 @@
       "tests/web/linear-multi-record.playwright.spec.js",
       "tests/web/live-edit-generate-equivalence.playwright.spec.js",
       "tests/web/losat-display-pair-reuse.playwright.spec.js",
-      "tests/web/losat-thread-fault.playwright.spec.js",
       "tests/web/multipart-label-regeneration.playwright.spec.js",
-      "tests/web/scale-visibility.playwright.spec.js"
+      "tests/web/scale-visibility.playwright.spec.js",
+      "tests/web/session-loading-feedback.playwright.spec.js"
     ],
     [
       "tests/web/accessibility.playwright.spec.js",
       "tests/web/circular-record-presentation.playwright.spec.js",
       "tests/web/color-captions.playwright.spec.js",
       "tests/web/error-boundary.playwright.spec.js",
+      "tests/web/export-lazy-loading.playwright.spec.js",
       "tests/web/gallery-session-regeneration.playwright.spec.js",
       "tests/web/history-generated-authority.playwright.spec.js",
       "tests/web/interactive-svg-v3.playwright.spec.js",
       "tests/web/non-edit-state-preservation.playwright.spec.js",
       "tests/web/session-active-mode.playwright.spec.js",
-      "tests/web/session-import-worker.playwright.spec.js",
       "tests/web/visual-state-regressions.playwright.spec.js"
     ],
     [
@@ -116,20 +117,20 @@
       "tests/web/gui-audit-20260930-options.playwright.spec.js",
       "tests/web/history-inputs.playwright.spec.js",
       "tests/web/linear-typography.playwright.spec.js",
+      "tests/web/losat-thread-fault.playwright.spec.js",
       "tests/web/mobile-feature-popup.playwright.spec.js",
       "tests/web/record-display-discovery.playwright.spec.js",
-      "tests/web/session-save-lifecycle.playwright.spec.js",
       "tests/web/settings-only-session.playwright.spec.js"
     ],
     [
       "tests/web/annotation-feature-identity.playwright.spec.js",
-      "tests/web/composition-layout.playwright.spec.js",
       "tests/web/contracts/current-session-lazy-materialization.playwright.spec.js",
       "tests/web/definition-replay-visual-state.playwright.spec.js",
       "tests/web/gallery-tutorial.playwright.spec.js",
       "tests/web/history-region.playwright.spec.js",
+      "tests/web/history-rule-preparation.playwright.spec.js",
+      "tests/web/mode-scoped-feature-edits.playwright.spec.js",
       "tests/web/multi-result-edit-matrix.playwright.spec.js",
-      "tests/web/palette-history-preservation.playwright.spec.js",
       "tests/web/right-drawer.playwright.spec.js",
       "tests/web/similarity-alignment-ui.playwright.spec.js",
       "tests/web/source-visibility-reconciliation.playwright.spec.js"
@@ -138,12 +139,12 @@
       "tests/web/annotation-resolution.playwright.spec.js",
       "tests/web/annotation-style-integration.playwright.spec.js",
       "tests/web/composite-session-resources.playwright.spec.js",
+      "tests/web/composition-layout.playwright.spec.js",
       "tests/web/computation-ownership.playwright.spec.js",
-      "tests/web/export-lazy-loading.playwright.spec.js",
       "tests/web/failed-generate-bindings.playwright.spec.js",
-      "tests/web/history-rule-preparation.playwright.spec.js",
       "tests/web/issue-564-label-leader-visibility.playwright.spec.js",
       "tests/web/mode-transition-editor-state.playwright.spec.js",
+      "tests/web/palette-history-preservation.playwright.spec.js",
       "tests/web/specific-color-pattern-drafts.playwright.spec.js",
       "tests/web/unmanaged-config-overrides.playwright.spec.js"
     ],
@@ -157,7 +158,7 @@
       "tests/web/mode-transition-result.playwright.spec.js",
       "tests/web/python-rule-parity.playwright.spec.js",
       "tests/web/session-cli-compatibility.playwright.spec.js",
-      "tests/web/session-loading-feedback.playwright.spec.js",
+      "tests/web/session-import-worker.playwright.spec.js",
       "tests/web/source-recipe-cli-parity.playwright.spec.js"
     ],
     [
@@ -182,7 +183,8 @@
       "tests/web/gui-audit-regressions.playwright.spec.js",
       "tests/web/history-comparison.playwright.spec.js",
       "tests/web/pixel-track-inputs.playwright.spec.js",
-      "tests/web/preview-bind-coalescing.playwright.spec.js"
+      "tests/web/preview-bind-coalescing.playwright.spec.js",
+      "tests/web/session-save-lifecycle.playwright.spec.js"
     ]
   ]
 }

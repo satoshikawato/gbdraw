@@ -6,7 +6,7 @@ import { validateCurrentWriterActiveConfig, validateAlignmentResetReceiptShape }
 import { migrateLegacyLinearLabelVisibility } from '../app/linear-label-visibility.js';
 import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
 import { canonicalFeatureOverrides, validateFeatureIdentityNotices } from './feature-placement.js';
-import { RENDERED_ID_FEATURE_EDIT_FIELDS } from './feature-edit-migration.js';
+import { RENDERED_ID_FEATURE_EDIT_FIELDS, migrateSessionFeaturePlacements } from './feature-edit-migration.js';
 
 // Session 44 introduced the current active-config and record-display draft
 // shapes; Session 45 keys per-feature edits by source identity (design Q4).
@@ -317,6 +317,13 @@ const validateSettingsOnlyDocument = data => {
       recordDisplayDrafts: migrateLegacyRecordDisplayDrafts(
         storedConfig.recordDisplayDrafts
       )
+    };
+  }
+  if (data.version < FEATURE_IDENTITY_SESSION_VERSION && isPlainObject(storedConfig)
+    && Object.prototype.hasOwnProperty.call(storedConfig, 'featurePlacementOverrides')) {
+    storedConfig = {
+      ...storedConfig,
+      featurePlacementOverrides: migrateSessionFeaturePlacements(storedConfig.featurePlacementOverrides)
     };
   }
   validateCurrentWriterActiveConfig({ mode: data.ui?.mode, storedConfig });
