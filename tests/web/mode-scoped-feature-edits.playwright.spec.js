@@ -67,13 +67,21 @@ test('a Circular Main placement and Feature visibility edit stay out of Linear r
   await generateAndWaitForResult(page);
   const linear = await committed(page, target.id);
   expect(linear).toMatchObject({ mode: 'linear', recordKeys: ['record-1'], featurePlacements: [], featureOverrides: [] });
-  // The Linear Result draws the feature; the popup reads no edit of its own.
+  // The Linear Result draws the feature; the feature reads no edit of its own,
+  // through the owners the popup and the Features list read.
   expect(linear.drawn).toBeGreaterThan(0);
-  expect(await page.evaluate((id) => {
+  expect(await page.evaluate(async (id) => {
     const app = window.__GBDRAW_APP__;
+    const { state } = await import('./js/state.js');
+    const { getFeatureVisibilityOverride } = await import('./js/app/feature-visibility.js');
     const feature = app.extractedFeatures.find((item) => item.biological_feature_id === id);
-    return [feature.scope, app.featurePlacementActions.valueFor(feature), app.getFeatureVisibility(feature)];
-  }, target.id)).toEqual(['linear', 'auto', 'default']);
+    return [
+      feature.scope,
+      app.featurePlacementActions.valueFor(feature),
+      getFeatureVisibilityOverride(state.featureOverrides, feature),
+      app.featureListState(feature).drawn
+    ];
+  }, target.id)).toEqual(['linear', 'auto', 'default', true]);
   // A mode change and the Linear Generate keep the Circular rows (R2).
   expect(linear.drafts).toEqual([[key], [key]]);
 
