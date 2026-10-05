@@ -33,6 +33,9 @@ const { createLegendEntryActions } = await import(
 const { createLegendStrokeActions } = await import(
   pathToFileURL(join(tempRoot, 'app', 'legend', 'stroke-actions.js'))
 );
+const { createLegendSortActions } = await import(
+  pathToFileURL(join(tempRoot, 'app', 'legend', 'sort-actions.js'))
+);
 assert.equal(SPECIFIC_COLOR_FILE_OWNER, 'specific-color-file');
 assert.deepEqual(parseTransformXY('translate(12.5,-3.25)'), { x: 12.5, y: -3.25 });
 assert.deepEqual(parseTransformXY('translate(.5 2e1)'), { x: 0.5, y: 20 });
@@ -241,6 +244,12 @@ const mockLegendEntry = (caption, color, x) => {
     featureLegend.children.map((entry) => entry.getAttribute('data-legend-key')),
     ['Beta', 'Gamma']
   );
+  // R3: History restore takes the Legend slots through orderLegendEntries, as
+  // live Sort and Move do.
+  assert.deepEqual(
+    featureLegend.children.map((entry) => entry.querySelector('text').getAttribute('transform')),
+    ['translate(22, 7)', 'translate(92, 7)']
+  );
   assert.equal(featureLegend.children[0].querySelector('path').getAttribute('fill'), '#abcdef');
   assert.equal(dirtyMarks, 1);
   assert.equal(layoutRefreshes, 1);
@@ -298,7 +307,7 @@ const mockLegendEntry = (caption, color, x) => {
   const capturedOwners = actions.captureLegendEntryOwners();
   featureLegend.children[0].setAttribute('data-legend-owner', 'specific-color-file');
   featureLegend.children[0].querySelector('path').setAttribute('fill', '#112233');
-  assert.equal(actions.reconcileLegendEntries({ restoreColorState: true, entryOwners: capturedOwners }), true);
+  assert.equal(actions.reconcileLegendEntries({ entryOwners: capturedOwners }), true);
   assert.equal(featureLegend.children[0].getAttribute('data-legend-owner'), null);
   assert.equal(featureLegend.children[0].querySelector('path').getAttribute('fill'), '#abcdef',
     'History restores the captured swatch, even when the original palette differs');
@@ -534,7 +543,7 @@ const mockLegendEntry = (caption, color, x) => {
   // shows. Undo restores Result 2's list from before the sort.
   render('Beta', 'Alpha', 'Own1');
   state.legendEntries.value = list('Alpha', 'Beta', 'Only2');
-  assert.equal(actions.reconcileLegendEntries({ restoreColorState: true, from: list('Only2', 'Beta', 'Alpha') }), true);
+  assert.equal(actions.reconcileLegendEntries({ from: list('Only2', 'Beta', 'Alpha') }), true);
   assert.deepEqual(drawn(), ['Alpha', 'Beta', 'Own1'], 'Undo orders Result 1 without the Result 2 entry');
   assert.deepEqual(listed(), ['Alpha', 'Beta', 'Own1'], 'the Legend panel lists Result 1');
   assert.equal(commits, 1);
@@ -542,15 +551,46 @@ const mockLegendEntry = (caption, color, x) => {
   // Redo of a deletion made on Result 2 removes the entry here too, and its
   // Undo returns this Result's entry; Only2 never appears.
   state.legendEntries.value = list('Alpha', 'Only2');
-  actions.reconcileLegendEntries({ restoreColorState: true, from: list('Alpha', 'Beta', 'Only2') });
+  actions.reconcileLegendEntries({ from: list('Alpha', 'Beta', 'Only2') });
   assert.deepEqual(drawn(), ['Alpha', 'Own1']);
   state.legendEntries.value = list('Alpha', 'Beta', 'Only2');
-  actions.reconcileLegendEntries({ restoreColorState: true, from: list('Alpha', 'Only2') });
+  actions.reconcileLegendEntries({ from: list('Alpha', 'Only2') });
   assert.deepEqual(drawn(), ['Alpha', 'Beta', 'Own1'], 'Undo returns the deleted entry to Result 1');
   assert.deepEqual(listed(), ['Alpha', 'Beta', 'Own1']);
 
   // A list that describes the displayed Result installs as is.
   state.legendEntries.value = list('Own1', 'Beta', 'Alpha');
-  actions.reconcileLegendEntries({ restoreColorState: true, from: list('Alpha', 'Beta', 'Own1') });
+  actions.reconcileLegendEntries({ from: list('Alpha', 'Beta', 'Own1') });
   assert.deepEqual(drawn(), ['Own1', 'Beta', 'Alpha']);
+
+  // Live Sort orders the mounted Legend through the entry owner's port, the
+  // ordering History restore uses (R3).
+  let sortCommits = 0;
+  const sortActions = createLegendSortActions({
+    state,
+    extractLegendEntries: actions.extractLegendEntries,
+    orderMountedLegend: actions.orderMountedLegend,
+    previewRuntime: { commitActiveResultEdit: (reason) => { if (reason === 'legend-order') sortCommits += 1; } }
+  });
+  actions.extractLegendEntries();
+  sortActions.sortLegendEntries('asc');
+  assert.deepEqual(drawn(), ['Alpha', 'Beta', 'Own1']);
+  assert.equal(sortCommits, 1);
+  sortActions.sortLegendEntries('asc');
+  assert.equal(sortCommits, 1, 'an order already shown records nothing');
+
+  // Outside a batch the restored list describes the displayed Result, so it
+  // installs as is whatever the step's other side lists (B19).
+  state.results.value = [{ name: 'r1.svg', content: 'unchanged' }];
+  state.legendEntries.value = list('Beta', 'Alpha', 'Only2');
+  actions.reconcileLegendEntries({ from: list('Only2', 'Alpha', 'Beta') });
+  assert.deepEqual(drawn(), ['Beta', 'Alpha', 'Only2']);
+
+  // Without a mounted Legend there is nothing to order.
+  const mounted = state.svgContainer.value;
+  state.svgContainer.value = null;
+  assert.equal(actions.orderMountedLegend(['Alpha']), null);
+  sortActions.sortLegendEntries('desc');
+  assert.equal(sortCommits, 1);
+  state.svgContainer.value = mounted;
 }

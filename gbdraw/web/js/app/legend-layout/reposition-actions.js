@@ -22,7 +22,8 @@ const setLegendVariant = (legendGroup, side) => {
 
 export const createLegendRepositionActions = ({
   state,
-  legendActions,
+  reflowDualLegendLayout,
+  reflowSingleLegendLayout,
   previewRuntime = null
 }) => {
   const {
@@ -38,10 +39,6 @@ export const createLegendRepositionActions = ({
     plotTitleUserOffset,
     canvasPadding
   } = state;
-  const {
-    reflowDualLegendLayout,
-    reflowSingleLegendLayout
-  } = legendActions;
   const syncStateFromComposition = (svg, binding = bindCompositionMetadata(svg)) => {
     const { metadata } = binding;
     const deltas = compositionUserDeltas(svg);

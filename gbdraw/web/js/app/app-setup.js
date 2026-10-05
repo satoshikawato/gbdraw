@@ -1188,8 +1188,6 @@ export const createAppSetup = () => {
     applyConfigData,
     buildUiStateData,
     applyUiStateData,
-    buildLegendEntryOwners: () => legendActions.captureLegendEntryOwners(),
-    buildCompositionIntent: () => legendLayout.captureCompositionIntent(),
     buildFeatureStateData,
     applyFeatureStateData,
     buildEditorStateData,
@@ -1300,10 +1298,13 @@ export const createAppSetup = () => {
     state,
     commitSpecificRules: (...args) => featureActions.commitSpecificRules(...args),
     rulePreparation,
-    history,
+    beginHistoryTransaction: history.begin,
+    commitHistoryTransaction: history.commit,
     previewRuntime,
     getCommittedRequest: getCommittedCanonicalRenderRequest
   });
+  // History captures register once their owner exists (R13).
+  historySnapshots.registerCapture('legend', legendActions.captureLegendEntryOwners);
   const svgActions = createSvgStyles({
     state,
     rulePreparation,
@@ -2244,8 +2245,10 @@ export const createAppSetup = () => {
   );
   const legendLayout = createLegendLayout({
     state,
-    legendActions,
-    history,
+    reflowDualLegendLayout: legendActions.reflowDualLegendLayout,
+    reflowSingleLegendLayout: legendActions.reflowSingleLegendLayout,
+    beginHistoryTransaction: history.begin,
+    commitHistoryTransaction: history.commit,
     previewRuntime,
     similarityAlignmentLifecycle: {
       beforeRecordDrag: () => similarityAlignmentActions?.beforeRecordDrag?.(),
@@ -2253,6 +2256,7 @@ export const createAppSetup = () => {
     }
   });
   legendActions.setLegendGeometryChangedHandler(legendLayout.refreshLegendGeometry);
+  historySnapshots.registerCapture('composition', legendLayout.captureCompositionIntent);
   const shouldSyncMountedLabelEditor = () => (
     isFeatureDrawerMounted.value
     || Boolean(clickedFeature.value)
@@ -2722,14 +2726,12 @@ export const createAppSetup = () => {
       change?.path?.[0] === 'config' && change.path[1] === 'rules'
     ));
     const editorState = changedDomains.has('editorState');
-    // B19: in a batch, the Legend list this step leaves tells whether the
-    // restored list describes the displayed Result or another Result.
+    // The Legend side of this step: the restored entry owners and `from`, the
+    // list the step leaves (the restored list when the step kept it). The
+    // Legend owner decides what it describes (B19).
     const legendChange = (Array.isArray(changes) ? changes : []).find(({ path } = {}) => (
       path?.length === 3 && path[0] === 'editorState' && path[1] === 'legend' && path[2] === 'entries'
     ));
-    const legendFrom = results.value.length > 1
-      ? (legendChange ? legendChange[direction === 'undo' ? 'after' : 'before'] : _intent?.editorState?.legend?.entries)
-      : null;
     const projected = await projectMountedEditorIntent({
       palette: colors,
       rules: colors,
@@ -2738,9 +2740,10 @@ export const createAppSetup = () => {
       rerender: true,
       legend: editorState
         ? {
-            restoreColorState: true,
             entryOwners: _intent.editorState.legend.entryOwners,
-            from: Array.isArray(legendFrom) ? legendFrom : null
+            from: legendChange
+              ? legendChange[direction === 'undo' ? 'after' : 'before']
+              : _intent.editorState.legend.entries
           }
         : null,
       strokes: editorState ? { changes } : null,

@@ -10,21 +10,25 @@ import {
 
 export const createLegendLayout = ({
   state,
-  legendActions,
-  history = null,
+  reflowDualLegendLayout,
+  reflowSingleLegendLayout,
+  beginHistoryTransaction = null,
+  commitHistoryTransaction = null,
   previewRuntime = null,
   similarityAlignmentLifecycle = null
 }) => {
   const diagramActions = createDiagramDragActions({
     state,
-    history,
+    beginHistoryTransaction,
+    commitHistoryTransaction,
     previewRuntime,
     similarityAlignmentLifecycle
   });
   const canvasActions = createLegendCanvasActions({ state, previewRuntime });
   const repositionActions = createLegendRepositionActions({
     state,
-    legendActions,
+    reflowDualLegendLayout,
+    reflowSingleLegendLayout,
     previewRuntime
   });
 
