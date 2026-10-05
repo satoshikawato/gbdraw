@@ -13,6 +13,7 @@ import { FEATURE_SELECTOR, getFeatureIdentity } from './svg-actions.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import { defaultFeatureRendering } from '../../utils/feature-rendering.js';
 import { readFileText } from '../../services/file-content-cache.js';
+import { normalizeTsvCell } from '../../utils/tsv-cell.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../legend/utils.js';
 
 export const EXCLUDED_GROUP_SELECTOR = [
@@ -1325,7 +1326,7 @@ export const createFeatureLabelActions = ({
       ? savedTable.trimEnd().split('\n')
       : Object.keys(labelTextBulkOverrides).sort((a, b) => a.localeCompare(b)).filter(Boolean)
         .map((sourceText) => `*\t*\tlabel\t^${escapeRegexLiteral(sourceText)}$\t${
-          String(labelTextBulkOverrides[sourceText] ?? '').replace(/[\t\r\n]+/g, ' ').trim()}`);
+          normalizeTsvCell(labelTextBulkOverrides[sourceText])}`);
     if (rows.length === 0) {
       window.alert('No label rules to export. Export Feature Edits TSV writes per-feature label edits.');
       return;

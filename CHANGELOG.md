@@ -30,6 +30,13 @@ write-up of a release.
   `foo#bar`) failed with "Missing values", and a Label override text or
   whitelist keyword such as `Gene #1` was silently cut to `Gene `. Only a line
   whose first non-blank character is `#` is a comment, as before.
+- Label whitelist and Qualifier priority (web app): a tab or line break typed
+  or pasted into a rule cell, such as a whitelist keyword, no longer adds a
+  column or row to the table that **Generate** writes. Each run of such
+  characters becomes one space and the cell is trimmed, as Feature visibility
+  and Label override cells already were. A tab used to shift the cells, so the
+  rule was read with the wrong feature type and qualifier, and a line break
+  split the rule into two rows and failed with "Missing values".
 - Default colors, Specific colors, Qualifier priority, Label whitelist or
   blacklist, Label overrides, and Feature visibility tables: a `"` is now part
   of the cell value; these tables are no longer read as CSV with quoting. A
@@ -40,6 +47,14 @@ write-up of a release.
   in CSV quotes now keeps those quotes in the value, so remove them from such
   files. The Feature override, Feature placement, and Annotation tables are
   unchanged.
+- Default colors, Specific colors, Qualifier priority, Label whitelist or
+  blacklist, Label overrides, and Feature visibility tables: a row with more
+  columns than the table has is now an error that names the file and line
+  ("Malformed line ... expected N columns"). Before, a Label whitelist,
+  Qualifier priority, or Default colors file whose first row had an extra
+  column was read shifted: `CDS`, `product`, `two`, `words` became feature type
+  `product`, qualifier `two`, keyword `words`, and no error was raised. Remove
+  the extra cells, or the tab inside a value, from such files.
 - Labels (web app): applying **Label visibility** **On** now asks **Feature Is
   Hidden** also for a feature that a **Feature Visibility** rule hides, for
   example a rule with a record ID, another qualifier, or a `hash`, `location`,

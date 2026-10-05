@@ -200,7 +200,9 @@ part of the cell value, so `foo#bar` and `Gene #1` are read as written.
 
 These tables are not CSV: a `"` is part of the cell value and never quotes a
 field, so `"quoted"` is read with its quotes and `"lead` is a valid value. A
-cell cannot contain a tab or a line break. The [feature override
+cell cannot contain a tab or a line break. A row with more cells than the table's columns is an
+error that names the file and line; a missing cell is reported as a missing
+value. The [feature override
 table](#feature-override-table) is different: it quotes a `label_text` that
 contains `"`.
 

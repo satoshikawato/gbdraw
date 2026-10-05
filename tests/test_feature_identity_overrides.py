@@ -576,3 +576,35 @@ def test_collide_fixture_layout_is_as_documented():
         ("misc_feature", 2401, 2500), ("tRNA", 2550, 2620),
         ("misc_feature", 2601, 2700), ("tRNA", 2750, 2820),
     ]
+
+
+def test_session_catalog_of_cropped_same_coordinate_features_beside_another_record(tmp_path):
+    """A Linear record drawn beside another record names a feature
+    `<drawn hash>_record_<n>`, and two features at the same coordinates add
+    `__instance_<source index>_<digest>` after that. Cropping the record changes
+    the drawn hash, so the catalog must read it under both suffixes."""
+    from gbdraw.linear import linear_main
+
+    testa, testb = (
+        f"{chunk.strip()}\n//\n"
+        for chunk in re.split(r"^//\s*$", (FIXTURES / "web_batch_two_records.gb").read_text(), flags=re.M)
+        if chunk.strip().startswith("LOCUS")
+    )
+    twin = '     CDS             301..600\n                     /locus_tag="TWIN_A"\n'
+    (tmp_path / "a.gb").write_text(testa.replace("     CDS             301..600\n", twin + "     CDS             301..600\n"))
+    (tmp_path / "b.gb").write_text(testb)
+    session = tmp_path / "out.gbdraw-session.json"
+    linear_main([
+        "--gbk", str(tmp_path / "a.gb"), str(tmp_path / "b.gb"), "--region", "TESTA:201-3800",
+        "-o", str(tmp_path / "out"), "-f", "svg", "--session_output", str(session),
+    ])
+
+    item = json.loads(session.read_text(encoding="utf-8"))["editorState"]["featureCatalog"]["items"][0]
+    twins = sorted(
+        (feature["svgId"], feature["biologicalFeatureId"])
+        for feature in item["features"]
+        if "__instance_" in feature["svgId"]
+    )
+    assert [biological_id for _, biological_id in twins] == ["f3ccacda4~1", "f3ccacda4~2"]
+    assert all(re.fullmatch(r"f[0-9a-f]{8}_record_1__instance_[12]_[0-9a-f]{16}", svg_id) for svg_id, _ in twins)
+    assert twins[0][0].split("_")[0] != "f3ccacda4"

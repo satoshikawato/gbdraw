@@ -1440,8 +1440,9 @@ export const createAppSetup = () => {
     linearTrackSlotsPanelOpen.value = !linearTrackSlotsPanelOpen.value;
   };
   const circularConservationFastaInput = ref(null);
-  const circularTrackSlotEditor = createCircularTrackSlotEditor({ state });
-  const linearTrackSlotEditor = createLinearTrackSlotEditor({ state });
+  const { trackLayoutActions } = featureActions.placementActions;
+  const circularTrackSlotEditor = createCircularTrackSlotEditor({ state, trackLayoutActions });
+  const linearTrackSlotEditor = createLinearTrackSlotEditor({ state, trackLayoutActions });
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
     state, getRecordCatalog: getAnnotationRecordCatalog,
@@ -1909,6 +1910,13 @@ export const createAppSetup = () => {
     refreshDepthTrackLabelsAfterRemoval(previousFiles, circularDepthRepresentatives(), idx);
     ensureDepthTrackConfigCount(activeDepthTrackCount());
     const activeFileCount = circularDepthRepresentatives().length;
+    // The removed series' rows before the Axis lower its index, as in Linear,
+    // so no other row crosses the Axis (R10).
+    const axis = adv.circular_track_slots_axis_index;
+    const removedBeforeAxis = Number.isInteger(axis)
+      ? adv.circular_track_slots.slice(0, axis)
+        .filter((slot) => isDefaultManagedDepthSlot(slot) && depthSlotTrackIndex(slot) === idx).length
+      : 0;
     adv.circular_track_slots.splice(
       0,
       adv.circular_track_slots.length,
@@ -1919,6 +1927,7 @@ export const createAppSetup = () => {
         managedPredicate: isDefaultManagedDepthSlot
       })
     );
+    if (removedBeforeAxis) adv.circular_track_slots_axis_index = axis - removedBeforeAxis;
     syncDepthTrackSlotLabelsForTrack(idx);
     circularTrackSlotEditor.normalizeCircularTrackSlots();
   };
@@ -4696,7 +4705,6 @@ export const createAppSetup = () => {
     circularTrackRendererLabel: circularTrackSlotEditor.circularTrackRendererLabel,
     resetCircularTrackSlotsFromSimpleControls: circularTrackSlotEditor.resetCircularTrackSlotsFromSimpleControls,
     resetCircularTrackSlotsToPreset: circularTrackSlotEditor.resetCircularTrackSlotsToPreset,
-    applyCircularTrackPreset: circularTrackSlotEditor.applyCircularTrackPreset,
     setCircularTrackSlotsEnabled: circularTrackSlotEditor.setCircularTrackSlotsEnabled,
     setCircularGcSuppressed: circularTrackSlotEditor.setCircularGcSuppressed,
     setCircularSkewSuppressed: circularTrackSlotEditor.setCircularSkewSuppressed,
@@ -4761,12 +4769,12 @@ export const createAppSetup = () => {
     duplicateLinearTrackSlot: linearTrackSlotEditor.duplicateLinearTrackSlot,
     canDuplicateLinearTrackSlot: linearTrackSlotEditor.canDuplicateLinearTrackSlot,
     removeLinearTrackSlot: linearTrackSlotEditor.removeLinearTrackSlot,
+    setLinearTrackSlotEnabled: linearTrackSlotEditor.setLinearTrackSlotEnabled,
     moveLinearTrackSlot: linearTrackSlotEditor.moveLinearTrackSlot,
     canMoveLinearTrackSlot: linearTrackSlotEditor.canMoveLinearTrackSlot,
     moveLinearTrackSlotAbove: linearTrackSlotEditor.moveLinearTrackSlotAbove,
     moveLinearTrackSlotBelow: linearTrackSlotEditor.moveLinearTrackSlotBelow,
     moveLinearTrackSlotToAxis: linearTrackSlotEditor.moveLinearTrackSlotToAxis,
-    moveLinearTrackSlotToPlacement: linearTrackSlotEditor.moveLinearTrackSlotToPlacement,
     canMoveLinearTrackSlotAbove: linearTrackSlotEditor.canMoveLinearTrackSlotAbove,
     canMoveLinearTrackSlotBelow: linearTrackSlotEditor.canMoveLinearTrackSlotBelow,
     canMoveLinearTrackSlotToAxis: linearTrackSlotEditor.canMoveLinearTrackSlotToAxis,

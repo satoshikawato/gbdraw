@@ -146,8 +146,8 @@ const indexHtml = await readFile(indexPath, 'utf8');
   '@change="importSession"',
   // B22: the Add Seq step commits after the ring record label read.
   '@change="addCircularConservationComparisonFile"',
-  // OV-09: a layout control and its placement dialog own one step (R10).
-  `@change="featurePlacementActions.changeLayoutSetting($event, 'separate_strands')"`,
+  // OV-09: the placement dialog's Reset owns its one step; the layout
+  // controls are adapter-owned (tests/web/track-layout-transition.test.mjs).
   `@click="featurePlacementActions.resolveLayoutChange('reset')"`
 ].forEach((handler) => {
   const escapedHandler = handler.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

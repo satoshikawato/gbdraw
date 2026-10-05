@@ -2924,7 +2924,7 @@
                                 </div>
                                 <div>
                                     <span class="input-label text-[10px] mb-1"><label for="linear-track-layout">Track Layout</label> <help-tip id="help-linear-track-layout" text="Simple mode only. Above places features above the axis, Features on axis centers them on it, and Below places them below it. Use Reset to copy this choice into the custom stack."></help-tip></span>
-                                    <select id="linear-track-layout" data-history-managed :value="form.linear_track_layout" @change="featurePlacementActions.changeLayoutSetting($event, 'linear_track_layout')" aria-describedby="help-linear-track-layout" class="form-input text-xs py-1" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled)" :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : ''">
+                                    <select id="linear-track-layout" :value="form.linear_track_layout" @change="featurePlacementActions.changeLayoutSetting($event, 'linear_track_layout')" aria-describedby="help-linear-track-layout" class="form-input text-xs py-1" :disabled="!semanticMutationAvailable || (adv.linear_track_slots_enabled)" :title="adv.linear_track_slots_enabled ? 'Simple mode only. Use Reset to rebuild the custom stack from this setting.' : ''">
                                         <option value="above">Above</option>
                                         <option value="middle">Features on axis</option>
                                         <option value="below">Below</option>
@@ -2933,7 +2933,7 @@
                                 <div class="grid grid-cols-2 gap-y-1 gap-x-1 p-1 bg-slate-50 rounded-lg">
                                     <div class="flex items-center text-xs">
                                         <label class="option-label flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
-                                            <input type="checkbox" data-history-managed :checked="form.separate_strands" @change="featurePlacementActions.changeLayoutSetting($event, 'separate_strands')" class="form-checkbox" aria-label="Separate Strands" aria-describedby="help-linear-separate-strands" :disabled="!semanticMutationAvailable">
+                                            <input type="checkbox" :checked="form.separate_strands" @change="featurePlacementActions.changeLayoutSetting($event, 'separate_strands')" class="form-checkbox" aria-label="Separate Strands" aria-describedby="help-linear-separate-strands" :disabled="!semanticMutationAvailable">
                                             <span>Separate Strands</span>
                                         </label>
                                         <help-tip id="help-linear-separate-strands" text="Display features on separate strands for better distinction."></help-tip>
@@ -3017,13 +3017,13 @@
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <label class="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 cursor-pointer select-none" title="Use the saved custom stack for rendering. Disabling it preserves the stack for later use.">
-                                                <input type="checkbox" :checked="adv.linear_track_slots_enabled" @change="setLinearTrackSlotsEnabled($event.target.checked)" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                                <input type="checkbox" :checked="adv.linear_track_slots_enabled" @change="setLinearTrackSlotsEnabled($event.target.checked, $event)" class="form-checkbox" :disabled="!semanticMutationAvailable">
                                                 Use custom stack
                                             </label>
                                             <button
                                                 type="button"
                                                 class="btn btn-secondary text-[10px] py-0.5 px-2"
-                                                @click="resetLinearTrackSlotsFromSimpleControls"
+                                                @click="resetLinearTrackSlotsFromSimpleControls($event)"
                                                 title="Replace the current custom stack from the simple controls; this is the only action that regenerates it"
                                              :disabled="!semanticMutationAvailable">
                                                 <i class="ph ph-arrow-counter-clockwise"></i>
@@ -3074,19 +3074,19 @@
                                                         <span class="h-px flex-1 bg-slate-300"></span>
                                                     </div>
                                                     <div class="track-slot-row-head">
-                                                        <input type="checkbox" v-model="entry.slot.enabled" class="form-checkbox" :title="entry.slot.enabled ? 'Enabled' : 'Disabled'" :aria-label="`Enable linear track slot ${entry.slot.id}`" :disabled="!semanticMutationAvailable">
+                                                        <input type="checkbox" :checked="entry.slot.enabled" @change="setLinearTrackSlotEnabled(entry.slot, $event.target.checked, $event)" class="form-checkbox" :title="entry.slot.enabled ? 'Enabled' : 'Disabled'" :aria-label="`Enable linear track slot ${entry.slot.id}`" :disabled="!semanticMutationAvailable">
                                                         <input v-model.trim="entry.slot.id" :aria-label="`Linear track slot id ${entry.slot.id}`" class="form-input px-1 py-0.5 text-[10px]" placeholder="slot_id" title="Slot id" :disabled="!semanticMutationAvailable">
-                                                        <select v-model="entry.slot.renderer" @change="updateLinearTrackSlotRenderer(entry.slot)" :aria-label="`Linear track renderer ${entry.slot.id}`" class="form-input px-1 py-0.5 text-[10px] min-w-0" title="Renderer" :disabled="!semanticMutationAvailable">
+                                                        <select :value="entry.slot.renderer" @change="updateLinearTrackSlotRenderer(entry.slot, $event.target.value, $event)" :aria-label="`Linear track renderer ${entry.slot.id}`" class="form-input px-1 py-0.5 text-[10px] min-w-0" title="Renderer" :disabled="!semanticMutationAvailable">
                                                             <option v-for="renderer in linearTrackRenderers" :key="renderer" :value="renderer">{{ linearTrackRendererLabel(renderer) }}</option>
                                                         </select>
                                                         <div class="track-slot-row-actions">
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlot(entry.index, entry.index - 1)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlot(entry.index, -1))" title="Move up within side"><i class="ph ph-arrow-up"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlot(entry.index, entry.index + 1)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlot(entry.index, 1))" title="Move down within side"><i class="ph ph-arrow-down"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotAbove(entry.index)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotAbove(entry.index))" title="Move above Axis"><i class="ph ph-arrow-line-up"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotBelow(entry.index)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotBelow(entry.index))" title="Move below Axis"><i class="ph ph-arrow-line-down"></i></button>
-                                                            <button v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotToAxis(entry.index)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotToAxis(entry.index))" title="Track on Axis"><i class="ph ph-record"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateLinearTrackSlot(entry.index)" :disabled="!canDuplicateLinearTrackSlot(entry.slot)" :title="canDuplicateLinearTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid'"><i class="ph ph-copy"></i></button>
-                                                            <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeLinearTrackSlot(entry.index)" title="Delete" :disabled="!semanticMutationAvailable"><i class="ph ph-trash"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlot(entry.index, entry.index - 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlot(entry.index, -1))" title="Move up within side"><i class="ph ph-arrow-up"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlot(entry.index, entry.index + 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlot(entry.index, 1))" title="Move down within side"><i class="ph ph-arrow-down"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotAbove(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotAbove(entry.index))" title="Move above Axis"><i class="ph ph-arrow-line-up"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotBelow(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotBelow(entry.index))" title="Move below Axis"><i class="ph ph-arrow-line-down"></i></button>
+                                                            <button v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotToAxis(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotToAxis(entry.index))" title="Track on Axis"><i class="ph ph-record"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateLinearTrackSlot(entry.index, $event)" :disabled="!canDuplicateLinearTrackSlot(entry.slot)" :title="canDuplicateLinearTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid'"><i class="ph ph-copy"></i></button>
+                                                            <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeLinearTrackSlot(entry.index, $event)" title="Delete" :disabled="!semanticMutationAvailable"><i class="ph ph-trash"></i></button>
                                                         </div>
                                                     </div>
                                                     <div class="track-slot-geometry-grid">
@@ -3117,8 +3117,7 @@
                                                     <div v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'annotations'" class="grid grid-cols-1 gap-1">
                                                         <select
                                                             :value="entry.slot.side"
-                                                            data-history-managed
-                                                            @change="featurePlacementActions.changeFeatureSlotSide($event, entry.slot, updateLinearTrackSlotPlacement)"
+                                                            @change="updateLinearTrackSlotPlacement(entry.slot, $event.target.value, $event)"
                                                             class="form-input px-1 py-0.5 text-[10px]"
                                                             title="Track placement" aria-label="Track placement"
                                                          :disabled="!semanticMutationAvailable">
@@ -3260,7 +3259,7 @@
                                             <select v-model="linearTrackNewRenderer" aria-label="New linear track renderer" class="form-input py-1 text-[10px] min-w-0" :disabled="!semanticMutationAvailable">
                                                 <option v-for="renderer in linearTrackRenderers" :key="renderer" :value="renderer">{{ linearTrackRendererLabel(renderer) }}</option>
                                             </select>
-                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2 shrink-0" @click="addLinearTrackSlot(linearTrackNewRenderer)" :disabled="!semanticMutationAvailable || (!canAddLinearTrackRenderer(linearTrackNewRenderer))" :title="canAddLinearTrackRenderer(linearTrackNewRenderer) ? 'Add track' : 'Add a required source first or remove the conflicting Features row'">
+                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2 shrink-0" @click="addLinearTrackSlot(linearTrackNewRenderer, $event)" :disabled="!semanticMutationAvailable || (!canAddLinearTrackRenderer(linearTrackNewRenderer))" :title="canAddLinearTrackRenderer(linearTrackNewRenderer) ? 'Add track' : 'Add a required source first or remove the conflicting Features row'">
                                                 <i class="ph ph-plus"></i>
                                                 Add track
                                             </button>
@@ -3275,7 +3274,7 @@
                             <template v-else>
                                 <div v-if="!adv.circular_track_slots_enabled">
                                     <span class="input-label text-[10px] mb-1"><label for="circular-track-preset">Track Preset</label> <help-tip id="help-circular-track-preset" text="Applies the live circular track arrangement used while Custom Track Slots is off. Custom Track Slots inherit this preset when enabled."></help-tip></span>
-                                    <select id="circular-track-preset" data-history-managed :value="form.track_type" @change="featurePlacementActions.changeLayoutSetting($event, 'track_type')" aria-describedby="help-circular-track-preset" class="form-input text-xs py-1" :disabled="!semanticMutationAvailable">
+                                    <select id="circular-track-preset" :value="form.track_type" @change="featurePlacementActions.changeLayoutSetting($event, 'track_type')" aria-describedby="help-circular-track-preset" class="form-input text-xs py-1" :disabled="!semanticMutationAvailable">
                                         <option value="tuckin">Tuckin</option>
                                         <option value="middle">Middle</option>
                                         <option value="spreadout">Spreadout</option>
@@ -3287,7 +3286,7 @@
                                         :class="enabledOptionClass"
                                         title="Display features on separate strands for better distinction."
                                     >
-                                        <input type="checkbox" v-model="form.separate_strands" class="form-checkbox" aria-label="Separate Strands" :disabled="!semanticMutationAvailable">
+                                        <input type="checkbox" :checked="form.separate_strands" @change="featurePlacementActions.changeLayoutSetting($event, 'separate_strands')" class="form-checkbox" aria-label="Separate Strands" :disabled="!semanticMutationAvailable">
                                         <span>Separate Strands</span>
                                     </label>
                                     <label
@@ -3345,13 +3344,13 @@
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <label class="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 cursor-pointer select-none" title="Use the saved custom stack for rendering. Disabling it preserves the stack for later use.">
-                                                <input type="checkbox" :checked="adv.circular_track_slots_enabled" @change="setCircularTrackSlotsEnabled($event.target.checked)" class="form-checkbox" :disabled="!semanticMutationAvailable">
+                                                <input type="checkbox" :checked="adv.circular_track_slots_enabled" @change="setCircularTrackSlotsEnabled($event.target.checked, $event)" class="form-checkbox" :disabled="!semanticMutationAvailable">
                                                 Use custom stack
                                             </label>
                                             <button
                                                 type="button"
                                                 class="btn btn-secondary text-[10px] py-0.5 px-2"
-                                                @click="resetCircularTrackSlotsFromSimpleControls"
+                                                @click="resetCircularTrackSlotsFromSimpleControls($event)"
                                                 title="Replace the current custom stack from the simple controls; this is the only action that regenerates it"
                                              :disabled="!semanticMutationAvailable">
                                                 <i class="ph ph-arrow-counter-clockwise"></i>
@@ -3369,9 +3368,9 @@
                                             Custom stack is saved but inactive; generation uses the simple track controls.
                                         </div>
                                         <div class="grid grid-cols-3 gap-1">
-                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('tuckin')" title="Replace the current custom stack with the Tuckin template" :disabled="!semanticMutationAvailable">Reset to Tuckin</button>
-                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('middle')" title="Replace the current custom stack with the Middle template" :disabled="!semanticMutationAvailable">Reset to Middle</button>
-                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('spreadout')" title="Replace the current custom stack with the Spreadout template" :disabled="!semanticMutationAvailable">Reset to Spreadout</button>
+                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('tuckin', $event)" title="Replace the current custom stack with the Tuckin template" :disabled="!semanticMutationAvailable">Reset to Tuckin</button>
+                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('middle', $event)" title="Replace the current custom stack with the Middle template" :disabled="!semanticMutationAvailable">Reset to Middle</button>
+                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('spreadout', $event)" title="Replace the current custom stack with the Spreadout template" :disabled="!semanticMutationAvailable">Reset to Spreadout</button>
                                         </div>
                                         <div class="rounded border border-sky-200 bg-sky-50 px-2 py-1.5 text-[10px] leading-snug text-slate-600">
                                             <div class="flex items-center gap-1 font-semibold text-sky-800">
@@ -3430,7 +3429,7 @@
                                                         <input
                                                             type="checkbox"
                                                             :checked="circularTrackSlotEffectiveEnabled(entry.slot)"
-                                                            @change="setCircularTrackSlotEnabled(entry.slot, $event.target.checked)"
+                                                            @change="setCircularTrackSlotEnabled(entry.slot, $event.target.checked, $event)"
                                                             class="form-checkbox"
                                                             :disabled="!semanticMutationAvailable || (circularTrackSlotHiddenBySuppress(entry.slot))"
                                                             :title="circularTrackSlotSuppressMessage(entry.slot) || (entry.slot.enabled ? 'Enabled' : 'Disabled')"
@@ -3439,7 +3438,7 @@
                                                         <input v-model.trim="entry.slot.id" :aria-label="`Circular track slot id ${entry.slot.id}`" class="form-input px-1 py-0.5 text-[10px]" placeholder="slot_id" :disabled="!semanticMutationAvailable">
                                                         <select
                                                             :value="entry.slot.renderer"
-                                                            @change="updateCircularTrackSlotRenderer(entry.slot, $event.target.value)"
+                                                            @change="updateCircularTrackSlotRenderer(entry.slot, $event.target.value, $event)"
                                                             :aria-label="`Circular track renderer ${entry.slot.id}`"
                                                             class="form-input px-1 py-0.5 text-[10px] min-w-0"
                                                          :disabled="!semanticMutationAvailable">
@@ -3448,13 +3447,13 @@
                                                             </option>
                                                         </select>
                                                         <div class="track-slot-row-actions">
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index - 1)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlot(entry.index, -1))" title="Move outward"><i class="ph ph-arrow-up"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index + 1)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlot(entry.index, 1))" title="Move inward"><i class="ph ph-arrow-down"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotOutside(entry.index)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotOutside(entry.index))" title="Move outside Axis"><i class="ph ph-arrow-line-up"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotInside(entry.index)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotInside(entry.index))" title="Move inside Axis"><i class="ph ph-arrow-line-down"></i></button>
-                                                            <button v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'ticks' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotToAxis(entry.index)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotToAxis(entry.index))" title="Track on Axis"><i class="ph ph-record"></i></button>
-                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index)" :disabled="!canDuplicateCircularTrackSlot(entry.slot)" :title="isManagedCircularConservationSlot(entry.slot) ? 'Comparison tracks are managed by Series' : (canDuplicateCircularTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid')"><i class="ph ph-copy"></i></button>
-                                                            <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(entry.index)" :disabled="!semanticMutationAvailable || (isManagedCircularConservationSlot(entry.slot))" :title="isManagedCircularConservationSlot(entry.slot) ? 'Remove this source in Pairwise Comparisons' : 'Remove'"><i class="ph ph-trash"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index - 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlot(entry.index, -1))" title="Move outward"><i class="ph ph-arrow-up"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index + 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlot(entry.index, 1))" title="Move inward"><i class="ph ph-arrow-down"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotOutside(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotOutside(entry.index))" title="Move outside Axis"><i class="ph ph-arrow-line-up"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotInside(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotInside(entry.index))" title="Move inside Axis"><i class="ph ph-arrow-line-down"></i></button>
+                                                            <button v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'ticks' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotToAxis(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotToAxis(entry.index))" title="Track on Axis"><i class="ph ph-record"></i></button>
+                                                            <button type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index, $event)" :disabled="!canDuplicateCircularTrackSlot(entry.slot)" :title="isManagedCircularConservationSlot(entry.slot) ? 'Comparison tracks are managed by Series' : (canDuplicateCircularTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid')"><i class="ph ph-copy"></i></button>
+                                                            <button type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(entry.index, $event)" :disabled="!semanticMutationAvailable || (isManagedCircularConservationSlot(entry.slot))" :title="isManagedCircularConservationSlot(entry.slot) ? 'Remove this source in Pairwise Comparisons' : 'Remove'"><i class="ph ph-trash"></i></button>
                                                         </div>
                                                     </div>
                                                     <div v-if="circularTrackSlotHiddenBySuppress(entry.slot)" class="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-700">
@@ -3503,8 +3502,7 @@
                                                     <div v-if="entry.slot.renderer === 'features'" class="grid grid-cols-1 gap-1">
                                                         <select
                                                             :value="entry.slot.params.lane_direction"
-                                                            data-history-managed
-                                                            @change="featurePlacementActions.changeFeatureSlotSide($event, entry.slot, updateCircularTrackFeatureLane)"
+                                                            @change="updateCircularTrackFeatureLane(entry.slot, $event.target.value, $event)"
                                                             :aria-label="`Feature lane ${entry.slot.id}`"
                                                             class="form-input px-1 py-0.5 text-[10px]"
                                                          :disabled="!semanticMutationAvailable">
@@ -3527,7 +3525,7 @@
                                                             <option value="">Select annotation set</option>
                                                             <option v-for="set in annotationSets" :key="`circular-annotation-set-${set.id}`" :value="set.id">{{ set.id }}</option>
                                                         </select>
-                                                        <select :value="entry.slot.side" @change="updateCircularTrackSlotPlacement(entry.slot, $event.target.value)" aria-label="Annotation placement" class="form-input px-1 py-0.5 text-[10px]" title="Placement" :disabled="!semanticMutationAvailable"><option value="outside">Outside axis</option><option value="inside">Inside axis</option><option value="overlay">Overlay anchor</option></select>
+                                                        <select :value="entry.slot.side" @change="updateCircularTrackSlotPlacement(entry.slot, $event.target.value, $event)" aria-label="Annotation placement" class="form-input px-1 py-0.5 text-[10px]" title="Placement" :disabled="!semanticMutationAvailable"><option value="outside">Outside axis</option><option value="inside">Inside axis</option><option value="overlay">Overlay anchor</option></select>
                                                         <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.anchor_slot" class="form-input px-1 py-0.5 text-[10px]" title="Enabled drawable anchor" aria-label="Enabled drawable anchor" :disabled="!semanticMutationAvailable">
                                                             <option value="">Select anchor</option>
                                                             <option v-if="!circularAnnotationAnchorIsKnown(entry.slot) && entry.slot.params.anchor_slot" :value="entry.slot.params.anchor_slot">Invalid: {{ entry.slot.params.anchor_slot }}</option>
@@ -3630,7 +3628,7 @@
                                                 <button
                                                     type="button"
                                                     class="btn btn-secondary text-[10px] py-1 px-2 shrink-0"
-                                                    @click="addCircularTrackSlot(circularTrackNewRenderer)"
+                                                    @click="addCircularTrackSlot(circularTrackNewRenderer, $event)"
                                                     :disabled="!semanticMutationAvailable || (!canAddCircularTrackRenderer(circularTrackNewRenderer))"
                                                     :title="canAddCircularTrackRenderer(circularTrackNewRenderer) ? 'Add track' : 'Add a required source first or remove the conflicting Features row'"
                                                 >
@@ -7584,8 +7582,8 @@
                      class="w-full max-w-md rounded-xl border border-slate-200 bg-white p-4 shadow-2xl">
                 <h2 id="placement-layout-change-title" class="text-base font-bold text-slate-800">Reset Feature placements?</h2>
                 <p id="placement-layout-change-description" class="mt-2 text-sm leading-relaxed text-slate-600">
-                    Changing {{ featurePlacementActions.layoutChange.setting }} to {{ featurePlacementActions.layoutChange.value }}
-                    leaves {{ featurePlacementActions.layoutChange.count }} Feature placement{{ featurePlacementActions.layoutChange.count === 1 ? ' without its lane' : 's without their lanes' }}.
+                    <template v-if="featurePlacementActions.layoutChange.value">Changing {{ featurePlacementActions.layoutChange.setting }} to {{ featurePlacementActions.layoutChange.value }}</template><template v-else>{{ featurePlacementActions.layoutChange.setting }}</template>
+                    leaves {{ featurePlacementActions.layoutChange.count }} {{ featurePlacementActions.layoutChange.scope }}Feature placement{{ featurePlacementActions.layoutChange.count === 1 ? ' without its lane' : 's without their lanes' }}.
                 </p>
                 <div class="mt-4 grid min-w-0 gap-2 sm:grid-cols-2">
                     <button type="button" data-history-managed data-placement-layout-primary :disabled="!semanticMutationAvailable" @click="featurePlacementActions.resolveLayoutChange('reset')"

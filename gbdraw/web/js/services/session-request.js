@@ -15,6 +15,8 @@ import {
   parsePriorityRules,
   parseSpecificRules,
   parseWhitelistRules,
+  serializeLabelWhitelistRules,
+  serializeQualifierPriorityRules,
   serializeSpecificRules
 } from '../app/file-imports.js';
 import {
@@ -76,7 +78,7 @@ import {
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
 } from '../app/track-slot-validation.js';
-import { annotationOptionsPayload, normalizeAnnotationSets } from '../app/annotations/state.js';
+import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from '../app/annotations/state.js';
 import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
 import { diagnosticError } from './error-normalization.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
@@ -1365,13 +1367,10 @@ const addLabelWhitelistResource = (state, resources, diagramOptions) => {
   if (preservedWhitelist) {
     diagramOptions.labelWhitelistFile = preservedWhitelist;
   } else if (state.filterMode.value === 'Whitelist' && state.manualWhitelist.length > 0) {
-    const whitelist = state.manualWhitelist
-      .filter((rule) => rule?.feat && rule?.qual)
-      .map((rule) => `${rule.feat}\t${rule.qual}\t${rule.key || ''}`)
-      .join('\n');
+    const whitelist = serializeLabelWhitelistRules(state.manualWhitelist);
     if (whitelist) {
       diagramOptions.labelWhitelistFile = fileRef(resources.addText(
-        'label-whitelist-file', 'label-whitelist-file', 'label-whitelist.tsv', `${whitelist}\n`
+        'label-whitelist-file', 'label-whitelist-file', 'label-whitelist.tsv', whitelist
       ));
     }
   }
@@ -1379,10 +1378,7 @@ const addLabelWhitelistResource = (state, resources, diagramOptions) => {
 
 const addQualifierPriorityResource = (state, resources, diagramOptions) => {
   const publicationFiles = state.canonicalPublicationFiles || {};
-  const priority = state.manualPriorityRules
-    .filter((rule) => rule?.feat && rule?.order)
-    .map((rule) => `${rule.feat}\t${rule.order}`)
-    .join('\n');
+  const priority = serializeQualifierPriorityRules(state.manualPriorityRules);
   const priorityRef = publicationFileRef(
     resources, publicationFiles, 'qualifier_priority', 'qualifier-priority-file'
   );
@@ -1393,7 +1389,7 @@ const addQualifierPriorityResource = (state, resources, diagramOptions) => {
     ] = priorityRef;
   } else if (priority) {
     diagramOptions.qualifierPriorityFile = fileRef(resources.addText(
-      'qualifier-priority-file', 'qualifier-priority-file', 'qualifier-priority.tsv', `${priority}\n`
+      'qualifier-priority-file', 'qualifier-priority-file', 'qualifier-priority.tsv', priority
     ));
   }
 };
@@ -2495,7 +2491,7 @@ const projectCanonicalRenderInput = ({
       : {})
   };
   if (Array.isArray(state.annotationSets) && state.annotationSets.length > 0) {
-    diagramOptions.annotations = annotationOptionsPayload(state.annotationSets, records);
+    diagramOptions.annotations = annotationOptionsPayload(state.annotationSets, state.mode.value, records);
   }
   if (state.mode.value === 'circular') {
     diagramOptions.keepFullDefinitionWithPlotTitle = Boolean(state.adv.keep_full_definition_with_plot_title);
@@ -4793,7 +4789,7 @@ export const projectCanonicalSessionRequest = ({
       whitelist: projectedWhitelist,
       blacklistText: projectedBlacklistText,
       linearRecordLayout: linearLayout,
-      annotationSets: normalizeAnnotationSets(options.annotations?.sets),
+      annotationSets: draftAnnotationSetsOfRequest(options.annotations?.sets, renderRequest.mode),
       recordDisplayDrafts: records.flatMap((record, index) => (record.display?.isCircular != null || record.display?.startCoordinate != null) ? [{
         scope: renderRequest.mode,
         sourceUid: renderRequest.mode === 'linear' ? String(files.linearSeqs[index]?.uid || record.recordKey) : 'circular',

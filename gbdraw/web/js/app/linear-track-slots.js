@@ -819,7 +819,9 @@ const replaceObjectContents = (target, source) => {
   return target;
 };
 
-export const createLinearTrackSlotEditor = ({ state }) => {
+// `trackLayoutActions` is the feature placement owner's transition (R10, Q3):
+// every stack edit that can change the feature slot runs through it.
+export const createLinearTrackSlotEditor = ({ state, trackLayoutActions = (actions) => actions }) => {
   const { adv, form } = state;
   const editorKeys = new WeakMap();
   let nextEditorKey = 1;
@@ -1098,6 +1100,13 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     normalizeCurrentSlots();
   };
 
+  const setLinearTrackSlotEnabled = (slot, enabled) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
+    if (!slot) return;
+    slot.enabled = Boolean(enabled);
+  };
+
   const removeLinearTrackSlot = (index) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -1276,11 +1285,11 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     moveLinearTrackSlotToPlacement(index, 'overlay');
   };
 
-  const updateLinearTrackSlotRenderer = (slot) => {
+  const updateLinearTrackSlotRenderer = (slot, renderer = slot?.renderer) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!slot) return;
-    slot.renderer = normalizeRenderer(slot.renderer);
+    slot.renderer = normalizeRenderer(renderer);
     slot.params = cloneParams(slot.params);
     if (slot.renderer === 'depth') {
       slot.params.track_index = normalizeTrackIndex(slot.params.track_index) ?? 0;
@@ -1606,25 +1615,27 @@ export const createLinearTrackSlotEditor = ({ state }) => {
     linearTrackSlotEditorKey,
     linearTrackRendererLabel,
     normalizeLinearTrackSlots: normalizeCurrentSlots,
-    resetLinearTrackSlotsFromSimpleControls,
     changeLinearDepthSources,
-    setLinearTrackSlotsEnabled,
-    addLinearTrackSlot,
+    ...trackLayoutActions({
+      resetLinearTrackSlotsFromSimpleControls,
+      setLinearTrackSlotsEnabled,
+      addLinearTrackSlot,
+      duplicateLinearTrackSlot,
+      removeLinearTrackSlot,
+      setLinearTrackSlotEnabled,
+      moveLinearTrackSlot,
+      moveLinearTrackSlotAbove,
+      moveLinearTrackSlotBelow,
+      moveLinearTrackSlotToAxis,
+      updateLinearTrackSlotRenderer,
+      updateLinearTrackSlotPlacement
+    }),
     canAddLinearTrackRenderer,
-    duplicateLinearTrackSlot,
     canDuplicateLinearTrackSlot,
-    removeLinearTrackSlot,
-    moveLinearTrackSlot,
     canMoveLinearTrackSlot,
-    moveLinearTrackSlotAbove,
-    moveLinearTrackSlotBelow,
-    moveLinearTrackSlotToAxis,
-    moveLinearTrackSlotToPlacement,
     canMoveLinearTrackSlotAbove,
     canMoveLinearTrackSlotBelow,
     canMoveLinearTrackSlotToAxis,
-    updateLinearTrackSlotRenderer,
-    updateLinearTrackSlotPlacement,
     linearTrackSlotIssue,
     linearTrackGlobalIssues,
     linearAnnotationAnchorOptions,
