@@ -34,8 +34,7 @@ write-up of a release.
   `"lead`, which the web app writes as typed) failed with "unexpected end of
   data". **Behavior change for CLI files:** a user table that wrapped a field
   in CSV quotes now keeps those quotes in the value, so remove them from such
-  files. The Feature override, Feature placement, and Annotation tables are
-  unchanged.
+  files. The Feature override and Feature placement tables are unchanged.
 - Labels (web app): applying **Label visibility** **On** now asks **Feature Is
   Hidden** also for a feature that a **Feature Visibility** rule hides, for
   example a rule with a record ID, another qualifier, or a `hash`, `location`,
