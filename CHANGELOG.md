@@ -28,6 +28,14 @@ write-up of a release.
   in CSV quotes now keeps those quotes in the value, so remove them from such
   files. The Feature override, Feature placement, and Annotation tables are
   unchanged.
+- Default colors, Specific colors, Qualifier priority, Label whitelist or
+  blacklist, Label overrides, and Feature visibility tables: a row with more
+  columns than the table has is now an error that names the file and line
+  ("Malformed line ... expected N columns"). Before, a Label whitelist,
+  Qualifier priority, or Default colors file whose first row had an extra
+  column was read shifted: `CDS`, `product`, `two`, `words` became feature type
+  `product`, qualifier `two`, keyword `words`, and no error was raised. Remove
+  the extra cells, or the tab inside a value, from such files.
 - Labels (web app): applying **Label visibility** **On** now asks **Feature Is
   Hidden** also for a feature that a **Feature Visibility** rule hides, for
   example a rule with a record ID, another qualifier, or a `hash`, `location`,
