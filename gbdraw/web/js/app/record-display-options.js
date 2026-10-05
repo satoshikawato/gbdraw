@@ -167,7 +167,12 @@ const requireReverseComplementOverride = (value) => {
   return value;
 };
 
-export const createRecordDisplayControls = ({ state, computed, watch, linearRecordSelector, history, getCommittedRequest, getCommittedSession }) => {
+// R13: the Linear record selector's three readers and History's undoable step
+// arrive as ports; this owner holds neither owner.
+export const createRecordDisplayControls = ({
+  state, computed, watch, linearRecordsFor, linearRecordStatusFor, linearRecordErrorFor, runUndoable,
+  getCommittedRequest, getCommittedSession
+}) => {
   let committedRows = [];
   let boundRequest = null;
   let boundSources = [];
@@ -182,7 +187,7 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
     ...state.linearSeqs.map((seq) => ({ scope: 'linear', sourceUid: seq.uid,
       source: state.lInputType.value === 'gff' ? seq.gff : seq.gb,
       paired: state.lInputType.value === 'gff' ? seq.fasta : null,
-      records: linearRecordSelector.recordsFor(seq), selector: seq.region_record_id,
+      records: linearRecordsFor(seq), selector: seq.region_record_id,
       cropped: Boolean(seq.region_start || seq.region_end), reverse: seq.region_reverse }))
   ]);
   const allRows = computed(() => sources.value.flatMap((source) => source.source
@@ -216,7 +221,7 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
     const busy = state.sessionOperationAvailability?.();
     return busy ? { ...surface, startEnabled: false, disabledReason: busy.reason } : surface;
   };
-  const edit = (row, patch, label) => history.runUndoable(label, () => {
+  const edit = (row, patch, label) => runUndoable(label, () => {
     let draft = state.recordDisplayDrafts.find((entry) => recordDisplayKey(entry) === row.key);
     if (!draft) {
       draft = { scope: row.scope, sourceUid: row.sourceUid, selector: row.selector,
@@ -405,7 +410,7 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
   const discoveryFor = (source) => {
     if (source.scope === 'circular') return circularDiscoveryForInput(state);
     const sequence = state.linearSeqs.find((seq) => seq.uid === source.sourceUid);
-    return { status: linearRecordSelector.statusFor(sequence), error: linearRecordSelector.errorFor(sequence) };
+    return { status: linearRecordStatusFor(sequence), error: linearRecordErrorFor(sequence) };
   };
   // The committed record's current sources have no read records: say whether
   // the read failed or has not happened, instead of calling the target stale.
@@ -529,7 +534,7 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
       reverseComplementOverride: requireReverseComplementOverride(value), anchorIntent: null
     }, 'Change record orientation'),
     // Apply on Generate: one undoable draft step, like the sidebar's edits.
-    setResolvedTransform: (row, transform) => history.runUndoable(
+    setResolvedTransform: (row, transform) => runUndoable(
       'Rotate record to feature on Generate',
       () => writeResolvedTransform(row, transform)
     ),

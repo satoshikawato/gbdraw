@@ -9,7 +9,10 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
 export const createFeatureEditor = ({
   state,
   rulePreparation,
-  history,
+  // R13: History's undoable steps and the preview owner's commit, visibility
+  // projection, and Result selection arrive as ports.
+  runUndoable,
+  runUndoableCheckpoint,
   getCommittedRequest,
   getCommittedSession = () => null,
   readResourceRecordCount = null,
@@ -21,14 +24,16 @@ export const createFeatureEditor = ({
   extractLegendEntries,
   onLegendGeometryChanged,
   featureSelection = null,
-  previewRuntime = null,
+  commitActiveResultEdit = null,
+  applyFeatureVisibilityChanges = null,
+  selectResult,
   isPatternEditAvailable = () => true,
   previewTransformInteraction = null,
   projectPaletteAndRules,
   projectFeatureEdits
 }) => {
   const { ref, computed, watch, reactive } = window.Vue;
-  const ruleActions = createFeatureRuleActions({ state, nextTick, prepareFileLegendEntries, rulePreparation, history, projectPaletteAndRules, ref, computed, isPatternEditAvailable });
+  const ruleActions = createFeatureRuleActions({ state, nextTick, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ref, computed, isPatternEditAvailable });
   // R13: the label owner's reactions, registered once it exists; the owners
   // created before it call them through this object only.
   const editorPorts = {};
@@ -41,7 +46,7 @@ export const createFeatureEditor = ({
     runWithDrawnMatches: rulePreparation.runDrawn,
     onFeaturePopupOpened: (...args) => editorPorts.syncLabelEditor(...args),
     featureSelection,
-    previewRuntime,
+    applyFeatureVisibilityChanges,
     previewTransformInteraction
   });
   const colorActions = createFeatureColorActions({
@@ -52,22 +57,23 @@ export const createFeatureEditor = ({
     extractLegendEntries,
     onLegendGeometryChanged,
     ruleActions,
-    featureSvgActions,
-    previewRuntime
+    getFeatureElements: featureSvgActions.getFeatureElements,
+    getFeatureFillElements: featureSvgActions.getFeatureFillElements,
+    commitActiveResultEdit
   });
   // The visibility owner comes before the label owner, which receives its
   // transition as a port: Show feature and label (Owner Q2) sets Feature
   // visibility through it.
   const visibilityActions = createFeatureVisibilityActions({
     state,
-    featureSvgActions,
+    applyVisibilityPreviewChanges: featureSvgActions.applyVisibilityPreviewChanges,
     ports: editorPorts,
-    previewRuntime,
+    selectResult,
     rulePreparation,
     getCommittedRequest
   });
   const labelActions = createFeatureLabelActions({
-    state, previewRuntime, rulePreparation, ref, computed, watch, nextTick, getCommittedRequest,
+    state, commitActiveResultEdit, rulePreparation, ref, computed, watch, nextTick, getCommittedRequest,
     setFeatureVisibility: visibilityActions.setFeatureVisibility
   });
   editorPorts.applyFeatureVisibilityToLabels = labelActions.applyFeatureVisibilityToLabels;
@@ -93,7 +99,7 @@ export const createFeatureEditor = ({
     clearSpecificRulePatternDrafts: ruleActions.clearSpecificRulePatternDrafts,
     captureSpecificRulePatternDrafts: ruleActions.captureSpecificRulePatternDrafts,
     restoreSpecificRulePatternDrafts: ruleActions.restoreSpecificRulePatternDrafts,
-    placementActions: createFeaturePlacementActions({ state, history, getCommittedRequest, isCurrentFeature, reactive, nextTick }),
+    placementActions: createFeaturePlacementActions({ state, runUndoable, getCommittedRequest, isCurrentFeature, reactive, nextTick }),
     canRetrySpecificRuleFailure: ruleActions.canRetrySpecificRuleFailure,
     canEditSpecificRuleFailure: ruleActions.canEditSpecificRuleFailure,
     retrySpecificRuleFailure: ruleActions.retrySpecificRuleFailure,

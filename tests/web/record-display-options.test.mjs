@@ -175,11 +175,11 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
   const history = createHistory ? createHistory(state) : { runUndoable: (_label, fn) => fn() };
   const linearDiscovery = { status: discovered ? 'ready' : 'loading', error: '' };
   const controls = createRecordDisplayControls({ state, computed: (fn) => ({ get value() { return fn(); } }),
-    watch: () => {}, linearRecordSelector: { recordsFor: seq => discovered ? [{selector:'#1',recordId:components[Number(seq.uid.slice(-1))-1].resourceId,recordLength:100,detectedTopology:'circular'}] : [],
-      statusFor: () => linearDiscovery.status, errorFor: () => linearDiscovery.error }, history,
-    getCommittedRequest, getCommittedSession: () => committed });
+    watch: () => {}, linearRecordsFor: seq => discovered ? [{selector:'#1',recordId:components[Number(seq.uid.slice(-1))-1].resourceId,recordLength:100,detectedTopology:'circular'}] : [],
+    linearRecordStatusFor: () => linearDiscovery.status, linearRecordErrorFor: () => linearDiscovery.error,
+    runUndoable: history.runUndoable, getCommittedRequest, getCommittedSession: () => committed });
   // The composition root's port: the pure check over the record display's binding.
-  const actions = createFeaturePlacementActions({ state, history, getCommittedRequest,
+  const actions = createFeaturePlacementActions({ state, runUndoable: history.runUndoable, getCommittedRequest,
     isCurrentFeature: (feature) => isCurrentFeature(feature, controls.sourceBinding()) });
   const feature = { scope: state.mode.value, record_key: 'record-2', biological_feature_id: 'logical-feature' };
   return { state, actions, controls, feature, file, makeFile, linearDiscovery, history,

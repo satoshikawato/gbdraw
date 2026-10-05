@@ -43,7 +43,7 @@ test('a stack edit that drops a lane asks, Cancel keeps the draft, and Reset is 
   const state = draftState('circular');
   const steps = [];
   const placement = createFeaturePlacementActions({ state, getCommittedRequest: () => null, isCurrentFeature: () => true,
-    history: { runUndoable: async (label, fn) => { steps.push(label); fn(); } } });
+    runUndoable: async (label, fn) => { steps.push(label); fn(); } });
   const editor = createCircularTrackSlotEditor({ state, changeTrackLayout: placement.changeTrackLayout });
   editor.normalizeCircularTrackSlots();
   createLinearTrackSlotEditor({ state }).normalizeLinearTrackSlots();

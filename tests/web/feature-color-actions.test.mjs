@@ -113,11 +113,9 @@ const applyRulePreviewFill = (featureId, color) => {
   previewFillColors.set(featureId, color);
   previewFillApplyCount += 1;
 };
-const previewRuntime = {
-  commitActiveResultEdit: () => {
-    previewCommitCount += 1;
-    return true;
-  }
+const commitActiveResultEdit = () => {
+  previewCommitCount += 1;
+  return true;
 };
 
 const { featureOverrideKey } = await import(pathToFileURL(join(tempDir, 'services', 'feature-override-identity.js')));
@@ -198,11 +196,9 @@ const actions = createFeatureColorActions({
         : null;
     }
   },
-  featureSvgActions: {
-    getFeatureElements: (_svg, featureId) => featureElementsById.get(featureId) || [],
-    getFeatureFillElements: (_svg, featureId) => featureElementsById.get(featureId) || []
-  },
-  previewRuntime
+  getFeatureElements: (_svg, featureId) => featureElementsById.get(featureId) || [],
+  getFeatureFillElements: (_svg, featureId) => featureElementsById.get(featureId) || [],
+  commitActiveResultEdit
 });
 
 await actions.handleColorScopeChoice('caption');
@@ -770,8 +766,9 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
       getIndividualFeatureLabel: (feature) => feature.product,
       getLabelSpecificRule: () => null
     },
-    featureSvgActions: { getFeatureElements: () => [], getFeatureFillElements: () => [] },
-    previewRuntime: null
+    getFeatureElements: () => [],
+    getFeatureFillElements: () => [],
+    commitActiveResultEdit: null
   });
   for (const choice of ['cancel', 'this']) {
     committed.length = 0;
@@ -840,8 +837,9 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
         findFeaturesWithSameIndividualLabel: () => [], getDisplayedFeatureLabel: (feature) => feature.product,
         getIndividualFeatureLabel: (feature) => feature.product, getLabelSpecificRule: () => null
       },
-      featureSvgActions: { getFeatureElements: () => [], getFeatureFillElements: () => [] },
-      previewRuntime: null
+      getFeatureElements: () => [],
+      getFeatureFillElements: () => [],
+      commitActiveResultEdit: null
     });
     return { renameActions, committed, legendRenameDialog, stateLegendEntries, originalOrder };
   };

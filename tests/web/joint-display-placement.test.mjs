@@ -168,7 +168,7 @@ test('Main, resolved side, bulk Auto and history share one draft owner', async (
       featurePlacementTargets: [{ kind: 'main' }, { kind: 'lane', side: 'below', level: 1 }] }] } } };
   const actions = createFeaturePlacementActions({ state, isCurrentFeature: () => true,
     getCommittedRequest: () => ({ mode: 'linear', records: [{ recordKey: 'card' }], grouping: 'single' }),
-    history: { runUndoable: async (label, fn) => { transactions.push({ label, before: structuredClone(overrides) }); fn(); } } });
+    runUndoable: async (label, fn) => { transactions.push({ label, before: structuredClone(overrides) }); fn(); } });
   assert.equal(actions.choices(features).find((choice) => choice.value === 'above').enabled, true);
   await actions.setPlacement(features, 'below');
   assert.equal(Object.keys(overrides).length, 2);
@@ -189,7 +189,7 @@ for (const mode of ['circular', 'linear']) {
       trackSlotResolvedGeometry: { value: { mode, records: [] } } };
     const geometry = structuredClone(state.trackSlotResolvedGeometry.value);
     const actions = createFeaturePlacementActions({ state, getCommittedRequest: () => ({ mode }),
-      isCurrentFeature: (entry) => entry === feature, history: { runUndoable: (_label, fn) => fn() } });
+      isCurrentFeature: (entry) => entry === feature, runUndoable: (_label, fn) => fn() });
     const sides = mode === 'circular' ? ['outward', 'inward'] : ['above', 'below'];
     const check = (enabled) => {
       for (const side of sides) {
@@ -249,7 +249,7 @@ test('a layout edit that drops lanes asks before it resets those placements', as
     adv: createDefaultAdv('circular'), featurePlacementOverrides: overrides };
   const steps = [];
   const actions = createFeaturePlacementActions({ state, getCommittedRequest: () => null, isCurrentFeature: () => true,
-    history: { runUndoable: async (label, fn) => { steps.push(label); fn(); } } });
+    runUndoable: async (label, fn) => { steps.push(label); fn(); } });
   const select = (value, label) => ({ target: { type: 'select-one', value, labels: [{ textContent: ` ${label} ` }],
     selectedOptions: [{ text: `${value[0].toUpperCase()}${value.slice(1)}` }] } });
   const ask = (event, field) => {
