@@ -114,7 +114,7 @@ const search = createPreviewFeatureSearch({
   computed(getter) {
     return { get value() { return getter(); } };
   },
-  previewRuntime: { isActiveResultReady: () => true },
+  isActiveResultReady: () => true,
   openFeatureEditorForFeature(target, point) { opened.push([target, point]); }
 });
 

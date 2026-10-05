@@ -4,7 +4,7 @@ import {
   compositionUserDeltas
 } from './composition-actions.js';
 
-export const createLegendCanvasActions = ({ state, previewRuntime = null }) => {
+export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null }) => {
   const {
     svgContainer,
     canvasPadding,
@@ -31,7 +31,7 @@ export const createLegendCanvasActions = ({ state, previewRuntime = null }) => {
     if (!svg) return false;
     bindCompositionMetadata(svg);
     if (!applyCanvasPaddingToSvg(svg, canvasPadding)) return false;
-    return Boolean(previewRuntime?.commitActiveResultEdit('canvas-padding'));
+    return Boolean(commitActiveResultEdit?.('canvas-padding'));
   };
 
   const resetCanvasPadding = () => {
