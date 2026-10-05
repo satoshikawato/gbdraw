@@ -272,7 +272,7 @@ test('templates reach the feature-slot inputs only through the transition (R10, 
     assert.doesNotMatch(handler, new RegExp(`(?:^|[^.\\w])${inputs}\\s*=(?!=)`),
       `${handler} assigns a feature-slot input`);
     for (const name of names) {
-      const escaped = name.replace(/[.$]/g, '\\$&');
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       for (const [call, args] of handler.matchAll(new RegExp(`(?:^|[^.\\w])${escaped}\\(([^)]*)\\)`, 'g'))) {
         calls.push(name);
         // The control names itself for Cancel and focus; its History adapter
