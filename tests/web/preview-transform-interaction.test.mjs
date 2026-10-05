@@ -52,6 +52,12 @@ await copyModule('app/feature-editor/svg-actions.js', 'app/feature-editor/svg-ac
 await copyModule('services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
 await copyModule('services/feature-identity.js', 'services/feature-identity.js');
 await copyModule('services/feature-placement.js', 'services/feature-placement.js');
+// No admitted catalog: features open as the Result draws them.
+await writeFile(
+  join(tempDir, 'services', 'feature-catalog.js'),
+  'export const resultCatalogFeatures = () => null;\nexport const stableFeatureOverrideKey = () => "";\n',
+  'utf8'
+);
 await writeFile(
   join(tempDir, 'app', 'color-utils.js'),
   'export const resolveColorToHex = (value) => value || "#94a3b8";\n',

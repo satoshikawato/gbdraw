@@ -132,12 +132,24 @@ test('Search features finds a hidden feature; Open shows its popup with the hidd
   await expect(popup).toBeVisible();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.clickedFeature.feat.locus_tag)).toBe('FL2');
   await expect(popup.locator('[data-feature-hidden-note]')).toHaveText('This feature is hidden. Choose On to show it.');
-  // The popup of a feature the Result does not draw opens inside the viewport.
-  const box = await popup.boundingBox();
-  const viewport = page.viewportSize();
-  expect(box.x).toBeGreaterThanOrEqual(0);
-  expect(box.y).toBeGreaterThanOrEqual(0);
-  expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+  // The popup of a feature the Result does not draw has no point to open at;
+  // it opens inside the viewport, also on a phone.
+  const insideViewport = async () => {
+    const box = await popup.boundingBox();
+    const viewport = page.viewportSize();
+    return box.x >= 0 && box.y >= 0 && box.x + box.width <= viewport.width && box.y < viewport.height;
+  };
+  expect(await insideViewport()).toBe(true);
+  const desktop = page.viewportSize();
+  await page.evaluate(() => { window.__GBDRAW_APP__.clickedFeature = null; });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.filteredFeatures.find((feature) => feature.locus_tag === 'FL2'), null);
+  });
+  await expect(popup).toBeVisible();
+  expect(await insideViewport()).toBe(true);
+  await page.setViewportSize(desktop);
 
   const before = await undoCount(page);
   await popup.getByRole('combobox', { name: 'Feature visibility', exact: true }).selectOption('on');

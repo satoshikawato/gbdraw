@@ -63,6 +63,18 @@ const feature = {
   strand: 1,
   qualifiers: { product: ['kinase'] }
 };
+// R-5: a listed feature the Result does not draw is searched by its identity.
+const hidden = {
+  id: 'record-1\u0000hidden',
+  svg_id: 'stable-hidden',
+  type: 'CDS',
+  record_id: 'record-1',
+  start: 20,
+  end: 29,
+  strand: 1,
+  qualifiers: { product: ['phosphatase'] }
+};
+const opened = [];
 const state = {
   svgContainer: ref(svg),
   canvasContainerRef: ref(null),
@@ -70,7 +82,8 @@ const state = {
   selectedResultIndex: ref(0),
   svgContent: ref('<svg></svg>'),
   extractedFeatures: ref([feature]),
-  featuresBySvgId: ref(new Map([['feature-1', feature]])),
+  featureList: ref({ rows: [feature, hidden] }),
+  featureListState: (row) => ({ drawn: row === feature, renderedId: row === feature ? row.svg_id : '' }),
   orthogroups: ref([]),
   adv: { rich_feature_popup: true },
   previewFeatureSearchInput: ref(''),
@@ -102,7 +115,7 @@ const search = createPreviewFeatureSearch({
     return { get value() { return getter(); } };
   },
   previewRuntime: { isActiveResultReady: () => true },
-  openFeatureEditorForFeature() {}
+  openFeatureEditorForFeature(target, point) { opened.push([target, point]); }
 });
 
 const metricTotal = (name) => metrics
@@ -124,6 +137,13 @@ assert.deepEqual(state.previewFeatureSearchMatches.value, ['feature-1']);
 search.applySearch();
 assert.equal(metricTotal('featureSearchIndexBuildCount'), 1);
 assert.equal(metricTotal('featureDomFullScanCount'), 1);
+
+state.previewFeatureSearchInput.value = 'phosphatase';
+search.applySearch();
+assert.deepEqual(state.previewFeatureSearchMatches.value, [hidden.id]);
+search.openActiveMatch();
+assert.deepEqual(opened, [[hidden, null]]);
+assert.equal(metricTotal('featureSearchIndexBuildCount'), 1);
 
 watchers[1].callback();
 assert.equal(metricTotal('featureSearchIndexBuildCount'), 2);
