@@ -170,11 +170,9 @@ const create = ({
     getCommittedRequest:()=>getCommittedRequest?.()||canonical.renderRequest,
     getCommittedSession:()=>({...canonical,renderRequest:getCommittedRequest?.()||canonical.renderRequest}),
     projectCommittedAlignment,
-    recordDisplayControls:{captureAlignmentOrientationIntent:()=>controllerState.linearSeqs.map(r=>r.region_reverse),
-      restoreAlignmentOrientationIntent:before=>before.forEach((v,i)=>{controllerState.linearSeqs[i].region_reverse=v;}),
-      commitAlignmentOrientations:directions=>directions.forEach(({recordKey,reverseComplement})=>{controllerState.linearSeqs.find(r=>r.uid===recordKey).region_reverse=reverseComplement;})},
     getCurrentSvg: () => svg,
-    runCommittedCanonicalCandidate: (options) => history.runUndoableArtifactReplacement(options.label, async () => {
+    // The composition root's port: run the candidate, then commit the changed orientations.
+    runRecordAlignment: (options) => history.runUndoableArtifactReplacement(options.label, async () => {
       generationCalls.push(options);
       const outcome = await generation(options);
       if (outcome.error?.summary) controllerState.errorLog.value = outcome.error;
@@ -184,7 +182,7 @@ const create = ({
         controllerState.similarityAlignmentResetReceipt.value=receipt;
         controllerState.similarityAlignmentPlan.value = canonical.renderRequest.layout.similarityAlignment;
         controllerState.linearRecordTranslations.value = canonical.renderRequest.layout.recordTranslations;
-        options.commitIntent();
+        options.orientations.forEach(({recordKey,reverseComplement})=>{controllerState.linearSeqs.find(r=>r.uid===recordKey).region_reverse=reverseComplement;});
         controllerState.results.value = [{ name: 'aligned.svg' }];
         svg = null;
       }
