@@ -598,7 +598,8 @@ const literalToJson = (literal) => {
 const readAllowlistLiteral = (source, symbol) => {
   if (source === null) return { status: 'absent', value: null };
   const masked = maskJavaScript(source);
-  const declaration = new RegExp(`^[ \\t]*(?:export\\s+)?const\\s+${symbol}\\s*=\\s*`, 'm');
+  const escapedSymbol = symbol.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const declaration = new RegExp(`^[ \\t]*(?:export\\s+)?const\\s+${escapedSymbol}\\s*=\\s*`, 'm');
   const match = masked.match(declaration);
   if (!match) return { status: 'missing', value: null };
   const start = match.index + match[0].length;
