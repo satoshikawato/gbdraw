@@ -12,6 +12,7 @@ from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqFeature import SeqFeature, SimpleLocation
 from Bio.SeqRecord import SeqRecord
+from BCBio import GFF
 from pandas import DataFrame
 
 from gbdraw import (
@@ -381,6 +382,33 @@ def _gff(record_key: str = "g", region: str | None = None) -> RecordInput:
         record_key=record_key,
         region=parse_region_spec(region) if region else None,
     )
+
+
+@pytest.mark.parametrize(
+    ("request_type", "options_type"),
+    [(LinearDiagramRequest, LinearDiagramOptions), (CircularDiagramRequest, CircularDiagramOptions)],
+)
+@pytest.mark.parametrize(
+    "case", ["no row", "row on a loaded type", "row on an unloaded type", "table row on an unloaded type"],
+)
+def test_gff_is_parsed_once_whatever_the_identity_rows_turn_on(monkeypatch, case, request_type, options_type):
+    def request(**options):
+        return request_type(records=(_gff(),), options=options_type(selected_features_set=("CDS",), **options))
+
+    catalog = plan_request(request()).provenance[0].source_feature_catalog
+    first = {kind: next(e.biological_feature_id for e in catalog if e.feature_type == kind) for kind in ("gene", "CDS")}
+    options = {
+        "no row": {},
+        "row on a loaded type": {"feature_overrides": (FeatureOverride("g", first["CDS"], label_visibility="on"),)},
+        "row on an unloaded type": {"feature_overrides": (FeatureOverride("g", first["gene"], feature_visibility="on"),)},
+        "table row on an unloaded type": {"feature_override_table": DataFrame([
+            {"record": "#1", "feature_selector": f"hash={first['gene']}", "feature_visibility": "on"}])},
+    }[case]
+    parses, parse = [], GFF.parse
+    monkeypatch.setattr(GFF, "parse", lambda *args, **kwargs: parses.append(args) or parse(*args, **kwargs))
+    plan = plan_request(request(**options))
+    assert len(parses) == 1
+    assert ("gene" in {feature.type for feature in plan.records[0].features}) == ("unloaded" in case)
 
 
 @pytest.mark.parametrize(

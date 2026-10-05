@@ -18,6 +18,7 @@ import gbdraw
 import gbdraw.circular as circular_cli_module
 import gbdraw.linear as linear_cli_module
 import gbdraw.api.request_render as request_render_module
+from gbdraw.api.record_planning import resolve_record_inputs
 from gbdraw.api.requests import LinearDiagramRequest
 from gbdraw.core.sequence import check_feature_presence
 from gbdraw.exceptions import InputFileError, ParseError, ValidationError
@@ -890,6 +891,27 @@ def test_linear_cli_feature_visibility_table_is_forwarded(
     assert canonical_request.options.feature_visibility_table is feature_table_df
 
 
+def _capture_gff_candidate_features(
+    monkeypatch: pytest.MonkeyPatch, record: SeqRecord, captured: dict[str, Any],
+) -> None:
+    """Serve ``record`` as the parsed GFF3 and note the types the request keeps from it."""
+
+    def fake_parse_gff_fasta(*args, **kwargs):
+        from gbdraw.features.source import build_source_feature_catalog
+        for feature in record.features:
+            feature.sub_features = []  # as BCBio leaves a feature without children
+        kwargs["source_feature_catalogs"].append(build_source_feature_catalog(record))
+        return [record]
+
+    def spy_resolve_record_inputs(*args, **kwargs):
+        captured["selected_features_set"] = set(kwargs["gff_candidate_features"])
+        captured["keep_all_features"] = kwargs["gff_keep_all_features"]
+        return resolve_record_inputs(*args, **kwargs)
+
+    monkeypatch.setattr(request_render_module, "parse_gff_fasta", fake_parse_gff_fasta)
+    monkeypatch.setattr(request_render_module, "resolve_record_inputs", spy_resolve_record_inputs)
+
+
 def test_circular_gff_loader_uses_candidate_features_when_feature_visibility_table_given(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -898,14 +920,7 @@ def test_circular_gff_loader_uses_candidate_features_when_feature_visibility_tab
     record = _make_record()
     captured: dict[str, Any] = {}
 
-    def fake_load_gff_fasta(*args, **kwargs):
-        captured["selected_features_set"] = set(kwargs["selected_features_set"])
-        captured["keep_all_features"] = kwargs.get("keep_all_features")
-        from gbdraw.features.source import build_source_feature_catalog
-        kwargs["source_feature_catalogs"].append(build_source_feature_catalog(record))
-        return [record]
-
-    monkeypatch.setattr(request_render_module, "load_gff_fasta", fake_load_gff_fasta)
+    _capture_gff_candidate_features(monkeypatch, record, captured)
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(
         request_render_module,
@@ -947,14 +962,7 @@ def test_linear_gff_loader_uses_candidate_features_when_feature_visibility_table
     )
     captured: dict[str, Any] = {}
 
-    def fake_load_gff_fasta(*args, **kwargs):
-        captured["selected_features_set"] = set(kwargs["selected_features_set"])
-        captured["keep_all_features"] = kwargs.get("keep_all_features")
-        from gbdraw.features.source import build_source_feature_catalog
-        kwargs["source_feature_catalogs"].append(build_source_feature_catalog(record))
-        return [record]
-
-    monkeypatch.setattr(request_render_module, "load_gff_fasta", fake_load_gff_fasta)
+    _capture_gff_candidate_features(monkeypatch, record, captured)
     monkeypatch.setattr(request_render_module, "read_color_table", lambda _path: None)
     monkeypatch.setattr(
         request_render_module,

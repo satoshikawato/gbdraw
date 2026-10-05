@@ -7,7 +7,7 @@ import logging
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Callable, Hashable, Literal, Sequence
+from typing import Callable, Hashable, Literal, MutableMapping, Sequence
 
 import pandas as pd
 from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
@@ -18,14 +18,19 @@ from gbdraw.analysis.protein_colinearity import (
     OrthogroupResult,
 )
 from gbdraw.exceptions import ValidationError
-from gbdraw.core.record_metadata import _iter_source_features, _read_coord_map, _source_feature_index
+from gbdraw.core.record_metadata import (
+    _feature_source_index_map,
+    _iter_source_features,
+    _read_coord_map,
+    _source_feature_index,
+)
 from gbdraw.io.cli_tables import (
     read_comparisons_table,
     read_conservation_table,
     read_records_table,
 )
 from gbdraw.io.comparisons import read_comparison_table
-from gbdraw.io.genome import load_gbks, load_gff_fasta
+from gbdraw.io.genome import filter_features_by_type, load_gbks, parse_gff_fasta
 from gbdraw.io.record_select import (
     RecordSelector,
     parse_record_selector,
@@ -710,11 +715,16 @@ def _source_details(
     raise ValidationError("Unsupported record input source.")
 
 
+def _gff_feature_types(
+    gff_candidate_features: Sequence[str] | None, gff_keep_all_features: bool,
+) -> frozenset[str] | None:
+    """The GFF3 feature types a request draws; ``None`` keeps every type."""
+    return None if gff_keep_all_features or gff_candidate_features is None else frozenset(gff_candidate_features)
+
+
 def _load_source_records(
     source: RecordInputSource,
     *,
-    gff_candidate_features: Sequence[str] | None,
-    gff_keep_all_features: bool,
     genbank_loader: GenBankLoader,
     gff_loader: GffFastaLoader,
 ) -> ParsedRecordInputs:
@@ -723,11 +733,10 @@ def _load_source_records(
         if isinstance(source, GenBankInputSource):
             records = genbank_loader([str(source.path)])
         elif isinstance(source, GffFastaInputSource):
+            # One parse serves every type filter: ``resolve_record_inputs`` applies it in memory.
             records = gff_loader(
-                [str(source.gff_path)],
-                [str(source.fasta_path)],
-                selected_features_set=gff_candidate_features,
-                keep_all_features=gff_keep_all_features,
+                str(source.gff_path),
+                str(source.fasta_path),
                 source_feature_catalogs=gff_catalogs,
             )
         elif isinstance(source, InMemoryRecordSource):
@@ -744,11 +753,7 @@ def _load_source_records(
         )
         return ParsedRecordInputs(tuple(records), catalogs)
 
-    cache_spec = _prepared_source_cache_spec(
-        source,
-        gff_candidate_features=gff_candidate_features,
-        gff_keep_all_features=gff_keep_all_features,
-    )
+    cache_spec = _prepared_source_cache_spec(source)
     if cache_spec is None:
         return load()
     key, identities = cache_spec
@@ -762,9 +767,6 @@ def _load_source_records(
 
 def _prepared_source_cache_spec(
     source: RecordInputSource,
-    *,
-    gff_candidate_features: Sequence[str] | None,
-    gff_keep_all_features: bool,
 ) -> tuple[Hashable, frozenset[PreparedResourceIdentity]] | None:
     """Build a path-independent parsed-source cache key for a Web resource."""
 
@@ -779,17 +781,7 @@ def _prepared_source_cache_spec(
         if gff_identity is None or fasta_identity is None:
             return None
         identities = frozenset({gff_identity, fasta_identity})
-        return (
-            (
-                "parsed-source-v1",
-                "gff-fasta",
-                gff_identity,
-                fasta_identity,
-                tuple(sorted(gff_candidate_features or ())),
-                bool(gff_keep_all_features),
-            ),
-            identities,
-        )
+        return ("parsed-source-v1", "gff-fasta", gff_identity, fasta_identity), identities
     return None
 
 
@@ -956,14 +948,20 @@ def resolve_record_inputs(
     gff_candidate_features: Sequence[str] | None,
     gff_keep_all_features: bool,
     genbank_loader: GenBankLoader = load_gbks,
-    gff_loader: GffFastaLoader = load_gff_fasta,
+    gff_loader: GffFastaLoader = parse_gff_fasta,
+    parsed_sources: MutableMapping[tuple[object, ...], ParsedRecordInputs] | None = None,
 ) -> ResolvedRecordCollection:
-    """Load each unique source once, then apply typed selection and transforms."""
+    """Load each unique source once, then apply typed selection and transforms.
+
+    ``parsed_sources`` keeps the parses across calls: a caller that resolves the
+    same sources again with other GFF3 candidate types does not parse them again.
+    """
 
     inputs = tuple(record_inputs)
     if not inputs:
         raise ValidationError("A request requires at least one RecordInput.")
-    cache: dict[tuple[object, ...], ParsedRecordInputs] = {}
+    gff_types = _gff_feature_types(gff_candidate_features, gff_keep_all_features)
+    cache = {} if parsed_sources is None else parsed_sources
     id_counts: dict[tuple[object, ...], Counter[str]] = {}
     records: list[SeqRecord] = []
     provenance: list[ResolvedRecordProvenance] = []
@@ -971,14 +969,12 @@ def resolve_record_inputs(
         key = _source_key(record_input.source)
         parsed = cache.get(key)
         if parsed is None:
-            parsed = _load_source_records(
+            parsed = cache[key] = _load_source_records(
                 record_input.source,
-                gff_candidate_features=gff_candidate_features,
-                gff_keep_all_features=gff_keep_all_features,
                 genbank_loader=genbank_loader,
                 gff_loader=gff_loader,
             )
-            cache[key] = parsed
+        if key not in id_counts:
             id_counts[key] = Counter(str(record.id) for record in parsed.records)
         raw_records = parsed.records
         selector = record_input.selector or _selector_from_region(record_input.region)
@@ -991,6 +987,10 @@ def resolve_record_inputs(
         expands = len(source_indexes) > 1
         for source_record_index in source_indexes:
             source_record = raw_records[source_record_index]
+            if source_kind == "gff_fasta":
+                source_record = filter_features_by_type(
+                    source_record, gff_types, source_indexes=_feature_source_index_map(source_record.features),
+                )
             source_cropped = bool(source_record.annotations.get("gbdraw_region_applied"))
             record = copy.deepcopy(source_record)
             record = reverse_records(
