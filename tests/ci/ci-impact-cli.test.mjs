@@ -1288,7 +1288,10 @@ test('functional shards intersect their assigned specs with the changed leaf spe
 
 test('shard-files writes the changed specs of one shard from the real shard map', async () => {
   const shards = JSON.parse(readFileSync(resolve(REPOSITORY_ROOT, 'tests/ci/functional-shards.json'), 'utf8')).shards;
-  const spec = shards[0][0];
+  // devLeafPlan declares the web-runtime capability, so the leaf spec must be
+  // one of shard 1's web-runtime specs; the shard order changes on rebalancing.
+  const spec = shards[0].find((path) => classifyPath(path).impact === 'web-runtime');
+  assert.ok(spec, 'shard 1 holds a web-runtime functional spec');
   const plan = devLeafPlan([{ path: spec, kind: 'functional', jobs: ['playwright-functional'] }]);
   for (const shard of [1, 2]) {
     const writes = new Map();
