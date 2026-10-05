@@ -102,12 +102,10 @@ const buildHarness = ({
   const actions = createFeatureLabelActions({
     ref, computed: get => ({ get value() { return get(); } }),
     state,
-    previewRuntime: {
-      commitActiveResultEdit(reason) {
-        assert.equal(reason, 'feature-label');
-        mutations.commit += 1;
-        return true;
-      }
+    commitActiveResultEdit(reason) {
+      assert.equal(reason, 'feature-label');
+      mutations.commit += 1;
+      return true;
     },
     rulePreparation,
     getCommittedRequest: () => (diagramOptions ? { diagramOptions } : null)

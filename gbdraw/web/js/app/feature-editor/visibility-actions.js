@@ -25,16 +25,17 @@ import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/
 
 export const createFeatureVisibilityActions = ({
   state,
-  featureSvgActions,
+  // R13: the feature SVG owner's preview of visibility changes.
+  applyVisibilityPreviewChanges,
   // R13: the composition root registers `applyFeatureVisibilityToLabels` once
   // the label owner exists; this owner only calls it.
   ports,
-  previewRuntime,
+  selectResult,
   rulePreparation = null,
   getCommittedRequest = () => null
 }) => {
   // The preview owner selects the Result a History command targets (R13).
-  if (typeof previewRuntime?.selectResult !== 'function') {
+  if (typeof selectResult !== 'function') {
     throw new Error('createFeatureVisibilityActions requires PreviewRuntime Result selection.');
   }
   const {
@@ -51,7 +52,6 @@ export const createFeatureVisibilityActions = ({
     svgContainer
   } = state;
 
-  const { applyVisibilityPreviewChanges } = featureSvgActions;
   const ruleFields = new Set(['recordId', 'featureType', 'qualifier', 'value', 'action']);
 
   const normalizeText = (value) => String(value ?? '').trim();
@@ -267,7 +267,7 @@ export const createFeatureVisibilityActions = ({
     const resultCount = Array.isArray(results?.value) ? results.value.length : 0;
     if (targetIndex >= resultCount) return false;
     if (Number(selectedResultIndex?.value || 0) !== targetIndex) {
-      previewRuntime.selectResult(targetIndex);
+      selectResult(targetIndex);
       await nextFrame();
     }
     return Boolean(svgContainer?.value?.querySelector?.('svg'));

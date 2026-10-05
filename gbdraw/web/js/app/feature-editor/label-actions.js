@@ -419,7 +419,7 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
 
 export const createFeatureLabelActions = ({
   state,
-  previewRuntime = null,
+  commitActiveResultEdit = null,
   rulePreparation,
   ref,
   computed,
@@ -500,7 +500,7 @@ export const createFeatureLabelActions = ({
     return labelScopeFilterReason(feature, diagramOptions) || blocker;
   };
 
-  const commitLabelEdit = () => previewRuntime?.commitActiveResultEdit('feature-label');
+  const commitLabelEdit = () => commitActiveResultEdit?.('feature-label');
 
   // R13: Generate and the label rerender clear the notices of the previous
   // label build through this port when they start; a rerender also clears its

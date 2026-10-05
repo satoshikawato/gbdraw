@@ -56,7 +56,7 @@ export const restoreTrackLayout = ({ form, adv }, saved) => {
 };
 
 export const createFeaturePlacementActions = ({
-  state, history, getCommittedRequest, isCurrentFeature,
+  state, runUndoable, getCommittedRequest, isCurrentFeature,
   reactive = (value) => value, nextTick = () => Promise.resolve()
 }) => {
   const draft = () => ({ mode: state.mode.value, form: state.form, adv: state.adv });
@@ -85,7 +85,7 @@ export const createFeaturePlacementActions = ({
     if (busy) return busy;
     const choice = choices(features).find((entry) => entry.value === value);
     if (!choice?.enabled) throw new Error(choice?.reason || 'Unknown feature placement.');
-    return history.runUndoable(features.length === 1 ? 'Change feature placement' : 'Change selected feature placements', () => {
+    return runUndoable(features.length === 1 ? 'Change feature placement' : 'Change selected feature placements', () => {
       for (const feature of features) {
         const key = featureIdentityKeyOf(feature);
         if (value === 'auto') delete state.featurePlacementOverrides[key];
@@ -149,7 +149,7 @@ export const createFeaturePlacementActions = ({
     pendingLayout = null;
     layoutChange.open = false;
     if (!change) return false;
-    const result = choice === 'reset' && await history.runUndoable('Change setting and reset Feature placements', () => {
+    const result = choice === 'reset' && await runUndoable('Change setting and reset Feature placements', () => {
       const before = laneSides();
       change.apply();
       for (const key of lostLaneKeys(before)) delete state.featurePlacementOverrides[key];
