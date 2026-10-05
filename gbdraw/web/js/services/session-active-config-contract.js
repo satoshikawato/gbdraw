@@ -6,6 +6,7 @@ import { LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION, LINEAR_TRACK_RENDERERS, LINEAR
 import { requireCurrentCircularMultiRecordSizeMode, requireCurrentCollinearAnchorMode, requireCurrentCollinearColorMode, requireCurrentCollinearMaxConflicts, requireCurrentCollinearMaxDiagonalDrift, requireCurrentCollinearMaxParalogLinks, requireCurrentCollinearMaxUnitGap, requireCurrentCollinearMergeOrientation, requireCurrentCollinearMinAnchors, requireCurrentCollinearInferOrthogroups, requireCurrentCollinearSearchScope, requireCurrentCollinearUnitMode, requireCurrentLinearLabelPlacement, requireCurrentLinearTrackLayout, requireCurrentOrthogroupMemberMaxHits, requireCurrentOrthogroupMembershipMode, requireCurrentProteinBlastpCandidateLimit, requireCurrentProteinBlastpMaxHits, requireCurrentProteinBlastpMode, requireCurrentWebStateFieldNames } from '../app/current-option-values.js'; import { DEFAULT_ARROW_SHAFT_WIDTH_RATIO, createDefaultFeatureRenderings } from '../utils/feature-rendering.js';
 import { MODE_DEFAULT_FEATURE_TYPES, comparisonStateForMode, managedAdvStateForMode, trackDefaultsForMode } from '../mode-profiles.js'; import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
+import { diagnosticError } from './error-normalization.js';
 import { validateRecordDisplayDrafts } from '../app/record-display-options.js';
 import { requireLinearLabelVisibilityMode } from '../app/linear-label-visibility.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
@@ -101,15 +102,13 @@ const validateCollections = (config) => {
     assertRows(set.annotations, ANNOTATION_FIELDS, `config.annotationSets[${index}].annotations`);
   });
 };
-const obsoleteCircularSlotPath = (slots) => {
+const obsoleteCircularSlotField = (slots) => {
   if (!Array.isArray(slots)) return null;
-  for (const [index, slot] of slots.entries()) {
+  for (const [slotIndex, slot] of slots.entries()) {
     if (!isObject(slot)) continue;
-    const field = [...OBSOLETE_SLOT_KEYS].find((key) => has(slot, key));
-    if (field) return `circular_track_slots[${index}].${field}`;
-    if (!isObject(slot.params)) continue;
-    const param = [...OBSOLETE_SLOT_PARAM_KEYS].find((key) => has(slot.params, key));
-    if (param) return `circular_track_slots[${index}].params.${param}`;
+    const field = [...OBSOLETE_SLOT_KEYS].find((key) => has(slot, key))
+      ?? (isObject(slot.params) ? [...OBSOLETE_SLOT_PARAM_KEYS].find((key) => has(slot.params, key)) : undefined);
+    if (field) return { field, slotIndex };
   }
   return null;
 };
@@ -118,8 +117,9 @@ export const validateImportedCircularTrackSlots = (config = {}, { depthTrackCoun
   if (!isObject(adv) || !has(adv, 'circular_track_slots')) return;
   if (adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION)
     throw new Error(`Custom Track Slots use an obsolete schema. Recreate the slots with schema version ${CIRCULAR_TRACK_SLOT_SCHEMA_VERSION}.`);
-  const obsolete = obsoleteCircularSlotPath(adv.circular_track_slots);
-  if (obsolete) throw new Error(`Custom Track Slots use obsolete field '${obsolete}'. Use slot-level radius, width, inner_gap_px, outer_gap_px, side, and z fields.`);
+  // Any value and either enablement: readers drop only the lossless legacy null.
+  const obsolete = obsoleteCircularSlotField(adv.circular_track_slots);
+  if (obsolete) throw diagnosticError('TRACK_INVALID', { ...obsolete, reason: 'OBSOLETE_TRACK_FIELD' });
   validateTrackSlotBindingInvariants(adv.circular_track_slots, { modeLabel: 'Circular', layoutKind: 'circular',
     supportedRenderers: CIRCULAR_TRACK_RENDERERS, supportedSides: ['inside', 'outside', 'overlay'],
     anchorlessRenderers: ['ticks', 'spacer'], depthTrackCount });

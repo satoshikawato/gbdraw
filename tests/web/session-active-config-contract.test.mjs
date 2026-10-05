@@ -9,8 +9,10 @@ const {
   createDefaultAdv,
   createDefaultForm,
   createDefaultLosat,
-  validateCurrentWriterActiveConfig
+  validateCurrentWriterActiveConfig,
+  validateImportedCircularTrackSlots
 } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
+const { normalizeUserFacingError } = await import('../../gbdraw/web/js/services/error-normalization.js');
 const { normalizeCurrentPairwiseMatchStyle } = await import(
   '../../gbdraw/web/js/app/current-option-values.js'
 );
@@ -173,3 +175,42 @@ for (const field of ['width', 'radius']) {
     }
   }
 }
+
+// OV-38 (R6): an obsolete Circular track slot field is a classified failure that
+// names the field and the row, whatever its value and whether the slots are on;
+// readers drop only the lossless legacy null (config.js).
+const obsoleteSlotFailure = (adv) => {
+  try {
+    validateImportedCircularTrackSlots({ adv });
+  } catch (error) {
+    return normalizeUserFacingError(error);
+  }
+  return null;
+};
+const featureSlot = {
+  id: 'features', renderer: 'features', enabled: true, side: 'inside', z: 0,
+  params: { lane_direction: 'inside' }, width: null, radius: null, inner_gap_px: null, outer_gap_px: null
+};
+const ticksSlot = {
+  id: 'ticks', renderer: 'ticks', enabled: true, side: 'inside', z: 0,
+  params: { tick_label_layout: 'label_in_tick_out' }, width: null, radius: null, inner_gap_px: null, outer_gap_px: null
+};
+for (const [enabled, slots, field, slotIndex] of [
+  [false, [featureSlot, { ...ticksSlot, spacing: null }], 'spacing', 1],
+  [true, [{ ...featureSlot, spacing: null }, ticksSlot], 'spacing', 0],
+  [false, [{ ...featureSlot, spacing: '4px' }, ticksSlot], 'spacing', 0],
+  [false, [featureSlot, { ...ticksSlot, inner_radius: 0.5 }], 'inner_radius', 1],
+  [false, [featureSlot, { ...ticksSlot, params: { ...ticksSlot.params, spacing: null } }], 'spacing', 1]
+]) {
+  const failure = obsoleteSlotFailure({
+    ...createDefaultAdv('circular'), circular_track_slots_enabled: enabled, circular_track_slots: slots
+  });
+  assert.equal(failure?.code, 'TRACK_INVALID', field);
+  assert.deepEqual(failure.context, { field, reason: 'OBSOLETE_TRACK_FIELD', slotIndex });
+  assert.equal(failure.summary, `The track settings are invalid. Track row ${slotIndex + 1}. Field: ${field}. `
+    + 'Custom Track Slots no longer read this field. Use slot-level radius, width, inner_gap_px, '
+    + 'outer_gap_px, side, and z fields.');
+}
+assert.equal(obsoleteSlotFailure({
+  ...createDefaultAdv('circular'), circular_track_slots: [featureSlot, ticksSlot]
+}), null);
