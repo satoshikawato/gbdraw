@@ -317,3 +317,65 @@ test('OV-21: an annotation of a selected Circular feature stays out of Linear re
   expect(await requestTargets()).toEqual({ mode: 'circular', recordKeys: ['record-1'], targets: [target] });
   expect(await drawnAnnotations(page)).toEqual(circularDrawn);
 });
+
+// R-7 (Owner decision 2026-10-05): a Session 44 named a selected feature by
+// `hash=` (selected-feature-annotations.provenance.json). Load moves the target
+// to the feature's source identity only when its record is drawn untransformed
+// and the hash names one feature (feature_1); a hash of two CDS at the same
+// coordinates (feature_2) and a target on a reverse-complemented record
+// (feature_3) stay. The saved figure, the next Generate, and the CLI replay of
+// the same Session draw the same annotations, and feature_1 stays on its
+// feature after a later crop.
+test('R-7: a Session 44 hash annotation of one untransformed feature moves to its identity without changing the figure', async ({ page }, testInfo) => {
+  test.setTimeout(360_000);
+  const SESSION = 'tests/fixtures/sessions/selected-feature-annotations.v44.gbdraw-session.json.gz';
+  const dialogs = [];
+  page.on('dialog', (dialog) => dialogs.push(dialog.message()));
+  await openFresh(page);
+  await page.locator('input[accept^=".json,"]').setInputFiles(SESSION);
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
+    && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
+  await settle(page);
+  expect(dialogs).toEqual(['Session loaded successfully! 1 annotation(s) from an older Session named a feature by '
+    + 'hash=. Each now names that feature by its source, so it stays on the feature when the crop or orientation changes.']);
+  const testa = await page.evaluate(async () => {
+    const { getCommittedCanonicalRenderRequest } = await import('/gbdraw/web/js/services/config.js');
+    return getCommittedCanonicalRenderRequest().records[0].recordKey;
+  });
+  const targets = await annotationTargets(page);
+  expect(targets[0]).toEqual({ kind: 'featureIdentity', scope: 'linear', recordKey: testa,
+    biologicalFeatureId: 'fef810304', envelope: 'outer_bounds', circularPath: 'shortest' });
+  expect(targets.slice(1).map((target) => [target.kind, target.selectors])).toEqual([
+    ['featureSpan', [{ key: 'hash', value: 'f3ccacda4' }]],
+    ['featureSpan', [{ key: 'hash', value: 'fbc76b20f' }]]
+  ]);
+
+  // Every drawn annotation shape, by annotation ID.
+  const geometry = (svg) => page.evaluate((text) => {
+    const root = new DOMParser().parseFromString(text, 'image/svg+xml').documentElement;
+    return [...root.querySelectorAll('[data-gbdraw-annotation-id]')].map((group) => [
+      group.getAttribute('data-gbdraw-annotation-id'),
+      [group, ...group.querySelectorAll('*')].map((element) => [element.localName,
+        ...['x', 'y', 'width', 'height', 'd', 'points', 'transform'].map((name) => element.getAttribute(name))])
+    ]).sort(([a], [b]) => a.localeCompare(b));
+  }, svg);
+  const saved = await geometry(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content));
+  expect(saved.map(([id]) => id)).toEqual(['feature_1', 'feature_2']);
+  await generate(page);
+  expect(await geometry(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content))).toEqual(saved);
+  expect(await geometry(replayOnCli(SESSION, testInfo.outputPath('v44-replay')))).toEqual(saved);
+  expect(await drawnAnnotations(page)).toEqual([
+    { id: 'feature_2', recordIndex: 0, segments: [[300, 600]] },
+    { id: 'feature_1', recordIndex: 0, segments: [[1600, 1901]] }
+  ]);
+
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.setLinearRecordCrop(app.linearSeqs[0], 'region_start', 701);
+    app.setLinearRecordCrop(app.linearSeqs[0], 'region_end', 3800);
+  });
+  await settle(page);
+  await generate(page);
+  expect((await drawnAnnotations(page)).find((item) => item.id === 'feature_1'))
+    .toEqual({ id: 'feature_1', recordIndex: 0, segments: [[900, 1201]] });
+});

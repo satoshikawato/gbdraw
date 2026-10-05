@@ -2,7 +2,8 @@ import {
   featureIdentityKey,
   featureIdentityKeyOf,
   normalizeFeatureOverrideLabelText,
-  parseFeatureIdentityKey
+  parseFeatureIdentityKey,
+  recordKeyBelongsToRequest
 } from './feature-placement.js';
 
 // Session 44 and older kept per-feature edits in four maps keyed by rendered
@@ -97,6 +98,11 @@ const catalogIndex = (catalog, mode) => {
 // (gbdraw/features/ids.py::disambiguate_feature_ids).
 const LINEAR_RECORD_SUFFIX = /_record_([1-9]\d*)(?=__|$)/;
 
+// A request record drawn cropped, reverse-complemented, or rotated: its drawn
+// hashes are not its source hashes.
+const drawnTransformed = (record) => Boolean(record?.region || record?.presentation?.reverseComplement
+  || Number.isSafeInteger(record?.display?.startCoordinate));
+
 const nonnegativeInteger = (value) => (
   value !== null && value !== '' && Number.isSafeInteger(Number(value)) && Number(value) >= 0 ? Number(value) : null
 );
@@ -142,11 +148,7 @@ const legacyIndex = ({ features = [], biologicalFeatures = [], records = [], mod
     offset += recordCounts.get(input) || 1;
   }
   const ordinalOf = (input, recordIndex) => (linear ? (offsets[input] ?? 0) + recordIndex + 1 : recordIndex + 1);
-  const transformed = (input, recordIndex) => {
-    const record = recordOf(input, recordIndex);
-    return Boolean(record?.region || record?.presentation?.reverseComplement
-      || Number.isSafeInteger(record?.display?.startCoordinate));
-  };
+  const transformed = (input, recordIndex) => drawnTransformed(recordOf(input, recordIndex));
   const hashCounts = new Map();
   sources.forEach((entry) => {
     const id = JSON.stringify([recordKeyOf(entry.input, entry.recordIndex), entry.sourceHash]);
@@ -307,6 +309,86 @@ export const migrateSessionFeatureEdits = ({ features, mode, catalog = null, leg
     droppedCount: migration.droppedCount,
     narrowedVisibilityCount: migration.narrowedVisibilityCount
   };
+};
+
+export const ANNOTATION_TARGET_MIGRATION_NOTICE = (count) => (
+  `${count} annotation(s) from an older Session named a feature by hash=. Each now names that feature by its source,`
+  + ' so it stays on the feature when the crop or orientation changes.'
+);
+
+// The records the renderer binds an annotation target in (the request's drawn
+// records in order, gbdraw/annotations/resolve.py::_bind_record) and the
+// source features by source hash, from the Session's saved feature catalog.
+const annotationCatalogIndex = (catalog) => {
+  const recordIds = new Map();
+  const featuresByHash = new Map();
+  (isObject(catalog) && Array.isArray(catalog.items) ? catalog.items : []).forEach((item) => {
+    (Array.isArray(item?.recordKeys) ? item.recordKeys : []).forEach((recordKey) => {
+      if (!recordIds.has(text(recordKey))) recordIds.set(text(recordKey), new Set());
+    });
+    (Array.isArray(item?.biologicalFeatures) ? item.biologicalFeatures : []).forEach((feature) => {
+      const recordKey = text(feature?.recordKey);
+      const biologicalFeatureId = text(feature?.biologicalFeatureId);
+      if (!recordKey || !biologicalFeatureId) return;
+      recordIds.get(recordKey)?.add(text(feature?.record_id ?? feature?.recordId));
+      const hash = text(feature?.stableFeatureId) || biologicalFeatureId.replace(/~\d+$/, '');
+      if (!featuresByHash.has(hash)) featuresByHash.set(hash, new Map());
+      featuresByHash.get(hash).set(JSON.stringify([recordKey, biologicalFeatureId]), { recordKey, biologicalFeatureId });
+    });
+  });
+  return { recordKeys: [...recordIds.keys()], recordIds, featuresByHash };
+};
+
+const boundRecordKey = (selector, { recordKeys, recordIds }) => {
+  if (selector == null) return recordKeys.length === 1 ? recordKeys[0] : '';
+  if (selector.kind === 'recordIndex') return recordKeys[selector.index] || '';
+  if (selector.kind !== 'recordId') return '';
+  // A record without catalog features has no known ID, so the binding is not certain.
+  if (recordKeys.some((recordKey) => recordIds.get(recordKey).size !== 1)) return '';
+  const matches = recordKeys.filter((recordKey) => recordIds.get(recordKey).has(text(selector.value)));
+  return matches.length === 1 ? matches[0] : '';
+};
+
+/**
+ * R-7 (Owner decision 2026-10-05): a Session before 45 named a selected
+ * feature in an annotation by `hash=<hash>` (a featureSpan target), which the
+ * renderer matches in the drawn record, and a hand-written target looks the
+ * same. Load moves such a target to the feature's source identity, in the mode
+ * of the Session's diagram (`mode`), only when the figure cannot change: the
+ * record it binds is drawn without a crop, reverse complement, or rotation, and
+ * the hash names exactly one feature of the saved catalog, in that record.
+ * Every other target stays as saved. Returns the annotation sets and the
+ * number of moved targets.
+ */
+export const migrateSessionAnnotationTargets = ({ annotationSets, mode, catalog = null, records = [] }) => {
+  const index = annotationCatalogIndex(catalog);
+  const requestRecords = Array.isArray(records) ? records : [];
+  let migratedCount = 0;
+  const identityTarget = (target) => {
+    const selector = target?.kind === 'featureSpan' && Array.isArray(target.selectors) && target.selectors.length === 1
+      ? target.selectors[0] : null;
+    if (selector?.key !== 'hash') return null;
+    const recordKey = boundRecordKey(target.record, index);
+    const matches = [...(index.featuresByHash.get(text(selector.value))?.values() || [])];
+    const request = requestRecords.find((record) => recordKeyBelongsToRequest(recordKey, [record]));
+    if (!recordKey || matches.length !== 1 || matches[0].recordKey !== recordKey
+      || !request || drawnTransformed(request)) return null;
+    const migrated = { kind: 'featureIdentity', scope: mode, ...matches[0],
+      envelope: target.envelope, circularPath: target.circularPath };
+    return featureIdentityKeyOf(migrated) ? migrated : null;
+  };
+  const migratedSets = (Array.isArray(annotationSets) ? annotationSets : []).map((set) => (
+    !Array.isArray(set?.annotations) ? set : {
+      ...set,
+      annotations: set.annotations.map((annotation) => {
+        const target = identityTarget(annotation?.target);
+        if (!target) return annotation;
+        migratedCount += 1;
+        return { ...annotation, target };
+      })
+    }
+  ));
+  return { annotationSets: migratedCount > 0 ? migratedSets : annotationSets, migratedCount };
 };
 
 const LANE_MODES = Object.freeze({ outward: 'circular', inward: 'circular', above: 'linear', below: 'linear' });

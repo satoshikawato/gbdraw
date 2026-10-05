@@ -37,7 +37,12 @@ visibility edit that hid every feature with its hash (each copy of a duplicated
 record) now applies to the edited feature only; the Web app reports how many.
 Each moved edit takes the mode of the Session's diagram. A Feature placement
 draft of a Session 41–44 takes the mode of its lane side; a Main placement,
-which reached requests of both modes, is kept for both. A catalog of schema 3 or
+which reached requests of both modes, is kept for both. An annotation target
+`hash=<hash>` of a Session 40–44 moves to a `featureIdentity` target in the
+Session's mode only when its record is drawn without a crop, reverse
+complement, or rotation and the hash names exactly one feature of the saved
+catalog, in that record; the Web app reports how many moved, and every other
+target loads unchanged. A catalog of schema 3 or
 4 reads as schema 5 without selector values until the next Generate; a feature
 whose rendered ID carries its source hash was drawn with its source
 coordinates, so its source values serve until then.
