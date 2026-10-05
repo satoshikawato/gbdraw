@@ -702,6 +702,11 @@ Retired names and their replacements are listed under
   a GenBank or DDBJ file restores its DEFINITION or organism label instead of
   the file name. The label read is part of the add's one History step; Undo,
   Redo, and Session save and load are unavailable until it answers (#747).
+- Fixed: in a standalone interactive SVG, the popup of a Linear collinear block
+  with several anchors now copies and downloads its Query span, Subject span,
+  and both spans. It showed "Match feature endpoint identity is invalid." under
+  each span and offered no sequence actions; a one-anchor block was not
+  affected. Gallery SVGs carry the fix after their next refresh.
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 

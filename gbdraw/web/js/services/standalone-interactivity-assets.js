@@ -5025,6 +5025,18 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
     return feature;
   }
 
+  // A match claims one endpoint feature, or several (a collinear block's anchors).
+  // Expansion resolves a plural claim as a whole; a single claim is re-checked
+  // against its rendered feature. A span is the match envelope either way.
+  function catalogMatchEndpointResolved(match, role) {
+    var references = match && match[role + 'FeatureReferences'];
+    if (Array.isArray(references) && references.length > 1) {
+      return match._gbdraw_catalog_endpoint_contract === true
+        && match['_gbdraw_' + role + '_endpoint_resolved'] === true;
+    }
+    return Boolean(resolvedCatalogMatchFeature(match, role));
+  }
+
   function materializedMatchFeatureRow(svgId, fallback, resolvedFeature) {
     var id = String(svgId || '').trim();
     var feature = resolvedFeature || featuresById.get(id) || {};
@@ -5118,7 +5130,7 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       && match._gbdraw_catalog_endpoint_contract === true
       && kind !== 'homology'
       && match['_gbdraw_' + role + '_record_span'] !== true
-      && !resolvedCatalogMatchFeature(match, role)
+      && !catalogMatchEndpointResolved(match, role)
     ) {
       return { source: null, reason: 'Match feature endpoint identity is invalid.' };
     }
