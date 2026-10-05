@@ -106,6 +106,8 @@ export const createFeaturePlacementActions = ({
   // value and records none. The control's own History adapter records an edit
   // that loses nothing (R11). Restores (Undo/Redo, Session load, Import, Reset
   // Settings) install state as is; Generate names what they leave (R6).
+  // The composition root passes `changeTrackLayout` to the track stack editors
+  // as their one port (R13); each routes its feature-slot edits through it.
   const layoutChange = reactive({ open: false, count: 0, setting: '', value: '', scope: '' });
   let pendingLayout = null;
   const laneSides = () => Object.fromEntries(Object.keys(SIDES).map((mode) => [mode,
@@ -160,16 +162,8 @@ export const createFeaturePlacementActions = ({
     const value = control.type === 'checkbox' ? control.checked : control.value;
     return changeTrackLayout(() => { state.form[field] = value; }, control);
   };
-  // The track stack editors' edits; a DOM event passed last names the control
-  // (its listener's element, not an icon inside a button).
-  const trackLayoutActions = (actions) => Object.fromEntries(Object.entries(actions).map(([name, action]) => [
-    name, (...args) => {
-      const event = typeof Event === 'function' && args.at(-1) instanceof Event ? args.pop() : null;
-      return changeTrackLayout(() => action(...args), event?.currentTarget);
-    }
-  ]));
 
-  return { choices, setPlacement, layoutChange, resolveLayoutChange, changeLayoutSetting, trackLayoutActions,
+  return { choices, setPlacement, layoutChange, resolveLayoutChange, changeLayoutSetting, changeTrackLayout,
     valueFor: (feature) => {
       // The control lists this mode's placements; a feature of the other
       // mode's Result reads as Auto until that mode is active (R2).

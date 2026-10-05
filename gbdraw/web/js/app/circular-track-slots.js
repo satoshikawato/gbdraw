@@ -20,6 +20,7 @@ import {
   isManualSlotValue,
   normalizeOptionalText
 } from './track-slot-display.js';
+import { featureSlotEdits } from './track-slot-edits.js';
 import { parseOptionalCircularScalar, parseOptionalPixel, validateCustomTrackPlan } from './track-slot-validation.js';
 import { visibleFeatureUnderlaysForState } from '../utils/feature-rendering.js';
 import { diagnosticError } from '../services/error-normalization.js';
@@ -1404,9 +1405,10 @@ const circularGeometryShortcutsForState = (state) => ({
   gcSkewRadius: state?.adv?.gc_skew_radius_circular
 });
 
-// `trackLayoutActions` is the feature placement owner's transition (R10, Q3):
-// every stack edit that can change the feature slot runs through it.
-export const createCircularTrackSlotEditor = ({ state, trackLayoutActions = (actions) => actions }) => {
+// `changeTrackLayout` is the feature placement owner's transition, injected as
+// a port (R10, Q3, R13): every stack edit that can change the feature slot
+// runs through it.
+export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (apply) => apply() }) => {
   const editorKeys = new WeakMap();
   let nextEditorKey = 1;
   const circularTrackSlotEditorKey = (slot) => {
@@ -2442,7 +2444,7 @@ export const createCircularTrackSlotEditor = ({ state, trackLayoutActions = (act
     normalizeCircularTrackSlots: normalizeSlotsInPlace,
     syncCircularConservationSlots,
     changeCircularDepthSources,
-    ...trackLayoutActions({
+    ...featureSlotEdits(changeTrackLayout, {
       resetCircularTrackSlotsFromSimpleControls,
       resetCircularTrackSlotsToPreset,
       setCircularTrackSlotsEnabled,
