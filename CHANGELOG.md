@@ -12,6 +12,18 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Features list and Search features (web app): a hidden feature now stays
+  listed, so it can be shown again. The list holds the displayed Result's
+  features of the selected types, every feature it draws, and every feature
+  with its own **Feature visibility**. Each row has a **Visibility** checkbox
+  that shows whether the feature is drawn and sets its **Feature visibility**
+  **On** or **Off**; **Edit** and **Open** open the popup of a hidden feature,
+  which says that it is hidden. A feature used to drop out of the list and
+  search after Generate once it was hidden, and its popup could not be opened.
+  Showing a feature that the Result does not draw renders it again live, also
+  with **Auto Reflow** off. A GFF3 input loads the type of a feature whose
+  **Feature visibility** a row turns **Off** as well as **On**, and a `source`
+  feature with its own **Feature visibility** stays in the feature catalog.
 - Label whitelist, Label overrides, and Feature visibility tables: a `#` after
   other text in a line is now part of the cell value instead of the start of a
   comment. A Feature visibility row whose value contains `#` (for example

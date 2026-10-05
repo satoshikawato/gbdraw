@@ -238,8 +238,9 @@ key) and `tests/web/mode-scoped-feature-edits.playwright.spec.js`;
 A live action, a History apply, and a Result display call the same projection:
 `projectMountedEditorIntent` (palette, rules, visibility, labels),
 `orderLegendEntries` in `app/legend/utils.js` (legend order), and
-`featureMatchesExactQualifier` in `app/feature-visibility.js` (exact-qualifier
-rules). A displayed batch Result whose shared legend entries already follow
+`resolveFeatureDrawn` in `app/feature-visibility.js` (whether a feature is
+drawn, as Python's `should_render_feature` answers; the Features list and
+Search features read it through `listFeatureRows`). A displayed batch Result whose shared legend entries already follow
 the legend order keeps its order (`orderLegendEntries` with `keepFollowed`),
 so the entries only that Result draws keep their places; a Result last shown
 with another order also receives the default order. A History legend step made
@@ -400,7 +401,8 @@ input is that transition, a listed restore, or a listed reconcile) with
   comparison sequences of a LOSAT-cache replay included: its ring rows and the
   managed track slots' `series_key` name those rows. Only the generated Linear
   comparisons stay in artifact checkpoints.
-- The Generate-owned feature catalog is held by reference in checkpoints, history
+- The feature catalog of the current Results (Generate's, or the automatic
+  rerender's, which replaces it with its Results) is held by reference in checkpoints, history
   entries, and Session rollback, and is never cloned through JSON.
   `state.featureCatalog` is null or an admitted catalog (`admittedFeatureCatalog`
   in `services/config.js`). The two paragraphs under Module ownership govern

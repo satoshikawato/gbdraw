@@ -62,7 +62,7 @@ export const createFeatureEditor = ({
   const featureEditTableActions = createFeatureEditTableActions({
     state, ref, computed, getCommittedSession, readResourceRecordCount, readFeatureOverrideTable,
     projectFeatureEdits: () => {
-      visibilityActions.reconcileFeatureVisibility();
+      visibilityActions.reconcileFeatureVisibility({ rerender: true });
       labelActions.reconcileLabelOverrides();
       labelActions.applyFeatureVisibilityToLabels();
     }
@@ -113,7 +113,6 @@ export const createFeatureEditor = ({
     downloadFeatureVisibilityRulesTsv: visibilityActions.downloadFeatureVisibilityRulesTsv,
     featureVisibilityQualifierSuggestions: visibilityActions.featureVisibilityQualifierSuggestions,
     featureVisibilityRuleDetail: visibilityActions.featureVisibilityRuleDetail,
-    getFeatureVisibility: visibilityActions.getFeatureVisibility,
     reconcileFeatureVisibility: visibilityActions.reconcileFeatureVisibility,
     handleFeatureVisibilityScopeChoice: visibilityActions.handleFeatureVisibilityScopeChoice,
     moveFeatureVisibilityRuleDown: visibilityActions.moveFeatureVisibilityRuleDown,

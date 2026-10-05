@@ -359,12 +359,14 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
     feature.scope = context.mode;
   });
   context.biologicalFeatures.push(...expandedBiological);
+  context.biologicalFeaturesByResult[resultIndex] = expandedBiological;
   context.scalarMetrics.biologicalFeatureCount += expandedBiological.length;
 
   const svgIds = new Set();
   const features = requireArray(item.features);
   const renderedByKey = new Map();
   const renderedFeatures = new Map();
+  const renderedByIdentity = new Map();
   const renderedIdentities = createCatalogRenderedIdentityCollection();
   for (const feature of features) {
     if (!isObject(feature)) throw catalogError();
@@ -413,10 +415,12 @@ function* validateAndProjectCatalogItem(item, result, resultIndex, context) {
     });
     rememberRenderedResultIndex(context.resultIndexesByRenderedId, svgId, resultIndex);
     renderedFeatures.set(svgId, projectedFeature);
+    if (!renderedByIdentity.has(key)) renderedByIdentity.set(key, projectedFeature);
     yield;
   }
   context.renderedIdentitiesByResult[resultIndex] = renderedIdentities;
   context.renderedFeaturesByResult[resultIndex] = renderedFeatures;
+  context.renderedByIdentityByResult[resultIndex] = renderedByIdentity;
   context.scalarMetrics.renderedFeatureCount += features.length;
 
   const orthogroups = requireArray(item.orthogroups);
@@ -630,6 +634,8 @@ function* catalogAdmissionSteps(
     sequenceSources: [],
     renderedIdentitiesByResult: [],
     renderedFeaturesByResult: [],
+    biologicalFeaturesByResult: [],
+    renderedByIdentityByResult: [],
     renderedTargetsByOverrideKey: new Map(),
     resultIndexesByRenderedId: new Map(),
     orthogroupProjection,
@@ -675,6 +681,10 @@ function* catalogAdmissionSteps(
     // Each Result's rendered features by rendered ID, so a mounted label or
     // feature element reaches its source identity (CW-02).
     renderedFeaturesByResult: context.renderedFeaturesByResult,
+    // Each Result's biological features in source order, and its rendered
+    // feature of each identity it draws: the Features list and search (R-5).
+    biologicalFeaturesByResult: context.biologicalFeaturesByResult,
+    renderedByIdentityByResult: context.renderedByIdentityByResult,
     renderedTargetsByOverrideKey: context.renderedTargetsByOverrideKey,
     resultIndexesByRenderedId: context.resultIndexesByRenderedId,
     scalarMetrics
@@ -1003,18 +1013,32 @@ export const featureStateFromCatalog = (catalog, { mode = '' } = {}) => {
 
 const rawValue = (value) => globalThis.window?.Vue?.toRaw ? globalThis.window.Vue.toRaw(value) : value;
 
-// The rendered features of one committed Result by rendered ID (the displayed
-// Result by default), from the admitted catalog; null without a catalog.
-export const resultRenderedFeatures = (state, resultIndex = state?.selectedResultIndex?.value) => {
+// The catalog features of one committed Result (the displayed Result by
+// default) from the admitted catalog, or null without a catalog: `biological`
+// in source order, `rendered` by rendered ID, and `renderedByIdentity`, the
+// rendered feature of each source identity the Result draws.
+export const resultCatalogFeatures = (state, resultIndex = state?.selectedResultIndex?.value) => {
   const catalog = rawValue(state?.featureCatalog?.value);
   if (!catalog) return null;
+  const index = Number(resultIndex) || 0;
   try {
-    return admitFeatureCatalog(catalog, rawValue(state.results?.value) || [], {
+    const admission = admitFeatureCatalog(catalog, rawValue(state.results?.value) || [], {
       mode: state.generatedMode?.value || ''
-    }).renderedFeaturesByResult[Number(resultIndex) || 0] || null;
+    });
+    const rendered = admission.renderedFeaturesByResult[index];
+    return rendered ? {
+      biological: admission.biologicalFeaturesByResult[index] || [],
+      rendered,
+      renderedByIdentity: admission.renderedByIdentityByResult[index] || new Map()
+    } : null;
   } catch {
     return null;
   }
 };
+
+// The rendered features of one committed Result by rendered ID; null without a catalog.
+export const resultRenderedFeatures = (state, resultIndex) => (
+  resultCatalogFeatures(state, resultIndex)?.rendered || null
+);
 
 export const featureCatalogReloadMessage = FEATURE_CATALOG_RELOAD_MESSAGE;

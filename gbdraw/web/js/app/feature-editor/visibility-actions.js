@@ -21,7 +21,7 @@ import {
 import { downloadTextFile } from '../../services/text-download.js';
 import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-identity.js';
 import { featureIdentityKeyOf } from '../../services/feature-placement.js';
-import { resultRenderedFeatures } from '../../services/feature-catalog.js';
+import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
 
 export const createFeatureVisibilityActions = ({
   state,
@@ -199,21 +199,44 @@ export const createFeatureVisibilityActions = ({
   const isRuleScope = (scope) => scope?.id === 'product' || scope?.id === 'protein_id';
 
   // The live projection of what the label rerender and Generate draw (R3): a
-  // feature shows the resolver's answer, and an unknown answer leaves it as
-  // it is. The resolver reads Python's rule matches, so an action prepares
-  // them first (`prepareDrawn`).
-  const drawnChanges = (features) => {
+  // feature the displayed Result draws shows the resolver's answer, and an
+  // unknown answer leaves it as it is. A feature the Result does not draw and
+  // the resolver draws needs geometry the Result does not have, so the action
+  // asks for the rerender, which draws what Generate draws (R-5); so does an
+  // unknown answer for a feature the action names (`targeted`). The resolver
+  // reads Python's rule matches, so an action prepares them first
+  // (`prepareDrawn`).
+  const drawnChanges = (features, { targeted = false } = {}) => {
     const context = featureDrawnContext(state, { diagramOptions: getCommittedRequest()?.diagramOptions });
-    return features.flatMap((feature) => {
-      const featureId = featureSvgId(feature);
-      const drawn = featureId ? resolveFeatureDrawn(feature, context) : null;
-      return drawn === null ? [] : [{ featureId, mode: drawn ? 'on' : 'off' }];
+    const catalogFeatures = resultCatalogFeatures(state);
+    let needsRerender = false;
+    const changes = features.flatMap((feature) => {
+      const shown = catalogFeatures
+        ? catalogFeatures.renderedByIdentity.get(stableFeatureOverrideKey(feature)) : feature;
+      const drawn = resolveFeatureDrawn(shown || feature, context);
+      if (!shown) {
+        needsRerender ||= drawn === true || (targeted && drawn === null);
+        return [];
+      }
+      const featureId = featureSvgId(shown);
+      return featureId && drawn !== null ? [{ featureId, mode: drawn ? 'on' : 'off' }] : [];
     });
+    return { changes, needsRerender };
   };
+  // Every catalog feature of the displayed Result, as drawn where it is drawn.
   const displayedFeatures = () => {
-    const displayed = resultRenderedFeatures(state);
-    return displayed ? [...displayed.values()]
+    const catalogFeatures = resultCatalogFeatures(state);
+    return catalogFeatures
+      ? catalogFeatures.biological.map((feature) => (
+        catalogFeatures.renderedByIdentity.get(stableFeatureOverrideKey(feature)) || feature
+      ))
       : uniqueFeaturesBySvgId(Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []);
+  };
+  // Applies the projection; returns whether a mounted element changed and
+  // whether the rerender must draw a feature.
+  const projectDrawn = (features, { targeted = false, ...options } = {}) => {
+    const { changes, needsRerender } = drawnChanges(features, { targeted });
+    return { updated: applyVisibilityPreviewChanges(changes, options), needsRerender };
   };
   const prepareDrawn = async (rules = []) => {
     if (rules.length) await rulePreparation?.prepareVisibility?.(rules);
@@ -275,10 +298,10 @@ export const createFeatureVisibilityActions = ({
           mode: useAfter ? change.after : change.before
         }))
       );
-      const updated = applyVisibilityPreviewChanges(drawnChanges(changedFeatures), { reason });
+      const { updated, needsRerender } = projectDrawn(changedFeatures, { reason, targeted: true });
       if (!updated && !overrideChanged) return false;
       updateClickedFeatureVisibilityFromRules(targetFeatures);
-      applyFeatureVisibilityToLabels();
+      applyFeatureVisibilityToLabels({ rerender: needsRerender });
       return true;
     };
 
@@ -319,12 +342,15 @@ export const createFeatureVisibilityActions = ({
     }
 
     // A rule can reach any feature, so it projects onto every displayed one.
-    applyVisibilityPreviewChanges(drawnChanges(isRuleScope(selectedScope) ? displayedFeatures() : targetFeatures));
+    const { needsRerender } = isRuleScope(selectedScope)
+      ? projectDrawn(displayedFeatures())
+      : projectDrawn(targetFeatures, { targeted: true });
 
     const clicked = clickedFeature.value?.feat;
     if (clicked && targetFeatures.some((feature) => sameFeature(feature, clicked))) {
       clickedFeature.value.featureVisibility = nextMode;
     }
+    return needsRerender;
   };
 
   const clearFeatureVisibilityScopeDialog = ({ restorePrevious = false } = {}) => {
@@ -348,10 +374,10 @@ export const createFeatureVisibilityActions = ({
     const nextMode = normalizeVisibilityMode(modeRaw);
     const previousMode = getFeatureVisibilityOverride(featureOverrides, feat);
 
-    applyFeatureVisibilityScope(feat, nextMode, scope);
+    const needsRerender = applyFeatureVisibilityScope(feat, nextMode, scope);
 
     if (previousMode !== nextMode) {
-      applyFeatureVisibilityToLabels({ reflow: triggerReflow });
+      applyFeatureVisibilityToLabels({ reflow: triggerReflow, rerender: needsRerender });
     }
 
     return previousMode !== nextMode;
@@ -403,12 +429,10 @@ export const createFeatureVisibilityActions = ({
     clearFeatureVisibilityScopeDialog();
     const rule = isRuleScope(scope) ? buildExactQualifierFeatureVisibilityRule({ ...scope, action: nextMode }) : null;
     await prepareDrawn(rule ? [rule] : []);
-    applyFeatureVisibilityScope(feat, nextMode, scope);
-    if (previousMode !== nextMode) applyFeatureVisibilityToLabels();
+    const needsRerender = applyFeatureVisibilityScope(feat, nextMode, scope);
+    if (previousMode !== nextMode) applyFeatureVisibilityToLabels({ rerender: needsRerender });
     return previousMode !== nextMode;
   };
-
-  const getFeatureVisibility = (feat) => getFeatureVisibilityOverride(featureOverrides, feat);
 
   const setFeatureVisibilityRuleField = (index, field, value) => {
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -464,7 +488,14 @@ export const createFeatureVisibilityActions = ({
   // Reconcile with the same resolver as the visibility action, so Undo and
   // Redo of a scoped hide leave the preview as the action left it (FE-04).
   // The displayed Result's features carry the identities its edits name (R3).
-  const reconcileFeatureVisibility = () => applyVisibilityPreviewChanges(drawnChanges(displayedFeatures()));
+  // A History step or a loaded table (`rerender`) that draws a feature the
+  // Result does not draw reruns the rerender, as the action did; a Result
+  // display does not, so a feature Python does not draw cannot repeat it.
+  const reconcileFeatureVisibility = ({ rerender = false } = {}) => {
+    const { updated, needsRerender } = projectDrawn(displayedFeatures());
+    if (rerender && needsRerender) applyFeatureVisibilityToLabels({ reflow: false, rerender: true });
+    return updated;
+  };
 
   return {
     addFeatureVisibilityRule,
@@ -472,7 +503,6 @@ export const createFeatureVisibilityActions = ({
     featureVisibilityQualifierSuggestions,
     featureVisibilityRuleDetail,
     buildSelectedFeaturesVisibilityCommand,
-    getFeatureVisibility,
     handleFeatureVisibilityScopeChoice,
     moveFeatureVisibilityRuleDown: (index) => moveFeatureVisibilityRule(index, 1),
     moveFeatureVisibilityRuleUp: (index) => moveFeatureVisibilityRule(index, -1),

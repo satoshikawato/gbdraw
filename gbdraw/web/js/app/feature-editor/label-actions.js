@@ -1,6 +1,6 @@
 import { diagnosticError, normalizeUserFacingError } from '../../services/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
-import { featureDrawnContext, getFeatureVisibilityOverride, resolveFeatureDrawn } from '../feature-visibility.js';
+import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride } from '../feature-visibility.js';
 import { parseLabelOverrideTsv, serializeLabelOverrideRows } from './label-override-table.js';
 import { escapeRegexLiteral } from '../feature-selector.js';
 import {
@@ -8,7 +8,7 @@ import {
   normalizeFeatureOverrideLabelText,
   updateFeatureOverride
 } from '../../services/feature-placement.js';
-import { resultRenderedFeatures } from '../../services/feature-catalog.js';
+import { resultCatalogFeatures, resultRenderedFeatures } from '../../services/feature-catalog.js';
 import { FEATURE_SELECTOR, getFeatureIdentity } from './svg-actions.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import { defaultFeatureRendering } from '../../utils/feature-rendering.js';
@@ -476,7 +476,9 @@ export const createFeatureLabelActions = ({
   // Generate's request with the current edits and rules (F-3, Owner Q2). The
   // feature visibility owner's resolver answers as Generate does.
   const drawnContext = () => featureDrawnContext(state, { diagramOptions: getCommittedRequest()?.diagramOptions });
-  const featureHidden = (feature, context = drawnContext()) => resolveFeatureDrawn(feature, context) === false;
+  const featureHidden = (feature, context = drawnContext()) => (
+    featureDrawnInResult(feature, context, resultCatalogFeatures(state)) === false
+  );
   // Owner decisions Q1 and Q2 (2026-10-04): Label visibility On takes effect
   // only when the diagram can draw the label. Returns 'hidden', 'underlay', or
   // 'embedded_only', or '' when the label is drawn.
@@ -751,14 +753,16 @@ export const createFeatureLabelActions = ({
   };
 
   // A feature visibility edit shows or hides the feature's label in the same
-  // action, then Auto Reflow places the labels as Generate does (F-3).
-  const applyFeatureVisibilityToLabels = ({ reflow = true } = {}) => {
+  // action, then Auto Reflow places the labels as Generate does (F-3). An edit
+  // that draws a feature the Result does not draw (`rerender`) always reruns
+  // the rerender, which draws it and its label (R-5).
+  const applyFeatureVisibilityToLabels = ({ reflow = true, rerender = false } = {}) => {
     if (generatedMode.value !== mode.value) return false;
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return false;
     const projection = applyStoredVisibilityOverridesToSvg(svg);
     if (projection.changed) commitLabelEdit();
-    if (reflow) queueLabelReflow(projection.unavailableOverride);
+    if (reflow || rerender) queueLabelReflow(rerender || projection.unavailableOverride);
     return projection.changed;
   };
 

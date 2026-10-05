@@ -840,7 +840,20 @@ stay with that feature when the displayed Result, record, or visibility
 changes, and when crop, reverse complement, record order, or a second copy of
 the record changes how it is drawn; every drawn copy of the feature shows the
 edit. Hiding a feature hides its label in the current Result, as Generate does;
-with **Auto Reflow** on, the remaining labels are placed again. After Generate
+with **Auto Reflow** on, the remaining labels are placed again.
+
+The Features list and **Search features** list the displayed Result's features
+of the types selected in **Features** at the last Generate, every feature the
+Result draws (for example by a color rule), and every feature with its own
+**Feature visibility**, also while it is hidden. A hidden feature stays listed,
+so it can be shown again. Each row's **Visibility** checkbox shows whether the
+feature is drawn; checking it sets the feature's **Feature visibility** to
+**On**, which beats the feature types and the visibility rules, and unchecking
+it sets **Off**. To return a feature to **Default**, use its popup. **Edit** and
+**Open** open the popup of a hidden feature too; the popup says that the
+feature is hidden. Showing a feature that the Result does not draw renders the
+Result again with the current edits, as Generate would, so its label edits
+apply as well. Each toggle is one **Undo** step. After Generate
 replaces a source file, only the edits of features that the new source does
 not have are removed; an edit that replaces every label with the same text
 stays. An edit of a feature outside the crop stays and applies again when the

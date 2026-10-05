@@ -4,7 +4,12 @@ import {
   normalizePaletteDefinitions
 } from './app/color-utils.js';
 import { collectSpecificColorQualifierSuggestions } from './app/feature-selector.js';
-import { normalizeFeatureVisibilityRule } from './app/feature-visibility.js';
+import {
+  featureDrawnContext,
+  listFeatureRows,
+  normalizeFeatureVisibilityRule
+} from './app/feature-visibility.js';
+import { resultCatalogFeatures } from './services/feature-catalog.js';
 import { normalizeCircularPlotTitlePosition } from './app/plot-title-position.js';
 import {
   createDefaultLayoutPreferences,
@@ -706,27 +711,49 @@ const newFeatureToAdd = ref(defaultEditorDraftState.newFeatureToAdd);
 const addedLegendCaptions = ref(new Set());
 const fileLegendCaptions = ref(new Set());
 
-// The Features drawer lists the features rendered in the displayed Result.
-// A batch Result shows one record, so the record picker appears only when the
-// displayed Result shows several records (FE-03).
-const displayedResultFeatures = computed(() => {
+// The Features drawer and Search features list the displayed Result's catalog
+// features (`listFeatureRows`, R-5): a hidden feature stays listed so it can be
+// shown again. The selected feature types are those of the request that drew
+// the Result (`state.committedDiagramOptions`, set by app-setup). A Result
+// without a catalog lists the features it renders. A batch Result shows one
+// record, so the record picker appears only when the displayed Result shows
+// several records (FE-03).
+const featureList = computed(() => {
+  const catalogFeatures = resultCatalogFeatures(state);
+  if (catalogFeatures) {
+    return listFeatureRows(catalogFeatures, featureDrawnContext(state, {
+      diagramOptions: state.committedDiagramOptions?.()
+    }));
+  }
   const features = extractedFeatures.value;
-  if (results.value.length < 2) return features;
-  const renderedIds = getCommittedSvgResultMetadata(toRaw(results.value[selectedResultIndex.value]))
-    ?.renderedFeatureIdentities?.renderedIds;
-  return renderedIds instanceof Set
-    ? features.filter((feature) => renderedIds.has(feature.svg_id))
-    : features;
+  const renderedIds = results.value.length < 2 ? null
+    : getCommittedSvgResultMetadata(toRaw(results.value[selectedResultIndex.value]))
+      ?.renderedFeatureIdentities?.renderedIds;
+  return {
+    rows: renderedIds instanceof Set ? features.filter((feature) => renderedIds.has(feature.svg_id)) : features,
+    drawn: null,
+    rendered: null
+  };
 });
+// A listed feature's drawn state and the rendered ID it is drawn with ('' when
+// the Result does not draw it).
+const featureListState = (feature) => {
+  const { drawn, rendered } = featureList.value;
+  const raw = toRaw(feature);
+  return {
+    drawn: drawn?.get(raw) ?? true,
+    renderedId: !rendered || rendered.has(raw) ? String(feature?.svg_id || '') : ''
+  };
+};
 const featureRecordPickerVisible = computed(() => (
   featureRecordIds.value.length > 1
-  && new Set(displayedResultFeatures.value.map((feature) => (
+  && new Set(featureList.value.rows.map((feature) => (
     mode.value === 'circular' ? feature.record_idx : feature.displayRecordId
   ))).size > 1
 ));
 
 const filteredFeatures = computed(() => {
-  let features = [...displayedResultFeatures.value];
+  let features = [...featureList.value.rows];
 
   // Filter by the selected record when the displayed Result shows several.
   if (featureRecordPickerVisible.value) {
@@ -756,7 +783,9 @@ const filteredFeatures = computed(() => {
   return features;
 });
 
-const FEATURE_ROW_HEIGHT_PX = 64;
+// The height of a Features list row (`h-[83px]` in index.html): three lines,
+// the last with the Visibility checkbox (R-5).
+const FEATURE_ROW_HEIGHT_PX = 83;
 const FEATURE_LIST_OVERSCAN = 8;
 const featureListScrollTop = ref(0);
 const featureListViewportHeight = ref(520);
@@ -1054,6 +1083,8 @@ export const state = {
   newFeatureToAdd,
   addedLegendCaptions,
   fileLegendCaptions,
+  featureList,
+  featureListState,
   filteredFeatures,
   filteredEditableLabels
 };

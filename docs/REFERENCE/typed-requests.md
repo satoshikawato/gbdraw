@@ -202,7 +202,9 @@ the crop, or removed while loading), that an uncropped record does not have
 source (`unresolved`) does not fail the render: the edit stays dormant and is
 reported in `feature_identity_notices` on the render result and on `Diagram`, in
 the Web metadata, and as one CLI log line per notice. Placement applies the same
-rule. A GFF3 input also loads the type of each feature a row turns `on`.
+rule. A GFF3 input also loads the type of each feature whose Feature visibility a
+row sets, so a feature a row turns `on` is drawn and one it turns `off` stays in
+the Web feature catalog.
 Requested placement can be combined with each `RecordInput.display` and the
 `canvas.feature_overlap_tolerance_bp` config override. It does not change source
 coordinates, sequences, or feature identities.

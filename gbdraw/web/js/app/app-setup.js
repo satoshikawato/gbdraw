@@ -455,7 +455,8 @@ export const createAppSetup = () => {
     newFeatureToAdd,
     addedLegendCaptions,
     fileLegendCaptions,
-    filteredFeatures
+    filteredFeatures,
+    featureListState
   } = state;
   let featureActions = null;
   let similarityAlignmentActions = null;
@@ -1424,6 +1425,7 @@ export const createAppSetup = () => {
     setMainSessionComparisonFrameConverter(null);
     disposeSessionOperations();
     state.sessionPreparationBusyReason = null;
+    state.committedDiagramOptions = null;
     disposeDiagramGenerationWorker();
   });
 
@@ -2499,6 +2501,9 @@ export const createAppSetup = () => {
     preparePaletteDefinitions: paletteLoader.loadPaletteAsset
   });
 
+  // The Features list reads the feature types of the request that drew the
+  // displayed Result (state.js cannot import the committed Session owner).
+  state.committedDiagramOptions = () => getCommittedCanonicalRenderRequest()?.diagramOptions || null;
   state.sessionPreparationBusyReason = () => {
     if (history.mutationPending() || ruleMatchingPending.value || auxiliaryFileImportPending()) {
       return 'Applying an edit. Retry after the edit finishes.';
@@ -2613,7 +2618,6 @@ export const createAppSetup = () => {
     getFeatureColor,
     getFeatureColorValue,
     canEditFeatureColor,
-    getFeatureVisibility,
     handleFeatureVisibilityScopeChoice,
     moveFeatureVisibilityRuleDown,
     moveFeatureVisibilityRuleUp,
@@ -2668,6 +2672,7 @@ export const createAppSetup = () => {
     rules = false,
     prepareRules = rules,
     visibility = false,
+    rerender = false,
     legend = null,
     strokes = null,
     labels = false
@@ -2677,7 +2682,7 @@ export const createAppSetup = () => {
     if (rules) svgActions.applySpecificRulesToSvg();
     if (visibility) {
       await rulePreparation.prepareDrawn();
-      reconcileFeatureVisibility();
+      reconcileFeatureVisibility({ rerender });
     }
     if (legend) reconcileLegendEntries(legend);
     if (strokes) reconcileStrokeOverrides(strokes);
@@ -2716,6 +2721,7 @@ export const createAppSetup = () => {
       rules: colors,
       prepareRules: changedDomains.has('features') || rulesChanged || !rulePreparation.isPrepared(),
       visibility: changedDomains.has('features'),
+      rerender: true,
       legend: editorState
         ? {
             restoreColorState: true,
@@ -5031,6 +5037,7 @@ export const createAppSetup = () => {
     labelReflowProcessing,
     labelReflowLastError,
     filteredFeatures,
+    featureListState,
     featureColorOverrides,
     featureVisibilityManualRules,
     featureVisibilityRules,
@@ -5043,7 +5050,6 @@ export const createAppSetup = () => {
     featureVisibilityRuleDetail,
     getFeatureColor,
     getFeatureColorValue,
-    getFeatureVisibility,
     moveFeatureVisibilityRuleDown: moveFeatureVisibilityRuleDownWithHistory,
     moveFeatureVisibilityRuleUp: moveFeatureVisibilityRuleUpWithHistory,
     removeFeatureVisibilityRule: removeFeatureVisibilityRuleWithHistory,

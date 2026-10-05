@@ -15,6 +15,7 @@ import {
 import { buildFeatureSequenceFastas } from '../feature-sequence-fasta.js';
 import { getFeatureOverride } from '../../services/feature-override-identity.js';
 import { featureIdentityKeyOf, featureOverrideValue } from '../../services/feature-placement.js';
+import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
 import { COMPARISON_LEGEND_SELECTOR } from '../legend/utils.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import {
@@ -316,7 +317,8 @@ export const createFeatureSvgActions = ({
     delegatedFeatureHandlers = null;
   };
 
-  const buildClickedFeaturePayload = (feat, featureElement = null, renderedSvgId = '') => {
+  // `renderedSvgId` is '' for a feature the displayed Result does not draw.
+  const buildClickedFeaturePayload = (feat, featureElement = null, renderedSvgId = undefined) => {
     const defaultLabel = getFeatureCaption(feat);
     const existingOverride = getFeatureOverride(featureColorOverrides, feat);
     const effectiveCaption = String(getEffectiveLegendCaption?.(feat) || existingOverride?.caption || defaultLabel || '').trim();
@@ -337,7 +339,7 @@ export const createFeatureSvgActions = ({
     const currentStrokeColor = featureElement?.getAttribute('stroke') || '#000000';
     const currentStrokeWidth = parseFloat(featureElement?.getAttribute('stroke-width')) || 0.5;
 
-    const actualSvgId = String(renderedSvgId || renderedFeatureSvgId(feat)).trim();
+    const actualSvgId = String(renderedSvgId ?? renderedFeatureSvgId(feat)).trim();
     const visibilityMode = normalizeVisibilityMode(featureOverrideValue(featureOverrides, feat, 'featureVisibility'));
 
     return {
@@ -397,15 +399,30 @@ export const createFeatureSvgActions = ({
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return null;
 
-    const renderedSvgId = renderedFeatureSvgId(feat);
-    if (!renderedSvgId) return null;
-    const featureElements = getFeatureElements(svg, renderedSvgId);
-    if (featureElements.length === 0) return null;
+    // A catalog feature opens as the displayed Result draws it; one that the
+    // Result lists but does not draw (a hidden feature, R-5) opens without an
+    // element, so its popup can show it again.
+    let target = feat;
+    let renderedSvgId = renderedFeatureSvgId(feat);
+    const catalogFeatures = resultCatalogFeatures(state);
+    const key = stableFeatureOverrideKey(feat);
+    if (catalogFeatures && key) {
+      target = catalogFeatures.renderedByIdentity.get(key)
+        || catalogFeatures.biological.find((candidate) => stableFeatureOverrideKey(candidate) === key);
+      if (!target) return null;
+      renderedSvgId = catalogFeatures.renderedByIdentity.has(key) ? renderedFeatureSvgId(target) : '';
+    } else if (!renderedSvgId) {
+      return null;
+    }
+    const featureElements = renderedSvgId ? getFeatureElements(svg, renderedSvgId) : [];
+    if (renderedSvgId && featureElements.length === 0) return null;
 
     hideHoverSummary();
     if (clickedPairwiseMatch) clickedPairwiseMatch.value = null;
-    const featureElement = getFeatureFillElements(svg, renderedSvgId)[0] || featureElements[0] || null;
-    clickedFeature.value = buildClickedFeaturePayload(feat, featureElement, renderedSvgId);
+    const featureElement = renderedSvgId
+      ? getFeatureFillElements(svg, renderedSvgId)[0] || featureElements[0] || null
+      : null;
+    clickedFeature.value = buildClickedFeaturePayload(target, featureElement, renderedSvgId);
     if (featurePopupSize) {
       featurePopupSize.width = 0;
       featurePopupSize.height = 0;

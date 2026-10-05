@@ -1166,13 +1166,16 @@ def _with_prepared_colors(request: DiagramRequest, inputs: PreparedDiagramInputs
     return replace(request, options=replace(request.options, colors=colors))
 
 
-def _gff_types_shown_by_overrides(
+def _gff_types_named_by_visibility_rows(
     rows: Sequence[FeatureOverride], collection: ResolvedRecordCollection,
 ) -> set[str]:
-    """Return the types of the GFF3 source features that identity rows turn on."""
+    """Return the types of the GFF3 source features that identity rows set the
+    Feature visibility of: a row turned on is drawn, and a feature with its own
+    visibility stays in the Web Features list so it can be shown again (R-5).
+    """
     shown: dict[str, set[str]] = {}
     for row in rows:
-        if row.feature_visibility == "on":
+        if row.feature_visibility is not None:
             shown.setdefault(row.record_key, set()).add(row.biological_feature_id)
     return {
         entry.feature_type
@@ -1263,11 +1266,11 @@ def _load_request_records(
     inputs = replace(inputs, parsed_sources={})
     collection = _coerce_resolved_collection(request, _normalize_request_records(request, inputs))
     request = _materialize_identity_tables(request, collection)
-    shown_types = _gff_types_shown_by_overrides(request.options.feature_overrides, collection)
+    shown_types = _gff_types_named_by_visibility_rows(request.options.feature_overrides, collection)
     if inputs.gff_keep_all_features or shown_types <= set(inputs.gff_candidate_features):
         return request, collection
-    # A row can turn on a GFF3 feature whose type the type filter dropped. Load
-    # that type as well, from the parse the first load made.
+    # A row can set the visibility of a GFF3 feature whose type the type filter
+    # dropped. Load that type as well, from the parse the first load made.
     return request, _coerce_resolved_collection(request, _normalize_request_records(request, replace(
         inputs,
         gff_candidate_features=tuple(sorted({*inputs.gff_candidate_features, *shown_types})),

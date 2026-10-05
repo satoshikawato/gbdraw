@@ -34,8 +34,8 @@ export const createPreviewFeatureSearch = ({
     canvasPan,
     selectedResultIndex,
     svgContent,
-    extractedFeatures,
-    featuresBySvgId,
+    featureList,
+    featureListState,
     orthogroups,
     adv,
     previewFeatureSearchInput,
@@ -74,15 +74,24 @@ export const createPreviewFeatureSearch = ({
     featureElementIndex = null;
     featureElementIndexSvg = null;
   };
+  // Search features searches the Features list of the displayed Result, so a
+  // hidden feature is found too (R-5). A drawn feature is found by its
+  // rendered ID; one the Result does not draw by its source identity.
+  let featuresBySearchId = new Map();
   const ensureSearchIndex = () => {
     if (!searchIndex) {
       const labels = new Map((state.editableLabels?.value || []).map((entry) => [entry.featureId, entry]));
+      featuresBySearchId = new Map();
       searchIndex = buildFeatureSearchIndex({
-        features: extractedFeatures.value.map((feature) => {
-          const entry = labels.get(feature.svg_id);
+        features: featureList.value.rows.map((feature) => {
+          const renderedId = featureListState(feature).renderedId;
+          const searchId = renderedId || String(feature.id || '');
+          featuresBySearchId.set(searchId, feature);
+          const entry = renderedId ? labels.get(renderedId) : null;
           const sources = [entry?.sourceText, feature.label, feature.product, feature.gene, feature.locus_tag];
           return {
             ...feature,
+            search_id: searchId,
             search_labels: [
               feature.search_labels,
               entry?.text,
@@ -101,7 +110,7 @@ export const createPreviewFeatureSearch = ({
   const updateRenderedCount = () => {
     previewFeatureSearchRenderedCount.value =
       state.featureCatalog?.value?.items?.[selectedResultIndex.value]?.features?.length
-      ?? extractedFeatures.value?.length ?? 0;
+      ?? state.extractedFeatures.value?.length ?? 0;
   };
   const ensureFeatureElementIndex = (svg = getSvg()) => {
     if (featureElementIndexSvg !== svg || !featureElementIndex) {
@@ -161,17 +170,17 @@ export const createPreviewFeatureSearch = ({
       return;
     }
     const featureIndex = ensureFeatureElementIndex(svg);
-    const renderedFeatureIds = new Set(featureIndex.keys());
+    const index = ensureSearchIndex();
     const searchResult = runFeatureSearch({
-      features: extractedFeatures.value,
-      renderedFeatureIds,
+      features: featureList.value.rows,
+      renderedFeatureIds: new Set(index.featureOrder),
       query: previewFeatureSearchQuery.value,
       field: normalizedField,
       qualifierKey: appliedQualifierKey,
       useRegex: appliedUseRegex,
       popupMode,
       orthogroups: orthogroups.value,
-      searchIndex: ensureSearchIndex(),
+      searchIndex: index,
       previousActiveId
     });
 
@@ -230,11 +239,7 @@ export const createPreviewFeatureSearch = ({
 
   const getActiveMatchFeature = () => {
     const activeId = getActiveMatchId();
-    if (!activeId) return null;
-    return featuresBySvgId.value?.get?.(activeId) ||
-      (Array.isArray(extractedFeatures.value)
-        ? extractedFeatures.value.find((candidate) => String(candidate?.svg_id || '').trim() === activeId)
-        : null);
+    return activeId ? featuresBySearchId.get(activeId) || null : null;
   };
 
   const openActiveMatch = ({ center = true } = {}) => {
@@ -342,7 +347,7 @@ export const createPreviewFeatureSearch = ({
       if (queryIsActive() && previewRuntime?.isActiveResultReady?.()) scheduleRefreshSearch();
     }
   );
-  watch([extractedFeatures, orthogroups], () => {
+  watch([featureList, orthogroups], () => {
     updateRenderedCount();
     invalidateSearchIndex();
     if (queryIsActive() && previewRuntime?.isActiveResultReady?.()) scheduleRefreshSearch();
