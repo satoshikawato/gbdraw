@@ -358,9 +358,21 @@ reconcile explicitly: Depth sources go through `changeCircularDepthSources` and
 (`resetCircularTrackSlotsToPreset` for the simple-controls stack). Display values
 are looked up by identity (`slotId`), never by position.
 
+Every edit of a feature-slot input (Track Preset, Track Layout, Separate
+Strands, Use custom stack, and the custom stack rows) runs through one
+transition in `app/feature-editor/placement-actions.js`: the stack editors
+receive it as `trackLayoutActions`, and a template passes `$event` so Cancel
+restores the control. An edit that would leave a lane Feature placement of
+either mode undrawable asks first (Owner decision Q3); Reset applies the edit
+and removes those rows as one History step. The control's History adapter
+records an edit that loses no lane, and restores install state as is (R11).
+
 Guards: `tests/web/depth-slot-lifecycle.test.mjs` (the same cases through the
-Circular and Linear editors), `tests/web/circular-track-slots.test.mjs`, and
-`tests/web/track-slot-display.test.mjs`.
+Circular and Linear editors), `tests/web/circular-track-slots.test.mjs`,
+`tests/web/track-slot-display.test.mjs`, and
+`tests/web/track-layout-transition.test.mjs` (every writer of a feature-slot
+input is that transition, a listed restore, or a listed reconcile) with
+`tests/web/track-layout-transition.playwright.spec.js`.
 
 ### R11: History transaction boundaries
 
