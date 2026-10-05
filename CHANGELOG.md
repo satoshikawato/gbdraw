@@ -18,6 +18,14 @@ write-up of a release.
   `foo#bar`) failed with "Missing values", and a Label override text or
   whitelist keyword such as `Gene #1` was silently cut to `Gene `. Only a line
   whose first non-blank character is `#` is a comment, as before.
+- Annotation table (`--annotation_table`, `read_annotation_table()`): a `"` is
+  now part of the cell value, as in the styling tables; the file is no longer
+  read as CSV with quoting. A label that starts with `"` and is never closed
+  (such as `"lead`, which the web app downloads as typed) failed with
+  "unexpected end of data", and a quoted cell lost its quotes. **Behavior
+  change for CLI files:** an annotation table that wrapped a cell in CSV quotes
+  (for example to hold a tab) now keeps the quotes in the value; remove them,
+  and replace a tab inside a cell with a space, as the web app does.
 - Labels (web app): applying **Label visibility** **On** now asks **Feature Is
   Hidden** also for a feature that a **Feature Visibility** rule hides, for
   example a rule with a record ID, another qualifier, or a `hash`, `location`,

@@ -297,7 +297,9 @@ def read_annotation_table(
 
     try:
         with Path(path).open(encoding="utf-8-sig", newline="") as handle:
-            rows = (row for row in csv.reader(handle, delimiter="\t", strict=True) if any(cell.strip() for cell in row))
+            # A ``"`` is part of the cell value, as in the other TSV tables (OV-24).
+            reader = csv.reader(handle, delimiter="\t", quoting=csv.QUOTE_NONE)
+            rows = (row for row in reader if any(cell.strip() for cell in row))
             header = _validate_header(next(rows, []))
             values = []
             for row_number, row in enumerate(rows, start=2):
