@@ -277,6 +277,89 @@ def test_standalone_rejects_conflicting_fragment_or_source_identity(tmp_path, co
         browser.close()
 
 
+def collinear_cluster_fixture():
+    """A Linear figure whose only match is one multi-anchor collinear block."""
+    import pandas as pd
+    from Bio.Seq import Seq
+    from gbdraw.analysis.collinearity import (
+        build_orthogroup_collinearity_blocks_from_hits, convert_collinearity_blocks_to_comparisons,
+    )
+    from gbdraw.analysis.protein_colinearity import extract_cds_proteins
+    from gbdraw.io.comparisons import COMPARISON_COLUMNS
+    from tests.test_collinearity import _cds, _hit_row, _record
+
+    def block_record(name, proteins, offset):
+        item = _record(name, [
+            _cds(index * 300, index * 300 + 299,
+                 {"locus_tag": [protein], "protein_id": [protein], "translation": ["M" * 100]})
+            for index, protein in enumerate(proteins)
+        ])
+        item.seq = Seq("".join("ACGT"[(index * 7 + index // 5 + offset) % 4] for index in range(2700)))
+        item.annotations.update(molecule_type="DNA", topology="linear")
+        return item
+
+    items = [block_record("record_a", ["a0", "a1", "a2"], 0), block_record("record_b", ["b0", "b1", "b2"], 1)]
+    hits = {
+        (0, 1): pd.DataFrame.from_records([_hit_row(f"a{i}", f"b{i}", 300) for i in range(3)], columns=COMPARISON_COLUMNS),
+        (1, 0): pd.DataFrame.from_records([_hit_row(f"b{i}", f"a{i}", 300) for i in range(3)], columns=COMPARISON_COLUMNS),
+    }
+    result = build_orthogroup_collinearity_blocks_from_hits(hits, extract_cds_proteins(items), records=items)
+    frame = convert_collinearity_blocks_to_comparisons(result, records=items)[0]
+    plan, root = svg(request("linear", items, [None, None], linear_comparisons=[LinearComparison(0, 1, frame)]))
+    context = build_interactive_svg_context(
+        plan.records, mode="linear", linear_rendered_feature_ids=True, orthogroups=result.orthogroups,
+    )
+    return items, enrich_svg(ET.tostring(root, encoding="unicode"), context)
+
+
+@pytest.mark.parametrize("member", ["resolves", "is_missing"])
+def test_standalone_collinear_cluster_block_span_actions(tmp_path, member, sync_playwright):
+    """A block names its anchor features, yet its span is the block envelope on each record (OV-17)."""
+    items, standalone = collinear_cluster_fixture()
+    if member == "is_missing":
+        root = ET.fromstring(standalone)
+        metadata = next(n for n in root.iter() if n.get("id") == "gbdraw-interactive-feature-metadata")
+        catalog = json.loads(metadata.text)
+        block = catalog["items"][0]["comparisonMatches"][0]
+        assert block["block_kind"] == "cluster" and len(block["queryFeatureReferences"]) == 3
+        block["queryFeatureReferences"][1]["biologicalFeatureId"] = "missing-feature"
+        metadata.text = json.dumps(catalog)
+        standalone = ET.tostring(root, encoding="unicode")
+    path = tmp_path / "cluster.svg"
+    path.write_text(standalone)
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page()
+        page.goto(path.as_uri())
+        page.evaluate("""() => {
+          window.fixtureClipboard = [];
+          Object.defineProperty(navigator, 'clipboard', {value: {writeText: async text => window.fixtureClipboard.push(text)}, configurable: true});
+        }""")
+        matches = page.locator('[data-gbdraw-interactive-match="true"]')
+        assert matches.count() == 1
+        matches.first.dispatch_event("click")
+        popup = page.locator('#gbdraw-feature-popup')
+        assert popup.is_visible()
+        assert "Collinearity block" in popup.text_content()
+        actions = popup.locator('.gfi-block-actions').filter(has_text="Both spans")
+        if member == "is_missing":
+            assert "Match feature endpoint identity is invalid." in popup.text_content()
+            assert actions.count() == 0
+        else:
+            assert "endpoint identity is invalid" not in popup.text_content()
+            for role, item in (("Query", items[0]), ("Subject", items[1])):
+                popup.locator('.gfi-block-title').filter(has_text=f"{role} span").get_by_role("button", name="Copy", exact=True).click()
+                fasta = page.evaluate("fixtureClipboard.at(-1)")
+                assert fasta.count(">") == 1
+                assert "".join(fasta.splitlines()[1:]) == str(item.seq)[0:899]
+            actions.get_by_role("button", name="Copy", exact=True).click()
+            both = page.evaluate("fixtureClipboard.at(-1)")
+            assert ["".join(part.splitlines()[1:]) for part in both.split(">")[1:]] == [
+                str(items[0].seq)[0:899], str(items[1].seq)[0:899],
+            ]
+        browser.close()
+
+
 def test_circular_grid_match_actions_resolve_duplicate_record_instances(tmp_path, sync_playwright):
     from dataclasses import replace
     from gbdraw.api.options import CircularMultiRecordOptions
