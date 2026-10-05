@@ -168,7 +168,7 @@ applied and report the failure. Metadata-only edits
 with no static SVG target, such as Similarity group names and descriptions,
 update canonical state only.
 
-## Design rules R1-R12
+## Design rules R1-R13
 
 Each rule names one owner and the guard that enforces it. Cite the rule id in PR
 descriptions and tests. Change the code and its guard together, and lower a
@@ -254,10 +254,15 @@ edits reach a Result through its catalog features' identities
 a feature in every Result shows the same edit. A dialog's
 reactive object holds display values only, never a copy of an owner's data.
 
+One projection means one call shape: a domain's projection function is called
+from outside its owner in one form, not re-implemented or re-sequenced per
+caller. The distinct call shapes per domain may only decrease (R13).
+
 Guards: `tests/web/gui-audit-20260930-editor.playwright.spec.js` (a Result shows
 the edits made on another Result, also after Undo, Save, and Load),
-`tests/web/feature-visibility-actions.test.mjs`, and
-`tests/web/feature-color-actions.test.mjs`.
+`tests/web/feature-visibility-actions.test.mjs`,
+`tests/web/feature-color-actions.test.mjs`, and the `projection-shapes`
+baseline in `tests/web/owner-graph-baseline.test.mjs`.
 
 ### R4: A fast path matches the canonical reader or declines
 
@@ -353,7 +358,9 @@ scans the Python and Web JavaScript sources for a second mapping onto
 ### R10: A watcher does not repair state
 
 A transition that changes the inputs of a derived structure calls the owner's
-reconcile explicitly: Depth sources go through `changeCircularDepthSources` and
+reconcile explicitly, through the port the composition root injected or by
+returning to the root, which calls the reconcile (R13); it does not hold the
+other owner's object. Depth sources go through `changeCircularDepthSources` and
 `changeLinearDepthSources`, and the suppress controls through
 `applyCircularSuppressControlsToSlots`. One concept has one builder
 (`resetCircularTrackSlotsToPreset` for the simple-controls stack). Display values
@@ -460,6 +467,50 @@ a Linear scale font without a ruler-label font) and
 `tests/web/accessibility.playwright.spec.js` (every visible input in both modes
 has an author-provided name that does not change with its state, and every help
 tip is a reachable disclosure).
+
+### R13: Owner layering and ports
+
+Modules sit in layers: `state.js`, then `services/`, then owner modules
+(`app/*.js` and `app/*/` factories), then the composition roots
+(`app/app-setup.js`, `app/feature-editor.js`, `app/legend.js`,
+`app/legend-layout.js`), then the template. A module depends only on lower
+layers.
+
+- An owner never imports, holds, or calls another owner object. It receives
+  ports: a port is one function, in one direction, named for the reaction it
+  performs (`applyFeatureVisibilityToLabels`), not for its provider
+  (`labelActions`). A factory that takes a whole owner object outside a
+  composition root is a whole-object port.
+- A reaction of owner A to a change in owner B is wired by a composition root:
+  as a port injected into B, or as the root calling A's projection after B's
+  transition returns. B does not call A's object, and A does not call back into
+  B.
+- A closure passed at composition that resolves to an owner created later in
+  the same root (a forward-reference closure) is a composition error: reorder
+  the creation, or register the port after both owners exist.
+- `state.<name> = <function>` outside `state.js` is a backdoor: a value an owner
+  needs from a higher layer arrives as a port or on an existing data path
+  (Result metadata, the admitted catalog).
+- A heavy derived value (`rulePreparation`) is triggered from one place per
+  flow: the composition root's projection, the Generate compiler, or the owner
+  of its input. An owner that only reads the result awaits `pending` rather
+  than triggering it.
+- Each projection domain has one projection function and one call shape
+  outside its owner (R3).
+
+The baseline of the current violations is recorded in
+`tests/web/owner-graph-baseline.test.mjs` and may only shrink: a runtime change
+removes the subjects it fixes from the baseline in the same pull request, and
+an addition is an authority-only change (`tools/web-design-rule-guards.json`,
+WEB_CHANGE_POLICY.md "Design-rule co-change"). The detectors are
+`tools/web-owner-graph-detectors.mjs` (injection edges, forward-reference
+closures, state backdoors, whole-object ports, projection call shapes, heavy
+derived trigger sites); `node tools/report-web-owner-graph.mjs --at worktree`
+prints the current subjects.
+
+Guards: `tests/web/owner-graph-baseline.test.mjs` (every observed subject is in
+the baseline with a count no higher than recorded, per detector) and
+`tests/web/owner-graph-detectors.test.mjs` (the detectors).
 
 ## Computation ownership
 
