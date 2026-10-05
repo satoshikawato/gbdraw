@@ -44,6 +44,11 @@ write-up of a release.
   files. The Feature override and Feature placement tables are unchanged.
   files. The Feature override, Feature placement, and Annotation tables are
   unchanged.
+- Label whitelist, Qualifier priority, and Default colors file imports (web
+  app): a row with too many or too few tab-separated columns is now rejected
+  with a table error that names the row and the required column count. The
+  import used to skip a short row and ignore extra columns, so a file that the
+  CLI rejects was accepted with rows dropped.
 - Default colors, Specific colors, Qualifier priority, Label whitelist or
   blacklist, Label overrides, and Feature visibility tables: a row with more
   columns than the table has is now an error that names the file and line
