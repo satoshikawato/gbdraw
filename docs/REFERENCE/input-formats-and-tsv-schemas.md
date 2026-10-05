@@ -180,6 +180,10 @@ default. TSV does not retain empty sets, metadata, or the distinction between
 an inherited set style and a row override. Tabs and line breaks within cells
 are replaced with spaces.
 
+The table is not CSV: a `"` is part of the cell value and never quotes a field,
+so a `label` of `"quoted"` keeps its quotes and `"lead` is a valid label. The
+Web download and import and `read_annotation_table()` read cells the same way.
+
 ## Styling tables
 
 Most styling tables are headerless TSV. Label-override and visibility readers

@@ -631,6 +631,18 @@ for (const entry of importCases) {
   });
 }
 
+test('quotes in a label are part of the value through Web write and Web read', () => {
+  // The same vector tests/test_annotations.py reads through read_annotation_table (OV-24).
+  const vector = importCases.find((entry) => entry.name === 'quotes are part of a label');
+  const expected = ['"lead', '"quoted"', 'a"b', 'plain'];
+  const sets = parseAnnotationTable(vector.table);
+  assert.deepEqual(sets[0].annotations.map((annotation) => annotation.label), expected);
+  const encoded = encodeAnnotationTable(sets);
+  const [header, ...rows] = encoded.trimEnd().split('\n').map((line) => line.split('\t'));
+  assert.deepEqual(rows.map((row) => row[header.indexOf('label')]), expected);
+  assert.deepEqual(parseAnnotationTable(encoded), sets);
+});
+
 test('file import commits once, separates notices, and preserves draft/Result on failure or stale completion', async () => {
   const state = { annotationSets: [createAnnotationSet({ id: 'before', annotations: [
     { id: 'old', target: coordinateTarget({ start: 1, end: 3 }), mark: 'band' }

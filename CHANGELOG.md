@@ -18,6 +18,14 @@ write-up of a release.
   `foo#bar`) failed with "Missing values", and a Label override text or
   whitelist keyword such as `Gene #1` was silently cut to `Gene `. Only a line
   whose first non-blank character is `#` is a comment, as before.
+- Annotation table (`--annotation_table`, `read_annotation_table()`): a `"` is
+  now part of the cell value, as in the styling tables; the file is no longer
+  read as CSV with quoting. A label that starts with `"` and is never closed
+  (such as `"lead`, which the web app downloads as typed) failed with
+  "unexpected end of data", and a quoted cell lost its quotes. **Behavior
+  change for CLI files:** an annotation table that wrapped a cell in CSV quotes
+  (for example to hold a tab) now keeps the quotes in the value; remove them,
+  and replace a tab inside a cell with a space, as the web app does.
 - Label whitelist and Qualifier priority (web app): a tab or line break typed
   or pasted into a rule cell, such as a whitelist keyword, no longer adds a
   column or row to the table that **Generate** writes. Each run of such
@@ -33,6 +41,7 @@ write-up of a release.
   `"lead`, which the web app writes as typed) failed with "unexpected end of
   data". **Behavior change for CLI files:** a user table that wrapped a field
   in CSV quotes now keeps those quotes in the value, so remove them from such
+  files. The Feature override and Feature placement tables are unchanged.
   files. The Feature override, Feature placement, and Annotation tables are
   unchanged.
 - Default colors, Specific colors, Qualifier priority, Label whitelist or

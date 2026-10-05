@@ -19,6 +19,13 @@
     "ignored": []
   },
   {
+    "name": "quotes are part of a label",
+    "valid": true,
+    "table": "set_id\tid\tmark\tstart\tend\tlabel\ns\ta\tband\t1\t8\t\"lead\ns\tb\tband\t9\t12\t\"quoted\"\ns\tc\tband\t13\t15\ta\"b\ns\td\tband\t16\t18\tplain\n",
+    "control": "set_id\tid\tmark\tstart\tend\tlabel\ns\ta\tband\t1\t8\t\"lead\ns\tb\tband\t9\t12\t\"quoted\"\ns\tc\tband\t13\t15\ta\"b\ns\td\tband\t16\t18\tplain\n",
+    "ignored": []
+  },
+  {
     "name": "typo alone",
     "valid": true,
     "table": "set_id\tid\tmark\tstart\tend\tfill_colour\ns\ta\tband\t1\t8\tred\n",
