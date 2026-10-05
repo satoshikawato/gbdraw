@@ -32,6 +32,11 @@ const LABEL_BINDING_SCHEMA_ATTRIBUTE = 'data-gbdraw-label-binding-schema';
 const LABEL_BINDING_SCHEMA = '1';
 const LABEL_FEATURE_ID_ATTRIBUTE = 'data-label-feature-id';
 const LABEL_VISIBILITY_PREVIEW_ATTRIBUTE = 'data-gbdraw-label-visibility-preview';
+// The labels whose visibility a projection sets: the labels the editor bound,
+// and the labels Python bound to their features, which the editor binds only
+// when it needs them, so a feature a rule hides hides its label (OV-35).
+const VISIBILITY_LABEL_SELECTOR = `${EDITABLE_LABEL_SELECTOR}, `
+  + `text[${LABEL_BINDING_SCHEMA_ATTRIBUTE}="${LABEL_BINDING_SCHEMA}"][${LABEL_FEATURE_ID_ATTRIBUTE}]`;
 
 // The locator of a feature whose label binding failed: its rendered ID, type,
 // and one-based span from the displayed feature catalog (R6).
@@ -594,7 +599,7 @@ export const createFeatureLabelActions = ({
     let unavailableOverride = false;
     const displayed = displayedFeatures();
     const context = drawnContext();
-    svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl) => {
+    svg.querySelectorAll(VISIBILITY_LABEL_SELECTOR).forEach((textEl) => {
       const featureId = String(
         textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || ''
       ).trim();

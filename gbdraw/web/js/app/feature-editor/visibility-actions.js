@@ -365,16 +365,18 @@ export const createFeatureVisibilityActions = ({
 
   // The one projection of this domain (R3), which History apply, the display
   // of a Result, and Load Feature Edits TSV call through
-  // `projectMountedEditorIntent`. A History step or a loaded table (`rerender`)
-  // that draws a feature the Result does not draw reruns the rerender, as the
-  // action did; a Result display does not, so a feature Python does not draw
-  // cannot repeat it. A loaded table (`reflow`) also places the labels, as a
-  // visibility edit does (F-3). Returns whether the Result changed.
+  // `projectMountedEditorIntent`. The label of a feature it hides or shows
+  // follows the feature (F-3, OV-35). A History step or a loaded table
+  // (`rerender`) that draws a feature the Result does not draw reruns the
+  // rerender, as the action did; a Result display does not, so a feature
+  // Python does not draw cannot repeat it. A loaded table (`reflow`) also
+  // places the labels, as a visibility edit does. Returns whether the Result
+  // changed.
   const projectFeatureVisibility = async ({ rerender = false, reflow = false } = {}) => {
     const projection = await runProjection();
     if (!projection) return false;
     const drawsMissing = rerender && projection.needsRerender;
-    if (reflow || drawsMissing) followLabels({ reflow, rerender: drawsMissing });
+    if (projection.updated || reflow || drawsMissing) followLabels({ reflow, rerender: drawsMissing });
     return projection.updated;
   };
 

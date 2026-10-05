@@ -1012,6 +1012,98 @@ test('Load Feature Edits TSV applies the visibility rules to a feature whose edi
   expect(await drawnFeatureIds(page, [fl1, fl2])).toEqual([fl2]);
 });
 
+// The given features whose label the mounted Result shows.
+const labeledFeatureIds = (page, featureIds) => page.evaluate((ids) => {
+  const root = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+  return ids.filter((id) => [...root.querySelectorAll(`text[data-label-feature-id="${CSS.escape(id)}"]`)]
+    .some((element) => !element.closest('[display="none"]')));
+}, featureIds);
+const autoReflowOff = (page) => page.evaluate(() => window.__GBDRAW_APP__.autoLabelReflowEnabled === false);
+
+// OV-35 (Owner 2026-10-05): a feature that a Feature Visibility rule hides
+// takes its label with it, as Generate draws it, also with Auto Reflow off and
+// before the editor has bound the labels. The rule edit, Undo and Redo (History
+// apply), and Generate show the same features and labels.
+test('a Feature Visibility rule that hides a feature hides its label too', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
+    window.__GBDRAW_APP__.form.labels_mode = 'out';
+  });
+  await generate(page);
+  expect(await autoReflowOff(page)).toBe(true);
+  const { fl1, fl2 } = await featureIdsByLocator(page);
+  const shown = async () => ({
+    drawn: await drawnFeatureIds(page, [fl1, fl2]),
+    labeled: await labeledFeatureIds(page, [fl1, fl2])
+  });
+  const all = { drawn: [fl1, fl2], labeled: [fl1, fl2] };
+  const withoutFl1 = { drawn: [fl2], labeled: [fl2] };
+  expect(await shown()).toEqual(all);
+
+  await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
+  expect(await shown()).toEqual(withoutFl1);
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  expect(await shown()).toEqual(all);
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  expect(await shown()).toEqual(withoutFl1);
+  await page.evaluate(() => window.__GBDRAW_APP__.setFeatureVisibilityRuleField(0, 'action', 'show'));
+  expect(await shown()).toEqual(all);
+  await page.evaluate(() => window.__GBDRAW_APP__.setFeatureVisibilityRuleField(0, 'action', 'off'));
+  expect(await shown()).toEqual(withoutFl1);
+  await generate(page);
+  expect(await shown()).toEqual(withoutFl1);
+});
+
+// OV-34: with Auto Reflow off, deleting the rule that hid a feature at Generate
+// draws the feature and its label live (the automatic rerender), as Generate
+// draws them.
+test('deleting a Feature Visibility rule draws the feature it hid at Generate', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
+    window.__GBDRAW_APP__.form.labels_mode = 'out';
+  });
+  await generate(page);
+  expect(await autoReflowOff(page)).toBe(true);
+  const { fl1, fl2 } = await featureIdsByLocator(page);
+  await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
+  await generate(page);
+  const shown = async () => ({
+    drawn: await drawnFeatureIds(page, [fl1, fl2]),
+    labeled: await labeledFeatureIds(page, [fl1, fl2])
+  });
+  expect(await shown()).toEqual({ drawn: [fl2], labeled: [fl2] });
+  expect(await page.evaluate((id) => Boolean(window.__GBDRAW_APP__.svgContainer
+    .querySelector(`[data-gbdraw-feature-id="${CSS.escape(id)}"]`)), fl1)).toBe(false);
+
+  await page.evaluate(() => window.__GBDRAW_APP__.removeFeatureVisibilityRule(0));
+  await expect.poll(shown, { timeout: 300_000 }).toEqual({ drawn: [fl1, fl2], labeled: [fl1, fl2] });
+  await waitForLabelReflow(page);
+  expect((await labelEditorState(page, 'labels.circular.scope')).reflowError).toBeNull();
+  await generate(page);
+  expect(await shown()).toEqual({ drawn: [fl1, fl2], labeled: [fl1, fl2] });
+});
+
+// OV-35 on Result display (R3): a rule edited while one batch Result is shown
+// hides the feature and its label on the other Result when it is displayed.
+test('a Feature Visibility rule hides the label on the other batch Result when it is displayed', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openBatch(page);
+  const ids = await page.evaluate(() => Object.fromEntries(window.__GBDRAW_APP__.extractedFeatures
+    .filter((feature) => /_000[14]$/.test(feature.locus_tag || ''))
+    .map((feature) => [feature.locus_tag, feature.svg_id])));
+  const shownOn = async (tags) => {
+    const featureIds = tags.map((tag) => ids[tag]);
+    return { drawn: await drawnFeatureIds(page, featureIds), labeled: await labeledFeatureIds(page, featureIds) };
+  };
+  expect(await shownOn(['TESTA_0001', 'TESTA_0004'])).toEqual({
+    drawn: [ids.TESTA_0001, ids.TESTA_0004], labeled: [ids.TESTA_0001, ids.TESTA_0004]
+  });
+  await addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '_0004$', action: 'off' });
+  expect(await shownOn(['TESTA_0001', 'TESTA_0004'])).toEqual({ drawn: [ids.TESTA_0001], labeled: [ids.TESTA_0001] });
+  await selectResult(page, 1);
+  expect(await shownOn(['TESTB_0001', 'TESTB_0004'])).toEqual({ drawn: [ids.TESTB_0001], labeled: [ids.TESTB_0001] });
+});
+
 test('Label visibility On for an underlay feature is kept without a label until the rendering changes', async ({ page }) => {
   test.setTimeout(600_000);
   await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {

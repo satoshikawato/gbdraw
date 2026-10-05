@@ -415,10 +415,11 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
 // R13, R3: the owner reaches the label owner through the one port the
 // composition root registers once the label owner exists. Its projection, which
 // History apply, the display of a Result, and Load Feature Edits TSV call
-// through `projectMountedEditorIntent`, asks for the rerender only when a
-// History step or a loaded table (`rerender`) must draw a feature the Result
-// does not draw, and a loaded table (`reflow`) also places the labels. A later
-// projection supersedes one that still waits for its matches.
+// through `projectMountedEditorIntent`, hands the label owner every feature it
+// hides or shows (OV-35), asks for the rerender only when a History step or a
+// loaded table (`rerender`) must draw a feature the Result does not draw, and
+// after a loaded table (`reflow`) also places the labels. A later projection
+// supersedes one that still waits for its matches.
 {
   const recordFeature = (id, start) => ({
     recordKey: 'REC1', biologicalFeatureId: id, record_id: 'REC1', type: 'CDS', start, end: start + 30, strand: 1,
@@ -443,7 +444,8 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     }]
   };
   const overrides = {};
-  const projected = [];
+  const mounted = { 'svg-A': 'on' };
+  let projections = 0;
   const follows = [];
   const portState = {
     clickedFeature: ref(null),
@@ -468,8 +470,12 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     getCommittedRequest: committedRequest(['CDS']),
     featureSvgActions: {
       applyVisibilityPreviewChanges: (changes) => {
-        projected.push(Object.fromEntries(changes.map(({ featureId, mode }) => [featureId, mode])));
-        return true;
+        projections += 1;
+        return changes.reduce((changed, { featureId, mode }) => {
+          if (mounted[featureId] === mode) return changed;
+          mounted[featureId] = mode;
+          return true;
+        }, false);
       }
     },
     ports,
@@ -477,35 +483,41 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   });
   // The root registers the port after both owners exist.
   ports.applyFeatureVisibilityToLabels = (options) => follows.push(options);
-  const featureB = resultCatalogFeatures(portState).biological
-    .find((feature) => feature.biological_feature_id === 'B');
-  setFeatureVisibilityOverride(overrides, featureB, 'off');
+  const featureOf = (id) => resultCatalogFeatures(portState).biological
+    .find((feature) => feature.biological_feature_id === id);
+  setFeatureVisibilityOverride(overrides, featureOf('B'), 'off');
 
-  assert.equal(await owner.projectFeatureVisibility({ rerender: true }), true);
-  assert.deepEqual(projected.at(-1), { 'svg-A': 'on' });
+  assert.equal(await owner.projectFeatureVisibility({ rerender: true }), false);
   assert.deepEqual(follows, [], 'nothing to follow when the Result draws what Generate draws');
 
-  // A History step shows B, which the Result does not draw.
-  setFeatureVisibilityOverride(overrides, featureB, 'on');
+  // OV-35: a Result display (or a History step) that hides A hides its label.
+  setFeatureVisibilityOverride(overrides, featureOf('A'), 'off');
+  assert.equal(await owner.projectFeatureVisibility(), true);
+  assert.deepEqual(mounted, { 'svg-A': 'off' });
+  assert.deepEqual(follows, [{ reflow: false, rerender: false }], 'the label follows the feature');
+
+  // B is shown, which the Result does not draw.
+  setFeatureVisibilityOverride(overrides, featureOf('A'), 'default');
+  setFeatureVisibilityOverride(overrides, featureOf('B'), 'on');
   await owner.projectFeatureVisibility();
-  assert.deepEqual(follows, [], 'a Result display does not rerender');
+  assert.deepEqual(follows.at(-1), { reflow: false, rerender: false }, 'a Result display does not rerender');
   await owner.projectFeatureVisibility({ rerender: true });
-  assert.deepEqual(follows, [{ reflow: false, rerender: true }], 'a History step rerenders to draw B');
+  assert.deepEqual(follows.at(-1), { reflow: false, rerender: true }, 'a History step rerenders to draw B');
   await owner.projectFeatureVisibility({ rerender: true, reflow: true });
   assert.deepEqual(follows.at(-1), { reflow: true, rerender: true }, 'a loaded table also places the labels');
-  setFeatureVisibilityOverride(overrides, featureB, 'off');
+  setFeatureVisibilityOverride(overrides, featureOf('B'), 'off');
   await owner.projectFeatureVisibility({ rerender: true, reflow: true });
   assert.deepEqual(follows.at(-1), { reflow: true, rerender: false });
 
-  setFeatureVisibilityOverride(overrides, featureB, 'on');
-  const projections = projected.length;
+  setFeatureVisibilityOverride(overrides, featureOf('A'), 'off');
+  const projectionsBefore = projections;
   const followCount = follows.length;
   const [waiting, latest] = await Promise.all([
     owner.projectFeatureVisibility({ rerender: true }),
     owner.projectFeatureVisibility({ rerender: true })
   ]);
   assert.deepEqual([waiting, latest], [false, true], 'the later projection supersedes the waiting one');
-  assert.equal(projected.length, projections + 1);
+  assert.equal(projections, projectionsBefore + 1);
   assert.equal(follows.length, followCount + 1);
 }
 
