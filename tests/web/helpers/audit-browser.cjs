@@ -1,6 +1,6 @@
 // Shared browser steps for the Web GUI audit 2026-09-30 regression specs.
 const { expect } = require('@playwright/test');
-const { generateAndWaitForResult, openApp } = require('./app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./app-lifecycle.cjs');
 
 const BATCH_FIXTURE = 'tests/fixtures/web_batch_two_records.gb';
 const HMMT = 'tests/test_inputs/HmmtDNA.gbk';
@@ -125,8 +125,10 @@ const legendCaptions = (page, { source = 'mounted' } = {}) => page.evaluate(asyn
 
 // One feature edit through the editor actions the drawer controls call. A
 // color or visibility edit with a scope dialog takes `scope`/`visibilityScope`
-// (default: This feature only / the first scope, This feature).
-const editFeature = (page, locusTag, edit) => page.evaluate(async ({ tag, change }) => {
+// (default: This feature only / the first scope, This feature). The edit
+// awaits Python's rule matches and the projection, so it runs on the retained
+// path: Chromium can collect the promise a long page.evaluate awaits.
+const editFeature = (page, locusTag, edit) => evaluateWithRetainedPromise(page, async ({ tag, change }) => {
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((item) => item.locus_tag === tag);
   if (!feature) throw new Error(`no feature ${tag}`);
