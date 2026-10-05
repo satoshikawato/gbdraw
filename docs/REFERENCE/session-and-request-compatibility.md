@@ -31,7 +31,9 @@ feature; otherwise a copy or record suffix is removed when exactly one feature
 remains. A Session before 40 is matched through its GenBank sources read again
 with its crops and orientations (the drawn hash and record position of each
 rendered ID), or, without readable sources, through its saved feature metadata
-for records drawn without a crop or reverse complement. An edit that names no
+for records drawn without a crop or reverse complement. If the Web app's
+diagram runtime cannot start or fails while reading the sources, the Load fails
+and keeps the current Session. An edit that names no
 feature is dropped, and the Web app reports how many. An older Feature
 visibility edit that hid every feature with its hash (each copy of a duplicated
 record) now applies to the edited feature only; the Web app reports how many.

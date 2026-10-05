@@ -2,6 +2,7 @@ import {
   buildLinearRegionExtractionContext,
   extractFeatureMetadataForPreview
 } from './feature-metadata-extraction.js';
+import { normalizeUserFacingError, retryCanSucceed } from '../services/error-normalization.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { enrichFeatureWithOrthogroup } from '../services/orthogroup-feature-metadata.js';
 import {
@@ -737,8 +738,11 @@ const extractSnapshotFeatures = (snapshot, {
  * its crops and orientations and without visibility rules, so each feature
  * carries its drawn hash beside its source identity. The rendered-ID edit
  * migration (services/feature-edit-migration.js) names features through it.
- * Returns null when the Session has no GenBank sources to read or the read
- * fails; the migration then uses the saved feature metadata.
+ * Returns null when the Session has no GenBank sources to read or a source
+ * cannot be read as saved; the migration then uses the saved feature metadata.
+ * A runtime failure (the Worker does not start, transport, cancellation) is
+ * thrown: the Load fails and keeps the previous Session instead of dropping
+ * the edits as unmatched (OV-39).
  */
 export const extractSessionSourceFeatures = async ({
   snapshot,
@@ -752,7 +756,8 @@ export const extractSessionSourceFeatures = async ({
       extractFeatureMetadataForPreviewImpl
     });
     return payload?.errors?.length || !Array.isArray(payload?.extractedFeatures) ? null : payload;
-  } catch {
+  } catch (error) {
+    if (retryCanSucceed(normalizeUserFacingError(error))) throw error;
     return null;
   }
 };

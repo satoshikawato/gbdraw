@@ -479,14 +479,19 @@ export const normalizeUserFacingError = (value, {
   return result;
 };
 
-// A live edit rerenders the committed Session with the current editor tables, so
-// repeating the edit sends the same request. Retry is offered only when the
-// failure's own recovery changes no input (B11, R6); otherwise the edit or the
-// settings must change, and settings apply on Generate.
+// A failure whose own recovery changes no input (B11, R6): the runtime failed,
+// not the request, so the same request can succeed on Retry.
 const PLAIN_RETRY_ACTIONS = new Set(['retry', 'reload', 'save-session']);
+export const retryCanSucceed = (error) =>
+  error.actions.includes('retry') && error.actions.every((action) => PLAIN_RETRY_ACTIONS.has(action));
+
+// A live edit rerenders the committed Session with the current editor tables, so
+// repeating the edit sends the same request. Retry is offered only when it can
+// succeed; otherwise the edit or the settings must change, and settings apply
+// on Generate.
 export const liveEditFailure = (error) => {
   if (!error) return null;
-  const retry = error.actions.includes('retry') && error.actions.every((action) => PLAIN_RETRY_ACTIONS.has(action));
+  const retry = retryCanSucceed(error);
   const next = error.actions.includes('generate') ? ''
     : retry ? ' Retry the live edit or use Generate.' : ' Change the edit, or change the settings and use Generate.';
   return { ...error, actions: retry ? ['retry', 'generate'] : ['generate'],
