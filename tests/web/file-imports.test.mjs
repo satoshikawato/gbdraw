@@ -231,3 +231,16 @@ for (const [name, parse, width, valid] of [
 }
 // A whitelist keyword may be empty; the row still has three cells.
 assert.deepEqual(parseWhitelistRules('CDS\tproduct\t\n').rules, [{ feat: 'CDS', qual: 'product', key: '' }]);
+
+// OV-26/OV-27: Python skips whole-line comments in these tables too, so the Web
+// parsers and Python agree: an indented or plain `#` line is skipped, a `#` or `"`
+// inside a value is data.
+assert.deepEqual(
+  parseSpecificRules('# note\n  # indented\n\t# tab\nCDS\tproduct\tGene #1\t#ff0000\tCaption #2\n').rules.map((rule) => [rule.val, rule.cap]),
+  [['Gene #1', 'Caption #2']]
+);
+assert.deepEqual(parseColorTable('# note\n  # indented\n\t# tab\nCDS\t#ff0000\n').colors, { CDS: '#ff0000' });
+assert.deepEqual(
+  parsePriorityRules('# note\n  # indented\n\t# tab\nCDS\t"note#1\n').rules,
+  [{ feat: 'CDS', order: '"note#1' }]
+);

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-"""Shared reading of the styling and override TSV tables.
+"""Shared reading of the styling, override, and annotation TSV tables.
 
 A whole-line comment is blanked, and a ``"`` is part of the cell value: the Web
 writes each value as typed, so these tables are read with CSV quoting off.
@@ -53,7 +53,8 @@ def read_literal_table(
 ) -> pd.DataFrame:
     """Read a tab-separated styling table; every cell is text and a ``"`` is a plain character.
 
-    ``source`` is a path or the stream from :func:`table_text_stream`. A row with more
+    ``source`` is a path, whose whole-line comments are blanked as in :func:`read_table_lines`,
+    or the stream from :func:`table_text_stream`. A row with more
     cells than ``names`` raises :class:`ParseError` with the file and line: pandas would
     otherwise take the extra leading cells as an index and read the row shifted. A row
     with fewer cells is left to the caller's missing-value check. ``label`` names the
@@ -65,8 +66,7 @@ def read_literal_table(
         text = source.getvalue()
     else:
         filepath = str(source)
-        with open(filepath, "r", encoding="utf-8-sig") as handle:
-            text = handle.read()
+        text = "".join(read_table_lines(filepath))
     for line_no, raw_line in enumerate(text.split("\n"), start=1):
         raw_line = raw_line.rstrip("\r")
         if raw_line.strip() and raw_line.count("\t") + 1 > len(names):

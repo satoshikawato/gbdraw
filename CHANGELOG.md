@@ -69,6 +69,13 @@ write-up of a release.
   column was read shifted: `CDS`, `product`, `two`, `words` became feature type
   `product`, qualifier `two`, keyword `words`, and no error was raised. Remove
   the extra cells, or the tab inside a value, from such files.
+  files. The Feature override and Feature placement tables are unchanged.
+- Default colors, Specific colors, Qualifier priority, and Annotation tables:
+  a line whose first non-blank character is `#` is now a comment and is
+  skipped, as in the Label whitelist, Label overrides, and Feature visibility
+  tables. These tables used to read such a line as a row and fail (for example
+  "Missing values" or a wrong column count), while the web app import already
+  skipped it. A `#` after other text in a line is still part of the cell value.
 - Labels (web app): applying **Label visibility** **On** now asks **Feature Is
   Hidden** also for a feature that a **Feature Visibility** rule hides, for
   example a rule with a record ID, another qualifier, or a `hash`, `location`,

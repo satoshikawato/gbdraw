@@ -191,8 +191,12 @@ TSV_IMPORT_CASES = json.loads(
 
 
 def _literal_rows(text: str) -> list[list[str]]:
-    """Split a TSV text the way the table readers do: a ``"`` is an ordinary character."""
-    return [line.split("\t") for line in text.split("\n") if line.strip()]
+    """Split a TSV text the way the table readers do: ``"`` is ordinary and whole-line ``#`` comments are skipped."""
+    return [
+        line.split("\t")
+        for line in text.split("\n")
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
 
 
 @pytest.mark.parametrize("case", TSV_IMPORT_CASES, ids=lambda case: case["name"])
