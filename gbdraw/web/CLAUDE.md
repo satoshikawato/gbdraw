@@ -168,7 +168,7 @@ applied and report the failure. Metadata-only edits
 with no static SVG target, such as Similarity group names and descriptions,
 update canonical state only.
 
-## Design rules R1-R13
+## Design rules R1-R14
 
 Each rule names one owner and the guard that enforces it. Cite the rule id in PR
 descriptions and tests. Change the code and its guard together, and lower a
@@ -523,6 +523,39 @@ Guards: `tests/web/owner-graph-baseline.test.mjs` (every observed subject is in
 the baseline with a count no higher than recorded, per detector) and
 `tests/web/owner-graph-detectors.test.mjs` (the detectors).
 
+### R14: Typed boundaries
+
+Modules under `js/` except `workers/` are checked by `tsc --noEmit` with JSDoc
+types (`tests/web/types/tsconfig.json`); there is no build step and no
+TypeScript source. A checked module starts with the line `// @ts-check`. The
+modules not yet checked are listed in `UNCHECKED_MODULES` in
+`tests/web/typed-boundaries.test.mjs`, which may only shrink: the pull request
+that checks a module removes it from the list, and an addition is an
+authority-only change. A new module is checked from its first commit.
+
+- A checked module declares the type of every parameter of its exported
+  `create*` and `setup*` factories. A port (R13) is a function type declared by
+  the owner that receives it; a composition root imports it with `@import`. A
+  type naming another owner's factory result (`ReturnType<typeof createX>`) is
+  a whole-object port.
+- A persisted contract (the Session, the canonical render request, the feature
+  catalog) has one typedef, in its writer beside its version constant
+  (`SESSION_VERSION`, `CANONICAL_REQUEST_SCHEMA`, `FEATURE_CATALOG_SCHEMA`),
+  for the current format only. A reader takes unvalidated data and returns that
+  typedef.
+- Types are JSDoc in the module that owns them, imported with
+  `/** @import { T } from './x.js' */`, never a `.d.ts` or a types module under
+  `gbdraw/web/`. A type import follows the layers of R13. The globals of
+  vendored scripts and the test hooks are declared once, as `any`, in
+  `tests/web/types/web-globals.d.ts`.
+- `@ts-ignore`, `@ts-expect-error`, and `@ts-nocheck` are not used: fix the
+  type, cast with JSDoc, or fix the code.
+
+Guard: `tests/web/typed-boundaries.test.mjs` (the checked set, the compiler
+run, declared factory parameters, no suppression, type-import direction). It
+runs the `typescript` version pinned in `package.json` and fails until
+`npm ci` has installed it.
+
 ## Computation ownership
 
 Follow [Computation ownership](../../docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#computation-ownership)
@@ -658,6 +691,8 @@ python tools/prepare_browser_wheel.py
 python tools/prepare_browser_wheel.py --refresh-cache-bust
 python -m build
 pytest tests/ -v -m "not slow"
+npm ci
+node --test tests/web/typed-boundaries.test.mjs
 ```
 
 Refresh the cache-bust token only when preparing a deployable bundle.

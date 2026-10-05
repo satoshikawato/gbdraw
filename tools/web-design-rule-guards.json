@@ -172,6 +172,20 @@
           "kind": "count-map"
         }
       ]
+    },
+    {
+      "id": "R14",
+      "heading": "R14: Typed boundaries",
+      "guards": [
+        "tests/web/typed-boundaries.test.mjs"
+      ],
+      "allowlists": [
+        {
+          "path": "tests/web/typed-boundaries.test.mjs",
+          "symbol": "UNCHECKED_MODULES",
+          "kind": "set"
+        }
+      ]
     }
   ]
 }
