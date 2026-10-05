@@ -2152,10 +2152,14 @@ const BUDGET_FIXTURE = Object.freeze({
   ),
   'gbdraw/web/vendor/library.js': 'globalThis.vendorLibrary = true;\n'
 });
+const WEB_DESIGN_RULES_PATH = 'gbdraw/web/CLAUDE.md';
+const DESIGN_RULE_GUARD_REGISTRY_PATH = 'tools/web-design-rule-guards.json';
 const FUTURE_GUARD_PATHS = Object.freeze([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   '.github/pull_request_template.md',
-  'tools/web-architecture-violations.json'
+  'tools/web-architecture-violations.json',
+  WEB_DESIGN_RULES_PATH,
+  DESIGN_RULE_GUARD_REGISTRY_PATH
 ]);
 const PROTECTED_ARCHITECTURE_GUARD_PATHS = Object.freeze([
   ...FUTURE_GUARD_PATHS,
@@ -2164,7 +2168,9 @@ const PROTECTED_ARCHITECTURE_GUARD_PATHS = Object.freeze([
 const FUTURE_AUTHORITY_PATHS = Object.freeze([
   'docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md',
   'tools/web-architecture-rules.json',
-  'tools/web-architecture-violations.json'
+  'tools/web-architecture-violations.json',
+  WEB_DESIGN_RULES_PATH,
+  DESIGN_RULE_GUARD_REGISTRY_PATH
 ]);
 const PRODUCT_IMPACT_GUARD_PATHS = Object.freeze([
   'docs/internal/PRODUCT_IMPACT_RATCHET.md',
@@ -4504,6 +4510,8 @@ test('checker implementation and authority files cannot change together', () => 
     'tools/web-architecture-violations.json',
     'tools/web-product-impact-map.json',
     'tools/web-product-decisions.json',
+    WEB_DESIGN_RULES_PATH,
+    DESIGN_RULE_GUARD_REGISTRY_PATH,
     '.github/workflows/gallery-publication.yml',
     '.github/workflows/deploy_web.yml',
     '.github/workflows/test.yml',
@@ -5644,4 +5652,183 @@ test('pull request SHA mismatches are blocking metadata errors', () => {
     assert.match(result.output, /Context: PROMOTION/);
     assert.match(result.output, /Checker base SHA does not match the GitHub event payload/);
   });
+});
+
+// Design-rule guard registry (WEB_CHANGE_POLICY.md "Design-rule co-change"):
+// the registry names the allowlist and baseline literals inside the guard
+// tests of gbdraw/web/CLAUDE.md R1-R12. A runtime diff may contract them and
+// may not expand them; an expansion is an authority-only change.
+const DESIGN_RULE_GUARD_TEST_PATH = 'tests/web/design-rule-guard-fixture.test.mjs';
+const designRuleGuardRegistrySource = (rules) => `${JSON.stringify({
+  schemaVersion: 1,
+  rulesPath: WEB_DESIGN_RULES_PATH,
+  rules
+}, null, 2)}\n`;
+const DESIGN_RULE_REGISTRY = designRuleGuardRegistrySource([{
+  id: 'R10',
+  heading: 'R10: A watcher does not repair state',
+  guards: [DESIGN_RULE_GUARD_TEST_PATH],
+  allowlists: [
+    { path: DESIGN_RULE_GUARD_TEST_PATH, symbol: 'RECONCILE', kind: 'set' },
+    { path: DESIGN_RULE_GUARD_TEST_PATH, symbol: 'WRITERS', kind: 'writer-map' },
+    { path: DESIGN_RULE_GUARD_TEST_PATH, symbol: 'THROW_BASELINE', kind: 'count-map' },
+    { path: DESIGN_RULE_GUARD_TEST_PATH, symbol: 'BASELINE', kind: 'count' }
+  ]
+}]);
+const designRuleGuardTestSource = ({
+  reconcile = ['normalizeCircularTrackSlots', 'changeCircularDepthSources'],
+  writers = "{\n  'app/app-setup.js': { removeCircularDepthTrack: 'reconcile' }, // keeps every lane\n  'services/reset.js': { resetSettings: 'restore' }\n}",
+  throwBaseline = "{ 'app/a.js': 3, 'app/b.js': 0 }",
+  baseline = 46
+} = {}) => [
+  "import test from 'node:test';",
+  '',
+  '// Exports that may write outside the transition (R10 reconciles).',
+  `const RECONCILE = new Set([${reconcile.map((name) => `'${name}'`).join(', ')}]);`,
+  `const WRITERS = ${writers};`,
+  `const THROW_BASELINE = ${throwBaseline};`,
+  '',
+  "test('baseline', () => {",
+  `  const BASELINE = ${baseline};`,
+  '  void RECONCILE; void WRITERS; void THROW_BASELINE; void BASELINE;',
+  '});',
+  ''
+].join('\n');
+
+const withDesignRuleGuardRepository = (runCase, { registry = DESIGN_RULE_REGISTRY } = {}) => (
+  withChangeBudgetRepository(({ commit, execute, write }) => {
+    write(DESIGN_RULE_GUARD_REGISTRY_PATH, registry);
+    write(DESIGN_RULE_GUARD_TEST_PATH, designRuleGuardTestSource());
+    commit('register design-rule guards');
+    return runCase({ execute, write });
+  })
+);
+const runtimeChange = (write) => {
+  write('gbdraw/web/js/services/session-file.js', 'export const readSession = () => ({ version: 2 });\n');
+};
+
+test('design-rule allowlists may contract alongside runtime files', () => {
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    runtimeChange(write);
+    write(DESIGN_RULE_GUARD_TEST_PATH, designRuleGuardTestSource({
+      reconcile: ['normalizeCircularTrackSlots'],
+      writers: "{\n  'services/reset.js': { resetSettings: 'restore' }\n}",
+      throwBaseline: "{ 'app/a.js': 2, 'app/b.js': 0 }",
+      baseline: 45
+    }));
+    const result = execute();
+    assert.equal(result.status, 0, result.output);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.doesNotMatch(result.output, /design-rule\.co-change/);
+    assert.match(result.output, /- contraction: R10 tests\/web\/design-rule-guard-fixture\.test\.mjs#RECONCILE/);
+    assert.match(result.output, /- contraction: R10 tests\/web\/design-rule-guard-fixture\.test\.mjs#WRITERS/);
+    assert.match(result.output, /- contraction: R10 tests\/web\/design-rule-guard-fixture\.test\.mjs#THROW_BASELINE/);
+    assert.match(result.output, /- contraction: R10 tests\/web\/design-rule-guard-fixture\.test\.mjs#BASELINE/);
+    assert.match(result.output, /Registry: 1 rule\(s\) from the trusted base/);
+  });
+});
+
+test('design-rule allowlists cannot expand alongside runtime files', () => {
+  const expansions = [
+    ['RECONCILE', { reconcile: ['normalizeCircularTrackSlots', 'changeCircularDepthSources', 'applyTrackLayout'] }],
+    ['WRITERS', { writers: "{\n  'app/app-setup.js': { removeCircularDepthTrack: 'reconcile' },\n  'services/reset.js': { resetSettings: 'restore' },\n  'app/feature-editor/placement-actions.js': { changeLayoutSetting: 'transition' }\n}" }],
+    ['WRITERS', { writers: "{\n  'app/app-setup.js': { removeCircularDepthTrack: 'transition' },\n  'services/reset.js': { resetSettings: 'restore' }\n}" }],
+    ['THROW_BASELINE', { throwBaseline: "{ 'app/a.js': 4, 'app/b.js': 0 }" }],
+    ['THROW_BASELINE', { throwBaseline: "{ 'app/a.js': 3, 'app/b.js': 0, 'app/c.js': 1 }" }],
+    ['BASELINE', { baseline: 47 }]
+  ];
+  expansions.forEach(([symbol, overrides]) => {
+    withDesignRuleGuardRepository(({ execute, write }) => {
+      runtimeChange(write);
+      write(DESIGN_RULE_GUARD_TEST_PATH, designRuleGuardTestSource(overrides));
+      for (const environment of [{}, { WEB_ARCHITECTURE_CHANGE: 'true' }]) {
+        const result = execute({ environment });
+        assert.equal(result.status, 1, `${symbol}\n${result.output}`);
+        assert.match(result.output, /Gate: \*\*FAIL\*\*/);
+        assert.match(
+          result.output,
+          new RegExp(`design-rule\\.co-change: a registered design-rule allowlist expanded alongside production runtime files \\([^)]*R10 tests/web/design-rule-guard-fixture\\.test\\.mjs#${symbol} \\(expansion\\)`)
+        );
+      }
+    });
+  });
+});
+
+test('a design-rule allowlist expansion without runtime files is an authority change', () => {
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    write(DESIGN_RULE_GUARD_TEST_PATH, designRuleGuardTestSource({ baseline: 47 }));
+    const result = execute();
+    assert.equal(result.status, 0, result.output);
+    assert.match(result.output, /Gate: \*\*PASS\*\*/);
+    assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
+    assert.match(result.output, /Governance and authority: registered design-rule allowlists expanded \(R10 tests\/web\/design-rule-guard-fixture\.test\.mjs#BASELINE \(expansion\)\)/);
+  });
+});
+
+test('an unreadable design-rule allowlist counts as an expansion', () => {
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    runtimeChange(write);
+    write(DESIGN_RULE_GUARD_TEST_PATH, designRuleGuardTestSource({ baseline: 'computeBaseline()' }));
+    const result = execute();
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, /design-rule\.co-change: .*#BASELINE \(unreadable\)/);
+  });
+});
+
+test('the design-rule guard registry is read from the trusted base and fails closed when malformed', () => {
+  withDesignRuleGuardRepository(({ execute, write }) => {
+    // A head-side registry rewrite cannot relax the base registry.
+    runtimeChange(write);
+    write(DESIGN_RULE_GUARD_REGISTRY_PATH, designRuleGuardRegistrySource([]));
+    write(DESIGN_RULE_GUARD_TEST_PATH, designRuleGuardTestSource({ baseline: 47 }));
+    const result = execute();
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, /design-rule\.co-change: .*#BASELINE \(expansion\)/);
+    assert.match(result.output, /production runtime files and Web guard\/CI files changed together/);
+  });
+  withDesignRuleGuardRepository(({ execute }) => {
+    const result = execute();
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, /trusted design-rule guard registry: tools\/web-design-rule-guards\.json: rules\[0\]\.allowlists\[0\]\.kind: expected one of/);
+  }, {
+    registry: designRuleGuardRegistrySource([{
+      id: 'R10',
+      heading: 'R10',
+      guards: [DESIGN_RULE_GUARD_TEST_PATH],
+      allowlists: [{ path: DESIGN_RULE_GUARD_TEST_PATH, symbol: 'RECONCILE', kind: 'list' }]
+    }])
+  });
+  withDesignRuleGuardRepository(({ execute }) => {
+    const result = execute();
+    assert.equal(result.status, 1, result.output);
+    assert.match(result.output, /trusted design-rule guard registry: tools\/web-design-rule-guards\.json: invalid JSON/);
+    assert.match(result.output, /Review: \*\*REQUIRED\*\*/);
+  }, { registry: '{ not json\n' });
+});
+
+test('the Web design rules and the guard registry are pre-registered guard and authority paths', () => {
+  const checker = readFileSync(CHANGE_BUDGET_CHECKER, 'utf8');
+  assert.match(checker, /const webDesignRulesPath = 'gbdraw\/web\/CLAUDE\.md';/);
+  assert.match(checker, /const designRuleGuardRegistryPath = 'tools\/web-design-rule-guards\.json';/);
+  const guardBlock = checker.match(/const guardPaths = new Set\(\[([\s\S]*?)\]\);/)[1];
+  const authorityBlock = checker.match(/const authorityPaths = new Set\(\[([\s\S]*?)\]\);/)[1];
+  for (const block of [guardBlock, authorityBlock]) {
+    assert.match(block, /webDesignRulesPath/);
+    assert.match(block, /designRuleGuardRegistryPath/);
+  }
+  if (existsSync(join(REPOSITORY_ROOT, DESIGN_RULE_GUARD_REGISTRY_PATH))) {
+    // Once the registry is activated, every rule it names exists in the Web
+    // rules, every guard exists, and every allowlist literal is readable.
+    const registry = JSON.parse(readFileSync(join(REPOSITORY_ROOT, DESIGN_RULE_GUARD_REGISTRY_PATH), 'utf8'));
+    const rules = readFileSync(join(REPOSITORY_ROOT, WEB_DESIGN_RULES_PATH), 'utf8');
+    assert.equal(registry.schemaVersion, 1);
+    registry.rules.forEach((rule) => {
+      assert.match(rules, new RegExp(`^### ${rule.heading.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}$`, 'm'), rule.id);
+      rule.guards.forEach((guard) => assert.ok(existsSync(join(REPOSITORY_ROOT, guard)), `${rule.id}: ${guard}`));
+      rule.allowlists.forEach(({ path, symbol }) => {
+        const source = readFileSync(join(REPOSITORY_ROOT, path), 'utf8');
+        assert.match(source, new RegExp(`^[ \\t]*(?:export\\s+)?const\\s+${symbol}\\s*=`, 'm'), `${rule.id}: ${path}#${symbol}`);
+      });
+    });
+  }
 });
