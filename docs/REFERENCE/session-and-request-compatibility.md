@@ -260,7 +260,8 @@ artifacts; use `render_session()` when those artifacts belong in the result.
 
 `render_request()` accepts current typed requests, not historical session
 envelopes. Public typed session conversion accepts full versions 31–33, 39–42, 44, and 45;
-versions 27–30 are CLI replay inputs only. Canonical schema 9 retains schema 7's
+versions 27–30 have no canonical request: the CLI replays them, and the Web app
+loads them from their saved settings. Canonical schema 9 retains schema 7's
 display values and schema 6's input cardinality, including selectorless `all`
 inputs. Resolve a typed request
 before encoding when it still contains deferred paths or collection-level transforms.
@@ -393,8 +394,8 @@ requested persistence fields.
 
 Supported older requests have unset display, empty placements and tolerance 0.
 Saving a schema-5/6 Web session promotes it without requiring Generate. Versions
-27–30 still support CLI replay only, and unknown or development-only versions
-remain rejected.
+27–30 still load without a canonical request (CLI replay and Web Load), and
+unknown or development-only versions remain rejected.
 
 Editable Web rotation and placement drafts are saved in config, separately from
 the last successful request and Result. An inactive rotation start stays in the

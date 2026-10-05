@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join, resolve } = require('node:path');
-const { gzipSync } = require('node:zlib');
+const { gunzipSync, gzipSync } = require('node:zlib');
 const { openApp } = require('./helpers/app-lifecycle.cjs');
 const { installImportReadGate } = require('./helpers/session-import-gate.cjs');
 
@@ -31,6 +31,21 @@ const replacementSession = {
     'sessions',
     'lambda_basic_linear.gbdraw-session.json'
   )))
+};
+
+// OV-38: the 0.13.0 Gallery Session (version 30, release tag 0.13.0) saved its
+// Circular Custom Track Slots rows with `spacing: null` while the slots were off.
+const galleryV30Bytes = gunzipSync(readFileSync(join(
+  repoRoot, 'tests', 'fixtures', 'sessions', 'BGC0000708-BGC0000713.v30.gbdraw-session.json.gz'
+)));
+const galleryV30Session = (edit = () => {}) => {
+  const document = JSON.parse(galleryV30Bytes);
+  edit(document.config.adv);
+  return {
+    name: 'BGC0000708-BGC0000713.gbdraw-session.json.gz',
+    mimeType: 'application/gzip',
+    buffer: gzipSync(Buffer.from(JSON.stringify(document)))
+  };
 };
 
 const loadBaselineSession = async (page) => {
@@ -258,4 +273,44 @@ test('failed session loading clears pending state and preserves the prior sessio
   await expect(page.getByRole('alert', { name: 'Operation error' })).toContainText('Use valid JSON.');
   expect(await importSnapshot(page)).toEqual(before);
   await expect(sessionInput).toHaveValue('');
+});
+
+test('a 0.13.0 Gallery Session loads, and its Custom Track Slots turned on name the obsolete field', async ({
+  page
+}) => {
+  test.setTimeout(300_000);
+  await openApp(page);
+  const dialogs = [];
+  page.on('dialog', async (dialog) => {
+    dialogs.push(dialog.message());
+    await dialog.accept();
+  });
+  const sessionInput = page.locator(sessionInputSelector);
+  const loadAndSettle = async (session) => {
+    await installLifecycleProbe(page);
+    await sessionInput.setInputFiles(session);
+    await page.waitForFunction(() => (
+      window.__GBDRAW_SESSION_LOADING_EVENTS__.some(({ name }) => name === 'interactiveReady')
+      && window.__GBDRAW_APP__?.sessionImportPending === false
+    ), null, { timeout: 240_000 });
+  };
+  await loadAndSettle(galleryV30Session());
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toBeNull();
+  expect(dialogs).toHaveLength(1);
+  expect(dialogs[0]).toMatch(/^Session loaded successfully!/);
+  const loaded = await importSnapshot(page);
+  expect(loaded).toMatchObject({ title: 'out', mode: 'linear', selectedResultName: 'out' });
+  expect(loaded.previewHtml).toContain('<svg');
+
+  await loadAndSettle(galleryV30Session((adv) => {
+    adv.circular_track_slots_enabled = true;
+  }));
+  expect(dialogs).toHaveLength(1);
+  await expect(page.getByRole('alert', { name: 'Operation error' })).toContainText(
+    'The track settings are invalid. Track row 1. Field: spacing. Custom Track Slots no longer read this field.'
+  );
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog)).toMatchObject({
+    code: 'TRACK_INVALID', context: { field: 'spacing', reason: 'OBSOLETE_TRACK_FIELD', slotIndex: 0 }
+  });
+  expect(await importSnapshot(page)).toEqual(loaded);
 });

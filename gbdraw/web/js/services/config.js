@@ -1317,17 +1317,41 @@ export const buildSessionLegacyArtifacts = ({
   return Object.keys(legacyArtifacts).length > 0 ? legacyArtifacts : null;
 };
 
+// The Web writers of Sessions 27–33 saved every schema-4 Circular slot row with
+// `spacing: null`. With Custom Track Slots off that null is lossless and is
+// dropped; any other obsolete slot field fails validateImportedCircularTrackSlots.
+const withoutLegacyNullCircularSlotSpacing = (configData) => {
+  const adv = configData?.adv;
+  if (!isPlainObject(adv) || adv.circular_track_slots_enabled
+    || adv.circular_track_slots_schema_version !== CIRCULAR_TRACK_SLOT_SCHEMA_VERSION
+    || !Array.isArray(adv.circular_track_slots)) return configData;
+  return {
+    ...configData,
+    adv: {
+      ...adv,
+      circular_track_slots: adv.circular_track_slots.map((slot) => {
+        if (!isPlainObject(slot) || slot.spacing !== null) return slot;
+        const { spacing: _spacing, ...current } = slot;
+        return current;
+      })
+    }
+  };
+};
+
 const migrateSessionDataToCurrent = (data, sourceSessionVersion) => {
   const readsLegacyOptionValues = sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION;
   const migratedOptions = readsLegacyOptionValues
     ? migratePersistedWebOptionValues(data.config)
     : data.config;
+  const circularSlotConfig = migrateImportedCircularTrackSlots(migratedOptions);
   return {
     ...data,
     version: SESSION_VERSION,
     config: migrateLegacyFeatureRenderingConfig(
       migrateImportedLinearTrackSlots(
-        migrateImportedCircularTrackSlots(migratedOptions),
+        sourceSessionVersion <= 33
+          ? withoutLegacyNullCircularSlotSpacing(circularSlotConfig)
+          : circularSlotConfig,
         sourceSessionVersion
       ),
       sourceSessionVersion <= 33
