@@ -504,8 +504,8 @@ export const createFeatureLabelActions = ({
 
   // R13: Generate and the label rerender clear the notices of the previous
   // label build through this port when they start; a rerender also clears its
-  // last failure, as a queued request does. The rerender still reports its own
-  // failure (R1(c)).
+  // last failure, as a queued request does, and so does a Generate that commits
+  // its Results (OV-36). The rerender still reports its own failure (R1(c)).
   const clearLabelBuildNotices = ({ rerender = false } = {}) => {
     if (rerender) labelReflowLastError.value = null;
     labelOverrideBuildWarning.value = '';

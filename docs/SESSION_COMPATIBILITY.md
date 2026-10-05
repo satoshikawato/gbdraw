@@ -8,6 +8,22 @@ session files, canonical render requests, and saved LOSAT results. The concise
 documents current support. Tutorials and the FAQ describe what a user should
 do; release notes record when a format changed.
 
+## Unreleased: Web Load of 0.13.0 Sessions
+
+Session version 45 is unchanged. Sessions 27–30, written by gbdraw 0.13.0 and
+earlier, have no canonical `renderRequest`. The Web app loads such a Session
+from its saved settings, with its saved preview; the CLI replays it, and the
+typed-session bridge does not convert it. The Web writers of Sessions 27–33
+saved every Circular Custom Track Slots row with `spacing: null`, a field the
+current slots do not read. When the Session's Custom Track Slots are off, that
+null carries no setting and Load drops it, so the 0.13.0 Gallery Sessions load.
+When the slots of a Session 27–30 are on, or a row holds a `spacing` value or
+another retired field (`strict`, `compress`, `reserve`, `placement`,
+`inner_radius`, `outer_radius`, or `gap_after`), Load fails with a message that
+names the field and the track row, and the previous Session stays loaded. The
+current Custom Track Slots use `radius`, `width`, `inner_gap_px`,
+`outer_gap_px`, `side`, and `z`.
+
 ## Unreleased: Web Load of Session 31–39 table rows
 
 Session version 45 is unchanged. The Web writers of Sessions 31–39 stored the
@@ -279,9 +295,10 @@ Session versions 34–38 and canonical request schemas 3–4 were development-on
 formats. They were never released on the supported history and are rejected.
 
 The public typed-session bridge can convert full session versions 31–33, 39–42, and 44 to
-a typed request. Versions 27–30 remain supported only as CLI replay inputs
-because they do not contain a canonical `renderRequest`. Use the same
-`circular` or `linear` subcommand that created the session.
+a typed request. Versions 27–30 do not contain a canonical `renderRequest`, so
+the bridge does not convert them: the CLI replays them with the same
+`circular` or `linear` subcommand that created the session, and the Web app
+loads them from their saved settings.
 
 `render_session()` is the compatibility boundary for canonical session replay.
 It migrates supported persisted artifacts into `CurrentRequestArtifacts`, then

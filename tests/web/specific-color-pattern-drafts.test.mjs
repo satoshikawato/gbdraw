@@ -48,7 +48,7 @@ const setup = ({ features = [{ type: 'CDS', svg_id: 'one', qualifiers: { product
       diff: { add: [], remove: [] },
       isCurrent: () => true,
       apply: () => { state.results.value = [{ name: 'figure', content: JSON.stringify(state.manualSpecificRules) }]; }
-    }, svgActions: { applyPaletteToSvg() {}, applySpecificRulesToSvg() {} }
+    }, projectPaletteAndRules: () => true
   });
   const row = state.manualSpecificRules[0];
   const stable = () => ({ canonical: JSON.stringify(state.manualSpecificRules), result: state.results.value, history: history.length });

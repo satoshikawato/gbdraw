@@ -26,7 +26,7 @@ export const fixture = (colors, rules) => {
   const ready = rulePreparation.prepare();
   // Style edits commit through the app's preview runtime (R1).
   const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg });
-  const actions = createSvgStyles({ state, rulePreparation, watch() {}, nextTick: fn => fn(),
+  const actions = createSvgStyles({ state, watch() {}, nextTick: fn => fn(),
     legendActions: { getAllFeatureLegendGroups: () => [] }, previewRuntime });
   return { actions, state, attrs, depthAttrs, ready };
 };

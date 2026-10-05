@@ -22,7 +22,8 @@ depth_min depth_max min_gc max_gc gc_tick_interval gc_axis_font_size depth_tick_
 depth_axis_font_size dinucleotide feature_width_circular depth_width_circular gc_content_width_circular
 gc_content_radius_circular gc_skew_width_circular gc_skew_radius_circular conservation_ring_width
 conservation_ring_gap center_reserved_radius multi_record_min_radius_ratio multi_record_column_gap_ratio
-multi_record_row_gap_ratio protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collinear_unit_mode collinear_anchor_mode collinear_merge_orientation collinear_color_mode orthogroup_membership_mode collinear_max_unit_gap collinear_max_conflicts collinear_max_paralog_links_per_orthogroup circular_multi_record_size_mode linear_track_layout linear_label_placement set_id anchor_slot side renderer lane_gap_px padding_px cover_anchor overflow layer z axis match_height source fasta gff annotations featurePlacements output_prefix`.split(/\s+/));
+multi_record_row_gap_ratio protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collinear_unit_mode collinear_anchor_mode collinear_merge_orientation collinear_color_mode orthogroup_membership_mode collinear_max_unit_gap collinear_max_conflicts collinear_max_paralog_links_per_orthogroup circular_multi_record_size_mode linear_track_layout linear_label_placement set_id anchor_slot side renderer lane_gap_px padding_px cover_anchor overflow layer z axis match_height source fasta gff annotations featurePlacements output_prefix
+placement strict compress reserve gapAfter gap_after innerRadius inner_radius outerRadius outer_radius`.split(/\s+/));
 const REASONS = Object.freeze({
   CROSS_ORIGIN_ISOLATION: 'This page is not cross-origin isolated.', SHARED_MEMORY: 'This browser does not provide SharedArrayBuffer.',
   WORKERS: 'This browser does not provide Web Workers.', THREADED_WASM: 'The threaded LOSAT runtime could not start.',
@@ -59,6 +60,7 @@ const REASONS = Object.freeze({
   PIXEL_NONNEGATIVE: 'Use a finite number of pixels of zero or greater (px optional).',
   POSITIVE_SCALAR: 'Use a positive finite px or factor scalar.',
   CIRCULAR_GAPS: 'Use inner_gap_px and outer_gap_px for physical gaps.',
+  OBSOLETE_TRACK_FIELD: 'Custom Track Slots no longer read this field. Use slot-level radius, width, inner_gap_px, outer_gap_px, side, and z fields.',
   SEPARATE_LINEAR_ROWS: 'Turn Normalize Record Lengths off or assign each record to a separate Linear row.',
   GFF_FASTA_MATCH: 'Ensure every GFF3 record has a matching FASTA entry.',
   UNTERMINATED_SET: 'Close the character set with ].',

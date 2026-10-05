@@ -26,7 +26,7 @@ const create = (features) => {
   const actions = createFeatureRuleActions({
     state, ref, computed, nextTick: async () => {},
     rulePreparation: { isCurrent: () => true },
-    history: {}, svgActions: {}
+    history: {}, projectPaletteAndRules: () => true
   });
   return { actions, extractedFeatures };
 };

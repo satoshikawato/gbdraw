@@ -123,7 +123,7 @@ const previewRuntime = {
 const { featureOverrideKey } = await import(pathToFileURL(join(tempDir, 'services', 'feature-override-identity.js')));
 const { createRulePreparation, firstMatchingRule } = await import(pathToFileURL(join(tempDir, 'app', 'rule-matching.js')));
 const actions = createFeatureColorActions({
-  rulePreparation: createRulePreparation({ state: { extractedFeatures, biologicalFeatures, manualSpecificRules }, evaluate: evaluatePythonRules }),
+  runWithRuleMatches: createRulePreparation({ state: { extractedFeatures, biologicalFeatures, manualSpecificRules }, evaluate: evaluatePythonRules }).run,
   state: {
     results: ref([]),
     selectedResultIndex: ref(0),
@@ -154,11 +154,6 @@ const actions = createFeatureColorActions({
     legendGeometryChangedCount += 1;
   },
   extractLegendEntries: () => {},
-  svgActions: {
-    applySpecificRulesToSvg: () => {
-      applySpecificRulesCount += 1;
-    }
-  },
   ruleActions: {
     commitSpecificRules: async (rules, _label, {afterCommit = () => {}, previousLegendIntents = []} = {}) => {
       committedLegendIntents.push(previousLegendIntents);
@@ -734,7 +729,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
     evaluate: evaluatePythonRules
   });
   const resetActions = createFeatureColorActions({
-    rulePreparation: resetPreparation,
+    runWithRuleMatches: resetPreparation.run,
     state: {
       results: ref([]),
       selectedResultIndex: ref(0),
@@ -760,7 +755,6 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
       addedLegendCaptions: ref(new Set())
     },
     nextTick: async () => {},
-    svgActions: {},
     ruleActions: {
       commitSpecificRules: async (rules) => {
         committed.push(rules.map((rule) => ({ ...rule })));
@@ -819,10 +813,10 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
     const originalOrder = ref([...order]);
     const featureList = ref(features);
     const renameActions = createFeatureColorActions({
-      rulePreparation: createRulePreparation({
+      runWithRuleMatches: createRulePreparation({
         state: { extractedFeatures: featureList, biologicalFeatures: featureList, manualSpecificRules: rules },
         evaluate: evaluatePythonRules
-      }),
+      }).run,
       state: {
         results: ref([]), selectedResultIndex: ref(0), appliedPaletteColors: ref({ tRNA: '#e8b441' }),
         manualSpecificRules: rules, extractedFeatures: featureList, biologicalFeatures: featureList,
@@ -835,7 +829,6 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
       },
       nextTick: async () => {},
       compactLegendEntries: () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
-      svgActions: {},
       ruleActions: {
         commitSpecificRules: async (nextRules) => { committed.push(nextRules.map((rule) => ({ ...rule }))); return true; },
         getEffectiveLegendCaption: (feature) => rules.find((rule) => rule.feat === feature.type)?.cap || feature.type,

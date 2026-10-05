@@ -84,6 +84,7 @@ import {
   serializeQualifierPriorityRules,
   serializeSpecificRules
 } from './file-imports.js';
+import { rebindRuleColorOverrides } from './rule-matching.js';
 import {
   pruneUnmatchedFeatureOverrides,
   serializeFeatureVisibilityRules
@@ -1894,6 +1895,26 @@ export const createRunAnalysis = ({
     return entry.promise;
   };
 
+  // R13: Generate and the label reflow prepare the specific-color rules they
+  // render here, the Generate compiler's one trigger of the rule preparation.
+  // `isCurrent` is the run's own staleness: the candidate is null when the run
+  // went stale during the preparation, and is admitted (`shouldAdmit`) while
+  // the run and the rule inputs it was prepared from stay current. The run
+  // commits the feature color overrides rebound to the normalized captions.
+  const prepareAndAdmitCandidate = async (isCurrent, options) => {
+    if (!rulePreparation) {
+      return { rules: manualSpecificRules, featureColorOverrides, shouldAdmit: isCurrent, notifyChanges: () => {} };
+    }
+    const candidate = await rulePreparation.prepareCandidate(manualSpecificRules, options);
+    if (!candidate || !isCurrent()) return null;
+    return {
+      rules: candidate.rules,
+      featureColorOverrides: rebindRuleColorOverrides(featureColorOverrides, manualSpecificRules, candidate.rules),
+      shouldAdmit: () => rulePreparation.isCurrent(candidate.snapshot) && isCurrent(),
+      notifyChanges: () => rulePreparation.notifyChanges(candidate)
+    };
+  };
+
   const runAnalysisInternal = async ({
     decorationContinuity = null,
     comparisonPlanSnapshot = null,
@@ -2130,13 +2151,16 @@ export const createRunAnalysis = ({
     clearLabelBuildNotices();
 
     try {
-      if (rulePreparation) {
-        colorCandidate = await rulePreparation.prepareCandidate(manualSpecificRules, { onProgress: onDiagramProgress });
+      colorCandidate = await prepareAndAdmitCandidate(
+        () => generationToken === latestGenerationToken && !generationCancelRequested.value,
+        { onProgress: onDiagramProgress }
+      );
+      if (!colorCandidate) {
         throwIfGenerationCanceled();
-        if (!colorCandidate || generationToken !== latestGenerationToken) return { status: 'stale' };
-        candidateRules = colorCandidate.rules;
-        runState.manualSpecificRules = candidateRules;
+        return { status: 'stale' };
       }
+      candidateRules = colorCandidate.rules;
+      runState.manualSpecificRules = candidateRules;
       if (mode.value === 'linear') {
         if (!activeComparisonPlanSnapshot || !Array.isArray(activeComparisonPlanSnapshot.edges)) {
           throw new Error('A resolved Linear comparison plan is required.');
@@ -4471,14 +4495,12 @@ export const createRunAnalysis = ({
         decorationContinuity,
         mode: mode.value,
         kind: 'generate',
-        shouldAdmit: () => (!colorCandidate || rulePreparation.isCurrent(colorCandidate.snapshot))
-          && generationToken === latestGenerationToken
-          && !generationCancelRequested.value,
+        shouldAdmit: colorCandidate.shouldAdmit,
         onProgress: onDiagramProgress,
         prepareCommit: prepareCandidateCommit,
         prepareCommitInput: {
           sourceReplaced,
-          featureColorOverrides: colorCandidate?.featureColorOverrides || featureColorOverrides,
+          featureColorOverrides: colorCandidate.featureColorOverrides,
           featureStrokeOverrides,
           featureOverrides,
           legendEntries: legendEntries.value,
@@ -4770,7 +4792,7 @@ export const createRunAnalysis = ({
           { disposition: IMPORTED_COMPARISON_DISPOSITIONS.EDITABLE }
         );
       }
-      if (colorCandidate) rulePreparation.notifyChanges(colorCandidate);
+      colorCandidate.notifyChanges();
       return {
         status: 'ok',
         generatedArtifactCandidate: activatedGeneratedArtifactCandidate
@@ -4902,6 +4924,10 @@ export const createRunAnalysis = ({
       if (outcome?.status === 'ok' && outcome.generatedArtifactCandidate) {
         generatedArtifactTransactionOwner.finalize();
         completedLosatSearch = null;
+        // The committed Results draw every edit, so the last live edit failure
+        // no longer applies (OV-36). A failed Generate keeps the Result it
+        // could not replace, and the note with it.
+        clearLabelBuildNotices({ rerender: true });
         recordSessionLifecycleEvent('generate.completed');
       }
       if (Object.prototype.hasOwnProperty.call(outcome || {}, 'generatedArtifactCandidate')) {
@@ -5313,12 +5339,9 @@ export const createRunAnalysis = ({
     skipCaptureBaseConfig.value = true;
     const isCurrent = () => generationToken === latestGenerationToken && requestId === pendingReflowRequestId;
     try {
-      let candidateRules = manualSpecificRules;
-      if (rulePreparation) {
-        colorCandidate = await rulePreparation.prepareCandidate(manualSpecificRules);
-        if (!colorCandidate || !isCurrent()) return { status: 'stale' };
-        candidateRules = colorCandidate.rules;
-      }
+      colorCandidate = await prepareAndAdmitCandidate(isCurrent);
+      if (!colorCandidate) return { status: 'stale' };
+      const candidateRules = colorCandidate.rules;
       const canonical = projectCommittedEditorIntent({
         committed,
         promotion: {
@@ -5338,10 +5361,10 @@ export const createRunAnalysis = ({
         decorationContinuity,
         mode: canonical.renderRequest.mode,
         kind: 'reflow',
-        shouldAdmit: () => (!colorCandidate || rulePreparation.isCurrent(colorCandidate.snapshot)) && isCurrent(),
+        shouldAdmit: colorCandidate.shouldAdmit,
         prepareCommit: prepareReflowCommit,
         prepareCommitInput: {
-          featureColorOverrides: colorCandidate?.featureColorOverrides || featureColorOverrides,
+          featureColorOverrides: colorCandidate.featureColorOverrides,
           featureStrokeOverrides,
           featureOverrides,
           legendEntries: legendEntries.value,
@@ -5387,7 +5410,7 @@ export const createRunAnalysis = ({
         execution.commit, nextSelectedResultIndex, isCurrent, canonical.renderRequest.diagramOptions
       );
       logPostGbdrawTimings(timingEntries);
-      if (colorCandidate) rulePreparation.notifyChanges(colorCandidate);
+      colorCandidate.notifyChanges();
       return { status: 'ok' };
     } catch (e) {
       if (isDiagramGenerationCanceled(e)) {
