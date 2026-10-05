@@ -12,7 +12,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from ..exceptions import InputFileError, ParseError, ValidationError
-from ..io.table_text import read_table_lines, table_text_stream
+from ..io.table_text import read_literal_table, read_table_lines, table_text_stream
 from .selector_values import (
     _matches_constraint,
     feature_matches_specific_color_rule,
@@ -73,16 +73,11 @@ def read_feature_visibility_file(filepath: str) -> Optional[DataFrame]:
             )
 
     try:
-        df = pd.read_csv(
+        df = read_literal_table(
             table_text_stream(lines),
-            sep="\t",
-            header=None,
             names=required_cols,
-            dtype=str,
             keep_default_na=False,
             na_filter=False,
-            on_bad_lines="error",
-            engine="python",
         )
     except pd.errors.ParserError as e:
         logger.error(f"ERROR: Malformed line in feature visibility file '{filepath}': {e}")

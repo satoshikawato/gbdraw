@@ -198,6 +198,12 @@ In the Label whitelist, Label overrides, and Feature visibility tables, a line
 whose first non-blank character is `#` is a comment. A `#` after other text is
 part of the cell value, so `foo#bar` and `Gene #1` are read as written.
 
+These tables are not CSV: a `"` is part of the cell value and never quotes a
+field, so `"quoted"` is read with its quotes and `"lead` is a valid value. A
+cell cannot contain a tab or a line break. The [feature override
+table](#feature-override-table) is different: it quotes a `label_text` that
+contains `"`.
+
 A Specific-colors `color` is `none` (no fill, any case), an SVG color name,
 `#RGB`, or `#RRGGBB`. Other values, including hex colors with alpha, are
 rejected with their line number. The Web app converts a color name to hex when
