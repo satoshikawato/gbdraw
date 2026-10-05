@@ -82,10 +82,6 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.forward-closure.v1|app/app-setup.js|previewFeatureSearch.resolveOrthogroups->orthogroupActions.resolveOrthogroupName': 1,
   'owner-graph.forward-closure.v1|app/app-setup.js|rightDrawerActions.onClose->featureActions.suspendSpecificRulePatternDrafts': 1,
   'owner-graph.forward-closure.v1|app/feature-editor.js|labelActions.setFeatureVisibility->visibilityActions.setFeatureVisibility': 1,
-  // owner-graph.state-backdoor.v1
-  'owner-graph.state-backdoor.v1|app/app-setup.js|committedDiagramOptions': 1,
-  'owner-graph.state-backdoor.v1|app/app-setup.js|recordDisplayRows': 1,
-  'owner-graph.state-backdoor.v1|app/app-setup.js|sessionPreparationBusyReason': 1,
   // owner-graph.whole-object-port.v1
   'owner-graph.whole-object-port.v1|app/feature-editor/color-actions.js|createFeatureColorActions|featureSvgActions': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/color-actions.js|createFeatureColorActions|legendActions': 1,

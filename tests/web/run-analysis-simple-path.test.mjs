@@ -1491,9 +1491,11 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
   let failLateArtifactAdoption = false;
   let committedRenderRequest = null;
   let committedCanonicalSession = null;
+  const recordDisplayRows = { value: [] };
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
+    recordDisplayRows,
     serializeCanonicalFiles: (_snapshot, _catalog, runState) => serializeActiveRenderFiles(runState.mode.value, runState),
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: (canonical) => {
@@ -1720,9 +1722,9 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       blastpMode: state.losat.blastp.mode
     });
     state.linearSeqs.find(({uid})=>uid==='middle').region_reverse=true;
-    state.recordDisplayRows = { value: [{ scope: 'linear', sourceUid: 'middle',
+    recordDisplayRows.value = [{ scope: 'linear', sourceUid: 'middle',
       key: JSON.stringify(['linear', 'middle', '#1']), selector: '#1', recordId: 'MIDDLE', recordLength: 8,
-      reverse: true, cropped: false, detectedTopology: 'linear' }] };
+      reverse: true, cropped: false, detectedTopology: 'linear' }];
     const linearResult = result('lazy-linear.svg', 'lazy-linear');
     workerResponses.push(response(linearResult, validCatalog(linearResult.name)));
     assert.deepEqual(
@@ -1760,7 +1762,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     assert.equal(projectedRun.records.find(({ recordKey }) => recordKey === 'middle')
       .presentation.reverseComplement, true);
     assert.equal(state.linearSeqs.find(({ uid }) => uid === 'middle').region_reverse, true);
-    delete state.recordDisplayRows;
+    recordDisplayRows.value = [];
     assert.equal(
       resourceMetrics.filter(({ name }) => name === 'resourceByteReadCount').length,
       3

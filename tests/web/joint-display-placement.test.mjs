@@ -62,7 +62,6 @@ for (const mode of ['circular', 'linear']) {
     const rows = buildRecordDisplayRows({ scope: mode, sourceUid, source: {},
       records: [1, 2].map(() => ({ recordId: 'same', recordLength: 100, detectedTopology: 'circular' })) });
     state.circularRecordList.value = rows.map((row) => ({ ...row, record_id: row.recordId }));
-    state.recordDisplayRows = { value: rows };
     state.recordDisplayDrafts = [draft(rows[0], 1), draft(rows[1], 71)];
     state.adv.feature_overlap_tolerance_bp = 2;
     const recordKey = mode === 'circular' ? 'record-2' : 'card:2';
@@ -70,7 +69,7 @@ for (const mode of ['circular', 'linear']) {
     const draftRow = { scope: mode, ...override };
     state.featurePlacementOverrides = { [JSON.stringify([mode, recordKey, 'feature'])]: draftRow };
     const filesData = { c_gb: file, linearSeqs: [{ uid: 'card', gb: file }] };
-    const result = buildCanonicalRenderRequest({ state, filesData, comparisonPlanSnapshot: mode === 'linear'
+    const result = buildCanonicalRenderRequest({ state, filesData, recordDisplayRows: rows, comparisonPlanSnapshot: mode === 'linear'
       ? resolveLinearComparisonPlan({ plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [], losatProgram: 'blastn', blastpMode: 'orthogroup' }) : null });
     assert.equal(result.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
     assert.deepEqual(result.renderRequest.records.map((record) => record.display.startCoordinate), [1, 71]);

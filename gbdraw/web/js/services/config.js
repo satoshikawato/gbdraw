@@ -3828,9 +3828,13 @@ export const applyResultsData = (resultsData = [], ui = {}) => {
     if (committedCount !== 0 && committedCount !== logicalResults.length) {
       throw new Error('Committed and imported SVG Results cannot be mixed.');
     }
+    // Results restored without their committed metadata (a History
+    // checkpoint) carry the feature types of the committed request (R13).
     state.results.value = committedCount === logicalResults.length
       ? logicalResults
-      : admitLegacyImportedResults(createLegacyImportResultSource(logicalResults));
+      : admitLegacyImportedResults(createLegacyImportResultSource(logicalResults), {
+          selectedFeatureTypes: committedCanonicalSession?.renderRequest?.diagramOptions?.selectedFeaturesSet
+        });
   } else {
     state.results.value = [];
   }
@@ -3967,7 +3971,7 @@ const applySessionFeatureRecoveryPlan = (plan, { generationId = 'session-feature
 
 const exportSessionDocument = async (
   titleOverride = null,
-  { linearRecordCatalog = null, storedConfig, savedUi, isCurrent } = {}
+  { linearRecordCatalog = null, recordDisplayRows = null, storedConfig, savedUi, isCurrent } = {}
 ) => {
   const resolvedTitle =
     typeof titleOverride === 'string'
@@ -4070,6 +4074,7 @@ const exportSessionDocument = async (
     committed = buildCanonicalRenderRequest({
       state,
       filesData: activeFiles,
+      recordDisplayRows: recordDisplayRows?.value || [],
       comparisonPlanSnapshot
     });
   }
@@ -4403,6 +4408,12 @@ const importSessionDocument = async (e, options = {}) => {
     };
 
     recordSessionLifecycleEvent('svg-admission-start');
+    // The loaded Results carry the feature types of the request that becomes
+    // the committed request below (R13). An older Session adopts no catalog,
+    // so its Features list lists what each Result renders and reads none.
+    const selectedFeatureTypes = currentSchemaSession
+      ? adoptedCanonicalSession?.renderRequest?.diagramOptions?.selectedFeaturesSet
+      : null;
     const committedImportedResults = currentSchemaSession && validatedSessionCatalog
       ? (() => {
           const catalogAdmission = admitFeatureCatalog(
@@ -4412,12 +4423,12 @@ const importSessionDocument = async (e, options = {}) => {
           );
           return admitCurrentSessionResults(
             createCurrentSessionResultSource(logicalImportedResults, catalogAdmission),
-            { mutationPlan: createEmptySvgMutationPlan(logicalImportedResults.length) }
+            { mutationPlan: createEmptySvgMutationPlan(logicalImportedResults.length), selectedFeatureTypes }
           );
         })()
       : admitLegacyImportedResults(
           createLegacyImportResultSource(logicalImportedResults),
-          { transformSvg: transformRestoredSessionSvg }
+          { transformSvg: transformRestoredSessionSvg, selectedFeatureTypes }
         );
     recordSessionLifecycleEvent('svg-admission-end');
 
@@ -4802,18 +4813,23 @@ export const disposeSessionOperations = () => {
   state.sessionImportPending.value = false;
 };
 
+// `options.availability` is the Save and Load availability the composition
+// root composes from `sessionOperationAvailability` and the edits still
+// applying (R13); `options.recordDisplayRows` are the draft record display
+// rows a Save without a committed request projects.
 export const exportSession = (titleOverride = null, options = {}) => {
   if (sessionSaveInFlight) {
     recordSessionLifecycleEvent('session-save-joined');
     return sessionSaveInFlight.promise;
   }
-  const busy = sessionOperationAvailability('save');
+  const { availability = sessionOperationAvailability } = options;
+  const busy = availability('save');
   if (busy) return Promise.resolve(busy);
   const operation = { canceled: false, promise: null };
   const previousAlert = state.errorLog.value;
   const isCurrent = () => sessionSaveInFlight === operation && !operation.canceled;
   operation.promise = Promise.resolve().then(async () => {
-    const busy = sessionOperationAvailability('save');
+    const busy = availability('save');
     if (busy) return busy;
     if (!isCurrent()) return { status: 'canceled' };
     const title = options.resolveTitle ? options.resolveTitle() : titleOverride;
@@ -4882,7 +4898,8 @@ export const importSession = async (event, options = {}) => {
   const input = event?.target;
   const file = input?.files?.[0];
   if (!file) return { status: 'skipped' };
-  const busy = sessionOperationAvailability('load');
+  const { availability = sessionOperationAvailability } = options;
+  const busy = availability('load');
   if (busy) {
     input.value = '';
     return busy;

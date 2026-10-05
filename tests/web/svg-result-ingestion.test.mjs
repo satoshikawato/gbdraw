@@ -236,10 +236,14 @@ test('current-worker EMPTY admission sanitizes once and performs zero applicatio
       catalogAdmission: admission,
       mutationPlan: createEmptySvgMutationPlan(1),
       sanitizer: sanitizer(calls),
-      parser: FakeDomParser
+      parser: FakeDomParser,
+      selectedFeatureTypes: ['CDS', 'tRNA']
     }
   ));
   const committed = results[0];
+  // R13: a Result carries the feature types of the request that drew it.
+  assert.deepEqual(getCommittedSvgResultMetadata(committed).selectedFeatureTypes, ['CDS', 'tRNA']);
+  assert.equal(Object.isFrozen(getCommittedSvgResultMetadata(committed).selectedFeatureTypes), true);
 
   assert.equal(calls.calls, 1);
   assert.equal(FakeDomParser.calls, 0);
@@ -661,6 +665,7 @@ test('current-session and legacy-import remain explicit, incompatible boundaries
   });
   assert.equal(FakeDomParser.calls, 0);
   assert.equal(current[0].content.includes('<script>'), false);
+  assert.equal(getCommittedSvgResultMetadata(current[0]).selectedFeatureTypes, null);
   assert.throws(
     () => admitLegacyImportedResults(currentSource),
     /legacy-import/
@@ -668,8 +673,9 @@ test('current-session and legacy-import remain explicit, incompatible boundaries
 
   const legacy = admitLegacyImportedResults(
     createLegacyImportResultSource([{ name: 'legacy.svg', content: '<svg></svg>' }]),
-    { sanitizer: { sanitize: (value) => value }, parser: FakeDomParser }
+    { sanitizer: { sanitize: (value) => value }, parser: FakeDomParser, selectedFeatureTypes: ['CDS'] }
   );
   assert.equal(FakeDomParser.calls, 1);
   assert.equal(getCommittedSvgResultMetadata(legacy[0]).sourceClass, 'legacy-import');
+  assert.deepEqual(getCommittedSvgResultMetadata(legacy[0]).selectedFeatureTypes, ['CDS']);
 });

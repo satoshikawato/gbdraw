@@ -1224,7 +1224,6 @@ export const createAppSetup = () => {
     mutationAvailability: sessionOperationAvailability
   });
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch, linearRecordSelector, history, getCommittedRequest: getCommittedCanonicalRenderRequest, getCommittedSession: getCommittedCanonicalSession });
-  state.recordDisplayRows = recordDisplayControls.allRows;
   window.__GBDRAW_HISTORY__ = history;
   // R13: owners receive this port, not the record display controls. The check
   // is pure (services/feature-identity.js) over the record display's binding.
@@ -1428,8 +1427,6 @@ export const createAppSetup = () => {
     setUnmanagedConfigOverrideValidator(null);
     setMainSessionComparisonFrameConverter(null);
     disposeSessionOperations();
-    state.sessionPreparationBusyReason = null;
-    state.committedDiagramOptions = null;
     disposeDiagramGenerationWorker();
   });
 
@@ -2372,6 +2369,7 @@ export const createAppSetup = () => {
       })
     ),
     prepareLinearRecordCatalog,
+    recordDisplayRows: recordDisplayControls.allRows,
     assertActiveModeInputs,
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts,
@@ -2514,22 +2512,25 @@ export const createAppSetup = () => {
     preparePaletteDefinitions: paletteLoader.loadPaletteAsset
   });
 
-  // The Features list reads the feature types of the request that drew the
-  // displayed Result (state.js cannot import the committed Session owner).
-  state.committedDiagramOptions = () => getCommittedCanonicalRenderRequest()?.diagramOptions || null;
-  state.sessionPreparationBusyReason = () => {
-    if (history.mutationPending() || ruleMatchingPending.value || auxiliaryFileImportPending()) {
-      return 'Applying an edit. Retry after the edit finishes.';
-    }
-    return '';
-  };
+  // Save and Load also wait for an edit still applying. Its owners exist only
+  // here, so the root composes the availability that Save, Load, and their
+  // controls read (R13).
+  const sessionPreparationBusyReason = () => (
+    history.mutationPending() || ruleMatchingPending.value || auxiliaryFileImportPending()
+      ? 'Applying an edit. Retry after the edit finishes.'
+      : ''
+  );
+  const sessionSaveLoadAvailability = (operation) => (
+    sessionOperationAvailability(operation, sessionPreparationBusyReason)
+  );
   const semanticMutationAvailable = computed(() => !sessionOperationAvailability());
-  const sessionSaveAvailable = computed(() => !sessionOperationAvailability('save'));
-  const sessionLoadAvailable = computed(() => !sessionOperationAvailability('load'));
-  const sessionBusyReason = computed(() => sessionOperationAvailability('save')?.reason || '');
+  const sessionSaveAvailable = computed(() => !sessionSaveLoadAvailability('save'));
+  const sessionLoadAvailable = computed(() => !sessionSaveLoadAvailability('load'));
+  const sessionBusyReason = computed(() => sessionSaveLoadAvailability('save')?.reason || '');
   const circularRecordPresentationPanel = ref(null);
   let nextSessionPreviewToken = 1;
   const importSession = (event) => importSessionFromFile(event, {
+    availability: sessionSaveLoadAvailability,
     beforeImport: async () => {
       await nextTick();
       await afterPaint();
@@ -3932,6 +3933,8 @@ export const createAppSetup = () => {
   };
 
   const saveSessionWithTitle = () => exportSession(null, {
+    availability: sessionSaveLoadAvailability,
+    recordDisplayRows: recordDisplayControls.allRows,
     resolveTitle: () => {
       let title = normalizeSessionTitle(sessionTitle.value);
       if (!title) {

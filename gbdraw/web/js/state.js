@@ -714,15 +714,16 @@ const fileLegendCaptions = ref(new Set());
 // The Features drawer and Search features list the displayed Result's catalog
 // features (`listFeatureRows`, R-5): a hidden feature stays listed so it can be
 // shown again. The selected feature types are those of the request that drew
-// the Result (`state.committedDiagramOptions`, set by app-setup). A Result
+// the Result, which its committed metadata carries (R13). A Result
 // without a catalog lists the features it renders. A batch Result shows one
 // record, so the record picker appears only when the displayed Result shows
 // several records (FE-03).
 const featureList = computed(() => {
   const catalogFeatures = resultCatalogFeatures(state);
   if (catalogFeatures) {
+    const metadata = getCommittedSvgResultMetadata(toRaw(results.value[selectedResultIndex.value]));
     return listFeatureRows(catalogFeatures, featureDrawnContext(state, {
-      diagramOptions: state.committedDiagramOptions?.()
+      diagramOptions: { selectedFeaturesSet: metadata?.selectedFeatureTypes }
     }));
   }
   const features = extractedFeatures.value;
@@ -836,14 +837,17 @@ const filteredEditableLabels = computed(() => {
 
 // Pending is owned by the existing Session lifecycle; availability stores no lock.
 // 'history' words why History rejects Undo/Redo; History decides when (D-28).
-export const sessionOperationAvailability = (operation = 'mutation') => {
+// `preparationBusyReason` words an edit still applying, whose owners only the
+// composition root holds: it passes it for Save and Load (R13). History words
+// its own pending edit the same way, so it passes none.
+export const sessionOperationAvailability = (operation = 'mutation', preparationBusyReason = null) => {
   let reason = '';
   if (sessionImportPending.value) reason = 'Loading session. Retry after loading finishes.';
   else if (sessionSavePending.value) reason = 'Saving session. Retry after saving finishes.';
   else if (operation === 'save' || operation === 'load' || operation === 'history') {
     if (processing.value) reason = 'Generating diagram. Retry after generation finishes.';
     else if (labelReflowProcessing.value) reason = 'Updating diagram. Retry after the update finishes.';
-    else reason = state.sessionPreparationBusyReason?.() || '';
+    else reason = preparationBusyReason?.() || '';
   }
   return reason ? { status: 'busy', reason } : null;
 };

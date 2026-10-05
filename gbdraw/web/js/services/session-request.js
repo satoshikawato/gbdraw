@@ -2302,9 +2302,13 @@ export const buildCanonicalRequestState = ({ session, projection, config,
     featurePlacementOverrides: publicationClone(config.featurePlacementOverrides || {}), canonicalPublicationFiles
   };
 };
+// `recordDisplayRows` are the record display rows of the draft sources
+// (`recordDisplayControls.allRows`); the caller reads them from the owner that
+// the composition root wires, never from `state` (R13).
 const projectCanonicalRenderInput = ({
   state,
   filesData,
+  recordDisplayRows = [],
   comparisonPlanSnapshot = null,
   resolvedComparisons = [],
   resolvedCircularConservation = [],
@@ -2336,12 +2340,11 @@ const projectCanonicalRenderInput = ({
   const webFiles = {};
   const recordPlan = buildRecords({ state, filesData, resources });
   const drafts = state.recordDisplayDrafts || [];
-  const displayRows = state.recordDisplayRows?.value || [];
   const sourceInputIndexes = [];
   const records = recordPlan.records.flatMap((record, index) => {
     const sourceUid = state.mode.value === 'linear'
       ? String(filesData.linearSeqs?.[index]?.uid || record.recordKey) : 'circular';
-    const sourceRows = displayRows.filter((row) => row.scope === state.mode.value && row.sourceUid === sourceUid);
+    const sourceRows = recordDisplayRows.filter((row) => row.scope === state.mode.value && row.sourceUid === sourceUid);
     const selector = record.region?.selector || record.selector;
     const selectedRows = sourceRows.filter((row) => !selector
       || (selector.kind === 'recordIndex' ? row.selector === `#${selector.index + 1}` : row.recordId === selector.value));

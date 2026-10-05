@@ -99,3 +99,49 @@ test('a drawn feature is listed as the rendered feature of the displayed Result'
 test('a batch Result lists only its own records', () => {
   assert.deepEqual(listOf(1).rows, [['Z', true, true]]);
 });
+
+// R13: the Features list reads the selected feature types from the displayed
+// Result's committed metadata, the types of the request that drew it; nothing
+// reaches `state` through a function.
+test('the Features list reads the selected types the displayed Result was drawn with', async () => {
+  globalThis.window ??= { Vue: {
+    ref: (value) => ({ value }), reactive: (value) => value,
+    computed: (getter) => ({ get value() { return getter(); } }), nextTick: async () => {}
+  } };
+  const { state } = await import('../../gbdraw/web/js/state.js');
+  const { admitFeatureCatalog } = await import('../../gbdraw/web/js/services/feature-catalog.js');
+  const {
+    admitCurrentSessionResults,
+    createCurrentSessionResultSource,
+    createEmptySvgMutationPlan,
+    getCommittedSvgResultMetadata
+  } = await import('../../gbdraw/web/js/services/svg-result-ingestion.js');
+  const admit = (selectedFeatureTypes) => admitCurrentSessionResults(
+    createCurrentSessionResultSource(results, admitFeatureCatalog(catalog, results, { mode: 'circular' })),
+    {
+      mutationPlan: createEmptySvgMutationPlan(results.length),
+      sanitizer: { sanitize: (value) => value },
+      selectedFeatureTypes
+    }
+  );
+  state.featureCatalog.value = catalog;
+  state.generatedMode.value = 'circular';
+  state.selectedResultIndex.value = 0;
+  const listed = () => state.featureList.value.rows.map((row) => [
+    row.biological_feature_id, state.featureListState(row).drawn
+  ]);
+
+  state.results.value = admit(['CDS']);
+  assert.deepEqual(getCommittedSvgResultMetadata(state.results.value[0]).selectedFeatureTypes, ['CDS']);
+  // The genes are of an unselected type with no rule or edit of their own.
+  assert.deepEqual(listed(), [['A', true], ['B', true], ['K', true]]);
+  state.results.value = admit(['CDS', 'gene']);
+  assert.deepEqual(listed(), [['A', true], ['B', true], ['G', true], ['H', true], ['J', true], ['K', true]]);
+  // A request that names no types: each feature reads as the Result draws it.
+  state.results.value = admit(undefined);
+  assert.equal(getCommittedSvgResultMetadata(state.results.value[0]).selectedFeatureTypes, null);
+  assert.deepEqual(listed(), [['A', true], ['B', false], ['G', false], ['H', true], ['J', false], ['K', false]]);
+  assert.equal('committedDiagramOptions' in state, false);
+  state.results.value = [];
+  state.featureCatalog.value = null;
+});
