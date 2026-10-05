@@ -240,10 +240,12 @@ const saveCurrentSession = async (page, title) => {
       }
     });
     expect(Date.now()).toBeLessThan(saveDeadline);
-    await page.waitForFunction(async () => {
-      const { state } = await import('/gbdraw/web/js/state.js');
-      return state.sessionOperationAvailability('save') === null;
-    }, null, { timeout: Math.max(1, saveDeadline - Date.now()) });
+    // The Save availability the composition root composes, which also waits
+    // for an edit still applying (R13).
+    await page.waitForFunction(
+      () => window.__GBDRAW_APP__.sessionSaveAvailable,
+      null, { timeout: Math.max(1, saveDeadline - Date.now()) }
+    );
     expect(await page.evaluate(() => window.__GBDRAW_APP__.labelReflowLastError))
       .toBeFalsy();
     const previous = attempt;

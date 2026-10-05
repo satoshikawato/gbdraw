@@ -1077,6 +1077,8 @@ export const executeCanonicalRenderCandidate = async ({
     () => prepareCommit({
       generationResponse,
       catalogAdmission: catalogState,
+      // The Results carry the feature types of the request that drew them (R13).
+      selectedFeatureTypes: canonical.renderRequest.diagramOptions?.selectedFeaturesSet ?? null,
       results,
       catalog: catalogState.catalog,
       mode,
@@ -1123,6 +1125,8 @@ export const createRunAnalysis = ({
   resetPreviewViewport,
   validateAnnotationTargets = null,
   prepareLinearRecordCatalog = null,
+  // The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
+  recordDisplayRows = null,
   // D12: ring rows added just before Generate are named before it reads them.
   settleComparisonRecordLabels = async () => {},
   // services/config.js owns the active-mode input check shared with Save.
@@ -4362,6 +4366,7 @@ export const createRunAnalysis = ({
       const canonical = buildCanonicalRenderRequest({
         state: candidateRequestState,
         filesData: candidateFiles,
+        recordDisplayRows: recordDisplayRows?.value || [],
         comparisonPlanSnapshot: activeComparisonPlanSnapshot,
         resolvedComparisons,
         resolvedCircularConservation: canonicalCircularConservation

@@ -173,9 +173,11 @@ test('History admits no late command or action after an awaited capture', async 
   state.sessionSavePending.value = false;
 });
 
+// R13: the composition root passes the busy source of an edit still applying
+// as an argument; availability keeps no registered callback on `state`.
 test('Save and Load report an active asynchronous History mutation until settlement', async () => {
   const history = historyFor();
-  state.sessionPreparationBusyReason = () => history.mutationPending()
+  const preparationBusyReason = () => history.mutationPending()
     ? 'Applying an edit. Retry after the edit finishes.' : '';
   const work = gate();
   let started = false;
@@ -184,12 +186,38 @@ test('Save and Load report an active asynchronous History mutation until settlem
     await work.promise;
   });
   while (!started) await Promise.resolve();
-  assert.match(sessionOperationAvailability('save').reason, /Applying/);
-  assert.match(sessionOperationAvailability('load').reason, /Applying/);
+  assert.match(sessionOperationAvailability('save', preparationBusyReason).reason, /Applying/);
+  assert.match(sessionOperationAvailability('load', preparationBusyReason).reason, /Applying/);
+  // Draft edits and callers without the source do not read it.
+  assert.equal(sessionOperationAvailability('mutation', preparationBusyReason), null);
+  assert.equal(sessionOperationAvailability('save'), null);
+  // A Generate in progress is worded before the edit still applying.
+  state.processing.value = true;
+  assert.match(sessionOperationAvailability('save', preparationBusyReason).reason, /Generating/);
+  state.processing.value = false;
   work.release();
   await pending;
-  assert.equal(sessionOperationAvailability('save'), null);
-  state.sessionPreparationBusyReason = null;
+  assert.equal(sessionOperationAvailability('save', preparationBusyReason), null);
+  assert.equal('sessionPreparationBusyReason' in state, false);
+});
+
+test('Save and Load consult the availability the composition root passes (R13)', async () => {
+  const { exportSession, importSession } = await load('services/config.js');
+  const calls = [];
+  const busyFrom = (operation, call) => (requested) => {
+    calls.push(requested);
+    return requested === operation && calls.length >= call ? applying : null;
+  };
+  // Save checks before it starts and again when its turn comes.
+  assert.deepEqual(await exportSession(null, { availability: busyFrom('save', 2) }), applying);
+  assert.deepEqual(calls, ['save', 'save']);
+  assert.equal(state.sessionSavePending.value, false);
+  calls.length = 0;
+  const input = { files: [{ name: 'session.gbdraw' }], value: 'session.gbdraw' };
+  assert.deepEqual(await importSession({ target: input }, { availability: busyFrom('load', 1) }), applying);
+  assert.deepEqual(calls, ['load']);
+  assert.equal(input.value, '');
+  assert.equal(state.sessionImportPending.value, false);
 });
 
 test('focused input intent does not occupy Session until asynchronous mutation starts', async () => {

@@ -159,12 +159,19 @@ const serializeAdmittedSvg = (svg, { phase, resultIndex }) => {
   return content;
 };
 
-const metadataFromCatalogAdmission = (catalogAdmission, resultIndex, sourceClass) => {
+// The feature types of the request that drew the Results (its
+// `diagramOptions.selectedFeaturesSet`), or null when it names none. The
+// Features list reads them from the displayed Result's metadata (R13).
+const resultFeatureTypes = (selectedFeatureTypes) => (
+  Array.isArray(selectedFeatureTypes) ? Object.freeze(selectedFeatureTypes.map(String)) : null
+);
+
+const metadataFromCatalogAdmission = (catalogAdmission, resultIndex, sourceClass, selectedFeatureTypes) => {
   const renderedFeatureIdentities = catalogAdmission.renderedIdentitiesByResult[resultIndex];
   if (!renderedFeatureIdentities) {
     throw new Error('The admitted feature catalog is missing Result identity metadata.');
   }
-  return Object.freeze({ renderedFeatureIdentities, sourceClass });
+  return Object.freeze({ renderedFeatureIdentities, sourceClass, selectedFeatureTypes });
 };
 
 export const isCommittedSvgResult = (result) => Boolean(committedState(result));
@@ -535,12 +542,14 @@ const admitCatalogBackedResults = (
   mutationPlan,
   {
     sanitizer = globalThis.DOMPurify || globalThis.window?.DOMPurify,
-    parser = globalThis.DOMParser || globalThis.window?.DOMParser
+    parser = globalThis.DOMParser || globalThis.window?.DOMParser,
+    selectedFeatureTypes = null
   } = {}
 ) => {
   const { results, catalogAdmission, sourceClass } = source;
   requireAlignedCatalogAdmission(catalogAdmission, results);
   const plan = requireCurrentMutationPlan(mutationPlan, results.length);
+  const featureTypes = resultFeatureTypes(selectedFeatureTypes);
   recordSessionLifecycleEvent('svg.admission-started', {
     phase: sourceClass,
     resultCount: results.length,
@@ -551,7 +560,7 @@ const admitCatalogBackedResults = (
   recordStructuralMetric('manualRuleFeatureMatchCount', 0, { phase: sourceClass });
   const admitted = results.map((result, resultIndex) => admitCurrentResult(
     result,
-    metadataFromCatalogAdmission(catalogAdmission, resultIndex, sourceClass),
+    metadataFromCatalogAdmission(catalogAdmission, resultIndex, sourceClass, featureTypes),
     currentResultOperations(plan, resultIndex),
     { sanitizer, parser, resultIndex, sourceClass }
   ));
@@ -578,7 +587,8 @@ export const admitCurrentGeneratedResults = (
     catalogAdmission,
     mutationPlan,
     sanitizer,
-    parser
+    parser,
+    selectedFeatureTypes
   } = {}
 ) => {
   if (!isCurrentWorkerGenerationResponse(generationResponse)) {
@@ -592,7 +602,7 @@ export const admitCurrentGeneratedResults = (
     requireResultList(generationResponse.results),
     requireAlignedCatalogAdmission(catalogAdmission, generationResponse.results)
   );
-  return admitCatalogBackedResults(source, mutationPlan, { sanitizer, parser });
+  return admitCatalogBackedResults(source, mutationPlan, { sanitizer, parser, selectedFeatureTypes });
 };
 
 export const admitCurrentSessionResults = (
@@ -600,12 +610,13 @@ export const admitCurrentSessionResults = (
   {
     mutationPlan,
     sanitizer,
-    parser
+    parser,
+    selectedFeatureTypes
   } = {}
 ) => admitCatalogBackedResults(
   requireSource(source, SVG_RESULT_SOURCE_CLASSES.CURRENT_SESSION),
   mutationPlan,
-  { sanitizer, parser }
+  { sanitizer, parser, selectedFeatureTypes }
 );
 
 const ingestSvgResult = (
@@ -615,7 +626,8 @@ const ingestSvgResult = (
     parser,
     transformSvg,
     sourceClass,
-    resultIndex
+    resultIndex,
+    selectedFeatureTypes
   }
 ) => {
   if (isCommittedSvgResult(result)) return result;
@@ -635,7 +647,7 @@ const ingestSvgResult = (
   const serialized = serializeAdmittedSvg(svg, { phase: sourceClass, resultIndex });
   return markCommitted(
     { ...result, content: serialized },
-    Object.freeze({ renderedFeatureIdentities, sourceClass })
+    Object.freeze({ renderedFeatureIdentities, sourceClass, selectedFeatureTypes })
   );
 };
 
@@ -648,13 +660,15 @@ export const admitLegacyImportedResults = (
   {
     sanitizer = globalThis.DOMPurify || globalThis.window?.DOMPurify,
     parser = globalThis.DOMParser || globalThis.window?.DOMParser,
-    transformSvg = null
+    transformSvg = null,
+    selectedFeatureTypes = null
   } = {}
 ) => {
   const { results, sourceClass } = requireSource(
     source,
     SVG_RESULT_SOURCE_CLASSES.LEGACY_IMPORT
   );
+  const featureTypes = resultFeatureTypes(selectedFeatureTypes);
   recordSessionLifecycleEvent('svg.admission-started', {
     phase: sourceClass,
     resultCount: results.length
@@ -664,7 +678,8 @@ export const admitLegacyImportedResults = (
     parser,
     transformSvg,
     sourceClass,
-    resultIndex
+    resultIndex,
+    selectedFeatureTypes: featureTypes
   }));
   recordSessionLifecycleEvent('svg.admission-completed', {
     phase: sourceClass,

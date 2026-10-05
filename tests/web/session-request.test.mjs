@@ -2092,7 +2092,6 @@ const oneSourceRows = [1, 2].map((index) => ({
 }));
 const oneSourceState = {
   ...state,
-  recordDisplayRows: ref(oneSourceRows),
   recordDisplayDrafts: []
 };
 const oneSourceSnapshot = resolveLinearComparisonPlan({
@@ -2102,6 +2101,7 @@ const oneSourceSnapshot = resolveLinearComparisonPlan({
 const unchangedOneSource = buildCanonicalRenderRequest({
   state: oneSourceState,
   filesData: oneSourceFilesData,
+  recordDisplayRows: oneSourceRows,
   comparisonPlanSnapshot: oneSourceSnapshot
 });
 assert.equal(unchangedOneSource.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
@@ -2116,6 +2116,7 @@ oneSourceState.recordDisplayDrafts = [{
 const transformedOneSource = buildCanonicalRenderRequest({
   state: oneSourceState,
   filesData: oneSourceFilesData,
+  recordDisplayRows: oneSourceRows,
   comparisonPlanSnapshot: oneSourceSnapshot
 });
 assert.deepEqual(

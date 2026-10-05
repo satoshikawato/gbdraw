@@ -341,6 +341,7 @@ export const compileDirectEditorMutationPlan = (options = {}) => (
 export const prepareCandidateRenderCommit = ({
   generationResponse,
   catalogAdmission,
+  selectedFeatureTypes = null,
   sanitizer = globalThis.DOMPurify || globalThis.window?.DOMPurify,
   parser = globalThis.DOMParser || globalThis.window?.DOMParser,
   ...editorState
@@ -351,7 +352,8 @@ export const prepareCandidateRenderCommit = ({
       catalogAdmission,
       mutationPlan: bundle.plan,
       sanitizer,
-      parser
+      parser,
+      selectedFeatureTypes
     }),
     featureState: catalogAdmission.featureState,
     featureColorOverrides: bundle.normalizedFeatureColorOverrides,
