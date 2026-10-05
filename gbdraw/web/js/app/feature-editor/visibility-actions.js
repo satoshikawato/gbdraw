@@ -1,6 +1,5 @@
 import {
   applyFeatureVisibilityOverrideChanges,
-  buildExactQualifierFeatureVisibilityRule,
   buildFeatureVisibilityChanges,
   createDefaultFeatureVisibilityRule,
   featureDrawnContext,
@@ -19,6 +18,7 @@ import {
   resolveDisplayProteinId
 } from '../feature-utils.js';
 import { downloadTextFile } from '../../services/text-download.js';
+import { normalizeUserFacingError } from '../../services/error-normalization.js';
 import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-identity.js';
 import { featureIdentityKeyOf } from '../../services/feature-placement.js';
 import { resultRenderedFeatures } from '../../services/feature-catalog.js';
@@ -215,10 +215,7 @@ export const createFeatureVisibilityActions = ({
     return displayed ? [...displayed.values()]
       : uniqueFeaturesBySvgId(Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []);
   };
-  const prepareDrawn = async (rules = []) => {
-    if (rules.length) await rulePreparation?.prepareVisibility?.(rules);
-    await rulePreparation?.prepareDrawn?.();
-  };
+  const prepareDrawn = () => rulePreparation?.prepareDrawn?.();
 
   const updateClickedFeatureVisibilityFromRules = (features) => {
     const clicked = clickedFeature.value?.feat;
@@ -293,38 +290,65 @@ export const createFeatureVisibilityActions = ({
     };
   };
 
-  const applyFeatureVisibilityScope = (feat, modeRaw, scope) => {
-    const nextMode = normalizeVisibilityMode(modeRaw);
-    const selectedScope = scope || { id: 'feature' };
-    const targetFeatures = selectedScope.id === 'orthogroup'
-      ? uniqueFeaturesBySvgId(selectedScope.features || [])
-      : [feat];
-
-    if (isRuleScope(selectedScope)) {
-      const ruleInput = {
-        featureType: selectedScope.featureType,
-        qualifier: selectedScope.qualifier,
-        value: selectedScope.value,
-        label: selectedScope.label
-      };
-      if (nextMode === 'default') {
-        removeEditorQualifierFeatureVisibilityRule(featureVisibilityManualRules, ruleInput);
-      } else {
-        upsertEditorQualifierFeatureVisibilityRule(featureVisibilityManualRules, ruleInput, nextMode);
-      }
-    } else {
-      targetFeatures.forEach((targetFeat) => {
-        setFeatureVisibilityOverride(featureOverrides, targetFeat, nextMode);
-      });
-    }
-
-    // A rule can reach any feature, so it projects onto every displayed one.
-    applyVisibilityPreviewChanges(drawnChanges(isRuleScope(selectedScope) ? displayedFeatures() : targetFeatures));
-
+  const showClickedFeatureVisibility = (targetFeatures, mode) => {
     const clicked = clickedFeature.value?.feat;
     if (clicked && targetFeatures.some((feature) => sameFeature(feature, clicked))) {
-      clickedFeature.value.featureVisibility = nextMode;
+      clickedFeature.value.featureVisibility = mode;
     }
+  };
+
+  // A feature or similarity-group scope: the identity rows of its features.
+  const applyFeatureVisibilityScope = (feat, modeRaw, scope) => {
+    const nextMode = normalizeVisibilityMode(modeRaw);
+    const targetFeatures = scope?.id === 'orthogroup'
+      ? uniqueFeaturesBySvgId(scope.features || [])
+      : [feat];
+    targetFeatures.forEach((targetFeat) => {
+      setFeatureVisibilityOverride(featureOverrides, targetFeat, nextMode);
+    });
+    applyVisibilityPreviewChanges(drawnChanges(targetFeatures));
+    showClickedFeatureVisibility(targetFeatures, nextMode);
+  };
+
+  // The live projection of the visibility rules and edits (R3), shared by a
+  // rule edit, a History apply, and the display of a Result: it prepares
+  // Python's matches, then shows on every displayed feature what Generate
+  // draws. A rule table that Generate rejects (an invalid regex) changes
+  // nothing, as a failed Generate keeps its Result, and reports Generate's
+  // error until a projection reads a table that Generate accepts. A later
+  // projection supersedes one that still waits for its matches. Returns
+  // whether the Result changed.
+  let projectionRun = 0;
+  let ruleTableError = null;
+  const projectFeatureVisibility = async () => {
+    const run = ++projectionRun;
+    const prepared = await rulePreparation?.prepareDrawn?.();
+    if (run !== projectionRun) return false;
+    if (prepared?.error) {
+      if (!state.errorLog) return false;
+      state.errorLog.value = normalizeUserFacingError(prepared.error, { operation: 'evaluateRules', stage: 'rule-validation' });
+      ruleTableError = state.errorLog.value; // As the error log holds it (a reactive copy).
+      return false;
+    }
+    if (ruleTableError && state.errorLog?.value === ruleTableError) state.errorLog.value = null;
+    ruleTableError = null;
+    return reconcileFeatureVisibility();
+  };
+
+  // OV-19 (PD-OI-066, R10): the one transition of a visibility rule edit, from
+  // the Features panel or the popup's product and protein ID scopes. `edit`
+  // changes a copy of the rules; the transition writes it, then projects the
+  // rules and the labels of the features they hide or show, as the label
+  // rerender and Generate draw them. The draft keeps a rule that Generate
+  // rejects.
+  const editFeatureVisibilityRules = async (edit) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
+    const rules = [...featureVisibilityManualRules];
+    if (edit(rules) === false) return false;
+    featureVisibilityManualRules.splice(0, featureVisibilityManualRules.length, ...rules);
+    if (await projectFeatureVisibility()) applyFeatureVisibilityToLabels();
+    return true;
   };
 
   const clearFeatureVisibilityScopeDialog = ({ restorePrevious = false } = {}) => {
@@ -401,8 +425,16 @@ export const createFeatureVisibilityActions = ({
     }
     const previousMode = featureVisibilityScopeDialog.previousMode;
     clearFeatureVisibilityScopeDialog();
-    const rule = isRuleScope(scope) ? buildExactQualifierFeatureVisibilityRule({ ...scope, action: nextMode }) : null;
-    await prepareDrawn(rule ? [rule] : []);
+    if (isRuleScope(scope)) {
+      const ruleInput = { featureType: scope.featureType, qualifier: scope.qualifier, value: scope.value, label: scope.label };
+      await editFeatureVisibilityRules((rules) => {
+        if (nextMode === 'default') removeEditorQualifierFeatureVisibilityRule(rules, ruleInput);
+        else upsertEditorQualifierFeatureVisibilityRule(rules, ruleInput, nextMode);
+      });
+      showClickedFeatureVisibility([feat], nextMode);
+      return previousMode !== nextMode;
+    }
+    await prepareDrawn();
     applyFeatureVisibilityScope(feat, nextMode, scope);
     if (previousMode !== nextMode) applyFeatureVisibilityToLabels();
     return previousMode !== nextMode;
@@ -410,35 +442,25 @@ export const createFeatureVisibilityActions = ({
 
   const getFeatureVisibility = (feat) => getFeatureVisibilityOverride(featureOverrides, feat);
 
-  const setFeatureVisibilityRuleField = (index, field, value) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    if (!ruleFields.has(field)) return;
-    const current = featureVisibilityManualRules[index];
-    if (!current) return;
-    const nextRule = normalizeFeatureVisibilityRule({ ...current, [field]: value });
-    featureVisibilityManualRules.splice(index, 1, nextRule);
-  };
+  const setFeatureVisibilityRuleField = (index, field, value) => editFeatureVisibilityRules((rules) => {
+    if (!ruleFields.has(field) || !rules[index]) return false;
+    rules[index] = normalizeFeatureVisibilityRule({ ...rules[index], [field]: value });
+  });
 
-  const moveFeatureVisibilityRule = (index, offset) => {
+  const moveFeatureVisibilityRule = (index, offset) => editFeatureVisibilityRules((rules) => {
     const target = index + offset;
-    if (target < 0 || target >= featureVisibilityManualRules.length) return;
-    const [rule] = featureVisibilityManualRules.splice(index, 1);
-    featureVisibilityManualRules.splice(target, 0, rule);
-  };
+    if (!rules[index] || target < 0 || target >= rules.length) return false;
+    rules.splice(target, 0, ...rules.splice(index, 1));
+  });
 
-  const addFeatureVisibilityRule = () => {
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    featureVisibilityManualRules.push(createDefaultFeatureVisibilityRule());
-  };
+  const addFeatureVisibilityRule = () => editFeatureVisibilityRules((rules) => {
+    rules.push(createDefaultFeatureVisibilityRule());
+  });
 
-  const removeFeatureVisibilityRule = (index) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    if (index < 0 || index >= featureVisibilityManualRules.length) return;
-    featureVisibilityManualRules.splice(index, 1);
-  };
+  const removeFeatureVisibilityRule = (index) => editFeatureVisibilityRules((rules) => {
+    if (!rules[index]) return false;
+    rules.splice(index, 1);
+  });
 
   const downloadFeatureVisibilityRulesTsv = () => {
     const text = serializeFeatureVisibilityRules(visibilityRuleRows());
@@ -476,6 +498,7 @@ export const createFeatureVisibilityActions = ({
     handleFeatureVisibilityScopeChoice,
     moveFeatureVisibilityRuleDown: (index) => moveFeatureVisibilityRule(index, 1),
     moveFeatureVisibilityRuleUp: (index) => moveFeatureVisibilityRule(index, -1),
+    projectFeatureVisibility,
     reconcileFeatureVisibility,
     removeFeatureVisibilityRule,
     setFeatureVisibility,

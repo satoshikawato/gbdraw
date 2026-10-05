@@ -61,8 +61,8 @@ export const createFeatureEditor = ({
   // A loaded table shows on the displayed Result as a History apply does (R3).
   const featureEditTableActions = createFeatureEditTableActions({
     state, ref, computed, getCommittedSession, readResourceRecordCount, readFeatureOverrideTable,
-    projectFeatureEdits: () => {
-      visibilityActions.reconcileFeatureVisibility();
+    projectFeatureEdits: async () => {
+      await visibilityActions.projectFeatureVisibility();
       labelActions.reconcileLabelOverrides();
       labelActions.applyFeatureVisibilityToLabels();
     }
@@ -114,7 +114,7 @@ export const createFeatureEditor = ({
     featureVisibilityQualifierSuggestions: visibilityActions.featureVisibilityQualifierSuggestions,
     featureVisibilityRuleDetail: visibilityActions.featureVisibilityRuleDetail,
     getFeatureVisibility: visibilityActions.getFeatureVisibility,
-    reconcileFeatureVisibility: visibilityActions.reconcileFeatureVisibility,
+    projectFeatureVisibility: visibilityActions.projectFeatureVisibility,
     handleFeatureVisibilityScopeChoice: visibilityActions.handleFeatureVisibilityScopeChoice,
     moveFeatureVisibilityRuleDown: visibilityActions.moveFeatureVisibilityRuleDown,
     moveFeatureVisibilityRuleUp: visibilityActions.moveFeatureVisibilityRuleUp,

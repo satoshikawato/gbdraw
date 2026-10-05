@@ -336,4 +336,77 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     'a loaded rule hides live as Generate does');
 }
 
+// OV-19 (PD-OI-066, R10): every Features panel rule edit is one transition
+// that writes the rules and projects them onto the displayed Result as
+// Generate draws them. A table Generate rejects stays in the draft, changes
+// nothing, and reports Generate's error until an edit leaves a table Generate
+// accepts.
+{
+  const fl1 = { svg_id: 'fl1', type: 'CDS', qualifiers: { locus_tag: ['FL1'] }, ...identity('fl1') };
+  const fl2 = { svg_id: 'fl2', type: 'CDS', qualifiers: { locus_tag: ['FL2'] }, ...identity('fl2') };
+  const rules = [];
+  const shown = { fl1: 'on', fl2: 'on' };
+  const labelProjections = [];
+  const panelState = {
+    clickedFeature: ref(null),
+    extractedFeatures: ref([fl1, fl2]),
+    orthogroups: ref([]),
+    featureVisibilityManualRules: rules,
+    featureVisibilityRules: ref([]),
+    featureOverrides: {},
+    featureVisibilityScopeDialog: {},
+    resultGenerationKey: ref('generation-1'),
+    results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) }),
+    errorLog: ref(null)
+  };
+  const panel = createFeatureVisibilityActions({
+    state: panelState,
+    rulePreparation: rulePreparationFor(panelState),
+    getCommittedRequest: committedRequest(['CDS']),
+    featureSvgActions: {
+      applyVisibilityPreviewChanges: (changes) => changes.reduce((changed, { featureId, mode }) => {
+        if (shown[featureId] === mode) return changed;
+        shown[featureId] = mode;
+        return true;
+      }, false)
+    },
+    labelActions: { applyFeatureVisibilityToLabels: () => labelProjections.push(true) },
+    previewRuntime: { selectResult: () => true }
+  });
+  const field = (index, name, value) => panel.setFeatureVisibilityRuleField(index, name, value);
+
+  await panel.addFeatureVisibilityRule();
+  await field(0, 'qualifier', 'locus_tag');
+  assert.deepEqual(shown, { fl1: 'on', fl2: 'on' }, 'a rule without a value is not in the request');
+  await field(0, 'value', '^fl1$');
+  assert.deepEqual(shown, { fl1: 'off', fl2: 'on' }, 'a rule edit hides live');
+  assert.equal(labelProjections.length, 1, 'the labels follow the features the edit hides');
+  await field(0, 'action', 'show');
+  assert.deepEqual(shown, { fl1: 'on', fl2: 'on' });
+  await panel.addFeatureVisibilityRule();
+  await field(1, 'qualifier', 'locus_tag');
+  await field(1, 'value', '^fl');
+  assert.deepEqual(shown, { fl1: 'on', fl2: 'off' }, 'the first matching rule decides');
+  await panel.moveFeatureVisibilityRuleUp(1);
+  assert.deepEqual(rules.map((rule) => rule.value), ['^fl', '^fl1$']);
+  assert.deepEqual(shown, { fl1: 'off', fl2: 'off' });
+
+  await field(1, 'value', '^fl1(');
+  assert.equal(rules[1].value, '^fl1(', 'the draft keeps a regex Generate rejects');
+  assert.deepEqual(shown, { fl1: 'off', fl2: 'off' });
+  assert.equal(panelState.errorLog.value?.operation, 'evaluateRules');
+  await panel.removeFeatureVisibilityRule(0);
+  assert.deepEqual(shown, { fl1: 'off', fl2: 'off' }, 'no edit shows a table Generate rejects');
+  assert.notEqual(panelState.errorLog.value, null);
+  await field(0, 'value', '^fl1$');
+  assert.equal(panelState.errorLog.value, null, 'an edit that Generate accepts clears the report');
+  assert.deepEqual(shown, { fl1: 'on', fl2: 'on' });
+
+  assert.equal(await panel.removeFeatureVisibilityRule(5), false, 'an edit of no rule changes nothing');
+  assert.equal(await panel.moveFeatureVisibilityRuleDown(0), false);
+  assert.equal(rules.length, 1);
+}
+
 console.log('feature visibility action tests passed');

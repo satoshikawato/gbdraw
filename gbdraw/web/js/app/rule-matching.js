@@ -162,13 +162,15 @@ export const createRulePreparation = ({
         return true;
       }).finally(() => { pending.value = --pendingCount > 0; });
   };
-  // The visibility rule matches of every catalog feature. A rule Generate
-  // rejects fails the evaluation and leaves its matches unknown.
+  // The visibility rule matches of every catalog feature. The rules go to
+  // Python in table order, so a table Generate rejects (an invalid regex)
+  // fails with Generate's error and row: its matches stay unknown, and the
+  // preparation resolves to `{ error }`.
   const prepareVisibility = (rules = visibilityRules(), options = {}) => {
-    const draft = [...new Map(rules.map((rule) => [visibilityRuleKey(rule), {
+    const draft = rules.map((rule) => ({
       recordId: rule.recordId, featureType: rule.featureType, qualifier: rule.qualifier,
       value: rule.value, action: rule.action
-    }])).values()];
+    }));
     if (draft.length === 0) return true;
     const targets = features().filter((feature) => draft
       .some((rule) => !cacheOf(feature)?.has(visibilityRuleKey(rule))));
@@ -187,7 +189,7 @@ export const createRulePreparation = ({
             : { matches: matches.has(ruleIndex) }));
         });
         return true;
-      }, () => false)
+      }, (error) => ({ error }))
       .finally(() => { pending.value = --pendingCount > 0; });
   };
   // `drawn` also prepares the visibility rule matches `resolveFeatureDrawn` reads.
@@ -201,12 +203,14 @@ export const createRulePreparation = ({
   };
   // Everything `resolveFeatureDrawn` reads: the visibility rule matches and,
   // for a feature of a type the request does not select, the color rule
-  // matches. Never rejects; what stays unknown is resolved as unknown.
+  // matches. Never rejects; what stays unknown is resolved as unknown. Resolves
+  // to `{ error }` when Generate would reject the visibility rule table.
   const prepareDrawn = (options = {}) => {
     const colors = prepare(state.manualSpecificRules || [], options);
     const visibility = prepareVisibility(undefined, options);
     if (colors === true && visibility === true) return true;
-    return Promise.all([Promise.resolve(colors).catch(() => false), visibility]).then(() => true);
+    return Promise.all([Promise.resolve(colors).catch(() => false), visibility])
+      .then(([, outcome]) => outcome?.error ? outcome : true);
   };
   // `retiredLegendIntents` are rows this commit replaces; they are no renderer
   // rows for the N-06 caption allocation.
@@ -247,6 +251,6 @@ export const createRulePreparation = ({
   };
   return {
     prepare, prepareVisibility, prepareDrawn, isPrepared, prepareCandidate, notifyChanges, run, evaluate, snapshot,
-    isCurrent
+    isCurrent, pending
   };
 };

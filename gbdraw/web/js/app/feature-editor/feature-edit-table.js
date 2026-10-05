@@ -112,7 +112,7 @@ export const createFeatureEditTableActions = ({
       if (getCommittedSession() !== committed || state.sessionOperationAvailability?.()) return false;
       const { rows, unmatchedRows } = admitFeatureOverrideTable(response?.result, records);
       replaceFeatureEdits(featureOverrides, rows, committed.renderRequest.mode, records);
-      projectFeatureEdits();
+      await projectFeatureEdits();
       if (state.errorLog?.value === failure.value?.error) state.errorLog.value = null;
       failure.value = null;
       let message = `Loaded ${rows.length + unmatchedRows.length} row(s). Applied ${rows.length} feature edit(s).`;

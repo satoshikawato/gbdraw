@@ -12,6 +12,12 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Feature Visibility rules (web app): adding, editing, moving, or deleting a
+  rule in **Features → Feature Visibility** now updates the current Result at
+  once, as Generate draws it, like the other visibility edits. The change used
+  to appear only after a label rerender, Undo, a Result switch, or Generate.
+  A rule whose value regex Generate rejects stays in the list, leaves the
+  Result as it is, and shows the error Generate reports, with the same line.
 - Label whitelist, Label overrides, and Feature visibility tables: a `#` after
   other text in a line is now part of the cell value instead of the start of a
   comment. A Feature visibility row whose value contains `#` (for example

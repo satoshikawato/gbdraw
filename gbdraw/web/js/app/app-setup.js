@@ -2645,7 +2645,7 @@ export const createAppSetup = () => {
     hiddenLabelTextMessage,
     requestLabelTextChangeByFeatureId,
     requestLabelTextChangeByKey,
-    reconcileFeatureVisibility,
+    projectFeatureVisibility,
     reconcileLabelOverrides,
     resetAllLabelTextOverrides
   } = featureActions;
@@ -2666,10 +2666,7 @@ export const createAppSetup = () => {
     if ((palette || rules) && prepareRules && !await rulePreparation.prepare()) return false;
     if (palette) svgActions.applyPaletteToSvg();
     if (rules) svgActions.applySpecificRulesToSvg();
-    if (visibility) {
-      await rulePreparation.prepareDrawn();
-      reconcileFeatureVisibility();
-    }
+    if (visibility) await projectFeatureVisibility();
     if (legend) reconcileLegendEntries(legend);
     if (strokes) reconcileStrokeOverrides(strokes);
     if (labels) reconcileLabelOverrides();

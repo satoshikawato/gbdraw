@@ -15,14 +15,20 @@ from gbdraw.features.visibility import (
 from gbdraw.labels.filtering import _build_label_override_rules, _resolve_label_override
 
 
-def _compile_visibility_row(rule: dict) -> dict | None:
-    """One draft row as Generate compiles the visibility table, or None for a
-    row that Generate skips as a header."""
-    compiled = compile_feature_visibility_rules(DataFrame([dict(
+def _visibility_table(rules: list[dict]) -> DataFrame:
+    return DataFrame([dict(
         record_id=rule["recordId"], feature_type=rule["featureType"],
         qualifier=rule["qualifier"], value=rule["value"], action=rule["action"],
-    )]))
-    return compiled[0] if compiled else None
+    ) for rule in rules])
+
+
+def _compile_visibility_rows(rules: list[dict]) -> list[dict | None]:
+    """The draft rows as Generate compiles the visibility table, with None for
+    a row that Generate skips as a header. A table Generate rejects raises
+    Generate's error, which names the row."""
+    compile_feature_visibility_rules(_visibility_table(rules))
+    rows = (compile_feature_visibility_rules(_visibility_table([rule])) for rule in rules)
+    return [compiled[0] if compiled else None for compiled in rows]
 
 
 def evaluate_rules_json(features_json: str, rules_json: str, kind: str = "color") -> str:
@@ -64,7 +70,7 @@ def evaluate_rules_json(features_json: str, rules_json: str, kind: str = "color"
         defaults = DataFrame(columns=["feature_type", "color"])
         compiled, _ = preprocess_color_tables(DataFrame(rows), defaults)
     elif kind == "visibility":
-        compiled = [_compile_visibility_row(r) for r in rules]
+        compiled = _compile_visibility_rows(rules)
     elif kind == "label":
         rows = [dict(record_id=r["recordId"], feature_type=r["featureType"],
                      qualifier=r["qualifier"], value=r["valueRegex"], label_text=str(i))

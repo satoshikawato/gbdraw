@@ -1053,6 +1053,7 @@ export const createFeatureLabelActions = ({
     const draft = normalizeVisibilityMode(clicked.labelVisibility);
     if (draft === 'off') return '';
     void results.value; // The committed request changes with the displayed Results.
+    void rulePreparation?.pending?.value; // Python's rule matches arrive when an evaluation ends.
     const featureId = clickedFeatureId();
     const feature = featureById(featureId);
     const diagramOptions = getCommittedRequest()?.diagramOptions;
