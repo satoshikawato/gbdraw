@@ -12,6 +12,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from ..exceptions import InputFileError, ParseError, ValidationError
+from ..io.table_text import read_table_lines, table_text_stream
 from .selector_values import (
     _matches_constraint,
     feature_matches_specific_color_rule,
@@ -53,32 +54,31 @@ def read_feature_visibility_file(filepath: str) -> Optional[DataFrame]:
     required_cols = _FEATURE_VISIBILITY_REQUIRED_COLS
 
     try:
-        with open(filepath, "r", encoding="utf-8") as handle:
-            for line_no, raw_line in enumerate(handle, start=1):
-                stripped = raw_line.strip()
-                if stripped == "" or stripped.startswith("#"):
-                    continue
-                if raw_line.rstrip("\r\n").count("\t") + 1 > len(required_cols):
-                    logger.error(
-                        f"ERROR: Malformed line in feature visibility file '{filepath}' at line {line_no}: "
-                        f"expected {len(required_cols)} columns."
-                    )
-                    raise ParseError(
-                        f"Malformed line in feature visibility file '{filepath}' at line {line_no}: "
-                        f"expected {len(required_cols)} columns."
-                    )
+        lines = read_table_lines(filepath)
     except FileNotFoundError as e:
         logger.error(f"ERROR: Feature visibility file not found: {e}")
         raise InputFileError(f"Feature visibility file not found: {e}") from e
 
+    for line_no, raw_line in enumerate(lines, start=1):
+        if raw_line.strip() == "":
+            continue
+        if raw_line.rstrip("\r\n").count("\t") + 1 > len(required_cols):
+            logger.error(
+                f"ERROR: Malformed line in feature visibility file '{filepath}' at line {line_no}: "
+                f"expected {len(required_cols)} columns."
+            )
+            raise ParseError(
+                f"Malformed line in feature visibility file '{filepath}' at line {line_no}: "
+                f"expected {len(required_cols)} columns."
+            )
+
     try:
         df = pd.read_csv(
-            filepath,
+            table_text_stream(lines),
             sep="\t",
             header=None,
             names=required_cols,
             dtype=str,
-            comment="#",
             keep_default_na=False,
             na_filter=False,
             on_bad_lines="error",

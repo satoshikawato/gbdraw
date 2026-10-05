@@ -194,6 +194,10 @@ also accept their documented header row.
 | Label overrides | `record_id`, `feature_type`, `qualifier`, `value`, `label_text` |
 | Feature visibility | `record_id`, `feature_type`, `qualifier`, `value`, `action` |
 
+In the Label whitelist, Label overrides, and Feature visibility tables, a line
+whose first non-blank character is `#` is a comment. A `#` after other text is
+part of the cell value, so `foo#bar` and `Gene #1` are read as written.
+
 A Specific-colors `color` is `none` (no fill, any case), an SVG color name,
 `#RGB`, or `#RRGGBB`. Other values, including hex colors with alpha, are
 rejected with their line number. The Web app converts a color name to hex when

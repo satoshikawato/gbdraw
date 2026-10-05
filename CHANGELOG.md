@@ -12,6 +12,12 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Label whitelist, Label overrides, and Feature visibility tables: a `#` after
+  other text in a line is now part of the cell value instead of the start of a
+  comment. A Feature visibility row whose value contains `#` (for example
+  `foo#bar`) failed with "Missing values", and a Label override text or
+  whitelist keyword such as `Gene #1` was silently cut to `Gene `. Only a line
+  whose first non-blank character is `#` is a comment, as before.
 - Linear File order (web app): the File up and down buttons now work when
   each File uses its own consecutive rows, including a CLI Session that draws
   each record of a multi-record file on its own row. A move exchanges the
