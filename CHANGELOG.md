@@ -12,6 +12,12 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Label whitelist, Label overrides, and Feature visibility tables: a `#` after
+  other text in a line is now part of the cell value instead of the start of a
+  comment. A Feature visibility row whose value contains `#` (for example
+  `foo#bar`) failed with "Missing values", and a Label override text or
+  whitelist keyword such as `Gene #1` was silently cut to `Gene `. Only a line
+  whose first non-blank character is `#` is a comment, as before.
 - Labels (web app): applying **Label visibility** **On** now asks **Feature Is
   Hidden** also for a feature that a **Feature Visibility** rule hides, for
   example a rule with a record ID, another qualifier, or a `hash`, `location`,
