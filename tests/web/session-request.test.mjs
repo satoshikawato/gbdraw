@@ -16,6 +16,7 @@ const {
   CANONICAL_REQUEST_SCHEMA,
   buildCanonicalRenderRequest: buildCanonicalRenderRequestRaw,
   bindCanonicalTypedResource,
+  decodeCanonicalResourceText,
   managedConfigOverridePathsForMode,
   normalizeWebGridColumnOrdering,
   promoteCanonicalRenderRequestToCurrent,
@@ -1366,6 +1367,22 @@ assert.deepEqual(
     priority: 'original-priority.tsv'
   }
 );
+// OV-23: a pasted tab or line break in a Label whitelist or Qualifier priority cell
+// must not add a column; the writers normalize like the Feature visibility writer.
+state.manualWhitelist.push({ feat: 'CDS', qual: 'product', key: 'two\twords\nmore ' });
+state.manualPriorityRules.push({ feat: 'tRNA', order: 'product,\tnote' });
+const tabbedCanonical = buildCanonicalRenderRequestRaw({ state, filesData });
+assert.equal(
+  decodeCanonicalResourceText(tabbedCanonical.resources, 'label-whitelist-file'),
+  'CDS\tgene\talpha\nCDS\tproduct\ttwo words more\n'
+);
+assert.equal(
+  decodeCanonicalResourceText(tabbedCanonical.resources, 'qualifier-priority-file'),
+  'CDS\tgene,product\ntRNA\tproduct, note\n'
+);
+state.manualWhitelist.pop();
+state.manualPriorityRules.pop();
+
 state.paletteDefinitions.value = { default: {} };
 state.currentColors.value = {};
 state.manualSpecificRules.splice(0);

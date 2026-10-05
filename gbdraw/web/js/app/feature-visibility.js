@@ -7,6 +7,7 @@ import {
   recordKeyBelongsToRequest,
   updateFeatureOverride
 } from '../services/feature-placement.js';
+import { normalizeTsvCell as normalizeCell } from '../utils/tsv-cell.js';
 export { escapeRegexLiteral, exactRegexValue } from './feature-selector.js';
 
 const REQUIRED_COLUMNS = ['record_id', 'feature_type', 'qualifier', 'value', 'action'];
@@ -17,7 +18,6 @@ const EXCLUDE_MATCHING_ACTIONS = new Set(['exclude_matching', 'suppress']);
 
 let generatedRuleId = 0;
 
-const normalizeCell = (value) => String(value ?? '').replace(/[\t\r\n]+/g, ' ').trim();
 const normalizeSource = (value) => {
   const normalized = normalizeCell(value).toLowerCase();
   return ['manual', 'editor', 'file'].includes(normalized) ? normalized : 'manual';

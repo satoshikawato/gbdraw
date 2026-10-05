@@ -14,6 +14,8 @@ import {
   parsePriorityRules,
   parseSpecificRules,
   parseWhitelistRules,
+  serializeLabelWhitelistRules,
+  serializeQualifierPriorityRules,
   serializeSpecificRules
 } from '../app/file-imports.js';
 import {
@@ -1364,13 +1366,10 @@ const addLabelWhitelistResource = (state, resources, diagramOptions) => {
   if (preservedWhitelist) {
     diagramOptions.labelWhitelistFile = preservedWhitelist;
   } else if (state.filterMode.value === 'Whitelist' && state.manualWhitelist.length > 0) {
-    const whitelist = state.manualWhitelist
-      .filter((rule) => rule?.feat && rule?.qual)
-      .map((rule) => `${rule.feat}\t${rule.qual}\t${rule.key || ''}`)
-      .join('\n');
+    const whitelist = serializeLabelWhitelistRules(state.manualWhitelist);
     if (whitelist) {
       diagramOptions.labelWhitelistFile = fileRef(resources.addText(
-        'label-whitelist-file', 'label-whitelist-file', 'label-whitelist.tsv', `${whitelist}\n`
+        'label-whitelist-file', 'label-whitelist-file', 'label-whitelist.tsv', whitelist
       ));
     }
   }
@@ -1378,10 +1377,7 @@ const addLabelWhitelistResource = (state, resources, diagramOptions) => {
 
 const addQualifierPriorityResource = (state, resources, diagramOptions) => {
   const publicationFiles = state.canonicalPublicationFiles || {};
-  const priority = state.manualPriorityRules
-    .filter((rule) => rule?.feat && rule?.order)
-    .map((rule) => `${rule.feat}\t${rule.order}`)
-    .join('\n');
+  const priority = serializeQualifierPriorityRules(state.manualPriorityRules);
   const priorityRef = publicationFileRef(
     resources, publicationFiles, 'qualifier_priority', 'qualifier-priority-file'
   );
@@ -1392,7 +1388,7 @@ const addQualifierPriorityResource = (state, resources, diagramOptions) => {
     ] = priorityRef;
   } else if (priority) {
     diagramOptions.qualifierPriorityFile = fileRef(resources.addText(
-      'qualifier-priority-file', 'qualifier-priority-file', 'qualifier-priority.tsv', `${priority}\n`
+      'qualifier-priority-file', 'qualifier-priority-file', 'qualifier-priority.tsv', priority
     ));
   }
 };

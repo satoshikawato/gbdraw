@@ -18,6 +18,13 @@ write-up of a release.
   `foo#bar`) failed with "Missing values", and a Label override text or
   whitelist keyword such as `Gene #1` was silently cut to `Gene `. Only a line
   whose first non-blank character is `#` is a comment, as before.
+- Label whitelist and Qualifier priority (web app): a tab or line break typed
+  or pasted into a rule cell, such as a whitelist keyword, no longer adds a
+  column or row to the table that **Generate** writes. Each run of such
+  characters becomes one space and the cell is trimmed, as Feature visibility
+  and Label override cells already were. A tab used to shift the cells, so the
+  rule was read with the wrong feature type and qualifier, and a line break
+  split the rule into two rows and failed with "Missing values".
 - Labels (web app): applying **Label visibility** **On** now asks **Feature Is
   Hidden** also for a feature that a **Feature Visibility** rule hides, for
   example a rule with a record ID, another qualifier, or a `hash`, `location`,

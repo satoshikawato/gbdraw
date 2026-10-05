@@ -78,7 +78,11 @@ import {
   buildDefaultColorOverrideTsv,
   normalizePaletteColors
 } from './color-utils.js';
-import { serializeSpecificRules } from './file-imports.js';
+import {
+  serializeLabelWhitelistRules,
+  serializeQualifierPriorityRules,
+  serializeSpecificRules
+} from './file-imports.js';
 import {
   pruneUnmatchedFeatureOverrides,
   serializeFeatureVisibilityRules
@@ -2292,19 +2296,13 @@ export const createRunAnalysis = ({
       }
 
       if (filterMode.value === 'Whitelist') {
-        if (manualWhitelist.length > 0) {
-          let wlContent = '';
-          manualWhitelist.forEach((r) => {
-            if (r.feat && r.qual) wlContent += `${r.feat}\t${r.qual}\t${r.key}\n`;
-          });
+        const wlContent = serializeLabelWhitelistRules(manualWhitelist);
+        if (wlContent) {
           stageTextFile('/manual_wl.tsv', wlContent);
         }
       }
 
-      let pContent = '';
-      manualPriorityRules.forEach((r) => {
-        pContent += `${r.feat}\t${r.order}\n`;
-      });
+      const pContent = serializeQualifierPriorityRules(manualPriorityRules);
       if (pContent.trim() !== '') {
         stageTextFile('/priority.tsv', pContent);
       }
