@@ -1,0 +1,27 @@
+{
+  "purpose": "Positive fixture for the Session 31-39 reader that reads Default colors, Label whitelist, and Qualifier priority rows as the current writer writes them (OV-40).",
+  "history": "first-parent main",
+  "writer": "gbdraw/web/js/services/config.js Save Session (Web), bytes kept unchanged",
+  "checkout": "git worktree add --detach <dir> <sourceCommit>; python tools/prepare_browser_wheel.py; served with Python http.server from <dir>",
+  "tools": {
+    "node": "v26.8.2",
+    "playwright": "1.61.0 (Python)",
+    "python": "3.13.3"
+  },
+  "sessions": {
+    "whitelist-tab-keyword.v39.gbdraw-session.json.gz": {
+      "sourceCommit": "17e2c9dee32724219aa7c96a02d183280ffbe438",
+      "wheel": "gbdraw-0.14.0b0-py3-none-any.whl",
+      "sessionVersion": 39,
+      "records": "tests/test_inputs/HmmtDNA.gbk (sha256 7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f)",
+      "steps": [
+        "Circular; GenBank/DDBJ File HmmtDNA.gbk; labels_mode = out; Generate",
+        "Label filtering Whitelist; + Add Rule (CDS, product); Pattern typed as cytochrome<TAB>c oxidase",
+        "Save Session, title whitelist-tab-keyword (no Generate after the rule)"
+      ],
+      "storedWhitelistResource": "CDS<TAB>product<TAB>cytochrome<TAB>c oxidase<LF>: the Session 39 writer joined the cells without normalizing the tab, so the row has four cells",
+      "sha256": "3107ab5445cb021e0c7d9a3fc54fcd3a41076b4a41e8582dc935e9172d69140d",
+      "decompressedSha256": "ebe2fce521d77e0dc68dee44eb2e4b96bd08b17f9e8e6ed39b201bd89b3d1c66"
+    }
+  }
+}

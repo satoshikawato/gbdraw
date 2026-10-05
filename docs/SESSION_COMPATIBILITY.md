@@ -8,6 +8,23 @@ session files, canonical render requests, and saved LOSAT results. The concise
 documents current support. Tutorials and the FAQ describe what a user should
 do; release notes record when a format changed.
 
+## Unreleased: Web Load of Session 31–39 table rows
+
+Session version 45 is unchanged. The Web writers of Sessions 31–39 stored the
+Default colors, Label whitelist, and Qualifier priority tables without
+normalizing their cell values, so a value typed with a tab became extra cells
+and a value with a line break became a short row. Since the Web table readers
+reject a row with the wrong number of cells, Load rejected such a Session. Load
+now reads these three tables of a Session 31–39 as the current writer writes
+them: the extra cells of a row join its last column with one space, and a row
+without its required columns is dropped (`feature_type` and `qualifier` for
+Label whitelist, `feature_type` and `priorities` for Qualifier priority, and
+`feature_type` and a color for Default colors). The Load notice names each
+table and line read this way. Sessions 40 and later are read as before, and
+table file imports and CLI replay (`--session`) still reject such a row. When
+another table of a Session fails to load, the message names the table, for
+example `Session table: Specific colors.`
+
 ## Unreleased: Session 45 and Web feature edits by source identity
 
 Session version 45 stores the Web app's Feature visibility, Label visibility,

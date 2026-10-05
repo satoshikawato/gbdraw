@@ -13,25 +13,47 @@ const requireColumnCount = (parts, columnCount, row) => {
   }
 };
 
-export const parseColorTable = (text) => {
+// Sessions 31–39 stored these tables as their Web writer wrote them, before cell
+// values were normalized (normalizeTsvCell): a tab in a value made extra cells and
+// a line break a short row. For them (`repairs`), a row is read as the current
+// writer writes it: the extra cells join the last field with one space, and a row
+// without its required fields (`complete`) is dropped; `repairs` lists each one.
+const tableCells = (line, columnCount, row, repairs, complete) => {
+  const parts = line.split('\t');
+  if (!repairs) {
+    requireColumnCount(parts, columnCount, row);
+    return parts.map((part) => part.trim());
+  }
+  const cells = [...parts.slice(0, columnCount - 1), parts.slice(columnCount - 1).join('\t')]
+    .map(normalizeTsvCell);
+  if (parts.length < columnCount || !complete(cells)) {
+    repairs.push({ row, repair: 'dropped' });
+    return null;
+  }
+  if (parts.length > columnCount) repairs.push({ row, repair: 'joined' });
+  return cells;
+};
+const isTableColor = (color) => color.startsWith('#') || /^[a-z]+$/i.test(color);
+
+export const parseColorTable = (text, { legacyRows = false } = {}) => {
   const colors = {};
   let count = 0;
+  const repairs = legacyRows ? [] : null;
   const lines = text.split(/\r?\n/);
 
   for (const [index, line] of lines.entries()) {
     if (!line.trim() || line.trim().startsWith('#') || line.trim().startsWith('[')) continue;
-    const parts = line.split('\t');
-    requireColumnCount(parts, 2, index + 1);
-    const key = parts[0].trim();
-    const color = parts[1].trim();
+    const cells = tableCells(line, 2, index + 1, repairs, ([key, color]) => key && isTableColor(color));
+    if (!cells) continue;
+    const [key, color] = cells;
     if (key.toLowerCase() === 'feature_type' && color.toLowerCase() === 'color') continue;
-    if (key && (color.startsWith('#') || /^[a-z]+$/i.test(color))) {
+    if (key && isTableColor(color)) {
       colors[key] = resolveColorToHex(color);
       count++;
     }
   }
 
-  return { colors, count };
+  return { colors, count, repairs: repairs || [] };
 };
 
 export const parseSpecificRules = (text) => {
@@ -117,40 +139,37 @@ export const serializeQualifierPriorityRules = (rules) => {
   return rows.length > 0 ? `${rows.join('\n')}\n` : '';
 };
 
-export const parsePriorityRules = (text) => {
+export const parsePriorityRules = (text, { legacyRows = false } = {}) => {
   const rules = [];
+  const repairs = legacyRows ? [] : null;
   const lines = text.split(/\r?\n/);
 
   for (const [index, line] of lines.entries()) {
     if (!line.trim() || line.trim().startsWith('#')) continue;
-    const parts = line.split('\t');
-    requireColumnCount(parts, 2, index + 1);
-    if (
-      parts[0].trim().toLowerCase() === 'feature_type' &&
-      parts[1].trim().toLowerCase() === 'priorities'
-    ) continue;
-    rules.push({ feat: parts[0].trim(), order: parts[1].trim() });
+    const cells = tableCells(line, 2, index + 1, repairs, ([feat, order]) => feat && order);
+    if (!cells) continue;
+    const [feat, order] = cells;
+    if (feat.toLowerCase() === 'feature_type' && order.toLowerCase() === 'priorities') continue;
+    rules.push({ feat, order });
   }
 
-  return { rules, count: rules.length };
+  return { rules, count: rules.length, repairs: repairs || [] };
 };
 
-export const parseWhitelistRules = (text) => {
+export const parseWhitelistRules = (text, { legacyRows = false } = {}) => {
   const rules = [];
+  const repairs = legacyRows ? [] : null;
   const lines = text.split(/\r?\n/);
 
   for (const [index, line] of lines.entries()) {
     if (!line.trim() || line.trim().startsWith('#')) continue;
-    const parts = line.split('\t');
-    requireColumnCount(parts, 3, index + 1);
-    rules.push({
-      feat: parts[0].trim(),
-      qual: parts[1].trim(),
-      key: parts[2].trim()
-    });
+    const cells = tableCells(line, 3, index + 1, repairs, ([feat, qual]) => feat && qual);
+    if (!cells) continue;
+    const [feat, qual, key] = cells;
+    rules.push({ feat, qual, key });
   }
 
-  return { rules, count: rules.length };
+  return { rules, count: rules.length, repairs: repairs || [] };
 };
 
 export const parseBlacklistWords = (text) => {

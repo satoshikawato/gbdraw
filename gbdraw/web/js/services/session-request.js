@@ -80,7 +80,7 @@ import {
 } from '../app/track-slot-validation.js';
 import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from '../app/annotations/state.js';
 import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
-import { diagnosticError } from './error-normalization.js';
+import { SESSION_TABLE_LABELS, diagnosticError, normalizeUserFacingError } from './error-normalization.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import {
   arrowHeadLengthRatioForState,
@@ -3311,6 +3311,37 @@ const resourceTextFromRef = (resources, ref) => (
   ref?.resourceId ? decodeCanonicalResourceText(resources, ref.resourceId) : null
 );
 
+// A table the Session stores is named in its failure: the user corrects the
+// Session file, not a table in this page.
+const readSessionTable = (table, read) => {
+  try {
+    return read();
+  } catch (error) {
+    const model = normalizeUserFacingError(error);
+    if (['UNKNOWN', 'VALIDATION_UNCLASSIFIED'].includes(model.code)) throw error;
+    throw diagnosticError(model.code, { ...model.context, sessionTable: table }, { stage: model.stage });
+  }
+};
+
+const lineList = (rows) => (rows.length === 1 ? `line ${rows[0]}`
+  : `lines ${rows.slice(0, 5).join(', ')}${rows.length > 5 ? `, and ${rows.length - 5} more` : ''}`);
+// The Load notice for the rows `legacyTableRepairs` lists, by table.
+export const legacyTableRowsNotice = (repairs) => {
+  if (!repairs?.length) return '';
+  const tables = [...new Set(repairs.map(({ table }) => table))];
+  return ['Some table rows of this older Session were read as the current version writes them.',
+    ...tables.flatMap((table) => {
+      const rows = (repair) => repairs.filter((item) => item.table === table && item.repair === repair)
+        .map(({ row }) => row);
+      const joined = rows('joined');
+      const dropped = rows('dropped');
+      return [
+        joined.length ? `${SESSION_TABLE_LABELS[table]}: ${lineList(joined)} had extra cells, joined into the last column with one space.` : '',
+        dropped.length ? `${SESSION_TABLE_LABELS[table]}: ${lineList(dropped)} lacked a required column and ${dropped.length === 1 ? 'was' : 'were'} dropped.` : ''
+      ].filter(Boolean);
+    })].join(' ');
+};
+
 // Whether the committed Session drew with the given Feature visibility rules
 // (TSV), compared after normalization. Reusing resolved protein comparisons is
 // valid only when it holds (CO-02); an unreadable committed table declines.
@@ -3742,6 +3773,7 @@ export const projectCanonicalSessionRequest = ({
   fileBindings = [],
   linearTrackSlotSchemaVersion = LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   repairInvalidComparisonHeight = false,
+  repairLegacyTableRows = false,
   sessionResourceTable = null,
   deferResourceContent = false,
   adoptCanonicalPayloads = false
@@ -4221,6 +4253,16 @@ export const projectCanonicalSessionRequest = ({
       files.linearSeqs[index].depth = depth.length > 1 ? depth : (depth[0] || null);
     });
   }
+  // Sessions 31–39 (repairLegacyTableRows) read these three tables as the
+  // current writer writes them; the Load notice lists the rows read so.
+  const legacyTableRepairs = [];
+  const readLegacyTable = (table, ref, parse) => {
+    const parsed = readSessionTable(table, () => parse(
+      resourceTextFromRef(resources, ref), { legacyRows: repairLegacyTableRows }
+    ));
+    legacyTableRepairs.push(...parsed.repairs.map((repair) => ({ table, ...repair })));
+    return parsed;
+  };
   const defaultColorsRef = options.colors?.defaultColorsFile || options.colors?.defaultColors;
   let projectedDefaultColors = deferResourceContent
     && storedConfig?.colors
@@ -4233,9 +4275,7 @@ export const projectCanonicalSessionRequest = ({
       ? resolveResourceFile(defaultColorsRef.resourceId)
       : resourceAsLegacyFile(resources, defaultColorsRef.resourceId);
     if (!deferResourceContent) {
-      projectedDefaultColors = parseColorTable(
-        resourceTextFromRef(resources, defaultColorsRef)
-      ).colors;
+      projectedDefaultColors = readLegacyTable('default-colors', defaultColorsRef, parseColorTable).colors;
     }
   }
   const colorTableRef = options.colors?.colorTableFile || options.colors?.colorTable;
@@ -4247,9 +4287,9 @@ export const projectCanonicalSessionRequest = ({
       ? resolveResourceFile(colorTableRef.resourceId)
       : resourceAsLegacyFile(resources, colorTableRef.resourceId);
     if (!deferResourceContent) {
-      projectedSpecificRules = parseSpecificRules(
+      projectedSpecificRules = readSessionTable('specific-colors', () => parseSpecificRules(
         resourceTextFromRef(resources, colorTableRef)
-      ).rules.map(({ fromFile: _fromFile, ...rule }) => rule);
+      )).rules.map(({ fromFile: _fromFile, ...rule }) => rule);
     }
   }
   let projectedWhitelist = deferResourceContent && Array.isArray(storedConfig?.whitelist)
@@ -4260,9 +4300,7 @@ export const projectCanonicalSessionRequest = ({
       ? resolveResourceFile(options.labelWhitelistFile.resourceId)
       : resourceAsLegacyFile(resources, options.labelWhitelistFile.resourceId);
     if (!deferResourceContent) {
-      projectedWhitelist = parseWhitelistRules(
-        resourceTextFromRef(resources, options.labelWhitelistFile)
-      ).rules;
+      projectedWhitelist = readLegacyTable('label-whitelist', options.labelWhitelistFile, parseWhitelistRules).rules;
     }
   }
   const qualifierPriorityRef = options.qualifierPriorityFile || options.qualifierPriorityTable;
@@ -4275,20 +4313,20 @@ export const projectCanonicalSessionRequest = ({
       ? resolveResourceFile(qualifierPriorityRef.resourceId)
       : resourceAsLegacyFile(resources, qualifierPriorityRef.resourceId);
     if (!deferResourceContent) {
-      projectedPriorityRules = parsePriorityRules(
-        resourceTextFromRef(resources, qualifierPriorityRef)
-      ).rules;
+      projectedPriorityRules = readLegacyTable('qualifier-priority', qualifierPriorityRef, parsePriorityRules).rules;
     }
   }
   const projectedFeatureVisibilityRules = !deferResourceContent
     && options.featureVisibilityTableFile?.resourceId
-    ? parseFeatureVisibilityRules(
+    ? readSessionTable('feature-visibility', () => parseFeatureVisibilityRules(
         resourceTextFromRef(resources, options.featureVisibilityTableFile)
-      ).rules
+      )).rules
     : [];
   const projectedLabelOverrideRows = !deferResourceContent
     && options.labelOverrideFile?.resourceId
-    ? parseLabelOverrideTsv(resourceTextFromRef(resources, options.labelOverrideFile)).map((row) => ({
+    ? readSessionTable('label-overrides', () => parseLabelOverrideTsv(
+      resourceTextFromRef(resources, options.labelOverrideFile)
+    )).map((row) => ({
         recordId: row.recordId,
         featureType: row.featureType,
         qualifier: row.qualifier,
@@ -4826,7 +4864,8 @@ export const projectCanonicalSessionRequest = ({
           legacySimilarityAlignment:
             projectedProteinPipeline.legacySimilarityAlignment
         }
-      : null
+      : null,
+    legacyTableRepairs
   };
 };
 const PUBLICATION_OUTPUT_ONLY_FIELDS = new Set(['prefix', 'formats', 'overwrite', 'artifactFilename']);
