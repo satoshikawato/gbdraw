@@ -35,6 +35,19 @@ test('every Phosphor icon in index.html is aria-hidden', () => {
   assert.deepEqual(missing, []);
 });
 
+// The characters of an HTML fragment outside its tags (a scan, not a regex
+// strip, so no tag remnant can survive).
+const textOutsideTags = (fragment) => {
+  let text = '';
+  let inTag = false;
+  for (const ch of fragment) {
+    if (ch === '<') inTag = true;
+    else if (ch === '>') inTag = false;
+    else if (!inTag) text += ch;
+  }
+  return text;
+};
+
 test('every icon-only button in index.html has an aria-label', () => {
   const unnamed = [];
   for (const match of html.matchAll(/<button\b/g)) {
@@ -42,8 +55,7 @@ test('every icon-only button in index.html has an aria-label', () => {
     const tag = html.slice(match.index, tagEnd + 1);
     const inner = html.slice(tagEnd + 1, html.indexOf('</button>', tagEnd));
     if (!/<i\b/.test(inner) || /\sv-text=/.test(inner)) continue;
-    const text = inner.replace(/<i\b[^>]*><\/i>/g, '').replace(/<[^>]+>/g, '')
-      .replace(/\{\{[\s\S]*?\}\}/g, 'x').trim();
+    const text = textOutsideTags(inner).replace(/\{\{[\s\S]*?\}\}/g, 'x').trim();
     if (text) continue;
     if (!/\saria-label(ledby)?=|\s:aria-label=/.test(tag)) unnamed.push(`line ${lineOf(match.index)}: ${tag.slice(0, 100)}`);
   }
