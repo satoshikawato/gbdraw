@@ -591,14 +591,19 @@ def _collect_rendered_features(root: ET.Element) -> dict[str, _RenderedFeatureEn
 
 
 def _rendered_space_stable_id_candidates(rendered_id: str) -> set[str]:
-    """Return stable-looking bases encoded by one rendered-space handle."""
+    """Return stable-looking bases encoded by one rendered-space handle.
+
+    A handle is ``<hash>[_record_<n>][__instance_<s>_<digest>]``
+    (``gbdraw/svg/ids.py``), so the record suffix may precede the instance one.
+    """
 
     base = _FEATURE_RECORD_SUFFIX_RE.sub("", _normalize_feature_id(rendered_id))
-    candidates = {base} if base else set()
     instance_base = _FEATURE_INSTANCE_SUFFIX_RE.sub("", base)
-    if instance_base:
-        candidates.add(instance_base)
-    return candidates
+    return {
+        value
+        for value in (base, instance_base, _FEATURE_RECORD_SUFFIX_RE.sub("", instance_base))
+        if value
+    }
 
 
 def _rendered_entry_agrees_with_identity(
