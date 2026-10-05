@@ -518,7 +518,7 @@ def _verify_direction_reset(page: Page) -> None:
     after = snapshot()
     assert len(after["receipt"]["directions"]) == 1
     assert after["receipt"]["directions"][0]["recordKey"] == changed[0]
-    page.get_by_role("button", name="Open editor", exact=True).click()
+    page.get_by_role("button", name="Editor", exact=True).click()
     expect(page.locator(".right-drawer")).to_have_attribute("aria-hidden", "false")
     page.get_by_role("button", name="Similarity groups").click()
     for combined in (True, False):

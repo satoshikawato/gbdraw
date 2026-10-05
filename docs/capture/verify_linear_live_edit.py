@@ -193,7 +193,7 @@ def main():
             )
             assert "comparison" in generated["mounted"].lower()
             # Use the same live Feature editor through its public controls.
-            page.get_by_role("button", name="Open editor", exact=True).click()
+            page.get_by_role("button", name="Editor", exact=True).click()
             page.get_by_label("Auto Reflow", exact=True).uncheck()
             # CSS/placeholder findings: list search and popup label lack associated labels.
             page.get_by_placeholder("Search by feature or annotation...").fill(

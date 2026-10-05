@@ -4,10 +4,13 @@
 // disclosure button outside <label>, described by its own text and referenced
 // by the control it explains.
 // TR-11: custom-stack rows keep the slot id and renderer readable.
+// OV-30 (R12): every visible button has a stable author-provided name (an
+// aria-label, aria-labelledby, or visible text), never a Phosphor glyph.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const { openApp, reveal } = require('./helpers/app-lifecycle.cjs');
+const { seeds, load, popup } = require('./helpers/mode-transition.cjs');
 
 const genbank = readFileSync(join(__dirname, '../test_inputs/HmmtDNA.gbk'), 'utf8');
 const depthTsv = ['reference_name\tposition\tdepth', 'NC_012920.1\t1\t10', 'NC_012920.1\t8000\t20', ''].join('\n');
@@ -107,6 +110,111 @@ const auditPage = (page) => page.evaluate(() => {
   const counts = { controls: controls.length, tips: visibleTips.length };
   return { counts, unnamed, tips, duplicateIds, danglingDescriptions };
 });
+
+const PRIVATE_USE = /[\uE000-\uF8FF]/;
+
+// Visible buttons whose name is not author-provided or holds an icon glyph.
+// The page's own computation skips aria-hidden subtrees; the browser's name,
+// read from the aria snapshot, is checked for glyphs and empty buttons too.
+const auditButtons = async (page) => {
+  const inPage = await page.evaluate(() => {
+    const visible = (element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: false });
+    const text = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+    const content = (node) => {
+      if (node.nodeType === Node.TEXT_NODE) return node.textContent;
+      if (node.nodeType !== Node.ELEMENT_NODE || node.getAttribute('aria-hidden') === 'true') return '';
+      return Array.from(node.childNodes, content).join(' ');
+    };
+    const authorName = (element) => text((element.getAttribute('aria-labelledby') || '').split(/\s+/)
+      .filter(Boolean).map((id) => content(document.getElementById(id) || document.createTextNode(''))).join(' '))
+      || text(element.getAttribute('aria-label'))
+      || text(content(element));
+    const buttons = Array.from(document.querySelectorAll('button, [role="button"]')).filter(visible);
+    const names = new Map(buttons.map((button) => [button, authorName(button)]));
+    const problems = [];
+    for (const [button, name] of names) {
+      const html = text(button.outerHTML).slice(0, 160);
+      if (!name) problems.push(`no author-provided name (title only or empty): ${html}`);
+      else if (/[\uE000-\uF8FF]/.test(name)) problems.push(`private-use glyph in name "${name}": ${html}`);
+    }
+    return { count: buttons.length, problems };
+  });
+  const snapshot = await page.locator('body').ariaSnapshot();
+  const browser = snapshot.split('\n').flatMap((line) => {
+    const match = line.match(/^\s*- button(?: "((?:[^"\\]|\\.)*)")?/);
+    if (!match) return [];
+    if (!match[1]) return [`browser reports an unnamed button: ${line.trim()}`];
+    return PRIVATE_USE.test(match[1]) ? [`browser name holds a private-use glyph: ${line.trim()}`] : [];
+  });
+  return { count: inPage.count, problems: [...inPage.problems, ...browser] };
+};
+
+// A name must not depend on state: toggle every aria-expanded/aria-pressed
+// button once and compare its name.
+const auditStateNames = async (page) => {
+  const stamped = await page.evaluate(() => {
+    const visible = (element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: false });
+    const buttons = Array.from(document.querySelectorAll('button[aria-expanded], button[aria-pressed]'))
+      .filter((button) => visible(button) && !button.disabled && !button.closest('.help-tip, .app-mode-button')
+        && !button.classList.contains('app-mode-button'));
+    buttons.forEach((button, index) => button.setAttribute('data-name-probe', String(index)));
+    return buttons.length;
+  });
+  const changed = [];
+  for (let index = 0; index < stamped; index += 1) {
+    const button = page.locator(`[data-name-probe="${index}"]`);
+    if (await button.count() !== 1 || !await button.isVisible()) continue;
+    const read = () => button.evaluate((element) => element.getAttribute('aria-label')
+      || element.textContent.replace(/\s+/g, ' ').trim());
+    const before = await read();
+    await button.click({ timeout: 5_000 }).catch(() => {});
+    if (await button.count() === 1) {
+      const after = await read();
+      if (after !== before) changed.push(`${before} -> ${after}`);
+      await button.click({ timeout: 5_000 }).catch(() => {});
+    }
+  }
+  return changed;
+};
+
+for (const mode of ['circular', 'linear']) {
+  test(`${mode} custom stack and Advanced buttons have stable names without icon glyphs`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await loadMode(page, mode);
+    const audit = await auditButtons(page);
+    expect(audit.count).toBeGreaterThan(40);
+    expect(audit.problems, 'buttons without a stable author-provided name').toEqual([]);
+    const move = mode === 'circular' ? 'Move outside Axis' : 'Move above Axis';
+    await expect(page.getByRole('button', { name: move, exact: true }).first()).toBeVisible();
+    expect(await auditStateNames(page), 'button names that change with state').toEqual([]);
+  });
+
+  test(`${mode} Result, drawer tabs, and feature popup buttons have stable names`, async ({ browser }) => {
+    test.setTimeout(300_000);
+    const page = await load(browser, mode === 'circular' ? seeds.circular : seeds.linear);
+    try {
+      await popup(page);
+      const problems = [];
+      const record = async (label) => {
+        const audit = await auditButtons(page);
+        expect(audit.count, `${label} buttons`).toBeGreaterThan(5);
+        problems.push(...audit.problems.map((problem) => `${label}: ${problem}`));
+      };
+      await record('page with drawer and popup');
+      for (const tab of ['Details', 'Qualifiers', 'Sequence', 'Edit']) {
+        const button = page.locator('.feature-popup').getByRole('button', { name: tab, exact: true });
+        if (await button.count()) { await button.click(); await record(`popup ${tab}`); }
+      }
+      for (const tab of ['Legend', 'Similarity groups', 'Features']) {
+        const button = page.locator('.right-drawer').getByRole('button', { name: tab, exact: true });
+        if (await button.isEnabled()) { await button.click(); await record(`drawer ${tab}`); }
+      }
+      expect(problems, 'buttons without a stable author-provided name').toEqual([]);
+      expect(await auditStateNames(page), 'button names that change with state').toEqual([]);
+    } finally { await page.context().close(); }
+  });
+}
 
 for (const mode of ['circular', 'linear']) {
   test(`${mode} controls have names and every help tip is a reachable disclosure`, async ({ page }) => {
