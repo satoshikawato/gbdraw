@@ -15,7 +15,7 @@ export const createDiagramDragActions = ({
   state,
   beginHistoryTransaction = null,
   commitHistoryTransaction = null,
-  previewRuntime = null,
+  commitActiveResultEdit = null,
   similarityAlignmentLifecycle = null
 }) => {
   const {
@@ -464,7 +464,7 @@ export const createDiagramDragActions = ({
         moved: Math.abs(deltaX) > 1e-9 || Math.abs(deltaY) > 1e-9
       });
     }
-    previewRuntime?.commitActiveResultEdit('diagram-drag');
+    commitActiveResultEdit?.('diagram-drag');
     const tx = diagramDragTxPromise ? await diagramDragTxPromise : null;
     diagramDragTxPromise = null;
     if (tx && commitHistoryTransaction) await commitHistoryTransaction(tx);

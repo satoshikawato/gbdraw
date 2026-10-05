@@ -38,7 +38,6 @@ export const setupWatchers = ({
   nextTick,
   onMounted,
   legendActions,
-  svgActions,
   featureActions,
   legendLayout,
   resultsManager,
@@ -116,7 +115,6 @@ export const setupWatchers = ({
     refreshLegendDragAffordances
   } = legendActions;
 
-  const { applyPaletteToSvg } = svgActions;
   const { syncLabelEditor } = featureActions;
   const {
     applyCanvasPadding,

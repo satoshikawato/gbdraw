@@ -219,16 +219,12 @@ const mockLegendEntry = (caption, color, x) => {
   };
   const actions = createLegendEntryActions({
     state,
-    layoutActions: {
-      compactLegendEntries: () => {},
-      reflowDualLegendLayout: () => { layoutRefreshes += 1; },
-      updatePairwiseLegendPositions: () => { layoutRefreshes += 1; }
-    },
-    previewRuntime: {
-      commitActiveResultEdit: () => {
-        dirtyMarks += 1;
-        return true;
-      }
+    compactLegendEntries: () => {},
+    reflowDualLegendLayout: () => { layoutRefreshes += 1; },
+    updatePairwiseLegendPositions: () => { layoutRefreshes += 1; },
+    commitActiveResultEdit: () => {
+      dirtyMarks += 1;
+      return true;
     }
   });
 
@@ -324,11 +320,9 @@ const mockLegendEntry = (caption, color, x) => {
   state.originalSvgStroke = ref({ color: null, width: null });
   const strokeActions = createLegendStrokeActions({
     state,
-    previewRuntime: {
-      commitActiveResultEdit: () => {
-        dirtyMarks += 1;
-        return true;
-      }
+    commitActiveResultEdit: () => {
+      dirtyMarks += 1;
+      return true;
     }
   });
   assert.equal(strokeActions.updateLegendEntryStrokeColor(0, '#222222'), true);
@@ -455,8 +449,10 @@ const mockLegendEntry = (caption, color, x) => {
   };
   const actions = createLegendEntryActions({
     state,
-    layoutActions: { compactLegendEntries: () => {}, reflowDualLegendLayout: () => {}, updatePairwiseLegendPositions: () => {} },
-    previewRuntime: { commitActiveResultEdit: () => true }
+    compactLegendEntries: () => {},
+    reflowDualLegendLayout: () => {},
+    updatePairwiseLegendPositions: () => {},
+    commitActiveResultEdit: () => true
   });
   const generate = (...rendered) => {
     const replayed = compileDirectEditorMutationPlan({
@@ -533,11 +529,11 @@ const mockLegendEntry = (caption, color, x) => {
   let commits = 0;
   const actions = createLegendEntryActions({
     state,
-    layoutActions: { compactLegendEntries: () => {}, reflowDualLegendLayout: () => {}, updatePairwiseLegendPositions: () => {} },
-    previewRuntime: {
-      commitActiveResultEdit: () => { commits += 1; return true; },
-      getActiveRuntime: () => ({ resultIdentity: 'result-1' })
-    }
+    compactLegendEntries: () => {},
+    reflowDualLegendLayout: () => {},
+    updatePairwiseLegendPositions: () => {},
+    commitActiveResultEdit: () => { commits += 1; return true; },
+    readActiveResultIdentity: () => 'result-1'
   });
   // Result 1 draws Own1; Result 2 drew Only2 and was sorted Z-A, which Result 1
   // shows. Undo restores Result 2's list from before the sort.
@@ -570,7 +566,7 @@ const mockLegendEntry = (caption, color, x) => {
     state,
     extractLegendEntries: actions.extractLegendEntries,
     orderMountedLegend: actions.orderMountedLegend,
-    previewRuntime: { commitActiveResultEdit: (reason) => { if (reason === 'legend-order') sortCommits += 1; } }
+    commitActiveResultEdit: (reason) => { if (reason === 'legend-order') sortCommits += 1; }
   });
   actions.extractLegendEntries();
   sortActions.sortLegendEntries('asc');

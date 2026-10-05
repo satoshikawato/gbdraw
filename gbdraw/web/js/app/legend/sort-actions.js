@@ -1,10 +1,10 @@
 // Sort and Move compute the requested caption order; the Legend entry owner
 // orders the mounted Legend through the `orderMountedLegend` port (R3, R13).
-export const createLegendSortActions = ({ state, extractLegendEntries, orderMountedLegend, previewRuntime = null }) => {
+export const createLegendSortActions = ({ state, extractLegendEntries, orderMountedLegend, commitActiveResultEdit = null }) => {
   const { legendEntries, originalLegendOrder } = state;
 
   const persistLegendOrder = () => {
-    previewRuntime?.commitActiveResultEdit('legend-order');
+    commitActiveResultEdit?.('legend-order');
     extractLegendEntries();
   };
 
