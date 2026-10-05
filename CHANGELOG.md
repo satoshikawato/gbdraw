@@ -18,6 +18,16 @@ write-up of a release.
   `foo#bar`) failed with "Missing values", and a Label override text or
   whitelist keyword such as `Gene #1` was silently cut to `Gene `. Only a line
   whose first non-blank character is `#` is a comment, as before.
+- Default colors, Specific colors, Qualifier priority, Label whitelist or
+  blacklist, Label overrides, and Feature visibility tables: a `"` is now part
+  of the cell value; these tables are no longer read as CSV with quoting. A
+  cell that starts with `"` used to lose its quotes (`"quoted"` was read as
+  `quoted`), and a value that starts with a `"` that is never closed (such as
+  `"lead`, which the web app writes as typed) failed with "unexpected end of
+  data". **Behavior change for CLI files:** a user table that wrapped a field
+  in CSV quotes now keeps those quotes in the value, so remove them from such
+  files. The Feature override, Feature placement, and Annotation tables are
+  unchanged.
 - Labels (web app): applying **Label visibility** **On** now asks **Feature Is
   Hidden** also for a feature that a **Feature Visibility** rule hides, for
   example a rule with a record ID, another qualifier, or a `hash`, `location`,
