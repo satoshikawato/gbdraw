@@ -91,7 +91,7 @@ in the same change.
 | Current active-config defaults, inventory, and validation | `js/services/session-active-config-contract.js` |
 | Historical Gallery session migration | `js/services/gallery-session-migration.js` |
 | Per-feature edits and Feature placements by source identity (draft key, row checks, request rows, notices) | `js/services/feature-placement.js` |
-| Rendered-ID feature edits of Sessions 31–33 and 44 onto identity rows | `js/services/feature-edit-migration.js` |
+| Rendered-ID feature edits of Sessions 31–33 and 44, and Feature placement drafts of Sessions 41–44, onto mode-scoped identity rows | `js/services/feature-edit-migration.js` |
 | Gallery publication preparation, finalization, and readiness | `js/services/gallery-session-publication.js` |
 | Save/load coordination | `js/services/config.js` |
 | History transactions and availability | `js/services/history.js`, `js/app/history-inputs.js`, `js/services/history-snapshot.js` |
@@ -212,13 +212,21 @@ successful source-replacing Generate (`pruneUnmatchedFeatureOverrides` in
 (`removeUnresolvedFeatureEdits`). Result selection, mount, record selection,
 mode change, hiding, and reflow never touch them. Per-feature edits
 (`state.featureOverrides`) and Feature placements are keyed by
-`JSON.stringify([recordKey, biologicalFeatureId])`; a request carries only the
-rows of its own records, and the other mode's rows stay in the draft.
+`JSON.stringify([scope, recordKey, biologicalFeatureId])`, where `scope` is the
+mode of the Result the edit was made on (an admitted catalog gives each feature
+its Result's mode). Both modes can use the same record key for the same feature
+(`record-1` in a Gallery or Python Session), so a request, the live projection,
+and every reconcile reach only the rows of their own mode and records; the
+other mode's rows stay in the draft. Only `services/feature-placement.js`
+builds a draft key.
 
 Guards: `tests/web/non-edit-state-preservation.playwright.spec.js` with
 `tests/web/non-edit-state-diff.test.mjs` (user-owned state is identical before
 and after non-edit operations); the disjoint-Result binding test in
-`tests/web/feature-label-visual-unit.test.mjs`.
+`tests/web/feature-label-visual-unit.test.mjs`;
+`tests/web/mode-scoped-feature-edits.test.mjs` (no draft row reaches a request,
+reconcile, or TSV load of the other mode, and no other module builds a draft
+key) and `tests/web/mode-scoped-feature-edits.playwright.spec.js`.
 
 ### R3: One projection per domain
 

@@ -119,7 +119,7 @@ for (const [name, gene, action] of cases) {
       await expect.poll(() => page.evaluate(() => !window.__GBDRAW_HISTORY__.capturing.value)).toBe(true);
       const intent = await overrides();
       if (action !== 'placement') {
-        expect(intent.labels[JSON.stringify([feature.record_key, feature.biological_feature_id])]).toBe(text);
+        expect(intent.labels[JSON.stringify([feature.scope, feature.record_key, feature.biological_feature_id])]).toBe(text);
       }
       await agree('live', action === 'placement' ? gene : text, feature);
       if (action === 'save') {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { createFeatureLabelActions } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
+import { LABEL_ABSENCE_REASONS, createFeatureLabelActions } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
 
 installFakeSvgDom();
@@ -9,12 +9,14 @@ globalThis.CSS ||= { escape: (value) => String(value) };
 
 const ref = (value) => ({ value });
 
-// Per-feature label and visibility edits are identity rows (design Q4).
+// Per-feature label and visibility edits are identity rows of the Result's
+// mode (design Q4, R2).
 const featureFor = (featureId, type = 'CDS') => ({
-  svg_id: featureId, type, record_key: 'record-1', biological_feature_id: `bio-${featureId}`
+  svg_id: featureId, type, scope: 'linear', record_key: 'record-1', biological_feature_id: `bio-${featureId}`
 });
-const keyFor = (featureId) => JSON.stringify(['record-1', `bio-${featureId}`]);
+const keyFor = (featureId) => JSON.stringify(['linear', 'record-1', `bio-${featureId}`]);
 const rowFor = (featureId, fields = {}) => ({
+  scope: 'linear',
   recordKey: 'record-1',
   biologicalFeatureId: `bio-${featureId}`,
   featureVisibility: null,
@@ -85,7 +87,7 @@ const buildHarness = ({
       hasEditableLabel: true
     }),
     labelTextScopeDialog: { show: false },
-    hiddenLabelTextDialog: { show: false, featureId: '' },
+    hiddenLabelTextDialog: { show: false, featureId: '', reason: '' },
     labelOnDialog: { show: false, reason: '', featureType: '' },
     featureOverrides: Object.fromEntries(Object.entries(visibilityOverrides).map(([id, mode]) => [
       keyFor(id), rowFor(id, { labelVisibility: mode })
@@ -207,10 +209,10 @@ test('a text edit asks whether to show a label only when the feature has none', 
   harness.state.editableLabels.value = [];
   Object.assign(harness.state.clickedFeature.value, { labelText: 'Renamed', labelSourceText: 'Original' });
   await harness.actions.updateClickedFeatureLabelText();
-  assert.deepEqual({ ...harness.state.hiddenLabelTextDialog }, { show: true, featureId });
+  assert.deepEqual({ ...harness.state.hiddenLabelTextDialog }, { show: true, featureId, reason: '' });
   assert.equal(rowOf(harness.state, featureId).labelText, 'Renamed');
   harness.actions.handleHiddenLabelTextChoice('text_only');
-  assert.deepEqual({ ...harness.state.hiddenLabelTextDialog }, { show: false, featureId: '' });
+  assert.deepEqual({ ...harness.state.hiddenLabelTextDialog }, { show: false, featureId: '', reason: '' });
   // "Keep hidden (apply text only)" keeps Label visibility unset (design Q4 6.2).
   assert.equal(rowOf(harness.state, featureId).labelVisibility, null);
   assert.equal(harness.state.labelReflowForceRequestSeq.value, 0);
@@ -226,6 +228,91 @@ test('a text edit asks whether to show a label only when the feature has none', 
   assert.equal(harness.state.labelReflowForceRequestSeq.value, 1);
   assert.equal(harness.state.labelReflowRequestSeq.value, 0);
 });
+
+// R-4 (FINDINGS, residual of #764): the Label Not Shown dialog and the popup
+// note state the one reason that decides why the diagram draws no label.
+const absenceCases = [
+  ['hidden', { rows: { featureVisibility: 'off' } }, ' The feature is hidden.'],
+  ['underlay', { type: 'repeat_region' }, ' Labels are not drawn for features drawn as "Underlay".'],
+  ['scope_none', { scope: 'none' },
+    ' Labels are set to "None" ("Show Labels" or "Label Mode"), so only a feature with Label visibility "On" has one.'],
+  ['scope_first', { scope: 'first', recordIdx: 1 },
+    ' "Show Labels" is "First Record Only", so labels are drawn only in the first record unless a feature has Label visibility "On".'],
+  ['scope_orthogroup_top', { scope: 'orthogroup_top' },
+    ' "Show Labels" is "Top Similarity Group Record", so labels are drawn only for the features that setting selects, unless a feature has Label visibility "On".'],
+  ['whitelist', { whitelist: true }, ' A label whitelist is set, and labels are drawn only for the features it lists.'],
+  ['blacklist', { blacklist: ['putative'] },
+    ' A label blacklist is set, and a label whose text contains one of its keywords is not drawn.'],
+  ['embedded_only', { rendering: 'embedded_only' },
+    ' With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.'],
+  ['', {}, '']
+];
+const absenceHarness = ({ type = 'CDS', rows, scope = 'all', recordIdx = 0, whitelist, blacklist, rendering = 'auto' }) => {
+  const featureId = 'feature:one/[a]';
+  const feature = { ...featureFor(featureId, type), record_idx: recordIdx };
+  const configOverrides = {
+    'labels.rendering': rendering,
+    'labels.circular.scope': scope,
+    ...(blacklist ? { 'labels.filtering.blacklist_keywords': blacklist } : {})
+  };
+  const harness = buildHarness({
+    diagramOptions: { featureShapes: {}, configOverrides, ...(whitelist ? { labelWhitelistFile: { resourceId: 'w' } } : {}) }
+  });
+  harness.state.featureVisibilityManualRules = [];
+  harness.state.editableLabels.value = [];
+  if (rows) setRow(harness.state, featureId, rows);
+  Object.assign(harness.state.clickedFeature.value, {
+    feat: feature, labelText: 'Renamed', labelSourceText: 'Original'
+  });
+  harness.state.extractedFeatures.value = [feature];
+  return { ...harness, feature, featureId };
+};
+
+for (const [reason, options, sentence] of absenceCases) {
+  test(`the Label Not Shown dialog names the reason "${reason || 'unknown'}" as the popup note does`, async () => {
+    const { actions, state } = absenceHarness(options);
+    const none = 'This feature has no label in the current Result.';
+    // The popup note, before the edit is applied.
+    state.clickedFeature.value.labelText = '';
+    assert.equal(actions.clickedFeatureLabelHint.value.startsWith(`${none}${sentence}`), true);
+    state.clickedFeature.value.labelText = 'Renamed';
+    await actions.updateClickedFeatureLabelText();
+    assert.equal(state.hiddenLabelTextDialog.show, true);
+    assert.equal(state.hiddenLabelTextDialog.reason, reason);
+    const message = actions.hiddenLabelTextMessage.value;
+    assert.equal(message.startsWith(`${none}${sentence || ' '}`), true, message);
+    assert.match(message, /The edited text will not appear/);
+  });
+}
+
+test('every reason the resolver can return has a sentence, and every sentence a reason', async () => {
+  const returned = new Set();
+  for (const [, options] of absenceCases) {
+    const { actions, state } = absenceHarness(options);
+    await actions.updateClickedFeatureLabelText();
+    returned.add(state.hiddenLabelTextDialog.reason);
+  }
+  returned.delete('');
+  assert.deepEqual([...returned].sort(), Object.keys(LABEL_ABSENCE_REASONS).sort());
+  Object.values(LABEL_ABSENCE_REASONS).forEach((sentence) => assert.equal(typeof sentence, 'string'));
+});
+
+// "Show this label" applies Label visibility On through the Q1 and Q2 dialogs.
+for (const [reason, options] of [['underlay', { type: 'repeat_region' }], ['hidden', { rows: { featureVisibility: 'off' } }]]) {
+  test(`"Show this label" for the reason "${reason}" asks the Label On question`, async () => {
+    const { actions, state, featureId } = absenceHarness(options);
+    await actions.updateClickedFeatureLabelText();
+    assert.equal(state.hiddenLabelTextDialog.reason, reason);
+    const shown = actions.handleHiddenLabelTextChoice('show');
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(state.labelOnDialog.show, true);
+    assert.equal(state.labelOnDialog.reason, reason);
+    actions.handleLabelOnChoice('cancel');
+    assert.equal(await shown, false);
+    assert.equal(rowOf(state, featureId)?.labelVisibility ?? null, null);
+  });
+}
 
 // Owner decisions Q1 and Q2 (2026-10-04): the popup note names why the
 // committed request draws no label, and On only where it can be drawn.

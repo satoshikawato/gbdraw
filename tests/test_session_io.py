@@ -977,7 +977,8 @@ def test_alignment_session_requires_reset_receipt_for_request_schema_8_and_later
 
 def test_session_version_45_keys_feature_edits_by_source_identity() -> None:
     # Design Q4: Session 45 stores per-feature edits as identity rows and
-    # rejects the retired rendered-ID maps.
+    # rejects the retired rendered-ID maps. Each row names the mode of its
+    # record key (R2), so both modes keep their own row for `record-1`.
     payload = build_session_json(
         SessionBuildContext(
             mode="circular",
@@ -990,6 +991,7 @@ def test_session_version_45_keys_feature_edits_by_source_identity() -> None:
         canonical_request=_canonical_request("circular"),
     )
     row = {
+        "scope": "circular",
         "recordKey": "record-1",
         "biologicalFeatureId": "feature-1",
         "featureVisibility": "off",
@@ -1004,29 +1006,83 @@ def test_session_version_45_keys_feature_edits_by_source_identity() -> None:
         "labelText": None,
         "labelSourceText": "nad2",
     }
-    key = json.dumps(["record-1", "feature-1"], separators=(",", ":"))
+    other_mode = {**row, "scope": "linear", "labelText": None, "labelSourceText": None}
+
+    def key(scope: str, feature_id: str) -> str:
+        return json.dumps([scope, "record-1", feature_id], separators=(",", ":"))
+
     payload["features"] = {
         "featureOverrides": {
-            key: row,
-            json.dumps(["record-1", "feature-2"], separators=(",", ":")): source_only,
+            key("circular", "feature-1"): row,
+            key("circular", "feature-2"): source_only,
+            key("linear", "feature-1"): other_mode,
         }
     }
 
     assert payload["version"] == CURRENT_SESSION_VERSION == 45
     validate_session(payload)
 
+    pair_key = json.dumps(["record-1", "feature-1"], separators=(",", ":"))
     for broken_features in (
         {"featureVisibilityOverrides": {"rendered-1": "off"}},
-        {"featureOverrides": {key: {**row, "recordKey": "record-2"}}},
-        {"featureOverrides": {key: {k: v for k, v in row.items() if k != "labelSourceText"}}},
-        {"featureOverrides": {key: {**row, "featureVisibility": None, "labelText": None,
-                                    "labelSourceText": None}}},
-        {"featureOverrides": {key: {**row, "labelText": "two\nlines"}}},
+        {"featureOverrides": {key("circular", "feature-1"): {**row, "recordKey": "record-2"}}},
+        {"featureOverrides": {key("linear", "feature-1"): row}},
+        {"featureOverrides": {pair_key: {k: v for k, v in row.items() if k != "scope"}}},
+        {"featureOverrides": {key("circular", "feature-1"): {k: v for k, v in row.items() if k != "labelSourceText"}}},
+        {"featureOverrides": {key("circular", "feature-1"): {**row, "featureVisibility": None, "labelText": None,
+                                                             "labelSourceText": None}}},
+        {"featureOverrides": {key("circular", "feature-1"): {**row, "labelText": "two\nlines"}}},
     ):
         broken = copy.deepcopy(payload)
         broken["features"] = broken_features
         with pytest.raises(ValidationError):
             validate_session(broken)
+
+
+def test_session_version_45_keeps_feature_placement_drafts_of_both_modes() -> None:
+    # R2: a Linear Session keeps the Circular lane rows for the Circular mode;
+    # each row's lane must be a side of its own mode. Session 44 rows (a JSON
+    # pair) belonged to the Session's mode.
+    payload = build_session_json(
+        SessionBuildContext(mode="linear", output_prefix="out", render_formats=("svg",)),
+        svg_results=(("out", "<svg></svg>"),),
+        embedded_files={},
+        generated_at=datetime(2026, 10, 5),
+        canonical_request=_canonical_request("linear"),
+    )
+
+    def placement(scope: str, side: str | None) -> tuple[str, dict]:
+        target = {"kind": "main"} if side is None else {"kind": "lane", "side": side, "level": 1}
+        row = {"scope": scope, "recordKey": "record-1", "biologicalFeatureId": f"f-{side}", "placement": target}
+        return json.dumps([scope, "record-1", f"f-{side}"], separators=(",", ":")), row
+
+    rows = dict(placement(*args) for args in (("circular", "outward"), ("linear", "above"), ("circular", None)))
+    payload["config"] = {"adv": {}, "featurePlacementOverrides": rows}
+    validate_session(payload)
+
+    wrong_side_key, wrong_side = placement("linear", "outward")
+    _, modeless = placement("linear", "above")
+    modeless.pop("scope")
+    for broken in (
+        {wrong_side_key: wrong_side},
+        {json.dumps(["record-1", "f-above"], separators=(",", ":")): modeless},
+        {placement("circular", "outward")[0]: placement("linear", "above")[1]},
+    ):
+        invalid = copy.deepcopy(payload)
+        invalid["config"]["featurePlacementOverrides"] = broken
+        with pytest.raises(ValidationError):
+            validate_session(invalid)
+
+    legacy = copy.deepcopy(payload)
+    legacy["version"] = 44
+    legacy["editorState"]["featureCatalog"]["schema"] = 4
+    legacy["renderRequest"]["schema"] = 8
+    legacy["renderRequest"]["diagramOptions"].pop("featureOverrides", None)
+    legacy_row = {"recordKey": "record-1", "biologicalFeatureId": "f1", "placement": {"kind": "main"}}
+    legacy["config"]["featurePlacementOverrides"] = {
+        json.dumps(["record-1", "f1"], separators=(",", ":")): legacy_row
+    }
+    validate_session(legacy)
 
 
 def test_session_version_44_validates_record_rotation_draft_and_version_42_shape() -> None:

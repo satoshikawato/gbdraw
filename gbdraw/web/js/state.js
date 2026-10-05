@@ -445,10 +445,10 @@ const previewFeatureSearchError = ref('');
 const previewFeatureSearchRenderedCount = ref(0);
 const featureColorOverrides = reactive({}); // {featureKey: color}
 const featureVisibilityManualRules = reactive([]);
-// Per-feature edits keyed by original-source identity (design Q4):
-// {JSON.stringify([recordKey, biologicalFeatureId]): {recordKey,
-// biologicalFeatureId, featureVisibility, labelVisibility, labelText,
-// labelSourceText}} (services/feature-placement.js owns the row shape).
+// Per-feature edits keyed by original-source identity in one mode (design Q4,
+// R2): {JSON.stringify([scope, recordKey, biologicalFeatureId]): {scope,
+// recordKey, biologicalFeatureId, featureVisibility, labelVisibility,
+// labelText, labelSourceText}} (services/feature-placement.js owns the row shape).
 const featureOverrides = reactive({});
 // The visibility table carries rules only; per-feature edits are featureOverrides.
 const featureVisibilityRules = computed(() => featureVisibilityManualRules
@@ -545,9 +545,11 @@ const labelTextScopeDialog = reactive({
 });
 
 // A label text edit on a feature that has no label in the displayed Result.
+// `reason` is the label absence reason (label-actions.js) the dialog words.
 const hiddenLabelTextDialog = reactive({
   show: false,
-  featureId: ''
+  featureId: '',
+  reason: ''
 });
 
 // Label visibility On that the diagram cannot draw (Owner Q1, Q2): why, and

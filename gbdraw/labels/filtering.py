@@ -9,7 +9,7 @@ import pandas as pd
 from pandas import DataFrame
 
 from ..exceptions import InputFileError, ParseError, ValidationError
-from ..io.table_text import read_table_lines, table_text_stream
+from ..io.table_text import read_literal_table, read_table_lines, table_text_stream
 from ..features.selector_values import (
     _matches_constraint,
     get_feature_hash as _get_feature_hash,
@@ -52,15 +52,7 @@ def read_qualifier_priority_file(filepath: str) -> Optional[DataFrame]:
     required_cols = ["feature_type", "priorities"]
 
     try:
-        df = pd.read_csv(
-            filepath,
-            sep="\t",
-            header=None,
-            names=required_cols,
-            dtype=str,
-            on_bad_lines="error",
-            engine="python",
-        )
+        df = read_literal_table(filepath, names=required_cols)
     except pd.errors.ParserError as e:
         logger.error(f"ERROR: Malformed line in qualifier priority file '{filepath}': {e}")
         raise ParseError(
@@ -96,15 +88,7 @@ def read_filter_list_file(filepath: str) -> Optional[DataFrame]:
     required_cols = ["feature_type", "qualifier", "keyword"]
 
     try:
-        df = pd.read_csv(
-            table_text_stream(read_table_lines(filepath)),
-            sep="\t",
-            header=None,
-            names=required_cols,
-            dtype=str,
-            on_bad_lines="error",
-            engine="python",
-        )
+        df = read_literal_table(table_text_stream(read_table_lines(filepath)), names=required_cols)
     except pd.errors.ParserError as e:
         logger.error(f"ERROR: Malformed line in filter list file '{filepath}': {e}")
         raise ParseError(
@@ -159,16 +143,11 @@ def read_label_override_file(filepath: str) -> Optional[DataFrame]:
             )
 
     try:
-        df = pd.read_csv(
+        df = read_literal_table(
             table_text_stream(lines),
-            sep="\t",
-            header=None,
             names=required_cols,
-            dtype=str,
             keep_default_na=False,
             na_filter=False,
-            on_bad_lines="error",
-            engine="python",
         )
     except pd.errors.ParserError as e:
         logger.error(f"ERROR: Malformed line in label override file '{filepath}': {e}")

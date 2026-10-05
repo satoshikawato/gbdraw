@@ -9,8 +9,8 @@ import {
   updateFeatureOverride
 } from '../../gbdraw/web/js/services/feature-placement.js';
 
-const key = (recordKey, featureId) => JSON.stringify([recordKey, featureId]);
-const feature = (recordKey, featureId) => ({ record_key: recordKey, biological_feature_id: featureId });
+const key = (recordKey, featureId) => JSON.stringify(['linear', recordKey, featureId]);
+const feature = (recordKey, featureId) => ({ scope: 'linear', record_key: recordKey, biological_feature_id: featureId });
 
 test('without label edits the projection is empty and reads no input', () => {
   const result = buildBulkLabelProjection({}, {
@@ -26,13 +26,14 @@ test('the request carries the rows of its records without the Web-only source te
   updateFeatureOverride(draft, feature('seq-a', 'f1~2'), { labelText: 'Renamed', labelSourceText: 'source' });
   updateFeatureOverride(draft, feature('circular-x', 'f1'), { labelVisibility: 'on' });
   updateFeatureOverride(draft, feature('seq-a', 'f3'), { labelSourceText: 'kept for a bulk edit' });
-  assert.deepEqual(requestFeatureOverrides(draft, [{ recordKey: 'seq-a' }, { recordKey: 'seq-b' }]), [
+  assert.deepEqual(requestFeatureOverrides(draft, 'linear', [{ recordKey: 'seq-a' }, { recordKey: 'seq-b' }]), [
     { recordKey: 'seq-a', biologicalFeatureId: 'f1~2', featureVisibility: null, labelVisibility: null, labelText: 'Renamed' },
     { recordKey: 'seq-b', biologicalFeatureId: 'f9', featureVisibility: 'off', labelVisibility: null, labelText: null }
   ]);
   // An ALL record owns its `<recordKey>:<n>` expansions.
   updateFeatureOverride(draft, feature('all-input:2', 'f4'), { featureVisibility: 'on' });
-  assert.equal(requestFeatureOverrides(draft, [{ recordKey: 'all-input', cardinality: 'all' }])[0].recordKey, 'all-input:2');
+  assert.equal(requestFeatureOverrides(draft, 'linear', [{ recordKey: 'all-input', cardinality: 'all' }])[0].recordKey,
+    'all-input:2');
 });
 
 // B6: a bulk label edit (a global `label` row of a Label TSV) reaches the
@@ -47,7 +48,8 @@ test('a bulk label edit reaches the recorded source of a feature on another Resu
   });
   assert.deepEqual(rows, []);
   const records = ['record-1', 'record-2', 'record-3'].map((recordKey) => ({ recordKey }));
-  assert.deepEqual(requestFeatureOverrides(draft, records, { bulkLabelText }).map((row) => [row.recordKey, row.labelText]), [
+  assert.deepEqual(requestFeatureOverrides(draft, 'linear', records, { bulkLabelText })
+    .map((row) => [row.recordKey, row.labelText]), [
     ['record-1', 'BULK'], ['record-2', 'BULK'], ['record-3', 'OWN']
   ]);
 });
@@ -65,7 +67,8 @@ test('request rows are one non-blank line and at least one edit', () => {
   // A draft key encodes its row's identity.
   assert.throws(() => canonicalFeatureOverrides({
     [key('r', 'other')]: {
-      recordKey: 'r', biologicalFeatureId: 'f', featureVisibility: 'off', labelVisibility: null, labelText: null, labelSourceText: null
+      scope: 'linear', recordKey: 'r', biologicalFeatureId: 'f', featureVisibility: 'off',
+      labelVisibility: null, labelText: null, labelSourceText: null
     }
   }));
 });

@@ -12,9 +12,12 @@ do; release notes record when a format changed.
 
 Session version 45 stores the Web app's Feature visibility, Label visibility,
 and label text edits in `features.featureOverrides`: one row per
-original-source feature, named by `recordKey` and `biologicalFeatureId`, with
-the same fields as request `diagramOptions.featureOverrides` and the label's
-original text (`labelSourceText`). The four rendered-ID maps
+original-source feature in one mode, named by `scope` (`circular` or
+`linear`), `recordKey`, and `biologicalFeatureId`, with the same fields as
+request `diagramOptions.featureOverrides` and the label's original text
+(`labelSourceText`). Feature placement drafts (`config.featurePlacementOverrides`)
+name their mode the same way. Both modes can use the same record key, so a
+request carries only the rows of its own mode. The four rendered-ID maps
 (`featureVisibilityOverrides`, `labelTextFeatureOverrides`,
 `labelTextFeatureOverrideSources`, `labelVisibilityOverrides`) are rejected in
 Session 45. The Web app now sends these rows in the request, loads a request
@@ -46,6 +49,10 @@ reverse complement. Other edits are dropped and Load reports how many. An older
 Feature visibility edit hid every feature with the same hash, such as each copy
 of a duplicated record; it now applies only to the feature that was edited, and
 Load reports how many edits the next Generate draws differently for this.
+Each moved edit takes the mode of the Session's diagram. A Feature placement
+draft of a Session 41–44 reached every request with its record key: a lane
+placement takes the mode of its side, and a Main placement is kept for both
+modes.
 
 ## Unreleased: request schema 9 and feature identity overrides
 

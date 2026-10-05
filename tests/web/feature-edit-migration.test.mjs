@@ -13,23 +13,28 @@ import {
 import { canonicalFeatureOverrides } from '../../gbdraw/web/js/services/feature-placement.js';
 
 const fixture = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url))));
-const key = (recordKey, featureId) => JSON.stringify([recordKey, featureId]);
-const row = (recordKey, biologicalFeatureId, fields) => ({
-  recordKey,
-  biologicalFeatureId,
-  featureVisibility: null,
-  labelVisibility: null,
-  labelText: null,
-  labelSourceText: null,
-  ...fields
+// Migrated rows name the mode of the Session's diagram (R2).
+const identityRows = (scope) => ({
+  key: (recordKey, featureId) => JSON.stringify([scope, recordKey, featureId]),
+  row: (recordKey, biologicalFeatureId, fields) => ({
+    scope,
+    recordKey,
+    biologicalFeatureId,
+    featureVisibility: null,
+    labelVisibility: null,
+    labelText: null,
+    labelSourceText: null,
+    ...fields
+  })
 });
 
 test('v44 Linear crop and reverse complement: rule 1 maps each drawn ID to its feature', () => {
   const session = fixture('feature-edits-crop-rc.v44.gbdraw-session.json.gz');
   assert.equal(session.version, 44);
   const [testa, testb] = session.renderRequest.records.map((record) => record.recordKey);
+  const { key, row } = identityRows('linear');
   const { features, droppedCount, narrowedVisibilityCount } = migrateSessionFeatureEdits({
-    features: session.features, catalog: session.editorState.featureCatalog
+    features: session.features, mode: session.renderRequest.mode, catalog: session.editorState.featureCatalog
   });
   assert.equal(droppedCount, 0);
   assert.equal(narrowedVisibilityCount, 0);
@@ -51,8 +56,9 @@ test('v44 Linear crop and reverse complement: rule 1 maps each drawn ID to its f
 
 test('v44 Circular canvas with one record twice: each copy keeps its own edits', () => {
   const session = fixture('feature-edits-circular-copies.v44.gbdraw-session.json.gz');
+  const { key, row } = identityRows('circular');
   const { features, droppedCount, narrowedVisibilityCount } = migrateSessionFeatureEdits({
-    features: session.features, catalog: session.editorState.featureCatalog
+    features: session.features, mode: session.renderRequest.mode, catalog: session.editorState.featureCatalog
   });
   assert.equal(droppedCount, 0);
   // Session 44 sent the Feature visibility edit as a `hash` row, which hid the
@@ -73,9 +79,11 @@ test('v33 Session without a catalog maps its edits through its feature metadata'
   const session = fixture('feature-edits-circular.v33.gbdraw-session.json.gz');
   assert.equal(session.version, 33);
   const [recordKey] = session.renderRequest.records.map((record) => record.recordKey);
+  const { key, row } = identityRows('circular');
   const { featureOverrides, droppedCount } = migrateRenderedIdFeatureEdits({
     features: session.features,
-    legacy: { mode: 'circular', features: session.features.extractedFeatures, records: session.renderRequest.records }
+    mode: 'circular',
+    legacy: { features: session.features.extractedFeatures, records: session.renderRequest.records }
   });
   assert.equal(droppedCount, 0);
   assert.deepEqual(featureOverrides, {
@@ -94,6 +102,7 @@ test('rule 3: an edit matching no feature is dropped and counted', () => {
       featureVisibilityOverrides: { f0000000a_record_1: 'off', f3b928d8c_record_1: 'off' },
       labelTextFeatureOverrides: { f0000000b: 'gone' }
     },
+    mode: 'linear',
     catalog: session.editorState.featureCatalog
   });
   assert.equal(droppedCount, 2);
@@ -117,6 +126,7 @@ test('rule 2 reads record and instance suffixes and needs exactly one candidate'
       ]
     }]
   };
+  const { key } = identityRows('linear');
   const { featureOverrides, droppedCount } = migrateRenderedIdFeatureEdits({
     features: {
       featureVisibilityOverrides: {
@@ -125,6 +135,7 @@ test('rule 2 reads record and instance suffixes and needs exactly one candidate'
         f2_record_2: 'exclude_matching'
       }
     },
+    mode: 'linear',
     catalog
   });
   assert.equal(droppedCount, 1);
@@ -133,8 +144,10 @@ test('rule 2 reads record and instance suffixes and needs exactly one candidate'
 });
 
 test('a blank label text hid its label and becomes Label visibility Off', () => {
+  const { key, row } = identityRows('circular');
   const { featureOverrides } = migrateRenderedIdFeatureEdits({
     features: { labelTextFeatureOverrides: { f2: '  ' } },
+    mode: 'circular',
     catalog: { schema: 4, items: [{ recordKeys: ['r'], features: [{ svgId: 'f2', recordKey: 'r', biologicalFeatureId: 'f2' }], biologicalFeatures: [] }] }
   });
   assert.deepEqual(featureOverrides[key('r', 'f2')], row('r', 'f2', { labelVisibility: 'off' }));
@@ -167,6 +180,7 @@ test('v31-33 Linear: source features read again name each record by its input an
     source(2, 1, 3, 'fdup', 'fdup'),
     source(2, 1, 5, 'fdup', 'fdup')
   ];
+  const { key, row } = identityRows('linear');
   const { featureOverrides, droppedCount } = migrateRenderedIdFeatureEdits({
     features: {
       featureVisibilityOverrides: {
@@ -178,7 +192,8 @@ test('v31-33 Linear: source features read again name each record by its input an
       labelTextFeatureOverrides: { fdrwb4_record_2: 'B_LABEL' },
       labelVisibilityOverrides: { fsame_record_3: 'off' }
     },
-    legacy: { mode: 'linear', features, records: linearRecords() }
+    mode: 'linear',
+    legacy: { features, records: linearRecords() }
   });
   assert.equal(droppedCount, 0);
   assert.deepEqual(featureOverrides, {
@@ -198,12 +213,13 @@ test('v31-33 Linear: saved metadata names features only of records drawn untrans
     fileIdx, record_idx: 0, svg_id: svgId, stable_svg_id: svgId.replace(/_record_\d+$/, ''),
     stable_feature_id: svgId.replace(/_record_\d+$/, '')
   });
+  const { key, row } = identityRows('linear');
   const { featureOverrides, droppedCount } = migrateRenderedIdFeatureEdits({
     features: {
       featureVisibilityOverrides: { fdrwa2_record_1: 'off', fdrwb2_record_2: 'off', fplain_record_3: 'off' }
     },
+    mode: 'linear',
     legacy: {
-      mode: 'linear',
       features: [saved(0, 'fdrwa2_record_1'), saved(1, 'fdrwb2_record_2'), saved(2, 'fplain_record_3')],
       records: linearRecords()
     }

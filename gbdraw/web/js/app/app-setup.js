@@ -2642,6 +2642,7 @@ export const createAppSetup = () => {
     handleHiddenLabelTextChoice,
     handleLabelOnChoice,
     clickedFeatureLabelHint,
+    hiddenLabelTextMessage,
     requestLabelTextChangeByFeatureId,
     requestLabelTextChangeByKey,
     reconcileFeatureVisibility,
@@ -2736,12 +2737,12 @@ export const createAppSetup = () => {
       JSON.stringify([manualSpecificRules, featureColorOverrides, legendColorOverrides])
     ],
     visibility: JSON.stringify([
-      Object.values(featureOverrides).map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility]),
+      Object.values(featureOverrides).map((row) => [row.scope, row.recordKey, row.biologicalFeatureId, row.featureVisibility]),
       featureVisibilityManualRules
     ]),
     labels: JSON.stringify([
       Object.values(featureOverrides).map((row) => [
-        row.recordKey, row.biologicalFeatureId, row.labelVisibility, row.labelText, row.labelSourceText
+        row.scope, row.recordKey, row.biologicalFeatureId, row.labelVisibility, row.labelText, row.labelSourceText
       ]),
       labelTextBulkOverrides
     ]),
@@ -2848,7 +2849,8 @@ export const createAppSetup = () => {
       unmatched: countUnresolvedFeatureEdits({
         featureOverrides: state.featureOverrides,
         featurePlacementOverrides: state.featurePlacementOverrides,
-        notices
+        notices,
+        scope: state.generatedMode.value
       }),
       removed: Number(featureEditRemovalCount.value) || 0
     };
@@ -2861,7 +2863,8 @@ export const createAppSetup = () => {
     return removeUnresolvedFeatureEdits({
       featureOverrides: state.featureOverrides,
       featurePlacementOverrides: state.featurePlacementOverrides,
-      notices: featureIdentityNotices.value
+      notices: featureIdentityNotices.value,
+      scope: state.generatedMode.value
     }) > 0;
   });
   const addFeatureVisibilityRuleWithHistory = undoableAction('Add feature visibility rule', addFeatureVisibilityRule);
@@ -5097,6 +5100,7 @@ export const createAppSetup = () => {
     // The dialog answers the Apply whose History step is still open.
     handleLabelOnChoice,
     clickedFeatureLabelHint,
+    hiddenLabelTextMessage,
     updateClickedFeatureLabelText: updateClickedFeatureLabelTextWithHistory,
     handleLabelTextScopeChoice: handleLabelTextScopeChoiceWithHistory,
     handleHiddenLabelTextChoice: handleHiddenLabelTextChoiceWithHistory,

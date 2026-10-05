@@ -65,16 +65,21 @@ test('a loaded table must return request rows of the committed records', () => {
 
 test('a load replaces the edits of the committed records and keeps the other records and label source texts', () => {
   const draft = {};
-  const put = (value) => { draft[featureIdentityKey(value.recordKey, value.biologicalFeatureId)] = value; };
-  put({ ...row('a', 'old', { featureVisibility: 'off' }), labelSourceText: 'tRNA-Leu' });
-  put({ ...row('a', 'gone', { labelVisibility: 'on' }), labelSourceText: null });
-  put({ ...row('circular-other', 'f1', { labelText: 'Other mode' }), labelSourceText: null });
+  const put = (scope, value) => {
+    draft[featureIdentityKey(scope, value.recordKey, value.biologicalFeatureId)] = { scope, ...value };
+  };
+  put('linear', { ...row('a', 'old', { featureVisibility: 'off' }), labelSourceText: 'tRNA-Leu' });
+  put('linear', { ...row('a', 'gone', { labelVisibility: 'on' }), labelSourceText: null });
+  put('circular', { ...row('circular-other', 'f1', { labelText: 'Other mode' }), labelSourceText: null });
+  // The other mode's row for the same record key stays (R2).
+  put('circular', { ...row('a', 'gone', { labelText: 'Same key' }), labelSourceText: null });
   replaceFeatureEdits(draft, [row('a', 'old', { labelText: 'New' }), row('a', 'f9', { featureVisibility: 'exclude_matching' })],
-    [record('a')]);
-  assert.deepEqual(Object.values(draft).map((value) => [value.recordKey, value.biologicalFeatureId,
+    'linear', [record('a')]);
+  assert.deepEqual(Object.values(draft).map((value) => [value.scope, value.recordKey, value.biologicalFeatureId,
     value.featureVisibility, value.labelVisibility, value.labelText, value.labelSourceText]).sort(), [
-    ['a', 'f9', 'exclude_matching', null, null, null],
-    ['a', 'old', null, null, 'New', 'tRNA-Leu'],
-    ['circular-other', 'f1', null, null, 'Other mode', null]
+    ['circular', 'a', 'gone', null, null, 'Same key', null],
+    ['circular', 'circular-other', 'f1', null, null, 'Other mode', null],
+    ['linear', 'a', 'f9', 'exclude_matching', null, null, null],
+    ['linear', 'a', 'old', null, null, 'New', 'tRNA-Leu']
   ]);
 });

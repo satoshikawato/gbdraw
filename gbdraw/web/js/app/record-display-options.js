@@ -3,7 +3,7 @@ import { resolveDisambiguatedRecordSelection } from './record-options.js';
 import { resolveFeatureAnchor } from './record-display/feature-anchor.js';
 import { matchesSessionResourceDescriptor } from '../services/session-resource-backing.js';
 import { cloneJsonData } from '../services/json-clone.js';
-import { requestFeaturePlacements } from '../services/feature-placement.js';
+import { featureIdentityKey, requestFeaturePlacements } from '../services/feature-placement.js';
 import { circularDiscoveryForInput } from './record-discovery.js';
 import { RECORD_READ_ERROR_LABEL } from './linear-record-selector.js';
 
@@ -393,7 +393,8 @@ export const createRecordDisplayControls = ({ state, computed, watch, linearReco
     if (request.mode !== state.mode.value || tolerance !== state.adv.feature_overlap_tolerance_bp
       || placements.length !== draftPlacementCount()
       || placements.some((row) => {
-        const target = state.featurePlacementOverrides[JSON.stringify([row.recordKey, row.biologicalFeatureId])]?.placement;
+        const target = state.featurePlacementOverrides[
+          featureIdentityKey(request.mode, row.recordKey, row.biologicalFeatureId)]?.placement;
         return !target || ['kind', 'side', 'level'].some((field) => target[field] !== row.placement[field]);
       })) return true;
     return committedRows.some((row) => {

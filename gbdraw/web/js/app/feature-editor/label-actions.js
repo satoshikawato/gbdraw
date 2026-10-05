@@ -93,11 +93,38 @@ export const labelDrawingBlocker = (feature, diagramOptions) => {
   ) === 'underlay') return 'underlay';
   return diagramOptions?.configOverrides?.['labels.rendering'] === 'embedded_only' ? 'embedded_only' : '';
 };
-const LABEL_HINT_REASONS = Object.freeze({
+// Why the diagram draws no label for a feature (`labelAbsenceReason`): the one
+// table of sentences the popup note and the Label Not Shown dialog both render.
+export const LABEL_ABSENCE_REASONS = Object.freeze({
   hidden: ' The feature is hidden.',
   underlay: ' Labels are not drawn for features drawn as "Underlay".',
+  scope_none: ' Labels are set to "None" ("Show Labels" or "Label Mode"), so only a feature with Label visibility "On" has one.',
+  scope_first: ' "Show Labels" is "First Record Only", so labels are drawn only in the first record unless a feature has Label visibility "On".',
+  scope_orthogroup_top: ' "Show Labels" is "Top Similarity Group Record", so labels are drawn only for the features that setting selects, unless a feature has Label visibility "On".',
+  whitelist: ' A label whitelist is set, and labels are drawn only for the features it lists.',
+  blacklist: ' A label blacklist is set, and a label whose text contains one of its keywords is not drawn.',
   embedded_only: ' With "Label Rendering" = "Embedded Only", a label is drawn only when it fits inside its feature.'
 });
+const LABEL_ABSENT_PREFIX = 'This feature has no label in the current Result.';
+// No reason found: the Show Labels scope and the label filters decide the rest.
+const LABEL_ABSENCE_UNKNOWN = ' The current Show Labels and label filter settings draw none.';
+
+// The label display scope and filters of a render request that leave a feature
+// with Default label visibility unlabeled: '' or a LABEL_ABSENCE_REASONS key.
+// Python decides which feature a filter removes; a set filter is named as the
+// reason once no other reason applies.
+const labelScopeFilterReason = (feature, diagramOptions) => {
+  const overrides = diagramOptions?.configOverrides || {};
+  const scope = overrides['labels.circular.scope'] ?? overrides['labels.linear.scope'];
+  if (scope === 'none') return 'scope_none';
+  if (scope === 'first' && Number(feature?.record_idx) > 0) return 'scope_first';
+  // Python picks the selected features (orthogroup_label_eligibility); the Web
+  // names the setting and does not repeat that rule.
+  if (scope === 'orthogroup_top') return 'scope_orthogroup_top';
+  if (diagramOptions?.labelWhitelistFile) return 'whitelist';
+  const blacklist = overrides['labels.filtering.blacklist_keywords'];
+  return Array.isArray(blacklist) && blacklist.length > 0 ? 'blacklist' : '';
+};
 
 const toNumber = (value, fallback = 0) => {
   const parsed = Number.parseFloat(value);
@@ -456,6 +483,15 @@ export const createFeatureLabelActions = ({
   const labelOnBlocker = (feature, diagramOptions) => (
     featureHidden(feature) ? 'hidden' : labelDrawingBlocker(feature, diagramOptions)
   );
+  // Why the displayed Result has no label for the feature: the blocker, unless
+  // a scope or filter reason applies to Default label visibility first.
+  // '' or a LABEL_ABSENCE_REASONS key.
+  const labelAbsenceReason = (feature, diagramOptions) => {
+    const blocker = labelOnBlocker(feature, diagramOptions);
+    if (blocker === 'hidden' || blocker === 'underlay'
+      || normalizeVisibilityMode(rowOf(feature)?.labelVisibility) === 'on') return blocker;
+    return labelScopeFilterReason(feature, diagramOptions) || blocker;
+  };
 
   const commitLabelEdit = () => previewRuntime?.commitActiveResultEdit('feature-label');
 
@@ -841,6 +877,7 @@ export const createFeatureLabelActions = ({
       && edit.visibility === 'default'
       && !getEditableLabelByFeatureId(featureId)) {
       hiddenLabelTextDialog.featureId = featureId;
+      hiddenLabelTextDialog.reason = labelAbsenceReason(feature, getCommittedRequest()?.diagramOptions);
       hiddenLabelTextDialog.show = true;
       return;
     }
@@ -888,6 +925,7 @@ export const createFeatureLabelActions = ({
   const closeHiddenLabelTextDialog = () => {
     hiddenLabelTextDialog.show = false;
     hiddenLabelTextDialog.featureId = '';
+    hiddenLabelTextDialog.reason = '';
   };
 
   const handleHiddenLabelTextChoice = (choice) => {
@@ -1016,7 +1054,9 @@ export const createFeatureLabelActions = ({
     if (draft === 'off') return '';
     void results.value; // The committed request changes with the displayed Results.
     const featureId = clickedFeatureId();
-    const blocker = labelOnBlocker(featureById(featureId), getCommittedRequest()?.diagramOptions);
+    const feature = featureById(featureId);
+    const diagramOptions = getCommittedRequest()?.diagramOptions;
+    const blocker = labelOnBlocker(feature, diagramOptions);
     // A hidden feature's label is hidden with it (F-3).
     if (clicked.labelKey && blocker !== 'hidden') return '';
     let next = '';
@@ -1027,8 +1067,15 @@ export const createFeatureLabelActions = ({
     } else if (!blocker) {
       return '';
     }
-    return `This feature has no label in the current Result.${LABEL_HINT_REASONS[blocker] || ''}${next}`;
+    const reason = labelAbsenceReason(feature, diagramOptions);
+    return `${LABEL_ABSENT_PREFIX}${LABEL_ABSENCE_REASONS[reason] || ''}${next}`;
   });
+
+  // The Label Not Shown dialog: the same reason sentence as the popup note.
+  const hiddenLabelTextMessage = computed(() => (
+    `${LABEL_ABSENT_PREFIX}${LABEL_ABSENCE_REASONS[hiddenLabelTextDialog.reason] || LABEL_ABSENCE_UNKNOWN}`
+    + ' The edited text will not appear unless you show this label.'
+  ));
 
   // A label list edit: one line of text, or an empty text, which hides the
   // label (Label visibility Off) as an empty label-table text does.
@@ -1292,6 +1339,7 @@ export const createFeatureLabelActions = ({
   return {
     applyFeatureVisibilityToLabels,
     clickedFeatureLabelHint,
+    hiddenLabelTextMessage,
     downloadLabelOverrideTable,
     loadLabelOverrideTable, canRetryLabelImportFailure, retryLabelImportFailure, editLabelImportFailure,
     getEditableLabelByFeatureId,

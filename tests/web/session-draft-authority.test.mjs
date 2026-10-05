@@ -649,8 +649,11 @@ const activeIntentSession = JSON.parse(await readFile(
 ));
 const activeFeature = activeIntentSession.editorState.featureCatalog.items[0].features[0];
 const activeFeatureId = activeFeature.svgId;
-// Session 45 keys per-feature edits by the feature's source identity.
-const activeFeatureIdentity = JSON.stringify([activeFeature.recordKey, activeFeature.biologicalFeatureId]);
+// Session 45 keys per-feature edits by the feature's source identity in the
+// mode of its Result (R2).
+const activeFeatureIdentity = JSON.stringify([
+  activeIntentSession.renderRequest.mode, activeFeature.recordKey, activeFeature.biologicalFeatureId
+]);
 Object.assign(activeIntentSession.config.form, {
   plot_title: 'Saved active draft',
   labels_mode: 'both',
@@ -725,6 +728,7 @@ activeIntentSession.features = {
   featureVisibilityManualRules: [],
   featureOverrides: {
     [activeFeatureIdentity]: {
+      scope: activeIntentSession.renderRequest.mode,
       recordKey: activeFeature.recordKey,
       biologicalFeatureId: activeFeature.biologicalFeatureId,
       featureVisibility: 'off',
@@ -806,6 +810,7 @@ const expectedActiveIntent = {
     strokes: structuredClone(activeIntentSession.editorState.featureStrokes.overrides),
     featureOverrides: {
       [activeFeatureIdentity]: {
+        scope: activeIntentSession.renderRequest.mode,
         recordKey: activeFeature.recordKey,
         biologicalFeatureId: activeFeature.biologicalFeatureId,
         featureVisibility: 'off',

@@ -102,8 +102,12 @@ RETIRED_RENDERED_ID_FEATURE_FIELDS = frozenset(
         "labelTextFeatureOverrideSources",
     }
 )
+# A version-45 draft row names the mode of its record key (``scope``), since
+# both modes can use the same record key for the same feature.
+DRAFT_SCOPES = ("circular", "linear")
 FEATURE_OVERRIDE_DRAFT_FIELDS = frozenset(
     {
+        "scope",
         "recordKey",
         "biologicalFeatureId",
         "featureVisibility",
@@ -843,15 +847,34 @@ def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
     placements = config.get("featurePlacementOverrides", {})
     if not isinstance(placements, Mapping):
         raise ValidationError("config.featurePlacementOverrides must be an object.")
-    rows = normalize_feature_placements(tuple(FeaturePlacementOverride.from_mapping(row) for row in placements.values()))
-    if set(placements) != {
-        json.dumps([row.record_key, row.biological_feature_id], ensure_ascii=False, separators=(",", ":"))
-        for row in rows
-    }:
-        raise ValidationError("Feature placement draft keys must encode their exact identity as a JSON pair.")
-    mode = (session.get("renderRequest") or {}).get("mode") or session.get("ui", {}).get("mode")
-    for row in rows:
-        row.target.validate_mode(mode)
+    if session.get("version") >= CURRENT_SESSION_VERSION:
+        # Each row names its mode; the other mode's rows wait for that mode.
+        invalid = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
+        for key, row in placements.items():
+            scope = row.get("scope") if isinstance(row, Mapping) else None
+            if scope not in DRAFT_SCOPES:
+                raise ValidationError(
+                    "Feature placement drafts require a circular or linear scope.", diagnostic=invalid
+                )
+            placement = FeaturePlacementOverride.from_mapping({k: v for k, v in row.items() if k != "scope"})
+            placement.target.validate_mode(scope)
+            if key != _draft_identity_key(scope, placement.record_key, placement.biological_feature_id):
+                raise ValidationError(
+                    "Feature placement draft keys must encode their scope and identity as a JSON triple.",
+                    diagnostic=invalid,
+                )
+    else:
+        rows = normalize_feature_placements(
+            tuple(FeaturePlacementOverride.from_mapping(row) for row in placements.values())
+        )
+        if set(placements) != {
+            json.dumps([row.record_key, row.biological_feature_id], ensure_ascii=False, separators=(",", ":"))
+            for row in rows
+        }:
+            raise ValidationError("Feature placement draft keys must encode their exact identity as a JSON pair.")
+        mode = (session.get("renderRequest") or {}).get("mode") or session.get("ui", {}).get("mode")
+        for row in rows:
+            row.target.validate_mode(mode)
     adv = config.get("adv", {})
     if not isinstance(adv, Mapping):
         raise ValidationError("config.adv must be an object.")
@@ -860,13 +883,17 @@ def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
         raise ValidationError("Feature overlap tolerance must be a non-negative integer.")
 
 
+def _draft_identity_key(scope: str, record_key: str, biological_feature_id: str) -> str:
+    return json.dumps([scope, record_key, biological_feature_id], ensure_ascii=False, separators=(",", ":"))
+
+
 def _validate_feature_override_drafts(session: Mapping[str, Any]) -> None:
     """Validate the version-45 per-feature edit drafts keyed by source identity.
 
-    A draft row is a request ``featureOverrides`` row plus the Web-only
-    ``labelSourceText``; a row may hold only that source text (a bulk label
-    edit's target). The key encodes the identity as a JSON pair, as placement
-    drafts do.
+    A draft row is a request ``featureOverrides`` row plus the mode of its
+    record key (``scope``) and the Web-only ``labelSourceText``; a row may hold
+    only that source text (a bulk label edit's target). The key encodes the
+    scope and identity as a JSON triple, as placement drafts do.
     """
     from .features.overrides import FeatureOverride
 
@@ -888,6 +915,10 @@ def _validate_feature_override_drafts(session: Mapping[str, Any]) -> None:
     for key, row in drafts.items():
         if not isinstance(row, Mapping) or set(row) != FEATURE_OVERRIDE_DRAFT_FIELDS:
             raise ValidationError("Invalid feature override draft fields.", diagnostic=invalid)
+        if row["scope"] not in DRAFT_SCOPES:
+            raise ValidationError(
+                "Feature override drafts require a circular or linear scope.", diagnostic=invalid
+            )
         source_text = row["labelSourceText"]
         if source_text is not None and (
             not isinstance(source_text, str) or not source_text or "\0" in source_text
@@ -913,9 +944,9 @@ def _validate_feature_override_drafts(session: Mapping[str, Any]) -> None:
                     "Feature override drafts require a record key and feature ID.",
                     diagnostic=invalid,
                 )
-        if key != json.dumps(list(identity), ensure_ascii=False, separators=(",", ":")):
+        if key != _draft_identity_key(row["scope"], *identity):
             raise ValidationError(
-                "Feature override draft keys must encode their exact identity as a JSON pair.",
+                "Feature override draft keys must encode their scope and identity as a JSON triple.",
                 diagnostic=invalid,
             )
 

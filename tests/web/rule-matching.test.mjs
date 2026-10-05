@@ -148,8 +148,8 @@ test('biological safety rows and hidden rendered features do not create unused l
   const {state,features,preparation}=setup();
   state.biologicalFeatures={value:[{type:'CDS',svg_id:'unrendered',qualifiers:{product:['absent']}}]};
   // Per-feature visibility is the feature's identity row (design Q4).
-  Object.assign(features[0],{record_key:'record-1',biological_feature_id:'bio-0'});
-  state.featureOverrides={[JSON.stringify(['record-1','bio-0'])]:{recordKey:'record-1',biologicalFeatureId:'bio-0',
+  Object.assign(features[0],{scope:'circular',record_key:'record-1',biological_feature_id:'bio-0'});
+  state.featureOverrides={[JSON.stringify(['circular','record-1','bio-0'])]:{scope:'circular',recordKey:'record-1',biologicalFeatureId:'bio-0',
     featureVisibility:'off',labelVisibility:null,labelText:null,labelSourceText:null}};
   const candidate=await preparation.prepareCandidate([
     {...rule('absent'),color:'#112233',cap:'Shared'}, {...rule('NADH'),color:'#445566',cap:'Shared'}

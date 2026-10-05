@@ -2,9 +2,12 @@ import { getFeatureCaption } from '../app/feature-utils.js';
 import { diagnosticError } from './error-normalization.js';
 
 // Drafts keyed by original-source feature identity: Feature placement rows and
-// per-feature edits (design Q4). Each draft map is
-// {JSON.stringify([recordKey, biologicalFeatureId]): row}; this module owns the
-// key, the row checks, and the projection onto a render request (R2).
+// per-feature edits (design Q4). A request chooses its record keys, so both
+// modes can use the same key for the same feature (`record-1` in a Gallery or
+// Python Session); each draft row therefore names its mode (`scope`, as record
+// display drafts do). Each draft map is
+// {JSON.stringify([scope, recordKey, biologicalFeatureId]): row}; this module
+// owns the key, the row checks, and the projection onto a render request (R2).
 
 const SIDES = Object.freeze({ circular: ['outward', 'inward'], linear: ['above', 'below'] });
 // A malformed row can come only from a Session file; the editor writes exact rows.
@@ -12,18 +15,34 @@ const invalidRow = () => diagnosticError('INPUT_INVALID', { field: 'schema', rea
 
 const validIdentityText = (value) => typeof value === 'string' && Boolean(value.trim()) && !value.includes('\0');
 
-export const featureIdentityKey = (recordKey, biologicalFeatureId) => (
-  validIdentityText(recordKey) && validIdentityText(biologicalFeatureId)
-    ? JSON.stringify([recordKey, biologicalFeatureId])
+export const featureIdentityKey = (scope, recordKey, biologicalFeatureId) => (
+  Object.hasOwn(SIDES, scope) && validIdentityText(recordKey) && validIdentityText(biologicalFeatureId)
+    ? JSON.stringify([scope, recordKey, biologicalFeatureId])
     : ''
 );
 
-// The identity key of a catalog feature (every rendered and biological
-// feature of an admitted catalog carries both fields).
+// The identity key of a draft row or a catalog feature (an admitted catalog
+// gives each rendered and biological feature its Result's mode as `scope`).
 export const featureIdentityKeyOf = (feature) => featureIdentityKey(
+  feature?.scope,
   feature?.record_key ?? feature?.recordKey,
   feature?.biological_feature_id ?? feature?.biologicalFeatureId
 );
+
+// The identity a draft key names ({scope, recordKey, biologicalFeatureId}), or null.
+export const parseFeatureIdentityKey = (key) => {
+  let parts;
+  try { parts = JSON.parse(key); } catch { return null; }
+  if (!Array.isArray(parts) || featureIdentityKey(...parts) !== key) return null;
+  const [scope, recordKey, biologicalFeatureId] = parts;
+  return { scope, recordKey, biologicalFeatureId };
+};
+
+// A draft map of rows that name their mode.
+export const featureDraftMap = (rows) => Object.fromEntries(rows.map((row) => [featureIdentityKeyOf(row), row]));
+
+// The draft rows of a request's rows, which are of the request's mode.
+export const draftRowsOfRequest = (rows, mode) => featureDraftMap(rows.map((row) => ({ scope: mode, ...row })));
 
 const compareSourceIdentity = (left, right) => {
   const a = Array.from(left, (value) => value.codePointAt(0));
@@ -35,7 +54,8 @@ const compareSourceIdentity = (left, right) => {
 };
 
 // Validates a draft map (or a request array) of identity rows with one row
-// check, and returns the rows in code-point order of their identity.
+// check, and returns the rows in code-point order of their identity. A draft
+// row names its mode; a request row is of the request's mode.
 const canonicalIdentityRows = (overrides, projectRow) => {
   const draft = !Array.isArray(overrides);
   const rows = draft ? Object.entries(overrides || {}) : overrides.map((row) => [null, row]);
@@ -45,49 +65,54 @@ const canonicalIdentityRows = (overrides, projectRow) => {
       || !validIdentityText(row.recordKey) || !validIdentityText(row.biologicalFeatureId)) {
       throw invalidRow();
     }
-    const identity = featureIdentityKey(row.recordKey, row.biologicalFeatureId);
-    if ((draft && key !== identity) || identities.has(identity)) throw invalidRow();
+    const identity = draft ? featureIdentityKeyOf(row) : JSON.stringify([row.recordKey, row.biologicalFeatureId]);
+    if (!identity || (draft && key !== identity) || identities.has(identity)) throw invalidRow();
     identities.add(identity);
-    return projectRow(row);
-  }).sort((a, b) => compareSourceIdentity(a.recordKey, b.recordKey)
+    return projectRow(row, draft);
+  }).sort((a, b) => compareSourceIdentity(a.scope || '', b.scope || '')
+    || compareSourceIdentity(a.recordKey, b.recordKey)
     || compareSourceIdentity(a.biologicalFeatureId, b.biologicalFeatureId));
 };
 
-// Record keys are mode-specific, so a request carries only the draft rows of its
-// own records (an ALL record also owns its <recordKey>:<n> expansions); the other
-// mode's rows stay in the draft for that mode (OV-08, R2).
+// Record keys are chosen per request, so a request carries only the draft rows
+// of its own mode and records (an ALL record also owns its <recordKey>:<n>
+// expansions); the other mode's rows stay in the draft for that mode (OV-08, R2).
 export const recordKeyBelongsToRequest = (recordKey, records = []) => (
   typeof recordKey === 'string' && records.some((record) => (
     record.recordKey === recordKey || (record.cardinality === 'all'
       && recordKey.startsWith(`${record.recordKey}:`) && /^[1-9]\d*$/.test(recordKey.slice(record.recordKey.length + 1)))))
 );
 
-// Requested placement wire validation shared by the codec and editable drafts.
-// Without a mode it validates the draft, which keeps each mode's rows (R2).
-export const canonicalFeaturePlacements = (overrides, mode = null) => {
-  const sides = mode ? SIDES[mode] || [] : [...SIDES.circular, ...SIDES.linear];
-  return canonicalIdentityRows(overrides, (row) => {
-    if (Object.keys(row).sort().join(',') !== 'biologicalFeatureId,placement,recordKey') throw invalidRow();
-    const target = row.placement;
-    if (!target || (target.kind === 'main'
-      ? Object.keys(target).join(',') !== 'kind'
-      : target.kind !== 'lane' || Object.keys(target).sort().join(',') !== 'kind,level,side'
-        || !sides.includes(target.side) || target.level !== 1)) {
-      throw invalidRow();
-    }
-    return { recordKey: row.recordKey, biologicalFeatureId: row.biologicalFeatureId, placement: { ...target } };
-  });
-};
+export const rowBelongsToRequest = (row, mode, records = []) => (
+  row?.scope === mode && recordKeyBelongsToRequest(row?.recordKey, records)
+);
 
-// A draft row applies to a mode unless it holds the other mode's lane.
-export const placementAppliesToMode = (row, mode) => row?.placement?.kind !== 'lane'
-  || Boolean(SIDES[mode]?.includes(row.placement.side));
+// Placement validation shared by the codec and editable drafts: a request row
+// takes the sides of the request's mode, a draft row those of its own mode.
+export const canonicalFeaturePlacements = (overrides, mode = null) => canonicalIdentityRows(overrides, (row, draft) => {
+  if (Object.keys(row).sort().join(',')
+    !== `biologicalFeatureId,placement,recordKey${draft ? ',scope' : ''}`) throw invalidRow();
+  const sides = SIDES[draft ? row.scope : mode] || [];
+  const target = row.placement;
+  if (!target || (target.kind === 'main'
+    ? Object.keys(target).join(',') !== 'kind'
+    : target.kind !== 'lane' || Object.keys(target).sort().join(',') !== 'kind,level,side'
+      || !sides.includes(target.side) || target.level !== 1)) {
+    throw invalidRow();
+  }
+  return {
+    ...(draft ? { scope: row.scope } : {}),
+    recordKey: row.recordKey,
+    biologicalFeatureId: row.biologicalFeatureId,
+    placement: { ...target }
+  };
+});
+
+const requestRow = ({ scope: _scope, ...row }) => row;
 
 export const requestFeaturePlacements = (overrides, mode, records = []) => canonicalFeaturePlacements(
-  Object.fromEntries(Object.entries(overrides || {})
-    .filter(([, row]) => recordKeyBelongsToRequest(row?.recordKey, records) && placementAppliesToMode(row, mode))),
-  mode
-);
+  Object.fromEntries(Object.entries(overrides || {}).filter(([, row]) => rowBelongsToRequest(row, mode, records)))
+).map(requestRow);
 
 // Per-feature edits (request schema 9 `featureOverrides`). A null field keeps
 // the rule-based result; the draft row adds the Web-only `labelSourceText`,
@@ -95,7 +120,7 @@ export const requestFeaturePlacements = (overrides, mode, records = []) => canon
 // projection read (B6). A draft row may hold only that source text.
 export const FEATURE_OVERRIDE_EDIT_FIELDS = Object.freeze(['featureVisibility', 'labelVisibility', 'labelText']);
 const REQUEST_OVERRIDE_FIELDS = 'biologicalFeatureId,featureVisibility,labelText,labelVisibility,recordKey';
-const DRAFT_OVERRIDE_FIELDS = 'biologicalFeatureId,featureVisibility,labelSourceText,labelText,labelVisibility,recordKey';
+const DRAFT_OVERRIDE_FIELDS = 'biologicalFeatureId,featureVisibility,labelSourceText,labelText,labelVisibility,recordKey,scope';
 const FEATURE_VISIBILITY_VALUES = new Set(['on', 'off', 'exclude_matching']);
 const LABEL_VISIBILITY_VALUES = new Set(['on', 'off']);
 
@@ -108,7 +133,7 @@ export const normalizeFeatureOverrideLabelText = (value) => {
 
 const hasEdit = (row) => FEATURE_OVERRIDE_EDIT_FIELDS.some((field) => row[field] !== null);
 
-const checkedOverrideRow = (row, { draft }) => {
+const checkedOverrideRow = (row, draft) => {
   if (Object.keys(row).sort().join(',') !== (draft ? DRAFT_OVERRIDE_FIELDS : REQUEST_OVERRIDE_FIELDS)
     || !(row.featureVisibility === null || FEATURE_VISIBILITY_VALUES.has(row.featureVisibility))
     || !(row.labelVisibility === null || LABEL_VISIBILITY_VALUES.has(row.labelVisibility))
@@ -119,6 +144,7 @@ const checkedOverrideRow = (row, { draft }) => {
     throw invalidRow();
   }
   return {
+    ...(draft ? { scope: row.scope } : {}),
     recordKey: row.recordKey,
     biologicalFeatureId: row.biologicalFeatureId,
     featureVisibility: row.featureVisibility,
@@ -129,34 +155,31 @@ const checkedOverrideRow = (row, { draft }) => {
 };
 
 // Validates request `featureOverrides` rows (an array) or the editor draft map.
-export const canonicalFeatureOverrides = (overrides) => canonicalIdentityRows(
-  overrides, (row) => checkedOverrideRow(row, { draft: !Array.isArray(overrides) })
-);
+export const canonicalFeatureOverrides = (overrides) => canonicalIdentityRows(overrides, checkedOverrideRow);
 
-// The request rows of the current request's records: the draft's edits, and
-// the label text that a bulk label edit gives a feature without its own
-// (`bulkLabelText`, {identityKey: text}). Rows of other records stay in the
-// draft (R2).
-export const requestFeatureOverrides = (overrides, records = [], { bulkLabelText = {} } = {}) => {
+// The request rows of the current request's mode and records: the draft's
+// edits, and the label text that a bulk label edit gives a feature without its
+// own (`bulkLabelText`, {identityKey: text}). Rows of other records and of the
+// other mode stay in the draft (R2).
+export const requestFeatureOverrides = (overrides, mode, records = [], { bulkLabelText = {} } = {}) => {
   const rows = new Map();
   Object.entries(overrides || {}).forEach(([key, row]) => {
-    if (recordKeyBelongsToRequest(row?.recordKey, records)) rows.set(key, row);
+    if (rowBelongsToRequest(row, mode, records)) rows.set(key, row);
   });
   Object.entries(bulkLabelText || {}).forEach(([key, text]) => {
     const row = rows.get(key);
     const labelText = normalizeFeatureOverrideLabelText(text);
     if (row?.labelText || !labelText) return;
-    let identity;
-    try { identity = JSON.parse(key); } catch { return; }
-    if (!Array.isArray(identity) || featureIdentityKey(identity[0], identity[1]) !== key
-      || !recordKeyBelongsToRequest(identity[0], records)) return;
-    rows.set(key, { ...(row || emptyOverrideRow(identity[0], identity[1])), labelText });
+    const identity = parseFeatureIdentityKey(key);
+    if (!rowBelongsToRequest(identity, mode, records)) return;
+    rows.set(key, { ...(row || emptyOverrideRow(identity)), labelText });
   });
   return canonicalFeatureOverrides(Object.fromEntries([...rows].filter(([, row]) => hasEdit(row))))
-    .map(({ labelSourceText: _source, ...row }) => row);
+    .map(({ labelSourceText: _source, ...row }) => requestRow(row));
 };
 
-const emptyOverrideRow = (recordKey, biologicalFeatureId) => ({
+const emptyOverrideRow = ({ scope, recordKey, biologicalFeatureId }) => ({
+  scope,
   recordKey,
   biologicalFeatureId,
   featureVisibility: null,
@@ -171,16 +194,15 @@ export const featureOverrideValue = (overrides, feature, field) => {
   return key ? overrides?.[key]?.[field] ?? null : null;
 };
 
-// Sets fields of one feature's draft row and deletes a row that no longer
-// holds an edit or a label source text. Returns whether the draft changed.
+// Sets fields of one feature's (or draft row's) draft row and deletes a row
+// that no longer holds an edit or a label source text. Returns whether the
+// draft changed.
 export const updateFeatureOverride = (overrides, feature, patch) => {
-  const recordKey = feature?.record_key ?? feature?.recordKey;
-  const biologicalFeatureId = feature?.biological_feature_id ?? feature?.biologicalFeatureId;
-  const key = featureIdentityKey(recordKey, biologicalFeatureId);
+  const key = featureIdentityKeyOf(feature);
   if (!key || !overrides) return false;
-  const next = { ...(overrides[key] || emptyOverrideRow(recordKey, biologicalFeatureId)) };
+  const next = { ...(overrides[key] || emptyOverrideRow(parseFeatureIdentityKey(key))) };
   Object.entries(patch || {}).forEach(([field, value]) => {
-    if (!(field in next) || field === 'recordKey' || field === 'biologicalFeatureId') return;
+    if (!(field in next) || ['scope', 'recordKey', 'biologicalFeatureId'].includes(field)) return;
     next[field] = value === undefined ? null : value;
   });
   const keep = hasEdit(next) || next.labelSourceText !== null;

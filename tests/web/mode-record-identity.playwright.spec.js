@@ -87,7 +87,7 @@ for (const committed of [false, true]) {
       if (committed) await generate(page);
       const before = await snapshot(page);
       expect(before.feature).toEqual({ recordKey: 'record-1', biologicalFeatureId: 'fb8ff22d9' });
-      expect(Object.values(before.placements)).toEqual([{ ...before.feature,
+      expect(Object.values(before.placements)).toEqual([{ scope: 'circular', ...before.feature,
         placement: { kind: 'lane', side: 'outward', level: 1 } }]);
       await page.evaluate(async () => { window.__MODE_SOURCE__ = (await import('./js/state.js')).state.files.c_gb; });
       const checkReturned = async () => {
@@ -171,7 +171,7 @@ for (const operation of ['replacement', 'removal']) {
       await placement(page, 'outward');
       const before = await snapshot(page);
       const placed = Object.keys(before.placements);
-      expect(placed).toEqual([JSON.stringify([before.feature.recordKey, before.feature.biologicalFeatureId])]);
+      expect(placed).toEqual([JSON.stringify(['circular', before.feature.recordKey, before.feature.biologicalFeatureId])]);
       const source = await page.evaluate(async () => {
         const { state } = await import('./js/state.js');
         window.__MODE_SOURCE__ = state.files.c_gb;

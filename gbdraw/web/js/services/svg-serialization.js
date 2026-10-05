@@ -92,14 +92,18 @@ export const serializeCleanSvg = (svg, options = {}) => {
 };
 
 // The standalone popup reads label text by rendered ID; each per-feature label
-// edit (identity-keyed, design Q4 6.4) is projected onto the rendered IDs of
-// the exported Result's catalog item.
+// edit of the Result's mode (identity-keyed, design Q4 6.4, R2) is projected
+// onto the rendered IDs of the exported Result's catalog item.
 const renderedLabelTextOverrides = (state, resultIndex) => {
   const overrides = {};
+  const mode = state.generatedMode?.value;
+  const textByFeature = new Map(Object.values(state.featureOverrides || {})
+    .filter((row) => row?.scope === mode && typeof row.labelText === 'string' && row.labelText)
+    .map((row) => [`${row.recordKey}\u0000${row.biologicalFeatureId}`, row.labelText]));
   const item = state.featureCatalog?.value?.items?.[resultIndex];
   (Array.isArray(item?.features) ? item.features : []).forEach((feature) => {
-    const text = state.featureOverrides?.[JSON.stringify([feature?.recordKey, feature?.biologicalFeatureId])]?.labelText;
-    if (typeof text === 'string' && text) overrides[feature.svgId] = text;
+    const text = textByFeature.get(`${feature?.recordKey}\u0000${feature?.biologicalFeatureId}`);
+    if (text) overrides[feature.svgId] = text;
   });
   return overrides;
 };

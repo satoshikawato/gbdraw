@@ -713,7 +713,7 @@ const labelOnFacts = (page) => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
   // Per-feature edits by the rendered ID of the feature in view.
   const edits = (field) => Object.fromEntries(state.extractedFeatures.value.flatMap((feature) => {
-    const value = state.featureOverrides[JSON.stringify([feature.record_key, feature.biological_feature_id])]?.[field];
+    const value = state.featureOverrides[JSON.stringify([feature.scope, feature.record_key, feature.biological_feature_id])]?.[field];
     return value === null || value === undefined ? [] : [[feature.svg_id, value]];
   }));
   return {
@@ -851,9 +851,9 @@ test('Label visibility On for a feature that a visibility rule hides asks first,
   });
   await generate(page);
   const { fl1, fl2 } = await featureIdsByLocator(page);
-  const fl2Identity = await page.evaluate((id) => {
-    const feature = window.__GBDRAW_APP__.extractedFeatures.find((item) => item.svg_id === id);
-    return JSON.stringify([feature.record_key, feature.biological_feature_id]);
+  const fl2Identity = await page.evaluate(async (id) => {
+    const { featureIdentityKeyOf } = await import('./js/services/feature-placement.js');
+    return featureIdentityKeyOf(window.__GBDRAW_APP__.extractedFeatures.find((item) => item.svg_id === id));
   }, fl2);
   const labelState = () => labelEditorState(page, 'labels.circular.scope');
   const shown = async () => ({ labels: (await labelState()).labels, drawn: await drawnFeatureIds(page, [fl1, fl2]) });
@@ -975,3 +975,39 @@ test('Label visibility On that does not fit with Embedded Only asks after the re
   expect(await labelState()).toMatchObject({ error: null, labels: kept });
   expect(await committedRendering()).toBe('embedded_only');
 });
+
+// R-4 (FINDINGS, residual of #764): the Label Not Shown dialog opens when a text
+// edit leaves a feature without a label, and its first sentence names the reason
+// the popup note names. The two reasons below differ: a feature drawn as
+// Underlay, and Show Labels None.
+const editTextOnly = (page, locator, text) => page.evaluate(async (edit) => {
+  const app = window.__GBDRAW_APP__;
+  const feature = app.extractedFeatures.find((item) => item.locus_tag === edit.locator || item.type === edit.locator);
+  await app.openFeatureEditorFromList(feature, null);
+  await window.Vue.nextTick();
+  const note = document.querySelector('[data-label-visibility-hint]')?.textContent.trim() || '';
+  app.clickedFeature.labelText = edit.text;
+  await app.updateClickedFeatureLabelText();
+  await window.Vue.nextTick();
+  const heading = [...document.querySelectorAll('h3')].find((node) => node.textContent === 'Label Not Shown');
+  const dialog = heading?.parentElement.querySelector('p').textContent.trim() || null;
+  if (app.hiddenLabelTextDialog.show) await app.handleHiddenLabelTextChoice('text_only');
+  app.clickedFeature = null;
+  return { note, dialog };
+}, { locator, text });
+
+for (const [name, mode, locator, sentence] of [
+  ['a feature drawn as Underlay', 'out', 'repeat_region', 'Labels are not drawn for features drawn as "Underlay".'],
+  ['Show Labels None', 'none', 'FL1', 'Labels are set to "None"']
+]) {
+  test(`the Label Not Shown dialog names the reason: ${name}`, async ({ page }) => {
+    test.setTimeout(300_000);
+    await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {});
+    await page.evaluate((labelsMode) => { window.__GBDRAW_APP__.form.labels_mode = labelsMode; }, mode);
+    await generate(page);
+    const { note, dialog } = await editTextOnly(page, locator, 'EDITED_TEXT');
+    expect(note).toContain(sentence);
+    expect(dialog).toContain(`This feature has no label in the current Result. ${sentence}`);
+    expect(dialog).not.toContain('With the current Show Labels and label filter settings');
+  });
+}

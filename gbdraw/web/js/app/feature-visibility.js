@@ -4,7 +4,8 @@ import {
   featureIdentityKey,
   featureIdentityKeyOf,
   featureOverrideValue,
-  recordKeyBelongsToRequest,
+  parseFeatureIdentityKey,
+  rowBelongsToRequest,
   updateFeatureOverride
 } from '../services/feature-placement.js';
 import { normalizeTsvCell as normalizeCell } from '../utils/tsv-cell.js';
@@ -188,8 +189,8 @@ export const setFeatureVisibilityOverride = (featureOverrides, feature, modeRaw)
   return previous;
 };
 
-// One change per feature identity: {recordKey, biologicalFeatureId, featureId
-// (the rendered ID it is drawn with), before, after}.
+// One change per feature identity: {scope, recordKey, biologicalFeatureId,
+// featureId (the rendered ID it is drawn with), before, after}.
 export const buildFeatureVisibilityChanges = (features, modeRaw, featureOverrides = {}) => {
   const mode = normalizeVisibilityMode(modeRaw);
   const seen = new Set();
@@ -200,8 +201,7 @@ export const buildFeatureVisibilityChanges = (features, modeRaw, featureOverride
     seen.add(key);
     const before = getFeatureVisibilityOverride(featureOverrides, feature);
     if (before === mode) return;
-    const [recordKey, biologicalFeatureId] = JSON.parse(key);
-    changes.push({ recordKey, biologicalFeatureId, featureId: getFeatureId(feature), before, after: mode });
+    changes.push({ ...parseFeatureIdentityKey(key), featureId: getFeatureId(feature), before, after: mode });
   });
   return changes;
 };
@@ -210,7 +210,7 @@ export const applyFeatureVisibilityOverrideChanges = (featureOverrides, changes)
   if (!featureOverrides || !Array.isArray(changes)) return 0;
   let applied = 0;
   changes.forEach((change) => {
-    if (!featureIdentityKey(change?.recordKey, change?.biologicalFeatureId)) return;
+    if (!featureIdentityKeyOf(change)) return;
     const mode = Object.prototype.hasOwnProperty.call(change || {}, 'mode') ? change.mode : change?.after;
     setFeatureVisibilityOverride(featureOverrides, change, mode);
     applied += 1;
@@ -223,13 +223,13 @@ const KIND_FIELDS = Object.freeze({
   feature_visibility: 'featureVisibility', label_visibility: 'labelVisibility', label_text: 'labelText'
 });
 
-// Python's `unresolved` notices by identity key: the edit kinds whose feature
-// the source does not have (design Q4 3.4).
-const unresolvedNoticeKinds = (notices, recordKeyFilter = () => true) => {
+// Python's `unresolved` notices of a request of mode `scope` by identity key:
+// the edit kinds whose feature the source does not have (design Q4 3.4).
+const unresolvedNoticeKinds = (notices, scope, recordKeyFilter = () => true) => {
   const unresolved = new Map();
   (Array.isArray(notices) ? notices : []).forEach((notice) => {
     if (notice?.status !== 'unresolved' || !recordKeyFilter(notice.recordKey)) return;
-    const key = featureIdentityKey(notice.recordKey, notice.biologicalFeatureId);
+    const key = featureIdentityKey(scope, notice.recordKey, notice.biologicalFeatureId);
     if (key) unresolved.set(key, new Set([...(unresolved.get(key) || []), ...(notice.kinds || [])]));
   });
   return unresolved;
@@ -247,13 +247,13 @@ const removeFeatureEdits = ({
 }) => {
   let removed = 0;
   Object.entries(featurePlacementOverrides || {}).forEach(([key, row]) => {
-    if (!dropped(row?.recordKey) && !unresolved.get(key)?.has('placement')) return;
+    if (!dropped(row) && !unresolved.get(key)?.has('placement')) return;
     delete featurePlacementOverrides[key];
     removed += 1;
   });
   Object.entries(featureOverrides || {}).forEach(([key, row]) => {
     const edits = EDIT_FIELDS.filter((field) => row?.[field] !== null && row?.[field] !== undefined);
-    if (dropped(row?.recordKey)) {
+    if (dropped(row)) {
       removed += edits.length;
       delete featureOverrides[key];
       return;
@@ -276,12 +276,13 @@ const removeFeatureEdits = ({
 // replaced record (Feature placement rows included), and every edit of a
 // record that the previous request of this mode had and this request has not.
 // A label source text kept for a bulk edit goes with its feature. Edits of
-// features outside the crop or display stay dormant. Returns the count of
-// removed edits.
+// features outside the crop or display stay dormant, and the other mode's
+// edits wait for their mode (R2). Returns the count of removed edits.
 export const pruneUnmatchedFeatureOverrides = ({
   featureOverrides = {},
   featurePlacementOverrides = {},
   notices = [],
+  scope = '',
   replacedRecordKeys = [],
   previousRecords = [],
   currentRecords = [],
@@ -293,18 +294,21 @@ export const pruneUnmatchedFeatureOverrides = ({
   return removeFeatureEdits({
     featureOverrides,
     featurePlacementOverrides,
-    unresolved: unresolvedNoticeKinds(notices, (recordKey) => replaced.has(recordKey)),
-    dropped: (recordKey) => recordKeyBelongsToRequest(recordKey, previousRecords)
-      && !recordKeyBelongsToRequest(recordKey, currentRecords),
-    sourceGone: (key, row) => replaced.has(row?.recordKey) && !present.has(key)
+    unresolved: unresolvedNoticeKinds(notices, scope, (recordKey) => replaced.has(recordKey)),
+    dropped: (row) => rowBelongsToRequest(row, scope, previousRecords)
+      && !rowBelongsToRequest(row, scope, currentRecords),
+    sourceGone: (key, row) => row?.scope === scope && replaced.has(row?.recordKey) && !present.has(key)
   });
 };
 
 // The unresolved edits the drafts still hold after a Generate that replaced no
-// source; "Remove N unmatched feature edits" removes them (an explicit Reset, R2).
-export const countUnresolvedFeatureEdits = ({ featureOverrides = {}, featurePlacementOverrides = {}, notices = [] } = {}) => {
+// source; "Remove N unmatched feature edits" removes them (an explicit Reset,
+// R2). `scope` is the mode of the request whose notices these are.
+export const countUnresolvedFeatureEdits = ({
+  featureOverrides = {}, featurePlacementOverrides = {}, notices = [], scope = ''
+} = {}) => {
   let count = 0;
-  unresolvedNoticeKinds(notices).forEach((kinds, key) => {
+  unresolvedNoticeKinds(notices, scope).forEach((kinds, key) => {
     if (kinds.has('placement') && featurePlacementOverrides?.[key]) count += 1;
     const row = featureOverrides?.[key];
     Object.entries(KIND_FIELDS).forEach(([kind, field]) => {
@@ -314,8 +318,10 @@ export const countUnresolvedFeatureEdits = ({ featureOverrides = {}, featurePlac
   return count;
 };
 
-export const removeUnresolvedFeatureEdits = ({ featureOverrides = {}, featurePlacementOverrides = {}, notices = [] } = {}) => (
-  removeFeatureEdits({ featureOverrides, featurePlacementOverrides, unresolved: unresolvedNoticeKinds(notices) })
+export const removeUnresolvedFeatureEdits = ({
+  featureOverrides = {}, featurePlacementOverrides = {}, notices = [], scope = ''
+} = {}) => (
+  removeFeatureEdits({ featureOverrides, featurePlacementOverrides, unresolved: unresolvedNoticeKinds(notices, scope) })
 );
 
 export const splitLegacyVisibilityRules = (rules) => {
