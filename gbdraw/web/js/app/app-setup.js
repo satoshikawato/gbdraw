@@ -2376,6 +2376,8 @@ export const createAppSetup = () => {
     prepareLinearRecordCatalog,
     recordDisplayRows: recordDisplayControls.allRows,
     assertActiveModeInputs,
+    closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
+    clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts,
     getCommittedCanonicalSession,
@@ -2513,6 +2515,8 @@ export const createAppSetup = () => {
     refreshLinearRecordSelectors: linearRecordSelector.refresh,
     resetPreviewViewport,
     resetRightDrawer: rightDrawerActions.resetRightDrawer,
+    closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
+    clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
     previewRuntime,
     preparePaletteDefinitions: paletteLoader.loadPaletteAsset
   });

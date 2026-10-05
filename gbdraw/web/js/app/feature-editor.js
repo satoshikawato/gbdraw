@@ -159,6 +159,9 @@ export const createFeatureEditor = ({
     refreshFeatureOverrides: ruleActions.refreshFeatureOverrides,
     getEditableLabelByFeatureId: labelActions.getEditableLabelByFeatureId,
     syncLabelEditor: labelActions.syncLabelEditor,
+    // R13: label owner ports the root hands Generate and the watchers.
+    closeLabelTextScopeDialog: labelActions.closeLabelTextScopeDialog,
+    clearLabelBuildNotices: labelActions.clearLabelBuildNotices,
     ...featureEditTableActions,
     downloadLabelOverrideTable: labelActions.downloadLabelOverrideTable,
     loadLabelOverrideTable: labelActions.loadLabelOverrideTable,

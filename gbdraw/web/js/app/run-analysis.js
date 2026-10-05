@@ -3,6 +3,7 @@ import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import {
   nameFeaturePlacementFailure,
   requestFeatureOverrides,
+  restorePlacements,
   validateFeatureIdentityNotices
 } from '../services/feature-placement.js';
 import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadata.js';
@@ -1131,6 +1132,9 @@ export const createRunAnalysis = ({
   settleComparisonRecordLabels = async () => {},
   // services/config.js owns the active-mode input check shared with Save.
   assertActiveModeInputs = null,
+  // R13: the label owner's ports (app/feature-editor/label-actions.js).
+  closeLabelTextScopeDialog,
+  clearLabelBuildNotices,
   losatExecutor = runLosatPairsParallel,
   executeCanonicalCandidate = executeCanonicalRenderCandidate,
   prepareCandidateCommit = prepareCandidateRenderCommit,
@@ -1219,10 +1223,8 @@ export const createRunAnalysis = ({
     featureRecordIds,
     selectedFeatureRecordIdx,
     editableLabels,
-    labelTextScopeDialog,
     canonicalLabelOverrideRows,
     labelTextBulkOverrides,
-    labelOverrideBuildWarning,
     labelReflowProcessing,
     labelReflowLastError,
     legendEntries,
@@ -1242,8 +1244,9 @@ export const createRunAnalysis = ({
     !previewRuntime
     || typeof previewRuntime.registerReadinessExpectation !== 'function'
     || typeof previewRuntime.restorePreviousSelectedResult !== 'function'
+    || typeof previewRuntime.selectResult !== 'function'
   ) {
-    throw new Error('createRunAnalysis requires PreviewRuntime readiness handlers.');
+    throw new Error('createRunAnalysis requires PreviewRuntime readiness and selection handlers.');
   }
   const executeLosatJobs = (...args) => {
     const override = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
@@ -1669,15 +1672,6 @@ export const createRunAnalysis = ({
     losatCacheInfo.value = losatCacheInfo.value.map((candidate) => (
       candidate === entry ? { ...candidate, filename } : candidate
     ));
-  };
-
-  const resetLabelScopeDialogState = () => {
-    labelTextScopeDialog.show = false;
-    labelTextScopeDialog.labelKey = '';
-    labelTextScopeDialog.newText = '';
-    labelTextScopeDialog.sourceText = '';
-    labelTextScopeDialog.featureId = '';
-    labelTextScopeDialog.matchingCount = 0;
   };
 
   const circularDiscoveryTargetsCurrentInput = () => circularDiscoveryForInput(state).current;
@@ -2130,10 +2124,10 @@ export const createRunAnalysis = ({
     resultPanelTab.value = 'preview';
     if (isCurrentAlert()) errorLog.value = null;
     skipCaptureBaseConfig.value = false;
-    resetLabelScopeDialogState();
+    closeLabelTextScopeDialog();
     window._origPairwiseMin = activeRunColors.pairwise_match_min || '#FFE7E7';
     window._origPairwiseMax = activeRunColors.pairwise_match_max || '#FF7272';
-    labelOverrideBuildWarning.value = '';
+    clearLabelBuildNotices();
 
     try {
       if (rulePreparation) {
@@ -4876,9 +4870,7 @@ export const createRunAnalysis = ({
                 removed: Number(featureEditRemovalCount.value) || 0
               }),
               restoreIntentCheckpoint: ({ placements, removed }) => {
-                Object.keys(state.featurePlacementOverrides)
-                  .forEach((key) => delete state.featurePlacementOverrides[key]);
-                Object.assign(state.featurePlacementOverrides, cloneJsonData(placements) || {});
+                restorePlacements(state.featurePlacementOverrides, placements);
                 featureEditRemovalCount.value = removed;
               },
               onCheckpointCapture: onGeneratedArtifactCheckpointCapture,
@@ -5317,8 +5309,7 @@ export const createRunAnalysis = ({
     }
     const generationToken = ++latestGenerationToken;
     let colorCandidate = null;
-    labelReflowLastError.value = null;
-    labelOverrideBuildWarning.value = '';
+    clearLabelBuildNotices({ rerender: true });
     skipCaptureBaseConfig.value = true;
     const isCurrent = () => generationToken === latestGenerationToken && requestId === pendingReflowRequestId;
     try {
@@ -5375,9 +5366,6 @@ export const createRunAnalysis = ({
       const nextSelectedResultIndex = Math.max(
         0, Math.min(previousSelectedResultIndex, execution.commit.results.length - 1)
       );
-      expectReflowLabelBindings(
-        execution.commit, nextSelectedResultIndex, isCurrent, canonical.renderRequest.diagramOptions
-      );
       skipCaptureBaseConfig.value = true;
       // The rerender's catalog describes the Results it draws, so they replace
       // the previous pair together: a feature it draws again or no more keeps
@@ -5388,9 +5376,16 @@ export const createRunAnalysis = ({
       extractedFeatures.value = execution.commit.featureState.extractedFeatures;
       biologicalFeatures.value = execution.commit.featureState.biologicalFeatures;
       results.value = execution.commit.results;
+      // The preview owner selects the Result (R13). It registers readiness only
+      // when fewer Results leave the selection out of range; the reflow's own
+      // expectation, registered next, replaces it, so the binder reports a
+      // forced label the Result does not draw (OV-06).
       if (execution.commit.results.length > 0) {
-        selectedResultIndex.value = nextSelectedResultIndex;
+        previewRuntime.selectResult(nextSelectedResultIndex);
       }
+      expectReflowLabelBindings(
+        execution.commit, nextSelectedResultIndex, isCurrent, canonical.renderRequest.diagramOptions
+      );
       logPostGbdrawTimings(timingEntries);
       if (colorCandidate) rulePreparation.notifyChanges(colorCandidate);
       return { status: 'ok' };

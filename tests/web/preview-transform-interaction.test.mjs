@@ -52,6 +52,7 @@ await copyModule('app/feature-editor/svg-actions.js', 'app/feature-editor/svg-ac
 await copyModule('services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
 await copyModule('services/feature-identity.js', 'services/feature-identity.js');
 await copyModule('services/feature-placement.js', 'services/feature-placement.js');
+await copyModule('services/json-clone.js', 'services/json-clone.js');
 // No admitted catalog: features open as the Result draws them.
 await writeFile(
   join(tempDir, 'services', 'feature-catalog.js'),
