@@ -1,15 +1,15 @@
 import {
   applyFeatureVisibilityOverrideChanges,
+  buildExactQualifierFeatureVisibilityRule,
   buildFeatureVisibilityChanges,
   createDefaultFeatureVisibilityRule,
-  exactRegexValue,
-  featureMatchesExactQualifier,
+  featureDrawnContext,
   featureVisibilityQualifierSuggestions,
   getFeatureVisibilityOverride,
   normalizeFeatureVisibilityRule,
   normalizeVisibilityMode,
   removeEditorQualifierFeatureVisibilityRule,
-  resolveEffectiveFeatureVisibility,
+  resolveFeatureDrawn,
   serializeFeatureVisibilityRules,
   setFeatureVisibilityOverride,
   upsertEditorQualifierFeatureVisibilityRule,
@@ -23,7 +23,14 @@ import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-
 import { featureIdentityKeyOf } from '../../services/feature-placement.js';
 import { resultRenderedFeatures } from '../../services/feature-catalog.js';
 
-export const createFeatureVisibilityActions = ({ state, featureSvgActions, labelActions = null, previewRuntime = null }) => {
+export const createFeatureVisibilityActions = ({
+  state,
+  featureSvgActions,
+  labelActions = null,
+  previewRuntime = null,
+  rulePreparation = null,
+  getCommittedRequest = () => null
+}) => {
   const {
     clickedFeature,
     extractedFeatures,
@@ -122,13 +129,6 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
     });
   };
 
-  const getMatchingQualifierFeatures = ({ featureType, qualifier, value }) => {
-    if (!normalizeText(featureType) || !normalizeText(qualifier) || !normalizeText(value)) return [];
-    const selector = { featureType, qualifier, value: exactRegexValue(normalizeText(value)) };
-    return (Array.isArray(extractedFeatures.value) ? extractedFeatures.value : [])
-      .filter((feat) => featureMatchesExactQualifier(feat, selector));
-  };
-
   const buildVisibilityScopes = (feat) => {
     const featureType = getFeatureType(feat);
     const scopes = [{
@@ -196,29 +196,28 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
     return Boolean(key) && key === featureIdentityKeyOf(right);
   };
 
-  const collectAffectedFeatures = (scope, feat) => {
-    if (scope?.id === 'orthogroup') return uniqueFeaturesBySvgId(scope.features || []);
-    if (scope?.id === 'product' || scope?.id === 'protein_id') {
-      return uniqueFeaturesBySvgId(getMatchingQualifierFeatures(scope));
-    }
-    return featureSvgId(feat) ? [feat] : [];
+  const isRuleScope = (scope) => scope?.id === 'product' || scope?.id === 'protein_id';
+
+  // The live projection of what the label rerender and Generate draw (R3): a
+  // feature shows the resolver's answer, and an unknown answer leaves it as
+  // it is. The resolver reads Python's rule matches, so an action prepares
+  // them first (`prepareDrawn`).
+  const drawnChanges = (features) => {
+    const context = featureDrawnContext(state, { diagramOptions: getCommittedRequest()?.diagramOptions });
+    return features.flatMap((feature) => {
+      const featureId = featureSvgId(feature);
+      const drawn = featureId ? resolveFeatureDrawn(feature, context) : null;
+      return drawn === null ? [] : [{ featureId, mode: drawn ? 'on' : 'off' }];
+    });
   };
-
-  const effectiveFeatureVisibility = (feature, overrides = featureOverrides) => resolveEffectiveFeatureVisibility(
-    feature, overrides, featureVisibilityManualRules
-  );
-
-  const applyVisibilityPreviewForScope = (scope, feat, mode) => {
-    const changes = collectAffectedFeatures(scope, feat).map((feature) => {
-      const specificMode = (scope?.id === 'product' || scope?.id === 'protein_id')
-        ? getFeatureVisibilityOverride(featureOverrides, feature)
-        : 'default';
-      const effectiveMode = specificMode !== 'default'
-        ? specificMode
-        : (mode === 'default' ? effectiveFeatureVisibility(feature) : mode);
-      return { featureId: featureSvgId(feature), mode: effectiveMode };
-    }).filter((change) => change.featureId);
-    return applyVisibilityPreviewChanges(changes);
+  const displayedFeatures = () => {
+    const displayed = resultRenderedFeatures(state);
+    return displayed ? [...displayed.values()]
+      : uniqueFeaturesBySvgId(Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []);
+  };
+  const prepareDrawn = async (rules = []) => {
+    if (rules.length) await rulePreparation?.prepareVisibility?.(rules);
+    await rulePreparation?.prepareDrawn?.();
   };
 
   const updateClickedFeatureVisibilityFromRules = (features) => {
@@ -226,8 +225,6 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
     if (!clicked || !features.some((feature) => sameFeature(feature, clicked))) return;
     clickedFeature.value.featureVisibility = getFeatureVisibilityOverride(featureOverrides, clicked);
   };
-
-  const cloneOverrides = () => JSON.parse(JSON.stringify(featureOverrides || {}));
 
   const nextFrame = () => new Promise((resolve) => {
     if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
@@ -259,28 +256,16 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
       .filter((feature) => featureIdentityKeyOf(feature));
     if (targetFeatures.length === 0) return null;
 
-    const baseOverrides = cloneOverrides();
-    const rawChanges = buildFeatureVisibilityChanges(targetFeatures, modeRaw, baseOverrides);
-    if (rawChanges.length === 0) return null;
-    const afterOverrides = cloneOverrides();
-    applyFeatureVisibilityOverrideChanges(
-      afterOverrides,
-      rawChanges.map((change) => ({ ...change, mode: change.after }))
-    );
-    const featureByIdentity = new Map(targetFeatures.map((feature) => [featureIdentityKeyOf(feature), feature]));
-    const changes = rawChanges.map((change) => {
-      const feature = featureByIdentity.get(featureIdentityKeyOf(change));
-      return {
-        ...change,
-        beforeEffective: effectiveFeatureVisibility(feature, baseOverrides),
-        afterEffective: effectiveFeatureVisibility(feature, afterOverrides)
-      };
-    });
+    const changes = buildFeatureVisibilityChanges(targetFeatures, modeRaw, featureOverrides);
+    if (changes.length === 0) return null;
+    const changedKeys = new Set(changes.map(featureIdentityKeyOf));
+    const changedFeatures = targetFeatures.filter((feature) => changedKeys.has(featureIdentityKeyOf(feature)));
     const commandResultIndex = Number(selectedResultIndex?.value || 0);
     const commandGenerationKey = String(resultGenerationKey?.value ?? '');
 
     const applyChangeSet = async (direction, reason) => {
       if (!(await ensureCommandTargetResult(commandResultIndex, commandGenerationKey))) return false;
+      await prepareDrawn();
       const useAfter = direction === 'apply';
       const overrideChanged = changes.some((change) => change.before !== change.after);
       applyFeatureVisibilityOverrideChanges(
@@ -290,13 +275,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
           mode: useAfter ? change.after : change.before
         }))
       );
-      const updated = applyVisibilityPreviewChanges(
-        changes.map((change) => ({
-          featureId: change.featureId,
-          mode: useAfter ? change.afterEffective : change.beforeEffective
-        })),
-        { reason }
-      );
+      const updated = applyVisibilityPreviewChanges(drawnChanges(changedFeatures), { reason });
       if (!updated && !overrideChanged) return false;
       updateClickedFeatureVisibilityFromRules(targetFeatures);
       applyFeatureVisibilityToLabels();
@@ -321,7 +300,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
       ? uniqueFeaturesBySvgId(selectedScope.features || [])
       : [feat];
 
-    if (selectedScope.id === 'product' || selectedScope.id === 'protein_id') {
+    if (isRuleScope(selectedScope)) {
       const ruleInput = {
         featureType: selectedScope.featureType,
         qualifier: selectedScope.qualifier,
@@ -339,10 +318,11 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
       });
     }
 
-    applyVisibilityPreviewForScope(selectedScope, feat, nextMode);
+    // A rule can reach any feature, so it projects onto every displayed one.
+    applyVisibilityPreviewChanges(drawnChanges(isRuleScope(selectedScope) ? displayedFeatures() : targetFeatures));
 
     const clicked = clickedFeature.value?.feat;
-    if (clicked && collectAffectedFeatures(selectedScope, feat).some((feature) => sameFeature(feature, clicked))) {
+    if (clicked && targetFeatures.some((feature) => sameFeature(feature, clicked))) {
       clickedFeature.value.featureVisibility = nextMode;
     }
   };
@@ -385,7 +365,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
     return command.apply();
   };
 
-  const updateClickedFeatureVisibility = (modeRaw) => {
+  const updateClickedFeatureVisibility = async (modeRaw) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value?.feat) return false;
@@ -394,6 +374,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
     const nextMode = normalizeVisibilityMode(modeRaw);
     const previousMode = getFeatureVisibilityOverride(featureOverrides, feat);
     if (scopes.length <= 1) {
+      await prepareDrawn();
       return setFeatureVisibility(feat, nextMode, { triggerReflow: true, scope: scopes[0] });
     }
     featureVisibilityScopeDialog.show = true;
@@ -404,7 +385,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
     return false;
   };
 
-  const handleFeatureVisibilityScopeChoice = (scopeId) => {
+  const handleFeatureVisibilityScopeChoice = async (scopeId) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (scopeId === 'cancel' || !featureVisibilityScopeDialog.show) {
@@ -419,8 +400,10 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
       return false;
     }
     const previousMode = featureVisibilityScopeDialog.previousMode;
-    applyFeatureVisibilityScope(feat, nextMode, scope);
     clearFeatureVisibilityScopeDialog();
+    const rule = isRuleScope(scope) ? buildExactQualifierFeatureVisibilityRule({ ...scope, action: nextMode }) : null;
+    await prepareDrawn(rule ? [rule] : []);
+    applyFeatureVisibilityScope(feat, nextMode, scope);
     if (previousMode !== nextMode) applyFeatureVisibilityToLabels();
     return previousMode !== nextMode;
   };
@@ -481,14 +464,7 @@ export const createFeatureVisibilityActions = ({ state, featureSvgActions, label
   // Reconcile with the same resolver as the visibility action, so Undo and
   // Redo of a scoped hide leave the preview as the action left it (FE-04).
   // The displayed Result's features carry the identities its edits name (R3).
-  const reconcileFeatureVisibility = () => {
-    const displayed = resultRenderedFeatures(state);
-    const features = displayed ? [...displayed.values()]
-      : uniqueFeaturesBySvgId(Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []);
-    return applyVisibilityPreviewChanges(
-      features.map((feature) => ({ featureId: featureSvgId(feature), mode: effectiveFeatureVisibility(feature) }))
-    );
-  };
+  const reconcileFeatureVisibility = () => applyVisibilityPreviewChanges(drawnChanges(displayedFeatures()));
 
   return {
     addFeatureVisibilityRule,

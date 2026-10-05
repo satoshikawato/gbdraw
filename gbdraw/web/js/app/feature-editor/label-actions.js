@@ -1,6 +1,6 @@
 import { diagnosticError, normalizeUserFacingError } from '../../services/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
-import { getFeatureVisibilityOverride, resolveEffectiveFeatureVisibility } from '../feature-visibility.js';
+import { featureDrawnContext, getFeatureVisibilityOverride, resolveFeatureDrawn } from '../feature-visibility.js';
 import { parseLabelOverrideTsv, serializeLabelOverrideRows } from './label-override-table.js';
 import { escapeRegexLiteral } from '../feature-selector.js';
 import {
@@ -80,32 +80,18 @@ export const requireUniqueEditableLabelBindings = (
   }, { stage: 'render', operation: 'generate' });
 };
 
-// Generate draws no feature, and so no label, for a feature that its
-// visibility override or a matching rule hides. The feature visibility owner's
-// resolver decides, also for exact-qualifier rules (F-3).
-const featureHidden = (state, featureId, feature) => resolveEffectiveFeatureVisibility(
-  feature || { svg_id: featureId },
-  state.featureOverrides || {},
-  state.featureVisibilityManualRules || []
-) === 'off';
-
-const labelDrawingBlocker = (feature, diagramOptions) => {
+// A feature drawn as underlay has no label (gbdraw/features/factory.py), and
+// with Label Rendering = Embedded Only no label is drawn that does not fit
+// inside its feature (gbdraw/labels/). Returns 'underlay', 'embedded_only', or
+// '' for a render request's diagram options. Generate and the label rerender
+// ask this of the features their own request draws.
+export const labelDrawingBlocker = (feature, diagramOptions) => {
   const featureType = String(feature?.type || '').trim();
   if (featureType && (
     diagramOptions?.featureShapes?.[featureType] || defaultFeatureRendering(featureType)
   ) === 'underlay') return 'underlay';
   return diagramOptions?.configOverrides?.['labels.rendering'] === 'embedded_only' ? 'embedded_only' : '';
 };
-// Owner decisions Q1 and Q2 (2026-10-04): Label visibility On takes effect
-// only when the diagram can draw the label. Python draws none for a hidden
-// feature or a feature drawn as underlay (gbdraw/features/factory.py), and with
-// Label Rendering = Embedded Only none that does not fit inside its feature
-// (gbdraw/labels/). Returns 'hidden', 'underlay', or 'embedded_only' for a
-// render request's diagram options, or '' when the label is drawn.
-export const labelOnBlocker = (state, featureId, feature, diagramOptions) => (
-  featureHidden(state, featureId, feature) ? 'hidden' : labelDrawingBlocker(feature, diagramOptions)
-);
-
 const LABEL_HINT_REASONS = Object.freeze({
   hidden: ' The feature is hidden.',
   underlay: ' Labels are not drawn for features drawn as "Underlay".',
@@ -458,6 +444,18 @@ export const createFeatureLabelActions = ({
   };
   const labelRow = (featureId, displayed) => rowOf(labelFeature(featureId, displayed));
 
+  // Whether the label rerender after this edit draws the feature: the last
+  // Generate's request with the current edits and rules (F-3, Owner Q2). The
+  // feature visibility owner's resolver answers as Generate does.
+  const drawnContext = () => featureDrawnContext(state, { diagramOptions: getCommittedRequest()?.diagramOptions });
+  const featureHidden = (feature, context = drawnContext()) => resolveFeatureDrawn(feature, context) === false;
+  // Owner decisions Q1 and Q2 (2026-10-04): Label visibility On takes effect
+  // only when the diagram can draw the label. Returns 'hidden', 'underlay', or
+  // 'embedded_only', or '' when the label is drawn.
+  const labelOnBlocker = (feature, diagramOptions) => (
+    featureHidden(feature) ? 'hidden' : labelDrawingBlocker(feature, diagramOptions)
+  );
+
   const commitLabelEdit = () => previewRuntime?.commitActiveResultEdit('feature-label');
 
   const queueLabelReflow = (force = false) => {
@@ -556,6 +554,7 @@ export const createFeatureLabelActions = ({
     let changed = false;
     let unavailableOverride = false;
     const displayed = displayedFeatures();
+    const context = drawnContext();
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl) => {
       const featureId = String(
         textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || ''
@@ -564,7 +563,7 @@ export const createFeatureLabelActions = ({
       // A hidden feature hides its label through this projection too (F-3).
       const visibilityMode = !featureId
         ? 'default'
-        : (featureHidden(state, featureId, feature) ? 'off' : rowOf(feature)?.labelVisibility);
+        : (featureHidden(feature, context) ? 'off' : rowOf(feature)?.labelVisibility);
       const projection = applyLabelVisibilityPreview(svg, textEl, visibilityMode);
       changed = projection.changed || changed;
       if (normalizeVisibilityMode(visibilityMode) !== 'default' && !projection.available) {
@@ -913,10 +912,13 @@ export const createFeatureLabelActions = ({
   // (Keep without label). The caller's History step stays open until the
   // choice, so a choice is one step and Cancel, which leaves the label intent
   // as it was, records none. Global settings never change.
-  const applyLabelOn = (featureId, apply) => {
+  const applyLabelOn = async (featureId, apply) => {
+    // The blocker reads Python's rule matches; prepared ones answer at once.
+    const prepared = rulePreparation?.prepareDrawn?.();
+    if (typeof prepared?.then === 'function') await prepared;
     const feature = featureById(featureId);
     const diagramOptions = getCommittedRequest()?.diagramOptions;
-    const blocker = labelOnBlocker(state, featureId, feature, diagramOptions);
+    const blocker = labelOnBlocker(feature, diagramOptions);
     if (!blocker) return apply();
     return confirmLabelOn({ featureId, feature, diagramOptions, blocker, apply });
   };
@@ -1013,7 +1015,7 @@ export const createFeatureLabelActions = ({
     if (draft === 'off') return '';
     void results.value; // The committed request changes with the displayed Results.
     const featureId = clickedFeatureId();
-    const blocker = labelOnBlocker(state, featureId, featureById(featureId), getCommittedRequest()?.diagramOptions);
+    const blocker = labelOnBlocker(featureById(featureId), getCommittedRequest()?.diagramOptions);
     // A hidden feature's label is hidden with it (F-3).
     if (clicked.labelKey && blocker !== 'hidden') return '';
     let next = '';

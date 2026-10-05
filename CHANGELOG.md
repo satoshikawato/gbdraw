@@ -12,6 +12,15 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Labels (web app): applying **Label visibility** **On** now asks **Feature Is
+  Hidden** also for a feature that a **Feature Visibility** rule hides, for
+  example a rule with a record ID, another qualifier, or a `hash`, `location`,
+  or `record_location` value, as a loaded visibility TSV can give. The dialog,
+  the popup note, and the preview after Undo, Redo, or a Result switch decide
+  whether a feature is drawn as Generate does, with Python's regular
+  expressions; the preview used to apply only the popup's exact product and
+  protein ID rules. Such an **On** used to be saved without a dialog and was
+  not drawn.
 - Linear File order (web app): the File up and down buttons now work when
   each File uses its own consecutive rows, including a CLI Session that draws
   each record of a multi-record file on its own row. A move exchanges the

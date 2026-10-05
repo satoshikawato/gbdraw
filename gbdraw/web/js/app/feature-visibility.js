@@ -1,4 +1,5 @@
 import { exactRegexValue } from './feature-selector.js';
+import { ruleMatchesFeature, visibilityRuleMatchesFeature } from './rule-matching.js';
 import {
   featureIdentityKey,
   featureIdentityKeyOf,
@@ -112,10 +113,13 @@ const isSerializableRule = (rule) => {
   );
 };
 
+// The rules a request carries, in table order (Generate reads no other row).
+export const requestFeatureVisibilityRules = (rules) => (Array.isArray(rules) ? rules : [])
+  .map((rule) => normalizeFeatureVisibilityRule(rule))
+  .filter(isSerializableRule);
+
 export const serializeFeatureVisibilityRules = (rules) => {
-  const rows = (Array.isArray(rules) ? rules : [])
-    .map((rule) => normalizeFeatureVisibilityRule(rule))
-    .filter(isSerializableRule)
+  const rows = requestFeatureVisibilityRules(rules)
     .map((rule) => [
       rule.recordId,
       rule.featureType,
@@ -170,8 +174,6 @@ export const parseFeatureVisibilityRules = (text) => {
 };
 
 const getFeatureId = (feat = {}) => normalizeCell(feat?.svg_id ?? feat?.svgId ?? feat?.featureId ?? feat?.feature_id ?? feat?.id);
-
-const getFeatureType = (feat = {}) => normalizeCell(feat?.type ?? feat?.featureType ?? feat?.feature_type) || '*';
 
 // Feature visibility edits live in the identity-keyed featureOverrides draft
 // (design Q4); these read and write one feature's `featureVisibility`.
@@ -337,34 +339,49 @@ export const splitLegacyVisibilityRules = (rules) => {
   return { overrides, manualRules, warnings };
 };
 
-// Feature visibility for the live preview: the feature's identity-keyed
-// override, then the first matching manual rule. With the feature, the
-// editor's exact-qualifier rules match as Generate does, so an action and a
-// later reconcile agree.
-export const resolveEffectiveFeatureVisibility = (feature, featureOverrides = {}, manualRules = []) => {
+// The inputs `resolveFeatureDrawn` reads. The feature types come from the
+// request's diagram options (a label rerender keeps the last Generate's); the
+// edits and rules are the current ones, which a label rerender and Generate
+// both carry.
+export const featureDrawnContext = (state, {
+  diagramOptions = null,
+  featureOverrides = state?.featureOverrides
+} = {}) => ({
+  featureOverrides: featureOverrides || {},
+  rules: requestFeatureVisibilityRules(state?.featureVisibilityManualRules),
+  selectedTypes: Array.isArray(diagramOptions?.selectedFeaturesSet)
+    ? new Set(diagramOptions.selectedFeaturesSet.map(String))
+    : null,
+  colorRules: Array.isArray(state?.manualSpecificRules) ? state.manualSpecificRules : []
+});
+
+// "Is this feature drawn?" as Generate answers it
+// (gbdraw/features/visibility.py::should_render_feature): the feature's
+// identity-keyed override decides when On or Off, and Exclude from matching
+// skips the rules; else the first matching visibility rule decides when Show
+// or Off; else the selected feature types, where a feature of another type is
+// drawn when a specific color rule matches it. Python matches the rules
+// (app/rule-matching.js, R4); the shared vectors in
+// tests/fixtures/feature_drawn_cases.json hold both sides to one answer.
+// Returns true, false, or null while a match it needs is unknown.
+export const resolveFeatureDrawn = (feature, { featureOverrides, rules, selectedTypes, colorRules }) => {
+  if (!feature) return null;
   const override = getFeatureVisibilityOverride(featureOverrides, feature);
-  if (override !== 'default') return override;
-  const featureId = getFeatureId(feature || {});
-  if (!featureId) return 'default';
-  for (const rule of Array.isArray(manualRules) ? manualRules : []) {
-    const normalized = normalizeFeatureVisibilityRule(rule);
-    if (isEditorExactQualifierRule(normalized)) {
-      if (featureMatchesExactQualifier(feature, normalized)) {
-        return featureVisibilityActionToMode(normalized.action);
-      }
-      continue;
-    }
-    if (normalized.qualifier.toLowerCase() !== 'hash') continue;
-    if (normalized.recordId !== '*' || normalized.featureType !== '*') continue;
-    try {
-      if (new RegExp(normalized.value).test(featureId)) {
-        return featureVisibilityActionToMode(normalized.action);
-      }
-    } catch (_err) {
-      return 'default';
+  if (override === 'on' || override === 'off') return override === 'on';
+  if (override !== 'exclude_matching') {
+    for (const rule of rules) {
+      const matched = visibilityRuleMatchesFeature(feature, rule);
+      if (matched === null) return null;
+      if (!matched) continue;
+      if (rule.action === 'show' || rule.action === 'off') return rule.action === 'show';
+      break;
     }
   }
-  return 'on';
+  if (!selectedTypes) return null;
+  if (selectedTypes.size === 0 || selectedTypes.has(String(feature?.type ?? ''))) return true;
+  const colorMatches = colorRules.map((rule) => ruleMatchesFeature(feature, rule));
+  if (colorMatches.includes(true)) return true;
+  return colorMatches.includes(null) ? null : false;
 };
 
 const isEditorFeatureRule = (rule) => {
@@ -382,28 +399,6 @@ const isEditorExactQualifierRule = (rule) => {
     ['product', 'protein_id'].includes(qualifier) &&
     normalized.value.startsWith('^') &&
     normalized.value.endsWith('$');
-};
-
-const qualifierValues = (feat, qualifier) => {
-  const key = normalizeCell(qualifier).toLowerCase();
-  const qualifiers = feat?.qualifiers && typeof feat.qualifiers === 'object' ? feat.qualifiers : {};
-  const entry = Object.entries(qualifiers).find(([name]) => String(name).toLowerCase() === key);
-  const raw = entry ? entry[1] : feat?.[key];
-  return (Array.isArray(raw) ? raw : [raw]).map((value) => normalizeCell(value)).filter(Boolean);
-};
-
-// Python matches qualifier rules with a case-insensitive regex search over
-// every value (gbdraw/features/visibility.py). The editor's exact-qualifier
-// scope and its rule use this one matcher.
-export const featureMatchesExactQualifier = (feat, { featureType, qualifier, value } = {}) => {
-  if (getFeatureType(feat) !== normalizeCell(featureType)) return false;
-  let pattern;
-  try {
-    pattern = new RegExp(normalizeCell(value), 'i');
-  } catch (_err) {
-    return false;
-  }
-  return qualifierValues(feat, qualifier).some((candidate) => pattern.test(candidate));
 };
 
 const reorderEditorVisibilityRules = (rules) => {
