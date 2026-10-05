@@ -57,7 +57,6 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.injection-edge.v1|app/feature-editor.js|ruleActions<-rulePreparation': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|ruleActions<-svgActions': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|visibilityActions<-featureSvgActions': 1,
-  'owner-graph.injection-edge.v1|app/feature-editor.js|visibilityActions<-labelActions': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|visibilityActions<-previewRuntime': 1,
   'owner-graph.injection-edge.v1|app/feature-editor.js|visibilityActions<-rulePreparation': 1,
   'owner-graph.injection-edge.v1|app/legend-layout.js|canvasActions<-previewRuntime': 1,
@@ -73,7 +72,6 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.forward-closure.v1|app/app-setup.js|previewFeatureSearch.resolveOrthogroups->orthogroupActions.resolveOrthogroupDescription': 1,
   'owner-graph.forward-closure.v1|app/app-setup.js|previewFeatureSearch.resolveOrthogroups->orthogroupActions.resolveOrthogroupName': 1,
   'owner-graph.forward-closure.v1|app/app-setup.js|rightDrawerActions.onClose->featureActions.suspendSpecificRulePatternDrafts': 1,
-  'owner-graph.forward-closure.v1|app/feature-editor.js|labelActions.setFeatureVisibility->visibilityActions.setFeatureVisibility': 1,
   // owner-graph.whole-object-port.v1
   'owner-graph.whole-object-port.v1|app/feature-editor/color-actions.js|createFeatureColorActions|featureSvgActions': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/color-actions.js|createFeatureColorActions|legendActions': 1,
@@ -93,7 +91,6 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.whole-object-port.v1|app/feature-editor/svg-actions.js|createFeatureSvgActions|previewTransformInteraction': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/svg-actions.js|createFeatureSvgActions|rulePreparation': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/visibility-actions.js|createFeatureVisibilityActions|featureSvgActions': 1,
-  'owner-graph.whole-object-port.v1|app/feature-editor/visibility-actions.js|createFeatureVisibilityActions|labelActions': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/visibility-actions.js|createFeatureVisibilityActions|previewRuntime': 1,
   'owner-graph.whole-object-port.v1|app/feature-editor/visibility-actions.js|createFeatureVisibilityActions|rulePreparation': 1,
   'owner-graph.whole-object-port.v1|app/feature-search/preview-actions.js|createPreviewFeatureSearch|previewRuntime': 1,
@@ -115,12 +112,12 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.whole-object-port.v1|services/history-snapshot.js|createHistorySnapshotService|fileStore': 1,
   'owner-graph.whole-object-port.v1|services/history.js|createHistoryManager|fileStore': 1,
   // heavy-derived.trigger-site.v1 (sites per module)
-  'heavy-derived.trigger-site.v1|rulePreparation|app/app-setup.js': 3,
+  'heavy-derived.trigger-site.v1|rulePreparation|app/app-setup.js': 2,
   'heavy-derived.trigger-site.v1|rulePreparation|app/feature-editor/color-actions.js': 2,
   'heavy-derived.trigger-site.v1|rulePreparation|app/feature-editor/label-actions.js': 2,
   'heavy-derived.trigger-site.v1|rulePreparation|app/feature-editor/rule-actions.js': 1,
   'heavy-derived.trigger-site.v1|rulePreparation|app/feature-editor/svg-actions.js': 1,
-  'heavy-derived.trigger-site.v1|rulePreparation|app/feature-editor/visibility-actions.js': 2,
+  'heavy-derived.trigger-site.v1|rulePreparation|app/feature-editor/visibility-actions.js': 1,
   'heavy-derived.trigger-site.v1|rulePreparation|app/legend.js': 1,
   'heavy-derived.trigger-site.v1|rulePreparation|app/run-analysis.js': 2,
   'heavy-derived.trigger-site.v1|rulePreparation|app/svg-styles.js': 1
@@ -129,9 +126,9 @@ const OWNER_GRAPH_BASELINE = {
 // Distinct call shapes per projection domain outside its owner (R3: one
 // projection is one call shape). May only decrease.
 const PROJECTION_SHAPE_BASELINE = {
-  'feature-visibility': 2,
-  'feature-visibility-labels': 5,
-  'label-intent': 2,
+  'feature-visibility': 1,
+  'feature-visibility-labels': 1,
+  'label-intent': 1,
   'legend-order': 2,
   'palette-rules': 4,
   'strokes': 2,

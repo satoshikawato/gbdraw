@@ -1,6 +1,5 @@
 import {
   applyFeatureVisibilityOverrideChanges,
-  buildExactQualifierFeatureVisibilityRule,
   buildFeatureVisibilityChanges,
   createDefaultFeatureVisibilityRule,
   featureDrawnContext,
@@ -19,6 +18,7 @@ import {
   resolveDisplayProteinId
 } from '../feature-utils.js';
 import { downloadTextFile } from '../../services/text-download.js';
+import { normalizeUserFacingError } from '../../services/error-normalization.js';
 import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-identity.js';
 import { featureIdentityKeyOf } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
@@ -26,7 +26,9 @@ import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/
 export const createFeatureVisibilityActions = ({
   state,
   featureSvgActions,
-  labelActions = null,
+  // R13: the composition root registers `applyFeatureVisibilityToLabels` once
+  // the label owner exists; this owner only calls it.
+  ports,
   previewRuntime = null,
   rulePreparation = null,
   getCommittedRequest = () => null
@@ -177,11 +179,11 @@ export const createFeatureVisibilityActions = ({
     return scopes;
   };
 
-  // The label owner hides a hidden feature's label with it, as Generate does,
-  // and queues the label reflow unless the caller declines it (F-3).
-  const applyFeatureVisibilityToLabels = (options = {}) => (
-    labelActions?.applyFeatureVisibilityToLabels?.(options) ?? false
-  );
+  // The one site that reaches the label owner (R13): it hides a hidden
+  // feature's label with it, as Generate does, and queues the label reflow
+  // unless the caller declines it (F-3); `rerender` asks for the automatic
+  // rerender, which draws a feature the Result does not draw (R-5).
+  const followLabels = (options) => ports.applyFeatureVisibilityToLabels(options);
 
   // The visibility table holds rules only; per-feature edits are identity rows.
   const visibilityRuleRows = () => (
@@ -238,10 +240,7 @@ export const createFeatureVisibilityActions = ({
     const { changes, needsRerender } = drawnChanges(features, { targeted });
     return { updated: applyVisibilityPreviewChanges(changes, options), needsRerender };
   };
-  const prepareDrawn = async (rules = []) => {
-    if (rules.length) await rulePreparation?.prepareVisibility?.(rules);
-    await rulePreparation?.prepareDrawn?.();
-  };
+  const prepareDrawn = () => rulePreparation?.prepareDrawn?.();
 
   const updateClickedFeatureVisibilityFromRules = (features) => {
     const clicked = clickedFeature.value?.feat;
@@ -301,7 +300,7 @@ export const createFeatureVisibilityActions = ({
       const { updated, needsRerender } = projectDrawn(changedFeatures, { reason, targeted: true });
       if (!updated && !overrideChanged) return false;
       updateClickedFeatureVisibilityFromRules(targetFeatures);
-      applyFeatureVisibilityToLabels({ rerender: needsRerender });
+      followLabels({ rerender: needsRerender });
       return true;
     };
 
@@ -316,41 +315,85 @@ export const createFeatureVisibilityActions = ({
     };
   };
 
-  const applyFeatureVisibilityScope = (feat, modeRaw, scope) => {
-    const nextMode = normalizeVisibilityMode(modeRaw);
-    const selectedScope = scope || { id: 'feature' };
-    const targetFeatures = selectedScope.id === 'orthogroup'
-      ? uniqueFeaturesBySvgId(selectedScope.features || [])
-      : [feat];
-
-    if (isRuleScope(selectedScope)) {
-      const ruleInput = {
-        featureType: selectedScope.featureType,
-        qualifier: selectedScope.qualifier,
-        value: selectedScope.value,
-        label: selectedScope.label
-      };
-      if (nextMode === 'default') {
-        removeEditorQualifierFeatureVisibilityRule(featureVisibilityManualRules, ruleInput);
-      } else {
-        upsertEditorQualifierFeatureVisibilityRule(featureVisibilityManualRules, ruleInput, nextMode);
-      }
-    } else {
-      targetFeatures.forEach((targetFeat) => {
-        setFeatureVisibilityOverride(featureOverrides, targetFeat, nextMode);
-      });
-    }
-
-    // A rule can reach any feature, so it projects onto every displayed one.
-    const { needsRerender } = isRuleScope(selectedScope)
-      ? projectDrawn(displayedFeatures())
-      : projectDrawn(targetFeatures, { targeted: true });
-
+  const showClickedFeatureVisibility = (targetFeatures, mode) => {
     const clicked = clickedFeature.value?.feat;
     if (clicked && targetFeatures.some((feature) => sameFeature(feature, clicked))) {
-      clickedFeature.value.featureVisibility = nextMode;
+      clickedFeature.value.featureVisibility = mode;
     }
+  };
+
+  // A feature or similarity-group scope: the identity rows of its features.
+  // Returns whether the rerender must draw one of them.
+  const applyFeatureVisibilityScope = (feat, modeRaw, scope) => {
+    const nextMode = normalizeVisibilityMode(modeRaw);
+    const targetFeatures = scope?.id === 'orthogroup'
+      ? uniqueFeaturesBySvgId(scope.features || [])
+      : [feat];
+    targetFeatures.forEach((targetFeat) => {
+      setFeatureVisibilityOverride(featureOverrides, targetFeat, nextMode);
+    });
+    const { needsRerender } = projectDrawn(targetFeatures, { targeted: true });
+    showClickedFeatureVisibility(targetFeatures, nextMode);
     return needsRerender;
+  };
+
+  // The live projection of the visibility rules and edits onto every
+  // displayed feature (R3), with the same resolver as the visibility actions,
+  // so Undo and Redo of a scoped hide leave the preview as the action left it
+  // (FE-04). It prepares Python's matches first. A rule table that Generate
+  // rejects (an invalid regex) changes nothing, as a failed Generate keeps its
+  // Result, and reports Generate's error until a projection reads a table that
+  // Generate accepts. A later projection supersedes one that still waits for
+  // its matches. Resolves to `projectDrawn`'s answer, or null when it projects
+  // nothing.
+  let projectionRun = 0;
+  let ruleTableError = null;
+  const runProjection = async () => {
+    const run = ++projectionRun;
+    const prepared = await prepareDrawn();
+    if (run !== projectionRun) return null;
+    if (prepared?.error) {
+      if (!state.errorLog) return null;
+      state.errorLog.value = normalizeUserFacingError(prepared.error, { operation: 'evaluateRules', stage: 'rule-validation' });
+      ruleTableError = state.errorLog.value; // As the error log holds it (a reactive copy).
+      return null;
+    }
+    if (ruleTableError && state.errorLog?.value === ruleTableError) state.errorLog.value = null;
+    ruleTableError = null;
+    return projectDrawn(displayedFeatures());
+  };
+
+  // The one projection of this domain (R3), which History apply, the display
+  // of a Result, and Load Feature Edits TSV call through
+  // `projectMountedEditorIntent`. A History step or a loaded table (`rerender`)
+  // that draws a feature the Result does not draw reruns the rerender, as the
+  // action did; a Result display does not, so a feature Python does not draw
+  // cannot repeat it. A loaded table (`reflow`) also places the labels, as a
+  // visibility edit does (F-3). Returns whether the Result changed.
+  const projectFeatureVisibility = async ({ rerender = false, reflow = false } = {}) => {
+    const projection = await runProjection();
+    if (!projection) return false;
+    const drawsMissing = rerender && projection.needsRerender;
+    if (reflow || drawsMissing) followLabels({ reflow, rerender: drawsMissing });
+    return projection.updated;
+  };
+
+  // OV-19 (PD-OI-066, R10): the one transition of a visibility rule edit, from
+  // the Features panel or the popup's product and protein ID scopes. `edit`
+  // changes a copy of the rules; the transition writes it, then projects the
+  // rules and the labels of the features they hide or show, as the label
+  // rerender and Generate draw them; a rule that draws a feature the Result
+  // does not draw asks for the rerender (R-5). The draft keeps a rule that
+  // Generate rejects.
+  const editFeatureVisibilityRules = async (edit) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
+    const rules = [...featureVisibilityManualRules];
+    if (edit(rules) === false) return false;
+    featureVisibilityManualRules.splice(0, featureVisibilityManualRules.length, ...rules);
+    const projection = await runProjection();
+    if (projection?.updated || projection?.needsRerender) followLabels({ rerender: projection.needsRerender });
+    return true;
   };
 
   const clearFeatureVisibilityScopeDialog = ({ restorePrevious = false } = {}) => {
@@ -377,7 +420,7 @@ export const createFeatureVisibilityActions = ({
     const needsRerender = applyFeatureVisibilityScope(feat, nextMode, scope);
 
     if (previousMode !== nextMode) {
-      applyFeatureVisibilityToLabels({ reflow: triggerReflow, rerender: needsRerender });
+      followLabels({ reflow: triggerReflow, rerender: needsRerender });
     }
 
     return previousMode !== nextMode;
@@ -427,42 +470,40 @@ export const createFeatureVisibilityActions = ({
     }
     const previousMode = featureVisibilityScopeDialog.previousMode;
     clearFeatureVisibilityScopeDialog();
-    const rule = isRuleScope(scope) ? buildExactQualifierFeatureVisibilityRule({ ...scope, action: nextMode }) : null;
-    await prepareDrawn(rule ? [rule] : []);
+    if (isRuleScope(scope)) {
+      const ruleInput = { featureType: scope.featureType, qualifier: scope.qualifier, value: scope.value, label: scope.label };
+      await editFeatureVisibilityRules((rules) => {
+        if (nextMode === 'default') removeEditorQualifierFeatureVisibilityRule(rules, ruleInput);
+        else upsertEditorQualifierFeatureVisibilityRule(rules, ruleInput, nextMode);
+      });
+      showClickedFeatureVisibility([feat], nextMode);
+      return previousMode !== nextMode;
+    }
+    await prepareDrawn();
     const needsRerender = applyFeatureVisibilityScope(feat, nextMode, scope);
-    if (previousMode !== nextMode) applyFeatureVisibilityToLabels({ rerender: needsRerender });
+    if (previousMode !== nextMode) followLabels({ rerender: needsRerender });
     return previousMode !== nextMode;
   };
 
-  const setFeatureVisibilityRuleField = (index, field, value) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    if (!ruleFields.has(field)) return;
-    const current = featureVisibilityManualRules[index];
-    if (!current) return;
-    const nextRule = normalizeFeatureVisibilityRule({ ...current, [field]: value });
-    featureVisibilityManualRules.splice(index, 1, nextRule);
-  };
+  const setFeatureVisibilityRuleField = (index, field, value) => editFeatureVisibilityRules((rules) => {
+    if (!ruleFields.has(field) || !rules[index]) return false;
+    rules[index] = normalizeFeatureVisibilityRule({ ...rules[index], [field]: value });
+  });
 
-  const moveFeatureVisibilityRule = (index, offset) => {
+  const moveFeatureVisibilityRule = (index, offset) => editFeatureVisibilityRules((rules) => {
     const target = index + offset;
-    if (target < 0 || target >= featureVisibilityManualRules.length) return;
-    const [rule] = featureVisibilityManualRules.splice(index, 1);
-    featureVisibilityManualRules.splice(target, 0, rule);
-  };
+    if (!rules[index] || target < 0 || target >= rules.length) return false;
+    rules.splice(target, 0, ...rules.splice(index, 1));
+  });
 
-  const addFeatureVisibilityRule = () => {
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    featureVisibilityManualRules.push(createDefaultFeatureVisibilityRule());
-  };
+  const addFeatureVisibilityRule = () => editFeatureVisibilityRules((rules) => {
+    rules.push(createDefaultFeatureVisibilityRule());
+  });
 
-  const removeFeatureVisibilityRule = (index) => {
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    if (index < 0 || index >= featureVisibilityManualRules.length) return;
-    featureVisibilityManualRules.splice(index, 1);
-  };
+  const removeFeatureVisibilityRule = (index) => editFeatureVisibilityRules((rules) => {
+    if (!rules[index]) return false;
+    rules.splice(index, 1);
+  });
 
   const downloadFeatureVisibilityRulesTsv = () => {
     const text = serializeFeatureVisibilityRules(visibilityRuleRows());
@@ -485,18 +526,6 @@ export const createFeatureVisibilityActions = ({
     return '';
   };
 
-  // Reconcile with the same resolver as the visibility action, so Undo and
-  // Redo of a scoped hide leave the preview as the action left it (FE-04).
-  // The displayed Result's features carry the identities its edits name (R3).
-  // A History step or a loaded table (`rerender`) that draws a feature the
-  // Result does not draw reruns the rerender, as the action did; a Result
-  // display does not, so a feature Python does not draw cannot repeat it.
-  const reconcileFeatureVisibility = ({ rerender = false } = {}) => {
-    const { updated, needsRerender } = projectDrawn(displayedFeatures());
-    if (rerender && needsRerender) applyFeatureVisibilityToLabels({ reflow: false, rerender: true });
-    return updated;
-  };
-
   return {
     addFeatureVisibilityRule,
     downloadFeatureVisibilityRulesTsv,
@@ -506,7 +535,7 @@ export const createFeatureVisibilityActions = ({
     handleFeatureVisibilityScopeChoice,
     moveFeatureVisibilityRuleDown: (index) => moveFeatureVisibilityRule(index, 1),
     moveFeatureVisibilityRuleUp: (index) => moveFeatureVisibilityRule(index, -1),
-    reconcileFeatureVisibility,
+    projectFeatureVisibility,
     removeFeatureVisibilityRule,
     setFeatureVisibility,
     setSelectedFeaturesVisibility,

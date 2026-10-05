@@ -890,6 +890,128 @@ test('Label visibility On for a feature that a visibility rule hides asks first,
   expect(await shown()).toEqual(kept);
 });
 
+// OV-19 (PD-OI-066, R1, R10, R11): a Feature Visibility rule edit in the
+// Features panel is live like the other composition edits. Adding, editing,
+// moving, and deleting a rule show on the Result at once as Generate draws it,
+// and each is one Undo step that Undo and Redo project. A regular expression
+// that Generate rejects stays in the draft and reports Generate's error; the
+// Result stays as the failed Generate leaves it.
+test('a Feature Visibility rule edit shows on the Result at once, as Generate draws it', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE);
+  await generate(page);
+  const { fl1, fl2 } = await featureIdsByLocator(page);
+  const drawn = () => drawnFeatureIds(page, [fl1, fl2]);
+  const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  const edit = (action, ...args) => page.evaluate(({ name, values }) => window.__GBDRAW_APP__[name](...values),
+    { name: action, values: args });
+  const reportedError = () => page.evaluate(async () => {
+    const error = (await import('./js/state.js')).state.errorLog.value;
+    return error && { code: error.code, row: error.context?.row };
+  });
+  expect(await drawn()).toEqual([fl1, fl2]);
+
+  await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
+  expect(await drawn()).toEqual([fl2]);
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.undo());
+  expect(await drawn()).toEqual([fl1, fl2]);
+  await page.evaluate(() => window.__GBDRAW_HISTORY__.redo());
+  expect(await drawn()).toEqual([fl2]);
+
+  await edit('setFeatureVisibilityRuleField', 0, 'action', 'show');
+  expect(await drawn()).toEqual([fl1, fl2]);
+  await addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl', action: 'off' });
+  expect(await drawn()).toEqual([fl1]);
+  const beforeMove = await undoCount();
+  await edit('moveFeatureVisibilityRuleUp', 1);
+  expect(await undoCount()).toBe(beforeMove + 1);
+  expect(await drawn()).toEqual([]);
+
+  const breakRegex = async () => {
+    await edit('setFeatureVisibilityRuleField', 1, 'value', '^fl1(');
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.featureVisibilityManualRules[1].value)).toBe('^fl1(');
+    expect(await drawn()).toEqual([]);
+  };
+  const fixRegex = () => edit('setFeatureVisibilityRuleField', 1, 'value', '^fl1$');
+  await breakRegex();
+  const liveError = await reportedError();
+  expect(liveError).toEqual({ code: 'REGEX_SYNTAX', row: 2 });
+  await fixRegex();
+  expect(await reportedError()).toBeNull();
+  expect(await drawn()).toEqual([]);
+  await breakRegex();
+  expect(await reportedError()).toEqual(liveError);
+  await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+  await expect.poll(() => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return { processing: state.processing.value, operation: state.errorLog.value?.operation };
+  }), { timeout: 180_000 }).toEqual({ processing: false, operation: 'generate' });
+  expect(await reportedError()).toEqual(liveError);
+  expect(await drawn()).toEqual([]);
+  await fixRegex();
+
+  const beforeDelete = await undoCount();
+  await edit('removeFeatureVisibilityRule', 0);
+  expect(await undoCount()).toBe(beforeDelete + 1);
+  const live = await drawn();
+  expect(live).toEqual([fl1, fl2]);
+  await generate(page);
+  expect(await drawn()).toEqual(live);
+});
+
+// OV-19: the popup note reads Python's matches of the edited rules, also when
+// the edit leaves the Result as it was.
+test('the feature popup note follows a Feature Visibility rule edit', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
+    window.__GBDRAW_APP__.form.labels_mode = 'none';
+  });
+  await generate(page);
+  const { fl1, fl2 } = await featureIdsByLocator(page);
+  await addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
+  await addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl2$', action: 'off' });
+  expect(await drawnFeatureIds(page, [fl1, fl2])).toEqual([]);
+  await page.evaluate(async (id) => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === id), null);
+  }, fl2);
+  const note = page.locator('[data-label-visibility-hint]');
+  const hidden = 'This feature has no label in the current Result. The feature is hidden.';
+  await expect(note).toHaveText(hidden);
+  // The first rule now hides FL2 too; Python has not matched its new regex yet.
+  await page.evaluate(() => window.__GBDRAW_APP__.setFeatureVisibilityRuleField(0, 'value', '^fl[12]$'));
+  expect(await drawnFeatureIds(page, [fl1, fl2])).toEqual([]);
+  await expect(note).toHaveText(hidden);
+});
+
+// R3 (found with OV-19): Load Feature Edits TSV projects visibility as a History
+// apply does, so a feature whose edit it clears follows the rules at once.
+test('Load Feature Edits TSV applies the visibility rules to a feature whose edit it clears', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE);
+  await generate(page);
+  const { fl1, fl2 } = await featureIdsByLocator(page);
+  await addVisibilityRule(page, { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
+  await page.evaluate(async (id) => {
+    const app = window.__GBDRAW_APP__;
+    await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.svg_id === id), null);
+    app.clickedFeature.featureVisibility = 'on';
+    await app.updateClickedFeatureVisibility('on');
+    await app.handleFeatureVisibilityScopeChoice('feature');
+    app.clickedFeature = null;
+  }, fl1);
+  await generate(page);
+  expect(await drawnFeatureIds(page, [fl1, fl2])).toEqual([fl1, fl2]);
+  await page.evaluate(async () => {
+    const text = 'record\tfeature_selector\tfeature_visibility\tlabel_visibility\tlabel_text\n';
+    const files = [new File([text], 'edits.tsv', { type: 'text/plain' })];
+    await window.__GBDRAW_APP__.loadFeatureEditTable({ target: { files, value: '' } });
+  });
+  expect(await drawnFeatureIds(page, [fl1, fl2])).toEqual([fl2]);
+  await generate(page);
+  expect(await drawnFeatureIds(page, [fl1, fl2])).toEqual([fl2]);
+});
+
 test('Label visibility On for an underlay feature is kept without a label until the rendering changes', async ({ page }) => {
   test.setTimeout(600_000);
   await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
