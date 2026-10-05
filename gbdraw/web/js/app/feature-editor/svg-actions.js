@@ -423,7 +423,8 @@ export const createFeatureSvgActions = ({
   const openFeatureEditorForFeature = (feat, eventLike = null) => {
     const previousAlert = state.errorLog?.value;
     const opened = () => openPreparedFeatureEditor(feat, eventLike);
-    const result = rulePreparation ? rulePreparation.run(state.manualSpecificRules, opened) : opened();
+    // The popup states whether the feature is drawn (resolveFeatureDrawn).
+    const result = rulePreparation ? rulePreparation.run(state.manualSpecificRules, opened, { drawn: true }) : opened();
     return result?.catch ? result.catch((error) => { state.errorLog && state.errorLog.value === previousAlert && (state.errorLog.value = normalizeUserFacingError(error, { operation: 'feature-extraction', stage: 'helper' })); }) : result;
   };
 

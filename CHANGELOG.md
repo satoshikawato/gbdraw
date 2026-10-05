@@ -18,6 +18,15 @@ write-up of a release.
   `foo#bar`) failed with "Missing values", and a Label override text or
   whitelist keyword such as `Gene #1` was silently cut to `Gene `. Only a line
   whose first non-blank character is `#` is a comment, as before.
+- Labels (web app): applying **Label visibility** **On** now asks **Feature Is
+  Hidden** also for a feature that a **Feature Visibility** rule hides, for
+  example a rule with a record ID, another qualifier, or a `hash`, `location`,
+  or `record_location` value, as a loaded visibility TSV can give. The dialog,
+  the popup note, and the preview after Undo, Redo, or a Result switch decide
+  whether a feature is drawn as Generate does, with Python's regular
+  expressions; the preview used to apply only the popup's exact product and
+  protein ID rules. Such an **On** used to be saved without a dialog and was
+  not drawn.
 - Linear File order (web app): the File up and down buttons now work when
   each File uses its own consecutive rows, including a CLI Session that draws
   each record of a multi-record file on its own row. A move exchanges the
@@ -707,6 +716,12 @@ Retired names and their replacements are listed under
   and both spans. It showed "Match feature endpoint identity is invalid." under
   each span and offered no sequence actions; a one-anchor block was not
   affected. Gallery SVGs carry the fix after their next refresh.
+- Fixed: in a standalone interactive SVG, the popup of a Linear collinear block
+  with several anchors lists, for each Similarity group, only the anchors that
+  belong to that group under Query member and Subject member, and lists one row
+  per anchor under Query and Subject. It listed every anchor of the block for
+  every group and joined the anchors into one row; the Web popup was not
+  affected. Gallery SVGs carry the fix after their next refresh (OV-18).
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 

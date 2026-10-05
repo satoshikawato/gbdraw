@@ -1,8 +1,21 @@
 import assert from 'node:assert/strict';
 import { createFeatureVisibilityActions } from '../../gbdraw/web/js/app/feature-editor/visibility-actions.js';
-import { setFeatureVisibilityOverride } from '../../gbdraw/web/js/app/feature-visibility.js';
+import {
+  requestFeatureVisibilityRules,
+  setFeatureVisibilityOverride
+} from '../../gbdraw/web/js/app/feature-visibility.js';
+import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
+import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 
 const ref = (value) => ({ value });
+// The live projection reads Python's rule matches (R4) and the committed
+// request's feature types.
+const rulePreparationFor = (state) => createRulePreparation({
+  state,
+  evaluate: evaluatePythonRules,
+  visibilityRules: () => requestFeatureVisibilityRules(state.featureVisibilityManualRules)
+});
+const committedRequest = (selectedFeaturesSet) => () => ({ diagramOptions: { selectedFeaturesSet } });
 // Per-feature visibility is the identity row of the feature (design Q4).
 const identity = (id) => ({ record_key: 'record-1', biological_feature_id: `bio-${id}` });
 const modes = (overrides) => Object.fromEntries(Object.values(overrides)
@@ -22,22 +35,25 @@ const appliedPreviewChanges = [];
 // F-3: each visibility edit hands the feature's label to the label owner.
 const labelVisibilityCalls = [];
 
+const actionState = {
+  clickedFeature,
+  extractedFeatures,
+  orthogroups,
+  featureVisibilityManualRules: [],
+  featureVisibilityRules: ref([]),
+  featureOverrides: featureVisibilityOverrides,
+  featureVisibilityScopeDialog,
+  resultGenerationKey,
+  results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
+  selectedResultIndex,
+  svgContainer: ref({
+    querySelector: (selector) => (selector === 'svg' ? {} : null)
+  })
+};
 const actions = createFeatureVisibilityActions({
-  state: {
-    clickedFeature,
-    extractedFeatures,
-    orthogroups,
-    featureVisibilityManualRules: [],
-    featureVisibilityRules: ref([]),
-    featureOverrides: featureVisibilityOverrides,
-    featureVisibilityScopeDialog,
-    resultGenerationKey,
-    results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
-    selectedResultIndex,
-    svgContainer: ref({
-      querySelector: (selector) => (selector === 'svg' ? {} : null)
-    })
-  },
+  state: actionState,
+  rulePreparation: rulePreparationFor(actionState),
+  getCommittedRequest: committedRequest(['CDS']),
   featureSvgActions: {
     applyVisibilityPreviewChanges: (changes, options = {}) => {
       appliedPreviewChanges.push({ changes, reason: options.reason });
@@ -108,7 +124,7 @@ clickedFeature.value = {
   featureVisibility: 'default',
   feat: sourceIdFeature
 };
-actions.updateClickedFeatureVisibility('off');
+await actions.updateClickedFeatureVisibility('off');
 assert.equal(featureVisibilityScopeDialog.show, true);
 assert.ok(featureVisibilityScopeDialog.scopes.some((scope) => (
   scope.id === 'protein_id' &&
@@ -128,7 +144,7 @@ clickedFeature.value = {
   feat: runtimeOnlyFeature
 };
 featureVisibilityScopeDialog.show = false;
-actions.updateClickedFeatureVisibility('off');
+await actions.updateClickedFeatureVisibility('off');
 assert.equal(featureVisibilityScopeDialog.show, false);
 clear(featureVisibilityOverrides);
 
@@ -169,7 +185,7 @@ clickedFeature.value = {
   featureVisibility: 'default',
   feat: reversedFeature
 };
-actions.updateClickedFeatureVisibility('off');
+await actions.updateClickedFeatureVisibility('off');
 const reversedGroupScope = featureVisibilityScopeDialog.scopes.find((scope) => scope.id === 'orthogroup');
 assert.ok(reversedGroupScope);
 assert.deepEqual(
@@ -216,7 +232,7 @@ clickedFeature.value = {
 };
 featureVisibilityScopeDialog.show = false;
 featureVisibilityScopeDialog.scopes = [];
-actions.updateClickedFeatureVisibility('off');
+await actions.updateClickedFeatureVisibility('off');
 assert.equal(featureVisibilityScopeDialog.show, false);
 clear(featureVisibilityOverrides);
 
@@ -237,7 +253,7 @@ orthogroups.value[0].members[1] = {
 };
 featureVisibilityScopeDialog.show = false;
 featureVisibilityScopeDialog.scopes = [];
-actions.updateClickedFeatureVisibility('off');
+await actions.updateClickedFeatureVisibility('off');
 assert.equal(featureVisibilityScopeDialog.show, false);
 clear(featureVisibilityOverrides);
 
@@ -245,7 +261,7 @@ extractedFeatures.value = [strictTrigger, duplicateA];
 orthogroups.value = [orthogroups.value[0], { ...orthogroups.value[0] }];
 featureVisibilityScopeDialog.show = false;
 featureVisibilityScopeDialog.scopes = [];
-actions.updateClickedFeatureVisibility('off');
+await actions.updateClickedFeatureVisibility('off');
 assert.equal(featureVisibilityScopeDialog.show, false);
 clear(featureVisibilityOverrides);
 
@@ -257,7 +273,9 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
 
 // FE-04: an Exact product hide is committed as an editor qualifier rule. The
 // reconcile that History runs after Undo/Redo resolves it with the action's
-// matcher (case-insensitive, like Python), so the feature stays hidden.
+// resolver (Python's matches), so the feature stays hidden. R-2: every rule,
+// also one typed in the Features panel or loaded from a TSV, hides live as
+// Generate hides.
 {
   const nd1 = { svg_id: 'nd1', type: 'CDS', qualifiers: { product: ['NADH dehydrogenase subunit 1'] }, ...identity('nd1') };
   const nd1Case = {
@@ -271,20 +289,24 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
   const overrides = {};
   const reconciled = [];
   const scopeDialog = {};
+  const productState = {
+    clickedFeature: ref({ svg_id: nd1.svg_id, featureVisibility: 'default', feat: nd1 }),
+    extractedFeatures: ref([nd1, nd1Case, nd2, geneRna]),
+    orthogroups: ref([]),
+    featureVisibilityManualRules: manualRules,
+    featureVisibilityRules: ref([]),
+    featureOverrides: overrides,
+    featureVisibilityScopeDialog: scopeDialog,
+    resultGenerationKey: ref('generation-1'),
+    results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) })
+  };
+  const productPreparation = rulePreparationFor(productState);
   const productActions = createFeatureVisibilityActions({
-    state: {
-      clickedFeature: ref({ svg_id: nd1.svg_id, featureVisibility: 'default', feat: nd1 }),
-      extractedFeatures: ref([nd1, nd1Case, nd2, geneRna]),
-      orthogroups: ref([]),
-      featureVisibilityManualRules: manualRules,
-      featureVisibilityRules: ref([]),
-      featureOverrides: overrides,
-      featureVisibilityScopeDialog: scopeDialog,
-      resultGenerationKey: ref('generation-1'),
-      results: ref([{ name: 'one.svg', content: '<svg></svg>' }]),
-      selectedResultIndex: ref(0),
-      svgContainer: ref({ querySelector: (selector) => (selector === 'svg' ? {} : null) })
-    },
+    state: productState,
+    rulePreparation: productPreparation,
+    getCommittedRequest: committedRequest(['CDS', 'tRNA']),
     featureSvgActions: {
       applyVisibilityPreviewChanges: (changes) => {
         reconciled.push(Object.fromEntries(changes.map((change) => [change.featureId, change.mode])));
@@ -293,20 +315,25 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
     },
     previewRuntime: { selectResult: () => true }
   });
-  productActions.updateClickedFeatureVisibility('off');
+  await productActions.updateClickedFeatureVisibility('off');
   assert.equal(scopeDialog.show, true);
-  assert.equal(productActions.handleFeatureVisibilityScopeChoice('product'), true);
-  assert.deepEqual(reconciled.at(-1), { nd1: 'off', 'nd1-case': 'off' });
+  assert.equal(await productActions.handleFeatureVisibilityScopeChoice('product'), true);
+  const hidden = { nd1: 'off', 'nd1-case': 'off', nd2: 'on', 'nd1-rna': 'on' };
+  assert.deepEqual(reconciled.at(-1), hidden);
   assert.equal(manualRules.length, 1);
   assert.equal(productActions.reconcileFeatureVisibility(), true);
-  assert.deepEqual(reconciled.at(-1), { nd1: 'off', 'nd1-case': 'off', nd2: 'on', 'nd1-rna': 'on' });
+  assert.deepEqual(reconciled.at(-1), hidden);
   setFeatureVisibilityOverride(overrides, nd1Case, 'on');
   productActions.reconcileFeatureVisibility();
   assert.equal(reconciled.at(-1)['nd1-case'], 'on', 'a per-feature override takes precedence');
-  manualRules.splice(0, manualRules.length, { ...manualRules[0], source: 'manual' });
   clear(overrides);
+  manualRules.splice(0, manualRules.length, {
+    ...manualRules[0], source: 'file', recordId: '*', featureType: '*', qualifier: 'Product', value: 'subunit 2$'
+  });
+  assert.equal(await productPreparation.prepareDrawn(), true);
   productActions.reconcileFeatureVisibility();
-  assert.equal(reconciled.at(-1).nd1, 'on', 'a manual product rule applies on Generate only');
+  assert.deepEqual(reconciled.at(-1), { nd1: 'on', 'nd1-case': 'on', nd2: 'off', 'nd1-rna': 'on' },
+    'a loaded rule hides live as Generate does');
 }
 
 console.log('feature visibility action tests passed');

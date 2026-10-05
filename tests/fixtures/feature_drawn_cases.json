@@ -1,0 +1,531 @@
+{
+  "comment": [
+    "Shared expectations for \"is this feature drawn?\" (R4).",
+    "gbdraw/features/visibility.py::should_render_feature decides it for Generate.",
+    "gbdraw/web/js/app/feature-visibility.js::resolveFeatureDrawn answers it for the Label On dialog and the",
+    "live preview, with the rule matches of the Python helper (gbdraw/web_support/rule_matching.py).",
+    "tests/test_web_rule_matching.py checks should_render_feature and the helper against these cases, and",
+    "tests/web/feature-drawn-resolver.test.mjs checks the JavaScript resolver with the helper's matches.",
+    "features: a feature in its drawn record, with the drawn selector values a feature catalog gives",
+    "(drawnSelector); location is [start, end, strand] in Python coordinates.",
+    "cases: override is the feature's identity-keyed Feature visibility; visibilityRules are table rows in",
+    "order; selectedFeatures is the request's feature types; colorRules are specific color rules."
+  ],
+  "features": {
+    "cds_fl1": {
+      "type": "CDS",
+      "recordId": "REC1",
+      "location": [
+        100,
+        700,
+        1
+      ],
+      "qualifiers": {
+        "locus_tag": [
+          "FL1"
+        ],
+        "product": [
+          "alpha protein"
+        ]
+      },
+      "drawnSelector": {
+        "hash": "f3613653a",
+        "location": "100..700",
+        "recordLocation": "REC1:100..700:+"
+      }
+    },
+    "cds_fl2": {
+      "type": "CDS",
+      "recordId": "REC1",
+      "location": [
+        2000,
+        2600,
+        -1
+      ],
+      "qualifiers": {
+        "locus_tag": [
+          "FL2"
+        ],
+        "product": [
+          "ı-protein"
+        ]
+      },
+      "drawnSelector": {
+        "hash": "fe05586bf",
+        "location": "2000..2600",
+        "recordLocation": "REC1:2000..2600:-"
+      }
+    },
+    "misc_marker": {
+      "type": "misc_feature",
+      "recordId": "REC1",
+      "location": [
+        900,
+        950,
+        1
+      ],
+      "qualifiers": {
+        "note": [
+          "marker"
+        ]
+      },
+      "drawnSelector": {
+        "hash": "fff977da2",
+        "location": "900..950",
+        "recordLocation": "REC1:900..950:+"
+      }
+    },
+    "trna_leu": {
+      "type": "tRNA",
+      "recordId": "REC2",
+      "location": [
+        3000,
+        3070,
+        1
+      ],
+      "qualifiers": {
+        "product": [
+          "tRNA-Leu"
+        ]
+      },
+      "drawnSelector": {
+        "hash": "fdb815879",
+        "location": "3000..3070",
+        "recordLocation": "REC2:3000..3070:+"
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "a selected type is drawn",
+      "feature": "cds_fl1",
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": true
+    },
+    {
+      "name": "a type the request does not select is not drawn",
+      "feature": "misc_marker",
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": false
+    },
+    {
+      "name": "an empty selection draws every type",
+      "feature": "misc_marker",
+      "selectedFeatures": [],
+      "drawn": true
+    },
+    {
+      "name": "a specific color rule draws a feature of an unselected type",
+      "feature": "misc_marker",
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "colorRules": [
+        {
+          "feat": "misc_feature",
+          "qual": "note",
+          "val": "mark"
+        }
+      ],
+      "drawn": true
+    },
+    {
+      "name": "a color rule of another type does not",
+      "feature": "misc_marker",
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "colorRules": [
+        {
+          "feat": "CDS",
+          "qual": "note",
+          "val": "mark"
+        }
+      ],
+      "drawn": false
+    },
+    {
+      "name": "a wildcard color rule matches in any letter case",
+      "feature": "misc_marker",
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "colorRules": [
+        {
+          "feat": "*",
+          "qual": "note",
+          "val": "^MARKER$"
+        }
+      ],
+      "drawn": true
+    },
+    {
+      "name": "an Off rule hides, in any letter case",
+      "feature": "cds_fl1",
+      "visibilityRules": [
+        {
+          "recordId": "REC1",
+          "featureType": "CDS",
+          "qualifier": "locus_tag",
+          "value": "^fl1$",
+          "action": "off"
+        }
+      ],
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": false
+    },
+    {
+      "name": "a rule of another record ID does not apply",
+      "feature": "cds_fl1",
+      "visibilityRules": [
+        {
+          "recordId": "REC2",
+          "featureType": "CDS",
+          "qualifier": "locus_tag",
+          "value": "FL1",
+          "action": "off"
+        }
+      ],
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": true
+    },
+    {
+      "name": "a rule of another feature type does not apply",
+      "feature": "cds_fl1",
+      "visibilityRules": [
+        {
+          "recordId": "*",
+          "featureType": "tRNA",
+          "qualifier": "locus_tag",
+          "value": "FL1",
+          "action": "off"
+        }
+      ],
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": true
+    },
+    {
+      "name": "a qualifier key matches in any letter case",
+      "feature": "cds_fl1",
+      "visibilityRules": [
+        {
+          "recordId": "*",
+          "featureType": "*",
+          "qualifier": "Locus_Tag",
+          "value": "FL1",
+          "action": "off"
+        }
+      ],
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": false
+    },
+    {
+      "name": "a regex uses Python syntax",
+      "feature": "cds_fl1",
+      "visibilityRules": [
+        {
+          "recordId": "*",
+          "featureType": "CDS",
+          "qualifier": "locus_tag",
+          "value": "(?P<tag>FL1)\\Z",
+          "action": "off"
+        }
+      ],
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": false
+    },
+    {
+      "name": "a regex folds letter case as Python does",
+      "feature": "cds_fl2",
+      "visibilityRules": [
+        {
+          "recordId": "*",
+          "featureType": "CDS",
+          "qualifier": "product",
+          "value": "^i-protein$",
+          "action": "off"
+        }
+      ],
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": false
+    },
+    {
+      "name": "the first matching rule decides",
+      "feature": "cds_fl1",
+      "visibilityRules": [
+        {
+          "recordId": "*",
+          "featureType": "CDS",
+          "qualifier": "locus_tag",
+          "value": "FL1",
+          "action": "show"
+        },
+        {
+          "recordId": "*",
+          "featureType": "CDS",
+          "qualifier": "locus_tag",
+          "value": "FL1",
+          "action": "off"
+        }
+      ],
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": true
+    },
+    {
+      "name": "a matching Exclude from matching rule ends the rules and keeps the type selection",
+      "feature": "cds_fl1",
+      "visibilityRules": [
+        {
+          "recordId": "*",
+          "featureType": "CDS",
+          "qualifier": "locus_tag",
+          "value": "FL1",
+          "action": "exclude_matching"
+        },
+        {
+          "recordId": "*",
+          "featureType": "CDS",
+          "qualifier": "locus_tag",
+          "value": "FL1",
+          "action": "off"
+        }
+      ],
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": true
+    },
+    {
+      "name": "a matching Exclude from matching rule keeps an unselected type hidden",
+      "feature": "misc_marker",
+      "visibilityRules": [
+        {
+          "recordId": "*",
+          "featureType": "*",
+          "qualifier": "note",
+          "value": "marker",
+          "action": "exclude_matching"
+        },
+        {
+          "recordId": "*",
+          "featureType": "*",
+          "qualifier": "note",
+          "value": "marker",
+          "action": "show"
+        }
+      ],
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": false
+    },
+    {
+      "name": "a Show rule draws a feature of an unselected type",
+      "feature": "misc_marker",
+      "visibilityRules": [
+        {
+          "recordId": "*",
+          "featureType": "misc_feature",
+          "qualifier": "note",
+          "value": "marker",
+          "action": "show"
+        }
+      ],
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": true
+    },
+    {
+      "name": "a hash rule searches the drawn hash",
+      "feature": "cds_fl1",
+      "visibilityRules": [
+        {
+          "recordId": "*",
+          "featureType": "*",
+          "qualifier": "hash",
+          "value": "F36136",
+          "action": "off"
+        }
+      ],
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": false
+    },
+    {
+      "name": "a location rule reads the drawn location",
+      "feature": "cds_fl1",
+      "visibilityRules": [
+        {
+          "recordId": "*",
+          "featureType": "*",
+          "qualifier": "location",
+          "value": "^100\\.\\.700$",
+          "action": "off"
+        }
+      ],
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": false
+    },
+    {
+      "name": "a record_location rule reads the drawn record location and strand",
+      "feature": "cds_fl2",
+      "visibilityRules": [
+        {
+          "recordId": "*",
+          "featureType": "*",
+          "qualifier": "record_location",
+          "value": "^REC1:2000\\.\\.2600:-$",
+          "action": "off"
+        }
+      ],
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": false
+    },
+    {
+      "name": "the hide action is Off",
+      "feature": "cds_fl1",
+      "visibilityRules": [
+        {
+          "recordId": "*",
+          "featureType": "CDS",
+          "qualifier": "product",
+          "value": "alpha",
+          "action": "hide"
+        }
+      ],
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": false
+    },
+    {
+      "name": "a rule of another record does not hide this one",
+      "feature": "trna_leu",
+      "visibilityRules": [
+        {
+          "recordId": "REC1",
+          "featureType": "*",
+          "qualifier": "product",
+          "value": "tRNA",
+          "action": "off"
+        }
+      ],
+      "selectedFeatures": [
+        "tRNA"
+      ],
+      "drawn": true
+    },
+    {
+      "name": "an On override beats an Off rule",
+      "feature": "cds_fl1",
+      "override": "on",
+      "visibilityRules": [
+        {
+          "recordId": "*",
+          "featureType": "CDS",
+          "qualifier": "locus_tag",
+          "value": "FL1",
+          "action": "off"
+        }
+      ],
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": true
+    },
+    {
+      "name": "an Off override hides a selected type",
+      "feature": "cds_fl1",
+      "override": "off",
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": false
+    },
+    {
+      "name": "an Off override beats a Show rule",
+      "feature": "misc_marker",
+      "override": "off",
+      "visibilityRules": [
+        {
+          "recordId": "*",
+          "featureType": "*",
+          "qualifier": "note",
+          "value": "marker",
+          "action": "show"
+        }
+      ],
+      "selectedFeatures": [],
+      "drawn": false
+    },
+    {
+      "name": "an On override draws a feature of an unselected type",
+      "feature": "misc_marker",
+      "override": "on",
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": true
+    },
+    {
+      "name": "an Exclude from matching override skips the rules",
+      "feature": "cds_fl1",
+      "override": "exclude_matching",
+      "visibilityRules": [
+        {
+          "recordId": "*",
+          "featureType": "CDS",
+          "qualifier": "locus_tag",
+          "value": "FL1",
+          "action": "off"
+        }
+      ],
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": true
+    },
+    {
+      "name": "an Exclude from matching override keeps the type selection",
+      "feature": "misc_marker",
+      "override": "exclude_matching",
+      "visibilityRules": [
+        {
+          "recordId": "*",
+          "featureType": "*",
+          "qualifier": "note",
+          "value": "marker",
+          "action": "show"
+        }
+      ],
+      "selectedFeatures": [
+        "CDS"
+      ],
+      "drawn": false
+    }
+  ]
+}
