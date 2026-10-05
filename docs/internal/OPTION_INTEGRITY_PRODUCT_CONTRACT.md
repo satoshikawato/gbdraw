@@ -412,7 +412,8 @@ Phase E): F-3 and `PD-OI-066` label-follows-feature → `app/feature-editor/visi
 Owner Q2 show-feature-and-label → `app/feature-editor/visibility-actions.js`,
 `port` (`setFeatureVisibility`), `projectFeatureVisibility`; Owner Q3
 slot inputs → `app/feature-editor/placement-actions.js`, `port`
-(`trackLayoutActions`), pending the E7 direction.
+(`changeTrackLayout`), the transition itself; E7 (#822) kept #805's direction,
+so placement remains the writer of the slot inputs.
 
 
 ### PD-OI-001: LOSATP raw-search limit fresh defaults
