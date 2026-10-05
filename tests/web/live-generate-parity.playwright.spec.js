@@ -7,7 +7,7 @@
 // the PR that fixes it removes the mark.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 
@@ -59,7 +59,7 @@ const generate = async (page) => {
 // opens and closes the popup, as a reader looking at the feature does, which
 // binds the labels.
 const popupEdit = async (page, match, edit = {}) => {
-  await page.evaluate(async ({ target, change }) => {
+  await evaluateWithRetainedPromise(page, async ({ target, change }) => {
     const app = window.__GBDRAW_APP__;
     const matches = (item) => (typeof target === 'string'
       ? item.locus_tag === target
@@ -97,7 +97,7 @@ const popupEdit = async (page, match, edit = {}) => {
 };
 
 const addVisibilityRule = async (page, fields) => {
-  await page.evaluate(async (ruleFields) => {
+  await evaluateWithRetainedPromise(page, async (ruleFields) => {
     const app = window.__GBDRAW_APP__;
     await app.addFeatureVisibilityRule();
     const index = app.featureVisibilityManualRules.length - 1;
