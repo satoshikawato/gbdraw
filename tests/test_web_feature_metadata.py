@@ -754,3 +754,24 @@ def test_biological_feature_catalog_excludes_non_rendered_source_features() -> N
     assert [
         feature["type"] for feature in source_payload["biological_features"]
     ] == ["source", "CDS"]
+
+
+def test_biological_feature_catalog_keeps_a_source_feature_with_its_own_visibility() -> None:
+    # R-5 (Owner decision 2026-10-05): a feature with its own Feature
+    # visibility stays in the Web Features list, which lists the catalog's
+    # biological features, so it can be shown again.
+    from gbdraw.features.overrides import ResolvedFeatureOverride
+    from gbdraw.features.placement import ResolvedRecordFeatureInputs
+
+    source = SeqFeature(FeatureLocation(0, 12, strand=1), type="source", qualifiers={"organism": ["x"]})
+    cds = SeqFeature(FeatureLocation(0, 9, strand=1), type="CDS", qualifiers={"locus_tag": ["C1"]})
+    record = SeqRecord(Seq("ATGAAATAAGGG"), id="catalog-record", features=[source, cds])
+    hidden = ResolvedFeatureOverride("off", None, None, "source 1..12")
+    payload = extract_features_from_records_payload(
+        [record],
+        selected_features=["CDS"],
+        record_features=(ResolvedRecordFeatureInputs("k", overrides={0: hidden}),),
+        include_biological_features=True,
+    )
+    assert [feature["type"] for feature in payload["features"]] == ["CDS"]
+    assert [feature["type"] for feature in payload["biological_features"]] == ["source", "CDS"]

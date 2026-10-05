@@ -389,7 +389,10 @@ def _gff(record_key: str = "g", region: str | None = None) -> RecordInput:
     [(LinearDiagramRequest, LinearDiagramOptions), (CircularDiagramRequest, CircularDiagramOptions)],
 )
 @pytest.mark.parametrize(
-    "case", ["no row", "row on a loaded type", "row on an unloaded type", "table row on an unloaded type"],
+    "case", [
+        "no row", "row on a loaded type", "row on an unloaded type", "table row on an unloaded type",
+        "off row on an unloaded type",
+    ],
 )
 def test_gff_is_parsed_once_whatever_the_identity_rows_turn_on(monkeypatch, case, request_type, options_type):
     def request(**options):
@@ -403,6 +406,7 @@ def test_gff_is_parsed_once_whatever_the_identity_rows_turn_on(monkeypatch, case
         "row on an unloaded type": {"feature_overrides": (FeatureOverride("g", first["gene"], feature_visibility="on"),)},
         "table row on an unloaded type": {"feature_override_table": DataFrame([
             {"record": "#1", "feature_selector": f"hash={first['gene']}", "feature_visibility": "on"}])},
+        "off row on an unloaded type": {"feature_overrides": (FeatureOverride("g", first["gene"], feature_visibility="off"),)},
     }[case]
     parses, parse = [], GFF.parse
     monkeypatch.setattr(GFF, "parse", lambda *args, **kwargs: parses.append(args) or parse(*args, **kwargs))
@@ -434,6 +438,42 @@ def test_gff_gene_shown_by_its_edit_keeps_parent_linked_cds_drawn(request_type, 
     before = drawn_ids(_svg(request()))
     assert len(before) > 100
     assert drawn_ids(_svg(shown)) == before | {_drawn_id(plan_request(shown), 0, gene)}
+
+
+@pytest.mark.parametrize(
+    ("request_type", "options_type"),
+    [(LinearDiagramRequest, LinearDiagramOptions), (CircularDiagramRequest, CircularDiagramOptions)],
+)
+def test_gff_feature_hidden_by_its_edit_is_loaded_and_listed_but_not_drawn(request_type, options_type):
+    # R-5 (Owner decision 2026-10-05): a feature with its own Feature visibility
+    # stays in the Web Features list, which lists the catalog's biological
+    # features, so GFF3 loads its type although the type filter drops it.
+    from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
+
+    def request(*rows):
+        return request_type(records=(_gff(),), options=options_type(
+            selected_features_set=("CDS",), feature_overrides=rows,
+        ))
+
+    def drawn_ids(svg: str) -> set[str]:
+        return set(re.findall(r'data-gbdraw-feature-id="([^"]+)"', svg))
+
+    base = plan_request(request())
+    gene = next(
+        entry.biological_feature_id
+        for entry in base.provenance[0].source_feature_catalog
+        if entry.feature_type == "gene"
+    )
+    hidden = request(FeatureOverride("g", gene, feature_visibility="off"))
+    plan = plan_request(hidden)
+    assert plan.inputs.feature_identity_notices == ()
+    payload = extract_features_from_records_payload(
+        plan.records, selected_features=["CDS"], record_features=plan.inputs.record_features,
+        include_biological_features=True,
+    )
+    assert "gene" in {feature["type"] for feature in payload["biological_features"]}
+    assert "gene" not in {feature["type"] for feature in payload["features"]}
+    assert drawn_ids(_svg(hidden)) == drawn_ids(_svg(request()))
 
 
 def test_crop_notice_message_covers_a_feature_removed_by_the_type_filter_inside_the_crop():

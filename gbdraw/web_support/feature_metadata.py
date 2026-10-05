@@ -322,20 +322,25 @@ def extract_features_from_records_payload(
         )
         for feature_index, feat in enumerate(_iter_features(record.features)):
             source_feature_index = _source_feature_index(feat)
+            feature_override = override_of(feat)
             is_rendered_feature = should_render_feature(
                 feat,
                 selected_feature_set,
                 feature_visibility_rules=feature_visibility_rules,
                 record_id=hash_record_id,
                 specific_color_rules=specific_color_rules,
-                feature_override=override_of(feat),
+                feature_override=feature_override,
             )
             if not is_rendered_feature and not include_biological_features:
                 continue
+            # An undrawn source feature stays out of the catalog unless it has
+            # its own Feature visibility, which keeps it in the Web Features
+            # list so it can be shown again (R-5).
             if (
                 include_biological_features
                 and not is_rendered_feature
                 and str(getattr(feat, "type", "") or "").lower() == "source"
+                and getattr(feature_override, "feature_visibility", None) is None
             ):
                 continue
             selector_values = _biological_selector_values(
