@@ -1,0 +1,157 @@
+{
+  "schemaVersion": 1,
+  "rulesPath": "gbdraw/web/CLAUDE.md",
+  "rules": [
+    {
+      "id": "R1",
+      "heading": "R1: Three writers of the Result",
+      "guards": [
+        "tests/web/gui-audit-20260930-editor.playwright.spec.js",
+        "tests/web/history-generated-authority.playwright.spec.js"
+      ],
+      "allowlists": []
+    },
+    {
+      "id": "R2",
+      "heading": "R2: Lifetime of editor intent",
+      "guards": [
+        "tests/web/annotation-feature-identity.playwright.spec.js",
+        "tests/web/annotations.test.mjs",
+        "tests/web/feature-label-visual-unit.test.mjs",
+        "tests/web/mode-scoped-feature-edits.playwright.spec.js",
+        "tests/web/mode-scoped-feature-edits.test.mjs",
+        "tests/web/non-edit-state-diff.test.mjs",
+        "tests/web/non-edit-state-preservation.playwright.spec.js"
+      ],
+      "allowlists": []
+    },
+    {
+      "id": "R3",
+      "heading": "R3: One projection per domain",
+      "guards": [
+        "tests/web/feature-color-actions.test.mjs",
+        "tests/web/feature-visibility-actions.test.mjs",
+        "tests/web/gui-audit-20260930-editor.playwright.spec.js"
+      ],
+      "allowlists": []
+    },
+    {
+      "id": "R4",
+      "heading": "R4: A fast path matches the canonical reader or declines",
+      "guards": [
+        "tests/fixtures/record_metadata_inference_cases.json",
+        "tests/test_record_metadata.py",
+        "tests/web/record-metadata-inference.test.mjs"
+      ],
+      "allowlists": []
+    },
+    {
+      "id": "R5",
+      "heading": "R5: Comparison frames and reuse",
+      "guards": [
+        "tests/web/gui-audit-20260930-comparisons.playwright.spec.js",
+        "tests/web/linear-sources.test.mjs"
+      ],
+      "allowlists": []
+    },
+    {
+      "id": "R6",
+      "heading": "R6: The producer owns the failure meaning",
+      "guards": [
+        "tests/test_web_error_producer_coverage.py",
+        "tests/web/error-normalization.test.mjs",
+        "tests/web/error-producer-coverage.test.mjs"
+      ],
+      "allowlists": [
+        {
+          "path": "tests/web/error-producer-coverage.test.mjs",
+          "symbol": "UNCLASSIFIED_THROW_BASELINE",
+          "kind": "count-map"
+        },
+        {
+          "path": "tests/web/error-producer-coverage.test.mjs",
+          "symbol": "NATIVE_VALIDATION_BASELINE",
+          "kind": "count-map"
+        }
+      ]
+    },
+    {
+      "id": "R7",
+      "heading": "R7: Python's typed layer owns value checks",
+      "guards": [
+        "tests/fixtures/option_domain_vectors.json",
+        "tests/test_option_domain_parity.py",
+        "tests/web/option-input-integrity.test.mjs"
+      ],
+      "allowlists": [
+        {
+          "path": "tests/web/option-input-integrity.test.mjs",
+          "symbol": "BASELINE",
+          "kind": "count"
+        }
+      ]
+    },
+    {
+      "id": "R8",
+      "heading": "R8: The Multi-Record Canvas owns placement only",
+      "guards": [
+        "tests/test_circular_multi_record_parity.py"
+      ],
+      "allowlists": []
+    },
+    {
+      "id": "R9",
+      "heading": "R9: One reader per input format",
+      "guards": [
+        "tests/test_comparison_tables.py"
+      ],
+      "allowlists": []
+    },
+    {
+      "id": "R10",
+      "heading": "R10: A watcher does not repair state",
+      "guards": [
+        "tests/web/circular-track-slots.test.mjs",
+        "tests/web/depth-slot-lifecycle.test.mjs",
+        "tests/web/track-layout-transition.playwright.spec.js",
+        "tests/web/track-layout-transition.test.mjs",
+        "tests/web/track-slot-display.test.mjs"
+      ],
+      "allowlists": [
+        {
+          "path": "tests/web/track-layout-transition.test.mjs",
+          "symbol": "RECONCILE",
+          "kind": "set"
+        },
+        {
+          "path": "tests/web/track-layout-transition.test.mjs",
+          "symbol": "WRITERS",
+          "kind": "writer-map"
+        }
+      ]
+    },
+    {
+      "id": "R11",
+      "heading": "R11: History transaction boundaries",
+      "guards": [
+        "tests/web/history-config-restore.test.mjs",
+        "tests/web/history-generated-authority.playwright.spec.js",
+        "tests/web/history-inputs.playwright.spec.js",
+        "tests/web/history-inputs.test.mjs",
+        "tests/web/multi-result-edit-matrix.playwright.spec.js",
+        "tests/web/non-edit-state-preservation.playwright.spec.js",
+        "tests/web/session-operation-consistency.test.mjs"
+      ],
+      "allowlists": []
+    },
+    {
+      "id": "R12",
+      "heading": "R12: Source recipe and accessibility",
+      "guards": [
+        "tests/web/accessibility.playwright.spec.js",
+        "tests/web/run-info.test.mjs"
+      ],
+      "allowlists": []
+    }
+  ]
+}

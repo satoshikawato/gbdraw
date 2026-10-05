@@ -247,6 +247,7 @@ Checker implementation consists of:
 tools/check-web-change-budget.mjs
 tools/web-architecture-detectors.mjs
 tools/web-architecture-evaluation.mjs
+tools/web-owner-graph-detectors.mjs
 tools/web-change-source.mjs
 tools/web-promotion-context.mjs
 tools/check-promotion-readiness.mjs
@@ -257,9 +258,12 @@ Authority and evidence producers consist of:
 ```text
 docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md
 docs/internal/WEB_CHANGE_POLICY.md
+gbdraw/web/CLAUDE.md
 tools/web-change-policy.json
 tools/web-architecture-rules.json
 tools/web-architecture-violations.json
+tools/web-design-rule-guards.json
+tools/web-owner-graph.json
 .github/workflows/test.yml
 .github/workflows/gallery-publication.yml
 .github/workflows/web-base-policy.yml
@@ -310,6 +314,10 @@ tools/web-change-source.mjs
 tools/web-promotion-context.mjs
 tools/check-promotion-readiness.mjs
 tools/web-change-policy.json
+tools/web-design-rule-guards.json
+tools/web-owner-graph.json
+tools/web-owner-graph-detectors.mjs
+gbdraw/web/CLAUDE.md
 docs/internal/WEB_CHANGE_POLICY.md
 tests/web/architecture-contracts.test.mjs
 tests/web/architecture-ratchet-fixtures.test.mjs
@@ -325,6 +333,35 @@ tests/web/web-promotion-context.test.mjs
 Mapped Product Impact contracts are classified from the trusted base map when
 an affected concern is evaluated. They do not need a duplicated static path
 list in this policy.
+
+### Design-rule co-change
+
+`gbdraw/web/CLAUDE.md` holds the Web design rules R1-R12. Each rule names the
+guard tests that enforce it, and some guards carry an allowlist or a baseline
+literal that the rule's text authorizes (a shrink-only count, a map of counts
+per module, a set of exempt exports, or a map of exempt writers per module).
+`tools/web-design-rule-guards.json` registers, per rule, the heading, the
+guard paths, and those literals (`path`, `symbol`, `kind`). The checker reads
+the registry from the trusted base.
+
+- A diff that changes `gbdraw/web/CLAUDE.md` or the registry and any
+  production runtime path fails the Gate ("production runtime files and Web
+  guard/CI files changed together"). Rule text and registration change in an
+  authority-only pull request, before or after the runtime change they
+  describe.
+- A diff that changes production runtime paths may contract a registered
+  allowlist in the same guard test (remove an entry, lower a count) and passes;
+  the report lists the contraction.
+- A diff that expands a registered allowlist, or leaves it unreadable, alongside
+  production runtime paths fails the Gate with `design-rule.co-change`. The
+  expansion goes to its own authority-only pull request, which is Review
+  REQUIRED ("registered design-rule allowlists expanded") and names the rule
+  and the reason for the new entry.
+- A malformed registry fails closed and is Review REQUIRED.
+
+Adding a test case to a guard test is neither an expansion nor a contraction
+and is not restricted by this rule. A new allowlist or baseline literal in a
+guard test is registered in the same authority-only pull request that adds it.
 
 ### Product Impact separation
 

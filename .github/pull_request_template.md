@@ -74,6 +74,7 @@ Complete only when `GOVERNANCE` is selected.
 - Authority or evidence-producer files touched:
 - Checker implementation files touched:
 - Self-authorization separation evidence:
+- Design-rule or guard-allowlist change (rule id, `contraction` or `expansion`, and the separate runtime pull request it precedes or follows), or `N/A`:
 - Branch-protection or ruleset impact, including unchanged settings:
 - Governance-specific rollback or protection restore point:
 
