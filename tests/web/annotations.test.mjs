@@ -186,7 +186,9 @@ const state = {
 };
 const editor = createAnnotationEditor({ state });
 test('delete and re-add keeps coordinate and selected-feature annotation IDs unique', () => {
-  const state = { annotationSets: [], selectedFeatures: { value: [{ record_key: 'k', biological_feature_id: 'f123' }] } };
+  const state = { annotationSets: [], selectedFeatures: { value: [{
+    scope: 'circular', record_key: 'k', biological_feature_id: 'f123'
+  }] } };
   const actions = createAnnotationEditor({ state });
   const set = actions.addAnnotationSet();
   for (let i = 0; i < 3; i += 1) actions.addCoordinateAnnotation(set);
@@ -204,8 +206,9 @@ test('delete and re-add keeps coordinate and selected-feature annotation IDs uni
 // identity, never by a selector value that a crop or a copy changes.
 test('selected annotations name each feature by its source identity', () => {
   const targets = featureTargetsFromSelection([
-    { type: 'D-loop', record_key: 'mt', biological_feature_id: 'fcf4827e2', selector: { hash: 'fcf4827e2' } },
-    { gene: 'duplicated', record_key: 'linear-seq-2', biological_feature_id: 'f1234~1', selector: { hash: 'f1234' } }
+    { type: 'D-loop', scope: 'circular', record_key: 'mt', biological_feature_id: 'fcf4827e2', selector: { hash: 'fcf4827e2' } },
+    { gene: 'duplicated', scope: 'linear', record_key: 'linear-seq-2', biological_feature_id: 'f1234~1',
+      selector: { hash: 'f1234' } }
   ]);
   assert.deepEqual(targets, [
     { kind: 'featureIdentity', recordKey: 'mt', biologicalFeatureId: 'fcf4827e2', envelope: 'outer_bounds', circularPath: 'shortest' },

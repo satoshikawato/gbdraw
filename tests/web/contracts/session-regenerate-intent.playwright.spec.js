@@ -340,7 +340,7 @@ const prepareLoadedPreviewDirectEditTarget = (page, expected = null) => page.eva
       || ''
     ).trim();
     // The draft key of the feature's per-feature edits (design Q4).
-    const identityKey = (feature) => JSON.stringify([feature.record_key, feature.biological_feature_id]);
+    const identityKey = (feature) => JSON.stringify([feature.scope, feature.record_key, feature.biological_feature_id]);
     const hasFeatureElement = (id) => Boolean(
       svg.querySelector(`[data-gbdraw-feature-id="${CSS.escape(id)}"]`)
       || svg.querySelector(`[data-gbdraw-rendered-feature-id="${CSS.escape(id)}"]`)
@@ -541,12 +541,13 @@ const bindLoadedPreviewDirectEditLabel = (page, expected = null) => page.evaluat
     target.labelFeature = resolved.labelFeature;
     target.labelFeatureId = featureId(resolved.labelFeature);
     target.labelFeatureIdentity = JSON.stringify([
-      resolved.labelFeature.record_key, resolved.labelFeature.biological_feature_id
+      resolved.labelFeature.scope, resolved.labelFeature.record_key, resolved.labelFeature.biological_feature_id
     ]);
     target.labelKey = String(resolved.labelEntry.key || '');
     target.labelVisibilityFeature = resolved.labelVisibilityFeature;
     target.labelVisibilityFeatureId = featureId(resolved.labelVisibilityFeature);
     target.labelVisibilityFeatureIdentity = JSON.stringify([
+      resolved.labelVisibilityFeature.scope,
       resolved.labelVisibilityFeature.record_key,
       resolved.labelVisibilityFeature.biological_feature_id
     ]);
@@ -1247,7 +1248,7 @@ const applyDivergentDraft = async (page) => page.evaluate(async () => {
   app.clickedFeature.labelVisibility = 'off';
   await app.updateClickedFeatureLabelText();
   const labelVisibilityApplied = state.featureOverrides[
-    JSON.stringify([labelFeature.record_key, labelFeature.biological_feature_id])
+    JSON.stringify([labelFeature.scope, labelFeature.record_key, labelFeature.biological_feature_id])
   ]?.labelVisibility === 'off';
   const visibilityApplied = await app.setFeatureVisibility(
     feature,
@@ -1272,9 +1273,9 @@ const applyDivergentDraft = async (page) => page.evaluate(async () => {
   ));
   return {
     featureId,
-    featureIdentity: JSON.stringify([feature.record_key, feature.biological_feature_id]),
+    featureIdentity: JSON.stringify([feature.scope, feature.record_key, feature.biological_feature_id]),
     labelFeatureId,
-    labelFeatureIdentity: JSON.stringify([labelFeature.record_key, labelFeature.biological_feature_id]),
+    labelFeatureIdentity: JSON.stringify([labelFeature.scope, labelFeature.record_key, labelFeature.biological_feature_id]),
     fillOverrideKey,
     strokeOverrideKey,
     fillApplied,
@@ -1652,7 +1653,7 @@ test('loaded current preview supports direct edits before the first Generate', a
     app.clickedFeature.labelVisibility = 'off';
     await app.updateClickedFeatureLabelText();
     const edit = (drawn, field) => app.featureOverrides[
-      JSON.stringify([drawn?.record_key, drawn?.biological_feature_id])
+      JSON.stringify([drawn?.scope, drawn?.record_key, drawn?.biological_feature_id])
     ]?.[field];
     return {
       requested,

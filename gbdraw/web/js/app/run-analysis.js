@@ -1953,12 +1953,12 @@ export const createRunAnalysis = ({
       || legendEntries.value.some(entry => entry.originalCaption && entry.originalCaption !== entry.caption);
     // The committed records whose source this Generate replaces or drops. The
     // metadata of a Session without a feature catalog has no record keys.
-    const replacedRecordKeys = hasSourceBoundEditorIntent
+    const replacedFeatures = hasSourceBoundEditorIntent
       ? [...new Map((workingBiologicalFeatures || []).filter(feature => feature.record_key)
         .map(feature => [feature.record_key, feature])).values()]
-        .filter(feature => !isCurrentFeature(feature)).map((feature) => String(feature.record_key))
+        .filter(feature => !isCurrentFeature(feature))
       : [];
-    const sourceReplaced = replacedRecordKeys.length > 0;
+    const sourceReplaced = replacedFeatures.length > 0;
     const previousCommittedRequest = typeof getCommittedCanonicalSession === 'function'
       ? getCommittedCanonicalSession()?.renderRequest : null;
     const previousRequestRecords = previousCommittedRequest?.mode === mode.value
@@ -2318,7 +2318,7 @@ export const createRunAnalysis = ({
       // Per-feature Feature visibility decides LOSATP's proteins as the rules do;
       // the helper resolves one record's rows as Generate does (R4).
       const proteinVisibilityRows = (recordKeys) => requestFeatureOverrides(
-        featureOverrides, recordKeys.map((recordKey) => ({ recordKey }))
+        featureOverrides, mode.value, recordKeys.map((recordKey) => ({ recordKey }))
       ).filter((row) => row.featureVisibility !== null)
         .map((row) => ({ ...row, labelVisibility: null, labelText: null }));
       let featureVisibilityTablePath = null;
@@ -4747,7 +4747,10 @@ export const createRunAnalysis = ({
         featureOverrides,
         featurePlacementOverrides: state.featurePlacementOverrides,
         notices: canonicalExecution.featureIdentityNotices,
-        replacedRecordKeys,
+        // Record keys name records of one mode; the reconcile reaches only its edits (R2).
+        scope: canonical.renderRequest.mode,
+        replacedRecordKeys: replacedFeatures.filter((feature) => feature.scope === canonical.renderRequest.mode)
+          .map((feature) => String(feature.record_key)),
         previousRecords: previousRequestRecords,
         currentRecords: canonical.renderRequest.records || [],
         biologicalFeatures: candidateBiologicalFeatures

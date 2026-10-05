@@ -88,7 +88,7 @@ export const createRulePreparation = ({ state, evaluate, pending = { value: fals
     legendStrokes: JSON.stringify(state.legendStrokeOverrides || {}),
     featureColors: JSON.stringify(state.featureColorOverrides || {}),
     featureVisibility: JSON.stringify(Object.values(state.featureOverrides || {})
-      .map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility])),
+      .map((row) => [row.scope, row.recordKey, row.biologicalFeatureId, row.featureVisibility])),
     // Physical source, palette, and selector inputs retain their identity while
     // request-owned comparison artifacts are published independently.
     inputFiles: [

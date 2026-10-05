@@ -4,6 +4,7 @@ import {
   canonicalFeatureOverrides,
   recordKeyBelongsToRequest,
   requestFeatureOverrides,
+  rowBelongsToRequest,
   updateFeatureOverride
 } from '../../services/feature-placement.js';
 import { diagnosticError, normalizeUserFacingError } from '../../services/error-normalization.js';
@@ -36,13 +37,14 @@ export const admitFeatureOverrideTable = (result, records) => {
   }
 };
 
-// Load replaces the edits of the committed records, as Load Label TSV replaces
-// the label edits; edits of other records (the other mode's) stay (R2).
-export const replaceFeatureEdits = (featureOverrides, rows, records) => {
+// Load replaces the edits of the committed request's records, as Load Label
+// TSV replaces the label edits; edits of other records and of the other mode
+// stay (R2).
+export const replaceFeatureEdits = (featureOverrides, rows, mode, records) => {
   Object.values(featureOverrides).forEach((row) => {
-    if (recordKeyBelongsToRequest(row.recordKey, records)) updateFeatureOverride(featureOverrides, row, CLEARED_EDITS);
+    if (rowBelongsToRequest(row, mode, records)) updateFeatureOverride(featureOverrides, row, CLEARED_EDITS);
   });
-  rows.forEach((row) => updateFeatureOverride(featureOverrides, row, editsOf(row)));
+  rows.forEach((row) => updateFeatureOverride(featureOverrides, { scope: mode, ...row }, editsOf(row)));
 };
 
 export const createFeatureEditTableActions = ({
@@ -59,7 +61,7 @@ export const createFeatureEditTableActions = ({
   const downloadFeatureEditTable = async () => {
     const committed = getCommittedSession();
     const records = committed?.renderRequest?.records || [];
-    const rows = records.length ? requestFeatureOverrides(featureOverrides, records) : [];
+    const rows = records.length ? requestFeatureOverrides(featureOverrides, committed.renderRequest.mode, records) : [];
     if (rows.length === 0) {
       window.alert('No feature edits to export.');
       return false;
@@ -109,7 +111,7 @@ export const createFeatureEditTableActions = ({
       // A Generate that finished meanwhile names other records.
       if (getCommittedSession() !== committed || state.sessionOperationAvailability?.()) return false;
       const { rows, unmatchedRows } = admitFeatureOverrideTable(response?.result, records);
-      replaceFeatureEdits(featureOverrides, rows, records);
+      replaceFeatureEdits(featureOverrides, rows, committed.renderRequest.mode, records);
       projectFeatureEdits();
       if (state.errorLog?.value === failure.value?.error) state.errorLog.value = null;
       failure.value = null;

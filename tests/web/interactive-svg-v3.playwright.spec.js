@@ -1661,7 +1661,8 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
     state.selectedResultIndex.value = 0;
     state.svgContainer.value = container;
     state.featureCatalog.value = catalog;
-    state.featureOverrides[JSON.stringify(['record-a', 'biological-a'])] = {
+    state.featureOverrides[JSON.stringify([state.generatedMode.value, 'record-a', 'biological-a'])] = {
+      scope: state.generatedMode.value,
       recordKey: 'record-a',
       biologicalFeatureId: 'biological-a',
       featureVisibility: null,

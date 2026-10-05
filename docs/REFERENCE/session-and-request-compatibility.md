@@ -20,7 +20,9 @@ a schema-8 request reads as one without overrides.
 Session 45 stores the Web app's per-feature edits (Feature visibility, Label
 visibility, and label text) in `features.featureOverrides`, one row per
 original-source feature named by `recordKey` and `biologicalFeatureId`, as the
-request does. Its feature catalog is schema 5, which records the selector
+request does, and by the mode the edit belongs to (`scope`); Feature placement
+drafts name their mode the same way. Both modes can use the same record key, so
+a request carries only the rows of its own mode. Its feature catalog is schema 5, which records the selector
 values each drawn feature had (`drawnSelector`). Loading a Session 44, or a
 Web Session 31–33, moves its edits keyed by rendered feature ID onto the
 feature they name: a rendered ID in the saved feature catalog names its
@@ -31,7 +33,10 @@ rendered ID), or, without readable sources, through its saved feature metadata
 for records drawn without a crop or reverse complement. An edit that names no
 feature is dropped, and the Web app reports how many. An older Feature
 visibility edit that hid every feature with its hash (each copy of a duplicated
-record) now applies to the edited feature only; the Web app reports how many. A catalog of schema 3 or
+record) now applies to the edited feature only; the Web app reports how many.
+Each moved edit takes the mode of the Session's diagram. A Feature placement
+draft of a Session 41–44 takes the mode of its lane side; a Main placement,
+which reached requests of both modes, is kept for both. A catalog of schema 3 or
 4 reads as schema 5 without selector values until the next Generate; a feature
 whose rendered ID carries its source hash was drawn with its source
 coordinates, so its source values serve until then.

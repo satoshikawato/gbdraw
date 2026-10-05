@@ -179,7 +179,7 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
     getCommittedRequest, getCommittedSession: () => committed });
   const actions = createFeaturePlacementActions({ state, history, getCommittedRequest,
     isCurrentFeature: controls.isCurrentFeature });
-  const feature = { record_key: 'record-2', biological_feature_id: 'logical-feature' };
+  const feature = { scope: state.mode.value, record_key: 'record-2', biological_feature_id: 'logical-feature' };
   return { state, actions, controls, feature, file, makeFile, linearDiscovery, history,
     enabled: () => actions.choices([feature]).filter((choice) => choice.enabled).map((choice) => choice.value),
     commitCombined: async () => {

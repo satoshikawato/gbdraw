@@ -1,10 +1,12 @@
-import { canonicalFeaturePlacements, placementAppliesToMode } from '../../services/feature-placement.js';
+import {
+  canonicalFeaturePlacements,
+  featureIdentityKeyOf,
+  parseFeatureIdentityKey
+} from '../../services/feature-placement.js';
 import { resolveCircularTrackFeaturePlacement } from '../circular-track-slots.js';
 import { createDefaultLinearTrackSlots, effectiveLinearSlotPlacement } from '../linear-track-slots.js';
 import { validateCustomTrackPlan } from '../track-slot-validation.js';
 
-const identity = (feature) => [feature?.record_key, feature?.biological_feature_id];
-const keyFor = (feature) => JSON.stringify(identity(feature));
 const SIDES = { circular: ['outward', 'inward'], linear: ['above', 'below'] };
 
 // The placement targets of a draft's feature slot: the one availability
@@ -43,7 +45,7 @@ export const createFeaturePlacementActions = ({
     const targets = targetsFor(features);
     return ['auto', 'main', ...SIDES[state.mode.value]].map((value) => {
       const enabled = features.length > 0 && features.every((feature) => {
-        if (identity(feature).some((part) => !part) || !isCurrentFeature(feature)) return false;
+        if (!featureIdentityKeyOf(feature) || !isCurrentFeature(feature)) return false;
         if (value === 'auto') return true;
         return targets.some((target) => value === 'main' ? target.kind === 'main' : target.side === value);
       });
@@ -59,13 +61,12 @@ export const createFeaturePlacementActions = ({
     if (!choice?.enabled) throw new Error(choice?.reason || 'Unknown feature placement.');
     return history.runUndoable(features.length === 1 ? 'Change feature placement' : 'Change selected feature placements', () => {
       for (const feature of features) {
-        const key = keyFor(feature);
+        const key = featureIdentityKeyOf(feature);
         if (value === 'auto') delete state.featurePlacementOverrides[key];
         else {
-          const [recordKey, biologicalFeatureId] = identity(feature);
-          const row = { recordKey, biologicalFeatureId, placement: value === 'main'
+          const row = { ...parseFeatureIdentityKey(key), placement: value === 'main'
             ? { kind: 'main' } : { kind: 'lane', side: value, level: 1 } };
-          canonicalFeaturePlacements([row], state.mode.value);
+          canonicalFeaturePlacements({ [key]: row });
           state.featurePlacementOverrides[key] = row;
         }
       }
@@ -83,8 +84,8 @@ export const createFeaturePlacementActions = ({
     const sides = (entry) => draftPlacementTargets(entry).map((target) => target.side).filter(Boolean);
     const [had, has] = [sides(draft()), sides(next(draft()))];
     return Object.keys(state.featurePlacementOverrides).filter((key) => {
-      const side = state.featurePlacementOverrides[key]?.placement?.side;
-      return had.includes(side) && !has.includes(side);
+      const row = state.featurePlacementOverrides[key];
+      return row?.scope === state.mode.value && had.includes(row.placement?.side) && !has.includes(row.placement?.side);
     });
   };
   const focusAfterRender = (find) => nextTick().then(() => find()?.focus?.());
@@ -138,9 +139,10 @@ export const createFeaturePlacementActions = ({
 
   return { choices, setPlacement, layoutChange, resolveLayoutChange, changeLayoutSetting, changeFeatureSlotSide,
     valueFor: (feature) => {
-      // The request projection skips another mode's lane; the popup reads it as Auto.
-      const row = state.featurePlacementOverrides[keyFor(feature)];
-      const target = placementAppliesToMode(row, state.mode.value) ? row?.placement : null;
+      // The control lists this mode's placements; a feature of the other
+      // mode's Result reads as Auto until that mode is active (R2).
+      const row = state.featurePlacementOverrides[featureIdentityKeyOf(feature)];
+      const target = row?.scope === state.mode.value ? row.placement : null;
       return target?.kind === 'main' ? 'main' : target?.side || 'auto';
     } };
 };

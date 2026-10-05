@@ -307,9 +307,10 @@ test('JSON cannot forge current-worker provenance and malformed envelopes fail c
   );
 });
 
-// Per-feature edits are identity rows (design Q4).
-const identityKey = JSON.stringify(['record-a', 'feature-a']);
+// Per-feature edits are identity rows of the Result's mode (design Q4, R2).
+const identityKey = JSON.stringify(['linear', 'record-a', 'feature-a']);
 const identityRow = (fields) => ({
+  scope: 'linear',
   recordKey: 'record-a',
   biologicalFeatureId: 'feature-a',
   featureVisibility: null,
@@ -373,6 +374,20 @@ for (const [domain, makeOptions] of Object.entries(planOptions)) {
     assert.equal(metricTotal(metrics, 'currentLegacyNormalizationCount'), 0);
   });
 }
+
+// R2 (R-1): the Circular row of the same record key and feature waits for a
+// Circular Result; this Linear Result draws none of it live.
+test('a per-feature edit of the other mode does not mutate the Result', () => {
+  const { admission } = currentFixture();
+  const circularKey = JSON.stringify(['circular', 'record-a', 'feature-a']);
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: admission,
+    featureOverrides: {
+      [circularKey]: identityRow({ scope: 'circular', featureVisibility: 'off', labelText: 'other mode' })
+    }
+  });
+  assert.equal(plan.kind, 'EMPTY');
+});
 
 test('combined current mutations share one root/index and serialize once', () => {
   FakeDomParser.calls = 0;
