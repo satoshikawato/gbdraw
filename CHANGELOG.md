@@ -26,6 +26,13 @@ write-up of a release.
   change for CLI files:** an annotation table that wrapped a cell in CSV quotes
   (for example to hold a tab) now keeps the quotes in the value; remove them,
   and replace a tab inside a cell with a space, as the web app does.
+- Label whitelist and Qualifier priority (web app): a tab or line break typed
+  or pasted into a rule cell, such as a whitelist keyword, no longer adds a
+  column or row to the table that **Generate** writes. Each run of such
+  characters becomes one space and the cell is trimmed, as Feature visibility
+  and Label override cells already were. A tab used to shift the cells, so the
+  rule was read with the wrong feature type and qualifier, and a line break
+  split the rule into two rows and failed with "Missing values".
 - Default colors, Specific colors, Qualifier priority, Label whitelist or
   blacklist, Label overrides, and Feature visibility tables: a `"` is now part
   of the cell value; these tables are no longer read as CSV with quoting. A
