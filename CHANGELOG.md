@@ -12,12 +12,6 @@ write-up of a release.
 
 ## [Unreleased]
 
-- Label whitelist, Label overrides, and Feature visibility tables: a `#` after
-  other text in a line is now part of the cell value instead of the start of a
-  comment. A Feature visibility row whose value contains `#` (for example
-  `foo#bar`) failed with "Missing values", and a Label override text or
-  whitelist keyword such as `Gene #1` was silently cut to `Gene `. Only a line
-  whose first non-blank character is `#` is a comment, as before.
 - Features list and Search features (web app): a hidden feature now stays
   listed, so it can be shown again. The list holds the displayed Result's
   features of the selected types, every feature it draws, and every feature
@@ -30,6 +24,12 @@ write-up of a release.
   with **Auto Reflow** off. A GFF3 input loads the type of a feature whose
   **Feature visibility** a row turns **Off** as well as **On**, and a `source`
   feature with its own **Feature visibility** stays in the feature catalog.
+- Label whitelist, Label overrides, and Feature visibility tables: a `#` after
+  other text in a line is now part of the cell value instead of the start of a
+  comment. A Feature visibility row whose value contains `#` (for example
+  `foo#bar`) failed with "Missing values", and a Label override text or
+  whitelist keyword such as `Gene #1` was silently cut to `Gene `. Only a line
+  whose first non-blank character is `#` is a comment, as before.
 - Default colors, Specific colors, Qualifier priority, Label whitelist or
   blacklist, Label overrides, and Feature visibility tables: a `"` is now part
   of the cell value; these tables are no longer read as CSV with quoting. A

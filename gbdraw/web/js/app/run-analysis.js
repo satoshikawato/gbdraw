@@ -5378,15 +5378,12 @@ export const createRunAnalysis = ({
       skipCaptureBaseConfig.value = true;
       // The rerender's catalog describes the Results it draws, so they replace
       // the previous pair together: a feature it draws again or no more keeps
-      // its popup, label binding, Features list row, and History projection (R-5).
-      const { featureState } = execution.commit;
+      // its popup, label binding, Features list row, and History projection
+      // (R-5). It renders the committed request, so the records and the
+      // similarity groups the Generate committed stay.
       featureCatalog.value = execution.catalog;
-      extractedFeatures.value = featureState.extractedFeatures;
-      biologicalFeatures.value = featureState.biologicalFeatures;
-      featureRecordIds.value = featureState.featureRecordIds;
-      orthogroups.value = featureState.orthogroups;
-      state.featureOrthogroupIndex.value = featureState.featureOrthogroupIndex;
-      state.collinearGroups.value = featureState.collinearGroups;
+      extractedFeatures.value = execution.commit.featureState.extractedFeatures;
+      biologicalFeatures.value = execution.commit.featureState.biologicalFeatures;
       results.value = execution.commit.results;
       if (execution.commit.results.length > 0) {
         selectedResultIndex.value = nextSelectedResultIndex;
