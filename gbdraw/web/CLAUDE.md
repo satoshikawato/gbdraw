@@ -218,7 +218,10 @@ its Result's mode). Both modes can use the same record key for the same feature
 (`record-1` in a Gallery or Python Session), so a request, the live projection,
 and every reconcile reach only the rows of their own mode and records; the
 other mode's rows stay in the draft. Only `services/feature-placement.js`
-builds a draft key.
+builds a draft key. A selected-feature annotation target (`featureIdentity`)
+names its mode the same way, and `annotationOptionsPayload` in
+`app/annotations/state.js` gives a request only the targets of its mode and
+records, without `scope`.
 
 Guards: `tests/web/non-edit-state-preservation.playwright.spec.js` with
 `tests/web/non-edit-state-diff.test.mjs` (user-owned state is identical before
@@ -226,7 +229,9 @@ and after non-edit operations); the disjoint-Result binding test in
 `tests/web/feature-label-visual-unit.test.mjs`;
 `tests/web/mode-scoped-feature-edits.test.mjs` (no draft row reaches a request,
 reconcile, or TSV load of the other mode, and no other module builds a draft
-key) and `tests/web/mode-scoped-feature-edits.playwright.spec.js`.
+key) and `tests/web/mode-scoped-feature-edits.playwright.spec.js`;
+`tests/web/annotations.test.mjs` and the OV-21 test in
+`tests/web/annotation-feature-identity.playwright.spec.js` (annotation targets).
 
 ### R3: One projection per domain
 

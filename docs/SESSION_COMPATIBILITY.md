@@ -23,7 +23,8 @@ request carries only the rows of its own mode. The four rendered-ID maps
 Session 45. The Web app now sends these rows in the request, loads a request
 whose `featureOverrides` array is not empty, and draws them in the live preview
 by identity. An annotation made from selected features is saved with a
-`featureIdentity` target. Annotation targets of older Sessions, including
+`featureIdentity` target that names its mode the same way (`scope`); the
+request target has no `scope`. Annotation targets of older Sessions, including
 `hash=` feature selectors made from a selection, load unchanged and keep their
 meaning: the hash of the drawn feature.
 
