@@ -166,6 +166,7 @@ export const createFeatureEditor = ({
     handleHiddenLabelTextChoice: labelActions.handleHiddenLabelTextChoice,
     handleLabelOnChoice: labelActions.handleLabelOnChoice,
     clickedFeatureLabelHint: labelActions.clickedFeatureLabelHint,
+    hiddenLabelTextMessage: labelActions.hiddenLabelTextMessage,
     requestLabelTextChangeByFeatureId: labelActions.requestLabelTextChangeByFeatureId,
     requestLabelTextChangeByKey: labelActions.requestLabelTextChangeByKey,
     reconcileLabelOverrides: labelActions.reconcileLabelOverrides,

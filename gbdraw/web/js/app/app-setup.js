@@ -2642,6 +2642,7 @@ export const createAppSetup = () => {
     handleHiddenLabelTextChoice,
     handleLabelOnChoice,
     clickedFeatureLabelHint,
+    hiddenLabelTextMessage,
     requestLabelTextChangeByFeatureId,
     requestLabelTextChangeByKey,
     reconcileFeatureVisibility,
@@ -5099,6 +5100,7 @@ export const createAppSetup = () => {
     // The dialog answers the Apply whose History step is still open.
     handleLabelOnChoice,
     clickedFeatureLabelHint,
+    hiddenLabelTextMessage,
     updateClickedFeatureLabelText: updateClickedFeatureLabelTextWithHistory,
     handleLabelTextScopeChoice: handleLabelTextScopeChoiceWithHistory,
     handleHiddenLabelTextChoice: handleHiddenLabelTextChoiceWithHistory,

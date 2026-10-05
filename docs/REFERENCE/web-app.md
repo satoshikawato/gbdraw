@@ -873,9 +873,10 @@ feature's label whatever **Show Labels** and the label filters select. With
 also on a later record, and no other label changes; the label rerender and
 Generate draw the same labels. A label text edit keeps **Default** visibility,
 which follows **Show Labels** and the filters. When the feature has no label in
-the current Result, **Label Not Shown** offers **Show this label**, which sets
-**On**, or **Keep hidden (apply text only)**, which keeps the text for when the
-label is shown.
+the current Result, **Label Not Shown** names the reason (a hidden feature,
+**Underlay**, **Embedded Only**, **Show Labels**, or a label filter), as the popup
+note does, and offers **Show this label**, which sets **On**, or **Keep hidden
+(apply text only)**, which keeps the text for when the label is shown.
 
 **On** takes effect only when the diagram can draw the label, so applying it
 asks first when the diagram cannot:
