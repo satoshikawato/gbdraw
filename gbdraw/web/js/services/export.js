@@ -1,3 +1,4 @@
+// @ts-check
 import { setDpiInPng } from '../utils/png.js';
 import { stripPreviewFeatureSearchClasses } from '../app/feature-search/preview-svg.js';
 import { ensureSvgDefs, stripTransientPreviewState } from './svg-serialization.js';
@@ -58,6 +59,15 @@ const loadPdfLibraries = () => {
   });
   return pdfLibrariesPromise;
 };
+
+/**
+ * @typedef {object} ExportSnapshot The captured preview an export action reads.
+ * @property {string} name
+ * @property {SVGSVGElement | null} [svg]
+ * @property {string} [svgContent]
+ * @property {unknown} [interactivity]
+ * @property {number | string} [dpi]
+ */
 
 const getDownloadName = (snapshot, extension) => {
   const baseName = snapshot.name;
@@ -305,16 +315,19 @@ const downloadSvgString = (svgString, filename) => {
   downloadBlob(new Blob([svgString], { type: 'image/svg+xml' }), filename);
 };
 
+/** @param {ExportSnapshot} snapshot */
 export const downloadSVG = (snapshot) => {
   const svgString = getCurrentSvgString(snapshot);
   downloadSvgString(svgString, getDownloadName(snapshot, 'svg'));
 };
 
+/** @param {ExportSnapshot} snapshot */
 export const downloadInteractiveSVG = async (snapshot) => {
   const svgString = await getInteractiveSvgString(snapshot);
   downloadSvgString(svgString, getDownloadName(snapshot, 'interactive.svg'));
 };
 
+/** @param {ExportSnapshot} snapshot */
 export const downloadPNG = async (snapshot) => {
   const filename = getDownloadName(snapshot, 'png');
   const svgString = getCurrentSvgString(snapshot);
@@ -327,7 +340,8 @@ export const downloadPNG = async (snapshot) => {
     throw new Error('The current SVG has no usable dimensions for PNG export.');
   }
   const canvas = document.createElement('canvas');
-  const dpi = parseInt(snapshot.dpi, 10);
+  // The Web sets a number (default 300) or a string; parseInt accepts both.
+  const dpi = parseInt(/** @type {string} */ (snapshot.dpi), 10);
   if (!Number.isFinite(dpi) || dpi <= 0) {
     throw new Error('The selected PNG DPI is invalid.');
   }
@@ -366,6 +380,14 @@ export const downloadPNG = async (snapshot) => {
   }
 };
 
+/**
+ * @typedef {{ loadPdfFont?: (filename: string) => Promise<string> | string }} PdfExportOptions
+ */
+
+/**
+ * @param {ExportSnapshot} snapshot
+ * @param {PdfExportOptions} [options]
+ */
 export const downloadPDF = async (snapshot, { loadPdfFont } = {}) => {
   const filename = getDownloadName(snapshot, 'pdf');
   const svgString = getCurrentSvgString(snapshot);

@@ -1,3 +1,4 @@
+// @ts-check
 export const FEATURE_RENDERING_VALUES = Object.freeze([
   'arrow',
   'rectangle',
