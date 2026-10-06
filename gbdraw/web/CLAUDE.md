@@ -236,7 +236,11 @@ key) and `tests/web/mode-scoped-feature-edits.playwright.spec.js`;
 ### R3: One projection per domain
 
 A live action, a History apply, and a Result display call the same projection:
-`projectMountedEditorIntent` (palette, rules, visibility, labels),
+`projectMountedEditorIntent` (palette, rules, visibility, labels), which calls
+the domain projections `projectPaletteAndRules` in `app/app-setup.js` (palette
+and specific rules) and `projectFeatureVisibility` in
+`app/feature-editor/visibility-actions.js` (feature visibility and the labels of
+the features it hides or shows),
 `orderLegendEntries` in `app/legend/utils.js` (legend order), and
 `resolveFeatureDrawn` in `app/feature-visibility.js` (whether a feature is
 drawn, as Python's `should_render_feature` answers; the Features list and
@@ -258,11 +262,22 @@ One projection means one call shape: a domain's projection function is called
 from outside its owner in one form, not re-implemented or re-sequenced per
 caller. The distinct call shapes per domain may only decrease (R13).
 
+A live edit shows on the Result what the next Generate draws (PD-OI-066). A
+change to a live-edit path is done when the case for its edit kind in
+`tests/web/live-generate-parity.playwright.spec.js` passes with Auto Reflow on
+and off and with the popup opened and not. A difference the Result may show
+until Generate is listed with its decision in
+`tests/web/contracts/live-generate-parity-allowed.json`. A mismatch the matrix
+finds is a bug: the case stays `test.fail` with its finding id until the fix
+makes it pass.
+
 Guards: `tests/web/gui-audit-20260930-editor.playwright.spec.js` (a Result shows
 the edits made on another Result, also after Undo, Save, and Load),
 `tests/web/feature-visibility-actions.test.mjs`,
-`tests/web/feature-color-actions.test.mjs`, and the `projection-shapes`
-baseline in `tests/web/owner-graph-baseline.test.mjs`.
+`tests/web/feature-color-actions.test.mjs`,
+`tests/web/live-generate-parity.playwright.spec.js` (a live edit equals the next
+Generate), and the `projection-shapes` baseline in
+`tests/web/owner-graph-baseline.test.mjs`.
 
 ### R4: A fast path matches the canonical reader or declines
 
@@ -377,12 +392,20 @@ either mode undrawable asks first (Owner decision Q3); Reset applies the edit
 and removes those rows as one History step. The control's History adapter
 records an edit that loses no lane, and restores install state as is (R11).
 
+Every edit of a Feature Visibility rule (the Features panel and the popup's
+product and protein ID scopes) runs through `editFeatureVisibilityRules` in
+`app/feature-editor/visibility-actions.js`, which writes the rules, projects
+them, and follows with the labels as one History step.
+
 Guards: `tests/web/depth-slot-lifecycle.test.mjs` (the same cases through the
 Circular and Linear editors), `tests/web/circular-track-slots.test.mjs`,
 `tests/web/track-slot-display.test.mjs`, and
 `tests/web/track-layout-transition.test.mjs` (every writer of a feature-slot
 input is that transition, a listed restore, or a listed reconcile) with
-`tests/web/track-layout-transition.playwright.spec.js`.
+`tests/web/track-layout-transition.playwright.spec.js`, and
+`tests/web/feature-visibility-rule-writers.test.mjs` (every writer of the
+Feature Visibility rules is that transition, a History restore, a Session load,
+or Reset Settings).
 
 ### R11: History transaction boundaries
 

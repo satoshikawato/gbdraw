@@ -31,7 +31,8 @@
       "guards": [
         "tests/web/feature-color-actions.test.mjs",
         "tests/web/feature-visibility-actions.test.mjs",
-        "tests/web/gui-audit-20260930-editor.playwright.spec.js"
+        "tests/web/gui-audit-20260930-editor.playwright.spec.js",
+        "tests/web/live-generate-parity.playwright.spec.js"
       ],
       "allowlists": []
     },
@@ -113,6 +114,7 @@
       "guards": [
         "tests/web/circular-track-slots.test.mjs",
         "tests/web/depth-slot-lifecycle.test.mjs",
+        "tests/web/feature-visibility-rule-writers.test.mjs",
         "tests/web/track-layout-transition.playwright.spec.js",
         "tests/web/track-layout-transition.test.mjs",
         "tests/web/track-slot-display.test.mjs"
