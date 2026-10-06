@@ -780,6 +780,16 @@ export const createFeatureLabelActions = ({
     return projection.changed;
   };
 
+  // An edit whose Result Python must draw again asks for the automatic
+  // rerender, Auto Reflow on or off: a specific-color rule edit or a History
+  // step that changes a Legend source (Owner decision 2026-10-06, OV-43). A
+  // request while one is pending joins it.
+  const requestAutomaticRerender = () => {
+    if (generatedMode.value !== mode.value || !svgContainer.value?.querySelector?.('svg')) return false;
+    queueLabelReflow(true);
+    return true;
+  };
+
   const requestLabelTextChangeByKey = (labelKey, nextTextRaw) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -1370,6 +1380,7 @@ export const createFeatureLabelActions = ({
     requestLabelTextChangeByFeatureId,
     requestLabelTextChangeByKey,
     reconcileLabelOverrides,
+    requestAutomaticRerender,
     resetAllLabelTextOverrides,
     syncClickedFeatureLabelState,
     syncLabelEditor,

@@ -33,10 +33,13 @@ export const createFeatureEditor = ({
   projectFeatureEdits
 }) => {
   const { ref, computed, watch, reactive } = window.Vue;
-  const ruleActions = createFeatureRuleActions({ state, nextTick, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ref, computed, isPatternEditAvailable });
   // R13: the label owner's reactions, registered once it exists; the owners
   // created before it call them through this object only.
   const editorPorts = {};
+  const ruleActions = createFeatureRuleActions({
+    state, nextTick, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules,
+    ports: editorPorts, getCommittedRequest, ref, computed, watch, isPatternEditAvailable
+  });
   const featureSvgActions = createFeatureSvgActions({
     state,
     getFeatureColor: ruleActions.getFeatureColor,
@@ -77,6 +80,7 @@ export const createFeatureEditor = ({
     setFeatureVisibility: visibilityActions.setFeatureVisibility
   });
   editorPorts.applyFeatureVisibilityToLabels = labelActions.applyFeatureVisibilityToLabels;
+  editorPorts.requestAutomaticRerender = labelActions.requestAutomaticRerender;
   editorPorts.syncLabelEditor = labelActions.syncLabelEditor;
   // A loaded table shows on the displayed Result as a History apply does (R3):
   // the root's projection (`projectFeatureEdits`) projects it.
@@ -116,6 +120,7 @@ export const createFeatureEditor = ({
     setFeatureShape: ruleActions.setFeatureShape,
     addSpecificRule: ruleActions.addSpecificRule,
     commitSpecificRules: ruleActions.commitSpecificRules,
+    followRestoredSpecificRules: ruleActions.followRestoredRules,
     applySpecificRulePreset: ruleActions.applySpecificRulePreset,
     clearAllSpecificRules: ruleActions.clearAllSpecificRules,
     downloadSpecificRulesTsv: ruleActions.downloadSpecificRulesTsv,

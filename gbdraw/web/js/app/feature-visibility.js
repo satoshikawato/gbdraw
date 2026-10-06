@@ -1,6 +1,6 @@
 import { exactRegexValue } from './feature-selector.js';
-import { ruleMatchesFeature, visibilityRuleMatchesFeature } from './rule-matching.js';
-import { stableFeatureOverrideKey as stableKeyOf } from '../services/feature-catalog.js';
+import { firstMatchingRuleIfKnown, ruleMatchesFeature, visibilityRuleMatchesFeature } from './rule-matching.js';
+import { resultCatalogFeatures, stableFeatureOverrideKey as stableKeyOf } from '../services/feature-catalog.js';
 import {
   featureIdentityKey,
   featureIdentityKeyOf,
@@ -421,6 +421,93 @@ export const listFeatureRows = (catalogFeatures, context) => {
   });
   return { rows, drawn, rendered };
 };
+
+// What Python derives the feature rows of a Result's Legend from
+// (gbdraw/legend/table.py::prepare_legend_table): per record, the types of
+// the drawn features in first-drawn order; for a type with a captioned rule,
+// the rules whose caption a drawn feature uses (in table order) and whether a
+// drawn feature keeps the default color (the "other <type>s" row); and every
+// rule caption, which Python reserves. A type without a captioned rule keeps
+// its default row whatever the rules match, so no match is read for it, and
+// neither is one for a type that its rules, all of the caption `<type>` and one
+// color, recolor as a whole: that row keeps its caption and the Legend follows
+// the color live. This is the input of the rows, not the rows: Python stays
+// their only derivation (Owner decision 2026-10-06, option A), and an edit
+// that changes a Result's source asks for the automatic rerender (OV-42,
+// OV-43). The color of a rule is in it only for a batch: with one Result the
+// rows keep their captions and the Legend follows the color live
+// (`ruleLegendCaption` gives the caption of a rule whose caption names another
+// row), while another batch Result shows the row it was drawn with until
+// Python draws it again (OV-44). A Result is read from its catalog features:
+// `asRendered` reads the features Python drew at the last render, else
+// `featureDrawnInResult` answers. A source is null while a rule match it needs
+// is unknown; null equals no source (`sameLegendSources`).
+const legendSourceOf = (catalogFeatures, context, { asRendered, withColors }) => {
+  const caption = (rule) => String(rule?.cap ?? '').trim();
+  const colorOf = (rule) => String(rule?.color ?? '').trim().toLowerCase();
+  const color = (rule) => (withColors ? colorOf(rule) : '');
+  const usage = (rule) => JSON.stringify([caption(rule), color(rule)]);
+  const rules = context.colorRules;
+  const typesByRecord = new Map();
+  const winnersByType = new Map();
+  for (const feature of catalogFeatures.biological) {
+    const shown = catalogFeatures.renderedByIdentity.get(stableKeyOf(feature));
+    const row = shown || feature;
+    if (!(asRendered ? shown : featureDrawnInResult(row, context, catalogFeatures))) continue;
+    const type = String(feature.type ?? '');
+    const record = String(feature.recordKey ?? '');
+    if (!typesByRecord.has(record)) typesByRecord.set(record, []);
+    if (!typesByRecord.get(record).includes(type)) typesByRecord.get(record).push(type);
+    const winners = winnersByType.get(type) || [];
+    winnersByType.set(type, winners);
+    // A type without a captioned rule needs no match.
+    if (!rules.some((rule) => caption(rule) && (rule.feat === type || rule.feat === '*'))) continue;
+    const winner = firstMatchingRuleIfKnown(row, rules);
+    if (winner === undefined) return null;
+    winners.push(winner);
+  }
+  const used = new Set();
+  const defaultTypes = new Set();
+  const plainTypes = new Set();
+  const recolored = new Set();
+  for (const [type, winners] of winnersByType) {
+    if (winners.length === 0) {
+      plainTypes.add(type);
+    } else if (winners.every((winner) => winner && caption(winner) === type && winner.feat === type)
+      && new Set(winners.map(colorOf)).size === 1) {
+      plainTypes.add(type);
+      recolored.add(type);
+    } else {
+      winners.forEach((winner) => {
+        if (!winner) defaultTypes.add(type);
+        else if (caption(winner)) used.add(usage(winner));
+      });
+    }
+  }
+  const counted = (rule) => !(recolored.has(rule.feat) && caption(rule) === rule.feat);
+  return JSON.stringify([
+    [...typesByRecord],
+    rules.filter((rule) => caption(rule) && counted(rule) && used.has(usage(rule)))
+      .map((rule) => [String(rule.feat ?? ''), caption(rule), color(rule)]),
+    [...defaultTypes].sort(),
+    [...plainTypes].sort(),
+    [...new Set(rules.filter(counted).map(caption).filter(Boolean))].sort()
+  ]);
+};
+
+// The Legend source of every committed Result, in Result order.
+export const resultLegendSources = (state, context, { asRendered = false } = {}) => {
+  const results = Array.isArray(state?.results?.value) ? state.results.value : [];
+  return results.map((_, index) => {
+    const catalogFeatures = resultCatalogFeatures(state, index);
+    return catalogFeatures
+      ? legendSourceOf(catalogFeatures, context, { asRendered, withColors: results.length > 1 })
+      : '';
+  });
+};
+
+export const sameLegendSources = (left, right) => left.length === right.length
+  && left.every((source, index) => source !== null && source === right[index]);
 
 const isEditorFeatureRule = (rule) => {
   const normalized = normalizeFeatureVisibilityRule(rule);

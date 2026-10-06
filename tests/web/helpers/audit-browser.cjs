@@ -22,7 +22,7 @@ const settle = async (page) => {
   await page.waitForFunction(() => {
     const app = window.__GBDRAW_APP__;
     const history = window.__GBDRAW_HISTORY__;
-    return !app.processing && !app.sessionImportPending && !app.ruleMatchingPending
+    return !app.processing && !app.labelReflowProcessing && !app.sessionImportPending && !app.ruleMatchingPending
       && !history?.capturing?.value && !history?.restoring?.value;
   });
   await page.evaluate(() => new Promise((resolve) => (

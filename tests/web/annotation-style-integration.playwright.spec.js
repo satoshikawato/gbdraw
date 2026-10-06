@@ -41,9 +41,17 @@ const drawingSignature = (page, svg) => page.evaluate(async svg => {
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
 }, svg);
 const artifact = value => ({ svg: value.svg, warnings: value.warnings, request: value.request, geometry: value.geometry });
+// A rule edit or a History step that changes the Legend asks for the automatic
+// rerender (OV-42, OV-43, #857); the Result is read once Python has drawn it.
+const rerendered = async page => {
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.processing && !window.__GBDRAW_APP__.labelReflowProcessing);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.processing && !window.__GBDRAW_APP__.labelReflowProcessing);
+};
 const history = async (page, name) => {
   await page.getByRole('button', { name, exact: true }).click();
   await expect.poll(() => page.evaluate(() => !window.__GBDRAW_HISTORY__.restoring.value && !window.__GBDRAW_HISTORY__.capturing.value)).toBe(true);
+  await rerendered(page);
 };
 const colorFile = page => page.evaluate(async () => {
   const file = window.__GBDRAW_APP__.files.t_color;
@@ -115,6 +123,7 @@ for (const width of [1440, 390]) {
         const originalColorFile = await colorFile(page);
         await colorInput.setInputFiles({ name: 'integration-colors.tsv', mimeType: 'text/plain', buffer: Buffer.from(input.colors) });
         await page.evaluate(async () => { const a = window.__GBDRAW_APP__; await a.waitForAuxiliaryFileImport(a.files.t_color); });
+        await rerendered(page);
         const imported = await inspect(page, mode);
         expect(imported.undoCount).toBe(beforeImport.undoCount + 1);
         await history(page, 'Undo');
@@ -165,6 +174,7 @@ for (const width of [1440, 390]) {
           const a = window.__GBDRAW_APP__;
           await a.setSpecificRuleField(a.manualSpecificRules.findIndex(rule => rule.val === id), 'cap', 'Integration primary');
         }, input.ids[0]);
+        await rerendered(page);
         const live = await inspect(page, mode);
         expect(live.undoCount).toBe(combined.undoCount + 1);
         expect(live.legends[0]).toContainEqual({ caption: 'Integration primary', color: '#112233' });

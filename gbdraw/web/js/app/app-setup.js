@@ -1195,26 +1195,42 @@ export const createAppSetup = () => {
     buildRunStateData,
     applyRunStateData
   });
-  // R13: a History restore keeps the open specific-color pattern drafts. The
+  // R13: a History restore keeps the open specific-color pattern drafts, and
+  // Undo and Redo of a rule edit follow the restored rules as the edit did
+  // (OV-43): the rule owner asks for the rerender when they change a Legend
+  // source. A Generate restore brings the Results drawn with its rules. The
   // feature editor takes History's undoable runs, so the root registers its
-  // capture and restore ports once both owners exist.
-  const specificRuleDraftPorts = {
+  // ports once both owners exist.
+  const specificRuleRestorePorts = {
     captureSpecificRulePatternDrafts: null,
-    restoreSpecificRulePatternDrafts: null
+    restoreSpecificRulePatternDrafts: null,
+    followRestoredSpecificRules: null,
+    retainRulesForRestore: null
   };
   const restoreWithSpecificRuleDrafts = async (restore, ...args) => {
-    const drafts = specificRuleDraftPorts.captureSpecificRulePatternDrafts();
+    const drafts = specificRuleRestorePorts.captureSpecificRulePatternDrafts();
     try {
       return await restore(...args);
     } finally {
-      if (drafts) specificRuleDraftPorts.restoreSpecificRulePatternDrafts(drafts);
+      if (drafts) specificRuleRestorePorts.restoreSpecificRulePatternDrafts(drafts);
+    }
+  };
+  const restoreRuleEdits = async (restore, ...args) => {
+    const previousRules = manualSpecificRules.map((rule) => ({ ...rule }));
+    specificRuleRestorePorts.retainRulesForRestore(previousRules);
+    try {
+      const restored = await restoreWithSpecificRuleDrafts(restore, ...args);
+      specificRuleRestorePorts.followRestoredSpecificRules(previousRules);
+      return restored;
+    } finally {
+      specificRuleRestorePorts.retainRulesForRestore([]);
     }
   };
   const history = createHistoryManager({
     buildIntent: historySnapshots.buildHistoryIntent,
-    applyIntent: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.applyHistoryIntent, ...args),
+    applyIntent: (...args) => restoreRuleEdits(historySnapshots.applyHistoryIntent, ...args),
     buildCheckpoint: historySnapshots.buildArtifactCheckpoint,
-    applyCheckpoint: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.applyArtifactCheckpoint, ...args),
+    applyCheckpoint: (...args) => restoreRuleEdits(historySnapshots.applyArtifactCheckpoint, ...args),
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
     restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
     compareGeneratedArtifactHandles: historySnapshots.compareGeneratedArtifactHandles,
@@ -1302,6 +1318,7 @@ export const createAppSetup = () => {
     evaluate: async (payload, options) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload, options)).result,
     visibilityRules: () => requestFeatureVisibilityRules(state.featureVisibilityManualRules)
   });
+  specificRuleRestorePorts.retainRulesForRestore = rulePreparation.retain;
   // R13: a Legend row a specific-color rule draws commits its edit through the
   // rule owner; the root registers the port once the feature editor exists.
   const legendRowRulePorts = { commitLegendRowRules: null };
@@ -1370,8 +1387,9 @@ export const createAppSetup = () => {
     projectFeatureEdits: () => projectMountedEditorIntent({ visibility: true, rerender: true, reflow: true, labels: true })
   });
   legendRowRulePorts.commitLegendRowRules = featureActions.commitSpecificRules;
-  specificRuleDraftPorts.captureSpecificRulePatternDrafts = featureActions.captureSpecificRulePatternDrafts;
-  specificRuleDraftPorts.restoreSpecificRulePatternDrafts = featureActions.restoreSpecificRulePatternDrafts;
+  specificRuleRestorePorts.captureSpecificRulePatternDrafts = featureActions.captureSpecificRulePatternDrafts;
+  specificRuleRestorePorts.restoreSpecificRulePatternDrafts = featureActions.restoreSpecificRulePatternDrafts;
+  specificRuleRestorePorts.followRestoredSpecificRules = featureActions.followRestoredSpecificRules;
   // R13: the drawer and the feature search come after the owners they react
   // through, so each receives its ports directly.
   const rightDrawerActions = createRightDrawerController({ state, watch,
@@ -2343,6 +2361,7 @@ export const createAppSetup = () => {
       });
       legendActions.extractLegendEntries({
         replaceGeneratedInventory: !context.bindingOptions.isIncrementalEdit
+          || Boolean(context.bindingOptions.replaceGeneratedLegend)
       });
     },
     bindComposition(context) {

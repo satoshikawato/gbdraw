@@ -239,3 +239,15 @@ test('prepared-rule readiness distinguishes warm config, new predicates, and new
   assert.equal(await preparation.prepare(), true);
   assert.equal(calls, 3);
 });
+
+test('retained rules are matched in the next preparation, in one evaluation', async () => {
+  let evaluations = 0;
+  const { features, preparation } = setup(payload => { evaluations++; return evaluatePythonRules(payload); });
+  const [kept, replaced] = [rule('NADH'), rule('other')];
+  preparation.retain([replaced]);
+  assert.equal(await preparation.prepare([kept]), true);
+  assert.equal(evaluations, 1);
+  assert.deepEqual(features.map(f => ruleMatchesFeature(f, replaced)), [false, false, false, true]);
+  assert.equal(preparation.isPrepared([replaced]), true, 'the replaced rule needs no second evaluation');
+  preparation.retain([]);
+});

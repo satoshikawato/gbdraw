@@ -7,6 +7,10 @@ const loadSession = async (page) => {
   await page.locator('input[accept^=".json,"]').setInputFiles(join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json'));
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.extractedFeatures.length);
 };
+// A rule that changes the Legend asks for the automatic rerender (OV-42, OV-43,
+// #857); the Result and its Legend are Python's once it has finished.
+const rerendered = (page) => page.waitForFunction(() => !window.__GBDRAW_APP__.processing
+  && !window.__GBDRAW_APP__.labelReflowProcessing);
 const fills = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   return app.extractedFeatures.filter((feature) => {
@@ -180,6 +184,7 @@ test('Python preset rules update the legend and invalid replacements preserve th
     a.selectedSpecificPreset = id;
     await a.applySpecificRulePreset();
   }, preset.id);
+  await rerendered(page);
   expect(await fills(page)).toHaveLength(7);
   expect(await page.locator('.origin-top svg text').filter({ hasText: /^Python preset$/ }).count()).toBe(1);
   const snapshot = await page.evaluate(() => ({ rules: JSON.stringify(window.__GBDRAW_APP__.manualSpecificRules), svg: window.__GBDRAW_APP__.svgContent }));
@@ -190,6 +195,7 @@ test('Python preset rules update the legend and invalid replacements preserve th
   await page.evaluate(() => window.__GBDRAW_APP__.undoHistory());
   expect(await fills(page)).toEqual([]);
   await page.evaluate(() => window.__GBDRAW_APP__.redoHistory());
+  await rerendered(page);
   expect(await fills(page)).toHaveLength(7);
   await generateAndWaitForResult(page);
   expect(await fills(page)).toHaveLength(7);

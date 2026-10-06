@@ -19,11 +19,14 @@ import {
   normalizeFeatureRendering
 } from '../../utils/feature-rendering.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
+import { featureDrawnContext, resultLegendSources, sameLegendSources } from '../feature-visibility.js';
 
 // R13: `projectPaletteAndRules` is the composition root's projection of the
 // palette and the specific-color rules (R3); this owner calls it after a rule
-// commit, whose candidate rules it has prepared.
-export const createFeatureRuleActions = ({ state, nextTick, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ref, computed, isPatternEditAvailable = () => true }) => {
+// commit, whose candidate rules it has prepared. The composition root
+// registers the label owner's `requestAutomaticRerender` in `ports` once that
+// owner exists; this owner only calls it.
+export const createFeatureRuleActions = ({ state, nextTick, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true }) => {
   const {
     currentColors,
     appliedPaletteColors,
@@ -92,9 +95,49 @@ export const createFeatureRuleActions = ({ state, nextTick, prepareFileLegendEnt
         .map(rule => ({ caption: currentCaption(rule), color: rule.color })), ...retiredLegendIntents]
     };
   };
-  const commitSpecificRules = async (rules, label = 'Change specific color rules', { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], sourceRows = rules.map(rule => manualSpecificRules.includes(rule) ? rule : null) } = {}) => {
+  // OV-43 (Owner decision 2026-10-06, option A): whether a rule table change
+  // changes a Result's Legend source, read with the current Feature
+  // visibility before and after. Python redraws the Legend rows, their order,
+  // and the "other <type>s" rows in the automatic rerender.
+  const legendSourceContext = (rules) => ({
+    ...featureDrawnContext(state, { diagramOptions: getCommittedRequest()?.diagramOptions }),
+    colorRules: rules
+  });
+  const changesLegendSource = (before, after) => !sameLegendSources(
+    resultLegendSources(state, legendSourceContext(before)),
+    resultLegendSources(state, legendSourceContext(after))
+  );
+  // Undo and Redo of a rule edit restore the rules; the composition root
+  // passes the rules they replaced, and a changed Legend source asks for the
+  // rerender, as the edit did.
+  const followRestoredRules = (previousRules) => (
+    JSON.stringify(previousRules) !== JSON.stringify(manualSpecificRules)
+    && changesLegendSource(previousRules, manualSpecificRules)
+    && ports.requestAutomaticRerender()
+  );
+  // The automatic rerender replaces the Results the candidate was prepared
+  // against, which makes the candidate stale (#857). An edit made while one runs
+  // waits for it and, when it replaced the Results under an unchanged rule
+  // table, prepares again instead of dropping the edit.
+  const rerenderIdle = () => (state.labelReflowProcessing?.value
+    ? new Promise((resolve) => {
+      const stop = watch(state.labelReflowProcessing, (busy) => { if (!busy) { stop(); resolve(); } });
+    })
+    : Promise.resolve());
+  const commitSpecificRules = async (rules, label = 'Change specific color rules', options = {}) => {
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
+    await rerenderIdle();
+    for (let attempt = 0; ; attempt += 1) {
+      const results = state.results.value;
+      const table = JSON.stringify(manualSpecificRules);
+      const outcome = await commitOnce(rules, label, options);
+      if (outcome || attempt === 2 || state.results.value === results
+        || JSON.stringify(manualSpecificRules) !== table) return outcome;
+      await rerenderIdle();
+    }
+  };
+  const commitOnce = async (rules, label, { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], sourceRows = rules.map(rule => manualSpecificRules.includes(rule) ? rule : null) } = {}) => {
     const revision = ++preparationRevision;
     const candidate = await rulePreparation.prepareCandidate(rules);
     if (!candidate) return false;
@@ -109,6 +152,7 @@ export const createFeatureRuleActions = ({ state, nextTick, prepareFileLegendEnt
       isCurrent: current
     });
     if (!legend) return false;
+    const redrawsLegend = changesLegendSource([...manualSpecificRules], candidate.rules);
     let applied = false;
     // One History step: the rule transition first, then the legend rows it
     // draws (R13); a checkpoint when the legend gains or loses a row.
@@ -136,6 +180,7 @@ export const createFeatureRuleActions = ({ state, nextTick, prepareFileLegendEnt
       return legend.diff;
     });
     if (applied) rulePreparation.notifyChanges(candidate);
+    if (applied && redrawsLegend) ports.requestAutomaticRerender();
     return applied;
   };
   const commitPrepared = async (rules, label, afterCommit = () => {}, input = null, sourceRows = rules.map(rule => manualSpecificRules.includes(rule) ? rule : null)) => {
@@ -604,6 +649,7 @@ export const createFeatureRuleActions = ({ state, nextTick, prepareFileLegendEnt
     canEditFeatureColor,
     clearAllSpecificRules: () => commitPrepared([], 'Clear specific color rules'),
     commitSpecificRules,
+    followRestoredRules,
     countFeaturesMatchingRule,
     downloadSpecificRulesTsv,
     findExistingColorForCaption,
