@@ -1,3 +1,4 @@
+// @ts-check
 // Source-bound editable rotation intent. The request service owns serialization.
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
 import { resolveFeatureAnchor } from './record-display/feature-anchor.js';
@@ -167,8 +168,24 @@ const requireReverseComplementOverride = (value) => {
   return value;
 };
 
+/**
+ * @typedef {object} RecordDisplayControlsOptions
+ * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
+ * @property {<T>(getter: () => T) => { value: T }} computed Vue `computed`
+ * @property {(source: any, callback: (...args: any[]) => void, options?: Record<string, any>) => any} watch Vue `watch`
+ * @property {(sequence: Record<string, any>) => Record<string, any>[]} linearRecordsFor
+ * @property {(sequence: Record<string, any> | undefined) => string} linearRecordStatusFor
+ * @property {(sequence: Record<string, any> | undefined) => any} linearRecordErrorFor
+ * @property {(label: string, apply: () => any) => any} runUndoable History's one undoable step
+ * @property {() => Record<string, any> | null} getCommittedRequest
+ * @property {() => Record<string, any> | null} getCommittedSession
+ */
+
 // R13: the Linear record selector's three readers and History's undoable step
 // arrive as ports; this owner holds neither owner.
+/**
+ * @param {RecordDisplayControlsOptions} options
+ */
 export const createRecordDisplayControls = ({
   state, computed, watch, linearRecordsFor, linearRecordStatusFor, linearRecordErrorFor, runUndoable,
   getCommittedRequest, getCommittedSession

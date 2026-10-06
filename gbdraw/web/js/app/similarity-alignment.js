@@ -1,3 +1,4 @@
+// @ts-check
 import { normalizeUserFacingError } from '../services/error-normalization.js';
 import { plainTextLinearRecordLabel } from './linear-comparisons.js';
 import { resolveLinearRecordEffectiveDefinition } from './linear-sources.js';
@@ -803,6 +804,43 @@ const anchorsAgree = (left, right) => {
   ));
 };
 
+/**
+ * One alignment run that the composition root executes as a candidate (R13):
+ * the root commits `orientations` to the record display intent.
+ * @typedef {object} AlignmentCandidateRun
+ * @property {Record<string, any>} canonical canonical Session projected by the alignment
+ * @property {string} operation
+ * @property {string} label
+ * @property {Record<string, any> | null} alignmentResetBefore
+ * @property {Record<string, any> | null | undefined} alignmentResetReceipt
+ * @property {{ recordKey: string, reverseComplement: boolean }[]} orientations
+ */
+
+/**
+ * The ports and state that the alignment owner receives. Ports are function
+ * types; the shapes of orthogroups, requests, and helper payloads belong to
+ * their owners (the committed request to Python, R7) and stay `Record<string, any>`.
+ * @typedef {object} SimilarityAlignmentActionsOptions
+ * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
+ * @property {(groupId: string) => Record<string, any> | null} getOrthogroupById
+ * @property {(group: Record<string, any> | string | null) => Record<string, any>[]} getEnrichedOrthogroupMembers
+ * @property {() => Record<string, any> | null} getCommittedRequest
+ * @property {(() => Record<string, any>) | null} [getRecordCatalog]
+ * @property {() => Record<string, any> | null} getCommittedSession
+ * @property {(args: Record<string, any>) => Record<string, any>} projectCommittedAlignment
+ * @property {(run: AlignmentCandidateRun) => Promise<Record<string, any>>} runRecordAlignment
+ * @property {(() => void) | null} [cancelRunAnalysis]
+ * @property {(operation: string, payload: Record<string, any>) => Promise<Record<string, any>>} runHelperOperation
+ * @property {string} resolveOperation
+ * @property {(() => SVGSVGElement | null) | null} [getCurrentSvg]
+ * @property {((anchor: Record<string, any>) => any) | null} [previewCandidate]
+ * @property {(() => void) | null} [clearCandidatePreview]
+ * @property {((error: Record<string, any>) => void) | null} [onError]
+ */
+
+/**
+ * @param {SimilarityAlignmentActionsOptions} options
+ */
 export const createSimilarityAlignmentActions = ({
   state,
   getOrthogroupById,
@@ -997,7 +1035,7 @@ export const createSimilarityAlignmentActions = ({
     const canonical = projectCommittedAlignment({ committed: activeBaseline.canonical,
       plan: response.plan, orientations,
       translations: projected.records.map(({ recordKey, translation }) => ({recordKey, ...translation})) });
-    const promise = runAlignmentCandidate({canonical, operation: 'align', label: 'Align Similarity Group',
+    const promise = runAlignmentCandidate({canonical, label: 'Align Similarity Group',
       alignmentResetBefore: activeBaseline.canonical});
     activeApply = promise;
     let outcome;
@@ -1286,7 +1324,7 @@ export const createSimilarityAlignmentActions = ({
         });
       }
       const canonical = projectCommittedAlignment({committed: current.canonical, plan:null, translations, orientations});
-      promise = runAlignmentCandidate({canonical, operation: 'align', label: scope === 'positions'
+      promise = runAlignmentCandidate({canonical, label: scope === 'positions'
         ? 'Reset alignment positions' : 'Reset alignment positions and direction changes', alignmentResetReceipt:null});
       activeApply = promise;
       const outcome = await promise;

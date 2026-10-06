@@ -1,3 +1,4 @@
+// @ts-check
 import { resolveFeatureAnchor } from './feature-anchor.js';
 import { RECORD_TARGET_NOT_DISCOVERED } from '../record-display-options.js';
 
@@ -15,11 +16,52 @@ const sameFeatureIdentity = (feature, identity) => {
 };
 
 /**
+ * The popup feature as the Result lists it; its fields come from the rendered
+ * feature records (Python owns the shape, R7).
+ * @typedef {Record<string, any>} PopupFeature
+ */
+
+/**
+ * A resolved record transform that Generate or a candidate applies.
+ * @typedef {object} ResolvedRecordTransform
+ * @property {number} startCoordinate
+ * @property {boolean} reverseComplement
+ * @property {Record<string, any> | null} anchorIntent
+ */
+
+/**
+ * @typedef {object} FeatureRecordRotationActionOptions
+ * @property {(feature: PopupFeature) => { row: Record<string, any>, target: Record<string, any> }} targetForFeature
+ *   record display port: the row and target of the feature's record
+ * @property {(row: Record<string, any>, transform: ResolvedRecordTransform) => any} setResolvedTransform
+ *   record display port: stages the transform in the record's draft (Apply on Generate)
+ * @property {() => Record<string, any> | null} getCommittedSession
+ * @property {(args: { committed: Record<string, any> | null, target: Record<string, any>, transform: Record<string, any> }) => { canonical: Record<string, any>, receipt: any }} projectCommittedRecordTransform
+ * @property {(run: { canonical: Record<string, any>, row: Record<string, any>, transform: ResolvedRecordTransform }) => Promise<Record<string, any>>} runRecordRotation
+ *   composition root port: runs the candidate and commits the target draft
+ * @property {((identity: { recordKey: string, biologicalFeatureId: string }) => PopupFeature | null) | null} [resolveCurrentFeature]
+ * @property {((feature: PopupFeature) => boolean) | null} [isCurrentFeature]
+ * @property {(() => Promise<Record<string, any>>) | null} [readRecords]
+ */
+
+/**
+ * The action that the workflow drives; `createFeatureRecordRotationAction` returns it.
+ * @typedef {object} FeatureRecordRotationActionPort
+ * @property {(feature: PopupFeature) => PopupFeature} currentFeature
+ * @property {(args: { feature: PopupFeature, intent: Record<string, any> }) => Record<string, any>} resolve
+ * @property {(args: { feature: PopupFeature, intent: Record<string, any> }) => Promise<Record<string, any>>} apply
+ * @property {(args: { feature: PopupFeature, intent: Record<string, any> }) => Promise<Record<string, any>>} stage
+ * @property {() => Promise<Record<string, any>>} readRecords
+ */
+
+/**
  * Coordinate one explicit popup feature through the existing domain owners.
  * The controller owns no request editing, generation, admission, or History stack.
  * It receives ports (R13): `targetForFeature` and `setResolvedTransform` of the
  * record display, and `runRecordRotation({ canonical, row, transform })`, which
  * the composition root wires to run the candidate and commit the target draft.
+ * @param {FeatureRecordRotationActionOptions} options
+ * @returns {Readonly<FeatureRecordRotationActionPort>}
  */
 export const createFeatureRecordRotationAction = ({
   targetForFeature,
@@ -173,6 +215,10 @@ const REFERENCE_CHOICES = Object.freeze([
   ['feature-end', 'just after the feature']
 ]);
 
+/**
+ * @param {readonly string[][]} entries `[value, label]` pairs
+ * @param {(value: string) => Record<string, any> | undefined} [capabilityFor]
+ */
 const choicesFrom = (entries, capabilityFor = () => emptyCapability()) => entries
   .map(([value, label]) => ({ value, label, ...copyCapability(capabilityFor(value)) }));
 
@@ -285,8 +331,16 @@ const initialDraft = () => ({
 });
 
 /**
+ * @typedef {object} FeatureRecordRotationWorkflowOptions
+ * @property {FeatureRecordRotationActionPort} action
+ * @property {(<T extends object>(value: T) => T) | undefined} [makeReactive] Vue `reactive`
+ * @property {((feature: PopupFeature, identity: { recordKey: string, biologicalFeatureId: string }) => void) | null} [onRebind]
+ */
+
+/**
  * Own only the popup's ephemeral draft and presentation state. Domain math and
  * transactional generation stay in createFeatureRecordRotationAction.
+ * @param {FeatureRecordRotationWorkflowOptions} options
  */
 export const createFeatureRecordRotationWorkflow = ({
   action,

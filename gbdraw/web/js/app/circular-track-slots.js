@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { ChangeTrackLayout } from './track-slot-edits.js' */
 import {
   CONSERVATION_SLOT_MANAGER,
   isManagedConservationSlot,
@@ -666,7 +668,7 @@ const isLegacyDefaultWebSlotShape = (source, renderer, defaultNt = 'GC', preset 
     const tickLayout = normalizeTickLabelLayout(params.tick_label_layout);
     return (
       side === 'inside' &&
-      [DEFAULT_TICK_LABEL_LAYOUT, defaultPresetTickLabelLayout(normalizedPreset)].includes(tickLayout) &&
+      [DEFAULT_TICK_LABEL_LAYOUT, defaultPresetTickLabelLayout()].includes(tickLayout) &&
       paramsMatchExactly(
         {
           ...params,
@@ -701,6 +703,21 @@ const isLegacyDefaultWebSlotShape = (source, renderer, defaultNt = 'GC', preset 
   return false;
 };
 
+/**
+ * @typedef {object} DefaultCircularTrackSlotsOptions
+ * @property {string} [nt] dinucleotide of the GC tracks
+ * @property {boolean} [showDepth]
+ * @property {number} [depthTrackCount]
+ * @property {boolean} [showGc]
+ * @property {boolean} [showSkew]
+ * @property {boolean} [showTicks]
+ * @property {string} [preset] circular track preset (`tuckin`, `middle`, `spreadout`)
+ */
+
+/**
+ * @param {DefaultCircularTrackSlotsOptions} [options]
+ * @returns {Record<string, any>[]}
+ */
 export const createDefaultCircularTrackSlots = ({
   nt = 'GC',
   showDepth = false,
@@ -723,7 +740,7 @@ export const createDefaultCircularTrackSlots = ({
       id: 'ticks',
       renderer: 'ticks',
       params: {
-        tick_label_layout: defaultPresetTickLabelLayout(preset)
+        tick_label_layout: defaultPresetTickLabelLayout()
       }
     }));
   }
@@ -837,6 +854,13 @@ export const circularTrackAxisIndexForEnabledSlots = (
     .length;
 };
 
+/**
+ * @param {string} renderer
+ * @param {Record<string, any>[]} [existingSlots]
+ * @param {string} [nt]
+ * @param {Record<string, any> | null} [placement]
+ * @returns {Record<string, any>}
+ */
 export const createCircularTrackSlotForRenderer = (renderer, existingSlots = [], nt = 'GC', placement = null) => {
   const normalizedRenderer = SUPPORTED_RENDERERS.includes(renderer) ? renderer : 'dinucleotide_skew';
   const baseId = DEFAULT_SLOT_IDS[normalizedRenderer] || normalizedRenderer;
@@ -1405,9 +1429,18 @@ const circularGeometryShortcutsForState = (state) => ({
   gcSkewRadius: state?.adv?.gc_skew_radius_circular
 });
 
+/**
+ * @typedef {object} CircularTrackSlotEditorOptions
+ * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
+ * @property {ChangeTrackLayout} [changeTrackLayout] R10 port (default: apply directly)
+ */
+
 // `changeTrackLayout` is the feature placement owner's transition, injected as
 // a port (R10, Q3, R13): every stack edit that can change the feature slot
 // runs through it.
+/**
+ * @param {CircularTrackSlotEditorOptions} options
+ */
 export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (apply) => apply() }) => {
   const editorKeys = new WeakMap();
   let nextEditorKey = 1;
@@ -1702,12 +1735,12 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   const reconcileCircularDepthSlots = (previousSourced) => {
     const slots = Array.isArray(state.adv.circular_track_slots) ? state.adv.circular_track_slots : [];
     if (slots.length === 0 && !state.adv.circular_track_slots_enabled) return;
-    const { slots: nextSlots, additions } = reconcileManagedDepthSlots({
+    const { slots: nextSlots, additions } = reconcileManagedDepthSlots(/** @type {any} */ ({
       slots,
       previousSourced,
       sourced: circularSourcedDepthTrackIndexesForState(state),
       managedPredicate: isDefaultManagedDepthSlot
-    });
+    }));
     if (additions.length === 0 && nextSlots.length === slots.length) return;
     const seriesCount = circularAvailableDepthTrackCountForState(state);
     const existingIds = new Set(nextSlots.map((slot) => String(slot?.id || '').trim()).filter(Boolean));
@@ -2244,13 +2277,13 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   );
 
   const circularTrackSlotSkewColorValue = (slot, key) => {
-    return resolveTrackSlotSkewColorValue({
+    return resolveTrackSlotSkewColorValue(/** @type {any} */ ({
       slot,
       key,
       currentColors: state.currentColors,
       paletteDefinitions: state.paletteDefinitions,
       selectedPalette: state.selectedPalette
-    });
+    }));
   };
 
   const setCircularTrackSlotSkewColor = (slot, key, value) => {
@@ -2330,14 +2363,14 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
 
   const selectedResultIndexValue = () => Number(state?.selectedResultIndex?.value ?? 0) || 0;
 
-  const resolvedCircularSlotGeometry = (slotId) => findTrackSlotGeometry({
+  const resolvedCircularSlotGeometry = (slotId) => findTrackSlotGeometry(/** @type {any} */ ({
     geometry: String(state?.trackSlotResolvedGeometry?.value?.mode || '') === 'circular'
       ? state.trackSlotResolvedGeometry.value
       : null,
     resultIndex: selectedResultIndexValue(),
     recordIndex: 0,
     slotId
-  });
+  }));
 
   const estimateCircularSlotGeometry = (slot, slotIndex) => {
     const preset = normalizeCircularTrackPreset(state.form.track_type);

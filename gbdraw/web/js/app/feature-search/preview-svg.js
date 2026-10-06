@@ -1,3 +1,4 @@
+// @ts-check
 import {
   getFeatureElementIndex,
   getFeatureElements
@@ -35,6 +36,24 @@ export const stripPreviewFeatureSearchClasses = (svg) => {
 
 export const getPreviewFeatureElementIndex = (svg) => getFeatureElementIndex(svg);
 
+/**
+ * The DOM state that the search classes last applied to one preview SVG.
+ * @typedef {object} PreviewFeatureSearchDomState
+ * @property {SVGSVGElement | null} svg
+ * @property {boolean} queryActive
+ * @property {Set<string>} matchedIds
+ * @property {string} activeId
+ * @property {number} updateGeneration
+ * @property {any} firstFrame handle of the first animation frame (or timeout)
+ * @property {any} secondFrame handle of the second animation frame (or timeout)
+ */
+
+/**
+ * Rendered feature elements by SVG id.
+ * @typedef {Map<string, Element[]>} FeatureElementIndex
+ */
+
+/** @returns {PreviewFeatureSearchDomState} */
 export const createPreviewFeatureSearchDomState = () => ({
   svg: null,
   queryActive: false,
@@ -69,6 +88,16 @@ const setFeatureClass = (featureIndex, svgId, className, enabled) => {
   });
 };
 
+/**
+ * @typedef {object} ApplyPreviewActiveSearchMatchOptions
+ * @property {FeatureElementIndex} [featureIndex]
+ * @property {PreviewFeatureSearchDomState} [appliedState]
+ * @property {string} [activeId]
+ */
+
+/**
+ * @param {ApplyPreviewActiveSearchMatchOptions} [options]
+ */
 export const applyPreviewActiveSearchMatch = ({
   featureIndex,
   appliedState,
@@ -89,6 +118,19 @@ export const applyPreviewActiveSearchMatch = ({
   }
 };
 
+/**
+ * @typedef {object} ApplyPreviewFeatureSearchClassesOptions
+ * @property {SVGSVGElement | null} [svg]
+ * @property {string[]} [matches]
+ * @property {string} [activeId]
+ * @property {boolean} [queryActive]
+ * @property {FeatureElementIndex | null} [featureIndex]
+ * @property {PreviewFeatureSearchDomState} [appliedState]
+ */
+
+/**
+ * @param {ApplyPreviewFeatureSearchClassesOptions} [options]
+ */
 export const applyPreviewFeatureSearchClasses = ({
   svg,
   matches = [],
@@ -123,6 +165,9 @@ export const applyPreviewFeatureSearchClasses = ({
   return appliedState;
 };
 
+/**
+ * @param {ApplyPreviewFeatureSearchClassesOptions} [options]
+ */
 export const schedulePreviewFeatureSearchClasses = (options = {}) => {
   const { svg, appliedState } = options;
   if (!svg || !appliedState) return appliedState;
@@ -183,6 +228,19 @@ export const getFeatureScreenCenter = (svg, featureId, featureIndex = null) => {
   };
 };
 
+/**
+ * @typedef {object} CenterPreviewFeatureOptions
+ * @property {SVGSVGElement | null} [svg]
+ * @property {string} [featureId]
+ * @property {FeatureElementIndex | null} [featureIndex]
+ * @property {HTMLElement | null} [canvasContainer]
+ * @property {{ x: number, y: number } | null} [canvasPan]
+ * @property {number} [maxDelta]
+ */
+
+/**
+ * @param {CenterPreviewFeatureOptions} [options]
+ */
 export const centerPreviewFeature = ({
   svg,
   featureId,

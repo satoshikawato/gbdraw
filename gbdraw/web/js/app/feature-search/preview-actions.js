@@ -1,3 +1,4 @@
+// @ts-check
 import {
   buildFeatureSearchIndex,
   formatSearchMatchDetail,
@@ -19,6 +20,21 @@ import {
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
 
+/**
+ * @typedef {object} PreviewFeatureSearchOptions
+ * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
+ * @property {(source: any, callback: (...args: any[]) => void, options?: Record<string, any>) => any} watch Vue `watch`
+ * @property {(callback?: () => void) => Promise<void>} nextTick Vue `nextTick`
+ * @property {<T>(getter: () => T) => { value: T }} computed Vue `computed`
+ * @property {(feature: Record<string, any>, eventLike?: { clientX: number, clientY: number } | null) => any} openFeatureEditorForFeature
+ *   feature editor port: opens the popup for a feature at a screen point
+ * @property {() => Record<string, any>[]} [resolveOrthogroups] orthogroups named for the search (default: `state.orthogroups`)
+ * @property {(() => boolean) | null} [isActiveResultReady] preview runtime port
+ */
+
+/**
+ * @param {PreviewFeatureSearchOptions} options
+ */
 export const createPreviewFeatureSearch = ({
   state,
   watch,
