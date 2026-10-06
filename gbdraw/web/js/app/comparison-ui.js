@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { LinearComparisonResolution } from './linear-comparisons.js' */
 import {
   LINEAR_COMPARISON_MODES,
   LINEAR_COMPARISON_SOURCES,
@@ -56,6 +58,9 @@ const LINEAR_COMPARISON_SECTION_KEYS = Object.freeze({
   })
 });
 
+/** @typedef {Readonly<{ key: string, label: string, adjacentOnly?: boolean }>} ComparisonModeEntry */
+
+/** @type {readonly ComparisonModeEntry[]} */
 const LOSAT_MODES = Object.freeze([
   Object.freeze({
     key: LINEAR_COMPARISON_LOSAT_MODE_KEYS.LOSATN,
@@ -71,6 +76,7 @@ const LOSAT_MODES = Object.freeze([
   })
 ]);
 
+/** @type {readonly ComparisonModeEntry[]} */
 const LOSATP_MODES = Object.freeze([
   Object.freeze({
     key: LINEAR_COMPARISON_LOSATP_MODE_KEYS.SIMILARITY_GROUPS,
@@ -356,6 +362,7 @@ const projectSectionKeys = ({
     selectedPairs.push(LINEAR_COMPARISON_SECTION_KEYS.SELECTED_PAIRS.RETAINED_DRAFTS);
   }
 
+  /** @type {string[]} */
   const advanced = [LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.RECORD_LAYOUT];
   if (planned.hasLosat) {
     advanced.push(LINEAR_COMPARISON_SECTION_KEYS.ADVANCED.LOSAT_CACHE);
@@ -480,6 +487,15 @@ export const projectLinearComparisonLosatpModeSelection = ({
   });
 };
 
+/**
+ * @param {{
+ *   plan?: Record<string, any>,
+ *   resolution?: Partial<LinearComparisonResolution>,
+ *   losatProgram?: string,
+ *   blastpMode?: string,
+ *   filters?: Record<string, any>
+ * }} [options]
+ */
 export const projectLinearComparisonUi = ({
   plan = {},
   resolution = {},

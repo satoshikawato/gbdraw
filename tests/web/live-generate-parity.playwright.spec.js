@@ -10,7 +10,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
-const { expectLiveEqualsGenerate, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
+const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -129,13 +129,22 @@ const history = async (page, step) => {
 const FL1_OFF = { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' };
 const BATCH_0004_OFF = { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '_0004$', action: 'off' };
 const BATCH_CDS_OFF = { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '.', action: 'off' };
+// The Legend row of a type with one feature (the Legend editor's color control).
+const legendRowColor = async (page, caption, color) => {
+  await page.evaluate(({ row, value }) => {
+    const app = window.__GBDRAW_APP__;
+    return app.updateLegendEntryColor(app.legendEntries.findIndex((entry) => entry.caption === row), value);
+  }, { row: caption, value: color });
+  await settleLive(page);
+};
+
 const FL1_ALPHA = { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'alpha' };
 
 // The edit kinds. Each appears at least once in the matrix.
 const KINDS = [
   'visibility rule add', 'visibility rule action', 'visibility rule delete', 'feature Off', 'feature On',
   'label text', 'label Off', 'label On', 'color rule add', 'color rule color', 'color rule delete', 'feature color',
-  'undo', 'redo', 'Result switch'
+  'undo', 'redo', 'Result switch', 'legend color'
 ];
 
 // The matrix: one edit kind in one set of states, with the setup before the
@@ -319,6 +328,23 @@ const CASES = [
     setup: async (page) => { await addColorRule(page, FL1_ALPHA); await history(page, 'undo'); },
     run: (page) => history(page, 'redo')
   },
+  // OV-61: a rule row recolored after a popup edit colored its only feature.
+  // The rule is the latest explicit color; the popup's Legend color does not
+  // come back at Generate.
+  {
+    kind: 'legend color',
+    edit: 'Legend row color of a feature colored in the popup',
+    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'unbound' },
+    setup: (page) => popupEdit(page, { type: 'repeat_region' }, { fill: '#e63946' }),
+    run: (page) => legendRowColor(page, 'repeat_region', '#f4a261')
+  },
+  {
+    kind: 'color rule color',
+    edit: 'Specific color rule color change of a feature colored in the popup',
+    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'bound' },
+    setup: (page) => popupEdit(page, { type: 'repeat_region' }, { fill: '#e63946' }),
+    run: (page) => appAction(page, 'setSpecificRuleField', 0, 'color', '#f4a261')
+  },
   {
     kind: 'Result switch',
     edit: 'Result switch after a feature color with the same-product scope',
@@ -453,4 +479,31 @@ test('an edit that changes a Legend source rerenders once', async ({ page }) => 
   await addColorRule(page, FL1_ALPHA);
   expect(await renders(), 'color rule, Auto Reflow on').toBe(1);
   await expectLiveEqualsGenerate(page, { label: 'edits that change a Legend source' });
+});
+
+// OV-46: a Legend-only color on a generated row that only one Result of a batch
+// draws. The compiler cannot tell which Result draws the row, so each Result may
+// miss it; the Generate succeeds when one Result draws it.
+test('a Legend color on a row only one Result draws survives the next Generate', async ({ page }) => {
+  test.setTimeout(150_000);
+  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await popupEdit(page, 'TESTA_0005', { fill: '#c83366' });
+  await generate(page);
+  const legendOf = async (index) => {
+    await showResult(page, index);
+    return (await semanticSnapshot(page)).legend;
+  };
+  const before = [await legendOf(0), await legendOf(1)];
+  expect(before[0].map(({ caption }) => caption)).toContain('other proteins');
+  expect(before[1].map(({ caption }) => caption)).not.toContain('other proteins');
+  await showResult(page, 0);
+  expect(await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.updateLegendEntryColor(app.legendEntries.findIndex((entry) => entry.caption === 'other proteins'), '#00aa00');
+  })).toBeTruthy();
+  await settleLive(page);
+  await generate(page);
+  const after = [await legendOf(0), await legendOf(1)];
+  expect(after[0].find(({ caption }) => caption === 'other proteins').fill.toLowerCase()).toBe('#00aa00');
+  expect(after[1]).toEqual(before[1]);
 });

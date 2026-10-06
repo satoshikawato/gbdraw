@@ -663,8 +663,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       lastAdoptedCanonical = structuredClone(canonical);
     },
     prepareCandidateCommit: ({
-      results,
-      catalog,
+      generationResponse,
+      catalogAdmission,
       featureColorOverrides,
       featureStrokeOverrides
     }) => {
@@ -672,8 +672,8 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
         throw new Error('forced current Result admission failure');
       }
       const candidate = {
-        results: structuredClone(results),
-        featureState: featureStateFromCatalog(catalog),
+        results: structuredClone(generationResponse.results),
+        featureState: featureStateFromCatalog(catalogAdmission.catalog),
         featureColorOverrides: structuredClone(featureColorOverrides),
         featureStrokeOverrides: structuredClone(featureStrokeOverrides)
       };
@@ -1530,13 +1530,13 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
       error: ''
     }),
     prepareCandidateCommit: ({
-      results,
-      catalog,
+      generationResponse,
+      catalogAdmission,
       featureColorOverrides,
       featureStrokeOverrides
     }) => ({
-      results: structuredClone(results),
-      featureState: featureStateFromCatalog(catalog),
+      results: structuredClone(generationResponse.results),
+      featureState: featureStateFromCatalog(catalogAdmission.catalog),
       featureColorOverrides: structuredClone(featureColorOverrides),
       featureStrokeOverrides: structuredClone(featureStrokeOverrides)
     }),
@@ -2252,19 +2252,18 @@ test('Linear mode none ignores dormant comparison state while active depth and a
     prepareLinearRecordCatalog: (...args) => prepareLinearRecordCatalogImpl(...args),
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: () => {},
-    validateAnnotationTargets: ({ loadComparison }) => {
+    validateAnnotationTargets: () => {
       annotationValidationCalls += 1;
-      assert.equal(loadComparison, false);
       return annotationValidationError;
     },
     prepareCandidateCommit: ({
-      results,
-      catalog,
+      generationResponse,
+      catalogAdmission,
       featureColorOverrides,
       featureStrokeOverrides
     }) => ({
-      results: structuredClone(results),
-      featureState: featureStateFromCatalog(catalog),
+      results: structuredClone(generationResponse.results),
+      featureState: featureStateFromCatalog(catalogAdmission.catalog),
       featureColorOverrides: structuredClone(featureColorOverrides),
       featureStrokeOverrides: structuredClone(featureStrokeOverrides)
     }),

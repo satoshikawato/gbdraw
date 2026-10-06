@@ -1,3 +1,89 @@
+// @ts-check
+/**
+ * @typedef {'none' | 'adjacent' | 'selected'} LinearComparisonMode
+ * @typedef {'losat' | 'upload'} LinearComparisonSource
+ */
+/**
+ * One draft pair of the Linear comparison plan. `file` is the uploaded BLAST
+ * TSV File (a Web File object, or null).
+ * @typedef {object} LinearComparisonEdge
+ * @property {string} id
+ * @property {string} queryUid
+ * @property {string} subjectUid
+ * @property {boolean} included
+ * @property {boolean} fileActive
+ * @property {boolean} losatFilenameActive
+ * @property {LinearComparisonSource} source
+ * @property {any} file
+ * @property {string} losatFilename
+ */
+/**
+ * The options of `createLinearComparisonEdge`; every field may be absent or
+ * unnormalized.
+ * @typedef {object} LinearComparisonEdgeInit
+ * @property {string} [id]
+ * @property {string} [queryUid]
+ * @property {string} [subjectUid]
+ * @property {boolean} [included]
+ * @property {boolean} [fileActive]
+ * @property {boolean} [losatFilenameActive]
+ * @property {string} [source]
+ * @property {any} [file]
+ * @property {string} [losatFilename]
+ */
+/**
+ * @typedef {object} LinearComparisonPlan
+ * @property {LinearComparisonMode} mode
+ * @property {LinearComparisonSource} defaultSource
+ * @property {LinearComparisonEdge[]} edges
+ */
+/**
+ * One edge `resolveLinearComparisonPlan` derives from the plan.
+ * @typedef {object} LinearComparisonResolvedEdge
+ * @property {string} id
+ * @property {string} queryUid
+ * @property {string} subjectUid
+ * @property {number} queryIndex
+ * @property {number} subjectIndex
+ * @property {string} edgeKey
+ * @property {number} ordinal
+ * @property {LinearComparisonSource} source
+ * @property {boolean} included
+ * @property {any} file
+ * @property {boolean} fileActive
+ * @property {string} losatFilename
+ * @property {boolean} losatFilenameActive
+ */
+/**
+ * @typedef {object} LinearComparisonIssue
+ * @property {string} code
+ * @property {string} message
+ * @property {string} edgeId
+ * @property {string} edgeKey
+ */
+/**
+ * @typedef {object} LinearComparisonResolution
+ * @property {LinearComparisonMode} mode
+ * @property {LinearComparisonSource} defaultSource
+ * @property {readonly LinearComparisonResolvedEdge[]} edges
+ * @property {readonly LinearComparisonIssue[]} errors
+ * @property {string} error
+ * @property {boolean} valid
+ * @property {boolean} hasComparisonIntent
+ * @property {boolean} hasLosatIntent
+ * @property {boolean} hasUploadIntent
+ */
+/**
+ * One record-pair search a Generate requests.
+ * @typedef {object} LosatJobSpec
+ * @property {string} edgeKey
+ * @property {number} ordinal
+ * @property {string} queryUid
+ * @property {string} subjectUid
+ * @property {number} queryIndex
+ * @property {number} subjectIndex
+ * @property {string} program
+ */
 export const LINEAR_COMPARISON_MODES = Object.freeze({
   NONE: 'none',
   ADJACENT: 'adjacent',
@@ -9,7 +95,9 @@ export const LINEAR_COMPARISON_SOURCES = Object.freeze({
   UPLOAD: 'upload'
 });
 
+/** @type {Set<string>} */
 const VALID_MODES = new Set(Object.values(LINEAR_COMPARISON_MODES));
+/** @type {Set<string>} */
 const VALID_SOURCES = new Set(Object.values(LINEAR_COMPARISON_SOURCES));
 const VALID_LOSAT_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
 
@@ -29,14 +117,23 @@ export const plainTextLinearRecordLabel = (value) => {
 
 // An absent or unknown mode is the Web default (No comparison): a plan never
 // starts a comparison its writer did not state (B15).
+/**
+ * @param {unknown} value
+ * @returns {LinearComparisonMode}
+ */
 const normalizeMode = (value) => {
   const mode = String(value || '').trim().toLowerCase();
-  return VALID_MODES.has(mode) ? mode : LINEAR_COMPARISON_MODES.NONE;
+  return VALID_MODES.has(mode) ? /** @type {LinearComparisonMode} */ (mode) : LINEAR_COMPARISON_MODES.NONE;
 };
 
+/**
+ * @param {unknown} value
+ * @param {LinearComparisonSource} [fallback]
+ * @returns {LinearComparisonSource}
+ */
 const normalizeSource = (value, fallback = LINEAR_COMPARISON_SOURCES.LOSAT) => {
   const source = String(value || '').trim().toLowerCase();
-  return VALID_SOURCES.has(source) ? source : fallback;
+  return VALID_SOURCES.has(source) ? /** @type {LinearComparisonSource} */ (source) : fallback;
 };
 
 const createComparisonId = () => {
@@ -51,12 +148,17 @@ export const linearComparisonEdgeKey = (queryUid, subjectUid) => (
   `${cleanUid(queryUid)}->${cleanUid(subjectUid)}`
 );
 
+/** @returns {LinearComparisonPlan} */
 export const createDefaultLinearComparisonPlan = () => ({
   mode: LINEAR_COMPARISON_MODES.NONE,
   defaultSource: LINEAR_COMPARISON_SOURCES.LOSAT,
   edges: []
 });
 
+/**
+ * @param {LinearComparisonEdgeInit} [init]
+ * @returns {LinearComparisonEdge}
+ */
 export const createLinearComparisonEdge = ({
   id = '',
   queryUid = '',
@@ -90,6 +192,10 @@ const normalizeEdge = (edge, index) => {
   });
 };
 
+/**
+ * @param {Record<string, any>} [plan] unvalidated plan (a session, a draft, or a live plan)
+ * @returns {LinearComparisonPlan}
+ */
 export const normalizeLinearComparisonPlan = (plan = {}) => {
   const source = plan && typeof plan === 'object' && !Array.isArray(plan) ? plan : {};
   const edges = (Array.isArray(source.edges) ? source.edges : []).map(normalizeEdge);
@@ -248,6 +354,16 @@ const resolvedEdge = ({ edge, queryUid, subjectUid, queryIndex, subjectIndex, so
   losatFilenameActive: edge?.losatFilenameActive === true
 });
 
+/**
+ * @param {{
+ *   plan?: Record<string, any>,
+ *   sequences?: any[],
+ *   layout?: any[],
+ *   losatProgram?: string,
+ *   blastpMode?: string
+ * }} [options]
+ * @returns {LinearComparisonResolution}
+ */
 export const resolveLinearComparisonPlan = ({
   plan = createDefaultLinearComparisonPlan(),
   sequences = [],
@@ -597,6 +713,14 @@ export const buildLinearComparisonTimeline = ({
   return { rows, unplacedDrafts };
 };
 
+/**
+ * @param {{
+ *   resolution?: LinearComparisonResolution,
+ *   program?: string,
+ *   blastpMode?: string
+ * }} [options]
+ * @returns {readonly LosatJobSpec[]}
+ */
 export const buildPairwiseLosatJobSpecs = ({
   resolution,
   program = 'blastn',
@@ -633,6 +757,18 @@ export const buildPairwiseLosatJobSpecs = ({
 // job-count estimate both expand them here (N-10). Similarity groups always
 // include within-record evidence; Collinear includes it only when inference is
 // on (PD-OI-018 item 4).
+/**
+ * @param {{
+ *   resolution?: LinearComparisonResolution,
+ *   recordCount?: number,
+ *   recordUids?: string[],
+ *   program?: string,
+ *   blastpMode?: string,
+ *   collinearInferOrthogroups?: boolean,
+ *   collinearSearchScope?: string
+ * }} [options]
+ * @returns {readonly LosatJobSpec[]}
+ */
 export const buildLosatJobSpecs = ({
   resolution,
   recordCount,

@@ -401,28 +401,31 @@ const updateLegendCaption = (entry, caption) => {
   if (label) label.textContent = caption;
 };
 
-const applyLegendOperations = (index, operations, { displayed = false } = {}) => {
-  operations.legendFills.forEach(({ caption, color, allowMissing }) => {
-    requireLegendEntries(index, caption, { allowMissing }).forEach((entry) => {
+// `drawnRows` collects the captions of rows marked `requiredInAnyResult` that
+// this Result draws, for the check over all Results of one admission (OV-46).
+const applyLegendOperations = (index, operations, { displayed = false, drawnRows = null } = {}) => {
+  const requireRow = (operation) => {
+    const entries = requireLegendEntries(index, operation.caption, operation);
+    if (operation.requiredInAnyResult && entries.length > 0) drawnRows?.add(operation.caption);
+    return entries;
+  };
+  operations.legendFills.forEach((operation) => {
+    const { color } = operation;
+    requireRow(operation).forEach((entry) => {
       const swatch = legendSwatch(entry);
       if (!swatch) throw new Error('Sanitized SVG content is missing a Legend swatch.');
       setAttributeIfDifferent(swatch, 'fill', color);
     });
   });
-  operations.legendStrokes.forEach(({
-    caption,
-    strokeColor,
-    strokeWidth,
-    allowMissing,
-    renderedIds
-  }) => {
+  operations.legendStrokes.forEach((operation) => {
+    const { strokeColor, strokeWidth, renderedIds } = operation;
     (Array.isArray(renderedIds) ? renderedIds : []).forEach((renderedId) => {
       requireFeatureElements(index, renderedId).forEach((element) => {
         if (strokeColor) setAttributeIfDifferent(element, 'stroke', strokeColor);
         if (strokeWidth !== null) setAttributeIfDifferent(element, 'stroke-width', strokeWidth);
       });
     });
-    requireLegendEntries(index, caption, { allowMissing }).forEach((entry) => {
+    requireRow(operation).forEach((entry) => {
       const swatch = legendSwatch(entry);
       if (!swatch) throw new Error('Sanitized SVG content is missing a Legend swatch.');
       if (strokeColor) setAttributeIfDifferent(swatch, 'stroke', strokeColor);
@@ -513,7 +516,8 @@ const admitCurrentResult = (
     sanitizer,
     parser,
     resultIndex,
-    sourceClass
+    sourceClass,
+    drawnRows
   }
 ) => {
   const phase = sourceClass;
@@ -532,10 +536,22 @@ const admitCurrentResult = (
   recordStructuralMetric('applicationSvgParseCount', 1, { phase, resultIndex });
   const index = createLazyMutationIndex(svg, { phase, resultIndex });
   applyFeatureOperations(index, operations);
-  applyLegendOperations(index, operations);
+  applyLegendOperations(index, operations, { drawnRows });
   operations.callerTransforms.forEach((transform) => transform(svg, { result, resultIndex }));
   const content = serializeAdmittedSvg(svg, { phase, resultIndex });
   return commitCatalogBackedResult({ ...result, content }, metadata);
+};
+
+// A Legend row the compiler could not tie to a Result may be missing in each
+// Result, but some Result of the Generate must draw it (OV-46).
+const requireRowsDrawnInAnyResult = (plan, drawnRows) => {
+  plan.operationsByResult.forEach((operations) => {
+    [...operations.legendFills, ...operations.legendStrokes].forEach((operation) => {
+      if (operation.requiredInAnyResult && !drawnRows.has(operation.caption)) {
+        throw diagnosticError('RESULT_INVALID', {}, { stage: 'result-admission' });
+      }
+    });
+  });
 };
 
 const admitCatalogBackedResults = (
@@ -559,12 +575,14 @@ const admitCatalogBackedResults = (
   recordStructuralMetric('currentLegacyNormalizationCount', 0, { phase: sourceClass });
   recordStructuralMetric('legacyOverrideMigrationCount', 0, { phase: sourceClass });
   recordStructuralMetric('manualRuleFeatureMatchCount', 0, { phase: sourceClass });
+  const drawnRows = new Set();
   const admitted = results.map((result, resultIndex) => admitCurrentResult(
     result,
     metadataFromCatalogAdmission(catalogAdmission, resultIndex, sourceClass, featureTypes),
     currentResultOperations(plan, resultIndex),
-    { sanitizer, parser, resultIndex, sourceClass }
+    { sanitizer, parser, resultIndex, sourceClass, drawnRows }
   ));
+  requireRowsDrawnInAnyResult(plan, drawnRows);
   recordSessionLifecycleEvent('svg.admission-completed', {
     phase: sourceClass,
     resultCount: admitted.length,

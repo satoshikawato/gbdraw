@@ -292,3 +292,37 @@ test('a Legend style may miss its row only in a Result that draws none of its fe
     [{ allowMissing: true, renderedIds: [] }]
   ]);
 });
+
+// OV-46: a Legend-only row (no feature is known to draw it) may be absent from
+// each Result, and the plan records that some Result must draw it.
+test('a Legend row with no known features is required in at least one Result, not in each', () => {
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: { ...admission(), resultNames: ['record-a.svg', 'record-b.svg'] },
+    legendEntries: [{ caption: 'other proteins', originalCaption: 'other proteins', color: '#00aa00' }],
+    originalLegendOrder: ['other proteins'],
+    legendColorOverrides: { 'other proteins': '#00aa00' },
+    legendStrokeOverrides: { 'other proteins': { strokeColor: '#445566', strokeWidth: 2 } }
+  });
+  assert.deepEqual(plan.operationsByResult.map(({ legendFills }) => legendFills), [
+    [{ caption: 'other proteins', color: '#00aa00', allowMissing: true, requiredInAnyResult: true }],
+    [{ caption: 'other proteins', color: '#00aa00', allowMissing: true, requiredInAnyResult: true }]
+  ]);
+  assert.deepEqual(plan.operationsByResult.map(({ legendStrokes }) => legendStrokes.map(
+    ({ allowMissing, requiredInAnyResult, renderedIds }) => ({ allowMissing, requiredInAnyResult, renderedIds })
+  )), [
+    [{ allowMissing: true, requiredInAnyResult: true, renderedIds: [] }],
+    [{ allowMissing: true, requiredInAnyResult: true, renderedIds: [] }]
+  ]);
+});
+
+test('a Legend row in a single Result stays required in that Result', () => {
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: admission(),
+    legendEntries: [{ caption: 'other proteins', originalCaption: 'other proteins', color: '#00aa00' }],
+    originalLegendOrder: ['other proteins'],
+    legendColorOverrides: { 'other proteins': '#00aa00' }
+  });
+  assert.deepEqual(plan.operationsByResult[0].legendFills, [
+    { caption: 'other proteins', color: '#00aa00', allowMissing: false }
+  ]);
+});

@@ -14,7 +14,7 @@ const setup = (evaluate = evaluatePythonRules) => {
     ] },
     featureColorOverrides: {}, featureOverrides: {}, results: { value: [{name:'figure',content:'before'}] },
     svgResultIdentity: { value:'before' }, fileLegendCaptions: { value:new Set() }, addedLegendCaptions: { value:new Set() },
-    legendEntries: { value:[] }, files: {t_color:null},
+    legendEntries: { value:[] }, files: {t_color:null}, legendColorOverrides: {},
     newSpecRule: {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared'}
   };
   const notices = [], transactions = [], transactionScopes = [];
@@ -261,4 +261,17 @@ test('a color action does not commit when its rules were replaced during the pre
   await assert.rejects(() => invalid.actions.runWithRuleMatches(
     [{ feat: 'CDS', qual: 'gene', val: '(?<enzyme>a)', color: '#112233', cap: '' }], () => assert.fail('invalid commit')
   ));
+});
+
+test('a rule commit retires the Legend color a popup edit left on a row it recolors (OV-61)', async () => {
+  const s = setup();
+  const rule = { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'Shared' };
+  s.state.manualSpecificRules.push({ ...rule });
+  s.state.legendColorOverrides.Shared = '#112233';
+  s.state.legendColorOverrides.Other = '#abcdef';
+  assert.equal(await s.actions.commitSpecificRules([{ ...rule }]), true);
+  assert.equal(s.state.legendColorOverrides.Shared, '#112233', 'the same color keeps the row\'s Legend color');
+  assert.equal(await s.actions.commitSpecificRules([{ ...rule, color: '#445566' }]), true);
+  assert.equal(Object.hasOwn(s.state.legendColorOverrides, 'Shared'), false, 'the recolored row drops the stale Legend color');
+  assert.equal(s.state.legendColorOverrides.Other, '#abcdef', 'a row the commit does not draw keeps its Legend color');
 });
