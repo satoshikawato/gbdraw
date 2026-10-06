@@ -491,6 +491,7 @@ export const createFeatureColorActions = ({
     legendRenameDialog.targetColor = '';
     legendRenameDialog.currentColor = '';
     legendRenameDialog.siblingCount = 0;
+    legendRenameDialog.mergeAvailable = true;
     legendRenameDialog.pendingRequest = null;
   };
 
@@ -751,7 +752,7 @@ export const createFeatureColorActions = ({
     legendRenameDialog.pendingRequest = request;
   };
 
-  const openLegendRenameTargetDialog = (request, targetEntry) => {
+  const openLegendRenameTargetDialog = (request, targetEntry, mergeAvailable) => {
     legendRenameDialog.show = true;
     legendRenameDialog.mode = 'target';
     legendRenameDialog.oldCaption = request.oldCaption;
@@ -760,6 +761,7 @@ export const createFeatureColorActions = ({
     legendRenameDialog.targetColor = targetEntry.color || '';
     legendRenameDialog.currentColor = request.currentColor || '';
     legendRenameDialog.siblingCount = request.siblingCount || 0;
+    legendRenameDialog.mergeAvailable = mergeAvailable;
     legendRenameDialog.pendingRequest = request;
   };
 
@@ -813,15 +815,28 @@ export const createFeatureColorActions = ({
     const isDistinctTargetEntry = targetEntry && !captionsMatch(targetEntry.caption, oldCaption);
     const ruleOwnedTarget = isDistinctTargetEntry && getLegendRowRules(targetEntry.caption).length > 0;
     const featureOrRuleRename = features.length > 0 || getLegendRowRules(oldCaption).length > 0;
+    // OV-62 (PD-OI-061 amended): two rows merge only when each draws features of
+    // one type and the type is the same. A row without features (GC content,
+    // GC skew), rows of different types, and a row that spans several types
+    // offer Suffix and Cancel only, even onto a rule-owned caption. The types
+    // are those of the features that take each row's caption, as the live editor
+    // knows them: a generated row such as `other proteins` has none live, so it
+    // is not merged into.
+    const featureTypes = (rowFeatures) => new Set(rowFeatures.map((feature) => feature?.type));
+    const sourceTypes = featureTypes(features);
+    const targetTypes = isDistinctTargetEntry ? featureTypes(getFeaturesForLegendCaption(targetEntry.caption)) : new Set();
+    const mergeAllowed = isDistinctTargetEntry && sourceTypes.size === 1 && targetTypes.size === 1
+      && [...sourceTypes][0] === [...targetTypes][0];
 
-    if (featureOrRuleRename && (!isDistinctTargetEntry || ruleOwnedTarget || colorsMatch(targetEntry.color, currentColor))) {
+    if (featureOrRuleRename && (!isDistinctTargetEntry
+      || (mergeAllowed && (ruleOwnedTarget || colorsMatch(targetEntry.color, currentColor))))) {
       await applyLegendRenameRequest({ ...request, currentColor, features,
         finalCaption: newCaption, finalColor: currentColor });
       clearLegendRenameDialog();
       return;
     }
 
-    if (isDistinctTargetEntry && !colorsMatch(targetEntry.color, currentColor)) {
+    if (isDistinctTargetEntry && (!mergeAllowed || !colorsMatch(targetEntry.color, currentColor))) {
       if (!request.targetResolution) {
         openLegendRenameTargetDialog(
           {
@@ -829,8 +844,14 @@ export const createFeatureColorActions = ({
             currentColor,
             features
           },
-          targetEntry
+          targetEntry,
+          mergeAllowed
         );
+        return;
+      }
+
+      if (request.targetResolution === 'merge' && !mergeAllowed) {
+        clearLegendRenameDialog({ restoreInput: true });
         return;
       }
 

@@ -829,7 +829,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
       ruleActions: {
         runWithRuleMatches: runWithRuleMatchesOf(createRulePreparation({ state: renameState, evaluate: evaluatePythonRules }), renameState),
         commitSpecificRules: async (nextRules) => { committed.push(nextRules.map((rule) => ({ ...rule }))); return true; },
-        getEffectiveLegendCaption: (feature) => rules.find((rule) => rule.feat === feature.type)?.cap || feature.type,
+        getEffectiveLegendCaption: (feature) => feature.legendCaption || rules.find((rule) => rule.feat === feature.type)?.cap || feature.type,
         getLegendRowRules: (caption) => legendRowRules(caption, {
           rules, legendEntries: stateLegendEntries.value, originalLegendOrder: originalOrder.value
         }),
@@ -885,36 +885,80 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
     [['GC content', 'Zeta', true]]);
   assert.deepEqual(onRulePlan.operationsByResult[0].legendFills, []);
 
-  // PV-04: renaming a feature row onto another caption of a different color
-  // asks Merge, Suffix, or Cancel before any rule commit.
+  // PV-04 (PD-OI-061 amended, OV-62): rows that draw features of one same type
+  // ask Merge, Suffix, or Cancel before any rule commit. Any other pair, with
+  // or without features, asks Suffix or Cancel only.
   const collide = () => build({
-    entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }, { caption: 'rRNA', color: '#71ee7d' }],
-    order: ['tRNA', 'rRNA'],
-    features: [trna]
+    entries: [{ caption: 'Leu A', color: '#e8b441', featureIds: ['t1'] }, { caption: 'Leu B', color: '#71ee7d', featureIds: ['t2'] }],
+    order: ['Leu A', 'Leu B'],
+    features: [{ ...trna, legendCaption: 'Leu A' }, { ...trna, id: 't2', svg_id: 't2', legendCaption: 'Leu B' }]
   });
   const merge = collide();
-  await merge.renameActions.renameLegendEntry(0, 'rRNA');
+  await merge.renameActions.renameLegendEntry(0, 'Leu B');
   assert.equal(merge.legendRenameDialog.show, true);
   assert.equal(merge.legendRenameDialog.mode, 'target');
+  assert.equal(merge.legendRenameDialog.mergeAvailable, true);
   assert.equal(merge.committed.length, 0);
   await merge.renameActions.handleLegendRenameChoice('merge');
-  assert.deepEqual(merge.committed.at(-1).map(({ cap, color }) => [cap, color]), [['rRNA', '#71ee7d']]);
+  assert.deepEqual(merge.committed.at(-1).map(({ cap, color }) => [cap, color]), [['Leu B', '#71ee7d']]);
   const suffix = collide();
-  await suffix.renameActions.renameLegendEntry(0, 'rRNA');
+  await suffix.renameActions.renameLegendEntry(0, 'Leu B');
   await suffix.renameActions.handleLegendRenameChoice('suffix');
-  assert.deepEqual(suffix.committed.at(-1).map(({ cap, color }) => [cap, color]), [['rRNA (1)', '#e8b441']]);
+  assert.deepEqual(suffix.committed.at(-1).map(({ cap, color }) => [cap, color]), [['Leu B (1)', '#e8b441']]);
   const cancel = collide();
-  await cancel.renameActions.renameLegendEntry(0, 'rRNA');
+  await cancel.renameActions.renameLegendEntry(0, 'Leu B');
   await cancel.renameActions.handleLegendRenameChoice('cancel');
   assert.equal(cancel.committed.length, 0);
   assert.equal(cancel.legendRenameDialog.show, false);
 
-  // A target owned by a specific-color rule keeps PD-OI-042 disambiguation.
+  // Different types, a row without features, and a target without live features
+  // offer no Merge; a programmatic Merge is refused like Cancel (OV-62).
+  const noMerge = {
+    differentTypes: () => build({
+      entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }, { caption: 'rRNA', color: '#71ee7d', featureIds: ['r1'] }],
+      order: ['tRNA', 'rRNA'],
+      features: [trna, { ...trna, id: 'r1', svg_id: 'r1', type: 'rRNA' }]
+    }),
+    // The colors match: the row still asks, as a silent rename would draw two rows of one caption.
+    differentTypesSameColor: () => build({
+      entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }, { caption: 'rRNA', color: '#e8b441', featureIds: ['r1'] }],
+      order: ['tRNA', 'rRNA'],
+      features: [trna, { ...trna, id: 'r1', svg_id: 'r1', type: 'rRNA' }]
+    }),
+    featureless: () => build({
+      entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }, { caption: 'GC content', color: '#a1a1a1' }],
+      order: ['tRNA', 'GC content'],
+      features: [trna]
+    })
+  };
+  for (const [name, make] of Object.entries(noMerge)) {
+    const source = name === 'featureless' ? 1 : 0;
+    const target = name === 'featureless' ? 'tRNA' : 'rRNA';
+    const refused = make();
+    const caption = refused.stateLegendEntries.value[source].caption;
+    await refused.renameActions.renameLegendEntry(source, target);
+    assert.equal(refused.legendRenameDialog.show, true, name);
+    assert.equal(refused.legendRenameDialog.mergeAvailable, false, name);
+    await refused.renameActions.handleLegendRenameChoice('merge');
+    assert.equal(refused.legendRenameDialog.show, false, name);
+    assert.equal(refused.committed.length, 0, name);
+    assert.equal(refused.stateLegendEntries.value[source].caption, caption, name);
+    const suffixed = make();
+    await suffixed.renameActions.renameLegendEntry(source, target);
+    await suffixed.renameActions.handleLegendRenameChoice('suffix');
+    const suffixedCaption = suffixed.committed.length
+      ? suffixed.committed.at(-1)[0].cap : suffixed.stateLegendEntries.value[source].caption;
+    assert.notEqual(suffixedCaption, target, name);
+    assert.ok(suffixedCaption.startsWith(target), name);
+  }
+
+  // A target owned by a specific-color rule keeps PD-OI-042 disambiguation
+  // for a row of the same type.
   const ruleOwned = build({
-    entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }, { caption: 'Special', color: '#ff0000' }],
+    entries: [{ caption: 'tRNA', color: '#e8b441', featureIds: ['t1'] }, { caption: 'Special', color: '#ff0000', featureIds: ['t2'] }],
     order: ['tRNA', 'Special'],
-    rules: [{ feat: 'rRNA', qual: 'product', val: '.*', color: '#ff0000', cap: 'Special' }],
-    features: [trna]
+    rules: [{ feat: 'tRNA', qual: 'product', val: '^NOMATCH$', color: '#ff0000', cap: 'Special' }],
+    features: [{ ...trna, legendCaption: 'tRNA' }, { ...trna, id: 't2', svg_id: 't2', legendCaption: 'Special' }]
   });
   await ruleOwned.renameActions.renameLegendEntry(0, 'Special');
   assert.notEqual(ruleOwned.legendRenameDialog.show, true);
