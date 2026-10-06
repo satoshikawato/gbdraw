@@ -80,9 +80,7 @@ import {
 } from './feature-edit-migration.js';
 import {
   buildSessionFeatureRecoveryPlan,
-  classifyFeatureMetadataState,
-  extractSessionSourceFeatures,
-  hasUsableBiologicalFeatureCatalog
+  extractSessionSourceFeatures
 } from '../app/session-feature-metadata.js';
 import {
   analyzeCatalogSequenceSourceCoverage,
@@ -101,7 +99,6 @@ import {
 } from './session-request.js';
 import {
   createDefaultLinearComparisonPlan,
-  createLinearComparisonEdge,
   linearComparisonEdgeKey,
   normalizeLinearComparisonPlan,
   reconcileLinearComparisonPlan,
@@ -3570,7 +3567,6 @@ const captureSessionImportTransientState = () => ({
   ),
   featureSelectionDrag: cloneJsonData(state.featureSelectionDrag),
   labelReflowLastError: state.labelReflowLastError.value,
-  labelOverrideBuildWarning: state.labelOverrideBuildWarning.value,
   clickedFeature: state.clickedFeature.value,
   clickedPairwiseMatch: state.clickedPairwiseMatch.value,
   clickedLabel: state.clickedLabel.value,
@@ -3631,7 +3627,6 @@ const restoreSessionImportTransientState = (snapshot) => {
     cloneJsonData(snapshot.featureSelectionDrag)
   );
   state.labelReflowLastError.value = snapshot.labelReflowLastError;
-  state.labelOverrideBuildWarning.value = snapshot.labelOverrideBuildWarning;
   state.clickedFeature.value = snapshot.clickedFeature;
   state.clickedPairwiseMatch.value = snapshot.clickedPairwiseMatch;
   state.clickedLabel.value = snapshot.clickedLabel;
@@ -3799,7 +3794,6 @@ const resetSessionBaseline = () => {
   clearObject(state.featureStrokeOverrides);
   state.canonicalLabelOverrideRows.value = [];
   clearObject(state.labelTextBulkOverrides);
-  state.labelOverrideBuildWarning.value = '';
   state.generatedMode.value = 'circular';
   state.generatedLegendPosition.value = 'left';
   state.generatedMultiRecordCanvas.value = false;
@@ -4479,7 +4473,7 @@ const importSessionDocument = async (e, options = {}) => {
           Boolean(canonicalProjection.config?.form?.multi_record_canvas)
         )
       : null;
-    const transformRestoredSessionSvg = (svg, { applyStrokes = true } = {}) => {
+    const transformRestoredSessionSvg = (svg) => {
       const legendGroupsChanged = normalizeLegacyLegendEntryGroups(svg);
       let compositionChanged = false;
       if (
@@ -4505,14 +4499,12 @@ const importSessionDocument = async (e, options = {}) => {
         });
         compositionChanged = true;
       }
-      const strokeCount = applyStrokes
-        ? applyStrokeOverridesToSvg({
-            svg,
-            features: restoredFeatureState.extractedFeatures || [],
-            legendStrokeOverrides: restoredEditorState?.legend?.strokeOverrides || {},
-            featureStrokeOverrides: restoredEditorState?.featureStrokes?.overrides || {}
-          })
-        : 0;
+      const strokeCount = applyStrokeOverridesToSvg({
+        svg,
+        features: restoredFeatureState.extractedFeatures || [],
+        legendStrokeOverrides: restoredEditorState?.legend?.strokeOverrides || {},
+        featureStrokeOverrides: restoredEditorState?.featureStrokes?.overrides || {}
+      });
       return legendGroupsChanged || compositionChanged || strokeCount > 0;
     };
 
@@ -4645,7 +4637,6 @@ const importSessionDocument = async (e, options = {}) => {
     // Suppressed mode watchers observe only the complete admitted document.
     state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
     state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
-    state.labelOverrideBuildWarning.value = '';
     if (ui.featurePanelTab === 'labels' || ui.featurePanelTab === 'colors') {
       state.featurePanelTab.value = ui.featurePanelTab;
     } else {
