@@ -14,47 +14,47 @@
   "files": {
     "gallery/examples.json": {
       "bytes": 20718,
-      "sha256": "4adf5eb1010c851dae99df73ab9fcc341626c8423a2abb3dd9c791d3a4f1a1e9"
+      "sha256": "be73f9a168eb6728504c0467d9d137dfe1e66a8b066f76faf128e209017b3e38"
     },
     "gallery/examples/BGC0000708-BGC0000713.svg": {
-      "bytes": 1153869,
-      "sha256": "aaf5b75e9baf2225a48fc02183750b6409e7ff5f9cf5350b0954c7960ad5111c"
+      "bytes": 1155041,
+      "sha256": "eff136dc84a4dd6407377a2f9588ef7d7017db7adb9ea83abcb0af425f15ef1d"
     },
     "gallery/examples/HmmtDNA_ATskew.svg": {
-      "bytes": 485112,
-      "sha256": "84ef41583855abc50b8fb58356ecc21bb13a01213d40f7c65d438dc3f478d714"
+      "bytes": 486284,
+      "sha256": "7133a60530b5b2429645ee9b406e3459991065c0b89044f464e22549fa54bd40"
     },
     "gallery/examples/HmmtDNA_basic_circular.svg": {
-      "bytes": 437946,
-      "sha256": "04fb0939120619a62463cb33ba618cce193ed22c49e8e5dfce7f44f2486cb6b7"
+      "bytes": 439118,
+      "sha256": "f64654986e24f697a8b99977adca6fb82ddc2b3e5f2d766dae17360503e396b3"
     },
     "gallery/examples/Vnig_TUMSAT-TG-2018.svg": {
-      "bytes": 28787783,
-      "sha256": "44d1e8eed85036c3bab8d96498b6fc8268df43b85874c33eac9e8108042ce0b6"
+      "bytes": 28788955,
+      "sha256": "9c47974a6da5eb6856b2a932c9010e07869d8d039c270828cbf8836c3a0e18b0"
     },
     "gallery/examples/hepatoplasmataceae_collinear.svg": {
-      "bytes": 16429239,
-      "sha256": "b2515ca264a09d8297fa7440f76d1661895de1c515cc0476078ed94ff7b0912f"
+      "bytes": 16430411,
+      "sha256": "1f7dd138a1318d5791017cb12b55c2f55a4bc18e077bac0d80f06a25e283ba25"
     },
     "gallery/examples/hepatoplasmataceae_orthogroup.svg": {
-      "bytes": 19479221,
-      "sha256": "9a5a50a9d0674b2bd5673241020b0d553b62a0c8a2cfe28ed76f7a223b270c1d"
+      "bytes": 19480393,
+      "sha256": "0c84f1ff43f30aba7a0328b10c55cf1d844f54024199681fa799e7af46a18d19"
     },
     "gallery/examples/lambda_basic_linear.svg": {
-      "bytes": 805881,
-      "sha256": "aa494ff4325ccefe33fc1dbe8149f6be81a125acd4fa21a7f60480ca22372ffb"
+      "bytes": 807053,
+      "sha256": "2ac76b58711d3e3d47c5aed052d8021835c5da222573c785f42d0ad3e15d784e"
     },
     "gallery/examples/majanivirus_orthogroup.svg": {
-      "bytes": 7316733,
-      "sha256": "0cd733985efaedc0914369e0e4d4fa7f1e4e694819077f61699ffea672d85866"
+      "bytes": 7317905,
+      "sha256": "b0f5aacd7dd70cec2cc3ef4cac0b8c80a89529fecdd6261c94c27db0d8b67fdf"
     },
     "gallery/examples/tobacco-chloroplast.svg": {
-      "bytes": 1442829,
-      "sha256": "7f3c0f920fe972fb44a4b6eaa30ce03445690317c4b44ffac171548445c8ab51"
+      "bytes": 1444001,
+      "sha256": "74cf4b56dd0fae9c4b03d9bc031b821e2cd3a079de1285d4f4aa0001e060712b"
     },
     "gallery/examples/vibrio-harveyi-group-collinear.svg": {
-      "bytes": 14909919,
-      "sha256": "1a86d2c35defcb4f405818cf9941e3778c10cf4a95babfb153d51882b78aa89b"
+      "bytes": 14911091,
+      "sha256": "3d1441cf16d7281e03ba5c0d33d16f2b34dfa6df2f4e781f0c53c0316d62d552"
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json": {
       "bytes": 2907431,
@@ -69,8 +69,8 @@
       "sha256": "b736756dd8bcd2f23740b100278d2edbbde4c7827464fb5072289dcc79cfeb38"
     },
     "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz": {
-      "bytes": 11650614,
-      "sha256": "8420df0d400d369e881419763fc186abf50542dd854d4626067d5656e0b83771"
+      "bytes": 11650615,
+      "sha256": "2fd4d925a8532de0759bc533d8c9240c1a404de97fdb99603f2a2ee20d66162e"
     },
     "gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz": {
       "bytes": 11430025,
@@ -93,8 +93,8 @@
       "sha256": "efb49b2a10a7f7160e26c63f009577c88af21fa8d33bfc31205df6da3483b35f"
     },
     "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz": {
-      "bytes": 22316784,
-      "sha256": "46932a9d02037aa0bbc32a7808e0e2028e049d11938c223aa9eb93981f4b5a35"
+      "bytes": 22316788,
+      "sha256": "f6decc370cb10c126dc72344dfb5b26425d3522eea128d42ce24be278cb3dfbf"
     },
     "gallery/sources/BGC0000708-BGC0000713.svg": {
       "bytes": 245436,
