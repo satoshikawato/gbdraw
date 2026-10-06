@@ -1,3 +1,4 @@
+// @ts-check
 import {
   isInternalProteinDisplayId,
   normalizeStringArray
@@ -74,6 +75,9 @@ export const wrapFastaSequence = (sequence, width = FASTA_LINE_WIDTH) => {
   return lines.join('\n');
 };
 
+/**
+ * @param {{ id: string, description?: string, sequence: string }} entry
+ */
 export const formatFastaEntry = ({ id, description, sequence }) => {
   const normalizedId = normalizeFastaId(id) || 'sequence';
   const wrappedSequence = wrapFastaSequence(sequence);
