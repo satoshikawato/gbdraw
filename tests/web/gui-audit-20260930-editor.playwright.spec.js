@@ -903,7 +903,10 @@ test('Label visibility On for a feature that a visibility rule hides asks first,
   const before = await labelOnFacts(page);
   await startLabelOn(page, fl1, 'FL1_SHOWN');
   await answerLabelOn(page, 'Feature Is Hidden', 'Show feature and label');
-  expect(await labelOnFacts(page)).toEqual({
+  // OV-48b: the facts name features by the rendered IDs of the Result in view.
+  // The rule edit's rerender leaves fl1 out of that Result until the Label On
+  // rerender draws it again, so the stored edit shows once that rerender ends.
+  await expect.poll(() => labelOnFacts(page), { timeout: 120_000 }).toEqual({
     ...before,
     undo: before.undo + 1,
     redo: 0,
