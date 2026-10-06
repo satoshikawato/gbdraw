@@ -1,3 +1,4 @@
+// @ts-check
 import { normalizeUserFacingError } from '../services/error-normalization.js';
 import {
   getFeatureElementIndex,
@@ -14,6 +15,153 @@ import {
   recordSessionLifecycleEvent,
   recordStructuralMetric
 } from '../services/runtime-test-hooks.js';
+
+/**
+ * What the Label editor and the mounted-preview binder steps read from
+ * `bindingOptions`. A caller names only the options its phase needs.
+ * @typedef {object} PreviewBindingOptions
+ * @property {boolean} [isIncrementalEdit] The Result is edited in place, not newly generated.
+ * @property {boolean} [skipLegendExtraction]
+ * @property {boolean} [trustedRestore] A restored artifact: its editor state is already current.
+ * @property {boolean} [replaceGeneratedLegend]
+ * @property {readonly string[]} [requiredLabelFeatureIds]
+ * @property {readonly string[]} [optionalLabelFeatureIds]
+ * @property {{ featureIds: readonly string[], report: (error: unknown) => void }} [reportedLabelBinding]
+ */
+
+/**
+ * The refs the runtime reads and writes (state.js owns them).
+ * @typedef {object} PreviewRuntimeState
+ * @property {{ value: any }} [svgContainer] The element that holds the mounted SVG.
+ * @property {{ value: Record<string, any>[] }} results
+ * @property {{ value: number }} selectedResultIndex
+ * @property {{ value: any }} [featureCatalog]
+ * @property {{ value: boolean }} [skipCaptureBaseConfig]
+ * @property {() => any} [sessionOperationAvailability]
+ */
+
+/**
+ * @typedef {object} PreviewRuntimeOptions
+ * @property {PreviewRuntimeState} state
+ * @property {(svg: Element) => string} serializeSvg The clean serializer of services/svg-serialization.js.
+ */
+
+/**
+ * The preview readiness a caller registers before it changes the mounted
+ * Result, and the receipt the binder must return for it.
+ * @typedef {object} ReadinessExpectationOptions
+ * @property {Record<string, any>} result
+ * @property {number} [resultIndex]
+ * @property {any} [artifactIdentity] A fingerprint object or string.
+ * @property {string} [generationToken]
+ * @property {any} [catalogState] The feature catalog admission of the Result.
+ * @property {string} [phase]
+ * @property {PreviewBindingOptions} [bindingOptions]
+ * @property {() => boolean} [isCurrent] Whether the operation that registered it is still current.
+ */
+
+/**
+ * @typedef {object} ReadinessExpectation
+ * @property {number} identity
+ * @property {Record<string, any>} result
+ * @property {number} resultIndex
+ * @property {string} resultIdentity
+ * @property {string} artifactIdentity
+ * @property {string} generationToken
+ * @property {any} catalogState
+ * @property {string} phase
+ * @property {Readonly<PreviewBindingOptions>} bindingOptions
+ * @property {number} bindSequence
+ * @property {number} rootGeneration
+ * @property {() => boolean} isCurrent
+ * @property {boolean} settled
+ * @property {Promise<ReadyReceipt>} promise
+ * @property {(receipt: ReadyReceipt) => void} resolve
+ * @property {(reason: Error) => void} reject
+ */
+
+/**
+ * @typedef {object} ReadyReceipt
+ * @property {string} artifactIdentity
+ * @property {string} resultIdentity
+ * @property {number} resultIndex
+ * @property {string} generationToken
+ * @property {number} rootIdentity
+ * @property {number} rootGeneration
+ * @property {number} bindSequence
+ * @property {Readonly<Record<string, boolean>>} requiredBindingFlags
+ * @property {number} readyTimestamp
+ * @property {string} phase
+ */
+
+/**
+ * One mounted Result and the lazily built indexes of its SVG.
+ * @typedef {object} PreviewResultRuntime
+ * @property {number} resultIndex
+ * @property {SVGSVGElement} svg
+ * @property {Record<string, any>} result
+ * @property {string} resultIdentity
+ * @property {string} artifactIdentity
+ * @property {string} generationToken
+ * @property {number} rootGeneration
+ * @property {number} bindSequence
+ * @property {ReadyReceipt | null} readyReceipt
+ * @property {boolean} dirty
+ * @property {Set<string>} dirtyReasons
+ * @property {{ features: Map<string, Element[]> | null, legend: any, pairwiseMatches: any, orthogroupComparisons: any }} indexes
+ * @property {string} [lastInvalidationReason]
+ */
+
+/**
+ * The mount a caller observes. A missing `result` and `resultIndex` mean the
+ * selected Result.
+ * @typedef {object} MountedResultContextOptions
+ * @property {SVGSVGElement} root
+ * @property {Record<string, any>} [result]
+ * @property {number} [resultIndex]
+ * @property {any} [catalogState]
+ * @property {PreviewBindingOptions} [bindingOptions]
+ */
+
+/**
+ * What a binder step receives for one observed mount.
+ * @typedef {object} MountedResultContext
+ * @property {SVGSVGElement} root
+ * @property {Record<string, any>} result
+ * @property {string} sourceClass
+ * @property {number} resultIndex
+ * @property {string} resultIdentity
+ * @property {string} artifactIdentity
+ * @property {string} generationToken
+ * @property {any} catalogState
+ * @property {number} bindSequence
+ * @property {number} rootGeneration
+ * @property {number} expectationIdentity `0` for a mount no expectation owns.
+ * @property {string} phase
+ * @property {Readonly<PreviewBindingOptions>} bindingOptions
+ */
+
+/**
+ * The steps of the mounted-preview binder, in the order they run. The root
+ * wires them with `configureMountedResultBinder`; each is optional.
+ * @typedef {object} MountedResultBinderSteps
+ * @property {(context: MountedResultContext) => unknown} [adoptLegend]
+ * @property {(context: MountedResultContext) => unknown} [bindComposition]
+ * @property {(context: MountedResultContext) => unknown} [setupDragAffordances]
+ * @property {(context: MountedResultContext) => unknown} [installDelegatedInteractions]
+ * @property {(context: MountedResultContext) => unknown} [synchronizeLabelEditor]
+ * @property {(context: MountedResultContext) => unknown} [initializeStrokeAndCanvas]
+ * @property {(context: MountedResultContext) => unknown} [reconcileSelection]
+ * @property {(context: MountedResultContext) => unknown} [afterReady] Runs after the receipt is accepted.
+ * @property {(runtime: PreviewResultRuntime) => unknown} [disposeMountedResult]
+ */
+
+/**
+ * @typedef {object} PreviousResultRestoreOptions
+ * @property {Record<string, any>} [handle] The generated-artifact handle that holds the owner set to restore.
+ * @property {() => unknown} restore The artifact owner's restore.
+ * @property {string} [phase]
+ */
 
 const normalizeVisibilityMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
@@ -44,11 +192,17 @@ const REQUIRED_BINDING_FLAGS = Object.freeze([
 ]);
 
 const readinessError = (message, code = 'PREVIEW_READINESS_REJECTED') => {
-  const error = new Error(message);
+  const error = /** @type {Error & { code?: string }} */ (new Error(message));
   error.code = code;
   return error;
 };
 
+/**
+ * @param {Pick<PreviewResultRuntime,
+ *   'resultIndex' | 'svg' | 'result' | 'resultIdentity' | 'artifactIdentity'
+ *   | 'generationToken' | 'rootGeneration' | 'bindSequence'>} identity
+ * @returns {PreviewResultRuntime}
+ */
 const makeRuntime = ({
   resultIndex,
   svg,
@@ -78,19 +232,25 @@ const makeRuntime = ({
   }
 });
 
+/** @param {PreviewRuntimeOptions} options */
 export const createPreviewRuntime = ({ state, serializeSvg }) => {
   if (!state) throw new Error('createPreviewRuntime requires state.');
   if (typeof serializeSvg !== 'function') throw new Error('createPreviewRuntime requires serializeSvg.');
 
+  /** @type {PreviewResultRuntime | null} */
   let activeRuntime = null;
+  /** @type {ReadinessExpectation | null} */
   let activeExpectation = null;
+  /** @type {{ root: SVGSVGElement, bindSequence: number, promise: Promise<ReadyReceipt> } | null} */
   let pendingBind = null;
+  /** @type {Readonly<MountedResultBinderSteps>} */
   let bindingSteps = Object.freeze({});
   let nextExpectationIdentity = 1;
   let nextFallbackResultIdentity = 1;
   let nextRootGeneration = 1;
   let nextBindSequence = 1;
   let nextRestoreToken = 1;
+  /** @type {{ root: SVGSVGElement, resultIdentity: string, bindSequence: number } | null} */
   let lastObservedMount = null;
   const fallbackResultIdentities = new WeakMap();
   const invalidatedReceipts = new WeakSet();
@@ -152,6 +312,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return rejected;
   };
 
+  /**
+   * @param {ReadinessExpectationOptions} [options]
+   * @returns {ReadinessExpectation}
+   */
   const registerReadinessExpectation = ({
     result,
     resultIndex = 0,
@@ -161,7 +325,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     phase = 'preview',
     bindingOptions = {},
     isCurrent = () => true
-  } = {}) => {
+  } = /** @type {ReadinessExpectationOptions} */ ({})) => {
     if (!result || typeof result !== 'object') {
       throw new Error('Preview readiness requires a selected Result.');
     }
@@ -274,6 +438,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return activeRuntime;
   };
 
+  /** @param {MountedResultBinderSteps} [steps] */
   const configureMountedResultBinder = (steps = {}) => {
     if (!steps || typeof steps !== 'object' || Array.isArray(steps)) {
       throw new Error('PreviewRuntime binder steps must be an object.');
@@ -281,13 +446,17 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     bindingSteps = Object.freeze({ ...steps });
   };
 
+  /**
+   * @param {MountedResultContextOptions} [options]
+   * @returns {MountedResultContext}
+   */
   const createMountedResultContext = ({
     root,
     result = state.results.value[state.selectedResultIndex?.value || 0],
     resultIndex = state.selectedResultIndex?.value || 0,
     catalogState = state.featureCatalog?.value || null,
     bindingOptions = {}
-  } = {}) => {
+  } = /** @type {MountedResultContextOptions} */ ({})) => {
     if (!root) throw new Error('Mounted preview observation requires an SVG root.');
     const normalizedIndex = Number(resultIndex) || 0;
     const resultIdentity = resultRuntimeIdentity(result);
@@ -471,7 +640,11 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     }
   };
 
-  const bindMountedResult = (context = {}) => {
+  /**
+   * @param {MountedResultContext} context
+   * @returns {Promise<ReadyReceipt>}
+   */
+  const bindMountedResult = (context = /** @type {MountedResultContext} */ ({})) => {
     if (
       pendingBind
       && pendingBind.root === context.root
@@ -642,11 +815,15 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return true;
   };
 
+  /**
+   * @param {PreviousResultRestoreOptions} options
+   * @returns {Promise<ReadyReceipt | null>}
+   */
   const restorePreviousSelectedResult = async ({
     handle,
     restore,
     phase = 'rollback-restoration'
-  } = {}) => {
+  } = /** @type {PreviousResultRestoreOptions} */ ({})) => {
     if (typeof restore !== 'function') {
       throw new Error('Preview restoration requires the generated-artifact restore owner.');
     }

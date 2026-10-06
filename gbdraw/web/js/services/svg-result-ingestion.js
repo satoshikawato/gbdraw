@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { FeatureCatalogAdmission } from './feature-catalog.js' */
 import { FEATURE_SELECTOR, filterFeatureFillTargets, getFeatureIdentity } from '../app/feature-dom.js';
 import {
   getAllFeatureLegendGroups,
@@ -30,6 +32,61 @@ const SVG_RESULT_SOURCE_CLASSES = Object.freeze({
 let nextResultIdentity = 1;
 
 const text = (value) => String(value ?? '').trim();
+
+/**
+ * A caller's rewrite of one parsed Result SVG. The return value is ignored.
+ * @typedef {(svg: Element, context: { result: any, resultIndex: number }) => unknown} SvgResultTransform
+ */
+
+/**
+ * One Result's compiled editor operations. The planner is app/candidate-render.js;
+ * this module declares the shape it applies.
+ * @typedef {Record<
+ *   'featureFills' | 'featureStrokes' | 'featureVisibility' | 'labelText' | 'labelVisibility'
+ *   | 'legendFills' | 'legendStrokes' | 'legendRenames' | 'legendDeletes' | 'legendAdds' | 'legendOrder',
+ *   readonly Record<string, any>[]
+ * > & { callerTransforms: readonly SvgResultTransform[] }} SvgMutationOperations
+ */
+
+/**
+ * @typedef {object} SvgMutationPlan
+ * @property {'EMPTY' | 'MUTATING'} kind
+ * @property {readonly SvgMutationOperations[]} operationsByResult One entry per Result.
+ */
+
+/**
+ * A classified Result list: the output of `createCurrentSessionResultSource` or
+ * `createLegacyImportResultSource`, the only input of the session and legacy
+ * admissions.
+ * @typedef {object} SvgResultSource
+ * @property {string} sourceClass
+ * @property {Record<string, any>[]} results
+ * @property {FeatureCatalogAdmission | null} catalogAdmission Set for a current source only.
+ */
+
+/**
+ * The DOM services and request facts an admission reads. A missing sanitizer
+ * or parser falls back to the page's DOMPurify and DOMParser.
+ * @typedef {object} SvgAdmissionRuntime
+ * @property {any} [sanitizer] DOMPurify, or an object with `sanitize(svg, options)`.
+ * @property {any} [parser] A DOMParser constructor.
+ * @property {readonly string[] | null} [selectedFeatureTypes] The feature types of the request that drew the Results.
+ */
+
+/**
+ * @typedef {SvgAdmissionRuntime & {
+ *   catalogAdmission: FeatureCatalogAdmission,
+ *   mutationPlan: SvgMutationPlan
+ * }} CurrentGeneratedAdmissionOptions
+ */
+
+/** @typedef {SvgAdmissionRuntime & { mutationPlan: SvgMutationPlan }} CurrentSessionAdmissionOptions */
+
+/**
+ * @typedef {SvgAdmissionRuntime & {
+ *   transformSvg?: SvgResultTransform | null
+ * }} LegacyImportAdmissionOptions
+ */
 
 const committedState = (result) => (
   result && typeof result === 'object' && result[COMMITTED_SVG_RESULT]
@@ -69,6 +126,12 @@ const requireAlignedCatalogAdmission = (admission, results) => {
   return admission;
 };
 
+/**
+ * @param {string} sourceClass
+ * @param {Record<string, any>[]} results
+ * @param {FeatureCatalogAdmission | null} [catalogAdmission]
+ * @returns {SvgResultSource}
+ */
 const createRuntimeSource = (sourceClass, results, catalogAdmission = null) => Object.freeze({
   [RESULT_SOURCE]: true,
   sourceClass,
@@ -80,6 +143,11 @@ const createRuntimeSource = (sourceClass, results, catalogAdmission = null) => O
  * Classify persisted current-session Results without granting current-worker
  * provenance. The catalog keeps this path parse-free and preserves lazy Worker use.
  */
+/**
+ * @param {Record<string, any>[]} results
+ * @param {FeatureCatalogAdmission} catalogAdmission
+ * @returns {SvgResultSource}
+ */
 export const createCurrentSessionResultSource = (results, catalogAdmission) => (
   createRuntimeSource(
     SVG_RESULT_SOURCE_CLASSES.CURRENT_SESSION,
@@ -89,6 +157,10 @@ export const createCurrentSessionResultSource = (results, catalogAdmission) => (
 );
 
 /** Classify persisted historical input as the sole compatibility-normalization source. */
+/**
+ * @param {Record<string, any>[]} results
+ * @returns {SvgResultSource}
+ */
 export const createLegacyImportResultSource = (results) => (
   createRuntimeSource(
     SVG_RESULT_SOURCE_CLASSES.LEGACY_IMPORT,
@@ -280,6 +352,10 @@ const freezeEmptyOperations = () => Object.freeze({
   callerTransforms: Object.freeze([])
 });
 
+/**
+ * @param {number} resultCount
+ * @returns {SvgMutationPlan}
+ */
 export const createEmptySvgMutationPlan = (resultCount) => {
   if (!Number.isSafeInteger(resultCount) || resultCount < 0) {
     throw new TypeError('An EMPTY SVG mutation plan requires a nonnegative Result count.');
@@ -554,6 +630,11 @@ const requireRowsDrawnInAnyResult = (plan, drawnRows) => {
   });
 };
 
+/**
+ * @param {SvgResultSource} source
+ * @param {SvgMutationPlan} mutationPlan
+ * @param {SvgAdmissionRuntime} [options]
+ */
 const admitCatalogBackedResults = (
   source,
   mutationPlan,
@@ -600,6 +681,10 @@ const admitCatalogBackedResults = (
  * Admit only a freshly decoded current Worker response. The runtime token minted
  * by diagram-generation.js and exact catalog object alignment are both required.
  */
+/**
+ * @param {any} generationResponse A decoded Worker response.
+ * @param {Partial<CurrentGeneratedAdmissionOptions>} [options] Admission throws when the catalog admission or plan is missing.
+ */
 export const admitCurrentGeneratedResults = (
   generationResponse,
   {
@@ -624,6 +709,10 @@ export const admitCurrentGeneratedResults = (
   return admitCatalogBackedResults(source, mutationPlan, { sanitizer, parser, selectedFeatureTypes });
 };
 
+/**
+ * @param {SvgResultSource} source
+ * @param {Partial<CurrentSessionAdmissionOptions>} [options] Admission throws when the plan is missing.
+ */
 export const admitCurrentSessionResults = (
   source,
   {
@@ -673,6 +762,10 @@ const ingestSvgResult = (
 /**
  * Admit historical/unclassified persisted SVG through compatibility repair.
  * Current Worker and current-session sources cannot enter this function.
+ */
+/**
+ * @param {SvgResultSource} source
+ * @param {LegacyImportAdmissionOptions} [options]
  */
 export const admitLegacyImportedResults = (
   source,
