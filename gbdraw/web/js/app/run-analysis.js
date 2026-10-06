@@ -63,13 +63,13 @@ import {
   normalizeRecordMajorDepthFileRows,
   representativeDepthFiles,
   syncDepthSlotLabels
-} from './depth-track-state.js';
+} from '../services/depth-track-state.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import {
   CustomTrackPlanValidationError,
   customTrackPlanIssues,
   validateCustomTrackPlan
-} from './track-slot-validation.js';
+} from '../services/track-slot-validation.js';
 import {
   normalizeCollinearSearchScope
 } from './losat-normalization.js';

@@ -37,7 +37,7 @@ import {
   reconcileDepthTracksToFiles,
   representativeDepthFiles,
   syncDepthSlotLabels
-} from '../app/depth-track-state.js';
+} from './depth-track-state.js';
 import {
   decodeDepthText,
   isEncodedDepthFileEntry

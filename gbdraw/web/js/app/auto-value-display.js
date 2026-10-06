@@ -1,5 +1,5 @@
 // @ts-check
-import { normalizeOptionalText } from './track-slot-display.js';
+import { normalizeOptionalText } from '../services/track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from './current-option-values.js';
 
 const LENGTH_THRESHOLD_BP = 50000;

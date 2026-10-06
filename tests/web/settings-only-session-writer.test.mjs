@@ -59,7 +59,7 @@ test('source-free Save emits no render metadata and preserves valid raw scalar d
 });
 
 const { writeCircularMeasureValue, changeCircularMeasureUnit } = await import(
-  '../../gbdraw/web/js/app/circular-track-slots/measure-editor.js'
+  '../../gbdraw/web/js/services/circular-track-measure.js'
 );
 const { buildCircularTrackSlotPayload } = await import('../../gbdraw/web/js/app/circular-track-slots.js');
 const { projectSettingsOnlySession } = await import('../../gbdraw/web/js/services/session-request.js');

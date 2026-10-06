@@ -12,7 +12,7 @@ import {
   parseDepthTrackIndexIdentity,
   reconcileManagedDepthSlots,
   representativeDepthFiles
-} from './depth-track-state.js';
+} from '../services/depth-track-state.js';
 import { resolveColorToHex } from './color-utils.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
 import {
@@ -21,9 +21,9 @@ import {
   formatRadiusFactorAuto,
   isManualSlotValue,
   normalizeOptionalText
-} from './track-slot-display.js';
+} from '../services/track-slot-display.js';
 import { featureSlotEdits } from './track-slot-edits.js';
-import { parseOptionalCircularScalar, parseOptionalPixel, validateCustomTrackPlan } from './track-slot-validation.js';
+import { parseOptionalCircularScalar, parseOptionalPixel, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 import { visibleFeatureUnderlaysForState } from '../utils/feature-rendering.js';
 import { diagnosticError } from '../services/error-normalization.js';
 

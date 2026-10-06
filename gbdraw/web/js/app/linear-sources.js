@@ -1,6 +1,6 @@
 // @ts-check
 import { getSessionResourceSource } from '../services/file-content-cache.js';
-import { depthFileSlotsFromValue } from './depth-track-state.js';
+import { depthFileSlotsFromValue } from '../services/depth-track-state.js';
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
 
 // A composite backing carries `descriptors` and no single `descriptor`.

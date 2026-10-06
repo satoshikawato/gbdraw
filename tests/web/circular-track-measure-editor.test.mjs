@@ -4,10 +4,10 @@ import { test } from 'node:test';
 import {
   readCircularMeasure, writeCircularMeasureValue,
   changeCircularMeasureUnit, projectCircularMeasureDraft
-} from '../../gbdraw/web/js/app/circular-track-slots/measure-editor.js';
+} from '../../gbdraw/web/js/services/circular-track-measure.js';
 import {
   parseOptionalCircularScalar, validateCustomTrackPlan
-} from '../../gbdraw/web/js/app/track-slot-validation.js';
+} from '../../gbdraw/web/js/services/track-slot-validation.js';
 import { buildCircularTrackSlotPayload } from '../../gbdraw/web/js/app/circular-track-slots.js';
 import {
   createDefaultAdv, createDefaultForm, validateCurrentWriterActiveConfig

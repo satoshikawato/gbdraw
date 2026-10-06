@@ -42,7 +42,7 @@ import {
   parseCircularTrackSlotSpecs
 } from '../app/circular-track-slots.js';
 import { countGenBankRecords } from '../app/genbank-header.js';
-import { projectCircularMeasureDraft } from '../app/circular-track-slots/measure-editor.js';
+import { projectCircularMeasureDraft } from './circular-track-measure.js';
 import {
   buildLinearTrackSlotPayload,
   LINEAR_TRACK_RENDERERS,
@@ -54,7 +54,7 @@ import {
   isRecordMajorDepthFileMatrix,
   normalizeRecordMajorDepthFileRows,
   parseDepthTrackIndexIdentity
-} from '../app/depth-track-state.js';
+} from './depth-track-state.js';
 import {
   buildDisambiguatedRecordEntries,
   resolveCircularRequestRecordSet,
@@ -78,7 +78,7 @@ import {
   parseOptionalPixel,
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
-} from '../app/track-slot-validation.js';
+} from './track-slot-validation.js';
 import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from '../app/annotations/state.js';
 import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
 import { SESSION_TABLE_LABELS, diagnosticError, normalizeUserFacingError } from './error-normalization.js';
