@@ -1308,6 +1308,56 @@ test('report-only source facts preserve the characterized masking behavior', () 
   });
 });
 
+test('source masking follows template expressions as code', () => {
+  const lines = (source) => source.split('\n');
+  const declarationsOf = (masked) => [...masked.matchAll(/^const\s+(\w+)/gm)].map(match => match[1]);
+
+  // A nested template inside `${ ... }` must not end the outer template early.
+  const nested = 'const a = `x ${ `y ${ 1 }` } z`;\nconst b = 2;\n';
+  assert.equal(maskJavaScript(nested).split('\n')[0].replace(/\s/g, ''), 'consta=1;');
+  assert.deepEqual(declarationsOf(maskJavaScript(nested)), ['a', 'b']);
+
+  // A quote inside a regex literal inside an expression does not open a string.
+  const regex = "const a = `${ s.replace(/'/g, '') }`;\nconst b = 2;\n";
+  assert.deepEqual(declarationsOf(maskJavaScript(regex)), ['a', 'b']);
+  assert.match(maskJavaScript(regex), /s\.replace\(/);
+
+  // Braces of object literals inside an expression do not end it early.
+  const braces = 'const a = `${ f({ k: { v: 1 } }) } tail`;\nconst b = 2;\n';
+  const bracesMasked = maskJavaScript(braces);
+  assert.deepEqual(declarationsOf(bracesMasked), ['a', 'b']);
+  assert.ok(!bracesMasked.includes('tail'));
+  assert.ok(bracesMasked.includes('f({ k: { v: 1 } })'));
+
+  // Comments inside an expression are comments, including a `}` or backtick.
+  const comment = 'const a = `${ f( // ` }\n  1) } tail`;\nconst b = `${ g(/* } ` */ 2) }`;\nconst c = 3;\n';
+  const commentMasked = maskJavaScript(comment, { strings: false });
+  assert.deepEqual(declarationsOf(commentMasked), ['a', 'b', 'c']);
+  assert.ok(!commentMasked.includes('// `'));
+  assert.ok(!commentMasked.includes('/* }'));
+  assert.deepEqual(declarationsOf(maskJavaScript(comment)), ['a', 'b', 'c']);
+
+  // Template text stays hidden under strings: true and visible otherwise.
+  assert.ok(!maskJavaScript('const a = `watch(cache) ${ 1 }`;').includes('watch'));
+  assert.ok(maskJavaScript('const a = `watch(cache) ${ 1 }`;', { strings: false }).includes('watch'));
+
+  // The run-info.js shell quoting line must not desynchronize what follows.
+  const quoting = [
+    'export const quoteShellArg = (value) => {',
+    "  return `'${token.replace(/'/g, `'\\\\''`)}'`;",
+    '};',
+    '',
+    '// comment after the template',
+    'export const buildShellCommand = (tokens) => tokens.length;',
+    ''
+  ].join('\n');
+  const quotingCode = lines(maskJavaScript(quoting));
+  const quotingComments = lines(maskJavaScript(quoting, { strings: false }));
+  assert.equal(quotingCode[5], quoting.split('\n')[5]);
+  assert.equal(quotingComments[4].trim(), '');
+  assert.match(quotingCode[1], /token\.replace\(/);
+});
+
 test('workflow triggers separate dev admission, dev staging, promotion, and deployment', () => {
   const candidateActivityTypes = /types: \[opened, synchronize, reopened, labeled, unlabeled\]/;
   const trustedActivityTypes = /types: \[opened, synchronize, reopened, edited, labeled, unlabeled\]/;
