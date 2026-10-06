@@ -1,3 +1,4 @@
+// @ts-check
 import { ruleMatchDeclined, ruleMatchesReady, ruleMatchesFeature, firstMatchingRule } from './rule-matching.js';
 import {
   estimateColorFactor,
@@ -39,6 +40,19 @@ const paletteColorKeysEqual = (left, right, keys) => keys.every(
   (key) => normalizeComparableColor(left?.[key]) === normalizeComparableColor(right?.[key])
 );
 
+/**
+ * @typedef {object} SvgStylesOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {(source: any, callback: (...args: any[]) => void, options?: Record<string, any>) => any} watch Vue `watch`
+ * @property {(callback?: () => void) => Promise<void>} nextTick Vue `nextTick`
+ * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
+ *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean }) => boolean | Promise<boolean>} projectPaletteAndRules
+ *   The root's projection of the palette and the rules (R3), which prepares the
+ *   rule matches and applies both through this owner.
+ */
+
+/** @param {SvgStylesOptions} options */
 export const createSvgStyles = ({
   state,
   watch,
@@ -156,16 +170,16 @@ export const createSvgStyles = ({
               String(candidate?.id || '').trim() === slotId
             ))
           : null;
-        const positiveColor = resolveTrackSlotSkewColorValue({
+        const positiveColor = resolveTrackSlotSkewColorValue(/** @type {any} */ ({
           slot,
           key: 'positive_color',
           currentColors: colors
-        });
-        const negativeColor = resolveTrackSlotSkewColorValue({
+        }));
+        const negativeColor = resolveTrackSlotSkewColorValue(/** @type {any} */ ({
           slot,
           key: 'negative_color',
           currentColors: colors
-        });
+        }));
         const skewPaths = skewGroup.querySelectorAll('path');
         let pathIndex = 0;
         skewPaths.forEach((path) => {
@@ -234,8 +248,8 @@ export const createSvgStyles = ({
             } else if (committedPairwiseFactors[pathKey] !== undefined) {
               factor = committedPairwiseFactors[pathKey];
             } else {
-              const origMin = window._origPairwiseMin || '#FFE7E7';
-              const origMax = window._origPairwiseMax || '#FF7272';
+              const origMin = /** @type {any} */ (window)._origPairwiseMin || '#FFE7E7';
+              const origMax = /** @type {any} */ (window)._origPairwiseMax || '#FF7272';
               factor = estimateColorFactor(currentFill, origMin, origMax);
               retainPairwiseFactor(pathKey, factor);
             }

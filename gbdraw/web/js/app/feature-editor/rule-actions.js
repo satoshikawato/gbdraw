@@ -1,3 +1,4 @@
+// @ts-check
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { normalizeUserFacingError } from '../../services/error-normalization.js';
 import { ruleMatchesFeature, firstMatchingRule, ruleMatchesReady } from '../rule-matching.js';
@@ -26,7 +27,44 @@ import { featureDrawnContext, resultLegendSources, sameLegendSources } from '../
 // commit, whose candidate rules it has prepared. The composition root
 // registers the label owner's `requestAutomaticRerender` in `ports` once that
 // owner exists; this owner only calls it.
-export const createFeatureRuleActions = ({ state, nextTick, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true }) => {
+/**
+ * The label owner's reaction the composition root registers once that owner exists.
+ * @typedef {object} RuleActionsPorts
+ * @property {() => boolean} requestAutomaticRerender
+ *   Asks for the automatic rerender of an edit Python must draw again (OV-43).
+ */
+
+/**
+ * The Legend rows a rule commit draws, prepared and not yet applied.
+ * @typedef {object} PreparedFileLegend
+ * @property {{ add: any[], update: any[], remove: any[], unchanged: any[] }} diff
+ * @property {() => boolean} isCurrent
+ * @property {() => void} apply
+ */
+
+/**
+ * @typedef {object} FeatureRuleActionsOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {(intents: Record<string, any>[], options?: { previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
+ *   The Legend owner's preparation of the rows the rules draw.
+ * @property {import('../rule-matching.js').RulePreparation} rulePreparation
+ * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
+ * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoableCheckpoint
+ *   History's undoable step that stores a checkpoint of the Result.
+ * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean }) => boolean | Promise<boolean>} projectPaletteAndRules
+ *   The root's projection of the palette and the rules (R3).
+ * @property {RuleActionsPorts} ports
+ * @property {() => ({ diagramOptions?: Record<string, any> } | null)} [getCommittedRequest]
+ *   The committed canonical request (Python owns the option fields, R7).
+ * @property {(value?: any) => { value: any }} ref Vue `ref`
+ * @property {<T>(getter: () => T) => { value: T }} computed Vue `computed`
+ * @property {(source: { value: any }, callback: (value: any) => void) => () => void} watch
+ *   Vue `watch`; a rule commit waits on it for an automatic rerender in flight.
+ * @property {() => boolean} [isPatternEditAvailable] False while a Session import is pending.
+ */
+
+/** @param {FeatureRuleActionsOptions} options */
+export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true }) => {
   const {
     currentColors,
     appliedPaletteColors,
@@ -119,11 +157,20 @@ export const createFeatureRuleActions = ({ state, nextTick, prepareFileLegendEnt
   // against, which makes the candidate stale (#857). An edit made while one runs
   // waits for it and, when it replaced the Results under an unchanged rule
   // table, prepares again instead of dropping the edit.
+  /** @returns {Promise<void>} */
   const rerenderIdle = () => (state.labelReflowProcessing?.value
     ? new Promise((resolve) => {
       const stop = watch(state.labelReflowProcessing, (busy) => { if (!busy) { stop(); resolve(); } });
     })
     : Promise.resolve());
+  /**
+   * @typedef {{ isCurrent?: () => boolean, afterCommit?: (intents: Record<string, any>[]) => void, previousLegendIntents?: Record<string, any>[], sourceRows?: (Record<string, any> | null)[] }} CommitSpecificRulesOptions
+   */
+  /**
+   * @param {Record<string, any>[]} rules
+   * @param {string} [label]
+   * @param {CommitSpecificRulesOptions} [options]
+   */
   const commitSpecificRules = async (rules, label = 'Change specific color rules', options = {}) => {
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
@@ -137,6 +184,11 @@ export const createFeatureRuleActions = ({ state, nextTick, prepareFileLegendEnt
       await rerenderIdle();
     }
   };
+  /**
+   * @param {Record<string, any>[]} rules
+   * @param {string} label
+   * @param {CommitSpecificRulesOptions} [options]
+   */
   const commitOnce = async (rules, label, { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], sourceRows = rules.map(rule => manualSpecificRules.includes(rule) ? rule : null) } = {}) => {
     const revision = ++preparationRevision;
     const candidate = await rulePreparation.prepareCandidate(rules);

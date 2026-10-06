@@ -1,3 +1,4 @@
+// @ts-check
 import {
   applyFeatureVisibilityOverrideChanges,
   buildFeatureVisibilityChanges,
@@ -25,6 +26,26 @@ import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-
 import { featureIdentityKeyOf } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
 
+/**
+ * The label owner's reaction the composition root registers once that owner exists.
+ * @typedef {object} VisibilityActionsPorts
+ * @property {(options?: { reflow?: boolean, rerender?: boolean }) => boolean} applyFeatureVisibilityToLabels
+ *   Projects the stored visibility overrides onto the labels and queues the label reflow.
+ */
+
+/**
+ * @typedef {object} FeatureVisibilityActionsOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {(changes: { featureId: string, mode: string }[], options?: { reason?: string }) => boolean} applyVisibilityPreviewChanges
+ *   The feature SVG owner's preview of visibility changes.
+ * @property {VisibilityActionsPorts} ports
+ * @property {(index: number) => any} selectResult The preview owner's selection of the Result a History command targets.
+ * @property {import('../rule-matching.js').RulePreparation | null} [rulePreparation]
+ * @property {() => ({ diagramOptions?: Record<string, any> } | null)} [getCommittedRequest]
+ *   The committed canonical request (Python owns the option fields, R7).
+ */
+
+/** @param {FeatureVisibilityActionsOptions} options */
 export const createFeatureVisibilityActions = ({
   state,
   // R13: the feature SVG owner's preview of visibility changes.
@@ -253,6 +274,10 @@ export const createFeatureVisibilityActions = ({
   };
   // Applies the projection; returns whether a mounted element changed and
   // whether the rerender must draw a feature or the Legend.
+  /**
+   * @param {Record<string, any>[]} features
+   * @param {{ targeted?: boolean, legend?: boolean, reason?: string }} [projection]
+   */
   const projectDrawn = (features, { targeted = false, legend = true, ...options } = {}) => {
     const { changes, needsRerender } = drawnChanges(features, { targeted, legend });
     return { updated: applyVisibilityPreviewChanges(changes, options), needsRerender };
@@ -265,13 +290,13 @@ export const createFeatureVisibilityActions = ({
     clickedFeature.value.featureVisibility = getFeatureVisibilityOverride(featureOverrides, clicked);
   };
 
-  const nextFrame = () => new Promise((resolve) => {
+  const nextFrame = () => /** @type {Promise<void>} */ (new Promise((resolve) => {
     if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
       window.requestAnimationFrame(() => resolve());
     } else {
       setTimeout(resolve, 0);
     }
-  });
+  }));
 
   const ensureCommandTargetResult = async (resultIndex, generationKey) => {
     if (String(resultGenerationKey?.value ?? '') !== String(generationKey ?? '')) return false;
@@ -363,7 +388,7 @@ export const createFeatureVisibilityActions = ({
   let ruleTableError = null;
   const runProjection = async ({ legend = true } = {}) => {
     const run = ++projectionRun;
-    const prepared = await prepareDrawn();
+    const prepared = /** @type {any} */ (await prepareDrawn());
     if (run !== projectionRun) return null;
     if (prepared?.error) {
       if (!state.errorLog) return null;

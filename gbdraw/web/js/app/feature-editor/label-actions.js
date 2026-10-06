@@ -1,3 +1,4 @@
+// @ts-check
 import { diagnosticError, normalizeUserFacingError } from '../../services/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
 import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride } from '../feature-visibility.js';
@@ -83,7 +84,7 @@ export const requireUniqueEditableLabelBindings = (
   throw diagnosticError(code, {
     ...(code === 'LABEL_NOT_DRAWN' ? { reason: 'FORCED_LABEL' } : {}),
     ...labelBindingLocator(featureIds[0], features, featureIds.length)
-  }, { stage: 'render', operation: 'generate' });
+  }, /** @type {{ stage?: string, operation?: string }} */ ({ stage: 'render', operation: 'generate' }));
 };
 
 // A feature drawn as underlay has no label (gbdraw/features/factory.py), and
@@ -417,6 +418,23 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
   return assignments;
 };
 
+/**
+ * @typedef {object} FeatureLabelActionsOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
+ *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ * @property {import('../rule-matching.js').RulePreparation} rulePreparation
+ * @property {(value?: any) => { value: any }} ref Vue `ref`
+ * @property {<T>(getter: () => T) => { value: T }} computed Vue `computed`
+ * @property {((source: any, callback: (...args: any[]) => void, options?: Record<string, any>) => () => void) | null} [watch] Vue `watch`
+ * @property {() => Promise<any>} [nextTick] Vue `nextTick`
+ * @property {() => ({ diagramOptions?: Record<string, any> } | null)} [getCommittedRequest]
+ *   The committed canonical request (Python owns the option fields, R7).
+ * @property {((feature: Record<string, any>, mode: string, options?: Record<string, any>) => any) | null} [setFeatureVisibility]
+ *   The visibility owner's transition: Show feature and label sets Feature visibility through it.
+ */
+
+/** @param {FeatureLabelActionsOptions} options */
 export const createFeatureLabelActions = ({
   state,
   commitActiveResultEdit = null,
@@ -981,7 +999,7 @@ export const createFeatureLabelActions = ({
   // as it was, records none. Global settings never change.
   const applyLabelOn = async (featureId, apply) => {
     // The blocker reads Python's rule matches; prepared ones answer at once.
-    const prepared = rulePreparation?.prepareDrawn?.();
+    const prepared = /** @type {any} */ (rulePreparation?.prepareDrawn?.());
     if (typeof prepared?.then === 'function') await prepared;
     const feature = featureById(featureId);
     const diagramOptions = getCommittedRequest()?.diagramOptions;
@@ -1026,13 +1044,13 @@ export const createFeatureLabelActions = ({
     const before = results.value[selectedResultIndex.value];
     await nextTick();
     if (labelReflowProcessing?.value && typeof watch === 'function') {
-      await new Promise((resolve) => {
+      await /** @type {Promise<void>} */ (new Promise((resolve) => {
         const stop = watch(labelReflowProcessing, (busy) => {
           if (busy) return;
           stop();
           resolve();
         });
-      });
+      }));
     }
     const result = results.value[selectedResultIndex.value];
     if (!result || result === before || labelReflowLastError.value || state.processing?.value
