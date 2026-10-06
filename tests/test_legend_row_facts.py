@@ -223,3 +223,29 @@ def test_a_hidden_legend_draws_no_row_and_suppresses_what_the_records_name(tmp_p
     [(facts, svg_keys)] = _render(request, tmp_path)
     assert svg_keys == [] and facts["drawn"] == []
     assert {"CDS", "repeat_region"} <= set(facts["suppressed"])
+
+
+def test_a_hidden_legend_suppresses_the_gc_rows_too(tmp_path):
+    request = CircularDiagramRequest(
+        records=(RecordInput(source=InMemoryRecordSource(_record("rec")), record_key="rec"),),
+        options=CircularDiagramOptions(output=CircularOutputOptions(legend="none")),
+        output=RenderOutputRequest(output_prefix="none", formats=("svg",), output_directory=tmp_path, overwrite=True),
+    )
+    [(facts, _)] = _render(request, tmp_path)
+    assert {"GC content", "GC skew (+)", "GC skew (-)"} <= set(facts["suppressed"])
+
+
+def test_a_multi_record_canvas_with_a_hidden_legend_still_reports_its_facts(tmp_path):
+    request = CircularDiagramRequest(
+        records=tuple(
+            RecordInput(source=InMemoryRecordSource(r), record_key=r.id)
+            for r in (_record("one"), _record("two", repeats=False))
+        ),
+        options=CircularDiagramOptions(output=CircularOutputOptions(legend="none")),
+        layout=CircularMultiRecordOptions(),
+        grouping="grid",
+        output=RenderOutputRequest(output_prefix="canvas", formats=("svg",), output_directory=tmp_path, overwrite=True),
+    )
+    [(facts, svg_keys)] = _render(request, tmp_path)
+    assert svg_keys == [] and facts["drawn"] == []
+    assert {"CDS", "repeat_region", "GC content"} <= set(facts["suppressed"])

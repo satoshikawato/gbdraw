@@ -553,3 +553,132 @@ test('a Legend style no feature can produce still fails the Generate', async ({ 
   expect(outcome.errorSummary).toContain('could not be accepted');
   expect(await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.errorLog))).toContain('RESULT_INVALID');
 });
+
+// OV-63 siblings: a Legend style on a row that the draft then removes by another
+// route than hiding features (a track switched off, a feature type deselected, the
+// Legend set to none). Each case colors the row, removes it, and requires that
+// Generate succeeds. A track slot edit is live, so its Result must equal
+// Generate's; the GC and skew switches, the Features selection, and the Legend
+// position apply on Generate, so those cases check the Generate Result for the
+// absent rows.
+const colorLegendRow = async (page, caption, color = '#7b2cbf') => {
+  expect(await page.evaluate(({ target, value }) => {
+    const app = window.__GBDRAW_APP__;
+    const index = app.legendEntries.findIndex((entry) => entry.caption === target);
+    return index >= 0 && app.updateLegendEntryColor(index, value);
+  }, { target: caption, value: color }), `Legend row ${caption}`).toBeTruthy();
+  await settleLive(page);
+};
+
+const openCanvas = async (page, mode, canvas) => {
+  await open(page, { mode, results: 'single', reflow: 'off' });
+  if (mode === 'circular' && canvas !== null) {
+    await page.evaluate((value) => { window.__GBDRAW_APP__.form.multi_record_canvas = value; }, canvas);
+    await generate(page);
+  }
+};
+
+const SIBLINGS = [
+  {
+    name: 'GC content row after GC content is switched off',
+    mode: 'circular',
+    absent: ['GC content'],
+    run: async (page) => {
+      await colorLegendRow(page, 'GC content');
+      await appAction(page, 'setCircularGcSuppressed', true);
+    }
+  },
+  {
+    name: 'feature type row after the type is deselected in the Features selection',
+    mode: 'circular',
+    absent: ['repeat_region'],
+    run: async (page) => {
+      await colorLegendRow(page, 'repeat_region');
+      await page.evaluate(() => {
+        const features = window.__GBDRAW_APP__.adv.features;
+        features.splice(features.indexOf('repeat_region'), 1);
+      });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'GC skew row after its track is disabled',
+    mode: 'circular',
+    run: async (page) => {
+      await colorLegendRow(page, 'GC skew (+)');
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        app.setCircularTrackSlotEnabled(app.adv.circular_track_slots.find((slot) => slot.id === 'gc_skew'), false);
+      });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'GC content row after its track slot is removed',
+    mode: 'circular',
+    run: async (page) => {
+      await colorLegendRow(page, 'GC content');
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        app.removeCircularTrackSlot(app.adv.circular_track_slots.findIndex((slot) => slot.id === 'gc_content'));
+      });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'GC skew row after GC skew is switched off',
+    mode: 'circular',
+    absent: ['GC skew (-)'],
+    run: async (page) => {
+      await colorLegendRow(page, 'GC skew (-)');
+      await appAction(page, 'setCircularSkewSuppressed', true);
+    }
+  },
+  {
+    name: 'a feature row after the Legend is set to none, Circular one record',
+    absent: ['CDS'],
+    mode: 'circular',
+    canvas: false,
+    run: async (page) => {
+      await colorLegendRow(page, 'CDS');
+      await page.evaluate(() => { window.__GBDRAW_APP__.form.legend = 'none'; });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'a feature row after the Legend is set to none, Linear',
+    absent: ['CDS'],
+    mode: 'linear',
+    run: async (page) => {
+      await colorLegendRow(page, 'CDS');
+      await page.evaluate(() => { window.__GBDRAW_APP__.form.legend = 'none'; });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'a feature row after the Legend is set to none, Circular Multi-Record Canvas',
+    absent: ['CDS'],
+    mode: 'circular',
+    canvas: true,
+    run: async (page) => {
+      await colorLegendRow(page, 'CDS');
+      await page.evaluate(() => { window.__GBDRAW_APP__.form.legend = 'none'; });
+      await settleLive(page);
+    }
+  }
+];
+
+for (const { name, mode, canvas = null, absent = null, run } of SIBLINGS) {
+  test(`a Legend color survives Generate: ${name}`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await openCanvas(page, mode, canvas);
+    await run(page);
+    if (!absent) {
+      await expectLiveEqualsGenerate(page, { label: name });
+      return;
+    }
+    await generate(page);
+    const captions = (await semanticSnapshot(page)).legend.map(({ caption }) => caption);
+    for (const caption of absent) expect(captions, name).not.toContain(caption);
+  });
+}

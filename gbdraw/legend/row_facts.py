@@ -53,11 +53,12 @@ class LegendRowFacts:
 
     @cached_property
     def suppressed(self) -> tuple[str, ...]:
-        """Feature rows the records can name that the draft did not draw.
+        """Rows the records can name that the draft did not draw.
 
         The rows are those of every feature type of the records (hidden or not
         selected included): the type row, its ``other`` row, and every row
-        ``prepare_legend_table`` yields when no feature is hidden.
+        ``prepare_legend_table`` yields when no feature is hidden, plus the GC
+        content and GC skew rows (a switched-off track draws none).
         """
 
         feature_config = self._feature_config
@@ -82,8 +83,8 @@ class LegendRowFacts:
             feature_types,
             used_color_rules=used_rules,
             default_used_features=default_used,
-            show_gc=False,
-            show_skew=False,
+            show_gc=True,
+            show_skew=True,
             show_depth=False,
         )
         rows = dict.fromkeys(
