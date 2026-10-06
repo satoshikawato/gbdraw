@@ -8,7 +8,7 @@
 // the Legend fixes of OV-42 to OV-44 ask of the automatic rerender.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult, reveal } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 
@@ -918,5 +918,28 @@ test.describe('OV-65 Legend styles follow the captions of track data', () => {
     await settleLive(page);
     expect((await legendStyleOf(page, 'Region X')).color).toBe(COLORED);
     await expectLiveEqualsGenerate(page, { label: 'annotation data replaced, same legendLabel' });
+  });
+
+  // OV-68: the generic Track legend label of a slot renames a GC row. Python
+  // lists the default GC caption among the rows it can produce (OV-63), so the
+  // Legend color on the old caption stays stored, as for a switched-off track,
+  // and Generate succeeds. The case guards that.
+  test('renaming the GC content row through its Track legend label keeps Generate working', async ({ page }) => {
+    await openCanvas(page, 'circular', null);
+    await colorLegendRow(page, 'GC content');
+    const panel = page.locator('button[aria-controls="circular-custom-track-slots-panel"]');
+    await reveal(panel);
+    if (await panel.getAttribute('aria-expanded') !== 'true') await panel.click({ timeout: 15_000 });
+    await page.getByText('Use custom stack', { exact: true }).locator('input').check({ timeout: 15_000 });
+    await settleLive(page);
+    const field = page.getByRole('group', { name: 'Circular track slot gc_content', exact: true })
+      .getByRole('textbox', { name: 'Track legend label' });
+    await field.fill('Custom GC', { timeout: 15_000 });
+    await field.blur();
+    await settleLive(page);
+    await generate(page);
+    const captions = await legendCaptions(page);
+    expect(captions).toContain('Custom GC');
+    expect(captions).not.toContain('GC content');
   });
 });
