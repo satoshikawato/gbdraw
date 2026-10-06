@@ -578,6 +578,22 @@ const openCanvas = async (page, mode, canvas) => {
   }
 };
 
+// OV-65 (open): a Legend color on a row named only by a track's data (an annotation
+// set, a depth file) fails Generate once the track data is removed; the two cases
+// below are marked test.fail until the Web retires such a preference.
+// A region annotation with a legend label draws a Legend row from its set; the
+// slot of the set is added through the track slot control.
+const addAnnotationRow = async (page, label) => {
+  await page.evaluate((legendLabel) => {
+    const app = window.__GBDRAW_APP__;
+    const set = app.addAnnotationSet('regions');
+    const annotation = app.addCoordinateAnnotation(set, { start: 100, end: 400 });
+    annotation.legendLabel = legendLabel;
+  }, label);
+  await settleLive(page);
+  await generate(page);
+};
+
 const SIBLINGS = [
   {
     name: 'GC content row after GC content is switched off',
@@ -626,6 +642,40 @@ const SIBLINGS = [
     }
   },
   {
+    name: 'annotation set row after its set is removed',
+    mode: 'circular',
+    knownMismatch: 'OV-65: no data of the draft names the row, so Python reports it neither drawn nor suppressed and admission rejects the Legend color',
+    absent: ['Region X'],
+    run: async (page) => {
+      await addAnnotationRow(page, 'Region X');
+      await colorLegendRow(page, 'Region X');
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        app.removeAnnotationSet(app.annotationSets[0]);
+      });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'Depth row after its depth file is removed',
+    mode: 'circular',
+    knownMismatch: 'OV-65: no data of the draft names the row, so Python reports it neither drawn nor suppressed and admission rejects the Legend color',
+    absent: ['Depth'],
+    run: async (page) => {
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        const rows = Array.from({ length: 4 }, (_, index) => `FORCEDLBL\t${index * 700 + 1}\t${10 + index}`);
+        app.files.c_depth = [[new File([rows.join('\n')], 'depth.tsv', { type: 'text/tab-separated-values' })]];
+        app.form.show_depth = true;
+      });
+      await settleLive(page);
+      await generate(page);
+      await colorLegendRow(page, 'Depth');
+      await page.evaluate(() => { window.__GBDRAW_APP__.files.c_depth = []; });
+      await settleLive(page);
+    }
+  },
+  {
     name: 'GC skew row after GC skew is switched off',
     mode: 'circular',
     absent: ['GC skew (-)'],
@@ -668,8 +718,9 @@ const SIBLINGS = [
   }
 ];
 
-for (const { name, mode, canvas = null, absent = null, run } of SIBLINGS) {
+for (const { name, mode, canvas = null, absent = null, knownMismatch, run } of SIBLINGS) {
   test(`a Legend color survives Generate: ${name}`, async ({ page }) => {
+    if (knownMismatch) test.fail(true, knownMismatch);
     test.setTimeout(120_000);
     await openCanvas(page, mode, canvas);
     await run(page);
