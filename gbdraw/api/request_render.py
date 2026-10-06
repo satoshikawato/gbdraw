@@ -628,7 +628,7 @@ class RequestRenderResult:
     """Files and normalized inputs produced by one request render."""
 
     mode: Literal["circular", "linear"]
-    request: DiagramRequest
+    request: CircularDiagramRequest | LinearDiagramRequest
     records: tuple[SeqRecord, ...]
     drawing: Drawing
     output_paths: tuple[Path, ...]

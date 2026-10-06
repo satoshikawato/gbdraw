@@ -66,14 +66,14 @@ class FeatureDrawingConfigurator:
             else compile_feature_visibility_rules(feature_table)
         )
         self.default_colors: DataFrame = default_colors
-        if (specific_color_rules is None) != (default_color_map is None):
-            raise ValueError(
-                "specific_color_rules and default_color_map must be provided together"
-            )
-        if specific_color_rules is None:
+        if specific_color_rules is None and default_color_map is None:
             specific_color_rules, default_color_map = preprocess_color_tables(
                 color_table,
                 default_colors,
+            )
+        elif specific_color_rules is None or default_color_map is None:
+            raise ValueError(
+                "specific_color_rules and default_color_map must be provided together"
             )
         self.specific_color_rules = specific_color_rules
         self.default_color_map = default_color_map

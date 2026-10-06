@@ -658,8 +658,8 @@ def build_depth_track_dataframes(
             if not max_values:
                 continue
             shared_max = max(max_values)
-            for row in indexed_rows:
-                track = row.get(track_index)
+            for indexed_row in indexed_rows:
+                track = indexed_row.get(track_index)
                 if track is not None:
                     track.config.max_depth = shared_max
 

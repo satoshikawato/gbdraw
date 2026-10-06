@@ -11,7 +11,7 @@ import {
 import {
   PAIRWISE_MATCH_SELECTOR,
   buildPairwiseMatchHoverSummary,
-  buildPairwiseMatchPayload
+  buildMatchPopupPayload
 } from '../pairwise-match-popup.js';
 import { buildFeatureSequenceFastas } from '../feature-sequence-fasta.js';
 import { getFeatureOverride } from '../../services/feature-override-identity.js';
@@ -666,7 +666,7 @@ export const createFeatureSvgActions = ({
       : orthogroups?.value || []
   );
 
-  const buildMatchPayload = (matchElement, featureLookup) => buildPairwiseMatchPayload(matchElement, {
+  const buildMatchPayload = (matchElement, featureLookup) => buildMatchPopupPayload(matchElement, {
     featureLookup,
     sourceFeatures: Array.isArray(biologicalFeatures?.value) && biologicalFeatures.value.length > 0
       ? biologicalFeatures.value

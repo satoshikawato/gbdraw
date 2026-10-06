@@ -16,6 +16,17 @@ from gbdraw.exceptions import ValidationError
 
 PATH_ORDERING = "protein-key-edge-tuple-v1"
 ProteinOrderKey = tuple[int, int, int, str]
+_IndexState = tuple[
+    dict[str, ProteinOrderKey],  # _keys
+    dict[str, list[str]],  # _children
+    dict[tuple[str, str], str],  # _chosen
+    dict[str, int],  # _suffix
+    dict[tuple[str, str], int],  # _offset
+    dict[str, int],  # _starts
+    dict[str, int],  # _containing
+    dict[str, int],  # _first
+    int,  # _count
+]
 
 
 @dataclass(frozen=True)
@@ -73,11 +84,11 @@ class OrthologPathCollection:
             if not all(isinstance(p, OrthologPath) for p in self.paths):
                 raise ValidationError("Explicit corpus requires OrthologPath values")
             # Keep arbitrary IDs, repeated paths, cycles and supplied shared data.
-            containing = {}
+            containing: dict[str, int] = {}
             for path in self.paths:
                 for pid in set(path.protein_ids):
                     containing[pid] = containing.get(pid, 0) + 1
-            state = ({}, {}, {}, {}, {}, {}, containing, {}, len(self.paths))
+            state: _IndexState = ({}, {}, {}, {}, {}, {}, containing, {}, len(self.paths))
         elif self.kind == "dag":
             if self.paths:
                 raise ValidationError("DAG collections cannot contain explicit paths")
@@ -93,8 +104,8 @@ class OrthologPathCollection:
         if self._tied_keys:
             self._index_tied_first_paths()
 
-    def _build_index(self):
-        keys = {}
+    def _build_index(self) -> _IndexState:
+        keys: dict[str, ProteinOrderKey] = {}
         for pid, key in self.nodes:
             if (type(pid) is not str or pid in keys or len(key) != 4
                     or any(type(v) is not int for v in key[:3]) or type(key[3]) is not str):
@@ -102,9 +113,9 @@ class OrthologPathCollection:
             keys[pid] = key
         if tuple(keys) != tuple(sorted(keys, key=lambda pid: (keys[pid], pid))):
             raise ValidationError("DAG nodes are not in canonical order")
-        children = {pid: [] for pid in keys}
+        children: dict[str, list[str]] = {pid: [] for pid in keys}
         indegree = dict.fromkeys(keys, 0)
-        chosen = {}
+        chosen: dict[tuple[str, str], str] = {}
         for u, v, eid in self.transitions:
             if (u not in keys or v not in keys or (u, v) in chosen
                     or type(eid) is not str or not eid):
@@ -120,7 +131,7 @@ class OrthologPathCollection:
             raise ValidationError("DAG transitions are not in canonical order")
         sources = [u for u in keys if not indegree[u]]
         queue = deque(sources)
-        order = []
+        order: list[str] = []
         while queue:
             u = queue.popleft()
             order.append(u)
@@ -130,14 +141,17 @@ class OrthologPathCollection:
                     queue.append(v)
         if len(order) != len(keys):
             raise ValidationError("Ortholog path DAG contains a cycle")
-        suffix, offsets = {}, {}
+        suffix: dict[str, int] = {}
+        offsets: dict[tuple[str, str], int] = {}
         for u in reversed(order):
             total = 0
             for v in children[u]:
                 offsets[u, v] = total
                 total += suffix[v]
             suffix[u] = total if children[u] else 1
-        starts, prefix, earliest = {}, dict.fromkeys(keys, 0), {}
+        starts: dict[str, int] = {}
+        prefix = dict.fromkeys(keys, 0)
+        earliest: dict[str, int] = {}
         count = 0
         for u in sources:
             starts[u] = earliest[u] = count
@@ -154,7 +168,7 @@ class OrthologPathCollection:
 
     @classmethod
     def from_edges(cls, group_id: str, edges: Sequence, protein_map: Mapping):
-        chosen = {}
+        chosen: dict[tuple[str, str], str] = {}
         for edge in edges:
             u, v = edge.query_protein_id, edge.subject_protein_id
             if edge.edge_kind not in {"rbh", "coortholog"} or u not in protein_map or v not in protein_map:
@@ -187,7 +201,7 @@ class OrthologPathCollection:
         """Check persisted graph selection and first-path IDs against evidence."""
         if self.kind == "explicit":
             return
-        chosen = {}
+        chosen: dict[tuple[str, str], str] = {}
         for edge in edges:
             u, v = edge.query_protein_id, edge.subject_protein_id
             if edge.edge_kind in {"rbh", "coortholog"}:
@@ -209,14 +223,14 @@ class OrthologPathCollection:
 
     def _label_frontier(self, frontier):
         """Weighted next nodes; merging prefixes must retain their multiplicity."""
-        following = {}
+        following: dict[str, int] = {}
         for u, weight in frontier.items():
             for v in self._children[u]:
                 following[v] = following.get(v, 0) + weight
         return following
 
     def _matching_suffixes(self, labels):
-        matches = [{} for _ in labels]
+        matches: list[dict[str, int]] = [{} for _ in labels]
         for position in range(len(labels) - 1, -1, -1):
             for u, key in self._keys.items():
                 if key == labels[position]:
@@ -246,7 +260,8 @@ class OrthologPathCollection:
             frontier = self._label_frontier(selected)
         matches = self._matching_suffixes(labels)
         sources = [u for u in self._starts if matches[0].get(u)]
-        proteins, edges = [], []
+        proteins: list[str] = []
+        edges: list[str] = []
         for position in range(1, len(labels)):
             choices = sorted((self._chosen[u, v], u, v) for u in sources
                              for v in self._children[u] if matches[position].get(v))
@@ -283,7 +298,7 @@ class OrthologPathCollection:
         # _suffix insertion order is reverse topological. Find the least full
         # (key sequence, edge sequence) through each edge, then rank just that
         # path. This remains polynomial and never expands the path corpus.
-        suffix = {}
+        suffix: dict[str, tuple[tuple[ProteinOrderKey, ...], tuple[str, ...], tuple[str, ...]]] = {}
         for u in self._suffix:
             suffix[u] = min(
                 (((self._keys[u],) + suffix[v][0], (self._chosen[u, v],) + suffix[v][1],
@@ -310,7 +325,9 @@ class OrthologPathCollection:
             return self.paths[rank - 1]
         if self._tied_keys:
             return self._tied_path(rank)
-        offset, proteins, edges = rank - 1, [], []
+        offset = rank - 1
+        proteins: list[str] = []
+        edges: list[str] = []
         candidates = self._starts
         while candidates:
             for node in candidates:
@@ -366,7 +383,8 @@ class OrthologPathCollection:
             return
         rank = 0
         for source in self._starts:
-            proteins, edges = [source], []
+            proteins = [source]
+            edges: list[str] = []
             stack = [iter(self._children[source])]
             while stack:
                 node = next(stack[-1], None)
@@ -385,7 +403,7 @@ class OrthologPathCollection:
 
     def to_payload(self) -> dict:
         """Persist only the lossless representation; no DP state or expansion."""
-        body = {"orthogroupId": self.orthogroup_id, "kind": self.kind, "count": str(self.count)}
+        body: dict[str, object] = {"orthogroupId": self.orthogroup_id, "kind": self.kind, "count": str(self.count)}
         if self.kind == "explicit":
             body["paths"] = self.paths
         else:
