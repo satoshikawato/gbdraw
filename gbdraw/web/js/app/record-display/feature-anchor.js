@@ -1,3 +1,4 @@
+// @ts-check
 const available = (extra = {}) => ({ enabled: true, code: null, message: '', ...extra });
 const unavailable = (code, message, extra = {}) => ({ enabled: false, code, message, ...extra });
 

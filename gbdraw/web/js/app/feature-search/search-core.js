@@ -1,3 +1,4 @@
+// @ts-check
 import {
   formatFeatureLocation,
   isInternalProteinDisplayId,
@@ -453,6 +454,28 @@ const preparedItemsForField = (feature, field, popupMode, orthogroupsById) => (
   featureSearchItems(feature, field, '', { popupMode, orthogroupsById }).map(prepareSearchItem)
 );
 
+/**
+ * The prepared index that `buildFeatureSearchIndex` returns and
+ * `runFeatureSearch` reads.
+ * @typedef {object} FeatureSearchIndex
+ * @property {string} popupMode
+ * @property {string[]} featureOrder
+ * @property {Map<string, { feature: Record<string, any>, itemsByField: Map<string, any[]>, qualifierValuesByKey: Map<string, any[]> }>} byId
+ * @property {Map<string, string[]>} qualifierFeatureIdsByKey
+ * @property {Map<string, any>} orthogroupsById
+ */
+
+/**
+ * @typedef {object} BuildFeatureSearchIndexOptions
+ * @property {Record<string, any>[]} [features]
+ * @property {string} [popupMode]
+ * @property {Record<string, any>[]} [orthogroups]
+ */
+
+/**
+ * @param {BuildFeatureSearchIndexOptions} [options]
+ * @returns {FeatureSearchIndex}
+ */
 export const buildFeatureSearchIndex = ({
   features = [],
   popupMode = 'rich',
@@ -523,6 +546,23 @@ const preparedFeatureSearchMatches = (document, matcher, field, qualifierKey) =>
   return details;
 };
 
+/**
+ * @typedef {object} RunFeatureSearchOptions
+ * @property {Record<string, any>[]} [features]
+ * @property {Iterable<string> | null} [renderedFeatureIds]
+ * @property {string} [query]
+ * @property {string} [field]
+ * @property {string} [qualifierKey]
+ * @property {boolean} [useRegex]
+ * @property {string} [popupMode]
+ * @property {Record<string, any>[]} [orthogroups]
+ * @property {FeatureSearchIndex | null} [searchIndex]
+ * @property {string} [previousActiveId]
+ */
+
+/**
+ * @param {RunFeatureSearchOptions} [options]
+ */
 export const runFeatureSearch = ({
   features,
   renderedFeatureIds,

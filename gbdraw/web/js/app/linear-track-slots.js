@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { ChangeTrackLayout } from './track-slot-edits.js' */
 import {
   activeDepthTrackIndices,
   depthTrackMatrixWidth,
@@ -172,6 +174,20 @@ export const linearDepthTrackCountForState = (state) => (
     : 0
 );
 
+/**
+ * @typedef {object} DefaultLinearTrackSlotsOptions
+ * @property {boolean} [showDepth]
+ * @property {number} [depthTrackCount]
+ * @property {boolean} [showGc]
+ * @property {boolean} [showSkew]
+ * @property {string} [nt] dinucleotide of the GC tracks
+ * @property {string} [trackLayout] linear track layout (`above`, `middle`, `below`)
+ */
+
+/**
+ * @param {DefaultLinearTrackSlotsOptions} [options]
+ * @returns {Record<string, any>[]}
+ */
 export const createDefaultLinearTrackSlots = ({
   showDepth = false,
   depthTrackCount = 1,
@@ -820,9 +836,18 @@ const replaceObjectContents = (target, source) => {
   return target;
 };
 
+/**
+ * @typedef {object} LinearTrackSlotEditorOptions
+ * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
+ * @property {ChangeTrackLayout} [changeTrackLayout] R10 port (default: apply directly)
+ */
+
 // `changeTrackLayout` is the feature placement owner's transition, injected as
 // a port (R10, Q3, R13): every stack edit that can change the feature slot
 // runs through it.
+/**
+ * @param {LinearTrackSlotEditorOptions} options
+ */
 export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply) => apply() }) => {
   const { adv, form } = state;
   const editorKeys = new WeakMap();
@@ -1338,12 +1363,12 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
   const reconcileLinearDepthSlots = (previousSourced) => {
     const slots = Array.isArray(adv.linear_track_slots) ? adv.linear_track_slots : [];
     if (slots.length === 0 && !adv.linear_track_slots_enabled) return;
-    const { slots: nextSlots, additions } = reconcileManagedDepthSlots({
+    const { slots: nextSlots, additions } = reconcileManagedDepthSlots(/** @type {any} */ ({
       slots,
       previousSourced,
       sourced: linearSourcedDepthTrackIndexesForState(state),
       managedPredicate: (slot) => isDefaultManagedLinearSlot(slot, 'depth')
-    });
+    }));
     if (additions.length === 0 && nextSlots.length === slots.length) return;
     const previousAxisIndex = clampLinearTrackAxisIndex(adv.linear_track_slots_axis_index, slots.length);
     if (previousAxisIndex !== null) {
@@ -1498,14 +1523,14 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
 
   const selectedResultIndexValue = () => Number(state?.selectedResultIndex?.value ?? 0) || 0;
 
-  const resolvedLinearSlotGeometry = (slotId) => findTrackSlotGeometry({
+  const resolvedLinearSlotGeometry = (slotId) => findTrackSlotGeometry(/** @type {any} */ ({
     geometry: String(state?.trackSlotResolvedGeometry?.value?.mode || '') === 'linear'
       ? state.trackSlotResolvedGeometry.value
       : null,
     resultIndex: selectedResultIndexValue(),
     recordIndex: 0,
     slotId
-  });
+  }));
 
   const estimateLinearSlotGeometry = (slot) => {
     const renderer = normalizeRenderer(slot?.renderer);
@@ -1585,13 +1610,13 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
   );
 
   const linearTrackSlotSkewColorValue = (slot, key) => {
-    return resolveTrackSlotSkewColorValue({
+    return resolveTrackSlotSkewColorValue(/** @type {any} */ ({
       slot,
       key,
       currentColors: state.currentColors,
       paletteDefinitions: state.paletteDefinitions,
       selectedPalette: state.selectedPalette
-    });
+    }));
   };
 
   const setLinearTrackSlotSkewColor = (slot, key, value) => {
