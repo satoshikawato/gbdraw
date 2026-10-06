@@ -7,9 +7,17 @@ export const DECIMAL_NUMBER_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?
 const NO_VALUE_TOKENS = new Set(['', 'auto', 'none', 'null']);
 
 /**
+ * @typedef {{ status: 'auto', value: null, raw?: undefined }
+ *   | { status: 'valid', value: number, raw?: undefined }
+ *   | { status: 'invalid', raw: unknown, value?: undefined }} OptionalNumberClassification
+ */
+
+/**
  * JSON-representable classification of an optional number: blank, Auto, or a
  * no-value token is 'auto', a finite number (any sign) is 'valid', anything
  * else is 'invalid'.
+ * @param {unknown} value
+ * @returns {OptionalNumberClassification}
  */
 export const classifyOptionalNumber = (value) => {
   if (value === null || value === undefined) return { status: 'auto', value: null };
@@ -24,6 +32,10 @@ export const classifyOptionalNumber = (value) => {
     : { status: 'invalid', raw: value };
 };
 
+/**
+ * @param {unknown} value
+ * @returns {OptionalNumberClassification}
+ */
 export const classifyOptionalPositiveNumber = (value) => {
   const classified = classifyOptionalNumber(value);
   return classified.status === 'valid' && !(classified.value > 0)

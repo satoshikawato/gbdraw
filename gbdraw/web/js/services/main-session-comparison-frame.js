@@ -10,6 +10,7 @@ import { base64ToBytes, bytesToText, textToBase64, textToBytes } from './byte-ut
 export const MAIN_DISPLAY_FRAME_SESSION_VERSION = 42;
 
 // The app injects the Worker table conversion, like the configuration validator.
+/** @type {((request: Record<string, any>) => Promise<any>) | null} */
 let tableConverter = null;
 export const setMainSessionComparisonFrameConverter = (converter) => {
   tableConverter = typeof converter === 'function' ? converter : null;

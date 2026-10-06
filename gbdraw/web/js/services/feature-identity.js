@@ -39,6 +39,7 @@ export const textAliasStatus = (source, keys) => {
 
 export const nonnegativeIntegerAliasStatus = (source, keys) => {
   let supplied = false;
+  /** @type {number | null} */
   let value = null;
   for (const key of keys) {
     const raw = source?.[key];

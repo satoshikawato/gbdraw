@@ -43,6 +43,11 @@ const consistentTextAlias = (payload, keys) => {
   };
 };
 
+/**
+ * @param {Record<string, any> | null | undefined} payload
+ * @param {readonly string[]} keys
+ * @param {number | string | null} [fallback]
+ */
 const consistentIntegerAlias = (payload, keys, fallback = null) => {
   const fallbackKey = '__gbdrawFallbackIdentity';
   const source = fallback !== null && fallback !== undefined && fallback !== ''
@@ -117,6 +122,10 @@ const sourceFeatureIndex = (payload) => consistentIntegerAlias(
   SOURCE_FEATURE_INDEX_KEYS
 );
 
+/**
+ * @param {Record<string, any> | null | undefined} payload
+ * @param {number | string | null} [fallback]
+ */
 const recordIdentity = (payload, fallback = null) => consistentIntegerAlias(
   payload,
   RECORD_INDEX_KEYS,
@@ -352,7 +361,7 @@ export const createOrthogroupFeatureProjection = () => {
         memberCount,
         recordCoverage
       }))
-      .filter(Boolean)
+      .filter((candidate) => candidate !== null)
       .map((candidate) => ({
         ...candidate,
         owner: {},

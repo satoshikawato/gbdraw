@@ -29,10 +29,11 @@ import {
  */
 
 const safeResourceLeaf = (value) => {
-  const basename = String(value || 'resource.dat')
+  // split() returns at least one element, so pop() is a string.
+  const basename = /** @type {string} */ (String(value || 'resource.dat')
     .replace(/\\/g, '/')
     .split('/')
-    .pop();
+    .pop());
   const safe = basename
     .replace(/[^A-Za-z0-9._-]+/g, '_')
     .replace(/^[._]+|[._]+$/g, '');
@@ -263,7 +264,8 @@ export const buildSessionResources = async (state, committedRequest) => {
     if (!Object.hasOwn(committedRequest.resources, id)) {
       throw new Error(`Committed render resource is missing: ${id}.`);
     }
-    const source = /** @type {SessionResourceSource} */ (
+    // A view of one resource id is a single backing, which always has readBytes.
+    const source = /** @type {SessionResourceSource & { readBytes: () => any }} */ (
       sessionResourceSource(createSessionResourceFileView(committedTable, id))
     );
     if (!reuseEncodedResources) await source.readBytes();

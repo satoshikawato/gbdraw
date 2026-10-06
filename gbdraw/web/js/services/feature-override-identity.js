@@ -74,7 +74,7 @@ export const migrateLegacyFeatureOverrides = (
     warn = console.warn,
     legacyFeatures = [],
     legacyRecordKeys = [],
-    onDiagnostic = null
+    onDiagnostic = /** @type {((diagnostics: Record<string, number | boolean>) => void) | null} */ (null)
   } = {}
 ) => {
   const result = {

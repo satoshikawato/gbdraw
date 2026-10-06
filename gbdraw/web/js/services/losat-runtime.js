@@ -1,4 +1,19 @@
 // @ts-check
+/**
+ * The exports of the direct LOSAT wasm API (`hasDirectLosatApi` checks for it).
+ * @typedef {object} LosatDirectExports
+ * @property {WebAssembly.Memory} memory
+ * @property {(len: number) => number} losat_web_alloc
+ * @property {(ptr: number, len: number) => void} losat_web_dealloc
+ * @property {(...args: number[]) => number} losat_web_run_pair
+ * @property {() => number} losat_web_error_ptr
+ * @property {() => number} losat_web_error_len
+ * @property {() => number} losat_web_result_ptr
+ * @property {() => number} losat_web_result_len
+ * @property {() => void} [losat_web_clear]
+ */
+
+/** @type {Promise<WebAssembly.Instance> | null} */
 let directInstancePromise = null;
 
 export const concatUint8Arrays = (chunks) => {
@@ -22,7 +37,7 @@ export const runLosatPairWasi = async ({
   queryFasta,
   subjectFasta,
   outfmt = '6',
-  extraArgs = [],
+  extraArgs = /** @type {string[]} */ ([]),
   wasiShim,
   wasmModule,
   checkCanceled = () => {}
@@ -66,6 +81,11 @@ export const runLosatPairWasi = async ({
   return stdoutText;
 };
 
+/**
+ * @param {Record<string, any>} wasiShim The vendored WASI shim classes.
+ * @param {WebAssembly.Module} wasmModule
+ * @returns {Promise<WebAssembly.Instance>}
+ */
 const instantiateDirectLosat = async (
   { WASI, File, OpenFile, PreopenDirectory, ConsoleStdout },
   wasmModule
@@ -109,12 +129,13 @@ export const runLosatPairDirect = async ({
   queryFasta,
   subjectFasta,
   outfmt = '6',
-  extraArgs = [],
+  extraArgs = /** @type {string[]} */ ([]),
   wasiShim,
   wasmModule
 }) => {
   const instance = await instantiateDirectLosat(wasiShim, wasmModule);
-  const exports = instance.exports;
+  // hasDirectLosatApi admitted this module, so its exports are the direct API.
+  const exports = /** @type {LosatDirectExports} */ (instance.exports);
   const encoder = new TextEncoder();
   const argsText = Array.isArray(extraArgs) ? extraArgs.map(String).join('\0') : '';
   const allocations = [
