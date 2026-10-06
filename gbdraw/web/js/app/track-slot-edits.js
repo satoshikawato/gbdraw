@@ -6,20 +6,31 @@
 // icon inside a button); the edit itself runs without the event.
 
 /**
- * R10: the feature placement owner's transition for an edit of a draft
- * feature-slot input. It runs `apply` (and may ask before keeping it) and
- * returns what `apply` returns, a busy outcome, or `false` while the user is asked.
- * @typedef {(apply: () => any, control?: Element | null) => any} ChangeTrackLayout
+ * The edited checkbox, select, or button, with the members the placement owner reads.
+ * @typedef {HTMLElement & {
+ *   type?: string,
+ *   checked?: boolean,
+ *   selectedOptions?: ArrayLike<{ text: string }>,
+ *   labels?: ArrayLike<{ textContent: string }> | null
+ * }} LayoutControl
  */
 
 /**
- * @param {ChangeTrackLayout} changeTrackLayout
- * @param {Record<string, (...args: any[]) => any>} actions
- * @returns {Record<string, (...args: any[]) => any>}
+ * R10: the feature placement owner's transition for an edit of a draft
+ * feature-slot input. It runs `apply` (and may ask before keeping it) and
+ * returns what `apply` returns, a busy outcome, or `false` while the user is asked.
+ * @typedef {(apply: () => any, control?: LayoutControl | null) => any} ChangeTrackLayout
  */
-export const featureSlotEdits = (changeTrackLayout, actions) => Object.fromEntries(
+
+/**
+ * @template {Record<string, (...args: any[]) => any>} Actions
+ * @param {ChangeTrackLayout} changeTrackLayout
+ * @param {Actions} actions
+ * @returns {Actions} The same names; each takes the optional trailing DOM event as well.
+ */
+export const featureSlotEdits = (changeTrackLayout, actions) => /** @type {Actions} */ (Object.fromEntries(
   Object.entries(actions).map(([name, action]) => [name, (...args) => {
     const event = typeof Event === 'function' && args.at(-1) instanceof Event ? args.pop() : null;
     return changeTrackLayout(() => action(...args), event?.currentTarget);
   }])
-);
+));
