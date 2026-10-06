@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { FeaturePlacementTarget } from '../../services/feature-placement.js' */
+/** @import { ChangeTrackLayout } from '../track-slot-edits.js' */
 import {
   canonicalFeaturePlacements,
   featureIdentityKeyOf,
@@ -140,8 +141,7 @@ export const createFeaturePlacementActions = ({
   const focusAfterRender = (find) => nextTick().then(() => find()?.focus?.());
   /**
    * The `ChangeTrackLayout` port of the track stack editors (app/track-slot-edits.js).
-   * @param {() => any} apply
-   * @param {any} [control] The edited checkbox, select, or button.
+   * @type {ChangeTrackLayout}
    */
   const changeTrackLayout = (apply, control = null) => {
     const busy = state.sessionOperationAvailability?.();

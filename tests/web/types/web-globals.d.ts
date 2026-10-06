@@ -12,6 +12,10 @@ declare global {
     DOMPurify: any;
     // Test and debugging hooks (`__GBDRAW_HISTORY__`, `__GBDRAW_APP__`).
     [hook: `__GBDRAW_${string}`]: any;
+    // The pairwise-match colors of the last Generate (`app/run-analysis.js`
+    // writes them, `app/svg-styles.js` reads them).
+    _origPairwiseMin: string;
+    _origPairwiseMax: string;
   }
   var DOMPurify: any;
   var __GBDRAW_TEST_HOOKS__: any;

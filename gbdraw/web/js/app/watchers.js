@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { RulePreparation } from './rule-matching.js' */
 import { normalizeUserFacingError } from '../services/error-normalization.js';
 import {
   parseBlacklistWords,
@@ -31,6 +33,46 @@ export const runRecordDiscoveryWatcher = async ({
   return !suppress;
 };
 
+/**
+ * The members of the preview owner's runtime (app/preview-runtime.js) that the
+ * mounted-Result watcher reads.
+ * @typedef {object} WatchersPreviewRuntime
+ * @property {() => void} clearActiveRuntime
+ * @property {(options: Record<string, any>) => any} createMountedResultContext
+ * @property {(context: any) => Promise<any>} bindMountedResult
+ */
+
+/**
+ * @typedef {object} WatchersOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {RulePreparation} rulePreparation
+ * @property {(value?: any) => { value: any }} ref Vue `ref`.
+ * @property {(getter: () => any) => { readonly value: any }} computed Vue `computed`.
+ * @property {(source: any, callback: (...args: any[]) => any, options?: Record<string, any>) => any} watch Vue `watch`.
+ * @property {(callback?: () => void) => Promise<void>} nextTick Vue `nextTick`.
+ * @property {(callback: () => any) => void} onMounted Vue `onMounted`.
+ * @property {{ refreshLegendDragAffordances: () => void }} legendActions
+ *   The Legend owner's reaction to a rebuilt Legend.
+ * @property {{
+ *   syncLabelEditor: (options?: Record<string, any>) => void,
+ *   commitSpecificRules: (rules: Record<string, any>[], label?: string, options?: Record<string, any>) => Promise<any>
+ * }} featureActions The feature editor's label reaction and its commit of the specific color rules.
+ * @property {{ applyCanvasPadding: () => void, refreshDiagramDragAffordances: () => void }} legendLayout
+ *   The Legend layout owner's canvas padding and drag affordances.
+ * @property {{ applyPaletteDraftToPreview: () => void, syncPaletteDraftState: () => void }} resultsManager
+ *   The Results owner's palette draft projections.
+ * @property {(() => Promise<any>) | null} [runLabelReflow] Generate's label reflow.
+ * @property {((options?: { suppress?: boolean, automatic?: boolean }) => Promise<any>) | null} [refreshCircularRecordOrder]
+ * @property {((options?: { suppress?: boolean }) => Promise<any>) | null} [refreshLinearRecordSelectors]
+ * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} [resetPreviewViewport] The preview owner's viewport reset.
+ * @property {() => void} resetRightDrawer The right drawer owner's reset.
+ * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
+ * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
+ * @property {WatchersPreviewRuntime | null} [previewRuntime]
+ * @property {(() => Promise<any>) | null} [preparePaletteDefinitions] The palette loader's load of the browser palette definitions.
+ */
+
+/** @param {WatchersOptions} options */
 export const setupWatchers = ({
   state,
   rulePreparation,
@@ -109,11 +151,7 @@ export const setupWatchers = ({
     errorLog
   } = state;
 
-  const {
-    addLegendEntry,
-    extractLegendEntries,
-    refreshLegendDragAffordances
-  } = legendActions;
+  const { refreshLegendDragAffordances } = legendActions;
 
   const { syncLabelEditor } = featureActions;
   const {
@@ -340,6 +378,7 @@ export const setupWatchers = ({
     return busy || (canRetryAuxiliaryImportFailure.value ? auxiliaryImportFailure.value.retry() : false);
   };
   const pendingFileImports = window.Vue.reactive(new Map());
+  /** @type {Promise<any>} */
   let fileImportApplications = Promise.resolve();
   const restoredFileSelections = new Map();
   const applyFileImport = (key, apply, file, previousFile) => {

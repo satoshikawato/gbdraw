@@ -248,8 +248,8 @@ export const createSvgStyles = ({
             } else if (committedPairwiseFactors[pathKey] !== undefined) {
               factor = committedPairwiseFactors[pathKey];
             } else {
-              const origMin = /** @type {any} */ (window)._origPairwiseMin || '#FFE7E7';
-              const origMax = /** @type {any} */ (window)._origPairwiseMax || '#FF7272';
+              const origMin = window._origPairwiseMin || '#FFE7E7';
+              const origMax = window._origPairwiseMax || '#FF7272';
               factor = estimateColorFactor(currentFill, origMin, origMax);
               retainPairwiseFactor(pathKey, factor);
             }
