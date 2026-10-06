@@ -8,7 +8,7 @@ import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
 import {
   groupMetadataScopeLabel,
   normalizeGroupMetadataScope
-} from './losat-normalization.js';
+} from '../services/losat-normalization.js';
 import {
   isInternalProteinDisplayId,
   resolveDisplayProteinId

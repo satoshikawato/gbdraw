@@ -19,12 +19,12 @@ import {
   serializeLabelWhitelistRules,
   serializeQualifierPriorityRules,
   serializeSpecificRules
-} from '../app/file-imports.js';
+} from './file-imports.js';
 import {
   buildBulkLabelProjection,
   parseLabelOverrideTsv,
   serializeLabelOverrideRows
-} from '../app/feature-editor/label-override-table.js';
+} from './label-override-table.js';
 import {
   parseFeatureVisibilityRules,
   serializeFeatureVisibilityRules
@@ -59,7 +59,7 @@ import {
   buildDisambiguatedRecordEntries,
   resolveCircularRequestRecordSet,
   resolveDisambiguatedRecordSelection
-} from '../app/record-options.js';
+} from './record-options.js';
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
@@ -71,15 +71,15 @@ import {
 import {
   linearRecordLayoutHasSharedRow,
   resolveEffectiveLinearRecordRows
-} from '../app/linear-record-layout.js';
-import { resolveLinearLabelVisibility } from '../app/linear-label-visibility.js';
+} from './linear-record-layout.js';
+import { resolveLinearLabelVisibility } from './linear-label-visibility.js';
 import {
   assertValidCustomTrackPlan,
   parseOptionalPixel,
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
 } from '../app/track-slot-validation.js';
-import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from '../app/annotations/state.js';
+import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from './annotation-state.js';
 import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
 import { SESSION_TABLE_LABELS, diagnosticError, normalizeUserFacingError } from './error-normalization.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
@@ -128,12 +128,12 @@ import {
   requireCurrentProteinBlastpMaxHits,
   requireCurrentProteinBlastpMode,
   requireCurrentWebStateFieldNames
-} from '../app/current-option-values.js';
+} from './current-option-values.js';
 import {
   normalizeCollinearAnchorMode,
   normalizeCollinearSearchScope,
   normalizeOrthogroupMembershipMode
-} from '../app/losat-normalization.js';
+} from './losat-normalization.js';
 import {
   canonicalComparisonResourceKind,
   isResourceBackedCanonicalComparison,

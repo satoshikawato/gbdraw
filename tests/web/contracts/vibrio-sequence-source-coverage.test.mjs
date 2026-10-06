@@ -25,7 +25,7 @@ const { groupLinearSourceRecords } = await import(
   pathToFileURL(join(tempRoot, 'js', 'app', 'linear-sources.js'))
 );
 const { planLinearSourceRowMove } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'app', 'linear-record-layout.js'))
+  pathToFileURL(join(tempRoot, 'js', 'services', 'linear-record-layout.js'))
 );
 
 const fixturePath = join(

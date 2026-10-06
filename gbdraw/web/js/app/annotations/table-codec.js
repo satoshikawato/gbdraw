@@ -1,8 +1,8 @@
 // @ts-check
 /**
- * @import { AnnotationHatch, AnnotationSet, AnnotationStyle, AnnotationTarget } from './state.js'
+ * @import { AnnotationHatch, AnnotationSet, AnnotationStyle, AnnotationTarget } from '../../services/annotation-state.js'
  */
-import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets } from './state.js';
+import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets } from '../../services/annotation-state.js';
 import { validateAnnotationCoordinates } from './validation.js';
 import {
   annotationRecordSelectorValue,

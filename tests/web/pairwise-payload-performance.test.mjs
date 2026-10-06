@@ -19,7 +19,7 @@ const modulePaths = [
   'gbdraw/web/js/app/genbank-header.js',
   'gbdraw/web/js/app/conservation-series.js',
   'gbdraw/web/js/app/color-utils.js',
-  'gbdraw/web/js/app/losat-normalization.js',
+  'gbdraw/web/js/services/losat-normalization.js',
   'gbdraw/web/js/services/file-content-cache.js',
   'gbdraw/web/js/services/feature-catalog.js',
   'gbdraw/web/js/services/feature-identity.js',

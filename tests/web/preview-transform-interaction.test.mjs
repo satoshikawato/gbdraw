@@ -47,7 +47,7 @@ const copyModule = async (source, destination) => {
 
 await copyModule('services/error-normalization.js', 'services/error-normalization.js');
 await copyModule('app/ui.js', 'app/ui.js');
-await copyModule('app/feature-dom.js', 'app/feature-dom.js');
+await copyModule('services/feature-dom.js', 'services/feature-dom.js');
 await copyModule('app/feature-editor/svg-actions.js', 'app/feature-editor/svg-actions.js');
 await copyModule('services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
 await copyModule('services/feature-identity.js', 'services/feature-identity.js');
@@ -660,7 +660,7 @@ featurePanZoom.disposePanZoom();
 completeCase('Feature action dispose removes delegated listeners and lifecycle subscription');
 
 const featureDomSource = await readFile(
-  join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-dom.js'),
+  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'feature-dom.js'),
   'utf8'
 );
 assert.doesNotMatch(featureDomSource, /markCursor|style\.cursor\s*=\s*['"]pointer['"]/);
@@ -673,7 +673,7 @@ const cssFeatureSelector = cursorRule[1]
   .split(',')
   .map((selector) => selector.trim())
   .join(', ');
-const { FEATURE_SELECTOR } = await import(pathToFileURL(join(tempDir, 'app', 'feature-dom.js')));
+const { FEATURE_SELECTOR } = await import(pathToFileURL(join(tempDir, 'services', 'feature-dom.js')));
 assert.equal(cssFeatureSelector, FEATURE_SELECTOR);
 for (const excludedSelector of [
   'data-gbdraw-pairwise-match-id',

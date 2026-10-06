@@ -1,5 +1,5 @@
 // @ts-check
-import { resolveColorToHex } from './color-utils.js';
+import { resolveColorToHex } from '../app/color-utils.js';
 import { parseSpecificRules } from './file-imports.js';
 
 export const SPECIFIC_COLOR_FILE_OWNER = 'specific-color-file';

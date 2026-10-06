@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 const { buildBulkLabelProjection } = await import(
-  '../../gbdraw/web/js/app/feature-editor/label-override-table.js'
+  '../../gbdraw/web/js/services/label-override-table.js'
 );
 
 const metrics = [];

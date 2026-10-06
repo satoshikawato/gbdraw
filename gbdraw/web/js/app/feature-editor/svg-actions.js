@@ -35,7 +35,7 @@ import {
   getFeatureFillElements,
   getFeatureIdentity,
   normalizeFeatureIdentity
-} from '../feature-dom.js';
+} from '../../services/feature-dom.js';
 
 export {
   FEATURE_ID_ATTRIBUTE,

@@ -15,7 +15,7 @@ import {
   normalizeOptionalText
 } from './track-slot-display.js';
 import { featureSlotEdits } from './track-slot-edits.js';
-import { requireCurrentLinearTrackLayout } from './current-option-values.js';
+import { requireCurrentLinearTrackLayout } from '../services/current-option-values.js';
 import { parseOptionalPixel, validateCustomTrackPlan } from './track-slot-validation.js';
 import { visibleFeatureUnderlaysForState } from '../utils/feature-rendering.js';
 

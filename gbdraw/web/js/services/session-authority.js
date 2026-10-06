@@ -4,7 +4,7 @@ import { validateComparisonWarnings } from './comparison-warnings.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
 import { validateWebFileBindings } from './session-resource-backing.js';
 import { validateCurrentWriterActiveConfig, validateAlignmentResetReceiptShape } from './session-active-config-contract.js';
-import { migrateLegacyLinearLabelVisibility } from '../app/linear-label-visibility.js';
+import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
 import { canonicalFeatureOverrides, validateFeatureIdentityNotices } from './feature-placement.js';
 import { RENDERED_ID_FEATURE_EDIT_FIELDS, migrateSessionFeaturePlacements } from './feature-edit-migration.js';

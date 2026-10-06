@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { FeatureCatalogAdmission } from './feature-catalog.js' */
-import { FEATURE_SELECTOR, filterFeatureFillTargets, getFeatureIdentity } from '../app/feature-dom.js';
+import { FEATURE_SELECTOR, filterFeatureFillTargets, getFeatureIdentity } from './feature-dom.js';
 import {
   getAllFeatureLegendGroups,
   getLegendEntrySwatch as legendSwatch,

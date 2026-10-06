@@ -24,7 +24,7 @@ import {
   requireCurrentProteinBlastpMaxHits,
   requireCurrentProteinBlastpMode,
   requireCurrentWebStateFieldNames
-} from '../../gbdraw/web/js/app/current-option-values.js';
+} from '../../gbdraw/web/js/services/current-option-values.js';
 
 assert.equal(requireCurrentCircularMultiRecordSizeMode(), 'auto');
 assert.equal(requireCurrentCircularMultiRecordSizeMode('linear'), 'linear');

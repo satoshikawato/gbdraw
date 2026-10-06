@@ -72,7 +72,7 @@ import {
 } from './track-slot-validation.js';
 import {
   normalizeCollinearSearchScope
-} from './losat-normalization.js';
+} from '../services/losat-normalization.js';
 import { buildRunInfo, buildSourceRecipe, summarizeLosatRuntimes } from './run-info.js';
 import {
   buildLosatJobSpecs,
@@ -86,7 +86,7 @@ import {
   serializeLabelWhitelistRules,
   serializeQualifierPriorityRules,
   serializeSpecificRules
-} from './file-imports.js';
+} from '../services/file-imports.js';
 import { rebindRuleColorOverrides } from './rule-matching.js';
 import {
   pruneUnmatchedFeatureOverrides,
@@ -94,8 +94,8 @@ import {
 } from './feature-visibility.js';
 import {
   normalizeDefinitionLineStyleState
-} from './definition-line-style-state.js';
-import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
+} from '../services/definition-line-style-state.js';
+import { requireLinearLabelVisibilityMode } from '../services/linear-label-visibility.js';
 import { createZipBlob } from '../utils/zip.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
@@ -126,7 +126,7 @@ import {
   requireCurrentProteinBlastpCandidateLimit,
   requireCurrentProteinBlastpMaxHits,
   requireCurrentProteinBlastpMode
-} from './current-option-values.js';
+} from '../services/current-option-values.js';
 import {
   circularDiscoveryForInput,
   discoverGffFastaRecords,

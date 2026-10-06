@@ -107,7 +107,7 @@ assert.deepEqual(roundtrip(primary).secondary, [{ code: 'CLEANUP_FAILED', stage:
 
 // Existing native validators feed finite corrections; changing a validator's
 // failure template must be detected rather than silently becoming UNKNOWN.
-const options = await import('../../gbdraw/web/js/app/current-option-values.js');
+const options = await import('../../gbdraw/web/js/services/current-option-values.js');
 for (const [validator, input, field, reason] of [
   ['requireCurrentProteinBlastpMaxHits', 0, 'protein_blastp_max_hits', 'POSITIVE_INTEGER'],
   ['requireCurrentProteinBlastpCandidateLimit', -1, 'protein_blastp_candidate_limit', 'POSITIVE_OR_AUTO'],

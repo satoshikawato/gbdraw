@@ -7,10 +7,10 @@ import {
   parseColorTable,
   parsePriorityRules,
   parseWhitelistRules
-} from './file-imports.js';
+} from '../services/file-imports.js';
 import {
   prepareSpecificColorImport
-} from './specific-color-rules.js';
+} from '../services/specific-color-rules.js';
 import {
   normalizeCircularPlotTitlePosition
 } from './plot-title-position.js';

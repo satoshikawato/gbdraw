@@ -1,12 +1,12 @@
 // @ts-check
 /**
- * @import { AnnotationRecordSelector } from './target-actions.js'
+ * @import { AnnotationRecordSelector } from '../../services/annotation-state.js'
  */
 import {
   annotationRecordSelectorFromValue,
   parseAnnotationRecordSelectorValue
 } from './target-actions.js';
-import { buildDisambiguatedRecordEntries, formatRecordLength } from '../record-options.js';
+import { buildDisambiguatedRecordEntries, formatRecordLength } from '../../services/record-options.js';
 import { normalizeUserFacingError } from '../../services/error-normalization.js';
 
 /**

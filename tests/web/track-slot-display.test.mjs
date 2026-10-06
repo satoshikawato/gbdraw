@@ -22,6 +22,11 @@ await cp(
   join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'error-normalization.js'),
   join(tempRoot, 'services', 'error-normalization.js')
 );
+// linear-track-slots.js reads the current option values.
+await cp(
+  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'current-option-values.js'),
+  join(tempRoot, 'services', 'current-option-values.js')
+);
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
 const { findTrackSlotGeometry } = await import(

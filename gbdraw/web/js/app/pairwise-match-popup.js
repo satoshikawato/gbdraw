@@ -10,7 +10,7 @@ import { readRecordSourceSpan, recordSourceInterval } from './record-source-coor
 import {
   groupMetadataScopeLabel,
   normalizeGroupMetadataScope
-} from './losat-normalization.js';
+} from '../services/losat-normalization.js';
 import {
   RENDERED_FEATURE_ID_KEYS,
   STABLE_FEATURE_ID_KEYS,

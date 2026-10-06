@@ -12,7 +12,7 @@ import {
   migrateSessionFeatureEdits
 } from '../../gbdraw/web/js/services/feature-edit-migration.js';
 import { canonicalFeatureOverrides } from '../../gbdraw/web/js/services/feature-placement.js';
-import { annotationOptionsPayload, normalizeAnnotationSets } from '../../gbdraw/web/js/app/annotations/state.js';
+import { annotationOptionsPayload, normalizeAnnotationSets } from '../../gbdraw/web/js/services/annotation-state.js';
 
 const fixture = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url))));
 // Migrated rows name the mode of the Session's diagram (R2).

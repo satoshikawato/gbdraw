@@ -1,6 +1,6 @@
 // @ts-check
-import { normalizeSpecificRuleColor, resolveColorToHex } from './color-utils.js';
-import { diagnosticError } from '../services/error-normalization.js';
+import { normalizeSpecificRuleColor, resolveColorToHex } from '../app/color-utils.js';
+import { diagnosticError } from './error-normalization.js';
 import { normalizeTsvCell } from '../utils/tsv-cell.js';
 
 const SPECIFIC_RULE_COLUMNS = Object.freeze(['feature_type', 'qualifier', 'pattern', 'color']);
