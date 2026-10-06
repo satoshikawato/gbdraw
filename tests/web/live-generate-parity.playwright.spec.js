@@ -129,13 +129,22 @@ const history = async (page, step) => {
 const FL1_OFF = { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' };
 const BATCH_0004_OFF = { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '_0004$', action: 'off' };
 const BATCH_CDS_OFF = { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '.', action: 'off' };
+// The Legend row of a type with one feature (the Legend editor's color control).
+const legendRowColor = async (page, caption, color) => {
+  await page.evaluate(({ row, value }) => {
+    const app = window.__GBDRAW_APP__;
+    return app.updateLegendEntryColor(app.legendEntries.findIndex((entry) => entry.caption === row), value);
+  }, { row: caption, value: color });
+  await settleLive(page);
+};
+
 const FL1_ALPHA = { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'alpha' };
 
 // The edit kinds. Each appears at least once in the matrix.
 const KINDS = [
   'visibility rule add', 'visibility rule action', 'visibility rule delete', 'feature Off', 'feature On',
   'label text', 'label Off', 'label On', 'color rule add', 'color rule color', 'color rule delete', 'feature color',
-  'undo', 'redo', 'Result switch'
+  'undo', 'redo', 'Result switch', 'legend color'
 ];
 
 // The matrix: one edit kind in one set of states, with the setup before the
@@ -318,6 +327,23 @@ const CASES = [
     states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
     setup: async (page) => { await addColorRule(page, FL1_ALPHA); await history(page, 'undo'); },
     run: (page) => history(page, 'redo')
+  },
+  // OV-61: a rule row recolored after a popup edit colored its only feature.
+  // The rule is the latest explicit color; the popup's Legend color does not
+  // come back at Generate.
+  {
+    kind: 'legend color',
+    edit: 'Legend row color of a feature colored in the popup',
+    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'unbound' },
+    setup: (page) => popupEdit(page, { type: 'repeat_region' }, { fill: '#e63946' }),
+    run: (page) => legendRowColor(page, 'repeat_region', '#f4a261')
+  },
+  {
+    kind: 'color rule color',
+    edit: 'Specific color rule color change of a feature colored in the popup',
+    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'bound' },
+    setup: (page) => popupEdit(page, { type: 'repeat_region' }, { fill: '#e63946' }),
+    run: (page) => appAction(page, 'setSpecificRuleField', 0, 'color', '#f4a261')
   },
   {
     kind: 'Result switch',
