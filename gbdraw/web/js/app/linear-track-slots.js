@@ -1548,16 +1548,14 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
       heightPx,
       spacingAfterPx,
       baseYOffsetPx: 0,
-      finalYOffsetPx: 0,
-      source: 'estimated'
+      finalYOffsetPx: 0
     };
   };
 
   // Only a rendered row has resolved geometry; a disabled row shows the estimate.
   const linearTrackSlotDisplayGeometry = (slot) => {
     const resolved = slot?.enabled !== false ? resolvedLinearSlotGeometry(slot?.id) : null;
-    if (resolved) return { ...resolved, source: 'resolved' };
-    return estimateLinearSlotGeometry(slot);
+    return resolved || estimateLinearSlotGeometry(slot);
   };
 
   // The row index is part of the shared template call; Linear geometry is
@@ -1568,7 +1566,7 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     const value = field === 'height'
       ? geometry.heightPx
       : (field === 'spacing' ? geometry.spacingAfterPx : null);
-    const autoText = formatPxAuto(value, geometry.source);
+    const autoText = formatPxAuto(value);
     if (normalizeRenderer(slot?.renderer) === 'features') {
       return autoText
         ? autoText.replace('(auto)', '(auto; varies by record)')
