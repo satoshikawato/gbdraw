@@ -12,6 +12,10 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Depth tracks (web app): Undo of a removed **Depth TSV** file or Depth track
+  now shows the Depth track with its tick text (for example `0.13x`) on the
+  current Result, as Generate draws it. The track came back without its ticks
+  until Generate.
 - Feature Visibility rules (web app): adding, editing, moving, or deleting a
   rule in **Features → Feature Visibility** now updates the current Result at
   once, as Generate draws it, like the other visibility edits. The change used
