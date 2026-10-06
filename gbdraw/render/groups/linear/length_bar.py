@@ -7,6 +7,7 @@ from svgwrite.container import Group
 from svgwrite.shapes import Line
 from svgwrite.text import Text
 
+from ....canvas import LinearCanvasConfigurator
 from ....core.text import calculate_bbox_dimensions
 from ....config.models import GbdrawConfig
 from ....layout.spatial import Aabb
@@ -101,7 +102,7 @@ class LengthBarGroup:
         fig_width: int,
         alignment_width: float,
         longest_genome: int,
-        canvas_config: dict,
+        canvas_config: LinearCanvasConfigurator,
         group_id="length_bar",
         *,
         cfg: GbdrawConfig,

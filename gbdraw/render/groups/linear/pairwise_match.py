@@ -4,7 +4,7 @@
 from gbdraw.exceptions import ComparisonIdentityError
 
 import math
-from typing import Dict, Sequence, Tuple
+from typing import Dict, Sequence, cast
 
 from pandas import DataFrame
 from svgwrite.container import Group
@@ -57,7 +57,8 @@ def _required_attribute_text(value: object) -> str:
 
 def _row_float(row: object, name: str, default: float = 0.0) -> float:
     try:
-        return float(_row_value(row, name, default))
+        # Non-numeric values still raise TypeError/ValueError, handled below.
+        return float(cast("str | float", _row_value(row, name, default)))
     except (TypeError, ValueError):
         return float(default)
 
@@ -192,19 +193,13 @@ class PairWiseMatchGroup:
             self.match_group.attribs["data-subject-row"] = self.subject_placement.row
         self.add_elements_to_group()
 
-    def calculate_query_subject_offsets(self) -> Tuple[float, float]:
+    def calculate_query_subject_offsets(self) -> None:
         """
         Calculates the horizontal offsets for the query and subject sequences.
 
         This method determines the starting x-coordinates for the query and subject in the alignment,
-        ensuring they are centered if specified in the configuration.
-
-        Args:
-            query_id (str): Identifier for the query sequence.
-            subject_id (str): Identifier for the subject sequence.
-
-        Returns:
-            Tuple[float, float]: The x-coordinate offsets for the query and subject sequences.
+        ensuring they are centered if specified in the configuration. The results are
+        stored on ``self`` (``query_offset_x``, ``subject_offset_x`` and the alignment offsets).
         """
         if self.query_placement is not None and self.subject_placement is not None:
             self.query_offset_x = 0.0
@@ -265,16 +260,16 @@ class PairWiseMatchGroup:
             feature_indexes = []
             for part in index_parts:
                 try:
-                    feature_index = int(part)
+                    parsed_index = int(part)
                 except (TypeError, ValueError):
                     raise ComparisonIdentityError(
                         "Comparison source feature index must be a nonnegative integer.", reason="SOURCE_INDEX"
                     ) from None
-                if feature_index < 0 or str(feature_index) != part:
+                if parsed_index < 0 or str(parsed_index) != part:
                     raise ComparisonIdentityError(
                         "Comparison source feature index must be a nonnegative integer.", reason="SOURCE_INDEX"
                     )
-                feature_indexes.append(feature_index)
+                feature_indexes.append(parsed_index)
         else:
             feature_indexes = [None] * len(view_ids)
 
@@ -718,7 +713,7 @@ class PairWiseMatchGroup:
                     if transforms is not None else None)
             projected = pair is not None and any(t.start_coordinate is not None for t in pair)
             endpoints = (project_match_endpoints((row.qstart, row.qend, row.sstart, row.send), pair)
-                         if projected else (None,))
+                         if projected and pair is not None else (None,))
             for fragment_index, fragment in enumerate(endpoints):
                 match_path = self.generate_linear_match_path(row, match_index=index, endpoints=fragment)
                 if projected:

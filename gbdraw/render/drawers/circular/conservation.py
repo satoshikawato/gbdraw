@@ -126,8 +126,8 @@ class ConservationDrawer:
                 "data-reference-record-id": _row_text(row, "reference_record_id"),
             }
             projected = record_transform is not None and record_transform.start_coordinate is not None
-            spans = ((_row_float(row, "draw_start"), _row_float(row, "draw_end")),)
-            if projected:
+            spans: tuple[tuple[float, float], ...] = ((_row_float(row, "draw_start"), _row_float(row, "draw_end")),)
+            if projected and record_transform is not None:
                 metadata[f"data-{_row_text(row, 'reference_side')}-record-index"] = record_index
                 spans = tuple((part.display_start, part.display_end) for part in
                               record_transform.project_interval(SourceInterval(int(spans[0][0]), int(spans[0][1]))))
