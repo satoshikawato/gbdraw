@@ -391,7 +391,7 @@ const SYNTHETIC_BASELINES = SYNTHETIC_BASELINES_GZIP
 test('compact pairwise payloads and hover rows match the accepted semantic baselines', () => {
   const captured = {};
   for (const [name, fixture] of Object.entries(buildSyntheticCases())) {
-    const payload = popupModule.buildPairwiseMatchPayload(fixture.element, fixture.options);
+    const payload = popupModule.buildMatchPopupPayload(fixture.element, fixture.options);
     const featureTokens = new WeakMap(
       fixture.featureReferences.map((feature, index) => [feature, `${name}:${index}`])
     );
@@ -426,7 +426,7 @@ test('lightweight hover summaries match accepted compact payload-derived rows', 
   const fixtures = buildSyntheticCases();
   for (const [name, fixture] of Object.entries(fixtures)) {
     if (name === 'orthogroup') continue;
-    const payload = popupModule.buildPairwiseMatchPayload(fixture.element, fixture.options);
+    const payload = popupModule.buildMatchPopupPayload(fixture.element, fixture.options);
     assert.deepStrictEqual(
       popupModule.buildPairwiseMatchHoverSummary(fixture.element, fixture.options),
       expectedHoverSummary(payload),
@@ -446,7 +446,7 @@ test('lightweight hover summaries match accepted compact payload-derived rows', 
     sourceFeatures: state.sourceFeatures,
     orthogroups: [state.globalGroup]
   };
-  const orthogroupPayload = popupModule.buildPairwiseMatchPayload(
+  const orthogroupPayload = popupModule.buildMatchPopupPayload(
     orthogroupElement,
     orthogroupOptions
   );
@@ -580,7 +580,7 @@ test('one full payload request traverses each input once and builds one FASTA pa
   });
   const metrics = createPairwiseMetrics();
   globalThis.__GBDRAW_PAIRWISE_TEST_METRICS__ = metrics;
-  const payload = instrumentedPopupModule.buildPairwiseMatchPayload(element, {
+  const payload = instrumentedPopupModule.buildMatchPopupPayload(element, {
     featureLookup,
     sourceFeatures,
     orthogroups,
@@ -628,7 +628,7 @@ test('source contracts keep heavy work out of hover and migrated inner loops', a
   assert.doesNotMatch(activateSource, /buildMatchPayload|ensureFeatureLookup/);
 
   const payloadStart = popupSource.indexOf('export const buildMatchPopupPayload =');
-  const payloadEnd = popupSource.indexOf('// Compatibility export retained', payloadStart);
+  const payloadEnd = popupSource.indexOf('const formatPairwiseMatchHoverRows =', payloadStart);
   const payloadSource = popupSource.slice(payloadStart, payloadEnd);
   assert.equal(
     (payloadSource.match(/createPairwisePayloadContext\s*\(/g) || []).length,
@@ -762,7 +762,7 @@ test('exact large-fixture payloads retain canonical digests, structure, and Feat
   assert.ok(exactLater, 'the exact fixture has no later distinct-block target');
   const captured = {};
   for (const [name, target] of [['first', exactFirst], ['laterDistinctBlock', exactLater]]) {
-    const payload = popupModule.buildPairwiseMatchPayload(target.element, exactOptions);
+    const payload = popupModule.buildMatchPopupPayload(target.element, exactOptions);
     assert.deepStrictEqual(
       popupModule.buildPairwiseMatchHoverSummary(target.element, exactOptions),
       expectedHoverSummary(payload),

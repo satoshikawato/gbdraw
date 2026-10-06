@@ -1551,10 +1551,6 @@ export const buildMatchPopupPayload = (
   };
 };
 
-// Compatibility export retained for callers and older tests.
-export const buildPairwiseMatchPayload = (element, options = {}) =>
-  buildMatchPopupPayload(element, options);
-
 const formatPairwiseMatchHoverRows = ({
   matchKind,
   identity,

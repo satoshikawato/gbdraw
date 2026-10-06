@@ -80,7 +80,7 @@ await writeFile(
   [
     'export const PAIRWISE_MATCH_SELECTOR = "path[data-gbdraw-pairwise-match-id]";',
     'export const buildPairwiseMatchHoverSummary = (element) => ({ id: element.getAttribute("data-gbdraw-pairwise-match-id"), title: "Pairwise match", subtitle: "", fill: "#94a3b8", rows: [] });',
-    'export const buildPairwiseMatchPayload = () => null;'
+    'export const buildMatchPopupPayload = () => null;'
   ].join('\n'),
   'utf8'
 );
