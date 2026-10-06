@@ -1,3 +1,4 @@
+// @ts-check
 import {
   applyFeatureVisibilityOverrideChanges,
   buildFeatureVisibilityChanges,
@@ -9,6 +10,8 @@ import {
   normalizeVisibilityMode,
   removeEditorQualifierFeatureVisibilityRule,
   resolveFeatureDrawn,
+  resultLegendSources,
+  sameLegendSources,
   serializeFeatureVisibilityRules,
   setFeatureVisibilityOverride,
   upsertEditorQualifierFeatureVisibilityRule,
@@ -23,6 +26,26 @@ import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-
 import { featureIdentityKeyOf } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
 
+/**
+ * The label owner's reaction the composition root registers once that owner exists.
+ * @typedef {object} VisibilityActionsPorts
+ * @property {(options?: { reflow?: boolean, rerender?: boolean }) => boolean} applyFeatureVisibilityToLabels
+ *   Projects the stored visibility overrides onto the labels and queues the label reflow.
+ */
+
+/**
+ * @typedef {object} FeatureVisibilityActionsOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {(changes: { featureId: string, mode: string }[], options?: { reason?: string }) => boolean} applyVisibilityPreviewChanges
+ *   The feature SVG owner's preview of visibility changes.
+ * @property {VisibilityActionsPorts} ports
+ * @property {(index: number) => any} selectResult The preview owner's selection of the Result a History command targets.
+ * @property {import('../rule-matching.js').RulePreparation | null} [rulePreparation]
+ * @property {() => ({ diagramOptions?: Record<string, any> } | null)} [getCommittedRequest]
+ *   The committed canonical request (Python owns the option fields, R7).
+ */
+
+/** @param {FeatureVisibilityActionsOptions} options */
 export const createFeatureVisibilityActions = ({
   state,
   // R13: the feature SVG owner's preview of visibility changes.
@@ -204,15 +227,26 @@ export const createFeatureVisibilityActions = ({
 
   const isRuleScope = (scope) => scope?.id === 'product' || scope?.id === 'protein_id';
 
+  // OV-42 (Owner decision 2026-10-06, option A): whether a Result's Legend
+  // derives from other features than Python drew at the last render: the
+  // Legend source of the features each Result's catalog draws against the
+  // source of the features the resolver draws now, under the current rules.
+  // Python redraws the Legend in the automatic rerender.
+  const legendSourceChanged = (context) => !sameLegendSources(
+    resultLegendSources(state, context, { asRendered: true }),
+    resultLegendSources(state, context)
+  );
+
   // The live projection of what the label rerender and Generate draw (R3): a
   // feature the displayed Result draws shows the resolver's answer, and an
   // unknown answer leaves it as it is. A feature the Result does not draw and
   // the resolver draws needs geometry the Result does not have, so the action
   // asks for the rerender, which draws what Generate draws (R-5); so does an
-  // unknown answer for a feature the action names (`targeted`). The resolver
-  // reads Python's rule matches, so an action prepares them first
-  // (`prepareDrawn`).
-  const drawnChanges = (features, { targeted = false } = {}) => {
+  // unknown answer for a feature the action names (`targeted`), and, unless
+  // the caller declines it (`legend`), a changed Legend source of any Result
+  // (OV-42). The resolver reads Python's rule matches, so an action prepares
+  // them first (`prepareDrawn`).
+  const drawnChanges = (features, { targeted = false, legend = true } = {}) => {
     const context = featureDrawnContext(state, { diagramOptions: getCommittedRequest()?.diagramOptions });
     const catalogFeatures = resultCatalogFeatures(state);
     let needsRerender = false;
@@ -227,7 +261,7 @@ export const createFeatureVisibilityActions = ({
       const featureId = featureSvgId(shown);
       return featureId && drawn !== null ? [{ featureId, mode: drawn ? 'on' : 'off' }] : [];
     });
-    return { changes, needsRerender };
+    return { changes, needsRerender: needsRerender || (legend && legendSourceChanged(context)) };
   };
   // Every catalog feature of the displayed Result, as drawn where it is drawn.
   const displayedFeatures = () => {
@@ -239,9 +273,13 @@ export const createFeatureVisibilityActions = ({
       : uniqueFeaturesBySvgId(Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []);
   };
   // Applies the projection; returns whether a mounted element changed and
-  // whether the rerender must draw a feature.
-  const projectDrawn = (features, { targeted = false, ...options } = {}) => {
-    const { changes, needsRerender } = drawnChanges(features, { targeted });
+  // whether the rerender must draw a feature or the Legend.
+  /**
+   * @param {Record<string, any>[]} features
+   * @param {{ targeted?: boolean, legend?: boolean, reason?: string }} [projection]
+   */
+  const projectDrawn = (features, { targeted = false, legend = true, ...options } = {}) => {
+    const { changes, needsRerender } = drawnChanges(features, { targeted, legend });
     return { updated: applyVisibilityPreviewChanges(changes, options), needsRerender };
   };
   const prepareDrawn = () => rulePreparation?.prepareDrawn?.();
@@ -252,13 +290,13 @@ export const createFeatureVisibilityActions = ({
     clickedFeature.value.featureVisibility = getFeatureVisibilityOverride(featureOverrides, clicked);
   };
 
-  const nextFrame = () => new Promise((resolve) => {
+  const nextFrame = () => /** @type {Promise<void>} */ (new Promise((resolve) => {
     if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
       window.requestAnimationFrame(() => resolve());
     } else {
       setTimeout(resolve, 0);
     }
-  });
+  }));
 
   const ensureCommandTargetResult = async (resultIndex, generationKey) => {
     if (String(resultGenerationKey?.value ?? '') !== String(generationKey ?? '')) return false;
@@ -348,9 +386,9 @@ export const createFeatureVisibilityActions = ({
   // nothing.
   let projectionRun = 0;
   let ruleTableError = null;
-  const runProjection = async () => {
+  const runProjection = async ({ legend = true } = {}) => {
     const run = ++projectionRun;
-    const prepared = await prepareDrawn();
+    const prepared = /** @type {any} */ (await prepareDrawn());
     if (run !== projectionRun) return null;
     if (prepared?.error) {
       if (!state.errorLog) return null;
@@ -360,20 +398,20 @@ export const createFeatureVisibilityActions = ({
     }
     if (ruleTableError && state.errorLog?.value === ruleTableError) state.errorLog.value = null;
     ruleTableError = null;
-    return projectDrawn(displayedFeatures());
+    return projectDrawn(displayedFeatures(), { legend });
   };
 
   // The one projection of this domain (R3), which History apply, the display
   // of a Result, and Load Feature Edits TSV call through
   // `projectMountedEditorIntent`. The label of a feature it hides or shows
   // follows the feature (F-3, OV-35). A History step or a loaded table
-  // (`rerender`) that draws a feature the Result does not draw reruns the
-  // rerender, as the action did; a Result display does not, so a feature
-  // Python does not draw cannot repeat it. A loaded table (`reflow`) also
-  // places the labels, as a visibility edit does. Returns whether the Result
-  // changed.
+  // (`rerender`) that draws a feature the Result does not draw, or changes a
+  // Legend source, reruns the rerender, as the action did; a Result display
+  // does not, so a feature Python does not draw cannot repeat it. A loaded
+  // table (`reflow`) also places the labels, as a visibility edit does.
+  // Returns whether the Result changed.
   const projectFeatureVisibility = async ({ rerender = false, reflow = false } = {}) => {
-    const projection = await runProjection();
+    const projection = await runProjection({ legend: rerender });
     if (!projection) return false;
     const drawsMissing = rerender && projection.needsRerender;
     if (projection.updated || reflow || drawsMissing) followLabels({ reflow, rerender: drawsMissing });

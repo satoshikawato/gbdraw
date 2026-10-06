@@ -16,12 +16,25 @@ import math
 from pathlib import Path
 import re
 import types
-from typing import Any, Literal, Mapping, Sequence, Union, get_args, get_origin, get_type_hints
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    Mapping,
+    NoReturn,
+    Sequence,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+    get_type_hints,
+    overload,
+)
 
-from Bio import SeqIO  # type: ignore[reportMissingImports]
-from pandas import DataFrame, read_csv  # type: ignore[reportMissingImports]
+from Bio import SeqIO
+from pandas import DataFrame, read_csv
 
-from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
     CollinearityResult,
@@ -29,7 +42,7 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
 )
 from gbdraw.analysis.conservation import _default_label as _default_conservation_label
 from gbdraw.analysis.ortholog_paths import OrthologPathCollection
-from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.protein_colinearity import (
     OrthogroupMember,
     OrthogroupNameCandidate,
     OrthogroupResult,
@@ -39,7 +52,7 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     OrthologPath,
     normalize_protein_blastp_mode,
 )
-from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from gbdraw.config.models import GbdrawConfig
 from gbdraw.comparisons.losat_jobs import record_source_paths
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import FeatureOverride
@@ -115,6 +128,12 @@ from .layout.similarity_alignment import (
     SimilarityAlignmentPlan,
     SimilarityAlignmentReference,
 )
+
+
+if TYPE_CHECKING:
+    from gbdraw.annotations.models import RegionTarget
+
+    from .api.options import LosatpMode
 
 
 CANONICAL_REQUEST_SCHEMA = 9
@@ -197,7 +216,7 @@ _TOP_LEVEL_FIELDS = frozenset(
 _TOP_LEVEL_FIELDS_V5 = _TOP_LEVEL_FIELDS | {"grouping"}
 _DEFAULT_CIRCULAR_OPTIONS = CircularDiagramOptions()
 _DEFAULT_LINEAR_OPTIONS = LinearDiagramOptions()
-_SHARED_OPTION_WRONG_MODE_DEFAULTS = {
+_SHARED_OPTION_WRONG_MODE_DEFAULTS: dict[str, dict[str, object]] = {
     "circular": {
         "depth_track_heights": None,
         "pairwise_match_style": "ribbon",
@@ -231,7 +250,7 @@ _LEGACY_SPARSE_FEATURE_TYPES = (
     "misc_RNA",
     "repeat_region",
 )
-_LEGACY_SPARSE_CONFIG_OVERRIDES = {
+_LEGACY_SPARSE_CONFIG_OVERRIDES: dict[str, dict[str, object]] = {
     "circular": {
         "canvas.show_gc": True,
         "canvas.show_skew": True,
@@ -427,7 +446,10 @@ _PROTEIN_SETTINGS_WIRE: tuple[tuple[str, str, str], ...] = (
 # Schemas 1-7 also stored the retired alignment target in the settings.
 _LEGACY_ALIGNMENT_SETTING = "alignOrthogroupFeature"
 _OPTIONAL_PROTEIN_SETTINGS = frozenset({"collinearInferOrthogroups"})
-_WIRE_LOSATP_MODES = {wire: typed for typed, wire in LOSATP_MODE_WIRE.items()}
+_WIRE_LOSATP_MODES = cast(
+    "dict[str, LosatpMode | Literal['none']]",
+    {wire: typed for typed, wire in LOSATP_MODE_WIRE.items()},
+)
 # Settings of a LOSATP search that has not been configured.
 _UNSET_LOSAT_SEARCH = LosatSearchOptions(program="losatp", losatp_mode="none")
 # Circular ring LOSAT intent (encoded only after the planner resolves it) and
@@ -705,8 +727,9 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
             )
     else:
         _validate_dataclass_contract(request.output, path="output", error="encode")
-    if getattr(request, "layout", None) is not None:
-        _validate_dataclass_contract(request.layout, path="layout", error="encode")
+    layout = getattr(request, "layout", None)
+    if layout is not None:
+        _validate_dataclass_contract(layout, path="layout", error="encode")
 
     resources = _ResourceBuilder()
     mode: Literal["circular", "linear"] = (
@@ -858,6 +881,7 @@ def _decode_canonical_request(
             )
 
     if mode == "linear":
+        assert isinstance(options, LinearDiagramOptions)
         output = _decode_output(top["output"], output_directory=output_directory)
         if schema == 1:
             layout_payload = _object(top["layout"], path="renderRequest.layout")
@@ -887,6 +911,7 @@ def _decode_canonical_request(
             )
         return request
 
+    assert isinstance(options, CircularDiagramOptions)
     layout = _decode_circular_layout(top["layout"], schema=schema)
     if schema in {1, 2}:
         grouping = "grid" if layout is not None or len(records) > 1 else "single"
@@ -1010,7 +1035,8 @@ def _source_file_transforms(
     found = [_source_file_transform(record) for record in records]
     if None in found or not (per_record or all(item == (None, False) for item in found)):
         return None
-    return found  # type: ignore[return-value]
+    # None is not in found here.
+    return cast("list[tuple[tuple[int, int] | None, bool]]", found)
 
 
 def _source_region(
@@ -1072,7 +1098,10 @@ def _encode_records(
     transformed: dict[int, RecordInput] = {}
     for paths, members in groups.items():
         first = members[0] + 1
-        members_records = [records[position].source.record for position in members]  # type: ignore[union-attr]
+        # Only in-memory sources were grouped above.
+        members_records = [
+            cast(InMemoryRecordSource, records[position].source).record for position in members
+        ]
         found = _source_file_transforms(members_records, paths, per_record=per_record)
         if found is not None:
             file_resources = _SOURCE_FILE_RESOURCES[
@@ -1239,6 +1268,7 @@ def _decode_record(
         item["source"], path=f"{path}.source", required={"kind"}, exact=False
     )
     kind = source_payload["kind"]
+    source: GenBankInputSource | GffFastaInputSource
     if kind == "genbank":
         _require_exact_fields(
             source_payload, path=f"{path}.source", required={"kind", "resourceId"}
@@ -1517,8 +1547,9 @@ def _encode_layout(request: DiagramRequest) -> dict[str, Any]:
                 }
                 for translation in request.layout.record_translations
             ],
+            # encode_canonical_request rejects an unresolved reference first.
             "similarityAlignment": _encode_similarity_alignment_plan(
-                request.similarity_alignment
+                cast("SimilarityAlignmentPlan | None", request.similarity_alignment)
             ),
         }
     if not isinstance(request, CircularDiagramRequest) or request.layout is None:
@@ -1684,6 +1715,7 @@ def _encode_diagram_options(
     record_count: int,
     resources: _ResourceBuilder,
 ) -> dict[str, Any]:
+    default_options: CircularDiagramOptions | LinearDiagramOptions
     if isinstance(options, CircularDiagramOptions):
         default_options = _DEFAULT_CIRCULAR_OPTIONS
     elif isinstance(options, LinearDiagramOptions):
@@ -1721,7 +1753,8 @@ def _encode_diagram_options(
         if name in _COMPARISON_FIELDS or name in _ALL_DEPTH_INPUT_FIELDS or name in _PLACEMENT_INPUT_FIELDS:
             continue
         if name == "conservation_search_results":
-            if getattr(options, name):
+            assert isinstance(options, CircularDiagramOptions)
+            if options.conservation_search_results:
                 # Planner-resolved ring rows are stored as the Web stores them.
                 result["conservationBlastFiles"] = [
                     {
@@ -1791,7 +1824,7 @@ def _decode_diagram_options(
     if schema in {1, 2}:
         payload = _migrate_legacy_feature_visibility_fields(payload)
     payload = dict(payload)
-    placements = ()
+    placements: tuple[FeaturePlacementOverride, ...] = ()
     if schema >= DISPLAY_PLACEMENT_SCHEMA:
         if not isinstance(payload.get("featurePlacements"), list):
             raise CanonicalRequestDecodingError("diagramOptions.featurePlacements must be an array.")
@@ -1799,7 +1832,7 @@ def _decode_diagram_options(
                            for row in payload.pop("featurePlacements"))
         for row in placements:
             row.target.validate_mode(mode)
-    overrides = ()
+    overrides: tuple[FeatureOverride, ...] = ()
     if schema >= FEATURE_OVERRIDE_SCHEMA:
         if not isinstance(payload.get("featureOverrides"), list):
             raise CanonicalRequestDecodingError("diagramOptions.featureOverrides must be an array.")
@@ -2166,8 +2199,10 @@ def _legacy_mode_label_scopes(
         raise CanonicalRequestDecodingError(
             f"{path} contains Linear-only label policy {normalized!r}."
         )
-    circular_scope = "outer" if normalized == "all" else "none"
-    return circular_scope, normalized  # type: ignore[return-value]
+    circular_scope: Literal["none", "outer"] = "outer" if normalized == "all" else "none"
+    return circular_scope, cast(
+        'Literal["none", "all", "first", "orthogroup_top"]', normalized
+    )
 
 
 def _retired_config_override(overrides: Mapping[str, Any]) -> str | None:
@@ -3096,6 +3131,7 @@ def _encode_annotations(value: object, *, resources: _ResourceBuilder) -> dict[s
         items = []
         for annotation in annotation_set.annotations:
             target = annotation.target
+            target_payload: dict[str, Any]
             if isinstance(target, CoordinateSpan):
                 target_payload = {
                     "kind": "coordinateSpan",
@@ -3188,6 +3224,7 @@ def _decode_annotations(
             )
             target_payload = _object(item["target"], path=f"{item_path}.target", required={"kind"}, exact=False)
             kind = target_payload["kind"]
+            target: RegionTarget
             if kind == "coordinateSpan":
                 _require_exact_fields(
                     target_payload,
@@ -3284,7 +3321,7 @@ def _encode_track_slot(
     *,
     kind: str,
 ) -> dict[str, Any]:
-    result = {"kind": kind}
+    result: dict[str, Any] = {"kind": kind}
     legacy_spacing = (
         slot.legacy_spacing
         if isinstance(slot, _InternalCircularTrackSlot)
@@ -3316,6 +3353,7 @@ def _encode_track_slot(
                 raw["style_override"] = _encode_annotation_style(raw["style_override"])
         result[_camel(item.name)] = _json_value(raw, path=f"trackSlot.{_camel(item.name)}")
     if legacy_spacing is not None:
+        assert isinstance(slot, CircularTrackSlot)
         if legacy_spacing.unit != "px":
             raise CanonicalRequestEncodingError(
                 "A legacy factor-based Circular spacing value can be replayed "
@@ -3333,6 +3371,26 @@ def _encode_track_slot(
             else legacy_spacing.value
         )
     return result
+
+
+@overload
+def _decode_track_slots(
+    value: object,
+    *,
+    mode: Literal["circular"],
+    schema: int,
+    path: str,
+) -> tuple[str | CircularTrackSlot, ...] | None: ...
+
+
+@overload
+def _decode_track_slots(
+    value: object,
+    *,
+    mode: Literal["linear"],
+    schema: int,
+    path: str,
+) -> tuple[str | LinearTrackSlot, ...] | None: ...
 
 
 def _decode_track_slots(
@@ -3380,7 +3438,7 @@ def _decode_track_slots(
                 legacy_spacing = (
                     decoded_spacing
                     if isinstance(decoded_spacing, ScalarSpec)
-                    else ScalarSpec.parse(decoded_spacing)
+                    else ScalarSpec.parse(str(decoded_spacing))
                 )
         if slot["kind"] != expected_kind:
             raise CanonicalRequestDecodingError(
@@ -3395,7 +3453,8 @@ def _decode_track_slots(
             if mode == "circular"
             else {"height", "spacing"}
         )
-        kwargs = {
+        # Wire values; _validate_dataclass_contract checks the constructed slot.
+        kwargs: dict[str, Any] = {
             name: (
                 _decode_scalar_if_needed(slot[key], path=f"{slot_path}.{key}")
                 if name in scalar_fields
@@ -3692,17 +3751,17 @@ def _encode_comparisons(
         )
     search = options.losat_search
     pairs = search.pairs if search is not None else None
-    mode = losatp_analysis_mode(search)
+    protein_mode = losatp_analysis_mode(search)
     settings = _encode_protein_settings(options)
     if (
-        mode != "none"
+        protein_mode != "none"
         or pairs is not None
         or settings != _encode_protein_settings(_DEFAULT_LINEAR_OPTIONS)
     ):
         result.append(
             {
                 "kind": "generatedProteinComparison",
-                "mode": mode,
+                "mode": protein_mode,
                 "pairs": [
                     {
                         "queryRecordIndex": int(pair[0]),
@@ -4444,7 +4503,7 @@ def _decode_typed_tree(
         ]
         return tuple(decoded) if origin is tuple else decoded
     if origin in {dict, Mapping, MappingABC}:
-        raw = _object(value, path=path)
+        raw_mapping = _object(value, path=path)
         key_hint, value_hint = args if len(args) == 2 else (str, Any)
         if key_hint is not str:
             raise CanonicalRequestDecodingError(
@@ -4457,7 +4516,7 @@ def _decode_typed_tree(
                 path=f"{path}.{key}",
                 resource_schema=resource_schema,
             )
-            for key, item in raw.items()
+            for key, item in raw_mapping.items()
         }
     if origin is Literal:
         if value not in args:
@@ -4636,7 +4695,7 @@ def _matches_type(value: object, hint: object) -> bool:
     return isinstance(hint, type) and isinstance(value, hint)
 
 
-def _raise_contract_error(kind: str, message: str) -> None:
+def _raise_contract_error(kind: str, message: str) -> NoReturn:
     if kind == "encode":
         raise CanonicalRequestEncodingError(message)
     raise CanonicalRequestDecodingError(message)

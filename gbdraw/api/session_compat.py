@@ -6,11 +6,12 @@ import copy
 import json
 import re
 from dataclasses import dataclass, field, fields, is_dataclass, replace
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, cast
 
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from pandas import DataFrame
 
 from gbdraw.analysis.protein_colinearity import (
+    ProteinBlastpMode,
     ProteinExtractionResult,
     build_legacy_protein_reference_map,
     is_legacy_protein_losat_cache_entry,
@@ -46,6 +47,7 @@ from .record_planning import (
 from .request_render import (
     CircularBatchRenderResult,
     CircularBatchRequestPlan,
+    CircularRequestPlan,
     CurrentRequestArtifacts,
     DiagramRequestPlan,
     LinearRequestPlan,
@@ -58,6 +60,8 @@ from .request_render import (
     render_prepared_request,
 )
 from .requests import (
+    CircularBatchRequest,
+    CircularDiagramRequest,
     DiagramRequest,
     LinearDiagramRequest,
     _LegacySimilarityAlignment,
@@ -127,7 +131,7 @@ class _SessionArtifactSource:
     current_raw_entries: tuple[Mapping[str, Any], ...]
     current_derived_entries: tuple[Mapping[str, Any], ...]
     protein_identity_manifest: Mapping[str, Any] | None
-    protein_source_mode: str | None
+    protein_source_mode: ProteinBlastpMode | None
     legacy_candidates: tuple[Mapping[str, Any], ...]
     legacy_derived_evidence: tuple[Mapping[str, Any], ...]
 
@@ -254,13 +258,13 @@ def _legacy_derived_evidence_entries(
     return tuple(result)
 
 
-def _session_protein_mode(artifacts: Mapping[str, Any]) -> str | None:
+def _session_protein_mode(artifacts: Mapping[str, Any]) -> ProteinBlastpMode | None:
     config = artifacts.get("config")
     losat = config.get("losat") if isinstance(config, Mapping) else None
     blastp = losat.get("blastp") if isinstance(losat, Mapping) else None
     configured = blastp.get("mode") if isinstance(blastp, Mapping) else None
     if str(configured or "") in {"pairwise", "orthogroup", "collinear"}:
-        return str(configured)
+        return cast(ProteinBlastpMode, str(configured))
     return None
 
 
@@ -710,7 +714,8 @@ def _legacy_alignment_groups(
                     stable_id,
                 )
             else:
-                record_key = member.get("recordKey")
+                # Checked against stable_keys (all str) before use below.
+                record_key = cast(str, member.get("recordKey"))
                 biological_id = member.get("biologicalFeatureId")
                 matches = tuple(
                     feature
@@ -820,7 +825,7 @@ def _legacy_similarity_alignment_plan(
         if record.record_key == reference.record_key:
             status = AlignmentDecisionStatus.REFERENCE
             rationale = AlignmentResolutionRationale.REFERENCE
-            anchor = reference
+            anchor: AlignmentAnchorIdentity | None = reference
         else:
             member = _legacy_alignment_record_member(members, record.record_key)
             status = (
@@ -966,16 +971,6 @@ def promote_legacy_session_similarity_alignment_request(
     )
 
 
-def materialize_legacy_similarity_alignment_request(
-    request: DiagramRequest,
-) -> DiagramRequest:
-    """Keep an old-schema projection on the current typed render boundary."""
-
-    if not isinstance(request, LinearDiagramRequest):
-        return request
-    return request
-
-
 def project_legacy_similarity_alignment_for_current_write(
     request: DiagramRequest,
     *,
@@ -1069,14 +1064,22 @@ def _replace_plan_request(
     plan: DiagramRequestPlan,
     request: DiagramRequest,
 ) -> DiagramRequestPlan:
-    if not isinstance(plan, LinearRequestPlan):
+    # The replacement request is derived from plan.request, so it has its mode.
+    if isinstance(plan, CircularRequestPlan):
+        assert isinstance(request, CircularDiagramRequest)
         return replace(plan, request=request)
+    if isinstance(plan, CircularBatchRequestPlan):
+        assert isinstance(request, CircularBatchRequest)
+        return replace(plan, request=request)
+    assert isinstance(request, LinearDiagramRequest)
     if plan.request.similarity_alignment == request.similarity_alignment:
         return replace(plan, request=request)
     if plan.request.similarity_alignment is not None:
         raise ValidationError(
             "Session compatibility cannot replace an active similarity alignment plan."
         )
+    # Only legacy promotion adds an alignment here, and it adds a resolved plan.
+    assert isinstance(request.similarity_alignment, SimilarityAlignmentPlan)
     centers = project_similarity_alignment_centers(
         ResolvedRecordCollection(plan.records, plan.provenance),
         request.similarity_alignment,
@@ -1167,7 +1170,7 @@ def _adapt_session_plan(
     id_map: dict[str, str] = {}
 
     if isinstance(plan, LinearRequestPlan):
-        request = materialize_legacy_similarity_alignment_request(request)
+        assert isinstance(request, LinearDiagramRequest)
         reference_ids: set[str] = set()
         for value in _request_protein_artifacts(request):
             reference_ids.update(_legacy_protein_reference_ids(value))
@@ -1490,7 +1493,6 @@ __all__ = [
     "adapt_session_request",
     "build_session_compatible_request_diagram",
     "canonical_payload_for_session_decode",
-    "materialize_legacy_similarity_alignment_request",
     "project_legacy_similarity_alignment_for_current_write",
     "promote_legacy_session_similarity_alignment_request",
     "render_session_compatible_request",

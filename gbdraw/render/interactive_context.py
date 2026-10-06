@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from typing import TYPE_CHECKING, Any, Sequence, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, Sequence, TypeVar, cast
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
 
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.visibility import compile_feature_visibility_rules
@@ -96,19 +96,21 @@ def build_interactive_svg_context(
         selected_features=selected_features_set,
         feature_visibility_rules=resolved_visibility_rules,
         record_features=record_features,
-        specific_color_rules=resolved_color_rules,
+        # The extractor is annotated dict but only reads the mapping.
+        specific_color_rules=cast("dict[Any, Any] | None", resolved_color_rules),
         linear_rendered_feature_ids=linear_rendered_feature_ids,
         include_biological_features=True,
     )
-    features = payload.get("features", [])
+    # The payload is typed dict[str, object]; these two keys always hold lists of feature dicts.
+    features = cast("list[dict[str, object]]", payload.get("features", []))
     if mode == "circular" and len(record_list) > 1 and (
         len({record.id for record in record_list}) != len(record_list)
         or (record_transforms and any(t.start_coordinate is not None for t in record_transforms))
     ):
         features = [dict(feature, rendered_feature_svg_id=instance_svg_id(
-            feature["rendered_feature_svg_id"], f"record_{int(feature['record_idx']) + 1}"
+            feature["rendered_feature_svg_id"], f"record_{int(cast('int', feature['record_idx'])) + 1}"
         )) for feature in features]
-    biological_features = payload.get("biological_features", [])
+    biological_features = cast("list[dict[str, object]]", payload.get("biological_features", []))
     orthogroup_payload: list[dict[str, object]] = []
     if orthogroups is not None:
         orthogroup_payload = serialize_orthogroups_payload(
@@ -198,7 +200,8 @@ def build_interactive_svg_context(
             )
             for record_index, record in enumerate(record_list)
         ),
-        collinearity_search_scope=collinearity_search_scope,
+        # Callers pass the already validated option value ("adjacent" or "all").
+        collinearity_search_scope=cast("Literal['adjacent', 'all'] | None", collinearity_search_scope),
     )
 
 

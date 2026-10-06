@@ -20,7 +20,7 @@ from ....layout.scalar_axis import (
     scalar_axis_tick_values,
     scaled_scalar_fraction,
 )
-from ....svg.circular_tracks import (  # type: ignore[reportMissingImports]
+from ....svg.circular_tracks import (
     generate_circular_gc_content_path_desc,
     generate_circular_scalar_area_path_desc,
 )

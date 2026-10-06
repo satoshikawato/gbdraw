@@ -170,6 +170,25 @@ export const defaultLegendEntryOrder = (entries, generatedOrder) => {
 };
 
 /**
+ * The captions of a Result's default order (D-08, OV-47): its generated
+ * inventory with each renamed entry's current caption, followed by the other
+ * entries in their current order. A Result applies it through
+ * `orderLegendEntries`, which skips the captions it does not draw.
+ * @param {{ caption?: string, originalCaption?: string }[]} entries
+ * @param {string[]} inventory
+ * @returns {string[]}
+ */
+export const defaultLegendCaptionOrder = (entries, inventory) => {
+  const generated = new Set(inventory);
+  const generatedCaption = (entry) => String(entry?.originalCaption || entry?.caption || '').trim();
+  const currentCaption = new Map(entries.map((entry) => [generatedCaption(entry), String(entry?.caption || '').trim()]));
+  return [...new Set([
+    ...inventory.map((caption) => currentCaption.get(caption) || caption),
+    ...entries.filter((entry) => !generated.has(generatedCaption(entry))).map((entry) => String(entry?.caption || '').trim())
+  ])].filter(Boolean);
+};
+
+/**
  * Whether Legend entries are in an edited order, not the default order (D-08).
  * Generate replays an edited order; the extraction of a Generate keeps the
  * generated order only while an edited order is replayed.

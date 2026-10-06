@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Iterator
 from typing import NamedTuple
 
-from Bio.SeqFeature import ExactPosition
+from Bio.SeqFeature import ExactPosition, SeqFeature
 from Bio.SeqRecord import SeqRecord
 
 
@@ -20,14 +21,14 @@ class _SourceFeatureAnchorProfile(NamedTuple):
     strand: str
 
 
-def _iter_source_features(features: object):
+def _iter_source_features(features: Iterable[SeqFeature] | None) -> Iterator[SeqFeature]:
     """Yield top-level and nested source features in their original order."""
     for feature in features or ():
         yield feature
         yield from _iter_source_features(getattr(feature, "sub_features", None))
 
 
-def _feature_source_index_map(features: object) -> dict[int, int]:
+def _feature_source_index_map(features: Iterable[SeqFeature] | None) -> dict[int, int]:
     """Map nested feature objects to their flattened source-order ordinals."""
     return {id(feature): index for index, feature in enumerate(_iter_source_features(features))}
 
@@ -214,11 +215,11 @@ def _read_coord_map(record: object) -> tuple[int, int]:
     return base, (1 if step > 0 else -1)
 
 
-def _write_coord_map(record: object, *, base: int, step: int) -> None:
+def _write_coord_map(record: SeqRecord, *, base: int, step: int) -> None:
     if getattr(record, "annotations", None) is None:
-        record.annotations = {}  # type: ignore[attr-defined]
-    record.annotations[_COORD_BASE_KEY] = int(base)  # type: ignore[attr-defined]
-    record.annotations[_COORD_STEP_KEY] = 1 if int(step) >= 0 else -1  # type: ignore[attr-defined]
+        record.annotations = {}
+    record.annotations[_COORD_BASE_KEY] = int(base)
+    record.annotations[_COORD_STEP_KEY] = 1 if int(step) >= 0 else -1
 
 
 def _absolute_display_interval(

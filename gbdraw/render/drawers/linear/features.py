@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from __future__ import annotations
+
 from typing import Optional
 
 from svgwrite.container import Group
@@ -9,6 +11,7 @@ from svgwrite.path import Path
 from ....configurators import FeatureDrawingConfigurator
 from ....features.ids import compute_feature_object_hash, make_linear_rendered_feature_id
 from ....layout.linear import LinearFeatureLaneGeometry
+from ....svg.arrows import ArrowHeadLengthRatio
 from ....svg.ids import instance_svg_id
 from ....svg.linear_features import (
     create_arrow_path_linear,
@@ -30,7 +33,7 @@ class FeatureDrawer:
         self.intron_stroke_color: str = feature_config.line_stroke_color
         self.intron_stroke_width: float = feature_config.line_stroke_width
         arrow_geometry = getattr(feature_config, "arrow_geometry", None)
-        self.head_length_ratio = getattr(
+        self.head_length_ratio: ArrowHeadLengthRatio = getattr(
             arrow_geometry,
             "head_length_ratio",
             "auto",
@@ -230,7 +233,7 @@ class FeaturePathGenerator:
         track_layout: str = "middle",
         track_axis_gap: float | None = None,
         feature_lane_geometry: LinearFeatureLaneGeometry | None = None,
-        head_length_ratio: str | float = "auto",
+        head_length_ratio: ArrowHeadLengthRatio = "auto",
         shaft_width_ratio: float = 1.0,
     ) -> None:
         self.genome_length = genome_length

@@ -171,7 +171,7 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install core test dependencies
-        run: python -m pip install -e ".[export]" pytest pytest-timeout pytest-xdist Pillow
+        run: python -m pip install -e ".[export,typecheck]" pytest pytest-timeout pytest-xdist Pillow
 
       - name: Run core tests
         run: >-
@@ -205,7 +205,7 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install core test dependencies
-        run: python -m pip install -e ".[export]" pytest pytest-timeout pytest-xdist Pillow
+        run: python -m pip install -e ".[export,typecheck]" pytest pytest-timeout pytest-xdist Pillow
 
       - name: Run core tests
         run: >-

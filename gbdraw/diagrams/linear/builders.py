@@ -8,23 +8,23 @@ from __future__ import annotations
 from collections.abc import Collection
 from typing import Optional, Sequence
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from svgwrite import Drawing  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
+from svgwrite import Drawing
+from svgwrite.container import Group
 
-from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
+from ...canvas import LinearCanvasConfigurator
 from ...features.factory import FeatureBuildResult
 from ...layout.linear_multi_record import LinearRecordPlacement
 from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext, place_linear_definition
 from ...linear_comparison import LinearComparison
-from ...configurators import (  # type: ignore[reportMissingImports]
+from ...configurators import (
     FeatureDrawingConfigurator,
     DepthConfigurator,
     GcContentConfigurator,
     GcSkewConfigurator,
 )
-from ...render.groups.linear import (  # type: ignore[reportMissingImports]
+from ...render.groups.linear import (
     DefinitionGroup,
     DepthGroup,
     GcContentGroup,

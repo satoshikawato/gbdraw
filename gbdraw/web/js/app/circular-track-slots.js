@@ -64,7 +64,6 @@ const DEFAULT_SLOT_IDS = {
   spacer: 'spacer'
 };
 
-const NUMERIC_RENDERERS = new Set(['dinucleotide_content', 'dinucleotide_skew', 'depth', 'sequence_conservation']);
 const STACK_ENTRY_AXIS = 'axis';
 const STACK_ENTRY_SLOT = 'slot';
 const GLOBAL_SUPPRESS_PARAM = '_suppressed_by_global';
@@ -495,14 +494,6 @@ const featureLaneForSlot = (slot, preset = 'tuckin') => (
   resolveCircularTrackFeaturePlacement(slot, preset).laneDirection
 );
 
-const syncFeaturePlacement = (slot, preset = 'tuckin') => {
-  if (!slot || slot.renderer !== 'features') return;
-  const lane = featureLaneForSlot(slot, preset);
-  slot.side = sideForLaneDirection(lane);
-  slot.params = cloneParams(slot.params);
-  slot.params.lane_direction = lane;
-};
-
 const syncTickParamsForPlacement = (slot, side) => {
   if (!slot || slot.renderer !== 'ticks') return;
   void side;
@@ -544,8 +535,6 @@ export const inferLegacyAxisIndexFromFeature = (slots, preset = 'tuckin') => {
   if (featureSide === 'outside') return featureIndex + 1;
   return featureIndex;
 };
-
-const axisIndexForSlots = inferLegacyAxisIndexFromFeature;
 
 export const clampCircularTrackAxisIndex = (value, slotCount) => {
   const length = Math.max(0, Number(slotCount) || 0);
@@ -2337,11 +2326,6 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     return buildCircularTrackSlotSpec(slot, state.adv.nt, state.form.track_type);
   };
 
-  const circularTrackSlotAutoPlacementFromOrder = (slot) => {
-    void slot;
-    return null;
-  };
-
   const updateCircularTrackSlotMeasure = (slot, field, scalar) => {
     if (!['width', 'radius'].includes(field) || !state.adv.circular_track_slots.includes(slot)) return;
     const numericLeaf = scalar && typeof scalar === 'object' && !Array.isArray(scalar)
@@ -2394,8 +2378,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
       widthPx,
       radiusFactor,
       innerGapPx: spacingPx,
-      outerGapPx: spacingPx,
-      source: 'estimated'
+      outerGapPx: spacingPx
     };
   };
 
@@ -2404,17 +2387,16 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     const resolved = circularTrackSlotEffectiveEnabled(slot)
       ? resolvedCircularSlotGeometry(slot?.id)
       : null;
-    if (resolved) return { ...resolved, source: 'resolved' };
-    return estimateCircularSlotGeometry(slot, slotIndex);
+    return resolved || estimateCircularSlotGeometry(slot, slotIndex);
   };
 
   const circularTrackSlotGeometryAutoText = (slot, slotIndex, field) => {
     if (isManualSlotValue(circularSlotManualValue(slot, field))) return '';
     const geometry = circularTrackSlotDisplayGeometry(slot, slotIndex);
-    if (field === 'width') return formatPxAuto(geometry.widthPx, geometry.source);
-    if (field === 'radius') return formatRadiusFactorAuto(geometry.radiusFactor, geometry.source);
-    if (field === 'inner_gap_px') return formatPxAuto(geometry.innerGapPx, geometry.source);
-    if (field === 'outer_gap_px') return formatPxAuto(geometry.outerGapPx, geometry.source);
+    if (field === 'width') return formatPxAuto(geometry.widthPx);
+    if (field === 'radius') return formatRadiusFactorAuto(geometry.radiusFactor);
+    if (field === 'inner_gap_px') return formatPxAuto(geometry.innerGapPx);
+    if (field === 'outer_gap_px') return formatPxAuto(geometry.outerGapPx);
     return '';
   };
 

@@ -5288,15 +5288,17 @@ export const createRunAnalysis = ({
 
   // A reflow keeps the Result it draws, so the preview binder reports a forced
   // label that the Result does not draw instead of failing the binding, with
-  // the diagnostic Generate raises for it (R6, OV-06).
-  const expectReflowLabelBindings = (commit, resultIndex, isCurrentReflow, diagramOptions) => {
+  // the diagnostic Generate raises for it (R6, OV-06). The rerender also draws
+  // the Legend again, so the Legend it draws is the generated inventory, as
+  // after Generate (OV-42, OV-43): the next edit compares against it.
+  const expectReflowBindings = (commit, resultIndex, isCurrentReflow, diagramOptions) => {
     const result = commit.results[resultIndex];
     const featureIds = forcedLabelFeatureIds(commit.mutationPlan?.operationsByResult?.[resultIndex], {
       features: [...(commit.featureState?.renderedFeaturesByResult?.[resultIndex]?.values()
         || extractedFeatures.value || [])],
       diagramOptions
     });
-    if (!result || featureIds.length === 0) return;
+    if (!result) return;
     const readinessId = `label-reflow:${latestGenerationToken}`;
     const resultIdentity = previewRuntime.getResultIdentity(result);
     previewRuntime.registerReadinessExpectation({
@@ -5307,12 +5309,15 @@ export const createRunAnalysis = ({
       catalogState: featureCatalog?.value || null,
       phase: 'label-reflow',
       bindingOptions: {
-        reportedLabelBinding: Object.freeze({
-          featureIds,
-          report: (error) => {
-            if (!isCurrentReflow()) return;
-            labelReflowLastError.value = liveEditFailure(formatError(error, 'generate', 'render'));
-          }
+        replaceGeneratedLegend: true,
+        ...(featureIds.length === 0 ? {} : {
+          reportedLabelBinding: Object.freeze({
+            featureIds,
+            report: (error) => {
+              if (!isCurrentReflow()) return;
+              labelReflowLastError.value = liveEditFailure(formatError(error, 'generate', 'render'));
+            }
+          })
         })
       },
       isCurrent: () => (
@@ -5406,7 +5411,7 @@ export const createRunAnalysis = ({
       if (execution.commit.results.length > 0) {
         previewRuntime.selectResult(nextSelectedResultIndex);
       }
-      expectReflowLabelBindings(
+      expectReflowBindings(
         execution.commit, nextSelectedResultIndex, isCurrent, canonical.renderRequest.diagramOptions
       );
       logPostGbdrawTimings(timingEntries);

@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
+from pandas import DataFrame
+from Bio.SeqRecord import SeqRecord
+from svgwrite.container import Group
 
-from ....analysis.skew import skew_df  # type: ignore[reportMissingImports]
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from ...drawers.linear.gc_content import GcContentDrawer  # type: ignore[reportMissingImports]
-from ....configurators import GcContentConfigurator  # type: ignore[reportMissingImports]
+from ....analysis.skew import skew_df
+from ....config.models import GbdrawConfig
+from ...drawers.linear.gc_content import GcContentDrawer
+from ....configurators import GcContentConfigurator
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -57,7 +57,7 @@ class GcContentGroup:
         """
         self.record_transform = record_transform
         self.group_id = group_id
-        self.gc_group = Group(id=self.group_id, debug=False)
+        self.gc_group: Group = Group(id=self.group_id, debug=False)
         self.start_x: float = start_x
         self.start_y: float = start_y
         self.longest_record_len: int = longest_record_len
@@ -87,11 +87,11 @@ class GcContentGroup:
         """
         self.record_len: int = len(self.gb_record.seq)
         if self.sequence_width is not None:
-            self.genome_size_normalization_factor = 1.0
-        elif self.bool_normalize_length:
             self.genome_size_normalization_factor: float = 1.0
+        elif self.bool_normalize_length:
+            self.genome_size_normalization_factor = 1.0
         else:
-            self.genome_size_normalization_factor: float = self.record_len / self.longest_record_len
+            self.genome_size_normalization_factor = self.record_len / self.longest_record_len
 
     def generate_gc_df(self, gc_df: DataFrame | None = None) -> None:
         """
@@ -112,7 +112,7 @@ class GcContentGroup:
         This method calls the GcContentDrawer to draw the GC content based on the calculated
         DataFrame and adds the resulting SVG elements to the group.
         """
-        self.gc_group: Group = GcContentDrawer(self.gc_config).draw(
+        self.gc_group = GcContentDrawer(self.gc_config).draw(
             self.gc_group,
             self.gc_df,
             self.record_len,

@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from gbdraw.config.models import RenderProfile  # type: ignore[reportMissingImports]
+from gbdraw.config.models import RenderProfile
 
 
 class DepthConfigurator:

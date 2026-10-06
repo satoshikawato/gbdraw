@@ -5,14 +5,22 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field, replace
-from typing import Literal, Sequence
+from typing import TYPE_CHECKING, Literal, Sequence, cast
 
 import pandas as pd
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from pandas import DataFrame
 
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.exceptions import ComparisonIdentityError, ValidationError
-from gbdraw.layout.record_coordinates import RecordDisplayTransform, SourceInterval, alignment_cut_breakpoints
+from gbdraw.layout.record_coordinates import (
+    DisplayFragment,
+    RecordDisplayTransform,
+    SourceInterval,
+    alignment_cut_breakpoints,
+)
+
+if TYPE_CHECKING:
+    from Bio.SeqRecord import SeqRecord
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +37,7 @@ def project_match_endpoints(
     """
     if all(transform.start_coordinate is None for transform in transforms):
         return (endpoints,)
-    projected = []
+    projected: list[tuple[tuple[float, float, int, int], ...]] = []
     source_spans = []
     for (start, end), transform in zip((endpoints[:2], endpoints[2:]), transforms, strict=True):
         if any(isinstance(value, bool) or int(value) != value for value in (start, end)):
@@ -37,20 +45,21 @@ def project_match_endpoints(
         start, end = int(start), int(end)
         if not 1 <= min(start, end) <= max(start, end) <= transform.length:
             raise ValidationError("Comparison endpoints must lie within their record.")
-        strand = 1 if start <= end else -1
+        strand: Literal[-1, 1] = 1 if start <= end else -1
         span = SourceInterval(min(start, end) - 1, max(start, end), strand)
         if transform.start_coordinate is None:
             directed = (span.start, span.end) if strand == 1 else (span.end, span.start)
             projected.append(((0.0, 1.0, *directed),))
             continue
-        fragments = transform.project_local_parts((span,))
+        # A transform with a start coordinate always returns display fragments.
+        fragments = cast("tuple[DisplayFragment, ...]", transform.project_local_parts((span,)))
         source_span = SourceInterval(
             min(part.source_start for part in fragments),
             max(part.source_end for part in fragments),
-            fragments[0].orientation * transform.source_step,
+            cast("Literal[-1, 1]", fragments[0].orientation * transform.source_step),
         )
         source_spans.append((transform, source_span))
-        intervals = []
+        intervals: list[tuple[float, float, int, int]] = []
         traversed = 0
         length = span.end - span.start
         for part in fragments:
@@ -61,13 +70,15 @@ def project_match_endpoints(
             traversed += width
         projected.append(tuple(intervals))
     cuts = (0.0, *alignment_cut_breakpoints(*source_spans), 1.0)
-    result = []
+    result: list[tuple[float, float, float, float]] = []
     for left, right in zip(cuts, cuts[1:]):
-        coordinates = []
-        for intervals in projected:
-            lo, hi, start, end = next(part for part in intervals if part[0] <= (left + right) / 2 < part[1])
+        coordinates: list[float] = []
+        for endpoint_intervals in projected:
+            lo, hi, start, end = next(
+                part for part in endpoint_intervals if part[0] <= (left + right) / 2 < part[1]
+            )
             coordinates.extend(start + (end - start) * (t - lo) / (hi - lo) for t in (left, right))
-        result.append(tuple(coordinates))
+        result.append(cast("tuple[float, float, float, float]", tuple(coordinates)))
     return tuple(result)
 
 
@@ -213,7 +224,7 @@ def _rows_without_feature_binding(frame: DataFrame) -> DataFrame:
 
 def project_search_frame_comparisons(
     comparisons: Sequence[LinearComparison],
-    records: Sequence[object],
+    records: Sequence[SeqRecord],
 ) -> tuple[LinearComparison, ...]:
     """Project comparison table rows from the search frame into each record (PD-OI-073).
 
@@ -258,8 +269,8 @@ def project_search_frame_comparisons(
     return tuple(projected)
 
 
-def _endpoint_frame(record: object) -> tuple[int, bool]:
-    return len(record), _read_coord_map(record)[1] == -1  # type: ignore[arg-type]
+def _endpoint_frame(record: SeqRecord) -> tuple[int, bool]:
+    return len(record), _read_coord_map(record)[1] == -1
 
 
 def reverse_unbound_endpoint_rows(

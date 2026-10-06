@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from typing import Iterable, cast
+
 from pandas import DataFrame
 
 from ..layout.linear_coords import normalize_position_to_linear_track
@@ -133,9 +135,9 @@ def calculate_linear_scalar_area_path_desc(
     baseline_y = float(start_y) + float(track_height)
     x_values: list[float] = []
     y_values: list[float] = []
-    samples = zip(scalar_df[position_column], scalar_df[value_column], strict=True)
+    samples: Iterable[tuple[float, float]] = zip(scalar_df[position_column], scalar_df[value_column], strict=True)
     projected = record_transform is not None and record_transform.start_coordinate is not None
-    if projected:
+    if projected and record_transform is not None:
         samples = ((p.position, p.value) for segment in project_scalar_samples(
             scalar_df[position_column], scalar_df[value_column], record_transform,
             source_positions=source_positions) for p in segment.points)
@@ -143,7 +145,8 @@ def calculate_linear_scalar_area_path_desc(
         position = float(position) if projected else int(position)
         value = max(0.0, min(1.0, float(value)))
         x_value = normalize_position_to_linear_track(
-            position, record_len, alignment_width, genome_size_normalization_factor
+            # The helper is annotated int but computes with floats; projected positions are float.
+            cast(int, position), record_len, alignment_width, genome_size_normalization_factor
         )
         y_value = baseline_y - (float(track_height) * value)
         x_values.append(float(x_value))

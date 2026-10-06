@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import logging
 from typing import Literal, Sequence
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
 
 from gbdraw.analysis.protein_colinearity import CdsProtein, ProteinExtractionResult
 from gbdraw.exceptions import ValidationError

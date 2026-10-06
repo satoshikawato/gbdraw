@@ -5,11 +5,11 @@ from __future__ import annotations
 import hashlib
 import re
 
-from svgwrite import Drawing  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
-from svgwrite.path import Path  # type: ignore[reportMissingImports]
-from svgwrite.shapes import Line, Rect  # type: ignore[reportMissingImports]
-from svgwrite.text import Text  # type: ignore[reportMissingImports]
+from svgwrite import Drawing
+from svgwrite.container import Group
+from svgwrite.path import Path
+from svgwrite.shapes import Line, Rect
+from svgwrite.text import Text
 
 from gbdraw.annotations import (
     AnnotationTrackParams,
@@ -182,6 +182,7 @@ def draw_linear_annotation_track(
                         item_group.add(Line(start=(x2, lane_center - cap), end=(x2, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
 
         if params.show_labels and annotation.label:
+            label_bp: float
             if style.label_position == "start":
                 label_bp, anchor = annotation.geometry_segments[0][0], "start"
             elif style.label_position == "end":

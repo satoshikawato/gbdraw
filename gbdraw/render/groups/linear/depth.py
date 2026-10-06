@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
+from svgwrite.container import Group
 
-from ....analysis.depth import depth_df as build_depth_df  # type: ignore[reportMissingImports]
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from ....configurators import DepthConfigurator  # type: ignore[reportMissingImports]
+from ....analysis.depth import depth_df as build_depth_df
+from ....config.models import GbdrawConfig
+from ....configurators import DepthConfigurator
 from ...drawers.linear.depth import DepthDrawer
 
 

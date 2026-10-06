@@ -4,7 +4,8 @@
 from svgwrite.container import Group
 from svgwrite.shapes import Circle
 
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ....canvas import CircularCanvasConfigurator
+from ....config.models import GbdrawConfig
 from ....svg.circular_tracks import draw_circle_path
 
 
@@ -16,7 +17,7 @@ class AxisGroup:
     def __init__(
         self,
         radius: float,
-        canvas_config: dict,
+        canvas_config: CircularCanvasConfigurator,
         *,
         cfg: GbdrawConfig,
     ) -> None:

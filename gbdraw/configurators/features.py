@@ -5,9 +5,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, List, Mapping, Optional
 
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from pandas import DataFrame
 
-from gbdraw.config.models import RenderProfile  # type: ignore[reportMissingImports]
+from gbdraw.config.models import RenderProfile
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.shapes import (
     normalize_feature_shape_overrides,

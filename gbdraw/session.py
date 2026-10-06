@@ -104,7 +104,7 @@ class SessionDocument:
             "circular",
             "linear",
         }:
-            return request["mode"]  # type: ignore[return-value]
+            return request["mode"]
         return None
 
     @property
@@ -202,7 +202,7 @@ class _SessionMaterializationContext(AbstractContextManager[MaterializedSession]
                 f"Canonical session resources could not be materialized: {exc}"
             ) from exc
 
-    def __exit__(self, exc_type, exc_value, traceback) -> bool:
+    def __exit__(self, exc_type, exc_value, traceback) -> Literal[False]:
         if self._materialized is not None:
             self._materialized._lifetime.active = False
         if self._owner is None:

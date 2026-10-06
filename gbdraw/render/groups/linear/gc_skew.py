@@ -6,7 +6,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite.container import Group
 
 from ....analysis.skew import skew_df
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ....config.models import GbdrawConfig
 from ...drawers.linear.gc_skew import SkewDrawer
 from ....configurators import GcSkewConfigurator
 
@@ -39,7 +39,7 @@ class GcSkewGroup:
         Initializes the GcSkewGroup with the given parameters and configurations.
         """
         self.record_transform = record_transform
-        self.skew_group = Group(id=group_id, debug=False)
+        self.skew_group: Group = Group(id=group_id, debug=False)
         self.start_x: float = start_x
         self.start_y: float = start_y
         self.longest_record_len: int = longest_record_len
@@ -66,11 +66,11 @@ class GcSkewGroup:
         """
         self.record_len: int = len(self.gb_record.seq)
         if self.sequence_width is not None:
-            self.genome_size_normalization_factor = 1.0
-        elif self.bool_normalize_length:
             self.genome_size_normalization_factor: float = 1.0
+        elif self.bool_normalize_length:
+            self.genome_size_normalization_factor = 1.0
         else:
-            self.genome_size_normalization_factor: float = self.record_len / self.longest_record_len
+            self.genome_size_normalization_factor = self.record_len / self.longest_record_len
 
     def generate_gc_df(self, gc_df: DataFrame | None = None) -> None:
         if gc_df is not None:
@@ -82,7 +82,7 @@ class GcSkewGroup:
         """
         Adds the GC skew visualization elements to the SVG group.
         """
-        self.skew_group: Group = SkewDrawer(self.skew_config).draw(
+        self.skew_group = SkewDrawer(self.skew_config).draw(
             self.skew_group,
             self.skew_df,
             self.record_len,

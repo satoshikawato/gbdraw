@@ -1,3 +1,8 @@
+// @ts-check
+/** @import { RulePreparation } from './rule-matching.js' */
+/** @import { PreparedFileLegend, RuleActionsPorts } from './feature-editor/rule-actions.js' */
+/** @import { VisibilityActionsPorts } from './feature-editor/visibility-actions.js' */
+/** @import { FeatureSelectionPort, PreviewTransformInteractionPort } from './feature-editor/svg-actions.js' */
 import { createFeatureColorActions } from './feature-editor/color-actions.js';
 import { createFeatureLabelActions } from './feature-editor/label-actions.js';
 import { createFeatureRuleActions } from './feature-editor/rule-actions.js';
@@ -6,6 +11,51 @@ import { createFeatureVisibilityActions } from './feature-editor/visibility-acti
 import { createFeaturePlacementActions } from './feature-editor/placement-actions.js';
 import { createFeatureEditTableActions } from './feature-editor/feature-edit-table.js';
 
+/**
+ * The label owner's reactions, registered in `editorPorts` once it exists; the
+ * owners created before it call them through the bag only.
+ * @typedef {RuleActionsPorts & VisibilityActionsPorts & {
+ *   syncLabelEditor: (options?: Record<string, any>) => void
+ * }} FeatureEditorPorts
+ */
+
+/**
+ * @typedef {object} FeatureEditorOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {RulePreparation} rulePreparation
+ * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
+ * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoableCheckpoint
+ *   History's undoable step that stores a checkpoint of the Result.
+ * @property {() => ({ mode?: string, diagramOptions?: Record<string, any> } | null)} getCommittedRequest
+ *   The committed canonical request (Python owns the option fields, R7).
+ * @property {() => Record<string, any> | null} [getCommittedSession] The committed canonical Session.
+ * @property {((resourceId: string, kind: string) => any) | null} [readResourceRecordCount]
+ *   Counts the records of a committed resource.
+ * @property {((payload: Record<string, any>) => Promise<{ result?: any }>) | null} [readFeatureOverrideTable]
+ *   The diagram helper that reads a Feature Edits TSV (R7).
+ * @property {(feature: Record<string, any>) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
+ * @property {(callback?: () => void) => Promise<void>} nextTick Vue `nextTick`
+ * @property {(intents: Record<string, any>[], options?: { previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
+ *   The Legend owner's preparation of the rows the rules draw.
+ * @property {(svg: SVGSVGElement) => void} compactLegendEntries The Legend layout owner's removal of gaps between the entries.
+ * @property {(options?: { replaceGeneratedInventory?: boolean }) => any} extractLegendEntries
+ *   The Legend owner's reading of the mounted Legend rows.
+ * @property {() => void} onLegendGeometryChanged The Legend owner's reaction to a change of Legend geometry.
+ * @property {FeatureSelectionPort | null} [featureSelection]
+ * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
+ *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ * @property {((changes: { featureId: string, mode: string }[], options?: { reason?: string }) => boolean) | null} [applyFeatureVisibilityChanges]
+ *   The preview owner's projection of feature visibility changes.
+ * @property {(index: number) => any} selectResult The preview owner's selection of a Result.
+ * @property {() => boolean} [isPatternEditAvailable] False while a Session import is pending.
+ * @property {PreviewTransformInteractionPort | null} [previewTransformInteraction]
+ * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean }) => boolean | Promise<boolean>} projectPaletteAndRules
+ *   The root's projection of the palette and the rules (R3).
+ * @property {() => any} projectFeatureEdits
+ *   The root's projection of loaded feature edits onto the displayed Result (R3).
+ */
+
+/** @param {FeatureEditorOptions} options */
 export const createFeatureEditor = ({
   state,
   rulePreparation,
@@ -33,10 +83,13 @@ export const createFeatureEditor = ({
   projectFeatureEdits
 }) => {
   const { ref, computed, watch, reactive } = window.Vue;
-  const ruleActions = createFeatureRuleActions({ state, nextTick, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ref, computed, isPatternEditAvailable });
   // R13: the label owner's reactions, registered once it exists; the owners
   // created before it call them through this object only.
-  const editorPorts = {};
+  const editorPorts = /** @type {FeatureEditorPorts} */ ({});
+  const ruleActions = createFeatureRuleActions({
+    state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules,
+    ports: editorPorts, getCommittedRequest, ref, computed, watch, isPatternEditAvailable
+  });
   const featureSvgActions = createFeatureSvgActions({
     state,
     getFeatureColor: ruleActions.getFeatureColor,
@@ -52,7 +105,6 @@ export const createFeatureEditor = ({
   const colorActions = createFeatureColorActions({
     state,
     runWithRuleMatches: rulePreparation.run,
-    nextTick,
     compactLegendEntries,
     extractLegendEntries,
     onLegendGeometryChanged,
@@ -77,6 +129,7 @@ export const createFeatureEditor = ({
     setFeatureVisibility: visibilityActions.setFeatureVisibility
   });
   editorPorts.applyFeatureVisibilityToLabels = labelActions.applyFeatureVisibilityToLabels;
+  editorPorts.requestAutomaticRerender = labelActions.requestAutomaticRerender;
   editorPorts.syncLabelEditor = labelActions.syncLabelEditor;
   // A loaded table shows on the displayed Result as a History apply does (R3):
   // the root's projection (`projectFeatureEdits`) projects it.
@@ -116,6 +169,7 @@ export const createFeatureEditor = ({
     setFeatureShape: ruleActions.setFeatureShape,
     addSpecificRule: ruleActions.addSpecificRule,
     commitSpecificRules: ruleActions.commitSpecificRules,
+    followRestoredSpecificRules: ruleActions.followRestoredRules,
     applySpecificRulePreset: ruleActions.applySpecificRulePreset,
     clearAllSpecificRules: ruleActions.clearAllSpecificRules,
     downloadSpecificRulesTsv: ruleActions.downloadSpecificRulesTsv,

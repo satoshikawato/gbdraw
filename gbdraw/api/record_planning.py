@@ -7,10 +7,10 @@ import logging
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Callable, Hashable, Literal, MutableMapping, Sequence
+from typing import Any, Callable, Hashable, Literal, MutableMapping, Sequence, cast
 
 import pandas as pd
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
 
 from gbdraw.analysis.protein_colinearity import (
     OrthogroupGraphResult,
@@ -186,7 +186,7 @@ class ResolvedRecordCollection:
         displays = []
         transforms = []
         for record, item in zip(self.records, self.provenance, strict=True):
-            base, step = _read_coord_map(record)
+            base, step = cast("tuple[int, Literal[-1, 1]]", _read_coord_map(record))
             cropped = item.is_cropped or bool(record.annotations.get("gbdraw_region_applied"))
             length = item.source_length
             if length is None and not cropped:
@@ -194,7 +194,8 @@ class ResolvedRecordCollection:
             try:
                 display = resolve_record_display(
                     item.display,
-                    source_length=length,
+                    # A None length is rejected by RecordDisplayTransform.
+                    source_length=cast(int, length),
                     detected_topology=item.detected_topology,
                     source_base=base,
                     source_step=step,
@@ -203,7 +204,7 @@ class ResolvedRecordCollection:
                     is_cropped=cropped,
                 )
                 transform = RecordDisplayTransform(
-                    length, base, step, display.start_coordinate, display.is_circular,
+                    cast(int, length), base, step, display.start_coordinate, display.is_circular,
                 )
             except ValidationError as exc:
                 raise ValidationError(
@@ -236,6 +237,8 @@ def project_source_bound_comparisons(
         return options
     bindings = []
     for record, provenance in zip(collection.records, collection.provenance, strict=True):
+        current: dict[int, str]
+        opposite: dict[int, str]
         current, opposite = {}, {}
         for ordinal, feature in enumerate(_iter_source_features(record.features)):
             if feature.location is None:
@@ -289,7 +292,10 @@ def project_source_bound_comparisons(
                     if not 1 <= coordinate <= length or int(coordinate) != coordinate:
                         raise ValidationError("Comparison view coordinate must be a finite genomic base within its record.")
                     updated.at[row_index, coordinate_field] = length + 1 - int(coordinate)
-                updated.at[row_index, f"{role}_view_feature_svg_id"] = ";".join(current_ids)
+                # Every ID is present: view_ids matched opposite_ids, which has the same keys.
+                updated.at[row_index, f"{role}_view_feature_svg_id"] = ";".join(
+                    cast("list[str]", current_ids)
+                )
             if updated is not None and flips[0] != flips[1] and "collinearity_orientation" in frame.columns:
                 orientation = row["collinearity_orientation"]
                 if orientation in ("plus", "minus"):
@@ -593,7 +599,7 @@ def _optional_positive_float(value: object | None, *, field_name: str) -> float 
     }:
         return None
     try:
-        numeric = float(value)
+        numeric = float(cast(Any, value))
     except (TypeError, ValueError) as exc:
         raise ValidationError(f"{field_name} values must be numeric or auto.") from exc
     if numeric <= 0:

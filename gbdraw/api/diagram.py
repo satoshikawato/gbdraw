@@ -16,16 +16,16 @@ import math
 import re
 from collections import Counter
 from dataclasses import dataclass, replace
-from typing import Any, Optional, Sequence, Mapping, Literal, cast
+from typing import TYPE_CHECKING, Any, Optional, Sequence, Mapping, Literal, cast
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from svgwrite import Drawing  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
+from svgwrite import Drawing
+from svgwrite.container import Group
 
-from gbdraw.analysis.depth import depth_df as build_depth_df  # type: ignore[reportMissingImports]
-from gbdraw.analysis.gc import circular_dinucleotide_content_df  # type: ignore[reportMissingImports]
-from gbdraw.analysis.depth_tracks import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.depth import depth_df as build_depth_df
+from gbdraw.analysis.gc import circular_dinucleotide_content_df
+from gbdraw.analysis.depth_tracks import (
     DepthTrackData,
     DepthTrackSpec,
     build_depth_track_dataframes,
@@ -37,14 +37,14 @@ from gbdraw.analysis.depth_tracks import (  # type: ignore[reportMissingImports]
     normalize_depth_tracks,
     representative_depth_tracks,
 )
-from gbdraw.analysis.conservation import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.conservation import (
     ConservationLoadResult,
     ConservationTrack,
     load_conservation_sources,
     normalize_conservation_reference,
     normalize_conservation_tracks_for_record,
 )
-from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.protein_colinearity import (
     LosatpCacheManager,
     OrthogroupMembershipMode,
     OrthogroupResult,
@@ -56,7 +56,7 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     build_rbh_orthogroup_protein_blastp_comparisons,
     normalize_orthogroup_membership_mode,
 )
-from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.collinearity import (
     CollinearityBlock,
     CollinearityAnchorMode,
     CollinearityColorMode,
@@ -70,13 +70,13 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     normalize_collinearity_color_mode,
     normalize_collinearity_search_scope,
 )
-from gbdraw.config.models.objects import (  # type: ignore[reportMissingImports]
+from gbdraw.config.models.objects import (
     normalize_pairwise_match_style,
 )
-from gbdraw.analysis.collinearity_units import CollinearityUnitMode  # type: ignore[reportMissingImports]
-from gbdraw.analysis.skew import skew_df  # type: ignore[reportMissingImports]
-from gbdraw.api.config import apply_config_overrides  # type: ignore[reportMissingImports]
-from gbdraw.api.options import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.collinearity_units import CollinearityUnitMode
+from gbdraw.analysis.skew import skew_df
+from gbdraw.api.config import apply_config_overrides
+from gbdraw.api.options import (
     AnnotationOptions,
     CircularDiagramOptions,
     CircularMultiRecordOptions,
@@ -95,22 +95,22 @@ from gbdraw.layout.linear_multi_record import record_pairs_between_adjacent_rows
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
 from gbdraw.layout.similarity_alignment import SimilarityAlignmentPlan
 from gbdraw.layout.record_placement import resolve_record_row_positions
-from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator  # type: ignore[reportMissingImports]
-from gbdraw.config.models import (  # type: ignore[reportMissingImports]
+from gbdraw.canvas import CircularCanvasConfigurator, LinearCanvasConfigurator
+from gbdraw.config.models import (
     CircularRenderProfile,
     GbdrawConfig,
     LinearRenderProfile,
 )
-from gbdraw.config.models.labels import LabelsFilteringConfig  # type: ignore[reportMissingImports]
-from gbdraw.io.colors import load_default_colors, read_color_table  # type: ignore[reportMissingImports]
-from gbdraw.labels.filtering import (  # type: ignore[reportMissingImports]
+from gbdraw.config.models.labels import LabelsFilteringConfig
+from gbdraw.io.colors import load_default_colors, read_color_table
+from gbdraw.labels.filtering import (
     DERIVED_LABEL_FILTERING_KEYS,
     read_filter_list_file,
     read_label_override_file,
     read_qualifier_priority_file,
 )
-from gbdraw.features.visibility import read_feature_visibility_file  # type: ignore[reportMissingImports]
-from gbdraw.configurators import (  # type: ignore[reportMissingImports]
+from gbdraw.features.visibility import read_feature_visibility_file
+from gbdraw.configurators import (
     BlastMatchConfigurator,
     DepthConfigurator,
     FeatureDrawingConfigurator,
@@ -118,16 +118,16 @@ from gbdraw.configurators import (  # type: ignore[reportMissingImports]
     GcSkewConfigurator,
     LegendDrawingConfigurator,
 )
-from gbdraw.core.sequence import create_dict_for_sequence_lengths  # type: ignore[reportMissingImports]
-from gbdraw.diagrams.circular.assemble import (  # type: ignore[reportMissingImports]
+from gbdraw.core.sequence import create_dict_for_sequence_lengths
+from gbdraw.diagrams.circular.assemble import (
     CircularAssemblyResult,
     _assemble_circular_diagram_result,
     build_circular_legend_table,
     plan_circular_annotation_slots,
 )
-from gbdraw.diagrams.linear import assemble_linear_diagram  # type: ignore[reportMissingImports]
+from gbdraw.diagrams.linear import assemble_linear_diagram
 from gbdraw.features.placement import ResolvedRecordFeatureInputs
-from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
+from gbdraw.exceptions import ValidationError
 from gbdraw.layout.composition import (
     CompositionItem,
     CompositionRequest,
@@ -143,16 +143,16 @@ from gbdraw.mode_profiles import (
     LINEAR_MODE_PROFILE,
 )
 from gbdraw.annotations import ResolvedAnnotationBundle, resolve_annotations
-from gbdraw.legend.table import (  # type: ignore[reportMissingImports]
+from gbdraw.legend.table import (
     configure_pairwise_identity_legend_from_comparisons,
 )
-from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup  # type: ignore[reportMissingImports]
+from gbdraw.render.groups.circular import DefinitionGroup, LegendGroup
 from gbdraw.render.composition import (
     COMPOSITION_ROLE_ATTRIBUTE,
     apply_composition_plan,
 )
 from gbdraw.svg.ids import definition_group_svg_id, instance_svg_id
-from gbdraw.tracks import (  # type: ignore[reportMissingImports]
+from gbdraw.tracks import (
     CircularTrackSlot,
     LinearTrackSlot,
     ScalarSpec,
@@ -164,9 +164,14 @@ from gbdraw.tracks import (  # type: ignore[reportMissingImports]
     parse_linear_track_slots,
     parse_nonnegative_integer,
 )
-from gbdraw.tracks.parsing import slot_dinucleotide  # type: ignore[reportMissingImports]
+from gbdraw.tracks.parsing import slot_dinucleotide
 
 from .prepared import ResolvedFeatureInputs, resolve_feature_inputs
+
+
+if TYPE_CHECKING:
+    from gbdraw.analysis.conservation import ConservationSearchResult
+
 
 DEFAULT_SELECTED_FEATURES = DEFAULT_FEATURE_TYPES
 
@@ -442,7 +447,7 @@ def _build_circular_dinucleotide_skew_dataframes(
 
 
 def _has_conservation_inputs(
-    conservation_blast_files: Sequence[str] | None,
+    conservation_blast_files: Sequence[str | ConservationSearchResult] | None,
     conservation_dataframes: Sequence[DataFrame] | None,
 ) -> bool:
     return bool(conservation_blast_files or conservation_dataframes)
@@ -472,7 +477,7 @@ def _build_conservation_blast_config(
 def _load_conservation_result(
     records: Sequence[SeqRecord],
     *,
-    conservation_blast_files: Sequence[str] | None,
+    conservation_blast_files: Sequence[str | ConservationSearchResult] | None,
     conservation_dataframes: Sequence[DataFrame] | None,
     conservation_labels: Sequence[str] | None,
     conservation_colors: Sequence[str] | None,
@@ -555,11 +560,12 @@ def _insert_conservation_slots(
 ) -> list[CircularTrackSlot]:
     if not conservation_slots:
         return list(base_slots)
+    out: list[CircularTrackSlot]
     if axis_index is not None:
         out = list(base_slots)
         out[axis_index:axis_index] = conservation_slots
         return out
-    out: list[CircularTrackSlot] = []
+    out = []
     inserted = False
     for slot in base_slots:
         out.append(slot)
@@ -2028,7 +2034,6 @@ def assemble_linear_diagram_from_records(
         profile=profile,
         default_colors_df=default_colors,
     )
-    blast_config.collinearity_color_mode = normalized_collinearity_color_mode
     additional_color_modes = (
         {normalized_collinearity_color_mode}
         if collinearity_blocks is not None or normalized_protein_blastp_mode == "collinear"
@@ -2140,7 +2145,7 @@ def assemble_circular_diagram_from_record(
     gb_record: SeqRecord,
     *,
     cfg: GbdrawConfig,
-    conservation_blast_files: Sequence[str] | None = None,
+    conservation_blast_files: Sequence[str | ConservationSearchResult] | None = None,
     conservation_dataframes: Sequence[DataFrame] | None = None,
     conservation_reference: Literal["query", "subject", "auto"] | str = "auto",
     conservation_labels: Sequence[str] | None = None,
@@ -2606,7 +2611,7 @@ def assemble_circular_diagram_from_records(
     records: Sequence[SeqRecord],
     *,
     cfg: GbdrawConfig,
-    conservation_blast_files: Sequence[str] | None = None,
+    conservation_blast_files: Sequence[str | ConservationSearchResult] | None = None,
     conservation_dataframes: Sequence[DataFrame] | None = None,
     conservation_reference: Literal["query", "subject", "auto"] | str = "auto",
     conservation_labels: Sequence[str] | None = None,
@@ -3373,10 +3378,11 @@ def build_circular_diagram(
         conservation_colors=options.conservation_colors,
         conservation_ring_width=options.conservation_ring_width,
         conservation_ring_gap=options.conservation_ring_gap,
-        evalue=options.evalue,
-        bitscore=options.bitscore,
-        identity=options.identity,
-        alignment_length=options.alignment_length,
+        # The builder options resolved omitted thresholds from the mode profile.
+        evalue=cast(float, options.evalue),
+        bitscore=cast(float, options.bitscore),
+        identity=cast(float, options.identity),
+        alignment_length=cast(int, options.alignment_length),
         species=options.species,
         strain=options.strain,
         plot_title=options.plot_title,
@@ -3488,10 +3494,11 @@ def _build_linear_diagram(
             else "bottom"
         ),
         plot_title_font_size=options.plot_title_font_size,
-        evalue=options.evalue,
-        bitscore=options.bitscore,
-        identity=options.identity,
-        alignment_length=options.alignment_length,
+        # The builder options resolved omitted thresholds from the mode profile.
+        evalue=cast(float, options.evalue),
+        bitscore=cast(float, options.bitscore),
+        identity=cast(float, options.identity),
+        alignment_length=cast(int, options.alignment_length),
         _resolved_feature_inputs=_resolved_feature_inputs,
         _resolved_record_features=_resolved_record_features,
         _record_transforms=_record_transforms,
@@ -3650,10 +3657,11 @@ def build_circular_multi_diagram(
         circular_track_axis_index=tracks.circular_track_axis_index if tracks else None,
         annotation_options=options.annotations,
         _resolved_annotations=_resolved_annotations,
-        evalue=options.evalue,
-        bitscore=options.bitscore,
-        identity=options.identity,
-        alignment_length=options.alignment_length,
+        # The builder options resolved omitted thresholds from the mode profile.
+        evalue=cast(float, options.evalue),
+        bitscore=cast(float, options.bitscore),
+        identity=cast(float, options.identity),
+        alignment_length=cast(int, options.alignment_length),
         _resolved_feature_inputs=_resolved_feature_inputs,
         _resolved_record_features=_resolved_record_features,
         _record_transforms=_record_transforms,

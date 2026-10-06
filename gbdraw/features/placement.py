@@ -6,7 +6,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from numbers import Integral
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 if TYPE_CHECKING:
     from .objects import FeatureObject
@@ -81,7 +81,8 @@ class FeaturePlacementTarget:
             raise ValidationError(
                 "Unknown or missing placement fields; main omits side/level and lane requires both."
             )
-        return cls(**value)
+        # __post_init__ validates every value; the mapping has exactly the declared fields.
+        return cls(**cast("Mapping[str, Any]", value))
 
 
 @dataclass(frozen=True)
@@ -109,10 +110,11 @@ class FeaturePlacementOverride:
             "placement",
         }:
             raise ValidationError("Unknown or missing exact placement fields.")
+        # __post_init__ validates identity strings; from_mapping rejects non-mappings.
         return cls(
-            value["recordKey"],
-            value["biologicalFeatureId"],
-            FeaturePlacementTarget.from_mapping(value["placement"]),
+            cast(str, value["recordKey"]),
+            cast(str, value["biologicalFeatureId"]),
+            FeaturePlacementTarget.from_mapping(cast("Mapping[str, object]", value["placement"])),
         )
 
 
@@ -181,7 +183,8 @@ def _table_target(row: Mapping[str, str], mode: str) -> FeaturePlacementTarget |
         raise ValidationError(f"Unsupported placement token {token!r}.")
     if level not in ("", "1"):
         raise ValidationError("Only feature lane level 1 is supported.")
-    target = FeaturePlacementTarget("lane", token, 1)
+    side = cast('Literal["outward", "inward", "above", "below"]', token)  # checked above
+    target = FeaturePlacementTarget("lane", side, 1)
     target.validate_mode(mode)
     return target
 
@@ -273,25 +276,31 @@ def resolve_record_feature_inputs(
             continue
         record = records[binding.record_index]
         feature = binding.feature
+        # Only an unresolved identity lacks a source index, and was skipped above.
+        source_index = binding.source_feature_index
+        assert source_index is not None
+        status: Literal["foreground", "hidden", "underlay", "crop_excluded"]
         if binding.status != "present":
             status = "crop_excluded" if binding.status == "crop_excluded" else "hidden"
-        elif id(feature) not in top_level[binding.record_index] or not should_render_feature(
-            feature,
-            selected_features,
-            feature_visibility_rules=feature_visibility_rules,
-            record_id=record.id,
-            specific_color_rules=specific_color_rules,
-            feature_override=overrides[binding.record_index].get(binding.source_feature_index),
-        ):
-            status = "hidden"
-        elif resolve_feature_rendering(feature.type, feature_shapes) == "underlay":
-            status = "underlay"
         else:
-            status = "foreground"
+            assert feature is not None  # a present binding carries its drawn feature
+            if id(feature) not in top_level[binding.record_index] or not should_render_feature(
+                feature,
+                selected_features,
+                feature_visibility_rules=feature_visibility_rules,
+                record_id=record.id,
+                specific_color_rules=specific_color_rules,
+                feature_override=overrides[binding.record_index].get(source_index),
+            ):
+                status = "hidden"
+            elif resolve_feature_rendering(feature.type, feature_shapes) == "underlay":
+                status = "underlay"
+            else:
+                status = "foreground"
         resolved[binding.record_index].append(
             ResolvedFeaturePlacement(
                 item.biological_feature_id,
-                binding.source_feature_index,
+                source_index,
                 item.target,
                 status,
                 placement_index,
@@ -305,7 +314,10 @@ def resolve_record_feature_inputs(
     notices = tuple(
         FeatureIdentityNotice(
             identity.record_key, identity.biological_feature_id,
-            bindings[identity].status, tuple(edit_kinds), bindings[identity].record_index,
+            # Present identities are filtered out below.
+            cast("Literal['crop_excluded', 'absent', 'unresolved']", bindings[identity].status),
+            tuple(edit_kinds),
+            bindings[identity].record_index,
         )
         for identity, edit_kinds in sorted(
             kinds.items(),
@@ -401,9 +413,12 @@ def _assignment_for_track(
     slot: FeaturePlacementSlot, track_id: int,
     target: FeaturePlacementTarget | None,
 ) -> FeaturePlacementAssignment:
-    negative_side = "inward" if slot.mode == "circular" else "below"
-    positive_side = "outward" if slot.mode == "circular" else "above"
-    pool = ("negative" if track_id < 0 else "positive") if slot.separate_strands else "combined"
+    negative_side: Literal["inward", "below"] = "inward" if slot.mode == "circular" else "below"
+    positive_side: Literal["outward", "above"] = "outward" if slot.mode == "circular" else "above"
+    pool: Literal["combined", "positive", "negative"] = (
+        ("negative" if track_id < 0 else "positive") if slot.separate_strands else "combined"
+    )
+    side: Literal["main", "outward", "inward", "above", "below"]
     level = abs(track_id) - (1 if pool == "negative" else 0)
     if slot.direction in ("inside", "below"):
         side = negative_side
@@ -448,8 +463,9 @@ def plan_feature_placements(
 
     tolerance_bp = validate_feature_overlap_tolerance(tolerance_bp)
     overrides = record_features.placements if record_features is not None else ()
+    record_key = "" if record_features is None else record_features.record_key
     for item in overrides:
-        slot.validate_target(item.target, record_key=record_features.record_key, placement=item)
+        slot.validate_target(item.target, record_key=record_key, placement=item)
     by_source = {feature.source_feature_index: key for key, feature in feature_dict.items()}
     targets = {}
     fixed = {}

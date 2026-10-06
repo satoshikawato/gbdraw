@@ -9,14 +9,18 @@ import math
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Mapping, Optional, Sequence
+from typing import Literal, Mapping, Optional, Sequence, cast
 from .config.toml import load_config_toml
 from .render.export import parse_formats
 from .api.request_render import (
     CurrentRequestArtifacts,
+    RequestRenderResult,
     render_request,
 )
-from .api.session_compat import render_session_compatible_request
+from .api.session_compat import (
+    SessionCompatibleRequestRenderResult,
+    render_session_compatible_request,
+)
 from .features.overrides import log_feature_identity_notices
 from .api.record_planning import (
     depth_track_inputs_from_cli,
@@ -59,7 +63,7 @@ from .analysis.protein_colinearity import (
     hydrate_protein_losat_tsv,
     is_protein_losat_cache_entry,
 )
-from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
+from .config.modify import modify_config_dict
 from .config.models.objects import normalize_pairwise_match_style
 from .features.shapes import parse_feature_shape_overrides
 from .exceptions import ValidationError
@@ -1060,7 +1064,7 @@ def linear_main(cmd_args) -> None:
             )
         return
 
-    args: argparse.Namespace = _get_args(cmd_args)
+    args = _get_args(cmd_args)
     run_result = run_linear_from_namespace(args)
     _write_losat_output_dir(
         args.losat_output_dir,
@@ -1106,7 +1110,8 @@ def _losatp_raw_output_text(run_result: DiagramRunResult) -> str:
 def _nucleotide_output_files(run_result: DiagramRunResult) -> list[tuple[str, str]]:
     """Per-edge raw TSVs and a ``--comparisons_table`` manifest (design 3.7)."""
 
-    request = run_result.canonical_request
+    # A Linear run result always carries its Linear request.
+    request = cast(LinearDiagramRequest, run_result.canonical_request)
     comparisons = [
         comparison
         for comparison in getattr(request.options, "linear_comparisons", None) or ()
@@ -1308,7 +1313,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     bitscore: float = args.bitscore
     identity: float = args.identity
     alignment_length: int = args.alignment_length
-    pairwise_match_style: str = args.pairwise_match_style
+    pairwise_match_style: Literal["ribbon", "curve"] = args.pairwise_match_style
     show_labels: str = args.show_labels
     label_whitelist: str = args.label_whitelist
     label_blacklist: str = args.label_blacklist
@@ -1612,7 +1617,10 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             annotations=annotation_options,
             output=LinearOutputOptions(
                 legend=legend,
-                plot_title_position=plot_title_position,
+                # argparse restricts --plot_title_position to the Linear choices.
+                plot_title_position=cast(
+                    'Literal["center", "top", "bottom"]', plot_title_position
+                ),
             ),
             selected_features_set=tuple(selected_features_set),
             feature_visibility_table_file=feature_table_path or None,
@@ -1678,14 +1686,19 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         session_output_path=session_output_path,
         overwrite=bool(args.overwrite),
     )
+    render_result: RequestRenderResult
     legacy_protein_raw_candidates = None
     legacy_protein_derived_evidence = None
     include_feature_catalog = bool(args.save_session or args.session_output)
     if source_session is not None:
-        render_result = render_session_compatible_request(
-            canonical_request,
-            source_session,
-            include_feature_catalog=include_feature_catalog,
+        # A Linear request renders to one session-compatible result, never a batch.
+        render_result = cast(
+            SessionCompatibleRequestRenderResult,
+            render_session_compatible_request(
+                canonical_request,
+                source_session,
+                include_feature_catalog=include_feature_catalog,
+            ),
         )
         legacy_protein_raw_candidates = (
             render_result.legacy_protein_raw_candidates
@@ -1695,10 +1708,14 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         )
     else:
         try:
-            render_result = render_request(
-                canonical_request,
-                artifacts=CurrentRequestArtifacts(),
-                include_feature_catalog=include_feature_catalog,
+            # A Linear request renders to one result, never a batch.
+            render_result = cast(
+                RequestRenderResult,
+                render_request(
+                    canonical_request,
+                    artifacts=CurrentRequestArtifacts(),
+                    include_feature_catalog=include_feature_catalog,
+                ),
             )
         except SimilarityAlignmentReferenceError as exc:
             raise ValidationError(f"--similarity_alignment_feature {exc.detail}") from exc

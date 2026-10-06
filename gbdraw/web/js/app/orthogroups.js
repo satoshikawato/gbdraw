@@ -181,7 +181,7 @@ const buildMemberFeaturePayload = (member) => {
   };
 };
 
-const memberFastaText = (member, sequenceKind, orthogroupId = '') => {
+const memberFastaText = (member, sequenceKind) => {
   const feature = buildMemberFeaturePayload(member);
   const fastas = buildFeatureSequenceFastas(feature, {
     nucleotideSequence: getMemberSequence(member, 'nt'),
@@ -623,18 +623,14 @@ export const createOrthogroupEditor = ({ state }) => {
 
   const buildOrthogroupFasta = (groupOrId, sequenceKind) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
-    const orthogroupId = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     return getEnrichedOrthogroupMembers(group)
-      .map((member) => memberFastaText(member, sequenceKind, orthogroupId))
+      .map((member) => memberFastaText(member, sequenceKind))
       .filter(Boolean)
       .join('');
   };
 
-  const buildOrthogroupMemberFasta = (member, sequenceKind, groupOrId = selectedOrthogroup.value) => {
-    const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
-    const orthogroupId = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
-    return memberFastaText(enrichOrthogroupMember(member), sequenceKind, orthogroupId);
-  };
+  const buildOrthogroupMemberFasta = (member, sequenceKind) =>
+    memberFastaText(enrichOrthogroupMember(member), sequenceKind);
 
   const orthogroupSequenceFilename = (groupOrId, sequenceKind) => {
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
@@ -687,13 +683,13 @@ export const createOrthogroupEditor = ({ state }) => {
     groupOrId = selectedOrthogroup.value,
     context = 'drawer'
   ) => {
-    const text = buildOrthogroupMemberFasta(member, sequenceKind, groupOrId);
+    const text = buildOrthogroupMemberFasta(member, sequenceKind);
     const key = orthogroupCopyFeedbackKey(groupOrId, sequenceKind, member, context);
     return copyWithFeedback(text, key);
   };
 
   const downloadOrthogroupMemberSequence = (member, sequenceKind = 'nt', groupOrId = selectedOrthogroup.value) => {
-    const text = buildOrthogroupMemberFasta(member, sequenceKind, groupOrId);
+    const text = buildOrthogroupMemberFasta(member, sequenceKind);
     if (!text) return;
     downloadTextFile(
       orthogroupMemberSequenceFilename(member, sequenceKind, groupOrId),

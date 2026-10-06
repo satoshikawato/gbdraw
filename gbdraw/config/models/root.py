@@ -3,13 +3,16 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, fields, is_dataclass
 from numbers import Real
-from typing import Any, Iterator, Mapping
+from typing import TYPE_CHECKING, Any, Iterator, Mapping
 
 from gbdraw.exceptions import ValidationError
 
 from .canvas import CanvasConfig
 from .labels import LabelsConfig
 from .objects import ObjectsConfig
+
+if TYPE_CHECKING:
+    from _typeshed import DataclassInstance
 
 
 # D-27 (PD-OI-081): only values whose meaning SVG/CSS fixes are constrained.
@@ -46,8 +49,8 @@ def validate_style_leaf(path: str, value: object, *, prefix: str) -> None:
     )
 
 
-def _typed_leaves(value: object, prefix: str = "") -> Iterator[tuple[str, object]]:
-    for config_field in fields(value):  # type: ignore[arg-type]
+def _typed_leaves(value: DataclassInstance, prefix: str = "") -> Iterator[tuple[str, object]]:
+    for config_field in fields(value):
         child = getattr(value, config_field.name)
         path = f"{prefix}{config_field.name}"
         if is_dataclass(child) and not isinstance(child, type):

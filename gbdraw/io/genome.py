@@ -4,7 +4,8 @@
 import os
 import logging
 from contextlib import contextmanager
-from typing import List, Dict, Set
+from collections.abc import Set as AbstractSet
+from typing import List, Dict
 
 from Bio import SeqIO
 from Bio.SeqFeature import CompoundLocation, SeqFeature
@@ -76,7 +77,7 @@ def load_gbks(
                     )
                 _attach_source_annotations(record, gbk_file)
                 record_list.append(record)
-                id_list.append(record.id)  # type: ignore
+                id_list.append(record.id)
         except ValueError as e:  # Catching common exception when parsing GenBank files
             if str(e).startswith("Record selector"):
                 logger.error(f"ERROR: {e}")
@@ -247,7 +248,7 @@ def _normalize_gff3_multipart_features(record: SeqRecord) -> SeqRecord:
 
 
 def scan_features_recursive(
-    features: List[SeqFeature], feature_types_to_keep: Set[str] | None,
+    features: List[SeqFeature], feature_types_to_keep: AbstractSet[str] | None,
     source_indexes: dict[int, int] | None = None,
 ) -> List[SeqFeature]:
     """Flatten nested features in source order; ``None`` keeps every type."""
@@ -275,7 +276,7 @@ def scan_features_recursive(
 
 
 def filter_features_by_type(
-    record: SeqRecord, feature_types_to_keep: Set[str] | None, *, source_indexes: dict[int, int] | None = None,
+    record: SeqRecord, feature_types_to_keep: AbstractSet[str] | None, *, source_indexes: dict[int, int] | None = None,
 ) -> SeqRecord:
     new_record = SeqRecord(
         seq=record.seq,
@@ -375,7 +376,9 @@ def load_gff_fasta(
         raise ValidationError("Number of GFF3 files does not match number of FASTA files.")
 
     for file_idx, (gff_file, fasta_file) in enumerate(zip(gff_list, fasta_list)):
-        file_catalogs = [] if source_feature_catalogs is not None else None
+        file_catalogs: list[tuple[SourceFeatureIdentity, ...]] | None = (
+            [] if source_feature_catalogs is not None else None
+        )
         parsed_records = parse_gff_fasta(gff_file, fasta_file, source_feature_catalogs=file_catalogs)
         with _gff_fasta_errors(gff_file, fasta_file):
             # The renderer reads record.features only, so Parent-linked children
@@ -416,7 +419,7 @@ def load_gff_fasta(
                 if source_feature_catalogs is not None:
                     source_feature_catalogs.append(selected_catalogs[record_index])
                 record_list.append(record)
-                id_list.append(record.id)  # type: ignore
+                id_list.append(record.id)
 
     logger.info("INFO:              ... finished loading GFF3 and FASTA files")
     logger.info(f"INFO: Number of sequences loaded to gbdraw: {len(record_list)}")

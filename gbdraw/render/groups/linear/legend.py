@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from collections.abc import Mapping
+
 from svgwrite.container import Group
 from svgwrite.gradients import LinearGradient
 from svgwrite.path import Path
 
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ....config.models import GbdrawConfig
 from ....configurators.legend import LegendMeasurement
 from ....legend.linear_layout import (
     LinearFeatureLegendLayout,
@@ -89,7 +91,7 @@ class LegendGroup:
     @staticmethod
     def _build_pairwise_gradient_id(
         key: str,
-        properties: dict,
+        properties: Mapping[str, object],
         orientation: str,
     ) -> str:
         return stable_svg_id(

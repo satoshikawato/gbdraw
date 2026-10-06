@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
+from svgwrite.container import Group
 
-from ....core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from ...drawers.circular.gc_skew import SkewDrawer  # type: ignore[reportMissingImports]
-from ....configurators import GcSkewConfigurator  # type: ignore[reportMissingImports]
+from ....core.sequence import determine_length_parameter
+from ....config.models import GbdrawConfig
+from ...drawers.circular.gc_skew import SkewDrawer
+from ....configurators import GcSkewConfigurator
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -39,7 +39,7 @@ class GcSkewGroup:
         self.track_width: float = track_width
         self.skew_config: GcSkewConfigurator = skew_config
         self.record_len: int = len(self.gb_record.seq)
-        self.skew_group = Group(id=group_id or "skew", debug=False)
+        self.skew_group: Group = Group(id=group_id or "skew", debug=False)
         self.track_type = cfg.canvas.circular.track_type
         self.length_threshold = cfg.labels.length_threshold.circular
         self.length_param = determine_length_parameter(len(gb_record.seq), self.length_threshold)
@@ -52,7 +52,7 @@ class GcSkewGroup:
         self.add_elements_to_group()
 
     def add_elements_to_group(self) -> None:
-        self.skew_group: Group = SkewDrawer(self.skew_config).draw(
+        self.skew_group = SkewDrawer(self.skew_config).draw(
             self.radius,
             self.skew_group,
             self.gc_df,

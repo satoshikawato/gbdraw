@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal, Mapping
+from typing import Any, Literal, Mapping, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.labels.policy import LabelRenderingPolicy, normalize_label_rendering
@@ -10,7 +10,7 @@ from gbdraw.labels.circular_types import (
     normalize_circular_label_placement,
 )
 
-from .common import ShortLongFloatConfig  # type: ignore[reportMissingImports]
+from .common import ShortLongFloatConfig
 
 CircularLabelScope = Literal["none", "outer", "both"]
 LinearLabelScope = Literal["none", "all", "first", "orthogroup_top"]
@@ -128,10 +128,10 @@ class LabelsLinearConfig:
             raise ValidationError(
                 "labels.linear.placement must be one of: auto, above_feature"
             )
-        placement: Literal["auto", "above_feature"] = placement_raw  # type: ignore[assignment]
+        placement = cast(Literal["auto", "above_feature"], placement_raw)
         rotation = float(raw.get("rotation", 0.0))
         return cls(
-            scope=scope,  # type: ignore[arg-type]
+            scope=cast(LinearLabelScope, scope),
             placement=placement,
             rotation=rotation,
         )
@@ -156,7 +156,7 @@ class LabelsCircularConfig:
                 "labels.circular.scope must be one of: none, outer, both"
             )
         return cls(
-            scope=scope,  # type: ignore[arg-type]
+            scope=cast(CircularLabelScope, scope),
             placement=normalize_circular_label_placement(raw.get("placement", "horizontal")),
         )
 

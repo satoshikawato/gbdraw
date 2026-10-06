@@ -10,8 +10,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Hashable, Iterator, Mapping, MutableMapping
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import normalize_specific_color_captions, preprocess_color_tables
@@ -34,7 +34,7 @@ class ResolvedFeatureInputs:
     color_table: DataFrame | None
     default_colors: DataFrame
     feature_visibility_table: DataFrame | None
-    feature_visibility_rules: list[dict[str, Any]]
+    feature_visibility_rules: list[dict[str, Any]] | None
     specific_color_rules: Mapping[str, Any]
     default_color_map: Mapping[str, str]
 

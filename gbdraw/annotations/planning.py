@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
-from typing import Callable, Literal, Sequence, TypeVar
+from typing import Callable, Literal, Sequence, TypeVar, cast
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
 
 from ..exceptions import ValidationError
-from ..layout.record_coordinates import RecordDisplayTransform, SourceInterval
+from ..layout.record_coordinates import DisplayFragment, RecordDisplayTransform, SourceInterval
 from .models import AnnotationOptions, ResolvedAnnotationBundle
 from .resolve import resolve_annotations
 
@@ -47,7 +47,10 @@ def prepare_annotation_track_slots(
             transform = transforms.get(item.record_index)
             if transform is not None and transform.start_coordinate is not None:
                 parts = transform.project_local_parts(tuple(SourceInterval(start, end) for start, end in item.segments))
-                item = replace(item, display_parts=tuple(parts))
+                # A set start_coordinate makes project_local_parts return DisplayFragments.
+                item = replace(
+                    item, display_parts=tuple(cast("Sequence[DisplayFragment]", parts))
+                )
             projected.append(item)
         bundle = replace(bundle, annotations=tuple(projected))
 

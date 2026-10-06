@@ -4,18 +4,18 @@ from __future__ import annotations
 
 from typing import Sequence
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
 from gbdraw.features.source import SourceFeatureIdentity
 
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from pandas import DataFrame
 
-from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
-from gbdraw.features.visibility import resolve_candidate_feature_types  # type: ignore[reportMissingImports]
-from gbdraw.io.genome import (  # type: ignore[reportMissingImports]
+from gbdraw.exceptions import ValidationError
+from gbdraw.features.visibility import resolve_candidate_feature_types
+from gbdraw.io.genome import (
     load_gbks as _load_gbks,
     load_gff_fasta as _load_gff_fasta,
 )
-from gbdraw.io.cli_tables import (  # type: ignore[reportMissingImports]
+from gbdraw.io.cli_tables import (
     CircularTrackTable,
     ConservationTable,
     ConservationTableRow,
@@ -29,17 +29,17 @@ from gbdraw.io.cli_tables import (  # type: ignore[reportMissingImports]
     read_comparisons_table,
     read_records_table,
 )
-from gbdraw.labels.filtering import (  # type: ignore[reportMissingImports]
+from gbdraw.labels.filtering import (
     read_filter_list_file,
     read_label_override_file,
     read_qualifier_priority_file,
 )
-from gbdraw.io.record_select import (  # type: ignore[reportMissingImports]
+from gbdraw.io.record_select import (
     RecordSelector,
     parse_record_selector as _parse_record_selector,
     parse_record_selectors as _parse_record_selectors,
 )
-from gbdraw.io.regions import (  # type: ignore[reportMissingImports]
+from gbdraw.io.regions import (
     RegionSpec,
     apply_region_specs as _apply_region_specs,
     parse_region_spec as _parse_region_spec,

@@ -879,9 +879,12 @@ const capturePageEvidence = (page, savedSvg = null) => page.evaluate(async (save
     return { length: text.length, hash: hash >>> 0 };
   };
   const mountedSvg = state.svgContainer.value?.querySelector?.('svg');
-  const svgContent = savedSvg ?? (mountedSvg
+  // The label editor marks the labels it lists (`data-label-editable`, `-key`,
+  // `-source-text`) once it has synchronized; a Result the automatic rerender drew and a Load without
+  // that synchronization differ only by this mark (OV-42, OV-43, #857).
+  const svgContent = (savedSvg ?? (mountedSvg
     ? serializeCleanSvg(mountedSvg)
-    : String(app.results?.[app.selectedResultIndex]?.content || ''));
+    : String(app.results?.[app.selectedResultIndex]?.content || ''))).replace(/ data-label-(?:editable|key|source-text)="[^"]*"/g, '');
   const svgDocument = new DOMParser().parseFromString(svgContent, 'image/svg+xml');
   const root = svgDocument.documentElement;
   if (!root || root.localName === 'parsererror') {
@@ -1942,8 +1945,10 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
         '/gbdraw/web/js/services/svg-serialization.js'
       );
       const svg = state.svgContainer.value?.querySelector('svg');
-      return state.sessionOperationAvailability?.('save') == null
-        && Boolean(svg) && serializeCleanSvg(svg) === capturedSvg;
+      // The edits that change the Legend ask for the automatic rerender
+      // (OV-42, OV-43, #857); the preview settles once it has finished.
+      return state.sessionOperationAvailability?.('save') == null && !state.labelReflowProcessing.value
+        && Boolean(svg) && serializeCleanSvg(svg).replace(/ data-label-(?:editable|key|source-text)="[^"]*"/g, '') === capturedSvg;
     }, evidence.svg.raw);
     if (settled) savedDraftIntent = evidence;
     return settled;

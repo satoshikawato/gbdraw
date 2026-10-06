@@ -6,10 +6,10 @@ import csv
 import logging
 from dataclasses import fields
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 import pandas as pd
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from pandas import DataFrame
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import parse_record_selector
@@ -208,9 +208,16 @@ def _target(
             record=record,
             start=_number(_text(row, "start"), row_number=row_number, column="start", integer=True),
             end=_number(_text(row, "end"), row_number=row_number, column="end", integer=True),
-            coordinate_space=(_text(row, "coordinate_space") or "source").lower(),
+            # Casts below satisfy the checker; CoordinateSpan.__post_init__ validates them.
+            coordinate_space=cast(
+                'Literal["source", "local"]',
+                (_text(row, "coordinate_space") or "source").lower(),
+            ),
             wraps_origin=wraps,
-            out_of_bounds=(_text(row, "out_of_bounds") or "clip").lower(),
+            out_of_bounds=cast(
+                'Literal["clip", "skip", "error"]',
+                (_text(row, "out_of_bounds") or "clip").lower(),
+            ),
         )
 
     raw_selectors = _text(row, "feature_selector")
@@ -218,8 +225,15 @@ def _target(
     return FeatureSpan(
         record=record,
         selectors=tuple(parse_feature_selector(item) for item in selector_parts),
-        envelope=(_text(row, "envelope") or "outer_bounds").lower(),
-        circular_path=(_text(row, "circular_path") or "shortest").lower(),
+        # Casts satisfy the checker; FeatureSpan.__post_init__ validates them.
+        envelope=cast(
+            'Literal["outer_bounds", "segments"]',
+            (_text(row, "envelope") or "outer_bounds").lower(),
+        ),
+        circular_path=cast(
+            'Literal["shortest", "forward", "reverse"]',
+            (_text(row, "circular_path") or "shortest").lower(),
+        ),
     )
 
 
@@ -265,7 +279,8 @@ def annotation_sets_from_dataframe(
                 id=annotation_id,
                 target=_target(row, row_number, mode=mode),
                 label=_text(row, "label"),
-                mark=mark,
+                # RegionAnnotation.__post_init__ validates the mark.
+                mark=cast('Literal["line", "bracket", "band", "highlight"]', mark),
                 lane=(
                     _number(lane_text, row_number=row_number, column="lane", integer=True)
                     if lane_text

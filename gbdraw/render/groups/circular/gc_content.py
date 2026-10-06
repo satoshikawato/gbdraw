@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
+from svgwrite.container import Group
 
-from ....core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from ...drawers.circular.gc_content import GcContentDrawer  # type: ignore[reportMissingImports]
-from ....configurators import GcContentConfigurator  # type: ignore[reportMissingImports]
+from ....core.sequence import determine_length_parameter
+from ....config.models import GbdrawConfig
+from ...drawers.circular.gc_content import GcContentDrawer
+from ....configurators import GcContentConfigurator
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
@@ -34,7 +34,7 @@ class GcContentGroup:
     ) -> None:
         self.record_transform = record_transform
         self.group_id = group_id or "gc_content"
-        self.gc_group = Group(id=self.group_id, debug=False)
+        self.gc_group: Group = Group(id=self.group_id, debug=False)
         self.radius: float = radius
         self.gc_config: GcContentConfigurator = gc_config
         self.gb_record: SeqRecord = gb_record
@@ -53,7 +53,7 @@ class GcContentGroup:
         self.add_elements_to_group()
 
     def add_elements_to_group(self) -> None:
-        self.gc_group: Group = GcContentDrawer(self.gc_config).draw(
+        self.gc_group = GcContentDrawer(self.gc_config).draw(
             self.radius,
             self.gc_group,
             self.gc_df,

@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
-from svgwrite.path import Path  # type: ignore[reportMissingImports]
+from pandas import DataFrame
+from svgwrite.container import Group
+from svgwrite.path import Path
 
-from ....analysis.conservation import conservation_track_gradient_colors  # type: ignore[reportMissingImports]
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from ....render.drawers.circular.conservation import (  # type: ignore[reportMissingImports]
+from ....analysis.conservation import conservation_track_gradient_colors
+from ....config.models import GbdrawConfig
+from ....render.drawers.circular.conservation import (
     ConservationDrawer,
     _safe_id_fragment,
 )

@@ -19,9 +19,9 @@ import unicodedata
 from typing import Callable, Literal, Mapping, Sequence
 
 import pandas as pd
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from Bio.SeqFeature import SeqFeature  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from Bio.SeqFeature import SeqFeature
+from pandas import DataFrame
 
 from gbdraw.analysis.ortholog_paths import OrthologPath, OrthologPathCollection, ortholog_edge_id
 from gbdraw.comparisons.losat_jobs import (
@@ -737,8 +737,8 @@ def _validate_protein_sets_and_record_analyses(
                 expected_feature_id = canonical_feature_analysis_id(
                     feature_type=str(protein.get("featureType") or ""),
                     location_operator=str(protein.get("locationOperator") or ""),
-                    location_parts=protein.get("locationParts") or (),  # type: ignore[arg-type]
-                    strand=protein.get("strand"),  # type: ignore[arg-type]
+                    location_parts=protein.get("locationParts") or (),
+                    strand=protein.get("strand"),
                     same_location_ordinal=int(protein.get("sameLocationOrdinal") or 0),
                 )
             except (TypeError, ValueError) as exc:
@@ -914,7 +914,7 @@ def validate_protein_identity_manifest(
         protein_set_hash = str(record_analyses[analysis_id]["proteinSetHash"])
         expected_feature_ids = {
             str(protein["featureAnalysisId"])
-            for protein in protein_sets[protein_set_hash]["proteins"]  # type: ignore[index]
+            for protein in protein_sets[protein_set_hash]["proteins"]
         }
         normalized_runtime_ids: dict[str, str] = {}
         for feature_id, runtime_handle in runtime_ids.items():
@@ -1535,7 +1535,7 @@ def _fasta_record_instance_key(
         protein_set = manifest.protein_sets[str(analysis["proteinSetHash"])]
         aa_by_feature_id = {
             str(protein["featureAnalysisId"]): str(protein["aaSha256"])
-            for protein in protein_set["proteins"]  # type: ignore[index]
+            for protein in protein_set["proteins"]
         }
         runtime_ids = binding["runtimeIds"]
         if not isinstance(runtime_ids, Mapping):
@@ -1785,7 +1785,7 @@ def validate_legacy_protein_raw_candidate_envelope(
     if value.get("schema") != LEGACY_PROTEIN_RAW_CANDIDATE_SCHEMA or not isinstance(value.get("entries"), list):
         raise ValidationError("Legacy protein raw candidate envelope must use schema 1.")
     entries: list[dict[str, object]] = []
-    for candidate in value["entries"]:  # type: ignore[index]
+    for candidate in value["entries"]:
         if not isinstance(candidate, Mapping):
             raise ValidationError("Legacy protein candidate must be an object.")
         state = str(candidate.get("state") or "")

@@ -9,13 +9,13 @@ from dataclasses import dataclass
 from typing import Iterable, Literal, Sequence
 
 import pandas as pd
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
 
-from gbdraw.core.color import normalize_hex_color, tint_color  # type: ignore[reportMissingImports]
-from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
-from gbdraw.io.colors import resolve_color_to_hex  # type: ignore[reportMissingImports]
-from gbdraw.io.comparisons import (  # type: ignore[reportMissingImports]
+from gbdraw.core.color import normalize_hex_color, tint_color
+from gbdraw.exceptions import ValidationError
+from gbdraw.io.colors import resolve_color_to_hex
+from gbdraw.io.comparisons import (
     COMPARISON_COLUMNS,
     filter_comparison_dataframe,
     normalize_comparison_dataframe,
@@ -325,7 +325,7 @@ def resolve_conservation_reference_side(
 ) -> ConservationReferenceSide | None:
     mode = normalize_conservation_reference(reference)
     if mode in {"query", "subject"}:
-        return mode  # type: ignore[return-value]
+        return mode
 
     df = source.dataframe
     if df is None or df.empty:

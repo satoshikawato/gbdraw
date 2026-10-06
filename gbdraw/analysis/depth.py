@@ -11,10 +11,10 @@ from typing import Iterable
 
 import numpy as np
 import pandas as pd
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
 
-from gbdraw.exceptions import ParseError, ValidationError  # type: ignore[reportMissingImports]
+from gbdraw.exceptions import ParseError, ValidationError
 
 DEPTH_COLUMNS = ["reference_name", "position", "depth"]
 _DEPTH_TSV_CACHE_MAXSIZE = 8

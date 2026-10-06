@@ -5,27 +5,29 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Any, Mapping
 
-from gbdraw.config.models import (  # type: ignore[reportMissingImports]
+from gbdraw.config.models import (
     CircularRenderProfile,
     LinearRenderProfile,
     RenderProfile,
 )
-from gbdraw.legend.circular_layout import (  # type: ignore[reportMissingImports]
+from gbdraw.legend.circular_layout import (
+    CircularCompactGradientEntryLayout,
     CircularLegendLayout,
+    CircularSingleGradientEntryLayout,
     build_circular_legend_layout,
 )
-from gbdraw.legend.linear_layout import (  # type: ignore[reportMissingImports]
+from gbdraw.legend.linear_layout import (
     LinearLegendLayout,
     build_linear_legend_layout,
 )
-from gbdraw.legend.metrics import (  # type: ignore[reportMissingImports]
+from gbdraw.legend.metrics import (
     legend_line_height,
     legend_text_x_offset,
 )
 from gbdraw.exceptions import ValidationError
-from gbdraw.layout.spatial import Aabb, union_aabbs  # type: ignore[reportMissingImports]
+from gbdraw.layout.spatial import Aabb, union_aabbs
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,7 +69,7 @@ def _legend_half_stroke_width(
     for properties in legend_table.values():
         if str(properties.get("stroke", "none")).strip().lower() == "none":
             continue
-        raw_width = properties.get("width", 0.0)
+        raw_width: Any = properties.get("width", 0.0)
         try:
             width = float(raw_width or 0.0)
         except (TypeError, ValueError):
@@ -110,15 +112,17 @@ def _circular_legend_local_bounds(
         )
     gradient = layout.gradient
     if gradient is not None:
-        entries = (*gradient.compact_entries, *gradient.single_entries)
-        for entry in entries:
+        gradient_entries: tuple[
+            CircularCompactGradientEntryLayout | CircularSingleGradientEntryLayout, ...
+        ] = (*gradient.compact_entries, *gradient.single_entries)
+        for gradient_entry in gradient_entries:
             bounds.append(
                 Aabb(
                     float(layout.gradient_x) + float(gradient.bar_x),
-                    float(layout.gradient_y) + float(entry.bar_y) - (0.5 * rect_size),
+                    float(layout.gradient_y) + float(gradient_entry.bar_y) - (0.5 * rect_size),
                     float(layout.gradient_x) + float(gradient.bar_x) + float(gradient.bar_width),
-                    float(layout.gradient_y) + float(entry.bar_y) + (0.5 * rect_size),
-                ).expanded(_entry_half_stroke_width(entry.properties))
+                    float(layout.gradient_y) + float(gradient_entry.bar_y) + (0.5 * rect_size),
+                ).expanded(_entry_half_stroke_width(gradient_entry.properties))
             )
     combined = union_aabbs(bounds)
     if combined is None:  # pragma: no cover - the layout rectangle is always present
@@ -146,14 +150,14 @@ def _linear_legend_local_bounds(
             ).expanded(_entry_half_stroke_width(entry.properties))
         )
     if active.gradient is not None:
-        for entry in active.gradient.entries:
+        for gradient_entry in active.gradient.entries:
             bounds.append(
                 Aabb(
-                    float(active.gradient_x) + float(entry.bar_x),
-                    float(active.gradient_y) + float(entry.bar_y) - (0.5 * rect_size),
-                    float(active.gradient_x) + float(entry.bar_x) + float(active.gradient.bar_width),
-                    float(active.gradient_y) + float(entry.bar_y) + (0.5 * rect_size),
-                ).expanded(_entry_half_stroke_width(entry.properties))
+                    float(active.gradient_x) + float(gradient_entry.bar_x),
+                    float(active.gradient_y) + float(gradient_entry.bar_y) - (0.5 * rect_size),
+                    float(active.gradient_x) + float(gradient_entry.bar_x) + float(active.gradient.bar_width),
+                    float(active.gradient_y) + float(gradient_entry.bar_y) + (0.5 * rect_size),
+                ).expanded(_entry_half_stroke_width(gradient_entry.properties))
             )
     combined = union_aabbs(bounds)
     if combined is None:  # pragma: no cover - the layout rectangle is always present
@@ -258,7 +262,7 @@ class LegendDrawingConfigurator:
             raise ValueError("legend wrap width must be a finite non-negative number")
         _legend_half_stroke_width(legend_table)
         if isinstance(self._profile, CircularRenderProfile):
-            layout = build_circular_legend_layout(
+            circular_layout = build_circular_legend_layout(
                 legend_table,
                 legend_position=str(placement),
                 canvas_width=wrap_width,
@@ -268,17 +272,17 @@ class LegendDrawingConfigurator:
                 color_rect_size=float(self.color_rect_size),
             )
             return self._measurement(
-                legend_width=layout.width,
-                legend_height=layout.height,
-                total_feature_legend_width=layout.feature_width,
-                pairwise_legend_width=layout.pairwise_legend_width,
-                num_of_lines=layout.num_lines,
-                num_of_columns=layout.num_columns,
-                num_of_items_per_line=layout.num_items_per_line,
-                has_gradient=layout.has_gradient,
-                circular_layout=layout,
+                legend_width=circular_layout.width,
+                legend_height=circular_layout.height,
+                total_feature_legend_width=circular_layout.feature_width,
+                pairwise_legend_width=circular_layout.pairwise_legend_width,
+                num_of_lines=circular_layout.num_lines,
+                num_of_columns=circular_layout.num_columns,
+                num_of_items_per_line=circular_layout.num_items_per_line,
+                has_gradient=circular_layout.has_gradient,
+                circular_layout=circular_layout,
                 local_bounds=_circular_legend_local_bounds(
-                    layout,
+                    circular_layout,
                     color_rect_size=float(self.color_rect_size),
                 ),
             )

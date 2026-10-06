@@ -5,10 +5,10 @@ from __future__ import annotations
 
 from typing import Literal
 
-from svgwrite import Drawing  # type: ignore[reportMissingImports]
+from svgwrite import Drawing
 
-from ..config.models import CircularRenderProfile  # type: ignore[reportMissingImports]
-from ..core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
+from ..config.models import CircularRenderProfile
+from ..core.sequence import determine_length_parameter
 
 
 class CircularCanvasConfigurator:
@@ -104,8 +104,8 @@ class CircularCanvasConfigurator:
         Calculates the dimensions and offsets for the circular canvas based on the configuration.
         """
 
-        self.total_width = self.default_width
-        self.total_height = self.default_height
+        self.total_width: float = self.default_width
+        self.total_height: float = self.default_height
         self.offset_x: float = self.default_width * 0.5
         self.offset_y: float = self.default_height * 0.5
         # Decorations are positioned only by the final composition plan.  Keep
@@ -135,12 +135,14 @@ class CircularCanvasConfigurator:
 
         self.track_ids: dict = {}
         depth_track_id: Literal[2] | None = 2 if self.show_depth else None
+        gc_track_id: Literal[2, 3] | None
+        skew_track_id: Literal[2, 3, 4] | None
         if self.show_depth:
-            gc_track_id: Literal[3] | None = 3 if self.show_gc else None
-            skew_track_id: Literal[4, 3] | None = (4 if self.show_gc else 3) if self.show_skew else None
+            gc_track_id = 3 if self.show_gc else None
+            skew_track_id = (4 if self.show_gc else 3) if self.show_skew else None
         else:
-            gc_track_id: Literal[2] | None = 2 if self.show_gc or not self.show_skew else None
-            skew_track_id: Literal[3, 2] | None = (3 if self.show_gc else 2) if self.show_skew else None
+            gc_track_id = 2 if self.show_gc or not self.show_skew else None
+            skew_track_id = (3 if self.show_gc else 2) if self.show_skew else None
 
         if depth_track_id is not None:
             self.track_ids["depth_track"] = depth_track_id

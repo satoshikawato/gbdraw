@@ -7,14 +7,14 @@ import math
 from numbers import Integral, Real
 from pathlib import Path
 from types import MappingProxyType
-from typing import Literal, Mapping, Sequence, cast
+from typing import Any, Callable, Literal, Mapping, Sequence, TypeAlias, cast
 
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from pandas import DataFrame
 
 from gbdraw.features.overrides import FeatureOverride, normalize_feature_override_inputs
 from gbdraw.features.placement import FeaturePlacementOverride, normalize_feature_placements
 
-from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.collinearity import (
     CollinearityBlock,
     CollinearityAnchorMode,
     CollinearityColorMode,
@@ -25,27 +25,27 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     normalize_collinearity_color_mode,
     normalize_collinearity_search_scope,
 )
-from gbdraw.analysis.collinearity_units import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.collinearity_units import (
     CollinearityUnitMode,
     normalize_collinearity_unit_mode,
 )
-from gbdraw.analysis.conservation import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.conservation import (
     ConservationSearchResult,
     normalize_conservation_reference,
 )
-from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.protein_colinearity import (
     OrthogroupResult,
     OrthogroupGraphResult,
     normalize_orthogroup_membership_mode,
 )
 from gbdraw.comparisons.losat_runtime import AUTOMATIC_LOSAT_BIN
-from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from gbdraw.config.models.objects import (  # type: ignore[reportMissingImports]
+from gbdraw.config.models import GbdrawConfig
+from gbdraw.config.models.objects import (
     normalize_pairwise_match_style,
 )
-from gbdraw.config.modify import validate_config_overrides  # type: ignore[reportMissingImports]
-from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
-from gbdraw.features.shapes import (  # type: ignore[reportMissingImports]
+from gbdraw.config.modify import validate_config_overrides
+from gbdraw.exceptions import ValidationError
+from gbdraw.features.shapes import (
     normalize_feature_shape_overrides,
 )
 from gbdraw.linear_comparison import LinearComparison
@@ -56,7 +56,7 @@ from gbdraw.mode_profiles import (
     resolve_mode_profile_overrides,
     validate_dinucleotide,
 )
-from gbdraw.tracks import (  # type: ignore[reportMissingImports]
+from gbdraw.tracks import (
     CircularTrackSlot,
     LinearTrackSlot,
     normalize_circular_track_slots_with_axis,
@@ -147,7 +147,7 @@ class ColorOptions:
     default_colors_file: str | None = None
 
 
-_DepthTrackSource = str | Path | DataFrame
+_DepthTrackSource: TypeAlias = str | Path | DataFrame
 
 
 @dataclass(frozen=True)
@@ -242,7 +242,7 @@ def _validate_track_configuration(
                 f"{slots_field_name} must contain strings or "
                 f"{expected_type.__name__} values."
             )
-        parser = (
+        parser: Callable[[Sequence[Any]], Sequence[Any]] = (
             parse_circular_track_slots
             if mode == "circular"
             else parse_linear_track_slots
@@ -259,7 +259,7 @@ def _validate_track_configuration(
     if parsed_slots is None:
         raise ValidationError(f"{axis_field_name} requires {slots_field_name}.")
     normalized_axis_index = int(axis_index)
-    normalizer = (
+    normalizer: Callable[[Sequence[Any], int], object] = (
         normalize_circular_track_slots_with_axis
         if mode == "circular"
         else normalize_linear_track_slots_with_axis
@@ -932,7 +932,7 @@ class _ModeDiagramOptions:
             or not str(self.feature_placement_table_file).strip()
         ):
             raise ValidationError("feature_placement_table_file must identify a file.")
-        nested_types = (
+        nested_types: tuple[tuple[str, object, type], ...] = (
             ("colors", self.colors, ColorOptions),
             ("annotations", self.annotations, AnnotationOptions),
         )

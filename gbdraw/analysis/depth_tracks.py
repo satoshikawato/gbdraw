@@ -9,12 +9,12 @@ from numbers import Integral
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Sequence, TypeVar
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
 
-from gbdraw.analysis.depth import depth_df, read_depth_tsv  # type: ignore[reportMissingImports]
-from gbdraw.configurators import DepthConfigurator  # type: ignore[reportMissingImports]
-from gbdraw.exceptions import GbdrawError, ValidationError  # type: ignore[reportMissingImports]
+from gbdraw.analysis.depth import depth_df, read_depth_tsv
+from gbdraw.configurators import DepthConfigurator
+from gbdraw.exceptions import GbdrawError, ValidationError
 from gbdraw.tracks.parsing import parse_nonnegative_integer
 
 if TYPE_CHECKING:

@@ -169,7 +169,7 @@ def _legacy_exact_coordinate(value: object) -> int | None:
     if isinstance(value, bool):
         return None
     try:
-        number = int(value)  # type: ignore[arg-type]
+        number = int(value)
     except (TypeError, ValueError, OverflowError):
         return None
     if isinstance(value, float) and not value.is_integer():

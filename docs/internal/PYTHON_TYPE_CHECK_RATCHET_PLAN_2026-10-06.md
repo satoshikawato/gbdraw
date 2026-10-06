@@ -39,7 +39,7 @@ plan. Section 10 gives the outlook.
 | Can the `Lint` job host a pytest guard? | Not without installing the package: `tests/conftest.py` imports `gbdraw.session_io`, which imports pandas and BioPython. | `tests/conftest.py:16` |
 | Does `Core PR` run for every change that can alter a checked file? | Yes. A `.py` path under `gbdraw/` outside `gbdraw/web/` classifies as `python-core`, `renderer`, `session-persistence`, `losat-integration`, `packaging` (`gbdraw/_build_support.py`), or `full` (the default for an unmatched path), and all of these route `core-pr`, as do `tests-only` and `ci-only`. The classes without `core-pr` (`documentation`, `metadata`, `policy-documentation`, `web-runtime`, `gallery`) cannot change a checked file. A dev push of any non-light class runs every dev job. | `tools/ci-impact-policy.mjs:42-56,158-210` |
 | Is a workflow change governed? | Yes. `.github/workflows/test.yml` is CI authority, so changing it is a GOVERNANCE pull request. The Web Gate's co-change block concerns production runtime paths, which it defines as `gbdraw/web/index.html`, `gbdraw/web/js/`, and `gbdraw/web/vendor/`. Python sources are not among them. | `docs/internal/WEB_CHANGE_POLICY.md:256-270`; `tools/check-web-change-budget.mjs:333-335,1830-1836` |
-| Are annotations ever runtime data? | Yes, in two ways. (1) `gbdraw/config/modify.py` calls `get_type_hints` on `GbdrawConfig` and its nested dataclasses to validate config overrides (Literal domains, nested dataclass detection). A field annotation under `gbdraw/config/models/` therefore changes behavior. (2) Only 143 of the 226 checked files have `from __future__ import annotations`. In the other 83 (51 of them annotated, 36 with type debt), annotations are evaluated when the module is imported. | `gbdraw/config/modify.py:76-95` |
+| Are annotations ever runtime data? | Yes, in three ways. (1) `get_type_hints` reads dataclass field annotations: `gbdraw/config/modify.py` for `GbdrawConfig` and its nested dataclasses (config overrides), and `_validate_dataclass_contract` in `gbdraw/session_request_codec.py` for request options, layouts, outputs, track slots, and other decoded or encoded dataclasses. A field annotation therefore changes behavior, and a name used in it must exist at run time. (2) `tests/test_public_contract.py` hashes the signatures, annotation strings included, of every name in `gbdraw.__all__`. (3) Only 143 of the 226 checked files have `from __future__ import annotations`. In the other 83 (51 of them annotated, 36 with type debt), annotations are evaluated when the module is imported. | `gbdraw/config/modify.py:76-95`; `gbdraw/session_request_codec.py:4579`; `tests/test_public_contract.py` |
 | Are there platform branches? | `gbdraw/losat_setup.py:155-171` uses `msvcrt.locking` under an `os.name` check, which a checker cannot narrow. `gbdraw/comparisons/losat_runtime.py:216-221` uses `sys.platform`, which it can. | source |
 
 ### 2.2 Checkers compared
@@ -253,17 +253,19 @@ want to override before T0.
     `from __future__ import annotations` (added to a file that lacks it
     before its annotations change);
   - `if TYPE_CHECKING:` blocks, in files that have the `__future__` import;
-  - `Protocol` and `TypedDict` classes, `X: TypeAlias = …`, `TypeVar`, and
-    `@overload` stubs;
+  - `Protocol` and `TypedDict` classes, `TypeVar`, and `@overload` stubs;
+  - `: TypeAlias` added to an existing alias assignment;
   - removing a `# type: ignore` comment.
 
-  These count as code changes, because the annotation is read at run time:
-  class-body annotations under `gbdraw/config/models/` (read by
-  `get_type_hints` in `gbdraw/config/modify.py`) and dataclass annotations
-  that name `ClassVar`, `InitVar`, or `KW_ONLY`. A name imported only under
-  `TYPE_CHECKING` must not appear in a `gbdraw/config/models/` annotation,
-  because `get_type_hints` would raise `NameError`. Appendix A has the check;
-  a slice pull request records its output.
+  These count as code changes and are named in the body: every class-body
+  annotation (dataclass and `NamedTuple` fields, which `get_type_hints` reads
+  in `gbdraw/config/modify.py` and `gbdraw/session_request_codec.py`), and a
+  new type alias, which is module-level code. A name imported only under
+  `TYPE_CHECKING` must not appear in a class-body annotation, because
+  `get_type_hints` would raise `NameError`. The annotations of names in
+  `gbdraw.__all__` are part of the public contract snapshot
+  (`tests/test_public_contract.py`); changing one is a public API change
+  (D10). Appendix A has the check; a slice pull request records its output.
 - **D8 Narrowing `None` is a runtime change.** If the `None` can arrive from
   a public input (the Python API, the CLI, a Session, or a table file), it is
   a defect `PY-xx`: a failing test comes first, then a fix that raises the
@@ -327,9 +329,12 @@ Patterns:
   entry, including a new file, has no debt. Fix the type, use
   `typing.cast`, or fix the code instead of adding `# type: ignore`. Raising
   an entry or relaxing `[tool.mypy]` needs the Owner's approval.
-- Field annotations under `gbdraw/config/models/` are runtime data:
-  `gbdraw/config/modify.py` reads them with `get_type_hints` to validate
-  overrides.
+- Class-body annotations are runtime data. `get_type_hints` reads dataclass
+  fields in `gbdraw/config/modify.py` (config overrides) and
+  `gbdraw/session_request_codec.py` (canonical request validation), and
+  `tests/test_public_contract.py` hashes the signatures of `gbdraw.__all__`.
+  Treat a change to either as a code change, and use only names importable at
+  run time in them, not names imported under `TYPE_CHECKING`.
 ```
 
 ### 4.2 Guard (`tests/test_type_check_ratchet.py`)
@@ -600,18 +605,17 @@ what has no runtime effect under ``from __future__ import annotations``:
 - ``if TYPE_CHECKING:`` blocks (the ``else`` branch is kept);
 - imports from ``typing``, ``typing_extensions``, ``collections.abc``;
 - classes deriving from ``Protocol`` or ``TypedDict``, ``@overload`` stubs,
-  ``X: TypeAlias = ...`` and ``T = TypeVar(...)``.
+  and ``T = TypeVar(...)``. ``X: TypeAlias = v`` counts as ``X = v``.
 
 Normalization applies only when the HEAD side of the file has
 ``from __future__ import annotations``; without it, annotations are evaluated at
 import time, so any typing change in that file is reported. Add the import first.
 
-Class-body annotations stay in two cases, because they are runtime data:
-dataclass fields whose annotation names ``ClassVar``, ``InitVar`` or ``KW_ONLY``,
-and every class-body annotation under ``gbdraw/config/models/``, which
-``gbdraw/config/modify.py`` reads with ``get_type_hints`` to validate overrides.
-A bare class-body ``x: T`` keeps its target (adding or removing a field is a
-change). Comments, including ``# type: ignore``, are not in the AST.
+Class-body annotations always stay: they are runtime data. Dataclass fields
+are read with ``get_type_hints`` by ``gbdraw/config/modify.py`` (config
+overrides) and ``gbdraw/session_request_codec.py`` (canonical request
+validation), and they decide ``ClassVar``/``InitVar``/``KW_ONLY`` and
+``NamedTuple`` fields. Comments, including ``# type: ignore``, are not in the AST.
 Exit 0 when every changed file is annotation-only; otherwise print a unified
 diff of the normalized code per file and exit 1.
 """
@@ -624,8 +628,6 @@ import subprocess
 import sys
 
 TYPING_MODULES = {"typing", "typing_extensions", "collections.abc", "__future__"}
-RUNTIME_ANNOTATION_DIRS = ("gbdraw/config/models/",)
-RUNTIME_ANNOTATION_NAMES = ("ClassVar", "InitVar", "KW_ONLY")
 
 
 def _name(node: ast.AST) -> str:
@@ -642,7 +644,6 @@ def _name(node: ast.AST) -> str:
 
 class Normalize(ast.NodeTransformer):
     def __init__(self, path: str) -> None:
-        self.keep_class_annotations = path.startswith(RUNTIME_ANNOTATION_DIRS)
         self.scopes: list[str] = ["module"]
 
     def _body(self, statements: list[ast.stmt]) -> list[ast.stmt]:
@@ -732,19 +733,10 @@ class Normalize(ast.NodeTransformer):
         return node if node.names else None
 
     def visit_AnnAssign(self, node):
-        if _name(node.annotation) == "TypeAlias":
-            return None
-        in_class = self.scopes[-1] == "class"
-        runtime_annotation = in_class and (
-            self.keep_class_annotations
-            or any(n in ast.unparse(node.annotation) for n in RUNTIME_ANNOTATION_NAMES)
-        )
-        if runtime_annotation:
+        if self.scopes[-1] == "class":
             node.value = None if node.value is None else self.visit(node.value)
             return node
         if node.value is None:
-            if in_class:
-                return ast.Expr(ast.Name(id=f"__field__{ast.unparse(node.target)}"))
             return None
         return ast.Assign(targets=[node.target], value=self.visit(node.value), lineno=0)
 

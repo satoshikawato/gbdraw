@@ -4,7 +4,8 @@
 // expectLiveEqualsGenerate (tests/web/helpers/live-generate-parity.cjs), minus
 // the differences tests/web/contracts/live-generate-parity-allowed.json allows.
 // A case marked test.fail names the finding (OV-xx) of a confirmed mismatch;
-// the PR that fixes it removes the mark.
+// the PR that fixes it removes the mark. The cases after the matrix check what
+// the Legend fixes of OV-42 to OV-44 ask of the automatic rerender.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
@@ -127,11 +128,13 @@ const history = async (page, step) => {
 
 const FL1_OFF = { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' };
 const BATCH_0004_OFF = { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '_0004$', action: 'off' };
+const BATCH_CDS_OFF = { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '.', action: 'off' };
+const FL1_ALPHA = { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'alpha' };
 
 // The edit kinds. Each appears at least once in the matrix.
 const KINDS = [
   'visibility rule add', 'visibility rule action', 'visibility rule delete', 'feature Off', 'feature On',
-  'label text', 'label Off', 'label On', 'color rule add', 'color rule color', 'feature color',
+  'label text', 'label Off', 'label On', 'color rule add', 'color rule color', 'color rule delete', 'feature color',
   'undo', 'redo', 'Result switch'
 ];
 
@@ -143,8 +146,7 @@ const CASES = [
     kind: 'visibility rule add',
     edit: 'Feature Visibility rule add',
     states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
-    run: (page) => addVisibilityRule(page, FL1_OFF),
-    knownMismatch: 'OV-42: the legend keeps the order (and the rows) of the features drawn before the edit'
+    run: (page) => addVisibilityRule(page, FL1_OFF)
   },
   {
     kind: 'visibility rule action',
@@ -203,8 +205,7 @@ const CASES = [
     kind: 'color rule add',
     edit: 'Specific color rule add',
     states: { mode: 'circular', results: 'batch', reflow: 'on', labels: 'bound' },
-    run: (page) => addColorRule(page, { feat: 'CDS', qual: 'product', val: '^gtg start$', color: '#e63946', cap: 'GTG start' }),
-    knownMismatch: 'OV-43: the legend keeps the CDS caption and appends the rule row last'
+    run: (page) => addColorRule(page, { feat: 'CDS', qual: 'product', val: '^gtg start$', color: '#e63946', cap: 'GTG start' })
   },
   {
     kind: 'color rule color',
@@ -220,8 +221,7 @@ const CASES = [
     kind: 'feature color',
     edit: 'Feature color (popup, this feature only)',
     states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'bound' },
-    run: (page) => popupEdit(page, 'FL1', { fill: '#c83366' }),
-    knownMismatch: 'OV-43: the legend keeps the CDS caption and appends the rule row last'
+    run: (page) => popupEdit(page, 'FL1', { fill: '#c83366' })
   },
   {
     kind: 'feature color',
@@ -254,14 +254,98 @@ const CASES = [
     edit: 'Result switch after a feature color with the same-product scope',
     states: { mode: 'circular', results: 'batch', reflow: 'on', labels: 'bound' },
     setup: (page) => popupEdit(page, 'TESTA_0001', { fill: '#c83366', scope: 'annotationLabel' }),
-    run: (page) => showResult(page, 1),
-    knownMismatch: 'OV-43, OV-44: the other Result lacks the rule row and keeps the CDS caption'
+    run: (page) => showResult(page, 1)
   },
   {
     kind: 'Result switch',
     edit: 'Result switch after a Feature Visibility rule add',
     states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
     setup: (page) => addVisibilityRule(page, BATCH_0004_OFF),
+    run: (page) => showResult(page, 1)
+  },
+  // OV-42, OV-43, OV-44 (Owner decision 2026-10-06, option A): an edit that
+  // changes what a Legend derives from asks for the automatic rerender, also
+  // with Auto Reflow off, and Python redraws the Legend of every Result.
+  {
+    kind: 'visibility rule add',
+    edit: 'Feature Visibility rule add that hides every CDS',
+    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
+    run: (page) => addVisibilityRule(page, BATCH_CDS_OFF)
+  },
+  {
+    kind: 'feature Off',
+    edit: 'Feature visibility Off (popup) for the first drawn CDS',
+    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'bound' },
+    run: (page) => popupEdit(page, 'FL1', { visibility: 'off' })
+  },
+  {
+    kind: 'undo',
+    edit: 'Undo of a Feature Visibility rule add that reorders the Legend',
+    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    setup: (page) => addVisibilityRule(page, FL1_OFF),
+    run: (page) => history(page, 'undo')
+  },
+  {
+    kind: 'redo',
+    edit: 'Redo of a Feature Visibility rule add that reorders the Legend',
+    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    setup: async (page) => { await addVisibilityRule(page, FL1_OFF); await history(page, 'undo'); },
+    run: (page) => history(page, 'redo')
+  },
+  {
+    kind: 'color rule add',
+    edit: 'Specific color rule add',
+    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'bound' },
+    run: (page) => addColorRule(page, FL1_ALPHA)
+  },
+  {
+    kind: 'color rule delete',
+    edit: 'Specific color rule delete of a rule Generate drew',
+    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    setup: async (page) => { await addColorRule(page, FL1_ALPHA); await generate(page); },
+    run: (page) => appAction(page, 'removeSpecificRule', 0)
+  },
+  {
+    kind: 'undo',
+    edit: 'Undo of a specific color rule add',
+    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    setup: (page) => addColorRule(page, FL1_ALPHA),
+    run: (page) => history(page, 'undo')
+  },
+  {
+    kind: 'redo',
+    edit: 'Redo of a specific color rule add',
+    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    setup: async (page) => { await addColorRule(page, FL1_ALPHA); await history(page, 'undo'); },
+    run: (page) => history(page, 'redo')
+  },
+  {
+    kind: 'Result switch',
+    edit: 'Result switch after a feature color with the same-product scope',
+    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'bound' },
+    setup: (page) => popupEdit(page, 'TESTA_0001', { fill: '#c83366', scope: 'annotationLabel' }),
+    run: (page) => showResult(page, 1)
+  },
+  {
+    kind: 'Result switch',
+    edit: 'Result switch after a color change of a same-product rule Generate drew',
+    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
+    setup: async (page) => {
+      await popupEdit(page, 'TESTA_0001', { fill: '#c83366', scope: 'annotationLabel' });
+      await generate(page);
+      await appAction(page, 'setSpecificRuleField', 0, 'color', '#2a9d8f');
+    },
+    run: (page) => showResult(page, 1)
+  },
+  {
+    kind: 'Result switch',
+    edit: 'Result switch after deleting a same-product rule Generate drew',
+    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
+    setup: async (page) => {
+      await popupEdit(page, 'TESTA_0001', { fill: '#c83366', scope: 'annotationLabel' });
+      await generate(page);
+      await appAction(page, 'removeSpecificRule', 0);
+    },
     run: (page) => showResult(page, 1)
   }
 ];
@@ -320,3 +404,53 @@ for (const { edit, states, setup, run, knownMismatch } of CASES) {
     await expectLiveEqualsGenerate(page, { label: `${edit} (${statesName(states)})` });
   });
 }
+
+// Counts the diagram renders (Generate and the automatic rerender) from here on.
+const countRenders = async (page) => {
+  await page.evaluate(() => {
+    window.__parityRenders = 0;
+    window.__GBDRAW_TEST_HOOKS__ = {
+      ...window.__GBDRAW_TEST_HOOKS__,
+      beforeDiagramGenerationResponse: () => { window.__parityRenders += 1; }
+    };
+  });
+  return () => page.evaluate(() => window.__parityRenders);
+};
+
+// With Auto Reflow off, an edit that changes no Legend source asks for no
+// rerender: the other labels may wait for the reflow (Owner, OV-35), and the
+// Result still shows what Generate draws apart from that placement.
+test('an edit that changes no Legend source does not rerender with Auto Reflow off', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await addColorRule(page, FL1_ALPHA);
+  await generate(page);
+  const renders = await countRenders(page);
+  await popupEdit(page, 'FL2', { labelText: 'beta protein, edited live' });
+  expect(await renders(), 'label text').toBe(0);
+  await appAction(page, 'setSpecificRuleField', 0, 'color', '#7b2cbf');
+  expect(await renders(), 'color of a rule a drawn feature uses').toBe(0);
+  await popupEdit(page, 'FL2', { labelVisibility: 'off' });
+  expect(await renders(), 'Label visibility Off').toBe(0);
+  await popupEdit(page, 'FL2', { visibility: 'off' });
+  expect(await renders(), 'Off for a CDS after the first').toBe(0);
+  await expectLiveEqualsGenerate(page, { label: 'edits that change no Legend source' });
+});
+
+// An edit that changes a Legend source rerenders once, whether Auto Reflow
+// would also place the labels or not.
+test('an edit that changes a Legend source rerenders once', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  let renders = await countRenders(page);
+  await addVisibilityRule(page, FL1_OFF);
+  expect(await renders(), 'visibility rule, Auto Reflow off').toBe(1);
+  await page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = true; });
+  renders = await countRenders(page);
+  await appAction(page, 'removeFeatureVisibilityRule', 0);
+  expect(await renders(), 'visibility rule delete, Auto Reflow on').toBe(1);
+  renders = await countRenders(page);
+  await addColorRule(page, FL1_ALPHA);
+  expect(await renders(), 'color rule, Auto Reflow on').toBe(1);
+  await expectLiveEqualsGenerate(page, { label: 'edits that change a Legend source' });
+});

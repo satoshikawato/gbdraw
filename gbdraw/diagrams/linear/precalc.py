@@ -15,23 +15,23 @@ from collections.abc import Collection
 import math
 from typing import Sequence
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
-from ...config.models import (  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from ...canvas import LinearCanvasConfigurator
+from ...config.models import (
     GbdrawConfig,
     LinearRenderProfile,
 )
-from ...configurators import FeatureDrawingConfigurator  # type: ignore[reportMissingImports]
-from ...core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
-from ...features.colors import preprocess_color_tables  # type: ignore[reportMissingImports]
-from ...features.factory import (  # type: ignore[reportMissingImports]
+from ...configurators import FeatureDrawingConfigurator
+from ...core.sequence import determine_length_parameter
+from ...features.colors import preprocess_color_tables
+from ...features.factory import (
     FeatureBuildResult,
     create_feature_layers,
 )
-from ...features.objects import FeatureObject  # type: ignore[reportMissingImports]
-from ...render.groups.linear import DefinitionGroup  # type: ignore[reportMissingImports]
-from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
-from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear  # type: ignore[reportMissingImports]
+from ...features.objects import FeatureObject
+from ...render.groups.linear import DefinitionGroup
+from ...labels.filtering import preprocess_label_filtering
+from ...labels.linear import calculate_label_y_bounds, prepare_label_list_linear
 from ...layout.record_coordinates import RecordDisplayTransform
 from ...layout.linear import LinearFeatureLaneGeometry, LinearRecordRenderContext
 from .orthogroup_alignment import OrthogroupLabelEligibility, orthogroup_label_sets_for_record
@@ -77,7 +77,7 @@ def _precalculate_definition_metrics(
     """
     Pre-calculate definition widths and heights for all records.
     """
-    max_definition_width = 0
+    max_definition_width: float = 0
     definition_heights: list[float] = []
     definition_widths: list[float] = []
     if not records:
@@ -170,7 +170,7 @@ def _precalculate_label_dimensions(
         canvas_config=canvas_config,
         profile=profile,
     )
-    max_required_height = 0
+    max_required_height: float = 0
     all_labels_by_record: list[list[dict]] = []
     record_label_heights: list[float] = []
     normalize_length = cfg.canvas.linear.normalize_length

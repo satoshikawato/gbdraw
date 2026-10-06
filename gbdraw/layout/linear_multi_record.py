@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import math
 from typing import Mapping, NewType, Sequence
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.layout.linear import AxisGapResolution, CollisionBand, resolve_axis_gap

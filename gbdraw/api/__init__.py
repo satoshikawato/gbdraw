@@ -33,7 +33,7 @@ from .io import (
     read_qualifier_priority_table,
     read_records_table,
 )
-from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
     CollinearityResult,
@@ -43,7 +43,7 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
     iter_collinearity_search_pairs,
     normalize_collinearity_search_scope,
 )
-from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.protein_colinearity import (
     OrthogroupMembershipMode,
     OrthologEdge,
     OrthologPath,
@@ -168,7 +168,7 @@ from gbdraw.session import (
     session_to_request,
     with_request_output,
 )
-from .tracks import (  # type: ignore[reportMissingImports]
+from .tracks import (
     CircularTrackRendererName,
     CircularTrackSide,
     CircularTrackSlot,

@@ -5,12 +5,14 @@ from __future__ import annotations
 
 from collections.abc import Collection
 from dataclasses import dataclass
+from typing import cast
 
 from Bio.SeqRecord import SeqRecord
 from svgwrite.container import Group
 from svgwrite.text import Text, TSpan
 
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ....canvas import LinearCanvasConfigurator
+from ....config.models import GbdrawConfig
 from ....core.record_metadata import format_replicon_label, infer_record_source_metadata
 from ....core.text import (
     calculate_bbox_dimensions,
@@ -54,7 +56,7 @@ class DefinitionGroup:
     def __init__(
         self,
         record: SeqRecord,
-        canvas_config: dict,
+        canvas_config: LinearCanvasConfigurator,
         *,
         cfg: GbdrawConfig,
         title_start_x: float = 0,
@@ -164,7 +166,8 @@ class DefinitionGroup:
                     float(line.y) + (0.5 * float(line.height)),
                 )
             )
-        return union_aabbs(bounds) if bounds else Aabb(0.0, 0.0, 0.0, 0.0)
+        merged = union_aabbs(bounds)
+        return merged if merged is not None else Aabb(0.0, 0.0, 0.0, 0.0)
 
     def get_definition_details(self) -> None:
         """Resolve all labels that may participate in the stacked definition."""
@@ -184,7 +187,8 @@ class DefinitionGroup:
 
         self.record_name: str = override if override else ""
         self.record_name_parts = parse_mixed_content_text(self.record_name)
-        self.record_name_plain = "".join(part.get("text") or "" for part in self.record_name_parts).strip()
+        # parse_mixed_content_text parts carry text as str | None (the bool is the italic flag).
+        self.record_name_plain = "".join(cast(str, part.get("text") or "") for part in self.record_name_parts).strip()
 
         subtitle = None
         if getattr(self.record, "annotations", None):
@@ -192,7 +196,7 @@ class DefinitionGroup:
         self.record_subtitle: str = str(subtitle).strip() if subtitle is not None else ""
         self.record_subtitle_parts = parse_mixed_content_text(self.record_subtitle)
         self.record_subtitle_plain = "".join(
-            part.get("text") or "" for part in self.record_subtitle_parts
+            cast(str, part.get("text") or "") for part in self.record_subtitle_parts
         ).strip()
 
         metadata = infer_record_source_metadata(self.record)

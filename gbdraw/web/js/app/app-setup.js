@@ -1195,26 +1195,42 @@ export const createAppSetup = () => {
     buildRunStateData,
     applyRunStateData
   });
-  // R13: a History restore keeps the open specific-color pattern drafts. The
+  // R13: a History restore keeps the open specific-color pattern drafts, and
+  // Undo and Redo of a rule edit follow the restored rules as the edit did
+  // (OV-43): the rule owner asks for the rerender when they change a Legend
+  // source. A Generate restore brings the Results drawn with its rules. The
   // feature editor takes History's undoable runs, so the root registers its
-  // capture and restore ports once both owners exist.
-  const specificRuleDraftPorts = {
+  // ports once both owners exist.
+  const specificRuleRestorePorts = {
     captureSpecificRulePatternDrafts: null,
-    restoreSpecificRulePatternDrafts: null
+    restoreSpecificRulePatternDrafts: null,
+    followRestoredSpecificRules: null,
+    retainRulesForRestore: null
   };
   const restoreWithSpecificRuleDrafts = async (restore, ...args) => {
-    const drafts = specificRuleDraftPorts.captureSpecificRulePatternDrafts();
+    const drafts = specificRuleRestorePorts.captureSpecificRulePatternDrafts();
     try {
       return await restore(...args);
     } finally {
-      if (drafts) specificRuleDraftPorts.restoreSpecificRulePatternDrafts(drafts);
+      if (drafts) specificRuleRestorePorts.restoreSpecificRulePatternDrafts(drafts);
+    }
+  };
+  const restoreRuleEdits = async (restore, ...args) => {
+    const previousRules = manualSpecificRules.map((rule) => ({ ...rule }));
+    specificRuleRestorePorts.retainRulesForRestore(previousRules);
+    try {
+      const restored = await restoreWithSpecificRuleDrafts(restore, ...args);
+      specificRuleRestorePorts.followRestoredSpecificRules(previousRules);
+      return restored;
+    } finally {
+      specificRuleRestorePorts.retainRulesForRestore([]);
     }
   };
   const history = createHistoryManager({
     buildIntent: historySnapshots.buildHistoryIntent,
-    applyIntent: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.applyHistoryIntent, ...args),
+    applyIntent: (...args) => restoreRuleEdits(historySnapshots.applyHistoryIntent, ...args),
     buildCheckpoint: historySnapshots.buildArtifactCheckpoint,
-    applyCheckpoint: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.applyArtifactCheckpoint, ...args),
+    applyCheckpoint: (...args) => restoreRuleEdits(historySnapshots.applyArtifactCheckpoint, ...args),
     captureGeneratedArtifactHandle: historySnapshots.captureGeneratedArtifactHandle,
     restoreGeneratedArtifactHandle: (...args) => restoreWithSpecificRuleDrafts(historySnapshots.restoreGeneratedArtifactHandle, ...args),
     compareGeneratedArtifactHandles: historySnapshots.compareGeneratedArtifactHandles,
@@ -1302,6 +1318,7 @@ export const createAppSetup = () => {
     evaluate: async (payload, options) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload, options)).result,
     visibilityRules: () => requestFeatureVisibilityRules(state.featureVisibilityManualRules)
   });
+  specificRuleRestorePorts.retainRulesForRestore = rulePreparation.retain;
   // R13: a Legend row a specific-color rule draws commits its edit through the
   // rule owner; the root registers the port once the feature editor exists.
   const legendRowRulePorts = { commitLegendRowRules: null };
@@ -1370,8 +1387,9 @@ export const createAppSetup = () => {
     projectFeatureEdits: () => projectMountedEditorIntent({ visibility: true, rerender: true, reflow: true, labels: true })
   });
   legendRowRulePorts.commitLegendRowRules = featureActions.commitSpecificRules;
-  specificRuleDraftPorts.captureSpecificRulePatternDrafts = featureActions.captureSpecificRulePatternDrafts;
-  specificRuleDraftPorts.restoreSpecificRulePatternDrafts = featureActions.restoreSpecificRulePatternDrafts;
+  specificRuleRestorePorts.captureSpecificRulePatternDrafts = featureActions.captureSpecificRulePatternDrafts;
+  specificRuleRestorePorts.restoreSpecificRulePatternDrafts = featureActions.restoreSpecificRulePatternDrafts;
+  specificRuleRestorePorts.followRestoredSpecificRules = featureActions.followRestoredSpecificRules;
   // R13: the drawer and the feature search come after the owners they react
   // through, so each receives its ports directly.
   const rightDrawerActions = createRightDrawerController({ state, watch,
@@ -2328,21 +2346,35 @@ export const createAppSetup = () => {
   );
   previewRuntime.configureMountedResultBinder({
     async adoptLegend(context) {
-      if (context.phase === 'result-selection' && !context.bindingOptions.trustedRestore) {
-        await projectEditorIntentOnDisplay(context);
+      // OV-47: each Result has its own default Legend order. A Result being
+      // displayed is read before its editor intent is projected; it then shows
+      // its own inventory, so a Generate or rerender made while another Result
+      // was displayed does not replace it.
+      const selecting = context.phase === 'result-selection' && !context.bindingOptions.trustedRestore;
+      const liveResultIdentities = results.value.map(previewRuntime.getResultIdentity);
+      if (selecting) {
+        const resultLegendOrder = legendActions.captureResultInventory(context.root, {
+          resultIdentity: context.resultIdentity,
+          liveResultIdentities
+        });
+        await projectEditorIntentOnDisplay(context, resultLegendOrder);
+        legendActions.adoptResultInventory(context.resultIdentity);
       } else {
         rememberCommittedEditorState(context);
       }
-      if (
-        context.bindingOptions.skipLegendExtraction
-        || context.bindingOptions.trustedRestore
-      ) return;
+      if (context.bindingOptions.trustedRestore) {
+        legendActions.adoptResultInventory(context.resultIdentity, { restored: true });
+        return;
+      }
+      if (context.bindingOptions.skipLegendExtraction) return;
       recordStructuralMetric('legendDomFullScanCount', 1, {
         phase: context.phase,
         rootGeneration: context.rootGeneration
       });
       legendActions.extractLegendEntries({
-        replaceGeneratedInventory: !context.bindingOptions.isIncrementalEdit
+        replaceGeneratedInventory: !selecting && (!context.bindingOptions.isIncrementalEdit
+          || Boolean(context.bindingOptions.replaceGeneratedLegend)),
+        liveResultIdentities
       });
     },
     bindComposition(context) {
@@ -2850,7 +2882,7 @@ export const createAppSetup = () => {
     });
     lastBoundResultIdentity = context.resultIdentity;
   };
-  const compileDisplayedResultOperations = (resultIndex, { replayDefaultLegendOrder = false } = {}) => {
+  const compileDisplayedResultOperations = (resultIndex, { replayDefaultLegendOrder = null } = {}) => {
     const catalog = toRaw(state.featureCatalog.value);
     if (!catalog) return null;
     const plan = compileDirectEditorMutationPlan({
@@ -2876,7 +2908,7 @@ export const createAppSetup = () => {
   // D-07 (PD-OI-062): a batch Result shows the canonical color, visibility,
   // Legend, and label edits when it is displayed. Labels follow in the
   // binder's label step.
-  const projectEditorIntentOnDisplay = async (context) => {
+  const projectEditorIntentOnDisplay = async (context, resultLegendOrder) => {
     const identity = context.resultIdentity;
     const current = currentEditorProjectionState();
     // The Result shown until now followed every live edit.
@@ -2890,8 +2922,8 @@ export const createAppSetup = () => {
     const visibility = previous.visibility !== current.visibility;
     labelProjectionResultIdentity = previous.labels !== current.labels ? identity : '';
     // B20: a Result last shown with another Legend order receives the current
-    // order, also the default order.
-    const replayDefaultLegendOrder = previous.legendOrder !== current.legendOrder;
+    // order, also the default order, which is its own generated order (OV-47).
+    const replayDefaultLegendOrder = previous.legendOrder !== current.legendOrder ? resultLegendOrder : null;
     let operations = null;
     try {
       operations = compileDisplayedResultOperations(context.resultIndex, { replayDefaultLegendOrder });

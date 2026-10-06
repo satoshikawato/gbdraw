@@ -6,18 +6,18 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
+from collections.abc import Iterable, Mapping as MappingABC, Sequence as SequenceABC
 from dataclasses import asdict, fields, is_dataclass
 from functools import lru_cache
 from numbers import Integral, Real
 from types import UnionType
-from typing import Any, Literal, Mapping, Union, get_args, get_origin, get_type_hints
+from typing import Any, Literal, Mapping, Union, cast, get_args, get_origin, get_type_hints
 
 from gbdraw.exceptions import ValidationError
 
-from .models import GbdrawConfig  # type: ignore[reportMissingImports]
-from .models.objects import circular_definition_interval_for_font  # type: ignore[reportMissingImports]
-from .models.root import validate_style_leaf  # type: ignore[reportMissingImports]
+from .models import GbdrawConfig
+from .models.objects import circular_definition_interval_for_font
+from .models.root import validate_style_leaf
 
 
 _UNSAFE_CONFIG_KEYS = frozenset({"__proto__", "constructor", "prototype"})
@@ -39,6 +39,7 @@ def _assert_safe_config_value(value: object, *, path: str) -> None:
         if identity in seen:
             continue
         seen.add(identity)
+        entries: Iterable[tuple[object, object]]
         if isinstance(current, MappingABC):
             entries = current.items()
         else:
@@ -348,7 +349,7 @@ def _apply_validated_config_overrides(
         validated.append(
             (
                 _CIRCULAR_DEFINITION_INTERVAL,
-                circular_definition_interval_for_font(font_size),
+                circular_definition_interval_for_font(cast(float, font_size)),
             )
         )
 
