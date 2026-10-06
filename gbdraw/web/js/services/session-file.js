@@ -1,3 +1,4 @@
+// @ts-check
 import { diagnosticError } from './error-normalization.js';
 
 const GZIP_MAGIC = Object.freeze([0x1f, 0x8b]);
@@ -7,6 +8,11 @@ const JSON_CHUNK_TARGET_BYTES = 256 * 1024;
 const JSON_TASK_BUDGET_MS = 16;
 export const SESSION_DOWNLOAD_CONFIRM_THRESHOLD_BYTES = 50 * 1024 * 1024;
 
+/**
+ * @param {Blob} blob The compressed Session.
+ * @param {(message: string) => boolean} [confirmFn]
+ * @returns {boolean} Whether the download may continue.
+ */
 export const confirmLargeSessionBlob = (
   blob,
   confirmFn = globalThis.confirm
@@ -291,6 +297,10 @@ const jsonByteStream = (data) => {
   });
 };
 
+/**
+ * @param {Record<string, any>} data The Session document.
+ * @returns {Promise<Blob>}
+ */
 export const compressSessionData = async (data) => {
   if (typeof CompressionStream !== 'function') {
     throw diagnosticError('SESSION_BROWSER_UNSUPPORTED', {}, { stage: 'transport' });
@@ -302,6 +312,10 @@ export const compressSessionData = async (data) => {
   }).blob();
 };
 
+/**
+ * @param {Blob} file A plain or gzip-compressed Session file.
+ * @returns {Promise<string>} The Session JSON text; the caller parses and validates it.
+ */
 export const readSessionText = async (file) => {
   if (file.size > MAX_SESSION_FILE_BYTES) {
     throw diagnosticError('SESSION_SIZE_LIMIT', {}, { stage: 'read' });

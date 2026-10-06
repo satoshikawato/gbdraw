@@ -1,3 +1,4 @@
+// @ts-check
 import { validateAnnotationWarnings } from './session-feature-metadata.js';
 import { validateComparisonWarnings } from './comparison-warnings.js';
 import { assertSafeObjectKeys } from './safe-object-keys.js';
@@ -168,6 +169,10 @@ const validateLinearComparisonPlan = (plan) => {
   return ids;
 };
 
+/**
+ * @param {Record<string, any>} sessionData Unvalidated Session data.
+ * @returns {void}
+ */
 export const validateCurrentComparisonAuthority = (sessionData) => {
   const config = isPlainObject(sessionData.config) ? sessionData.config : {};
   const ui = isPlainObject(sessionData.ui) ? sessionData.ui : {};
@@ -275,12 +280,20 @@ const hasInput = value => Array.isArray(value) ? value.some(hasInput) : value !=
 
 // The same complete inventory is used before Save and at document admission.
 // An inactive input remains biological even when it cannot render the active mode.
+/**
+ * @param {Record<string, any>} [files] The Session's Web input inventory.
+ * @returns {boolean}
+ */
 export const hasBiologicalSessionInputs = (files = {}) => (
   ['c_gb', 'c_gff', 'c_fasta', 'c_conservation_fastas', 'c_conservation_sequence_sources']
     .some(key => hasInput(files[key]))
   || (files.linearSeqs || []).some(row => ['gb', 'gff', 'fasta'].some(key => hasInput(row[key])))
 );
 
+/**
+ * @param {Record<string, any> | null | undefined} data
+ * @returns {boolean}
+ */
 export const isSettingsOnlySessionDocument = data => [42, 44, 45].includes(data?.version)
   && Object.hasOwn(data, 'renderRequest') && data.renderRequest === null;
 
@@ -339,6 +352,11 @@ const validateSettingsOnlyDocument = data => {
   }
 };
 
+/**
+ * @param {Record<string, any>} sessionData Unvalidated Session data.
+ * @param {number | string} version
+ * @returns {void}
+ */
 export const validateSessionAuthorityInventory = (sessionData, version) => {
   if (!sessionData || typeof sessionData !== 'object' || Array.isArray(sessionData)) {
     throw new Error('Session authority inventory requires an object.');
@@ -479,6 +497,10 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
   if (isSettingsOnlySessionDocument(sessionData)) validateSettingsOnlyDocument(sessionData);
 };
 
+/**
+ * @param {Record<string, any>} canonical `{ renderRequest, resources, webFiles }`.
+ * @returns {Record<string, any>} The same object, adopted.
+ */
 export const adoptRuntimeCanonicalSession = (canonical) => {
   if (
     !isPlainObject(canonical)
@@ -495,6 +517,11 @@ export const adoptRuntimeCanonicalSession = (canonical) => {
   return canonical;
 };
 
+/**
+ * @param {Record<string, any>} sessionData Unvalidated Session data.
+ * @param {number} currentVersion
+ * @returns {{ document: Record<string, any>, canonical: Record<string, any> | null }}
+ */
 export const adoptCurrentSessionDocument = (sessionData, currentVersion) => {
   validateSessionAuthorityInventory(sessionData, currentVersion);
   if (sessionData.version !== currentVersion) {
@@ -509,18 +536,34 @@ export const adoptCurrentSessionDocument = (sessionData, currentVersion) => {
   return { document: sessionData, canonical };
 };
 
+/**
+ * @param {any} value
+ * @returns {boolean}
+ */
 export const isAdoptedCurrentSessionDocument = (value) => (
   Boolean(value) && adoptedCurrentDocuments.has(value)
 );
 
+/**
+ * @param {any} value
+ * @returns {boolean}
+ */
 export const isAdoptedCanonicalSession = (value) => (
   Boolean(value) && adoptedCanonicalOwners.has(value)
 );
 
+/**
+ * @param {Record<string, any> | null | undefined} sessionData
+ * @returns {{ ui: Record<string, any> }}
+ */
 export const projectWebOnlyEditorMetadata = (sessionData) => ({
   ui: copyFields(sessionData?.ui, WEB_EDITOR_UI_FIELDS)
 });
 
+/**
+ * @param {Record<string, any> | null | undefined} sessionData
+ * @returns {Record<string, any>}
+ */
 export const projectArtifactState = (sessionData) => ({
   results: Array.isArray(sessionData?.results) ? sessionData.results : [],
   ui: copyFields(sessionData?.ui, ARTIFACT_UI_FIELDS),
@@ -534,6 +577,10 @@ export const projectArtifactState = (sessionData) => ({
   runMetadata: sessionData?.runMetadata || {}
 });
 
+/**
+ * @param {Record<string, any> | null | undefined} sessionData
+ * @returns {{ format: any, version: any, createdAt: any, title: string }}
+ */
 export const projectDocumentMetadata = (sessionData) => ({
   format: sessionData?.format,
   version: sessionData?.version,
