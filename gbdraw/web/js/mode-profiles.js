@@ -1,3 +1,4 @@
+// @ts-check
 import { MODE_PROFILE_DATA } from './mode-profiles.generated.js';
 import { diagnosticError } from './services/error-normalization.js';
 import { DECIMAL_NUMBER_PATTERN } from './utils/optional-positive-number.js';
@@ -192,6 +193,11 @@ const managedFlagsFor = (values, defaults) => Object.fromEntries(
   ])
 );
 
+/**
+ * @param {string} initialMode
+ * @param {Record<string, any>} initialState the adv state the manager reads and writes
+ * @param {Record<string, any> | null} [formState] the form state holding the managed form fields
+ */
 export const createModeProfileStateManager = (initialMode, initialState, formState = null) => {
   const snapshots = new Map();
   const readProfileValues = (source) => readManagedState(source, formState);
