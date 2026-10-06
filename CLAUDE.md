@@ -44,6 +44,10 @@ pytest tests/ --cov=gbdraw --cov-report=html
 # Check code formatting (ruff)
 ruff check gbdraw/
 
+# Type-check gbdraw/ with the pinned mypy and compare with the type-debt baseline
+pytest tests/test_type_check_ratchet.py
+mypy  # full error list
+
 # Install in development mode
 pip install -e ".[dev]"
 
@@ -203,9 +207,23 @@ The `gbdraw/render/` module has a two-tier architecture:
 
 ### Patterns
 - Frozen dataclasses for configuration models
-- `type: ignore` comments for BioPython (missing type stubs)
 - Factory methods (`.from_dict()`) for config parsing
 - `NamedTuple` for immutable data structures
+
+### Type checking
+- mypy, pinned in the `typecheck` extra and configured in `[tool.mypy]`,
+  checks `gbdraw/` except `gbdraw/web/`. Third-party packages are `Any` to it,
+  so their imports need no `# type: ignore`.
+- A file's type debt is its mypy errors plus its `# type: ignore` comments.
+  `TYPE_DEBT_BASELINE` in `tests/test_type_check_ratchet.py` only goes down:
+  lower or remove a file's entry when its debt falls. A file without an
+  entry, including a new file, has no debt. Fix the type, use
+  `typing.cast`, or fix the code instead of adding `# type: ignore`. Raising
+  an entry or relaxing `[tool.mypy]` needs the Owner's approval.
+- Field annotations under `gbdraw/config/models/` are runtime data:
+  `gbdraw/config/modify.py` reads them with `get_type_hints` to validate
+  overrides.
+- Plan: `docs/internal/PYTHON_TYPE_CHECK_RATCHET_PLAN_2026-10-06.md`.
 
 ## Key Configuration Files
 
@@ -240,6 +258,7 @@ Tests compare generated SVG against `tests/reference_outputs/` files.
 
 - **Python versions tested:** 3.10, 3.11, 3.12
 - **Lint job:** Uses Ruff 0.15.12 and blocks CI on lint failures
+- **Type check:** `Core PR` and `Core` install the `typecheck` extra and run `tests/test_type_check_ratchet.py` (mypy 2.4.0) with the other core tests
 - **CairoSVG:** The Python matrix installs the `dev` extra and required system packages (`libcairo2-dev`, `libpango1.0-dev` on Ubuntu)
 - **Slow tests:** Only run on push to main branch
 
