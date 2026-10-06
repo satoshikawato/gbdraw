@@ -163,6 +163,19 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       const stop = watch(state.labelReflowProcessing, (busy) => { if (!busy) { stop(); resolve(); } });
     })
     : Promise.resolve());
+  // OV-61: the rule table is the latest explicit color of the rows its rules
+  // draw. A Legend-only color an earlier popup edit left on such a row (the
+  // popup stores the caption's color when it recolors a whole group) would
+  // win at Generate over the recolored rule, so a commit that recolors the row
+  // retires it; `afterCommit` may store a new one.
+  const retireSupersededLegendColors = (intents) => {
+    const overrides = state.legendColorOverrides;
+    for (const { caption, color } of intents) {
+      if (Object.hasOwn(overrides, caption) && resolveColorToHex(overrides[caption]) !== resolveColorToHex(color)) {
+        delete overrides[caption];
+      }
+    }
+  };
   /**
    * @typedef {{ isCurrent?: () => boolean, afterCommit?: (intents: Record<string, any>[]) => void, previousLegendIntents?: Record<string, any>[], sourceRows?: (Record<string, any> | null)[] }} CommitSpecificRulesOptions
    */
@@ -226,6 +239,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
         ...intents.map(intent => intent.caption)
       ]);
       applyRulePreview();
+      retireSupersededLegendColors(intents);
       afterCommit(intents);
       applied = true;
       legend.apply();
