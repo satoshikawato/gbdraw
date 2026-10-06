@@ -102,10 +102,12 @@ test('every detector exposes the evidence contract and a stable id list', () => 
   assert.deepEqual(WEB_OWNER_GRAPH_DETECTOR_IDS, [
     'owner-graph.injection-edge.v1',
     'owner-graph.forward-closure.v1',
+    'owner-graph.forward-closure.v2',
     'owner-graph.state-backdoor.v1',
     'owner-graph.whole-object-port.v1',
     'projection.call-shape.v1',
-    'heavy-derived.trigger-site.v1'
+    'heavy-derived.trigger-site.v1',
+    'heavy-derived.trigger-site.v2'
   ]);
   WEB_OWNER_GRAPH_DETECTOR_IDS.forEach((id) => {
     const detector = WEB_OWNER_GRAPH_DETECTORS[id];
@@ -160,6 +162,114 @@ test('forward closures are closures that reach an owner created later in the roo
   ]);
 });
 
+// A composition root whose closures sit below the top level: a named helper
+// that an owner's port reaches, an object literal inside an argument, a
+// method, a watcher, and function variables bound late.
+const NESTED_ROOT = [
+  'export const createAppSetup = () => {',
+  '  let blocksEditor = () => false;',
+  '  let refreshCanvas = () => {};',
+  '  let neverRead = () => {};',
+  '  let counter = 0;',
+  '  let lazyTimer = null;',
+  '  const restoreWithDrafts = async (restore, ...args) => {',
+  '    const drafts = featureActions.captureDrafts();',
+  '    try { return await restore(...args); } finally { featureActions?.restoreDrafts(drafts); }',
+  '  };',
+  '  const history = createHistoryManager({',
+  '    applyIntent: (...args) => restoreWithDrafts(applyHistoryIntent, ...args),',
+  '    describe: () => history.label',
+  '  });',
+  '  const legendLayout = createLegendLayout({',
+  '    lifecycle: {',
+  '      beforeDrag: () => alignmentActions.beforeDrag(),',
+  '      afterDrag: (options) => alignmentActions.afterDrag(options)',
+  '    }',
+  '  });',
+  '  const drawer = createDrawer({',
+  "    getReason: () => blocksEditor() ? 'blocked' : ''",
+  '  });',
+  '  previewRuntime.configureBinder({',
+  '    install(context) {',
+  '      refreshCanvas();',
+  '    }',
+  '  });',
+  '  watch(selected, () => refreshCanvas());',
+  '  watch(other, () => refreshCanvas());',
+  '  const afterOnly = () => featureActions.afterCreation();',
+  '  const chained = () => afterOnly();',
+  '  const unusedHelper = () => featureActions.neverPassed();',
+  '  const sidebar = createSidebar({ unusedHelper: null });',
+  '  const shadowed = (featureActions) => featureActions.local();',
+  '  const wrapped = createWrapper(shadowed);',
+  '  const laterTimer = () => { lazyTimer = () => {}; };',
+  '  const readsLater = () => featureActions.tdzCase();',
+  '  const bridge = createBridge({ callback: () => viaLater() });',
+  '  const featureActions = createFeatureEditor({ history });',
+  '  const alignmentActions = createAlignment({ legendLayout });',
+  '  const viaLater = () => readsLater();',
+  '  const earlier = () => featureActions.readsAnOwnerCreatedEarlier();',
+  '  const reuse = createReuse({ earlier });',
+  '  blocksEditor = () => Boolean(alignmentActions.dialogOpen);',
+  '  refreshCanvas = () => { alignmentActions.refresh(); };',
+  '  neverRead = () => {};',
+  '  counter = 5;',
+  '  return { history, chained, wrapped, sidebar, drawer, laterTimer, reuse };',
+  '};',
+  ''
+].join('\n');
+const NESTED_SOURCES = new Map([['gbdraw/web/js/app/app-setup.js', NESTED_ROOT]]);
+
+test('v2 forward closures find closures at any depth that an owner can reach before the owner they read exists', () => {
+  const detector = WEB_OWNER_GRAPH_DETECTORS['owner-graph.forward-closure.v2'];
+  const result = detector.detect(NESTED_SOURCES, REGISTRY);
+  assert.deepEqual(result.subjects, [
+    // A named helper that createHistoryManager's port names (reached through the port).
+    'app/app-setup.js|restoreWithDrafts->featureActions.captureDrafts',
+    'app/app-setup.js|restoreWithDrafts->featureActions.restoreDrafts',
+    // An object literal inside an argument, which v1's entry check does not open.
+    'app/app-setup.js|beforeDrag->alignmentActions.beforeDrag',
+    'app/app-setup.js|afterDrag->alignmentActions.afterDrag',
+    // A late-bound function variable read by a port, a method, and watchers.
+    'app/app-setup.js|getReason->blocksEditor',
+    'app/app-setup.js|install->refreshCanvas',
+    'app/app-setup.js|watch(callback)->refreshCanvas'
+  ].sort());
+  assert.deepEqual(detector.encodeSubject({
+    path: 'gbdraw/web/js/app/app-setup.js', consumer: 'getReason', provider: 'blocksEditor', method: ''
+  }), 'app/app-setup.js|getReason->blocksEditor');
+  assert.deepEqual(detector.encodeSubject({
+    path: 'gbdraw/web/js/app/app-setup.js', consumer: 'beforeDrag', provider: 'alignmentActions', method: 'beforeDrag'
+  }), 'app/app-setup.js|beforeDrag->alignmentActions.beforeDrag');
+  // Both watchers share one subject; the references keep their lines.
+  assert.deepEqual(result.observedReferences.filter(({ consumer }) => consumer === 'watch(callback)').map(({ line }) => line), [29, 30]);
+  // Not subjects: `afterOnly` and `chained` are reachable only from the returned
+  // bindings after every owner exists; `unusedHelper` is a property key, not a
+  // use; `shadowed` declares its own `featureActions`; `earlier` reads an
+  // owner created before it; `readsLater` is named only by `viaLater`, a `const`
+  // function defined after `featureActions` exists, which cannot run before
+  // that; `neverRead`, `counter` (not a function), and `lazyTimer` (assigned
+  // inside a function) are not late-bound function variables.
+  ['afterOnly', 'chained', 'unusedHelper', 'shadowed', 'earlier', 'readsLater', 'tdzCase', 'neverRead', 'counter', 'lazyTimer'].forEach((name) => {
+    assert.ok(!result.subjects.some((subject) => subject.includes(name)), name);
+  });
+});
+
+test('v2 forward closures keep every v1 subject and add nothing when the owner is created first', () => {
+  const v1 = WEB_OWNER_GRAPH_DETECTORS['owner-graph.forward-closure.v1'].detect(SOURCES, REGISTRY).subjects;
+  const v2 = WEB_OWNER_GRAPH_DETECTORS['owner-graph.forward-closure.v2'].detect(SOURCES, REGISTRY);
+  assert.deepEqual(v2.subjects, v1);
+  assert.deepEqual(v2.observedReferences, []);
+  // The same closures with the late owner created first are not forward.
+  const early = NESTED_ROOT
+    .replace("  const featureActions = createFeatureEditor({ history });\n", '')
+    .replace("  const alignmentActions = createAlignment({ legendLayout });\n", '')
+    .replace("  let blocksEditor = () => false;\n", "  const featureActions = createFeatureEditor({ history });\n  const alignmentActions = createAlignment({ legendLayout });\n  let blocksEditor = () => false;\n")
+    .replace("  blocksEditor = () => Boolean(alignmentActions.dialogOpen);\n  refreshCanvas = () => { alignmentActions.refresh(); };\n", '');
+  const result = WEB_OWNER_GRAPH_DETECTORS['owner-graph.forward-closure.v2'].detect(new Map([['gbdraw/web/js/app/app-setup.js', early]]), REGISTRY);
+  assert.deepEqual(result.subjects, []);
+});
+
 test('state backdoors are functions or owner members assigned into state outside the state module', () => {
   const result = WEB_OWNER_GRAPH_DETECTORS['owner-graph.state-backdoor.v1'].detect(SOURCES, REGISTRY);
   assert.deepEqual(result.subjects, [
@@ -210,6 +320,92 @@ test('heavy-derived trigger sites count producer calls per module outside the ow
   const owner = new Map(SOURCES);
   owner.set('gbdraw/web/js/app/rule-matching.js', 'export const createRulePreparation = () => ({ prepare: () => rulePreparation.prepare() });\n');
   assert.equal(WEB_OWNER_GRAPH_DETECTORS['heavy-derived.trigger-site.v1'].detect(owner, REGISTRY).siteCount, 2);
+});
+
+// A root that hands producer functions to a factory instead of the producer.
+const PORT_ROOT = [
+  'export const createFeatureEditor = ({ rulePreparation }) => {',
+  '  const svg = createSvgOwner({',
+  '    state,',
+  '    runWithDrawn: rulePreparation.runDrawn,',
+  '    runWithRules: rulePreparation.run,',
+  '    onChanges: rulePreparation.notifyChanges,',
+  '    isReady: rulePreparation.isPrepared',
+  '  });',
+  '  const other = createOtherOwner({ unrelated: someOtherObject.run, runWithDrawn: rulePreparation.runDrawn });',
+  '  const missing = createMissingOwner({ runWithDrawn: rulePreparation.runDrawn });',
+  '  return { svg, other, missing };',
+  '};',
+  ''
+].join('\n');
+const PORT_OWNER = [
+  'export const createSvgOwner = ({',
+  '  state,',
+  '  runWithDrawn = (commit) => commit(),',
+  '  runWithRules: runRules,',
+  '  onChanges = () => {},',
+  '  isReady = () => true',
+  '}) => {',
+  '  const open = () => runWithDrawn(() => draw());',
+  '  const refresh = () => runRules(rules, () => draw());',
+  '  const guarded = () => runWithDrawn?.(() => draw());',
+  '  const notify = () => onChanges(candidate);',
+  '  return { open, refresh, guarded, notify, ready: isReady() };',
+  '};',
+  ''
+].join('\n');
+const OTHER_OWNER = [
+  'export const createOtherOwner = ({ unrelated, runWithDrawn }) => {',
+  '  const run = () => unrelated();',
+  '  return { run, expose: runWithDrawn };',
+  '};',
+  ''
+].join('\n');
+const PORT_REGISTRY = {
+  ...REGISTRY,
+  compositionRoots: ['app/feature-editor.js'],
+  heavyProducers: [{
+    name: 'rulePreparation', owner: 'app/rule-matching.js', methods: ['prepare', 'prepareDrawn', 'run'], v2Methods: ['runDrawn']
+  }]
+};
+const PORT_SOURCES = new Map([
+  ['gbdraw/web/js/app/feature-editor.js', PORT_ROOT],
+  ['gbdraw/web/js/app/svg-owner.js', PORT_OWNER],
+  ['gbdraw/web/js/app/other-owner.js', OTHER_OWNER],
+  ['gbdraw/web/js/app/rule-matching.js', 'export const createRulePreparation = () => ({ run: () => rulePreparation.run() });\n']
+]);
+
+test('v2 trigger sites count calls of a producer port in the module that receives it', () => {
+  const v1 = WEB_OWNER_GRAPH_DETECTORS['heavy-derived.trigger-site.v1'].detect(PORT_SOURCES, PORT_REGISTRY);
+  // v1 sees no call of `rulePreparation.` in any module: the port hides them.
+  assert.deepEqual(v1.countsBySubject, {});
+  const detector = WEB_OWNER_GRAPH_DETECTORS['heavy-derived.trigger-site.v2'];
+  const result = detector.detect(PORT_SOURCES, PORT_REGISTRY);
+  assert.deepEqual(result.countsBySubject, { 'rulePreparation|app/svg-owner.js': 3 });
+  assert.deepEqual(result.subjects, ['rulePreparation|app/svg-owner.js']);
+  assert.equal(result.siteCount, 3);
+  assert.deepEqual(result.observedSites.map(({ method, via, line }) => `${method}@${line} via ${via}`), [
+    'runDrawn@8 via app/feature-editor.js:createSvgOwner.runWithDrawn',
+    'run@9 via app/feature-editor.js:createSvgOwner.runWithRules',
+    'runDrawn@10 via app/feature-editor.js:createSvgOwner.runWithDrawn'
+  ]);
+  assert.equal(detector.encodeSubject({ producer: 'rulePreparation', path: 'app/svg-owner.js' }), 'rulePreparation|app/svg-owner.js');
+  // Not sites: the default parameter (`runWithDrawn = (commit) => commit()`),
+  // the binding itself, `notifyChanges` and `isPrepared` (not run methods), a
+  // port the module only hands on (`other-owner.js`), a factory that is not in
+  // the sources, and another object's `run`.
+  assert.ok(!result.subjects.some((subject) => /other-owner|rule-matching|feature-editor/.test(subject)));
+  // A direct call counts as in v1, and `runDrawn` is a producer method in v2 only.
+  const direct = new Map(PORT_SOURCES);
+  direct.set('gbdraw/web/js/app/direct.js', 'export const x = () => rulePreparation.runDrawn(() => 1);\nexport const y = () => rulePreparation?.prepareDrawn?.();\n');
+  assert.deepEqual(detector.detect(direct, PORT_REGISTRY).countsBySubject, {
+    'rulePreparation|app/direct.js': 2, 'rulePreparation|app/svg-owner.js': 3
+  });
+  assert.deepEqual(WEB_OWNER_GRAPH_DETECTORS['heavy-derived.trigger-site.v1'].detect(direct, PORT_REGISTRY).countsBySubject, {
+    'rulePreparation|app/direct.js': 1
+  });
+  // The default registry names `runDrawn` as a v2 producer method.
+  assert.ok(WEB_OWNER_GRAPH_DEFAULTS.heavyProducers.find(({ name }) => name === 'rulePreparation').v2Methods.includes('runDrawn'));
 });
 
 test('detectWebOwnerGraph runs every detector and summarizeWebOwnerGraph counts subjects', () => {

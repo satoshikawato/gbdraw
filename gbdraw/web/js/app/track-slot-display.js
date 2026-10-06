@@ -12,14 +12,12 @@ const roundDisplayNumber = (value, digits = 1) => {
 
 export const isManualSlotValue = (value) => normalizeOptionalText(value) !== null;
 
-export const formatPxAuto = (value, source = 'estimated') => {
-  void source;
+export const formatPxAuto = (value) => {
   const text = roundDisplayNumber(value, 1);
   return text ? `${text} px (auto)` : '';
 };
 
-export const formatRadiusFactorAuto = (value, source = 'estimated') => {
-  void source;
+export const formatRadiusFactorAuto = (value) => {
   const text = roundDisplayNumber(value, 2);
   return text ? `${text} R (auto)` : '';
 };
