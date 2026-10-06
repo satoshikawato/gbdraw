@@ -396,11 +396,11 @@ class SeqRecordGroup:
             record_group.attribs["data-gbdraw-record-source-step"] = str(source_step)
 
         if self.sequence_width is not None:
-            genome_size_normalization_factor = 1.0
+            genome_size_normalization_factor: float = 1.0
         elif self.normalize_length:
             genome_size_normalization_factor = 1.0
         else:
-            genome_size_normalization_factor: float = record_length / longest_genome
+            genome_size_normalization_factor = record_length / longest_genome
 
         feature_dict = self.feature_layers.foreground_features
         label_list = []
@@ -428,7 +428,7 @@ class SeqRecordGroup:
                     record_transform=self.record_transform,
                 )
 
-        record_group: Group = self.draw_record(
+        record_group = self.draw_record(
             feature_dict,
             record_length,
             cds_height,

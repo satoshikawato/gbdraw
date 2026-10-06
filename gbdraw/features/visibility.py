@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import re
 import warnings
+from collections.abc import Mapping
 from typing import Any, Optional, Sequence
 
 import pandas as pd
@@ -321,7 +322,7 @@ def should_render_feature(
     selected_features_set: Sequence[str] | set[str] | None,
     feature_visibility_rules: Optional[list[dict[str, Any]]] = None,
     record_id: Optional[str] = None,
-    specific_color_rules: Optional[dict] = None,
+    specific_color_rules: Optional[Mapping] = None,
     feature_override: Any = None,
 ) -> bool:
     """Decide whether a feature is drawn.

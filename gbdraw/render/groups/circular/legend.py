@@ -70,11 +70,11 @@ class LegendGroup:
         )
 
         if layout.compact:
-            for entry in layout.compact_entries:
-                properties = entry.properties
-                gradient_id = self._gradient_id(entry.key, properties)
+            for compact_entry in layout.compact_entries:
+                properties = compact_entry.properties
+                gradient_id = self._gradient_id(compact_entry.key, properties)
                 entry_group = Group(debug=False)
-                entry_group.attribs["data-legend-key"] = str(entry.key)
+                entry_group.attribs["data-legend-key"] = str(compact_entry.key)
 
                 gradient = LinearGradient(start=(0, 0), end=("100%", 0), id=gradient_id)
                 gradient.add_stop_color(offset="0%", color=properties["min_color"])
@@ -82,7 +82,7 @@ class LegendGroup:
                 entry_group.add(gradient)
 
                 label_path = generate_text_path(
-                    entry.key,
+                    compact_entry.key,
                     0,
                     0,
                     0,
@@ -92,7 +92,7 @@ class LegendGroup:
                     dominant_baseline="central",
                     text_anchor="start",
                 )
-                label_path.translate(0, entry.label_y)
+                label_path.translate(0, compact_entry.label_y)
                 entry_group.add(label_path)
 
                 grad_rect = Path(
@@ -101,7 +101,7 @@ class LegendGroup:
                     stroke=properties["stroke"],
                     stroke_width=properties["width"],
                 )
-                grad_rect.translate(layout.bar_x, entry.bar_y)
+                grad_rect.translate(layout.bar_x, compact_entry.bar_y)
                 entry_group.add(grad_rect)
                 group.add(entry_group)
 
@@ -199,18 +199,20 @@ class LegendGroup:
         return group
 
     def add_elements_to_group(self):
+        layout = self.layout
+        assert layout is not None
         path_desc = (
             f"M {0},{-0.5 * self.color_rect_size} "
-            f"L {self.layout.width},{-0.5 * self.color_rect_size} "
-            f"L {self.layout.width},{self.layout.height -0.5 * self.color_rect_size} "
-            f"L {0},{self.layout.height -0.5 * self.color_rect_size} z"
+            f"L {layout.width},{-0.5 * self.color_rect_size} "
+            f"L {layout.width},{layout.height -0.5 * self.color_rect_size} "
+            f"L {0},{layout.height -0.5 * self.color_rect_size} z"
         )
         rect_path = Path(d=path_desc, fill="none", stroke="none", stroke_width=0)
         self.legend_group.add(rect_path)
         path_desc = self.create_rectangle_path_for_legend()
         font = self.font_family
-        feature_group = Group(id="feature_legend") if self.layout.gradient is not None else self.legend_group
-        for entry in self.layout.solid_entries:
+        feature_group = Group(id="feature_legend") if layout.gradient is not None else self.legend_group
+        for entry in layout.solid_entries:
             entry_group = Group(debug=False)
             entry_group.attribs["data-legend-key"] = str(entry.key)
 
@@ -237,11 +239,11 @@ class LegendGroup:
             entry_group.add(legend_path)
             feature_group.add(entry_group)
 
-        if self.layout.gradient is not None and self.layout.solid_entries:
+        if layout.gradient is not None and layout.solid_entries:
             self.legend_group.add(feature_group)
-        if self.layout.gradient is not None:
-            gradient_group = self._build_gradient_legend(self.layout.gradient)
-            gradient_group.translate(self.layout.gradient_x, self.layout.gradient_y)
+        if layout.gradient is not None:
+            gradient_group = self._build_gradient_legend(layout.gradient)
+            gradient_group.translate(layout.gradient_x, layout.gradient_y)
             self.legend_group.add(gradient_group)
         return self.legend_group
 

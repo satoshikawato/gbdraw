@@ -228,7 +228,7 @@ class DefinitionGroup:
                 record_count=self.record_count,
             )
         )
-        self.definition_group = Group(id=self.definition_group_id, debug=False)
+        self.definition_group: Group = Group(id=self.definition_group_id, debug=False)
         if self.definition_profile == "shared_common" or self.definition_group_id == "plot_title":
             self.definition_group.attribs["data-gbdraw-role"] = "plot-title"
         else:
@@ -263,17 +263,17 @@ class DefinitionGroup:
         self.organelle = metadata.organelle
 
         if explicit_label:
-            self.species_parts = parse_mixed_content_text(explicit_label)
+            self.species_parts: List[Dict[str, str | bool | None]] = parse_mixed_content_text(explicit_label)
         elif self.species:
-            self.species_parts: List[Dict[str, str | bool | None]] = parse_mixed_content_text(self.species)
+            self.species_parts = parse_mixed_content_text(self.species)
         else:
             self.species_parts = parse_mixed_content_text(record_name)
         self.record_name = explicit_label or str(record_name).strip() or str(self.gb_record.id)
 
         if explicit_subtitle:
-            self.strain_parts = parse_mixed_content_text(explicit_subtitle)
+            self.strain_parts: List[Dict[str, str | bool | None]] = parse_mixed_content_text(explicit_subtitle)
         elif self.strain:
-            self.strain_parts: List[Dict[str, str | bool | None]] = parse_mixed_content_text(self.strain)
+            self.strain_parts = parse_mixed_content_text(self.strain)
         else:
             self.strain_parts = parse_mixed_content_text(strain_name)
 
@@ -334,7 +334,7 @@ class DefinitionGroup:
             if len(wrapped) > 1:
                 species_line_parts = wrapped
 
-        self.definition_group: Group = DefinitionDrawer(cfg=self._cfg).draw(
+        self.definition_group = DefinitionDrawer(cfg=self._cfg).draw(
             self.definition_group,
             self.title_x,
             self.title_y,

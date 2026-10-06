@@ -3,6 +3,7 @@
 
 import logging
 import re
+from collections.abc import Mapping
 from typing import Any, Optional
 
 import pandas as pd
@@ -440,7 +441,7 @@ def has_forced_label_overrides(label_filtering: dict) -> bool:
 
 def get_label_text(
     feature: Any,
-    label_filtering: dict,
+    label_filtering: Mapping,
     record_id: Optional[str] = None,
     *,
     overrides_only: bool = False,
@@ -479,7 +480,7 @@ def get_label_text(
 
 def _label_text(
     feature: Any,
-    label_filtering: dict,
+    label_filtering: Mapping,
     record_id: Optional[str] = None,
     *,
     overrides_only: bool = False,

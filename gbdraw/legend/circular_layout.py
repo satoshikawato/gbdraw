@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Mapping
+from typing import Mapping, cast
 
 from ..core.text import calculate_bbox_dimensions
 from .metrics import legend_line_height, legend_text_x_offset
@@ -90,7 +90,8 @@ class _MeasuredLegendEntry:
 
 
 def min_gradient_label_text(value: object) -> str:
-    min_identity = float(value or 0)
+    # Non-numeric values were never accepted; legend properties are numeric or numeric strings.
+    min_identity = float(cast("float | str", value or 0))
     if min_identity == int(min_identity):
         return f"{int(min_identity)}%"
     return f"{min_identity}%"

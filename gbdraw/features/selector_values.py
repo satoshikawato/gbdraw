@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, Optional
 
 from Bio.SeqFeature import SeqFeature
@@ -312,7 +313,7 @@ def find_specific_color_rule(feature, color_map, record_id=None, *, selector=Non
 
 def feature_matches_specific_color_rule(
     feature: SeqFeature,
-    color_map: dict,
+    color_map: Mapping,
     record_id: Optional[str] = None,
 ) -> bool:
     return find_specific_color_rule(feature, color_map, record_id=record_id) is not None

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, List, Union
 
 from Bio.Data.CodonTable import unambiguous_dna_by_id
@@ -15,7 +16,7 @@ from ..features.visibility import should_render_feature
 from .record_metadata import _source_feature_anchor_profile
 
 
-def create_dict_for_sequence_lengths(records: list[SeqRecord]) -> dict[str, int]:
+def create_dict_for_sequence_lengths(records: Sequence[SeqRecord]) -> dict[str, int]:
     return {record.id: len(record.seq) for record in records}
 
 

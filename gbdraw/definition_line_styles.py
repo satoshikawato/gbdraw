@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import math
-from typing import Iterable
+from typing import Iterable, cast
 
 DEFINITION_LINE_KINDS: tuple[str, ...] = ("name", "subtitle", "replicon", "accession", "length")
 DEFINITION_LINE_STYLE_PROPERTIES: tuple[str, ...] = ("font_size", "font_weight", "fill")
@@ -66,7 +66,7 @@ def normalize_definition_line_font_size(value: object) -> float | None:
         if normalized in {"", "auto", "none", "null", "default"}:
             return None
         value = normalized
-    parsed = float(value)
+    parsed = float(cast("str | float", value))  # a non-numeric object still raises TypeError/ValueError
     if not math.isfinite(parsed) or parsed <= 0:
         raise ValueError("definition line font_size must be a positive finite number")
     return parsed

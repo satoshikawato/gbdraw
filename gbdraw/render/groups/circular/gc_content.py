@@ -34,7 +34,7 @@ class GcContentGroup:
     ) -> None:
         self.record_transform = record_transform
         self.group_id = group_id or "gc_content"
-        self.gc_group = Group(id=self.group_id, debug=False)
+        self.gc_group: Group = Group(id=self.group_id, debug=False)
         self.radius: float = radius
         self.gc_config: GcContentConfigurator = gc_config
         self.gb_record: SeqRecord = gb_record
@@ -53,7 +53,7 @@ class GcContentGroup:
         self.add_elements_to_group()
 
     def add_elements_to_group(self) -> None:
-        self.gc_group: Group = GcContentDrawer(self.gc_config).draw(
+        self.gc_group = GcContentDrawer(self.gc_config).draw(
             self.radius,
             self.gc_group,
             self.gc_df,

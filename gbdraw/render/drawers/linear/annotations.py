@@ -182,6 +182,7 @@ def draw_linear_annotation_track(
                         item_group.add(Line(start=(x2, lane_center - cap), end=(x2, lane_center + cap), stroke=style.stroke, stroke_width=style.stroke_width))
 
         if params.show_labels and annotation.label:
+            label_bp: float
             if style.label_position == "start":
                 label_bp, anchor = annotation.geometry_segments[0][0], "start"
             elif style.label_position == "end":

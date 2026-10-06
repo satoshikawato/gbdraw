@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, cast
 
 from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
@@ -306,9 +306,9 @@ def resolve_annotation_set(
             else str(record.annotations.get("topology", "")).strip().lower() == "circular"
         ) and not bool(record.annotations.get("gbdraw_region_applied"))
         clipped = False
-        if isinstance(annotation.target, CoordinateSpan):
-            segments, clipped = _coordinate_segments(annotation.target, record, is_circular=is_circular)
-            policy = annotation.target.out_of_bounds
+        if isinstance(target, CoordinateSpan):
+            segments, clipped = _coordinate_segments(target, record, is_circular=is_circular)
+            policy = target.out_of_bounds
             if clipped and policy == "error":
                 raise ValidationError(
                     f"Annotation {annotation_set.id}/{annotation.id} extends outside record {record.id!r}."
@@ -397,10 +397,12 @@ def resolve_annotation_set(
 def _materialize_sets(options: AnnotationOptions, *, mode: str) -> tuple[AnnotationSet, ...]:
     if options.sets:
         return options.sets
+    # `mode` is checked by the resolver; the table readers accept the same two values.
+    _mode = cast('Literal["circular", "linear"]', mode)
     if options.table is not None:
-        return annotation_sets_from_dataframe(options.table, mode=mode)  # type: ignore[arg-type]
+        return annotation_sets_from_dataframe(options.table, mode=_mode)
     if options.table_file:
-        return read_annotation_table(options.table_file, mode=mode)  # type: ignore[arg-type]
+        return read_annotation_table(options.table_file, mode=_mode)
     return ()
 
 

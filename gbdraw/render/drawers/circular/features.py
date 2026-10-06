@@ -27,6 +27,7 @@ from ....svg.circular_features import (
     generate_circular_rectangle_path_with_radii,
 )
 from ....svg.arrows import (
+    ArrowHeadLengthRatio,
     calculate_circular_arrow_length,
     resolve_circular_arrow_head_length_bp,
 )
@@ -51,7 +52,7 @@ class FeatureDrawer:
         self.intron_stroke_color: str = feature_config.line_stroke_color
         self.intron_stroke_width: float = feature_config.line_stroke_width
         arrow_geometry = getattr(feature_config, "arrow_geometry", None)
-        self.arrow_head_length_ratio = getattr(
+        self.arrow_head_length_ratio: ArrowHeadLengthRatio = getattr(
             arrow_geometry, "head_length_ratio", "auto"
         )
         self.arrow_shaft_width_ratio = float(
@@ -255,7 +256,7 @@ class FeaturePathGenerator:
         strandedness: bool,
         track_id: int = 0,
         feature_layout: CircularFeatureLayout | None = None,
-        head_length_ratio: str | float = "auto",
+        head_length_ratio: ArrowHeadLengthRatio = "auto",
         shaft_width_ratio: float = 1.0,
     ) -> None:
         """

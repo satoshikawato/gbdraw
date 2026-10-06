@@ -9,7 +9,7 @@ def generate_name_path(
     title_x: float,
     title_y: float,
     interval: float,
-    font_size: str,
+    font_size: float,
     font_weight: str,
     font_family: str,
 ) -> Text:

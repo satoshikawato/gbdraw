@@ -34,7 +34,7 @@ class ResolvedFeatureInputs:
     color_table: DataFrame | None
     default_colors: DataFrame
     feature_visibility_table: DataFrame | None
-    feature_visibility_rules: list[dict[str, Any]]
+    feature_visibility_rules: list[dict[str, Any]] | None
     specific_color_rules: Mapping[str, Any]
     default_color_map: Mapping[str, str]
 

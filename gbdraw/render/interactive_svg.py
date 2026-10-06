@@ -8,7 +8,7 @@ from importlib import resources
 import json
 import math
 import re
-from typing import Callable, Literal
+from typing import Callable, Literal, TypeGuard, cast, overload
 import xml.etree.ElementTree as ET
 
 from gbdraw.exceptions import GbdrawError
@@ -151,16 +151,24 @@ def _remove_class_token(element: ET.Element, token: str) -> None:
         element.attrib.pop("class", None)
 
 
+@overload
+def _compact_wire_value(value: Mapping[str, object]) -> dict[str, object] | None: ...
+
+
+@overload
+def _compact_wire_value(value: object) -> object | None: ...
+
+
 def _compact_wire_value(value: object) -> object | None:
     value_type = type(value)
-    if value_type is dict:
+    if value_type is dict and isinstance(value, dict):
         compact = {
             str(key): normalized
             for key, entry in value.items()
             if (normalized := _compact_wire_value(entry)) is not None
         }
         return compact or None
-    if value_type is list or value_type is tuple:
+    if (value_type is list or value_type is tuple) and isinstance(value, (list, tuple)):
         items = [
             normalized
             for entry in value
@@ -757,7 +765,8 @@ def _number_or_none(value: object) -> float | int | None:
     if value is None:
         return None
     try:
-        number = float(value)
+        # Any other object type raises TypeError, handled below.
+        number = float(cast("str | float", value))
     except (TypeError, ValueError):
         return None
     if not math.isfinite(number):
@@ -883,7 +892,7 @@ def _normalize_orthogroup_member(
         member.get("featureSvgId"),
         member.get("feature_svg_id"),
     )
-    payload = {
+    payload: dict[str, object] = {
         "orthogroup_id": _first_text(member.get("orthogroupId"), member.get("orthogroup_id")),
         "protein_id": _first_text(member.get("proteinId"), member.get("protein_id")),
         "source_protein_id": _first_text(member.get("sourceProteinId"), member.get("source_protein_id")),
@@ -1105,7 +1114,7 @@ def _feature_payloads_from_rendered(
             (value for value in _normalize_string_array(qualifiers.get("translation")) if value.strip()),
             "",
         )
-        payload = {
+        payload: dict[str, object] = {
             "svg_id": svg_id,
             "rendered_feature_svg_id": svg_id,
             "stable_svg_id": _first_text(
@@ -1420,6 +1429,15 @@ def _apply_viewport_root(root: ET.Element) -> None:
     _set_style_properties(root)
 
 
+def _is_array_value(value: object) -> TypeGuard[Sequence[object]]:
+    return isinstance(value, Sequence) and not isinstance(value, (str, bytes))
+
+
+def _catalog_array(catalog_item: Mapping[str, object], key: str) -> Sequence[object]:
+    # build_feature_catalog_item always emits these keys as lists.
+    return cast("Sequence[object]", catalog_item[key])
+
+
 def _validate_catalog_feature_bindings(
     root: ET.Element,
     catalog_item: Mapping[str, object],
@@ -1429,9 +1447,10 @@ def _validate_catalog_feature_bindings(
     record_keys_value = catalog_item.get("recordKeys")
     biological_value = catalog_item.get("biologicalFeatures")
     rendered_value = catalog_item.get("features")
-    if any(
-        not isinstance(value, Sequence) or isinstance(value, (str, bytes))
-        for value in (record_keys_value, biological_value, rendered_value)
+    if not (
+        _is_array_value(record_keys_value)
+        and _is_array_value(biological_value)
+        and _is_array_value(rendered_value)
     ):
         raise GbdrawError("Interactive feature catalog is missing feature arrays.")
 
@@ -1632,12 +1651,12 @@ def enrich_svg(
             str(feature.get("recordKey") or ""),
             str(feature.get("biologicalFeatureId") or ""),
         ): feature
-        for feature in catalog_item["biologicalFeatures"]
+        for feature in _catalog_array(catalog_item, "biologicalFeatures")
         if isinstance(feature, Mapping)
     }
     rendered_features_by_id = {
         str(feature.get("svgId") or ""): feature
-        for feature in catalog_item["features"]
+        for feature in _catalog_array(catalog_item, "features")
         if isinstance(feature, Mapping)
     }
     for element in root.iter():
@@ -1668,7 +1687,7 @@ def enrich_svg(
 
     matches = [
         match
-        for match in catalog_item["comparisonMatches"]
+        for match in _catalog_array(catalog_item, "comparisonMatches")
         if isinstance(match, Mapping)
     ]
     match_elements = [element for element in root.iter() if _is_match_candidate(element)]
