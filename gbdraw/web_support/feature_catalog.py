@@ -10,7 +10,7 @@ import math
 import re
 from types import MappingProxyType
 import xml.etree.ElementTree as ET
-from typing import Any
+from typing import Any, Iterable, TypeVar, cast
 
 from gbdraw.exceptions import GbdrawError
 from gbdraw.features.ids import disambiguate_feature_ids
@@ -147,6 +147,12 @@ def _text(value: object | None) -> str:
     return _first_text(value)
 
 
+def _compact_wire_mapping(value: Mapping[str, object]) -> dict[str, object]:
+    # _compact_wire_value returns a mapping (or None when empty) for a mapping.
+    compacted = cast("Mapping[str, object] | None", _compact_wire_value(value))
+    return dict(compacted or {})
+
+
 def _legacy_feature_strand(
     feature: Mapping[str, object],
     parts: Sequence[Mapping[str, object]],
@@ -165,7 +171,8 @@ def _legacy_feature_strand(
     return "unstranded"
 
 
-def _legacy_exact_coordinate(value: object) -> int | None:
+def _legacy_exact_coordinate(value: Any) -> int | None:
+    # Legacy payload values are arbitrary JSON; non-numeric ones raise TypeError.
     if isinstance(value, bool):
         return None
     try:
@@ -554,7 +561,7 @@ def _match_payload(
             for field, attribute in _MATCH_ATTRIBUTES.items()
         }
     )
-    return dict(_compact_wire_value(payload) or {})
+    return _compact_wire_mapping(payload)
 
 
 def _record_source_span(element: ET.Element) -> tuple[int, tuple[int, int, int]] | None:
@@ -635,7 +642,7 @@ def _match_payloads(
             )
             payload.setdefault(f"{role}_feature_index", rendered.get("feature_index"))
         payload.update(_record_source_interval_fields(payload, record_source_spans))
-        payloads.append(dict(_compact_wire_value(payload) or {}))
+        payloads.append(_compact_wire_mapping(payload))
     return payloads
 
 
@@ -771,8 +778,9 @@ def _first_qualifier_value(value: object | None) -> str:
     if value is None:
         return ""
     value_type = type(value)
+    values: Iterable[object]
     if value_type is list or value_type is tuple:
-        values = value
+        values = cast("Iterable[object]", value)
     elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
         values = value
     else:
@@ -1053,8 +1061,10 @@ def _normalized_biological_features(
                 payload.get("protein_id")
                 or payload.get("proteinId")
                 or (
-                    payload.get("qualifiers", {}).get("protein_id")
-                    if isinstance(payload.get("qualifiers"), Mapping)
+                    payload_qualifiers.get("protein_id")
+                    if isinstance(
+                        payload_qualifiers := payload.get("qualifiers"), Mapping
+                    )
                     else None
                 )
             )
@@ -1115,6 +1125,9 @@ def _normalized_biological_features(
     return normalized, indexed
 
 
+_IndexKey = TypeVar("_IndexKey")
+
+
 class _BiologicalFeatureIndex:
     def __init__(
         self,
@@ -1154,8 +1167,8 @@ class _BiologicalFeatureIndex:
 
     @staticmethod
     def _add_unique(
-        index: dict[object, Mapping[str, object] | None],
-        key: object,
+        index: dict[_IndexKey, Mapping[str, object] | None],
+        key: _IndexKey,
         feature: Mapping[str, object],
     ) -> None:
         index[key] = None if key in index else feature
@@ -1473,8 +1486,8 @@ def _normalized_orthogroups(
                     for output_key, source_keys in member_specific_fields
                 },
             }
-            members.append(dict(_compact_wire_value(compact_member) or {}))
-        compact_group = dict(_compact_wire_value(payload) or {})
+            members.append(_compact_wire_mapping(compact_member))
+        compact_group = _compact_wire_mapping(payload)
         presentations = {
             presentation
             for presentation in (
@@ -1793,7 +1806,7 @@ def _normalized_matches(
                 "RenderedFeatureSvgId",
             ):
                 payload.pop(f"{role}{suffix}", None)
-        normalized.append(dict(_compact_wire_value(payload) or {}))
+        normalized.append(_compact_wire_mapping(payload))
     return normalized
 
 
@@ -1847,7 +1860,7 @@ def _normalized_annotations(
                 ),
             }
         )
-        annotations.append(dict(_compact_wire_value(payload) or {}))
+        annotations.append(_compact_wire_mapping(payload))
     return annotations
 
 
@@ -1861,7 +1874,7 @@ def _deduplicated_sequence_sources(
     for source in selected:
         if not isinstance(source, Mapping):
             continue
-        payload = dict(_compact_wire_value(dict(source)) or {})
+        payload = _compact_wire_mapping(dict(source))
         key = _text(payload.get("key"))
         if not key:
             raise GbdrawError(
@@ -1880,7 +1893,7 @@ def _deduplicated_sequence_sources(
     return normalized
 
 
-def _integer_or_none(value: object) -> int | None:
+def _integer_or_none(value: Any) -> int | None:
     try:
         number = float(value)
     except (TypeError, ValueError):
@@ -2075,7 +2088,7 @@ def _reference_reconstructible_nucleotide_sequences(
 
 def build_feature_catalog_item(
     svg_source: str,
-    context: InteractiveSvgContext,
+    context: InteractiveSvgContext | None,
     *,
     result_index: int,
     result_name: str,
@@ -2134,8 +2147,8 @@ def build_feature_catalog_item(
             raise GbdrawError(
                 "Orthogroup comparison metadata has an invalid membership scope."
             )
-        for group_id in _sequence(match.get("orthogroup_ids")):
-            normalized_group_id = _text(group_id)
+        for listed_group_id in _sequence(match.get("orthogroup_ids")):
+            normalized_group_id = _text(listed_group_id)
             if not normalized_group_id or normalized_group_id in known_group_ids:
                 continue
             orthogroups.append(
@@ -2396,7 +2409,8 @@ def select_feature_catalog_item(
                 or not _reconstruct_nucleotide_sequence(
                     feature,
                     source,
-                    source_sequence=canonical_sources[source_index],
+                    # source is not None only when source_index is an int.
+                    source_sequence=canonical_sources[cast(int, source_index)],
                 )
             ):
                 raise GbdrawError(

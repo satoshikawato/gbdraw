@@ -60,14 +60,7 @@ EXPECTED_MYPY_CONFIG = {
 TYPE_DEBT_BASELINE: dict[str, int] = {
     "gbdraw/diagrams/circular/assemble.py": 2,
     "gbdraw/diagrams/linear/assemble.py": 2,
-    "gbdraw/web_support/config_overrides.py": 1,
-    "gbdraw/web_support/error_adapter.py": 8,
-    "gbdraw/web_support/feature_catalog.py": 8,
-    "gbdraw/web_support/feature_metadata.py": 2,
-    "gbdraw/web_support/orthogroup_metadata.py": 5,
-    "gbdraw/web_support/request_render.py": 4,
-    "gbdraw/web_support/rule_matching.py": 4,
-    "gbdraw/web_support/similarity_alignment.py": 3,
+    "gbdraw/web_support/request_render.py": 1,
 }
 
 

@@ -9,7 +9,7 @@ from contextlib import contextmanager, redirect_stderr, redirect_stdout
 import json
 import logging
 import re
-from typing import Iterator
+from typing import Iterator, Protocol, cast
 
 from gbdraw.exceptions import (
     ComparisonIdentityError, ConfigError, ExportError, GbdrawError, InputFileError, ParseError, ValidationError,
@@ -147,12 +147,21 @@ _TEMPLATES = (
 )
 
 
+class WebErrorAttributes(Protocol):
+    """Attributes that the Web layer attaches to native exceptions."""
+
+    _web_error_stage: str
+    _web_error_secondary: list[dict[str, str]]
+    __notes__: list[str]
+
+
 def _chain(error: BaseException) -> Iterator[BaseException]:
-    seen = set()
-    while error is not None and id(error) not in seen and len(seen) < 8:
-        seen.add(id(error))
-        yield error
-        error = error.__cause__  # implicit context is not explicit authority
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen and len(seen) < 8:
+        seen.add(id(current))
+        yield current
+        current = current.__cause__  # implicit context is not explicit authority
 
 
 def _regex_reason(error: re.error) -> str:
@@ -213,12 +222,12 @@ def _validation(error: BaseException) -> tuple[str, dict]:
         return "VALIDATION_UNCLASSIFIED", {}
     message = str(error)
     if message in _EXACT:
-        code, context = _EXACT[message]
-        return code, dict(context)
+        code, exact_context = _EXACT[message]
+        return code, dict(exact_context)
     for template, code, reason in _TEMPLATES:
         match = re.fullmatch(template, message)
         if match:
-            context = {"reason": reason}
+            context: dict[str, str | int] = {"reason": reason}
             if reason == "VISIBILITY_ACTION":
                 context.update(field="action", row=int(match[1]))
             if reason == "BLASTP_MODE":
@@ -262,7 +271,7 @@ def _classify_native(error: BaseException, chain: list[BaseException], stage: st
         if isinstance(cause, ComparisonIdentityError):
             return "COMPARISON_IDENTITY", {"reason": cause.reason}, "render"
         if isinstance(cause, re.error):
-            context = {"reason": _regex_reason(cause), "positionUnit": "python-character"}
+            context: dict[str, str | int] = {"reason": _regex_reason(cause), "positionUnit": "python-character"}
             if isinstance(cause.pos, int) and not isinstance(cause.pos, bool) and 0 <= cause.pos <= 10_000_000:
                 context["position"] = cause.pos
             for parent in chain:
@@ -340,5 +349,5 @@ def web_error_stage(stage: str):
         yield
     except Exception as error:
         if not hasattr(error, "_web_error_stage"):
-            error._web_error_stage = stage
+            cast(WebErrorAttributes, error)._web_error_stage = stage
         raise
