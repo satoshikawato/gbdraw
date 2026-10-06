@@ -293,7 +293,8 @@ want to override before T0.
     output changes, `tests/reference_outputs/` is regenerated only after the
     difference is reviewed (root `CLAUDE.md`, "Updating Reference Outputs").
 - **D11 Rule changes.** The guard compares `[tool.mypy]` with
-  `EXPECTED_MYPY_CONFIG` and rejects inline `# mypy:` comments. Relaxing the
+  `EXPECTED_MYPY_CONFIG` and rejects the suppressions that hide more than one
+  counted line (4.2, assertion 3). Relaxing the
   configuration or raising an entry expands authority. It goes in its own
   pull request, which waits for the Owner's approval and is not
   auto-merged. Lowering or removing entries is a contraction and may ship
@@ -337,11 +338,15 @@ Patterns:
    exactly one `mypy==X` entry, and the installed mypy is version X.
    Otherwise: "run `pip install -e '.[typecheck]'`".
 2. **Configuration.** `[tool.mypy]` equals `EXPECTED_MYPY_CONFIG`.
-3. **No inline configuration.** No comment under `gbdraw/` (outside
-   `gbdraw/web/`) starts with `# mypy:`.
-4. **Debt.** One run of `sys.executable -m mypy --config-file pyproject.toml
-   --cache-dir <os.devnull> --output json` from the repository root. An exit
-   code other than 0 or 1 fails with mypy's output. Errors outside the
+3. **No suppression outside the count.** Under `gbdraw/` (outside
+   `gbdraw/web/`), no comment starts with `# mypy:` (per-file
+   configuration), no `# type: ignore` stands on a line of its own (at the top
+   of a module it silences the whole module), and no `no_type_check` appears
+   (it silences a whole function).
+4. **Debt.** Assertion 1 first, then one run of `sys.executable -m mypy --config-file pyproject.toml
+   --cache-dir <os.devnull> --output json` from the repository root. Exit
+   code 0, or 1 with JSON lines, is accepted; anything else fails with mypy's
+   output. Errors outside the
    checked file set fail. `# type: ignore` comments are counted with
    `tokenize`, so a string that contains the text does not count. Then D3
    applies, and the keys of `TYPE_DEBT_BASELINE` must be sorted. A failure
@@ -449,7 +454,7 @@ node tools/ci-impact.mjs classify --base origin/dev --head HEAD   # ci-only + pa
 #   a new module with a type error -> "is above its baseline 0", with the error line
 #   `# type: ignore[assignment]` added to gbdraw/exceptions.py -> "is above its baseline 0"
 #   check_untyped_defs = false -> assertion 2 fails; assertion 4 lists files now below their entries
-#   `# mypy: ignore-errors` in a module -> assertion 3 names it
+#   `# mypy: ignore-errors`, a top-of-module `# type: ignore`, and `@typing.no_type_check` -> assertion 3 names each
 #   mypy uninstalled -> "run `pip install -e '.[typecheck]'`"
 ```
 
@@ -503,7 +508,7 @@ members. A change to either is a separate pull request that also updates
 
 ## 7. Acceptance
 
-- T0: the guard runs in `Core PR` and `Core` in under 15 s, the five negative
+- T0: the guard runs in `Core PR` and `Core` in under 15 s, the negative
   checks fail with the documented messages, and the baseline records 1,082
   in 138 files at the T0 base.
 - T1: 730 in 107 files; Appendix A reports no runtime change.
