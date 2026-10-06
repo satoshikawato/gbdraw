@@ -1141,18 +1141,12 @@ export const createAppSetup = () => {
     )
   });
   const getCircularRecordDiscoveryState = () => circularDiscoveryForInput(state);
-  const getAnnotationRecordCatalog = (loadComparisonOverride = null, linearSourcesOverride = null) => {
-    const inputType = mode.value === 'linear' ? lInputType.value : cInputType.value;
+  const getAnnotationRecordCatalog = (linearSourcesOverride = null) => {
     const circularPrimaryFile = cInputType.value === 'gff' ? files.c_gff : files.c_gb;
     const circularPairedFile = cInputType.value === 'gff' ? files.c_fasta : null;
     const circularDiscovery = getCircularRecordDiscoveryState();
-    const loadComparison = loadComparisonOverride == null
-      ? mode.value === 'linear' && hasLinearComparisonIntent.value
-      : Boolean(loadComparisonOverride);
     return buildAnnotationRecordCatalog(/** @type {any} */ ({
       mode: mode.value,
-      inputType,
-      loadComparison,
       circularSource: {
         sourceKey: annotationSourceKey({
           scope: 'circular',
@@ -2521,8 +2515,8 @@ export const createAppSetup = () => {
       });
     },
     resetPreviewViewport,
-    validateAnnotationTargets: ({ loadComparison }) => {
-      const catalog = getAnnotationRecordCatalog(loadComparison);
+    validateAnnotationTargets: () => {
+      const catalog = getAnnotationRecordCatalog();
       reconcileAnnotationRecordBindings(annotationSets, catalog);
       return validateAnnotationRecordTargets(annotationSets, catalog);
     }
@@ -3150,7 +3144,7 @@ export const createAppSetup = () => {
     const issue = catalog.issues[0];
     return issue ? diagnosticError(issue.code, issue.context) : diagnosticError('INPUT_UNREADABLE');
   };
-  async function prepareLinearRecordCatalog(loadComparison = false, { privateCandidate = false } = {}) {
+  async function prepareLinearRecordCatalog({ privateCandidate = false } = {}) {
     if (mode.value !== 'linear') return { catalog: null, error: '' };
     const hasAutomaticSequence = linearSeqs.some((sequence) => {
       if (String(sequence?.region_record_id || '').trim()) return false;
@@ -3178,18 +3172,18 @@ export const createAppSetup = () => {
           return { sourceKey, selector: seq.region_record_id, hasInput: Boolean(primaryFile), status: 'error', error: error.message, records: [] };
         }
       }));
-      const catalog = getAnnotationRecordCatalog(loadComparison, sources);
+      const catalog = getAnnotationRecordCatalog(sources);
       return catalog.status === 'ready' ? { catalog, error: '' }
         : { catalog: null, error: catalogIssueError(catalog) };
     }
-    let catalog = getAnnotationRecordCatalog(loadComparison);
+    let catalog = getAnnotationRecordCatalog();
     if (catalog.status !== 'ready') {
       try {
         await linearRecordSelector.refresh();
       } catch (error) {
         return { catalog: null, error: normalizeUserFacingError(error, { operation: 'listSequenceRecords', stage: 'helper' }) };
       }
-      catalog = getAnnotationRecordCatalog(loadComparison);
+      catalog = getAnnotationRecordCatalog();
     }
     return catalog.status === 'ready'
       ? { catalog, error: '' }
@@ -4083,11 +4077,7 @@ export const createAppSetup = () => {
       let catalog = null;
       let error = '';
       if (!committedSession) {
-        const comparisonPlanSnapshot = mode.value === 'linear'
-          ? linearComparisonResolution.value : null;
-        ({ catalog, error } = await prepareLinearRecordCatalog(
-          comparisonPlanSnapshot?.hasComparisonIntent, { privateCandidate: true }
-        ));
+        ({ catalog, error } = await prepareLinearRecordCatalog({ privateCandidate: true }));
         await afterPaint();
       }
       recordSessionLifecycleEvent('session-save-catalog-preparation-end', {

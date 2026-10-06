@@ -1131,9 +1131,6 @@ export const executeCanonicalRenderCandidate = async ({
       catalogAdmission: catalogState,
       // The Results carry the feature types of the request that drew them (R13).
       selectedFeatureTypes: canonical.renderRequest.diagramOptions?.selectedFeaturesSet ?? null,
-      results,
-      catalog: catalogState.catalog,
-      mode,
       ...prepareCommitInput,
       resultTransforms: decorationContinuity?.(canonical, catalogState) || []
     })
@@ -1194,8 +1191,8 @@ export const executeCanonicalRenderCandidate = async ({
  * @property {() => Promise<void>} [waitForPostBindFrame]
  * @property {((capture: { phase?: string, diagnostics?: any }) => void) | null} [onGeneratedArtifactCheckpointCapture]
  * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} resetPreviewViewport The preview owner's viewport reset.
- * @property {((options: { loadComparison: boolean }) => ({ code: string, context?: any } | null | undefined)) | null} [validateAnnotationTargets]
- * @property {((hasComparisonIntent?: boolean) => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
+ * @property {(() => ({ code: string, context?: any } | null | undefined)) | null} [validateAnnotationTargets]
+ * @property {(() => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
  * @property {{ value: Record<string, any>[] } | null} [recordDisplayRows]
  *   The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
  * @property {() => Promise<void>} [settleComparisonRecordLabels] D12: ring rows added just before Generate are named before it reads them.
@@ -2172,9 +2169,7 @@ export const createRunAnalysis = ({
       processingStatus.value = 'Reading input records...';
       let prepared;
       try {
-        prepared = await prepareLinearRecordCatalog(
-          activeComparisonPlanSnapshot?.hasComparisonIntent
-        );
+        prepared = await prepareLinearRecordCatalog();
       } catch (error) {
         prepared = {
           catalog: null,
@@ -2287,13 +2282,8 @@ export const createRunAnalysis = ({
           throw new Error(activeComparisonPlanSnapshot.error);
         }
       }
-      const annotationLoadComparison = (
-        mode.value === 'linear' && activeComparisonPlanSnapshot?.hasComparisonIntent === true
-      );
       if (typeof validateAnnotationTargets === 'function' && annotationSets.length > 0) {
-        const annotationError = validateAnnotationTargets({
-          loadComparison: annotationLoadComparison
-        });
+        const annotationError = validateAnnotationTargets();
         if (annotationError) throw diagnosticError(annotationError.code, annotationError.context);
       }
       let regionSpecs = [];
