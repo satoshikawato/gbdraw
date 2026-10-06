@@ -1024,7 +1024,7 @@ export const createSimilarityAlignmentActions = ({
       orientations: changed });
   };
 
-  const applyPlan = async (response, request, expectedActionId, projected) => {
+  const applyPlan = async (response, expectedActionId, projected) => {
     if (expectedActionId !== actionId) return { status: 'stale' };
     if (!artifactIsCurrent()) return rejectStaleDraft();
     if (!projected.selectionComplete || !projected.geometryValidated) {
@@ -1080,7 +1080,7 @@ export const createSimilarityAlignmentActions = ({
     if (mode === 'align' && response.status === 'resolved') {
       status.value = 'applying';
       automaticApply.value = true;
-      try { return await applyPlan(response, request, expectedActionId, projectDraft(response, [])); }
+      try { return await applyPlan(response, expectedActionId, projectDraft(response, [])); }
       finally { automaticApply.value = false; }
     }
     return { status: 'reviewing' };
@@ -1185,7 +1185,7 @@ export const createSimilarityAlignmentActions = ({
         publishError(new Error('Validated directions or reference placement changed. Review the updated preview and Apply again.'));
         return {status:'reviewing'};
       }
-      return applyPlan(response, request, expectedActionId, final);
+      return applyPlan(response, expectedActionId, final);
     } catch (cause) {
       if (expectedActionId !== actionId) return { status: 'stale' };
       status.value = 'reviewing';

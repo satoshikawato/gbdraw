@@ -145,7 +145,6 @@ import {
   bytesToText,
   getSessionResourceSource,
   readFileText,
-  textToBase64,
   textToBytes
 } from './file-content-cache.js';
 import {
@@ -2216,7 +2215,7 @@ const buildComparisons = ({
   return comparisons;
 };
 
-const buildLayout = (state, filesData, records = []) => {
+const buildLayout = (state, records = []) => {
   if (state.mode.value === 'linear') {
     const recordKeys = records.map((record) => requireCanonicalText(
       record.recordKey,
@@ -2701,7 +2700,7 @@ const projectCanonicalRenderInput = ({
       grouping,
       records,
       diagramOptions,
-      layout: buildLayout(state, filesData, records),
+      layout: buildLayout(state, records),
       comparisons: buildComparisons({
       state,
       filesData,

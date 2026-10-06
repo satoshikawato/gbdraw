@@ -355,11 +355,6 @@ const featureOrthogroupIdStatus = (feature) => {
   };
 };
 
-const featureOrthogroupId = (feature) => {
-  const status = featureOrthogroupIdStatus(feature);
-  return status.valid ? status.value : '';
-};
-
 const featureProduct = (feature) => firstText(
   feature?.product,
   qualifierFirstValue(feature, 'product'),
@@ -742,46 +737,6 @@ const buildFallbackOrthogroupWithContext = ({
     members
   };
 };
-
-const getRenderedFeatureForMember = (member, feature, featureLookup) => (
-  createPairwisePayloadContext({ featureLookup, sourceFeatures: [feature] })
-    .renderedFeatureForMember(member, feature)
-);
-
-const getFeatureForMember = (member, featureLookup, sourceFeatures = []) => (
-  createPairwisePayloadContext({ featureLookup, sourceFeatures }).featureForMember(member)
-);
-
-const getGroupMemberForFeatureSvgId = (group, featureSvgId, featureLookup = null) => (
-  createPairwisePayloadContext({ featureLookup, orthogroups: [group] })
-    .groupMemberForFeatureId(group, featureSvgId)
-);
-
-const getOrthogroupForMatch = (orthogroups, options = {}) => (
-  createPairwisePayloadContext({
-    featureLookup: options.featureLookup,
-    orthogroups,
-    descriptor: {
-      matchKind: 'pairwise',
-      orthogroupId: options.orthogroupId,
-      groupScope: options.groupScope,
-      queryFeatureSvgId: options.queryFeatureSvgId,
-      subjectFeatureSvgId: options.subjectFeatureSvgId
-    }
-  }).orthogroupForMatch()
-);
-
-const buildFallbackOrthogroup = ({
-  orthogroupId,
-  queryFeature,
-  subjectFeature,
-  featureLookup
-}) => buildFallbackOrthogroupWithContext({
-  orthogroupId,
-  queryFeature,
-  subjectFeature,
-  context: createPairwisePayloadContext({ featureLookup })
-});
 
 const overrideValue = (overrides, key) => {
   const normalizedKey = normalizeText(key);
