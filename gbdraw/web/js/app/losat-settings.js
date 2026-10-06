@@ -66,6 +66,9 @@ export const createLosatSettings = ({ state }) => {
     losatProgram
   } = state;
 
+  // `state.js` always provides the computed plan.
+  const readResolution = () => linearComparisonResolution.value || {};
+
   const losatHardwareThreads = ref(getLosatHardwareThreads());
   onMounted(() => {
     losatHardwareThreads.value = getLosatHardwareThreads();
@@ -77,13 +80,11 @@ export const createLosatSettings = ({ state }) => {
   // translation tables vary per record, so they are the only arguments that
   // can split a source batch.
   const losatEstimatedJobCount = computed(() => {
-    const resolution = linearComparisonResolution?.value || linearComparisonResolution || {};
+    const resolution = readResolution();
     if (resolution.valid === false || !resolution.hasLosatIntent) return 0;
     const program = losatProgram.value;
     try {
-      // linear-comparisons.js is unchecked until P8; its inferred options type
-      // drops `resolution` and `recordCount`, which have no default.
-      const specs = buildLosatJobSpecs(/** @type {any} */ ({
+      const specs = buildLosatJobSpecs({
         resolution,
         recordCount: linearSeqs.length,
         recordUids: linearSeqs.map((sequence) => sequence?.uid),
@@ -91,7 +92,7 @@ export const createLosatSettings = ({ state }) => {
         blastpMode: String(losat.blastp?.mode || 'orthogroup'),
         collinearInferOrthogroups: losat.blastp?.collinearInferOrthogroups !== false,
         collinearSearchScope: normalizeCollinearSearchScope(losat.blastp?.collinearSearchScope)
-      }));
+      });
       return planLosatSourceJobs({
         sequences: linearSeqs,
         specs,
@@ -163,7 +164,7 @@ export const createLosatSettings = ({ state }) => {
   );
 
   const hasValidLosatIntent = () => {
-    const resolution = linearComparisonResolution?.value || linearComparisonResolution || {};
+    const resolution = readResolution();
     return resolution.valid === true && resolution.hasLosatIntent === true;
   };
 
