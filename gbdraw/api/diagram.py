@@ -143,6 +143,7 @@ from gbdraw.mode_profiles import (
     LINEAR_MODE_PROFILE,
 )
 from gbdraw.annotations import ResolvedAnnotationBundle, resolve_annotations
+from gbdraw.legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from gbdraw.legend.table import (
     configure_pairwise_identity_legend_from_comparisons,
 )
@@ -3056,6 +3057,7 @@ def assemble_circular_diagram_from_records(
     )
 
     legend_table: dict = {}
+    legend_row_facts: LegendRowFacts | None = None
     legend_target: Group | None = None
     legend_bounds: Aabb | None = None
     plot_title_group: Group | None = None
@@ -3152,6 +3154,13 @@ def assemble_circular_diagram_from_records(
             conservation_tracks=first_record_conservation_tracks,
             conservation_min_identity=float(identity),
         )
+        legend_row_facts = LegendRowFacts(
+            records=records,
+            feature_config=feature_config,
+            gc_config=gc_config,
+            skew_config=skew_config,
+            legend_table=legend_table,
+        )
         if legend_table:
             legend_config = LegendDrawingConfigurator(
                 color_table=color_table,
@@ -3183,6 +3192,8 @@ def assemble_circular_diagram_from_records(
         ),
         debug=False,
     )
+    if legend_row_facts is not None:
+        attach_legend_row_facts(merged_canvas, legend_row_facts)
     used_ids: set[str] = set()
     record_targets: list[Group] = []
     grid_overlay_obstacles: list[Aabb] = []

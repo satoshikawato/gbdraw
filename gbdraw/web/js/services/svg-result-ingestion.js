@@ -69,12 +69,53 @@ const requireAlignedCatalogAdmission = (admission, results) => {
   return admission;
 };
 
-const createRuntimeSource = (sourceClass, results, catalogAdmission = null) => Object.freeze({
+const createRuntimeSource = (
+  sourceClass,
+  results,
+  catalogAdmission = null,
+  legendRows = null
+) => Object.freeze({
   [RESULT_SOURCE]: true,
   sourceClass,
   results,
-  catalogAdmission
+  catalogAdmission,
+  legendRows
 });
+
+const invalidResult = () => diagnosticError('RESULT_INVALID', {}, { stage: 'result-admission' });
+
+// Python's Legend row facts for each Result (`metadata.legendRows`): the row keys
+// its Legend drew, and the feature rows its records can name that the draft did not
+// draw (hidden or recaptioned features). They are read for one admission and never
+// persisted. Without them (a replayed Session, a stub) a required row stays required.
+const normalizeLegendRowFacts = (legendRows, results) => {
+  if (legendRows === undefined) return null;
+  const keys = (list) => (
+    Array.isArray(list) && list.every((key) => typeof key === 'string') ? new Set(list) : null
+  );
+  if (!Array.isArray(legendRows) || legendRows.length !== results.length) throw invalidResult();
+  return Object.freeze(legendRows.map((row, index) => {
+    const drawn = keys(row?.drawn);
+    const suppressed = keys(row?.suppressed);
+    if (!drawn || !suppressed || row.resultIndex !== index || row.resultName !== text(results[index]?.name)) {
+      throw invalidResult();
+    }
+    return Object.freeze({ drawn, suppressed });
+  }));
+};
+
+// A required Legend row that Result `resultIndex` does not contain may be absent when
+// Python reports it as removed by the draft there (suppressed), or as belonging to
+// another Result of the batch (drawn or suppressed there). A row Python drew in this
+// Result must be present, and a key no Result reports is stale (OV-46, OV-63).
+const legendRowMayBeAbsent = (legendRows, resultIndex, caption) => {
+  if (!legendRows) return false;
+  const own = legendRows[resultIndex];
+  if (own.drawn.has(caption)) return false;
+  if (own.suppressed.has(caption)) return true;
+  return legendRows.some((other, index) => index !== resultIndex
+    && (other.drawn.has(caption) || other.suppressed.has(caption)));
+};
 
 /**
  * Classify persisted current-session Results without granting current-worker
@@ -365,11 +406,9 @@ const requireFeatureElements = (index, renderedId) => {
   return elements;
 };
 
-const requireLegendEntries = (index, caption, { allowMissing = false } = {}) => {
+const requireLegendEntries = (index, caption, { allowMissing = false } = {}, mayBeAbsent = () => false) => {
   const entries = index.legends().entries.get(caption) || [];
-  if (entries.length === 0 && !allowMissing) {
-    throw diagnosticError('RESULT_INVALID', {}, { stage: 'result-admission' });
-  }
+  if (entries.length === 0 && !allowMissing && !mayBeAbsent(caption)) throw invalidResult();
   return entries;
 };
 
@@ -401,14 +440,10 @@ const updateLegendCaption = (entry, caption) => {
   if (label) label.textContent = caption;
 };
 
-// `drawnRows` collects the captions of rows marked `requiredInAnyResult` that
-// this Result draws, for the check over all Results of one admission (OV-46).
-const applyLegendOperations = (index, operations, { displayed = false, drawnRows = null } = {}) => {
-  const requireRow = (operation) => {
-    const entries = requireLegendEntries(index, operation.caption, operation);
-    if (operation.requiredInAnyResult && entries.length > 0) drawnRows?.add(operation.caption);
-    return entries;
-  };
+// `mayBeAbsent(caption)` says whether Python's Legend row facts let a required row
+// be missing from this Result (OV-63).
+const applyLegendOperations = (index, operations, { displayed = false, mayBeAbsent = undefined } = {}) => {
+  const requireRow = (operation) => requireLegendEntries(index, operation.caption, operation, mayBeAbsent);
   operations.legendFills.forEach((operation) => {
     const { color } = operation;
     requireRow(operation).forEach((entry) => {
@@ -433,7 +468,7 @@ const applyLegendOperations = (index, operations, { displayed = false, drawnRows
     });
   });
   operations.legendRenames.forEach(({ from, to, xPos, yPos, allowMissing }) => {
-    requireLegendEntries(index, from, { allowMissing }).forEach((entry) => {
+    requireLegendEntries(index, from, { allowMissing }, mayBeAbsent).forEach((entry) => {
       updateLegendCaption(entry, to);
       moveLegendEntryToAnchor(entry, xPos, yPos);
     });
@@ -517,7 +552,7 @@ const admitCurrentResult = (
     parser,
     resultIndex,
     sourceClass,
-    drawnRows
+    legendRows
   }
 ) => {
   const phase = sourceClass;
@@ -536,22 +571,12 @@ const admitCurrentResult = (
   recordStructuralMetric('applicationSvgParseCount', 1, { phase, resultIndex });
   const index = createLazyMutationIndex(svg, { phase, resultIndex });
   applyFeatureOperations(index, operations);
-  applyLegendOperations(index, operations, { drawnRows });
+  applyLegendOperations(index, operations, {
+    mayBeAbsent: (caption) => legendRowMayBeAbsent(legendRows, resultIndex, caption)
+  });
   operations.callerTransforms.forEach((transform) => transform(svg, { result, resultIndex }));
   const content = serializeAdmittedSvg(svg, { phase, resultIndex });
   return commitCatalogBackedResult({ ...result, content }, metadata);
-};
-
-// A Legend row the compiler could not tie to a Result may be missing in each
-// Result, but some Result of the Generate must draw it (OV-46).
-const requireRowsDrawnInAnyResult = (plan, drawnRows) => {
-  plan.operationsByResult.forEach((operations) => {
-    [...operations.legendFills, ...operations.legendStrokes].forEach((operation) => {
-      if (operation.requiredInAnyResult && !drawnRows.has(operation.caption)) {
-        throw diagnosticError('RESULT_INVALID', {}, { stage: 'result-admission' });
-      }
-    });
-  });
 };
 
 const admitCatalogBackedResults = (
@@ -563,7 +588,7 @@ const admitCatalogBackedResults = (
     selectedFeatureTypes = null
   } = {}
 ) => {
-  const { results, catalogAdmission, sourceClass } = source;
+  const { results, catalogAdmission, sourceClass, legendRows } = source;
   requireAlignedCatalogAdmission(catalogAdmission, results);
   const plan = requireCurrentMutationPlan(mutationPlan, results.length);
   const featureTypes = resultFeatureTypes(selectedFeatureTypes);
@@ -575,14 +600,12 @@ const admitCatalogBackedResults = (
   recordStructuralMetric('currentLegacyNormalizationCount', 0, { phase: sourceClass });
   recordStructuralMetric('legacyOverrideMigrationCount', 0, { phase: sourceClass });
   recordStructuralMetric('manualRuleFeatureMatchCount', 0, { phase: sourceClass });
-  const drawnRows = new Set();
   const admitted = results.map((result, resultIndex) => admitCurrentResult(
     result,
     metadataFromCatalogAdmission(catalogAdmission, resultIndex, sourceClass, featureTypes),
     currentResultOperations(plan, resultIndex),
-    { sanitizer, parser, resultIndex, sourceClass, drawnRows }
+    { sanitizer, parser, resultIndex, sourceClass, legendRows }
   ));
-  requireRowsDrawnInAnyResult(plan, drawnRows);
   recordSessionLifecycleEvent('svg.admission-completed', {
     phase: sourceClass,
     resultCount: admitted.length,
@@ -619,7 +642,8 @@ export const admitCurrentGeneratedResults = (
   const source = createRuntimeSource(
     SVG_RESULT_SOURCE_CLASSES.CURRENT_WORKER,
     requireResultList(generationResponse.results),
-    requireAlignedCatalogAdmission(catalogAdmission, generationResponse.results)
+    requireAlignedCatalogAdmission(catalogAdmission, generationResponse.results),
+    normalizeLegendRowFacts(generationResponse.metadata?.legendRows, generationResponse.results)
   );
   return admitCatalogBackedResults(source, mutationPlan, { sanitizer, parser, selectedFeatureTypes });
 };

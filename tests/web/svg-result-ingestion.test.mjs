@@ -543,32 +543,46 @@ test('an unexplained missing Legend binding remains rejected', () => {
   );
 });
 
-// OV-46: a Legend-only row has no known feature, so the compiler cannot tell which
-// Result draws it. Each Result may miss it; the Generate must draw it somewhere.
-const legendOnlyBatchFixture = (contents) => {
+// OV-46, OV-63: the plan requires a generated Legend row (fill, stroke, rename) in
+// each Result. Python's per-Result Legend row facts (`metadata.legendRows`) say which
+// absences are legitimate: a row the draft removed (suppressed), or a row another
+// Result of the batch draws or has removed. Any other absence is a stale operation.
+const legendRowsFixture = ({ contents, legendRows, withFacts = true, rename = false }) => {
   const featureCatalog = catalog();
   const [first] = featureCatalog.items;
-  featureCatalog.items.push({
-    ...first,
-    resultIndex: 1,
-    resultName: 'diagram-2.svg',
-    recordKeys: ['record-b'],
-    features: first.features.map((feature) => ({ ...feature, recordKey: 'record-b' })),
-    biologicalFeatures: first.biologicalFeatures.map((feature) => ({
-      ...feature, recordKey: 'record-b', record_id: 'record-b', stableFeatureId: 'stable-b'
-    }))
-  });
+  if (contents.length > 1) {
+    featureCatalog.items.push({
+      ...first,
+      resultIndex: 1,
+      resultName: 'diagram-2.svg',
+      recordKeys: ['record-b'],
+      features: first.features.map((feature) => ({ ...feature, recordKey: 'record-b' })),
+      biologicalFeatures: first.biologicalFeatures.map((feature) => ({
+        ...feature, recordKey: 'record-b', record_id: 'record-b', stableFeatureId: 'stable-b'
+      }))
+    });
+  }
+  const names = contents.map((_, index) => (index === 0 ? 'diagram.svg' : 'diagram-2.svg'));
   const response = normalizeGenerationResponse({
-    results: contents.map((content, index) => ({ name: index === 0 ? 'diagram.svg' : 'diagram-2.svg', content })),
-    metadata: { featureCatalog }
+    results: contents.map((content, index) => ({ name: names[index], content })),
+    metadata: {
+      featureCatalog,
+      ...(withFacts ? {
+        legendRows: legendRows.map(({ drawn = [], suppressed = [] }, index) => ({
+          resultIndex: index, resultName: names[index], drawn, suppressed
+        }))
+      } : {})
+    }
   });
   const admission = admitFeatureCatalog(featureCatalog, response.results, { adopt: true, mode: 'linear' });
   const plan = compileDirectEditorMutationPlan({
     catalogAdmission: admission,
-    legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#00aa00' }],
+    legendEntries: [{ caption: rename ? 'Genes' : 'CDS', originalCaption: 'CDS', color: '#00aa00' }],
     originalLegendOrder: ['CDS'],
-    legendColorOverrides: { CDS: '#00aa00' },
-    legendStrokeOverrides: { CDS: { strokeColor: '#445566', strokeWidth: 3 } }
+    ...(rename ? {} : {
+      legendColorOverrides: { CDS: '#00aa00' },
+      legendStrokeOverrides: { CDS: { strokeColor: '#445566', strokeWidth: 3 } }
+    })
   });
   const admit = () => admitCurrentGeneratedResults(response, {
     catalogAdmission: admission,
@@ -579,17 +593,59 @@ const legendOnlyBatchFixture = (contents) => {
   return { plan, admit };
 };
 
-test('a Legend row with unknown drawing Results may be missing in a Result that another Result draws', () => {
-  const { plan, admit } = legendOnlyBatchFixture(['<svg><path id="f0001"/></svg>', '<svg>missing-legend</svg>']);
-  assert.deepEqual(plan.operationsByResult.map(({ legendFills }) => legendFills[0].allowMissing), [true, true]);
+const WITH_ROW = '<svg><path id="f0001"/></svg>';
+const NO_ROW = '<svg>missing-legend</svg>';
+
+test('a row Python reports as suppressed by the draft may be missing from its Result', () => {
+  const { plan, admit } = legendRowsFixture({ contents: [NO_ROW], legendRows: [{ suppressed: ['CDS'] }] });
+  assert.equal(plan.operationsByResult[0].legendFills[0].allowMissing, false);
+  assert.doesNotThrow(admit);
+  const rename = legendRowsFixture({ contents: [NO_ROW], legendRows: [{ suppressed: ['CDS'] }], rename: true });
+  assert.doesNotThrow(rename.admit);
+});
+
+test('a row neither drawn nor suppressed is a stale operation and is rejected', () => {
+  for (const rename of [false, true]) {
+    const { admit } = legendRowsFixture({
+      contents: [NO_ROW], legendRows: [{ drawn: ['GC content'], suppressed: ['repeat_region'] }], rename
+    });
+    assert.throws(admit, { code: 'RESULT_INVALID', stage: 'result-admission' });
+  }
+});
+
+test('a row Python says it drew but the SVG lacks is rejected', () => {
+  const { admit } = legendRowsFixture({ contents: [NO_ROW], legendRows: [{ drawn: ['CDS'] }] });
+  assert.throws(admit, { code: 'RESULT_INVALID', stage: 'result-admission' });
+});
+
+test('without Legend row facts a required row stays required', () => {
+  const { admit } = legendRowsFixture({ contents: [NO_ROW], legendRows: [], withFacts: false });
+  assert.throws(admit, { code: 'RESULT_INVALID', stage: 'result-admission' });
+});
+
+test('a row another Result draws may be missing from a Result that does not name it', () => {
+  const { admit } = legendRowsFixture({
+    contents: [WITH_ROW, NO_ROW], legendRows: [{ drawn: ['CDS'] }, {}]
+  });
   const results = admit();
   assert.match(results[0].content, /fill="#00aa00"/);
   assert.doesNotMatch(results[1].content, /#00aa00/);
 });
 
-test('a Legend row with unknown drawing Results that no Result draws is rejected', () => {
-  const { admit } = legendOnlyBatchFixture(['<svg>missing-legend</svg>', '<svg>missing-legend</svg>']);
+test('a row only another Result suppresses may be missing; a row no Result reports is rejected', () => {
+  assert.doesNotThrow(legendRowsFixture({
+    contents: [NO_ROW, NO_ROW], legendRows: [{ suppressed: ['CDS'] }, {}]
+  }).admit);
+  const { admit } = legendRowsFixture({ contents: [NO_ROW, NO_ROW], legendRows: [{}, {}] });
   assert.throws(admit, { code: 'RESULT_INVALID', stage: 'result-admission' });
+});
+
+test('malformed Legend row facts are rejected at admission', () => {
+  const base = { contents: [NO_ROW] };
+  for (const legendRows of [[], [{ drawn: 'CDS' }], [{ suppressed: [1] }]]) {
+    const { admit } = legendRowsFixture({ ...base, legendRows });
+    assert.throws(admit, { code: 'RESULT_INVALID', stage: 'result-admission' });
+  }
 });
 
 test('source replacement may retire styled, renamed, or deleted generated Legend categories', () => {

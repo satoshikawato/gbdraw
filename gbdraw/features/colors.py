@@ -147,6 +147,7 @@ def precompute_used_color_rules(
     selected_features_set: set,
     feature_visibility_rules: list[dict] | None = None,
     record_features=(),
+    include_hidden: bool = False,
 ) -> tuple[set, set]:
     """
     Pre-compute which color rules will be used for a set of records.
@@ -158,6 +159,8 @@ def precompute_used_color_rules(
         color_map: Preprocessed color map from preprocess_color_tables
         default_color_map: Preprocessed default color map
         selected_features_set: Set of feature types to consider
+        include_hidden: Also match the features the draft hides, so the result names
+            every rule row the records can produce (Legend row facts).
 
     Returns:
         (used_rules, default_used_features)
@@ -177,7 +180,7 @@ def precompute_used_color_rules(
             record, record_features[index].overrides if record_features else None
         )
         for feature in record.features:
-            if not should_render_feature(
+            if not include_hidden and not should_render_feature(
                 feature,
                 selected_features_set,
                 feature_visibility_rules=feature_visibility_rules,

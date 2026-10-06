@@ -62,6 +62,7 @@ from ...render.groups.linear.length_bar import (
     format_linear_tick_label,
 )
 from ...io.comparisons import filter_comparison_dataframe, load_comparisons
+from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from ...legend.table import (
     _unique_legend_key,
     configure_pairwise_identity_legend_from_comparisons,
@@ -3106,6 +3107,16 @@ def assemble_linear_diagram(
         ).supported_targets()
         for record_geometry in getattr(canvas, "_gbdraw_track_slot_geometry", {}).get("records", []):
             record_geometry["featurePlacementTargets"] = targets
+    attach_legend_row_facts(
+        canvas,
+        LegendRowFacts(
+            records=records,
+            feature_config=feature_config,
+            gc_config=gc_config,
+            skew_config=skew_config,
+            legend_table=legend_table,
+        ),
+    )
     setattr(canvas, "_gbdraw_alignment_placements", tuple(
         replace(placement, x=placement.x + float(canvas_config.horizontal_offset))
         for placement in alignment_placements

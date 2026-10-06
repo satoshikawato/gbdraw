@@ -337,6 +337,60 @@ const CASES = [
     },
     run: (page) => showResult(page, 1)
   },
+  // OV-63: a Legend color on a row whose features are then all hidden. Generate
+  // draws no row for them, and the stored color does not fail the Generate.
+  {
+    kind: 'feature Off',
+    edit: 'Feature visibility Off (popup) for every feature of a Legend row with a Legend color',
+    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    setup: async (page) => {
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        return app.updateLegendEntryColor(app.legendEntries.findIndex((entry) => entry.caption === 'repeat_region'), '#7b2cbf');
+      });
+      await settleLive(page);
+    },
+    run: (page) => popupEdit(page, { type: 'repeat_region' }, { visibility: 'off' })
+  },
+  {
+    kind: 'feature Off',
+    edit: 'Feature visibility Off (popup) for every feature of a Legend row renamed in the Legend',
+    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    setup: async (page) => {
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        return app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'repeat_region'), 'Repeats');
+      });
+      await settleLive(page);
+    },
+    run: (page) => popupEdit(page, { type: 'repeat_region' }, { visibility: 'off' })
+  },
+  {
+    kind: 'visibility rule add',
+    edit: 'Feature Visibility rule add that hides every feature of a Legend row with a Legend color',
+    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'bound' },
+    setup: async (page) => {
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        return app.updateLegendEntryColor(app.legendEntries.findIndex((entry) => entry.caption === 'CDS'), '#7b2cbf');
+      });
+      await settleLive(page);
+    },
+    run: (page) => addVisibilityRule(page, BATCH_CDS_OFF)
+  },
+  {
+    kind: 'color rule add',
+    edit: 'Specific color rule add that recaptions every feature of a Legend row with a Legend color',
+    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'unbound' },
+    setup: async (page) => {
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        return app.updateLegendEntryColor(app.legendEntries.findIndex((entry) => entry.caption === 'CDS'), '#7b2cbf');
+      });
+      await settleLive(page);
+    },
+    run: (page) => addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '.', color: '#c83366', cap: 'Zeta' })
+  },
   {
     kind: 'Result switch',
     edit: 'Result switch after deleting a same-product rule Generate drew',
@@ -480,4 +534,22 @@ test('a Legend color on a row only one Result draws survives the next Generate',
   const after = [await legendOf(0), await legendOf(1)];
   expect(after[0].find(({ caption }) => caption === 'other proteins').fill.toLowerCase()).toBe('#00aa00');
   expect(after[1]).toEqual(before[1]);
+});
+
+// OV-63: Python's Legend row facts excuse only a row the draft removed. A Legend
+// style on a key no feature of the records can produce is a stale operation, and
+// the Generate still fails at result admission.
+test('a Legend style no feature can produce still fails the Generate', async ({ page }) => {
+  test.setTimeout(90_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { state } = await import('/gbdraw/web/js/state.js');
+    state.originalLegendOrder.value = [...state.originalLegendOrder.value, 'Ghost'];
+    app.legendEntries.push({ caption: 'Ghost', originalCaption: 'Ghost', color: '#123456', yPos: 400 });
+    state.legendColorOverrides.Ghost = '#123456';
+  });
+  const outcome = await generateAndWaitForResult(page, { expectedStatus: 'error' });
+  expect(outcome.errorSummary).toContain('could not be accepted');
+  expect(await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.errorLog))).toContain('RESULT_INVALID');
 });
