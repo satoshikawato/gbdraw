@@ -454,3 +454,19 @@ test('an edit that changes a Legend source rerenders once', async ({ page }) => 
   expect(await renders(), 'color rule, Auto Reflow on').toBe(1);
   await expectLiveEqualsGenerate(page, { label: 'edits that change a Legend source' });
 });
+
+// OV-60: renaming a generated Legend row (GC content) onto the caption of a
+// color rule that draws no row is an explicit rename; Generate draws it too.
+test('a Legend rename onto the caption of a color rule without a drawn row equals Generate', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^NOMATCH$', color: '#c83366', cap: 'Zeta' });
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'GC content'), 'Zeta');
+  });
+  await settleLive(page);
+  const captions = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption));
+  expect(captions, 'the renamed row is drawn live').toContain('Zeta');
+  await expectLiveEqualsGenerate(page, { label: 'Legend rename onto the caption of a color rule without a row' });
+});

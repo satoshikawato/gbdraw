@@ -798,7 +798,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
       querySelectorAll: () => []
     };
   };
-  const build = ({ entries, order, rules = [], features = [] }) => {
+  const build = ({ entries, order, rules = [], features = [], legendColorOverrides = {} }) => {
     const groupEntries = new Map(entries.map((entry) => [entry.caption, fakeEntry(entry.caption)]));
     const legendGroup = {
       querySelector: (selector) => [...groupEntries].find(([caption]) => selector.includes(`"${caption}"`))?.[1] || null
@@ -819,7 +819,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
         manualSpecificRules: rules, extractedFeatures: featureList, biologicalFeatures: featureList,
         featureColorOverrides: {}, svgContainer: ref({ querySelector: (selector) => selector === 'svg' ? svgRoot : null }),
         clickedFeature: ref(null), featureStyleScopeDialog: {}, resetColorDialog: {}, legendRenameDialog,
-        legendEntries: stateLegendEntries, legendStrokeOverrides: {}, legendColorOverrides: {},
+        legendEntries: stateLegendEntries, legendStrokeOverrides: {}, legendColorOverrides,
         originalLegendOrder: originalOrder, originalLegendColors: ref({}), originalSvgStroke: ref({ color: null, width: null }),
         featureStrokeOverrides: {}, skipCaptureBaseConfig: ref(false), skipExtractOnSvgChange: ref(false),
         addedLegendCaptions: ref(new Set())
@@ -841,7 +841,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
       getFeatureFillElements: () => [],
       commitActiveResultEdit: null
     });
-    return { renameActions, committed, legendRenameDialog, stateLegendEntries, originalOrder };
+    return { renameActions, committed, legendRenameDialog, stateLegendEntries, originalOrder, legendColorOverrides };
   };
 
   // PV-02: a renamed renderer-generated row keeps its generated identity, so
@@ -860,6 +860,29 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
     originalLegendOrder: gc.originalOrder.value
   });
   assert.deepEqual(gcPlan.operationsByResult[0].legendRenames.map(({ from, to }) => [from, to]), [['GC content', 'GC percent']]);
+
+  // OV-60: a renamed row onto a color rule's caption (a rule without a drawn
+  // row) is replayed by Generate, and a style an earlier row left under the
+  // caption does not follow the renamed row.
+  const unusedRule = { feat: 'CDS', qual: 'locus_tag', val: '^NOMATCH$', color: '#c83366', cap: 'Zeta' };
+  const onRule = build({
+    entries: [{ caption: 'CDS', color: '#54bcf8' }, { caption: 'GC content', color: '#a1a1a1' }],
+    order: ['CDS', 'GC content'],
+    rules: [unusedRule],
+    legendColorOverrides: { Zeta: '#7b2cbf' }
+  });
+  await onRule.renameActions.renameLegendEntry(1, 'Zeta');
+  assert.notEqual(onRule.legendRenameDialog.show, true);
+  assert.deepEqual(onRule.legendColorOverrides, {}, 'the stale style of the caption is dropped');
+  const onRulePlan = compileDirectEditorMutationPlan({
+    catalogAdmission: { resultNames: ['a.svg'], renderedTargetsByOverrideKey: new Map(), resultIndexesByRenderedId: new Map() },
+    legendEntries: onRule.stateLegendEntries.value,
+    originalLegendOrder: onRule.originalOrder.value,
+    manualSpecificRules: [unusedRule]
+  });
+  assert.deepEqual(onRulePlan.operationsByResult[0].legendRenames.map(({ from, to, allowMissing }) => [from, to, allowMissing]),
+    [['GC content', 'Zeta', true]]);
+  assert.deepEqual(onRulePlan.operationsByResult[0].legendFills, []);
 
   // PV-04: renaming a feature row onto another caption of a different color
   // asks Merge, Suffix, or Cancel before any rule commit.

@@ -672,6 +672,14 @@ export const createFeatureColorActions = ({
 
     if (!updated) return false;
 
+    // The renamed row takes the caption: a style that an earlier row left under
+    // that caption does not follow it, as Generate would otherwise apply it (OV-60).
+    if (!findLegendEntryByCaption(newCaption)) {
+      for (const store of [legendColorOverrides, legendStrokeOverrides]) {
+        const staleKey = findCaptionKey(store, newCaption);
+        if (staleKey) delete store[staleKey];
+      }
+    }
     moveCaptionStateKey(legendColorOverrides, oldCaption, newCaption);
     moveCaptionStateKey(legendStrokeOverrides, oldCaption, newCaption);
     moveAddedLegendCaption(oldCaption, newCaption);
