@@ -98,3 +98,55 @@ REPLAY.forEach(({ pr, merge, detector, subject }) => {
     assert.ok(after.has(subject), `${pr}: ${subject} not observed at the merge`);
   });
 });
+
+// Hand fixes of hidden forward references that v1 could not see. The v2
+// detector (nested closures and late-bound function variables) reports the
+// closures before the merge and none of them after it. The before revision is
+// the merge's first parent; E11's first parent (9a83e8f8) holds the same three
+// closures as 161ca594, the last merge before the E11 branch changed them.
+const FORWARD_CLOSURE_V2 = 'owner-graph.forward-closure.v2';
+const E11_CLOSURES = [
+  'app/app-setup.js|getOpenDisabledReason->alignmentReviewBlocksEditor',
+  'app/app-setup.js|installDelegatedInteractions->refreshSimilarityAlignmentCanvas',
+  'app/app-setup.js|watch(callback)->refreshSimilarityAlignmentCanvas'
+];
+const REPLAY_FIXED_V2 = [
+  {
+    pr: '#843 (E10)',
+    merge: '8d44ed7c',
+    before: [
+      'app/app-setup.js|afterRecordDrag->similarityAlignmentActions.afterRecordDrag',
+      'app/app-setup.js|beforeRecordDrag->similarityAlignmentActions.beforeRecordDrag',
+      'app/app-setup.js|restoreWithSpecificRuleDrafts->featureActions.captureSpecificRulePatternDrafts',
+      'app/app-setup.js|restoreWithSpecificRuleDrafts->featureActions.restoreSpecificRulePatternDrafts',
+      ...E11_CLOSURES
+    ],
+    after: E11_CLOSURES
+  },
+  { pr: '#854 (E11)', merge: 'ae52337e', before: E11_CLOSURES, after: [] }
+];
+
+const fixedHistoryAvailable = REPLAY_FIXED_V2.every(({ merge }) => revisionExists(`${merge}^1`) && revisionExists('161ca594'));
+
+REPLAY_FIXED_V2.forEach(({ pr, merge, before, after }) => {
+  test(`${pr} (${merge}) fixed the ${FORWARD_CLOSURE_V2} closures that v1 did not report`, {
+    skip: fixedHistoryAvailable ? false : 'revision history not available in this checkout'
+  }, () => {
+    assert.deepEqual(evaluateWebOwnerGraphAt(`${merge}^1`).results[FORWARD_CLOSURE_V2].subjects, [...before].sort());
+    assert.deepEqual(evaluateWebOwnerGraphAt(merge).results[FORWARD_CLOSURE_V2].subjects, [...after].sort());
+  });
+});
+
+test('161ca594 (before E11) reports the three E11 closures and nothing else', { skip: fixedHistoryAvailable ? false : 'revision history not available in this checkout' }, () => {
+  assert.deepEqual(evaluateWebOwnerGraphAt('161ca594').results[FORWARD_CLOSURE_V2].subjects, E11_CLOSURES);
+});
+
+test('trigger sites handed to owners as producer ports are counted by v2 and not by v1 (E4, E9)', { skip: revisionExists('ae52337e') ? false : 'revision history not available in this checkout' }, () => {
+  const { results } = evaluateWebOwnerGraphAt('ae52337e');
+  const hidden = ['rulePreparation|app/feature-editor/color-actions.js', 'rulePreparation|app/feature-editor/svg-actions.js'];
+  hidden.forEach((subject) => {
+    assert.equal(results['heavy-derived.trigger-site.v1'].countsBySubject[subject], undefined);
+  });
+  assert.equal(results['heavy-derived.trigger-site.v2'].countsBySubject[hidden[0]], 2);
+  assert.equal(results['heavy-derived.trigger-site.v2'].countsBySubject[hidden[1]], 1);
+});
