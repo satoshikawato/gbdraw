@@ -1,3 +1,4 @@
+// @ts-check
 import { formatFastaEntry } from './feature-sequence-fasta.js';
 import { recordSourceInterval } from './record-source-coordinates.js';
 import {
@@ -6,6 +7,87 @@ import {
 } from './conservation-series.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { genbankHeaderIds } from './genbank-header.js';
+
+/**
+ * A registered sequence source: one record whose bases a match span reads.
+ * @typedef {object} SequenceSource
+ * @property {string} key
+ * @property {string} recordId
+ * @property {string[]} aliases
+ * @property {string} sequence
+ * @property {string} origin
+ * @property {number | null} recordIndex
+ * @property {number | null} sourceIndex
+ */
+
+/**
+ * A source as callers supply it for registration; the registry normalizes it
+ * into a `SequenceSource`.
+ * @typedef {object} SequenceSourceInput
+ * @property {string} key
+ * @property {string} [recordId]
+ * @property {string[]} [aliases]
+ * @property {string} sequence
+ * @property {string} [origin]
+ * @property {number | string | null} [recordIndex]
+ * @property {number | string | null} [sourceIndex]
+ */
+
+/**
+ * The identity a match carries to pick its sequence source.
+ * @typedef {object} SequenceSourceContext
+ * @property {string} [origin]
+ * @property {number | string | null} [recordIndex]
+ * @property {number | string | null} [sourceIndex]
+ */
+
+/**
+ * @typedef {object} SequenceSourceResolution
+ * @property {SequenceSource | null} source
+ * @property {string} reason
+ */
+
+/**
+ * Port that resolves a match span to its sequence source. A resolver may
+ * return the bare source or a `{ source, reason }` resolution.
+ * @typedef {(
+ *   sourceKey: string,
+ *   recordId: string,
+ *   context: SequenceSourceContext
+ * ) => SequenceSourceResolution | SequenceSource | null} SequenceSourceResolver
+ */
+
+/**
+ * @typedef {object} MatchSpanExtraction
+ * @property {boolean} valid
+ * @property {string} [reason]
+ * @property {number} [start]
+ * @property {number} [end]
+ * @property {string} [orientation]
+ * @property {string} sequence
+ * @property {number} [sequenceLength]
+ */
+
+/**
+ * @typedef {object} MatchSequenceEntryOptions
+ * @property {string} [matchId]
+ * @property {SequenceSourceResolver} [resolveSequenceSource]
+ * @property {SequenceSourceContext} [context]
+ * @property {string} [unavailableReason]
+ */
+
+/**
+ * @typedef {object} MatchSequenceBundleOptions
+ * @property {string} [matchId]
+ * @property {SequenceSourceResolver} [resolveSequenceSource]
+ * @property {(span: any) => SequenceSourceContext} [contextForSpan]
+ * @property {(span: any) => string} [unavailableReasonForSpan]
+ */
+
+/**
+ * The slice of the session files that the sequence-source readers consult.
+ * @typedef {Record<string, any>} MatchSequenceFiles
+ */
 
 const IUPAC_COMPLEMENT = Object.freeze({
   A: 'T', C: 'G', G: 'C', T: 'A', U: 'A',
@@ -87,6 +169,12 @@ export const validateMatchCoordinates = (startRaw, endRaw, sequenceLength) => {
   return { valid: true, start, end, orientation: start <= end ? '+' : '-' };
 };
 
+/**
+ * @param {string} sequence
+ * @param {number | string} startRaw
+ * @param {number | string} endRaw
+ * @returns {MatchSpanExtraction}
+ */
 export const extractMatchedSpan = (sequence, startRaw, endRaw) => {
   const normalized = normalizedSequence(sequence);
   const validation = validateMatchCoordinates(startRaw, endRaw, normalized.length);
@@ -101,6 +189,9 @@ export const extractMatchedSpan = (sequence, startRaw, endRaw) => {
   };
 };
 
+/**
+ * @param {SequenceSourceInput[]} [initialSources]
+ */
 export const createSequenceSourceRegistry = (initialSources = []) => {
   let owner = Object.freeze({
     sources: new Map(),
@@ -335,6 +426,9 @@ const invalidCatalogSourceReason = (source, identity) => {
   return '';
 };
 
+/**
+ * @param {{ files?: MatchSequenceFiles, circularConservation?: Record<string, any> }} [options]
+ */
 export const resolveCircularComparisonSequenceAvailability = ({
   files,
   circularConservation
@@ -411,6 +505,14 @@ const comparisonSourceAvailabilityAt = (inventory, sourceIndex) => {
 /**
  * Decide whether a current feature catalog already contains every sequence
  * source that its feature and match-popup consumers require.
+ */
+/**
+ * @param {{
+ *   mode?: string,
+ *   catalogFeatureState?: Record<string, any>,
+ *   renderRequest?: Record<string, any>,
+ *   comparisonSourceAvailability?: Record<string, any>[]
+ * }} [options]
  */
 export const analyzeCatalogSequenceSourceCoverage = ({
   mode,
@@ -712,6 +814,10 @@ const normalizeResolution = (resolved) => {
   return { source: resolved, reason: '' };
 };
 
+/**
+ * @param {any} span
+ * @param {MatchSequenceEntryOptions} [options]
+ */
 export const buildMatchSequenceEntry = (
   span,
   {
@@ -777,6 +883,10 @@ export const buildMatchSequenceEntry = (
   };
 };
 
+/**
+ * @param {any[]} spans
+ * @param {MatchSequenceBundleOptions} [options]
+ */
 export const buildMatchSequenceBundle = (
   spans,
   {
@@ -903,6 +1013,16 @@ const readInputSequenceRecords = async (file, inputType) => {
  * Sessions already contain the source files, so sequence strings do not need a
  * second persisted copy. Sources that were never supplied (for example, a
  * BLAST upload without its optional comparison FASTA) remain unavailable.
+ */
+/**
+ * @param {{
+ *   mode?: string,
+ *   cInputType?: string,
+ *   lInputType?: string,
+ *   files?: MatchSequenceFiles,
+ *   linearSeqs?: Record<string, any>[],
+ *   circularConservation?: Record<string, any>
+ * }} [options]
  */
 export const buildRestoredMatchSequenceSources = async ({
   mode,

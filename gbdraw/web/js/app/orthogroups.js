@@ -1,3 +1,4 @@
+// @ts-check
 import {
   FEATURE_SELECTOR,
   getFeatureElements,
@@ -293,6 +294,31 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
   return matches.length === 1 ? matches[0].renderedId.value : '';
 };
 
+/**
+ * The reactive state fields the similarity-group editor reads and writes.
+ * A `{ value }` field is a Vue ref; the override maps and `linearSeqs` are
+ * reactive objects.
+ * @typedef {object} OrthogroupEditorState
+ * @property {{ value: Record<string, any>[] }} orthogroups
+ * @property {Record<string, string>} orthogroupNameOverrides
+ * @property {Record<string, string>} orthogroupDescriptionOverrides
+ * @property {Record<string, { name?: string, description?: string }>} orthogroupDormantOverrides
+ * @property {{ value: string }} selectedOrthogroupId
+ * @property {{ value: string }} orthogroupSearch
+ * @property {{ value: string }} orthogroupSortMode
+ * @property {{ value: Record<string, any> | null }} clickedFeature
+ * @property {{ value: boolean }} showRightDrawer
+ * @property {{ value: string }} rightDrawerTab
+ * @property {{ value: HTMLElement | null }} svgContainer
+ * @property {Record<string, any>[]} linearSeqs
+ * @property {{ value: Record<string, any>[] }} extractedFeatures
+ * @property {{ value: Record<string, any>[] }} biologicalFeatures
+ * @property {() => { status: string, reason: string } | null} [sessionOperationAvailability]
+ */
+
+/**
+ * @param {{ state: OrthogroupEditorState }} options
+ */
 export const createOrthogroupEditor = ({ state }) => {
   const {
     orthogroups,
