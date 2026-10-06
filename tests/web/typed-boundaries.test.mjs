@@ -78,9 +78,6 @@ const UNCHECKED_MODULES = new Set([
   'app/track-slot-validation.js',
   'app/ui.js',
   'components.js',
-  'config.js',
-  'mode-profiles.generated.js',
-  'mode-profiles.js',
   'services/history-snapshot.js',
   'services/history.js',
   'services/losat-thread-plan.js',
@@ -89,9 +86,7 @@ const UNCHECKED_MODULES = new Set([
   'services/standalone-interactivity-assets.js',
   'services/svg-result-ingestion.js',
   'services/svg-result-normalization.js',
-  'services/svg-serialization.js',
-  'state.js',
-  'web-ux-profile.js'
+  'services/svg-serialization.js'
 ]);
 
 const REPOSITORY_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
