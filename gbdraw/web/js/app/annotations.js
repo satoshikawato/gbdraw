@@ -16,7 +16,9 @@ const nextAnnotationId = (annotations, prefix) => {
   return `${prefix}_${index}`;
 };
 
-export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice }) => {
+export const createAnnotationEditor = ({
+  state, getRecordCatalog, onImportNotice, retireLegendStylesOfUnnamedCaptions = (change) => change()
+}) => {
   const recordSelector = createAnnotationRecordSelector({ getCatalog: getRecordCatalog });
   // The catalog feature of a selected-feature target in the current Results:
   // a drawn feature, or (unless `drawnOnly`) a listed feature they hide, of the
@@ -50,7 +52,9 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
   };
   const replaceSets = (sets) => {
     const candidate = reconcileRecords(normalizeAnnotationSets(sets));
-    state.annotationSets.splice(0, state.annotationSets.length, ...candidate);
+    retireLegendStylesOfUnnamedCaptions(() => {
+      state.annotationSets.splice(0, state.annotationSets.length, ...candidate);
+    });
   };
   const addAnnotationSet = (base = 'annotations') => {
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -84,7 +88,7 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const index = state.annotationSets.indexOf(set);
-    if (index >= 0) state.annotationSets.splice(index, 1);
+    if (index >= 0) retireLegendStylesOfUnnamedCaptions(() => state.annotationSets.splice(index, 1));
   };
   const addCoordinateAnnotation = (set, options = {}) => {
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -114,7 +118,7 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const index = set?.annotations?.indexOf(item) ?? -1;
-    if (index >= 0) set.annotations.splice(index, 1);
+    if (index >= 0) retireLegendStylesOfUnnamedCaptions(() => set.annotations.splice(index, 1));
   };
   const renameAnnotation = (set, item, value) => {
     const sessionBusy = state.sessionOperationAvailability?.();

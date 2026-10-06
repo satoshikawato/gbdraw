@@ -604,9 +604,10 @@ const openCanvas = async (page, mode, canvas) => {
   }
 };
 
-// OV-65 (open): a Legend color on a row named only by a track's data (an annotation
-// set, a depth file) fails Generate once the track data is removed; the two cases
-// below are marked test.fail until the Web retires such a preference.
+// OV-65: a Legend color on a row named only by a track's data (an annotation set,
+// a depth file) follows the caption: a data change retires the styles of the
+// captions the data no longer names, in the History step of the change, so
+// Undo brings back the data and the style (OV65_CASES, further below).
 // A region annotation with a legend label draws a Legend row from its set; the
 // slot of the set is added through the track slot control.
 const addAnnotationRow = async (page, label) => {
@@ -668,40 +669,6 @@ const SIBLINGS = [
     }
   },
   {
-    name: 'annotation set row after its set is removed',
-    mode: 'circular',
-    knownMismatch: 'OV-65: no data of the draft names the row, so Python reports it neither drawn nor suppressed and admission rejects the Legend color',
-    absent: ['Region X'],
-    run: async (page) => {
-      await addAnnotationRow(page, 'Region X');
-      await colorLegendRow(page, 'Region X');
-      await page.evaluate(() => {
-        const app = window.__GBDRAW_APP__;
-        app.removeAnnotationSet(app.annotationSets[0]);
-      });
-      await settleLive(page);
-    }
-  },
-  {
-    name: 'Depth row after its depth file is removed',
-    mode: 'circular',
-    knownMismatch: 'OV-65: no data of the draft names the row, so Python reports it neither drawn nor suppressed and admission rejects the Legend color',
-    absent: ['Depth'],
-    run: async (page) => {
-      await page.evaluate(() => {
-        const app = window.__GBDRAW_APP__;
-        const rows = Array.from({ length: 4 }, (_, index) => `FORCEDLBL\t${index * 700 + 1}\t${10 + index}`);
-        app.files.c_depth = [[new File([rows.join('\n')], 'depth.tsv', { type: 'text/tab-separated-values' })]];
-        app.form.show_depth = true;
-      });
-      await settleLive(page);
-      await generate(page);
-      await colorLegendRow(page, 'Depth');
-      await page.evaluate(() => { window.__GBDRAW_APP__.files.c_depth = []; });
-      await settleLive(page);
-    }
-  },
-  {
     name: 'GC skew row after GC skew is switched off',
     mode: 'circular',
     absent: ['GC skew (-)'],
@@ -744,9 +711,8 @@ const SIBLINGS = [
   }
 ];
 
-for (const { name, mode, canvas = null, absent = null, knownMismatch, run } of SIBLINGS) {
+for (const { name, mode, canvas = null, absent = null, run } of SIBLINGS) {
   test(`a Legend color survives Generate: ${name}`, async ({ page }) => {
-    if (knownMismatch) test.fail(true, knownMismatch);
     test.setTimeout(120_000);
     await openCanvas(page, mode, canvas);
     await run(page);
@@ -759,3 +725,150 @@ for (const { name, mode, canvas = null, absent = null, knownMismatch, run } of S
     for (const caption of absent) expect(captions, name).not.toContain(caption);
   });
 }
+
+// OV-65: Legend styles follow the captions that track data names. Each data
+// change below runs in one History step, as its control's does.
+const inHistoryStep = (page, label, body, arg) => page.evaluate(
+  async ({ stepLabel, source, value }) => {
+    const change = new Function('app', 'value', `return (${source})(app, value);`);
+    await window.__GBDRAW_HISTORY__.runUndoable(stepLabel, () => change(window.__GBDRAW_APP__, value));
+  },
+  { stepLabel: label, source: body.toString(), value: arg }
+);
+
+const legendStyleOf = (page, caption) => page.evaluate(async (target) => {
+  const { state } = await import('/gbdraw/web/js/state.js');
+  return {
+    color: state.legendColorOverrides[target] ?? null,
+    stroke: state.legendStrokeOverrides[target] ?? null
+  };
+}, caption);
+
+const undo = async (page) => {
+  await page.evaluate(() => window.__GBDRAW_APP__.undoHistory());
+  await settleLive(page);
+};
+
+const DEPTH_TSV = Array.from({ length: 4 }, (_, index) => `FORCEDLBL\t${index * 700 + 1}\t${10 + index}`).join('\n');
+const addDepthFile = async (page, name) => {
+  await inHistoryStep(page, 'Change uploaded file', (app, { text, fileName }) => {
+    app.setCircularDepthFile(0, new File([text], fileName, { type: 'text/tab-separated-values' }));
+  }, { text: DEPTH_TSV, fileName: name });
+  await settleLive(page);
+};
+const depthCaption = (page) => page.evaluate(() => (
+  window.__GBDRAW_APP__.legendEntries.find((entry) => /depth/i.test(entry.caption))?.caption ?? null
+));
+
+const ANNOTATION_TSV = (legendLabel) => [
+  'set_id\tid\tmark\tstart\tend\tlegend_label',
+  `regions\tregion_1\thighlight\t100\t400\t${legendLabel}`
+].join('\n');
+
+const legendCaptions = async (page) => (await semanticSnapshot(page)).legend.map(({ caption }) => caption);
+const NO_STYLE = { color: null, stroke: null };
+const COLORED = '#7b2cbf';
+
+// Each case runs a data change that removes a caption's rows as one History
+// step. The style is retired in that step: Generate succeeds and draws no row
+// of the data; Undo brings back the data and the style, and the live Result
+// equals Generate.
+const RETIRING_CASES = [
+  {
+    name: 'removing an annotation set',
+    caption: async () => 'Region X',
+    setup: async (page) => {
+      await addAnnotationRow(page, 'Region X');
+      await colorLegendRow(page, 'Region X');
+    },
+    change: (page) => inHistoryStep(page, 'Delete set', (app) => app.removeAnnotationSet(app.annotationSets[0])),
+    restored: (page) => page.evaluate(() => window.__GBDRAW_APP__.annotationSets.length === 1)
+  },
+  {
+    name: 'removing the depth file',
+    caption: async (page) => depthCaption(page),
+    setup: async (page) => {
+      await addDepthFile(page, 'depth.tsv');
+      await generate(page);
+      await colorLegendRow(page, await depthCaption(page));
+    },
+    change: (page) => inHistoryStep(page, 'Change uploaded file', (app) => app.setCircularDepthFile(0, null)),
+    restored: (page) => page.evaluate(() => Boolean(window.__GBDRAW_APP__.files.c_depth?.[0]?.[0])),
+    // A file change applies on Generate, and the Result after Undo of a file
+    // removal lacks the Depth ticks until then (OV-66), so only Generate is compared.
+    liveEqualsGenerate: false
+  },
+  {
+    name: 'replacing the annotation data with another legendLabel',
+    caption: async () => 'Region X',
+    setup: async (page) => {
+      await addAnnotationRow(page, 'Region X');
+      await colorLegendRow(page, 'Region X');
+    },
+    change: (page) => inHistoryStep(page, 'Import annotations', async (app, tsv) => {
+      await app.importAnnotationTableFile({ target: { files: [new File([tsv], 'annotations.tsv')], value: '' } });
+    }, ANNOTATION_TSV('Region Y')),
+    restored: (page) => page.evaluate(() => window.__GBDRAW_APP__.annotationSets[0]?.annotations[0]?.legendLabel === 'Region X'),
+    drawn: ['Region Y']
+  }
+];
+
+test.describe('OV-65 Legend styles follow the captions of track data', () => {
+  test.beforeEach(() => { test.setTimeout(180_000); });
+
+  for (const { name, caption, setup, change, restored, drawn = [], liveEqualsGenerate = true } of RETIRING_CASES) {
+    test(`${name} retires the styles of its rows, and Generate succeeds`, async ({ page }) => {
+      await openCanvas(page, 'circular', null);
+      await setup(page);
+      const row = await caption(page);
+      expect(row, 'row caption').toBeTruthy();
+      await change(page);
+      await settleLive(page);
+      expect(await legendStyleOf(page, row)).toEqual(NO_STYLE);
+      await generate(page);
+      const captions = await legendCaptions(page);
+      expect(captions).not.toContain(row);
+      for (const kept of drawn) expect(captions).toContain(kept);
+    });
+
+    test(`${name}: Undo restores the data and the style, and live equals Generate`, async ({ page }) => {
+      await openCanvas(page, 'circular', null);
+      await setup(page);
+      const row = await caption(page);
+      await change(page);
+      await settleLive(page);
+      await undo(page);
+      expect(await restored(page), 'data restored').toBe(true);
+      expect((await legendStyleOf(page, row)).color).toBe(COLORED);
+      if (liveEqualsGenerate) {
+        await expectLiveEqualsGenerate(page, { label: `${name}, Undo` });
+      } else {
+        await generate(page);
+        expect(await legendCaptions(page)).toContain(row);
+      }
+    });
+  }
+
+  test('replacing the depth file with the label unchanged keeps the row style', async ({ page }) => {
+    await openCanvas(page, 'circular', null);
+    await addDepthFile(page, 'depth.tsv');
+    await generate(page);
+    const caption = await depthCaption(page);
+    await colorLegendRow(page, caption);
+    await addDepthFile(page, 'depth.tsv');
+    expect((await legendStyleOf(page, caption)).color).toBe(COLORED);
+    await expectLiveEqualsGenerate(page, { label: 'depth file replaced, same label' });
+  });
+
+  test('replacing the annotation data with the legendLabel unchanged keeps the row style', async ({ page }) => {
+    await openCanvas(page, 'circular', null);
+    await addAnnotationRow(page, 'Region X');
+    await colorLegendRow(page, 'Region X');
+    await inHistoryStep(page, 'Import annotations', async (app, tsv) => {
+      await app.importAnnotationTableFile({ target: { files: [new File([tsv], 'annotations.tsv')], value: '' } });
+    }, ANNOTATION_TSV('Region X'));
+    await settleLive(page);
+    expect((await legendStyleOf(page, 'Region X')).color).toBe(COLORED);
+    await expectLiveEqualsGenerate(page, { label: 'annotation data replaced, same legendLabel' });
+  });
+});

@@ -113,6 +113,7 @@ import {
 } from './circular-track-slots.js';
 import { createLinearTrackSlotEditor } from './linear-track-slots.js';
 import { createAnnotationEditor } from './annotations.js';
+import { buildLegendStyleRetirement, trackDataLegendCaptions } from './legend/track-data-styles.js';
 import {
   annotationSourceKey,
   buildAnnotationRecordCatalog
@@ -1537,11 +1538,28 @@ export const createAppSetup = () => {
   const circularConservationFastaInput = ref(null);
   // The stack editors receive the feature placement transition as one port (R10, R13).
   const { changeTrackLayout } = featureActions.placementActions;
-  const circularTrackSlotEditor = createCircularTrackSlotEditor({ state, changeTrackLayout });
-  const linearTrackSlotEditor = createLinearTrackSlotEditor({ state, changeTrackLayout });
+  // Legend styles follow the captions that track data names (OV-65): the
+  // transitions of annotation and Depth data receive this one port.
+  const retireLegendStylesOfUnnamedCaptions = buildLegendStyleRetirement({
+    legendColorOverrides,
+    legendStrokeOverrides,
+    namedCaptions: () => trackDataLegendCaptions({
+      annotationSets,
+      depthTracks: adv.depth_tracks,
+      ...(mode.value === 'linear'
+        ? { depthSlots: adv.linear_track_slots, sourcedDepthTrackIndexes: activeDepthTrackIndices(linearDepthRows()) }
+        : {
+            depthSlots: adv.circular_track_slots,
+            sourcedDepthTrackIndexes: circularDepthRepresentatives()
+              .flatMap((file, index) => (file ? [index] : []))
+          })
+    })
+  });
+  const circularTrackSlotEditor = createCircularTrackSlotEditor({ state, changeTrackLayout, retireLegendStylesOfUnnamedCaptions });
+  const linearTrackSlotEditor = createLinearTrackSlotEditor({ state, changeTrackLayout, retireLegendStylesOfUnnamedCaptions });
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
-    state, getRecordCatalog: getAnnotationRecordCatalog,
+    state, getRecordCatalog: getAnnotationRecordCatalog, retireLegendStylesOfUnnamedCaptions,
     onImportNotice: (notice) => { annotationImportNotice.value = notice; }
   });
   watch(
