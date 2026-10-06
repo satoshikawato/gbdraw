@@ -1,9 +1,35 @@
+// @ts-check
+/**
+ * @import { AnnotationRecordSelector } from './target-actions.js'
+ */
 import {
   annotationRecordSelectorFromValue,
   parseAnnotationRecordSelectorValue
 } from './target-actions.js';
 import { buildDisambiguatedRecordEntries, formatRecordLength } from '../record-options.js';
 import { normalizeUserFacingError } from '../../services/error-normalization.js';
+
+/**
+ * @typedef {{
+ *   key: string, value: string, label: string, recordId: string, recordLength: number | null,
+ *   index: number, localIndex: number, sourceIndex?: number, sourceKey: string,
+ *   backendSelector: AnnotationRecordSelector | null
+ * }} AnnotationCatalogRecord A record a target may name; `key` survives reorders, `value` is the record ID or `#<n>`.
+ * @typedef {{ code: string, context: Record<string, any> }} AnnotationCatalogIssue A producer diagnostic.
+ * @typedef {{
+ *   mode?: string, status: string, records: AnnotationCatalogRecord[],
+ *   issues: AnnotationCatalogIssue[], requiresSelection: boolean, signature?: string
+ * }} AnnotationRecordCatalog `status` is 'ready', 'loading', or 'error'.
+ * @typedef {{
+ *   sourceKey?: string, hasInput: boolean, status: string, error?: any, selector?: string,
+ *   records?: Record<string, any>[]
+ * }} AnnotationCatalogSource A discovered input: the Circular discovery state or a Linear source.
+ *   Each record carries `recordId` or `record_id`, `recordLength` or `record_length`, and `selector`.
+ * @typedef {object} AnnotationRecordCatalogOptions
+ * @property {string} [mode] 'linear' selects `linearSources`; anything else `circularSource`.
+ * @property {AnnotationCatalogSource | null} [circularSource]
+ * @property {AnnotationCatalogSource[]} [linearSources]
+ */
 
 const cleanText = (value) => String(value ?? '').trim();
 // Catalog issues are producer diagnostics ({ code, context }); wording stays
@@ -159,6 +185,10 @@ const buildCircularCatalog = (source) => {
   };
 };
 
+/**
+ * @param {AnnotationRecordCatalogOptions} [options]
+ * @returns {AnnotationRecordCatalog}
+ */
 export const buildAnnotationRecordCatalog = ({
   mode,
   circularSource = null,

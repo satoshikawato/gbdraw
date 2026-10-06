@@ -28,13 +28,6 @@ import { WEB_OWNER_GRAPH_DEFAULTS } from '../../tools/web-owner-graph-detectors.
 
 const UNCHECKED_MODULES = new Set([
   'app.js',
-  'app/annotations.js',
-  'app/annotations/record-catalog.js',
-  'app/annotations/record-selector.js',
-  'app/annotations/state.js',
-  'app/annotations/table-codec.js',
-  'app/annotations/target-actions.js',
-  'app/annotations/validation.js',
   'app/auto-value-display.js',
   'app/candidate-render.js',
   'app/color-utils.js',
