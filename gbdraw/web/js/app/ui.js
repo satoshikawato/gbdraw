@@ -1,3 +1,4 @@
+// @ts-check
 import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 
 // Keep one burst alive through the existing 0.2 s transform transition. This
@@ -5,6 +6,7 @@ import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 const WHEEL_BURST_QUIET_MS = 220;
 const WHEEL_TRANSITION_FALLBACK_MS = 260;
 
+/** @param {Record<string, any>} state Shape owned by state.js. */
 export const createPanZoom = (state) => {
   const { zoom, layoutRepositionMode, isPanning, panStart, canvasPan, canvasContainerRef, svgContainer } = state;
   let panFrameId = null;
@@ -297,6 +299,7 @@ export const createPanZoom = (state) => {
   };
 };
 
+/** @param {Record<string, any>} state Shape owned by state.js. */
 export const createSidebarResize = (state) => {
   const { sidebarWidth, isResizing } = state;
 
@@ -321,6 +324,15 @@ export const createSidebarResize = (state) => {
   return { startResizing };
 };
 
+/**
+ * @typedef {Object} GlobalUiEventsOptions
+ * @property {Record<string, any>} state Shape owned by state.js.
+ * @property {(callback: () => void) => void} onMounted
+ * @property {(callback: () => void) => void} onUnmounted
+ * @property {() => void} closeRightDrawer
+ */
+
+/** @param {GlobalUiEventsOptions} options */
 export const setupGlobalUiEvents = ({
   state,
   onMounted,
