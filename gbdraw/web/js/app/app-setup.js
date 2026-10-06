@@ -2866,6 +2866,10 @@ export const createAppSetup = () => {
       labels: changedDomains.has('features') || editorState
     });
     if (!projected) return;
+    // The restored form decides which track groups the mounted Result shows.
+    // The visibility watcher is suppressed while a Depth source is restored, so
+    // the step applies it here (OV-66, R3).
+    if (changedDomains.has('config')) svgActions.applyTrackVisibility();
     await nextTick();
   });
 

@@ -507,3 +507,46 @@ test('a Legend color on a row only one Result draws survives the next Generate',
   expect(after[0].find(({ caption }) => caption === 'other proteins').fill.toLowerCase()).toBe('#00aa00');
   expect(after[1]).toEqual(before[1]);
 });
+
+// OV-66: Undo of a Depth source removal brings back the Depth track and its
+// tick text, and Redo hides them again; the live Result equals what Generate
+// draws. A Depth source History step restores files, which suppresses the
+// track-visibility watcher, so the step projects the visibility itself.
+const DEPTH_TSV = Array.from({ length: 4 }, (_, index) => `FORCEDLBL\t${index * 700 + 1}\t${10 + index}`).join('\n');
+const DEPTH_CASES = {
+  'circular, clearing the Depth file': {
+    mode: 'circular',
+    add: (app, file) => app.setCircularDepthFile(0, file),
+    remove: (app) => app.setCircularDepthFile(0, null)
+  },
+  'circular, removing the Depth track': {
+    mode: 'circular',
+    add: (app, file) => app.setCircularDepthFile(0, file),
+    remove: (app) => app.removeCircularDepthTrack(0)
+  },
+  'linear, clearing the Depth file': {
+    mode: 'linear',
+    add: (app, file) => app.setLinearDepthFile(app.linearSeqs[0], 0, file),
+    remove: (app) => app.setLinearDepthFile(app.linearSeqs[0], 0, null)
+  }
+};
+for (const [name, { mode, add, remove }] of Object.entries(DEPTH_CASES)) {
+  test(`Undo and Redo of a Depth source removal match Generate (${name})`, async ({ page }) => {
+    test.setTimeout(180_000);
+    await open(page, { mode, results: 'single', reflow: 'off' });
+    const inStep = async (label, change, ...args) => {
+      await page.evaluate(async ({ stepLabel, source, values }) => {
+        const run = new Function('app', 'text', `return (${source})(app, text && new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));`);
+        await window.__GBDRAW_HISTORY__.runUndoable(stepLabel, () => run(window.__GBDRAW_APP__, values[0]));
+      }, { stepLabel: label, source: change.toString(), values: args });
+      await settleLive(page);
+    };
+    await inStep('Change uploaded file', add, DEPTH_TSV);
+    await generate(page);
+    await inStep('Remove Depth', remove, null);
+    await history(page, 'undo');
+    await expectLiveEqualsGenerate(page, { label: `${name}: Undo` });
+    await history(page, 'redo');
+    await expectLiveEqualsGenerate(page, { label: `${name}: Redo` });
+  });
+}
