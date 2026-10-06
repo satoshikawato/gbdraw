@@ -666,7 +666,7 @@ const openCanvas = async (page, mode, canvas) => {
 // OV-65: a Legend color on a row named only by a track's data (an annotation set,
 // a depth file) follows the caption: a data change retires the styles of the
 // captions the data no longer names, in the History step of the change, so
-// Undo brings back the data and the style (OV65_CASES, further below).
+// Undo brings back the data and the style (RETIRING_CASES, further below).
 // A region annotation with a legend label draws a Legend row from its set; the
 // slot of the set is added through the track slot control.
 const addAnnotationRow = async (page, label) => {
@@ -936,10 +936,7 @@ const RETIRING_CASES = [
       await colorLegendRow(page, await depthCaption(page));
     },
     change: (page) => inHistoryStep(page, 'Change uploaded file', (app) => app.setCircularDepthFile(0, null)),
-    restored: (page) => page.evaluate(() => Boolean(window.__GBDRAW_APP__.files.c_depth?.[0]?.[0])),
-    // A file change applies on Generate, and the Result after Undo of a file
-    // removal lacks the Depth ticks until then (OV-66), so only Generate is compared.
-    liveEqualsGenerate: false
+    restored: (page) => page.evaluate(() => Boolean(window.__GBDRAW_APP__.files.c_depth?.[0]?.[0]))
   },
   {
     name: 'replacing the annotation data with another legendLabel',
@@ -991,7 +988,7 @@ const RETIRING_CASES = [
 test.describe('OV-65 Legend styles follow the captions of track data', () => {
   test.beforeEach(() => { test.setTimeout(180_000); });
 
-  for (const { name, caption, setup, change, restored, drawn = [], liveEqualsGenerate = true } of RETIRING_CASES) {
+  for (const { name, caption, setup, change, restored, drawn = [] } of RETIRING_CASES) {
     test(`${name} retires the styles of its rows, and Generate succeeds`, async ({ page }) => {
       await openCanvas(page, 'circular', null);
       await setup(page);
@@ -1015,12 +1012,7 @@ test.describe('OV-65 Legend styles follow the captions of track data', () => {
       await undo(page);
       expect(await restored(page), 'data restored').toBe(true);
       expect((await legendStyleOf(page, row)).color).toBe(COLORED);
-      if (liveEqualsGenerate) {
-        await expectLiveEqualsGenerate(page, { label: `${name}, Undo` });
-      } else {
-        await generate(page);
-        expect(await drawnLegendCaptions(page)).toContain(row);
-      }
+      await expectLiveEqualsGenerate(page, { label: `${name}, Undo` });
     });
   }
 
