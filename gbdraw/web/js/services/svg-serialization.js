@@ -1,3 +1,4 @@
+// @ts-check
 const TRANSIENT_PREVIEW_CLASSES = Object.freeze([
   'gbdraw-preview-layout-target',
   'gbdraw-preview-feature-search-match',

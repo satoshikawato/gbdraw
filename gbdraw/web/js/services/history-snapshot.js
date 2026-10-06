@@ -1,3 +1,4 @@
+// @ts-check
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import { normalizeFeatureVisibilityRule } from '../app/feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
@@ -220,13 +221,13 @@ const applyDraftIntentData = (state, drafts = {}) => {
   }
 };
 
-const nextFrame = () => new Promise((resolve) => {
+const nextFrame = () => /** @type {Promise<void>} */ (new Promise((resolve) => {
   if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
     window.requestAnimationFrame(() => resolve());
   } else {
     setTimeout(resolve, 0);
   }
-});
+}));
 
 const closeTransientState = (state) => {
   setRef(state.clickedFeature, null);
@@ -554,6 +555,53 @@ const applyFilesData = (state, filesData, fileStore, normalizeLinearSeqList = nu
   }
 };
 
+/**
+ * @typedef {object} HistorySnapshotFileStore
+ *   The three functions of the History file store that the snapshot service
+ *   calls (F-05). `services/history.js` calls two other functions of the same
+ *   store, so the receivers share the object and no function.
+ * @property {(value: any) => any} describeValue
+ *   A file, or an array of files, as the descriptors an intent holds (`null` for a non-file).
+ * @property {(file: any) => string | null} registerFile
+ *   Stores a file by reference and returns its id; `null` for a non-file.
+ * @property {(value: any) => any} restoreValue
+ *   The stored file, or an array of them, that the descriptors name (`null` when none).
+ *
+ * @typedef {Record<string, any>} HistorySnapshotData
+ *   A domain payload that the snapshot service holds by value (config, ui, features, editor state,
+ *   orthogroup state, run state): the owner that builds it declares its shape.
+ *
+ * @typedef {object} HistorySnapshotServiceOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {HistorySnapshotFileStore} fileStore
+ *   The file store that holds the files an intent and a checkpoint name.
+ * @property {() => Promise<unknown>} [nextTick] Vue `nextTick`, awaited between restore steps.
+ * @property {((rows: HistorySnapshotData[]) => HistorySnapshotData[]) | null} [normalizeLinearSeqList]
+ *   The Linear record rows' normalization after a files restore.
+ * @property {(() => HistorySnapshotData) | null} [buildConfigData] The Settings capture.
+ * @property {((config: HistorySnapshotData, options: { resolveTrackPlacements: boolean }) => unknown) | null} [applyConfigData]
+ *   The Settings restore.
+ * @property {((options: { includePreviewNavigation: boolean }) => HistorySnapshotData) | null} [buildUiStateData]
+ *   The UI capture; `includePreviewNavigation` adds pan, zoom, and tab state.
+ * @property {((ui: HistorySnapshotData, options?: { restorePreviewNavigation: boolean }) => unknown) | null} [applyUiStateData]
+ *   The UI restore.
+ * @property {(() => HistorySnapshotData) | null} [buildFeatureStateData] The feature-override capture.
+ * @property {((features: HistorySnapshotData) => unknown) | null} [applyFeatureStateData]
+ *   The feature-override restore.
+ * @property {(() => HistorySnapshotData) | null} [buildEditorStateData] The legend and stroke editor capture.
+ * @property {((editorState: HistorySnapshotData, options: { normalized: boolean }) => unknown) | null} [applyEditorStateData]
+ *   The editor restore; `normalized` marks a state that is installed as captured.
+ * @property {(() => HistorySnapshotData) | null} [buildOrthogroupStateData] The orthogroup capture.
+ * @property {((orthogroupState: HistorySnapshotData) => unknown) | null} [applyOrthogroupStateData]
+ *   The orthogroup restore.
+ * @property {(() => HistorySnapshotData[]) | null} [serializeResults] The generated Results' capture.
+ * @property {((results: HistorySnapshotData[], ui: HistorySnapshotData) => unknown) | null} [applyResultsData]
+ *   The generated Results' restore, with the checkpoint's UI state.
+ * @property {(() => HistorySnapshotData) | null} [buildRunStateData] The last-run capture.
+ * @property {((runState: HistorySnapshotData) => unknown) | null} [applyRunStateData] The last-run restore.
+ */
+
+/** @param {HistorySnapshotServiceOptions} options */
 export const createHistorySnapshotService = ({
   state,
   fileStore,
@@ -978,10 +1026,7 @@ export const createHistorySnapshotService = ({
         featureExtractionPending: Boolean(
           getGeneratedArtifactRef(state.featureExtractionPending, false)
         ),
-        featureExtractionError: getGeneratedArtifactRef(state.featureExtractionError, null),
-        labelOverrideBuildWarning: String(
-          getGeneratedArtifactRef(state.labelOverrideBuildWarning, '') || ''
-        )
+        featureExtractionError: getGeneratedArtifactRef(state.featureExtractionError, null)
       })
     });
     const runtimeState = generatedArtifactRuntimeOwner?.capture?.() || null;
@@ -1106,10 +1151,6 @@ export const createHistorySnapshotService = ({
       setGeneratedArtifactRef(
         state.featureExtractionError,
         presentation.featureExtractionError ?? null
-      );
-      setGeneratedArtifactRef(
-        state.labelOverrideBuildWarning,
-        presentation.labelOverrideBuildWarning || ''
       );
 
       const boundedUi = { ...ui };

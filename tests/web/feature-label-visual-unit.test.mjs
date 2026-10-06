@@ -94,7 +94,6 @@ const buildHarness = ({
       keyFor(id), rowFor(id, { labelVisibility: mode })
     ])),
     labelTextBulkOverrides: {},
-    labelOverrideBuildWarning: ref(''),
     autoLabelReflowEnabled: ref(false),
     labelReflowRequestSeq: ref(0),
     labelReflowForceRequestSeq: ref(0),

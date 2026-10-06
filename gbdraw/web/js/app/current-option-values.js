@@ -1,3 +1,4 @@
+// @ts-check
 const normalizedValue = (value, fallback) => {
   const normalized = String(value ?? '').trim().toLowerCase();
   return normalized || fallback;

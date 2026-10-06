@@ -1,3 +1,4 @@
+// @ts-check
 // Input-file coordinates of displayed Linear records (PD-OI-076). One
 // dependency-free formula for the match popup, FASTA headers and the
 // Interactive SVG payload.

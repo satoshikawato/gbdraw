@@ -1,3 +1,4 @@
+// @ts-check
 import { exactRegexValue } from './feature-selector.js';
 import { firstMatchingRuleIfKnown, ruleMatchesFeature, visibilityRuleMatchesFeature } from './rule-matching.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey as stableKeyOf } from '../services/feature-catalog.js';
@@ -76,6 +77,31 @@ const isHeaderRow = (fields) => {
     normalized[4] === 'action';
 };
 
+/**
+ * A normalized Feature visibility rule row (`normalizeFeatureVisibilityRule`).
+ * @typedef {object} FeatureVisibilityRule
+ * @property {string} id
+ * @property {string} source
+ * @property {string} featureId
+ * @property {string} label
+ * @property {string} recordId
+ * @property {string} featureType
+ * @property {string} qualifier
+ * @property {string} value
+ * @property {string} action
+ */
+
+/**
+ * The fields an exact-qualifier rule is built or removed by.
+ * @typedef {object} FeatureVisibilityRuleInput
+ * @property {string} [featureType]
+ * @property {string} [qualifier]
+ * @property {string} [value]
+ * @property {string} [action]
+ * @property {string} [label]
+ */
+
+/** @returns {FeatureVisibilityRule} */
 export const createDefaultFeatureVisibilityRule = () => ({
   id: nextRuleId(),
   source: 'manual',
@@ -88,6 +114,10 @@ export const createDefaultFeatureVisibilityRule = () => ({
   action: 'off'
 });
 
+/**
+ * @param {Record<string, any>} [raw]
+ * @returns {FeatureVisibilityRule}
+ */
 export const normalizeFeatureVisibilityRule = (raw = {}) => {
   const source = normalizeSource(raw.source);
   const action = normalizeFeatureVisibilityAction(raw.action) || 'off';
@@ -226,6 +256,11 @@ const KIND_FIELDS = Object.freeze({
 
 // Python's `unresolved` notices of a request of mode `scope` by identity key:
 // the edit kinds whose feature the source does not have (design Q4 3.4).
+/**
+ * @param {any} notices
+ * @param {string} scope
+ * @param {(recordKey: string) => boolean} [recordKeyFilter]
+ */
 const unresolvedNoticeKinds = (notices, scope, recordKeyFilter = () => true) => {
   const unresolved = new Map();
   (Array.isArray(notices) ? notices : []).forEach((notice) => {
@@ -239,6 +274,16 @@ const unresolvedNoticeKinds = (notices, scope, recordKeyFilter = () => true) => 
 // Removes edits from the identity-keyed drafts: every edit of a dropped
 // record, the unresolved edit kinds of an identity, and (`sourceGone`) the
 // label source text kept for a bulk edit. Returns the count of removed edits.
+/**
+ * @typedef {object} FeatureEditRemoval
+ * @property {Record<string, any>} [featureOverrides]
+ * @property {Record<string, any>} [featurePlacementOverrides]
+ * @property {Map<string, Set<string>>} [unresolved]
+ * @property {(row: any) => boolean} [dropped]
+ * @property {(key: string, row: any) => boolean} [sourceGone]
+ */
+
+/** @param {FeatureEditRemoval} options */
 const removeFeatureEdits = ({
   featureOverrides = {},
   featurePlacementOverrides = {},
@@ -543,6 +588,10 @@ const reorderEditorVisibilityRules = (rules) => {
   rules.splice(0, rules.length, ...featureRules, ...qualifierRules, ...otherRules);
 };
 
+/**
+ * @param {FeatureVisibilityRuleInput} [input]
+ * @returns {FeatureVisibilityRule | null}
+ */
 export const buildExactQualifierFeatureVisibilityRule = ({
   featureType,
   qualifier,
@@ -593,6 +642,10 @@ export const upsertEditorQualifierFeatureVisibilityRule = (rules, ruleInput, act
   return nextRule;
 };
 
+/**
+ * @param {any} rules
+ * @param {FeatureVisibilityRuleInput} [ruleInput]
+ */
 export const removeEditorQualifierFeatureVisibilityRule = (rules, ruleInput = {}) => {
   if (!Array.isArray(rules)) return 0;
   const featureType = normalizeCell(ruleInput.featureType);

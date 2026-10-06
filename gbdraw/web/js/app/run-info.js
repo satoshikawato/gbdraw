@@ -1,3 +1,4 @@
+// @ts-check
 import { normalizeUserFacingError } from '../services/error-normalization.js';
 import {
   buildCircularTrackSlotSpec,
@@ -17,6 +18,9 @@ const SOURCE_PROVENANCE_UNAVAILABLE =
   'Source recipe unavailable: this session does not contain sufficient source-file provenance.';
 
 class SourceRecipeUnavailable extends Error {}
+
+// identityTableUnavailable assigns reason after construction.
+/** @typedef {{ reason?: string }} Reasoned */
 
 const normalizePath = (value) => String(value ?? '').trim();
 
@@ -117,6 +121,7 @@ const allocateVisibleFilenames = ({ sourceMetadata, exactMetadata, sourceAvailab
     used.set(filenameCollisionKey(name), `${namespace}:${path}`);
   };
 
+  /** @type {Array<[string, Map<string, any>]>} */
   const namespaces = sourceAvailable ? [['source', source], ['exact', exact]] : [['exact', exact]];
   namespaces.forEach(([namespace, metadata]) => metadata.forEach((entry, path) => {
     if (entry.kind !== 'generated') reserveFixed(namespace, path, entry);
@@ -1574,11 +1579,22 @@ export const buildFeatureOverrideTable = async ({
     await requireExactRecords(renderRequest, createRecipeFiles(resources, {}, null, readResourceRecordCount));
     return { text: featureOverrideTable(renderRequest, rows), reason: '' };
   } catch (error) {
-    if (error instanceof SourceRecipeUnavailable && error.reason) return { text: '', reason: error.reason };
+    if (error instanceof SourceRecipeUnavailable && /** @type {Reasoned} */ (error).reason) return {
+      text: '', reason: /** @type {Reasoned} */ (error).reason };
     throw error;
   }
 };
 
+/**
+ * @typedef {Object} SourceRecipeOptions
+ * @property {Record<string, any>} [renderRequest] Committed render request (schema owned by the session request).
+ * @property {Record<string, any>} [resources]
+ * @property {any} [webFiles]
+ * @property {Map<string, string>} [generatedFileNameHints]
+ * @property {((resourceId: string, kind: string) => number | Promise<number>) | null} [readResourceRecordCount]
+ */
+
+/** @param {SourceRecipeOptions} [options] */
 export const buildSourceRecipe = async ({
   renderRequest,
   resources,
@@ -1799,6 +1815,23 @@ export const summarizeLosatRuntimes = (cacheInfo, cacheMap) => {
   return Array.from(runtimes.values());
 };
 
+/**
+ * @typedef {Object} RunInfoOptions
+ * @property {string} [mode]
+ * @property {string[]} [args]
+ * @property {Record<string, any> | null} [sourceRecipe] Result of buildSourceRecipe.
+ * @property {string[]} [exactReplayArgs]
+ * @property {any} [fileMetadata] Map or entries of uploaded and generated file metadata.
+ * @property {number} [elapsedMs]
+ * @property {number} [resultCount]
+ * @property {string} [startedAtIso]
+ * @property {string} [generatedBy]
+ * @property {boolean} [losatComparisons]
+ * @property {any[]} [losatRuntimes]
+ * @property {any[]} [featureIdentityNotices]
+ */
+
+/** @param {RunInfoOptions} [options] */
 export const buildRunInfo = ({
   mode,
   args,

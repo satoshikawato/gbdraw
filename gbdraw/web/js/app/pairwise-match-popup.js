@@ -1,3 +1,4 @@
+// @ts-check
 import {
   formatFeatureLocation,
   isInternalProteinDisplayId,
@@ -18,6 +19,97 @@ import {
   renderedFeatureIdentity,
   textAliasStatus
 } from '../services/feature-identity.js';
+
+/**
+ * One popup table row.
+ * @typedef {{ label: string, value: string }} PopupRow
+ */
+
+/**
+ * A popup section. `section` builds `title` and `rows`; the member and
+ * feature sections add their list data and the Similarity group section
+ * adds the copy and FASTA fields.
+ * @typedef {object} PopupSection
+ * @property {string} title
+ * @property {PopupRow[]} rows
+ * @property {Record<string, any>[]} [featureRows]
+ * @property {Record<string, any>[]} [memberRows]
+ * @property {string} [memberCopyText]
+ * @property {string} [memberNtFasta]
+ * @property {string} [memberAaFasta]
+ * @property {number} [memberNtCount]
+ * @property {number} [memberAaCount]
+ * @property {string} [memberNtFilename]
+ * @property {string} [memberAaFilename]
+ * @property {Record<string, any>[]} [blockOrthogroups]
+ */
+
+/**
+ * What the popup and the hover summary read from one match element.
+ * @typedef {object} PairwiseMatchDescriptor
+ * @property {string} matchKind
+ * @property {string} matchId
+ * @property {string} orthogroupId
+ * @property {string[]} orthogroupIds
+ * @property {string} collinearityBlockId
+ * @property {string} groupScope
+ * @property {string} normalizedGroupScope
+ * @property {string} queryFeatureSvgId
+ * @property {string} subjectFeatureSvgId
+ * @property {string} queryRecordId
+ * @property {string} subjectRecordId
+ * @property {string} queryInterval
+ * @property {string} subjectInterval
+ * @property {string} queryTableInterval
+ * @property {string} subjectTableInterval
+ * @property {string} identity
+ * @property {string} orientation
+ * @property {string} title
+ * @property {string} subtitle
+ * @property {string} fill
+ * @property {{ query: ReturnType<typeof matchEndpointReferences>, subject: ReturnType<typeof matchEndpointReferences> }} endpoints
+ */
+
+/**
+ * The values of one hover summary, taken from a descriptor or from a payload.
+ * @typedef {object} PairwiseHoverRowValues
+ * @property {string} [matchKind]
+ * @property {string} [identity]
+ * @property {string} [queryInterval]
+ * @property {string} [subjectInterval]
+ * @property {string} [orthogroupId]
+ * @property {string} [displayName]
+ * @property {string} [memberCount]
+ * @property {string} [groupScope]
+ * @property {number | string} [blockOrthogroupCount]
+ * @property {string} [collinearityBlockId]
+ */
+
+/**
+ * Overrides keyed by similarity-group ID, as a Map or a plain object.
+ * @typedef {Map<string, string> | Record<string, string> | null} OrthogroupTextOverrides
+ */
+
+/**
+ * Rendered features by SVG ID, as the SVG owner holds them.
+ * @typedef {Map<string, any> | Record<string, any> | any[] | null} FeatureLookup
+ */
+
+/**
+ * @typedef {object} MatchPopupPayloadOptions
+ * @property {FeatureLookup} [featureLookup]
+ * @property {Record<string, any>[]} [sourceFeatures]
+ * @property {Record<string, any>[]} [orthogroups]
+ * @property {OrthogroupTextOverrides} [orthogroupNameOverrides]
+ * @property {OrthogroupTextOverrides} [orthogroupDescriptionOverrides]
+ * @property {import('./match-sequences.js').SequenceSourceResolver | null} [resolveSequenceSource]
+ */
+
+/**
+ * @typedef {object} MatchHoverSummaryOptions
+ * @property {Record<string, any>[] | (() => Record<string, any>[])} [orthogroups]
+ * @property {OrthogroupTextOverrides} [orthogroupNameOverrides]
+ */
 
 export const PAIRWISE_MATCH_SELECTOR = [
   'path[data-gbdraw-match-id]',
@@ -285,6 +377,10 @@ const matchIntervals = (element, matchKind, role, start, end) => {
     : { interval: intervalText(start, end), table: '' };
 };
 
+/**
+ * @param {SVGElement} element
+ * @returns {PairwiseMatchDescriptor}
+ */
 const readPairwiseMatchDescriptor = (element) => {
   const matchKind = normalizeMatchKind(attr(element, 'data-match-kind'), element);
   const orthogroupId = attr(element, 'data-orthogroup-id');
@@ -425,6 +521,14 @@ const identityIndexKeys = (identity) => {
   return keys;
 };
 
+/**
+ * @param {{
+ *   featureLookup?: FeatureLookup,
+ *   sourceFeatures?: Record<string, any>[],
+ *   orthogroups?: Record<string, any>[],
+ *   descriptor?: PairwiseMatchDescriptor | null
+ * }} [options]
+ */
 const createPairwisePayloadContext = ({
   featureLookup = new Map(),
   sourceFeatures = [],
@@ -536,7 +640,8 @@ const createPairwisePayloadContext = ({
   const featureForLookupId = (renderedSvgId) => {
     const id = normalizeText(renderedSvgId);
     if (!id || rejectedRenderedIds.has(id)) return null;
-    const feature = featureLookup?.get?.(id) || null;
+    // Only a Map answers `get`; an array or plain object lookup yields no feature.
+    const feature = /** @type {Partial<Map<string, any>> | null} */ (featureLookup)?.get?.(id) || null;
     const record = feature ? renderedByObject.get(feature) : null;
     return record && rejectedRenderedIds.has(record.identity.renderedId.value)
       ? null
@@ -745,6 +850,12 @@ const overrideValue = (overrides, key) => {
   return normalizeText(overrides[normalizedKey]);
 };
 
+/**
+ * @param {string} title
+ * @param {PopupRow[]} rows
+ * @param {Partial<PopupSection>} [extras]
+ * @returns {PopupSection}
+ */
 const section = (title, rows, extras = {}) => ({
   title,
   rows: rows.filter((row) => normalizeText(row.value)),
@@ -1303,6 +1414,10 @@ const buildSequenceBundleForMatch = (element, matchKind, matchId, resolveSequenc
   });
 };
 
+/**
+ * @param {SVGElement} element
+ * @param {MatchPopupPayloadOptions} [options]
+ */
 export const buildMatchPopupPayload = (
   element,
   {
@@ -1551,6 +1666,9 @@ export const buildMatchPopupPayload = (
   };
 };
 
+/**
+ * @param {PairwiseHoverRowValues} [values]
+ */
 const formatPairwiseMatchHoverRows = ({
   matchKind,
   identity,
@@ -1591,6 +1709,10 @@ const formatPairwiseMatchHoverRows = ({
   return rows.slice(0, 6);
 };
 
+/**
+ * @param {SVGElement} element
+ * @param {MatchHoverSummaryOptions} [options]
+ */
 export const buildPairwiseMatchHoverSummary = (
   element,
   {

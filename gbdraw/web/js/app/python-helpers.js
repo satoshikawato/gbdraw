@@ -1,3 +1,4 @@
+// @ts-check
 export const PYTHON_HELPERS = `
 import warnings
 warnings.simplefilter('ignore', SyntaxWarning)

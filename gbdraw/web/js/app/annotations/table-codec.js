@@ -1,3 +1,7 @@
+// @ts-check
+/**
+ * @import { AnnotationHatch, AnnotationSet, AnnotationStyle, AnnotationTarget } from './state.js'
+ */
 import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets } from './state.js';
 import { validateAnnotationCoordinates } from './validation.js';
 import {
@@ -159,16 +163,28 @@ export const parseAnnotationTableWithNotice = (text) => {
 
 export const parseAnnotationTable = (text) => parseAnnotationTableWithNotice(text).sets;
 
+/**
+ * @typedef {{ recordIndex: number, hash: string }} AnnotationDrawnPlacement The drawn position of a selected feature.
+ * @typedef {object} AnnotationTableEncodeOptions
+ * @property {(target: AnnotationTarget) => AnnotationDrawnPlacement | null} [drawnPlacement]
+ *   Places a `featureIdentity` target in the current diagram; null when it is not drawn.
+ */
+
 // The table has no source-identity selector. A selected-feature target is
 // written in its current placement (design Q4 6.4): `drawnPlacement(target)`
 // gives its drawn record position and drawn hash, written as `record=#<n>` and
 // `feature_selector=hash=<hash>`; a target it does not place is not written.
+/**
+ * @param {AnnotationSet[]} sets
+ * @param {AnnotationTableEncodeOptions} [options]
+ */
 export const encodeAnnotationTableWithNotice = (sets, { drawnPlacement = () => null } = {}) => {
   const rows = [COLUMNS.join('\t')];
   let placedFeatureIdentityCount = 0;
   let skippedFeatureIdentityCount = 0;
   normalizeAnnotationSets(sets).forEach((set) => set.annotations.forEach((annotation) => {
-    let target = annotation.target || {};
+    /** @type {AnnotationTarget} */
+    let target = /** @type {AnnotationTarget} */ (annotation.target || {});
     if (target.kind === 'featureIdentity') {
       const placement = drawnPlacement(target);
       if (!placement) {
@@ -183,8 +199,8 @@ export const encodeAnnotationTableWithNotice = (sets, { drawnPlacement = () => n
     }
     const coordinate = target.kind === 'coordinateSpan';
     const selectors = Array.isArray(target.selectors) ? target.selectors.map((item) => item.key ? `${item.key}=${item.value}` : item.value).join(';') : '';
-    const style = annotation.style || set.defaultStyle || {};
-    const hatch = style.hatch || {};
+    const style = /** @type {Partial<AnnotationStyle>} */ (annotation.style || set.defaultStyle || {});
+    const hatch = style.hatch || /** @type {Partial<AnnotationHatch>} */ ({});
     const row = {
       set_id: set.id, id: annotation.id, mark: annotation.mark, record: annotationRecordSelectorValue(target.record),
       start: coordinate ? target.start : '', end: coordinate ? target.end : '', coordinate_space: coordinate ? target.coordinateSpace : '',

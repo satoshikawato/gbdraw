@@ -1,3 +1,6 @@
+// @ts-check
+/** @import { FeatureCatalogAdmission } from '../services/feature-catalog.js' */
+/** @import { SvgAdmissionRuntime, SvgResultTransform } from '../services/svg-result-ingestion.js' */
 import { resolveColorToHex } from './color-utils.js';
 import { defaultLegendCaptionOrder, isLegendOrderEdited } from './legend/utils.js';
 import { cloneJsonValue } from '../services/json-clone.js';
@@ -5,6 +8,31 @@ import { biologicalFeatureKey } from '../services/feature-catalog.js';
 import {
   admitCurrentGeneratedResults
 } from '../services/svg-result-ingestion.js';
+
+/**
+ * The committed editor state a direct mutation plan compiles. Python and the
+ * editor owners define the row shapes (R7), so each map is a record here.
+ * @typedef {object} EditorPlanOptions
+ * @property {FeatureCatalogAdmission} catalogAdmission
+ * @property {Record<string, any>} [featureColorOverrides]
+ * @property {Record<string, any>} [featureStrokeOverrides]
+ * @property {Record<string, any>} [featureOverrides]
+ * @property {Record<string, any>[]} [legendEntries]
+ * @property {Record<string, any>[]} [deletedLegendEntries]
+ * @property {string[]} [originalLegendOrder]
+ * @property {boolean} [sourceReplaced]
+ * @property {Iterable<string>} [addedLegendCaptions] Captions the renderer drew without a manual rule.
+ * @property {Record<string, any>} [legendColorOverrides]
+ * @property {Record<string, any>} [legendStrokeOverrides]
+ * @property {Record<string, any>[]} [manualSpecificRules]
+ * @property {string[] | null} [replayDefaultLegendOrder]
+ * @property {SvgResultTransform[]} [resultTransforms] One transform per Result, by index.
+ * @property {SvgResultTransform | null} [transformSvg] A transform applied to every Result.
+ */
+
+/**
+ * @typedef {EditorPlanOptions & SvgAdmissionRuntime & { generationResponse: any }} CandidateCommitOptions
+ */
 
 const text = (value) => String(value ?? '').trim();
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
@@ -109,6 +137,7 @@ const normalizedLegendEntries = (entries) => (
     : []
 );
 
+/** @param {EditorPlanOptions} options */
 const compilePlanBundle = ({
   catalogAdmission,
   featureColorOverrides = {},
@@ -343,11 +372,15 @@ const compilePlanBundle = ({
   };
 };
 
-/** Compile direct live-editor deltas without enumerating admitted Features. */
-export const compileDirectEditorMutationPlan = (options = {}) => (
+/**
+ * Compile direct live-editor deltas without enumerating admitted Features.
+ * @param {EditorPlanOptions} [options]
+ */
+export const compileDirectEditorMutationPlan = (options = /** @type {EditorPlanOptions} */ ({})) => (
   compilePlanBundle(options).plan
 );
 
+/** @param {CandidateCommitOptions} options */
 export const prepareCandidateRenderCommit = ({
   generationResponse,
   catalogAdmission,

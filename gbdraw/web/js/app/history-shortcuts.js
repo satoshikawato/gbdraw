@@ -1,3 +1,4 @@
+// @ts-check
 const isTextEditingTarget = (target) => {
   if (!target) return false;
   if (target.isContentEditable) return true;
@@ -12,6 +13,19 @@ const isTextEditingTarget = (target) => {
   return !['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'color'].includes(type);
 };
 
+/**
+ * @typedef {object} HistoryShortcutsHistory
+ *   The two History functions the shortcuts call.
+ * @property {() => Promise<unknown>} undo
+ * @property {() => Promise<unknown>} redo
+ *
+ * @typedef {object} HistoryShortcutsOptions
+ * @property {HistoryShortcutsHistory | null} history Without it the shortcuts do nothing.
+ * @property {(hook: () => void) => unknown} onMounted Vue `onMounted`: adds the document listener.
+ * @property {(hook: () => void) => unknown} onUnmounted Vue `onUnmounted`: removes it.
+ */
+
+/** @param {HistoryShortcutsOptions} options */
 export const setupHistoryShortcuts = ({ history, onMounted, onUnmounted }) => {
   const handleKeyDown = (event) => {
     if (!history) return;

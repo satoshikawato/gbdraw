@@ -1,3 +1,4 @@
+// @ts-check
 import { normalizeOptionalText } from './track-slot-display.js';
 import { requireCurrentLinearTrackLayout } from './current-option-values.js';
 
@@ -426,6 +427,9 @@ const autoTextByKey = (state, key, context = null) => {
   }
 };
 
+/**
+ * @param {Record<string, any>} state the Web state; its shape belongs to `state.js`
+ */
 export const createAutoValueDisplay = (state) => {
   const autoValueText = (key, context = null) => autoTextByKey(state, key, context);
   const autoValueVisible = (value, key, context = null) => (

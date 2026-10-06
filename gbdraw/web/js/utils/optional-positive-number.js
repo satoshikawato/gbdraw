@@ -1,3 +1,4 @@
+// @ts-check
 import { diagnosticError } from '../services/error-normalization.js';
 
 export const DECIMAL_NUMBER_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;

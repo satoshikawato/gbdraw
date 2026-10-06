@@ -1,3 +1,4 @@
+// @ts-check
 export const WEB_UX_PROFILE_VERSION = 1;
 
 export const WEB_UX_PROFILE = Object.freeze({

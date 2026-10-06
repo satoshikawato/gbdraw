@@ -1,3 +1,4 @@
+// @ts-check
 import { resolveColorToHex } from './color-utils.js';
 import { parseSpecificRules } from './file-imports.js';
 
@@ -83,7 +84,30 @@ const uniqueLegendKey = (reserved, preferred) => {
   return `${preferred} (${suffix})`;
 };
 
-// Returns rule -> the legend caption Generate draws for that rule.
+/**
+ * A Legend row of the renderer: its caption and its fill (`fillIdentity`).
+ * @typedef {object} RendererLegendRow
+ * @property {string} caption
+ * @property {string} color
+ */
+
+/**
+ * A specific color rule as `normalizeSpecificRule` returns it.
+ * @typedef {object} SpecificColorRule
+ * @property {string} feat
+ * @property {string} qual
+ * @property {string} val
+ * @property {string} color
+ * @property {string} cap
+ * @property {boolean} [fromFile]
+ */
+
+/**
+ * Returns rule -> the legend caption Generate draws for that rule.
+ * @param {Partial<SpecificColorRule>[]} [rules]
+ * @param {RendererLegendRow[]} [rendererRows]
+ * @returns {(rule: Partial<SpecificColorRule> | null | undefined) => string}
+ */
 export const createRuleLegendCaptions = (rules = [], rendererRows = []) => {
   const rowColors = new Map((rendererRows || []).map((row) => [row.caption, row.color]));
   const normalizedRules = (rules || []).map((rule) => normalizeSpecificRule(rule));
@@ -144,7 +168,7 @@ export const legendRowRules = (caption, { rules = [], legendEntries = [], origin
 export const diffLegendIntents = (currentEntries, desiredIntents) => {
   const desired = new Map(
     (Array.isArray(desiredIntents) ? desiredIntents : [])
-      .map((entry) => [normalizeText(entry?.caption), normalizeColor(entry?.color)])
+      .map((entry) => /** @type {[string, string]} */ ([normalizeText(entry?.caption), normalizeColor(entry?.color)]))
       .filter(([caption]) => caption)
   );
   const current = new Map();

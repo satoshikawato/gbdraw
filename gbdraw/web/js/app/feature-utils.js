@@ -1,3 +1,4 @@
+// @ts-check
 export const normalizeStringArray = (value) => {
   if (Array.isArray(value)) {
     return value
