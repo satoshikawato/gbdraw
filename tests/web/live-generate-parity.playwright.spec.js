@@ -775,3 +775,72 @@ for (const { name, mode, canvas = null, absent = null, knownMismatch, run } of S
     for (const caption of absent) expect(captions, name).not.toContain(caption);
   });
 }
+
+// OV-62 (PD-OI-061 amended): two Legend rows merge only when both draw features
+// of one same type. Anything else offers Suffix and Cancel only.
+const renameRow = (page, from, to) => evaluateWithRetainedPromise(page, async ({ from, to }) => {
+  const app = window.__GBDRAW_APP__;
+  const index = app.legendEntries.findIndex((entry) => entry.caption === from);
+  if (index < 0) throw new Error(`no Legend row "${from}": ${app.legendEntries.map((entry) => entry.caption).join(', ')}`);
+  await app.renameLegendEntry(index, to);
+}, { from, to });
+const legendCaptions = (page) => page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption));
+const choose = async (page, choice) => {
+  await evaluateWithRetainedPromise(page, async (picked) => { await window.__GBDRAW_APP__.handleLegendRenameChoice(picked); }, choice);
+  await settleLive(page);
+};
+const mergeButton = (page) => page.getByRole('button', { name: /Merge into existing/ });
+const suffixButton = (page) => page.getByRole('button', { name: /add a suffix/ });
+
+test('a Legend rename of GC content onto CDS offers no Merge, and Suffix equals Generate', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'CDS' });
+  const before = await legendCaptions(page);
+  await renameRow(page, 'GC content', 'CDS');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'the rename asks').toBe(true);
+  await expect(mergeButton(page), 'Merge is not offered').toHaveCount(0);
+  await expect(suffixButton(page), 'Suffix is offered').toHaveCount(1);
+  await choose(page, 'merge');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'a refused Merge closes the dialog').toBe(false);
+  expect(await legendCaptions(page), 'a refused Merge changes no row').toEqual(before);
+  await renameRow(page, 'GC content', 'CDS');
+  await choose(page, 'suffix');
+  const renamed = await legendCaptions(page);
+  expect(renamed.filter((caption) => caption === 'CDS'), 'one row keeps the caption CDS').toHaveLength(1);
+  expect(renamed, 'GC content is gone').not.toContain('GC content');
+  expect(renamed.some((caption) => caption !== 'CDS' && caption.startsWith('CDS')), 'the plot has a suffixed caption').toBe(true);
+  await expectLiveEqualsGenerate(page, { label: 'GC content renamed onto CDS with Suffix' });
+});
+
+const RULE_ROWS = [
+  { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'alpha' },
+  { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2a9d8f', cap: 'beta' },
+  { feat: 'repeat_region', qual: 'note', val: '^RPT_ONE$', color: '#7b2cbf', cap: 'rep' }
+];
+
+test('a Legend rename between rows of different feature types offers no Merge', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  for (const rule of RULE_ROWS) await addColorRule(page, rule);
+  await renameRow(page, 'rep', 'alpha');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'the rename asks').toBe(true);
+  await expect(mergeButton(page), 'Merge is not offered').toHaveCount(0);
+  await choose(page, 'suffix');
+  const renamed = await legendCaptions(page);
+  expect(renamed.filter((caption) => caption === 'alpha'), 'one row keeps the caption').toHaveLength(1);
+  expect(renamed.some((caption) => caption !== 'alpha' && caption.startsWith('alpha')), 'the repeat row has a suffixed caption').toBe(true);
+  await expectLiveEqualsGenerate(page, { label: 'repeat_region row renamed onto a CDS row with Suffix' });
+});
+
+// Two color-rule rows of one feature type: the target is owned by a rule, so the
+// rename keeps its PD-OI-042 disambiguation instead of asking, and Generate agrees.
+test('a Legend rename of a rule row onto another rule row of one feature type equals Generate', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  for (const rule of RULE_ROWS) await addColorRule(page, rule);
+  await renameRow(page, 'beta', 'alpha');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'a rule-owned caption does not ask').toBe(false);
+  await settleLive(page);
+  await expectLiveEqualsGenerate(page, { label: 'same-type rule row renamed onto a rule row' });
+});

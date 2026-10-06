@@ -536,6 +536,7 @@ const legendRenameDialog = reactive({
   targetColor: '',
   currentColor: '',
   siblingCount: 0,
+  mergeAvailable: true, // false unless both rows draw features of one same type
   pendingRequest: null
 });
 
