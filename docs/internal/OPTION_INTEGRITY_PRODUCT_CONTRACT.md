@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `31`
+- Contract revision: `32`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -301,6 +301,19 @@ Status: active Product authority
     answer quoted above. Earlier decisions retain their scope. This
     authority-only amendment contains no runtime; dependent runtime (`#780`)
     requires it merged into its base.
+- Revision 32 changes: `PD-OI-061` is replaced for scenario revision `2`
+  (`B / MERGE-SAME-FEATURE-TYPE-ONLY`), from the Product Decision Owner
+  `satoshikawato`'s replies of `2026-10-06` while reviewing OV-62 (a Legend row
+  without features renamed onto a drawn row's caption).
+  - Reply 1, on the screenshot of the Merge, Suffix, and Cancel dialog for
+    GC content renamed onto `CDS`: 「それはマズいね。CDSとGC contentは全く別物じゃん。トラックとか、同じフィーチャートラックでも別タイプのフィーチャーの場合は混ぜちゃいけないよね基本的に。」
+  - Reply 2, selecting an option of the multiple-choice question
+    「Merge を出してよい条件」: 「同じ track の同じ feature type 同士だけ (Recommended)」
+  - Reply 3, on the full receipt text recorded below: 「OKです」
+  - The Owner approved the receipt text as written. Earlier decisions retain
+    their scope. This change is a static Product Contract co-change: the
+    runtime, tests, and documentation that implement it are in the same pull
+    request, and the Review is `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -2768,20 +2781,19 @@ Decision date: 2026-09-30
 ### PD-OI-061: Legend rename collisions for every entry
 
 - Concern key: `web.legend.rename-collision`
-- Scenario revision: `1`
+- Scenario revision: `2`
+- Supersedes: `PD-OI-061`, scenario revision `1` (`A / DIALOG-FOR-ALL-ENTRIES`).
 - Status: `ACCEPTED`
-- Selected outcome: `A / DIALOG-FOR-ALL-ENTRIES`
+- Selected outcome: `B / MERGE-SAME-FEATURE-TYPE-ONLY`
 - Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
   and its nine-field JSON representation below.
-- Decision source: the complete `D-06` receipt in [`02_DECISION_PACK.md`](./web-gui-audit-20260930/02_DECISION_PACK.md) at P00 merge commit
-  `e97d90fecfb327135eb50e85cfa9a87be3145823`, approved by `satoshikawato` on `2026-09-30` through the two
-  Owner replies quoted verbatim in the Revision 29 entry above. The receipt and
-  JSON below reproduce all nine supplied fields without translation or
-  additional terms. This record does not supersede another decision.
-  Dependent runtime requires this authority merged into its base; this
-  amendment supplies no runtime acceptance evidence.
+- Decision source: the Owner replies of `2026-10-06` quoted verbatim in the
+  Revision 32 entry above. The Owner approved the receipt text below as
+  written ("OKです"). Dependent runtime (OV-62) is changed in the same pull
+  request, by the static Product Contract co-change route; this record supplies
+  no runtime acceptance evidence.
 - Receipt SHA-256 (UTF-8, excluding the final newline):
-  `286c9b269cf98ccbb7c385bf41fd24ecc1f991b636782fe507a03effbad209b9`.
+  `783436b02c70f043f89dc07b4bf8d56e0869e996507f72fedbbecd0301c8f322`.
 - Acceptance contracts: `OIC-006`. These obligations and the complete
   selected outcome are jointly required; their citation does not claim
   completed dependent-runtime checks.
@@ -2789,27 +2801,27 @@ Decision date: 2026-09-30
 ```text
 PRODUCT_DECISION
 Concern: web.legend.rename-collision
-Scenario revision: 1
-Choice: A / DIALOG-FOR-ALL-ENTRIES
-Rationale: 凡例の名前を既存の名前に変えたとき、feature の有無にかかわらず同じ Merge / Suffix / Cancel の選択を示す。原因の分からないエラーで止めない。
-Must preserve: 衝突しない rename の即時反映、feature のない項目の既存ダイアログ、衝突先が色ルールの caption のときの PD-OI-042 の区別、Undo/Redo、Generate と Session での保持。
-May retire: feature のある項目の衝突で、UNKNOWN のエラーを出して何もしない動作。
-Accepted residual risk: Merge を選ぶと 2 つの凡例項目が 1 つの色と名前にまとまる。
+Scenario revision: 2
+Choice: B / MERGE-SAME-FEATURE-TYPE-ONLY
+Rationale: 凡例の名前を既存の名前に変えたとき、Merge は両方の項目が同じ track の同じ feature type を表すときだけ示す。それ以外は Suffix と Cancel を示す。CDS と GC content のように別のものを 1 つの凡例項目にまとめない。
+Must preserve: 衝突しない rename の即時反映、すべての項目で衝突時に選択のダイアログを示すこと（原因の分からないエラーで止めない）、衝突先が色ルールの caption のときの PD-OI-042 の区別、Undo/Redo、Generate と Session での保持。
+May retire: feature のない項目や別の feature type の項目を、Merge で別の項目にまとめる動作。
+Accepted residual risk: 別の feature type の項目に同じ名前を付けたいときは、Suffix の付いた名前（例: "CDS (1)"）になる。描画が名付けた項目（例: "other proteins"）は、その feature type が分かるまで Suffix と Cancel だけを示す。
 Owner: satoshikawato
-Decision date: 2026-09-30
+Decision date: 2026-10-06
 ```
 
 ```json
 {
   "concern": "web.legend.rename-collision",
-  "scenarioRevision": 1,
-  "choice": "A / DIALOG-FOR-ALL-ENTRIES",
-  "rationale": "凡例の名前を既存の名前に変えたとき、feature の有無にかかわらず同じ Merge / Suffix / Cancel の選択を示す。原因の分からないエラーで止めない。",
-  "mustPreserve": "衝突しない rename の即時反映、feature のない項目の既存ダイアログ、衝突先が色ルールの caption のときの PD-OI-042 の区別、Undo/Redo、Generate と Session での保持。",
-  "mayRetire": "feature のある項目の衝突で、UNKNOWN のエラーを出して何もしない動作。",
-  "acceptedResidualRisk": "Merge を選ぶと 2 つの凡例項目が 1 つの色と名前にまとまる。",
+  "scenarioRevision": 2,
+  "choice": "B / MERGE-SAME-FEATURE-TYPE-ONLY",
+  "rationale": "凡例の名前を既存の名前に変えたとき、Merge は両方の項目が同じ track の同じ feature type を表すときだけ示す。それ以外は Suffix と Cancel を示す。CDS と GC content のように別のものを 1 つの凡例項目にまとめない。",
+  "mustPreserve": "衝突しない rename の即時反映、すべての項目で衝突時に選択のダイアログを示すこと（原因の分からないエラーで止めない）、衝突先が色ルールの caption のときの PD-OI-042 の区別、Undo/Redo、Generate と Session での保持。",
+  "mayRetire": "feature のない項目や別の feature type の項目を、Merge で別の項目にまとめる動作。",
+  "acceptedResidualRisk": "別の feature type の項目に同じ名前を付けたいときは、Suffix の付いた名前（例: \"CDS (1)\"）になる。描画が名付けた項目（例: \"other proteins\"）は、その feature type が分かるまで Suffix と Cancel だけを示す。",
   "owner": "satoshikawato",
-  "decisionDate": "2026-09-30"
+  "decisionDate": "2026-10-06"
 }
 ```
 
