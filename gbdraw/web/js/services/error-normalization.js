@@ -1,3 +1,4 @@
+// @ts-check
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'readPdfFont', 'buildProteinLosatCacheKeys', 'convertMainSessionComparisonFrame',
   'convertLosatpPairsToGenomicPayload', 'extractCdsProteinFasta', 'extractFirstFasta', 'generateLegendEntrySvg',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'measureLegendText',
@@ -197,13 +198,24 @@ const FEATURE_ID = /^[A-Za-z_][A-Za-z0-9_.-]{0,159}$/;
 const FEATURE_TYPE = /^[A-Za-z0-9_'-]{1,40}$/;
 
 /**
+ * @typedef {Record<string, any>} DiagnosticContext Bounded facts about the failure; `contextFor` keeps only the known keys.
+ * @typedef {{ code: string, stage: string, operation?: string, context?: DiagnosticContext }} NativeValidation
+ * @typedef {Error & { code: string, stage: string, operation?: string, context: DiagnosticContext }} DiagnosticError
+ */
+
+/**
  * The single JS producer contract for a user-correctable failure: a code and
  * bounded context; wording stays here. The message is a fixed identifier, so an
  * uncaught error never carries document values.
+ * @param {string} code
+ * @param {DiagnosticContext} [context]
+ * @param {{ stage?: string, operation?: string }} [options]
+ * @returns {DiagnosticError}
  */
 export const diagnosticError = (code, context = {}, { stage = 'request-validation', operation } = {}) =>
   Object.assign(new Error(`${code}/${context.reason || ''}`), { code, stage, ...(operation && { operation }), context });
 // Exact native JS validation messages with no document interpolation.
+/** @type {Map<string, NativeValidation>} */
 const NATIVE_VALIDATIONS = new Map([
   ['The diagram engine returned incompatible feature metadata. Reload the page and Generate again.', { code: 'FEATURE_METADATA', stage: 'result-admission' }],
   ['A File-like object with arrayBuffer() or text() is required.', { code: 'RESOURCE_INVALID', stage: 'resource-staging' }],
@@ -328,14 +340,18 @@ for (const message of ['The preserved comparison is missing a required resource.
   'The saved comparison is missing a required resource.',
   'The saved Circular comparison is missing a required resource.']) NATIVE_VALIDATIONS.set(message,
   { code: 'COMPARISON_INPUT', stage: 'request-validation', context: { field: 'comparison', reason: 'REQUIRED' } });
+/**
+ * @param {unknown} message
+ * @returns {NativeValidation | null}
+ */
 const nativeValidation = (message) => {
   if (typeof message !== 'string') return null;
   if (/^Circular region End \([0-9]+\) exceeds the selected record length \([0-9]+\)\.$/.test(message)) return { code: 'REGION_INVALID', stage: 'request-validation', context: { field: 'region', reason: 'RECORD_BOUNDS' } };
-  for (const [template, reason] of [
+  for (const [template, reason] of /** @type {[RegExp, string][]} */ ([
     [/^Session resource [\s\S]* has an invalid declared byte size\.$/, 'RESOURCE_SIZE'],
     [/^Custom Track Slots use an obsolete schema\. Recreate the slots with schema version [0-9]+\.$/, 'TRACK_SCHEMA'],
     [/^Session contains unclassified top-level field\(s\): [\s\S]*$/, 'SESSION_FIELDS']
-  ]) if (template.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason } };
+  ])) if (template.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason } };
   if (/^Invalid managed flag for (?:circular|linear)\.[a-z_]+\.$/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'config', reason: 'FIELDS' } };
   if (/^Missing canonical resource:/.test(message) || /^Session resource [\s\S]* has an unsupported encoded payload\.$/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'FIELDS' } };
   if (/^The SVG composition metadata is not valid JSON:/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'JSON_FORMAT' } };
@@ -353,10 +369,10 @@ const nativeValidation = (message) => {
   if (order) return { code: 'REGION_INVALID', stage: 'request-validation', context: { reason: 'STRICT_ORDER' } };
   const selector = /^Record selector #[0-9]+ is out of range \(loaded ([0-9]+) record\(s\)\)\.$/.exec(message);
   if (selector) return { code: 'RECORD_SELECTION', stage: 'request-validation', context: { reason: 'OUT_OF_RANGE', recordCount: Number(selector[1]) } };
-  for (const [template, reason] of [
+  for (const [template, reason] of /** @type {[RegExp, string][]} */ ([
     [/^Record selector '[\s\S]*' did not match any record ID\.$/, 'NO_MATCH'],
     [/^Record selector '[\s\S]*' matched multiple records\. Use #index to disambiguate\.$/, 'AMBIGUOUS']
-  ]) if (template.test(message)) return { code: 'RECORD_SELECTION', stage: 'request-validation', context: { reason } };
+  ])) if (template.test(message)) return { code: 'RECORD_SELECTION', stage: 'request-validation', context: { reason } };
   const glyph = /^PDF fonts do not contain U\+([0-9A-F]{1,6})\. Use SVG to retain this text\.$/.exec(message);
   if (glyph) return { code: 'PDF_GLYPH', operation: 'export-pdf', stage: 'font-validation', context: { codepoint: parseInt(glyph[1], 16) } };
   const labelColumns = /^Invalid label TSV at line ([0-9]+): expected 5 columns, found ([0-9]+)\.$/.exec(message);
@@ -390,6 +406,10 @@ const TRACK_ISSUES = Object.freeze({
   annotation_anchor_ineligible: ['OVERLAY_ANCHOR', 'anchor_slot'], annotation_underlay_z: ['DRAW_ORDER', 'z'],
   annotation_foreground_z: ['DRAW_ORDER', 'z'], axis_side_conflict: ['TRACK_SIDE', 'side']
 });
+/**
+ * @param {Record<string, any>} error
+ * @returns {NativeValidation}
+ */
 const typedTrackValidation = (error) => {
   const issue = Array.isArray(error.issues) ? error.issues[0] : null;
   if (issue?.code === 'geometry_invalid') {
@@ -429,13 +449,17 @@ const contextFor = (value) => {
   return context;
 };
 
-/** The sole public diagnostic model. Raw messages, causes, logs and stacks are never copied. */
+/**
+ * The sole public diagnostic model. Raw messages, causes, logs and stacks are never copied.
+ * @param {string | Record<string, any> | null | undefined} value
+ * @param {{ operation?: string, stage?: string, code?: string, summaryLimit?: number, detailLimit?: number }} [options]
+ */
 export const normalizeUserFacingError = (value, {
   operation = 'unknown', stage = 'unknown', code = 'UNKNOWN', summaryLimit = 1000, detailLimit = 4000
 } = {}) => {
   if (!value) return null;
   const object = value && typeof value === 'object' ? value : {};
-  const source = object.code === 'CUSTOM_TRACK_PLAN_INVALID' ? typedTrackValidation(object) : CODES.has(object.code) ? object : nativeValidation(typeof value === 'string' ? value : object.message) || object;
+  const source = /** @type {Record<string, any>} */ (object.code === 'CUSTOM_TRACK_PLAN_INVALID' ? typedTrackValidation(object) : CODES.has(object.code) ? object : nativeValidation(typeof value === 'string' ? value : object.message) || object);
   const result = {
     code: identifier(source.code, CODES, identifier(code, CODES, 'UNKNOWN')),
     operation: identifier(operation === 'unknown' ? source.operation : operation, OPERATIONS, 'unknown'),

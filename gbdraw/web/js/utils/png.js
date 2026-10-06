@@ -1,3 +1,4 @@
+// @ts-check
 export const setDpiInPng = async (blob, dpi) => {
   const pixelsPerMeter = Math.round(dpi / 0.0254);
   const buffer = await blob.arrayBuffer();
