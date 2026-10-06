@@ -1336,11 +1336,14 @@ export const createAppSetup = () => {
 
   const specificRuleNotice = ref('');
   const ruleMatchingPending = ref(false);
+  // Python's rule evaluation (R7): the rule preparation's, and the Label TSV
+  // import's own stateless one (`evaluateLabelRules`).
+  const evaluateRules = async (payload, options) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload, options)).result;
   const rulePreparation = createRulePreparation({
     state,
     pending: ruleMatchingPending,
     notify: notice => { specificRuleNotice.value = notice; },
-    evaluate: async (payload, options) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload, options)).result,
+    evaluate: evaluateRules,
     visibilityRules: () => requestFeatureVisibilityRules(state.featureVisibilityManualRules)
   });
   specificRuleRestorePorts.retainRulesForRestore = rulePreparation.retain;
@@ -1390,6 +1393,7 @@ export const createAppSetup = () => {
   const featureActions = createFeatureEditor({
     state,
     rulePreparation,
+    evaluateLabelRules: evaluateRules,
     runUndoable: history.runUndoable,
     runUndoableCheckpoint: history.runUndoableCheckpoint,
     getCommittedRequest: getCommittedCanonicalRenderRequest,

@@ -86,7 +86,7 @@ await writeFile(
 );
 await writeFile(
   join(tempDir, 'app', 'rule-matching.js'),
-  'export const reportRuleRunFailure = (_state, _operation, run) => run();\n',
+  'export const reportRuleRunFailure = (_state, _operation, run) => run();\nexport const runWhenPrepared = (_state, _preparations, commit) => commit();\n',
   'utf8'
 );
 await writeFile(
