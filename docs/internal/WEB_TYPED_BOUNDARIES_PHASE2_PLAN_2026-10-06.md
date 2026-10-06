@@ -390,3 +390,5 @@ None blocks. The Owner may want to override these delegated choices:
   - `noUnusedLocals` +59 (+69 with `noUnusedParameters`). After F-03 removes
     the dead declarations, this would cost little. The report at the end of
     phase 2 gives a recommendation and a cost estimate.
+  - Phase 3 is planned in
+    [WEB_TYPED_BOUNDARIES_PHASE3_PLAN_2026-10-07.md](WEB_TYPED_BOUNDARIES_PHASE3_PLAN_2026-10-07.md).
