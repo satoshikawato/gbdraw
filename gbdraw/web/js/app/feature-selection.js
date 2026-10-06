@@ -1,3 +1,4 @@
+// @ts-check
 import { setClassToken } from '../services/svg-serialization.js';
 
 const { computed, reactive } = window.Vue;
@@ -162,7 +163,15 @@ const angleOnClockwiseInterval = (startAngle, endAngle, angle) => {
   return delta <= span + 1e-9;
 };
 
-export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = null } = {}) => {
+/**
+ * @typedef {object} FeatureSelectionOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {((callback: () => void) => void) | null} [onMounted] Vue `onMounted`.
+ * @property {((callback: () => void) => void) | null} [onUnmounted] Vue `onUnmounted`.
+ */
+
+/** @param {FeatureSelectionOptions} options */
+export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = null }) => {
   const {
     selectedFeatureIds,
     selectedFeatureAnchorId,
@@ -256,6 +265,7 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     if (!fromHandle && event.target?.closest?.('input, select, button, label, textarea, a')) return;
     stopToolbarDrag();
     const toolbar = event.currentTarget?.closest?.('.feature-selection-toolbar') || null;
+    /** @type {Partial<NonNullable<ReturnType<typeof getToolbarDragBounds>>>} */
     const bounds = getToolbarDragBounds(toolbar) || {};
     activeToolbarDrag = {
       startX: Number(event.clientX) || 0,
