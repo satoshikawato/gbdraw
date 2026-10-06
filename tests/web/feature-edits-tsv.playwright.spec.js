@@ -185,12 +185,15 @@ test('Export and Load Feature Edits TSV carry per-feature edits by identity, als
   await generateAndWaitForResult(page);
   await settle(page);
   const editedSvg = await resultSvg(page, testInfo.outputPath('edited.gui.svg'));
-  // Generate does not draw the hidden feature; the live preview hides it.
+  // Generate does not draw the hidden feature. Loading the table changes the
+  // Legend source (the first misc_feature is the hidden one), so the automatic
+  // rerender draws the preview as Generate does, without the feature (OV-42,
+  // #857).
   const expectDrawsEdits = async (target, from) => {
+    await settle(target);
     list = await features(target);
     const hiddenCopy = pick(list, 3, 'misc_feature');
-    if (from === 'result') expect(hiddenCopy).toBeUndefined();
-    else expect((await drawn(target, [hiddenCopy.svgId], from))[hiddenCopy.svgId].drawn).toBe(false);
+    expect(hiddenCopy).toBeUndefined();
     const ids = [pick(list, 1, 'misc_feature'), pick(list, 2, 'tRNA'), pick(list, 1, 'tRNA'), pick(list, 3, 'tRNA')]
       .map((feature) => feature.svgId);
     const shown = await drawn(target, ids, from);

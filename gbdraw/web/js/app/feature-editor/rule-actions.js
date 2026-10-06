@@ -26,7 +26,7 @@ import { featureDrawnContext, resultLegendSources, sameLegendSources } from '../
 // commit, whose candidate rules it has prepared. The composition root
 // registers the label owner's `requestAutomaticRerender` in `ports` once that
 // owner exists; this owner only calls it.
-export const createFeatureRuleActions = ({ state, nextTick, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, getCommittedRequest = () => null, ref, computed, isPatternEditAvailable = () => true }) => {
+export const createFeatureRuleActions = ({ state, nextTick, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true }) => {
   const {
     currentColors,
     appliedPaletteColors,
@@ -115,9 +115,29 @@ export const createFeatureRuleActions = ({ state, nextTick, prepareFileLegendEnt
     && changesLegendSource(previousRules, manualSpecificRules)
     && ports.requestAutomaticRerender()
   );
-  const commitSpecificRules = async (rules, label = 'Change specific color rules', { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], sourceRows = rules.map(rule => manualSpecificRules.includes(rule) ? rule : null) } = {}) => {
+  // The automatic rerender replaces the Results the candidate was prepared
+  // against, which makes the candidate stale (#857). An edit made while one runs
+  // waits for it and, when it replaced the Results under an unchanged rule
+  // table, prepares again instead of dropping the edit.
+  const rerenderIdle = () => (state.labelReflowProcessing?.value
+    ? new Promise((resolve) => {
+      const stop = watch(state.labelReflowProcessing, (busy) => { if (!busy) { stop(); resolve(); } });
+    })
+    : Promise.resolve());
+  const commitSpecificRules = async (rules, label = 'Change specific color rules', options = {}) => {
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
+    await rerenderIdle();
+    for (let attempt = 0; ; attempt += 1) {
+      const results = state.results.value;
+      const table = JSON.stringify(manualSpecificRules);
+      const outcome = await commitOnce(rules, label, options);
+      if (outcome || attempt === 2 || state.results.value === results
+        || JSON.stringify(manualSpecificRules) !== table) return outcome;
+      await rerenderIdle();
+    }
+  };
+  const commitOnce = async (rules, label, { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], sourceRows = rules.map(rule => manualSpecificRules.includes(rule) ? rule : null) } = {}) => {
     const revision = ++preparationRevision;
     const candidate = await rulePreparation.prepareCandidate(rules);
     if (!candidate) return false;

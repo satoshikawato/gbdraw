@@ -1204,7 +1204,8 @@ export const createAppSetup = () => {
   const specificRuleRestorePorts = {
     captureSpecificRulePatternDrafts: null,
     restoreSpecificRulePatternDrafts: null,
-    followRestoredSpecificRules: null
+    followRestoredSpecificRules: null,
+    retainRulesForRestore: null
   };
   const restoreWithSpecificRuleDrafts = async (restore, ...args) => {
     const drafts = specificRuleRestorePorts.captureSpecificRulePatternDrafts();
@@ -1216,9 +1217,14 @@ export const createAppSetup = () => {
   };
   const restoreRuleEdits = async (restore, ...args) => {
     const previousRules = manualSpecificRules.map((rule) => ({ ...rule }));
-    const restored = await restoreWithSpecificRuleDrafts(restore, ...args);
-    specificRuleRestorePorts.followRestoredSpecificRules(previousRules);
-    return restored;
+    specificRuleRestorePorts.retainRulesForRestore(previousRules);
+    try {
+      const restored = await restoreWithSpecificRuleDrafts(restore, ...args);
+      specificRuleRestorePorts.followRestoredSpecificRules(previousRules);
+      return restored;
+    } finally {
+      specificRuleRestorePorts.retainRulesForRestore([]);
+    }
   };
   const history = createHistoryManager({
     buildIntent: historySnapshots.buildHistoryIntent,
@@ -1312,6 +1318,7 @@ export const createAppSetup = () => {
     evaluate: async (payload, options) => (await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.EVALUATE_RULES, payload, options)).result,
     visibilityRules: () => requestFeatureVisibilityRules(state.featureVisibilityManualRules)
   });
+  specificRuleRestorePorts.retainRulesForRestore = rulePreparation.retain;
   // R13: a Legend row a specific-color rule draws commits its edit through the
   // rule owner; the root registers the port once the feature editor exists.
   const legendRowRulePorts = { commitLegendRowRules: null };

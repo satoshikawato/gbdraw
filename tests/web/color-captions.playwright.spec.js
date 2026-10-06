@@ -4,7 +4,15 @@ const { execFileSync } = require('node:child_process');
 const { load, generate, download } = require('./helpers/mode-transition.cjs');
 const { getDiagramWorkerActivity } = require('./helpers/app-lifecycle.cjs');
 
-const inspect = page => page.evaluate(async () => {
+// A rule edit that changes the Legend asks for the automatic rerender (OV-42,
+// OV-43, #857), so the Result is read once Python has drawn it.
+const inspect = async page => {
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.processing && !window.__GBDRAW_APP__.labelReflowProcessing);
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.processing && !window.__GBDRAW_APP__.labelReflowProcessing);
+  return inspectNow(page);
+};
+const inspectNow = page => page.evaluate(async () => {
   const { state: s } = await import('./js/state.js');
   const { getVisibleFeatureLegendGroup, getAllFeatureLegendGroups } = await import('./js/app/legend/utils.js');
   const root=s.svgContainer.value.querySelector('svg');

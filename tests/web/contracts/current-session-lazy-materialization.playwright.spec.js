@@ -1212,7 +1212,9 @@ test('Generate materializes only required resources and reuses one Worker', asyn
   expect(worker.constructions).toBe(1);
   expect(worker.initializations).toBe(1);
   expect(worker.helpers).toBeGreaterThanOrEqual(1);
-  expect(worker.runs).toBe(2);
+  // Two Generates, and the automatic rerender of the color edit, which adds a
+  // Legend row (OV-42, OV-43, #857).
+  expect(worker.runs).toBe(3);
   expect(worker.instances).toHaveLength(1);
   expect(worker.instances[0].terminated).toBe(false);
 });

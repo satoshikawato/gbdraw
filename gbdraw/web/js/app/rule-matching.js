@@ -183,9 +183,14 @@ export const createRulePreparation = ({
     const draft = [...new Map(rules.map((rule) => [ruleKey(rule), rule])).values()];
     return matchesPrepared(features(), draft);
   };
+  // Rules a restore replaces: the next preparation matches them with the
+  // restored ones, in one evaluation, so the Legend change of the restore is
+  // read from known matches (`retain`).
+  let retained = [];
+  const retain = (rules = []) => { retained = rules; };
   const prepare = (rules = state.manualSpecificRules, options = {}) => {
     const targets = features();
-    const draft = [...new Map(rules.map((rule) => [ruleKey(rule), { feat: rule.feat, qual: rule.qual, val: rule.val }])).values()];
+    const draft = [...new Map([...rules, ...retained].map((rule) => [ruleKey(rule), { feat: rule.feat, qual: rule.qual, val: rule.val }])).values()];
     // Empty catalogs still require syntax validation at input boundaries.
     if (matchesPrepared(targets, draft)) return true;
     const before = snapshot();
@@ -278,7 +283,7 @@ export const createRulePreparation = ({
     if (candidate?.changes.length) notify(`Updated ${candidate.changes.length} specific-color caption(s) to distinguish their colors.`);
   };
   return {
-    prepare, prepareDrawn, isPrepared, prepareCandidate, notifyChanges, run, runDrawn, evaluate, snapshot,
+    prepare, retain, prepareDrawn, isPrepared, prepareCandidate, notifyChanges, run, runDrawn, evaluate, snapshot,
     isCurrent, pending
   };
 };

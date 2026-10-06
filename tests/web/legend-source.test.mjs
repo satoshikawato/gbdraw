@@ -78,3 +78,12 @@ test('a rule match that is not known yet reads as a changed source', () => {
   assert.equal(sameLegendSources([], []), true);
   assert.equal(sameLegendSources(['a'], ['a', 'b']), false);
 });
+
+test('a type without a captioned rule needs no match, whatever its rules match', () => {
+  // The rule has no caption, so Python draws the type's default row either way.
+  const uncaptioned = { feat: 'CDS', qual: 'locus_tag', val: '^A$', color: '#ff0000', cap: '' };
+  const [source] = sourcesOf([], [uncaptioned]);
+  assert.notEqual(source, null);
+  assert.equal(sameLegendSources(sourcesOf(), sourcesOf([], [uncaptioned])), true, 'an uncaptioned rule draws no row');
+  assert.equal(sameLegendSources(sourcesOf([], [uncaptioned]), sourcesOf([], [{ ...uncaptioned, val: '^B$' }])), true);
+});

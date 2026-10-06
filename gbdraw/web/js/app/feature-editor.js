@@ -38,7 +38,7 @@ export const createFeatureEditor = ({
   const editorPorts = {};
   const ruleActions = createFeatureRuleActions({
     state, nextTick, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules,
-    ports: editorPorts, getCommittedRequest, ref, computed, isPatternEditAvailable
+    ports: editorPorts, getCommittedRequest, ref, computed, watch, isPatternEditAvailable
   });
   const featureSvgActions = createFeatureSvgActions({
     state,
