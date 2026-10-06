@@ -1,5 +1,20 @@
+// @ts-check
 import { resolveColorToHex } from './color-utils.js';
 import { normalizeOptionalText } from './track-slot-display.js';
+
+/**
+ * Where an inherited skew color comes from. The color and palette sources may
+ * be Vue refs or plain values (`unwrapRef`).
+ * @typedef {object} InheritedSkewSlotColorOptions
+ * @property {string} [key] The slot param: `positive_color` or `negative_color`.
+ * @property {any} [currentColors]
+ * @property {any} [paletteDefinitions]
+ * @property {any} [selectedPalette]
+ */
+
+/**
+ * @typedef {InheritedSkewSlotColorOptions & { slot?: Record<string, any> }} TrackSlotSkewColorOptions
+ */
 
 const SKEW_COLOR_PARAM_TO_PALETTE_KEY = Object.freeze({
   positive_color: 'skew_high',
@@ -36,6 +51,7 @@ const resolvePaletteName = (selectedPalette) => {
   return text || 'default';
 };
 
+/** @param {InheritedSkewSlotColorOptions} [options] */
 export const resolveInheritedSkewSlotColor = ({
   key,
   currentColors = {},
@@ -62,6 +78,7 @@ export const resolveInheritedSkewSlotColor = ({
   return '#777777';
 };
 
+/** @param {TrackSlotSkewColorOptions} [options] */
 export const resolveTrackSlotSkewColorValue = ({
   slot,
   key,

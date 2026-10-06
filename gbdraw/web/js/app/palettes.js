@@ -1,5 +1,28 @@
+// @ts-check
 import { COMPARISON_COLOR_KEYS } from './color-utils.js';
 
+/**
+ * The palette fields of the Web state (`state.js`) the loader reads and writes.
+ * Each `{ value }` is a Vue ref.
+ * @typedef {object} PaletteLoaderState
+ * @property {{ value: any }} paletteDefinitions
+ * @property {{ value: string[] }} paletteNames
+ * @property {{ value: string }} selectedPalette
+ * @property {{ value: Record<string, string> }} currentColors
+ * @property {{ value: string }} appliedPaletteName
+ * @property {{ value: Record<string, string> }} appliedPaletteColors
+ * @property {{ value: string }} pendingPaletteName
+ * @property {{ value: Record<string, string> }} pendingPaletteColors
+ * @property {(colors: any) => Record<string, string>} normalizePaletteColors
+ * @property {(palettes: any) => Record<string, any>} normalizePaletteDefinitions
+ */
+
+/**
+ * @typedef {object} PaletteLoaderOptions
+ * @property {PaletteLoaderState} state
+ */
+
+/** @param {PaletteLoaderOptions} options */
 export const createPaletteLoader = ({ state }) => {
   const {
     paletteDefinitions,

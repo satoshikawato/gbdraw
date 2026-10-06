@@ -1,3 +1,4 @@
+// @ts-check
 import { parseDepthTrackIndexIdentity } from './depth-track-state.js';
 
 const normalizedString = (value) => String(value ?? '').trim().toLowerCase();

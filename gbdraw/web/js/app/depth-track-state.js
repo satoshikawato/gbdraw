@@ -1,4 +1,68 @@
+// @ts-check
 import { normalizeOptionalText } from './track-slot-display.js';
+
+/**
+ * A track slot row. Python owns its field set (R7); this module reads
+ * `renderer`, `id`, `enabled`, `params`, and `depth_binding_error`.
+ * @typedef {Record<string, any>} DepthSlotRow
+ */
+
+/**
+ * The Depth track defaults of the calling stack.
+ * @typedef {object} DepthTrackDefaults
+ * @property {(index: number) => string} [labelForIndex]
+ * @property {(index: number) => string} [colorForIndex]
+ * @property {string} [depthColor]
+ * @property {number | string | null} [depthHeight]
+ * @property {number | string | null} [largeTickInterval]
+ * @property {number | string | null} [smallTickInterval]
+ * @property {number | string | null} [tickFontSize]
+ */
+
+/**
+ * @typedef {object} ReconcileDepthTracksToFilesOptions
+ * @property {any} [files] Depth file slots of one record (an array or one file).
+ * @property {any[]} [depthTracks] The Depth track configs before the change.
+ * @property {number} [targetCount]
+ * @property {DepthTrackDefaults} [defaults]
+ */
+
+/**
+ * @typedef {object} DepthTrackSessionWidthOptions
+ * @property {any[]} [rows] Record-major Depth file rows.
+ * @property {any[]} [depthTracks]
+ * @property {DepthSlotRow[]} [slots]
+ */
+
+/**
+ * @typedef {object} ReindexDepthSlotsOptions
+ * @property {DepthSlotRow[]} [slots]
+ * @property {number} [removedIndex] The logical series that was removed.
+ * @property {number} [activeCount] The series count after the removal.
+ * @property {(slot: DepthSlotRow) => boolean} [managedPredicate]
+ */
+
+/**
+ * @typedef {object} DropInvalidManagedDepthSlotsOptions
+ * @property {DepthSlotRow[]} [slots]
+ * @property {number} [activeCount]
+ * @property {(slot: DepthSlotRow) => boolean} [managedPredicate]
+ */
+
+/**
+ * @typedef {object} ReconcileManagedDepthSlotsOptions
+ * @property {DepthSlotRow[]} [slots]
+ * @property {Iterable<number>} [previousSourced] Series indexes with a source before.
+ * @property {Iterable<number>} [sourced] Series indexes with a source after.
+ * @property {(slot: DepthSlotRow) => boolean} [managedPredicate]
+ */
+
+/**
+ * @typedef {object} SyncDepthSlotLabelsOptions
+ * @property {DepthSlotRow[]} [slots]
+ * @property {any[]} [depthTracks]
+ * @property {number | null} [activeCount]
+ */
 
 const DEPTH_TRACK_FALLBACK_COLORS = [
   '#4A90E2',
@@ -223,6 +287,7 @@ export const ensureDepthTrackConfigShape = (tracks, count, defaults = {}) => {
   return targetTracks;
 };
 
+/** @param {ReconcileDepthTracksToFilesOptions} [options] */
 export const reconcileDepthTracksToFiles = ({
   files,
   depthTracks,
@@ -277,6 +342,7 @@ const referencedDepthTrackWidth = (slots) => {
   return width;
 };
 
+/** @param {DepthTrackSessionWidthOptions} [options] */
 export const depthTrackSessionWidth = ({ rows, depthTracks, slots } = {}) => Math.max(
   depthTrackMatrixWidth(rows),
   Array.isArray(depthTracks) ? depthTracks.length : 0,
@@ -328,6 +394,7 @@ const disableInvalidManualDepthSlot = (slot, removedTrackIndex = null) => {
   return next;
 };
 
+/** @param {ReindexDepthSlotsOptions} [options] */
 export const reindexDepthSlots = ({
   slots,
   removedIndex,
@@ -363,6 +430,7 @@ export const reindexDepthSlots = ({
   return nextSlots;
 };
 
+/** @param {DropInvalidManagedDepthSlotsOptions} [options] */
 export const dropInvalidManagedDepthSlots = ({
   slots,
   activeCount,
@@ -395,6 +463,7 @@ const isDepthSlot = (slot) => Boolean(slot) && String(slot.renderer || '') === '
  *   `additions`, unless a row (enabled or disabled) already references it.
  * Manual rows are never changed. A manual row left on a series without a
  * source reports a row issue (PD-OI-083).
+ * @param {ReconcileManagedDepthSlotsOptions} [options]
  */
 export const reconcileManagedDepthSlots = ({
   slots,
@@ -416,6 +485,7 @@ export const reconcileManagedDepthSlots = ({
   return { slots: kept, additions };
 };
 
+/** @param {SyncDepthSlotLabelsOptions} [options] */
 export const syncDepthSlotLabels = ({ slots, depthTracks, activeCount = null } = {}) => {
   if (!Array.isArray(slots)) return;
   const count = activeCount === null || activeCount === undefined
