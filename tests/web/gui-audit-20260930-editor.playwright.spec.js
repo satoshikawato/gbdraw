@@ -903,7 +903,10 @@ test('Label visibility On for a feature that a visibility rule hides asks first,
   const before = await labelOnFacts(page);
   await startLabelOn(page, fl1, 'FL1_SHOWN');
   await answerLabelOn(page, 'Feature Is Hidden', 'Show feature and label');
-  expect(await labelOnFacts(page)).toEqual({
+  // OV-48b: the facts name features by the rendered IDs of the Result in view.
+  // The rule edit's rerender leaves fl1 out of that Result until the Label On
+  // rerender draws it again, so the stored edit shows once that rerender ends.
+  await expect.poll(() => labelOnFacts(page), { timeout: 120_000 }).toEqual({
     ...before,
     undo: before.undo + 1,
     redo: 0,
@@ -1096,6 +1099,54 @@ test('a Feature Visibility rule that hides a feature hides its label too', async
   expect(await shown()).toEqual(withoutFl1);
   await generate(page);
   expect(await shown()).toEqual(withoutFl1);
+});
+
+// OV-48: Generate always wins over the automatic rerender. An edit that asks
+// for a rerender while Generate runs waits for it (the rerender would take the
+// newer generation token and end Generate with no Result and no message), and
+// the rerender then runs once, so the edit is drawn.
+test('an automatic rerender requested during Generate waits for it and then runs once', async ({ page }) => {
+  test.setTimeout(600_000);
+  await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
+    window.__GBDRAW_APP__.form.labels_mode = 'out';
+  });
+  await generate(page);
+  const { fl1, fl2 } = await featureIdsByLocator(page);
+  const glyphPresent = (id) => page.evaluate((featureId) => Boolean(window.__GBDRAW_APP__.svgContainer
+    .querySelector(`[data-gbdraw-feature-id="${CSS.escape(featureId)}"]`)), id);
+  expect(await glyphPresent(fl1)).toBe(true);
+
+  // Hold the first Python response (Generate's); count every response.
+  await page.evaluate(() => {
+    window.__OV48_RESPONSES__ = 0;
+    window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => {
+      window.__OV48_RESPONSES__ += 1;
+      if (window.__OV48_RESPONSES__ > 1) return undefined;
+      return new Promise((resolve) => { window.__OV48_RELEASE__ = resolve; });
+    };
+  });
+  const key = await page.evaluate(async () => (await import('./js/state.js')).state.resultGenerationKey.value);
+  await page.getByRole('button', { name: 'Generate Diagram', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => typeof window.__OV48_RELEASE__), { timeout: 180_000 }).toBe('function');
+  expect(await page.evaluate(async () => (await import('./js/state.js')).state.processing.value)).toBe(true);
+
+  // An edit during Generate asks for the rerender; it must not start now.
+  await addVisibilityRule(page, { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' });
+  await page.evaluate(async () => { await window.Vue.nextTick(); });
+  expect(await page.evaluate(() => window.__OV48_RESPONSES__)).toBe(1);
+
+  await page.evaluate(() => window.__OV48_RELEASE__());
+  await expect.poll(() => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return { key: state.resultGenerationKey.value, processing: state.processing.value, error: state.errorLog.value };
+  }), { timeout: 180_000 }).toEqual({ key: key + 1, processing: false, error: null });
+  await waitForLabelReflow(page);
+  await expect.poll(() => page.evaluate(() => window.__OV48_RESPONSES__), { timeout: 180_000 }).toBe(2);
+  expect(await glyphPresent(fl1)).toBe(false);
+  expect(await drawnFeatureIds(page, [fl1, fl2])).toEqual([fl2]);
+  expect(await labeledFeatureIds(page, [fl1, fl2])).toEqual([fl2]);
+  expect((await labelEditorState(page, 'labels.circular.scope')).reflowError).toBeNull();
+  expect(await page.evaluate(() => window.__OV48_RESPONSES__)).toBe(2);
 });
 
 // OV-34: with Auto Reflow off, deleting the rule that hid a feature at Generate
