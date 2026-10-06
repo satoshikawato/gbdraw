@@ -228,8 +228,7 @@ const CASES = [
     edit: 'Feature color change of a feature colored at the last Generate',
     states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
     setup: async (page) => { await popupEdit(page, 'TESTA_0005', { fill: '#c83366' }); await generate(page); },
-    run: (page) => popupEdit(page, 'TESTA_0005', { fill: '#123456' }),
-    knownMismatch: 'OV-45: Generate fails with UNKNOWN; its legend fill names a row the other Result does not draw'
+    run: (page) => popupEdit(page, 'TESTA_0005', { fill: '#123456' })
   },
   {
     kind: 'undo',

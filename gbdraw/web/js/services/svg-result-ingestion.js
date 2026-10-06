@@ -6,6 +6,7 @@ import {
   orderLegendEntries
 } from '../app/legend/utils.js';
 import { isCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
+import { diagnosticError } from './error-normalization.js';
 import { sanitizeSvgContent } from './svg-sanitization.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { collectRenderedFeatureIdentitiesFromSvgRoot } from './session-feature-metadata.js';
@@ -367,7 +368,7 @@ const requireFeatureElements = (index, renderedId) => {
 const requireLegendEntries = (index, caption, { allowMissing = false } = {}) => {
   const entries = index.legends().entries.get(caption) || [];
   if (entries.length === 0 && !allowMissing) {
-    throw new Error('Sanitized SVG content is missing a Legend binding.');
+    throw diagnosticError('RESULT_INVALID', {}, { stage: 'result-admission' });
   }
   return entries;
 };

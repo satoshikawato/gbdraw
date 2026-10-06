@@ -267,3 +267,28 @@ test('an identity row projects onto every Result that draws its feature', () => 
     ['renamed'], ['renamed']
   ]);
 });
+
+// OV-45: a batch Result that draws none of a styled Legend row's features draws
+// no row for it, so its Legend style may find the row absent; the Result that
+// draws them still requires it.
+test('a Legend style may miss its row only in a Result that draws none of its features', () => {
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: { ...admission(), resultNames: ['record-a.svg', 'record-b.svg'] },
+    featureColorOverrides: { [stableKey]: { color: '#123456', caption: 'codon start two' } },
+    manualSpecificRules: [{ feat: 'CDS', qual: 'hash', val: 'fef810304', color: '#123456', cap: 'codon start two' }],
+    legendEntries: [{ caption: 'codon start two', originalCaption: 'codon start two', color: '#123456' }],
+    originalLegendOrder: ['codon start two', 'CDS'],
+    legendColorOverrides: { 'codon start two': '#123456' },
+    legendStrokeOverrides: { 'codon start two': { strokeColor: '#445566', strokeWidth: 2 } }
+  });
+  assert.deepEqual(plan.operationsByResult.map(({ legendFills }) => legendFills), [
+    [{ caption: 'codon start two', color: '#123456', allowMissing: false }],
+    [{ caption: 'codon start two', color: '#123456', allowMissing: true }]
+  ]);
+  assert.deepEqual(plan.operationsByResult.map(({ legendStrokes }) => legendStrokes.map(
+    ({ allowMissing, renderedIds }) => ({ allowMissing, renderedIds })
+  )), [
+    [{ allowMissing: false, renderedIds: ['f0001'] }],
+    [{ allowMissing: true, renderedIds: [] }]
+  ]);
+});
