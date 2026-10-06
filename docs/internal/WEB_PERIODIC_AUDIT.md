@@ -4,7 +4,11 @@ The 2026-09-30 Web GUI audit
 ([remediation proposal, section 8.3](web-gui-audit-20260930/01_REMEDIATION_PROPOSAL.md#83-ワークフロー);
 [W8, section 3](web-gui-audit-20260930/remediation/W8_verification_workflow.md))
 decided that periodic audits use no new gate or workflow. Each audit is a
-checklist item in the `dev` to `main` promotion pull request. This page holds the
+checklist item in the `dev` to `main` promotion pull request. Steps 5 and 6 are
+Phase F of the
+[Web owner-coupling prevention plan](WEB_OWNER_COUPLING_PREVENTION_IMPLEMENTATION_PLAN_2026-10-05.md#phase-f--continuous-structural-audit)
+in this checklist form, which the Owner chose on 2026-10-06 over a scheduled
+workflow. This page holds the
 procedure and the checklist. The admission rules for a `PROMOTION` stay in
 [`WEB_CHANGE_POLICY.md`](WEB_CHANGE_POLICY.md); this page does not change them.
 
@@ -57,6 +61,67 @@ procedure and the checklist. The admission rules for a `PROMOTION` stay in
    Generate/options, comparisons, Feature editing, legend/Preview/export, and
    tracks/layout. Reproduce each suspected defect on `dev` before you record it.
 
+5. Compare the owner graph of `main` and `dev`. Run from the repository root
+   after `git fetch origin main dev`; it prints every frozen metric on both
+   sides and exits 1 when one is higher on `dev`:
+
+   ```bash
+   D=$(mktemp -d)
+   node tools/report-web-owner-graph.mjs --at origin/main --json > "$D/main.json"
+   node tools/report-web-owner-graph.mjs --at origin/dev --json > "$D/dev.json"
+   node -e "
+   const { readFileSync } = require('node:fs');
+   const [main, dev] = ['main', 'dev'].map((name) => JSON.parse(readFileSync(process.argv[1] + '/' + name + '.json', 'utf8')).summary);
+   const flat = ({ projectionShapes, ...counts }) => ({
+     ...counts,
+     ...Object.fromEntries(Object.entries(projectionShapes).map(([domain, count]) => ['shapes:' + domain, count]))
+   });
+   const [before, after] = [flat(main), flat(dev)];
+   const rows = Object.keys({ ...before, ...after }).map((metric) => [metric, before[metric] ?? 0, after[metric] ?? 0]);
+   for (const [metric, onMain, onDev] of rows) console.log(metric.padEnd(34), String(onMain).padStart(4), String(onDev).padStart(4), onDev > onMain ? 'HIGHER ON DEV' : '');
+   process.exitCode = rows.some(([, onMain, onDev]) => onDev > onMain) ? 1 : 0;
+   " "$D"
+   ```
+
+   A metric that is higher on `dev` blocks the promotion, unless the R13
+   baseline (`tests/web/owner-graph-baseline.test.mjs` on `dev`) records the
+   higher count and an authority PR admitted it. To find which merge changed a
+   metric, list the first-parent merges between the two:
+
+   ```bash
+   node tools/report-web-owner-graph.mjs --range origin/main..origin/dev --first-parent
+   ```
+
+   A `*` after a count marks a value that differs from the previous row, so
+   the first row that carries it names the merge. The per-PR `Gate` and the push CI of `dev` already enforce
+   the R13 baseline; this step adds the trend across the merges of one
+   promotion.
+6. Run the seeded live-vs-Generate random walk
+   ([`live-generate-random-walk.promotion.spec.js`](../../tests/web/live-generate-random-walk.promotion.spec.js),
+   run by `playwright.promotion.config.js`; no PR or dev workflow collects it).
+   Use a fixed seed and the default budget (20 steps on each of a Circular
+   Result, a Linear Result, and a two-Result Circular batch), and rebuild the
+   browser wheel first when Python under `gbdraw/` changed
+   (`python tools/prepare_browser_wheel.py`):
+
+   ```bash
+   GBDRAW_RANDOM_WALK_SEED=20261006 npx playwright test --config=playwright.promotion.config.js --workers=1
+   ```
+
+   After each step (feature fill with each scope choice, label text and
+   visibility, Feature Visibility and specific color rules, legend rename,
+   color, and sort, Undo, Redo, Result switch, Auto Reflow), the walk requires
+   the displayed Result to equal the Result Generate draws from the same draft
+   (R3, PD-OI-066), minus `tests/web/contracts/live-generate-parity-allowed.json`.
+   The log starts with the seed; a failure names the seed, the fixture, the
+   step index, the steps so far, and the differences. The same seed and
+   `GBDRAW_RANDOM_WALK_STEPS` replay the same walk; `-g "<fixture name>"`
+   replays one fixture. Each mismatch is a finding (OV-xx): log it, and either
+   fix it or mark the matching case `test.fail` in
+   `tests/web/live-generate-parity.playwright.spec.js` per R3 (naming the
+   finding) before the promotion. Pick a new seed for each promotion and
+   record it in the promotion pull request.
+
 ## Carrying evidence forward
 
 A light change can move `dev` after promotion evidence was collected on an
@@ -108,6 +173,8 @@ request and complete them.
   - [ ] Changed areas audited by hand, with the time spent per area
   - [ ] Each confirmed defect class has "guard added" (test, PR) or "no guard" (reason)
   - [ ] Every P1 is fixed, or has an Owner waiver: <links>
+  - [ ] Owner graph, `origin/main` against `origin/dev` (Procedure step 5): no frozen metric is higher on `dev`, or each one is recorded in the R13 baseline by an authority PR: <PR>
+  - [ ] Random walk (Procedure step 6): seed <seed>, 20 steps per fixture, no mismatch, or each mismatch is an OV-xx that is fixed or marked `test.fail` in the parity spec: <rows>
   - [ ] Evidence carried from an ancestor: none, or E <sha>, the `classify --base <E> --head <H>` output, and the verdicts used
 ```
 

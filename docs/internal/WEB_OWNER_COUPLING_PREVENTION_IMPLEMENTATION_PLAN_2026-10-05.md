@@ -125,7 +125,7 @@ app-setup availability cycle (#641).
 | `tests/web/owner-graph-detectors.test.mjs` | Fixture corpus + untouched-base characterization at `8f450194` | B1 |
 | `tests/web/owner-graph-replay.test.mjs` | Historical replay: the merges that introduced each coupling produce NEW observations against their first parent | B1 |
 | `tests/web/architecture-contracts.test.mjs` | Extended: every `Guards:` path in CLAUDE.md R-sections is registered; layering section present | A1, C1 |
-| `.github/workflows/web-structure-audit.yml` | Daily report on `dev` | F1 |
+| `tests/web/live-generate-random-walk.promotion.spec.js`, `playwright.promotion.config.js` | Seeded live-vs-Generate random walk, run from the promotion checklist | F1 |
 
 ## 6. Required implementation sequence
 
@@ -404,18 +404,21 @@ before/after; no `gbdraw/web/CLAUDE.md` or guard change (A1 would fail it).
 
 ### Phase F — continuous structural audit
 
-#### PR F1 — daily report on `dev`
+#### PR F1 — promotion checklist steps (decided and implemented 2026-10-06)
 
-`.github/workflows/web-structure-audit.yml`: `schedule: cron '15 20 * * *'`
-(05:15 JST) and `workflow_dispatch`; checks out `dev`; runs
-`node tools/report-web-owner-graph.mjs --at HEAD --json` and
-`--range <previous-run-sha>..HEAD --first-parent`; uploads the JSON as an
-artifact; writes the table to the job summary; fails the job when any frozen
-metric is above the previous artifact's value (trend check independent of the
-per-PR gate). `permissions: contents: read`. Add the job name to
-`docs/internal/WEB_PERIODIC_AUDIT.md`.
-
-Proposed commit title: `ci: daily Web owner-graph structural audit`
+The Owner declined the scheduled workflow this phase first proposed
+(`.github/workflows/web-structure-audit.yml`, a daily `cron` report on `dev`)
+on 2026-10-06 and chose promotion-checklist steps instead, in line with the
+2026-09-30 decision that periodic audits use no new gate or workflow. F1 added
+two items to the promotion checklist in
+[`WEB_PERIODIC_AUDIT.md`](WEB_PERIODIC_AUDIT.md): the owner-graph comparison
+of `origin/main` and `origin/dev` (`tools/report-web-owner-graph.mjs`; a metric
+higher on `dev` blocks promotion unless the R13 baseline records it by an
+authority PR), and a seeded live-vs-Generate random walk
+(`tests/web/live-generate-random-walk.promotion.spec.js` under
+`playwright.promotion.config.js`; no PR or dev workflow collects it). The
+per-PR Gate and the dev push CI already enforce the R13 baseline; the
+checklist steps add the cross-merge trend and the random walk at promotion.
 
 ## 7. Acceptance for the plan as a whole
 
@@ -426,8 +429,9 @@ Proposed commit title: `ci: daily Web owner-graph structural audit`
   backdoor, a trigger site in a new module, or a second call shape for a
   registered domain fails the trusted-base Gate from `dev`'s checker, with the
   PR unable to amend the registry in the same diff.
-- After E1–E8, the frozen store holds zero owner-graph subjects and the daily
-  audit's frozen metrics equal the Section 2 "2026-09-01" column or better.
+- After E1–E8, the frozen store holds zero owner-graph subjects and the
+  promotion checklist's owner-graph comparison reports frozen metrics that
+  equal the Section 2 "2026-09-01" column or better.
 
 ## 8. Open owner decisions
 

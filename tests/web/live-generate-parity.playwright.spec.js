@@ -363,6 +363,60 @@ const CASES = [
     },
     run: (page) => showResult(page, 1)
   },
+  // OV-63: a Legend color on a row whose features are then all hidden. Generate
+  // draws no row for them, and the stored color does not fail the Generate.
+  {
+    kind: 'feature Off',
+    edit: 'Feature visibility Off (popup) for every feature of a Legend row with a Legend color',
+    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    setup: async (page) => {
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        return app.updateLegendEntryColor(app.legendEntries.findIndex((entry) => entry.caption === 'repeat_region'), '#7b2cbf');
+      });
+      await settleLive(page);
+    },
+    run: (page) => popupEdit(page, { type: 'repeat_region' }, { visibility: 'off' })
+  },
+  {
+    kind: 'feature Off',
+    edit: 'Feature visibility Off (popup) for every feature of a Legend row renamed in the Legend',
+    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    setup: async (page) => {
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        return app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'repeat_region'), 'Repeats');
+      });
+      await settleLive(page);
+    },
+    run: (page) => popupEdit(page, { type: 'repeat_region' }, { visibility: 'off' })
+  },
+  {
+    kind: 'visibility rule add',
+    edit: 'Feature Visibility rule add that hides every feature of a Legend row with a Legend color',
+    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'bound' },
+    setup: async (page) => {
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        return app.updateLegendEntryColor(app.legendEntries.findIndex((entry) => entry.caption === 'CDS'), '#7b2cbf');
+      });
+      await settleLive(page);
+    },
+    run: (page) => addVisibilityRule(page, BATCH_CDS_OFF)
+  },
+  {
+    kind: 'color rule add',
+    edit: 'Specific color rule add that recaptions every feature of a Legend row with a Legend color',
+    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'unbound' },
+    setup: async (page) => {
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        return app.updateLegendEntryColor(app.legendEntries.findIndex((entry) => entry.caption === 'CDS'), '#7b2cbf');
+      });
+      await settleLive(page);
+    },
+    run: (page) => addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '.', color: '#c83366', cap: 'Zeta' })
+  },
   {
     kind: 'Result switch',
     edit: 'Result switch after deleting a same-product rule Generate drew',
@@ -548,5 +602,203 @@ for (const [name, { mode, add, remove }] of Object.entries(DEPTH_CASES)) {
     await expectLiveEqualsGenerate(page, { label: `${name}: Undo` });
     await history(page, 'redo');
     await expectLiveEqualsGenerate(page, { label: `${name}: Redo` });
+  });
+}
+
+// OV-63: Python's Legend row facts excuse only a row the draft removed. A Legend
+// style on a key no feature of the records can produce is a stale operation, and
+// the Generate still fails at result admission.
+test('a Legend style no feature can produce still fails the Generate', async ({ page }) => {
+  test.setTimeout(90_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await page.evaluate(async () => {
+    const app = window.__GBDRAW_APP__;
+    const { state } = await import('/gbdraw/web/js/state.js');
+    state.originalLegendOrder.value = [...state.originalLegendOrder.value, 'Ghost'];
+    app.legendEntries.push({ caption: 'Ghost', originalCaption: 'Ghost', color: '#123456', yPos: 400 });
+    state.legendColorOverrides.Ghost = '#123456';
+  });
+  const outcome = await generateAndWaitForResult(page, { expectedStatus: 'error' });
+  expect(outcome.errorSummary).toContain('could not be accepted');
+  expect(await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.errorLog))).toContain('RESULT_INVALID');
+});
+
+// OV-63 siblings: a Legend style on a row that the draft then removes by another
+// route than hiding features (a track switched off, a feature type deselected, the
+// Legend set to none). Each case colors the row, removes it, and requires that
+// Generate succeeds. A track slot edit is live, so its Result must equal
+// Generate's; the GC and skew switches, the Features selection, and the Legend
+// position apply on Generate, so those cases check the Generate Result for the
+// absent rows.
+const colorLegendRow = async (page, caption, color = '#7b2cbf') => {
+  expect(await page.evaluate(({ target, value }) => {
+    const app = window.__GBDRAW_APP__;
+    const index = app.legendEntries.findIndex((entry) => entry.caption === target);
+    return index >= 0 && app.updateLegendEntryColor(index, value);
+  }, { target: caption, value: color }), `Legend row ${caption}`).toBeTruthy();
+  await settleLive(page);
+};
+
+const openCanvas = async (page, mode, canvas) => {
+  await open(page, { mode, results: 'single', reflow: 'off' });
+  if (mode === 'circular' && canvas !== null) {
+    await page.evaluate((value) => { window.__GBDRAW_APP__.form.multi_record_canvas = value; }, canvas);
+    await generate(page);
+  }
+};
+
+// OV-65 (open): a Legend color on a row named only by a track's data (an annotation
+// set, a depth file) fails Generate once the track data is removed; the two cases
+// below are marked test.fail until the Web retires such a preference.
+// A region annotation with a legend label draws a Legend row from its set; the
+// slot of the set is added through the track slot control.
+const addAnnotationRow = async (page, label) => {
+  await page.evaluate((legendLabel) => {
+    const app = window.__GBDRAW_APP__;
+    const set = app.addAnnotationSet('regions');
+    const annotation = app.addCoordinateAnnotation(set, { start: 100, end: 400 });
+    annotation.legendLabel = legendLabel;
+  }, label);
+  await settleLive(page);
+  await generate(page);
+};
+
+const SIBLINGS = [
+  {
+    name: 'GC content row after GC content is switched off',
+    mode: 'circular',
+    absent: ['GC content'],
+    run: async (page) => {
+      await colorLegendRow(page, 'GC content');
+      await appAction(page, 'setCircularGcSuppressed', true);
+    }
+  },
+  {
+    name: 'feature type row after the type is deselected in the Features selection',
+    mode: 'circular',
+    absent: ['repeat_region'],
+    run: async (page) => {
+      await colorLegendRow(page, 'repeat_region');
+      await page.evaluate(() => {
+        const features = window.__GBDRAW_APP__.adv.features;
+        features.splice(features.indexOf('repeat_region'), 1);
+      });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'GC skew row after its track is disabled',
+    mode: 'circular',
+    run: async (page) => {
+      await colorLegendRow(page, 'GC skew (+)');
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        app.setCircularTrackSlotEnabled(app.adv.circular_track_slots.find((slot) => slot.id === 'gc_skew'), false);
+      });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'GC content row after its track slot is removed',
+    mode: 'circular',
+    run: async (page) => {
+      await colorLegendRow(page, 'GC content');
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        app.removeCircularTrackSlot(app.adv.circular_track_slots.findIndex((slot) => slot.id === 'gc_content'));
+      });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'annotation set row after its set is removed',
+    mode: 'circular',
+    knownMismatch: 'OV-65: no data of the draft names the row, so Python reports it neither drawn nor suppressed and admission rejects the Legend color',
+    absent: ['Region X'],
+    run: async (page) => {
+      await addAnnotationRow(page, 'Region X');
+      await colorLegendRow(page, 'Region X');
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        app.removeAnnotationSet(app.annotationSets[0]);
+      });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'Depth row after its depth file is removed',
+    mode: 'circular',
+    knownMismatch: 'OV-65: no data of the draft names the row, so Python reports it neither drawn nor suppressed and admission rejects the Legend color',
+    absent: ['Depth'],
+    run: async (page) => {
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        const rows = Array.from({ length: 4 }, (_, index) => `FORCEDLBL\t${index * 700 + 1}\t${10 + index}`);
+        app.files.c_depth = [[new File([rows.join('\n')], 'depth.tsv', { type: 'text/tab-separated-values' })]];
+        app.form.show_depth = true;
+      });
+      await settleLive(page);
+      await generate(page);
+      await colorLegendRow(page, 'Depth');
+      await page.evaluate(() => { window.__GBDRAW_APP__.files.c_depth = []; });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'GC skew row after GC skew is switched off',
+    mode: 'circular',
+    absent: ['GC skew (-)'],
+    run: async (page) => {
+      await colorLegendRow(page, 'GC skew (-)');
+      await appAction(page, 'setCircularSkewSuppressed', true);
+    }
+  },
+  {
+    name: 'a feature row after the Legend is set to none, Circular one record',
+    absent: ['CDS'],
+    mode: 'circular',
+    canvas: false,
+    run: async (page) => {
+      await colorLegendRow(page, 'CDS');
+      await page.evaluate(() => { window.__GBDRAW_APP__.form.legend = 'none'; });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'a feature row after the Legend is set to none, Linear',
+    absent: ['CDS'],
+    mode: 'linear',
+    run: async (page) => {
+      await colorLegendRow(page, 'CDS');
+      await page.evaluate(() => { window.__GBDRAW_APP__.form.legend = 'none'; });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'a feature row after the Legend is set to none, Circular Multi-Record Canvas',
+    absent: ['CDS'],
+    mode: 'circular',
+    canvas: true,
+    run: async (page) => {
+      await colorLegendRow(page, 'CDS');
+      await page.evaluate(() => { window.__GBDRAW_APP__.form.legend = 'none'; });
+      await settleLive(page);
+    }
+  }
+];
+
+for (const { name, mode, canvas = null, absent = null, knownMismatch, run } of SIBLINGS) {
+  test(`a Legend color survives Generate: ${name}`, async ({ page }) => {
+    if (knownMismatch) test.fail(true, knownMismatch);
+    test.setTimeout(120_000);
+    await openCanvas(page, mode, canvas);
+    await run(page);
+    if (!absent) {
+      await expectLiveEqualsGenerate(page, { label: name });
+      return;
+    }
+    await generate(page);
+    const captions = (await semanticSnapshot(page)).legend.map(({ caption }) => caption);
+    for (const caption of absent) expect(captions, name).not.toContain(caption);
   });
 }

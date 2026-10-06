@@ -143,6 +143,7 @@ from gbdraw.mode_profiles import (
     LINEAR_MODE_PROFILE,
 )
 from gbdraw.annotations import ResolvedAnnotationBundle, resolve_annotations
+from gbdraw.legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from gbdraw.legend.table import (
     configure_pairwise_identity_legend_from_comparisons,
 )
@@ -3072,55 +3073,55 @@ def assemble_circular_diagram_from_records(
             plot_title=normalized_plot_title or None,
         )
 
+    legend_canvas_config = CircularCanvasConfigurator(
+        output_prefix=output_prefix,
+        profile=profile,
+        legend=legend_effective,
+        gb_record=records[0],
+    )
+    legend_window, legend_step = _resolve_circular_window_step(
+        records[0],
+        cfg,
+        window=window,
+        step=step,
+    )
+    gc_config = GcContentConfigurator(
+        window=legend_window,
+        step=legend_step,
+        dinucleotide=dinucleotide,
+        profile=profile,
+        default_colors_df=default_colors,
+    )
+    skew_config = GcSkewConfigurator(
+        window=legend_window,
+        step=legend_step,
+        dinucleotide=dinucleotide,
+        profile=profile,
+        default_colors_df=default_colors,
+    )
+    depth_config = (
+        DepthConfigurator(
+            window=legend_window,
+            step=legend_step,
+            profile=profile,
+        )
+        if cfg.canvas.show_depth
+        else None
+    )
+    feature_config = FeatureDrawingConfigurator(
+        color_table=color_table,
+        default_colors=default_colors,
+        selected_features_set=list(selected_features_set),
+        profile=profile,
+        feature_table=feature_table,
+        feature_shapes=feature_shapes,
+        feature_visibility_rules=resolved_feature_inputs.feature_visibility_rules,
+        specific_color_rules=resolved_feature_inputs.specific_color_rules,
+        default_color_map=resolved_feature_inputs.default_color_map,
+        canvas_config=legend_canvas_config,
+        record_features=_resolved_record_features,
+    )
     if legend_effective != "none":
-        legend_canvas_config = CircularCanvasConfigurator(
-            output_prefix=output_prefix,
-            profile=profile,
-            legend=legend_effective,
-            gb_record=records[0],
-        )
-        legend_window, legend_step = _resolve_circular_window_step(
-            records[0],
-            cfg,
-            window=window,
-            step=step,
-        )
-        gc_config = GcContentConfigurator(
-            window=legend_window,
-            step=legend_step,
-            dinucleotide=dinucleotide,
-            profile=profile,
-            default_colors_df=default_colors,
-        )
-        skew_config = GcSkewConfigurator(
-            window=legend_window,
-            step=legend_step,
-            dinucleotide=dinucleotide,
-            profile=profile,
-            default_colors_df=default_colors,
-        )
-        depth_config = (
-            DepthConfigurator(
-                window=legend_window,
-                step=legend_step,
-                profile=profile,
-            )
-            if cfg.canvas.show_depth
-            else None
-        )
-        feature_config = FeatureDrawingConfigurator(
-            color_table=color_table,
-            default_colors=default_colors,
-            selected_features_set=list(selected_features_set),
-            profile=profile,
-            feature_table=feature_table,
-            feature_shapes=feature_shapes,
-            feature_visibility_rules=resolved_feature_inputs.feature_visibility_rules,
-            specific_color_rules=resolved_feature_inputs.specific_color_rules,
-            default_color_map=resolved_feature_inputs.default_color_map,
-            canvas_config=legend_canvas_config,
-            record_features=_resolved_record_features,
-        )
         legend_slots, legend_annotations = plan_circular_annotation_slots(
             resolved_annotations,
             records,
@@ -3175,6 +3176,14 @@ def assemble_circular_diagram_from_records(
                 legend_table,
             ).get_group()
 
+    legend_row_facts = LegendRowFacts(
+        records=records,
+        feature_config=feature_config,
+        gc_config=gc_config,
+        skew_config=skew_config,
+        legend_table=legend_table,
+    )
+
     merged_canvas = Drawing(
         filename=f"{output_prefix}.svg",
         size=(f"{grid_layout.bounds.width}px", f"{grid_layout.bounds.height}px"),
@@ -3183,6 +3192,7 @@ def assemble_circular_diagram_from_records(
         ),
         debug=False,
     )
+    attach_legend_row_facts(merged_canvas, legend_row_facts)
     used_ids: set[str] = set()
     record_targets: list[Group] = []
     grid_overlay_obstacles: list[Aabb] = []

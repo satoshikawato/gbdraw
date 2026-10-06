@@ -293,19 +293,15 @@ const compilePlanBundle = ({
     // that renders none of them draws no row for the category (OV-45).
     const renderedIdsIn = (resultIndex) => legendRenderedIds
       .filter(id => renderedResultIndexes(catalogAdmission, id).has(resultIndex));
-    // OV-46: a row with no known features cannot be tied to the Results that
-    // draw it. Each Result may miss it; admission requires one Result to draw it.
-    const drawnByUnknownResults = !allowMissing && legendRenderedIds.length === 0
-      && operationsByResult.length > 1;
-    const allowMissingIn = (resultIndex) => allowMissing || drawnByUnknownResults
+    // A row of unknown features may be absent from a Result that does not draw it
+    // or whose draft removed it; admission decides that from Python's Legend row
+    // facts (`metadata.legendRows`, OV-46, OV-63), not here.
+    const allowMissingIn = (resultIndex) => allowMissing
       || (legendRenderedIds.length > 0 && renderedIdsIn(resultIndex).length === 0);
-    const anyResultMark = drawnByUnknownResults ? { requiredInAnyResult: true } : {};
     if (hasOwn(legendColorOverrides, caption)) {
       const color = normalizePaint(legendColorOverrides[caption], 'legend color');
       if (color) operationsByResult.forEach((operations, resultIndex) => {
-        operations.legendFills.push({
-          caption: targetCaption, color, allowMissing: allowMissingIn(resultIndex), ...anyResultMark
-        });
+        operations.legendFills.push({ caption: targetCaption, color, allowMissing: allowMissingIn(resultIndex) });
       });
     }
     const stroke = legendStrokeOverrides[caption];
@@ -315,7 +311,7 @@ const compilePlanBundle = ({
       if (strokeColor || strokeWidth !== null) operationsByResult.forEach((operations, resultIndex) => {
         operations.legendStrokes.push({
           caption: targetCaption, strokeColor, strokeWidth, allowMissing: allowMissingIn(resultIndex),
-          renderedIds: renderedIdsIn(resultIndex), ...anyResultMark
+          renderedIds: renderedIdsIn(resultIndex)
         });
       });
     }
