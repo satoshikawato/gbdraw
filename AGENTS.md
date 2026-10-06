@@ -30,6 +30,24 @@ Guidance for automated agents working in this repository.
   entry added to a registered baseline or allowlist). Wait for the Owner's
   approval.
 
+## Workspace Cleanup
+
+- GitHub deletes a pull request's head branch when the pull request merges.
+  Your local worktree and branch stay; remove them yourself.
+- When your pull request merges and you no longer need its worktree, run
+  `git status` in it, then `git worktree remove <path>` and
+  `git branch -D <branch>`. Keep the worktree while it holds uncommitted work
+  you still need.
+- Remove only the worktrees and branches you created. Merged or idle does not
+  mean unused: another agent may still work in its worktree. To clean up
+  across agents, ask each owner first.
+- Keep logs, evidence, scratch scripts, virtual environments, and backups in
+  one folder per task outside the repository, never inside `.worktrees/`.
+- When a task ends, delete its remaining worktrees, local branches, virtual
+  environments, caches, and backups. Keep its report and handoff notes. PR body
+  drafts and session logs need no archive. A backup script keeps at most three
+  snapshots.
+
 ## Project Summary
 
 - `gbdraw` is a Python 3.10+ bioinformatics tool for publication-quality genome diagrams.
