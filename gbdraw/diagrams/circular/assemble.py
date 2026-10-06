@@ -316,6 +316,8 @@ def _prepare_circular_annotation_tracks(
     )
     if not bundle.set_ids and not bundle.annotations:
         return slots, bundle, {}
+    # The planner generates the slot list whenever annotations are present.
+    assert slots is not None
     relevant = tuple(item for item in bundle.annotations if item.record_index == record_index)
 
     record_lengths = {record_index: len(gb_record.seq)}
@@ -1503,13 +1505,13 @@ def _sync_legend_table_for_circular_slots(
                 }
     if conservation_tracks:
         if any(track.track_color for track in conservation_tracks):
-            for track in conservation_tracks:
+            for conservation_track in conservation_tracks:
                 min_color, max_color = conservation_track_gradient_colors(
-                    track.track_color,
+                    conservation_track.track_color,
                     default_min_color=cfg.objects.conservation.min_color,
                     default_max_color=cfg.objects.conservation.max_color,
                 )
-                out[_unique_legend_key(out, track.track_label)] = {
+                out[_unique_legend_key(out, conservation_track.track_label)] = {
                     "type": "gradient",
                     "min_color": min_color,
                     "max_color": max_color,
@@ -1562,7 +1564,10 @@ def _draw_resolved_circular_slot(
     """Draw one resolved circular slot."""
     cfg = render_context.profile.config
     renderer = str(resolved_slot.renderer)
-    norm_factor_override = float(resolved_slot.anchor_radius_px) / float(canvas_config.radius)
+    # Radial layout always resolves a radius; float(None) already failed here before.
+    anchor_radius_px = resolved_slot.anchor_radius_px
+    assert anchor_radius_px is not None
+    norm_factor_override = float(anchor_radius_px) / float(canvas_config.radius)
     if renderer == "spacer":
         return canvas
 
@@ -1633,12 +1638,12 @@ def _draw_resolved_circular_slot(
                 f"{int(resolved_slot.slot_index) + 1}_{resolved_slot.id}"
             )
         if use_feature_anchor_override or not math.isclose(
-            float(resolved_slot.anchor_radius_px),
+            float(anchor_radius_px),
             float(canvas_config.radius),
             rel_tol=1e-9,
             abs_tol=1e-9,
         ):
-            feature_kwargs["feature_anchor_radius_px"] = float(resolved_slot.anchor_radius_px)
+            feature_kwargs["feature_anchor_radius_px"] = float(anchor_radius_px)
         return add_record_group_on_canvas(
             canvas,
             gb_record,
@@ -1671,7 +1676,7 @@ def _draw_resolved_circular_slot(
         ).strip().lower()
         if label_side != "none" or tick_side != "none":
             tick_group_kwargs: dict[str, Any] = {
-                "radius_override": float(resolved_slot.anchor_radius_px),
+                "radius_override": float(anchor_radius_px),
             }
             if use_slot_tick_options or tick_layout is not None:
                 tick_group_kwargs["label_side"] = label_side

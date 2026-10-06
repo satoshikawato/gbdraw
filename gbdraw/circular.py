@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 from dataclasses import replace
 from tempfile import TemporaryDirectory
-from typing import Optional
+from typing import Any, Literal, Mapping, Optional, Sequence, cast
 from .io.cli_tables import (
     read_circular_track_table,
 )
@@ -782,7 +782,7 @@ def circular_main(cmd_args) -> None:
             )
         return
 
-    args: argparse.Namespace = _get_args(cmd_args)
+    args = _get_args(cmd_args)
     if args.losat_output_dir:
         preflight_output_paths(
             (Path(args.losat_output_dir) / LOSAT_CONSERVATION_OUTPUT_NAME,),
@@ -861,7 +861,11 @@ def _cli_ring_options(*, _args: argparse.Namespace, **values) -> CircularDiagram
 def _ring_output_files(run_result: DiagramRunResult, output_dir: Path) -> list[tuple[str, str]]:
     """Per-ring raw TSVs and a ``--conservation_table`` manifest (design 3.7)."""
 
-    options = run_result.canonical_request.options
+    # A Circular run result always carries its Circular request.
+    request = cast(
+        CircularDiagramRequest | CircularBatchRequest, run_result.canonical_request
+    )
+    options = request.options
     rings = tuple(getattr(options, "conservation_search_results", None) or ())
     if not rings:
         raise ValidationError(
@@ -1011,7 +1015,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         else None
     )
     circular_track_order: str | None = None if circular_track_table else args.circular_track_order
-    circular_track_slot_specs: list[str | CircularTrackSlot] = (
+    circular_track_slot_specs: Sequence[str | CircularTrackSlot] = (
         parse_circular_track_slots(
             circular_track_table.slot_specs,
             _allow_legacy_transport=allow_legacy_track_transport,
@@ -1060,7 +1064,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     line_stroke_width: Optional[float] = args.line_stroke_width
     track_type: str = args.track_type
     strandedness = args.separate_strands
-    scale_interval: Optional[int] = args.scale_interval
+    scale_interval = args.scale_interval
     if (
         not multi_record_canvas
         and bool(multi_record_positions)
@@ -1193,7 +1197,7 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
             "put r= and/or w= on the matching circular track slot."
         )
 
-    circular_track_slots_or_none: list[str] | list[CircularTrackSlot] | None = None
+    circular_track_slots_or_none: Sequence[str | CircularTrackSlot] | None = None
     if circular_track_slot_specs:
         circular_track_slots_or_none = circular_track_slot_specs
     elif circular_track_order:
@@ -1277,7 +1281,10 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         annotations=annotation_options,
         output=CircularOutputOptions(
             legend=legend,
-            plot_title_position=plot_title_position,
+            # argparse restricts --plot_title_position to the Circular choices.
+            plot_title_position=cast(
+                'Literal["none", "top", "bottom"]', plot_title_position
+            ),
         ),
         selected_features_set=tuple(selected_features_set),
         feature_visibility_table_file=feature_table_path or None,
@@ -1320,12 +1327,16 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     )
     request_records = record_manifest.records
 
+    canonical_request: CircularDiagramRequest | CircularBatchRequest
     if multi_record_canvas:
         canonical_request = CircularDiagramRequest(
             records=request_records,
             options=request_options,
             layout=CircularMultiRecordOptions(
-                multi_record_size_mode=multi_record_size_mode,
+                # argparse restricts --multi_record_size_mode to these choices.
+                multi_record_size_mode=cast(
+                    'Literal["linear", "auto", "equal"]', multi_record_size_mode
+                ),
                 multi_record_min_radius_ratio=multi_record_min_radius_ratio,
                 multi_record_column_gap_ratio=multi_record_column_gap_ratio,
                 multi_record_row_gap_ratio=multi_record_row_gap_ratio,
@@ -1402,8 +1413,8 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
 
     outputs: list[RenderedSvg] = []
     track_slot_geometry_records = []
-    session_feature_metadata = []
-    session_biological_feature_metadata = []
+    session_feature_metadata: list[Mapping[str, Any]] = []
+    session_biological_feature_metadata: list[Mapping[str, Any]] = []
     session_interactive_contexts = []
     for result_index, rendered_item in enumerate(rendered_items):
         for warning in rendered_item.annotation_warnings:
@@ -1414,10 +1425,12 @@ def run_circular_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
         if not rendered_item.output_paths:
             raise ValidationError("Circular request renderer did not produce an SVG output.")
         svg_path = Path(rendered_item.output_paths[0])
+        # Every rendered item (also of a batch) comes from a single-diagram request.
+        item_request = cast(CircularDiagramRequest, rendered_item.request)
         rendered_svg = RenderedSvg(
             output_prefix=str(svg_path.with_suffix("")),
             svg_path=svg_path,
-            result_name=rendered_item.request.output.output_prefix,
+            result_name=item_request.output.output_prefix,
         )
         outputs.append(rendered_svg)
         track_slot_geometry_records.extend(

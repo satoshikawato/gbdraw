@@ -9,7 +9,7 @@ import argparse
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence, cast
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.cli_tables import (
@@ -696,7 +696,10 @@ def _project_web_file_inventory(
     has_current_bindings = (
         isinstance(bindings_value, Mapping) and bindings_value.get("schema") in (1, 2)
     )
-    bindings = bindings_value if has_current_bindings else {}
+    # has_current_bindings is true only when bindings_value is a Mapping.
+    bindings = cast(
+        "Mapping[str, Any]", bindings_value if has_current_bindings else {}
+    )
     direct_source_fields = {
         "conservationLosatFastaSources": "c_conservation_fastas",
         "conservationSequenceSources": "c_conservation_sequence_sources",
@@ -1027,7 +1030,7 @@ def collect_embedded_files_from_cli_args(
             if value_index < len(cli_args) and _is_embeddable_path(cli_args[value_index]):
                 table_slot = _append_cli_input(files, cli_args[value_index], depth=False)
                 bindings.append(_binding(value_index, table_slot, cli_args[value_index]))
-                table_entry = {
+                table_entry: dict[str, Any] = {
                     "argIndex": value_index,
                     "kind": _cli_table_kind(token),
                     "slot": table_slot,
