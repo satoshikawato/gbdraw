@@ -1,3 +1,4 @@
+// @ts-check
 import {
   OperationError,
   RecordDisplayControl,

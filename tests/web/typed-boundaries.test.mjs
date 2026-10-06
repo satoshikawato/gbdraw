@@ -27,18 +27,10 @@ import { maskJavaScript } from '../../tools/web-change-source.mjs';
 import { WEB_OWNER_GRAPH_DEFAULTS } from '../../tools/web-owner-graph-detectors.mjs';
 
 const UNCHECKED_MODULES = new Set([
-  'app.js',
   'app/candidate-render.js',
   'app/feature-dom.js',
   'app/preview-runtime.js',
-  'app/python-helpers.js',
   'app/results.js',
-  'app/right-drawer.js',
-  'app/run-info.js',
-  'app/ui.js',
-  'components.js',
-  'services/pyodide-assets.js',
-  'services/standalone-interactivity-assets.js',
   'services/svg-result-ingestion.js',
   'services/svg-result-normalization.js',
   'services/svg-serialization.js'

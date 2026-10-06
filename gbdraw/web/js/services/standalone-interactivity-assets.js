@@ -1,3 +1,4 @@
+// @ts-check
 // Shared standalone interactive SVG runtime/style assets.
 // The embedded display denylist retains an unsupported historical protein-ID
 // shape defensively; it is not a supported session migration path.
