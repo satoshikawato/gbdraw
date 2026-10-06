@@ -1,3 +1,4 @@
+// @ts-check
 import { diagnosticError, normalizeUserFacingError } from './error-normalization.js';
 import { state, sessionOperationAvailability, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
@@ -235,6 +236,63 @@ import {
 
 const { nextTick } = window.Vue;
 
+/** @import { ActiveWebConfig } from './session-active-config-contract.js' */
+/** @import { CanonicalRenderEnvelope, CanonicalRenderRequest } from './session-request.js' */
+/** @import { FeatureCatalog } from './feature-catalog.js' */
+/** @import { SessionResourceSource } from './session-resources.js' */
+/** @import { FeatureOverrideDraft } from './feature-placement.js' */
+
+/**
+ * The editor state of a Session: the Python-owned legend and stroke rows (R7)
+ * and the admitted feature catalog.
+ * @typedef {object} SessionEditorState
+ * @property {Record<string, any>} legend
+ * @property {Record<string, any>} featureStrokes
+ * @property {Record<string, any>} originalSvgStroke
+ * @property {Record<string, any> | null} alignmentResetReceipt
+ * @property {FeatureCatalog | null} featureCatalog
+ */
+
+/**
+ * The feature edits of a Session. `featureOverrides` carries the identity-keyed
+ * rows that JavaScript builds itself; the other fields are open.
+ * @typedef {object} SessionFeatureState
+ * @property {number} selectedFeatureRecordIdx
+ * @property {Record<string, any>} featureColorOverrides
+ * @property {Record<string, any>[]} featureVisibilityManualRules
+ * @property {FeatureOverrideDraft} featureOverrides
+ * @property {Record<string, any>[]} labelOverrideRows
+ * @property {Record<string, any>} labelTextBulkOverrides
+ */
+
+/**
+ * A gbdraw Session in the current writer format (`SESSION_VERSION`; the
+ * writer format only, readers take unvalidated data, R14). The render fields
+ * stay in `CanonicalRenderRequest` and `ActiveWebConfig`; the top-level fields
+ * equal `CURRENT_SESSION_TOP_LEVEL_FIELDS` in `gbdraw/session_io.py` (a pytest
+ * checks this list). `title`, `runMetadata`, `legacyArtifacts`, and
+ * `cliInvocation` are written only when they exist.
+ * @typedef {object} GbdrawSession
+ * @property {string} format `gbdraw-session`.
+ * @property {number} version
+ * @property {string} createdAt
+ * @property {string} [title]
+ * @property {CanonicalRenderRequest} renderRequest
+ * @property {CanonicalRenderEnvelope['resources']} resources
+ * @property {CanonicalRenderEnvelope['webFiles']} webFiles
+ * @property {ActiveWebConfig} config
+ * @property {Record<string, any>} ui
+ * @property {Record<string, any>[]} results
+ * @property {SessionFeatureState} features
+ * @property {SessionEditorState} editorState
+ * @property {Record<string, any>} orthogroupState
+ * @property {Record<string, any>} losatCache
+ * @property {Record<string, any>} losatDerivedCache
+ * @property {Record<string, any>} proteinIdentityManifest
+ * @property {Record<string, any>} [legacyArtifacts]
+ * @property {Record<string, any>} [runMetadata]
+ * @property {Record<string, any>} [cliInvocation]
+ */
 export const SESSION_VERSION = 45;
 const CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40;
 const LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32;
@@ -246,7 +304,9 @@ const LOSAT_DERIVED_CACHE_LIMIT = 16;
 // D-25 (PD-OI-079): a Result without current feature metadata (a legacy
 // Session) is saved only after one Generate; the error offers that Generate.
 const sessionSaveRequiresGenerate = () => diagnosticError(
-  'SESSION_SAVE_REQUIRES_GENERATE', {}, { operation: 'session-save', stage: 'result-admission' }
+  'SESSION_SAVE_REQUIRES_GENERATE', {}, /** @type {Record<string, any>} */ ({
+    operation: 'session-save', stage: 'result-admission'
+  })
 );
 // A Save wrapper keeps a recognized cause; otherwise it reports the bounded fallback.
 const recognizedCauseOr = (error, fallback) => {
@@ -533,6 +593,10 @@ const normalizePositiveNumberOrNull = (value) => {
   return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
 };
 
+/**
+ * @param {Record<string, any>} [configData] The stored active configuration.
+ * @returns {Record<string, any>}
+ */
 const migrateImportedCircularTrackSlots = (configData = {}) => {
   const adv = configData && typeof configData === 'object' ? configData.adv : null;
   if (!adv || typeof adv !== 'object' || Array.isArray(adv)) return configData;
@@ -594,6 +658,11 @@ const migratePersistedWebOptionValues = (configData = {}) => {
   }));
 };
 
+/**
+ * @param {Record<string, any>} [configData] The stored active configuration.
+ * @param {number | null} [sourceSessionVersion]
+ * @returns {Record<string, any>}
+ */
 const migrateImportedLinearTrackSlots = (configData = {}, sourceSessionVersion = null) => {
   const adv = configData && typeof configData === 'object' ? configData.adv : null;
   if (!adv || typeof adv !== 'object' || Array.isArray(adv)) return configData;
@@ -1338,13 +1407,18 @@ const withoutLegacyNullCircularSlotSpacing = (configData) => {
   };
 };
 
+/**
+ * @param {Record<string, any>} data An unvalidated Session of a supported version.
+ * @param {number} sourceSessionVersion
+ * @returns {GbdrawSession}
+ */
 const migrateSessionDataToCurrent = (data, sourceSessionVersion) => {
   const readsLegacyOptionValues = sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION;
   const migratedOptions = readsLegacyOptionValues
     ? migratePersistedWebOptionValues(data.config)
     : data.config;
   const circularSlotConfig = migrateImportedCircularTrackSlots(migratedOptions);
-  return {
+  return /** @type {GbdrawSession} */ ({
     ...data,
     version: SESSION_VERSION,
     config: migrateLegacyFeatureRenderingConfig(
@@ -1356,7 +1430,7 @@ const migrateSessionDataToCurrent = (data, sourceSessionVersion) => {
       ),
       sourceSessionVersion <= 33
     )
-  };
+  });
 };
 
 const LEGACY_CONFIG_KEYS = new Set([
@@ -1619,10 +1693,10 @@ const preflightSessionImport = async (sessionData) => {
   const data = currentSession
     ? promotedData
     : migrateSessionDataToCurrent(promotedData, sourceSessionVersion);
-  const comparisonClassification = classifyImportedComparisonIntent({
+  const comparisonClassification = classifyImportedComparisonIntent(/** @type {Record<string, any>} */ ({
     renderRequest: data.renderRequest,
     resources: data.resources
-  });
+  }));
   const projectionRenderRequest = (
     data.renderRequest?.mode === 'linear'
     && comparisonClassification.disposition
@@ -2423,7 +2497,7 @@ const cacheSerializedFileDescriptor = (file, descriptor) => {
 
 const serializeFile = async (file) => {
   if (!file) return null;
-  const source = getSessionResourceSource(file);
+  const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(file));
   if (source?.descriptor) {
     const visibleName = String(file.name || '').trim();
     const descriptor = visibleName && visibleName !== source.descriptor.name
@@ -3155,6 +3229,10 @@ export const canonicalRenderArtifactOwner = Object.freeze({
   }
 });
 
+/**
+ * @param {Record<string, any>} filesData
+ * @param {{ adoptCanonicalPayloads?: boolean, resolveRecordInputs?: boolean, targetState?: Record<string, any> }} [options]
+ */
 const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordInputs = true, targetState = state } = {}) => {
   targetState.matchSequenceRegistry?.reset?.();
   targetState.circularRecordList.value = [];
@@ -3295,11 +3373,11 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordIn
       );
     }
     const comparisonFiles = new Map(
-      (Array.isArray(filesData.linearComparisons) ? filesData.linearComparisons : [])
+      /** @type {[string, any][]} */ ((Array.isArray(filesData.linearComparisons) ? filesData.linearComparisons : [])
         .map((comparison) => [
           String(comparison?.id || ''),
           deserializeFile(comparison?.file)
-        ])
+        ]))
         .filter(([id]) => id)
     );
     const planWithFiles = normalizeLinearComparisonPlan(targetState.linearComparisonPlan);
@@ -3352,28 +3430,28 @@ const reconcileDepthTrackStateAfterSessionFiles = () => {
       normalizedTracks.push(normalizeDepthTrackConfig(null, normalizedTracks.length, state.adv));
     }
   } else {
-    normalizedTracks = reconcileDepthTracksToFiles({
+    normalizedTracks = reconcileDepthTracksToFiles(/** @type {Record<string, any>} */ ({
       files: circularDepthFiles,
       depthTracks: state.adv.depth_tracks,
       targetCount: Math.max(1, circularDepthCount),
       defaults
-    });
+    }));
   }
   state.adv.depth_tracks.splice(0, state.adv.depth_tracks.length, ...normalizedTracks);
 
   state.adv.circular_track_slots.splice(
     0,
     state.adv.circular_track_slots.length,
-    ...dropInvalidManagedDepthSlots({
+    ...dropInvalidManagedDepthSlots(/** @type {Record<string, any>} */ ({
       slots: state.adv.circular_track_slots,
       activeCount: circularDepthCount
-    })
+    }))
   );
-  syncDepthSlotLabels({
+  syncDepthSlotLabels(/** @type {Record<string, any>} */ ({
     slots: state.adv.circular_track_slots,
     depthTracks: state.adv.depth_tracks,
     activeCount: circularDepthCount
-  });
+  }));
   state.adv.circular_track_slots.splice(
     0,
     state.adv.circular_track_slots.length,
@@ -3388,16 +3466,16 @@ const reconcileDepthTrackStateAfterSessionFiles = () => {
   state.adv.linear_track_slots.splice(
     0,
     state.adv.linear_track_slots.length,
-    ...dropInvalidManagedDepthSlots({
+    ...dropInvalidManagedDepthSlots(/** @type {Record<string, any>} */ ({
       slots: state.adv.linear_track_slots,
       activeCount: linearDepthCount
-    })
+    }))
   );
-  syncDepthSlotLabels({
+  syncDepthSlotLabels(/** @type {Record<string, any>} */ ({
     slots: state.adv.linear_track_slots,
     depthTracks: state.adv.depth_tracks,
     activeCount: linearDepthCount
-  });
+  }));
   state.adv.linear_track_slots.splice(
     0,
     state.adv.linear_track_slots.length,
@@ -3995,6 +4073,10 @@ const applySessionFeatureRecoveryPlan = (plan, { generationId = 'session-feature
   synchronizeRestoredFeatureSummaryStatus({ generationId });
 };
 
+/**
+ * @param {string | null} [titleOverride]
+ * @param {{ linearRecordCatalog?: any, recordDisplayRows?: any, storedConfig?: ActiveWebConfig, savedUi?: Record<string, any>, isCurrent?: () => boolean }} [options]
+ */
 const exportSessionDocument = async (
   titleOverride = null,
   { linearRecordCatalog = null, recordDisplayRows = null, storedConfig, savedUi, isCurrent } = {}
@@ -4135,7 +4217,8 @@ const exportSessionDocument = async (
   ) {
     throw new Error('Save Session requires a valid protein identity manifest.');
   }
-  const sessionData = {
+  /** @type {GbdrawSession} */
+  const sessionData = /** @satisfies {GbdrawSession} */ ({
     format: 'gbdraw-session',
     version: SESSION_VERSION,
     createdAt: new Date().toISOString(),
@@ -4180,7 +4263,7 @@ const exportSessionDocument = async (
       ? rawReactiveValue(state.proteinIdentityManifest.value)
       : cloneJsonData(state.proteinIdentityManifest.value),
     cliInvocation: exportableCliInvocation
-  };
+  });
 
   const legacyArtifacts = buildSessionLegacyArtifacts({
     legacyRawCandidates,
@@ -4468,12 +4551,12 @@ const importSessionDocument = async (e, options = {}) => {
     };
     if (sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION) {
       try {
-        legacyFeatureRecoveryPlan = await buildSessionFeatureRecoveryPlan({
+        legacyFeatureRecoveryPlan = await buildSessionFeatureRecoveryPlan(/** @type {any} */ ({
           snapshot: legacyFeatureSnapshot,
           featureVisibilityTsv: serializeFeatureVisibilityRules(
             features.featureVisibilityManualRules || features.featureVisibilityRules || []
           )
-        });
+        }));
       } catch (error) {
         legacyFeatureRecoveryPlan = { status: 'failed', warning: normalizeUserFacingError(error).summary };
       }
@@ -4488,7 +4571,7 @@ const importSessionDocument = async (e, options = {}) => {
     if (sourceSessionVersion < SESSION_VERSION) {
       const recovered = legacyFeatureRecoveryPlan?.recoveredFeatureState;
       const sourceFeatures = !validatedSessionCatalog && hasRenderedIdFeatureEdits(features)
-        ? await extractSessionSourceFeatures({ snapshot: legacyFeatureSnapshot })
+        ? await extractSessionSourceFeatures(/** @type {any} */ ({ snapshot: legacyFeatureSnapshot }))
         : null;
       const migration = migrateSessionFeatureEdits({
         features,

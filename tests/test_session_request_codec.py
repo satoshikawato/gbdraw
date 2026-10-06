@@ -71,6 +71,7 @@ from gbdraw.layout.similarity_alignment import (
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.shapes import resolve_feature_rendering
+from gbdraw.session_io import CURRENT_SESSION_TOP_LEVEL_FIELDS, CURRENT_SESSION_VERSION
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
     SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
@@ -3004,8 +3005,25 @@ def test_web_canonical_render_request_typedef_matches_codec_top_level_fields() -
     assert f"export const CANONICAL_REQUEST_SCHEMA = {CANONICAL_REQUEST_SCHEMA};" in source
 
 
+_WEB_CONFIG_JS = Path(__file__).parents[1] / "gbdraw" / "web" / "js" / "services" / "config.js"
+
+
+def test_web_gbdraw_session_typedef_matches_session_io_fields_and_version() -> None:
+    source = _WEB_CONFIG_JS.read_text(encoding="utf-8")
+    # `files` is accepted only for Sessions older than version 40; the current
+    # writer never writes it and the current reader rejects it.
+    assert _jsdoc_typedef_property_names(source, "GbdrawSession") == (
+        set(CURRENT_SESSION_TOP_LEVEL_FIELDS) - {"files"}
+    )
+    assert f"export const SESSION_VERSION = {CURRENT_SESSION_VERSION};" in source
+
+
 def test_jsdoc_typedef_property_parser_is_strict() -> None:
     with pytest.raises(AssertionError, match="expected exactly one"):
         _jsdoc_typedef_property_names("/** @typedef {object} Other\n * @property {number} a\n */", "Missing")
     with pytest.raises(AssertionError, match="declares no @property"):
         _jsdoc_typedef_property_names("/**\n * @typedef {object} Empty\n */", "Empty")
+    assert _jsdoc_typedef_property_names(
+        "/**\n * @typedef {object} Mixed\n * @property {string} a\n * @property {number} [b]\n */",
+        "Mixed",
+    ) == {"a", "b"}
