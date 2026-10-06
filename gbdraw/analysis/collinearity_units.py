@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
-from typing import Literal, Sequence
+from typing import Literal, Sequence, cast
 
 from Bio.SeqRecord import SeqRecord
 
@@ -54,7 +54,7 @@ def normalize_collinearity_unit_mode(mode: str | None) -> CollinearityUnitMode:
     normalized = str(mode or "auto").strip().lower()
     if normalized not in {"auto", "cds", "locus"}:
         raise ValidationError("collinear_unit_mode must be one of: auto, cds, locus")
-    return normalized  # type: ignore[return-value]
+    return cast(CollinearityUnitMode, normalized)
 
 
 def _geneid_db_xref(protein: CdsProtein) -> str | None:

@@ -16,7 +16,18 @@ import math
 import re
 import sys
 import unicodedata
-from typing import Callable, Literal, Mapping, Sequence
+from typing import (
+    Callable,
+    Literal,
+    Mapping,
+    NamedTuple,
+    Protocol,
+    Sequence,
+    SupportsFloat,
+    TypedDict,
+    TypeGuard,
+    cast,
+)
 
 import pandas as pd
 from Bio.SeqRecord import SeqRecord
@@ -663,8 +674,9 @@ def canonical_feature_analysis_id(
     for raw_part in location_parts:
         if len(raw_part) != 3:
             raise ValidationError("Each location part must contain start, end, and strand.")
-        start = int(raw_part[0])  # type: ignore[arg-type]
-        end = int(raw_part[1])  # type: ignore[arg-type]
+        # Only the strand part may be None.
+        start = int(cast(int, raw_part[0]))
+        end = int(cast(int, raw_part[1]))
         part_strand = int(raw_part[2]) if raw_part[2] in {-1, 1} else None
         if start < 0 or end <= start:
             raise ValidationError("Feature identity location parts must be 0-based, end-exclusive intervals.")
@@ -914,7 +926,9 @@ def validate_protein_identity_manifest(
         protein_set_hash = str(record_analyses[analysis_id]["proteinSetHash"])
         expected_feature_ids = {
             str(protein["featureAnalysisId"])
-            for protein in protein_sets[protein_set_hash]["proteins"]
+            for protein in cast(
+                "Sequence[Mapping[str, object]]", protein_sets[protein_set_hash]["proteins"]
+            )
         }
         normalized_runtime_ids: dict[str, str] = {}
         for feature_id, runtime_handle in runtime_ids.items():
@@ -1535,7 +1549,7 @@ def _fasta_record_instance_key(
         protein_set = manifest.protein_sets[str(analysis["proteinSetHash"])]
         aa_by_feature_id = {
             str(protein["featureAnalysisId"]): str(protein["aaSha256"])
-            for protein in protein_set["proteins"]
+            for protein in cast("Sequence[Mapping[str, object]]", protein_set["proteins"])
         }
         runtime_ids = binding["runtimeIds"]
         if not isinstance(runtime_ids, Mapping):
@@ -1578,7 +1592,7 @@ def raw_protein_tsv_matches_bindings(
     return True
 
 
-def is_protein_losat_cache_entry(entry: Mapping[str, object] | object) -> bool:
+def is_protein_losat_cache_entry(entry: Mapping[str, object] | object) -> TypeGuard[Mapping[str, object]]:
     """Discriminate a current schema-4 protein raw entry."""
 
     if not isinstance(entry, Mapping):
@@ -1603,7 +1617,9 @@ def is_protein_losat_cache_entry(entry: Mapping[str, object] | object) -> bool:
     )
 
 
-def is_legacy_protein_losat_cache_entry(entry: Mapping[str, object] | object) -> bool:
+def is_legacy_protein_losat_cache_entry(
+    entry: Mapping[str, object] | object,
+) -> TypeGuard[Mapping[str, object]]:
     """Discriminate an imported schema-2 blastp candidate."""
 
     return (
@@ -1632,15 +1648,15 @@ def validate_protein_raw_entry_references(
         )
         pair_identity = build_protein_losat_pair_identity(
             authority,
-            query_record_instance_key=str(entry["queryRecordInstanceKey"]),  # type: ignore[index]
-            subject_record_instance_key=str(entry["subjectRecordInstanceKey"]),  # type: ignore[index]
+            query_record_instance_key=str(entry["queryRecordInstanceKey"]),
+            subject_record_instance_key=str(entry["subjectRecordInstanceKey"]),
         )
         if (
-            str(entry["queryProteinSetHash"]) != pair_identity.query_protein_set_hash  # type: ignore[index]
-            or str(entry["subjectProteinSetHash"]) != pair_identity.subject_protein_set_hash  # type: ignore[index]
-            or str(entry["queryRuntimeBindingHash"])  # type: ignore[index]
+            str(entry["queryProteinSetHash"]) != pair_identity.query_protein_set_hash
+            or str(entry["subjectProteinSetHash"]) != pair_identity.subject_protein_set_hash
+            or str(entry["queryRuntimeBindingHash"])
             != pair_identity.query_runtime_binding_hash
-            or str(entry["subjectRuntimeBindingHash"])  # type: ignore[index]
+            or str(entry["subjectRuntimeBindingHash"])
             != pair_identity.subject_runtime_binding_hash
         ):
             return False
@@ -1652,7 +1668,8 @@ def validate_protein_raw_entry_references(
             args=args,
             program=str(entry.get("program") or "blastp"),
             outfmt=str(entry.get("outfmt") or "6"),
-            search_context=entry.get("searchContext"),
+            # A non-string context raises TypeError in the key builder, handled below.
+            search_context=cast("str | None", entry.get("searchContext")),
         )
         if str(entry.get("key") or "") != expected_key:
             return False
@@ -1785,7 +1802,7 @@ def validate_legacy_protein_raw_candidate_envelope(
     if value.get("schema") != LEGACY_PROTEIN_RAW_CANDIDATE_SCHEMA or not isinstance(value.get("entries"), list):
         raise ValidationError("Legacy protein raw candidate envelope must use schema 1.")
     entries: list[dict[str, object]] = []
-    for candidate in value["entries"]:
+    for candidate in cast("Sequence[object]", value["entries"]):
         if not isinstance(candidate, Mapping):
             raise ValidationError("Legacy protein candidate must be an object.")
         state = str(candidate.get("state") or "")
@@ -1797,7 +1814,7 @@ def validate_legacy_protein_raw_candidate_envelope(
         entries.append(
             make_legacy_protein_raw_candidate(
                 original,
-                state=state,  # type: ignore[arg-type]
+                state=cast(Literal["pending", "promoted", "rejected"], state),
                 rejection_reason=(
                     str(candidate.get("rejectionReason"))
                     if candidate.get("rejectionReason") is not None
@@ -2273,7 +2290,7 @@ class LosatpCacheManager(LosatRawCache):
                 "text": str(entry.get("text") or ""),
                 "program": str(entry.get("program") or "blastp"),
                 "outfmt": str(entry.get("outfmt") or "6"),
-                "args": [str(arg) for arg in entry.get("args") or ()],
+                "args": [str(arg) for arg in cast("Sequence[object]", entry.get("args") or ())],
                 "queryProteinSetHash": str(entry.get("queryProteinSetHash") or ""),
                 "subjectProteinSetHash": str(entry.get("subjectProteinSetHash") or ""),
                 "queryRuntimeBindingHash": str(
@@ -2338,7 +2355,13 @@ class LosatpCacheManager(LosatRawCache):
                 )
             protein_tuple = tuple(proteins)
             fasta_text = proteins_to_fasta(protein_tuple)
-            if _fasta_record_instance_key(fasta_text, self.identity_manifest) != normalized_key:
+            # set_identity_manifest above stored the (non-None) extraction manifest.
+            if (
+                _fasta_record_instance_key(
+                    fasta_text, cast(ProteinIdentityManifest, self.identity_manifest)
+                )
+                != normalized_key
+            ):
                 raise ValidationError(
                     "Stable protein extraction does not match its record-instance binding."
                 )
@@ -2407,7 +2430,7 @@ class LosatpCacheManager(LosatRawCache):
             return None
         if str(cached.get("outfmt") or "") != outfmt:
             return None
-        if tuple(str(arg) for arg in cached.get("args") or ()) != tuple(str(arg) for arg in args):
+        if tuple(str(arg) for arg in cast("Sequence[object]", cached.get("args") or ())) != tuple(str(arg) for arg in args):
             return None
         query_ids = _binding_runtime_ids(
             self.identity_manifest,
@@ -2474,7 +2497,8 @@ class LosatpCacheManager(LosatRawCache):
             subject_proteins=subject_proteins,
             query_fasta=query_fasta,
             subject_fasta=subject_fasta,
-            identity_manifest=self.identity_manifest,  # type: ignore[arg-type]
+            # _pair_identity_from_fasta above raised when the manifest is None.
+            identity_manifest=cast(ProteinIdentityManifest, self.identity_manifest),
             expected_args=args,
             expected_program="blastp",
             expected_outfmt="6",
@@ -2532,11 +2556,11 @@ class LosatpCacheManager(LosatRawCache):
         if not raw_protein_tsv_matches_bindings(
             str(entry["text"]),
             query_ids=_binding_runtime_ids(
-                self.identity_manifest,  # type: ignore[arg-type]
+                cast(ProteinIdentityManifest, self.identity_manifest),
                 pair_identity.query_record_instance_key,
             ),
             subject_ids=_binding_runtime_ids(
-                self.identity_manifest,  # type: ignore[arg-type]
+                cast(ProteinIdentityManifest, self.identity_manifest),
                 pair_identity.subject_record_instance_key,
             ),
         ):
@@ -3072,7 +3096,7 @@ def normalize_protein_blastp_mode(mode: str | None) -> ProteinBlastpMode:
             "protein_blastp_mode must be one of: "
             + ", ".join(PROTEIN_BLASTP_MODES)
         )
-    return normalized  # type: ignore[return-value]
+    return cast(ProteinBlastpMode, normalized)
 
 
 def normalize_orthogroup_membership_mode(mode: str | None) -> OrthogroupMembershipMode:
@@ -3104,7 +3128,7 @@ def normalize_orthogroup_membership_mode(mode: str | None) -> OrthogroupMembersh
             f"{ORTHOGROUP_INFERENCE_VERSION} or a legacy alias: "
             + ", ".join(_LEGACY_ORTHOGROUP_MEMBERSHIP_MODES)
         )
-    return normalized  # type: ignore[return-value]
+    return cast(OrthogroupMembershipMode, normalized)
 
 
 def _validate_comparison_columns(hits: DataFrame) -> None:
@@ -3365,7 +3389,7 @@ def _empty_normalized_hit_table(columns: Sequence[str]) -> DataFrame:
 
 def _coverage_coordinate(value: object) -> int | None:
     try:
-        coordinate = float(value)
+        coordinate = float(cast(SupportsFloat, value))
     except (TypeError, ValueError):
         return None
     if not math.isfinite(coordinate):
@@ -3527,7 +3551,7 @@ def _aggregate_hsps_by_protein_pair(
         subject_coverage = min(1.0, float(subject_covered_length) / float(subject_length))
         min_hit_coverage = min(query_coverage, subject_coverage)
 
-        record = representative_row._asdict()
+        record = cast(NamedTuple, representative_row)._asdict()
         record.update(
             {
                 "query_length": query_length,
@@ -3583,7 +3607,7 @@ def _normalize_directional_hit_table(
     for row in normalized_hits.itertuples(index=False):
         bitscore = _row_float(row, "bitscore", 0.0)
         length_product = _row_float(row, "length_product", 0.0)
-        if fallback:
+        if model is None:
             denominator = math.sqrt(max(length_product, _ORTHOGROUP_SPLIT_EPSILON))
             normalized_scores.append(bitscore / denominator)
             continue
@@ -3774,13 +3798,24 @@ def _member_annotation_value(member: OrthogroupMember, source: str) -> str | Non
     return None
 
 
+class _OrthogroupNameAccumulator(TypedDict):
+    text: str
+    source: str
+    source_weight: int
+    source_rank: int
+    members: set[str]
+    records: set[int]
+    representatives: set[str]
+    weak: bool
+
+
 def _iter_orthogroup_name_candidates(
     members: Sequence[OrthogroupMember],
     *,
     include_label: bool,
 ) -> list[OrthogroupNameCandidate]:
     candidate_sources = _ORTHOGROUP_NAME_SOURCE_ORDER if include_label else _ORTHOGROUP_NAME_SOURCE_ORDER[:-1]
-    accumulators: dict[str, dict[str, object]] = {}
+    accumulators: dict[str, _OrthogroupNameAccumulator] = {}
 
     for member in members:
         member_id = str(member.protein_id)
@@ -4095,7 +4130,7 @@ def _canonical_edge_endpoint_ids(
         return query_id, subject_id
     if int(query_protein.record_index) > int(subject_protein.record_index):
         return subject_id, query_id
-    return tuple(sorted((query_id, subject_id)))  # type: ignore[return-value]
+    return cast(tuple[str, str], tuple(sorted((query_id, subject_id))))
 
 
 def _make_ortholog_edge(
@@ -4240,6 +4275,11 @@ def _anchor_core_edge_sort_key(
     )
 
 
+class _SubjectRow(Protocol):
+    @property
+    def subject(self) -> object: ...
+
+
 def _select_anchor_core_edges(
     best_by_direction: Mapping[tuple[str, str], object],
     protein_map: Mapping[str, CdsProtein],
@@ -4247,7 +4287,7 @@ def _select_anchor_core_edges(
 ) -> tuple[_AnchorCoreEvidenceEdge, ...]:
     best_by_query_record = _best_row_by_query_target_record(ranked_direction_rows, protein_map)
     best_subject_by_query_record = {
-        key: str(row.subject)
+        key: str(cast(_SubjectRow, row).subject)
         for key, row in best_by_query_record.items()
     }
     best_score_by_query_record = {
@@ -4431,7 +4471,7 @@ def _select_record_local_paralog_edges(
             reverse_score=float(canonical_reverse_score),
             edge_kind="record_local_paralog",
         )
-        key = tuple(sorted((canonical_query_id, canonical_subject_id)))
+        key = cast(tuple[str, str], tuple(sorted((canonical_query_id, canonical_subject_id))))
         current = selected_by_pair.get(key)
         if current is None or _anchor_core_edge_sort_key(candidate, protein_map) < _anchor_core_edge_sort_key(current, protein_map):
             selected_by_pair[key] = candidate
@@ -4781,18 +4821,21 @@ def _best_evidence_between_protein_and_members(
             )
         ):
             supports[record_kind] = (float(score), row, query_id, subject_id)
-    return tuple(
-        _BestCoreEvidence(
-            support_score=float(support[0]),
-            support_row=support[1],
-            support_query_id=support[2],
-            support_subject_id=support[3],
-            diagnostic_score=float(diagnostic[0]),
-            diagnostic_row=diagnostic[1],
-            diagnostic_query_id=diagnostic[2],
-            diagnostic_subject_id=diagnostic[3],
-        )
-        for support, diagnostic in zip(supports, diagnostics)
+    return cast(
+        tuple[_BestCoreEvidence, _BestCoreEvidence],
+        tuple(
+            _BestCoreEvidence(
+                support_score=float(support[0]),
+                support_row=support[1],
+                support_query_id=support[2],
+                support_subject_id=support[3],
+                diagnostic_score=float(diagnostic[0]),
+                diagnostic_row=diagnostic[1],
+                diagnostic_query_id=diagnostic[2],
+                diagnostic_subject_id=diagnostic[3],
+            )
+            for support, diagnostic in zip(supports, diagnostics)
+        ),
     )
 
 
@@ -5054,14 +5097,14 @@ def _build_anchor_core_orthogroups(
             representative_ids_by_group.setdefault(group_id, set()).add(representative_id)
 
     for edge in anchor_edges:
-        group_id = group_by_protein.get(edge.query_id)
-        if group_id is None:
+        edge_group_id = group_by_protein.get(edge.query_id)
+        if edge_group_id is None:
             continue
-        ortholog_edges_by_group.setdefault(group_id, []).append(
+        ortholog_edges_by_group.setdefault(edge_group_id, []).append(
             _make_ortholog_edge(
-                orthogroup_id=group_id,
-                source_rbh_orthogroup_id=group_id,
-                target_rbh_orthogroup_id=group_id,
+                orthogroup_id=edge_group_id,
+                source_rbh_orthogroup_id=edge_group_id,
+                target_rbh_orthogroup_id=edge_group_id,
                 query_id=edge.query_id,
                 subject_id=edge.subject_id,
                 row=edge.row,
@@ -5237,7 +5280,7 @@ def _build_anchor_core_orthogroups(
                 relation_kind = "related_homolog"
         else:
             relation_kind = "related_homolog"
-        edge_pair = tuple(sorted((canonical_query_id, canonical_subject_id)))
+        edge_pair = cast(tuple[str, str], tuple(sorted((canonical_query_id, canonical_subject_id))))
         edge_key = edge_pair + (relation_kind,)
         if edge_pair in membership_pairs or edge_key in seen_related_pairs:
             continue
@@ -5370,7 +5413,7 @@ def _select_anchor_core_orthogroup_edges_from_directional_hits(
         raise ValidationError("comparison_pairs must not contain duplicates.")
     adjacent_anchor_edges_by_pair = {}
     for query, subject in display_pairs:
-        table = anchor_edge_tables.get(tuple(sorted((query, subject))), _empty_comparison_hits())
+        table = anchor_edge_tables.get(cast(tuple[int, int], tuple(sorted((query, subject)))), _empty_comparison_hits())
         if query > subject:
             table = pd.DataFrame.from_records(
                 [_comparison_record_for_ids(row, str(row.subject), str(row.query))
@@ -5481,7 +5524,7 @@ def _edge_metadata_for_protein_pair(
     subject_id: str,
     edge_indexes: dict[str, _OrthogroupEdgeIndex],
 ) -> dict[str, object]:
-    metadata = {
+    metadata: dict[str, object] = {
         "rbh_orthogroup_id": "",
         "ortholog_path_id": "",
         "edge_kind": "",
@@ -5567,8 +5610,9 @@ def convert_pair_protein_hits_to_genomic_links(
             edge_indexes,
         )
         if orthogroup_id and orthogroup_id not in member_counts:
+            # A non-empty orthogroup_id comes from orthogroup members, so orthogroups is set.
             member_counts[orthogroup_id] = _orthogroup_member_counts(
-                orthogroups.orthogroups.get(orthogroup_id, [])
+                cast("OrthogroupResult | OrthogroupGraphResult", orthogroups).orthogroups.get(orthogroup_id, [])
             )
         counts = member_counts.get(orthogroup_id, {})
         rows.append(
@@ -5959,10 +6003,10 @@ def _comparison_row_display_rank(
     return (
         int(edge_kind_rank),
         0 if both_representative else 1,
-        float(row.get("evalue", float("inf"))),
-        -float(row.get("bitscore", 0.0)),
-        -float(row.get("identity", 0.0)),
-        -int(float(row.get("alignment_length", 0.0))),
+        float(cast(SupportsFloat, row.get("evalue", float("inf")))),
+        -float(cast(SupportsFloat, row.get("bitscore", 0.0))),
+        -float(cast(SupportsFloat, row.get("identity", 0.0))),
+        -int(float(cast(SupportsFloat, row.get("alignment_length", 0.0)))),
         int(query_member.record_index) if query_member is not None else 0,
         int(subject_member.record_index) if subject_member is not None else 0,
         query_id,
@@ -6182,7 +6226,7 @@ def _build_adjacent_display_edges_by_pair(
                 query_id, subject_id = _comparison_row_key(row)
                 candidate_subjects_by_query.setdefault(query_id, set()).add(subject_id)
                 candidate_queries_by_subject.setdefault(subject_id, set()).add(query_id)
-                candidate_kind_rank_by_pair[(query_id, subject_id)] = int(rank[0])
+                candidate_kind_rank_by_pair[(query_id, subject_id)] = int(cast(int, rank[0]))
 
             # Display selection is stricter than membership expansion: prefer
             # same-quality links that introduce new endpoints on both records.
@@ -6205,7 +6249,7 @@ def _build_adjacent_display_edges_by_pair(
                             continue
                         if _has_uncovered_display_alternative(
                             row_key,
-                            current_kind_rank=int(rank[0]),
+                            current_kind_rank=int(cast(int, rank[0])),
                             candidate_subjects_by_query=candidate_subjects_by_query,
                             candidate_queries_by_subject=candidate_queries_by_subject,
                             candidate_kind_rank_by_pair=candidate_kind_rank_by_pair,

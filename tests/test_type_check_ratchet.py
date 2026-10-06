@@ -58,16 +58,6 @@ EXPECTED_MYPY_CONFIG = {
 }
 
 TYPE_DEBT_BASELINE: dict[str, int] = {
-    "gbdraw/analysis/collinearity.py": 7,
-    "gbdraw/analysis/collinearity_units.py": 1,
-    "gbdraw/analysis/conservation.py": 2,
-    "gbdraw/analysis/depth_tracks.py": 2,
-    "gbdraw/analysis/ortholog_paths.py": 14,
-    "gbdraw/analysis/protein_artifacts.py": 8,
-    "gbdraw/analysis/protein_colinearity.py": 52,
-    "gbdraw/comparisons/circular_losat.py": 1,
-    "gbdraw/comparisons/linear_losat.py": 1,
-    "gbdraw/comparisons/losat_jobs.py": 7,
     "gbdraw/diagrams/circular/assemble.py": 2,
     "gbdraw/diagrams/linear/assemble.py": 2,
     "gbdraw/web_support/config_overrides.py": 1,
