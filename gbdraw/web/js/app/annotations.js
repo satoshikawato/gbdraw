@@ -33,12 +33,16 @@ const nextAnnotationId = (annotations, prefix) => {
  * @property {AnnotationEditorState} state
  * @property {() => AnnotationRecordCatalog | null | undefined} getRecordCatalog
  * @property {(notice: string) => void} onImportNotice Shows or clears the notice of the last import.
+ * @property {<T>(change: () => T) => T} [retireLegendStylesOfUnnamedCaptions] Runs a track data change and
+ *   retires the Legend styles of the captions it no longer names (OV-65).
  */
 
 /**
  * @param {AnnotationEditorOptions} options
  */
-export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice }) => {
+export const createAnnotationEditor = ({
+  state, getRecordCatalog, onImportNotice, retireLegendStylesOfUnnamedCaptions = (change) => change()
+}) => {
   const recordSelector = createAnnotationRecordSelector({ getCatalog: getRecordCatalog });
   // The catalog feature of a selected-feature target in the current Results:
   // a drawn feature, or (unless `drawnOnly`) a listed feature they hide, of the
@@ -72,7 +76,9 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
   };
   const replaceSets = (sets) => {
     const candidate = reconcileRecords(normalizeAnnotationSets(sets));
-    state.annotationSets.splice(0, state.annotationSets.length, ...candidate);
+    retireLegendStylesOfUnnamedCaptions(() => {
+      state.annotationSets.splice(0, state.annotationSets.length, ...candidate);
+    });
   };
   const addAnnotationSet = (base = 'annotations') => {
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -94,6 +100,14 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
     ));
     return nextId;
   };
+  // The legend label of a set names its rows: a new text retires the Legend
+  // styles of the old caption in the same step (OV-67).
+  const setAnnotationSetLegendLabel = (set, value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
+    if (!set) return;
+    retireLegendStylesOfUnnamedCaptions(() => { set.legendLabel = String(value ?? '').trim(); });
+  };
   const duplicateAnnotationSet = (set) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -106,7 +120,7 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const index = state.annotationSets.indexOf(set);
-    if (index >= 0) state.annotationSets.splice(index, 1);
+    if (index >= 0) retireLegendStylesOfUnnamedCaptions(() => state.annotationSets.splice(index, 1));
   };
   const addCoordinateAnnotation = (set, options = {}) => {
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -136,7 +150,7 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const index = set?.annotations?.indexOf(item) ?? -1;
-    if (index >= 0) set.annotations.splice(index, 1);
+    if (index >= 0) retireLegendStylesOfUnnamedCaptions(() => set.annotations.splice(index, 1));
   };
   const renameAnnotation = (set, item, value) => {
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -216,7 +230,7 @@ export const createAnnotationEditor = ({ state, getRecordCatalog, onImportNotice
     }
   };
   return {
-    addAnnotationSet, renameAnnotationSet, duplicateAnnotationSet, removeAnnotationSet,
+    addAnnotationSet, renameAnnotationSet, setAnnotationSetLegendLabel, duplicateAnnotationSet, removeAnnotationSet,
     addCoordinateAnnotation, addSelectedFeatures, removeAnnotation, renameAnnotation, setAnnotationStyle, setAnnotationTargetKind,
     importAnnotationTable, importAnnotationTableFile, replaceAnnotationSets: replaceSets,
     canDownloadAnnotationTable, downloadAnnotationTable, featureTargetCaption,
