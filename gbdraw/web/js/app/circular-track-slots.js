@@ -1422,7 +1422,6 @@ const circularGeometryShortcutsForState = (state) => ({
  * @typedef {object} CircularTrackSlotEditorOptions
  * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
  * @property {ChangeTrackLayout} [changeTrackLayout] R10 port (default: apply directly)
- * @property {<T>(change: () => T) => T} [retireLegendStylesOfUnnamedCaptions] runs a Depth source change, then retires the Legend styles of captions the track data no longer names (OV-65)
  */
 
 // `changeTrackLayout` is the feature placement owner's transition, injected as
@@ -1431,11 +1430,7 @@ const circularGeometryShortcutsForState = (state) => ({
 /**
  * @param {CircularTrackSlotEditorOptions} options
  */
-export const createCircularTrackSlotEditor = ({
-  state,
-  changeTrackLayout = (apply) => apply(),
-  retireLegendStylesOfUnnamedCaptions = (change) => change()
-}) => {
+export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (apply) => apply() }) => {
   const editorKeys = new WeakMap();
   let nextEditorKey = 1;
   const circularTrackSlotEditorKey = (slot) => {
@@ -1763,10 +1758,8 @@ export const createCircularTrackSlotEditor = ({
   // The only entry for Depth source changes: run the change, then reconcile.
   const changeCircularDepthSources = (mutate) => {
     const previousSourced = circularSourcedDepthTrackIndexesForState(state);
-    retireLegendStylesOfUnnamedCaptions(() => {
-      mutate();
-      reconcileCircularDepthSlots(previousSourced);
-    });
+    mutate();
+    reconcileCircularDepthSlots(previousSourced);
   };
 
   const syncCircularConservationSlots = () => {

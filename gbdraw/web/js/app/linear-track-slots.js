@@ -840,7 +840,6 @@ const replaceObjectContents = (target, source) => {
  * @typedef {object} LinearTrackSlotEditorOptions
  * @property {Record<string, any>} state the Web state; its shape belongs to `state.js`
  * @property {ChangeTrackLayout} [changeTrackLayout] R10 port (default: apply directly)
- * @property {<T>(change: () => T) => T} [retireLegendStylesOfUnnamedCaptions] runs a Depth source change, then retires the Legend styles of captions the track data no longer names (OV-65)
  */
 
 // `changeTrackLayout` is the feature placement owner's transition, injected as
@@ -849,11 +848,7 @@ const replaceObjectContents = (target, source) => {
 /**
  * @param {LinearTrackSlotEditorOptions} options
  */
-export const createLinearTrackSlotEditor = ({
-  state,
-  changeTrackLayout = (apply) => apply(),
-  retireLegendStylesOfUnnamedCaptions = (change) => change()
-}) => {
+export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply) => apply() }) => {
   const { adv, form } = state;
   const editorKeys = new WeakMap();
   let nextEditorKey = 1;
@@ -1402,10 +1397,8 @@ export const createLinearTrackSlotEditor = ({
   // The only entry for Depth source changes: run the change, then reconcile.
   const changeLinearDepthSources = (mutate) => {
     const previousSourced = linearSourcedDepthTrackIndexesForState(state);
-    retireLegendStylesOfUnnamedCaptions(() => {
-      mutate();
-      reconcileLinearDepthSlots(previousSourced);
-    });
+    mutate();
+    reconcileLinearDepthSlots(previousSourced);
   };
 
   const linearTrackStackEntries = () => {

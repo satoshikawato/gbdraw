@@ -893,15 +893,27 @@ const typeIntoLabel = async (page, section, label, text) => {
   await settleLive(page);
 };
 
-const addDepthFile = async (page, name) => {
-  await inHistoryStep(page, 'Change uploaded file', (app, { text, fileName }) => {
-    app.setCircularDepthFile(0, new File([text], fileName, { type: 'text/tab-separated-values' }));
-  }, { text: DEPTH_TSV, fileName: name });
+const addDepthFile = async (page, name, mode = 'circular') => {
+  await inHistoryStep(page, 'Change uploaded file', (app, { text, fileName, linear }) => {
+    const file = new File([text], fileName, { type: 'text/tab-separated-values' });
+    if (linear) app.setLinearDepthFile(app.linearSeqs[0], 0, file);
+    else app.setCircularDepthFile(0, file);
+  }, { text: DEPTH_TSV, fileName: name, linear: mode === 'linear' });
   await settleLive(page);
 };
 const depthCaption = (page) => page.evaluate(() => (
   window.__GBDRAW_APP__.legendEntries.find((entry) => /depth/i.test(entry.caption))?.caption ?? null
 ));
+// The setup of a Depth case: a file `depth.tsv` drawn once, with a Legend color on its row.
+const colorDepthRow = (mode = 'circular') => async (page) => {
+  await addDepthFile(page, 'depth.tsv', mode);
+  await generate(page);
+  await colorLegendRow(page, await depthCaption(page));
+};
+const depthFileName = (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  return (app.mode === 'linear' ? app.linearSeqs[0]?.depth?.[0] : app.files.c_depth?.[0]?.[0])?.name ?? null;
+});
 
 const ANNOTATION_TSV = (legendLabel) => [
   'set_id\tid\tmark\tstart\tend\tlegend_label',
@@ -930,13 +942,42 @@ const RETIRING_CASES = [
   {
     name: 'removing the depth file',
     caption: async (page) => depthCaption(page),
-    setup: async (page) => {
-      await addDepthFile(page, 'depth.tsv');
-      await generate(page);
-      await colorLegendRow(page, await depthCaption(page));
-    },
+    setup: colorDepthRow(),
     change: (page) => inHistoryStep(page, 'Change uploaded file', (app) => app.setCircularDepthFile(0, null)),
-    restored: (page) => page.evaluate(() => Boolean(window.__GBDRAW_APP__.files.c_depth?.[0]?.[0]))
+    restored: async (page) => await depthFileName(page) === 'depth.tsv'
+  },
+  // A Depth track removal and a file of another name reach the same rule.
+  {
+    name: 'removing the Depth track',
+    caption: async (page) => depthCaption(page),
+    setup: colorDepthRow(),
+    change: (page) => inHistoryStep(page, 'Remove Depth', (app) => app.removeCircularDepthTrack(0)),
+    restored: async (page) => await depthFileName(page) === 'depth.tsv'
+  },
+  {
+    name: 'replacing the depth file with a file of another name',
+    caption: async (page) => depthCaption(page),
+    setup: colorDepthRow(),
+    change: (page) => addDepthFile(page, 'coverage.tsv'),
+    restored: async (page) => await depthFileName(page) === 'depth.tsv',
+    drawn: ['coverage']
+  },
+  {
+    name: 'removing the Depth track in Linear',
+    mode: 'linear',
+    caption: async (page) => depthCaption(page),
+    setup: colorDepthRow('linear'),
+    change: (page) => inHistoryStep(page, 'Remove Depth', (app) => app.removeLinearDepthTrack(0)),
+    restored: async (page) => await depthFileName(page) === 'depth.tsv'
+  },
+  {
+    name: 'replacing the depth file with a file of another name in Linear',
+    mode: 'linear',
+    caption: async (page) => depthCaption(page),
+    setup: colorDepthRow('linear'),
+    change: (page) => addDepthFile(page, 'coverage.tsv', 'linear'),
+    restored: async (page) => await depthFileName(page) === 'depth.tsv',
+    drawn: ['coverage']
   },
   {
     name: 'replacing the annotation data with another legendLabel',
@@ -974,11 +1015,7 @@ const RETIRING_CASES = [
   {
     name: 'editing the legend title of a Depth series',
     caption: async (page) => depthCaption(page),
-    setup: async (page) => {
-      await addDepthFile(page, 'depth.tsv');
-      await generate(page);
-      await colorLegendRow(page, await depthCaption(page));
-    },
+    setup: colorDepthRow(),
     change: (page) => typeIntoLabel(page, 'Depth TSV tracks', 'Depth legend title', 'Coverage'),
     restored: (page) => page.evaluate(() => window.__GBDRAW_APP__.adv.depth_tracks[0]?.label === 'depth'),
     drawn: ['Coverage']
@@ -988,9 +1025,9 @@ const RETIRING_CASES = [
 test.describe('OV-65 Legend styles follow the captions of track data', () => {
   test.beforeEach(() => { test.setTimeout(180_000); });
 
-  for (const { name, caption, setup, change, restored, drawn = [] } of RETIRING_CASES) {
+  for (const { name, mode = 'circular', caption, setup, change, restored, drawn = [] } of RETIRING_CASES) {
     test(`${name} retires the styles of its rows, and Generate succeeds`, async ({ page }) => {
-      await openCanvas(page, 'circular', null);
+      await openCanvas(page, mode, null);
       await setup(page);
       const row = await caption(page);
       expect(row, 'row caption').toBeTruthy();
@@ -1004,7 +1041,7 @@ test.describe('OV-65 Legend styles follow the captions of track data', () => {
     });
 
     test(`${name}: Undo restores the data and the style, and live equals Generate`, async ({ page }) => {
-      await openCanvas(page, 'circular', null);
+      await openCanvas(page, mode, null);
       await setup(page);
       const row = await caption(page);
       await change(page);

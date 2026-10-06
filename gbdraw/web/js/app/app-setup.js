@@ -1538,7 +1538,8 @@ export const createAppSetup = () => {
   // The stack editors receive the feature placement transition as one port (R10, R13).
   const { changeTrackLayout } = featureActions.placementActions;
   // Legend styles follow the captions that track data names (OV-65): the
-  // transitions of annotation and Depth data receive this one port.
+  // annotation editor receives this one port, and the Depth source and label
+  // transitions below run through it.
   const retireLegendStylesOfUnnamedCaptions = buildLegendStyleRetirement({
     legendColorOverrides,
     legendStrokeOverrides,
@@ -1554,8 +1555,8 @@ export const createAppSetup = () => {
           })
     })
   });
-  const circularTrackSlotEditor = createCircularTrackSlotEditor({ state, changeTrackLayout, retireLegendStylesOfUnnamedCaptions });
-  const linearTrackSlotEditor = createLinearTrackSlotEditor({ state, changeTrackLayout, retireLegendStylesOfUnnamedCaptions });
+  const circularTrackSlotEditor = createCircularTrackSlotEditor({ state, changeTrackLayout });
+  const linearTrackSlotEditor = createLinearTrackSlotEditor({ state, changeTrackLayout });
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
     state, getRecordCatalog: getAnnotationRecordCatalog, retireLegendStylesOfUnnamedCaptions,
@@ -1950,16 +1951,19 @@ export const createAppSetup = () => {
     depthTrackUiCounts.circular = Math.max(depthTrackUiCounts.circular, idx + 1);
     const rows = circularDepthRows();
     const previousFile = circularDepthRepresentatives()[idx] || null;
-    circularTrackSlotEditor.changeCircularDepthSources(() => {
-      rows.forEach((row) => {
-        row[idx] = file || null;
+    // A new file can rename an auto-labeled series, so the label follows in the same retirement.
+    retireLegendStylesOfUnnamedCaptions(() => {
+      circularTrackSlotEditor.changeCircularDepthSources(() => {
+        rows.forEach((row) => {
+          row[idx] = file || null;
+        });
+        files.c_depth = rows.map((row) => compactDepthFileSlots(row));
       });
-      files.c_depth = rows.map((row) => compactDepthFileSlots(row));
+      if (file) {
+        updateDepthTrackLabelFromFile(idx, file, previousFile);
+        form.show_depth = true;
+      }
     });
-    if (file) {
-      updateDepthTrackLabelFromFile(idx, file, previousFile);
-      form.show_depth = true;
-    }
   };
   const getLinearDepthFile = (seq, index) => depthFileSlotsFromValue(seq?.depth)[Number(index)] || null;
   const setLinearDepthFiles = (sequences, index, file) => {
@@ -1972,21 +1976,23 @@ export const createAppSetup = () => {
     padLinearDepthRows(logicalWidth);
     ensureDepthTrackConfigCount(logicalWidth);
     const previousFile = getLinearDepthFile(targets[0], idx);
-    linearTrackSlotEditor.changeLinearDepthSources(() => {
-      targets.forEach((seq) => {
-        const slots = depthFileSlotsFromValue(seq.depth);
-        if (file) {
-          slots[idx] = file;
-          seq.depth = slots;
-        } else {
-          seq.depth = clearDepthTrackSourceAt(slots, idx, logicalWidth);
-        }
+    retireLegendStylesOfUnnamedCaptions(() => {
+      linearTrackSlotEditor.changeLinearDepthSources(() => {
+        targets.forEach((seq) => {
+          const slots = depthFileSlotsFromValue(seq.depth);
+          if (file) {
+            slots[idx] = file;
+            seq.depth = slots;
+          } else {
+            seq.depth = clearDepthTrackSourceAt(slots, idx, logicalWidth);
+          }
+        });
       });
+      if (file) {
+        updateDepthTrackLabelFromFile(idx, file, previousFile);
+        form.show_depth = true;
+      }
     });
-    if (file) {
-      updateDepthTrackLabelFromFile(idx, file, previousFile);
-      form.show_depth = true;
-    }
   };
   const setLinearDepthFile = (seq, index, file) => setLinearDepthFiles([seq], index, file);
   const setLinearSourceDepthFile = (source, index, file) => setLinearDepthFiles(
@@ -2018,35 +2024,38 @@ export const createAppSetup = () => {
     if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0) return;
-    const count = sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular);
-    const previousFiles = circularDepthRepresentatives();
-    files.c_depth = removeDepthTrackColumnAt(circularDepthRows(), idx)
-      .map((row) => compactDepthFileSlots(row));
-    if (idx < adv.depth_tracks.length) adv.depth_tracks.splice(idx, 1);
-    depthTrackUiCounts.circular = count <= 1 ? 1 : Math.max(1, count - 1);
-    refreshDepthTrackLabelsAfterRemoval(previousFiles, circularDepthRepresentatives(), idx);
-    ensureDepthTrackConfigCount(activeDepthTrackCount());
-    const activeFileCount = circularDepthRepresentatives().length;
-    // The removed series' rows before the Axis lower its index, as in Linear,
-    // so no other row crosses the Axis (R10).
-    const axis = adv.circular_track_slots_axis_index;
-    const removedBeforeAxis = Number.isInteger(axis)
-      ? adv.circular_track_slots.slice(0, axis)
-        .filter((slot) => isDefaultManagedDepthSlot(slot) && depthSlotTrackIndex(slot) === idx).length
-      : 0;
-    adv.circular_track_slots.splice(
-      0,
-      adv.circular_track_slots.length,
-      ...reindexDepthSlots(/** @type {any} */ ({
-        slots: adv.circular_track_slots,
-        removedIndex: idx,
-        activeCount: activeFileCount,
-        managedPredicate: isDefaultManagedDepthSlot
-      }))
-    );
-    if (removedBeforeAxis) adv.circular_track_slots_axis_index = axis - removedBeforeAxis;
-    syncDepthTrackSlotLabelsForTrack(idx);
-    circularTrackSlotEditor.normalizeCircularTrackSlots();
+    // Removing a series retires the Legend styles of its rows (OV-65).
+    retireLegendStylesOfUnnamedCaptions(() => {
+      const count = sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular);
+      const previousFiles = circularDepthRepresentatives();
+      files.c_depth = removeDepthTrackColumnAt(circularDepthRows(), idx)
+        .map((row) => compactDepthFileSlots(row));
+      if (idx < adv.depth_tracks.length) adv.depth_tracks.splice(idx, 1);
+      depthTrackUiCounts.circular = count <= 1 ? 1 : Math.max(1, count - 1);
+      refreshDepthTrackLabelsAfterRemoval(previousFiles, circularDepthRepresentatives(), idx);
+      ensureDepthTrackConfigCount(activeDepthTrackCount());
+      const activeFileCount = circularDepthRepresentatives().length;
+      // The removed series' rows before the Axis lower its index, as in Linear,
+      // so no other row crosses the Axis (R10).
+      const axis = adv.circular_track_slots_axis_index;
+      const removedBeforeAxis = Number.isInteger(axis)
+        ? adv.circular_track_slots.slice(0, axis)
+          .filter((slot) => isDefaultManagedDepthSlot(slot) && depthSlotTrackIndex(slot) === idx).length
+        : 0;
+      adv.circular_track_slots.splice(
+        0,
+        adv.circular_track_slots.length,
+        ...reindexDepthSlots(/** @type {any} */ ({
+          slots: adv.circular_track_slots,
+          removedIndex: idx,
+          activeCount: activeFileCount,
+          managedPredicate: isDefaultManagedDepthSlot
+        }))
+      );
+      if (removedBeforeAxis) adv.circular_track_slots_axis_index = axis - removedBeforeAxis;
+      syncDepthTrackSlotLabelsForTrack(idx);
+      circularTrackSlotEditor.normalizeCircularTrackSlots();
+    });
   };
   const removeLinearDepthTrack = (index) => {
     const sessionBusy = sessionOperationAvailability();
@@ -2055,39 +2064,42 @@ export const createAppSetup = () => {
     if (!Number.isInteger(idx) || idx < 0) return;
     const logicalWidth = linearDepthLogicalWidth();
     if (idx >= logicalWidth) return;
-    const nextRows = removeDepthTrackColumnAt(linearDepthRows(), idx);
-    linearSeqs.forEach((seq, recordIndex) => {
-      seq.depth = nextRows[recordIndex] || [];
-    });
-    if (idx < adv.depth_tracks.length) adv.depth_tracks.splice(idx, 1);
-    depthTrackAutoLabels.splice(idx, 1);
-    ensureDepthTrackConfigCount(activeDepthTrackCount());
-    const previousAxisIndex = Number(adv.linear_track_slots_axis_index);
-    const removedManagedSlotCountBeforeAxis = Number.isInteger(previousAxisIndex)
-      ? adv.linear_track_slots.reduce((count, slot, slotIndex) => {
-          if (slotIndex >= previousAxisIndex || !isDefaultManagedDepthSlot(slot)) return count;
-          return depthSlotTrackIndex(slot) === idx ? count + 1 : count;
-        }, 0)
-      : 0;
-    adv.linear_track_slots.splice(
-      0,
-      adv.linear_track_slots.length,
-      ...reindexDepthSlots(/** @type {any} */ ({
-        slots: adv.linear_track_slots,
-        removedIndex: idx,
-        activeCount: Math.max(0, logicalWidth - 1),
-        managedPredicate: isDefaultManagedDepthSlot
-      }))
-    );
-    if (Number.isInteger(previousAxisIndex)) {
-      adv.linear_track_slots_axis_index = Math.max(
+    // Removing a series retires the Legend styles of its rows (OV-65).
+    retireLegendStylesOfUnnamedCaptions(() => {
+      const nextRows = removeDepthTrackColumnAt(linearDepthRows(), idx);
+      linearSeqs.forEach((seq, recordIndex) => {
+        seq.depth = nextRows[recordIndex] || [];
+      });
+      if (idx < adv.depth_tracks.length) adv.depth_tracks.splice(idx, 1);
+      depthTrackAutoLabels.splice(idx, 1);
+      ensureDepthTrackConfigCount(activeDepthTrackCount());
+      const previousAxisIndex = Number(adv.linear_track_slots_axis_index);
+      const removedManagedSlotCountBeforeAxis = Number.isInteger(previousAxisIndex)
+        ? adv.linear_track_slots.reduce((count, slot, slotIndex) => {
+            if (slotIndex >= previousAxisIndex || !isDefaultManagedDepthSlot(slot)) return count;
+            return depthSlotTrackIndex(slot) === idx ? count + 1 : count;
+          }, 0)
+        : 0;
+      adv.linear_track_slots.splice(
         0,
-        previousAxisIndex - removedManagedSlotCountBeforeAxis
+        adv.linear_track_slots.length,
+        ...reindexDepthSlots(/** @type {any} */ ({
+          slots: adv.linear_track_slots,
+          removedIndex: idx,
+          activeCount: Math.max(0, logicalWidth - 1),
+          managedPredicate: isDefaultManagedDepthSlot
+        }))
       );
-    }
-    syncDepthTrackSlotLabelsForTrack(0);
-    linearTrackSlotEditor.syncLinearDepthSlotHeightsFromDepthTracks();
-    linearTrackSlotEditor.normalizeLinearTrackSlots();
+      if (Number.isInteger(previousAxisIndex)) {
+        adv.linear_track_slots_axis_index = Math.max(
+          0,
+          previousAxisIndex - removedManagedSlotCountBeforeAxis
+        );
+      }
+      syncDepthTrackSlotLabelsForTrack(0);
+      linearTrackSlotEditor.syncLinearDepthSlotHeightsFromDepthTracks();
+      linearTrackSlotEditor.normalizeLinearTrackSlots();
+    });
   };
   watch(
     () => [
@@ -4371,9 +4383,9 @@ export const createAppSetup = () => {
       });
     }
     // Removing a File can remove the last source of a Depth series.
-    linearTrackSlotEditor.changeLinearDepthSources(() => {
+    retireLegendStylesOfUnnamedCaptions(() => linearTrackSlotEditor.changeLinearDepthSources(() => {
       linearSeqs.splice(0, linearSeqs.length, ...next);
-    });
+    }));
     const activeUids = new Set(next.map((seq) => seq.uid));
     pendingLinearRecordExpansions.forEach((uid) => {
       if (!activeUids.has(uid)) pendingLinearRecordExpansions.delete(uid);
