@@ -1874,8 +1874,10 @@ export const createAppSetup = () => {
     if (sessionBusy) return sessionBusy;
     const idx = Math.max(0, Number(index) || 0);
     const config = depthTrackConfigForIndex(idx);
-    config.label = String(value ?? '');
-    syncDepthTrackSlotLabelsForTrack(idx);
+    retireLegendStylesOfUnnamedCaptions(() => {
+      config.label = String(value ?? '');
+      syncDepthTrackSlotLabelsForTrack(idx);
+    });
   };
   const getDepthTrackLegendLabelForSlot = (slot) => (
     getDepthTrackLabel(normalizeDepthSlotTrackIndex(slot))
@@ -1885,14 +1887,16 @@ export const createAppSetup = () => {
     if (sessionBusy) return sessionBusy;
     if (!slot) return;
     const idx = normalizeDepthSlotTrackIndex(slot);
-    slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
-    const label = String(value ?? '');
-    if (label.trim()) {
-      slot.params.legend_label = label;
-    } else {
-      delete slot.params.legend_label;
-    }
-    setDepthTrackLabel(idx, label);
+    retireLegendStylesOfUnnamedCaptions(() => {
+      slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
+      const label = String(value ?? '');
+      if (label.trim()) {
+        slot.params.legend_label = label;
+      } else {
+        delete slot.params.legend_label;
+      }
+      setDepthTrackLabel(idx, label);
+    });
   };
   const syncDepthTrackSlotLabel = (slot) => {
     if (!slot || slot.renderer !== 'depth') return;
@@ -4700,6 +4704,7 @@ export const createAppSetup = () => {
     renameAnnotationSet: annotationEditor.renameAnnotationSet,
     duplicateAnnotationSet: annotationEditor.duplicateAnnotationSet,
     removeAnnotationSet: annotationEditor.removeAnnotationSet,
+    setAnnotationSetLegendLabel: annotationEditor.setAnnotationSetLegendLabel,
     addCoordinateAnnotation: annotationEditor.addCoordinateAnnotation,
     addSelectedFeatureAnnotations: annotationEditor.addSelectedFeatures,
     removeAnnotation: annotationEditor.removeAnnotation,

@@ -749,6 +749,22 @@ const undo = async (page) => {
   await settleLive(page);
 };
 
+// Types a new text into a label field of an opened section, and leaves the
+// field, as the reader does; the History step commits when the field loses focus.
+const typeIntoLabel = async (page, section, label, text) => {
+  await page.evaluate((name) => {
+    document.querySelectorAll('details > summary').forEach((summary) => {
+      if (summary.textContent.trim().startsWith(name) || summary.getAttribute('aria-label') === name) {
+        summary.parentElement.open = true;
+      }
+    });
+  }, section);
+  const field = page.getByLabel(label, { exact: true });
+  await field.fill(text);
+  await field.blur();
+  await settleLive(page);
+};
+
 const DEPTH_TSV = Array.from({ length: 4 }, (_, index) => `FORCEDLBL\t${index * 700 + 1}\t${10 + index}`).join('\n');
 const addDepthFile = async (page, name) => {
   await inHistoryStep(page, 'Change uploaded file', (app, { text, fileName }) => {
@@ -810,6 +826,38 @@ const RETIRING_CASES = [
     }, ANNOTATION_TSV('Region Y')),
     restored: (page) => page.evaluate(() => window.__GBDRAW_APP__.annotationSets[0]?.annotations[0]?.legendLabel === 'Region X'),
     drawn: ['Region Y']
+  },
+  // OV-67: a label edit is a data change of the caption. The edits go through
+  // the label fields a reader types into.
+  {
+    name: 'editing the legend label of an annotation set',
+    caption: async () => 'Region X',
+    setup: async (page) => {
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        const set = app.addAnnotationSet('regions');
+        app.addCoordinateAnnotation(set, { start: 100, end: 400 });
+        set.legendLabel = 'Region X';
+      });
+      await settleLive(page);
+      await generate(page);
+      await colorLegendRow(page, 'Region X');
+    },
+    change: (page) => typeIntoLabel(page, 'Region Annotations', 'Set legend label', 'Region Z'),
+    restored: (page) => page.evaluate(() => window.__GBDRAW_APP__.annotationSets[0]?.legendLabel === 'Region X'),
+    drawn: ['Region Z']
+  },
+  {
+    name: 'editing the legend title of a Depth series',
+    caption: async (page) => depthCaption(page),
+    setup: async (page) => {
+      await addDepthFile(page, 'depth.tsv');
+      await generate(page);
+      await colorLegendRow(page, await depthCaption(page));
+    },
+    change: (page) => typeIntoLabel(page, 'Depth TSV tracks', 'Depth legend title', 'Coverage'),
+    restored: (page) => page.evaluate(() => window.__GBDRAW_APP__.adv.depth_tracks[0]?.label === 'depth'),
+    drawn: ['Coverage']
   }
 ];
 

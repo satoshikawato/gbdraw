@@ -76,6 +76,14 @@ export const createAnnotationEditor = ({
     ));
     return nextId;
   };
+  // The legend label of a set names its rows: a new text retires the Legend
+  // styles of the old caption in the same step (OV-67).
+  const setAnnotationSetLegendLabel = (set, value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
+    if (!set) return;
+    retireLegendStylesOfUnnamedCaptions(() => { set.legendLabel = String(value ?? '').trim(); });
+  };
   const duplicateAnnotationSet = (set) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -198,7 +206,7 @@ export const createAnnotationEditor = ({
     }
   };
   return {
-    addAnnotationSet, renameAnnotationSet, duplicateAnnotationSet, removeAnnotationSet,
+    addAnnotationSet, renameAnnotationSet, setAnnotationSetLegendLabel, duplicateAnnotationSet, removeAnnotationSet,
     addCoordinateAnnotation, addSelectedFeatures, removeAnnotation, renameAnnotation, setAnnotationStyle, setAnnotationTargetKind,
     importAnnotationTable, importAnnotationTableFile, replaceAnnotationSets: replaceSets,
     canDownloadAnnotationTable, downloadAnnotationTable, featureTargetCaption,

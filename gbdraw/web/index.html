@@ -2655,7 +2655,7 @@
                                     <button aria-label="Duplicate set" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="duplicateAnnotationSet(set)" title="Duplicate set"><i class="ph ph-copy" aria-hidden="true"></i></button>
                                     <button aria-label="Delete set" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotationSet(set)" title="Delete set" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                 </div>
-                                <input v-model.trim="set.legendLabel" aria-label="Set legend label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Set legend label (optional)" :disabled="!semanticMutationAvailable">
+                                <input :value="set.legendLabel" @input="setAnnotationSetLegendLabel(set, $event.target.value)" aria-label="Set legend label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Set legend label (optional)" :disabled="!semanticMutationAvailable">
                                 <div v-for="item in set.annotations" :key="item.id" class="rounded border p-1.5 space-y-1" :class="selectedAnnotation?.setId === set.id && selectedAnnotation?.id === item.id ? 'border-blue-400 bg-blue-50 ring-1 ring-blue-200' : 'border-slate-200 bg-slate-50'">
                                     <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1">
                                         <input :value="item.id" @change="renameAnnotation(set, item, $event.target.value)" aria-label="Annotation id" class="form-input px-1 py-0.5 text-[10px]" placeholder="annotation_id" :disabled="!semanticMutationAvailable">
