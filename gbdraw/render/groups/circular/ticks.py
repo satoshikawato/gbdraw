@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
-from svgwrite.path import Path  # type: ignore[reportMissingImports]
-from svgwrite.text import Text  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from svgwrite.container import Group
+from svgwrite.path import Path
+from svgwrite.text import Text
 
-from ....canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
-from ....config.models import CircularRenderProfile  # type: ignore[reportMissingImports]
-from ....svg.circular_ticks import (  # type: ignore[reportMissingImports]
+from ....canvas import CircularCanvasConfigurator
+from ....config.models import CircularRenderProfile
+from ....svg.circular_ticks import (
     get_circular_tick_intervals,
     generate_circular_tick_paths,
     generate_circular_tick_labels,

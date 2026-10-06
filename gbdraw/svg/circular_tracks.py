@@ -208,7 +208,7 @@ def draw_circle_path(radius: float, stroke_color: str, stroke_width: float) -> C
     """
     circle_path = Circle(
         center=(0, 0),
-        r=radius,  # type: ignore
+        r=radius,
         stroke=stroke_color,
         stroke_width=stroke_width,
         fill="none",

@@ -22,9 +22,9 @@ from typing import (
     TypeAlias,
 )
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from svgwrite import Drawing  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
+from svgwrite import Drawing
 
 from gbdraw.analysis.protein_artifacts import (
     is_current_derived_protein_artifact,

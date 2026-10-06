@@ -13,7 +13,7 @@ from svgwrite.container import Group
 
 from ....analysis.gc import calculate_gc_percent
 from ....canvas import CircularCanvasConfigurator
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ....config.models import GbdrawConfig
 from ....core.record_metadata import infer_record_source_metadata
 from ....core.text import (
     calculate_bbox_dimensions,

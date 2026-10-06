@@ -8,10 +8,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import NamedTuple, Sequence
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
 
-from ...analysis.protein_colinearity import OrthogroupResult, OrthogroupGraphResult  # type: ignore[reportMissingImports]
+from ...analysis.protein_colinearity import OrthogroupResult, OrthogroupGraphResult
 from ...core.record_metadata import (
     _mapped_feature_location_parts,
     _read_coord_map,
@@ -163,7 +163,7 @@ def _features_by_source_index(record: SeqRecord) -> dict[int, object]:
 
     def walk(features: object) -> None:
         nonlocal fallback_index
-        for feature in features or ():  # type: ignore[union-attr]
+        for feature in features or ():
             source_index = _source_feature_index(feature)
             resolved_index = fallback_index if source_index is None else source_index
             fallback_index += 1

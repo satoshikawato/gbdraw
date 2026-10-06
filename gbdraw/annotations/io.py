@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Literal
 
 import pandas as pd
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from pandas import DataFrame
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import parse_record_selector

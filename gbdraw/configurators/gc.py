@@ -5,7 +5,7 @@ import copy
 
 from pandas import DataFrame
 
-from gbdraw.config.models import RenderProfile  # type: ignore[reportMissingImports]
+from gbdraw.config.models import RenderProfile
 from gbdraw.io.colors import resolve_color_to_hex
 
 

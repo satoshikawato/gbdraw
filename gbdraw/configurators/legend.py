@@ -7,25 +7,25 @@ import math
 from dataclasses import dataclass
 from typing import Mapping
 
-from gbdraw.config.models import (  # type: ignore[reportMissingImports]
+from gbdraw.config.models import (
     CircularRenderProfile,
     LinearRenderProfile,
     RenderProfile,
 )
-from gbdraw.legend.circular_layout import (  # type: ignore[reportMissingImports]
+from gbdraw.legend.circular_layout import (
     CircularLegendLayout,
     build_circular_legend_layout,
 )
-from gbdraw.legend.linear_layout import (  # type: ignore[reportMissingImports]
+from gbdraw.legend.linear_layout import (
     LinearLegendLayout,
     build_linear_legend_layout,
 )
-from gbdraw.legend.metrics import (  # type: ignore[reportMissingImports]
+from gbdraw.legend.metrics import (
     legend_line_height,
     legend_text_x_offset,
 )
 from gbdraw.exceptions import ValidationError
-from gbdraw.layout.spatial import Aabb, union_aabbs  # type: ignore[reportMissingImports]
+from gbdraw.layout.spatial import Aabb, union_aabbs
 
 
 @dataclass(frozen=True, slots=True)

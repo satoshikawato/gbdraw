@@ -111,7 +111,7 @@ class FeatureObject:
         self.feature_id: str = feature_id
         # Accept both raw 6-tuples and FeatureLocationPart instances for compatibility.
         self.location: FeatureLocation = [
-            part if isinstance(part, FeatureLocationPart) else FeatureLocationPart(*part)  # type: ignore[arg-type]
+            part if isinstance(part, FeatureLocationPart) else FeatureLocationPart(*part)
             for part in (location or [])
         ]
         self.glyph_kind: FeatureGlyph = _resolve_glyph_kind(

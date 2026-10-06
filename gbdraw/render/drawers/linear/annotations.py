@@ -5,11 +5,11 @@ from __future__ import annotations
 import hashlib
 import re
 
-from svgwrite import Drawing  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
-from svgwrite.path import Path  # type: ignore[reportMissingImports]
-from svgwrite.shapes import Line, Rect  # type: ignore[reportMissingImports]
-from svgwrite.text import Text  # type: ignore[reportMissingImports]
+from svgwrite import Drawing
+from svgwrite.container import Group
+from svgwrite.path import Path
+from svgwrite.shapes import Line, Rect
+from svgwrite.text import Text
 
 from gbdraw.annotations import (
     AnnotationTrackParams,

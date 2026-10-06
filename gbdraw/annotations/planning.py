@@ -6,7 +6,7 @@ import logging
 from dataclasses import replace
 from typing import Callable, Literal, Sequence, TypeVar
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
 
 from ..exceptions import ValidationError
 from ..layout.record_coordinates import RecordDisplayTransform, SourceInterval

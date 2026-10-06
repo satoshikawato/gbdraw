@@ -7,15 +7,15 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
-from svgwrite.shapes import Line  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from svgwrite.container import Group
+from svgwrite.shapes import Line
 
-from ....canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
-from ....features.factory import FeatureBuildResult  # type: ignore[reportMissingImports]
-from ....labels.circular import prepare_label_list  # type: ignore[reportMissingImports]
-from ....layout.circular import CircularRecordRenderContext  # type: ignore[reportMissingImports]
-from ...drawers.circular.labels import LabelDrawer  # type: ignore[reportMissingImports]
+from ....canvas import CircularCanvasConfigurator
+from ....features.factory import FeatureBuildResult
+from ....labels.circular import prepare_label_list
+from ....layout.circular import CircularRecordRenderContext
+from ...drawers.circular.labels import LabelDrawer
 from ...label_binding import bind_label_part
 
 

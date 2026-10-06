@@ -17,15 +17,15 @@ import logging
 import math
 from typing import TYPE_CHECKING, Any, Sequence
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
 import pandas as pd
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from svgwrite import Drawing  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
+from pandas import DataFrame
+from svgwrite import Drawing
+from svgwrite.container import Group
 
-from ...analysis.skew import skew_df  # type: ignore[reportMissingImports]
-from ...analysis.depth import depth_df as build_depth_df  # type: ignore[reportMissingImports]
-from ...analysis.depth_tracks import (  # type: ignore[reportMissingImports]
+from ...analysis.skew import skew_df
+from ...analysis.depth import depth_df as build_depth_df
+from ...analysis.depth_tracks import (
     DepthTrackData,
     DepthTrackSpec,
     build_depth_track_dataframes,
@@ -36,14 +36,14 @@ from ...analysis.depth_tracks import (  # type: ignore[reportMissingImports]
     representative_depth_tracks,
     sync_depth_track_legend_entries,
 )
-from ...analysis.protein_colinearity import OrthogroupResult, OrthogroupGraphResult  # type: ignore[reportMissingImports]
-from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
-from ...config.models import (  # type: ignore[reportMissingImports]
+from ...analysis.protein_colinearity import OrthogroupResult, OrthogroupGraphResult
+from ...canvas import LinearCanvasConfigurator
+from ...config.models import (
     GbdrawConfig,
     LinearRenderProfile,
 )
 from ...exceptions import ValidationError
-from ...configurators import (  # type: ignore[reportMissingImports]
+from ...configurators import (
     FeatureDrawingConfigurator,
     DepthConfigurator,
     GcContentConfigurator,
@@ -53,8 +53,8 @@ from ...configurators import (  # type: ignore[reportMissingImports]
 )
 from ...configurators.gc import _slot_skew_config
 from ...core.text import calculate_bbox_dimensions
-from ...core.sequence import check_feature_presence  # type: ignore[reportMissingImports]
-from ...render.groups.linear import LengthBarGroup, LegendGroup, PlotTitleGroup  # type: ignore[reportMissingImports]
+from ...core.sequence import check_feature_presence
+from ...render.groups.linear import LengthBarGroup, LegendGroup, PlotTitleGroup
 from ...render.groups.linear.length_bar import (
     RULER_LABEL_OFFSET,
     RULER_TICK_LENGTH,
@@ -62,12 +62,12 @@ from ...render.groups.linear.length_bar import (
     format_linear_tick_label,
 )
 from ...io.comparisons import filter_comparison_dataframe, load_comparisons
-from ...legend.table import (  # type: ignore[reportMissingImports]
+from ...legend.table import (
     _unique_legend_key,
     configure_pairwise_identity_legend_from_comparisons,
     prepare_legend_table,
 )
-from ...layout.linear import (  # type: ignore[reportMissingImports]
+from ...layout.linear import (
     place_linear_definition,
     AxisGapResolution,
     CollisionBand,
@@ -108,7 +108,7 @@ from ...linear_comparison import (
     validate_linear_comparison_record_ids,
     validate_linear_comparison_topology,
 )
-from ...layout.scalar_axis import linear_scalar_axis_tick_font_size_px  # type: ignore[reportMissingImports]
+from ...layout.scalar_axis import linear_scalar_axis_tick_font_size_px
 from ...layout.scalar_axis import (
     _depth_axis_bounds,
     _format_depth_tick,
@@ -161,7 +161,7 @@ from .precalc import (
     _precalculate_label_dimensions,
     _resolve_linear_diagram_label_font_size,
 )
-from ...features.colors import precompute_used_color_rules  # type: ignore[reportMissingImports]
+from ...features.colors import precompute_used_color_rules
 from ...features.ids import make_linear_dom_id
 from ...svg.ids import (
     definition_group_svg_id,

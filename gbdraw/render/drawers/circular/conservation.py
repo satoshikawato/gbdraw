@@ -5,9 +5,9 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
-from svgwrite.path import Path  # type: ignore[reportMissingImports]
+from pandas import DataFrame
+from svgwrite.container import Group
+from svgwrite.path import Path
 
 from ....core.color import interpolate_color
 from ....svg.circular_conservation import generate_annular_hsp_path_desc

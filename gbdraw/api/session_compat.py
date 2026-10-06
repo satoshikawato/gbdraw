@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from typing import Any, Mapping, Sequence
 
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from pandas import DataFrame
 
 from gbdraw.analysis.protein_colinearity import (
     ProteinExtractionResult,

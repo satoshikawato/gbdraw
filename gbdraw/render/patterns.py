@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import hashlib
 
-from svgwrite import Drawing  # type: ignore[reportMissingImports]
-from svgwrite.shapes import Line  # type: ignore[reportMissingImports]
+from svgwrite import Drawing
+from svgwrite.shapes import Line
 
 from gbdraw.annotations.models import HatchStyle
 

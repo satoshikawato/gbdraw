@@ -6,15 +6,15 @@
 from collections import defaultdict
 from .coordinates import display_label_segment
 
-from .filtering import get_label_text  # type: ignore[reportMissingImports]
-from ..config.models import LinearRenderProfile  # type: ignore[reportMissingImports]
-from ..features.coordinates import get_strand  # type: ignore[reportMissingImports]
+from .filtering import get_label_text
+from ..config.models import LinearRenderProfile
+from ..features.coordinates import get_strand
 from ..features.ids import compute_feature_object_hash
 from ..core.record_metadata import _source_feature_index
-from ..core.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
-from ..core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
-from ..layout.linear_coords import normalize_position_to_linear_track  # type: ignore[reportMissingImports]
-from ..layout.linear import (  # type: ignore[reportMissingImports]
+from ..core.text import calculate_bbox_dimensions
+from ..core.sequence import determine_length_parameter
+from ..layout.linear_coords import normalize_position_to_linear_track
+from ..layout.linear import (
     LinearFeatureLaneGeometry,
     calculate_feature_position_factors_linear,
 )

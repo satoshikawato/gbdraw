@@ -268,7 +268,7 @@ def plan_losat_jobs(
             }
             drafts[key] = draft
             order.append(key)
-        draft["specs"].append((int(query_index), int(subject_index)))  # type: ignore[union-attr]
+        draft["specs"].append((int(query_index), int(subject_index)))
     return tuple(
         LosatJob(
             query_indexes=drafts[key]["query"],  # type: ignore[arg-type]

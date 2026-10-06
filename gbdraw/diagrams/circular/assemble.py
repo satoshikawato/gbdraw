@@ -17,27 +17,27 @@ from dataclasses import dataclass, replace
 from functools import lru_cache
 from typing import Any, Callable, Optional, Mapping, Sequence, cast
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from svgwrite import Drawing  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
+from svgwrite import Drawing
+from svgwrite.container import Group
 
-from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
-from ...analysis.conservation import (  # type: ignore[reportMissingImports]
+from ...canvas import CircularCanvasConfigurator
+from ...analysis.conservation import (
     ConservationTrack,
     conservation_track_gradient_colors,
 )
-from ...analysis.depth_tracks import (  # type: ignore[reportMissingImports]
+from ...analysis.depth_tracks import (
     DepthTrackData,
     depth_track_data_count,
     index_depth_track_row,
     sync_depth_track_legend_entries,
 )
-from ...config.models import (  # type: ignore[reportMissingImports]
+from ...config.models import (
     CircularRenderProfile,
     GbdrawConfig,
 )
-from ...configurators import (  # type: ignore[reportMissingImports]
+from ...configurators import (
     FeatureDrawingConfigurator,
     DepthConfigurator,
     GcContentConfigurator,
@@ -46,30 +46,30 @@ from ...configurators import (  # type: ignore[reportMissingImports]
     LegendMeasurement,
 )
 from ...configurators.gc import _slot_skew_config
-from ...core.sequence import check_feature_presence  # type: ignore[reportMissingImports]
+from ...core.sequence import check_feature_presence
 from ...core.text import calculate_bbox_dimensions, calculate_svg_bbox_dimensions
-from ...config.toml import load_config_toml  # type: ignore[reportMissingImports]
+from ...config.toml import load_config_toml
 from ...exceptions import ValidationError
-from ...features.colors import precompute_used_color_rules  # type: ignore[reportMissingImports]
-from ...features.factory import FeatureBuildResult, create_feature_layers  # type: ignore[reportMissingImports]
-from ...labels.circular import (  # type: ignore[reportMissingImports]
+from ...features.colors import precompute_used_color_rules
+from ...features.factory import FeatureBuildResult, create_feature_layers
+from ...labels.circular import (
     assign_leader_start_points,
     minimum_bbox_gap_px,
     prepare_label_list,
     x_overlap,
     y_overlap,
 )
-from ...labels.filtering import preprocess_label_filtering  # type: ignore[reportMissingImports]
+from ...labels.filtering import preprocess_label_filtering
 from ...layout.record_coordinates import RecordDisplayTransform
-from ...layout.circular import (  # type: ignore[reportMissingImports]
+from ...layout.circular import (
     CircularFeatureLaneDirection,
     CircularRadialLayout,
     CircularRecordRenderContext,
     CircularResolvedSlot,
     CircularTickLayout,
 )
-from ...layout.circular_depth_axis import depth_axis_tick_font_size_px  # type: ignore[reportMissingImports]
-from ...layout.composition import (  # type: ignore[reportMissingImports]
+from ...layout.circular_depth_axis import depth_axis_tick_font_size_px
+from ...layout.composition import (
     CompositionItem,
     CompositionPlan,
     CompositionRequest,
@@ -78,9 +78,9 @@ from ...layout.composition import (  # type: ignore[reportMissingImports]
     TitlePlacement,
     plan_composition,
 )
-from ...layout.spatial import Aabb, union_aabbs  # type: ignore[reportMissingImports]
-from ...legend.table import _unique_legend_key, prepare_legend_table  # type: ignore[reportMissingImports]
-from ...tracks import (  # type: ignore[reportMissingImports]
+from ...layout.spatial import Aabb, union_aabbs
+from ...legend.table import _unique_legend_key, prepare_legend_table
+from ...tracks import (
     CircularTrackSlot,
     ScalarSpec,
     default_circular_track_slots,
@@ -103,7 +103,7 @@ from ...render.drawers.circular.annotations import draw_circular_annotation_trac
 from ...render.composition import apply_composition_plan
 from ...svg.ids import stable_svg_id, track_slot_svg_id
 from .positioning import _parse_svg_number as _svg_number, center_group_on_canvas
-from ...tracks.circular import tick_sides_for_tick_label_layout  # type: ignore[reportMissingImports]
+from ...tracks.circular import tick_sides_for_tick_label_layout
 from ...tracks.parsing import slot_dinucleotide
 
 from .builders import (
@@ -118,9 +118,9 @@ from .builders import (
     add_record_group_on_canvas,
     add_tick_group_on_canvas,
 )
-from ...render.groups.circular.definition import DefinitionGroup  # type: ignore[reportMissingImports]
-from .radial_layout import resolve_circular_radial_layout  # type: ignore[reportMissingImports]
-from .presets import (  # type: ignore[reportMissingImports]
+from ...render.groups.circular.definition import DefinitionGroup
+from .radial_layout import resolve_circular_radial_layout
+from .presets import (
     CircularPresetContext,
     circular_feature_lane_direction_for_preset,
     circular_radial_plan_for_preset,

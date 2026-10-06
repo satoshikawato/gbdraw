@@ -4,19 +4,19 @@
 from collections import Counter
 from typing import Optional, Dict
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from svgwrite.container import Group
 
-from ....canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
-from ....core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
-from ....features.factory import FeatureBuildResult  # type: ignore[reportMissingImports]
-from ....features.objects import FeatureObject  # type: ignore[reportMissingImports]
-from ....labels.circular import prepare_label_list  # type: ignore[reportMissingImports]
-from ....layout.circular import CircularRecordRenderContext  # type: ignore[reportMissingImports]
+from ....canvas import CircularCanvasConfigurator
+from ....core.sequence import determine_length_parameter
+from ....features.factory import FeatureBuildResult
+from ....features.objects import FeatureObject
+from ....labels.circular import prepare_label_list
+from ....layout.circular import CircularRecordRenderContext
 from ....svg.ids import record_group_svg_id
-from ...drawers.circular.labels import LabelDrawer  # type: ignore[reportMissingImports]
-from ...drawers.circular.features import FeatureDrawer  # type: ignore[reportMissingImports]
-from ....configurators import FeatureDrawingConfigurator  # type: ignore[reportMissingImports]
+from ...drawers.circular.labels import LabelDrawer
+from ...drawers.circular.features import FeatureDrawer
+from ....configurators import FeatureDrawingConfigurator
 
 
 class SeqRecordGroup:

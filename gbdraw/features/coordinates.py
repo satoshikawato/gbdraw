@@ -75,14 +75,14 @@ def get_exon_coordinate(
     Returns:
         (exon_count, exon_coordinate)
     """
-    exon_strand: Strand = get_strand(exon_line.strand)  # type: ignore
+    exon_strand: Strand = get_strand(exon_line.strand)
     exon_count: int = previous_exon_count + 1
     exon_id: str = str(exon_count).zfill(3)
-    exon_start = int(exon_line.start)  # type: ignore
+    exon_start = int(exon_line.start)
     if exon_start < 1:
         exon_start = 1
 
-    exon_end = int(exon_line.end)  # type: ignore
+    exon_end = int(exon_line.end)
     if exon_end < 1:
         exon_end = 1
     exon_coordinate = FeatureLocationPart("block", exon_id, exon_strand, exon_start, exon_end, last_or_not)

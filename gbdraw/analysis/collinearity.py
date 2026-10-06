@@ -12,8 +12,8 @@ import sys
 from typing import Literal, Mapping, Sequence
 
 import pandas as pd
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
 
 from gbdraw.analysis.collinearity_units import (
     CollinearityUnit,
@@ -282,7 +282,7 @@ def _unit_genomic_link_coordinates(unit: CollinearityUnit) -> tuple[int, int]:
 
 def _normalized_strand(value: object) -> int | None:
     try:
-        strand = int(value)  # type: ignore[arg-type]
+        strand = int(value)
     except (TypeError, ValueError):
         return None
     return strand if strand in {-1, 1} else None

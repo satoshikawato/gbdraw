@@ -5,9 +5,9 @@
 
 from __future__ import annotations
 
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
+from svgwrite.container import Group
 
-from ...canvas import LinearCanvasConfigurator  # type: ignore[reportMissingImports]
+from ...canvas import LinearCanvasConfigurator
 
 
 def position_record_group(record_group: Group, offset: float, offset_x: float, canvas_config: LinearCanvasConfigurator) -> Group:

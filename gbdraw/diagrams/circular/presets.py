@@ -10,17 +10,17 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import Literal, Sequence
 
-from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
-from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from ...tracks.circular import (  # type: ignore[reportMissingImports]
+from ...canvas import CircularCanvasConfigurator
+from ...config.models import GbdrawConfig
+from ...tracks.circular import (
     CircularTrackSlot,
     NUMERIC_CIRCULAR_TRACK_RENDERERS,
     _internal_circular_track_slot,
     circular_track_slots_with_axis_side,
     tick_label_layout_from_sides,
 )
-from ...tracks.scalars import ScalarSpec  # type: ignore[reportMissingImports]
-from ...svg.circular_ticks import (  # type: ignore[reportMissingImports]
+from ...tracks.scalars import ScalarSpec
+from ...svg.circular_ticks import (
     get_circular_tick_label_radius_bounds,
     get_circular_tick_path_ratio_bounds,
 )
