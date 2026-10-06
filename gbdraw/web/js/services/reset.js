@@ -101,7 +101,6 @@ const resetEditorDraftState = (state) => {
   state.fileLegendCaptions.value = new Set();
 
   clearReactiveObject(state.labelTextBulkOverrides);
-  state.labelOverrideBuildWarning.value = '';
   state.autoLabelReflowEnabled.value = false;
   state.labelReflowLastError.value = null;
 

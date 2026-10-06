@@ -460,7 +460,6 @@ export const createFeatureLabelActions = ({
     labelOnDialog,
     featureOverrides,
     labelTextBulkOverrides,
-    labelOverrideBuildWarning,
     autoLabelReflowEnabled,
     labelReflowRequestSeq,
     labelReflowForceRequestSeq,
@@ -476,7 +475,6 @@ export const createFeatureLabelActions = ({
       updateFeatureOverride(featureOverrides, row, Object.fromEntries(LABEL_FIELDS.map((field) => [field, null])));
     });
     Object.keys(labelTextBulkOverrides).forEach((key) => delete labelTextBulkOverrides[key]);
-    labelOverrideBuildWarning.value = '';
   };
 
   // A mounted label names its feature by rendered ID; the displayed Result's
@@ -526,7 +524,6 @@ export const createFeatureLabelActions = ({
   // its Results (OV-36). The rerender still reports its own failure (R1(c)).
   const clearLabelBuildNotices = ({ rerender = false } = {}) => {
     if (rerender) labelReflowLastError.value = null;
-    labelOverrideBuildWarning.value = '';
   };
 
   const queueLabelReflow = (force = false) => {

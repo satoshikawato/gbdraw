@@ -1833,7 +1833,6 @@ const createLayoutPreferences = () => ({
     featureEditorStatus: { status: 'summary-ready', summaryCount: 1 },
     featureExtractionPending: ref(false),
     featureExtractionError: ref(null),
-    labelOverrideBuildWarning: ref(''),
     proteinIdentityManifest: ref(proteinIdentityManifestA),
     legacyProteinRawCandidates: ref(legacyProteinRawCandidatesA),
     legacyProteinDerivedEvidence: ref(legacyProteinDerivedEvidenceA),

@@ -463,7 +463,6 @@ const labelSearch = ref('');
 const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText}]
 const canonicalLabelOverrideRows = ref([]);
 const labelTextBulkOverrides = reactive({}); // { sourceText: text }
-const labelOverrideBuildWarning = ref('');
 const autoLabelReflowEnabled = ref(false);
 const labelReflowProcessing = ref(false);
 const labelReflowRequestSeq = ref(0);
@@ -1008,7 +1007,6 @@ export const state = {
   editableLabels,
   canonicalLabelOverrideRows,
   labelTextBulkOverrides,
-  labelOverrideBuildWarning,
   autoLabelReflowEnabled,
   labelReflowProcessing,
   labelReflowRequestSeq,

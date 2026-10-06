@@ -978,10 +978,7 @@ export const createHistorySnapshotService = ({
         featureExtractionPending: Boolean(
           getGeneratedArtifactRef(state.featureExtractionPending, false)
         ),
-        featureExtractionError: getGeneratedArtifactRef(state.featureExtractionError, null),
-        labelOverrideBuildWarning: String(
-          getGeneratedArtifactRef(state.labelOverrideBuildWarning, '') || ''
-        )
+        featureExtractionError: getGeneratedArtifactRef(state.featureExtractionError, null)
       })
     });
     const runtimeState = generatedArtifactRuntimeOwner?.capture?.() || null;
@@ -1106,10 +1103,6 @@ export const createHistorySnapshotService = ({
       setGeneratedArtifactRef(
         state.featureExtractionError,
         presentation.featureExtractionError ?? null
-      );
-      setGeneratedArtifactRef(
-        state.labelOverrideBuildWarning,
-        presentation.labelOverrideBuildWarning || ''
       );
 
       const boundedUi = { ...ui };
