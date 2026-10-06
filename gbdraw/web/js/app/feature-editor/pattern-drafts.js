@@ -1,9 +1,18 @@
+// @ts-check
 // Transient display state for existing Color-rule patterns. Canonical rows stay
 // with rule-actions; signatures only recognize unchanged rows after bulk restore.
 const specificRuleRevision = (rule) => JSON.stringify([
   rule.feat, rule.qual, rule.val, rule.color, rule.cap, Boolean(rule.fromFile)
 ]);
 
+/**
+ * @typedef {object} SpecificRulePatternDraftsOptions
+ * @property {Record<string, any>[]} rules The canonical Color-rule rows (their owner is rule-actions).
+ * @property {(value?: any) => { value: any }} ref Vue `ref`
+ * @property {() => void} invalidate Tells the rule owner a displayed pattern changed.
+ */
+
+/** @param {SpecificRulePatternDraftsOptions} options */
 export const createSpecificRulePatternDrafts = ({ rules, ref, invalidate }) => {
   const drafts = ref(new Map());
   const fieldIds = new WeakMap();

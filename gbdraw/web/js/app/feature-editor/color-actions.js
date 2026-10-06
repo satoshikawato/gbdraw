@@ -1,3 +1,4 @@
+// @ts-check
 import { reportRuleRunFailure, ruleMatchesFeature } from '../rule-matching.js';
 import { resolveColorToHex } from '../color-utils.js';
 import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } from '../feature-utils.js';
@@ -8,6 +9,41 @@ import {
   getFeatureOverride
 } from '../../services/feature-override-identity.js';
 
+/**
+ * The rule owner's actions this owner reads (a whole-object port, R13).
+ * @typedef {object} ColorActionsRuleActions
+ * @property {(rules: Record<string, any>[], label?: string, options?: Record<string, any>) => Promise<any>} commitSpecificRules
+ * @property {(rule: Record<string, any>) => number} countFeaturesMatchingRule
+ * @property {(feature: Record<string, any>, caption: string) => { rule: Record<string, any>, color: string } | null} findExistingColorForCaption
+ * @property {(feature: Record<string, any>, label?: string | null) => Record<string, any>[]} findFeaturesWithSameDisplayedLabel
+ * @property {(feature: Record<string, any>, label?: string | null) => Record<string, any>[]} findFeaturesWithSameIndividualLabel
+ * @property {(feature: Record<string, any>, caption?: string | null) => Record<string, any>[]} findFeaturesWithSameLegendItem
+ * @property {(feature: Record<string, any>) => Record<string, any> | null} findMatchingRegexRule
+ * @property {(feature: Record<string, any>) => string} getDisplayedFeatureLabel
+ * @property {(feature: Record<string, any>) => string} getEffectiveLegendCaption
+ * @property {(feature: Record<string, any>) => string} getIndividualFeatureLabel
+ * @property {(feature: Record<string, any>) => { qual: string, val: string } | null} getFeatureQualifier
+ * @property {(feature: Record<string, any>, label: string) => { feat: string, qual: string, val: string } | null} getLabelSpecificRule
+ * @property {(caption: string) => Record<string, any>[]} getLegendRowRules
+ */
+
+/**
+ * @typedef {object} FeatureColorActionsOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {(rules: Record<string, any>[], commit: () => any) => any} runWithRuleMatches
+ *   Runs an action once the color rule matches it reads are prepared (the rule preparation's `run`).
+ * @property {(svg: SVGSVGElement) => void} compactLegendEntries The Legend layout owner's removal of gaps between the entries.
+ * @property {(options?: { replaceGeneratedInventory?: boolean }) => any} extractLegendEntries
+ *   The Legend owner's reading of the mounted Legend rows.
+ * @property {() => void} onLegendGeometryChanged The Legend owner's reaction to a change of Legend geometry.
+ * @property {ColorActionsRuleActions} ruleActions The rule owner's lookups and commit of specific-color rules.
+ * @property {(svg: Element, featureId: string) => Element[]} getFeatureElements The mounted elements of a feature.
+ * @property {(svg: Element, featureId: string) => Element[]} getFeatureFillElements The mounted fill elements of a feature.
+ * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
+ *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ */
+
+/** @param {FeatureColorActionsOptions} options */
 export const createFeatureColorActions = ({
   state,
   // R13: runs an action once the color rule matches it reads are prepared;
@@ -1034,7 +1070,7 @@ export const createFeatureColorActions = ({
       }
       const siblings = findFeaturesWithSameLegendItem(feat, targetLegendName);
       const allFeatures = [feat, ...siblings];
-      if (!(await applyColorToLegendSpecificRules(targetLegendName, color, allFeatures))) {
+      if (!(await applyColorToLegendSpecificRules(targetLegendName, color))) {
         await applyColorToFeatureGroup(allFeatures, targetLegendName, color);
       }
     } else if (choice === 'displayLabel') {
@@ -1102,7 +1138,7 @@ export const createFeatureColorActions = ({
         changed = true;
       }
       if (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(element, normalizedStrokeWidth)) {
-        element.setAttribute('stroke-width', normalizedStrokeWidth);
+        element.setAttribute('stroke-width', /** @type {any} */ (normalizedStrokeWidth));
         changed = true;
       }
     });
@@ -1174,7 +1210,7 @@ export const createFeatureColorActions = ({
       }
       if (!strokeWidthAttributeMatches(element, originalWidth)) {
         if (originalWidth === null) element.removeAttribute('stroke-width');
-        else element.setAttribute('stroke-width', originalWidth);
+        else element.setAttribute('stroke-width', /** @type {any} */ (originalWidth));
         changed = true;
       }
     });
@@ -1377,7 +1413,7 @@ export const createFeatureColorActions = ({
           changed = true;
         }
         if (normalizedStrokeWidth !== null && !strokeWidthAttributeMatches(element, normalizedStrokeWidth)) {
-          element.setAttribute('stroke-width', normalizedStrokeWidth);
+          element.setAttribute('stroke-width', /** @type {any} */ (normalizedStrokeWidth));
           changed = true;
         }
         if (changed) updatedCount += 1;

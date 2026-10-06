@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { FeaturePlacementTarget } from '../../services/feature-placement.js' */
 import {
   canonicalFeaturePlacements,
   featureIdentityKeyOf,
@@ -34,6 +36,7 @@ export const draftPlacementTargets = ({ mode, form, adv }) => {
 const LAYOUT_FORM_FIELDS = ['track_type', 'linear_track_layout', 'separate_strands'];
 const copy = (value) => (Array.isArray(value) ? value.map(copy) : value && typeof value === 'object'
   ? Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, copy(entry)])) : value);
+/** @param {Record<string, any>} draft The draft's `form` and `adv`. */
 export const saveTrackLayout = ({ form, adv }) => ({
   form: Object.fromEntries(LAYOUT_FORM_FIELDS.map((field) => [field, form[field]])),
   stacks: Object.keys(SIDES).map((mode) => {
@@ -42,6 +45,10 @@ export const saveTrackLayout = ({ form, adv }) => ({
       rows: (Array.isArray(slots) ? slots : []).map((slot) => [slot, copy(slot)]) };
   })
 });
+/**
+ * @param {Record<string, any>} draft The draft's `form` and `adv`.
+ * @param {Record<string, any>} saved The result of `saveTrackLayout`.
+ */
 export const restoreTrackLayout = ({ form, adv }, saved) => {
   Object.assign(form, saved.form);
   for (const { mode, slots, enabled, axis, rows } of saved.stacks) {
@@ -55,6 +62,17 @@ export const restoreTrackLayout = ({ form, adv }, saved) => {
   }
 };
 
+/**
+ * @typedef {object} FeaturePlacementActionsOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
+ * @property {() => ({ mode?: string } | null)} getCommittedRequest The committed canonical request.
+ * @property {(feature: Record<string, any>) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
+ * @property {<T extends object>(value: T) => T} [reactive] Vue `reactive`
+ * @property {() => Promise<any>} [nextTick] Vue `nextTick`
+ */
+
+/** @param {FeaturePlacementActionsOptions} options */
 export const createFeaturePlacementActions = ({
   state, runUndoable, getCommittedRequest, isCurrentFeature,
   reactive = (value) => value, nextTick = () => Promise.resolve()
@@ -90,8 +108,8 @@ export const createFeaturePlacementActions = ({
         const key = featureIdentityKeyOf(feature);
         if (value === 'auto') delete state.featurePlacementOverrides[key];
         else {
-          const row = { ...parseFeatureIdentityKey(key), placement: value === 'main'
-            ? { kind: 'main' } : { kind: 'lane', side: value, level: 1 } };
+          const row = { ...parseFeatureIdentityKey(key), placement: /** @type {FeaturePlacementTarget} */ (value === 'main'
+            ? { kind: 'main' } : { kind: 'lane', side: value, level: 1 }) };
           canonicalFeaturePlacements({ [key]: row });
           state.featurePlacementOverrides[key] = row;
         }
@@ -120,6 +138,11 @@ export const createFeaturePlacementActions = ({
     });
   };
   const focusAfterRender = (find) => nextTick().then(() => find()?.focus?.());
+  /**
+   * The `ChangeTrackLayout` port of the track stack editors (app/track-slot-edits.js).
+   * @param {() => any} apply
+   * @param {any} [control] The edited checkbox, select, or button.
+   */
   const changeTrackLayout = (apply, control = null) => {
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
