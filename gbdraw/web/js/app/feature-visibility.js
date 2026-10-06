@@ -1,6 +1,6 @@
 import { exactRegexValue } from './feature-selector.js';
-import { ruleMatchesFeature, visibilityRuleMatchesFeature } from './rule-matching.js';
-import { stableFeatureOverrideKey as stableKeyOf } from '../services/feature-catalog.js';
+import { firstMatchingRuleIfKnown, ruleMatchesFeature, visibilityRuleMatchesFeature } from './rule-matching.js';
+import { resultCatalogFeatures, stableFeatureOverrideKey as stableKeyOf } from '../services/feature-catalog.js';
 import {
   featureIdentityKey,
   featureIdentityKeyOf,
@@ -421,6 +421,65 @@ export const listFeatureRows = (catalogFeatures, context) => {
   });
   return { rows, drawn, rendered };
 };
+
+// What Python derives the feature rows of a Result's Legend from
+// (gbdraw/legend/table.py::prepare_legend_table): per record, the types of
+// the drawn features in first-drawn order; the specific color rules whose
+// caption a drawn feature uses, in table order; the types of the drawn
+// features no rule colors (the "other <type>s" rows); and every rule caption,
+// which Python reserves. This is the input of the rows, not the rows: Python
+// stays their only derivation (Owner decision 2026-10-06, option A), and an
+// edit that changes a Result's source asks for the automatic rerender (OV-42,
+// OV-43). The color of a rule is in it only for a batch: with one Result the
+// rows keep their captions and the Legend follows the color live
+// (`ruleLegendCaption` gives the caption of a rule whose caption names another
+// row), while another batch Result shows the row it was drawn with until
+// Python draws it again (OV-44). A Result is read from its catalog features:
+// `asRendered` reads the features Python drew at the last render, else
+// `featureDrawnInResult` answers. A source is null while a rule match it needs
+// is unknown; null equals no source (`sameLegendSources`).
+const legendSourceOf = (catalogFeatures, context, { asRendered, withColors }) => {
+  const caption = (rule) => String(rule?.cap ?? '').trim();
+  const color = (rule) => (withColors ? String(rule?.color ?? '').trim().toLowerCase() : '');
+  const usage = (rule) => JSON.stringify([caption(rule), color(rule)]);
+  const typesByRecord = new Map();
+  const used = new Set();
+  const defaultTypes = new Set();
+  for (const feature of catalogFeatures.biological) {
+    const shown = catalogFeatures.renderedByIdentity.get(stableKeyOf(feature));
+    const row = shown || feature;
+    if (!(asRendered ? shown : featureDrawnInResult(row, context, catalogFeatures))) continue;
+    const type = String(feature.type ?? '');
+    const record = String(feature.recordKey ?? '');
+    if (!typesByRecord.has(record)) typesByRecord.set(record, []);
+    if (!typesByRecord.get(record).includes(type)) typesByRecord.get(record).push(type);
+    const rule = firstMatchingRuleIfKnown(row, context.colorRules);
+    if (rule === undefined) return null;
+    if (!rule) defaultTypes.add(type);
+    else if (caption(rule)) used.add(usage(rule));
+  }
+  return JSON.stringify([
+    [...typesByRecord],
+    context.colorRules.filter((rule) => caption(rule) && used.has(usage(rule)))
+      .map((rule) => [String(rule.feat ?? ''), caption(rule), color(rule)]),
+    [...defaultTypes].sort(),
+    [...new Set(context.colorRules.map(caption).filter(Boolean))].sort()
+  ]);
+};
+
+// The Legend source of every committed Result, in Result order.
+export const resultLegendSources = (state, context, { asRendered = false } = {}) => {
+  const results = Array.isArray(state?.results?.value) ? state.results.value : [];
+  return results.map((_, index) => {
+    const catalogFeatures = resultCatalogFeatures(state, index);
+    return catalogFeatures
+      ? legendSourceOf(catalogFeatures, context, { asRendered, withColors: results.length > 1 })
+      : '';
+  });
+};
+
+export const sameLegendSources = (left, right) => left.length === right.length
+  && left.every((source, index) => source !== null && source === right[index]);
 
 const isEditorFeatureRule = (rule) => {
   const normalized = normalizeFeatureVisibilityRule(rule);

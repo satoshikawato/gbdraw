@@ -20,6 +20,11 @@ const { download, generate, load } = require('./helpers/mode-transition.cjs');
 
 test.describe.configure({ retries: 0 });
 
+// A feature a live edit hides keeps its glyph with display none until the
+// rerender that the edit asks for (a rule that changes the Legend) leaves it
+// out of the drawing, as Generate does.
+const notDrawn = (value) => value === null || /\|hidden$/.test(value);
+
 test('batch drawer lists and edits the features of the displayed Result', async ({ page }) => {
   test.setTimeout(300_000);
   await openBatch(page);
@@ -51,12 +56,12 @@ test('batch record-wide color and visibility scopes reach the other Result when 
   await settle(page);
   const edited = await featurePresentation(page, ['TESTA_0001', 'TESTA_0004']);
   expect(edited.TESTA_0001.mounted).toBe('#ff0000|shown');
-  expect(edited.TESTA_0004.mounted).toMatch(/\|hidden$/);
+  expect(notDrawn(edited.TESTA_0004.mounted)).toBe(true);
   await selectResult(page, 1);
   const displayed = await featurePresentation(page, ['TESTB_0001', 'TESTB_0002', 'TESTB_0004']);
   expect(displayed.TESTB_0001.mounted).toBe('#ff0000|shown');
   expect(displayed.TESTB_0002.mounted).toBe('#ff0000|shown');
-  expect(displayed.TESTB_0004.mounted).toMatch(/\|hidden$/);
+  expect(notDrawn(displayed.TESTB_0004.mounted)).toBe(true);
 });
 
 test('batch live legend deletion reaches the other Result when it is displayed', async ({ page }) => {
@@ -801,54 +806,56 @@ const hideFeature = (page, featureId) => evaluateWithRetainedPromise(page, async
 }, featureId);
 
 // Auto Reflow is off, so a hidden feature stays in the Result until a choice
-// below queues the label reflow, which draws it no more.
+// below queues the label reflow, which draws it no more. The features are not
+// the first CDS: hiding that one changes the Legend, which asks for the
+// rerender at once (OV-42).
 test('Label visibility On for a hidden feature shows the feature and label or keeps the feature hidden', async ({ page }) => {
   test.setTimeout(600_000);
   await openWithGenBank(page, FORCED_LABEL_FIXTURE, () => {
     window.__GBDRAW_APP__.form.labels_mode = 'none';
   });
   await generate(page);
-  const { fl1, fl2 } = await featureIdsByLocator(page);
+  const { fl2: first, dup: second } = await featureIdsByLocator(page);
   const labelState = () => labelEditorState(page, 'labels.circular.scope');
-  await hideFeature(page, fl1);
+  await hideFeature(page, first);
   const hidden = await labelOnFacts(page);
-  expect(hidden.featureVisibility).toEqual({ [fl1]: 'off' });
+  expect(hidden.featureVisibility).toEqual({ [first]: 'off' });
 
-  await startLabelOn(page, fl1, 'FL1_SHOWN');
+  await startLabelOn(page, first, 'FL1_SHOWN');
   await answerLabelOn(page, 'Feature Is Hidden', 'Cancel');
   expect(await labelOnFacts(page)).toEqual(hidden);
 
-  await startLabelOn(page, fl1, 'FL1_SHOWN');
+  await startLabelOn(page, first, 'FL1_SHOWN');
   await answerLabelOn(page, 'Feature Is Hidden', 'Show feature and label');
   expect(await labelOnFacts(page)).toEqual({
     ...hidden,
     undo: hidden.undo + 1,
     redo: 0,
-    labelVisibility: { [fl1]: 'on' },
-    labelText: { [fl1]: 'FL1_SHOWN' },
-    featureVisibility: { [fl1]: 'on' }
+    labelVisibility: { [first]: 'on' },
+    labelText: { [first]: 'FL1_SHOWN' },
+    featureVisibility: { [first]: 'on' }
   });
   await waitForLabelReflow(page);
-  expect(await labelState()).toMatchObject({ reflowError: null, labels: [[fl1, 'FL1_SHOWN']] });
+  expect(await labelState()).toMatchObject({ reflowError: null, labels: [[first, 'FL1_SHOWN']] });
 
-  await hideFeature(page, fl2);
-  expect(await popupLabelHint(page, fl2)).toBe('This feature has no label in the current Result. The feature is hidden.');
+  await hideFeature(page, second);
+  expect(await popupLabelHint(page, second)).toBe('This feature has no label in the current Result. The feature is hidden.');
   const shown = await labelOnFacts(page);
-  await startLabelOn(page, fl2, 'FL2_KEPT');
+  await startLabelOn(page, second, 'FL2_KEPT');
   await answerLabelOn(page, 'Feature Is Hidden', 'Keep feature hidden');
   expect(await labelOnFacts(page)).toEqual({
     ...shown,
     undo: shown.undo + 1,
     redo: 0,
-    labelVisibility: { [fl1]: 'on', [fl2]: 'on' },
-    labelText: { [fl1]: 'FL1_SHOWN', [fl2]: 'FL2_KEPT' },
-    featureVisibility: { [fl1]: 'on', [fl2]: 'off' }
+    labelVisibility: { [first]: 'on', [second]: 'on' },
+    labelText: { [first]: 'FL1_SHOWN', [second]: 'FL2_KEPT' },
+    featureVisibility: { [first]: 'on', [second]: 'off' }
   });
   await waitForLabelReflow(page);
-  expect(await labelState()).toMatchObject({ reflowError: null, labels: [[fl1, 'FL1_SHOWN']] });
+  expect(await labelState()).toMatchObject({ reflowError: null, labels: [[first, 'FL1_SHOWN']] });
 
   await generate(page);
-  expect(await labelState()).toMatchObject({ error: null, reflowError: null, labels: [[fl1, 'FL1_SHOWN']] });
+  expect(await labelState()).toMatchObject({ error: null, reflowError: null, labels: [[first, 'FL1_SHOWN']] });
 });
 
 // The given features that the mounted Result draws.
@@ -935,7 +942,10 @@ test('a Feature Visibility rule edit shows on the Result at once, as Generate dr
   await openWithGenBank(page, FORCED_LABEL_FIXTURE);
   await generate(page);
   const { fl1, fl2 } = await featureIdsByLocator(page);
-  const drawn = () => drawnFeatureIds(page, [fl1, fl2]);
+  // The edit shows on the mounted Result at once; a rerender it asks for (an
+  // edit that changes the Legend, or draws a feature the Result lacks) then
+  // draws the same features, so the check waits for it (OV-42).
+  const drawn = async () => { await settle(page); return drawnFeatureIds(page, [fl1, fl2]); };
   const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   const edit = (action, ...args) => evaluateWithRetainedPromise(page, ({ name, values }) => window.__GBDRAW_APP__[name](...values),
     { name: action, values: args });

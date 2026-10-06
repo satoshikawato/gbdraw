@@ -47,6 +47,24 @@ export const firstMatchingRule = (feature, rules) => {
   }
   return winner;
 };
+// `firstMatchingRule` for a reader that must not take an unknown match for a
+// miss: undefined while a match of a rule of the feature's type is pending or
+// declined.
+export const firstMatchingRuleIfKnown = (feature, rules) => {
+  const cache = cacheOf(feature);
+  let winner = null;
+  let priority = Infinity;
+  for (const rule of rules) {
+    if (!rule || (rule.feat !== '*' && rule.feat !== feature?.type)) continue;
+    const result = cache?.get(ruleKey(rule));
+    if (!result || result.matches === null) return undefined;
+    if (result.matches && result.priority < priority) {
+      winner = rule;
+      priority = result.priority;
+    }
+  }
+  return winner;
+};
 export const ruleMatchesReady = (features, rules) => features.every((feature) =>
   rules.every((rule) => ruleMatchesFeature(feature, rule) !== null || ruleMatchDeclined(feature, [rule]))
 );

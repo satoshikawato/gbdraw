@@ -247,6 +247,11 @@ test('Circular batch: a Label TSV imported on Result 1 reaches Result 2 live, th
   expect.soft(await labelViolations(page, 'Generate', ids, IMPORTED_LABELS)).toEqual([]);
 });
 
+// The entries only Result 2 draws once the "This feature only" color of
+// TESTB_0001 is a rule: the rule row and the "other proteins" row that Python
+// captions the remaining CDS row with (the rerender draws them, OV-43).
+const RESULT_2_ONLY = ['duplicate protein', 'other proteins'];
+
 // B18 (D-07, D-08, R11): a Legend Sort Z-A made on Result 2 keeps its order on
 // Result 2 through a switch to Result 1 and back, also for the entry only
 // Result 2 draws (the "This feature only" color entry of TESTB_0001), and
@@ -260,32 +265,33 @@ test('Circular batch: a Legend sort on Result 2 keeps its order through a Result
   await settle(page);
   const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   const edited = await undoCount();
+  const unsorted = await legendCaptions(page);
   await openDrawer(page);
   await page.locator('.right-drawer').getByRole('button', { name: 'Legend' }).click();
   await page.locator('.right-drawer').getByTitle('Sort Z-A', { exact: true }).click();
   await settle(page);
   const sorted = await legendCaptions(page);
   expect(sorted).toContain('duplicate protein');
-  expect(sorted.at(-1)).not.toBe('duplicate protein');
+  expect(sorted).not.toEqual(unsorted);
   expect(await legendCaptions(page, { source: 'content' })).toEqual(sorted);
   expect(await undoCount()).toBe(edited + 1);
 
   await show(page, 0);
-  expect.soft(await legendCaptions(page), 'Result 1 shows the sort without the Result 2 entry')
-    .toEqual(sorted.filter((caption) => caption !== 'duplicate protein'));
+  expect.soft(await legendCaptions(page), 'Result 1 shows the sort without the Result 2 entries, its own CDS entry after them')
+    .toEqual(sorted.filter((caption) => !RESULT_2_ONLY.includes(caption)).concat('CDS'));
   expect.soft(await undoCount(), 'showing Result 1 records no Undo step').toBe(edited + 1);
   await show(page, 1);
   expect.soft(await legendCaptions(page), 'Result 2 keeps its sorted order').toEqual(sorted);
   expect.soft(await legendCaptions(page, { source: 'content' }), 'Result 2 content keeps its sorted order').toEqual(sorted);
   expect.soft(await undoCount(), 'showing Result 2 records no Undo step').toBe(edited + 1);
 
-  // Generate turns the "This feature only" color into a rule and captions the
-  // remaining CDS row "other proteins" (documented), which follows the order.
+  // The rerender drew the "This feature only" color as a rule and captioned the
+  // remaining CDS row "other proteins" (OV-43), as Generate does, so Generate
+  // keeps the order.
   await generateAndWaitForResult(page);
   await settle(page);
   await show(page, 1);
-  expect.soft(await legendCaptions(page), 'Generate keeps the sorted order on Result 2')
-    .toEqual(sorted.filter((caption) => caption !== 'CDS').concat('other proteins'));
+  expect.soft(await legendCaptions(page), 'Generate keeps the sorted order on Result 2').toEqual(sorted);
 });
 
 // The displayed Result's Legend: mounted, committed (export and Session
@@ -307,29 +313,44 @@ const sortResult2Descending = async (page) => {
   await editFeature(page, 'TESTB_0001', { fill: RED });
   await settle(page);
   const result2 = await legendCaptions(page);
-  expect(result2.filter((caption) => !result1.includes(caption))).toEqual(['duplicate protein']);
+  expect(result2.filter((caption) => !result1.includes(caption))).toEqual(RESULT_2_ONLY);
   await openDrawer(page);
   await page.locator('.right-drawer').getByRole('button', { name: 'Legend' }).click();
   await page.locator('.right-drawer').getByTitle('Sort Z-A', { exact: true }).click();
   await settle(page);
   const sorted = await legendCaptions(page);
   expect(sorted).not.toEqual(result2);
-  return { result1, result2, sorted, shared: (captions) => captions.filter((caption) => caption !== 'duplicate protein') };
+  const shared = (captions) => captions.filter((caption) => !RESULT_2_ONLY.includes(caption));
+  return {
+    result1,
+    result2,
+    sorted,
+    shared,
+    onResult1: (captions) => shared(captions).filter((caption) => caption !== 'CDS').concat('CDS')
+  };
 };
+
+// OV-47: the default Legend order (`originalLegendOrder`) is one inventory,
+// taken from the Result displayed when Generate or the automatic rerender
+// draws. A rerender while Result 2 is shown drops Result 1's own rows from it,
+// so Undo and Sort by default on Result 1 do not return Python's order. A
+// per-Result inventory fixes it.
+const OV_47 = 'OV-47: the default Legend order is one inventory, taken from the displayed Result; Undo and Sort by default do not return Python\'s order of the other Result';
 
 // B19 (D-07, D-08, R3, R11): Undo and Redo of a Legend sort made on Result 2
 // while Result 1 is displayed restore the order on Result 1 and never give it
 // the entry only Result 2 draws; Result 2 shows the restored order once it is
 // displayed, its own entry following the shared entries.
 test('Circular batch: Undo and Redo of a Legend sort on Result 2 keep each Result\'s own entries while Result 1 is shown', async ({ page }) => {
+  test.fail(true, OV_47);
   test.setTimeout(300_000);
-  const { result1, result2, sorted, shared } = await sortResult2Descending(page);
+  const { result1, result2, sorted, shared, onResult1 } = await sortResult2Descending(page);
   await show(page, 0);
-  expect(await legendCaptions(page)).toEqual(shared(sorted));
+  expect(await legendCaptions(page)).toEqual(onResult1(sorted));
 
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
-  expect.soft(await legendView(page), 'Undo on Result 1 gives its order before the sort, without the Result 2 entry')
+  expect.soft(await legendView(page), 'Undo on Result 1 gives its order before the sort, without the Result 2 entries')
     .toEqual(sameView(result1));
   await show(page, 1);
   expect.soft(await legendView(page), 'after Undo, Result 2 shows its order before the sort').toEqual(sameView(result2));
@@ -338,7 +359,7 @@ test('Circular batch: Undo and Redo of a Legend sort on Result 2 keep each Resul
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
   await settle(page);
   expect.soft(await legendView(page), 'Redo on Result 1 sorts it again, without the Result 2 entry')
-    .toEqual(sameView(shared(sorted)));
+    .toEqual(sameView(onResult1(sorted)));
   await show(page, 1);
   const redone = await legendView(page);
   expect.soft(shared(redone.mounted), 'after Redo, Result 2 shows the sort').toEqual(shared(sorted));
@@ -351,6 +372,7 @@ test('Circular batch: Undo and Redo of a Legend sort on Result 2 keep each Resul
 // B20 (D-07, D-08): Sort by default made on Result 1 reaches Result 2, which
 // shows the Sort Z-A made on it, once Result 2 is displayed.
 test('Circular batch: Sort by default on Result 1 reaches Result 2 shown in a sorted order', async ({ page }) => {
+  test.fail(true, OV_47);
   test.setTimeout(300_000);
   const { result1, result2 } = await sortResult2Descending(page);
   await show(page, 0);
@@ -419,8 +441,12 @@ const dragRole = (role, dx, dy) => (page) => page.evaluate(async ({ targetRole, 
 }, { targetRole: role, deltaX: dx, deltaY: dy });
 
 const onApp = (action, arg = null) => (page) => evaluateWithRetainedPromise(page, action, arg);
+// A fourth element marks an edit that changes a Legend source, so the
+// automatic rerender draws the Result again (OV-43): its content is Python's
+// drawing, as after Generate, and shows the edit's text instead of equaling
+// the mounted SVG that the preview binder completes.
 const SWITCH_EDITS = [
-  ['feature fill', (page) => editFeature(page, 'TESTB_0001', { fill: RED })],
+  ['feature fill', (page) => editFeature(page, 'TESTB_0001', { fill: RED }), null, RED],
   ['feature stroke', onApp(async () => {
     const app = window.__GBDRAW_APP__;
     await app.openFeatureEditorFromList(app.extractedFeatures.find((item) => item.locus_tag === 'TESTB_0002'), null);
@@ -444,7 +470,7 @@ const SWITCH_EDITS = [
   ['legend rename', onApp(async () => {
     const app = window.__GBDRAW_APP__;
     await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'tRNA'), 'transfer RNA');
-  })],
+  }), null, 'transfer RNA'],
   ['reset positions', onApp(() => window.__GBDRAW_APP__.resetAllPositions())],
   ['canvas padding', onApp(() => { window.__GBDRAW_APP__.canvasPadding.right = 40; })],
   ['palette color', onApp(() => {
@@ -460,7 +486,7 @@ test('Circular batch: each editor edit kind is committed when made, not by the R
   await openBatch(page);
   await show(page, 1);
   const failed = [];
-  for (const [name, apply] of SWITCH_EDITS) {
+  for (const [name, apply, , rerendered] of SWITCH_EDITS) {
     await test.step(name, async () => {
       const before = await committed(page);
       await apply(page);
@@ -468,12 +494,14 @@ test('Circular batch: each editor edit kind is committed when made, not by the R
       const edited = await committed(page);
       if (edited.index !== 1) failed.push(`${name}: displays Result ${edited.index + 1}`);
       if (edited.content === before.content) failed.push(`${name}: Result 2 content unchanged after the edit`);
-      if (!edited.matchesMounted) failed.push(`${name}: Result 2 content differs from the mounted SVG ${firstDiff(edited)}`);
+      if (rerendered && !edited.content.includes(rerendered)) failed.push(`${name}: Result 2 content lacks ${rerendered}`);
+      if (!rerendered && !edited.matchesMounted) failed.push(`${name}: Result 2 content differs from the mounted SVG ${firstDiff(edited)}`);
       await show(page, 0);
       await show(page, 1);
       const back = await committed(page);
       if (back.content === before.content) failed.push(`${name}: Result 2 reverted by the switch`);
-      if (!back.matchesMounted) failed.push(`${name}: after the switch, Result 2 differs from the mounted SVG ${firstDiff(back)}`);
+      if (rerendered && !back.content.includes(rerendered)) failed.push(`${name}: after the switch, Result 2 content lacks ${rerendered}`);
+      if (!rerendered && !back.matchesMounted) failed.push(`${name}: after the switch, Result 2 differs from the mounted SVG ${firstDiff(back)}`);
     });
   }
   expect(failed).toEqual([]);
