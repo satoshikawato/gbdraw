@@ -42,7 +42,8 @@ test(`untouched-base characterization at ${BASE}`, { skip: historyAvailable ? fa
       composition: 1
     },
     triggerSites: 15,
-    triggerModules: 9
+    triggerModules: 9,
+    layerImports: 79
   });
   assert.deepEqual(results['owner-graph.forward-closure.v1'].subjects, [
     'app/app-setup.js|historySnapshots.buildCompositionIntent->legendLayout.captureCompositionIntent',

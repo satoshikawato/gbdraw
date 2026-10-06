@@ -6,7 +6,8 @@ import {
   summarizeWebOwnerGraph,
   WEB_OWNER_GRAPH_DEFAULTS,
   WEB_OWNER_GRAPH_DETECTOR_IDS,
-  WEB_OWNER_GRAPH_DETECTORS
+  WEB_OWNER_GRAPH_DETECTORS,
+  webLayerOf
 } from '../../tools/web-owner-graph-detectors.mjs';
 
 // Synthetic fixtures: a composition root (app/app-setup.js) that creates
@@ -107,7 +108,8 @@ test('every detector exposes the evidence contract and a stable id list', () => 
     'owner-graph.whole-object-port.v1',
     'projection.call-shape.v1',
     'heavy-derived.trigger-site.v1',
-    'heavy-derived.trigger-site.v2'
+    'heavy-derived.trigger-site.v2',
+    'layer.import-direction.v1'
   ]);
   WEB_OWNER_GRAPH_DETECTOR_IDS.forEach((id) => {
     const detector = WEB_OWNER_GRAPH_DETECTORS[id];
@@ -408,6 +410,130 @@ test('v2 trigger sites count calls of a producer port in the module that receive
   assert.ok(WEB_OWNER_GRAPH_DEFAULTS.heavyProducers.find(({ name }) => name === 'rulePreparation').v2Methods.includes('runDrawn'));
 });
 
+const LAYER_SOURCES = new Map([
+  ['gbdraw/web/js/utils/leaf.js', [
+    "import { helper } from './other-leaf.js';",
+    "import { VERSION } from '../config.js';",
+    "import { normalize } from '../services/error-normalization.js';",
+    "import { service } from '../services/svc.js';",
+    ''
+  ].join('\n')],
+  ['gbdraw/web/js/utils/other-leaf.js', 'export const helper = 1;\n'],
+  ['gbdraw/web/js/config.js', "import { helper } from './utils/other-leaf.js';\nexport const VERSION = 1;\n"],
+  ['gbdraw/web/js/services/error-normalization.js', 'export const normalize = (value) => value;\n'],
+  ['gbdraw/web/js/services/svc.js', [
+    "import { helper } from '../utils/other-leaf.js';",
+    "import { sibling } from './sibling.js';",
+    "import { state } from '../state.js';",
+    "import { load } from './config.js';",
+    "import { a, b as renamed, default as fallback } from '../app/owner.js';",
+    "export { a } from '../app/owner.js';",
+    "import * as everything from '../app/ns.js';",
+    "import '../app/side.js';",
+    "import defaultOwner from '../app/default-owner.js';",
+    "import Vue from 'vue';",
+    "/** @import { OwnerType } from '../app/typed-only.js' */",
+    "// import { skipped } from '../app/line-comment.js';",
+    "/* import { skipped } from '../app/block-comment.js'; */",
+    "const text = \"import { skipped } from '../app/in-string.js'\";",
+    "export const lazy = () => import('../app/dynamic.js');",
+    ''
+  ].join('\n')],
+  ['gbdraw/web/js/services/sibling.js', 'export const sibling = 1;\n'],
+  ['gbdraw/web/js/services/config.js', [
+    "import { state } from '../state.js';",
+    "import { service } from './svc.js';",
+    "import { a } from '../app/owner.js';",
+    ''
+  ].join('\n')],
+  ['gbdraw/web/js/state.js', [
+    "import { service } from './services/svc.js';",
+    "import { helper } from './utils/other-leaf.js';",
+    "import { a } from './app/owner.js';",
+    ''
+  ].join('\n')],
+  ['gbdraw/web/js/app/owner.js', [
+    "import { state } from '../state.js';",
+    "import { load } from '../services/config.js';",
+    "import { createAppSetup } from './app-setup.js';",
+    "import { other } from './other-owner.js';",
+    ''
+  ].join('\n')],
+  ['gbdraw/web/js/app/other-owner.js', 'export const other = 1;\n'],
+  ['gbdraw/web/js/app/app-setup.js', "import { a } from './owner.js';\nimport { createLegendManager } from './legend.js';\nexport const createAppSetup = () => a;\n"],
+  ['gbdraw/web/js/app/legend.js', "import { state } from '../state.js';\nexport const createLegendManager = () => state;\n"],
+  ['gbdraw/web/js/app.js', "import { createAppSetup } from './app/app-setup.js';\nimport { state } from './state.js';\n"],
+  ['gbdraw/web/js/workers/worker.js', "import { a } from '../app/owner.js';\n"],
+  // Targets that exist, so a missed mask would show as a subject.
+  ...['default-owner', 'dynamic', 'ns', 'side', 'typed-only', 'line-comment', 'block-comment', 'in-string']
+    .map((name) => [`gbdraw/web/js/app/${name}.js`, 'export const x = 1;\n'])
+]);
+
+test('webLayerOf ranks modules by the R13 layers and leaves workers unranked', () => {
+  const ranks = (paths) => paths.map((path) => webLayerOf(path));
+  assert.deepEqual(ranks(['utils/zip.js', 'config.js', 'web-ux-profile.js', 'mode-profiles.generated.js', 'mode-profiles.js']), [0, 0, 0, 0, 0]);
+  assert.deepEqual(ranks(['services/svg-serialization.js', 'services/losat.js', 'services/error-normalization.js']), [1, 1, 1]);
+  assert.equal(webLayerOf('state.js'), 2);
+  assert.deepEqual(ranks(['services/config.js', 'services/reset.js']), [3, 3]);
+  assert.deepEqual(ranks(['app/run-analysis.js', 'app/legend/utils.js', 'app/feature-editor/label-actions.js']), [4, 4, 4]);
+  assert.deepEqual(ranks(['app/app-setup.js', 'app/feature-editor.js', 'app/legend.js', 'app/legend-layout.js']), [5, 5, 5, 5]);
+  assert.deepEqual(ranks(['app.js', 'components.js']), [6, 6]);
+  assert.deepEqual(ranks(['workers/losat-worker.js', 'package.json']), [null, null]);
+  // The source prefix is accepted, and every module under the registered roots is ranked.
+  assert.equal(webLayerOf('gbdraw/web/js/state.js'), 2);
+  assert.equal(webLayerOf('gbdraw/web/js/services/config.js'), 3);
+});
+
+test('layer import direction reports a module that imports a higher layer, and only that', () => {
+  const detector = WEB_OWNER_GRAPH_DETECTORS['layer.import-direction.v1'];
+  assert.equal(detector.subjectCategory, 'layer-import');
+  const result = detector.detect(LAYER_SOURCES);
+  // Counts are the distinct imported names: `a`, `b`, `default` (a repeated name counts once);
+  // a namespace, a side-effect, and a dynamic import count one each.
+  assert.deepEqual(result.countsBySubject, {
+    'app/owner.js->app/app-setup.js': 1,
+    'services/config.js->app/owner.js': 1,
+    'services/svc.js->app/default-owner.js': 1,
+    'services/svc.js->app/dynamic.js': 1,
+    'services/svc.js->app/ns.js': 1,
+    'services/svc.js->app/owner.js': 3,
+    'services/svc.js->app/side.js': 1,
+    'services/svc.js->services/config.js': 1,
+    'services/svc.js->state.js': 1,
+    'state.js->app/owner.js': 1,
+    'utils/leaf.js->services/error-normalization.js': 1,
+    'utils/leaf.js->services/svc.js': 1
+  });
+  assert.deepEqual(result.subjects, Object.keys(result.countsBySubject));
+  assert.equal(result.nameCount, 14);
+  // A state-free service never imports state.js, an owner never imports a composition root.
+  assert.deepEqual(result.observedImports.filter(({ target }) => target === 'state.js' || target === 'app/app-setup.js')
+    .map(({ path, target, layers }) => `${path}->${target} (${layers})`), [
+    'app/owner.js->app/app-setup.js (owner module -> composition root)',
+    'services/svc.js->state.js (state-free service -> state)'
+  ]);
+  // Not violations: same layer, a lower layer, a leaf importing a leaf, an entry module importing
+  // anything, a composition root importing an owner, a bare specifier, a JSDoc `@import`,
+  // comments, a string, and a module under workers/.
+  const flagged = new Set(result.observedImports.map(({ path }) => path));
+  ['config.js', 'utils/other-leaf.js', 'services/sibling.js', 'app/other-owner.js', 'app/app-setup.js', 'app/legend.js', 'app.js', 'workers/worker.js']
+    .forEach((path) => assert.ok(!flagged.has(path), path));
+  const targets = result.observedImports.map(({ target }) => target);
+  ['app/typed-only.js', 'app/line-comment.js', 'app/block-comment.js', 'app/in-string.js', 'config.js']
+    .forEach((target) => assert.ok(!targets.includes(target), target));
+  assert.equal(detector.encodeSubject({ path: 'gbdraw/web/js/services/svc.js', target: 'app/owner.js' }), 'services/svc.js->app/owner.js');
+  // The same sources in another order give the same subjects.
+  assert.deepEqual(detector.detect(new Map([...LAYER_SOURCES].reverse())).subjects, result.subjects);
+  // A graph that only goes down reports nothing.
+  assert.deepEqual(detector.detect(new Map([
+    ['app/owner.js', "import { x } from '../services/svc.js';\nimport { y } from '../utils/leaf.js';\n"],
+    ['services/svc.js', "import { y } from '../utils/leaf.js';\n"],
+    ['utils/leaf.js', 'export const y = 1;\n']
+  ])).subjects, []);
+  // The summary counts importer->target pairs.
+  assert.equal(summarizeWebOwnerGraph(detectWebOwnerGraph(LAYER_SOURCES)).layerImports, 12);
+});
+
 test('detectWebOwnerGraph runs every detector and summarizeWebOwnerGraph counts subjects', () => {
   const results = detectWebOwnerGraph(SOURCES, REGISTRY);
   assert.deepEqual(Object.keys(results), WEB_OWNER_GRAPH_DETECTOR_IDS);
@@ -418,7 +544,8 @@ test('detectWebOwnerGraph runs every detector and summarizeWebOwnerGraph counts 
     wholeObjectPorts: 3,
     projectionShapes: { 'legend-order': 2, 'feature-visibility': 1 },
     triggerSites: 2,
-    triggerModules: 1
+    triggerModules: 1,
+    layerImports: 0
   });
   // The default registry applies when none is given.
   const withDefaults = detectWebOwnerGraph(SOURCES);

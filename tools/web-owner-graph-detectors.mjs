@@ -11,6 +11,8 @@
 // Keep each detector ID and its transitive helpers executable-identical while
 // referenced. Add a versioned detector beside it, then migrate authority in a
 // separate pull request.
+import { posix } from 'node:path';
+
 import { maskJavaScript } from './web-change-source.mjs';
 
 const WEB_SOURCE_PREFIX = 'gbdraw/web/js/';
@@ -48,6 +50,17 @@ export const WEB_OWNER_GRAPH_DEFAULTS = Object.freeze({
   ]),
   ownerObjectNamePattern: '(?:Actions|Runtime|Layout|Preparation|Selection|Interaction|Snapshots|Controls|Manager|Store|Editor|Rotation|Selector)$|^history$',
   stateModule: 'state.js',
+  // R13 layers, lowest first (see `webLayerOf`). A module may import its own
+  // layer and lower ones; `compositionRoots` and `stateModule` above are the
+  // roots layer and the state layer.
+  layers: Object.freeze({
+    leaves: Object.freeze([
+      'config.js', 'web-ux-profile.js', 'mode-profiles.generated.js', 'mode-profiles.js'
+    ]),
+    leafDirectories: Object.freeze(['utils/']),
+    stateBoundServices: Object.freeze(['services/config.js', 'services/reset.js']),
+    entryModules: Object.freeze(['app.js', 'components.js'])
+  }),
   projectionDomains: Object.freeze([
     Object.freeze({
       name: 'feature-visibility',
@@ -800,6 +813,92 @@ const detectHeavyDerivedTriggerSitesV2 = (sources, registryInput) => {
   });
 };
 
+// --- import direction (R13 layers) --------------------------------------------
+
+// Layer of a module under gbdraw/web/js, lowest first: 0 leaves (`utils/` and
+// the constants modules), 1 state-free `services/`, 2 `state.js`, 3 the
+// state-bound services, 4 owner modules (`app/`), 5 composition roots, 6
+// `app.js` and `components.js`. Anything else (`workers/`, a non-module file)
+// is unranked: `null`.
+export const WEB_LAYER_NAMES = Object.freeze([
+  'leaf', 'state-free service', 'state', 'state-bound service', 'owner module', 'composition root', 'entry module'
+]);
+export const webLayerOf = (path, registry = WEB_OWNER_GRAPH_DEFAULTS) => {
+  const module = normalizeModulePath(path);
+  const { layers } = registry;
+  if (layers.leaves.includes(module) || layers.leafDirectories.some((directory) => module.startsWith(directory))) return 0;
+  if (module === registry.stateModule) return 2;
+  if (layers.stateBoundServices.includes(module)) return 3;
+  if (module.startsWith('services/')) return 1;
+  if (registry.compositionRoots.includes(module)) return 5;
+  if (module.startsWith('app/')) return 4;
+  if (layers.entryModules.includes(module)) return 6;
+  return null;
+};
+
+// Static, `export ... from`, side-effect, and literal dynamic imports of one
+// module, with comments masked (a JSDoc `@import` is not an edge) and the
+// names each statement takes: the imported names, `default`, or `*` for a
+// namespace or a side-effect import.
+const importStatements = (source) => {
+  const commentsMasked = maskJavaScript(source, { strings: false });
+  const code = maskJavaScript(source);
+  const statements = [];
+  for (const match of commentsMasked.matchAll(/(?:^|\n)[ \t]*(import|export)\s+((?:[^;'"]*?)\s+from\s+)?(['"])([^'"]+)\3/g)) {
+    const keywordIndex = match.index + match[0].search(/\b(?:import|export)\b/);
+    if (!/^(?:import|export)\b/.test(code.slice(keywordIndex))) continue;
+    const clause = (match[2] || '').replace(/\s+from\s+$/, '').trim();
+    const names = [];
+    const braces = /\{([^}]*)\}/s.exec(clause);
+    if (braces) braces[1].split(',').map((part) => part.trim()).filter(Boolean).forEach((part) => names.push(part.split(/\s+as\s+/)[0]));
+    if (/\*/.test(clause)) names.push('*');
+    if (/^[\w$]+/.test(clause.replace(/\{[^}]*\}/s, '').replace(/\*\s*(?:as\s+[\w$]+)?/, '').replace(/^[\s,]+/, ''))) names.push('default');
+    statements.push({ specifier: match[4], index: keywordIndex, names: names.length ? names : ['*'] });
+  }
+  for (const match of commentsMasked.matchAll(/\bimport\s*\(\s*(['"])([^'"]+)\1\s*\)/g)) {
+    statements.push({ specifier: match[2], index: match.index, names: ['*'] });
+  }
+  return statements;
+};
+
+// An import that names a module in a higher layer than the importer. Subject
+// `importer->target`; its count is the distinct imported names, so a baseline
+// can shrink one name at a time.
+const detectLayerImportDirectionV1 = (sources, registryInput) => {
+  const registry = resolveRegistry(registryInput);
+  const entries = sourceEntries(sources);
+  const modules = new Set(entries.map(([path]) => path));
+  const observed = [];
+  entries.forEach(([path, source]) => {
+    const layer = webLayerOf(path, registry);
+    if (layer === null) return;
+    importStatements(source).forEach(({ specifier, index, names }) => {
+      if (!specifier.startsWith('.')) return;
+      const resolved = posix.normalize(posix.join(posix.dirname(path), specifier));
+      const target = [resolved, `${resolved}.js`].find((candidate) => modules.has(candidate));
+      const targetLayer = target === undefined ? null : webLayerOf(target, registry);
+      if (targetLayer === null || targetLayer <= layer) return;
+      observed.push({ path, target, line: lineNumberAt(source, index), names, layer, targetLayer, subject: `${path}->${target}` });
+    });
+  });
+  const sorted = observed.sort((left, right) => left.subject.localeCompare(right.subject) || left.line - right.line);
+  const namesBySubject = new Map();
+  sorted.forEach(({ subject, names }) => {
+    namesBySubject.set(subject, new Set([...(namesBySubject.get(subject) || []), ...names]));
+  });
+  const countsBySubject = {};
+  namesBySubject.forEach((names, subject) => { countsBySubject[subject] = names.size; });
+  return Object.freeze({
+    observedImports: Object.freeze(sorted.map(({ path, target, line, names, layer, targetLayer }) => Object.freeze({
+      path, target, line, names: Object.freeze([...names]),
+      layers: `${WEB_LAYER_NAMES[layer]} -> ${WEB_LAYER_NAMES[targetLayer]}`
+    }))),
+    countsBySubject: Object.freeze(countsBySubject),
+    nameCount: Object.values(countsBySubject).reduce((total, count) => total + count, 0),
+    subjects: Object.freeze(unique(sorted.map(({ subject }) => subject)))
+  });
+};
+
 const encodeNamedSubject = (keys) => (record) => keys.map((key) => record[key]).join('|');
 
 export const WEB_OWNER_GRAPH_DETECTORS = Object.freeze({
@@ -842,6 +941,11 @@ export const WEB_OWNER_GRAPH_DETECTORS = Object.freeze({
     subjectCategory: 'trigger-site',
     encodeSubject: encodeNamedSubject(['producer', 'path']),
     detect: detectHeavyDerivedTriggerSitesV2
+  }),
+  'layer.import-direction.v1': Object.freeze({
+    subjectCategory: 'layer-import',
+    encodeSubject: (record) => `${normalizeModulePath(record.path)}->${record.target}`,
+    detect: detectLayerImportDirectionV1
   })
 });
 
@@ -860,5 +964,6 @@ export const summarizeWebOwnerGraph = (results) => Object.freeze({
   wholeObjectPorts: results['owner-graph.whole-object-port.v1'].subjects.length,
   projectionShapes: Object.freeze({ ...results['projection.call-shape.v1'].shapesByDomain }),
   triggerSites: results['heavy-derived.trigger-site.v1'].siteCount,
-  triggerModules: results['heavy-derived.trigger-site.v1'].subjects.length
+  triggerModules: results['heavy-derived.trigger-site.v1'].subjects.length,
+  layerImports: results['layer.import-direction.v1'].subjects.length
 });
