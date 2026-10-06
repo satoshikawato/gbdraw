@@ -172,6 +172,11 @@
           "path": "tests/web/owner-graph-baseline.test.mjs",
           "symbol": "PROJECTION_SHAPE_BASELINE",
           "kind": "count-map"
+        },
+        {
+          "path": "tests/web/owner-graph-baseline.test.mjs",
+          "symbol": "LAYER_IMPORT_BASELINE",
+          "kind": "count-map"
         }
       ]
     },
