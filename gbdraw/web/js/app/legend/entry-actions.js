@@ -2,6 +2,7 @@
 import { normalizeUserFacingError } from '../../services/error-normalization.js';
 import { resolveColorToHex, toNativeColorInputValue } from '../color-utils.js';
 import {
+  defaultLegendCaptionOrder,
   getAllFeatureLegendGroups,
   getVisibleFeatureLegendGroup,
   isLegendOrderEdited,
@@ -120,6 +121,18 @@ export const createLegendEntryActions = ({
   // so an Undo or restore of that deletion returns them when the Result is
   // displayed again (D-07). Keyed by the mounted Result's runtime identity.
   const retiredEntriesByResult = new Map();
+
+  // The generated inventory of Legend captions in Python's order, per Result
+  // (OV-47): each Result has its own order, so the displayed Result's order is
+  // `originalLegendOrder`, and the others wait here under their runtime
+  // identity until they are displayed. `replayedInventoryResults` are the
+  // Results a draw replayed an edited order onto: their drawing no longer shows
+  // Python's order.
+  /** @type {Map<string, string[]>} */
+  const inventoryByResult = new Map();
+  /** @type {Set<string>} */
+  const replayedInventoryResults = new Set();
+
   const rememberResultEntry = (
     caption, targetGroup, targetIndex, entryGroup,
     identity = readActiveResultIdentity?.()
@@ -703,8 +716,21 @@ export const createLegendEntryActions = ({
     });
     if (removedEntry || returnedEntry) compactLegendEntries(svg);
     // A Result already in the order keeps its own entries' places (B18); a
-    // returned entry takes its place in the order, and own entries follow.
-    if ((orderChanged || returnedEntry) && orderMountedLegend([...after.keys()], { keepFollowed: !returnedEntry })) {
+    // returned entry takes its place in the order, and own entries follow. A
+    // step that leaves the default order of the Result it was made on gives
+    // this Result its own default order (OV-47).
+    const ownInventory = inventoryByResult.get(identity);
+    const directCaptions = new Set(entryOwners.flatMap((group) => group.entries)
+      .filter((entry) => entry.owner === 'direct-editor').map((entry) => entry.caption));
+    const generatedEntries = restored.filter((entry) => !directCaptions.has(legendCaption(entry)));
+    const restoresDefault = [...inventoryByResult.values()].some((inventory) => (
+      generatedEntries.every((entry) => inventory.includes(generatedCaption(entry)))
+      && !isLegendOrderEdited(restored, inventory)
+    ));
+    const order = ownInventory?.length && restoresDefault
+      ? defaultLegendCaptionOrder(restored, ownInventory)
+      : [...after.keys()];
+    if ((orderChanged || returnedEntry) && orderMountedLegend(order, { keepFollowed: !returnedEntry })) {
       changed = true;
     }
     if (changed) {
@@ -952,29 +978,22 @@ export const createLegendEntryActions = ({
     }
   };
 
-  const extractLegendEntries = ({ replaceGeneratedInventory = false } = {}) => {
-    if (!svgContainer.value) {
-      legendEntries.value = [];
-      return;
-    }
-
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) {
-      legendEntries.value = [];
-      return;
-    }
-
+  /**
+   * Read the Legend of a mounted Result: its entries in visual order and the
+   * captions the renderer generated (not the editor's direct entries). The one
+   * reader of a mounted Legend; `previousEntries` keep stroke, feature ids,
+   * and the generated caption of a renamed entry.
+   * @param {SVGSVGElement} svg
+   * @param {any[]} previousEntries
+   */
+  const readMountedLegend = (svg, previousEntries) => {
     const targetGroup = getVisibleFeatureLegendGroup(svg);
-    if (!targetGroup) {
-      legendEntries.value = [];
-      return;
-    }
+    if (!targetGroup) return null;
 
     const entries = [];
     const generatedCaptions = new Set();
 
     const entryGroups = targetGroup.querySelectorAll('g[data-legend-key]');
-
     entryGroups.forEach((entryGroup) => {
       const caption = entryGroup.getAttribute('data-legend-key');
       if (!caption) return;
@@ -1002,7 +1021,7 @@ export const createLegendEntryActions = ({
         yPos = groupTransform.y;
       }
 
-      const existingEntry = legendEntries.value.find((entry) => (
+      const existingEntry = previousEntries.find((entry) => (
         entry.caption === caption
         && normalizedColor(entry.color) === normalizedColor(color)
       ));
@@ -1036,27 +1055,126 @@ export const createLegendEntryActions = ({
       return yDelta;
     });
 
+    return { entries: visuallySortedEntries, generatedCaptions };
+  };
+
+  // The inventory after a draw: while an edited order is replayed, the
+  // surviving categories keep their default order and new ones follow it;
+  // otherwise the Result shows the renderer's order, which becomes the default
+  // order. Deleted entries keep their place.
+  /**
+   * @param {{ inventory: string[], orderEdited: boolean, generatedCaptions: Set<string>, rendered: string[] }} drawn
+   */
+  const drawnInventory = ({ inventory, orderEdited, generatedCaptions, rendered }) => {
+    const retainedCaptions = new Set([
+      ...generatedCaptions,
+      ...deletedLegendEntries.value.map(entry => entry.originalCaption || entry.caption)
+    ]);
+    const surviving = inventory.filter(caption => retainedCaptions.has(caption));
+    return [...new Set(orderEdited ? [...surviving, ...rendered] : [...rendered, ...surviving])];
+  };
+  const renderedCaptions = ({ entries, generatedCaptions }) => entries
+    .map(entry => entry.originalCaption)
+    .filter(caption => generatedCaptions.has(caption));
+
+  /** @param {string[]} liveResultIdentities */
+  const pruneResultInventories = (liveResultIdentities) => {
+    const live = new Set(liveResultIdentities);
+    [...inventoryByResult.keys()].forEach((key) => {
+      if (!live.has(key)) inventoryByResult.delete(key);
+    });
+    [...replayedInventoryResults].forEach((key) => {
+      if (!live.has(key)) replayedInventoryResults.delete(key);
+    });
+  };
+
+  // A Result about to be displayed has no inventory yet: read it from the
+  // mounted Legend as the renderer drew it. The stored SVG of a Result changes
+  // only through edits made while it is displayed, so this runs before the
+  // editor intent is projected onto it. The displayed Result keeps its own
+  // inventory in `originalLegendOrder` until `adoptResultInventory`.
+  /**
+   * @param {SVGSVGElement} svg
+   * @param {{ resultIdentity?: string, liveResultIdentities?: string[] }} [options]
+   * @returns {string[]} The Result's inventory.
+   */
+  const captureResultInventory = (svg, { resultIdentity: identity = '', liveResultIdentities = [] } = {}) => {
+    pruneResultInventories(liveResultIdentities);
+    const stored = inventoryByResult.get(identity);
+    if (!identity || stored) return stored || [];
+    const mounted = readMountedLegend(svg, legendEntries.value || []);
+    const inventory = mounted
+      ? drawnInventory({
+        inventory: originalLegendOrder.value,
+        orderEdited: replayedInventoryResults.has(identity),
+        generatedCaptions: mounted.generatedCaptions,
+        rendered: renderedCaptions(mounted)
+      })
+      : [];
+    inventoryByResult.set(identity, inventory);
+    replayedInventoryResults.delete(identity);
+    return inventory;
+  };
+
+  // `originalLegendOrder` is the displayed Result's inventory: after a Result
+  // is displayed and after a History restore wrote another Result's value.
+  // `restored` marks a restore (Session Load, checkpoint) that installed the
+  // displayed Result's own inventory.
+  /** @param {string | undefined} identity @param {{ restored?: boolean }} [options] */
+  const adoptResultInventory = (identity, { restored = false } = {}) => {
+    if (!identity) return;
+    const stored = inventoryByResult.get(identity);
+    if (stored && !restored) originalLegendOrder.value = [...stored];
+    else inventoryByResult.set(identity, [...originalLegendOrder.value]);
+  };
+
+  /** @param {{ replaceGeneratedInventory?: boolean, liveResultIdentities?: string[] }} [options] */
+  const extractLegendEntries = ({ replaceGeneratedInventory = false, liveResultIdentities = [] } = {}) => {
+    if (!svgContainer.value) {
+      legendEntries.value = [];
+      return;
+    }
+
+    const svg = svgContainer.value.querySelector('svg');
+    if (!svg) {
+      legendEntries.value = [];
+      return;
+    }
+
+    const mounted = readMountedLegend(svg, legendEntries.value || []);
+    if (!mounted) {
+      legendEntries.value = [];
+      return;
+    }
+    const { entries: visuallySortedEntries, generatedCaptions } = mounted;
+
     // The entries shown before this extraction decide, as in Generate, whether
     // the displayed Result replays an edited order (D-08).
     const orderEdited = isLegendOrderEdited(legendEntries.value, originalLegendOrder.value);
     legendEntries.value = visuallySortedEntries;
 
+    const identity = readActiveResultIdentity?.() || '';
     if (replaceGeneratedInventory || originalLegendOrder.value.length === 0) {
       // Keep deletion intent; live editor extraction alone must not advance
-      // the accepted generated inventory. While an edited order is replayed,
-      // the surviving categories keep their default order and new ones follow
-      // it; otherwise the Result shows the renderer's order, which becomes the
-      // default order.
-      const retainedCaptions = new Set([
-        ...generatedCaptions,
-        ...deletedLegendEntries.value.map(entry => entry.originalCaption || entry.caption)
-      ]);
-      const surviving = originalLegendOrder.value.filter(caption => retainedCaptions.has(caption));
-      const rendered = visuallySortedEntries.map(entry => entry.originalCaption)
-        .filter(caption => generatedCaptions.has(caption));
-      originalLegendOrder.value = [...new Set(orderEdited
-        ? [...surviving, ...rendered]
-        : [...rendered, ...surviving])];
+      // the accepted generated inventory.
+      originalLegendOrder.value = drawnInventory({
+        inventory: originalLegendOrder.value,
+        orderEdited,
+        generatedCaptions,
+        rendered: renderedCaptions(mounted)
+      });
+      if (identity) {
+        // A draw that replays an edited order shows it on every Result.
+        if (replaceGeneratedInventory && orderEdited) {
+          liveResultIdentities.filter((key) => key !== identity).forEach((key) => {
+            inventoryByResult.delete(key);
+            replayedInventoryResults.add(key);
+          });
+        }
+        inventoryByResult.set(identity, [...originalLegendOrder.value]);
+      }
+    } else if (identity && !inventoryByResult.has(identity)) {
+      inventoryByResult.set(identity, [...originalLegendOrder.value]);
     }
 
     if (Object.keys(originalLegendColors.value).length === 0 && visuallySortedEntries.length > 0) {
@@ -1206,7 +1324,9 @@ export const createLegendEntryActions = ({
   return {
     addLegendEntry,
     captureLegendEntryOwners,
+    adoptResultInventory,
     addNewLegendEntry,
+    captureResultInventory,
     deleteLegendEntry,
     extractLegendEntries,
     legendEntryExists,
