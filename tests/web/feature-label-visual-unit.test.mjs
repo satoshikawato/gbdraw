@@ -61,6 +61,7 @@ const buildHarness = ({
   labelKey = 'label-1',
   visibilityOverrides = {},
   rulePreparation = {},
+  evaluateLabelRules = async () => ({ winners: [] }),
   diagramOptions = null
 } = {}) => {
   const mutations = { commit: 0 };
@@ -108,6 +109,7 @@ const buildHarness = ({
       return true;
     },
     rulePreparation,
+    evaluateLabelRules,
     getCommittedRequest: () => (diagramOptions ? { diagramOptions } : null)
   });
   return { actions, mutations, state, svg };
@@ -497,15 +499,12 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
   const harness = buildHarness({
     svg: displayed,
     featureId: 'fa',
-    rulePreparation: {
-      snapshot: () => ({}),
-      isCurrent: () => true,
-      async evaluate({ features, rules }) {
-        evaluated.push(features.map((feature) => feature.label));
-        return { winners: features.map((feature) => rules.findIndex((rule) => (
-          new RegExp(rule.valueRegex).test(feature.label)
-        ))) };
-      }
+    rulePreparation: { snapshot: () => ({}), isCurrent: () => true },
+    async evaluateLabelRules({ features, rules }) {
+      evaluated.push(features.map((feature) => feature.label));
+      return { winners: features.map((feature) => rules.findIndex((rule) => (
+        new RegExp(rule.valueRegex).test(feature.label)
+      ))) };
     }
   });
   const { state, actions } = harness;

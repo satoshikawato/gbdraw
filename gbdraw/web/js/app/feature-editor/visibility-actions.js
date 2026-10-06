@@ -282,7 +282,13 @@ export const createFeatureVisibilityActions = ({
     const { changes, needsRerender } = drawnChanges(features, { targeted, legend });
     return { updated: applyVisibilityPreviewChanges(changes, options), needsRerender };
   };
-  const prepareDrawn = () => rulePreparation?.prepareDrawn?.();
+  // Also the reaction the popup and Label On ask this owner for: the matches
+  // `resolveFeatureDrawn` reads are this owner's read model (R13).
+  /**
+   * @param {{ strict?: boolean }} [options]
+   * @returns {boolean | Promise<boolean | { error: any }>}
+   */
+  const prepareDrawn = (options) => rulePreparation?.prepareDrawn?.(options) ?? true;
 
   const updateClickedFeatureVisibilityFromRules = (features) => {
     const clicked = clickedFeature.value?.feat;
@@ -575,6 +581,7 @@ export const createFeatureVisibilityActions = ({
     handleFeatureVisibilityScopeChoice,
     moveFeatureVisibilityRuleDown: (index) => moveFeatureVisibilityRule(index, 1),
     moveFeatureVisibilityRuleUp: (index) => moveFeatureVisibilityRule(index, -1),
+    prepareDrawnFeatureMatches: prepareDrawn,
     projectFeatureVisibility,
     removeFeatureVisibilityRule,
     setFeatureVisibility,

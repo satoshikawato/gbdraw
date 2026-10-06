@@ -123,7 +123,7 @@ export const rebindRuleColorOverrides = (overrides, rules, normalized) => {
   }));
 };
 
-// A run (`run`, `runDrawn`) that fails, in its preparation or its commit,
+// A run (`runWhenPrepared`) that fails, in its preparation or its commit,
 // shows its error as the caller's `operation`, unless another error replaced
 // the one shown when it started. Every owner that runs through the rule
 // preparation reports a failure this way.
@@ -135,6 +135,23 @@ export const reportRuleRunFailure = (state, operation, run) => {
       state.errorLog.value = normalizeUserFacingError(error, { operation, stage: 'helper' });
     }
   }) : result;
+};
+
+// Runs `commit` once the matches it reads are prepared (`preparations`, the
+// color rule matches first): at once when they are, after them when the color
+// matches are still current, and not while a session operation runs. A failed
+// color preparation rejects (`reportRuleRunFailure`).
+/**
+ * @param {Record<string, any>} state App state (state.js; not yet typed).
+ * @param {() => (boolean | Promise<boolean | { error: any }>)[]} preparations
+ * @param {() => any} commit
+ */
+export const runWhenPrepared = (state, preparations, commit) => {
+  if (state.sessionOperationAvailability?.()) return state.sessionOperationAvailability();
+  const prepared = preparations();
+  if (prepared.every((value) => value === true)) return commit();
+  return Promise.all(prepared).then(([current]) =>
+    state.sessionOperationAvailability?.() || (current ? commit() : undefined));
 };
 
 /**
@@ -170,16 +187,14 @@ export const reportRuleRunFailure = (state, operation, run) => {
  *   True at once when the matches of `rules` are prepared, else a promise of whether they are now.
  * @property {(rules?: Record<string, any>[]) => void} retain
  *   Keeps the rules a History restore replaces, so the next preparation matches them with the restored ones.
- * @property {() => boolean | Promise<boolean | { error: any }>} prepareDrawn
+ * @property {(options?: { strict?: boolean }) => boolean | Promise<boolean | { error: any }>} prepareDrawn
  *   Prepares what `resolveFeatureDrawn` reads; resolves to `{ error }` when Generate rejects the visibility rule table.
+ *   `strict` rejects when the color preparation fails and resolves to false when it is stale, as a run does.
  * @property {(rules?: Record<string, any>[]) => boolean} isPrepared
  * @property {(rules?: Record<string, any>[], options?: Record<string, any>) => Promise<RuleCandidate | null>} prepareCandidate
  * @property {(candidate: RuleCandidate | null) => void} notifyChanges
  * @property {(rules: Record<string, any>[], commit: () => any) => any} run
  *   Runs `commit` once the color rule matches of `rules` are prepared.
- * @property {(commit: () => any) => any} runDrawn
- *   Runs `commit` once the matches `resolveFeatureDrawn` reads are prepared.
- * @property {(payload: Record<string, any>, options?: Record<string, any>) => Promise<RuleEvaluationResult>} evaluate
  * @property {() => Record<string, any>} snapshot The inputs the matches depend on.
  * @property {(before: Record<string, any>) => boolean} isCurrent Whether `before` is still the current inputs.
  * @property {{ value: boolean }} pending
@@ -293,31 +308,20 @@ export const createRulePreparation = ({
       }, (error) => ({ error }))
       .finally(() => { pending.value = --pendingCount > 0; });
   };
-  // Runs `commit` once the matches it reads are prepared (`preparations`, the
-  // color rule matches first): at once when they are, after them when the
-  // color matches are still current, and not while a session operation runs.
-  // A failed color preparation rejects (`reportRuleRunFailure`).
-  const runPrepared = (preparations, commit) => {
-    if (state.sessionOperationAvailability?.()) return state.sessionOperationAvailability();
-    const prepared = preparations();
-    if (prepared.every((value) => value === true)) return commit();
-    return Promise.all(prepared).then(([current]) =>
-      state.sessionOperationAvailability?.() || (current ? commit() : undefined));
-  };
   // `commit` reads the color rule matches of `rules`.
-  const run = (rules, commit) => runPrepared(() => [prepare(rules)], commit);
-  // `commit` reads what `resolveFeatureDrawn` reads (`prepareDrawn`).
-  const runDrawn = (commit) => runPrepared(() => [prepare(state.manualSpecificRules), prepareVisibility()], commit);
+  const run = (rules, commit) => runWhenPrepared(state, () => [prepare(rules)], commit);
   // Everything `resolveFeatureDrawn` reads: the visibility rule matches and,
   // for a feature of a type the request does not select, the color rule
   // matches. Never rejects; what stays unknown is resolved as unknown. Resolves
-  // to `{ error }` when Generate would reject the visibility rule table.
-  const prepareDrawn = () => {
+  // to `{ error }` when Generate would reject the visibility rule table. A
+  // `strict` preparation is a run's: a failed color preparation rejects and a
+  // stale one resolves to false (`runWhenPrepared`).
+  const prepareDrawn = ({ strict = false } = {}) => {
     const colors = prepare(state.manualSpecificRules || []);
     const visibility = prepareVisibility();
     if (colors === true && visibility === true) return true;
-    return Promise.all([Promise.resolve(colors).catch(() => false), visibility])
-      .then(([, outcome]) => /** @type {any} */ (outcome)?.error ? outcome : true);
+    return Promise.all([strict ? colors : Promise.resolve(colors).catch(() => false), visibility])
+      .then(([current, outcome]) => strict && !current ? false : /** @type {any} */ (outcome)?.error ? outcome : true);
   };
   // The rules a commit or a run admits: Python's normalized captions, their
   // matches prepared, and the captions it changed (`notifyChanges`). `options`
@@ -337,7 +341,7 @@ export const createRulePreparation = ({
     if (candidate?.changes.length) notify(`Updated ${candidate.changes.length} specific-color caption(s) to distinguish their colors.`);
   };
   return {
-    prepare, retain, prepareDrawn, isPrepared, prepareCandidate, notifyChanges, run, runDrawn, evaluate, snapshot,
+    prepare, retain, prepareDrawn, isPrepared, prepareCandidate, notifyChanges, run, snapshot,
     isCurrent, pending
   };
 };

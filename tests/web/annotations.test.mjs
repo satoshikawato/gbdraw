@@ -453,8 +453,6 @@ assert.deepEqual(emptySourceCatalog.issues[0], { code: 'NO_RECORDS', context: { 
 
 const gbComparisonCatalog = buildAnnotationRecordCatalog({
   mode: 'linear',
-  inputType: 'gb',
-  loadComparison: true,
   linearSources: [
     { sourceKey: 'gb-a', hasInput: true, status: 'ready', selector: '', records: [{ recordId: 'A1' }, { recordId: 'A2' }] },
     { sourceKey: 'gb-b', hasInput: true, status: 'ready', selector: '', records: [{ recordId: 'B1' }, { recordId: 'B2' }] }
@@ -463,12 +461,12 @@ const gbComparisonCatalog = buildAnnotationRecordCatalog({
 assert.deepEqual(gbComparisonCatalog.records.map((record) => record.recordId), ['A1', 'A2', 'B1', 'B2']);
 assert.deepEqual(gbComparisonCatalog.records.map((record) => record.sourceIndex), [0, 0, 1, 1]);
 const singleGbComparisonCatalog = buildAnnotationRecordCatalog({
-  mode: 'linear', inputType: 'gb', loadComparison: true,
+  mode: 'linear',
   linearSources: [{ sourceKey: 'gb-only', hasInput: true, status: 'ready', selector: '', records: [{ recordId: 'A1' }, { recordId: 'A2' }] }]
 });
 assert.deepEqual(singleGbComparisonCatalog.records.map((record) => record.recordId), ['A1', 'A2']);
 const gffComparisonCatalog = buildAnnotationRecordCatalog({
-  mode: 'linear', inputType: 'gff', loadComparison: true,
+  mode: 'linear',
   linearSources: [{ sourceKey: 'gff-only', hasInput: true, status: 'ready', selector: '', records: [{ recordId: 'G1' }, { recordId: 'G2' }] }]
 });
 assert.deepEqual(gffComparisonCatalog.records.map((record) => record.recordId), ['G1', 'G2']);

@@ -2,7 +2,7 @@
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { PreparedFileLegend, RuleActionsPorts } from './feature-editor/rule-actions.js' */
 /** @import { VisibilityActionsPorts } from './feature-editor/visibility-actions.js' */
-/** @import { FeatureSelectionPort, PreviewTransformInteractionPort } from './feature-editor/svg-actions.js' */
+/** @import { FeatureSelectionPort, PrepareDrawnFeatureMatchesPort, PreviewTransformInteractionPort } from './feature-editor/svg-actions.js' */
 import { createFeatureColorActions } from './feature-editor/color-actions.js';
 import { createFeatureLabelActions } from './feature-editor/label-actions.js';
 import { createFeatureRuleActions } from './feature-editor/rule-actions.js';
@@ -12,10 +12,12 @@ import { createFeaturePlacementActions } from './feature-editor/placement-action
 import { createFeatureEditTableActions } from './feature-editor/feature-edit-table.js';
 
 /**
- * The label owner's reactions, registered in `editorPorts` once it exists; the
- * owners created before it call them through the bag only.
+ * The reactions registered in `editorPorts` once their owner exists (the label
+ * owner's, and the visibility owner's preparation); the owners created before
+ * it call them through the bag only.
  * @typedef {RuleActionsPorts & VisibilityActionsPorts & {
- *   syncLabelEditor: (options?: Record<string, any>) => void
+ *   syncLabelEditor: (options?: Record<string, any>) => void,
+ *   prepareDrawnFeatureMatches: PrepareDrawnFeatureMatchesPort
  * }} FeatureEditorPorts
  */
 
@@ -53,6 +55,8 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  *   The root's projection of the palette and the rules (R3).
  * @property {() => any} projectFeatureEdits
  *   The root's projection of loaded feature edits onto the displayed Result (R3).
+ * @property {(payload: Record<string, any>, options?: Record<string, any>) => Promise<Record<string, any>>} evaluateLabelRules
+ *   The root's Python evaluation of Label TSV rows against the displayed labels (R7).
  */
 
 /** @param {FeatureEditorOptions} options */
@@ -80,7 +84,8 @@ export const createFeatureEditor = ({
   isPatternEditAvailable = () => true,
   previewTransformInteraction = null,
   projectPaletteAndRules,
-  projectFeatureEdits
+  projectFeatureEdits,
+  evaluateLabelRules
 }) => {
   const { ref, computed, watch, reactive } = window.Vue;
   // R13: the label owner's reactions, registered once it exists; the owners
@@ -94,9 +99,9 @@ export const createFeatureEditor = ({
     state,
     getFeatureColor: ruleActions.getFeatureColor,
     getEffectiveLegendCaption: ruleActions.getEffectiveLegendCaption,
-    // R13: the rule preparation's runs reach the owners that read its matches
-    // as ports; they never hold the preparation.
-    runWithDrawnMatches: rulePreparation.runDrawn,
+    // R13: the visibility owner prepares the matches the popup reads; it is
+    // created after this owner, so the port registers in `editorPorts`.
+    prepareDrawnFeatureMatches: (...args) => editorPorts.prepareDrawnFeatureMatches(...args),
     onFeaturePopupOpened: (...args) => editorPorts.syncLabelEditor(...args),
     featureSelection,
     applyFeatureVisibilityChanges,
@@ -126,8 +131,11 @@ export const createFeatureEditor = ({
   });
   const labelActions = createFeatureLabelActions({
     state, commitActiveResultEdit, rulePreparation, ref, computed, watch, nextTick, getCommittedRequest,
-    setFeatureVisibility: visibilityActions.setFeatureVisibility
+    setFeatureVisibility: visibilityActions.setFeatureVisibility,
+    prepareDrawnFeatureMatches: visibilityActions.prepareDrawnFeatureMatches,
+    evaluateLabelRules
   });
+  editorPorts.prepareDrawnFeatureMatches = visibilityActions.prepareDrawnFeatureMatches;
   editorPorts.applyFeatureVisibilityToLabels = labelActions.applyFeatureVisibilityToLabels;
   editorPorts.requestAutomaticRerender = labelActions.requestAutomaticRerender;
   editorPorts.syncLabelEditor = labelActions.syncLabelEditor;

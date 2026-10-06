@@ -543,6 +543,55 @@ test('an unexplained missing Legend binding remains rejected', () => {
   );
 });
 
+// OV-46: a Legend-only row has no known feature, so the compiler cannot tell which
+// Result draws it. Each Result may miss it; the Generate must draw it somewhere.
+const legendOnlyBatchFixture = (contents) => {
+  const featureCatalog = catalog();
+  const [first] = featureCatalog.items;
+  featureCatalog.items.push({
+    ...first,
+    resultIndex: 1,
+    resultName: 'diagram-2.svg',
+    recordKeys: ['record-b'],
+    features: first.features.map((feature) => ({ ...feature, recordKey: 'record-b' })),
+    biologicalFeatures: first.biologicalFeatures.map((feature) => ({
+      ...feature, recordKey: 'record-b', record_id: 'record-b', stableFeatureId: 'stable-b'
+    }))
+  });
+  const response = normalizeGenerationResponse({
+    results: contents.map((content, index) => ({ name: index === 0 ? 'diagram.svg' : 'diagram-2.svg', content })),
+    metadata: { featureCatalog }
+  });
+  const admission = admitFeatureCatalog(featureCatalog, response.results, { adopt: true, mode: 'linear' });
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: admission,
+    legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#00aa00' }],
+    originalLegendOrder: ['CDS'],
+    legendColorOverrides: { CDS: '#00aa00' },
+    legendStrokeOverrides: { CDS: { strokeColor: '#445566', strokeWidth: 3 } }
+  });
+  const admit = () => admitCurrentGeneratedResults(response, {
+    catalogAdmission: admission,
+    mutationPlan: plan,
+    sanitizer: { sanitize: (value) => value },
+    parser: FakeDomParser
+  });
+  return { plan, admit };
+};
+
+test('a Legend row with unknown drawing Results may be missing in a Result that another Result draws', () => {
+  const { plan, admit } = legendOnlyBatchFixture(['<svg><path id="f0001"/></svg>', '<svg>missing-legend</svg>']);
+  assert.deepEqual(plan.operationsByResult.map(({ legendFills }) => legendFills[0].allowMissing), [true, true]);
+  const results = admit();
+  assert.match(results[0].content, /fill="#00aa00"/);
+  assert.doesNotMatch(results[1].content, /#00aa00/);
+});
+
+test('a Legend row with unknown drawing Results that no Result draws is rejected', () => {
+  const { admit } = legendOnlyBatchFixture(['<svg>missing-legend</svg>', '<svg>missing-legend</svg>']);
+  assert.throws(admit, { code: 'RESULT_INVALID', stage: 'result-admission' });
+});
+
 test('source replacement may retire styled, renamed, or deleted generated Legend categories', () => {
   const { response, admission } = currentFixture('<svg>missing-legend</svg>');
   const plan = compileDirectEditorMutationPlan({

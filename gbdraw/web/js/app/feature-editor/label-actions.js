@@ -432,6 +432,10 @@ const assignFeatureIdsToLabels = (svg, labelElements, featureGeometry, mode) => 
  *   The committed canonical request (Python owns the option fields, R7).
  * @property {((feature: Record<string, any>, mode: string, options?: Record<string, any>) => any) | null} [setFeatureVisibility]
  *   The visibility owner's transition: Show feature and label sets Feature visibility through it.
+ * @property {() => boolean | Promise<boolean | { error: any }>} [prepareDrawnFeatureMatches]
+ *   The visibility owner's preparation of the rule matches `resolveFeatureDrawn` reads (Label On asks the blocker of it).
+ * @property {(payload: Record<string, any>, options?: Record<string, any>) => Promise<Record<string, any>>} evaluateLabelRules
+ *   The root's Python evaluation of Label TSV rows against the displayed labels (R7).
  */
 
 /** @param {FeatureLabelActionsOptions} options */
@@ -444,7 +448,9 @@ export const createFeatureLabelActions = ({
   watch = null,
   nextTick = () => Promise.resolve(),
   getCommittedRequest = () => null,
-  setFeatureVisibility = null
+  setFeatureVisibility = null,
+  prepareDrawnFeatureMatches = () => true,
+  evaluateLabelRules
 }) => {
   const {
     mode,
@@ -999,7 +1005,7 @@ export const createFeatureLabelActions = ({
   // as it was, records none. Global settings never change.
   const applyLabelOn = async (featureId, apply) => {
     // The blocker reads Python's rule matches; prepared ones answer at once.
-    const prepared = /** @type {any} */ (rulePreparation?.prepareDrawn?.());
+    const prepared = /** @type {any} */ (prepareDrawnFeatureMatches());
     if (typeof prepared?.then === 'function') await prepared;
     const feature = featureById(featureId);
     const diagramOptions = getCommittedRequest()?.diagramOptions;
@@ -1281,7 +1287,7 @@ export const createFeatureLabelActions = ({
 
       const svg = sourceSvg;
       const labels = svg ? labelImportTargets(svg) : [];
-      const evaluation = await rulePreparation.evaluate({
+      const evaluation = await evaluateLabelRules({
         kind: 'label', rules: rows,
         features: labels.map((entry) => ruleFeaturePayload(
           entry.feature || { type: '', svg_id: entry.featureId }, entry.sourceText

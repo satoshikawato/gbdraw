@@ -10,7 +10,7 @@ const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
-const { expectLiveEqualsGenerate, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
+const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -469,4 +469,31 @@ test('a Legend rename onto the caption of a color rule without a drawn row equal
   const captions = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption));
   expect(captions, 'the renamed row is drawn live').toContain('Zeta');
   await expectLiveEqualsGenerate(page, { label: 'Legend rename onto the caption of a color rule without a row' });
+});
+
+// OV-46: a Legend-only color on a generated row that only one Result of a batch
+// draws. The compiler cannot tell which Result draws the row, so each Result may
+// miss it; the Generate succeeds when one Result draws it.
+test('a Legend color on a row only one Result draws survives the next Generate', async ({ page }) => {
+  test.setTimeout(150_000);
+  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await popupEdit(page, 'TESTA_0005', { fill: '#c83366' });
+  await generate(page);
+  const legendOf = async (index) => {
+    await showResult(page, index);
+    return (await semanticSnapshot(page)).legend;
+  };
+  const before = [await legendOf(0), await legendOf(1)];
+  expect(before[0].map(({ caption }) => caption)).toContain('other proteins');
+  expect(before[1].map(({ caption }) => caption)).not.toContain('other proteins');
+  await showResult(page, 0);
+  expect(await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    return app.updateLegendEntryColor(app.legendEntries.findIndex((entry) => entry.caption === 'other proteins'), '#00aa00');
+  })).toBeTruthy();
+  await settleLive(page);
+  await generate(page);
+  const after = [await legendOf(0), await legendOf(1)];
+  expect(after[0].find(({ caption }) => caption === 'other proteins').fill.toLowerCase()).toBe('#00aa00');
+  expect(after[1]).toEqual(before[1]);
 });
