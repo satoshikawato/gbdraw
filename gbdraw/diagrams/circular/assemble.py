@@ -79,6 +79,7 @@ from ...layout.composition import (
     plan_composition,
 )
 from ...layout.spatial import Aabb, union_aabbs
+from ...legend.row_facts import LegendRowFacts, attach_legend_row_facts
 from ...legend.table import _unique_legend_key, prepare_legend_table
 from ...tracks import (
     CircularTrackSlot,
@@ -2954,6 +2955,16 @@ def _assemble_circular_diagram_result(
             conservation_min_identity=conservation_min_identity,
         )
     canvas: Drawing = canvas_config.create_svg_canvas()
+    attach_legend_row_facts(
+        canvas,
+        LegendRowFacts(
+            records=[gb_record],
+            feature_config=feature_config,
+            gc_config=gc_config,
+            skew_config=skew_config,
+            legend_table=legend_table,
+        ),
+    )
     plot = add_record_on_circular_canvas(
         canvas,
         gb_record,

@@ -293,9 +293,10 @@ test('a Legend style may miss its row only in a Result that draws none of its fe
   ]);
 });
 
-// OV-46: a Legend-only row (no feature is known to draw it) may be absent from
-// each Result, and the plan records that some Result must draw it.
-test('a Legend row with no known features is required in at least one Result, not in each', () => {
+// OV-46, OV-63: a Legend row with no known features is required by the plan in each
+// Result. Admission lets Python's Legend row facts excuse the absence (suppressed by
+// the draft, or drawn by another Result), so the plan carries no guess of its own.
+test('a Legend row with no known features stays required in each Result of a batch', () => {
   const plan = compileDirectEditorMutationPlan({
     catalogAdmission: { ...admission(), resultNames: ['record-a.svg', 'record-b.svg'] },
     legendEntries: [{ caption: 'other proteins', originalCaption: 'other proteins', color: '#00aa00' }],
@@ -304,15 +305,31 @@ test('a Legend row with no known features is required in at least one Result, no
     legendStrokeOverrides: { 'other proteins': { strokeColor: '#445566', strokeWidth: 2 } }
   });
   assert.deepEqual(plan.operationsByResult.map(({ legendFills }) => legendFills), [
-    [{ caption: 'other proteins', color: '#00aa00', allowMissing: true, requiredInAnyResult: true }],
-    [{ caption: 'other proteins', color: '#00aa00', allowMissing: true, requiredInAnyResult: true }]
+    [{ caption: 'other proteins', color: '#00aa00', allowMissing: false }],
+    [{ caption: 'other proteins', color: '#00aa00', allowMissing: false }]
   ]);
   assert.deepEqual(plan.operationsByResult.map(({ legendStrokes }) => legendStrokes.map(
-    ({ allowMissing, requiredInAnyResult, renderedIds }) => ({ allowMissing, requiredInAnyResult, renderedIds })
+    ({ allowMissing, renderedIds }) => ({ allowMissing, renderedIds })
   )), [
-    [{ allowMissing: true, requiredInAnyResult: true, renderedIds: [] }],
-    [{ allowMissing: true, requiredInAnyResult: true, renderedIds: [] }]
+    [{ allowMissing: false, renderedIds: [] }],
+    [{ allowMissing: false, renderedIds: [] }]
   ]);
+});
+
+test('a Legend rename and style of a generated row are compiled the same way whatever the draft hides', () => {
+  const compile = (extra = {}) => compileDirectEditorMutationPlan({
+    catalogAdmission: admission(),
+    legendEntries: [{ caption: 'Repeats', originalCaption: 'repeat_region', color: '#7b2cbf' }],
+    originalLegendOrder: ['repeat_region'],
+    legendColorOverrides: { Repeats: '#7b2cbf' },
+    ...extra
+  }).operationsByResult[0];
+  const plain = compile();
+  const hidden = compile({ featureOverrides: identityRow({ featureVisibility: 'off' }) });
+  assert.deepEqual(hidden.legendFills, plain.legendFills);
+  assert.deepEqual(hidden.legendRenames, plain.legendRenames);
+  assert.deepEqual(plain.legendFills, [{ caption: 'repeat_region', color: '#7b2cbf', allowMissing: false }]);
+  assert.equal(plain.legendRenames[0].allowMissing, false);
 });
 
 test('a Legend row in a single Result stays required in that Result', () => {

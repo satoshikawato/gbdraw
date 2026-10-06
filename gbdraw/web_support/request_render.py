@@ -21,6 +21,7 @@ from gbdraw.api.prepared import (
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.web_support.error_adapter import WebErrorAttributes, web_error_stage
+from gbdraw.legend.row_facts import collect_legend_row_facts
 from gbdraw.render.formats import SVG_FORMAT, resolve_format_output_path
 from gbdraw.render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
@@ -177,6 +178,7 @@ def _render_canonical_web_request(
     results: list[dict[str, str]] = []
     geometry_records: list[dict[str, Any]] = []
     feature_catalog_items: list[dict[str, Any]] = []
+    legend_rows: list[dict[str, Any]] = []
     for result_index, item in enumerate(items):
         path = _base_svg_path(item)
         result_name = path.name
@@ -199,6 +201,13 @@ def _render_canonical_web_request(
                 )
             )
         with _web_render_diagnostic_phase(diagnostics, "geometryMetadata"):
+            legend_rows.append(
+                collect_legend_row_facts(
+                    item.drawing,
+                    result_index=result_index,
+                    result_name=result_name,
+                )
+            )
             geometry_records.extend(
                 collect_track_slot_geometry_records(
                     item.drawing,
@@ -216,6 +225,8 @@ def _render_canonical_web_request(
         )
     with _web_render_diagnostic_phase(diagnostics, "featureCatalog"):
         metadata["featureCatalog"] = build_feature_catalog(feature_catalog_items)
+    # Per Result: the Legend rows drawn and the feature rows the draft removed (OV-63).
+    metadata["legendRows"] = legend_rows
     metadata["annotationWarnings"] = [
         {
             "code": warning.code,

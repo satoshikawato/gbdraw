@@ -12,6 +12,13 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Legend colors and names (web app): Generate no longer fails with "The generated
+  result could not be accepted" after a Legend color, stroke, or name is set on a row
+  whose features are then all hidden (Feature visibility Off, a Feature Visibility
+  rule, or a color rule that recaptions them). The row is not drawn, and the stored
+  Legend edit applies again when the row returns. A Legend edit for a name that no
+  feature can produce still fails Generate. The Python engine now reports, for each
+  Result, the Legend rows it drew and the rows its draft removed.
 - Feature Visibility rules (web app): adding, editing, moving, or deleting a
   rule in **Features → Feature Visibility** now updates the current Result at
   once, as Generate draws it, like the other visibility edits. The change used
