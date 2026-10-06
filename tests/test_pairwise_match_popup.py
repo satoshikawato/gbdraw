@@ -86,24 +86,61 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .replace("./match-sequences.js", "./match-sequences.mjs")
         .replace("./losat-normalization.js", "./losat-normalization.mjs")
         .replace("../services/feature-identity.js", "./feature-identity.mjs")
-        + "\nexport { buildFallbackOrthogroup, featureOrthogroupId, getFeatureForMember, getRenderedFeatureForMember, getGroupMemberForFeatureSvgId, getOrthogroupById, getOrthogroupForMatch, integerAttr };\n",
+        + "\nexport { buildFallbackOrthogroupWithContext, createPairwisePayloadContext, featureOrthogroupIdStatus, getOrthogroupById, integerAttr };\n",
         encoding="utf-8",
     )
     check_path = tmp_path / "check-collinearity-popup.mjs"
     check_path.write_text(
         f"""
         import {{
-          buildFallbackOrthogroup,
+          buildFallbackOrthogroupWithContext,
           buildPairwiseMatchHoverRows,
           buildPairwiseMatchPayload,
-          featureOrthogroupId,
-          getFeatureForMember,
-          getRenderedFeatureForMember,
-          getGroupMemberForFeatureSvgId,
+          createPairwisePayloadContext,
+          featureOrthogroupIdStatus,
           getOrthogroupById,
-          getOrthogroupForMatch,
           integerAttr
         }} from {module_path.as_uri()!r};
+
+        const featureOrthogroupId = (feature) => {{
+          const status = featureOrthogroupIdStatus(feature);
+          return status.valid ? status.value : '';
+        }};
+        const getRenderedFeatureForMember = (member, feature, featureLookup) => (
+          createPairwisePayloadContext({{ featureLookup, sourceFeatures: [feature] }})
+            .renderedFeatureForMember(member, feature)
+        );
+        const getFeatureForMember = (member, featureLookup, sourceFeatures = []) => (
+          createPairwisePayloadContext({{ featureLookup, sourceFeatures }}).featureForMember(member)
+        );
+        const getGroupMemberForFeatureSvgId = (group, featureSvgId, featureLookup = null) => (
+          createPairwisePayloadContext({{ featureLookup, orthogroups: [group] }})
+            .groupMemberForFeatureId(group, featureSvgId)
+        );
+        const getOrthogroupForMatch = (orthogroups, options = {{}}) => (
+          createPairwisePayloadContext({{
+            featureLookup: options.featureLookup,
+            orthogroups,
+            descriptor: {{
+              matchKind: 'pairwise',
+              orthogroupId: options.orthogroupId,
+              groupScope: options.groupScope,
+              queryFeatureSvgId: options.queryFeatureSvgId,
+              subjectFeatureSvgId: options.subjectFeatureSvgId
+            }}
+          }}).orthogroupForMatch()
+        );
+        const buildFallbackOrthogroup = ({{
+          orthogroupId,
+          queryFeature,
+          subjectFeature,
+          featureLookup
+        }}) => buildFallbackOrthogroupWithContext({{
+          orthogroupId,
+          queryFeature,
+          subjectFeature,
+          context: createPairwisePayloadContext({{ featureLookup }})
+        }});
 
         const assert = (condition, message) => {{
           if (!condition) throw new Error(message);

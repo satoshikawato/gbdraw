@@ -45,12 +45,15 @@ const OWNER_GRAPH_BASELINE = {
   'owner-graph.whole-object-port.v1|app/run-analysis.js|createRunAnalysis|rulePreparation': 1,
   'owner-graph.whole-object-port.v1|services/history-snapshot.js|createHistorySnapshotService|fileStore': 1,
   'owner-graph.whole-object-port.v1|services/history.js|createHistoryManager|fileStore': 1,
-  // heavy-derived.trigger-site.v1 (sites per module)
-  'heavy-derived.trigger-site.v1|rulePreparation|app/app-setup.js': 2,
-  'heavy-derived.trigger-site.v1|rulePreparation|app/feature-editor/label-actions.js': 2,
-  'heavy-derived.trigger-site.v1|rulePreparation|app/feature-editor/rule-actions.js': 1,
-  'heavy-derived.trigger-site.v1|rulePreparation|app/feature-editor/visibility-actions.js': 1,
-  'heavy-derived.trigger-site.v1|rulePreparation|app/run-analysis.js': 1
+  // heavy-derived.trigger-site.v2 (sites per module; includes calls of a
+  // producer port such as rulePreparation.run handed to an owner)
+  'heavy-derived.trigger-site.v2|rulePreparation|app/app-setup.js': 2,
+  'heavy-derived.trigger-site.v2|rulePreparation|app/feature-editor/color-actions.js': 2,
+  'heavy-derived.trigger-site.v2|rulePreparation|app/feature-editor/label-actions.js': 2,
+  'heavy-derived.trigger-site.v2|rulePreparation|app/feature-editor/rule-actions.js': 1,
+  'heavy-derived.trigger-site.v2|rulePreparation|app/feature-editor/svg-actions.js': 1,
+  'heavy-derived.trigger-site.v2|rulePreparation|app/feature-editor/visibility-actions.js': 1,
+  'heavy-derived.trigger-site.v2|rulePreparation|app/run-analysis.js': 1
 };
 
 // Distinct call shapes per projection domain outside its owner (R3: one
@@ -67,7 +70,7 @@ const PROJECTION_SHAPE_BASELINE = {
 
 const SUBJECT_DETECTORS = [
   'owner-graph.injection-edge.v1',
-  'owner-graph.forward-closure.v1',
+  'owner-graph.forward-closure.v2',
   'owner-graph.state-backdoor.v1',
   'owner-graph.whole-object-port.v1'
 ];
@@ -79,8 +82,8 @@ test('every owner-graph subject in the working tree is in the baseline, and ever
   SUBJECT_DETECTORS.forEach((id) => {
     results[id].subjects.forEach((subject) => observed.set(`${id}|${subject}`, 1));
   });
-  Object.entries(results['heavy-derived.trigger-site.v1'].countsBySubject).forEach(([subject, count]) => {
-    observed.set(`heavy-derived.trigger-site.v1|${subject}`, count);
+  Object.entries(results['heavy-derived.trigger-site.v2'].countsBySubject).forEach(([subject, count]) => {
+    observed.set(`heavy-derived.trigger-site.v2|${subject}`, count);
   });
   const added = [...observed].filter(([key, count]) => !(key in OWNER_GRAPH_BASELINE) || count > OWNER_GRAPH_BASELINE[key]);
   const fixed = Object.entries(OWNER_GRAPH_BASELINE).filter(([key, count]) => !observed.has(key) || observed.get(key) < count);

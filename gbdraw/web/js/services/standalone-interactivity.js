@@ -237,11 +237,6 @@ const standaloneMemberRecordIndexStatus = (member) => (
   ])
 );
 
-const standaloneMemberRecordIndex = (member) => {
-  const status = standaloneMemberRecordIndexStatus(member);
-  return status.valid ? status.value : null;
-};
-
 const standaloneMemberStableSvgId = (member) => {
   const stable = standaloneConsistentTextAlias(member, [
     'stableFeatureSvgId', 'stable_feature_svg_id',
@@ -257,14 +252,6 @@ const standaloneMemberStableSvgId = (member) => {
     || (stable.value && legacy.value && stable.value !== legacy.value)
   ) return '';
   return stable.value || legacy.value;
-};
-
-const standaloneMemberRenderedSvgId = (member) => {
-  const status = standaloneConsistentTextAlias(member, [
-    'renderedFeatureSvgId', 'rendered_feature_svg_id',
-    'renderedSvgId', 'rendered_svg_id'
-  ]);
-  return status.valid ? status.value : '';
 };
 
 const standaloneFeatureIndexStatus = (payload) => standaloneIntegerAlias([
