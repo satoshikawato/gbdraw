@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+from __future__ import annotations
+
 import logging
 import sys
 
@@ -12,8 +14,12 @@ else:
 
 from importlib import resources
 from importlib.abc import Traversable
+from typing import TYPE_CHECKING, cast
 
 from ..exceptions import ConfigError
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +30,8 @@ def load_config_toml(config_directory: str, config_file: str) -> dict:
         # Generate the path object for the 'config.toml' file
         config_path: Traversable = resources.files(config_directory).joinpath(config_file)
         # Convert the path to an absolute path
-        absolute_config_path = config_path.resolve()  # type: ignore
+        # Installed packages are directories, so files() returns a Path here.
+        absolute_config_path = cast("Path", config_path).resolve()
         # Display or log the absolute path
         logger.info(f"INFO: Loading config file: {absolute_config_path}")
         # Open the file and load the configuration
