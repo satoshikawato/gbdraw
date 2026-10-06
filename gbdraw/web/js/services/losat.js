@@ -416,7 +416,7 @@ const buildJobSequencePayload = (job, sequenceStore, loadedKeys) => {
  * @param {LosatRunOptions} [options]
  * @returns {Promise<LosatJobResult[]>}
  */
-const runLosatPairsSequential = async (jobs, { onProgress, sequences, signal } = {}) => {
+const runLosatPairsSequential = async (jobs, { onProgress, sequences, signal, wasmPath } = {}) => {
   throwIfAborted(signal);
   const startedAt = getNow();
   const sequenceStore = normalizeSequenceStore(sequences);
@@ -427,6 +427,7 @@ const runLosatPairsSequential = async (jobs, { onProgress, sequences, signal } =
     try {
       const text = await runLosatPair({
         ...materializeJobSequences(job, sequenceStore),
+        wasmPath,
         signal
       });
       throwIfAborted(signal);
