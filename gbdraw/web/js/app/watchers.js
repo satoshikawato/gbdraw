@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { MountedResultContext, MountedResultContextOptions } from './preview-runtime.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 import { normalizeUserFacingError } from '../services/error-normalization.js';
 import {
@@ -38,8 +39,8 @@ export const runRecordDiscoveryWatcher = async ({
  * mounted-Result watcher reads.
  * @typedef {object} WatchersPreviewRuntime
  * @property {() => void} clearActiveRuntime
- * @property {(options: Record<string, any>) => any} createMountedResultContext
- * @property {(context: any) => Promise<any>} bindMountedResult
+ * @property {(options: MountedResultContextOptions) => MountedResultContext} createMountedResultContext
+ * @property {(context: MountedResultContext) => Promise<any>} bindMountedResult
  */
 
 /**

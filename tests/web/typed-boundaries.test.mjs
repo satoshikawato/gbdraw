@@ -26,15 +26,7 @@ import { fileURLToPath } from 'node:url';
 import { maskJavaScript } from '../../tools/web-change-source.mjs';
 import { WEB_OWNER_GRAPH_DEFAULTS } from '../../tools/web-owner-graph-detectors.mjs';
 
-const UNCHECKED_MODULES = new Set([
-  'app/candidate-render.js',
-  'app/feature-dom.js',
-  'app/preview-runtime.js',
-  'app/results.js',
-  'services/svg-result-ingestion.js',
-  'services/svg-result-normalization.js',
-  'services/svg-serialization.js'
-]);
+const UNCHECKED_MODULES = new Set([]);
 
 const REPOSITORY_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const WEB_JS = join(REPOSITORY_ROOT, 'gbdraw', 'web', 'js');

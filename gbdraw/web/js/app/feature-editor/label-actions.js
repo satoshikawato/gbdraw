@@ -708,6 +708,14 @@ export const createFeatureLabelActions = ({
         : 'No editable feature label for this feature in current diagram.');
   };
 
+  /**
+   * @param {{
+   *   requiredFeatureIds?: readonly string[],
+   *   optionalFeatureIds?: readonly string[],
+   *   reportedLabelBinding?: { featureIds: readonly string[], report: (error: unknown) => void } | null,
+   *   queueIncompleteVisibility?: boolean
+   * }} [options]
+   */
   const syncLabelEditor = ({
     requiredFeatureIds = [],
     optionalFeatureIds = [],
