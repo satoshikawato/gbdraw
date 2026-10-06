@@ -314,32 +314,6 @@ export const createLegendEntryActions = ({
       }
     }
 
-    let maxY = -lineMargin;
-    const textElements = targetGroup.querySelectorAll('text');
-    textElements.forEach((el) => {
-      const transform = el.getAttribute('transform');
-      if (transform) {
-        const { y } = parseTransformXY(transform);
-        if (y > maxY) maxY = y;
-      }
-    });
-
-    if (textElements.length === 0) {
-      const colorRects = targetGroup.querySelectorAll('path');
-      colorRects.forEach((el) => {
-        const fill = el.getAttribute('fill');
-        if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-          const transform = el.getAttribute('transform');
-          if (transform) {
-            const { y } = parseTransformXY(transform);
-            if (y > maxY) maxY = y;
-          }
-        }
-      });
-    }
-
-    const newY = maxY + lineMargin;
-
     try {
       const parser = new DOMParser();
 
