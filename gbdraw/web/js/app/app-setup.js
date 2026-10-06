@@ -2346,22 +2346,35 @@ export const createAppSetup = () => {
   );
   previewRuntime.configureMountedResultBinder({
     async adoptLegend(context) {
-      if (context.phase === 'result-selection' && !context.bindingOptions.trustedRestore) {
-        await projectEditorIntentOnDisplay(context);
+      // OV-47: each Result has its own default Legend order. A Result being
+      // displayed is read before its editor intent is projected; it then shows
+      // its own inventory, so a Generate or rerender made while another Result
+      // was displayed does not replace it.
+      const selecting = context.phase === 'result-selection' && !context.bindingOptions.trustedRestore;
+      const liveResultIdentities = results.value.map(previewRuntime.getResultIdentity);
+      if (selecting) {
+        const resultLegendOrder = legendActions.captureResultInventory(context.root, {
+          resultIdentity: context.resultIdentity,
+          liveResultIdentities
+        });
+        await projectEditorIntentOnDisplay(context, resultLegendOrder);
+        legendActions.adoptResultInventory(context.resultIdentity);
       } else {
         rememberCommittedEditorState(context);
       }
-      if (
-        context.bindingOptions.skipLegendExtraction
-        || context.bindingOptions.trustedRestore
-      ) return;
+      if (context.bindingOptions.trustedRestore) {
+        legendActions.adoptResultInventory(context.resultIdentity, { restored: true });
+        return;
+      }
+      if (context.bindingOptions.skipLegendExtraction) return;
       recordStructuralMetric('legendDomFullScanCount', 1, {
         phase: context.phase,
         rootGeneration: context.rootGeneration
       });
       legendActions.extractLegendEntries({
-        replaceGeneratedInventory: !context.bindingOptions.isIncrementalEdit
-          || Boolean(context.bindingOptions.replaceGeneratedLegend)
+        replaceGeneratedInventory: !selecting && (!context.bindingOptions.isIncrementalEdit
+          || Boolean(context.bindingOptions.replaceGeneratedLegend)),
+        liveResultIdentities
       });
     },
     bindComposition(context) {
@@ -2869,7 +2882,7 @@ export const createAppSetup = () => {
     });
     lastBoundResultIdentity = context.resultIdentity;
   };
-  const compileDisplayedResultOperations = (resultIndex, { replayDefaultLegendOrder = false } = {}) => {
+  const compileDisplayedResultOperations = (resultIndex, { replayDefaultLegendOrder = null } = {}) => {
     const catalog = toRaw(state.featureCatalog.value);
     if (!catalog) return null;
     const plan = compileDirectEditorMutationPlan({
@@ -2895,7 +2908,7 @@ export const createAppSetup = () => {
   // D-07 (PD-OI-062): a batch Result shows the canonical color, visibility,
   // Legend, and label edits when it is displayed. Labels follow in the
   // binder's label step.
-  const projectEditorIntentOnDisplay = async (context) => {
+  const projectEditorIntentOnDisplay = async (context, resultLegendOrder) => {
     const identity = context.resultIdentity;
     const current = currentEditorProjectionState();
     // The Result shown until now followed every live edit.
@@ -2909,8 +2922,8 @@ export const createAppSetup = () => {
     const visibility = previous.visibility !== current.visibility;
     labelProjectionResultIdentity = previous.labels !== current.labels ? identity : '';
     // B20: a Result last shown with another Legend order receives the current
-    // order, also the default order.
-    const replayDefaultLegendOrder = previous.legendOrder !== current.legendOrder;
+    // order, also the default order, which is its own generated order (OV-47).
+    const replayDefaultLegendOrder = previous.legendOrder !== current.legendOrder ? resultLegendOrder : null;
     let operations = null;
     try {
       operations = compileDisplayedResultOperations(context.resultIndex, { replayDefaultLegendOrder });
