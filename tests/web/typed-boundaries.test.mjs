@@ -114,8 +114,6 @@ const UNCHECKED_MODULES = new Set([
   'services/losat.js',
   'services/pdf-fonts.js',
   'services/pyodide-assets.js',
-  'services/session-request.js',
-  'services/session-resources.js',
   'services/standalone-interactivity-assets.js',
   'services/svg-result-ingestion.js',
   'services/svg-result-normalization.js',
