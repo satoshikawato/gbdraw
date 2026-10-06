@@ -2866,6 +2866,15 @@ export const createAppSetup = () => {
     });
     if (!projected) return;
     await nextTick();
+    // The restored form decides which track groups the mounted Result shows.
+    // The visibility watcher is suppressed while a step restores files (a Depth
+    // source), so the step applies it here once the restored container is
+    // mounted. A step that switched the mode leaves it to the mode's own
+    // restore: the mounted Result must be of the current mode (OV-66, R3).
+    if (changedDomains.has('files') && changedDomains.has('config')
+      && state.generatedMode.value === mode.value) {
+      svgActions.applyTrackVisibility();
+    }
   });
 
   // Each Result's bytes reflect the editor state it was committed or last
