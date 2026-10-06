@@ -4,6 +4,7 @@
 """Linear track-based label placement utilities."""
 
 from collections import defaultdict
+from typing import Any, cast
 from .coordinates import display_label_segment
 
 from .filtering import get_label_text
@@ -95,7 +96,8 @@ def _find_lowest_available_track_indexed(
         if index is None:
             candidates = track_dict[track_id]
         else:
-            candidates = [label_by_id[label_id] for label_id in index.query(label_interval)]
+            # Only int ids are inserted into these indexes.
+            candidates = [label_by_id[cast(int, label_id)] for label_id in index.query(label_interval)]
 
         if not any(check_label_overlap(label, existing_label) for existing_label in candidates):
             return track_num
@@ -287,7 +289,7 @@ def _place_linear_label_without_overlap(
             candidates = placed
         else:
             candidates = [
-                placed_by_id[label_id]
+                placed_by_id[cast(int, label_id)]  # only int ids are inserted
                 for label_id in placed_index.query(_linear_label_aabb(label), padding=min_gap_px)
             ]
 
@@ -354,7 +356,7 @@ def _passes_orthogroup_label_eligibility(
         return True
     source_feature_index = _source_feature_index(feature_object)
     if source_feature_index is None:
-        raw_source_feature_index = getattr(
+        raw_source_feature_index: Any = getattr(
             feature_object,
             "source_feature_index",
             None,
@@ -364,7 +366,7 @@ def _passes_orthogroup_label_eligibility(
         except (TypeError, ValueError):
             source_feature_index = None
     feature_svg_id = compute_feature_object_hash(feature_object)
-    identities = {feature_svg_id}
+    identities: set[str | int | None] = {feature_svg_id}
     if source_feature_index is not None:
         identities.add(source_feature_index)
     if not identities.intersection(member_ids):
@@ -501,9 +503,9 @@ def prepare_label_list_linear(
             max_bbox_height = bbox_height_px
         # Find the longest segment and its middle point
         longest_segment_length = 0
-        coordinate_strand = None
-        longest_segment_start = 0
-        longest_segment_end = 0
+        coordinate_strand: str | None = None
+        longest_segment_start: float = 0
+        longest_segment_end: float = 0
 
         for coordinate in feature_object.coordinates:
             coordinate_strand = get_strand(coordinate.strand)
@@ -524,11 +526,13 @@ def prepare_label_list_linear(
             coordinate_strand = projected_segment.strand
 
         # Calculate normalized positions
+        # `position` is only used in arithmetic but is declared int in layout/linear_coords.py,
+        # while display fragments are floats (F-s5-1).
         normalized_start = normalize_position_to_linear_track(
-            longest_segment_start, genome_length, alignment_width, genome_size_normalization_factor
+            cast(int, longest_segment_start), genome_length, alignment_width, genome_size_normalization_factor
         )
         normalized_end = normalize_position_to_linear_track(
-            longest_segment_end, genome_length, alignment_width, genome_size_normalization_factor
+            cast(int, longest_segment_end), genome_length, alignment_width, genome_size_normalization_factor
         )
         longest_segment_length_in_pixels = abs(normalized_end - normalized_start) + 1
 

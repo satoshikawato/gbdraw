@@ -1,3 +1,4 @@
+// @ts-check
 import { resolveColorToHex } from '../color-utils.js';
 import { reportRuleRunFailure } from '../rule-matching.js';
 import {
@@ -10,7 +11,7 @@ import {
 import {
   PAIRWISE_MATCH_SELECTOR,
   buildPairwiseMatchHoverSummary,
-  buildPairwiseMatchPayload
+  buildMatchPopupPayload
 } from '../pairwise-match-popup.js';
 import { buildFeatureSequenceFastas } from '../feature-sequence-fasta.js';
 import { getFeatureOverride } from '../../services/feature-override-identity.js';
@@ -48,6 +49,43 @@ export {
   normalizeFeatureIdentity
 };
 
+/**
+ * The feature selection owner's reactions to a click or a drag on the preview.
+ * @typedef {object} FeatureSelectionPort
+ * @property {() => boolean} [consumeSuppressNextClick]
+ * @property {(event: Event, svg: Element) => Element | null} [getSelectableFeatureTarget]
+ * @property {(selectionId: string) => any} [toggleFeatureSelection]
+ * @property {(selectionId: string, options?: { additive?: boolean }) => any} [selectFeatureRange]
+ * @property {(options?: { clearStatus?: boolean }) => any} [clearFeatureSelection]
+ * @property {(svgId: string) => any} [markPlainFeatureClick]
+ * @property {(event: Event, svg: Element) => boolean} [startMarqueePointer]
+ * @property {(event: Event) => boolean} [moveMarqueePointer]
+ * @property {(event: Event) => boolean} [commitMarqueePointer]
+ * @property {() => any} [cancelMarqueePointer]
+ */
+
+/**
+ * The preview owner's pan and zoom interaction, which pauses feature hover.
+ * @typedef {object} PreviewTransformInteractionPort
+ * @property {() => boolean} [isActive]
+ * @property {(listener: (change: { active: boolean, kind: string, event: Event, reconcile: boolean }) => void) => (() => void) | void} [subscribe]
+ */
+
+/**
+ * @typedef {object} FeatureSvgActionsOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {(feature: Record<string, any>) => string} getFeatureColor The rule owner's color of a feature.
+ * @property {(feature: Record<string, any>) => string} [getEffectiveLegendCaption] The rule owner's Legend caption of a feature.
+ * @property {(() => void) | null} [onFeaturePopupOpened] The label owner's sync of its editor when the popup opens.
+ * @property {(commit: () => any) => any} [runWithDrawnMatches]
+ *   Runs the popup's opening once the rule matches `resolveFeatureDrawn` reads are prepared (the rule preparation's `runDrawn`).
+ * @property {FeatureSelectionPort | null} [featureSelection]
+ * @property {((changes: { featureId: string, mode: string }[], options?: { reason?: string }) => boolean) | null} [applyFeatureVisibilityChanges]
+ *   The preview owner's projection of feature visibility changes.
+ * @property {PreviewTransformInteractionPort | null} [previewTransformInteraction]
+ */
+
+/** @param {FeatureSvgActionsOptions} options */
 export const createFeatureSvgActions = ({
   state,
   getFeatureColor,
@@ -628,7 +666,7 @@ export const createFeatureSvgActions = ({
       : orthogroups?.value || []
   );
 
-  const buildMatchPayload = (matchElement, featureLookup) => buildPairwiseMatchPayload(matchElement, {
+  const buildMatchPayload = (matchElement, featureLookup) => buildMatchPopupPayload(matchElement, {
     featureLookup,
     sourceFeatures: Array.isArray(biologicalFeatures?.value) && biologicalFeatures.value.length > 0
       ? biologicalFeatures.value
@@ -639,10 +677,11 @@ export const createFeatureSvgActions = ({
     resolveSequenceSource: matchSequenceRegistry?.resolve
   });
 
-  const buildMatchHoverSummary = (matchElement) => buildPairwiseMatchHoverSummary(matchElement, {
+  // The summary builder reads a function as well as a list.
+  const buildMatchHoverSummary = (matchElement) => buildPairwiseMatchHoverSummary(matchElement, /** @type {any} */ ({
     orthogroups: () => groupsForMatch(matchElement),
     orthogroupNameOverrides
-  });
+  }));
 
   const openPairwiseMatchPopup = (matchElement, eventLike, featureLookup) => {
     if (!matchElement || !clickedPairwiseMatch || !clickedPairwiseMatchPos) return null;

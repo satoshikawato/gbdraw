@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path, PureWindowsPath
-from typing import Literal, Sequence, TypeAlias
+from typing import Literal, Sequence, TypeAlias, cast
 
 from Bio.SeqRecord import SeqRecord
 
@@ -779,7 +779,10 @@ class LinearDiagramRequest:
             else None
         )
         if translations or plan is not None:
-            record_keys = tuple(record.record_key for record in records)
+            # None keys are rejected just below.
+            record_keys = cast(
+                "tuple[str, ...]", tuple(record.record_key for record in records)
+            )
             if any(record_key is None for record_key in record_keys):
                 raise ValidationError(
                     "Similarity alignment and record translations require stable record keys."

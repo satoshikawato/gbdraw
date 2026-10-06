@@ -6,7 +6,7 @@ import io
 import logging
 import os
 from dataclasses import dataclass
-from typing import Iterable, Literal, Sequence
+from typing import TYPE_CHECKING, Iterable, Literal, Sequence, cast
 
 import pandas as pd
 from Bio.SeqRecord import SeqRecord
@@ -22,6 +22,8 @@ from gbdraw.io.comparisons import (
     read_comparison_table,
 )
 
+if TYPE_CHECKING:
+    from gbdraw.configurators import BlastMatchConfigurator
 
 logger = logging.getLogger(__name__)
 
@@ -115,7 +117,7 @@ def normalize_conservation_reference(value: object | None) -> ConservationRefere
     normalized = str(value or "auto").strip().lower()
     if normalized not in {"query", "subject", "auto"}:
         raise ValidationError("conservation_reference must be one of: query, subject, auto")
-    return normalized  # type: ignore[return-value]
+    return cast(ConservationReferenceMode, normalized)
 
 
 def empty_normalized_conservation_hits() -> DataFrame:
@@ -154,17 +156,17 @@ def conservation_track_gradient_colors(
     return tint_color(normalized_track_color), normalized_track_color
 
 
-def _filter_normalized_dataframe(dataframe: DataFrame, blast_config: object) -> DataFrame:
+def _filter_normalized_dataframe(dataframe: DataFrame, blast_config: BlastMatchConfigurator) -> DataFrame:
     df = dataframe.copy()
     # Keep the original source-row identity through filtering and paint-order sorting.
     df["source_hit_index"] = range(len(df))
-    filtered = filter_comparison_dataframe(df, blast_config)  # type: ignore[arg-type]
+    filtered = filter_comparison_dataframe(df, blast_config)
     return filtered.loc[:, [*COMPARISON_COLUMNS, "source_hit_index"]].reset_index(drop=True)
 
 
 def _load_conservation_file(
     path: "str | ConservationSearchResult",
-    blast_config: object,
+    blast_config: BlastMatchConfigurator,
 ) -> tuple[DataFrame | None, str | None]:
     try:
         if isinstance(path, ConservationSearchResult):
@@ -221,7 +223,7 @@ def load_conservation_sources(
         if path is not None:
             frame, reason = _load_conservation_file(
                 path if isinstance(path, ConservationSearchResult) else str(path),
-                blast_config,
+                cast("BlastMatchConfigurator", blast_config),
             )
             if frame is not None:
                 valid_frames.append(frame)
@@ -234,7 +236,7 @@ def load_conservation_sources(
                 valid_frames.append(
                     _filter_normalized_dataframe(
                         normalize_comparison_dataframe(dataframes[source_index]),
-                        blast_config,
+                        cast("BlastMatchConfigurator", blast_config),
                     )
                 )
             except ValidationError as exc:

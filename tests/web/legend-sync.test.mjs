@@ -87,7 +87,7 @@ assert.match(configSource, /skipCaptureBaseConfig\.value = true;\s+applyResultsD
 const sessionLegendSyncSource = appSetupSource.match(
   /adoptLegend\(context\)[\s\S]*?\n    bindComposition/
 )?.[0] || '';
-assert.match(sessionLegendSyncSource, /extractLegendEntries\(\{\s*replaceGeneratedInventory: !context\.bindingOptions\.isIncrementalEdit/);
+assert.match(sessionLegendSyncSource, /extractLegendEntries\(\{\s*replaceGeneratedInventory: !selecting && \(!context\.bindingOptions\.isIncrementalEdit/);
 assert.doesNotMatch(sessionLegendSyncSource, /initPyodide|addLegendEntry|removeLegendEntry/);
 assert.doesNotMatch(appSetupSource, /restoreLoadedSessionLegendEntries/);
 assert.match(configSource, /entries: normalizeSessionLegendEntries\(legend\.entries\)/);
@@ -489,7 +489,7 @@ const mockLegendEntry = (caption, color, x) => {
     ...options
   }).operationsByResult[0].legendOrder.map(({ captions }) => [...captions]);
   assert.deepEqual(compile({}), []);
-  assert.deepEqual(compile({ replayDefaultLegendOrder: true }), [['Core', 'Added', 'Other', 'Late']]);
+  assert.deepEqual(compile({ replayDefaultLegendOrder: ['Core', 'Added', 'Other', 'Late'] }), [['Core', 'Added', 'Other', 'Late']]);
 }
 
 {
@@ -589,4 +589,82 @@ const mockLegendEntry = (caption, color, x) => {
   sortActions.sortLegendEntries('desc');
   assert.equal(sortCommits, 1);
   state.svgContainer.value = mounted;
+}
+
+{
+  // OV-47: each batch Result has its own generated Legend order. A draw made
+  // while Result 2 is displayed does not replace the order of Result 1, which
+  // is read from its Legend when it is displayed first, and each Result gets
+  // its own order back when it is displayed again.
+  const ref = (value) => ({ value });
+  const svg = new MockElement('svg');
+  const legend = new MockElement('g', { id: 'legend' });
+  const featureLegend = new MockElement('g', { id: 'feature_legend' });
+  legend.appendChild(featureLegend);
+  svg.appendChild(legend);
+  const render = (...captions) => {
+    featureLegend.children.forEach(entry => { entry.parentElement = null; });
+    featureLegend.children = [];
+    captions.forEach((caption, index) => featureLegend.appendChild(mockLegendEntry(caption, '#112233', index * 70)));
+  };
+  const state = {
+    results: ref([{ name: 'r1.svg', content: 'unchanged' }, { name: 'r2.svg', content: 'unchanged' }]),
+    selectedResultIndex: ref(0),
+    svgContainer: ref({ querySelector: () => svg }),
+    adv: {},
+    legendEntries: ref([]),
+    deletedLegendEntries: ref([]),
+    originalLegendOrder: ref([]),
+    originalLegendColors: ref({}),
+    newLegendCaption: ref(''),
+    newLegendColor: ref('#808080'),
+    legendStrokeOverrides: {},
+    legendColorOverrides: {},
+    manualSpecificRules: [],
+    skipCaptureBaseConfig: ref(false)
+  };
+  let identity = 'result-2';
+  const live = ['result-1', 'result-2'];
+  const actions = createLegendEntryActions({
+    state,
+    compactLegendEntries: () => {},
+    reflowDualLegendLayout: () => {},
+    updatePairwiseLegendPositions: () => {},
+    commitActiveResultEdit: () => true,
+    readActiveResultIdentity: () => identity
+  });
+  // Generate draws while Result 2 is displayed: it keeps Result 2's order.
+  render('Rule', 'Other', 'tRNA', 'GC');
+  actions.extractLegendEntries({ replaceGeneratedInventory: true, liveResultIdentities: live });
+  assert.deepEqual(state.originalLegendOrder.value, ['Rule', 'Other', 'tRNA', 'GC']);
+  // Result 1 is displayed first: its order is read before any projection, and
+  // the inventory of Result 2 is not its own.
+  render('CDS', 'tRNA', 'GC');
+  identity = 'result-1';
+  assert.deepEqual(actions.captureResultInventory(svg, { resultIdentity: 'result-1', liveResultIdentities: live }), ['CDS', 'tRNA', 'GC']);
+  actions.adoptResultInventory('result-1');
+  assert.deepEqual(state.originalLegendOrder.value, ['CDS', 'tRNA', 'GC']);
+  // Result 2 comes back with its own inventory, not Result 1's.
+  identity = 'result-2';
+  assert.deepEqual(actions.captureResultInventory(svg, { resultIdentity: 'result-2', liveResultIdentities: live }), ['Rule', 'Other', 'tRNA', 'GC']);
+  actions.adoptResultInventory('result-2');
+  assert.deepEqual(state.originalLegendOrder.value, ['Rule', 'Other', 'tRNA', 'GC']);
+  // A Result that no longer exists is forgotten.
+  actions.captureResultInventory(svg, { resultIdentity: 'result-2', liveResultIdentities: ['result-2'] });
+  identity = 'result-1';
+  render('Z', 'CDS');
+  assert.deepEqual(actions.captureResultInventory(svg, { resultIdentity: 'result-1', liveResultIdentities: ['result-1', 'result-2'] }), ['Z', 'CDS']);
+  // A draw that replays an edited order shows it on the other Results, whose
+  // order is then the displayed one with their own entries after it.
+  state.originalLegendOrder.value = ['A', 'B'];
+  render('B', 'A');
+  actions.extractLegendEntries();
+  identity = 'result-2';
+  actions.extractLegendEntries({ replaceGeneratedInventory: true, liveResultIdentities: ['result-1', 'result-2', 'result-3'] });
+  render('B', 'A', 'Own');
+  assert.deepEqual(
+    actions.captureResultInventory(svg, { resultIdentity: 'result-3', liveResultIdentities: ['result-1', 'result-2', 'result-3'] }),
+    ['A', 'B', 'Own'],
+    'a Result drawn with a replayed edited order keeps the displayed default order'
+  );
 }

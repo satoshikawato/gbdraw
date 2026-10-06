@@ -29,7 +29,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import re
-from typing import Callable, Hashable, Literal, Mapping, Sequence
+from typing import Callable, Hashable, Literal, Mapping, Sequence, TypedDict, cast
 
 from Bio.SeqRecord import SeqRecord
 
@@ -45,6 +45,14 @@ _FASTA_HEADER = re.compile(r"^>(\S+)([^\r\n]*)", re.MULTILINE)
 
 LosatJobScope = Literal["between-sources", "within-source", "self"]
 RecordPair = tuple[int, int]
+
+
+class _LosatJobDraft(TypedDict):
+    query: tuple[int, ...]
+    subject: tuple[int, ...]
+    args: tuple[str, ...]
+    scope: LosatJobScope
+    specs: list[RecordPair]
 
 
 def sha256_text(text: str) -> str:
@@ -222,7 +230,7 @@ def plan_losat_jobs(
         return tuple(str(arg) for arg in build_args(query, subject))
 
     order: list[tuple[object, ...]] = []
-    drafts: dict[tuple[object, ...], dict[str, object]] = {}
+    drafts: dict[tuple[object, ...], _LosatJobDraft] = {}
     for query_index, subject_index in specs:
         args = args_of(query_index, subject_index)
         query_source = source_ids[query_index]
@@ -271,11 +279,11 @@ def plan_losat_jobs(
         draft["specs"].append((int(query_index), int(subject_index)))
     return tuple(
         LosatJob(
-            query_indexes=drafts[key]["query"],  # type: ignore[arg-type]
-            subject_indexes=drafts[key]["subject"],  # type: ignore[arg-type]
-            args=drafts[key]["args"],  # type: ignore[arg-type]
-            scope=drafts[key]["scope"],  # type: ignore[arg-type]
-            specs=tuple(drafts[key]["specs"]),  # type: ignore[arg-type]
+            query_indexes=drafts[key]["query"],
+            subject_indexes=drafts[key]["subject"],
+            args=drafts[key]["args"],
+            scope=drafts[key]["scope"],
+            specs=tuple(drafts[key]["specs"]),
         )
         for key in order
     )
@@ -378,7 +386,7 @@ def split_losat_batch_result(
     Rows keep the runtime order (Web ``splitLosatSourceResult``).
     """
 
-    rows: dict[RecordPair, list[str]] = {tuple(spec): [] for spec in specs}  # type: ignore[misc]
+    rows: dict[RecordPair, list[str]] = {cast(RecordPair, tuple(spec)): [] for spec in specs}
     for line_number, line in enumerate(re.split(r"\r?\n", str(text)), start=1):
         if not line.strip() or line.lstrip().startswith("#"):
             continue

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 from .record_coordinates import DisplaySeries, RecordDisplayTransform, SeriesPoint
 
 
@@ -21,7 +21,9 @@ def project_scalar_samples(
                    for position, value in zip(positions, values, strict=True))
     if source_positions:
         return transform.project_series(points)
-    return transform.project_local_series(points)
+    # Every caller reaches this branch only when ``transform.start_coordinate`` is set,
+    # where project_local_series returns DisplaySeries (it returns the input points when unset).
+    return cast(tuple[DisplaySeries, ...], transform.project_local_series(points))
 
 
 LINEAR_SCALAR_AXIS_DEFAULT_FONT_MIN_PX = 5.0

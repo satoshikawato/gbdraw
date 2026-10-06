@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, cast
 
 from gbdraw.exceptions import ValidationError
 
@@ -18,7 +18,7 @@ def normalize_label_rendering(value: object) -> LabelRenderingPolicy:
         raise ValidationError(
             "labels.rendering must be one of: auto, embedded_only, external_only"
         )
-    return normalized  # type: ignore[return-value]
+    return cast(LabelRenderingPolicy, normalized)
 
 
 __all__ = ["LabelRenderingPolicy", "normalize_label_rendering"]

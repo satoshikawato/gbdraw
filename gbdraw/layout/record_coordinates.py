@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from math import isfinite
-from typing import Literal, Mapping, Sequence, TypeVar
+from typing import Literal, Mapping, Sequence, TypeVar, cast
 
 from gbdraw.exceptions import ValidationError
 
@@ -258,7 +258,8 @@ class RecordDisplayTransform:
                     local_end,
                     display_start,
                     display_start + end - start,
-                    interval.strand * self.source_step,
+                    # Product of two +/-1 steps is +/-1.
+                    cast(Literal[-1, 1], interval.strand * self.source_step),
                     interval.biological_start and index == 0,
                     interval.biological_end and index == len(spans) - 1,
                     artificial_low if self.source_step == 1 else artificial_high,
@@ -309,7 +310,11 @@ class RecordDisplayTransform:
             )
             source_parts.append(
                 replace(
-                    part, start=start, end=end, strand=part.strand * self.source_step
+                    part,
+                    start=start,
+                    end=end,
+                    # Product of two +/-1 steps is +/-1.
+                    strand=cast(Literal[-1, 1], part.strand * self.source_step),
                 )
             )
         return self.project_parts(source_parts)
@@ -326,7 +331,7 @@ class RecordDisplayTransform:
         nor adds samples. This primitive accepts one continuous periodic track;
         it does not infer missing-data gaps.
         """
-        previous = -1
+        previous: float = -1
         for point in points:
             if (
                 not isinstance(point, SeriesPoint)
@@ -348,7 +353,7 @@ class RecordDisplayTransform:
             and self.source_step == 1
         ):
             return (DisplaySeries(tuple(points), tuple(range(len(points))), None),)
-        mapped = sorted(
+        mapped: list[tuple[float, float, int | None]] = sorted(
             (self._boundary_offset(point.position), point.value, i)
             for i, point in enumerate(points)
         )

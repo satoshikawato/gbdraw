@@ -507,7 +507,7 @@ def generate_circular_tick_paths(
 
 def set_tick_label_anchor_value(
     total_len: int, tick: float
-) -> tuple[Literal["middle"], Literal["text-after-edge", "middle", "hanging"]]:
+) -> tuple[Literal["middle"], Literal["text-after-edge", "text-before-edge", "middle", "hanging"]]:
     """
     Determines the anchor and baseline values for tick labels based on their position.
 
@@ -515,6 +515,7 @@ def set_tick_label_anchor_value(
     """
     anchor_value: Literal["middle"] = "middle"
     angle: float = 360.0 * (tick / total_len)
+    baseline_value: Literal["text-after-edge", "text-before-edge", "middle", "hanging"]
     if 0 <= angle < 90:
         baseline_value = "text-after-edge"
     elif 90 <= angle < 270:

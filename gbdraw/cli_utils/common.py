@@ -203,7 +203,7 @@ def _add_retired_option_args(
             retired.option,
             action=_RetiredOptionAction,
             retired=retired,
-            **({"nargs": retired.nargs} if retired.nargs is not None else {}),
+            nargs=retired.nargs,
             dest=f"_retired_{retired.option.lstrip('-')}",
             default=argparse.SUPPRESS,
             help=argparse.SUPPRESS,

@@ -1,3 +1,4 @@
+// @ts-check
 import { normalizeSpecificRule } from './specific-color-rules.js';
 import { normalizeFeatureSelectorMetadata } from './feature-selector.js';
 import { getFeatureColorRuleHash } from './feature-utils.js';
@@ -136,6 +137,58 @@ export const reportRuleRunFailure = (state, operation, run) => {
   }) : result;
 };
 
+/**
+ * Python's answer to a rule evaluation (R7): per feature, the indexes of the
+ * rules it matches and, for color rules, their priorities; or the normalized
+ * rows of `color-captions`.
+ * @typedef {Record<string, any>} RuleEvaluationResult
+ */
+
+/**
+ * @typedef {object} RulePreparationOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {(payload: Record<string, any>, options?: Record<string, any>) => Promise<RuleEvaluationResult>} evaluate
+ *   The diagram helper that matches rules against feature payloads (R7).
+ * @property {{ value: boolean }} [pending] Receives whether a preparation is running.
+ * @property {(notice: string) => void} [notify] Shows the notice of a caption Python changed.
+ * @property {() => Record<string, any>[]} [visibilityRules] The Feature visibility rule rows, in table order.
+ */
+
+/**
+ * The candidate rules a commit or a run admits (`prepareCandidate`).
+ * @typedef {object} RuleCandidate
+ * @property {Record<string, any>[]} rules Python's normalized rule rows.
+ * @property {{ index: number, before: string, after: string }[]} changes The captions it changed.
+ * @property {Record<string, any>} snapshot The inputs the candidate was prepared from.
+ */
+
+/**
+ * The rule preparation: every owner that reads rule matches runs through it
+ * (R13), as the whole-object `rulePreparation` or as one function of it.
+ * @typedef {object} RulePreparation
+ * @property {(rules?: Record<string, any>[], options?: Record<string, any>) => boolean | Promise<boolean>} prepare
+ *   True at once when the matches of `rules` are prepared, else a promise of whether they are now.
+ * @property {(rules?: Record<string, any>[]) => void} retain
+ *   Keeps the rules a History restore replaces, so the next preparation matches them with the restored ones.
+ * @property {() => boolean | Promise<boolean | { error: any }>} prepareDrawn
+ *   Prepares what `resolveFeatureDrawn` reads; resolves to `{ error }` when Generate rejects the visibility rule table.
+ * @property {(rules?: Record<string, any>[]) => boolean} isPrepared
+ * @property {(rules?: Record<string, any>[], options?: Record<string, any>) => Promise<RuleCandidate | null>} prepareCandidate
+ * @property {(candidate: RuleCandidate | null) => void} notifyChanges
+ * @property {(rules: Record<string, any>[], commit: () => any) => any} run
+ *   Runs `commit` once the color rule matches of `rules` are prepared.
+ * @property {(commit: () => any) => any} runDrawn
+ *   Runs `commit` once the matches `resolveFeatureDrawn` reads are prepared.
+ * @property {(payload: Record<string, any>, options?: Record<string, any>) => Promise<RuleEvaluationResult>} evaluate
+ * @property {() => Record<string, any>} snapshot The inputs the matches depend on.
+ * @property {(before: Record<string, any>) => boolean} isCurrent Whether `before` is still the current inputs.
+ * @property {{ value: boolean }} pending
+ */
+
+/**
+ * @param {RulePreparationOptions} options
+ * @returns {RulePreparation}
+ */
 export const createRulePreparation = ({
   state, evaluate, pending = { value: false }, notify = () => {}, visibilityRules = () => []
 }) => {
@@ -213,6 +266,7 @@ export const createRulePreparation = ({
   // Python in table order, so a table Generate rejects (an invalid regex)
   // fails with Generate's error and row: its matches stay unknown, and the
   // preparation resolves to `{ error }`.
+  /** @returns {boolean | Promise<boolean | { error: any }>} */
   const prepareVisibility = () => {
     const draft = visibilityRules().map((rule) => ({
       recordId: rule.recordId, featureType: rule.featureType, qualifier: rule.qualifier,
@@ -263,7 +317,7 @@ export const createRulePreparation = ({
     const visibility = prepareVisibility();
     if (colors === true && visibility === true) return true;
     return Promise.all([Promise.resolve(colors).catch(() => false), visibility])
-      .then(([, outcome]) => outcome?.error ? outcome : true);
+      .then(([, outcome]) => /** @type {any} */ (outcome)?.error ? outcome : true);
   };
   // The rules a commit or a run admits: Python's normalized captions, their
   // matches prepared, and the captions it changed (`notifyChanges`). `options`

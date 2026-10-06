@@ -1,5 +1,5 @@
 import { resolveColorToHex } from './color-utils.js';
-import { defaultLegendEntryOrder, isLegendOrderEdited } from './legend/utils.js';
+import { defaultLegendCaptionOrder, isLegendOrderEdited } from './legend/utils.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
 import {
@@ -122,7 +122,7 @@ const compilePlanBundle = ({
   legendColorOverrides = {},
   legendStrokeOverrides = {},
   manualSpecificRules = [],
-  replayDefaultLegendOrder = false,
+  replayDefaultLegendOrder = null,
   resultTransforms = [],
   transformSvg = null
 }) => {
@@ -229,15 +229,16 @@ const compilePlanBundle = ({
   // slots. The renderer places generated entries in their generated order and
   // direct additions after them; only a different order emits an operation,
   // and a renamed entry then takes its slot from that order. A displayed batch
-  // Result that may still show an earlier edited order also receives the
-  // default order (D-07, B20).
+  // Result that may still show an earlier edited order also receives its own
+  // default order, the generated order of that Result (D-07, B20, OV-47).
   const legendOrderChanged = isLegendOrderEdited(currentEntries, [...originalCaptions]);
-  const replayedLegendOrder = legendOrderChanged
-    ? currentEntries
-    : (replayDefaultLegendOrder ? defaultLegendEntryOrder(currentEntries, [...originalCaptions]) : null);
-  if (replayedLegendOrder) {
+  const defaultOrder = Array.isArray(replayDefaultLegendOrder) ? replayDefaultLegendOrder.map(text).filter(Boolean) : [];
+  const replayedLegendCaptions = legendOrderChanged
+    ? currentEntries.map((entry) => entry.caption)
+    : (defaultOrder.length > 0 ? defaultLegendCaptionOrder(currentEntries, defaultOrder) : null);
+  if (replayedLegendCaptions) {
     addToResults(operationsByResult, allResultIndexes, 'legendOrder', {
-      captions: Object.freeze(replayedLegendOrder.map((entry) => entry.caption))
+      captions: Object.freeze(replayedLegendCaptions)
     });
   }
 

@@ -234,6 +234,8 @@ def _build_feature_layers(
         )
         include_label = compute_label_text and rendering != "underlay"
 
+        feature_id: str
+        feature_object: FeatureObject
         if feature.type in {"CDS", "rRNA", "tRNA", "tmRNA", "ncRNA", "misc_RNA"}:
             locus_count += 1
             locus_id: str = "gene_" + str(locus_count).zfill(9)
@@ -270,8 +272,8 @@ def _build_feature_layers(
             feature_id, feature_object = repeat_id, repeat_object
         else:
             feature_count += 1
-            feature_id: str = "feature_" + str(feature_count).zfill(9)
-            feature_object: FeatureObject = create_feature_object(
+            feature_id = "feature_" + str(feature_count).zfill(9)
+            feature_object = create_feature_object(
                 feature_id,
                 feature,
                 color_table,

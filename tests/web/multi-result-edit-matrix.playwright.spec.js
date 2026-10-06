@@ -321,6 +321,8 @@ const sortResult2Descending = async (page) => {
   const sorted = await legendCaptions(page);
   expect(sorted).not.toEqual(result2);
   const shared = (captions) => captions.filter((caption) => !RESULT_2_ONLY.includes(caption));
+  // A sorted order shown on Result 1 never lists the entries only Result 2
+  // draws; its own CDS entry, which the sort did not list, follows the rest.
   return {
     result1,
     result2,
@@ -330,19 +332,11 @@ const sortResult2Descending = async (page) => {
   };
 };
 
-// OV-47: the default Legend order (`originalLegendOrder`) is one inventory,
-// taken from the Result displayed when Generate or the automatic rerender
-// draws. A rerender while Result 2 is shown drops Result 1's own rows from it,
-// so Undo and Sort by default on Result 1 do not return Python's order. A
-// per-Result inventory fixes it.
-const OV_47 = 'OV-47: the default Legend order is one inventory, taken from the displayed Result; Undo and Sort by default do not return Python\'s order of the other Result';
-
 // B19 (D-07, D-08, R3, R11): Undo and Redo of a Legend sort made on Result 2
 // while Result 1 is displayed restore the order on Result 1 and never give it
 // the entry only Result 2 draws; Result 2 shows the restored order once it is
 // displayed, its own entry following the shared entries.
 test('Circular batch: Undo and Redo of a Legend sort on Result 2 keep each Result\'s own entries while Result 1 is shown', async ({ page }) => {
-  test.fail(true, OV_47);
   test.setTimeout(300_000);
   const { result1, result2, sorted, shared, onResult1 } = await sortResult2Descending(page);
   await show(page, 0);
@@ -372,16 +366,59 @@ test('Circular batch: Undo and Redo of a Legend sort on Result 2 keep each Resul
 // B20 (D-07, D-08): Sort by default made on Result 1 reaches Result 2, which
 // shows the Sort Z-A made on it, once Result 2 is displayed.
 test('Circular batch: Sort by default on Result 1 reaches Result 2 shown in a sorted order', async ({ page }) => {
-  test.fail(true, OV_47);
   test.setTimeout(300_000);
   const { result1, result2 } = await sortResult2Descending(page);
   await show(page, 0);
   await openDrawer(page);
   await page.locator('.right-drawer').getByTitle('Sort by default', { exact: true }).click();
   await settle(page);
-  expect(await legendCaptions(page)).toEqual(result1);
+  expect(await legendCaptions(page), 'Result 1 shows the order Python draws for it').toEqual(result1);
   await show(page, 1);
-  expect.soft(await legendView(page), 'Result 2 shows the default order').toEqual(sameView(result2));
+  expect.soft(await legendView(page), 'Result 2 shows the order Python draws for it').toEqual(sameView(result2));
+});
+
+// OV-47 (D-07, D-08): Generate made while Result 2 is displayed gives each
+// Result its own default Legend order, the one Python draws for it. Undo of a
+// sort made on Result 2 and Sort by default on Result 1 return Result 1 to the
+// order a Generate with Result 1 displayed draws, with its own CDS entry in
+// Python's place.
+test('Circular batch: after Generate on Result 2, Result 1 returns to its own default Legend order', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openBatch(page);
+  await show(page, 0);
+  const fresh = await legendCaptions(page);
+  await show(page, 1);
+  await editFeature(page, 'TESTB_0001', { fill: RED });
+  await settle(page);
+  await generateAndWaitForResult(page);
+  await settle(page);
+  await show(page, 1);
+  const result2 = await legendCaptions(page);
+  await show(page, 0);
+  expect.soft(await legendView(page), 'Result 1 shows the order of a Generate with Result 1 displayed').toEqual(sameView(fresh));
+
+  await show(page, 1);
+  await openDrawer(page);
+  await page.locator('.right-drawer').getByRole('button', { name: 'Legend' }).click();
+  await page.locator('.right-drawer').getByTitle('Sort Z-A', { exact: true }).click();
+  await settle(page);
+  expect(await legendCaptions(page)).not.toEqual(result2);
+  await show(page, 0);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+  await settle(page);
+  expect.soft(await legendView(page), 'Undo on Result 1 gives its default order').toEqual(sameView(fresh));
+  await show(page, 1);
+  expect.soft(await legendView(page), 'after Undo, Result 2 shows its default order').toEqual(sameView(result2));
+
+  await show(page, 0);
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
+  await settle(page);
+  expect(await legendCaptions(page)).not.toEqual(fresh);
+  await page.locator('.right-drawer').getByTitle('Sort by default', { exact: true }).click();
+  await settle(page);
+  expect.soft(await legendView(page), 'Sort by default gives Result 1 its default order').toEqual(sameView(fresh));
+  await show(page, 1);
+  expect.soft(await legendView(page), 'Result 2 shows its default order').toEqual(sameView(result2));
 });
 
 // R1 (A1): each editor edit kind writes the displayed Result when it is made,

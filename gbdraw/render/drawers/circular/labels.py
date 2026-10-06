@@ -33,6 +33,8 @@ class LabelDrawer:
     ) -> Tuple[Literal["middle", "start", "end"], Literal["text-after-edge", "middle", "hanging"]]:
         angle = (360.0 * (tick / total_len)) % 360
 
+        anchor_value: Literal["middle", "start", "end"]
+        baseline_value: Literal["text-after-edge", "middle", "hanging"]
         if start_x > 0:
             anchor_value = "end" if is_inner else "start"
         else:

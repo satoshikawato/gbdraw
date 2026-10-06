@@ -1,3 +1,7 @@
+// @ts-check
+/** @import { RulePreparation } from './rule-matching.js' */
+/** @import { FeatureEditorOptions } from './feature-editor.js' */
+/** @import { ColorActionsRuleActions } from './feature-editor/color-actions.js' */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan } from './candidate-render.js';
 import {
@@ -219,6 +223,18 @@ const loadExportService = () => {
   return exportServicePromise;
 };
 
+/**
+ * @typedef {object} SessionImportRollbackOptions
+ * @property {{ circular: number }} depthTrackUiCounts
+ * @property {Record<string, any>[]} depthTracks
+ * @property {{ value: number }} featureListScrollTop
+ * @property {{ value: HTMLElement | null }} featureListScrollRef
+ * @property {{ value: string }} selectedPairwiseBlockOrthogroupId
+ * @property {(() => any) | null} [captureSpecificRulePatternDrafts] The feature editor's capture of the unsaved rule pattern drafts.
+ * @property {((drafts: any) => void) | null} [restoreSpecificRulePatternDrafts]
+ */
+
+/** @param {SessionImportRollbackOptions} options */
 export const createSessionImportRollbackState = ({
   depthTrackUiCounts,
   depthTracks,
@@ -459,10 +475,12 @@ export const createAppSetup = () => {
     filteredFeatures,
     featureListState
   } = state;
+  /** @type {ReturnType<typeof createSimilarityAlignmentActions>} */
   let similarityAlignmentActions = null;
   // R13 port: the drawer, the preview binder, and the result watchers read the
   // alignment owner through these ports; the root assigns them once the
   // alignment owner exists.
+  /** @type {{ refreshCanvas: () => void, reviewBlocksEditor: () => boolean }} */
   const similarityAlignmentPorts = {
     refreshCanvas: () => {},
     reviewBlocksEditor: () => false
@@ -685,7 +703,7 @@ export const createAppSetup = () => {
   };
   const openLinearComparisonDisclosure = async (disclosureKey) => {
     if (!disclosureKey) return null;
-    const details = [...document.querySelectorAll('[data-linear-comparison-disclosure]')]
+    const details = /** @type {HTMLDetailsElement[]} */ ([...document.querySelectorAll('[data-linear-comparison-disclosure]')])
       .find((element) => element.dataset.linearComparisonDisclosure === disclosureKey);
     if (!details) return null;
     details.open = true;
@@ -698,22 +716,23 @@ export const createAppSetup = () => {
 
   const focusLinearComparisonPair = async (edgeKey) => {
     await openLinearComparisonDisclosure('selected-pairs');
-    const container = [...document.querySelectorAll('[data-edge-key]')]
+    const container = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-edge-key]')])
       .find((element) => element.dataset.edgeKey === edgeKey);
-    container?.querySelector('input, select, button')?.focus();
+    /** @type {HTMLElement | null | undefined} */ (container?.querySelector('input, select, button'))?.focus();
   };
 
   const focusLinearComparisonIssue = async () => {
     const target = linearComparisonUi.value.errorTargets[0];
     if (!target) return false;
     const details = await openLinearComparisonDisclosure(target.disclosureKey);
+    /** @type {HTMLElement | null} */
     let container = details;
     if (target.edgeKey) {
-      container = [...document.querySelectorAll('[data-edge-key]')]
+      container = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-edge-key]')])
         .find((element) => element.dataset.edgeKey === target.edgeKey) || container;
     }
     if (target.edgeId && target.focusTargetKey === 'pair-row') {
-      container = [...document.querySelectorAll('[data-linear-unplaced-draft]')]
+      container = /** @type {HTMLElement[]} */ ([...document.querySelectorAll('[data-linear-unplaced-draft]')])
         .find((element) => element.dataset.linearUnplacedDraft === target.edgeId) || container;
     }
     const marked = container?.querySelector(
@@ -722,7 +741,7 @@ export const createAppSetup = () => {
     const focusable = marked?.matches?.('input, select, button, [tabindex]')
       ? marked
       : marked?.querySelector?.('input, select, button, [tabindex]');
-    (focusable || container?.querySelector?.('input, select, button, [tabindex]'))?.focus();
+    /** @type {HTMLElement | null | undefined} */ (focusable || container?.querySelector?.('input, select, button, [tabindex]'))?.focus();
     return true;
   };
 
@@ -976,7 +995,7 @@ export const createAppSetup = () => {
         queryUid: resolved.queryUid,
         subjectUid: resolved.subjectUid,
         included: false,
-        source: LINEAR_COMPARISON_SOURCES.LOSAT
+        source: /** @type {any} */ (LINEAR_COMPARISON_SOURCES.LOSAT)
       }));
       index = next.edges.length - 1;
     }
@@ -1130,7 +1149,7 @@ export const createAppSetup = () => {
     const loadComparison = loadComparisonOverride == null
       ? mode.value === 'linear' && hasLinearComparisonIntent.value
       : Boolean(loadComparisonOverride);
-    return buildAnnotationRecordCatalog({
+    return buildAnnotationRecordCatalog(/** @type {any} */ ({
       mode: mode.value,
       inputType,
       loadComparison,
@@ -1144,12 +1163,12 @@ export const createAppSetup = () => {
         hasInput: circularDiscovery.hasInput,
         status: circularDiscovery.status,
         error: circularDiscovery.error,
-        records: resolveCircularRequestRecordSet({
+        records: resolveCircularRequestRecordSet(/** @type {any} */ ({
           records: circularDiscovery.records,
           selector: form.circular_record_selector,
           multiRecordCanvas: form.multi_record_canvas,
           groupingIntent: adv.circular_grouping_intent
-        }).records
+        })).records
       },
       linearSources: linearSourcesOverride || linearSeqs.map((seq) => {
         const primaryFile = lInputType.value === 'gff' ? seq.gff : seq.gb;
@@ -1169,7 +1188,7 @@ export const createAppSetup = () => {
           records: linearRecordSelector.recordsFor(seq)
         };
       })
-    });
+    }));
   };
   const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg });
   setPreviewRuntime(previewRuntime);
@@ -1201,6 +1220,12 @@ export const createAppSetup = () => {
   // source. A Generate restore brings the Results drawn with its rules. The
   // feature editor takes History's undoable runs, so the root registers its
   // ports once both owners exist.
+  /** @type {{
+   *   captureSpecificRulePatternDrafts: ReturnType<typeof createFeatureEditor>['captureSpecificRulePatternDrafts'],
+   *   restoreSpecificRulePatternDrafts: ReturnType<typeof createFeatureEditor>['restoreSpecificRulePatternDrafts'],
+   *   followRestoredSpecificRules: ReturnType<typeof createFeatureEditor>['followRestoredSpecificRules'],
+   *   retainRulesForRestore: RulePreparation['retain']
+   * }} */
   const specificRuleRestorePorts = {
     captureSpecificRulePatternDrafts: null,
     restoreSpecificRulePatternDrafts: null,
@@ -1226,7 +1251,7 @@ export const createAppSetup = () => {
       specificRuleRestorePorts.retainRulesForRestore([]);
     }
   };
-  const history = createHistoryManager({
+  const history = createHistoryManager(/** @type {any} */ ({
     buildIntent: historySnapshots.buildHistoryIntent,
     applyIntent: (...args) => restoreRuleEdits(historySnapshots.applyHistoryIntent, ...args),
     buildCheckpoint: historySnapshots.buildArtifactCheckpoint,
@@ -1239,7 +1264,7 @@ export const createAppSetup = () => {
     collectCurrentFileIds: historySnapshots.collectCurrentFileIds,
     makeRef: ref,
     mutationAvailability: sessionOperationAvailability
-  });
+  }));
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch,
     linearRecordsFor: linearRecordSelector.recordsFor,
     linearRecordStatusFor: linearRecordSelector.statusFor,
@@ -1321,6 +1346,7 @@ export const createAppSetup = () => {
   specificRuleRestorePorts.retainRulesForRestore = rulePreparation.retain;
   // R13: a Legend row a specific-color rule draws commits its edit through the
   // rule owner; the root registers the port once the feature editor exists.
+  /** @type {{ commitLegendRowRules: ColorActionsRuleActions['commitSpecificRules'] }} */
   const legendRowRulePorts = { commitLegendRowRules: null };
   const legendActions = createLegendManager({
     state,
@@ -1335,10 +1361,11 @@ export const createAppSetup = () => {
   historySnapshots.registerCapture('legend', legendActions.captureLegendEntryOwners);
   // R13: the palette watcher reacts through the root's palette and rules
   // projection, registered once the style owner it applies through exists.
+  /** @type {{ projectPaletteAndRules: FeatureEditorOptions['projectPaletteAndRules'] }} */
   const paletteRulePorts = { projectPaletteAndRules: null };
   const svgActions = createSvgStyles({
     state,
-    ref, computed, watch,
+    watch,
     nextTick,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
     projectPaletteAndRules: (...args) => paletteRulePorts.projectPaletteAndRules(...args)
@@ -1359,7 +1386,7 @@ export const createAppSetup = () => {
       : project();
   };
   paletteRulePorts.projectPaletteAndRules = projectPaletteAndRules;
-  const featureSelection = createFeatureSelection({ state, onMounted, onUnmounted });
+  const featureSelection = createFeatureSelection(/** @type {any} */ ({ state, onMounted, onUnmounted }));
   const featureActions = createFeatureEditor({
     state,
     rulePreparation,
@@ -1374,7 +1401,7 @@ export const createAppSetup = () => {
     isCurrentFeature: isCurrentResultFeature,
     isPatternEditAvailable: () => !sessionImportPending.value,
     nextTick,
-    prepareFileLegendEntries: legendActions.prepareFileLegendEntries,
+    prepareFileLegendEntries: /** @type {any} */ (legendActions.prepareFileLegendEntries),
     compactLegendEntries: legendActions.compactLegendEntries,
     extractLegendEntries: legendActions.extractLegendEntries,
     onLegendGeometryChanged: legendActions.onLegendGeometryChanged,
@@ -1396,7 +1423,7 @@ export const createAppSetup = () => {
     onClose: featureActions.suspendSpecificRulePatternDrafts,
     focusReturn: {
       isFocusInDrawer: () => Boolean(document.querySelector('.right-drawer')?.contains(document.activeElement)),
-      focusToggle: () => document.querySelector('.drawer-toggle')?.focus()
+      focusToggle: () => /** @type {HTMLElement | null} */ (document.querySelector('.drawer-toggle'))?.focus()
     },
     getOpenDisabledReason: () => similarityAlignmentPorts.reviewBlocksEditor()
       ? 'Finish or cancel alignment review before opening Editor.' : '' });
@@ -1818,11 +1845,11 @@ export const createAppSetup = () => {
   ];
   const syncDepthTrackSlotLabelsForTrack = (index) => {
     depthTrackSlotCollections().forEach((slots) => {
-      syncDepthSlotLabels({
+      syncDepthSlotLabels(/** @type {any} */ ({
         slots,
         depthTracks: adv.depth_tracks,
         activeCount: adv.depth_tracks.length
-      });
+      }));
     });
     void index;
   };
@@ -1991,12 +2018,12 @@ export const createAppSetup = () => {
     adv.circular_track_slots.splice(
       0,
       adv.circular_track_slots.length,
-      ...reindexDepthSlots({
+      ...reindexDepthSlots(/** @type {any} */ ({
         slots: adv.circular_track_slots,
         removedIndex: idx,
         activeCount: activeFileCount,
         managedPredicate: isDefaultManagedDepthSlot
-      })
+      }))
     );
     if (removedBeforeAxis) adv.circular_track_slots_axis_index = axis - removedBeforeAxis;
     syncDepthTrackSlotLabelsForTrack(idx);
@@ -2026,12 +2053,12 @@ export const createAppSetup = () => {
     adv.linear_track_slots.splice(
       0,
       adv.linear_track_slots.length,
-      ...reindexDepthSlots({
+      ...reindexDepthSlots(/** @type {any} */ ({
         slots: adv.linear_track_slots,
         removedIndex: idx,
         activeCount: Math.max(0, logicalWidth - 1),
         managedPredicate: isDefaultManagedDepthSlot
-      })
+      }))
     );
     if (Number.isInteger(previousAxisIndex)) {
       adv.linear_track_slots_axis_index = Math.max(
@@ -2315,6 +2342,10 @@ export const createAppSetup = () => {
   // positions. The alignment owner runs its candidate through Generate, which
   // reads this layout owner, so the root registers both ports once the
   // alignment owner exists.
+  /** @type {{
+   *   beforeRecordDrag: ReturnType<typeof createSimilarityAlignmentActions>['beforeRecordDrag'],
+   *   afterRecordDrag: ReturnType<typeof createSimilarityAlignmentActions>['afterRecordDrag']
+   * }} */
   const recordDragAlignmentPorts = { beforeRecordDrag: null, afterRecordDrag: null };
   const legendLayout = createLegendLayout({
     state,
@@ -2346,22 +2377,35 @@ export const createAppSetup = () => {
   );
   previewRuntime.configureMountedResultBinder({
     async adoptLegend(context) {
-      if (context.phase === 'result-selection' && !context.bindingOptions.trustedRestore) {
-        await projectEditorIntentOnDisplay(context);
+      // OV-47: each Result has its own default Legend order. A Result being
+      // displayed is read before its editor intent is projected; it then shows
+      // its own inventory, so a Generate or rerender made while another Result
+      // was displayed does not replace it.
+      const selecting = context.phase === 'result-selection' && !context.bindingOptions.trustedRestore;
+      const liveResultIdentities = results.value.map(previewRuntime.getResultIdentity);
+      if (selecting) {
+        const resultLegendOrder = legendActions.captureResultInventory(context.root, {
+          resultIdentity: context.resultIdentity,
+          liveResultIdentities
+        });
+        await projectEditorIntentOnDisplay(context, resultLegendOrder);
+        legendActions.adoptResultInventory(context.resultIdentity);
       } else {
         rememberCommittedEditorState(context);
       }
-      if (
-        context.bindingOptions.skipLegendExtraction
-        || context.bindingOptions.trustedRestore
-      ) return;
+      if (context.bindingOptions.trustedRestore) {
+        legendActions.adoptResultInventory(context.resultIdentity, { restored: true });
+        return;
+      }
+      if (context.bindingOptions.skipLegendExtraction) return;
       recordStructuralMetric('legendDomFullScanCount', 1, {
         phase: context.phase,
         rootGeneration: context.rootGeneration
       });
       legendActions.extractLegendEntries({
-        replaceGeneratedInventory: !context.bindingOptions.isIncrementalEdit
-          || Boolean(context.bindingOptions.replaceGeneratedLegend)
+        replaceGeneratedInventory: !selecting && (!context.bindingOptions.isIncrementalEdit
+          || Boolean(context.bindingOptions.replaceGeneratedLegend)),
+        liveResultIdentities
       });
     },
     bindComposition(context) {
@@ -2415,8 +2459,8 @@ export const createAppSetup = () => {
         featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
       }
     },
-    afterReady(context) {
-      previewFeatureSearch.handleMountedResultReady(context);
+    afterReady() {
+      previewFeatureSearch.handleMountedResultReady();
     }
   });
   const {
@@ -2621,7 +2665,7 @@ export const createAppSetup = () => {
       const selectedResult = importedResults[resultIndex] || null;
       if (!selectedResult) return null;
       const token = `session-load:${nextSessionPreviewToken++}`;
-      return previewRuntime.registerReadinessExpectation({
+      return previewRuntime.registerReadinessExpectation(/** @type {any} */ ({
         result: selectedResult,
         resultIndex,
         artifactIdentity: token,
@@ -2633,7 +2677,7 @@ export const createAppSetup = () => {
           results.value[resultIndex] === selectedResult
           && Number(selectedResultIndex.value) === resultIndex
         )
-      });
+      }));
     },
     rollbackState: createSessionImportRollbackState({
       depthTrackUiCounts,
@@ -2783,7 +2827,7 @@ export const createAppSetup = () => {
     return true;
   };
 
-  historySnapshots.setAfterApplyHistoryIntent(async (_intent, { domains, changes, direction } = {}) => {
+  historySnapshots.setAfterApplyHistoryIntent(async (_intent, /** @type {{ domains?: Set<string>, changes?: Record<string, any>, direction?: string }} */ { domains, changes, direction } = {}) => {
     if (!svgContainer.value?.querySelector?.('svg')) return;
     const changedDomains = domains instanceof Set ? domains : new Set();
     // B17: restore the offsets of each Result whose composition this step changed.
@@ -2869,7 +2913,7 @@ export const createAppSetup = () => {
     });
     lastBoundResultIdentity = context.resultIdentity;
   };
-  const compileDisplayedResultOperations = (resultIndex, { replayDefaultLegendOrder = false } = {}) => {
+  const compileDisplayedResultOperations = (resultIndex, { replayDefaultLegendOrder = null } = {}) => {
     const catalog = toRaw(state.featureCatalog.value);
     if (!catalog) return null;
     const plan = compileDirectEditorMutationPlan({
@@ -2895,7 +2939,7 @@ export const createAppSetup = () => {
   // D-07 (PD-OI-062): a batch Result shows the canonical color, visibility,
   // Legend, and label edits when it is displayed. Labels follow in the
   // binder's label step.
-  const projectEditorIntentOnDisplay = async (context) => {
+  const projectEditorIntentOnDisplay = async (context, resultLegendOrder) => {
     const identity = context.resultIdentity;
     const current = currentEditorProjectionState();
     // The Result shown until now followed every live edit.
@@ -2909,8 +2953,8 @@ export const createAppSetup = () => {
     const visibility = previous.visibility !== current.visibility;
     labelProjectionResultIdentity = previous.labels !== current.labels ? identity : '';
     // B20: a Result last shown with another Legend order receives the current
-    // order, also the default order.
-    const replayDefaultLegendOrder = previous.legendOrder !== current.legendOrder;
+    // order, also the default order, which is its own generated order (OV-47).
+    const replayDefaultLegendOrder = previous.legendOrder !== current.legendOrder ? resultLegendOrder : null;
     let operations = null;
     try {
       operations = compileDisplayedResultOperations(context.resultIndex, { replayDefaultLegendOrder });
@@ -3253,7 +3297,7 @@ export const createAppSetup = () => {
     getRecordCatalog: getAnnotationRecordCatalog,
     getCommittedRequest: getCommittedCanonicalRenderRequest,
     getCommittedSession: getCommittedCanonicalSession,
-    projectCommittedAlignment: projectCommittedSimilarityAlignment,
+    projectCommittedAlignment: /** @type {any} */ (projectCommittedSimilarityAlignment),
     // R13: the root runs the candidate with the record display's orientation
     // checkpoint; the alignment owner holds neither owner.
     runRecordAlignment: ({ orientations, ...run }) => runCommittedCanonicalCandidate({ ...run,
@@ -3372,7 +3416,7 @@ export const createAppSetup = () => {
       target.focus();
       return;
     }
-    document.querySelector('.drawer-toggle')?.focus();
+    /** @type {HTMLElement | null} */ (document.querySelector('.drawer-toggle'))?.focus();
   };
   const focusSimilarityAlignmentDialog = async () => {
     await nextTick();
@@ -3421,7 +3465,7 @@ export const createAppSetup = () => {
     if (similarityAlignmentActions.dialogOpen.value) {
       if (similarityAlignmentActions.error.value) {
         await nextTick();
-        document.querySelector('[data-similarity-alignment-error]')?.focus();
+        /** @type {HTMLElement | null} */ (document.querySelector('[data-similarity-alignment-error]'))?.focus();
       } else await focusSimilarityAlignmentDialog();
     } else await restoreSimilarityAlignmentFocus();
     return outcome;
@@ -3441,7 +3485,7 @@ export const createAppSetup = () => {
     const outcome = await (reset ? similarityAlignmentActions.applyReset() : similarityAlignmentActions.applyDraft());
     if (outcome.status === 'error' || outcome.status === 'reviewing') {
       await nextTick();
-      document.querySelector('[data-similarity-alignment-error], [data-similarity-alignment-reset-error]')?.focus();
+      /** @type {HTMLElement | null} */ (document.querySelector('[data-similarity-alignment-error], [data-similarity-alignment-reset-error]'))?.focus();
     }
     return outcome;
   };
@@ -4148,7 +4192,7 @@ export const createAppSetup = () => {
     return { status: 'ok' };
   };
   const showCircularCanvasSetting = async () => {
-    const control = document.querySelector('[data-circular-canvas-setting]');
+    const control = /** @type {HTMLElement | null} */ (document.querySelector('[data-circular-canvas-setting]'));
     if (!control || mode.value !== 'circular' || !form.multi_record_canvas) {
       return { status: 'unavailable' };
     }
@@ -4349,7 +4393,7 @@ export const createAppSetup = () => {
   };
   const focusLinearSourceRemovalDialog = async () => {
     await nextTick();
-    document.querySelector('[data-linear-source-removal-primary]')?.focus();
+    /** @type {HTMLElement | null} */ (document.querySelector('[data-linear-source-removal-primary]'))?.focus();
   };
   // Keeps Tab inside the modal dialog of the overlay that handles the keydown.
   const trapDialogFocus = (event) => {
@@ -4370,8 +4414,8 @@ export const createAppSetup = () => {
     await nextTick();
     const cards = document.querySelectorAll('[data-linear-source-card]');
     const targetIndex = Math.max(0, Math.min(Number(sourceIndex) || 0, cards.length - 1));
-    const target = cards[targetIndex]?.querySelector('.upload-zone[tabindex="0"]')
-      || document.querySelector('[data-linear-file-add]');
+    const target = /** @type {HTMLElement | null} */ (cards[targetIndex]?.querySelector('.upload-zone[tabindex="0"]')
+      || document.querySelector('[data-linear-file-add]'));
     if (typeof target?.focus === 'function') target.focus();
   };
   const openLinearSourceRemovalDialog = (source, origin, returnFocus = null) => {
@@ -5025,7 +5069,6 @@ export const createAppSetup = () => {
     setLosatPairFilename,
     clearLosatCache,
     getLosatPairDefaultName,
-    refreshCircularRecordOrder,
     getCircularRecordOrderLabel,
     getCircularRecordRow,
     getCircularRecordRowOptions,

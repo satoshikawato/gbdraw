@@ -7,7 +7,7 @@ from gbdraw.layout.record_coordinates import DisplayFragment
 from dataclasses import dataclass, field
 from math import isfinite
 from types import MappingProxyType
-from typing import Literal, Mapping, TypeAlias
+from typing import Literal, Mapping, TypeAlias, cast
 
 from pandas import DataFrame
 
@@ -19,7 +19,8 @@ from gbdraw.io.record_select import RecordSelector
 
 def _finite(value: object, name: str, *, positive: bool = False, nonnegative: bool = False) -> float:
     try:
-        number = float(value)
+        # TypeError/ValueError from non-numeric input is reported below.
+        number = float(cast("float | str", value))
     except (TypeError, ValueError) as exc:
         raise ValidationError(f"{name} must be numeric.") from exc
     if not isfinite(number):
@@ -379,16 +380,24 @@ def annotation_track_params_from_mapping(params: Mapping[str, object]) -> Annota
             style_override = RegionAnnotationStyle(**dict(style_override))
         except TypeError as exc:
             raise ValidationError(f"Invalid annotation style_override: {exc}") from exc
+    # The casts below only satisfy the checker: AnnotationTrackParams.__post_init__
+    # validates every one of these values at run time.
     return AnnotationTrackParams(
         set_id=str(raw.get("set_id", "")),
-        marks=raw.get("marks"),  # type: ignore[arg-type]
-        lane_gap_px=raw.get("lane_gap_px", 3.0),  # type: ignore[arg-type]
-        padding_px=raw.get("padding_px", 2.0),  # type: ignore[arg-type]
-        overflow=str(raw.get("overflow", "error")).strip().lower(),  # type: ignore[arg-type]
+        marks=cast("tuple[str, ...] | None", raw.get("marks")),
+        lane_gap_px=cast(float, raw.get("lane_gap_px", 3.0)),
+        padding_px=cast(float, raw.get("padding_px", 2.0)),
+        overflow=cast(
+            'Literal["error", "compress", "clip"]',
+            str(raw.get("overflow", "error")).strip().lower(),
+        ),
         show_labels=show_labels,
-        style_override=style_override,  # type: ignore[arg-type]
+        style_override=cast("RegionAnnotationStyle | None", style_override),
         anchor_slot=(None if raw.get("anchor_slot") is None else str(raw["anchor_slot"])),
-        layer=str(raw.get("layer", "foreground")).strip().lower(),  # type: ignore[arg-type]
+        layer=cast(
+            'Literal["underlay", "foreground"]',
+            str(raw.get("layer", "foreground")).strip().lower(),
+        ),
         cover_anchor=cover_anchor,
     )
 

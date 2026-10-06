@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { RulePreparation } from './rule-matching.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import {
@@ -259,6 +261,25 @@ export const confirmHydratedLosatExport = (
   ))
 );
 
+/**
+ * @typedef {object} LosatCacheMetadata
+ * @property {string} [identityKind] `protein` for a BLASTP search, otherwise nucleotide.
+ * @property {string} flow
+ * @property {string} program
+ * @property {string} [outfmt]
+ * @property {string[]} args
+ * @property {string} [queryCanonicalHash]
+ * @property {string} [subjectCanonicalHash]
+ * @property {string} [queryProteinSetHash]
+ * @property {string} [subjectProteinSetHash]
+ * @property {string} [queryRuntimeBindingHash]
+ * @property {string} [subjectRuntimeBindingHash]
+ * @property {string} [queryRecordInstanceKey]
+ * @property {string} [subjectRecordInstanceKey]
+ * @property {Record<string, any>} [searchContext]
+ */
+
+/** @param {LosatCacheMetadata} metadata */
 export const buildLosatCachePayload = ({
   identityKind,
   flow,
@@ -362,6 +383,34 @@ const pruneLosatDerivedCache = (cacheMap) => {
   }
 };
 
+/**
+ * The option values a derived protein payload depends on, as the options form holds them.
+ * @typedef {object} LosatDerivedCacheMetadata
+ * @property {any} [mode]
+ * @property {any} [maxHits]
+ * @property {any} [bitscore]
+ * @property {any} [evalue]
+ * @property {any} [identity]
+ * @property {any} [alignmentLength]
+ * @property {any} [collinearMinAnchors]
+ * @property {any} [collinearMaxUnitGap]
+ * @property {any} [collinearUnitMode]
+ * @property {any} [collinearColorMode]
+ * @property {any} [collinearAnchorMode]
+ * @property {any} [collinearMergeOrientation]
+ * @property {any} [collinearMaxDiagonalDrift]
+ * @property {any} [collinearMaxConflictsInMergeGap]
+ * @property {any} [collinearMaxParalogLinksPerOrthogroup]
+ * @property {any} [collinearSearchScope]
+ * @property {any} [orthogroupMembershipMode]
+ * @property {any} [orthogroupMemberMaxHits]
+ * @property {boolean} [collinearInferOrthogroups]
+ * @property {boolean} [explicitDisplayPairs]
+ * @property {Record<string, any>[]} [recordPayloads]
+ * @property {Record<string, any>[]} [pairPayloads]
+ */
+
+/** @param {LosatDerivedCacheMetadata} metadata */
 export const buildLosatDerivedPayloadCachePayload = ({
   mode,
   maxHits,
@@ -898,6 +947,7 @@ export const extractLosatFastaFast = async ({ file, text, fmt, regionSpec, recor
     canonicalLength: transformed.sequence.length
   };
 };
+/** @param {{ file?: any, text?: string | null, fmt: string }} options */
 const extractAllLosatFastaFast = async ({ file, text, fmt }) => {
   const sourceText = typeof text === 'string' ? text : await readFileText(file);
   const records = fmt === 'genbank' ? parseGenbankRecordsFast(sourceText) : parseFastaRecordsFast(sourceText);
@@ -1104,6 +1154,59 @@ export const executeCanonicalRenderCandidate = async ({
   };
 };
 
+/**
+ * The members of the preview owner's runtime (app/preview-runtime.js) that
+ * Generate reads: it registers the readiness a candidate must meet, and rolls
+ * the selection back when the candidate is rejected.
+ * @typedef {object} RunAnalysisPreviewRuntime
+ * @property {(expectation: Record<string, any>) => any} registerReadinessExpectation
+ * @property {(generationToken: string, reason: Error) => void} invalidateReadinessExpectation
+ * @property {(receipt: any, reason: string) => void} invalidateReadyReceipt
+ * @property {(options: Record<string, any>) => Promise<any>} restorePreviousSelectedResult
+ * @property {(index: number) => any} selectResult
+ * @property {(result: any) => any} getResultIdentity
+ * @property {() => ({ readyReceipt?: any } | null)} [getActiveRuntime]
+ */
+
+/**
+ * @typedef {object} RunAnalysisOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {RulePreparation | null} [rulePreparation] The rule owner's preparation, which Generate runs before it draws.
+ * @property {(feature: Record<string, any>) => boolean} isCurrentFeature Whether the feature belongs to the displayed Result.
+ * @property {(comparisonPlanSnapshot: Record<string, any> | null, linearRecordCatalog: any, runState: any) => any} serializeCanonicalFiles
+ *   The Session owner's serialization of the active render files; `runState` is a copy of `state`.
+ * @property {number} canonicalSessionVersion `SESSION_VERSION` of the Session owner.
+ * @property {(canonical: Record<string, any>, options: { adoptOwnedRequest?: boolean }) => void} adoptCanonicalRenderArtifacts
+ *   The Session owner's adoption of a candidate's request, resources, and files.
+ * @property {(() => (Record<string, any> | null)) | null} [getCommittedCanonicalSession] The committed canonical Session.
+ * @property {(session: Record<string, any> | null | undefined, projectIdentity: (...args: any[]) => any) => any} [captureDecorationContinuity]
+ *   The Legend layout owner's capture of the decoration positions a rerender keeps.
+ * @property {() => Record<string, any> | Promise<Record<string, any>>} captureGeneratedArtifactHandle History's capture of the current generated artifact.
+ * @property {() => ({ results: any[] } & Record<string, any>)} captureGeneratedArtifactOwnerSet
+ * @property {(ownerSet: Record<string, any>, options: { selectedResultIndex: number, installResults: (results: any[]) => void }) => void} installGeneratedArtifactOwnerSet
+ * @property {(handle: Record<string, any>) => any} restoreGeneratedArtifactHandle
+ * @property {((artifactIdentity: any, options: { results: any[] }) => void) | null} [setGeneratedArtifactIdentity]
+ * @property {((label: string, execute: (handle?: Record<string, any>) => any, options: Record<string, any>) => Promise<any>) | null} [runGeneratedArtifactReplacement]
+ *   History's undoable replacement of the generated artifact.
+ * @property {RunAnalysisPreviewRuntime | null} [previewRuntime]
+ * @property {() => Promise<void>} [nextTick] Vue `nextTick`.
+ * @property {() => Promise<void>} [waitForAfterPaint]
+ * @property {() => Promise<void>} [waitForPostBindFrame]
+ * @property {((capture: { phase?: string, diagnostics?: any }) => void) | null} [onGeneratedArtifactCheckpointCapture]
+ * @property {(options?: { pan?: any, resetZoom?: boolean }) => void} resetPreviewViewport The preview owner's viewport reset.
+ * @property {((options: { loadComparison: boolean }) => ({ code: string, context?: any } | null | undefined)) | null} [validateAnnotationTargets]
+ * @property {((hasComparisonIntent?: boolean) => Promise<Record<string, any>>) | null} [prepareLinearRecordCatalog]
+ * @property {{ value: Record<string, any>[] } | null} [recordDisplayRows]
+ *   The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
+ * @property {() => Promise<void>} [settleComparisonRecordLabels] D12: ring rows added just before Generate are named before it reads them.
+ * @property {((mode: string, state: any) => void) | null} [assertActiveModeInputs]
+ *   services/config.js owns the active-mode input check shared with Save.
+ * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
+ * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
+ * @property {typeof prepareCandidateRenderCommit} [prepareCandidateCommit] Test seam.
+ */
+
+/** @param {RunAnalysisOptions} options */
 export const createRunAnalysis = ({
   state,
   rulePreparation = null,
@@ -1136,10 +1239,7 @@ export const createRunAnalysis = ({
   // R13: the label owner's ports (app/feature-editor/label-actions.js).
   closeLabelTextScopeDialog,
   clearLabelBuildNotices,
-  losatExecutor = runLosatPairsParallel,
-  executeCanonicalCandidate = executeCanonicalRenderCandidate,
-  prepareCandidateCommit = prepareCandidateRenderCommit,
-  prepareReflowCommit = prepareReflowResultCommit
+  prepareCandidateCommit = prepareCandidateRenderCommit
 }) => {
   const {
     processing,
@@ -1251,10 +1351,14 @@ export const createRunAnalysis = ({
   }
   const executeLosatJobs = (...args) => {
     const override = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
-    return (typeof override === 'function' ? override : losatExecutor)(...args);
+    return (typeof override === 'function' ? override : runLosatPairsParallel)(...args);
   };
   let pendingReflowRequestId = 0;
   let activeReflowRequestId = 0;
+  // A rerender requested while Generate (or a committed-candidate run) is in
+  // progress waits for it: the rerender would take the newer generation token
+  // and silently supersede the run (OV-48). It runs once after the run settles.
+  let reflowDeferredByProcessing = false;
   let featureExtractionRequestId = 0;
   let latestGenerationToken = 0;
   let latestOperationId = 0;
@@ -1287,6 +1391,10 @@ export const createRunAnalysis = ({
       retainedBytes: latestCliHelperRetainedBytes
     })
   );
+  /**
+   * @param {Record<string, any>} [runtimeState]
+   * @param {{ ui?: { canvasPan?: any } }} [options]
+   */
   const restoreGeneratedArtifactRuntimeState = (runtimeState = {}, { ui = {} } = {}) => {
     latestCliHelperFiles = runtimeState?.latestCliHelperFiles || Object.freeze([]);
     latestCliHelperArchiveName = String(
@@ -1413,6 +1521,11 @@ export const createRunAnalysis = ({
 
   const formatError = (cause, operation = 'generate', stage = 'request-validation') =>
     normalizeUserFacingError(cause || { code: 'UNKNOWN' }, { operation, stage });
+  /**
+   * @param {any} cause
+   * @param {{ handle?: Record<string, any> | null, restore?: (() => any) | null, operation?: string, stage?: string,
+   *   isCurrent?: () => boolean, isCurrentOperation?: () => boolean, recovery?: string | null }} [options]
+   */
   const failOperation = async (cause, { handle, restore = null, operation = 'generate',
     stage = 'render', isCurrent = () => true, isCurrentOperation = () => true, recovery = null } = {}) => {
     if (!isCurrentOperation()) return { status: 'stale' };
@@ -1915,6 +2028,11 @@ export const createRunAnalysis = ({
     };
   };
 
+  /**
+   * @param {{ decorationContinuity?: any, comparisonPlanSnapshot?: Record<string, any> | null,
+   *   generatedArtifactHandle?: Record<string, any> | null, comparisonExecution?: Record<string, any> | null,
+   *   isCurrentOperation?: () => boolean, isCurrentAlert?: () => boolean }} [options]
+   */
   const runAnalysisInternal = async ({
     decorationContinuity = null,
     comparisonPlanSnapshot = null,
@@ -2180,7 +2298,6 @@ export const createRunAnalysis = ({
       }
       let regionSpecs = [];
       let recordSelectors = [];
-      let reverseFlags = [];
       const resolvedComparisons = [];
       let resolvedCircularConservation = [];
       const runInfoFileMap = new Map();
@@ -2438,11 +2555,11 @@ export const createRunAnalysis = ({
         for (let trackIndex = 0; trackIndex < trackCount; trackIndex += 1) {
           ensureDepthTrackConfigAt(trackIndex);
         }
-        syncDepthSlotLabels({
+        syncDepthSlotLabels(/** @type {any} */ ({
           slots,
           depthTracks: adv.depth_tracks,
           activeCount: trackCount
-        });
+        }));
       };
       const linearDepthRepresentativeFiles = () => {
         const rows = linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
@@ -2825,7 +2942,9 @@ export const createRunAnalysis = ({
             const conservationResults = await runCircularLosatConservation(conservationEntries);
             circularConservation.reference = 'subject';
             resolvedCircularConservation = conservationResults.map((result, index) => {
+              /** @type {Record<string, any>} */
               const source = conservationEntries[index] || {};
+              /** @type {Record<string, any>} */
               const style = conservationSeries[index] || {};
               return {
                 name: result.name || getPayloadName(result.path),
@@ -3072,12 +3191,10 @@ export const createRunAnalysis = ({
             const displayReverse = wantsReverse || coordinateReverse;
             const specBody = `${start}-${end}${wantsReverse ? ':rc' : ''}`;
             const canonicalSpecBody = `${canonicalStart}-${canonicalEnd}`;
-            reverseFlags.push(false);
             viewTransformSpecs.push({ reverse: displayReverse });
             return { file: canonicalSpecBody, displayFile: specBody };
           }
 
-          reverseFlags.push(wantsReverse);
           viewTransformSpecs.push({ reverse: wantsReverse });
           return null;
         };
@@ -3181,7 +3298,7 @@ export const createRunAnalysis = ({
             : (useProteinBlastp ? 'gff' : 'fasta');
           const regionSpec = regionSpecs[idx]?.file || null;
           const recordSelector = recordSelectors[idx] ?? '';
-          const reverseFlag = '0';
+          const reverseFlag = /** @type {string} */ ('0');
           const sourceFile = lInputType.value === 'gb'
             ? linearSeqs[idx]?.gb
             : (useProteinBlastp ? linearSeqs[idx]?.gff : linearSeqs[idx]?.fasta);
@@ -3642,7 +3759,7 @@ export const createRunAnalysis = ({
           const fastaExtractionBeforeJobBuild = losatTiming.fastaExtractionMs;
           const cacheHashBeforeJobBuild = losatTiming.cacheHashMs;
 
-          const jobSpecs = buildLosatJobSpecs({
+          const jobSpecs = buildLosatJobSpecs(/** @type {any} */ ({
             resolution: comparisonResolution,
             recordCount: linearSeqs.length,
             recordUids: linearSeqs.map((seq) => seq.uid),
@@ -3650,7 +3767,7 @@ export const createRunAnalysis = ({
             blastpMode,
             collinearInferOrthogroups,
             collinearSearchScope
-          });
+          }));
 
           const sourcePlan = await prepareLosatSourceBatches({
             sequences: linearSeqs,
@@ -4479,18 +4596,18 @@ export const createRunAnalysis = ({
           }
         });
         // Establish source counts before Worker transfer releases the file-content cache.
-        sourceRecipe = await buildSourceRecipe({
+        sourceRecipe = await buildSourceRecipe(/** @type {any} */ ({
           ...canonical,
           generatedFileNameHints,
           readResourceRecordCount: (resourceId, kind) => (
             readCanonicalResourceRecordCount(canonical.resources, resourceId, kind)
           )
-        });
+        }));
         throwIfGenerationCanceled();
       }
       const postGbdrawTimingEntries = [];
       failureStage = 'render';
-      const canonicalExecution = await executeCanonicalCandidate({
+      const canonicalExecution = await executeCanonicalRenderCandidate({
         canonical,
         decorationContinuity,
         mode: mode.value,
@@ -4552,7 +4669,7 @@ export const createRunAnalysis = ({
       let candidateRunInfo = null;
       let candidateCliHelpers = null;
       if (manualRunStartedAt !== null) {
-        candidateRunInfo = buildRunInfo({
+        candidateRunInfo = buildRunInfo(/** @type {any} */ ({
           mode: mode.value,
           sourceRecipe,
           exactReplayArgs: ['--session', canonicalReplayPath],
@@ -4566,7 +4683,7 @@ export const createRunAnalysis = ({
             pendingLosatCacheCommit?.cacheMap || losatCache.value
           ),
           featureIdentityNotices: generationMetadata.featureIdentityNotices
-        });
+        }));
         sourceRecipe.generatedFiles.forEach((file) => {
           recordGeneratedCliFile(
             file.path,
@@ -4955,10 +5072,16 @@ export const createRunAnalysis = ({
         recordSessionLifecycleEvent('generate.processing-cleared', {
           status: outcome?.status || 'error'
         });
+        replayDeferredLabelReflow();
       }
     }
   };
 
+  /**
+   * @param {{ canonical: Record<string, any>, decorationContinuity?: any, generatedArtifactHandle?: Record<string, any> | null,
+   *   commitIntent?: (() => any) | null, alignmentResetBefore?: any, alignmentResetReceipt?: any, operation?: string,
+   *   isCurrentOperation?: () => boolean, isCurrentAlert?: () => boolean }} options
+   */
   const runCommittedCanonicalCandidateInternal = async ({
     canonical,
     decorationContinuity = null,
@@ -5014,7 +5137,7 @@ export const createRunAnalysis = ({
     };
     try {
       const timingEntries = [];
-      const execution = await executeCanonicalCandidate({
+      const execution = await executeCanonicalRenderCandidate({
         canonical,
         decorationContinuity,
         mode: canonical.renderRequest.mode,
@@ -5263,6 +5386,7 @@ export const createRunAnalysis = ({
         if (outcome?.status !== 'canceled') processingStatus.value = '';
         generationCancelRequested.value = false;
         processing.value = false;
+        replayDeferredLabelReflow();
       }
     }
   };
@@ -5361,13 +5485,13 @@ export const createRunAnalysis = ({
         }
       });
       const timingEntries = [];
-      const execution = await executeCanonicalCandidate({
+      const execution = await executeCanonicalRenderCandidate({
         canonical,
         decorationContinuity,
         mode: canonical.renderRequest.mode,
         kind: 'reflow',
         shouldAdmit: colorCandidate.shouldAdmit,
-        prepareCommit: prepareReflowCommit,
+        prepareCommit: prepareReflowResultCommit,
         prepareCommitInput: {
           featureColorOverrides: colorCandidate.featureColorOverrides,
           featureStrokeOverrides,
@@ -5433,10 +5557,15 @@ export const createRunAnalysis = ({
     if (sessionBusy) return sessionBusy;
     pendingReflowRequestId += 1;
     if (activeReflowRequestId !== 0) return;
+    if (processing.value) {
+      reflowDeferredByProcessing = true;
+      return;
+    }
 
     labelReflowProcessing.value = true;
     try {
-      while (activeReflowRequestId < pendingReflowRequestId) {
+      // Generate takes priority: an iteration never starts while it runs.
+      while (!processing.value && activeReflowRequestId < pendingReflowRequestId) {
         activeReflowRequestId = pendingReflowRequestId;
         let decorationContinuity;
         try {
@@ -5450,10 +5579,20 @@ export const createRunAnalysis = ({
           requestId: activeReflowRequestId
         });
       }
+      if (processing.value && activeReflowRequestId < pendingReflowRequestId) {
+        reflowDeferredByProcessing = true;
+      }
     } finally {
       activeReflowRequestId = 0;
       labelReflowProcessing.value = false;
     }
+  };
+
+  // Called where a run clears `processing`: the requests it held back run once.
+  const replayDeferredLabelReflow = () => {
+    if (!reflowDeferredByProcessing || processing.value) return;
+    reflowDeferredByProcessing = false;
+    void runLabelReflow();
   };
 
   const downloadLosatCache = async () => {

@@ -161,7 +161,7 @@ class SeqRecordGroup:
             record_group.attribs["data-gbdraw-slot-renderer"] = "features"
         record_length: int = len(self.gb_record.seq)
 
-        record_group: Group = self.draw_record(feature_dict, record_length, record_group)
+        record_group = self.draw_record(feature_dict, record_length, record_group)
         return record_group
 
     def get_group(self) -> Group:

@@ -95,7 +95,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         import {{
           buildFallbackOrthogroupWithContext,
           buildPairwiseMatchHoverRows,
-          buildPairwiseMatchPayload,
+          buildMatchPopupPayload,
           createPairwisePayloadContext,
           featureOrthogroupIdStatus,
           getOrthogroupById,
@@ -382,7 +382,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
           'data-qend': '4'
         }}));
         let invalidQueryResolverCalls = 0;
-        const invalidSequencePayload = buildPairwiseMatchPayload({{
+        const invalidSequencePayload = buildMatchPopupPayload({{
           style: {{}},
           getAttribute: (name) => invalidSequenceAttrs.get(name) || ''
         }}, {{
@@ -422,7 +422,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
               : {{ 'data-sstart': '1', 'data-send': '9' }}),
             ...overrides
           }}));
-          const endpointResult = buildPairwiseMatchPayload({{
+          const endpointResult = buildMatchPopupPayload({{
             style: {{}},
             getAttribute: (name) => endpointAttrs.get(name) || ''
           }}, {{ featureLookup, sourceFeatures: popupOptions.sourceFeatures }});
@@ -637,7 +637,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
           ) === null,
           'duplicate group members did not fail closed'
         );
-        const payload = buildPairwiseMatchPayload(element, popupOptions);
+        const payload = buildMatchPopupPayload(element, popupOptions);
 
         const sectionTitles = payload.sections.map((section) => section.title);
         assert(!sectionTitles.includes('Alignment'), `Alignment section leaked: ${{JSON.stringify(sectionTitles)}}`);
@@ -686,7 +686,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
           'data-query-locus-id': 'HPAVJP_0240',
           'data-query-display-name': 'HPAVJP_0240'
         }}));
-        const duplicatePayload = buildPairwiseMatchPayload({{
+        const duplicatePayload = buildMatchPopupPayload({{
           style: {{}},
           getAttribute: (name) => duplicateAttrs.get(name) || ''
         }}, {{
@@ -723,7 +723,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
           'data-qend': '30',
           'data-query-protein-id': runtimeOnlyHandle
         }}));
-        const runtimeOnlyPayload = buildPairwiseMatchPayload({{
+        const runtimeOnlyPayload = buildMatchPopupPayload({{
           style: {{}},
           getAttribute: (name) => runtimeOnlyAttrs.get(name) || ''
         }}, {{ featureLookup: new Map() }});
@@ -746,14 +746,14 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         assert(reverseMember.feature.svg_id === 'display-space-rendered-id', JSON.stringify(reverseMember));
         assert(payload.blockOrthogroups[0].memberAaFasta.includes('>CAG34720.1'), payload.blockOrthogroups[0].memberAaFasta);
         featureLookup.get('display-space-rendered-id').stable_feature_id = 'wrong-source-id';
-        const mismatchedPayload = buildPairwiseMatchPayload(element, popupOptions);
+        const mismatchedPayload = buildMatchPopupPayload(element, popupOptions);
         const mismatchedReverseMember = mismatchedPayload.blockOrthogroups[0].memberRows
           .find((row) => row.proteinId === 'CAG34720.1');
         assert(!mismatchedReverseMember.canOpen, JSON.stringify(mismatchedReverseMember));
         featureLookup.get('display-space-rendered-id').stable_feature_id = 'source-space-stable-id';
         featureLookup.set('source-space-stable-id', popupOptions.sourceFeatures[0]);
         popupOptions.orthogroups[0].members[2].recordIndex = 3;
-        const wrongRecordPayload = buildPairwiseMatchPayload(element, popupOptions);
+        const wrongRecordPayload = buildMatchPopupPayload(element, popupOptions);
         const wrongRecordReverseMember = wrongRecordPayload.blockOrthogroups[0].memberRows
           .find((row) => row.proteinId === 'CAG34720.1');
         assert(!wrongRecordReverseMember.aaFasta, JSON.stringify(wrongRecordReverseMember));

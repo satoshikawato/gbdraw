@@ -7,7 +7,7 @@ import math
 from numbers import Integral, Real
 from pathlib import Path
 from types import MappingProxyType
-from typing import Literal, Mapping, Sequence, cast
+from typing import Any, Callable, Literal, Mapping, Sequence, TypeAlias, cast
 
 from pandas import DataFrame
 
@@ -147,7 +147,7 @@ class ColorOptions:
     default_colors_file: str | None = None
 
 
-_DepthTrackSource = str | Path | DataFrame
+_DepthTrackSource: TypeAlias = str | Path | DataFrame
 
 
 @dataclass(frozen=True)
@@ -242,7 +242,7 @@ def _validate_track_configuration(
                 f"{slots_field_name} must contain strings or "
                 f"{expected_type.__name__} values."
             )
-        parser = (
+        parser: Callable[[Sequence[Any]], Sequence[Any]] = (
             parse_circular_track_slots
             if mode == "circular"
             else parse_linear_track_slots
@@ -259,7 +259,7 @@ def _validate_track_configuration(
     if parsed_slots is None:
         raise ValidationError(f"{axis_field_name} requires {slots_field_name}.")
     normalized_axis_index = int(axis_index)
-    normalizer = (
+    normalizer: Callable[[Sequence[Any], int], object] = (
         normalize_circular_track_slots_with_axis
         if mode == "circular"
         else normalize_linear_track_slots_with_axis
@@ -932,7 +932,7 @@ class _ModeDiagramOptions:
             or not str(self.feature_placement_table_file).strip()
         ):
             raise ValidationError("feature_placement_table_file must identify a file.")
-        nested_types = (
+        nested_types: tuple[tuple[str, object, type], ...] = (
             ("colors", self.colors, ColorOptions),
             ("annotations", self.annotations, AnnotationOptions),
         )

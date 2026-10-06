@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from numbers import Integral
 from dataclasses import dataclass
-from typing import Any, Literal, Mapping, TypeAlias
+from typing import Any, Literal, Mapping, TypeAlias, cast
 
 from gbdraw.exceptions import ValidationError
 
@@ -143,7 +143,7 @@ class LinearCanvasConfig:
             raise ValidationError(
                 "canvas.linear.track_layout must be one of: above, middle, below"
             )
-        track_layout: Literal["above", "middle", "below"] = track_layout_raw  # type: ignore[assignment]
+        track_layout = cast(LinearTrackLayoutMode, track_layout_raw)
         track_axis_gap_raw = d.get("track_axis_gap", "auto")
         track_axis_gap: float | None
         if track_axis_gap_raw is None:

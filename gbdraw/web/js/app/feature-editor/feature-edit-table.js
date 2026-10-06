@@ -1,3 +1,4 @@
+// @ts-check
 import { buildFeatureOverrideTable } from '../run-info.js';
 import {
   FEATURE_OVERRIDE_EDIT_FIELDS,
@@ -23,7 +24,7 @@ const hasEdit = (row) => FEATURE_OVERRIDE_EDIT_FIELDS.some((field) => row?.[fiel
 
 // The helper's rows must be request rows of the committed records.
 export const admitFeatureOverrideTable = (result, records) => {
-  const invalid = () => diagnosticError('RESULT_INVALID', {}, { operation: OPERATION, stage: 'result-admission' });
+  const invalid = () => diagnosticError('RESULT_INVALID', {}, /** @type {{ stage?: string, operation?: string }} */ ({ operation: OPERATION, stage: 'result-admission' }));
   const unmatchedRows = result?.unmatchedRows;
   if (!Array.isArray(result?.rows) || !Array.isArray(unmatchedRows)
     || unmatchedRows.some((row) => !Number.isSafeInteger(row) || row < 2)
@@ -47,6 +48,20 @@ export const replaceFeatureEdits = (featureOverrides, rows, mode, records) => {
   rows.forEach((row) => updateFeatureOverride(featureOverrides, { scope: mode, ...row }, editsOf(row)));
 };
 
+/**
+ * @typedef {object} FeatureEditTableOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {(value?: any) => { value: any }} ref Vue `ref`
+ * @property {<T>(getter: () => T) => { value: T }} computed Vue `computed`
+ * @property {() => Record<string, any> | null} getCommittedSession The committed canonical Session (render request and resources).
+ * @property {((resourceId: string, kind: string) => any) | null} [readResourceRecordCount]
+ *   Counts the records of a committed resource, for the Source recipe checks of the export.
+ * @property {((payload: Record<string, any>) => Promise<{ result?: any }>) | null} [readFeatureOverrideTable]
+ *   The diagram helper that reads a Feature Edits TSV (R7).
+ * @property {() => any} projectFeatureEdits The root's projection of loaded feature edits onto the displayed Result (R3).
+ */
+
+/** @param {FeatureEditTableOptions} options */
 export const createFeatureEditTableActions = ({
   state,
   ref,

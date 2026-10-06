@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import shutil
 from time import perf_counter
-from typing import Any, Iterator, Mapping, MutableMapping
+from typing import Any, Iterator, Mapping, MutableMapping, cast
 
 from gbdraw.api.request_render import (
     CircularBatchRenderResult,
@@ -15,13 +15,12 @@ from gbdraw.api.request_render import (
     _capture_request_render_diagnostics,
     render_request,
 )
-from gbdraw.api.session_compat import materialize_legacy_similarity_alignment_request
 from gbdraw.api.prepared import (
     PreparedBiologicalInputCache,
     PreparedResourceIdentity,
 )
 from gbdraw.exceptions import ValidationError
-from gbdraw.web_support.error_adapter import web_error_stage
+from gbdraw.web_support.error_adapter import WebErrorAttributes, web_error_stage
 from gbdraw.render.formats import SVG_FORMAT, resolve_format_output_path
 from gbdraw.render.track_slot_metadata import (
     build_track_slot_geometry_run_metadata,
@@ -62,7 +61,7 @@ def _web_render_diagnostic_phase(
 def _attach_exception_note(error: BaseException, note: str) -> None:
     """Attach a diagnostic on Python versions before BaseException.add_note."""
 
-    error._web_error_secondary = [{"code": "CLEANUP_FAILED", "stage": "cleanup"}]
+    cast(WebErrorAttributes, error)._web_error_secondary = [{"code": "CLEANUP_FAILED", "stage": "cleanup"}]
     add_note = getattr(error, "add_note", None)
     if callable(add_note):
         add_note(note)
@@ -71,7 +70,7 @@ def _attach_exception_note(error: BaseException, note: str) -> None:
     if isinstance(notes, list):
         notes.append(note)
     else:
-        error.__notes__ = [note]  # type: ignore[attr-defined]
+        cast(WebErrorAttributes, error).__notes__ = [note]
 
 
 def _base_svg_path(item: RequestRenderResult) -> Path:
@@ -167,7 +166,6 @@ def _render_canonical_web_request(
             resource_paths=resource_paths,
             output_directory=output_root,
         )
-        request = materialize_legacy_similarity_alignment_request(request)
     with _web_render_diagnostic_phase(diagnostics, "renderRequest"):
         rendered = render_request(request, include_feature_catalog=True)
     items: tuple[RequestRenderResult, ...]

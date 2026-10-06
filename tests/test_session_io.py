@@ -78,7 +78,12 @@ from gbdraw.session_io import (
 )
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 from gbdraw.io.regions import parse_region_spec
-from gbdraw.session import SessionFormatError, build_session_document, load_session_document
+from gbdraw.session import (
+    SessionFormatError,
+    SessionVersionError,
+    build_session_document,
+    load_session_document,
+)
 
 
 def _file_entry(name: str, content: bytes) -> dict:
@@ -2055,6 +2060,26 @@ def test_future_session_version_fails() -> None:
 
     with pytest.raises(ValidationError, match="newer"):
         validate_session(session)
+
+
+@pytest.mark.parametrize("version", [None, "45"])
+def test_session_without_integer_version_fails_validation(
+    tmp_path: Path,
+    version: object,
+) -> None:
+    # The version check runs before the version-dependent feature-catalog expansion.
+    session: dict[str, object] = {"format": SESSION_FORMAT, "config": {}}
+    if version is not None:
+        session["version"] = version
+    session_path = tmp_path / "session.json"
+    session_path.write_text(json.dumps(session), encoding="utf-8")
+
+    with pytest.raises(ValidationError, match="Session version is required"):
+        load_session(session_path)
+    with pytest.raises(SessionVersionError, match="Session version is required"):
+        load_session_document(session)
+    with pytest.raises(ValidationError, match="Session version is required"):
+        write_session_json(tmp_path / "written.json", session)
 
 
 def test_current_session_rejects_legacy_files_but_version_39_accepts_them() -> None:

@@ -9,7 +9,7 @@ from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 import math
 import sys
-from typing import Literal, Mapping, Sequence
+from typing import Literal, Mapping, Sequence, SupportsInt, cast
 
 import pandas as pd
 from Bio.SeqRecord import SeqRecord
@@ -195,7 +195,7 @@ def normalize_collinearity_color_mode(mode: str | None) -> CollinearityColorMode
             + ", ".join(COLLINEARITY_COLOR_MODES),
             diagnostic={"code": "INPUT_INVALID", "field": "collinear_color_mode", "reason": "COLLINEAR_COLOR_MODE"},
         )
-    return normalized  # type: ignore[return-value]
+    return cast(CollinearityColorMode, normalized)
 
 
 def normalize_collinearity_anchor_mode(mode: str | None) -> CollinearityAnchorMode:
@@ -220,7 +220,7 @@ def normalize_collinearity_anchor_mode(mode: str | None) -> CollinearityAnchorMo
             + ", ".join(COLLINEARITY_ANCHOR_MODES),
             diagnostic={"code": "INPUT_INVALID", "field": "collinear_anchor_mode", "reason": "COLLINEAR_ANCHOR_MODE"},
         )
-    return normalized  # type: ignore[return-value]
+    return cast(CollinearityAnchorMode, normalized)
 
 
 def normalize_collinearity_search_scope(scope: str | None) -> CollinearitySearchScope:
@@ -231,7 +231,7 @@ def normalize_collinearity_search_scope(scope: str | None) -> CollinearitySearch
             + ", ".join(COLLINEARITY_SEARCH_SCOPES),
             diagnostic={"code": "INPUT_INVALID", "field": "collinear_search_scope", "reason": "ADJACENT_ALL"},
         )
-    return normalized  # type: ignore[return-value]
+    return cast(CollinearitySearchScope, normalized)
 
 
 def iter_collinearity_search_pairs(
@@ -251,7 +251,7 @@ def iter_collinearity_search_pairs(
         infer_orthogroups=False,
         search_scope=normalize_collinearity_search_scope(str(scope)),
     )
-    return tuple(dict.fromkeys(tuple(sorted(pair)) for pair in specs))
+    return tuple(dict.fromkeys(cast(tuple[int, int], tuple(sorted(pair))) for pair in specs))
 
 
 def _float_from_row(row: object, column: str, default: float = 0.0) -> float:
@@ -282,7 +282,8 @@ def _unit_genomic_link_coordinates(unit: CollinearityUnit) -> tuple[int, int]:
 
 def _normalized_strand(value: object) -> int | None:
     try:
-        strand = int(value)
+        # Values that int() rejects raise TypeError or ValueError, handled below.
+        strand = int(cast(SupportsInt, value))
     except (TypeError, ValueError):
         return None
     return strand if strand in {-1, 1} else None
@@ -1415,7 +1416,7 @@ def build_orthogroup_collinearity_blocks(
         record_count=len(records),
         pairs=(
             tuple(
-                tuple(sorted((int(query_index), int(subject_index))))
+                cast(tuple[int, int], tuple(sorted((int(query_index), int(subject_index)))))
                 for query_index, subject_index in comparison_pairs
             )
             if comparison_pairs is not None
@@ -1565,7 +1566,7 @@ def _joined_anchor_endpoint_values(
         ).strip()
         raw_feature_index = getattr(anchor, f"{role}_feature_index", None)
         try:
-            feature_index = int(raw_feature_index)
+            feature_index = int(cast(SupportsInt, raw_feature_index))
         except (TypeError, ValueError):
             feature_index = -1
         value = (stable_id, feature_index, view_id)

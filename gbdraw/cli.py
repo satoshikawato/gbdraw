@@ -21,7 +21,7 @@ import webbrowser
 import http.server
 import socketserver
 import socket
-from typing import NoReturn
+from typing import TYPE_CHECKING, NoReturn
 from importlib import resources
 from functools import partial
 
@@ -29,6 +29,9 @@ from .circular import circular_main
 from .linear import linear_main
 from .exceptions import GbdrawError
 from .version import __version_display__
+
+if TYPE_CHECKING:
+    from importlib.abc import Traversable
 
 
 class IsolatedSimpleHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -158,6 +161,7 @@ def main() -> None:
             from .losat_setup import setup_main
             setup_main(args)
         elif command == "gui":
+            web_dir: Traversable | str
             try:
                 # Python 3.9+
                 web_dir = resources.files('gbdraw').joinpath('web')

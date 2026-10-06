@@ -20,7 +20,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Mapping, NoReturn, Sequence, TextIO, cast
 
 from .analysis.protein_artifacts import (
     CURRENT_DERIVED_PROTEIN_ARTIFACT_SCHEMA,
@@ -452,7 +452,9 @@ def expand_session_feature_catalog(
     """Expand the released v39 compact feature representation."""
 
     expanded_session = dict(session)
-    if expanded_session.get("version") >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
+    version = expanded_session.get("version")
+    # validate_session reports a missing or non-integer version.
+    if not isinstance(version, int) or version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         return expanded_session
     features = expanded_session.get("features")
     if not isinstance(features, Mapping):
@@ -585,11 +587,11 @@ def validate_session(session: Mapping[str, Any]) -> None:
         render_request = session.get("renderRequest")
         resources = session.get("resources")
         settings_only = is_settings_only_session(session)
-        if not settings_only and not isinstance(render_request, Mapping):
-            raise ValidationError(
-                f"Session version {version} requires a canonical renderRequest object."
-            )
         if not settings_only:
+            if not isinstance(render_request, Mapping):
+                raise ValidationError(
+                    f"Session version {version} requires a canonical renderRequest object."
+                )
             request_schema = render_request.get("schema")
             if not isinstance(request_schema, int) or isinstance(request_schema, bool):
                 raise ValidationError("renderRequest.schema must be an integer.")
@@ -621,10 +623,10 @@ def validate_session(session: Mapping[str, Any]) -> None:
     if version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         _validate_current_retired_active_config_paths(session)
         _validate_current_comparison_authority(session)
-        _validate_current_feature_catalog_authority(session)
+        _validate_current_feature_catalog_authority(session, version)
         _validate_alignment_reset_receipt(session)
     if version >= 41:
-        _validate_display_placement_drafts(session)
+        _validate_display_placement_drafts(session, version)
     if version >= CURRENT_SESSION_VERSION:
         _validate_feature_override_drafts(session)
     if is_settings_only_session(session):
@@ -776,7 +778,7 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
                     value(row.get("file"))
 
 
-def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
+def _validate_display_placement_drafts(session: Mapping[str, Any], version: int) -> None:
     """Validate editable intent independently of the committed render request."""
     from .api.requests import RecordDisplayOptions
     from .features.placement import FeaturePlacementOverride, normalize_feature_placements
@@ -787,7 +789,7 @@ def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
     drafts = config.get("recordDisplayDrafts", [])
     if not isinstance(drafts, list):
         raise ValidationError("config.recordDisplayDrafts must be an array.")
-    current = session.get("version") >= TYPED_DRAFT_SESSION_MIN_VERSION
+    current = version >= TYPED_DRAFT_SESSION_MIN_VERSION
     expected_fields = {
         "scope", "sourceUid", "selector", "recordId", "topologyOverride", "startCoordinate",
     }
@@ -847,7 +849,7 @@ def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
     placements = config.get("featurePlacementOverrides", {})
     if not isinstance(placements, Mapping):
         raise ValidationError("config.featurePlacementOverrides must be an object.")
-    if session.get("version") >= CURRENT_SESSION_VERSION:
+    if version >= CURRENT_SESSION_VERSION:
         # Each row names its mode; the other mode's rows wait for that mode.
         invalid = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
         for key, row in placements.items():
@@ -1156,7 +1158,7 @@ def _validate_alignment_reset_receipt(session: Mapping[str, Any]) -> None:
     receipt = editor.get("alignmentResetReceipt") if isinstance(editor, Mapping) else None
     if receipt is None:
         return
-    def invalid() -> None:
+    def invalid() -> NoReturn:
         raise ValidationError("Alignment reset receipt is malformed or stale.")
 
     if (not isinstance(receipt, Mapping)
@@ -1164,7 +1166,8 @@ def _validate_alignment_reset_receipt(session: Mapping[str, Any]) -> None:
             or not isinstance(receipt.get("binding"), str)
             or not re.fullmatch(r"[0-9a-f]{64}", receipt["binding"])
             or not isinstance(receipt.get("directions"), list)
-            or not isinstance(plan, Mapping) or request.get("mode") != "linear"):
+            or not isinstance(plan, Mapping) or not isinstance(request, Mapping)
+            or request.get("mode") != "linear"):
         invalid()
     eligible = {item["recordKey"] for item in plan["records"] if item["status"] != "skipped"}
     keys: set[str] = set()
@@ -1220,10 +1223,11 @@ def _validate_alignment_reset_receipt(session: Mapping[str, Any]) -> None:
 
 def _validate_current_feature_catalog_authority(
     session: Mapping[str, Any],
+    version: int,
 ) -> None:
     """Require the version-owned catalog and reject duplicated payloads."""
 
-    catalog_schema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION.get(session.get("version"), 3)
+    catalog_schema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION.get(version, 3)
 
     unknown_fields = sorted(
         str(field)
@@ -2235,7 +2239,7 @@ def _migrate_legacy_linear_comparison_draft(
         plan = _json_clone(dict(existing_plan))
         edges_value = plan.get("edges")
         edges = edges_value if isinstance(edges_value, list) else []
-        file_by_id = {
+        file_by_id: dict[str, Any] = {
             str(item.get("id") or ""): item.get("file")
             for item in file_comparisons
             if str(item.get("id") or "") and item.get("file")
@@ -2270,7 +2274,7 @@ def _migrate_legacy_linear_comparison_draft(
         for index, row in enumerate(legacy_rows)
         if str(row.get("uid") or "")
     }
-    legacy_binding_entries = [
+    legacy_binding_entries: list[dict[str, Any]] = [
         {
             "index": index,
             "comparison": comparison,
@@ -2281,7 +2285,7 @@ def _migrate_legacy_linear_comparison_draft(
         }
         for index, comparison in enumerate(file_comparisons)
     ]
-    file_by_id: dict[str, Mapping[str, Any]] = {}
+    file_by_id = {}
     file_by_pair: dict[tuple[str, str], Mapping[str, Any]] = {}
     for entry in legacy_binding_entries:
         file_entry = entry["file"]
@@ -2363,6 +2367,7 @@ def _migrate_legacy_linear_comparison_draft(
     mode = "none" if legacy_none else "adjacent"
     used_payload_gaps: set[int] = set()
     if authoritative_explicit:
+        assert explicit is not None
         mode = "selected" if explicit else "none"
         for index, comparison in enumerate(explicit):
             query_index_value = comparison.get("queryIndex")
@@ -2562,7 +2567,7 @@ def _attach_current_web_file_bindings(
         raise ValidationError("Current session resources must be an object.")
     resources = resources_value
     candidates: dict[int, list[str]] = {}
-    encoded: dict[tuple[int, str], str] = {}
+    encoded: dict[tuple[int | None, str], str] = {}
     decoded: dict[int, bytes] = {}
     identities: dict[int, str] = {}
     canonical_by_identity: dict[tuple[int, str], str] = {}
@@ -2827,7 +2832,11 @@ def build_session_json(
         source_web_files = context.source_session.get("webFiles")
         source_bindings = source_web_files.get("bindings") if isinstance(source_web_files, Mapping) else None
         explicit = source_bindings.get("c_gb") if isinstance(source_bindings, Mapping) else None
-        if isinstance(explicit, Mapping) and explicit.get("kind") == "composite":
+        if (
+            isinstance(source_bindings, Mapping)
+            and isinstance(explicit, Mapping)
+            and explicit.get("kind") == "composite"
+        ):
             from .session import _validate_document
 
             _validate_document(context.source_session)
@@ -2995,6 +3004,7 @@ def write_session_json(
             dir=output_path.parent,
         )
         temp_path = Path(temp_name)
+        text_file: TextIO
         if output_path.suffix.lower() == ".gz":
             raw_file = os.fdopen(temp_fd, "wb")
             temp_fd = None
@@ -3449,8 +3459,10 @@ def _gui_session_to_cli_args(
     ui = session.get("ui")
     if not isinstance(ui, Mapping):
         ui = {}
-    form = config.get("form") if isinstance(config.get("form"), Mapping) else {}
-    adv = dict(config.get("adv")) if isinstance(config.get("adv"), Mapping) else {}
+    form_value = config.get("form")
+    form = form_value if isinstance(form_value, Mapping) else {}
+    adv_value = config.get("adv")
+    adv = dict(adv_value) if isinstance(adv_value, Mapping) else {}
     if int(session.get("version", 0)) <= 30:
         effective_features = adv.get("features")
         if not isinstance(effective_features, list):
@@ -3531,7 +3543,7 @@ def _restore_cli_table_paths(
         if not isinstance(table_entry, Mapping):
             continue
         try:
-            arg_index = int(table_entry.get("argIndex"))
+            arg_index = int(cast(Any, table_entry.get("argIndex")))
         except (TypeError, ValueError) as exc:
             raise ValidationError("files.cliTables argIndex must be an integer.") from exc
         if arg_index < 0 or arg_index >= len(run_args):
@@ -3571,7 +3583,7 @@ def _restore_cli_table_paths(
             if not isinstance(dependency, Mapping):
                 continue
             try:
-                row_index = int(dependency.get("rowIndex"))
+                row_index = int(cast(Any, dependency.get("rowIndex")))
             except (TypeError, ValueError) as exc:
                 raise ValidationError("files.cliTables dependencies rowIndex must be an integer.") from exc
             column = str(dependency.get("column") or "").strip()
@@ -4118,8 +4130,8 @@ def _append_linear_gui_sequence_options(
         wants_reverse = bool(seq.get("region_reverse"))
         if has_start and has_end:
             try:
-                start_int = int(start)
-                end_int = int(end)
+                start_int = int(cast(Any, start))
+                end_int = int(cast(Any, end))
             except (TypeError, ValueError) as exc:
                 raise ValidationError(
                     f"Linear sequence #{index + 1} has invalid region coordinates."
@@ -4364,7 +4376,7 @@ def _normalize_file_bindings(value: Any) -> list[SessionFileBinding]:
         if not isinstance(item, Mapping):
             raise ValidationError("cliInvocation.fileBindings entries must be objects.")
         try:
-            arg_index = int(item.get("argIndex"))
+            arg_index = int(cast(Any, item.get("argIndex")))
         except (TypeError, ValueError) as exc:
             raise ValidationError("cliInvocation.fileBindings argIndex must be an integer.") from exc
         slot = str(item.get("slot") or "").strip()

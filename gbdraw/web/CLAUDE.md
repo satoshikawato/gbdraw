@@ -495,11 +495,16 @@ tip is a reachable disclosure).
 
 ### R13: Owner layering and ports
 
-Modules sit in layers: `state.js`, then `services/`, then owner modules
-(`app/*.js` and `app/*/` factories), then the composition roots
+Modules sit in layers, lowest first: leaves (`utils/`, `config.js`,
+`web-ux-profile.js`, `mode-profiles.js`, `mode-profiles.generated.js`), then
+state-free `services/`, then
+`state.js`, then the two state-bound services (`services/config.js`,
+`services/reset.js`), the only services that import `state.js`, then owner
+modules (`app/*.js` and `app/*/` factories), then the composition roots
 (`app/app-setup.js`, `app/feature-editor.js`, `app/legend.js`,
-`app/legend-layout.js`), then the template. A module depends only on lower
-layers.
+`app/legend-layout.js`), then `app.js`, `components.js`, and the template. A
+module imports its own layer and lower ones; a state-free module never imports
+`state.js`, and an owner module never imports a composition root.
 
 - An owner never imports, holds, or calls another owner object. It receives
   ports: a port is one function, in one direction, named for the reaction it
@@ -536,8 +541,12 @@ WEB_CHANGE_POLICY.md "Design-rule co-change"). The detectors are
 `tools/web-owner-graph-detectors.mjs` (injection edges, forward-reference
 closures `owner-graph.forward-closure.v2`, state backdoors, whole-object ports,
 projection call shapes, heavy derived trigger sites
-`heavy-derived.trigger-site.v2`); `node tools/report-web-owner-graph.mjs --at worktree`
-prints the current subjects.
+`heavy-derived.trigger-site.v2`, and import direction
+`layer.import-direction.v1`, which ranks modules with `webLayerOf` and records
+each upward import in `LAYER_IMPORT_BASELINE`);
+`node tools/report-web-owner-graph.mjs --at worktree` prints the current
+subjects. Fix a new upward import by moving the imported code down or taking
+a port, not by recording it.
 
 Run `node --test tests/web/owner-graph-baseline.test.mjs` before and after a
 change to `gbdraw/web/js`. A new subject means the change couples owners:
@@ -549,7 +558,8 @@ and Projection (`docs/internal/OPTION_INTEGRITY_PRODUCT_CONTRACT.md`); without
 a record, ask the Owner before implementing it.
 
 Guards: `tests/web/owner-graph-baseline.test.mjs` (every observed subject is in
-the baseline with a count no higher than recorded, per detector) and
+the baseline with a count no higher than recorded, per detector, and every
+upward import is in `LAYER_IMPORT_BASELINE`) and
 `tests/web/owner-graph-detectors.test.mjs` (the detectors).
 
 ### R14: Typed boundaries
