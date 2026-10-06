@@ -247,12 +247,13 @@ const compilePlanBundle = ({
     if (
       isOriginal
       && entry.caption !== entry.originalCaption
-      && !manualCaptions.has(entry.caption)
     ) {
+      // A rename onto a color rule's caption is explicit and wins (PV-02). A
+      // rule that replaced the source row leaves nothing to rename.
       addToResults(operationsByResult, allResultIndexes, 'legendRenames', {
         from: entry.originalCaption,
         to: entry.caption,
-        allowMissing: sourceReplaced,
+        allowMissing: sourceReplaced || manualCaptions.has(entry.caption),
         xPos: legendOrderChanged ? null : entry.xPos,
         yPos: legendOrderChanged ? null : entry.yPos
       });
