@@ -12,6 +12,12 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Legend colors (web app): a Legend color or stroke on a row that only track data
+  names (an annotation set legend label, a Depth series) is retired together with
+  that data, so Generate no longer fails with "The generated result could not be
+  accepted" after the set or the Depth file is removed. Styles follow the caption:
+  replacing the data keeps the style of a caption the new data still names. Undo
+  restores the data and the style.
 - Legend colors and names (web app): Generate no longer fails with "The generated
   result could not be accepted" after a Legend color, stroke, or name is set on a row
   whose features are then all hidden (Feature visibility Off, a Feature Visibility
