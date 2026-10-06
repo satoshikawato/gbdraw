@@ -1,3 +1,4 @@
+// @ts-check
 export const validateAnnotationWarnings = (warnings, results) => {
   if (warnings === undefined) return [];
   const fields = ['code', 'setId', 'annotationId', 'recordId', 'recordIndex',

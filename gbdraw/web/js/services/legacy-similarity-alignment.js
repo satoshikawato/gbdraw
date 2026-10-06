@@ -1,3 +1,4 @@
+// @ts-check
 import { featureIdentity } from './feature-identity.js';
 
 const requiredText = (value, path) => {
