@@ -2,12 +2,12 @@
 # coding: utf-8
 
 import logging
-from typing import List, Tuple
+from typing import List, Tuple, cast
 
 from Bio.SeqFeature import SimpleLocation
 
 from .objects import FeatureDisplayPart, FeatureLocation, FeatureLocationPart, Strand
-from ..layout.record_coordinates import RecordDisplayTransform, SourceInterval
+from ..layout.record_coordinates import DisplayFragment, RecordDisplayTransform, SourceInterval
 
 
 logger = logging.getLogger(__name__)
@@ -33,10 +33,11 @@ def project_feature_parts(
         biological_start=exon.strand in (-1, 1),
         biological_end=exon.strand in (-1, 1),
     ) for index, exon in enumerate(exons)]
-    by_part = {}
-    for fragment in transform.project_local_parts(parts):
+    # With start_coordinate set (checked above) project_local_parts returns DisplayFragments.
+    by_part: dict[int, list[DisplayFragment]] = {}
+    for fragment in cast("tuple[DisplayFragment, ...]", transform.project_local_parts(parts)):
         by_part.setdefault(fragment.part_index, []).append(fragment)
-    result = []
+    result: list[FeatureDisplayPart] = []
     previous_index = None
     for index, part in enumerate(parts):
         if part.start == part.end:
@@ -59,7 +60,10 @@ def project_feature_parts(
                     continue
                 connector = SourceInterval(start, end, part.strand, index, False, False)
                 result.extend(FeatureDisplayPart("line", get_strand(exons[index].strand), f)
-                              for f in transform.project_local_parts((connector,)))
+                              for f in cast(
+                                  "tuple[DisplayFragment, ...]",
+                                  transform.project_local_parts((connector,)),
+                              ))
         result.extend(FeatureDisplayPart("block", get_strand(exons[index].strand), fragment)
                       for fragment in by_part.get(index, ()))
         previous_index = index
@@ -136,14 +140,14 @@ def get_intron_coordinate(
             )
             intron_parts.append(intron_coordinate_2)
         elif intron_strand == "negative":
-            intron_start_1: int = int(previous_exon_start) - 1
-            intron_end_1: int = 0
+            intron_start_1 = int(previous_exon_start) - 1
+            intron_end_1 = 0
             intron_coordinate_1 = FeatureLocationPart(
                 "line", intron_id, intron_strand, intron_start_1, intron_end_1, False
             )
             intron_parts.append(intron_coordinate_1)
-            intron_start_2: int = genome_length
-            intron_end_2: int = min(int(current_exon_end) + 1, genome_length)
+            intron_start_2 = genome_length
+            intron_end_2 = min(int(current_exon_end) + 1, genome_length)
             intron_coordinate_2 = FeatureLocationPart(
                 "line", intron_id, intron_strand, intron_start_2, intron_end_2, False
             )
@@ -224,7 +228,7 @@ def get_strand(strand_value: int) -> Strand:
     Converts strand value to a string representation.
     """
     if strand_value == 1:
-        strand: str = "positive"
+        strand: Strand = "positive"
     elif strand_value == -1:
         strand = "negative"
     else:

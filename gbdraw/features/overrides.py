@@ -6,7 +6,7 @@ import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from pandas import DataFrame
 
@@ -101,12 +101,13 @@ class FeatureOverride:
     def from_mapping(cls, value: Mapping[str, object]) -> FeatureOverride:
         if not isinstance(value, Mapping) or set(value) != _ROW_FIELDS:
             raise _invalid("Unknown or missing feature override fields.")
+        # The casts only satisfy the checker: __post_init__ validates every value.
         return cls(
-            value["recordKey"],
-            value["biologicalFeatureId"],
-            value["featureVisibility"],
-            value["labelVisibility"],
-            value["labelText"],
+            cast(str, value["recordKey"]),
+            cast(str, value["biologicalFeatureId"]),
+            cast("FeatureVisibilityMode | None", value["featureVisibility"]),
+            cast("LabelVisibilityMode | None", value["labelVisibility"]),
+            cast("str | None", value["labelText"]),
         )
 
     def to_mapping(self) -> dict[str, str | None]:
@@ -196,7 +197,15 @@ def read_feature_override_table(
         unmatched=unmatched,
     )
     return normalize_feature_overrides([
-        FeatureOverride(identity.record_key, identity.biological_feature_id, *values)
+        # `values` is [feature_visibility, label_visibility, label_text], validated above.
+        FeatureOverride(
+            identity.record_key,
+            identity.biological_feature_id,
+            *cast(
+                "tuple[FeatureVisibilityMode | None, LabelVisibilityMode | None, str | None]",
+                values,
+            ),
+        )
         for identity, values in zip(identities, edits, strict=True)
         if identity is not None
     ])
@@ -269,10 +278,12 @@ def bind_feature_overrides(
                 item.source_feature_index: item
                 for item in source_catalogs[binding.record_index]
             }
-        entry = entries[binding.record_index][int(binding.source_feature_index)]
+        source_index = binding.source_feature_index
+        assert source_index is not None  # status "present" always has an index
+        entry = entries[binding.record_index][source_index]
         start = min(part[0] for part in entry.location_parts)
         end = max(part[1] for part in entry.location_parts)
-        resolved[binding.record_index][int(binding.source_feature_index)] = (
+        resolved[binding.record_index][source_index] = (
             ResolvedFeatureOverride(
                 row.feature_visibility,
                 row.label_visibility,
@@ -294,7 +305,11 @@ def feature_override_lookup(
 
     def lookup(feature: object) -> ResolvedFeatureOverride | None:
         index = _source_feature_index(feature)
-        return overrides.get(ordinals.get(id(feature)) if index is None else index)
+        if index is None:
+            index = ordinals.get(id(feature))
+            if index is None:
+                return None
+        return overrides.get(index)
 
     return lookup
 

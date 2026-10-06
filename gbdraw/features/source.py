@@ -7,7 +7,7 @@ from collections import defaultdict
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Literal
+from typing import Literal, overload
 
 from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
@@ -196,13 +196,13 @@ def resolve_feature_identities(
         for feature in _iter_source_features(record.features):
             index = _source_feature_index(feature)
             drawn[ordinals[id(feature)] if index is None else index] = feature
-        missing = (
+        missing: Literal["crop_excluded", "absent"] = (
             "crop_excluded" if record.annotations.get("gbdraw_region_applied") else "absent"
         )
         for identity in items:
             index = known.get(identity.biological_feature_id)
             feature = None if index is None else drawn.get(index)
-            status = (
+            status: Literal["present", "crop_excluded", "absent", "unresolved"] = (
                 "unresolved" if index is None else "present" if feature is not None else missing
             )
             bindings[identity] = IdentityBinding(record_index, index, status, feature)
@@ -270,6 +270,32 @@ def _selects_no_record(records: Sequence[SeqRecord], selector: RecordSelector | 
     if selector.record_index is not None:
         return selector.record_index >= len(records)
     return all(record.id != selector.record_id for record in records)
+
+
+@overload
+def resolve_identity_table_rows(
+    rows: Sequence[tuple[str, str]],
+    *,
+    table: str,
+    records: Sequence[SeqRecord],
+    record_keys: Sequence[str],
+    source_record_ids: Sequence[str],
+    source_catalogs: Sequence[tuple[SourceFeatureIdentity, ...]],
+    unmatched: None = None,
+) -> tuple[FeatureIdentity, ...]: ...
+
+
+@overload
+def resolve_identity_table_rows(
+    rows: Sequence[tuple[str, str]],
+    *,
+    table: str,
+    records: Sequence[SeqRecord],
+    record_keys: Sequence[str],
+    source_record_ids: Sequence[str],
+    source_catalogs: Sequence[tuple[SourceFeatureIdentity, ...]],
+    unmatched: list[int] | None = None,
+) -> tuple[FeatureIdentity | None, ...]: ...
 
 
 def resolve_identity_table_rows(

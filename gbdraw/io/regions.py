@@ -338,18 +338,18 @@ def apply_region_specs(
 
     new_records: list[SeqRecord] = []
     for idx, record in enumerate(records):
-        spec = assignments.get(idx)
-        if not spec:
+        assigned = assignments.get(idx)
+        if not assigned:
             new_records.append(record)
             continue
         log.info(
             "INFO: Cropping record %s to %s..%s%s.",
             record.id,
-            spec.start,
-            spec.end,
-            " (reverse complement)" if spec.reverse_complement else "",
+            assigned.start,
+            assigned.end,
+            " (reverse complement)" if assigned.reverse_complement else "",
         )
-        new_records.append(_crop_record_to_region(record, spec, log=log))
+        new_records.append(_crop_record_to_region(record, assigned, log=log))
 
     return new_records
 
