@@ -1255,6 +1255,10 @@ export const createRunAnalysis = ({
   };
   let pendingReflowRequestId = 0;
   let activeReflowRequestId = 0;
+  // A rerender requested while Generate (or a committed-candidate run) is in
+  // progress waits for it: the rerender would take the newer generation token
+  // and silently supersede the run (OV-48). It runs once after the run settles.
+  let reflowDeferredByProcessing = false;
   let featureExtractionRequestId = 0;
   let latestGenerationToken = 0;
   let latestOperationId = 0;
@@ -4955,6 +4959,7 @@ export const createRunAnalysis = ({
         recordSessionLifecycleEvent('generate.processing-cleared', {
           status: outcome?.status || 'error'
         });
+        replayDeferredLabelReflow();
       }
     }
   };
@@ -5263,6 +5268,7 @@ export const createRunAnalysis = ({
         if (outcome?.status !== 'canceled') processingStatus.value = '';
         generationCancelRequested.value = false;
         processing.value = false;
+        replayDeferredLabelReflow();
       }
     }
   };
@@ -5433,10 +5439,15 @@ export const createRunAnalysis = ({
     if (sessionBusy) return sessionBusy;
     pendingReflowRequestId += 1;
     if (activeReflowRequestId !== 0) return;
+    if (processing.value) {
+      reflowDeferredByProcessing = true;
+      return;
+    }
 
     labelReflowProcessing.value = true;
     try {
-      while (activeReflowRequestId < pendingReflowRequestId) {
+      // Generate takes priority: an iteration never starts while it runs.
+      while (!processing.value && activeReflowRequestId < pendingReflowRequestId) {
         activeReflowRequestId = pendingReflowRequestId;
         let decorationContinuity;
         try {
@@ -5450,10 +5461,20 @@ export const createRunAnalysis = ({
           requestId: activeReflowRequestId
         });
       }
+      if (processing.value && activeReflowRequestId < pendingReflowRequestId) {
+        reflowDeferredByProcessing = true;
+      }
     } finally {
       activeReflowRequestId = 0;
       labelReflowProcessing.value = false;
     }
+  };
+
+  // Called where a run clears `processing`: the requests it held back run once.
+  const replayDeferredLabelReflow = () => {
+    if (!reflowDeferredByProcessing || processing.value) return;
+    reflowDeferredByProcessing = false;
+    void runLabelReflow();
   };
 
   const downloadLosatCache = async () => {
