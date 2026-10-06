@@ -1,6 +1,6 @@
 // @ts-check
 import { resolveColorToHex } from '../color-utils.js';
-import { reportRuleRunFailure } from '../rule-matching.js';
+import { reportRuleRunFailure, runWhenPrepared } from '../rule-matching.js';
 import {
   formatFeatureLength,
   formatFeatureLocation,
@@ -72,13 +72,20 @@ export {
  */
 
 /**
+ * The visibility owner's preparation of the rule matches `resolveFeatureDrawn`
+ * reads. Strict, it rejects when the color preparation fails and resolves to
+ * false when it is stale.
+ * @typedef {(options?: { strict?: boolean }) => boolean | Promise<boolean | { error: any }>} PrepareDrawnFeatureMatchesPort
+ */
+
+/**
  * @typedef {object} FeatureSvgActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
  * @property {(feature: Record<string, any>) => string} getFeatureColor The rule owner's color of a feature.
  * @property {(feature: Record<string, any>) => string} [getEffectiveLegendCaption] The rule owner's Legend caption of a feature.
  * @property {(() => void) | null} [onFeaturePopupOpened] The label owner's sync of its editor when the popup opens.
- * @property {(commit: () => any) => any} [runWithDrawnMatches]
- *   Runs the popup's opening once the rule matches `resolveFeatureDrawn` reads are prepared (the rule preparation's `runDrawn`).
+ * @property {PrepareDrawnFeatureMatchesPort} [prepareDrawnFeatureMatches]
+ *   The visibility owner's preparation of the rule matches `resolveFeatureDrawn` reads.
  * @property {FeatureSelectionPort | null} [featureSelection]
  * @property {((changes: { featureId: string, mode: string }[], options?: { reason?: string }) => boolean) | null} [applyFeatureVisibilityChanges]
  *   The preview owner's projection of feature visibility changes.
@@ -91,10 +98,9 @@ export const createFeatureSvgActions = ({
   getFeatureColor,
   getEffectiveLegendCaption,
   onFeaturePopupOpened = null,
-  // R13: runs the popup's opening once the rule matches `resolveFeatureDrawn`
-  // reads are prepared; the composition root injects the rule preparation's
-  // `runDrawn`.
-  runWithDrawnMatches = (commit) => commit(),
+  // R13: the popup opens once the rule matches `resolveFeatureDrawn` reads are
+  // prepared; the composition root injects the visibility owner's preparation.
+  prepareDrawnFeatureMatches = () => true,
   featureSelection = null,
   // R13: the preview owner's projection of feature visibility changes.
   applyFeatureVisibilityChanges = null,
@@ -481,7 +487,9 @@ export const createFeatureSvgActions = ({
 
   // The popup states whether the feature is drawn (resolveFeatureDrawn).
   const openFeatureEditorForFeature = (feat, eventLike = null) => reportRuleRunFailure(
-    state, 'feature-extraction', () => runWithDrawnMatches(() => openPreparedFeatureEditor(feat, eventLike))
+    state, 'feature-extraction', () => runWhenPrepared(
+      state, () => [prepareDrawnFeatureMatches({ strict: true })], () => openPreparedFeatureEditor(feat, eventLike)
+    )
   );
 
   const hoverSummaryIsAllowed = () => {
