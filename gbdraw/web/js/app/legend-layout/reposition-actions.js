@@ -1,3 +1,4 @@
+// @ts-check
 import {
   applyCompositionEdit,
   bindCompositionMetadata,
@@ -20,6 +21,18 @@ const setLegendVariant = (legendGroup, side) => {
   return true;
 };
 
+/**
+ * @typedef {object} LegendRepositionActionsOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {(svg: SVGSVGElement) => void} reflowDualLegendLayout
+ *   The Legend layout owner's reflow of a diagram with a horizontal and a vertical Legend.
+ * @property {(svg: SVGSVGElement, layout: string, maxWidthOverride?: number | null) => void} reflowSingleLegendLayout
+ *   The Legend layout owner's reflow of a diagram with one Legend.
+ * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
+ *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ */
+
+/** @param {LegendRepositionActionsOptions} options */
 export const createLegendRepositionActions = ({
   state,
   reflowDualLegendLayout,

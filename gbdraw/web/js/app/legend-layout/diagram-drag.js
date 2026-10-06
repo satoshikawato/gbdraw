@@ -1,3 +1,4 @@
+// @ts-check
 import { parseTransform, replaceLeadingTranslate } from './transform-utils.js';
 import {
   bindCompositionMetadata,
@@ -11,6 +12,26 @@ import {
 } from '../record-groups.js';
 import { setClassToken } from '../../services/svg-serialization.js';
 
+/**
+ * @typedef {object} DiagramDragActionsOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {((label?: string, options?: { source?: string, owner?: unknown }) => Promise<any>) | null} [beginHistoryTransaction]
+ *   History's begin of one step (R11); resolves to the transaction, or null when History is busy.
+ * @property {((transaction: any, options?: Record<string, any>) => Promise<any>) | null} [commitHistoryTransaction]
+ *   History's commit of the step that `beginHistoryTransaction` opened.
+ * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
+ *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ * @property {LegendLayoutRecordDragPort | null} [similarityAlignmentLifecycle]
+ *   The alignment owner's record-drag hooks, registered by the root (R13).
+ */
+
+/**
+ * @typedef {object} LegendLayoutRecordDragPort
+ * @property {() => void} [beforeRecordDrag]
+ * @property {(options: { moved: boolean }) => void} [afterRecordDrag]
+ */
+
+/** @param {DiagramDragActionsOptions} options */
 export const createDiagramDragActions = ({
   state,
   beginHistoryTransaction = null,

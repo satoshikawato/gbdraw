@@ -1,3 +1,4 @@
+// @ts-check
 import {
   getAllFeatureLegendGroups,
   getComparisonLegendGroup,
@@ -6,6 +7,19 @@ import {
   parseTransformXY
 } from './utils.js';
 import { parseCompositionMetadata } from '../legend-layout/composition-actions.js';
+
+/**
+ * A Legend text with its matched swatch, and the position that a reflow
+ * assigns it.
+ * @typedef {object} LegendLayoutEntry
+ * @property {SVGGraphicsElement} text
+ * @property {SVGGraphicsElement | null} rect
+ * @property {number} x
+ * @property {number} y
+ * @property {number} [newX]
+ * @property {number} [newY]
+ * @property {number} [textWidth]
+ */
 
 export const createLegendLayoutActions = () => {
   const getHorizontalWrapWidth = (svg) => {
@@ -244,6 +258,7 @@ export const createLegendLayoutActions = () => {
         return fill && fill !== 'none' && !fill.startsWith('url(');
       });
 
+      /** @type {LegendLayoutEntry[]} */
       const entries = texts.map((t) => {
         const pos = parseTransformXY(t.getAttribute('transform'));
         const expectedRectX = pos.x - textXOffset;
@@ -401,6 +416,7 @@ export const createLegendLayoutActions = () => {
         return fill && fill !== 'none' && !fill.startsWith('url(');
       });
 
+      /** @type {LegendLayoutEntry[]} */
       const entries = texts.map((t) => {
         const pos = parseTransformXY(t.getAttribute('transform'));
         const expectedRectX = pos.x - textXOffset;
@@ -512,6 +528,7 @@ export const createLegendLayoutActions = () => {
     const pairwiseContentOffsetY = pairwiseBBox ? pairwiseBBox.y : 0;
     const pairwiseWidth = pairwiseBBox ? pairwiseBBox.width : 0;
 
+    /** @type {LegendLayoutEntry[]} */
     const entries = textElements.map((t) => {
       const pos = parseTransformXY(t.getAttribute('transform'));
       return { text: t, rect: null, x: pos.x, y: pos.y };

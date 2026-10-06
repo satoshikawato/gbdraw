@@ -1,9 +1,18 @@
+// @ts-check
 import {
   applyCanvasPaddingToSvg,
   bindCompositionMetadata,
   compositionUserDeltas
 } from './composition-actions.js';
 
+/**
+ * @typedef {object} LegendCanvasActionsOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
+ *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ */
+
+/** @param {LegendCanvasActionsOptions} options */
 export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null }) => {
   const {
     svgContainer,

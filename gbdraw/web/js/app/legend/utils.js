@@ -1,3 +1,4 @@
+// @ts-check
 import { parseTransform } from '../legend-layout/transform-utils.js';
 
 export { parseTransform };

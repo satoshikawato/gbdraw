@@ -1,3 +1,4 @@
+// @ts-check
 import { normalizeUserFacingError } from '../../services/error-normalization.js';
 import { resolveColorToHex, toNativeColorInputValue } from '../color-utils.js';
 import {
@@ -54,6 +55,24 @@ const setLegendEntryColor = (entryGroup, color) => {
   return true;
 };
 
+/**
+ * @typedef {object} LegendEntryActionsOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {(svg: SVGSVGElement) => void} updatePairwiseLegendPositions
+ *   The Legend layout owner's reflow of a pairwise (comparison) Legend.
+ * @property {(svg: SVGSVGElement) => void} reflowDualLegendLayout
+ *   The Legend layout owner's reflow of a diagram with a horizontal and a vertical Legend.
+ * @property {(svg: SVGSVGElement) => void} compactLegendEntries
+ *   The Legend layout owner's removal of gaps between the entries.
+ * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
+ *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ * @property {(() => string | undefined) | null} [readActiveResultIdentity]
+ *   The preview owner's runtime identity of the mounted Result.
+ * @property {() => ({ diagramOptions?: Record<string, any> } | null)} [getCommittedRequest]
+ *   The committed canonical request (Python owns the option fields, R7).
+ */
+
+/** @param {LegendEntryActionsOptions} options */
 export const createLegendEntryActions = ({
   state,
   updatePairwiseLegendPositions,
@@ -112,6 +131,7 @@ export const createLegendEntryActions = ({
     retiredEntriesByResult.set(identity, entries);
   };
 
+  /** @param {{ resultIdentity?: string, deletedCaptions?: string[] }} [options] */
   const hasRetiredResultLegend = ({ resultIdentity, deletedCaptions = [] } = {}) => {
     const deleted = new Set(deletedCaptions.map((caption) => String(caption || '').trim()));
     return [...(retiredEntriesByResult.get(resultIdentity)?.values() || [])]
@@ -121,6 +141,10 @@ export const createLegendEntryActions = ({
   // Before the displayed Result receives the diagram-wide Legend operations:
   // return its entries whose deletion is no longer intended, and keep the
   // entries that the operations delete. Returns whether its Legend changes.
+  /**
+   * @param {SVGSVGElement} svg
+   * @param {{ resultIdentity?: string, liveResultIdentities?: string[], deletedCaptions?: string[] }} [options]
+   */
   const prepareDisplayedResultLegend = (svg, {
     resultIdentity: identity,
     liveResultIdentities = [],
