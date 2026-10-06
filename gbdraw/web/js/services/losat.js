@@ -1,3 +1,4 @@
+// @ts-check
 import { diagnosticError, normalizeUserFacingError } from './error-normalization.js';
 import { LOSAT_THREADED_WASM_URL, WASI_SHIM_URL } from '../config.js';
 import { resolveLosatThreadPlan } from './losat-thread-plan.js';
@@ -16,6 +17,107 @@ const DEFAULT_THREADED_MIN_FASTA_CHARS = 500000;
 const THREADED_TRAP_RETRY_LIMIT = 2;
 const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
 
+/**
+ * One pair job, as planned by `linear-sources.js`. Only the fields this module
+ * reads are named; the rest travels to the worker and back unread.
+ * @typedef {object} LosatJob
+ * @property {string} [program]
+ * @property {string} [querySequenceKey]
+ * @property {string} [subjectSequenceKey]
+ * @property {number} [pairIndex]
+ * @property {string} [cacheKey]
+ */
+
+/** @typedef {LosatJob & { text: string }} LosatJobResult */
+
+/**
+ * The FASTA text of each sequence key: a Map, `{ key, fasta }` entries, or an
+ * object keyed by sequence key.
+ * @typedef {Map<string, string> | { key: string, fasta?: string }[] | Record<string, string>} LosatSequences
+ */
+
+/**
+ * @typedef {object} LosatProgress
+ * @property {number} completed
+ * @property {number} total
+ * @property {LosatJob} job
+ * @property {number} [index]
+ * @property {boolean} [threaded]
+ * @property {number} [spawnCount]
+ */
+
+/**
+ * The status the Settings panel and the Generate status line show.
+ * @typedef {object} LosatRuntimeStatus
+ * @property {string} state
+ * @property {string} message
+ * @property {string} [reason]
+ * @property {WebAssembly.Module | null} [wasmModule]
+ * @property {string} [mode]
+ */
+
+/**
+ * The options of `runLosatPairsParallel`. The serial pool, the Worker pool, and
+ * the threaded pool each read the subset they name. `wasmModule` is set by
+ * `runLosatPairsParallel` itself for the threaded pool.
+ * @typedef {object} LosatRunOptions
+ * @property {string} [executionMode] 'auto', 'serial', or 'threaded'
+ * @property {number} [concurrency] requested pair workers
+ * @property {string | number | null} [totalThreadBudget]
+ * @property {string | number | null} [threadsPerJob]
+ * @property {LosatSequences} [sequences]
+ * @property {AbortSignal} [signal]
+ * @property {string} [workerUrl]
+ * @property {string} [wasmPath]
+ * @property {string} [threadedWorkerUrl]
+ * @property {string} [threadedWasmPath]
+ * @property {WebAssembly.Module} [wasmModule]
+ * @property {(status: LosatRuntimeStatus) => void} [onRuntimeStatus]
+ * @property {(progress: LosatProgress) => void} [onProgress]
+ */
+
+/**
+ * What the LOSAT workers post back. `init` and `run` replies carry `ok`; the
+ * threaded worker adds `trap` and `spawnCount`; a thread-fault arrives on the
+ * fault BroadcastChannel with `tid` and `stderr`.
+ * @typedef {object} LosatWorkerReply
+ * @property {string} [id]
+ * @property {string} [type]
+ * @property {boolean} [ok]
+ * @property {string} [error]
+ * @property {string} [text]
+ * @property {boolean} [trap]
+ * @property {number} [spawnCount]
+ * @property {number} [tid]
+ * @property {string} [stderr]
+ */
+
+/**
+ * The first message to a pool worker.
+ * @typedef {object} LosatWorkerInit
+ * @property {'init'} type
+ * @property {string} id
+ * @property {WebAssembly.Module} wasmModule
+ * @property {string} wasmUrl
+ * @property {string} wasiShimUrl
+ */
+
+/** @typedef {Error & { canceled?: boolean }} LosatAbortError */
+
+/**
+ * One pair run in this thread: the program, the two FASTA texts, and what the
+ * `losat` command line takes. The program and both texts are required; the
+ * run throws when one is missing.
+ * @typedef {object} LosatPairRequest
+ * @property {string} [program] 'blastn', 'tblastx', or 'blastp'
+ * @property {string} [queryFasta]
+ * @property {string} [subjectFasta]
+ * @property {string} [outfmt]
+ * @property {string[]} [extraArgs]
+ * @property {string} [wasmPath]
+ * @property {AbortSignal} [signal]
+ */
+
 let wasiShimPromise = null;
 const wasmModulePromises = new Map();
 const threadedSupportPromises = new Map();
@@ -27,7 +129,7 @@ const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now
 const formatDuration = (startedAt) => `${((getNow() - startedAt) / 1000).toFixed(2)}s`;
 
 const createAbortError = () => {
-  const error = new Error('LOSAT run was canceled.');
+  const error = /** @type {LosatAbortError} */ (new Error('LOSAT run was canceled.'));
   error.name = 'AbortError';
   error.canceled = true;
   return error;
@@ -37,7 +139,7 @@ const getAbortReason = (signal) => {
   const reason = signal?.reason;
   if (reason instanceof Error) return reason;
   if (reason !== undefined) {
-    const error = new Error(String(reason));
+    const error = /** @type {LosatAbortError} */ (new Error(String(reason)));
     error.name = 'AbortError';
     error.canceled = true;
     return error;
@@ -89,6 +191,12 @@ const moduleHasThreadedWasiShape = (wasmModule) => {
     imports.some((entry) => entry.module === 'wasi' && entry.name === 'thread-spawn' && entry.kind === 'function');
 };
 
+/**
+ * @param {string} state
+ * @param {string} message
+ * @param {Partial<LosatRuntimeStatus>} [details]
+ * @returns {LosatRuntimeStatus}
+ */
 const buildThreadingStatus = (state, message, details = {}) => ({
   state,
   message,
@@ -142,6 +250,10 @@ export const getLosatThreadingSupport = async ({
   return threadedSupportPromises.get(key);
 };
 
+/**
+ * @param {LosatPairRequest} [request]
+ * @returns {Promise<string>}
+ */
 export const runLosatPair = async ({
   program,
   queryFasta,
@@ -215,6 +327,12 @@ const shouldUseThreadedLosat = (jobs, sequenceStore, threadsPerJob) => {
   return totalChars >= DEFAULT_THREADED_MIN_FASTA_CHARS * 2;
 };
 
+/**
+ * @param {string} state
+ * @param {string} message
+ * @param {Record<string, any>} [details]
+ * @returns {LosatRuntimeStatus}
+ */
 const buildRuntimeStatus = (state, message, details = {}) => ({
   state,
   message,
@@ -240,6 +358,10 @@ const formatPairErrorPrefix = (job) => {
   return pairNumber ? `LOSAT pair #${pairNumber}` : 'LOSAT pair';
 };
 
+/**
+ * @param {LosatSequences} [sequences]
+ * @returns {Map<string, string>}
+ */
 const normalizeSequenceStore = (sequences) => {
   if (sequences instanceof Map) return sequences;
   if (Array.isArray(sequences)) {
@@ -289,6 +411,11 @@ const buildJobSequencePayload = (job, sequenceStore, loadedKeys) => {
   return payload;
 };
 
+/**
+ * @param {LosatJob[]} jobs
+ * @param {LosatRunOptions} [options]
+ * @returns {Promise<LosatJobResult[]>}
+ */
 const runLosatPairsSequential = async (jobs, { onProgress, sequences, signal } = {}) => {
   throwIfAborted(signal);
   const startedAt = getNow();
@@ -317,6 +444,12 @@ const runLosatPairsSequential = async (jobs, { onProgress, sequences, signal } =
   return results;
 };
 
+/**
+ * @param {Worker} worker
+ * @param {LosatWorkerInit} payload
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<Worker>}
+ */
 const initializeLosatWorker = (worker, payload, signal) =>
   new Promise((resolve, reject) => {
     let settled = false;
@@ -336,7 +469,7 @@ const initializeLosatWorker = (worker, payload, signal) =>
       signal?.removeEventListener?.('abort', handleAbort);
     };
     const handleMessage = (event) => {
-      const data = event.data || {};
+      const data = /** @type {LosatWorkerReply} */ (event.data || {});
       if (data.id !== payload.id || data.type !== 'init') return;
       if (data.ok) {
         settle(() => resolve(worker));
@@ -364,6 +497,11 @@ const initializeLosatWorker = (worker, payload, signal) =>
     worker.postMessage(payload);
   });
 
+/**
+ * @param {LosatJob[]} jobs
+ * @param {LosatRunOptions} [options]
+ * @returns {Promise<LosatJobResult[]>}
+ */
 const runLosatPairsWithWorkers = async (
   jobs,
   { concurrency, totalThreadBudget, workerUrl, wasmPath, onProgress, sequences, signal } = {}
@@ -474,7 +612,7 @@ const runLosatPairsWithWorkers = async (
       }
 
       const handleMessage = (event) => {
-        const data = event.data || {};
+        const data = /** @type {LosatWorkerReply} */ (event.data || {});
         if (data.id !== id) return;
         if (data.type && data.type !== 'run') return;
         worker.removeEventListener('message', handleMessage);
@@ -532,6 +670,11 @@ const runLosatPairsWithWorkers = async (
   });
 };
 
+/**
+ * @param {LosatJob[]} jobs
+ * @param {LosatRunOptions} [options]
+ * @returns {Promise<LosatJobResult[]>}
+ */
 const runLosatPairsThreaded = async (
   jobs,
   {
@@ -658,7 +801,7 @@ const runLosatPairsThreaded = async (
       };
 
       const handleMessage = (event) => {
-        const data = event.data || {};
+        const data = /** @type {LosatWorkerReply} */ (event.data || {});
         if (data.id !== id) return;
         if (data.type && data.type !== 'run') return;
         cleanupWorker();
@@ -696,7 +839,7 @@ const runLosatPairsThreaded = async (
       };
 
       const handleThreadFault = (event) => {
-        const data = event.data || {};
+        const data = /** @type {LosatWorkerReply} */ (event.data || {});
         if (data.type !== 'thread-fault') return;
         cleanupWorker();
         const detail = [data.error || 'LOSAT WASI thread trapped', data.stderr].filter(Boolean).join('\n');
@@ -738,6 +881,11 @@ const runLosatPairsThreaded = async (
   });
 };
 
+/**
+ * @param {LosatJob[]} jobs
+ * @param {LosatRunOptions} [options]
+ * @returns {Promise<LosatJobResult[]>}
+ */
 export const runLosatPairsParallel = async (jobs, options = {}) => {
   const jobList = Array.isArray(jobs) ? jobs : [];
   if (jobList.length === 0) return [];
