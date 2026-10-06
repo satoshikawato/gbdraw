@@ -96,7 +96,10 @@ app-setup availability cycle (#641).
   passes an owner object (not a port) into `consumer`'s factory.
 - **Forward-reference closure**: a closure passed at composition that
   references an owner instance assigned later in the same file, including
-  `let x = null; … x = createX(...)` (`app/app-setup.js:461,1313`).
+  `let x = null; … x = createX(...)` (`app/app-setup.js:461,1313`). A closure
+  at any depth counts, and so does a late-bound function variable that the
+  root reassigns after the owner exists (detector
+  `owner-graph.forward-closure.v2`, added after E11).
 - **State backdoor**: `state.<name> = <function or owner member>` outside
   `state.js`.
 - **Projection domain**: a derived display the Result shows from editor intent
@@ -106,7 +109,10 @@ app-setup availability cycle (#641).
   (arguments and surrounding orchestration on the same statement). R3 holds
   when a domain has one call shape outside its owner.
 - **Trigger site**: a call of a heavy derived value's producer
-  (`rulePreparation.prepare|prepareDrawn|prepareVisibility|prepareCandidate|evaluate|run`).
+  (`rulePreparation.prepare|prepareDrawn|prepareVisibility|prepareCandidate|evaluate|run|runDrawn`),
+  including a call of a producer port (a producer method handed to an owner as
+  a function, such as `rulePreparation.run`) in the module that receives it
+  (detector `heavy-derived.trigger-site.v2`, added after E11).
 
 ## 5. Target authority layout
 

@@ -512,14 +512,19 @@ layers.
   B.
 - A closure passed at composition that resolves to an owner created later in
   the same root (a forward-reference closure) is a composition error: reorder
-  the creation, or register the port after both owners exist.
+  the creation, or register the port after both owners exist. A closure at any
+  depth counts, and so does a late-bound function variable that the root
+  reassigns after the owner exists.
 - `state.<name> = <function>` outside `state.js` is a backdoor: a value an owner
   needs from a higher layer arrives as a port or on an existing data path
   (Result metadata, the admitted catalog).
 - A heavy derived value (`rulePreparation`) is triggered from one place per
   flow: the composition root's projection, the Generate compiler, or the owner
   of its input. An owner that only reads the result awaits `pending` rather
-  than triggering it.
+  than triggering it. A trigger site includes a call of a producer port (a
+  producer method handed to an owner as a function, such as
+  `rulePreparation.run` or `rulePreparation.runDrawn`) in the module that
+  receives it.
 - Each projection domain has one projection function and one call shape
   outside its owner (R3).
 
@@ -529,8 +534,9 @@ removes the subjects it fixes from the baseline in the same pull request, and
 an addition is an authority-only change (`tools/web-design-rule-guards.json`,
 WEB_CHANGE_POLICY.md "Design-rule co-change"). The detectors are
 `tools/web-owner-graph-detectors.mjs` (injection edges, forward-reference
-closures, state backdoors, whole-object ports, projection call shapes, heavy
-derived trigger sites); `node tools/report-web-owner-graph.mjs --at worktree`
+closures `owner-graph.forward-closure.v2`, state backdoors, whole-object ports,
+projection call shapes, heavy derived trigger sites
+`heavy-derived.trigger-site.v2`); `node tools/report-web-owner-graph.mjs --at worktree`
 prints the current subjects.
 
 Run `node --test tests/web/owner-graph-baseline.test.mjs` before and after a
