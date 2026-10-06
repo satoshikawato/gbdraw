@@ -119,6 +119,9 @@ factories, and each name is one JSDoc `@property` line.
 | C1 | (c) Pure services (no DOM) | 30 | 8 (6) | 12 / 568 | 4,588 | ~60 |
 | | Total | 83 of 166 | | 350 / 6,938 | | |
 
+The other 83 modules are checked by
+[phase 2](WEB_TYPED_BOUNDARIES_PHASE2_PLAN_2026-10-06.md).
+
 Many A4 and B errors are inference artifacts of kind 2, which disappear once
 the receivers are typed. The estimates assume that. Module lists:
 
@@ -408,7 +411,7 @@ landing, because it is independent.
   each, at the writer; readers and migrators return it; the two pytest parity
   checks pass.
 - After C1: `UNCHECKED_MODULES` has 83 entries (166 - 83), and the rest are
-  input for later work.
+  input for later work ([phase 2](WEB_TYPED_BOUNDARIES_PHASE2_PLAN_2026-10-06.md)).
 - Every slice PR passes the comment-only check, apart from the D10 fixes its
   body names.
 
