@@ -1,3 +1,4 @@
+// @ts-check
 const cleanText = (value) => String(value ?? '').trim();
 const NULL_RECORD_SELECTOR_TOKENS = new Set([
   'none', 'null', 'jsnull', 'undefined', 'jsundefined', '-'
@@ -63,6 +64,15 @@ export const resolveDisambiguatedRecordSelection = (records, requestedValue) => 
 // single presentation, otherwise every record. services/session-request.js
 // builds the request from this set and the region annotation record catalog
 // offers the same records.
+/**
+ * @typedef {Object} CircularRequestRecordSetOptions
+ * @property {any[]} [records] Discovered records (`record_id` or `recordId`, `recordLength`, `selector`).
+ * @property {string} [selector]
+ * @property {boolean} [multiRecordCanvas]
+ * @property {string} [groupingIntent]
+ */
+
+/** @param {CircularRequestRecordSetOptions} [options] */
 export const resolveCircularRequestRecordSet = ({
   records,
   selector = '',

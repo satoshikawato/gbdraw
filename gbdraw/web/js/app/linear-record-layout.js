@@ -1,3 +1,4 @@
+// @ts-check
 const positiveRow = (value, fallback = 1) => {
   const row = Number(value);
   return Number.isInteger(row) && row > 0 ? row : fallback;
