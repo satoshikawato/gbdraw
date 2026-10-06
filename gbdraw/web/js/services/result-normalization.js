@@ -1,3 +1,4 @@
+// @ts-check
 const interactivePairName = (name) => {
   const normalized = String(name || '').trim();
   const match = normalized.match(/^(.*)\.interactive\.svg$/i);

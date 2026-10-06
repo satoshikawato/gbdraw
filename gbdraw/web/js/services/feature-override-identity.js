@@ -1,3 +1,4 @@
+// @ts-check
 import { stableFeatureOverrideKey } from './feature-catalog.js';
 
 const text = (value) => String(value ?? '').trim();

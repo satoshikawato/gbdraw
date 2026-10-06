@@ -1,3 +1,4 @@
+// @ts-check
 import { createBoundedJsonReceiver } from './bounded-json-transport.js';
 import { buildPyodideAssetManifest } from './pyodide-assets.js';
 import { normalizeUserFacingError } from './error-normalization.js';
@@ -578,9 +579,14 @@ const runAuxiliaryWorkerRequest = ({
   return promise;
 };
 
+/**
+ * @param {unknown} operation
+ * @param {Record<string, any>} [payload]
+ * @param {{ onProgress?: ((progress: any) => void) | null }} [options]
+ */
 export const runDiagramHelperOperation = (operation, payload = {}, { onProgress = null } = {}) => {
   const normalizedOperation = String(operation || '').trim();
-  if (!diagramHelperOperationNames.has(normalizedOperation)) {
+  if (!diagramHelperOperationNames.has(/** @type {any} */ (normalizedOperation))) {
     return Promise.reject(
       deserializeWorkerError({ code: 'HELPER_PROTOCOL', stage: 'request-validation' })
     );

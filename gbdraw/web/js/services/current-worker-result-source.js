@@ -1,3 +1,4 @@
+// @ts-check
 // Runtime-only provenance shared by the Worker response decoder and SVG admission.
 // The token is non-enumerable and cannot survive a JSON/Session round trip.
 const CURRENT_WORKER_GENERATION_RESPONSE = Symbol('gbdraw.currentWorkerGenerationResponse');

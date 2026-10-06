@@ -1,3 +1,4 @@
+// @ts-check
 const isFileLike = (value) =>
   Boolean(value) &&
   typeof value === 'object' &&
