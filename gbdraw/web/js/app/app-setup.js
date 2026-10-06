@@ -4063,6 +4063,8 @@ export const createAppSetup = () => {
     const entries = circularRecordPresentationEntries();
     const current = String(form.circular_record_selector || '').trim();
     const selection = resolveDisambiguatedRecordSelection(entries, current);
+    // Without an inspected catalog the saved selector is unverified, not missing.
+    const inspected = circularRecordDiscoveryState.value.status === 'ready';
     const automaticLabel = entries.length > 1 || adv.circular_grouping_intent === 'batch'
       ? 'All records (separate diagrams)'
       : 'Automatic (only record)';
@@ -4071,7 +4073,7 @@ export const createAppSetup = () => {
       ...(current && selection.status !== 'resolved'
         ? [{
             value: current,
-            label: `${current} (${selection.status === 'ambiguous' ? 'ambiguous' : 'not found'})`,
+            label: `${current} (${!inspected ? 'not inspected' : selection.status === 'ambiguous' ? 'ambiguous' : 'not found'})`,
             synthetic: true
           }]
         : []),

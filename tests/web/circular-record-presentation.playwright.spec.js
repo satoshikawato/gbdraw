@@ -283,3 +283,45 @@ test('History restore re-inspects sources and reconciles missing or ambiguous se
   await expect(page.getByLabel('Circular region start')).toHaveValue('25');
   await expect(page.getByLabel('Circular region end')).toHaveValue('100');
 });
+
+test('Loaded Session shows the saved record selector as uninspected, not as missing, until inspection', async ({ page }) => {
+  test.setTimeout(420000);
+  await openApp(page);
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.form.multi_record_canvas = false;
+    window.__GBDRAW_APP__.sessionTitle = 'ov41-record-selector';
+  });
+  await nativeUpload(page, singleSource);
+  await ready(page);
+  await page.getByLabel('Circular record', { exact: true }).selectOption('NC_012920.1');
+  await generateAndWaitForResult(page);
+  const downloadPromise = page.waitForEvent('download', { timeout: 180000 });
+  await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle());
+  const savedSessionPath = await (await downloadPromise).path();
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await waitForAppShell(page, { waitForPalette: false });
+  const dialogPromise = page.waitForEvent('dialog', { timeout: 180000 });
+  await page.locator('input[accept^=".json,"]').first().setInputFiles(savedSessionPath);
+  await (await dialogPromise).accept();
+
+  const select = page.getByLabel('Circular record', { exact: true });
+  await expect(select).toHaveValue('NC_012920.1');
+  const shot = async (name) => {
+    if (!process.env.OV41_SHOT_DIR) return;
+    const section = page.locator('section[aria-label="Source records"]');
+    await section.scrollIntoViewIfNeeded();
+    await section.screenshot({ path: join(process.env.OV41_SHOT_DIR, name) });
+  };
+  // A Session load does not inspect the source; the saved selector is unverified, not missing.
+  await expect(page.locator('[data-circular-discovery-status]')).toHaveText('Records not inspected');
+  await shot('record-control-loaded.png');
+  await expect(select.locator('option:checked')).toHaveText('NC_012920.1 (not inspected)');
+
+  // Inspection resolves the selector to the real record entry.
+  await page.getByRole('button', { name: 'Inspect source records', exact: true }).click();
+  await ready(page);
+  await expect(select).toHaveValue('NC_012920.1');
+  await expect(select.locator('option:checked')).toHaveText('NC_012920.1 (16,569 bp)');
+  await shot('record-control-inspected.png');
+});
