@@ -57,11 +57,7 @@ EXPECTED_MYPY_CONFIG = {
     ],
 }
 
-TYPE_DEBT_BASELINE: dict[str, int] = {
-    "gbdraw/diagrams/circular/assemble.py": 2,
-    "gbdraw/diagrams/linear/assemble.py": 2,
-    "gbdraw/web_support/request_render.py": 1,
-}
+TYPE_DEBT_BASELINE: dict[str, int] = {}
 
 
 def _pyproject() -> dict:
@@ -121,6 +117,8 @@ def _mypy_errors() -> dict[str, list[str]]:
     ), f"mypy failed with exit code {result.returncode}:\n{result.stderr}{result.stdout}"
     errors: dict[str, list[str]] = {}
     for line in result.stdout.splitlines():
+        if not line.strip():
+            continue  # a clean run prints one blank line instead of JSON
         diagnostic = json.loads(line)
         if diagnostic["severity"] != "error":
             continue
