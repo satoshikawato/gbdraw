@@ -1,3 +1,4 @@
+// @ts-check
 import { writeCanonicalRecordReverseComplement } from '../app/record-display-options.js';
 import {
   canonicalFeatureOverrides,
@@ -165,7 +166,33 @@ import { isCanonicalResourceReferenceField } from './canonical-resource-referenc
 import { recordStructuralMetric } from './runtime-test-hooks.js';
 import { recordDisplayKey, requestedRecordTransform } from '../app/record-display-options.js';
 
+/** @import { SessionResourceSource } from './session-resources.js' */
+
 export const CANONICAL_REQUEST_SCHEMA = 9;
+/**
+ * The canonical render request of the current schema (the writer format only;
+ * readers take unvalidated data, R14). Python owns the option field set (R7),
+ * so `diagramOptions` is open; the top-level fields equal
+ * `_TOP_LEVEL_FIELDS_V5` in `gbdraw/session_request_codec.py` (a pytest checks
+ * this list).
+ * @typedef {object} CanonicalRenderRequest
+ * @property {number} schema
+ * @property {string} mode
+ * @property {Record<string, any>[]} records
+ * @property {Record<string, any>} diagramOptions
+ * @property {Record<string, any>} layout
+ * @property {Record<string, any>[]} comparisons
+ * @property {Record<string, any> | Record<string, any>[]} output
+ * @property {string} grouping
+ */
+/**
+ * What the request writer returns and the session stores beside the request:
+ * the encoded resources by id and the Web-only file metadata.
+ * @typedef {object} CanonicalRenderEnvelope
+ * @property {CanonicalRenderRequest} renderRequest
+ * @property {Record<string, any>} resources
+ * @property {Record<string, any>} webFiles
+ */
 const FEATURE_OVERRIDE_SCHEMA = 9;
 const SUPPORTED_CANONICAL_REQUEST_SCHEMAS = new Set([
   1, 2, 5, 6, 7, 8, CANONICAL_REQUEST_SCHEMA
@@ -497,9 +524,11 @@ export const managedConfigOverridePathsForMode = (mode) => {
   if (!['circular', 'linear'].includes(mode)) {
     throw new Error(`Unsupported config override mode: ${String(mode)}.`);
   }
+  /** @type {Set<string>} */
   const excluded = mode === 'circular'
     ? LINEAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS
     : CIRCULAR_ONLY_GUI_CONFIG_OVERRIDE_PATHS;
+  /** @type {Set<string>} */
   const paths = new Set(
     Object.values(CONFIG_OVERRIDE_PATHS).filter((path) => !excluded.has(path))
   );
@@ -580,6 +609,7 @@ const renderOutputPayload = (prefix) => ({
   interactiveMetadataPolicy: 'auto'
 });
 
+/** @param {Record<string, any>} thresholds */
 const projectComparisonThresholds = ({ evalue, bitscore, identity, alignmentLength }) => ({
   evalue: Number(evalue), bitscore, identity, alignmentLength
 });
@@ -660,12 +690,16 @@ const createResourceBuilder = ({ encode = true } = {}) => {
       throw new Error(`Canonical resource ${resourceId} is missing.`);
     }
     if (resources[resourceId]) return resourceId;
-    const adoptedSource = getSessionResourceSource(entry);
+    const adoptedSource = /** @type {SessionResourceSource | null} */ (
+      getSessionResourceSource(entry)
+    );
     const encodedEntry = adoptedSource?.descriptor || entry;
     const effectiveKind = String(encodedEntry.kind || kind);
     const kindResourceIds = fileResourceIds.get(effectiveKind) || new WeakMap();
     const owner = getResourcePayloadOwner(entry);
-    const identity = getSessionResourceSource(owner)?.descriptor || owner;
+    const identity = /** @type {SessionResourceSource | null} */ (
+      getSessionResourceSource(owner)
+    )?.descriptor || owner;
     const existingResourceId = kindResourceIds.get(identity);
     if (existingResourceId) return existingResourceId;
     const descriptor = {
@@ -810,7 +844,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
 const fileRef = (resourceId) => ({ resourceId, representation: 'file' });
 const publicationFileRef = (resources, files, key, fallbackId) => {
   if (!files[key]) return null;
-  const source = getSessionResourceSource(files[key]);
+  const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(files[key]));
   return {
     resourceId: resources.addFile(source?.resourceId || fallbackId, fallbackId, files[key]),
     representation: source?.descriptor?.kind === 'canonical-tsv' ? 'canonicalTsv' : 'file'
@@ -913,11 +947,11 @@ const linearSeqRecordFields = (record) => ({
 
 const buildRecords = ({ state, filesData, resources }) => {
   if (state.mode.value === 'linear') {
-    const resolvedRows = resolveEffectiveLinearRecordRows(
+    const resolvedRows = /** @type {Record<string, any>[]} */ (resolveEffectiveLinearRecordRows(
       filesData.linearSeqs,
       state.linearRecordRows,
       { enabled: Boolean(state.linearRecordLayoutEnabled?.value) }
-    );
+    ));
     const canonicalCardinalityByUid = new Map(
       (state.linearRecordRows || []).map((entry) => [entry.uid, entry.canonicalCardinality])
     );
@@ -1040,12 +1074,12 @@ const buildRecords = ({ state, filesData, resources }) => {
         kind: 'genbank',
         resourceId: resources.addFile('record-1-genbank', 'genbank', filesData.c_gb)
       };
-  const recordSet = resolveCircularRequestRecordSet({
+  const recordSet = resolveCircularRequestRecordSet(/** @type {Record<string, any>} */ ({
     records: state.circularRecordList.value,
     selector: state.form.circular_record_selector,
     multiRecordCanvas: state.form.multi_record_canvas,
     groupingIntent: state.adv.circular_grouping_intent
-  });
+  }));
   if (recordSet.selectionFailure) throw diagnosticError('RECORD_SELECTION', { reason: recordSet.selectionFailure });
   const { recordSelectors } = recordSet;
   const selectedRecords = recordSet.records.length > 0 ? recordSet.records : [null];
@@ -1287,6 +1321,7 @@ const buildConfigOverrides = (
   };
 };
 
+/** @type {Readonly<Record<string, boolean>>} */
 const ALL_GENERATED_TABLES = Object.freeze({
   colors: true, visibility: true, whitelist: true, priority: true, labelOverrides: true
 });
@@ -2305,6 +2340,10 @@ export const buildCanonicalRequestState = ({ session, projection, config,
 // `recordDisplayRows` are the record display rows of the draft sources
 // (`recordDisplayControls.allRows`); the caller reads them from the owner that
 // the composition root wires, never from `state` (R13).
+/**
+ * @param {Record<string, any>} input
+ * @returns {CanonicalRenderEnvelope}
+ */
 const projectCanonicalRenderInput = ({
   state,
   filesData,
@@ -2337,6 +2376,7 @@ const projectCanonicalRenderInput = ({
   const comparisonOptionsRequested = (
     state.mode.value === 'circular' || hasLinearComparisonIntent
   );
+  /** @type {Record<string, any>} */
   const webFiles = {};
   const recordPlan = buildRecords({ state, filesData, resources });
   const drafts = state.recordDisplayDrafts || [];
@@ -2456,6 +2496,7 @@ const projectCanonicalRenderInput = ({
         explicitPrefix ?? (state.mode.value === 'circular' ? defaultCircularPrefix : 'out')
       );
   const labelProjection = requestLabelProjection(state);
+  /** @type {Record<string, any>} */
   const diagramOptions = {
     featurePlacements: requestFeaturePlacements(state.featurePlacementOverrides, state.mode.value, records),
     // Per-feature edits by source identity (design Q4); the rows of other
@@ -2653,7 +2694,7 @@ const projectCanonicalRenderInput = ({
     });
   }
 
-  return {
+  return /** @satisfies {CanonicalRenderEnvelope} */ ({
     renderRequest: {
       schema: CANONICAL_REQUEST_SCHEMA,
       mode: state.mode.value,
@@ -2672,7 +2713,7 @@ const projectCanonicalRenderInput = ({
     },
     resources: resources.resources,
     webFiles
-  };
+  });
 };
 
 // The request writer and the inexpensive comparison use the same projection.
@@ -2684,7 +2725,7 @@ const generationResourceIdentity = (resource) => {
     return typeof value === 'string' ? { text: value } : value;
   }
   const owner = getResourcePayloadOwner(resource);
-  const backing = getSessionResourceSource(owner);
+  const backing = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(owner));
   if (backing?.descriptors) {
     return { bindings: backing.descriptors.map((entry) => entry.descriptor) };
   }
@@ -3418,6 +3459,7 @@ const legacyLabelScope = ({ mode, showLabels, allowInnerLabels }) => {
 
 const projectFullConfigOverrides = (config, mode) => {
   if (!config || typeof config !== 'object' || Array.isArray(config)) return {};
+  /** @type {Set<string>} */
   const paths = new Set(Object.values(CONFIG_OVERRIDE_PATHS));
   const labelScopePath = MODE_LABEL_SCOPE_PATHS[mode];
   paths.add(labelScopePath);
@@ -3452,6 +3494,7 @@ const projectFullConfigOverrides = (config, mode) => {
 };
 
 const projectCanonicalConfigOverrides = (overrides, mode) => {
+  /** @type {Record<string, any>} */
   const projected = {};
   for (const [semanticName, path] of Object.entries(CONFIG_OVERRIDE_PATHS)) {
     if (Object.prototype.hasOwnProperty.call(overrides, path)) {
@@ -3763,6 +3806,10 @@ const projectedOutputPrefix = (
     : '';
 };
 
+/**
+ * A reader of unvalidated Session data (R14): the input is not typed.
+ * @param {Record<string, any>} input
+ */
 export const projectCanonicalSessionRequest = ({
   renderRequest,
   resources: canonicalResources,
@@ -4944,6 +4991,11 @@ const firstPublicationDiff = (expected, actual, path = '$') => {
   }
   return null;
 };
+/**
+ * @param {Record<string, any>} request A canonical request of schema 5 to 9.
+ * @param {Record<string, any>} [promotion]
+ * @returns {CanonicalRenderRequest}
+ */
 export const promoteCanonicalRenderRequestToCurrent = (request, promotion = {}) => {
   const promoted = cloneCanonicalJsonValue(request);
   if (promoted.schema === CANONICAL_REQUEST_SCHEMA) return promoted;
@@ -5358,7 +5410,7 @@ export const compareCanonicalRenderRequests = async (input) => {
 export const assertCanonicalRenderRequestsEquivalent = async (input) => {
   const comparison = await compareCanonicalRenderRequests(input);
   if (comparison.equivalent) return comparison;
-  const error = new Error(`Gallery publication request differs at ${comparison.differences[0]?.path || '$'} (committed ${comparison.expected.digest}, rebuilt ${comparison.actual.digest}).`);
+  const error = /** @type {Error & { comparison?: any }} */ (new Error(`Gallery publication request differs at ${comparison.differences[0]?.path || '$'} (committed ${comparison.expected.digest}, rebuilt ${comparison.actual.digest}).`));
   error.comparison = comparison;
   throw error;
 };

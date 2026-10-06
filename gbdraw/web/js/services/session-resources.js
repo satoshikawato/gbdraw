@@ -1,3 +1,4 @@
+// @ts-check
 import {
   bytesToBase64,
   getSessionResourceSource,
@@ -15,6 +16,17 @@ import {
   collectCanonicalResourceIds,
   isCanonicalResourceReferenceField
 } from './canonical-resource-references.js';
+
+/**
+ * The shape `sessionResourceSource` returns: a single backing (`descriptor`,
+ * `readBytes`) or a composite of backings (`descriptors`).
+ * @typedef {{
+ *   resourceId?: string,
+ *   descriptor?: Record<string, any>,
+ *   descriptors?: Record<string, any>[],
+ *   readBytes?: () => any
+ * }} SessionResourceSource
+ */
 
 const safeResourceLeaf = (value) => {
   const basename = String(value || 'resource.dat')
@@ -251,7 +263,9 @@ export const buildSessionResources = async (state, committedRequest) => {
     if (!Object.hasOwn(committedRequest.resources, id)) {
       throw new Error(`Committed render resource is missing: ${id}.`);
     }
-    const source = sessionResourceSource(createSessionResourceFileView(committedTable, id));
+    const source = /** @type {SessionResourceSource} */ (
+      sessionResourceSource(createSessionResourceFileView(committedTable, id))
+    );
     if (!reuseEncodedResources) await source.readBytes();
     aliases.set(id, reuseEncodedResources ? id : await allocate(source, source.descriptor));
   }
@@ -261,7 +275,7 @@ export const buildSessionResources = async (state, committedRequest) => {
   );
   const bindFile = async file => {
     if (!file) return null;
-    const source = getSessionResourceSource(file);
+    const source = /** @type {SessionResourceSource | null} */ (getSessionResourceSource(file));
     if (Array.isArray(source?.descriptors)) {
       const components = [];
       for (const component of source.descriptors) components.push(await bindSource(component, component));
