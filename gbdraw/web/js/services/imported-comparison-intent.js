@@ -1,3 +1,4 @@
+// @ts-check
 export const IMPORTED_COMPARISON_DISPOSITIONS = Object.freeze({
   EDITABLE: 'EDITABLE',
   PRESERVED_READ_ONLY: 'PRESERVED_READ_ONLY',
@@ -201,6 +202,7 @@ const generatedPipelineIsProjectable = ({ records, comparisons, pipeline }) => {
   return true;
 };
 
+/** @param {{ renderRequest?: Record<string, any>, resources?: Record<string, any> }} [input] */
 export const classifyImportedComparisonIntent = ({
   renderRequest,
   resources = {}
@@ -340,7 +342,7 @@ export const resolveImportedComparisonAction = ({
   draftResolution
 }) => {
   const requested = String(action || '').trim().toUpperCase();
-  if (!VALID_ACTIONS.has(requested)) {
+  if (!VALID_ACTIONS.has(/** @type {any} */ (requested))) {
     return { ok: false, message: 'Choose how to resolve the saved comparison.' };
   }
   if (

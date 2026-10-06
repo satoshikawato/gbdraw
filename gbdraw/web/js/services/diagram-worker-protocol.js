@@ -1,3 +1,4 @@
+// @ts-check
 export const DIAGRAM_HELPER_OPERATIONS = Object.freeze({
   EVALUATE_RULES: 'evaluateRules',
   READ_PDF_FONT: 'readPdfFont',

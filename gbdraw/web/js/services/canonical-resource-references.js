@@ -1,3 +1,4 @@
+// @ts-check
 const RESOURCE_REFERENCE_FIELDS = new Set([
   'resourceId',
   'gffResourceId',

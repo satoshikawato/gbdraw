@@ -1,3 +1,4 @@
+// @ts-check
 // Comparison table rows whose sequence IDs match no displayed record are drawn by
 // position (PD-OI-074). The Worker carries the warning the CLI logs.
 export const validateComparisonWarnings = (warnings, results) => {

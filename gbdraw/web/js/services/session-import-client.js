@@ -1,3 +1,4 @@
+// @ts-check
 import { createBoundedJsonReceiver } from './bounded-json-transport.js';
 import { recordSessionLifecycleEvent } from './runtime-test-hooks.js';
 import { diagnosticError } from './error-normalization.js';
@@ -8,6 +9,10 @@ let nextOperationId = 1;
 const unavailable = () => diagnosticError('SESSION_IMPORT_UNAVAILABLE', {}, { stage: 'transport' });
 
 // This owns transport lifetime only. The caller still admits an untrusted candidate.
+/**
+ * @param {File} file
+ * @param {{ signal?: AbortSignal }} [options]
+ */
 export const importSessionFile = (file, { signal } = {}) => new Promise((resolve, reject) => {
   const operationId = nextOperationId++;
   let worker = null;

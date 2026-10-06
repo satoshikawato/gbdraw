@@ -1,3 +1,4 @@
+// @ts-check
 const normalizeText = (value) => String(value ?? '').trim();
 
 export const RECORD_INDEX_KEYS = Object.freeze([

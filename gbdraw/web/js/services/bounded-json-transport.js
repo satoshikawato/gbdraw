@@ -1,3 +1,4 @@
+// @ts-check
 const CLONE_LIMIT = 128 * 1024;
 const STRING_UNITS = 128 * 1024;
 const BYTE_CHUNK = 256 * 1024;
