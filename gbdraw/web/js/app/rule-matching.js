@@ -143,7 +143,7 @@ export const reportRuleRunFailure = (state, operation, run) => {
 // color preparation rejects (`reportRuleRunFailure`).
 /**
  * @param {Record<string, any>} state App state (state.js; not yet typed).
- * @param {() => (boolean | Promise<boolean | { error: any }>)[]} preparations
+ * @param {() => (boolean | Promise<any>)[]} preparations
  * @param {() => any} commit
  */
 export const runWhenPrepared = (state, preparations, commit) => {
@@ -192,9 +192,8 @@ export const runWhenPrepared = (state, preparations, commit) => {
  *   `strict` rejects when the color preparation fails and resolves to false when it is stale, as a run does.
  * @property {(rules?: Record<string, any>[]) => boolean} isPrepared
  * @property {(rules?: Record<string, any>[], options?: Record<string, any>) => Promise<RuleCandidate | null>} prepareCandidate
+ *   `options.captions` false prepares the rules as given, without Python's caption normalization.
  * @property {(candidate: RuleCandidate | null) => void} notifyChanges
- * @property {(rules: Record<string, any>[], commit: () => any) => any} run
- *   Runs `commit` once the color rule matches of `rules` are prepared.
  * @property {() => Record<string, any>} snapshot The inputs the matches depend on.
  * @property {(before: Record<string, any>) => boolean} isCurrent Whether `before` is still the current inputs.
  * @property {{ value: boolean }} pending
@@ -308,8 +307,6 @@ export const createRulePreparation = ({
       }, (error) => ({ error }))
       .finally(() => { pending.value = --pendingCount > 0; });
   };
-  // `commit` reads the color rule matches of `rules`.
-  const run = (rules, commit) => runWhenPrepared(state, () => [prepare(rules)], commit);
   // Everything `resolveFeatureDrawn` reads: the visibility rule matches and,
   // for a feature of a type the request does not select, the color rule
   // matches. Never rejects; what stays unknown is resolved as unknown. Resolves
@@ -325,9 +322,15 @@ export const createRulePreparation = ({
   };
   // The rules a commit or a run admits: Python's normalized captions, their
   // matches prepared, and the captions it changed (`notifyChanges`). `options`
-  // are the caller's evaluation options (a run's progress observer).
-  const prepareCandidate = async (rules = state.manualSpecificRules, options = {}) => {
+  // are the caller's evaluation options (a run's progress observer). A run
+  // that only reads the matches of rules it keeps as they are asks for
+  // `captions: false`: the rules are prepared as given and no caption changes.
+  const prepareCandidate = async (rules = state.manualSpecificRules, { captions = true, ...options } = {}) => {
     const before = snapshot();
+    if (!captions) {
+      return await prepare(rules, options) && isCurrent(before)
+        ? { rules, changes: [], snapshot: before } : null;
+    }
     const source = rules.map(rule => normalizeSpecificRule(rule));
     const response = await evaluate({ features: [], rules: source, kind: 'color-captions' }, options);
     if (!isCurrent(before)) return null;
@@ -341,7 +344,7 @@ export const createRulePreparation = ({
     if (candidate?.changes.length) notify(`Updated ${candidate.changes.length} specific-color caption(s) to distinguish their colors.`);
   };
   return {
-    prepare, retain, prepareDrawn, isPrepared, prepareCandidate, notifyChanges, run, snapshot,
+    prepare, retain, prepareDrawn, isPrepared, prepareCandidate, notifyChanges, snapshot,
     isCurrent, pending
   };
 };

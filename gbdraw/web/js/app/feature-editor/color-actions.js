@@ -25,13 +25,13 @@ import {
  * @property {(feature: Record<string, any>) => { qual: string, val: string } | null} getFeatureQualifier
  * @property {(feature: Record<string, any>, label: string) => { feat: string, qual: string, val: string } | null} getLabelSpecificRule
  * @property {(caption: string) => Record<string, any>[]} getLegendRowRules
+ * @property {(rules: Record<string, any>[], commit: () => any) => any} runWithRuleMatches
+ *   Runs an action once the color rule matches of `rules` are prepared: the rule owner prepares the rules it builds.
  */
 
 /**
  * @typedef {object} FeatureColorActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(rules: Record<string, any>[], commit: () => any) => any} runWithRuleMatches
- *   Runs an action once the color rule matches it reads are prepared (the rule preparation's `run`).
  * @property {(svg: SVGSVGElement) => void} compactLegendEntries The Legend layout owner's removal of gaps between the entries.
  * @property {(options?: { replaceGeneratedInventory?: boolean }) => any} extractLegendEntries
  *   The Legend owner's reading of the mounted Legend rows.
@@ -46,9 +46,6 @@ import {
 /** @param {FeatureColorActionsOptions} options */
 export const createFeatureColorActions = ({
   state,
-  // R13: runs an action once the color rule matches it reads are prepared;
-  // the composition root injects the rule preparation's `run`.
-  runWithRuleMatches,
   compactLegendEntries,
   extractLegendEntries,
   onLegendGeometryChanged,
@@ -93,7 +90,8 @@ export const createFeatureColorActions = ({
     getIndividualFeatureLabel,
     getFeatureQualifier,
     getLabelSpecificRule,
-    getLegendRowRules
+    getLegendRowRules,
+    runWithRuleMatches
   } = ruleActions;
   const normalizeCaption = (value) => String(value || '').trim();
   const normalizeCaptionKey = (value) => normalizeCaption(value).toLowerCase();

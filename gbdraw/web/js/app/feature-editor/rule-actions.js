@@ -1,7 +1,7 @@
 // @ts-check
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { normalizeUserFacingError } from '../../services/error-normalization.js';
-import { ruleMatchesFeature, firstMatchingRule, ruleMatchesReady } from '../rule-matching.js';
+import { ruleMatchesFeature, firstMatchingRule, ruleMatchesReady, runWhenPrepared } from '../rule-matching.js';
 import { resolveColorToHex } from '../color-utils.js';
 import { parseSpecificRules, serializeSpecificRules } from '../file-imports.js';
 import { getFeatureColorRuleHash } from '../feature-utils.js';
@@ -184,6 +184,19 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       await rerenderIdle();
     }
   };
+  // R13: this owner builds the candidate rules, so it is the one place that asks
+  // the rule preparation for their matches: a commit prepares the candidate
+  // with its captions, a color action prepares the rules it reads as they are.
+  const prepareRules = (rules, options) => rulePreparation.prepareCandidate(rules, options);
+  // Runs `commit` once the color rule matches of `rules` are prepared; a
+  // prepared table answers at once, so the commit runs in the caller's tick.
+  /**
+   * @param {Record<string, any>[]} rules
+   * @param {() => any} commit
+   */
+  const runWithRuleMatches = (rules, commit) => runWhenPrepared(
+    state, () => [rulePreparation.isPrepared(rules) || prepareRules(rules, { captions: false })], commit
+  );
   /**
    * @param {Record<string, any>[]} rules
    * @param {string} label
@@ -191,7 +204,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
    */
   const commitOnce = async (rules, label, { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], sourceRows = rules.map(rule => manualSpecificRules.includes(rule) ? rule : null) } = {}) => {
     const revision = ++preparationRevision;
-    const candidate = await rulePreparation.prepareCandidate(rules);
+    const candidate = await prepareRules(rules);
     if (!candidate) return false;
     const current = () => revision === preparationRevision && !state.sessionOperationAvailability?.() && isCurrent()
       && rulePreparation.isCurrent(candidate.snapshot);
@@ -721,6 +734,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     moveSpecificRuleDown: (index) => moveSpecificRule(index, 1),
     moveSpecificRuleUp: (index) => moveSpecificRule(index, -1),
     refreshFeatureOverrides,
+    runWithRuleMatches,
     removeSpecificRule: (index) => {
       const sourceRows = manualSpecificRules.filter((_, i) => i !== index);
       return commitPrepared(sourceRows.map(rule => ({ ...rule })), 'Remove specific color rule', () => {}, null, sourceRows);

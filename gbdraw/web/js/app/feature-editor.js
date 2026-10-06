@@ -109,7 +109,6 @@ export const createFeatureEditor = ({
   });
   const colorActions = createFeatureColorActions({
     state,
-    runWithRuleMatches: rulePreparation.run,
     compactLegendEntries,
     extractLegendEntries,
     onLegendGeometryChanged,

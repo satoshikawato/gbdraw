@@ -6,7 +6,7 @@ import { createLegendManager } from '../../gbdraw/web/js/app/legend.js';
 import { diffLegendIntents } from '../../gbdraw/web/js/app/specific-color-rules.js';
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 
-const setup = () => {
+const setup = (evaluate = evaluatePythonRules) => {
   const state = {
     manualSpecificRules: [], extractedFeatures: { value: [
       { type: 'CDS', svg_id: 'a', qualifiers: { gene: ['a'] } },
@@ -18,7 +18,7 @@ const setup = () => {
     newSpecRule: {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared'}
   };
   const notices = [], transactions = [], transactionScopes = [];
-  const preparation = createRulePreparation({state, evaluate:evaluatePythonRules, notify:message=>notices.push(message)});
+  const preparation = createRulePreparation({state, evaluate, notify:message=>notices.push(message)});
   let prepareLegend = async () => {};
   let previousIntents = [];
   let openTransaction = null;
@@ -232,4 +232,33 @@ test('the Legend editor recolors the rule of a suffixed row, and only that row',
   assert.deepEqual(committed, [{ rules: [{ ...rule, color: '#00ff00' }], label: 'Change legend color' }]);
   assert.equal(legend.updateLegendEntryColor(0, '#123456'), false, 'the generated CDS row is no rule row');
   assert.equal(committed.length, 1);
+});
+
+test('a color action prepares the color matches of its rules without the caption evaluation, and a prepared table answers at once', async () => {
+  const kinds = [];
+  const s = setup(async (payload, options) => { kinds.push(payload.kind); return evaluatePythonRules(payload, options); });
+  const commits = [];
+  const pending = s.actions.runWithRuleMatches(rules, () => { commits.push('cold'); return 'cold'; });
+  assert.ok(pending instanceof Promise, 'unprepared rules are prepared first');
+  assert.deepEqual(commits, []);
+  assert.equal(await pending, 'cold');
+  assert.deepEqual(kinds, ['color'], 'the matches only; commitSpecificRules evaluates the captions');
+  assert.equal(s.actions.runWithRuleMatches(rules, () => { commits.push('warm'); return 'warm'; }), 'warm');
+  assert.deepEqual(commits, ['cold', 'warm']);
+  assert.deepEqual(kinds, ['color']);
+});
+
+test('a color action does not commit when its rules were replaced during the preparation, and rejects an invalid pattern', async () => {
+  let release;
+  const s = setup((payload) => new Promise((resolve) => { release = () => evaluatePythonRules(payload).then(resolve); }));
+  let commits = 0;
+  const pending = s.actions.runWithRuleMatches(rules, () => { commits++; });
+  s.state.manualSpecificRules.push({ ...rules[0], val: 'other' });
+  await release();
+  await pending;
+  assert.equal(commits, 0);
+  const invalid = setup();
+  await assert.rejects(() => invalid.actions.runWithRuleMatches(
+    [{ feat: 'CDS', qual: 'gene', val: '(?<enzyme>a)', color: '#112233', cap: '' }], () => assert.fail('invalid commit')
+  ));
 });

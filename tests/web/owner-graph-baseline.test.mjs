@@ -48,7 +48,6 @@ const OWNER_GRAPH_BASELINE = {
   // heavy-derived.trigger-site.v2 (sites per module; includes calls of a
   // producer port such as rulePreparation.run handed to an owner)
   'heavy-derived.trigger-site.v2|rulePreparation|app/app-setup.js': 2,
-  'heavy-derived.trigger-site.v2|rulePreparation|app/feature-editor/color-actions.js': 2,
   'heavy-derived.trigger-site.v2|rulePreparation|app/feature-editor/rule-actions.js': 1,
   'heavy-derived.trigger-site.v2|rulePreparation|app/feature-editor/visibility-actions.js': 1,
   'heavy-derived.trigger-site.v2|rulePreparation|app/run-analysis.js': 1
