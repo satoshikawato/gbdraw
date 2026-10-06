@@ -1,3 +1,4 @@
+// @ts-check
 const FEATURE_ID_KEY_EMPTY = '';
 
 export const DEFAULT_LABEL_QUALIFIER_PRIORITY = Object.freeze([
