@@ -1,8 +1,12 @@
+// @ts-check
 import { getSessionResourceSource } from '../services/file-content-cache.js';
 import { depthFileSlotsFromValue } from './depth-track-state.js';
 import { resolveDisambiguatedRecordSelection } from './record-options.js';
 
-const sourceFileIdentity = (file) => getSessionResourceSource(file)?.descriptor || file;
+// A composite backing carries `descriptors` and no single `descriptor`.
+const sourceFileIdentity = (file) => (
+  /** @type {{ descriptor?: any } | null} */ (getSessionResourceSource(file))?.descriptor || file
+);
 
 export const groupLinearSourceRecords = (sequences) => {
   const groups = [];

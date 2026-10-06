@@ -1,3 +1,4 @@
+// @ts-check
 // The single JavaScript reader of GenBank record headers. Record discovery,
 // LOSAT FASTA extraction, and match sequences use it so their record IDs are
 // the ones gbdraw.io.genome reads with Biopython.
