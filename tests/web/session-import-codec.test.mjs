@@ -5,7 +5,7 @@ import { importSessionFile } from '../../gbdraw/web/js/services/session-import-c
 import { gzipSync } from 'node:zlib';
 import { readSessionText } from '../../gbdraw/web/js/services/session-file.js';
 import { assertSafeObjectKeys } from '../../gbdraw/web/js/services/safe-object-keys.js';
-import { normalizeUserFacingError } from '../../gbdraw/web/js/services/error-normalization.js';
+import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 
 installSessionImportWorker();
 const decode = async blob => {

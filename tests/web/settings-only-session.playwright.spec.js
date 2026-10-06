@@ -61,7 +61,7 @@ const loadFile = async (page, file, message = 'Session loaded successfully!') =>
   await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending);
   const actual = await page.evaluate(() => window.__GBDRAW_APP__.errorLog);
   const expected = await page.evaluate(async field => {
-    const { normalizeUserFacingError } = await import('./js/services/error-normalization.js');
+    const { normalizeUserFacingError } = await import('./js/utils/error-normalization.js');
     return normalizeUserFacingError({ code: 'INPUT_INVALID', stage: 'request-validation',
       context: { field, reason: 'FIELDS' } });
   }, message.field);

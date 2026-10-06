@@ -5458,7 +5458,7 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
     pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
   );
   const { normalizeUserFacingError } = await import(
-    pathToFileURL(join(tempRoot, 'js', 'services', 'error-normalization.js'))
+    pathToFileURL(join(tempRoot, 'js', 'utils', 'error-normalization.js'))
   );
   const session = JSON.parse(gunzipSync(await readFile(join(
     repoRoot, 'tests', 'fixtures', 'sessions', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz'

@@ -72,7 +72,6 @@ const PROJECTION_SHAPE_BASELINE = {
 // that moves the imported code down removes its entries in the same pull
 // request; the list ends empty. May only shrink.
 const LAYER_IMPORT_BASELINE = {
-  'layer.import-direction.v1|mode-profiles.js->services/error-normalization.js': 1,
   'layer.import-direction.v1|services/config.js->app/annotations/state.js': 1,
   'layer.import-direction.v1|services/config.js->app/circular-track-slots.js': 7,
   'layer.import-direction.v1|services/config.js->app/color-utils.js': 1,
@@ -149,8 +148,7 @@ const LAYER_IMPORT_BASELINE = {
   'layer.import-direction.v1|state.js->app/layout-preferences.js': 3,
   'layer.import-direction.v1|state.js->app/linear-comparisons.js': 2,
   'layer.import-direction.v1|state.js->app/match-sequences.js': 1,
-  'layer.import-direction.v1|state.js->app/plot-title-position.js': 1,
-  'layer.import-direction.v1|utils/optional-positive-number.js->services/error-normalization.js': 1
+  'layer.import-direction.v1|state.js->app/plot-title-position.js': 1
 };
 
 const SUBJECT_DETECTORS = [

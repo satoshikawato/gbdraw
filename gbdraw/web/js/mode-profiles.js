@@ -1,6 +1,6 @@
 // @ts-check
 import { MODE_PROFILE_DATA } from './mode-profiles.generated.js';
-import { diagnosticError } from './services/error-normalization.js';
+import { diagnosticError } from './utils/error-normalization.js';
 import { DECIMAL_NUMBER_PATTERN } from './utils/optional-positive-number.js';
 
 const MODE_NAMES = Object.freeze(['circular', 'linear']);

@@ -1,6 +1,6 @@
 // @ts-check
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
-import { normalizeUserFacingError } from '../../services/error-normalization.js';
+import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { ruleMatchesFeature, firstMatchingRule, ruleMatchesReady, runWhenPrepared } from '../rule-matching.js';
 import { resolveColorToHex } from '../color-utils.js';
 import { parseSpecificRules, serializeSpecificRules } from '../file-imports.js';

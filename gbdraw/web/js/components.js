@@ -6,7 +6,7 @@ import {
   toNativeColorInputValue
 } from './app/color-utils.js';
 
-import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './services/error-normalization.js';
+import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './utils/error-normalization.js';
 
 const { ref, reactive, computed, nextTick, watch, useId } = window.Vue;
 

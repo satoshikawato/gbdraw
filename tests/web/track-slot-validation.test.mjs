@@ -17,11 +17,6 @@ await cp(
   join(tempRoot, 'utils'),
   { recursive: true }
 );
-// circular-track-slots.js reports through the dependency-free wording owner.
-await cp(
-  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'error-normalization.js'),
-  join(tempRoot, 'services', 'error-normalization.js')
-);
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
 const {

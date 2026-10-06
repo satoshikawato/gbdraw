@@ -28,8 +28,8 @@ await Promise.all([
   ),
   // mode-profiles.js evaluates comparison thresholds with these dependency-free modules.
   cp(
-    join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'error-normalization.js'),
-    join(tempRoot, 'js', 'services', 'error-normalization.js')
+    join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'error-normalization.js'),
+    join(tempRoot, 'js', 'utils', 'error-normalization.js')
   ),
   cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'optional-positive-number.js'),

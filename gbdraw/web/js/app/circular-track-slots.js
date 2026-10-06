@@ -25,7 +25,7 @@ import {
 import { featureSlotEdits } from './track-slot-edits.js';
 import { parseOptionalCircularScalar, parseOptionalPixel, validateCustomTrackPlan } from './track-slot-validation.js';
 import { visibleFeatureUnderlaysForState } from '../utils/feature-rendering.js';
-import { diagnosticError } from '../services/error-normalization.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 
 const SUPPORTED_RENDERERS = [
   'features',

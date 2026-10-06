@@ -9,7 +9,6 @@ const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'app');
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-file-imports-'));
 const tempDir = join(tempRoot, 'app');
 await mkdir(tempDir);
-await mkdir(join(tempRoot, 'services'));
 await mkdir(join(tempRoot, 'utils'));
 await writeFile(
   join(tempRoot, 'utils', 'tsv-cell.js'),
@@ -18,8 +17,8 @@ await writeFile(
 );
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
 await writeFile(
-  join(tempRoot, 'services', 'error-normalization.js'),
-  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'error-normalization.js'), 'utf8'),
+  join(tempRoot, 'utils', 'error-normalization.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'error-normalization.js'), 'utf8'),
   'utf8'
 );
 await writeFile(

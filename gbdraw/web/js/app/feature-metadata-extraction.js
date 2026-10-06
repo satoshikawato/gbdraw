@@ -1,6 +1,6 @@
 // @ts-check
 import { runFeatureExtraction } from '../services/diagram-generation.js';
-import { diagnosticError } from '../services/error-normalization.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { cloneFileBytesForTransfer } from '../services/file-content-cache.js';
 

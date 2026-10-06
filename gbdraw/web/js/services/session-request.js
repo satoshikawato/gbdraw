@@ -81,7 +81,7 @@ import {
 } from '../app/track-slot-validation.js';
 import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from '../app/annotations/state.js';
 import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
-import { SESSION_TABLE_LABELS, diagnosticError, normalizeUserFacingError } from './error-normalization.js';
+import { SESSION_TABLE_LABELS, diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import {
   arrowHeadLengthRatioForState,

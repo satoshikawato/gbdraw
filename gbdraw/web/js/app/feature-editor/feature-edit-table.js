@@ -8,7 +8,7 @@ import {
   rowBelongsToRequest,
   updateFeatureOverride
 } from '../../services/feature-placement.js';
-import { diagnosticError, normalizeUserFacingError } from '../../services/error-normalization.js';
+import { diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { cloneFileBytesForTransfer } from '../../services/file-content-cache.js';
 import { downloadTextFile } from '../../services/text-download.js';
 

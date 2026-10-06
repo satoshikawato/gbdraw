@@ -154,7 +154,7 @@ import {
   webLosatRuntimeRecord
 } from './losat-cache.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
-import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../services/error-normalization.js';
+import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
   cloneFileBytesForTransfer,
   readFileBytes,

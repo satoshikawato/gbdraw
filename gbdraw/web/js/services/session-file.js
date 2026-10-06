@@ -1,5 +1,5 @@
 // @ts-check
-import { diagnosticError } from './error-normalization.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 
 const GZIP_MAGIC = Object.freeze([0x1f, 0x8b]);
 const MAX_SESSION_FILE_BYTES = 200 * 1024 * 1024;
