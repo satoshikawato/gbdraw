@@ -1,3 +1,4 @@
+// @ts-check
 import { createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat, validateCurrentWriterActiveConfig } from './session-active-config-contract.js';
 import { resolveActiveLayoutPreference } from '../app/layout-preferences.js';
 import { migrateLegacyLinearLabelVisibility } from '../app/linear-label-visibility.js';
@@ -29,6 +30,11 @@ const regenerableProteinCache = (session) => session.renderRequest?.comparisons?
   && session.losatCache?.entries?.some((entry) => entry?.schema === 4 && entry?.kind === 'raw-losat' && entry?.program === 'blastp'
     && entry?.idEncoding === 'runtime-handle-v1'
     && typeof entry?.queryProteinSetHash === 'string' && typeof entry?.subjectProteinSetHash === 'string');
+/**
+ * @param {Record<string, any>} session
+ * @param {{ limitBytes?: number }} [options]
+ * @returns {Record<string, any>}
+ */
 export const applyDerivedCachePublicationPolicy = (session, { limitBytes = CACHE_LIMIT_BYTES } = {}) => {
   const entries = session.losatDerivedCache?.entries;
   if (!entries?.length || !regenerableProteinCache(session) || new TextEncoder().encode(JSON.stringify(entries)).byteLength <= limitBytes) return session;
@@ -156,6 +162,24 @@ const mergeReplayResources = (prepared, replayed) => {
   }
   return resources;
 };
+/**
+ * The owners a publication calls: the Session and request owners
+ * (`services/session-request.js`, `services/gallery-session-migration.js`) and
+ * the Linear comparison planner. Each takes and returns unvalidated documents.
+ * @typedef {object} GallerySessionPublicationOwners
+ * @property {(session: Record<string, any>) => Record<string, any>} promoteSession
+ *   Promotes a historical Session to the current version.
+ * @property {(input: Record<string, any>) => Promise<Record<string, any>>} assertRequestsEquivalent
+ * @property {(input: Record<string, any>) => Record<string, any>} buildRequest
+ * @property {(input: Record<string, any>) => Record<string, any>} buildRequestState
+ * @property {(request: Record<string, any>, promotion?: Record<string, any>) => Record<string, any>} promoteRequest
+ * @property {(input: Record<string, any>) => Record<string, any>} projectRequest
+ * @property {(input: Record<string, any>) => any} resolveComparisonPlan
+ */
+
+/**
+ * @param {GallerySessionPublicationOwners} owners
+ */
 export const createGallerySessionPublication = (owners) => {
   const promoteVisibilityState = (session) => ({
     ...session,

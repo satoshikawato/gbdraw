@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { FeatureOverrideDraft, FeatureRequestRecord } from './feature-placement.js' */
 import {
   featureIdentityKey,
   featureIdentityKeyOf,
@@ -27,6 +29,16 @@ export const FEATURE_VISIBILITY_NARROWED_NOTICE = (count) => (
   `${count} Feature visibility edit(s) from an older Session hid every feature with the same hash, such as each copy`
   + ' of a duplicated record. Each now applies only to the feature that was edited, so the next Generate draws the others.'
 );
+
+/**
+ * The input of a Session feature-edit migration. `catalog` is the Session's
+ * saved catalog (schema 3, 4, or 5), unvalidated.
+ * @typedef {object} FeatureEditMigrationInput
+ * @property {Record<string, any>} features
+ * @property {string} mode
+ * @property {Record<string, any> | null} [catalog]
+ * @property {Record<string, any> | null} [legacy]
+ */
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value) => String(value ?? '').trim();
@@ -209,6 +221,10 @@ const FEATURE_VISIBILITY_MODES = Object.freeze({
   on: 'on', off: 'off', exclude_matching: 'exclude_matching', suppress: 'exclude_matching'
 });
 
+/**
+ * @param {unknown} features
+ * @returns {boolean}
+ */
 export const hasRenderedIdFeatureEdits = (features) => isObject(features)
   && RENDERED_ID_FEATURE_EDIT_FIELDS.some((field) => isObject(features[field]) && Object.keys(features[field]).length > 0);
 
@@ -223,8 +239,16 @@ export const hasRenderedIdFeatureEdits = (features) => isObject(features)
  * text entries; a label's source text is not an edit of its own), the number
  * of Feature visibility edits that now reach fewer features than the `hash`
  * row the Session sent, and whether the Session had label edits.
+ * @param {FeatureEditMigrationInput} input
+ * @returns {{
+ *   featureOverrides: FeatureOverrideDraft,
+ *   droppedCount: number,
+ *   narrowedVisibilityCount: number,
+ *   migratedLabelEdits: boolean
+ * }}
  */
 export const migrateRenderedIdFeatureEdits = ({ features, mode, catalog = null, legacy = null }) => {
+  /** @type {FeatureOverrideDraft} */
   const rows = {};
   let droppedCount = 0;
   let narrowedVisibilityCount = 0;
@@ -296,6 +320,12 @@ export const migrateRenderedIdFeatureEdits = ({ features, mode, catalog = null, 
  * become `featureOverrides`. When a label map is migrated, the saved label
  * table is cleared: it was the copy of those maps built at the last Generate
  * (the same invariant the editor keeps when label edits change).
+ * @param {FeatureEditMigrationInput} input
+ * @returns {{
+ *   features: Record<string, any>,
+ *   droppedCount: number,
+ *   narrowedVisibilityCount: number
+ * }}
  */
 export const migrateSessionFeatureEdits = ({ features, mode, catalog = null, legacy = null }) => {
   const source = isObject(features) ? features : {};
@@ -359,6 +389,13 @@ const boundRecordKey = (selector, { recordKeys, recordIds }) => {
  * the hash names exactly one feature of the saved catalog, in that record.
  * Every other target stays as saved. Returns the annotation sets and the
  * number of moved targets.
+ * @param {{
+ *   annotationSets: unknown,
+ *   mode: string,
+ *   catalog?: Record<string, any> | null,
+ *   records?: Array<FeatureRequestRecord & Record<string, any>>
+ * }} input
+ * @returns {{ annotationSets: any, migratedCount: number }}
  */
 export const migrateSessionAnnotationTargets = ({ annotationSets, mode, catalog = null, records = [] }) => {
   const index = annotationCatalogIndex(catalog);
@@ -399,9 +436,12 @@ const LANE_MODES = Object.freeze({ outward: 'circular', inward: 'circular', abov
  * record key, so a Main row is kept for both modes and a lane row for the mode
  * of its side. A row whose key does not encode it is kept as is, and the draft
  * check rejects it.
+ * @param {any} placements
+ * @returns {any} The Feature placement draft, or the unvalidated input when it is not a map.
  */
 export const migrateSessionFeaturePlacements = (placements) => {
   if (!isObject(placements)) return placements;
+  /** @type {Record<string, any>} */
   const migrated = {};
   Object.entries(placements).forEach(([key, row]) => {
     const target = row?.placement;

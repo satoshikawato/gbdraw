@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { FeaturePlacementDraft } from './feature-placement.js' */
 import { adoptCurrentSessionResources, createSessionResourceFileView, readSessionResourceBytes } from './session-resource-backing.js';
 import { sha256Hex, textToBytes } from './byte-utils.js';
 import { canonicalRecordReverseComplement } from '../app/record-display-options.js';
@@ -13,6 +15,39 @@ import { canonicalFeaturePlacements } from './feature-placement.js';
 const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDefaultsForMode('linear');
 export const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4, LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value), has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
+/**
+ * The Session's active Web configuration (`config` of the stored Session) in
+ * its current writer format: the domains of `CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS`
+ * plus the compatibility field `colorsAreOverrides`. `form` and `adv` are
+ * required; the option fields inside them belong to Python (R7) and stay
+ * `Record<string, any>`. A reader takes unvalidated data and returns this type.
+ * @typedef {object} ActiveWebConfig
+ * @property {Record<string, any>} form
+ * @property {Record<string, any>} adv
+ * @property {Record<string, any>} [losat]
+ * @property {Record<string, any>} [cliOptions]
+ * @property {Record<string, any>} [colors]
+ * @property {string} [palette]
+ * @property {boolean} [paletteInstantPreviewEnabled]
+ * @property {Array<Record<string, any>>} [rules]
+ * @property {Array<Record<string, any>>} [qualifierPriorityRules]
+ * @property {string} [filterMode] `None`, `Whitelist`, or `Blacklist`.
+ * @property {Array<Record<string, any>>} [whitelist]
+ * @property {string} [blacklistText]
+ * @property {string} [losatProgram]
+ * @property {Record<string, any>} [circularConservation]
+ * @property {Array<Record<string, any>>} [annotationSets]
+ * @property {Array<Record<string, any>>} [recordDisplayDrafts]
+ * @property {FeaturePlacementDraft} [featurePlacementOverrides]
+ * @property {Record<string, any>} [modeProfiles]
+ * @property {Record<string, any>} [unmanagedConfigOverrides]
+ * @property {Record<string, any>} [linearRecordLayout]
+ * @property {Record<string, any>} [linearComparisonPlan]
+ * @property {Record<string, any>} [importedComparisonResolution]
+ * @property {Record<string, any>} [webEdits]
+ * @property {boolean} [colorsAreOverrides]
+ */
+
 export const createDefaultForm = () => ({
   prefix: '', species: '', strain: '', plot_title: '', track_type: 'tuckin', linear_track_layout: 'middle', show_scale: true, scale_style: 'bar',
   linear_ruler_on_axis: false, labels_mode: 'none', show_labels_linear: 'none', multi_record_canvas: WEB_UX_PROFILE.circular.gridByDefault,
@@ -21,6 +56,10 @@ export const createDefaultForm = () => ({
   separate_strands: WEB_UX_PROFILE.separateStrands, suppress_gc: !circularTracks.gc, suppress_skew: !circularTracks.skew, align_center: false,
   keep_definition_left_aligned: true, show_gc: linearTracks.gc, show_skew: linearTracks.skew, show_depth: false, normalize_length: false
 });
+/**
+ * @param {string} [mode] `circular` or `linear`.
+ * @returns {Record<string, any>}
+ */
 export const createDefaultAdv = (mode = 'circular') => ({
   rich_feature_popup: true, features: [...MODE_DEFAULT_FEATURE_TYPES], feature_shapes: createDefaultFeatureRenderings(), arrow_head_length_ratio: null,
   arrow_shaft_width_ratio: DEFAULT_ARROW_SHAFT_WIDTH_RATIO, window_size: null, step_size: null, nt: 'GC', def_font_size: null,
@@ -112,6 +151,11 @@ const obsoleteCircularSlotField = (slots) => {
   }
   return null;
 };
+/**
+ * @param {Record<string, any>} [config] The active configuration.
+ * @param {{ depthTrackCount?: number | null }} [options]
+ * @returns {void}
+ */
 export const validateImportedCircularTrackSlots = (config = {}, { depthTrackCount = null } = {}) => {
   const adv = isObject(config) ? config.adv : null;
   if (!isObject(adv) || !has(adv, 'circular_track_slots')) return;
@@ -124,6 +168,11 @@ export const validateImportedCircularTrackSlots = (config = {}, { depthTrackCoun
     supportedRenderers: CIRCULAR_TRACK_RENDERERS, supportedSides: ['inside', 'outside', 'overlay'],
     anchorlessRenderers: ['ticks', 'spacer'], depthTrackCount });
 };
+/**
+ * @param {Record<string, any>} [config] The active configuration.
+ * @param {{ depthTrackCount?: number | null }} [options]
+ * @returns {void}
+ */
 export const validateImportedLinearTrackSlots = (config = {}, { depthTrackCount = null } = {}) => {
   const adv = isObject(config) ? config.adv : null;
   if (!isObject(adv) || !has(adv, 'linear_track_slots')) return;
@@ -134,6 +183,11 @@ export const validateImportedLinearTrackSlots = (config = {}, { depthTrackCount 
     supportedRenderers: LINEAR_TRACK_RENDERERS, supportedSides: ['above', 'below', 'overlay'],
     anchorlessRenderers: ['spacer'], depthTrackCount });
 };
+/**
+ * Throws when `storedConfig` is not a current-writer active configuration.
+ * @param {{ mode: string, storedConfig: Record<string, any> }} input
+ * @returns {void}
+ */
 export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }) => {
   if (!['circular', 'linear'].includes(mode)) throw new Error(`Current session active configuration has unsupported mode: ${String(mode)}.`);
   if (!isObject(config)) throw new Error('Current session is missing its active Web configuration.');

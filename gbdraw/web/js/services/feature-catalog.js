@@ -1,3 +1,4 @@
+// @ts-check
 import {
   SOURCE_FEATURE_INDEX_KEYS,
   nonnegativeIntegerAliasStatus
@@ -16,6 +17,53 @@ const FEATURE_CATALOG_RELOAD_MESSAGE =
 // Schema 4 added source-anchor profiles; schema 5 adds each rendered feature's
 // drawn selector values (`drawnSelector`), which live rule matching reads (R4).
 export const FEATURE_CATALOG_SCHEMA = 5;
+
+/**
+ * One catalog row the Python engine writes (a biological feature, a rendered
+ * feature, an orthogroup, a comparison match, an annotation, a sequence
+ * source). Python owns the row fields (R7); admission validates what it reads.
+ * @typedef {Record<string, any>} FeatureCatalogRow
+ */
+
+/**
+ * One Result's catalog items.
+ * @typedef {object} FeatureCatalogItem
+ * @property {number} resultIndex
+ * @property {string} resultName
+ * @property {string[]} recordKeys
+ * @property {FeatureCatalogRow[]} [sequenceSources]
+ * @property {FeatureCatalogRow[]} biologicalFeatures
+ * @property {FeatureCatalogRow[]} features Rendered features, each with `drawnSelector`.
+ * @property {FeatureCatalogRow[]} orthogroups
+ * @property {FeatureCatalogRow[]} comparisonMatches
+ * @property {FeatureCatalogRow[]} annotations
+ */
+
+/**
+ * The persisted feature catalog in its current writer format
+ * (`FEATURE_CATALOG_SCHEMA`). A reader takes unvalidated data and returns this.
+ * @typedef {object} FeatureCatalog
+ * @property {number} schema
+ * @property {FeatureCatalogItem[]} items
+ */
+
+/**
+ * A Result as the catalog admission reads it.
+ * @typedef {Record<string, any>} FeatureCatalogResult
+ */
+
+/**
+ * The options of one admission traversal.
+ * @typedef {object} FeatureCatalogAdmissionOptions
+ * @property {boolean} [adopt] Mark the validated catalog as adopted and keep it by reference.
+ * @property {string} [mode] The request mode, `circular` or `linear`.
+ */
+
+/**
+ * The runtime admission: the validated catalog and its derived editor
+ * projections. It is never persisted.
+ * @typedef {{ catalog: FeatureCatalog } & Record<string, any>} FeatureCatalogAdmission
+ */
 const ANCHOR_FEATURE_CATALOG_SCHEMA = 4;
 const LEGACY_FEATURE_CATALOG_SCHEMA = 3;
 const adoptedFeatureCatalogs = new WeakSet();
@@ -70,6 +118,10 @@ const legacyAnchorProfile = (feature) => {
 // Schema 3 gains only safely inferred anchor profiles. Rendered features of
 // schemas 3 and 4 gain `drawnSelector: null`: their drawn values are unknown
 // until the next Generate, so live rule matching declines them.
+/**
+ * @param {Record<string, any>} catalog An unvalidated schema 3 or 4 catalog.
+ * @returns {FeatureCatalog}
+ */
 export const migrateLegacyFeatureCatalog = (catalog) => {
   if (!isObject(catalog)
     || ![LEGACY_FEATURE_CATALOG_SCHEMA, ANCHOR_FEATURE_CATALOG_SCHEMA].includes(catalog.schema)) {
@@ -711,6 +763,12 @@ function* catalogAdmissionSteps(
 };
 
 // Both callers exhaust the same admission traversal; scheduling changes no validation.
+/**
+ * @param {Record<string, any>} catalog An unvalidated catalog.
+ * @param {FeatureCatalogResult[]} results
+ * @param {FeatureCatalogAdmissionOptions} [options]
+ * @returns {FeatureCatalogAdmission}
+ */
 export const admitFeatureCatalog = (catalog, results, options = {}) => {
   const steps = catalogAdmissionSteps(catalog, results, options);
   let step;
@@ -718,6 +776,12 @@ export const admitFeatureCatalog = (catalog, results, options = {}) => {
   return step.value;
 };
 
+/**
+ * @param {Record<string, any>} catalog An unvalidated catalog.
+ * @param {FeatureCatalogResult[]} results
+ * @param {FeatureCatalogAdmissionOptions} [options]
+ * @returns {Promise<FeatureCatalog>}
+ */
 export const validateFeatureCatalogForImport = async (catalog, results, options = {}) => {
   const steps = catalogAdmissionSteps(catalog, results, options);
   let deadline = performance.now() + 16;
@@ -731,6 +795,12 @@ export const validateFeatureCatalogForImport = async (catalog, results, options 
   }
 };
 
+/**
+ * @param {Record<string, any>} catalog An unvalidated catalog.
+ * @param {FeatureCatalogResult[]} results
+ * @param {FeatureCatalogAdmissionOptions} [options]
+ * @returns {FeatureCatalog}
+ */
 export const validateFeatureCatalog = (catalog, results, options = {}) => (
   admitFeatureCatalog(catalog, results, options).catalog
 );

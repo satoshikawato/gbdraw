@@ -1,3 +1,5 @@
+// @ts-check
+/** @import { FeatureCatalog, FeatureCatalogItem } from './feature-catalog.js' */
 import { normalizeStringArray } from '../app/feature-utils.js';
 import { readRecordSourceSpan, recordSourceInterval } from '../app/record-source-coordinates.js';
 import { FEATURE_CATALOG_SCHEMA } from './feature-catalog.js';
@@ -323,6 +325,10 @@ const normalizeStandaloneContext = (options = {}) => ({
   sequenceSources: Array.isArray(options.sequenceSources) ? options.sequenceSources : []
 });
 
+/**
+ * @param {Record<string, any>} context The normalized standalone context.
+ * @returns {FeatureCatalogItem | null}
+ */
 const selectStandaloneCatalogItem = (context) => {
   const catalog = context?.featureCatalog;
   if (
@@ -351,6 +357,10 @@ const selectStandaloneCatalogItem = (context) => {
   return matches.length === 1 ? matches[0] : null;
 };
 
+/**
+ * @param {FeatureCatalogItem} item
+ * @returns {FeatureCatalogItem}
+ */
 const cloneStandaloneCatalogItem = (item) => JSON.parse(JSON.stringify(item));
 
 const standaloneCatalogFeatureKey = (recordKey, biologicalFeatureId) => (
@@ -672,6 +682,11 @@ const getStandaloneOrthogroupDescription = (group, context) => {
   return override || String(group?.description || '').trim();
 };
 
+/**
+ * @param {FeatureCatalogItem} sourceItem
+ * @param {Record<string, any>} context The normalized standalone context.
+ * @returns {FeatureCatalogItem | null}
+ */
 const catalogItemWithStandaloneOverrides = (sourceItem, context) => {
   const item = cloneStandaloneCatalogItem(sourceItem);
   const biologicalByKey = new Map();
@@ -1770,10 +1785,10 @@ export const enrichSvgWithStandaloneInteractivity = (svg, options = {}) => {
     metadata.setAttribute('data-schema', String(FEATURE_CATALOG_SCHEMA));
     metadata.setAttribute('data-result-index', String(catalogItem.resultIndex));
     metadata.setAttribute('data-result-name', String(catalogItem.resultName || ''));
-    metadata.textContent = JSON.stringify({
+    metadata.textContent = JSON.stringify(/** @satisfies {FeatureCatalog} */ ({
       schema: FEATURE_CATALOG_SCHEMA,
       items: [catalogItem]
-    });
+    }));
   } else {
     metadata.setAttribute('data-schema', INTERACTIVE_SCHEMA);
     metadata.textContent = JSON.stringify(compactWireValue({
