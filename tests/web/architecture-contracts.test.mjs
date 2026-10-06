@@ -5674,7 +5674,7 @@ test('pull request SHA mismatches are blocking metadata errors', () => {
 
 // Design-rule guard registry (WEB_CHANGE_POLICY.md "Design-rule co-change"):
 // the registry names the allowlist and baseline literals inside the guard
-// tests of gbdraw/web/CLAUDE.md R1-R12. A runtime diff may contract them and
+// tests of the numbered rules in gbdraw/web/CLAUDE.md. A runtime diff may contract them and
 // may not expand them; an expansion is an authority-only change.
 const DESIGN_RULE_GUARD_TEST_PATH = 'tests/web/design-rule-guard-fixture.test.mjs';
 const designRuleGuardRegistrySource = (rules) => `${JSON.stringify({
