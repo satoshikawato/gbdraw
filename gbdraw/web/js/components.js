@@ -4,7 +4,7 @@ import {
   colorValueForMode,
   colorValueMode,
   toNativeColorInputValue
-} from './app/color-utils.js';
+} from './utils/color-utils.js';
 
 import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './utils/error-normalization.js';
 

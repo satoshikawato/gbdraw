@@ -11,6 +11,7 @@ import {
   createDefaultSpecificRule
 } from '../state.js';
 import { createDefaultLayoutPreferences } from '../app/layout-preferences.js';
+import { normalizePaletteColors } from '../utils/color-utils.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 
 const clonePlain = (value) => {
@@ -45,7 +46,7 @@ const defaultPaletteColors = (state) => {
   const colors = definitions.default && typeof definitions.default === 'object'
     ? definitions.default
     : {};
-  return state.normalizePaletteColors(clonePlain(colors));
+  return normalizePaletteColors(clonePlain(colors));
 };
 
 const resetPaletteState = (state) => {

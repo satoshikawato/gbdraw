@@ -61,12 +61,12 @@ await writeFile(
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'app', 'color-utils.js'),
+  join(tempDir, 'utils', 'color-utils.js'),
   'export const resolveColorToHex = (value) => value || "#94a3b8";\n',
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'app', 'feature-utils.js'),
+  join(tempDir, 'services', 'feature-utils.js'),
   [
     'export const formatFeatureLength = () => "";',
     'export const formatFeatureLocation = () => "";',
@@ -91,7 +91,7 @@ await writeFile(
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'app', 'feature-sequence-fasta.js'),
+  join(tempDir, 'services', 'feature-sequence-fasta.js'),
   'export const buildFeatureSequenceFastas = () => ({ nucleotideFasta: "", aminoAcidFasta: "" });\n',
   'utf8'
 );

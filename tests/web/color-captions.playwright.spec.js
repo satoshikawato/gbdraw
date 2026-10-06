@@ -44,7 +44,7 @@ for(const width of [1440,390]) {
       await generate(page);
       const source=await page.evaluate(async()=>{
         const a=window.__GBDRAW_APP__;
-        const {getFeatureColorRuleHash}=await import('./js/app/feature-utils.js');
+        const {getFeatureColorRuleHash}=await import('./js/services/feature-utils.js');
         const selected=a.extractedFeatures.filter(f=>f.type==='CDS').slice(0,3);
         const ids=selected.map(getFeatureColorRuleHash);
         const original=a.manualSpecificRules.map(r=>[r.feat,r.qual,r.val,r.color,r.cap].join('\t')).join('\n');
@@ -183,7 +183,7 @@ test('generated-caption collisions roll back and old Session drafts normalize on
     });
     await expect.poll(()=>page.evaluate(()=>window.__GBDRAW_APP__.legendEntries.some(e=>e.caption==='Conflict [#112233]'))).toBe(true);
     const ids=await page.evaluate(async()=>{
-      const a=window.__GBDRAW_APP__,{getFeatureColorRuleHash}=await import('./js/app/feature-utils.js');
+      const a=window.__GBDRAW_APP__,{getFeatureColorRuleHash}=await import('./js/services/feature-utils.js');
       const ids=a.extractedFeatures.filter(f=>f.type==='CDS').slice(0,2).map(getFeatureColorRuleHash);
       Object.assign(a.newSpecRule,{feat:'CDS',qual:'hash',val:ids[0],color:'#445566',cap:'Conflict'});
       await a.addSpecificRule();return ids;
@@ -240,7 +240,7 @@ test('Linear comparison keeps both legend orientations and their swatches canoni
   try {
     await generate(page);
     await page.evaluate(async()=>{
-      const a=window.__GBDRAW_APP__,{getFeatureColorRuleHash}=await import('./js/app/feature-utils.js');
+      const a=window.__GBDRAW_APP__,{getFeatureColorRuleHash}=await import('./js/services/feature-utils.js');
       const features=a.extractedFeatures.filter(f=>f.type==='CDS').slice(0,2);
       for(let i=0;i<features.length;i++) {
         Object.assign(a.newSpecRule,{feat:'CDS',qual:'hash',val:getFeatureColorRuleHash(features[i]),color:['#112233','#445566'][i],cap:'Comparison group'});
@@ -326,7 +326,7 @@ for (const width of [1440, 390]) {
       await history(page, 'Undo');
       await page.evaluate(async () => {
         const a = window.__GBDRAW_APP__;
-        const { getFeatureColorRuleHash } = await import('./js/app/feature-utils.js');
+        const { getFeatureColorRuleHash } = await import('./js/services/feature-utils.js');
         Object.assign(a.newSpecRule, { feat: 'CDS', qual: 'hash',
           val: getFeatureColorRuleHash(a.extractedFeatures.find(feature => feature.type === 'CDS')),
           color: '#112233', cap: 'Independent group' });

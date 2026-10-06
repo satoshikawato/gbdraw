@@ -2489,15 +2489,16 @@ ORIGIN
     app.sessionTitle = 'keep-after-rollback';
     app.form.legend = 'left';
     app.adv.comparison_height = 37;
-    const original = state.normalizePaletteColors;
-    let injected = false;
-    state.normalizePaletteColors = (...args) => {
-      if (!injected) {
-        injected = true;
+    // The first palette write of the reset throws once, then the ref behaves normally again.
+    const accessor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(state.selectedPalette), 'value');
+    Object.defineProperty(state.selectedPalette, 'value', {
+      configurable: true,
+      get() { return accessor.get.call(this); },
+      set() {
+        delete state.selectedPalette.value;
         throw new Error('Injected session commit failure');
       }
-      return original(...args);
-    };
+    });
   });
   const dialogs = [];
   page.on('dialog', async (dialog) => {

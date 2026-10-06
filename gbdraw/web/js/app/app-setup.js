@@ -80,7 +80,7 @@ import {
   recordStructuralMetric
 } from '../services/runtime-test-hooks.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
-import { colorValueMode, toNativeColorInputValue } from './color-utils.js';
+import { colorValueMode, toNativeColorInputValue } from '../utils/color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
 import { PAIRWISE_MATCH_SELECTOR } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
@@ -178,7 +178,7 @@ import {
   orderedOptionalConservationFiles,
   parseConservationLabelText,
   reconcileConservationSeries
-} from './conservation-series.js';
+} from '../services/conservation-series.js';
 import {
   getDepthTrackFallbackLabel,
   getDepthTrackLabelFromFile,

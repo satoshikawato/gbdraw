@@ -9,7 +9,7 @@ import {
   orthogroupIdStatus
 } from '../services/feature-identity.js';
 import { materializeRecordTranslations } from './legend-layout/composition-actions.js';
-import { isInternalProteinDisplayId } from './feature-utils.js';
+import { isInternalProteinDisplayId } from '../services/feature-utils.js';
 
 const { computed, ref } = window.Vue;
 

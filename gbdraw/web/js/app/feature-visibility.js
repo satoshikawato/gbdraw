@@ -1,5 +1,5 @@
 // @ts-check
-import { exactRegexValue } from './feature-selector.js';
+import { exactRegexValue } from '../services/feature-selector.js';
 import { firstMatchingRuleIfKnown, ruleMatchesFeature, visibilityRuleMatchesFeature } from './rule-matching.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey as stableKeyOf } from '../services/feature-catalog.js';
 import {
@@ -11,7 +11,7 @@ import {
   updateFeatureOverride
 } from '../services/feature-placement.js';
 import { normalizeTsvCell as normalizeCell } from '../utils/tsv-cell.js';
-export { escapeRegexLiteral, exactRegexValue } from './feature-selector.js';
+export { escapeRegexLiteral, exactRegexValue } from '../services/feature-selector.js';
 
 const REQUIRED_COLUMNS = ['record_id', 'feature_type', 'qualifier', 'value', 'action'];
 const COMMON_QUALIFIERS = ['product', 'gene', 'protein_id', 'locus_tag', 'hash', 'location', 'record_location'];

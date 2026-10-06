@@ -19,7 +19,7 @@ import {
 import {
   isInternalProteinDisplayId,
   resolveDisplayProteinId
-} from '../feature-utils.js';
+} from '../../services/feature-utils.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-identity.js';

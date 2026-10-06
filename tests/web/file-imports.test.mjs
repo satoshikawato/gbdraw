@@ -27,8 +27,8 @@ await writeFile(
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'color-utils.js'),
-  await readFile(join(sourceDir, 'color-utils.js'), 'utf8'),
+  join(tempRoot, 'utils', 'color-utils.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'color-utils.js'), 'utf8'),
   'utf8'
 );
 await writeFile(

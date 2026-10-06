@@ -6,14 +6,14 @@ import {
   normalizeFileList,
   orderedConservationSources,
   safeConservationSlotId
-} from './conservation-series.js';
+} from '../services/conservation-series.js';
 import {
   isDefaultManagedDepthSlot,
   parseDepthTrackIndexIdentity,
   reconcileManagedDepthSlots,
   representativeDepthFiles
 } from './depth-track-state.js';
-import { resolveColorToHex } from './color-utils.js';
+import { resolveColorToHex } from '../utils/color-utils.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
 import {
   findTrackSlotGeometry,

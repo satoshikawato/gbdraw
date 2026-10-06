@@ -1,10 +1,6 @@
 // @ts-check
-import {
-  COMPARISON_COLOR_KEYS,
-  normalizePaletteColors,
-  normalizePaletteDefinitions
-} from './app/color-utils.js';
-import { collectSpecificColorQualifierSuggestions } from './app/feature-selector.js';
+import { COMPARISON_COLOR_KEYS } from './utils/color-utils.js';
+import { collectSpecificColorQualifierSuggestions } from './services/feature-selector.js';
 import {
   featureDrawnContext,
   listFeatureRows,
@@ -1102,8 +1098,6 @@ export const state = {
   skipCaptureBaseConfig,
   skipExtractOnSvgChange,
   trustedArtifactRestoreInProgress,
-  normalizePaletteColors,
-  normalizePaletteDefinitions,
   featureKeys,
   defaultColorKeys,
   newColorFeat,

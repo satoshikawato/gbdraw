@@ -1,8 +1,8 @@
 // @ts-check
 import { reportRuleRunFailure, ruleMatchesFeature } from '../rule-matching.js';
-import { resolveColorToHex } from '../color-utils.js';
-import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } from '../feature-utils.js';
-import { exactRegexValue } from '../feature-selector.js';
+import { resolveColorToHex } from '../../utils/color-utils.js';
+import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } from '../../services/feature-utils.js';
+import { exactRegexValue } from '../../services/feature-selector.js';
 import { getAllFeatureLegendGroups } from '../legend/utils.js';
 import {
   featureOverrideKey,

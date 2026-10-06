@@ -15,8 +15,8 @@ const colorActionsSource = await readFile(join(sourceDir, 'app', 'feature-editor
 const { createFeatureColorActions } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-editor', 'color-actions.js'))
 );
-const { getFeatureColorRuleHash } = await import(pathToFileURL(join(tempDir, 'app', 'feature-utils.js')));
-const { resolveFeatureLabelSelector } = await import(pathToFileURL(join(tempDir, 'app', 'feature-selector.js')));
+const { getFeatureColorRuleHash } = await import(pathToFileURL(join(tempDir, 'services', 'feature-utils.js')));
+const { resolveFeatureLabelSelector } = await import(pathToFileURL(join(tempDir, 'services', 'feature-selector.js')));
 const { buildLegendIntents, legendRowRules } = await import(pathToFileURL(join(tempDir, 'app', 'specific-color-rules.js')));
 
 assert.doesNotMatch(colorActionsSource, /serializeCleanSvg|results\.value\[[^\]]+\]\s*=/);

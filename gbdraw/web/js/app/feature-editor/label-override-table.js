@@ -1,5 +1,5 @@
 // @ts-check
-import { escapeRegexLiteral } from '../feature-selector.js';
+import { escapeRegexLiteral } from '../../services/feature-selector.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import { normalizeTsvCell } from '../../utils/tsv-cell.js';
 

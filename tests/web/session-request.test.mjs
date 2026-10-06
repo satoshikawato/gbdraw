@@ -110,7 +110,7 @@ const { validateTrackSlotBindingInvariants } = await import(
   pathToFileURL(join(tempRoot, 'js', 'app', 'track-slot-validation.js'))
 );
 const { orderedConservationSources } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'app', 'conservation-series.js'))
+  pathToFileURL(join(tempRoot, 'js', 'services', 'conservation-series.js'))
 );
 
 assert.equal(linearTrackAxisIndexForEnabledSlots([

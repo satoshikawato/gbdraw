@@ -6,7 +6,7 @@ import {
   parseDepthTrackIndexIdentity,
   reconcileManagedDepthSlots
 } from './depth-track-state.js';
-import { resolveColorToHex } from './color-utils.js';
+import { resolveColorToHex } from '../utils/color-utils.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
 import {
   findTrackSlotGeometry,

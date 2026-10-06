@@ -1,5 +1,5 @@
 // @ts-check
-import { resolveColorToHex } from './color-utils.js';
+import { resolveColorToHex } from '../utils/color-utils.js';
 import { normalizeOptionalText } from './track-slot-display.js';
 
 /**

@@ -8,7 +8,7 @@ import {
   buildLinearTrackSlotSpec,
   parseLinearTrackSlotSpec
 } from './linear-track-slots.js';
-import { countGenBankRecords } from './genbank-header.js';
+import { countGenBankRecords } from '../services/genbank-header.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
 

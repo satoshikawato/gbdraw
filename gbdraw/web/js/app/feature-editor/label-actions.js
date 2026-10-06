@@ -3,7 +3,7 @@ import { diagnosticError, normalizeUserFacingError } from '../../utils/error-nor
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
 import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride } from '../feature-visibility.js';
 import { parseLabelOverrideTsv, serializeLabelOverrideRows } from './label-override-table.js';
-import { escapeRegexLiteral } from '../feature-selector.js';
+import { escapeRegexLiteral } from '../../services/feature-selector.js';
 import {
   featureIdentityKeyOf,
   normalizeFeatureOverrideLabelText,
