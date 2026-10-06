@@ -1,3 +1,4 @@
+// @ts-check
 // origin/main Web Sessions (version 42 and older) stored the nucleotide
 // comparison rows of a reverse-complemented Linear record after the reverse
 // complement. Comparison tables now use the search frame (D-18, PD-OI-073),

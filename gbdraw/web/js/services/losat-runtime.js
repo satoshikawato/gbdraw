@@ -1,3 +1,4 @@
+// @ts-check
 let directInstancePromise = null;
 
 export const concatUint8Arrays = (chunks) => {

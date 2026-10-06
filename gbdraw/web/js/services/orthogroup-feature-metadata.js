@@ -1,3 +1,4 @@
+// @ts-check
 import { normalizeGroupMetadataScope } from '../app/losat-normalization.js';
 import {
   RECORD_INDEX_KEYS,
@@ -228,12 +229,15 @@ const indexCandidateForMember = ({
   };
 };
 
+/** @typedef {Map<any, any> & { recordsWithRenderedIds?: Set<any> }} OrthogroupFeatureIndex */
+
 /**
  * Incrementally project orthogroup metadata while the catalog owner is already
  * visiting groups and Features. This keeps the canonical admission path from
  * rebuilding an index and remapping the complete Feature population afterward.
  */
 export const createOrthogroupFeatureProjection = () => {
+  /** @type {OrthogroupFeatureIndex} */
   const index = new Map();
   const recordsWithRenderedIds = new Set();
   const candidatesByKey = new Map();
@@ -414,6 +418,11 @@ export const buildOrthogroupFeatureIndex = (orthogroups) => {
   return projection.index;
 };
 
+/**
+ * @param {OrthogroupFeatureIndex} index
+ * @param {any} feature
+ * @param {number | null} [fallbackRecordIndex]
+ */
 const resolveOrthogroupFeatureMetadata = (
   index,
   feature,

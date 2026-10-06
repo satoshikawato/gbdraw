@@ -1,3 +1,4 @@
+// @ts-check
 const DEPTH_FILE_SCHEMA = 1;
 const DEPTH_FILE_ENCODING = 'gbdraw-depth-table-v1';
 
