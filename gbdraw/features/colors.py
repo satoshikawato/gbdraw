@@ -2,7 +2,7 @@
 # coding: utf-8
 
 import re
-from typing import Optional, Tuple
+from typing import Any, Mapping, Optional, Tuple
 
 from pandas import DataFrame
 from Bio.SeqFeature import SeqFeature
@@ -99,8 +99,8 @@ def preprocess_color_tables(color_table: DataFrame, default_colors: DataFrame) -
 
 def get_color_with_info(
     feature: SeqFeature,
-    color_map: dict,
-    default_color_map: dict,
+    color_map: Mapping[str, Any],
+    default_color_map: Mapping[str, str],
     record_id: Optional[str] = None,
 ) -> Tuple[str, Optional[str]]:
     """
@@ -123,7 +123,12 @@ def get_color_with_info(
     return default_color_map.get(feature.type, "#d3d3d3"), None
 
 
-def get_color(feature: SeqFeature, color_map: dict, default_color_map: dict, record_id: Optional[str] = None) -> str:
+def get_color(
+    feature: SeqFeature,
+    color_map: Mapping[str, Any],
+    default_color_map: Mapping[str, str],
+    record_id: Optional[str] = None,
+) -> str:
     """
     Determines the color for a given feature based on its type and qualifiers.
 
@@ -137,8 +142,8 @@ def get_color(feature: SeqFeature, color_map: dict, default_color_map: dict, rec
 
 def precompute_used_color_rules(
     records,
-    color_map: dict,
-    default_color_map: dict,
+    color_map: Mapping[str, Any],
+    default_color_map: Mapping[str, str],
     selected_features_set: set,
     feature_visibility_rules: list[dict] | None = None,
     record_features=(),

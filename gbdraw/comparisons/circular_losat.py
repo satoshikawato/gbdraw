@@ -19,7 +19,7 @@ from dataclasses import replace
 import logging
 import os
 import re
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence, cast
 
 from Bio.SeqRecord import SeqRecord
 
@@ -180,7 +180,11 @@ def resolve_circular_conservation_losat(
             subject_hash=subject_hash,
             flow=CIRCULAR_CONSERVATION_FLOW,
         )
-        filename = ring_losat_filename(paths[index] if index < len(paths) else comparison.path, search.program)
+        filename = ring_losat_filename(
+            # Ring LOSAT validation rejects an empty comparison sequence entry.
+            cast(str, paths[index]) if index < len(paths) else comparison.path,
+            search.program,
+        )
         cached = cache.cached_entry(key)
         if cached is not None:
             text = str(cached["text"])

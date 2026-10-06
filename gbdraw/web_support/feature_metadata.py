@@ -165,7 +165,7 @@ def _biological_selector_values(
     record_id: str | None,
     coord_base: int,
     coord_step: int,
-) -> tuple[dict[str, object], str, str]:
+) -> tuple[dict[str, object], str, str, dict[str, str | None]]:
     """Return source selector values, the biological and processed-record
     feature IDs, and the drawn record's selector values.
 
