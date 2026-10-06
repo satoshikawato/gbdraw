@@ -1,3 +1,4 @@
+// @ts-check
 export const normalizeCollinearAnchorMode = (value) => {
   const normalized = String(value || '').trim().toLowerCase().replace(/-/g, '_');
   const aliases = {
