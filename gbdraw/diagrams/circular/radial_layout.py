@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, replace
-from typing import Any, Collection, Literal, Mapping, Sequence
+from typing import Any, Collection, Literal, Mapping, Sequence, TypedDict
 
 from ...canvas import CircularCanvasConfigurator
 from ...config.models import GbdrawConfig
@@ -564,6 +564,7 @@ def _slot_intents(
                     slot.id,
                 )
             placement_policy = "auto"
+        anchor_px = radius_px if radius_px is not None else preferred_anchor_px
         intents.append(
             _RadialSlotIntent(
                 slot=slot,
@@ -572,8 +573,8 @@ def _slot_intents(
                 renderer=slot.renderer,
                 side=slot.side,
                 anchor_offset_px=(
-                    float(radius_px if radius_px is not None else preferred_anchor_px) - axis_radius_px
-                    if (radius_px is not None or preferred_anchor_px is not None)
+                    float(anchor_px) - axis_radius_px
+                    if anchor_px is not None
                     else None
                 ),
                 width_px=max(0.0, float(width_px)),
@@ -629,7 +630,9 @@ def _measure_radial_slot(
             anchor_radius_px = float(feature_layout.anchor_radius_px)
             anchor_offset_px = float(anchor_radius_px) - float(axis_radius_px)
         band = feature_layout.all_band_px if feature_layout is not None else RadialBand(anchor_radius_px, anchor_radius_px)
-        draw_band = feature_layout.primary_band_px if feature_layout is not None else band
+        draw_band: RadialBand | None = (
+            feature_layout.primary_band_px if feature_layout is not None else band
+        )
         return CircularResolvedSlot(
             slot_index=int(intent.slot_index),
             id=intent.slot_id,
@@ -1589,6 +1592,9 @@ def _validate_same_side_order(
                 if side == "inside"
                 else _gap_between_inner_outer_tracks(current_intent, previous_intent)
             )
+            # side_slots above keeps only slots with a packing band.
+            assert previous.packing_band_px is not None
+            assert current.packing_band_px is not None
             if side == "outside":
                 if previous.packing_band_px.inner_px < current.packing_band_px.outer_px + spacing - LAYOUT_EPSILON:
                     raise ValidationError(
@@ -1749,6 +1755,8 @@ def _inside_placement_window(
     )
     if future_hard is not None:
         future_hard_intent, future_hard_slot = future_hard
+        # _next_future_hard_slot only returns slots that have a packing band.
+        assert future_hard_slot.packing_band_px is not None
         gap_to_future_hard = (
             _gap_between_inner_outer_tracks(future_hard_intent, current_outer_intent)
             if current_outer_intent is not None
@@ -1801,6 +1809,8 @@ def _outside_placement_window(
     )
     if future_hard is not None:
         future_hard_intent, future_hard_slot = future_hard
+        # _next_future_hard_slot only returns slots that have a packing band.
+        assert future_hard_slot.packing_band_px is not None
         gap_to_future_hard = (
             _gap_between_inner_outer_tracks(future_hard_intent, current_outer_intent)
             if current_outer_intent is not None
@@ -1808,6 +1818,18 @@ def _outside_placement_window(
         )
         outer_limit = float(future_hard_slot.packing_band_px.inner_px) - gap_to_future_hard
     return PlacementWindow(float(outside_min_inner), outer_limit)
+
+
+class _RadialLayoutInputs(TypedDict):
+    """Keyword arguments shared by both _resolve_circular_radial_layout attempts."""
+
+    total_length: int
+    canvas_config: CircularCanvasConfigurator
+    slots: Sequence[CircularTrackSlot]
+    feature_dict: Mapping[str, Any] | None
+    tick_track_channel_override: str | None
+    preferred_anchor_slot_ids: Collection[str]
+    depth_config: DepthConfigurator | None
 
 
 def resolve_circular_radial_layout(
@@ -1830,7 +1852,7 @@ def resolve_circular_radial_layout(
     (``center_reserved_radius_explicit``); otherwise it is ``CANNOT_FIT``.
     """
 
-    layout_inputs = dict(
+    layout_inputs = _RadialLayoutInputs(
         total_length=total_length,
         canvas_config=canvas_config,
         slots=slots,
@@ -1938,34 +1960,34 @@ def _resolve_circular_radial_layout(
     outside_min_inner = axis_radius_px + outside_axis_gap_px
     inside_max_outer = axis_radius_px - inside_axis_gap_px
     for slot_index, resolved in resolved_by_index.items():
-        intent = intent_by_index.get(slot_index)
-        if intent is None or resolved.packing_band_px is None:
+        slot_intent = intent_by_index.get(slot_index)
+        if slot_intent is None or resolved.packing_band_px is None:
             continue
         if resolved.renderer == "features":
             outside_min_inner = max(
                 outside_min_inner,
-                max(axis_radius_px, float(resolved.packing_band_px.outer_px)) + max(0.0, float(intent.outer_gap_px)),
+                max(axis_radius_px, float(resolved.packing_band_px.outer_px)) + max(0.0, float(slot_intent.outer_gap_px)),
             )
             inside_max_outer = min(
                 inside_max_outer,
-                min(axis_radius_px, float(resolved.packing_band_px.inner_px)) - max(0.0, float(intent.inner_gap_px)),
+                min(axis_radius_px, float(resolved.packing_band_px.inner_px)) - max(0.0, float(slot_intent.inner_gap_px)),
             )
         elif resolved.side == "outside":
             outside_min_inner = max(
                 outside_min_inner,
-                float(resolved.packing_band_px.outer_px) + max(0.0, float(intent.outer_gap_px)),
+                float(resolved.packing_band_px.outer_px) + max(0.0, float(slot_intent.outer_gap_px)),
             )
         elif resolved.side == "inside":
             inside_max_outer = min(
                 inside_max_outer,
-                float(resolved.packing_band_px.inner_px) - max(0.0, float(intent.inner_gap_px)),
+                float(resolved.packing_band_px.inner_px) - max(0.0, float(slot_intent.inner_gap_px)),
             )
 
     ordered_intents = sorted(intents, key=lambda item: item.slot_index)
 
     for intent_pos, intent in enumerate(ordered_intents):
-        resolved = resolved_by_index.get(intent.slot_index)
-        if resolved is not None:
+        already_resolved = resolved_by_index.get(intent.slot_index)
+        if already_resolved is not None:
             continue
 
         if intent.side == "overlay":
@@ -2243,10 +2265,10 @@ def _resolve_circular_radial_layout(
     for intent in intents:
         if intent.renderer != "annotations" or intent.side != "overlay":
             continue
-        resolved = resolved_by_index.get(intent.slot_index)
+        overlay_resolved = resolved_by_index.get(intent.slot_index)
         anchor_id = str(intent.params.get("anchor_slot", "")).strip()
         anchor = by_id.get(anchor_id)
-        if resolved is None or anchor is None:
+        if overlay_resolved is None or anchor is None:
             continue
         anchor_band = anchor.draw_band_px or anchor.packing_band_px
         anchor_radius = (
@@ -2263,11 +2285,11 @@ def _resolve_circular_radial_layout(
         width = (
             float(anchor_band.width_px)
             if cover_anchor and anchor_band is not None
-            else max(0.0, float(resolved.resolved_width_px or intent.width_px))
+            else max(0.0, float(overlay_resolved.resolved_width_px or intent.width_px))
         )
         draw_band = _band_from_center_width(anchor_radius, width)
         anchored = replace(
-            resolved,
+            overlay_resolved,
             anchor_radius_px=anchor_radius,
             anchor_offset_px=anchor_radius - axis_radius_px,
             resolved_width_px=width,

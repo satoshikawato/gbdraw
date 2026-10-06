@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Sequence, cast
 
 
 @dataclass(frozen=True)
@@ -241,7 +241,7 @@ def candidate_aabb_pairs(
     index = AabbIndex(bucket_size=bucket_size)
     for item_idx, bbox in enumerate(bboxes):
         for candidate_idx in index.query(bbox, padding=padding):
-            left = int(candidate_idx)
+            left = int(cast(int, candidate_idx))  # ids inserted above are item indexes
             right = int(item_idx)
             pairs.add((left, right) if left < right else (right, left))
         index.insert(item_idx, bbox)

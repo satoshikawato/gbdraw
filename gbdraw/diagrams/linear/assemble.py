@@ -15,7 +15,7 @@ import copy
 from dataclasses import dataclass, replace
 import logging
 import math
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any, Literal, Sequence, cast
 
 from Bio.SeqRecord import SeqRecord
 import pandas as pd
@@ -184,6 +184,15 @@ if TYPE_CHECKING:
     from ...api.options import LinearMultiRecordOptions
 
 
+def _linear_feature_placement_slot(side: str, separate_strands: bool) -> FeaturePlacementSlot:
+    # FeaturePlacementSlot.__post_init__ validates the side for linear mode.
+    return FeaturePlacementSlot(
+        "linear",
+        cast(Literal["overlay", "above", "below"], side),
+        separate_strands,
+    )
+
+
 def _linear_track_slot_dom_id(
     *,
     slot_id: str,
@@ -240,6 +249,8 @@ def _prepare_linear_annotation_tracks(
     )
     if not bundle.set_ids and not bundle.annotations:
         return slots, bundle, {}, frozenset()
+    # The planner generates the slot list whenever annotations are present.
+    assert slots is not None
     updated_slots, layouts = _layout_linear_annotation_tracks(
         records,
         slots,
@@ -387,8 +398,9 @@ def _apply_depth_track_heights_to_linear_slots(
             out.append(slot)
             continue
         track_index = _depth_slot_track_index(slot)
-        if 0 <= track_index < len(depth_heights) and depth_heights[track_index] is not None:
-            out.append(replace(slot, height=ScalarSpec(float(depth_heights[track_index]), "px")))
+        track_height = depth_heights[track_index] if 0 <= track_index < len(depth_heights) else None
+        if track_height is not None:
+            out.append(replace(slot, height=ScalarSpec(float(track_height), "px")))
         else:
             out.append(slot)
     return out
@@ -1915,9 +1927,11 @@ def assemble_linear_diagram(
         feature_config,
         profile,
         record_transforms=record_transforms,
-        placement_slot=(FeaturePlacementSlot(
-            "linear", resolved_feature_slot.side, profile.strandedness,
-        ) if resolved_feature_slot is not None else None),
+        placement_slot=(
+            _linear_feature_placement_slot(resolved_feature_slot.side, profile.strandedness)
+            if resolved_feature_slot is not None
+            else None
+        ),
     )
     record_feature_dicts = [
         result.foreground_features for result in record_feature_layers
@@ -2551,14 +2565,14 @@ def assemble_linear_diagram(
         plan = record_vertical_plans[record_index]
         attachment_band = plan.axis_band
         non_feature_band: VerticalBand | None = None
-        for slot in plan.slots:
-            band = slot.paint_band
+        for plan_slot in plan.slots:
+            band = plan_slot.paint_band
             if band is None:
                 continue
-            if slot.renderer == "features":
+            if plan_slot.renderer == "features":
                 band = record_feature_lane_geometries[
                     record_index
-                ].occupied_band.translate(slot.origin_y)
+                ].occupied_band.translate(plan_slot.origin_y)
             else:
                 non_feature_band = band if non_feature_band is None else non_feature_band.union(band)
             attachment_band = attachment_band.union(band)
@@ -2580,17 +2594,19 @@ def assemble_linear_diagram(
         if not any(feature.placement is not None and feature.placement.level > 0
                    for feature in features.values()):
             continue
-        for slot in plan.slots:
-            if slot.renderer != "features" or slot.paint_band is None:
+        for plan_slot in plan.slots:
+            if plan_slot.renderer != "features" or plan_slot.paint_band is None:
                 continue
             geometry = record_feature_lane_geometries[record_index]
             for feature in features.values():
+                if feature.source_feature_index is None:
+                    continue  # by_source_index only holds integer source indexes
                 dom_id = feature_dom_index.by_source_index.get((record_index, feature.source_feature_index))
                 if dom_id is None:
                     continue
                 lane = geometry.lane_for(strand=feature.strand, track_id=feature.feature_track_id,
                                          separate_strands=render_context.profile.strandedness)
-                band = lane.band.translate(slot.origin_y)
+                band = lane.band.translate(plan_slot.origin_y)
                 if non_feature_band is not None:
                     band = band.union(non_feature_band)
                 feature_attachment_bands[dom_id] = VerticalBand(
@@ -3085,7 +3101,9 @@ def assemble_linear_diagram(
             ),
         )
     if resolved_feature_slot is not None:
-        targets = FeaturePlacementSlot("linear", resolved_feature_slot.side, profile.strandedness).supported_targets()
+        targets = _linear_feature_placement_slot(
+            resolved_feature_slot.side, profile.strandedness
+        ).supported_targets()
         for record_geometry in getattr(canvas, "_gbdraw_track_slot_geometry", {}).get("records", []):
             record_geometry["featurePlacementTargets"] = targets
     setattr(canvas, "_gbdraw_alignment_placements", tuple(

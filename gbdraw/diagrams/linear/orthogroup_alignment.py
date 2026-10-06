@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import NamedTuple, Sequence
+from typing import Any, Iterable, NamedTuple, Sequence
 
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
@@ -50,7 +50,7 @@ def _row_str(row: object, column: str) -> str:
 
 
 def _row_int(row: object, column: str, default: int = -1) -> int:
-    value = _row_value(row, column, default)
+    value: Any = _row_value(row, column, default)
     try:
         return int(value)
     except (TypeError, ValueError):
@@ -83,6 +83,7 @@ def _collect_label_members(
             continue
         for row in comparison.itertuples(index=False):
             for role in ("query", "subject"):
+                key: tuple[str, int, int | str]
                 member = _member_from_row(row, role)
                 if member is None or member.record_index < 0:
                     continue
@@ -161,7 +162,7 @@ def _features_by_source_index(record: SeqRecord) -> dict[int, object]:
     by_source_index: dict[int, object] = {}
     fallback_index = 0
 
-    def walk(features: object) -> None:
+    def walk(features: Iterable[object] | None) -> None:
         nonlocal fallback_index
         for feature in features or ():
             source_index = _source_feature_index(feature)

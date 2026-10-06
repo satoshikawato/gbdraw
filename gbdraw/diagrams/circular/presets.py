@@ -8,7 +8,7 @@ branching on the legacy preset name.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Literal, Sequence
+from typing import Literal, Sequence, cast
 
 from ...canvas import CircularCanvasConfigurator
 from ...config.models import GbdrawConfig
@@ -74,7 +74,7 @@ def normalize_circular_track_preset(raw: str | None) -> CircularTrackPreset:
         raise ValueError(
             "Circular track preset must be one of: tuckin, middle, spreadout"
         )
-    return preset  # type: ignore[return-value]
+    return cast(CircularTrackPreset, preset)  # membership checked above
 
 
 def circular_feature_lane_direction_for_preset(

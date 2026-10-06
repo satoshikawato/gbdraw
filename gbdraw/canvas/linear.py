@@ -105,6 +105,9 @@ class LinearCanvasConfigurator:
     create_svg_canvas(): Creates and returns an SVG canvas for drawing.
     """
 
+    # Set by assemble_linear_diagram once record rows are placed; read by add_length_bar_on_linear_canvas.
+    height_below_final_record: float
+
     def __init__(
         self,
         num_of_entries: int,
@@ -311,8 +314,8 @@ class LinearCanvasConfigurator:
             self.cds_height: float = 1 * self.default_cds_height
             self.cds_padding: float = 0.6 * self.cds_height + 5
         else:
-            self.cds_height: float = 0.5 * self.default_cds_height
-            self.cds_padding: float = 0.6 * self.cds_height + 5
+            self.cds_height = 0.5 * self.default_cds_height
+            self.cds_padding = 0.6 * self.cds_height + 5
 
     def set_arrow_length(self) -> None:
         """
@@ -343,8 +346,8 @@ class LinearCanvasConfigurator:
         # Keep the record axis width fixed to the configured figure width from the start.
         # Horizontal offsets reposition the plotted record; they do not shorten its scale.
         self.alignment_width: float = self.fig_width
-        self.total_width = int(self.horizontal_offset + self.fig_width)
-        self.total_height = int(
+        self.total_width: float = int(self.horizontal_offset + self.fig_width)
+        self.total_height: float = int(
             2 * self.vertical_offset
             + (self.cds_height + self.plot_tracks_height)
             + (

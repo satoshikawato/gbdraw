@@ -77,7 +77,7 @@ def _precalculate_definition_metrics(
     """
     Pre-calculate definition widths and heights for all records.
     """
-    max_definition_width = 0
+    max_definition_width: float = 0
     definition_heights: list[float] = []
     definition_widths: list[float] = []
     if not records:
@@ -170,7 +170,7 @@ def _precalculate_label_dimensions(
         canvas_config=canvas_config,
         profile=profile,
     )
-    max_required_height = 0
+    max_required_height: float = 0
     all_labels_by_record: list[list[dict]] = []
     record_label_heights: list[float] = []
     normalize_length = cfg.canvas.linear.normalize_length

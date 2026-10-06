@@ -924,9 +924,9 @@ def resolve_similarity_alignment(
             for candidate in group_candidates
             if candidate.is_usable_for(resolved_group_id)
         )
-        choice = choice_by_record.get(record_key)
-        if choice is not None:
-            if choice.kind is AlignmentChoiceKind.SKIP:
+        explicit_choice = choice_by_record.get(record_key)
+        if explicit_choice is not None:
+            if explicit_choice.kind is AlignmentChoiceKind.SKIP:
                 records.append(
                     AlignmentRecordDecision(
                         record_key=record_key,
@@ -935,12 +935,15 @@ def resolve_similarity_alignment(
                     )
                 )
                 continue
+            chosen_anchor = explicit_choice.anchor
+            # AlignmentRecordChoice.__post_init__ requires an anchor for Select choices.
+            assert chosen_anchor is not None
             selected = next(
                 (
                     candidate
                     for candidate in usable
-                    if candidate.anchor.canonical_key == choice.anchor.canonical_key
-                    and _identities_agree(choice.anchor, candidate.anchor)
+                    if candidate.anchor.canonical_key == chosen_anchor.canonical_key
+                    and _identities_agree(chosen_anchor, candidate.anchor)
                 ),
                 None,
             )
