@@ -1,3 +1,4 @@
+// @ts-check
 import {
   annotationRecordBinding,
   annotationRecordSelectorFromTarget,
@@ -6,6 +7,10 @@ import {
 
 const cleanText = (value) => String(value ?? '').trim();
 
+/**
+ * @param {{ start?: any, end?: any }} span A coordinate target or a table row.
+ * @returns {string} The message of a failed span, or ''.
+ */
 export const validateAnnotationCoordinates = ({ start, end }) => (
   [start, end].every((value) => cleanText(value) !== '' && Number.isSafeInteger(Number(value)) && Number(value) >= 1)
     ? '' : 'start and end must be positive integers (1-based coordinates).'

@@ -535,6 +535,22 @@ test('an edit that changes a Legend source rerenders once', async ({ page }) => 
   await expectLiveEqualsGenerate(page, { label: 'edits that change a Legend source' });
 });
 
+// OV-60: renaming a generated Legend row (GC content) onto the caption of a
+// color rule that draws no row is an explicit rename; Generate draws it too.
+test('a Legend rename onto the caption of a color rule without a drawn row equals Generate', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^NOMATCH$', color: '#c83366', cap: 'Zeta' });
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === 'GC content'), 'Zeta');
+  });
+  await settleLive(page);
+  const captions = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption));
+  expect(captions, 'the renamed row is drawn live').toContain('Zeta');
+  await expectLiveEqualsGenerate(page, { label: 'Legend rename onto the caption of a color rule without a row' });
+});
+
 // OV-46: a Legend-only color on a generated row that only one Result of a batch
 // draws. The compiler cannot tell which Result draws the row, so each Result may
 // miss it; the Generate succeeds when one Result draws it.
@@ -561,6 +577,49 @@ test('a Legend color on a row only one Result draws survives the next Generate',
   expect(after[0].find(({ caption }) => caption === 'other proteins').fill.toLowerCase()).toBe('#00aa00');
   expect(after[1]).toEqual(before[1]);
 });
+
+// OV-66: Undo of a Depth source removal brings back the Depth track and its
+// tick text, and Redo hides them again; the live Result equals what Generate
+// draws. A Depth source History step restores files, which suppresses the
+// track-visibility watcher, so the step projects the visibility itself.
+const DEPTH_TSV = Array.from({ length: 4 }, (_, index) => `FORCEDLBL\t${index * 700 + 1}\t${10 + index}`).join('\n');
+const DEPTH_CASES = {
+  'circular, clearing the Depth file': {
+    mode: 'circular',
+    add: (app, file) => app.setCircularDepthFile(0, file),
+    remove: (app) => app.setCircularDepthFile(0, null)
+  },
+  'circular, removing the Depth track': {
+    mode: 'circular',
+    add: (app, file) => app.setCircularDepthFile(0, file),
+    remove: (app) => app.removeCircularDepthTrack(0)
+  },
+  'linear, clearing the Depth file': {
+    mode: 'linear',
+    add: (app, file) => app.setLinearDepthFile(app.linearSeqs[0], 0, file),
+    remove: (app) => app.setLinearDepthFile(app.linearSeqs[0], 0, null)
+  }
+};
+for (const [name, { mode, add, remove }] of Object.entries(DEPTH_CASES)) {
+  test(`Undo and Redo of a Depth source removal match Generate (${name})`, async ({ page }) => {
+    test.setTimeout(180_000);
+    await open(page, { mode, results: 'single', reflow: 'off' });
+    const inStep = async (label, change, ...args) => {
+      await page.evaluate(async ({ stepLabel, source, values }) => {
+        const run = new Function('app', 'text', `return (${source})(app, text && new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));`);
+        await window.__GBDRAW_HISTORY__.runUndoable(stepLabel, () => run(window.__GBDRAW_APP__, values[0]));
+      }, { stepLabel: label, source: change.toString(), values: args });
+      await settleLive(page);
+    };
+    await inStep('Change uploaded file', add, DEPTH_TSV);
+    await generate(page);
+    await inStep('Remove Depth', remove, null);
+    await history(page, 'undo');
+    await expectLiveEqualsGenerate(page, { label: `${name}: Undo` });
+    await history(page, 'redo');
+    await expectLiveEqualsGenerate(page, { label: `${name}: Redo` });
+  });
+}
 
 // OV-63: Python's Legend row facts excuse only a row the draft removed. A Legend
 // style on a key no feature of the records can produce is a stale operation, and
@@ -726,6 +785,75 @@ for (const { name, mode, canvas = null, absent = null, run } of SIBLINGS) {
   });
 }
 
+// OV-62 (PD-OI-061 amended): two Legend rows merge only when both draw features
+// of one same type. Anything else offers Suffix and Cancel only.
+const renameRow = (page, from, to) => evaluateWithRetainedPromise(page, async ({ from, to }) => {
+  const app = window.__GBDRAW_APP__;
+  const index = app.legendEntries.findIndex((entry) => entry.caption === from);
+  if (index < 0) throw new Error(`no Legend row "${from}": ${app.legendEntries.map((entry) => entry.caption).join(', ')}`);
+  await app.renameLegendEntry(index, to);
+}, { from, to });
+const legendCaptions = (page) => page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption));
+const choose = async (page, choice) => {
+  await evaluateWithRetainedPromise(page, async (picked) => { await window.__GBDRAW_APP__.handleLegendRenameChoice(picked); }, choice);
+  await settleLive(page);
+};
+const mergeButton = (page) => page.getByRole('button', { name: /Merge into existing/ });
+const suffixButton = (page) => page.getByRole('button', { name: /add a suffix/ });
+
+test('a Legend rename of GC content onto CDS offers no Merge, and Suffix equals Generate', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'CDS' });
+  const before = await legendCaptions(page);
+  await renameRow(page, 'GC content', 'CDS');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'the rename asks').toBe(true);
+  await expect(mergeButton(page), 'Merge is not offered').toHaveCount(0);
+  await expect(suffixButton(page), 'Suffix is offered').toHaveCount(1);
+  await choose(page, 'merge');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'a refused Merge closes the dialog').toBe(false);
+  expect(await legendCaptions(page), 'a refused Merge changes no row').toEqual(before);
+  await renameRow(page, 'GC content', 'CDS');
+  await choose(page, 'suffix');
+  const renamed = await legendCaptions(page);
+  expect(renamed.filter((caption) => caption === 'CDS'), 'one row keeps the caption CDS').toHaveLength(1);
+  expect(renamed, 'GC content is gone').not.toContain('GC content');
+  expect(renamed.some((caption) => caption !== 'CDS' && caption.startsWith('CDS')), 'the plot has a suffixed caption').toBe(true);
+  await expectLiveEqualsGenerate(page, { label: 'GC content renamed onto CDS with Suffix' });
+});
+
+const RULE_ROWS = [
+  { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'alpha' },
+  { feat: 'CDS', qual: 'locus_tag', val: '^FL2$', color: '#2a9d8f', cap: 'beta' },
+  { feat: 'repeat_region', qual: 'note', val: '^RPT_ONE$', color: '#7b2cbf', cap: 'rep' }
+];
+
+test('a Legend rename between rows of different feature types offers no Merge', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  for (const rule of RULE_ROWS) await addColorRule(page, rule);
+  await renameRow(page, 'rep', 'alpha');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'the rename asks').toBe(true);
+  await expect(mergeButton(page), 'Merge is not offered').toHaveCount(0);
+  await choose(page, 'suffix');
+  const renamed = await legendCaptions(page);
+  expect(renamed.filter((caption) => caption === 'alpha'), 'one row keeps the caption').toHaveLength(1);
+  expect(renamed.some((caption) => caption !== 'alpha' && caption.startsWith('alpha')), 'the repeat row has a suffixed caption').toBe(true);
+  await expectLiveEqualsGenerate(page, { label: 'repeat_region row renamed onto a CDS row with Suffix' });
+});
+
+// Two color-rule rows of one feature type: the target is owned by a rule, so the
+// rename keeps its PD-OI-042 disambiguation instead of asking, and Generate agrees.
+test('a Legend rename of a rule row onto another rule row of one feature type equals Generate', async ({ page }) => {
+  test.setTimeout(120_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'on' });
+  for (const rule of RULE_ROWS) await addColorRule(page, rule);
+  await renameRow(page, 'beta', 'alpha');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'a rule-owned caption does not ask').toBe(false);
+  await settleLive(page);
+  await expectLiveEqualsGenerate(page, { label: 'same-type rule row renamed onto a rule row' });
+});
+
 // OV-65: Legend styles follow the captions that track data names. Each data
 // change below runs in one History step, as its control's does.
 const inHistoryStep = (page, label, body, arg) => page.evaluate(
@@ -765,7 +893,6 @@ const typeIntoLabel = async (page, section, label, text) => {
   await settleLive(page);
 };
 
-const DEPTH_TSV = Array.from({ length: 4 }, (_, index) => `FORCEDLBL\t${index * 700 + 1}\t${10 + index}`).join('\n');
 const addDepthFile = async (page, name) => {
   await inHistoryStep(page, 'Change uploaded file', (app, { text, fileName }) => {
     app.setCircularDepthFile(0, new File([text], fileName, { type: 'text/tab-separated-values' }));
@@ -781,7 +908,7 @@ const ANNOTATION_TSV = (legendLabel) => [
   `regions\tregion_1\thighlight\t100\t400\t${legendLabel}`
 ].join('\n');
 
-const legendCaptions = async (page) => (await semanticSnapshot(page)).legend.map(({ caption }) => caption);
+const drawnLegendCaptions = async (page) => (await semanticSnapshot(page)).legend.map(({ caption }) => caption);
 const NO_STYLE = { color: null, stroke: null };
 const COLORED = '#7b2cbf';
 
@@ -874,7 +1001,7 @@ test.describe('OV-65 Legend styles follow the captions of track data', () => {
       await settleLive(page);
       expect(await legendStyleOf(page, row)).toEqual(NO_STYLE);
       await generate(page);
-      const captions = await legendCaptions(page);
+      const captions = await drawnLegendCaptions(page);
       expect(captions).not.toContain(row);
       for (const kept of drawn) expect(captions).toContain(kept);
     });
@@ -892,7 +1019,7 @@ test.describe('OV-65 Legend styles follow the captions of track data', () => {
         await expectLiveEqualsGenerate(page, { label: `${name}, Undo` });
       } else {
         await generate(page);
-        expect(await legendCaptions(page)).toContain(row);
+        expect(await drawnLegendCaptions(page)).toContain(row);
       }
     });
   }
@@ -938,7 +1065,7 @@ test.describe('OV-65 Legend styles follow the captions of track data', () => {
     await field.blur();
     await settleLive(page);
     await generate(page);
-    const captions = await legendCaptions(page);
+    const captions = await drawnLegendCaptions(page);
     expect(captions).toContain('Custom GC');
     expect(captions).not.toContain('GC content');
   });

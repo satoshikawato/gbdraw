@@ -1,3 +1,4 @@
+// @ts-check
 import {
   DIAGRAM_HELPER_OPERATIONS,
   runDiagramHelperOperation

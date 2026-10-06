@@ -1,3 +1,4 @@
+// @ts-check
 export const LINEAR_LABEL_VISIBILITY_MODES = Object.freeze(['auto', 'show', 'hide']);
 
 const hasOwn = (value, key) => (

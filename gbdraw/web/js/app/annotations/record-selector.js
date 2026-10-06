@@ -1,3 +1,7 @@
+// @ts-check
+/**
+ * @import { AnnotationRecordCatalog } from './record-catalog.js'
+ */
 import {
   annotationRecordSelectorValue,
   parseAnnotationRecordSelectorValue
@@ -120,6 +124,14 @@ export const annotationRecordOptions = (catalog, annotation) => {
   ];
 };
 
+/**
+ * @typedef {object} AnnotationRecordSelectorOptions
+ * @property {() => AnnotationRecordCatalog | null | undefined} getCatalog The current catalog of the mode.
+ */
+
+/**
+ * @param {AnnotationRecordSelectorOptions} options
+ */
 export const createAnnotationRecordSelector = ({ getCatalog }) => {
   const catalog = () => getCatalog?.() || {
     status: 'error', records: [], issues: [], requiresSelection: false

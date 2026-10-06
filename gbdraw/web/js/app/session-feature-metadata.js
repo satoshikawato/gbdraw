@@ -1,3 +1,4 @@
+// @ts-check
 import {
   buildLinearRegionExtractionContext,
   extractFeatureMetadataForPreview
@@ -708,6 +709,15 @@ const hasMigrationEntries = (migration) =>
 
 // Reads the snapshot's GenBank sources with its crops, record selectors, and
 // orientations, as the renderer drew them.
+/**
+ * @param {any} snapshot
+ * @param {{
+ *   featureVisibilityTsv?: string,
+ *   enrichFeature?: (feature: any, recordIndex?: number) => any,
+ *   readFeatureExtractionDataImpl: any,
+ *   extractFeatureMetadataForPreviewImpl?: typeof extractFeatureMetadataForPreview
+ * }} options
+ */
 const extractSnapshotFeatures = (snapshot, {
   featureVisibilityTsv = '',
   enrichFeature,

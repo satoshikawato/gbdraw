@@ -1,3 +1,4 @@
+// @ts-check
 export const hexToRgb = (hex) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   return result
@@ -169,6 +170,10 @@ export const colorValueForMode = (mode, currentColor = null, fallback = '#000000
   return toNativeColorInputValue(currentColor, fallback);
 };
 
+/**
+ * @param {Record<string, string>} [colors]
+ * @returns {Record<string, string>}
+ */
 export const normalizePaletteColors = (colors = {}) => {
   const normalized = { ...(colors || {}) };
   Object.keys(normalized).forEach((key) => {

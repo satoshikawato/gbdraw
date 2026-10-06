@@ -1,3 +1,20 @@
+// @ts-check
+/**
+ * The palette refs the manager reads and writes (state.js owns them).
+ * @typedef {object} ResultsManagerState
+ * @property {{ value: Record<string, Record<string, string>> | null }} paletteDefinitions
+ * @property {{ value: string }} selectedPalette
+ * @property {{ value: Record<string, string> }} currentColors
+ * @property {{ value: boolean }} paletteInstantPreviewEnabled
+ * @property {{ value: string }} appliedPaletteName
+ * @property {{ value: Record<string, string> }} appliedPaletteColors
+ * @property {{ value: string }} pendingPaletteName
+ * @property {{ value: Record<string, string> }} pendingPaletteColors
+ * @property {(colors: Record<string, string>) => Record<string, string>} normalizePaletteColors
+ * @property {() => any} [sessionOperationAvailability] The busy outcome of a Session operation, if any.
+ */
+
+/** @param {{ state: ResultsManagerState }} options */
 export const createResultsManager = ({ state }) => {
   const {
     paletteDefinitions,

@@ -1,3 +1,4 @@
+// @ts-check
 import { collectHistoryFileIds } from './history-files.js';
 import {
   recordSessionLifecycleEvent,
@@ -12,6 +13,11 @@ const HISTORY_EDIT_BUSY = Object.freeze({
   reason: 'Applying an edit. Retry after the edit finishes.'
 });
 
+/**
+ * @template T
+ * @param {T} value
+ * @returns {{ value: T }}
+ */
 const makeBox = (value) => ({ value });
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 const isPlainObject = (value) => (
@@ -118,6 +124,59 @@ const checkpointSvgBytes = (checkpoint) => (
     : 0
 );
 
+/**
+ * @typedef {Record<string, any>} HistoryIntent
+ *   The editable intent (config, files, ui, features, ...); the snapshot service builds and applies it.
+ * @typedef {Record<string, any>} HistoryCheckpoint
+ *   An artifact checkpoint: intent plus the generated Result domains.
+ * @typedef {{ path: string[], before: any, after: any, beforeHas: boolean, afterHas: boolean }} HistoryIntentChange
+ *   One changed leaf of an intent; `path[0]` is the domain.
+ * @typedef {{
+ *   retainedBytes: number,
+ *   fileIds?: readonly string[],
+ *   identity?: { fingerprint?: string, compactSignature?: string },
+ *   [key: string]: any
+ * }} HistoryArtifactHandle
+ *   A generated-artifact capture; History reads only these fields.
+ * @typedef {{ status: string, reason: string }} HistoryBusy
+ *   The Session availability that rejects an edit, Undo, or Redo.
+ * @typedef {object} HistoryFileRetention
+ *   The two functions of the History file store that History calls (R13).
+ * @property {(fileIds: Set<string>) => number} estimateBytes
+ *   Bytes of the retained files named by `fileIds`.
+ * @property {(fileIds: Set<string>) => void} retainOnly
+ *   Drops every stored file that `fileIds` does not name.
+ *
+ * @typedef {object} HistoryManagerOptions
+ * @property {() => HistoryIntent | Promise<HistoryIntent>} buildIntent
+ *   The snapshot service's capture of the current intent.
+ * @property {(intent: HistoryIntent, context: { changes: HistoryIntentChange[], direction: 'undo' | 'redo' }) => unknown} applyIntent
+ *   The snapshot service's restore of an intent; History awaits it.
+ * @property {() => HistoryCheckpoint | Promise<HistoryCheckpoint>} buildCheckpoint
+ *   The snapshot service's capture of an artifact checkpoint.
+ * @property {(checkpoint: HistoryCheckpoint) => unknown} applyCheckpoint
+ *   The snapshot service's restore of an artifact checkpoint; History awaits it.
+ * @property {(() => HistoryArtifactHandle | Promise<HistoryArtifactHandle>) | null} [captureGeneratedArtifactHandle]
+ *   The snapshot service's capture of the generated artifact for a replacement step.
+ * @property {((handle: HistoryArtifactHandle, options: { clearFailedGeneratePresentation: boolean }) => unknown) | null} [restoreGeneratedArtifactHandle]
+ *   The snapshot service's restore of a captured handle; History awaits it.
+ * @property {((before: HistoryArtifactHandle, after: HistoryArtifactHandle) => boolean) | null} [compareGeneratedArtifactHandles]
+ *   Whether two handles name the same artifact.
+ * @property {(value: unknown) => string} [signatureFor]
+ *   The signature that detects a change; JSON by default.
+ * @property {HistoryFileRetention | null} [fileStore]
+ *   The file store that keeps the files that entries name (F-05).
+ * @property {(() => Iterable<string>) | null} [collectCurrentFileIds]
+ *   The ids of the files bound now, from the snapshot service.
+ * @property {number} [maxActions] Undo entries kept.
+ * @property {number} [maxBytes] Retained bytes allowed before the oldest entries drop.
+ * @property {<T>(value: T) => { value: T }} [makeRef]
+ *   Creates a reactive box (Vue `ref` in the app); a plain box by default.
+ * @property {(operation?: string) => HistoryBusy | null} [mutationAvailability]
+ *   The Session lifecycle's busy answer (`'history'` words Undo and Redo, D-28).
+ */
+
+/** @param {HistoryManagerOptions} options */
 export const createHistoryManager = ({
   buildIntent,
   applyIntent,
@@ -133,7 +192,7 @@ export const createHistoryManager = ({
   maxBytes = DEFAULT_MAX_BYTES,
   makeRef = makeBox,
   mutationAvailability = () => null
-} = {}) => {
+} = /** @type {HistoryManagerOptions} */ ({})) => {
   if (typeof buildIntent !== 'function') {
     throw new Error('createHistoryManager requires buildIntent.');
   }
@@ -669,7 +728,7 @@ export const createHistoryManager = ({
     if (phase === 'before') diagnostics.artifactHandleBeforeBuildCount += 1;
     else diagnostics.artifactHandleAfterBuildCount += 1;
     try {
-      const handle = captureGeneratedArtifactHandle({ phase });
+      const handle = captureGeneratedArtifactHandle();
       if (isPromiseLike(handle)) {
         return Promise.resolve(handle)
           .then((captured) => finishArtifactHandleCapture(captured, phase))

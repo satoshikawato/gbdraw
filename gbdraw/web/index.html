@@ -6477,6 +6477,10 @@
                                 {{ legendRenameDialog.siblingCount + 1 }} features.
                                 <br>Apply the rename to "<span class="font-bold text-emerald-600">{{ legendRenameDialog.newCaption }}</span>" for this feature only, or for all current uses?
                             </p>
+                            <p v-else-if="!legendRenameDialog.mergeAvailable" class="text-sm text-slate-600 mb-4">
+                                "<span class="font-bold text-blue-600">{{ legendRenameDialog.newCaption }}</span>" already exists, and "{{ legendRenameDialog.oldCaption }}" is not the same type of item, so the two cannot be merged.
+                                <br>Keep "{{ legendRenameDialog.oldCaption }}" as its own Legend item with a suffix, or cancel.
+                            </p>
                             <p v-else class="text-sm text-slate-600 mb-4">
                                 "<span class="font-bold text-blue-600">{{ legendRenameDialog.newCaption }}</span>" already exists with a different color.
                                 <br>Existing color:
@@ -6509,7 +6513,8 @@
                             </div>
 
                             <div v-else class="flex flex-col gap-2">
-                                <button @click="handleLegendRenameChoice('merge')"
+                                <button v-if="legendRenameDialog.mergeAvailable"
+                                        @click="handleLegendRenameChoice('merge')"
                                         data-history-managed
                                         class="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-arrows-merge text-lg" aria-hidden="true"></i>
@@ -6875,9 +6880,6 @@
                             </div>
                             <p v-if="labelReflowLastError" class="text-[10px] text-amber-600" :title="labelReflowLastError.summary">
                                 <i class="ph ph-warning" aria-hidden="true"></i> Auto Reflow failed. Current diagram is kept.
-                            </p>
-                            <p v-if="labelOverrideBuildWarning" class="text-[10px] text-amber-600" :title="labelOverrideBuildWarning">
-                                <i class="ph ph-warning" aria-hidden="true"></i> {{ labelOverrideBuildWarning }}
                             </p>
                         </div>
                     </div>

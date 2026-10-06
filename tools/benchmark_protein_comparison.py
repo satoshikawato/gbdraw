@@ -134,7 +134,7 @@ def source_info(root):
 
 
 def helpers(root):
-    text = (root / "gbdraw/web/js/app/python-helpers.js").read_text()
+    text = (root / "gbdraw/web/js/app/python-helpers.js").read_text().removeprefix("// @ts-check\n")
     if not text.startswith("export const PYTHON_HELPERS = `") or text.count("`") != 2:
         raise ValueError("Python helper embedding changed; review the extraction boundary")
     namespace = {}

@@ -1,3 +1,4 @@
+// @ts-check
 export const getDepthTrackFallbackLabel = (index) => {
   const numericIndex = Math.max(0, Number(index) || 0);
   return numericIndex === 0 ? 'Depth' : `Depth ${numericIndex + 1}`;

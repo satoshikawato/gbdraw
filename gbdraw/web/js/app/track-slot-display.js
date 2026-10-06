@@ -1,3 +1,4 @@
+// @ts-check
 export const normalizeOptionalText = (value) => {
   const text = String(value ?? '').trim();
   return text.length > 0 ? text : null;
@@ -45,8 +46,17 @@ export const manualOrAutoDisplay = ({ manualValue, autoValue, formatter }) => {
   return typeof formatter === 'function' ? formatter(autoValue) : String(autoValue ?? '');
 };
 
+/**
+ * @typedef {object} FindTrackSlotGeometryOptions
+ * @property {{ records?: any[] } | null} [geometry] The Python track geometry.
+ * @property {number} [resultIndex]
+ * @property {number} [recordIndex]
+ * @property {string | null} [slotId]
+ */
+
 // Python emits geometry only for rendered rows, so geometry belongs to a row
 // by slot ID alone; a row without rendered geometry has none.
+/** @param {FindTrackSlotGeometryOptions} [options] */
 export const findTrackSlotGeometry = ({
   geometry,
   resultIndex = 0,

@@ -1,5 +1,6 @@
 // @ts-check
 /** @import { RulePreparation } from './rule-matching.js' */
+/** @import { PreviousResultRestoreOptions, ReadinessExpectationOptions } from './preview-runtime.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import {
@@ -1156,10 +1157,10 @@ export const executeCanonicalRenderCandidate = async ({
  * Generate reads: it registers the readiness a candidate must meet, and rolls
  * the selection back when the candidate is rejected.
  * @typedef {object} RunAnalysisPreviewRuntime
- * @property {(expectation: Record<string, any>) => any} registerReadinessExpectation
+ * @property {(expectation: ReadinessExpectationOptions) => any} registerReadinessExpectation
  * @property {(generationToken: string, reason: Error) => void} invalidateReadinessExpectation
  * @property {(receipt: any, reason: string) => void} invalidateReadyReceipt
- * @property {(options: Record<string, any>) => Promise<any>} restorePreviousSelectedResult
+ * @property {(options: PreviousResultRestoreOptions) => Promise<any>} restorePreviousSelectedResult
  * @property {(index: number) => any} selectResult
  * @property {(result: any) => any} getResultIdentity
  * @property {() => ({ readyReceipt?: any } | null)} [getActiveRuntime]

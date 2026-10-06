@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createRulePreparation, ruleMatchesFeature, firstMatchingRule, rebindRuleColorOverrides } from '../../gbdraw/web/js/app/rule-matching.js';
+import { createRulePreparation, ruleMatchesFeature, firstMatchingRule, rebindRuleColorOverrides, runWhenPrepared } from '../../gbdraw/web/js/app/rule-matching.js';
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 
 const setup = (evaluate = evaluatePythonRules) => {
@@ -11,9 +11,10 @@ const setup = (evaluate = evaluatePythonRules) => {
   return { state, features, preparation: createRulePreparation({ state, evaluate }) };
 };
 const rule = val => ({ feat: 'CDS', qual: 'product', val });
+const run = (state, preparation, rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit);
 
 test('one prepared Python result supplies synchronous membership without JS regex translation', async () => {
-  const { features, preparation } = setup();
+  const { state, features, preparation } = setup();
   const rules = ['(?i)NADH', '(?P<enzyme>NADH)', 'NADH\\Z', '\\bβ', 'i'].map(rule);
   assert.equal(ruleMatchesFeature(features[0], rules[0]), null);
   assert.equal(await preparation.prepare(rules), true);
@@ -22,7 +23,7 @@ test('one prepared Python result supplies synchronous membership without JS rege
     [false, true, false, false], [false, false, true, false]
   ]);
   let committed = false;
-  preparation.run(rules, () => { committed = true; });
+  run(state, preparation, rules, () => { committed = true; });
   assert.equal(committed, true, 'prepared edits commit before returning');
 });
 
@@ -30,7 +31,7 @@ test('invalid syntax with an empty or unrelated catalog cannot reach the commit'
   const { state, preparation } = setup();
   for (const features of [state.extractedFeatures.value, []]) {
     state.extractedFeatures.value = features;
-    await assert.rejects(() => preparation.run([rule('(?<enzyme>NADH)')], () => assert.fail('invalid commit')));
+    await assert.rejects(() => run(state, preparation, [rule('(?<enzyme>NADH)')], () => assert.fail('invalid commit')));
   }
 });
 
@@ -39,7 +40,7 @@ for (const replace of [s => { s.svgResultIdentity.value = 'two'; }, s => { s.man
     let release;
     const { state, preparation } = setup(payload => new Promise(resolve => { release = () => evaluatePythonRules(payload).then(resolve); }));
     let commits = 0;
-    const pending = preparation.run([rule('NADH')], () => { commits++; });
+    const pending = run(state, preparation, [rule('NADH')], () => { commits++; });
     replace(state);
     await release();
     await pending;
@@ -144,7 +145,7 @@ test('Generate preparation forwards its progress observer through caption and me
   const options = { onProgress: event => observations.push(event) };
   const kinds = [];
   const { preparation } = setup(async (payload, received) => {
-    assert.equal(received, options);
+    assert.equal(received.onProgress, options.onProgress);
     kinds.push(payload.kind);
     received.onProgress({ stage: 'preparing-runtime', requestId: 17 });
     return evaluatePythonRules(payload);

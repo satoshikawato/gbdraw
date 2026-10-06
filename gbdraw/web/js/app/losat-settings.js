@@ -1,3 +1,4 @@
+// @ts-check
 import { normalizeCollinearSearchScope } from './losat-normalization.js';
 import { buildLosatJobSpecs } from './linear-comparisons.js';
 import { losatRecordGencode, planLosatSourceJobs } from './linear-sources.js';
@@ -32,6 +33,31 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
     : [...options, requestedOption];
 };
 
+/**
+ * The saved LOSAT Settings values. A thread value is 'safe', 'available', a
+ * count, or blank (Auto), as `resolveLosatThreadPlan` reads it.
+ * @typedef {object} LosatSettingsValues
+ * @property {string} [executionMode]
+ * @property {string | number | null} [threadsPerJob]
+ * @property {string | number | null} [parallelWorkers]
+ * @property {string | number | null} [totalThreadBudget]
+ * @property {{ mode?: string, collinearInferOrthogroups?: boolean, collinearSearchScope?: string }} [blastp]
+ */
+
+/**
+ * The refs and reactive objects of `state.js` this module reads. A ref is
+ * `{ value }` because Vue comes from `window.Vue`, which is `any`.
+ * @typedef {object} LosatSettingsState
+ * @property {Record<string, any>[]} linearSeqs
+ * @property {{ value: any }} linearComparisonResolution
+ * @property {LosatSettingsValues} losat
+ * @property {{ value: string }} losatProgram
+ * @property {{ value?: { state?: string } }} [losatThreadingStatus]
+ */
+
+/**
+ * @param {{ state: LosatSettingsState }} options
+ */
 export const createLosatSettings = ({ state }) => {
   const {
     linearSeqs,
@@ -39,6 +65,9 @@ export const createLosatSettings = ({ state }) => {
     losat,
     losatProgram
   } = state;
+
+  // `state.js` always provides the computed plan.
+  const readResolution = () => linearComparisonResolution.value || {};
 
   const losatHardwareThreads = ref(getLosatHardwareThreads());
   onMounted(() => {
@@ -51,7 +80,7 @@ export const createLosatSettings = ({ state }) => {
   // translation tables vary per record, so they are the only arguments that
   // can split a source batch.
   const losatEstimatedJobCount = computed(() => {
-    const resolution = linearComparisonResolution?.value || linearComparisonResolution || {};
+    const resolution = readResolution();
     if (resolution.valid === false || !resolution.hasLosatIntent) return 0;
     const program = losatProgram.value;
     try {
@@ -135,7 +164,7 @@ export const createLosatSettings = ({ state }) => {
   );
 
   const hasValidLosatIntent = () => {
-    const resolution = linearComparisonResolution?.value || linearComparisonResolution || {};
+    const resolution = readResolution();
     return resolution.valid === true && resolution.hasLosatIntent === true;
   };
 

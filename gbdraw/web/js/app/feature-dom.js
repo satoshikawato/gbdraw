@@ -1,3 +1,4 @@
+// @ts-check
 export const FEATURE_ID_ATTRIBUTE = 'data-gbdraw-feature-id';
 export const RENDERED_FEATURE_ID_ATTRIBUTE = 'data-gbdraw-rendered-feature-id';
 export const FEATURE_PART_ATTRIBUTE = 'data-gbdraw-feature-part';

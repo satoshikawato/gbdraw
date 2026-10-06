@@ -1,3 +1,4 @@
+// @ts-check
 import {
   COMPARISON_COLOR_KEYS,
   normalizePaletteColors,
@@ -132,6 +133,32 @@ const normalizeLinearSeqNumber = (value) => {
   return Number.isFinite(numeric) ? numeric : null;
 };
 
+/**
+ * One linear record slot as `createLinearSeq` builds it. The file fields hold
+ * browser `File` objects or null.
+ * @typedef {object} LinearSeq
+ * @property {string} uid
+ * @property {any} gb
+ * @property {any} gff
+ * @property {any} fasta
+ * @property {any} depth
+ * @property {number} losat_gencode
+ * @property {string} definition
+ * @property {string} record_subtitle
+ * @property {string} file_definition
+ * @property {string} file_subtitle
+ * @property {string} inferred_definition
+ * @property {string} region_record_id
+ * @property {number | null} region_start
+ * @property {number | null} region_end
+ * @property {boolean} region_reverse
+ */
+
+/**
+ * @param {Partial<LinearSeq> | Record<string, any> | null} [overrides] a slot,
+ *   or unvalidated data (a session, an import) that is normalized here
+ * @returns {LinearSeq}
+ */
 export const createLinearSeq = (overrides = {}) => {
   const source = overrides && typeof overrides === 'object' && !Array.isArray(overrides) ? overrides : {};
   const rawUid = String(source.uid ?? '').trim();
@@ -463,7 +490,6 @@ const labelSearch = ref('');
 const editableLabels = ref([]); // [{key, text, sourceText, featureId, draftText}]
 const canonicalLabelOverrideRows = ref([]);
 const labelTextBulkOverrides = reactive({}); // { sourceText: text }
-const labelOverrideBuildWarning = ref('');
 const autoLabelReflowEnabled = ref(false);
 const labelReflowProcessing = ref(false);
 const labelReflowRequestSeq = ref(0);
@@ -536,6 +562,7 @@ const legendRenameDialog = reactive({
   targetColor: '',
   currentColor: '',
   siblingCount: 0,
+  mergeAvailable: true, // false unless both rows draw features of one same type
   pendingRequest: null
 });
 
@@ -1008,7 +1035,6 @@ export const state = {
   editableLabels,
   canonicalLabelOverrideRows,
   labelTextBulkOverrides,
-  labelOverrideBuildWarning,
   autoLabelReflowEnabled,
   labelReflowProcessing,
   labelReflowRequestSeq,

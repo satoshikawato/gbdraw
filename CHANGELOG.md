@@ -18,6 +18,10 @@ write-up of a release.
   accepted" after the set or the Depth file is removed. Styles follow the caption:
   replacing the data keeps the style of a caption the new data still names. Undo
   restores the data and the style.
+- Depth tracks (web app): Undo of a removed **Depth TSV** file or Depth track
+  now shows the Depth track with its tick text (for example `0.13x`) on the
+  current Result, as Generate draws it. The track came back without its ticks
+  until Generate.
 - Legend colors and names (web app): Generate no longer fails with "The generated
   result could not be accepted" after a Legend color, stroke, or name is set on a row
   whose features are then all hidden (Feature visibility Off, a Feature Visibility

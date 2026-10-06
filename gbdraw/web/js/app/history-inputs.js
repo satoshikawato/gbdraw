@@ -1,3 +1,4 @@
+// @ts-check
 const TEXT_INPUT_TYPES = new Set([
   '',
   'date',
@@ -39,6 +40,28 @@ const controlLabel = (element) => {
   return 'Edit setting';
 };
 
+/**
+ * @typedef {{ closed: boolean, deferAdapterCommit?: boolean }} HistoryInputsTransaction
+ *   The part of an open History step that the input adapter reads.
+ *
+ * @typedef {object} HistoryInputsHistory
+ *   The two History functions the input adapter calls (R11).
+ * @property {(label: string, options: { source: string, owner: unknown }) => Promise<HistoryInputsTransaction | null>} begin
+ *   Opens one step for a control; resolves to null while History is busy.
+ * @property {(transaction: HistoryInputsTransaction) => Promise<unknown>} commit
+ *   Closes the step that `begin` opened.
+ *
+ * @typedef {object} HistoryInputsOptions
+ * @property {HTMLElement | null} [root] The element that hosts the controls; `#app` by default.
+ * @property {HistoryInputsHistory | null} [history] History's begin and commit; without it the adapter does nothing.
+ * @property {() => Promise<unknown>} nextTick
+ *   Vue `nextTick`: a commit waits for the state a handler updated.
+ */
+
+/**
+ * @param {HistoryInputsOptions} options
+ * @returns {() => void} Removes the listeners.
+ */
 export const setupHistoryInputs = ({ root, history, nextTick }) => {
   const appRoot = root || document.getElementById('app');
   if (!appRoot || !history) return () => {};

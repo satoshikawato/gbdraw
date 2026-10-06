@@ -1,3 +1,4 @@
+// @ts-check
 import { runFeatureExtraction } from '../services/diagram-generation.js';
 import { diagnosticError } from '../services/error-normalization.js';
 import { cloneJsonValue } from '../services/json-clone.js';
@@ -278,7 +279,7 @@ export const extractFeatureMetadataForPreview = async ({
   featureVisibilityTablePath = null,
   featureVisibilityTsv = '',
   selectedFeatures = null,
-  enrichFeature = (feature) => feature,
+  enrichFeature = /** @type {(feature: any, inputIndex?: number) => any} */ ((feature) => feature),
   readFeatureExtractionDataImpl = readFeatureExtractionData,
   timingEntries = []
 }) => {

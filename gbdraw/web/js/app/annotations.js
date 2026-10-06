@@ -1,3 +1,8 @@
+// @ts-check
+/**
+ * @import { AnnotationRecordCatalog } from './annotations/record-catalog.js'
+ * @import { AnnotationSet } from './annotations/state.js'
+ */
 import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets, uniqueAnnotationSetId } from './annotations/state.js';
 import { coordinateTarget, featureTarget, featureTargetsFromSelection } from './annotations/target-actions.js';
 import { encodeAnnotationTableWithNotice, parseAnnotationTableWithNotice } from './annotations/table-codec.js';
@@ -16,6 +21,25 @@ const nextAnnotationId = (annotations, prefix) => {
   return `${prefix}_${index}`;
 };
 
+/**
+ * The Web state the editor reads; the four feature and result members are refs
+ * or plain lists, read only as the Results hold them.
+ * @typedef {{
+ *   annotationSets: AnnotationSet[], adv: { circular_track_slots?: any[], linear_track_slots?: any[] },
+ *   extractedFeatures: any, biologicalFeatures: any, selectedFeatures: any, results: any,
+ *   sessionOperationAvailability?: () => any
+ * }} AnnotationEditorState `sessionOperationAvailability` returns a busy outcome while a Session operation runs.
+ * @typedef {object} AnnotationEditorOptions
+ * @property {AnnotationEditorState} state
+ * @property {() => AnnotationRecordCatalog | null | undefined} getRecordCatalog
+ * @property {(notice: string) => void} onImportNotice Shows or clears the notice of the last import.
+ * @property {<T>(change: () => T) => T} [retireLegendStylesOfUnnamedCaptions] Runs a track data change and
+ *   retires the Legend styles of the captions it no longer names (OV-65).
+ */
+
+/**
+ * @param {AnnotationEditorOptions} options
+ */
 export const createAnnotationEditor = ({
   state, getRecordCatalog, onImportNotice, retireLegendStylesOfUnnamedCaptions = (change) => change()
 }) => {

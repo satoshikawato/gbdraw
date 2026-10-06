@@ -1,3 +1,4 @@
+// @ts-check
 export const PROTEIN_LOSAT_CACHE_SCHEMA = 4;
 export const NUCLEOTIDE_LOSAT_CACHE_SCHEMA = 2;
 export const LOSAT_DERIVED_CACHE_SCHEMA = 3;
@@ -644,6 +645,24 @@ export const getCurrentRawLosatCacheEntry = (
   return { key: cacheKey, entry };
 };
 
+/**
+ * A legacy protein cache entry held back until its references validate.
+ * @typedef {object} LegacyProteinCandidate
+ * @property {string} state 'pending', 'promoted', or 'rejected'
+ * @property {Record<string, any>} originalEntry the raw cache entry, as imported
+ * @property {string | null} rejectionReason
+ */
+
+/**
+ * @typedef {object} LegacyProteinCandidateEnvelope
+ * @property {number} schema
+ * @property {LegacyProteinCandidate[]} entries
+ */
+
+/**
+ * @param {Record<string, any>[]} entries the raw cache entries of an imported Session
+ * @returns {LegacyProteinCandidateEnvelope}
+ */
 export const createLegacyProteinCandidateEnvelope = (entries) => ({
   schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA,
   entries: (Array.isArray(entries) ? entries : [])

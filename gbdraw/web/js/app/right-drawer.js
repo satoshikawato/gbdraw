@@ -1,3 +1,4 @@
+// @ts-check
 import { uniqueOrthogroupEntries } from '../services/feature-identity.js';
 
 const DEFAULT_RIGHT_DRAWER_TAB = 'features';
@@ -75,6 +76,22 @@ export const restoreRightDrawerState = (
   state.showRightDrawer.value = Boolean(snapshot?.showRightDrawer);
 };
 
+/**
+ * @typedef {Object} RightDrawerFocusReturn
+ * @property {() => boolean} isFocusInDrawer
+ * @property {() => void} focusToggle
+ */
+
+/**
+ * @typedef {Object} RightDrawerControllerOptions
+ * @property {Record<string, any>} state Shape owned by state.js.
+ * @property {(source: () => unknown, callback: () => void, options?: Record<string, any>) => unknown} watch
+ * @property {() => string} [getOpenDisabledReason]
+ * @property {() => void} [onClose]
+ * @property {RightDrawerFocusReturn | null} [focusReturn]
+ */
+
+/** @param {RightDrawerControllerOptions} options */
 export const createRightDrawerController = ({
   state,
   watch,

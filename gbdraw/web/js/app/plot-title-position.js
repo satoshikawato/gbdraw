@@ -1,3 +1,4 @@
+// @ts-check
 export const normalizeCircularPlotTitlePosition = (value) => {
   const normalized = String(value || '').trim().toLowerCase();
   return ['none', 'top', 'bottom'].includes(normalized) ? normalized : 'none';

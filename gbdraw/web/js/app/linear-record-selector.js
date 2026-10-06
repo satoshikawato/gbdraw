@@ -1,3 +1,4 @@
+// @ts-check
 import { normalizeUserFacingError } from '../services/error-normalization.js';
 import { discoveryErrorIsFinal } from './record-discovery.js';
 import { buildDisambiguatedRecordEntries, formatRecordLength } from './record-options.js';
@@ -49,6 +50,25 @@ const emptySelectorState = () => ({
 const sanitizePathSegment = (value) =>
   String(value || 'sequence').replace(/[^A-Za-z0-9_.-]+/g, '_').slice(0, 96) || 'sequence';
 
+/**
+ * @typedef {Object} LinearRecordReadRequest
+ * @property {string} inputType
+ * @property {any} primaryFile
+ * @property {any} pairedFile
+ * @property {string} temporaryPathPrefix
+ */
+
+/**
+ * @typedef {Object} LinearRecordSelectorOptions
+ * @property {Record<string, any>} state Shape owned by `state.js`.
+ * @property {(initial: Record<string, any>) => Record<string, any>} reactive
+ * @property {(request: LinearRecordReadRequest) => Promise<any[]>} recordReader
+ * @property {((discovered: { uid: string, records: any[] }) => boolean | void) | null} [onRecordsDiscovered]
+ *   Returns true when it expanded the rows, which restarts the refresh.
+ * @property {{ warn?: (...args: any[]) => void }} [logger]
+ */
+
+/** @param {LinearRecordSelectorOptions} options */
 export const createLinearRecordSelector = ({
   state,
   reactive,
