@@ -378,7 +378,7 @@ const productImpactEvaluationPath = 'tools/web-product-impact-evaluation.mjs';
 const productImpactDecisionSourcePath = 'tools/web-product-impact-decision-source.mjs';
 const productImpactFixturePath = 'tests/web/product-impact-ratchet-fixtures.test.mjs';
 const trustedWorkflowPath = '.github/workflows/web-base-policy.yml';
-// The Web design rules (R1-R12 in gbdraw/web/CLAUDE.md) and the registry that
+// The Web design rules (the numbered rules in gbdraw/web/CLAUDE.md) and the registry that
 // names their guard tests and in-test allowlists are authority: a runtime
 // change may not amend them in the same diff (WEB_CHANGE_POLICY.md "Design-rule
 // co-change").
