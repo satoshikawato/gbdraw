@@ -10,8 +10,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Hashable, Iterator, Mapping, MutableMapping
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import normalize_specific_color_captions, preprocess_color_tables

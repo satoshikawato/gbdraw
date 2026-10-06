@@ -5,7 +5,7 @@ from svgwrite.container import Group
 from svgwrite.gradients import LinearGradient
 from svgwrite.path import Path
 
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ....config.models import GbdrawConfig
 from ....configurators.legend import LegendMeasurement
 from ....legend.linear_layout import (
     LinearFeatureLegendLayout,

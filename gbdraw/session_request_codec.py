@@ -18,10 +18,10 @@ import re
 import types
 from typing import Any, Literal, Mapping, Sequence, Union, get_args, get_origin, get_type_hints
 
-from Bio import SeqIO  # type: ignore[reportMissingImports]
-from pandas import DataFrame, read_csv  # type: ignore[reportMissingImports]
+from Bio import SeqIO
+from pandas import DataFrame, read_csv
 
-from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.collinearity import (
     CollinearityAnchor,
     CollinearityBlock,
     CollinearityResult,
@@ -29,7 +29,7 @@ from gbdraw.analysis.collinearity import (  # type: ignore[reportMissingImports]
 )
 from gbdraw.analysis.conservation import _default_label as _default_conservation_label
 from gbdraw.analysis.ortholog_paths import OrthologPathCollection
-from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingImports]
+from gbdraw.analysis.protein_colinearity import (
     OrthogroupMember,
     OrthogroupNameCandidate,
     OrthogroupResult,
@@ -39,7 +39,7 @@ from gbdraw.analysis.protein_colinearity import (  # type: ignore[reportMissingI
     OrthologPath,
     normalize_protein_blastp_mode,
 )
-from gbdraw.config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from gbdraw.config.models import GbdrawConfig
 from gbdraw.comparisons.losat_jobs import record_source_paths
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.overrides import FeatureOverride

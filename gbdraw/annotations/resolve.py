@@ -6,8 +6,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from Bio.SeqFeature import SeqFeature  # type: ignore[reportMissingImports]
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from Bio.SeqFeature import SeqFeature
+from Bio.SeqRecord import SeqRecord
 
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.exceptions import ValidationError

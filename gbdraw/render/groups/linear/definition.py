@@ -10,7 +10,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite.container import Group
 from svgwrite.text import Text, TSpan
 
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ....config.models import GbdrawConfig
 from ....core.record_metadata import format_replicon_label, infer_record_source_metadata
 from ....core.text import (
     calculate_bbox_dimensions,

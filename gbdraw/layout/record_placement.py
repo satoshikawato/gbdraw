@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal, Sequence
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.record_select import parse_record_selector

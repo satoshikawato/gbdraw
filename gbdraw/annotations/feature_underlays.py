@@ -6,7 +6,7 @@ from collections import Counter
 from collections.abc import Sequence
 from typing import Any
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.ids import (

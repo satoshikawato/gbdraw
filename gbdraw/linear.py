@@ -59,7 +59,7 @@ from .analysis.protein_colinearity import (
     hydrate_protein_losat_tsv,
     is_protein_losat_cache_entry,
 )
-from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
+from .config.modify import modify_config_dict
 from .config.models.objects import normalize_pairwise_match_style
 from .features.shapes import parse_feature_shape_overrides
 from .exceptions import ValidationError

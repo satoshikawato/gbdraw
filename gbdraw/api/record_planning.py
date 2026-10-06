@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable, Hashable, Literal, MutableMapping, Sequence
 
 import pandas as pd
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
 
 from gbdraw.analysis.protein_colinearity import (
     OrthogroupGraphResult,

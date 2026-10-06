@@ -76,7 +76,7 @@ def load_gbks(
                     )
                 _attach_source_annotations(record, gbk_file)
                 record_list.append(record)
-                id_list.append(record.id)  # type: ignore
+                id_list.append(record.id)
         except ValueError as e:  # Catching common exception when parsing GenBank files
             if str(e).startswith("Record selector"):
                 logger.error(f"ERROR: {e}")
@@ -416,7 +416,7 @@ def load_gff_fasta(
                 if source_feature_catalogs is not None:
                     source_feature_catalogs.append(selected_catalogs[record_index])
                 record_list.append(record)
-                id_list.append(record.id)  # type: ignore
+                id_list.append(record.id)
 
     logger.info("INFO:              ... finished loading GFF3 and FASTA files")
     logger.info(f"INFO: Number of sequences loaded to gbdraw: {len(record_list)}")

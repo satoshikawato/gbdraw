@@ -6,7 +6,7 @@ from Bio.SeqRecord import SeqRecord
 from svgwrite.container import Group
 
 from ....analysis.skew import skew_df
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ....config.models import GbdrawConfig
 from ...drawers.linear.gc_skew import SkewDrawer
 from ....configurators import GcSkewConfigurator
 

@@ -15,9 +15,9 @@ from typing import Any, Literal, Mapping, Union, get_args, get_origin, get_type_
 
 from gbdraw.exceptions import ValidationError
 
-from .models import GbdrawConfig  # type: ignore[reportMissingImports]
-from .models.objects import circular_definition_interval_for_font  # type: ignore[reportMissingImports]
-from .models.root import validate_style_leaf  # type: ignore[reportMissingImports]
+from .models import GbdrawConfig
+from .models.objects import circular_definition_interval_for_font
+from .models.root import validate_style_leaf
 
 
 _UNSAFE_CONFIG_KEYS = frozenset({"__proto__", "constructor", "prototype"})

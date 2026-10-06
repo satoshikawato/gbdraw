@@ -5,10 +5,10 @@ from __future__ import annotations
 
 from typing import Literal
 
-from svgwrite import Drawing  # type: ignore[reportMissingImports]
+from svgwrite import Drawing
 
-from ..config.models import CircularRenderProfile  # type: ignore[reportMissingImports]
-from ..core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
+from ..config.models import CircularRenderProfile
+from ..core.sequence import determine_length_parameter
 
 
 class CircularCanvasConfigurator:

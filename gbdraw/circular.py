@@ -48,13 +48,13 @@ from .api.requests import (
     RecordCardinality,
     RenderOutputRequest,
 )
-from .config.modify import modify_config_dict  # type: ignore[reportMissingImports]
+from .config.modify import modify_config_dict
 from .layout.record_placement import parse_record_row_position
 from .features.overrides import log_feature_identity_notices
 from .features.shapes import parse_feature_shape_overrides
 from .exceptions import ValidationError
 from .mode_profiles import CIRCULAR_MODE_PROFILE, ComparisonThresholds
-from .tracks import (  # type: ignore[reportMissingImports]
+from .tracks import (
     CircularTrackSlot,
     ScalarSpec,
     circular_track_slots_from_order,

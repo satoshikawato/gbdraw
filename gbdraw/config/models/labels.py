@@ -10,7 +10,7 @@ from gbdraw.labels.circular_types import (
     normalize_circular_label_placement,
 )
 
-from .common import ShortLongFloatConfig  # type: ignore[reportMissingImports]
+from .common import ShortLongFloatConfig
 
 CircularLabelScope = Literal["none", "outer", "both"]
 LinearLabelScope = Literal["none", "all", "first", "orthogroup_top"]

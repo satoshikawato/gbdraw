@@ -8,7 +8,7 @@ from svgwrite.shapes import Line
 from svgwrite.text import Text
 
 from ....core.text import calculate_bbox_dimensions
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ....config.models import GbdrawConfig
 from ....layout.spatial import Aabb
 
 RULER_TICK_LENGTH = 10.0 * (2.0 / 3.0)

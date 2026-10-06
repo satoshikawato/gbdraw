@@ -7,11 +7,11 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
 
-from gbdraw.exceptions import ValidationError  # type: ignore[reportMissingImports]
-from gbdraw.analysis.skew import (  # type: ignore[reportMissingImports]
+from gbdraw.exceptions import ValidationError
+from gbdraw.analysis.skew import (
     _build_prefix_counts,
     _window_count_from_prefix,
     counted_dinucleotide,

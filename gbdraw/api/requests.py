@@ -11,7 +11,7 @@ from enum import Enum
 from pathlib import Path, PureWindowsPath
 from typing import Literal, Sequence, TypeAlias
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.source import SourceFeatureIdentity

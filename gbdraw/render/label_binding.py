@@ -1,6 +1,6 @@
 """Internal SVG metadata for complete feature-label visual units."""
 
-from svgwrite.params import Parameter  # type: ignore[reportMissingImports]
+from svgwrite.params import Parameter
 
 
 LABEL_FEATURE_ID_ATTRIBUTE = "data-label-feature-id"

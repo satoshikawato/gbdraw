@@ -4,7 +4,7 @@
 from svgwrite.container import Group
 from svgwrite.shapes import Circle
 
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
+from ....config.models import GbdrawConfig
 from ....svg.circular_tracks import draw_circle_path
 
 

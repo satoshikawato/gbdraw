@@ -6,11 +6,11 @@ import logging
 from dataclasses import dataclass, replace
 from typing import Any, Collection, Literal, Mapping, Sequence
 
-from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
-from ...config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from ...configurators import DepthConfigurator  # type: ignore[reportMissingImports]
-from ...exceptions import ValidationError  # type: ignore[reportMissingImports]
-from ...layout.circular import (  # type: ignore[reportMissingImports]
+from ...canvas import CircularCanvasConfigurator
+from ...config.models import GbdrawConfig
+from ...configurators import DepthConfigurator
+from ...exceptions import ValidationError
+from ...layout.circular import (
     CircularAxisLayout,
     CircularFeatureLane,
     CircularFeatureLayout,
@@ -23,22 +23,22 @@ from ...layout.circular import (  # type: ignore[reportMissingImports]
     band_union,
     bands_overlap,
 )
-from ...layout.circular_depth_axis import (  # type: ignore[reportMissingImports]
+from ...layout.circular_depth_axis import (
     DepthAxisFootprint,
     resolve_depth_axis_footprint,
 )
-from ...tracks.circular import (  # type: ignore[reportMissingImports]
+from ...tracks.circular import (
     NUMERIC_CIRCULAR_TRACK_RENDERERS,
     CircularTrackSlot,
     NormalizedCircularTrackSlot,
     normalize_circular_track_slots,
     tick_sides_for_tick_label_layout,
 )
-from ...svg.circular_ticks import (  # type: ignore[reportMissingImports]
+from ...svg.circular_ticks import (
     get_circular_tick_label_radius_bounds,
     get_circular_tick_path_radius_bounds,
 )
-from .presets import normalize_circular_track_preset  # type: ignore[reportMissingImports]
+from .presets import normalize_circular_track_preset
 
 
 logger = logging.getLogger(__name__)

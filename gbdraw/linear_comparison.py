@@ -8,7 +8,7 @@ from dataclasses import dataclass, field, replace
 from typing import Literal, Sequence
 
 import pandas as pd
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from pandas import DataFrame
 
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.exceptions import ComparisonIdentityError, ValidationError

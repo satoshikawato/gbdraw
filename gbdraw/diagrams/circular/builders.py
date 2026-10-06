@@ -7,22 +7,22 @@ from __future__ import annotations
 
 from typing import Literal
 
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from svgwrite import Drawing  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
+from Bio.SeqRecord import SeqRecord
+from pandas import DataFrame
+from svgwrite import Drawing
+from svgwrite.container import Group
 
-from ...canvas import CircularCanvasConfigurator  # type: ignore[reportMissingImports]
+from ...canvas import CircularCanvasConfigurator
 from ...features.factory import FeatureBuildResult
 from ...layout.circular import CircularRecordRenderContext
-from ...configurators import (  # type: ignore[reportMissingImports]
+from ...configurators import (
     FeatureDrawingConfigurator,
     DepthConfigurator,
     GcContentConfigurator,
     GcSkewConfigurator,
     LegendMeasurement,
 )
-from ...render.groups.circular import (  # type: ignore[reportMissingImports]
+from ...render.groups.circular import (
     AxisGroup,
     ConservationGroup,
     DefinitionGroup,

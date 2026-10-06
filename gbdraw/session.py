@@ -104,7 +104,7 @@ class SessionDocument:
             "circular",
             "linear",
         }:
-            return request["mode"]  # type: ignore[return-value]
+            return request["mode"]
         return None
 
     @property

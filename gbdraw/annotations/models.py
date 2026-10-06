@@ -9,7 +9,7 @@ from math import isfinite
 from types import MappingProxyType
 from typing import Literal, Mapping, TypeAlias
 
-from pandas import DataFrame  # type: ignore[reportMissingImports]
+from pandas import DataFrame
 
 from gbdraw.core.color import normalize_hex_color
 from gbdraw.exceptions import ValidationError

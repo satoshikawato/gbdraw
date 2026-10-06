@@ -28,7 +28,7 @@ def normalize_pairwise_match_style(value: Any) -> PairwiseMatchStyle:
     normalized = str(value if value is not None else "ribbon").strip().lower()
     if normalized not in _PAIRWISE_MATCH_STYLES:
         raise ValidationError("pairwise_match_style must be one of: ribbon, curve")
-    return normalized  # type: ignore[return-value]
+    return normalized
 
 
 def _normalize_curve_tension(value: Any) -> float:
@@ -42,14 +42,14 @@ def _normalize_gc_content_mode(value: Any) -> GcContentMode:
     normalized = str(value if value is not None else "deviation").strip().lower()
     if normalized not in _GC_CONTENT_MODES:
         raise ValidationError("gc_content_mode must be one of: deviation, percent")
-    return normalized  # type: ignore[return-value]
+    return normalized
 
 
 def _normalize_scale_style(value: Any) -> ScaleStyle:
     normalized = str(value if value is not None else "bar").strip().lower()
     if normalized not in _SCALE_STYLES:
         raise ValidationError("scale_style must be one of: bar, ruler")
-    return normalized  # type: ignore[return-value]
+    return normalized
 
 
 def _normalize_arrow_head_length_ratio(value: Any) -> ArrowHeadLengthRatio:

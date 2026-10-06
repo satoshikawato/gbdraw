@@ -14,7 +14,7 @@ from ..features.ids import compute_feature_object_hash
 from .filtering import preprocess_label_filtering
 from .circular_candidates import build_circular_label_candidates
 from .circular_radial import place_radial_labels
-from ..config.models import (  # type: ignore[reportMissingImports]
+from ..config.models import (
     CircularRenderProfile,
     GbdrawConfig,
 )

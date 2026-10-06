@@ -4,16 +4,16 @@
 import math
 from typing import Literal, Tuple
 
-from svgwrite.path import Path  # type: ignore[reportMissingImports]
-from svgwrite.text import Text, TextPath  # type: ignore[reportMissingImports]
+from svgwrite.path import Path
+from svgwrite.text import Text, TextPath
 
-from ....config.models import CircularRenderProfile  # type: ignore[reportMissingImports]
-from ....core.sequence import determine_length_parameter  # type: ignore[reportMissingImports]
-from ....layout.circular import calculate_feature_position_factors_circular  # type: ignore[reportMissingImports]
-from ....layout.common import calculate_cds_ratio  # type: ignore[reportMissingImports]
+from ....config.models import CircularRenderProfile
+from ....core.sequence import determine_length_parameter
+from ....layout.circular import calculate_feature_position_factors_circular
+from ....layout.common import calculate_cds_ratio
 from ....svg.ids import stable_svg_id
-from ....svg.text_path import generate_text_path  # type: ignore[reportMissingImports]
-from ....core.text import calculate_bbox_dimensions  # type: ignore[reportMissingImports]
+from ....svg.text_path import generate_text_path
+from ....core.text import calculate_bbox_dimensions
 from ...label_binding import bind_label_part
 
 

@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-from pandas import DataFrame  # type: ignore[reportMissingImports]
-from Bio.SeqRecord import SeqRecord  # type: ignore[reportMissingImports]
-from svgwrite.container import Group  # type: ignore[reportMissingImports]
+from pandas import DataFrame
+from Bio.SeqRecord import SeqRecord
+from svgwrite.container import Group
 
-from ....analysis.skew import skew_df  # type: ignore[reportMissingImports]
-from ....config.models import GbdrawConfig  # type: ignore[reportMissingImports]
-from ...drawers.linear.gc_content import GcContentDrawer  # type: ignore[reportMissingImports]
-from ....configurators import GcContentConfigurator  # type: ignore[reportMissingImports]
+from ....analysis.skew import skew_df
+from ....config.models import GbdrawConfig
+from ...drawers.linear.gc_content import GcContentDrawer
+from ....configurators import GcContentConfigurator
 
 
 from gbdraw.layout.record_coordinates import RecordDisplayTransform
