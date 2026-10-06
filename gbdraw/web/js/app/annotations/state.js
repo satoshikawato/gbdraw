@@ -1,5 +1,32 @@
+// @ts-check
 import { diagnosticError } from '../../services/error-normalization.js';
 import { featureIdentityKeyOf, rowBelongsToRequest } from '../../services/feature-placement.js';
+
+/**
+ * @import { AnnotationRecordSelector } from './target-actions.js'
+ */
+
+/**
+ * @typedef {{ angle: number, spacing: number, color: string, width: number, cross: boolean }} AnnotationHatch
+ * @typedef {{
+ *   stroke: string, strokeWidth: number, strokeDasharray: number[], lineCap: string,
+ *   fill: string | null, fillOpacity: number, hatch: AnnotationHatch | null, labelColor: string,
+ *   labelFontSize: number | null, labelOrientation: string, labelPosition: string, labelOffset: number
+ * }} AnnotationStyle
+ * @typedef {{
+ *   kind: string, record?: AnnotationRecordSelector | null, envelope?: string, circularPath?: string,
+ *   start?: number, end?: number, coordinateSpace?: string, wrapsOrigin?: boolean, outOfBounds?: string,
+ *   selectors?: { key: string | null, value: string }[],
+ *   scope?: string, recordKey?: string, biologicalFeatureId?: string
+ * }} AnnotationTarget One shape for `coordinateSpan`, `featureSpan`, and `featureIdentity`; each kind reads its own fields.
+ * @typedef {{
+ *   id: string, target: AnnotationTarget, label: string, mark: string, lane: number | null,
+ *   style: AnnotationStyle | null, legendLabel: string | null, metadata: Record<string, any>
+ * }} AnnotationItem
+ * @typedef {{
+ *   id: string, annotations: AnnotationItem[], defaultStyle: AnnotationStyle, legendLabel: string | null
+ * }} AnnotationSet
+ */
 
 const DEFAULT_STYLE = Object.freeze({
   stroke: '#404040',
@@ -63,11 +90,19 @@ const normalizeTarget = (target) => {
   };
 };
 
+/**
+ * @param {Partial<AnnotationStyle> | null} [overrides]
+ * @returns {AnnotationStyle}
+ */
 export const createDefaultAnnotationStyle = (overrides = {}) => ({
   ...DEFAULT_STYLE,
   ...(overrides && typeof overrides === 'object' ? clone(overrides) : {})
 });
 
+/**
+ * @param {Partial<AnnotationSet>} [overrides] A set from a Session, a table, or the editor.
+ * @returns {AnnotationSet}
+ */
 export const createAnnotationSet = (overrides = {}) => ({
   id: cleanId(overrides.id, 'annotations'),
   annotations: Array.isArray(overrides.annotations) ? clone(overrides.annotations) : [],

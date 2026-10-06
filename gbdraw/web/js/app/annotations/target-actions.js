@@ -1,11 +1,21 @@
+// @ts-check
 import { isUnspecifiedRecordSelectorValue } from '../record-options.js';
 import { featureIdentityKeyOf } from '../../services/feature-placement.js';
+
+/**
+ * A record named by a target: a 0-based position or a record ID.
+ * @typedef {{ kind: 'recordId', value: string } | { kind: 'recordIndex', index: number }} AnnotationRecordSelector
+ */
 
 const cleanNullable = (value) => {
   const text = String(value ?? '').trim();
   return text || null;
 };
 
+/**
+ * @param {any} value A table cell, a record ID, or `#<n>`.
+ * @returns {{ selector: AnnotationRecordSelector | null, error: string }}
+ */
 export const parseAnnotationRecordSelectorValue = (value) => {
   const text = cleanNullable(value);
   if (isUnspecifiedRecordSelectorValue(text)) {
@@ -36,6 +46,11 @@ export const isSafeRecordIdSelector = (value) => {
   return !parsed.error && parsed.selector?.kind === 'recordId';
 };
 
+/**
+ * @param {any} recordId
+ * @param {any} recordIndex
+ * @returns {AnnotationRecordSelector | null}
+ */
 export const annotationRecordSelector = (recordId, recordIndex) => {
   const id = cleanNullable(recordId);
   if (id && isSafeRecordIdSelector(id)) return { kind: 'recordId', value: id };
