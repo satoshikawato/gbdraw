@@ -12,6 +12,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from time import perf_counter
 from typing import (
+    TYPE_CHECKING,
     Any,
     Hashable,
     Iterator,
@@ -20,6 +21,10 @@ from typing import (
     MutableMapping,
     Sequence,
     TypeAlias,
+    TypedDict,
+    TypeVar,
+    cast,
+    overload,
 )
 
 from Bio.SeqRecord import SeqRecord
@@ -69,7 +74,7 @@ from gbdraw.features.visibility import (
     resolve_candidate_feature_types,
 )
 from gbdraw.annotations import (
-    AnnotationOptions, FeatureIdentitySpan, ResolvedAnnotationBundle, ResolutionWarning,
+    AnnotationOptions, CoordinateSpan, FeatureIdentitySpan, ResolvedAnnotationBundle, ResolutionWarning,
     read_annotation_table, resolve_annotations,
 )
 from gbdraw.io.comparisons import COMPARISON_COLUMNS
@@ -172,7 +177,18 @@ from .requests import (
     RenderOutputRequest,
 )
 
+if TYPE_CHECKING:
+    from gbdraw.annotations import RegionAnnotationStyle
+    from gbdraw.annotations.models import RegionTarget
+    from gbdraw.linear_comparison import LinearComparison
+
+    from .requests import CircularBatchOutputPolicy
+
 logger = logging.getLogger(__name__)
+
+# A helper that takes one of these returns the same type: mode never changes.
+_RequestT = TypeVar("_RequestT", CircularDiagramRequest, CircularBatchRequest, LinearDiagramRequest)
+_OptionsT = TypeVar("_OptionsT", CircularDiagramOptions, LinearDiagramOptions)
 
 
 _REQUEST_RENDER_DIAGNOSTICS: ContextVar[MutableMapping[str, Any] | None] = (
@@ -231,11 +247,11 @@ def _artifact_text_characters(value: object) -> int:
 
 
 def _resolve_request_option_tables(
-    options: CircularDiagramOptions | LinearDiagramOptions,
+    options: _OptionsT,
     *,
     mode: Literal["circular", "linear"],
     load_comparison_colors: bool,
-) -> CircularDiagramOptions | LinearDiagramOptions:
+) -> _OptionsT:
     """Resolve file-backed option tables once before record and drawing plans."""
 
     colors = options.colors
@@ -587,7 +603,7 @@ class PreparedDiagramRequest:
     """A validated request with normalized records and its SVG drawing."""
 
     mode: Literal["circular", "linear"]
-    request: DiagramRequest
+    request: CircularDiagramRequest | LinearDiagramRequest
     records: tuple[SeqRecord, ...]
     drawing: Drawing
     inputs: PreparedDiagramInputs | None = None
@@ -772,7 +788,7 @@ class CircularRequestPlan:
         _preflight_render_output(self.request.output)
 
     def build(self) -> Drawing:
-        shared_kwargs = (
+        shared_kwargs: dict[str, Any] = (
             {"_resolved_feature_inputs": self.inputs.features}
             if self.inputs is not None
             else {}
@@ -865,6 +881,7 @@ class CircularBatchRequestPlan:
         _preflight_circular_batch_outputs(self.request)
 
     def item_plans(self) -> tuple[CircularRequestPlan, ...]:
+        assert self.resolved_annotations is not None  # filled by __post_init__
         plans: list[CircularRequestPlan] = []
         options = self.request.options
         normalized_depth = normalize_depth_tracks(
@@ -1154,7 +1171,7 @@ def _prepare_diagram_inputs(request: DiagramRequest) -> PreparedDiagramInputs:
     )
 
 
-def _with_prepared_colors(request: DiagramRequest, inputs: PreparedDiagramInputs) -> DiagramRequest:
+def _with_prepared_colors(request: _RequestT, inputs: PreparedDiagramInputs) -> _RequestT:
     """Record the canonical table actually compiled for this request."""
     if inputs.features.color_table is None:
         return request
@@ -1196,7 +1213,14 @@ def _source_catalogs(
     )
 
 
-def _identity_table_context(collection: ResolvedRecordCollection) -> dict[str, object]:
+class _IdentityTableContext(TypedDict):
+    records: tuple[SeqRecord, ...]
+    record_keys: tuple[str, ...]
+    source_record_ids: tuple[str, ...]
+    source_catalogs: tuple[tuple[SourceFeatureIdentity, ...], ...]
+
+
+def _identity_table_context(collection: ResolvedRecordCollection) -> _IdentityTableContext:
     """The records an identity table names: ``#index`` and record IDs select among them."""
     return {
         "records": collection.records,
@@ -1207,8 +1231,8 @@ def _identity_table_context(collection: ResolvedRecordCollection) -> dict[str, o
 
 
 def _materialize_identity_tables(
-    request: DiagramRequest, collection: ResolvedRecordCollection,
-) -> DiagramRequest:
+    request: _RequestT, collection: ResolvedRecordCollection,
+) -> _RequestT:
     """Replace feature placement and feature override tables with their exact rows."""
     options = request.options
     placement_table = (options.feature_placement_table if options.feature_placement_table is not None
@@ -1218,7 +1242,7 @@ def _materialize_identity_tables(
     if placement_table is None and override_table is None:
         return request
     context = _identity_table_context(collection)
-    changes: dict[str, object] = {}
+    changes: dict[str, Any] = {}
     if placement_table is not None:
         changes.update(
             feature_placements=read_feature_placement_table(
@@ -1255,9 +1279,9 @@ def read_request_feature_override_table(
 
 
 def _load_request_records(
-    request: DiagramRequest,
+    request: _RequestT,
     inputs: PreparedDiagramInputs,
-) -> tuple[DiagramRequest, ResolvedRecordCollection]:
+) -> tuple[_RequestT, ResolvedRecordCollection]:
     """Load the records and turn identity tables into exact rows against them.
 
     Tables resolve before the GFF3 check below, so a table row and an exact row
@@ -1266,7 +1290,7 @@ def _load_request_records(
     inputs = replace(inputs, parsed_sources={})
     collection = _coerce_resolved_collection(request, _normalize_request_records(request, inputs))
     request = _materialize_identity_tables(request, collection)
-    shown_types = _gff_types_named_by_visibility_rows(request.options.feature_overrides, collection)
+    shown_types: set[str] = _gff_types_named_by_visibility_rows(request.options.feature_overrides, collection)
     if inputs.gff_keep_all_features or shown_types <= set(inputs.gff_candidate_features):
         return request, collection
     # A row can set the visibility of a GFF3 feature whose type the type filter
@@ -1412,6 +1436,7 @@ def _coerce_resolved_collection(
         zip(records, request.records, strict=True)
     ):
         source = record_input.source
+        source_paths: tuple[str, ...]
         if isinstance(source, GenBankInputSource):
             source_kind: Literal["genbank", "gff_fasta", "memory"] = "genbank"
             source_paths = (str(source.path),)
@@ -1447,7 +1472,8 @@ def _coerce_resolved_collection(
 def normalize_request_records(request: DiagramRequest) -> tuple[SeqRecord, ...]:
     """Resolve typed record inputs according to their explicit cardinality."""
 
-    return _load_request_records(request, _prepare_diagram_inputs(request))[1].records
+    # Every request mode loads its records the same way.
+    return _load_request_records(cast(Any, request), _prepare_diagram_inputs(request))[1].records
 
 
 def _materialized_record_inputs(
@@ -1739,7 +1765,8 @@ def plan_circular_batch_request(
             unresolved_request.outputs
             if unresolved_request.outputs
             else resolve_circular_batch_outputs(
-                unresolved_request.output_policy,
+                # A batch request has explicit outputs or an output policy.
+                cast("CircularBatchOutputPolicy", unresolved_request.output_policy),
                 records,
             )
         )
@@ -1786,7 +1813,11 @@ def plan_linear_request(
     if not isinstance(request, LinearDiagramRequest):
         raise ValidationError("request must be LinearDiagramRequest.")
     if isinstance(request.similarity_alignment, SimilarityAlignmentReference):
-        request, _artifacts = _resolve_similarity_alignment_reference(request, None)
+        # Resolving the reference keeps the request mode.
+        request, _artifacts = cast(
+            "tuple[LinearDiagramRequest, CurrentRequestArtifacts | None]",
+            _resolve_similarity_alignment_reference(request, None),
+        )
     with _request_render_diagnostic_phase("preparation"):
         unresolved_request = replace(
             request,
@@ -1827,8 +1858,10 @@ def plan_linear_request(
                 options=resolved_options,
             )
         )
+        # The reference was resolved to a plan at the top of this function.
         alignment_anchor_centers = project_similarity_alignment_centers(
-            collection, materialized_request.similarity_alignment
+            collection,
+            cast("SimilarityAlignmentPlan | None", materialized_request.similarity_alignment),
         )
     return LinearRequestPlan(
         request=materialized_request,
@@ -2244,10 +2277,14 @@ def _resolved_protein_pair_payloads(
     metadata: LinearDiagramMetadata | None,
     request: LinearDiagramRequest,
 ) -> list[dict[str, Any]]:
-    direct = metadata.protein_comparisons if metadata is not None else None
+    direct: Sequence[Any] | None = (
+        metadata.protein_comparisons if metadata is not None else None
+    )
     if direct is None:
         direct = request.options.protein_comparisons
-    explicit = metadata.linear_comparisons if metadata is not None else None
+    explicit: Sequence[LinearComparison] | None = (
+        metadata.linear_comparisons if metadata is not None else None
+    )
 
     result: list[dict[str, Any]] = []
     for pair_index, frame in enumerate(direct or ()):
@@ -2373,7 +2410,7 @@ def _build_current_derived_entries(
             if str(entry.get("key") or "")
         }
     )
-    identity = {
+    identity: dict[str, Any] = {
         "cacheSchema": 3,
         "semantics": "derived-option-conformance-v1",
         "pathRepresentation": "lossless-graph-v1",
@@ -2420,8 +2457,8 @@ def _build_current_derived_entries(
                     "reverse": bool(
                         request.records[index].presentation.reverse_complement
                         or (
-                            request.records[index].region is not None
-                            and request.records[index].region.reverse_complement
+                            (region := request.records[index].region) is not None
+                            and region.reverse_complement
                         )
                     ),
                 },
@@ -2533,6 +2570,30 @@ def _merged_losat_entries(
     return (*loaded, *(entry for entry in searched if entry.get("key") not in keys))
 
 
+@overload
+def build_request_plan_diagram(
+    plan: CircularBatchRequestPlan,
+    *,
+    artifacts: CurrentRequestArtifacts | None = None,
+) -> PreparedCircularBatchRequest: ...
+
+
+@overload
+def build_request_plan_diagram(
+    plan: CircularRequestPlan | LinearRequestPlan,
+    *,
+    artifacts: CurrentRequestArtifacts | None = None,
+) -> PreparedDiagramRequest: ...
+
+
+@overload
+def build_request_plan_diagram(
+    plan: DiagramRequestPlan,
+    *,
+    artifacts: CurrentRequestArtifacts | None = None,
+) -> PreparedDiagramRequest | PreparedCircularBatchRequest: ...
+
+
 def build_request_plan_diagram(
     plan: DiagramRequestPlan,
     *,
@@ -2562,7 +2623,10 @@ def build_request_plan_diagram(
                     drawing=item_plan.build(),
                     inputs=item_plan.inputs,
                     transforms=item_plan.transforms,
-                    resolved_annotations=item_plan.resolved_annotations,
+                    # Filled by CircularRequestPlan.__post_init__.
+                    resolved_annotations=cast(
+                        ResolvedAnnotationBundle, item_plan.resolved_annotations
+                    ),
                 )
                 for item_plan in plan.item_plans()
             )
@@ -2594,7 +2658,7 @@ def build_request_plan_diagram(
             raise ValidationError("Linear request plan has no prepared diagram inputs.")
         with _request_render_diagnostic_phase("comparisonPreparation"):
             linear_artifacts = _prepare_linear_artifacts(
-                request,
+                plan.request,
                 records,
                 current_artifacts,
                 plan.inputs,
@@ -2626,7 +2690,7 @@ def build_request_plan_diagram(
             )
             losat_derived_cache_entries = _build_current_derived_entries(
                 linear_metadata,
-                request,
+                plan.request,
                 records,
                 linear_artifacts,
                 losat_cache_entries,
@@ -2640,7 +2704,8 @@ def build_request_plan_diagram(
     return PreparedDiagramRequest(
         mode=plan.mode,
         transforms=plan.transforms,
-        resolved_annotations=plan.resolved_annotations,
+        # Filled by the plan's __post_init__.
+        resolved_annotations=cast(ResolvedAnnotationBundle, plan.resolved_annotations),
         request=request,
         records=records,
         drawing=drawing,
@@ -2764,7 +2829,7 @@ def _resource_backed_context_key(value: object) -> Hashable | None:
     return ("resource", identity)
 
 
-def _annotation_style_context_key(value: object | None) -> Hashable:
+def _annotation_style_context_key(value: RegionAnnotationStyle | None) -> Hashable:
     if value is None:
         return None
     hatch = getattr(value, "hatch", None)
@@ -2793,7 +2858,7 @@ def _annotation_style_context_key(value: object | None) -> Hashable:
     )
 
 
-def _annotation_target_context_key(value: object) -> Hashable:
+def _annotation_target_context_key(value: RegionTarget) -> Hashable:
     if isinstance(value, FeatureIdentitySpan):
         return (
             "feature-identity",
@@ -2804,7 +2869,8 @@ def _annotation_target_context_key(value: object) -> Hashable:
         )
     record = getattr(value, "record", None)
     record_key = _selector_preparation_key(record)
-    if hasattr(value, "start") and hasattr(value, "end"):
+    # RegionAnnotation admits only these three target types.
+    if isinstance(value, CoordinateSpan):
         return (
             "coordinates",
             record_key,
