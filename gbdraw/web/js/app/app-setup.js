@@ -460,13 +460,18 @@ export const createAppSetup = () => {
     featureListState
   } = state;
   let similarityAlignmentActions = null;
-  let refreshSimilarityAlignmentCanvas = () => {};
+  // R13 port: the drawer, the preview binder, and the result watchers read the
+  // alignment owner through these ports; the root assigns them once the
+  // alignment owner exists.
+  const similarityAlignmentPorts = {
+    refreshCanvas: () => {},
+    reviewBlocksEditor: () => false
+  };
   const linearTypography = createLinearTypographyController({
     adv,
     linked: linearTypographyLinked,
     mutationAvailability: sessionOperationAvailability
   });
-  let alignmentReviewBlocksEditor = () => false;
 
   const comparisonHeightValidationError = computed(() => {
     if (
@@ -1375,7 +1380,7 @@ export const createAppSetup = () => {
       isFocusInDrawer: () => Boolean(document.querySelector('.right-drawer')?.contains(document.activeElement)),
       focusToggle: () => document.querySelector('.drawer-toggle')?.focus()
     },
-    getOpenDisabledReason: () => alignmentReviewBlocksEditor()
+    getOpenDisabledReason: () => similarityAlignmentPorts.reviewBlocksEditor()
       ? 'Finish or cancel alignment review before opening Editor.' : '' });
   const orthogroupActions = createOrthogroupEditor({ state });
   const previewFeatureSearch = createPreviewFeatureSearch({
@@ -1407,12 +1412,12 @@ export const createAppSetup = () => {
     featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
   }, { flush: 'sync' });
   watch(svgContent, () => {
-    refreshSimilarityAlignmentCanvas();
+    similarityAlignmentPorts.refreshCanvas();
     if (!skipCaptureBaseConfig.value) {
       featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
     }
   });
-  watch(() => results.value[selectedResultIndex.value], () => refreshSimilarityAlignmentCanvas(), { flush: 'post' });
+  watch(() => results.value[selectedResultIndex.value], () => similarityAlignmentPorts.refreshCanvas(), { flush: 'post' });
 
   let featureSearchDebounceId = null;
   const featureListScrollRef = ref(null);
@@ -2355,7 +2360,7 @@ export const createAppSetup = () => {
         phase: context.phase,
         rootGeneration: context.rootGeneration
       });
-      refreshSimilarityAlignmentCanvas();
+      similarityAlignmentPorts.refreshCanvas();
       featureActions.preparePairwiseInteractionAffordances({
         root: context.root,
         phase: context.phase,
@@ -3247,7 +3252,7 @@ export const createAppSetup = () => {
   recordDragAlignmentPorts.beforeRecordDrag = similarityAlignmentActions.beforeRecordDrag;
   recordDragAlignmentPorts.afterRecordDrag = similarityAlignmentActions.afterRecordDrag;
   const similarityAlignmentCanvasHover = ref(null);
-  refreshSimilarityAlignmentCanvas = () => {
+  similarityAlignmentPorts.refreshCanvas = () => {
     if (!similarityAlignmentActions.dialogOpen.value
       || similarityAlignmentActions.status.value !== 'reviewing'
       || !similarityAlignmentActions.isDraftArtifactCurrent()) {
@@ -3270,7 +3275,7 @@ export const createAppSetup = () => {
     similarityAlignmentActions.dialogOpen,
     () => similarityAlignmentActions.draft.value?.rows,
     similarityAlignmentActions.status
-  ], refreshSimilarityAlignmentCanvas, { flush: 'post' });
+  ], similarityAlignmentPorts.refreshCanvas, { flush: 'post' });
   let similarityAlignmentReturnFocus = null;
   const similarityAlignmentPaletteRef = ref(null);
   const similarityAlignmentPalettePosition = reactive({ x: null, y: null });
@@ -3284,7 +3289,7 @@ export const createAppSetup = () => {
     similarityAlignmentCompact.value && similarityAlignmentActions.dialogOpen.value
       ? 'Finish or cancel alignment review before opening Editor.' : ''
   ));
-  alignmentReviewBlocksEditor = () => Boolean(similarityAlignmentEditorDisabledReason.value);
+  similarityAlignmentPorts.reviewBlocksEditor = () => Boolean(similarityAlignmentEditorDisabledReason.value);
   let similarityAlignmentPreviewObserver = null;
   watch([similarityAlignmentActions.dialogOpen, similarityAlignmentCompact], ([open, compact]) => {
     if (open && compact) {
