@@ -220,9 +220,12 @@ The `gbdraw/render/` module has a two-tier architecture:
   entry, including a new file, has no debt. Fix the type, use
   `typing.cast`, or fix the code instead of adding `# type: ignore`. Raising
   an entry or relaxing `[tool.mypy]` needs the Owner's approval.
-- Field annotations under `gbdraw/config/models/` are runtime data:
-  `gbdraw/config/modify.py` reads them with `get_type_hints` to validate
-  overrides.
+- Class-body annotations are runtime data. `get_type_hints` reads dataclass
+  fields in `gbdraw/config/modify.py` (config overrides) and
+  `gbdraw/session_request_codec.py` (canonical request validation), and
+  `tests/test_public_contract.py` hashes the signatures of `gbdraw.__all__`.
+  Treat a change to either as a code change, and use only names importable at
+  run time in them, not names imported under `TYPE_CHECKING`.
 - Plan: `docs/internal/PYTHON_TYPE_CHECK_RATCHET_PLAN_2026-10-06.md`.
 
 ## Key Configuration Files
