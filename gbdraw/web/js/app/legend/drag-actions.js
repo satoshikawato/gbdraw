@@ -1,3 +1,4 @@
+// @ts-check
 import { parseTransform } from './utils.js';
 import { setClassToken } from '../../services/svg-serialization.js';
 import {
@@ -7,6 +8,20 @@ import {
 } from '../legend-layout/composition-actions.js';
 import { replaceLeadingTranslate } from '../legend-layout/transform-utils.js';
 
+/**
+ * @typedef {object} LegendDragActionsOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {(options?: { replaceGeneratedInventory?: boolean }) => void} extractLegendEntries
+ *   The Legend entry owner's re-read of the mounted Legend.
+ * @property {((label?: string, options?: { source?: string, owner?: unknown }) => Promise<any>) | null} [beginHistoryTransaction]
+ *   History's begin of one step (R11); resolves to the transaction, or null when History is busy.
+ * @property {((transaction: any, options?: Record<string, any>) => Promise<any>) | null} [commitHistoryTransaction]
+ *   History's commit of the step that `beginHistoryTransaction` opened.
+ * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
+ *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ */
+
+/** @param {LegendDragActionsOptions} options */
 export const createLegendDragActions = ({
   state,
   extractLegendEntries,

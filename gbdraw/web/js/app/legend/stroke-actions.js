@@ -1,3 +1,4 @@
+// @ts-check
 import { getFeatureCaption } from '../feature-utils.js';
 import {
   FEATURE_SELECTOR,
@@ -70,6 +71,7 @@ const getLegendSwatches = (svg, caption) => {
   return swatches;
 };
 
+/** @param {{ svg?: Element | null, legendColorOverrides?: Record<string, string> }} [options] */
 export const applyLegendColorOverridesToSvg = ({
   svg,
   legendColorOverrides = {}
@@ -88,6 +90,14 @@ export const applyLegendColorOverridesToSvg = ({
   return changedCount;
 };
 
+/**
+ * @param {{
+ *   svg?: Element | null,
+ *   features?: Array<Record<string, any>>,
+ *   legendStrokeOverrides?: Record<string, any>,
+ *   featureStrokeOverrides?: Record<string, any>
+ * }} [options]
+ */
 export const applyStrokeOverridesToSvg = ({
   svg,
   features = [],
@@ -125,6 +135,14 @@ export const applyStrokeOverridesToSvg = ({
   return changedCount;
 };
 
+/**
+ * @typedef {object} LegendStrokeActionsOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
+ *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ */
+
+/** @param {LegendStrokeActionsOptions} options */
 export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null }) => {
   const {
     extractedFeatures,

@@ -1,5 +1,18 @@
+// @ts-check
 // Sort and Move compute the requested caption order; the Legend entry owner
 // orders the mounted Legend through the `orderMountedLegend` port (R3, R13).
+/**
+ * @typedef {object} LegendSortActionsOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {(options?: { replaceGeneratedInventory?: boolean }) => void} extractLegendEntries
+ *   The Legend entry owner's re-read of the mounted Legend.
+ * @property {(captionOrder: string[], options?: { keepFollowed?: boolean }) => (boolean | null)} orderMountedLegend
+ *   The Legend entry owner's one ordering of the mounted Legend; null when no Legend is mounted.
+ * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
+ *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ */
+
+/** @param {LegendSortActionsOptions} options */
 export const createLegendSortActions = ({ state, extractLegendEntries, orderMountedLegend, commitActiveResultEdit = null }) => {
   const { legendEntries, originalLegendOrder } = state;
 

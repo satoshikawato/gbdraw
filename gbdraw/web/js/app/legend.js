@@ -1,3 +1,4 @@
+// @ts-check
 import { createLegendDragActions } from './legend/drag-actions.js';
 import { createLegendEntryActions } from './legend/entry-actions.js';
 import { createLegendLayoutActions } from './legend/layout-actions.js';
@@ -10,6 +11,24 @@ import {
 } from './legend/utils.js';
 import { legendRowRules } from './specific-color-rules.js';
 
+/**
+ * @typedef {object} LegendManagerOptions
+ * @property {Record<string, any>} state App state (state.js; not yet typed).
+ * @property {(rows: Array<Record<string, any>>, label?: string) => Promise<any>} commitLegendRowRules
+ *   The rule owner's commit of the specific-color rules that a Legend row edit changes (R13).
+ * @property {((label?: string, options?: { source?: string, owner?: unknown }) => Promise<any>) | null} [beginHistoryTransaction]
+ *   History's begin of one step (R11); resolves to the transaction, or null when History is busy.
+ * @property {((transaction: any, options?: Record<string, any>) => Promise<any>) | null} [commitHistoryTransaction]
+ *   History's commit of the step that `beginHistoryTransaction` opened.
+ * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
+ *   The preview owner's commit of an edit to the displayed Result (R1, R13).
+ * @property {(() => string | undefined) | null} [readActiveResultIdentity]
+ *   The preview owner's runtime identity of the mounted Result.
+ * @property {() => ({ diagramOptions?: Record<string, any> } | null)} [getCommittedRequest]
+ *   The committed canonical request (Python owns the option fields, R7).
+ */
+
+/** @param {LegendManagerOptions} options */
 export const createLegendManager = ({
   state,
   commitLegendRowRules,
@@ -20,7 +39,7 @@ export const createLegendManager = ({
   readActiveResultIdentity = null,
   getCommittedRequest = () => null
 }) => {
-  const layoutActions = createLegendLayoutActions({ state });
+  const layoutActions = createLegendLayoutActions();
   const entryActions = createLegendEntryActions({
     state,
     updatePairwiseLegendPositions: layoutActions.updatePairwiseLegendPositions,

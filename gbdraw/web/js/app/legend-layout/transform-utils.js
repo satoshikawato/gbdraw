@@ -1,3 +1,4 @@
+// @ts-check
 const SVG_NUMBER = '[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?';
 const LEADING_TRANSLATE = new RegExp(
   `^(\\s*)translate\\(\\s*(${SVG_NUMBER})(?:\\s*,\\s*|\\s+)(${SVG_NUMBER})?\\s*\\)`
