@@ -336,7 +336,7 @@ list in this policy.
 
 ### Design-rule co-change
 
-`gbdraw/web/CLAUDE.md` holds the Web design rules R1-R12. Each rule names the
+`gbdraw/web/CLAUDE.md` holds the numbered Web design rules (R1, R2, …). Each rule names the
 guard tests that enforce it, and some guards carry an allowlist or a baseline
 literal that the rule's text authorizes (a shrink-only count, a map of counts
 per module, a set of exempt exports, or a map of exempt writers per module).
