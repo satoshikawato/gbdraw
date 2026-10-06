@@ -161,8 +161,6 @@ const buildCircularCatalog = (source) => {
 
 export const buildAnnotationRecordCatalog = ({
   mode,
-  inputType = 'gb',
-  loadComparison = false,
   circularSource = null,
   linearSources = []
 } = {}) => (
