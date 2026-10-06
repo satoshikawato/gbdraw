@@ -1,3 +1,4 @@
+// @ts-check
 export const DEFINITION_LINE_STYLE_KINDS = Object.freeze([
   'name',
   'subtitle',
