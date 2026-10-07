@@ -389,7 +389,9 @@ test('Worker construction and the diagram-generation client have explicit owners
       'app/record-discovery.js',
       'app/run-analysis.js'
     ].map(atCurrentPath),
-    ['app/results.js']
+    // The Legend editor's added-row helper (GENERATE_LEGEND_ENTRY_SVG) retires
+    // with the zero-shift Legend layout, and its import with it.
+    ['app/legend/entry-actions.js', 'app/results.js']
   ));
 });
 

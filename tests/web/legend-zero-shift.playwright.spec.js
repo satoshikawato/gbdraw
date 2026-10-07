@@ -248,3 +248,125 @@ test('a renamed Linear row that is not last keeps its place live and at Generate
     expect(generated, `${name}: live equals Generate`).toEqual(live);
   }
 });
+
+// OV-143 (E1 REVIEW-3, controls K1-K8): single-mode Legend edits whose screen
+// differed from the next Generate on dev. Each shown Legend equals the next
+// Generate exactly, and no two rows overlap.
+const rowOverlaps = (page) => page.evaluate(() => {
+  const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+  const shown = Array.from(svg.getElementById('legend').querySelectorAll('g[data-legend-key]'))
+    .filter((entry) => !entry.closest('[display="none"]') && !entry.closest('[data-gbdraw-role="comparison-legend"]'))
+    .map((entry) => [entry.getAttribute('data-legend-key'), entry.getBoundingClientRect()]);
+  const overlaps = [];
+  shown.forEach(([first, a], index) => shown.slice(index + 1).forEach(([second, b]) => {
+    const width = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+    const height = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+    if (width > 0.5 && height > 0.5) overlaps.push(`${first} / ${second}`);
+  }));
+  return overlaps;
+});
+const expectShownEqualsGenerate = async (page, label) => {
+  await settleLive(page);
+  const shown = await legendGeometry(page);
+  expect(await rowOverlaps(page), `${label}: shown rows overlap`).toEqual([]);
+  await generate(page);
+  expect(await rowOverlaps(page), `${label}: generated rows overlap`).toEqual([]);
+  expect(await legendGeometry(page), `${label}: shown equals Generate`).toEqual(shown);
+  return shown;
+};
+const openControlCircular = async (page) => {
+  await openWithGenBank(page, FIXTURE, () => { window.__GBDRAW_APP__.autoLabelReflowEnabled = false; });
+  await generate(page);
+};
+const renameRow = async (page, from, to) => {
+  await evaluateWithRetainedPromise(page, async ({ source, target }) => {
+    const app = window.__GBDRAW_APP__;
+    await app.renameLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === source), target);
+  }, { source: from, target: to });
+  await settleLive(page);
+};
+// A delete recorded as one History step, as the Legend editor records it.
+const recordedDelete = async (page, caption) => {
+  await evaluateWithRetainedPromise(page, async (target) => {
+    const history = window.__GBDRAW_HISTORY__;
+    const transaction = await history.begin('Change setting', { source: 'legend-zero-shift', owner: {} });
+    const app = window.__GBDRAW_APP__;
+    await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === target));
+    await window.Vue.nextTick();
+    if (transaction) await history.commit(transaction);
+  }, caption);
+  await settleLive(page);
+};
+const historyStep = async (page, name) => {
+  await evaluateWithRetainedPromise(page, async (step) => { await window.__GBDRAW_HISTORY__[step](); }, name);
+  await settleLive(page);
+};
+
+test('OV-143 K1: a GC content row renamed in Circular stays in its slot', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openControlCircular(page);
+  const before = await legendGeometry(page);
+  await renameRow(page, 'GC content', 'GC%');
+  const shown = await expectShownEqualsGenerate(page, 'K1');
+  const row = (geometry, key) => geometry.rows.find(([caption]) => caption === key);
+  expect(row(shown, 'GC%')[1][1], 'K1: the row keeps its y').toBe(row(before, 'GC content')[1][1]);
+});
+
+test('OV-143 K4: an added row and a renamed CDS row in Circular do not overlap', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openControlCircular(page);
+  await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    app.newLegendCaption = 'Extra';
+    app.newLegendColor = '#7b2cbf';
+    await app.addNewLegendEntry();
+  });
+  await page.waitForFunction(() => window.__GBDRAW_APP__.legendEntries.some((entry) => entry.caption === 'Extra'));
+  await renameRow(page, 'CDS', 'Coding');
+  await expectShownEqualsGenerate(page, 'K4');
+});
+
+test('OV-143 K6: a row moved up in Linear takes its place in the row', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openLinear(page);
+  await generate(page);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.moveLegendEntryUp(app.legendEntries.findIndex((entry) => entry.caption === 'repeat_region'));
+  });
+  await expectShownEqualsGenerate(page, 'K6');
+});
+
+test('OV-143 K7: two deletes in Circular are drawn compact live and at Generate', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openControlCircular(page);
+  await recordedDelete(page, 'repeat_region');
+  await recordedDelete(page, 'GC content');
+  await expectShownEqualsGenerate(page, 'K7');
+});
+
+test('OV-143 K8: Undo of a delete returns the row to its slot; Generate agrees', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openControlCircular(page);
+  await recordedDelete(page, 'repeat_region');
+  await recordedDelete(page, 'GC content');
+  await historyStep(page, 'undo');
+  await expectShownEqualsGenerate(page, 'K8 Undo of the second delete');
+});
+
+test('OV-143 K8: Undo and Redo of two deletes walk the laid-out Legends', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openControlCircular(page);
+  const unedited = await legendGeometry(page);
+  await recordedDelete(page, 'repeat_region');
+  const oneDeleted = await legendGeometry(page);
+  await recordedDelete(page, 'GC content');
+  const twoDeleted = await legendGeometry(page);
+  const walk = [['undo', oneDeleted], ['undo', unedited], ['redo', oneDeleted], ['redo', twoDeleted]];
+  for (const [step, expected] of walk) {
+    await historyStep(page, step);
+    expect(await rowOverlaps(page), `K8 ${step}: rows overlap`).toEqual([]);
+    expect(await legendGeometry(page), `K8 ${step}`).toEqual(expected);
+  }
+  await expectShownEqualsGenerate(page, 'K8 after Redo');
+});

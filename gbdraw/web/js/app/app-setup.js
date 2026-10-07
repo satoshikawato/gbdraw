@@ -2416,6 +2416,10 @@ export const createAppSetup = () => {
   );
   // A legacy imported SVG without composition metadata stays unbound: it has
   // no composition to capture and no canvas to pad.
+  // Mounted Results whose Legend `adoptLegend` laid out; the commit waits for
+  // the later binding steps (`initializeStrokeAndCanvas`).
+  /** @type {WeakSet<Element>} */
+  const mountedLegendLayouts = new WeakSet();
   const shouldBindComposition = (context) => (
     context.root.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== null
     || context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
@@ -2426,7 +2430,9 @@ export const createAppSetup = () => {
       // The Legend layout port (zero shift) reads the bundled-font metrics;
       // they load with the first Result that has a Legend, so the Legend
       // edits, which lay the Legend out synchronously, find them loaded.
-      if (context.root.getElementById?.('legend')) {
+      // Once loaded, the binder does not wait: an edit waiting for this
+      // binding (a rule commit after a rerender) reads its Legend unchanged.
+      if (context.root.getElementById?.('legend') && !legendActions.isLegendLayoutReady()) {
         await legendActions.prepareLegendLayout().catch((error) => {
           console.error('The Legend layout could not load its font metrics.', normalizeUserFacingError(error));
         });
@@ -2451,15 +2457,19 @@ export const createAppSetup = () => {
         legendActions.adoptResultInventory(context.resultIdentity, { restored: true });
         return;
       }
-      // A Result that Generate, a rerender, or a record transform drew, or a
-      // batch Result being displayed, shows the Legend edits laid out as
-      // Python lays the edited rows out, before its entries are read (zero
-      // shift; OV-122, OV-124, OV-126). A loaded Session shows its saved bytes.
+      // A Result the renderer drew: generated, newly displayed, or drawn again
+      // by an automatic rerender. An incremental edit, a History restore, and
+      // a loaded Session show bytes already laid out.
+      const drawn = !context.bindingOptions.isIncrementalEdit
+        || Boolean(context.bindingOptions.replaceGeneratedLegend);
+      // It shows the Legend editor's edits laid out as Python lays the edited
+      // rows out, before its entries are read (zero shift; OV-122, OV-124,
+      // OV-126, OV-127).
       if (
-        context.phase !== 'session-load' && context.phase !== 'passive-preview'
-        && context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
+        drawn && context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
+        && legendActions.layOutMountedLegendEdits(context.root)
       ) {
-        legendActions.layOutMountedLegendEdits(context.root);
+        mountedLegendLayouts.add(context.root);
       }
       if (context.bindingOptions.skipLegendExtraction) return;
       recordStructuralMetric('legendDomFullScanCount', 1, {
@@ -2467,8 +2477,7 @@ export const createAppSetup = () => {
         rootGeneration: context.rootGeneration
       });
       legendActions.extractLegendEntries({
-        replaceGeneratedInventory: !selecting && (!context.bindingOptions.isIncrementalEdit
-          || Boolean(context.bindingOptions.replaceGeneratedLegend)),
+        replaceGeneratedInventory: !selecting && drawn,
         liveResultIdentities
       });
     },
@@ -2506,14 +2515,16 @@ export const createAppSetup = () => {
       }
     },
     initializeStrokeAndCanvas(context) {
-      if (
-        context.bindingOptions.trustedRestore
-        || context.bindingOptions.isIncrementalEdit
-      ) return;
-      legendActions.captureOriginalStroke();
-      // Generate already padded its candidates; another batch Result shows
-      // the current canvas padding when it is displayed (D-09).
-      if (shouldBindComposition(context)) legendLayout.applyCanvasPadding();
+      const legendLaidOut = mountedLegendLayouts.delete(context.root);
+      if (!context.bindingOptions.trustedRestore && !context.bindingOptions.isIncrementalEdit) {
+        legendActions.captureOriginalStroke();
+        // Generate already padded its candidates; another batch Result shows
+        // the current canvas padding when it is displayed (D-09).
+        if (shouldBindComposition(context)) legendLayout.applyCanvasPadding();
+      }
+      // The Legend laid out at mount is committed with the bindings the
+      // steps since added, so the Result's content is its mounted SVG (R1).
+      if (legendLaidOut) previewRuntime.commitActiveResultEdit('legend-position');
     },
     reconcileSelection(context) {
       if (

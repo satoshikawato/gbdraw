@@ -123,6 +123,19 @@ const inspectLiveComposition = async (page, caption = renamedLegendCaption) => (
 
     const binding = composition.bindCompositionMetadata(svg);
     const deltas = composition.compositionUserDeltas(svg);
+    // Zero shift: the Legend's recorded local bounds are the bounds the Legend
+    // layout owner gives its rows (Python's layout), not its painted box.
+    const { createLegendLayoutActions } = await import('./js/app/legend/layout-actions.js');
+    const legendLayout = createLegendLayoutActions();
+    await legendLayout.prepareLegendLayout();
+    const laidOut = svg.getElementById('legend')
+      ? legendLayout.layOutLegend(new DOMParser().parseFromString(
+        new XMLSerializer().serializeToString(svg), 'image/svg+xml'
+      ).documentElement)
+      : null;
+    const layoutLegendBounds = laidOut && {
+      x: laidOut.minX, y: laidOut.minY, width: laidOut.maxX - laidOut.minX, height: laidOut.maxY - laidOut.minY
+    };
     const transformPoint = (matrix, x, y) => ({
       x: matrix.a * x + matrix.c * y + matrix.e,
       y: matrix.b * x + matrix.d * y + matrix.f
@@ -277,6 +290,7 @@ const inspectLiveComposition = async (page, caption = renamedLegendCaption) => (
       metadataBoundsErrors: {
         primary: boundsError(automaticBounds.primary, binding.metadata.primary.finalBounds),
         legend: boundsError(localBounds.legend, binding.metadata.legend?.localBounds || null),
+        legendLayout: boundsError(layoutLegendBounds, binding.metadata.legend?.localBounds || null),
         title: boundsError(localBounds.title, binding.metadata.title?.localBounds || null)
       },
       primaryMetadataContainmentError: containmentError(
@@ -365,7 +379,7 @@ const addAndRenameLegendEntry = async (page) => {
     renamed.legendBox.width !== added.legendBox.width ||
     renamed.legendBox.height !== added.legendBox.height
   ).toBe(true);
-  expect(renamed.metadataBoundsErrors.legend).toBeLessThan(1);
+  expect(renamed.metadataBoundsErrors.legendLayout).toBeLessThan(1e-9);
   expect(renamed.metadata.legend.localBounds).not.toEqual(added.metadata.legend.localBounds);
   return { added, renamed };
 };
@@ -699,7 +713,7 @@ for (const mode of ['circular', 'linear']) {
     expectValidComposition(reflowedAfterDrag);
     expectDeltasClose(reflowedAfterDrag.deltas, moved.deltas);
     expectRenamedEntry(reflowedAfterDrag);
-    expect(reflowedAfterDrag.metadataBoundsErrors.legend).toBeLessThan(1);
+    expect(reflowedAfterDrag.metadataBoundsErrors.legendLayout).toBeLessThan(1e-9);
 
     const saved = await saveSession(page);
     expect(saved.session.format).toBe('gbdraw-session');

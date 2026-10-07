@@ -134,6 +134,8 @@ export const createLegendLayoutActions = () => {
     fontMetrics = await loadLegendFontMetrics();
     return fontMetrics;
   };
+  /** Whether the metrics are loaded, so a caller need not wait for them. */
+  const isLegendLayoutReady = () => fontMetrics !== null;
 
   /**
    * Lay out the Legend of `svg` for `side` (default: its composition side) as
@@ -226,5 +228,5 @@ export const createLegendLayoutActions = () => {
     return circularLegendLocalBounds(layout, rect);
   };
 
-  return { layOutLegend, prepareLegendLayout };
+  return { isLegendLayoutReady, layOutLegend, prepareLegendLayout };
 };

@@ -94,7 +94,13 @@ export const createLegendRepositionActions = ({
     }
   };
 
-  const repositionForLegendChange = (newPosition, _oldPosition, _options = {}) => {
+  /**
+   * @param {string} newPosition
+   * @param {string} [_oldPosition]
+   * @param {{ preserveManualOffsets?: boolean, commit?: boolean }} [options]
+   *   `commit: false` leaves the commit to the caller (the mount binder).
+   */
+  const repositionForLegendChange = (newPosition, _oldPosition, options = {}) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!svgContainer.value || !svgContent.value) return false;
@@ -119,18 +125,20 @@ export const createLegendRepositionActions = ({
 
     const nextBinding = applyCompositionEdit(svg, { legendSide: newPosition, canvasPadding, legendLocalBox });
     syncStateFromComposition(svg, nextBinding);
-    commitActiveResultEdit?.('legend-position');
+    if (options.commit !== false) commitActiveResultEdit?.('legend-position');
     return true;
   };
 
-  const refreshLegendGeometry = () => {
+  /** @param {{ commit?: boolean }} [options] */
+  const refreshLegendGeometry = ({ commit = true } = {}) => {
     if (!svgContainer.value || !svgContent.value) return false;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;
     const binding = bindCompositionMetadata(svg);
     if (!binding.legend.metadata || binding.metadata.legendSide === 'none') return false;
     return repositionForLegendChange(binding.metadata.legendSide, binding.metadata.legendSide, {
-      preserveManualOffsets: true
+      preserveManualOffsets: true,
+      commit
     });
   };
 

@@ -82,7 +82,7 @@ export const createLegendEntryActions = ({
     originalSvgStroke
   } = state;
 
-  /** @type {(() => void) | null} */
+  /** @type {((options?: { commit?: boolean }) => unknown) | null} */
   let legendGeometryChangedHandler = null;
   const retiredEntryTemplates = new Map();
 
@@ -187,7 +187,8 @@ export const createLegendEntryActions = ({
     legendGeometryChangedHandler = typeof handler === 'function' ? handler : null;
   };
 
-  const onLegendGeometryChanged = () => legendGeometryChangedHandler?.();
+  /** @param {{ commit?: boolean }} [options] */
+  const onLegendGeometryChanged = (options) => legendGeometryChangedHandler?.(options);
 
   // The stroke Generate gives a row added here: the renderer's first Legend row
   // as it drew it, before that row's own stroke edit, whose captured original
@@ -465,9 +466,10 @@ export const createLegendEntryActions = ({
   // edited rows out, as the live edit was (zero shift; OV-122, OV-124,
   // OV-126, OV-127, PD-OI-066). Returns whether it was laid out again.
   /** @param {SVGSVGElement} svg */
+  // The mount binder commits the Result once its later steps have bound it.
   const layOutMountedLegendEdits = (svg) => {
     if (getAllFeatureLegendGroups(svg).length === 0 || !hasLegendRowEdits(svg)) return false;
-    onLegendGeometryChanged();
+    onLegendGeometryChanged({ commit: false });
     return true;
   };
 
