@@ -1527,12 +1527,15 @@ export const createAppSetup = () => {
   const circularConservationFastaInput = ref(null);
   // The stack editors receive the feature placement transition as one port (R10, R13).
   const { changeTrackLayout } = featureActions.placementActions;
-  // Legend styles follow the captions that track data names (OV-65): the
-  // annotation editor receives this one port, and the Depth source and label
-  // transitions below run through it.
+  // Legend styles and names follow the captions that track data names (OV-65,
+  // OV-87): the annotation editor receives this one port, and the Depth source
+  // and label transitions below run through it. A retired rename reaches the
+  // displayed Result through the one Legend projection (R3).
   const retireLegendStylesOfUnnamedCaptions = buildLegendStyleRetirement({
     legendColorOverrides,
     legendStrokeOverrides,
+    legendEntries,
+    projectLegendEntries: () => { void projectMountedEditorIntent({ legend: {} }); },
     namedCaptions: () => trackDataLegendCaptions({
       annotationSets,
       depthTracks: adv.depth_tracks,

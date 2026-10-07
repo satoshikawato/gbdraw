@@ -12,6 +12,22 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Legend names (web app): Generate no longer fails with "The generated result
+  could not be accepted" after a **Depth** row renamed in the Legend is hidden by
+  **Show Depth**, in Linear and Circular. The row is not drawn; as for a renamed GC
+  row that is switched off, it returns under its series caption when Depth is
+  shown again.
+- Legend names (web app): a Legend rename of a row that only track data names
+  (a Depth series, an annotation set legend label) is now retired together with
+  that data, with the color and stroke stored under the new name. Generate no
+  longer fails with "The generated result could not be accepted" after the Depth
+  file or track of a renamed row is removed, or the file is replaced by one with
+  another label. A replacement that keeps the row's caption keeps the rename, and
+  Undo restores the data, the name, and the styles.
+- Depth tracks (web app): a Depth series that no record gives a Depth TSV now
+  fails Generate with "The depth input or settings are invalid. Depth series N.
+  Supply the required value." and the **Depth** actions. The same failure showed
+  "The operation failed without recognized diagnostic information".
 - Feature strokes (web app): a stroke set on one feature in the feature popup is no
   longer lost when Generate draws a Result without that feature, such as a Generate
   in the other mode (Circular or Linear). The stroke stays in the draft and in a
