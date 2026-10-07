@@ -91,7 +91,12 @@ and keeps the current Session, so no edit is dropped. An older
 Feature visibility edit hid every feature with the same hash, such as each copy
 of a duplicated record; it now applies only to the feature that was edited, and
 Load reports how many edits the next Generate draws differently for this.
-Each moved edit takes the mode of the Session's diagram. A Feature placement
+Each moved edit takes the mode of the Session's diagram. The CLI moves the
+edits of a Session 40–44 through its saved catalog in the same way when it
+replays the Session with `--session_output` or `--save_session`, and logs these
+counts. It does not read the sources of an older Session again, so it drops
+that Session's edits; the replayed request's tables keep their effect on the
+diagram. A Feature placement
 draft of a Session 41–44 reached every request with its record key: a lane
 placement takes the mode of its side, and a Main placement is kept for both
 modes. The CLI applies the same mapping when it replays such a Session with
