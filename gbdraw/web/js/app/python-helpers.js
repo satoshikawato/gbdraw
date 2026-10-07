@@ -1611,7 +1611,12 @@ def list_sequence_records(path, format):
             return json.dumps({'error': serialize_web_error(ValueError(f'Unsupported format: {format}'), operation='listSequenceRecords', stage="helper")})
         records = list(SeqIO.parse(path, format_map[format]))
         if not records:
-            return json.dumps({'error': serialize_web_error(ValueError('No records found'), operation='listSequenceRecords', stage="helper")})
+            missing = ValueError('No records found')
+            if format == "genbank":
+                from gbdraw.exceptions import ValidationError
+                from gbdraw.io.genome import genbank_absence_diagnostic
+                missing = ValidationError('No records found', diagnostic=genbank_absence_diagnostic(path))
+            return json.dumps({'error': serialize_web_error(missing, operation='listSequenceRecords', stage="helper")})
         payload = []
         for idx, record in enumerate(records):
             organism = ""

@@ -201,6 +201,90 @@ def test_track_fit_failure_reports_row_and_band_without_slot_id(
     assert _web(ValidationError(message))["context"] == {"exceptionType": "ValidationError"}
 
 
+def _pinned(slot_id: str, renderer: str, radius_px: float, width_px: float = 20.0, **fields) -> CircularTrackSlot:
+    return CircularTrackSlot(
+        id=slot_id,
+        renderer=renderer,
+        radius=ScalarSpec(radius_px, "px"),
+        width=ScalarSpec(width_px, "px"),
+        **fields,
+    )
+
+
+@pytest.mark.parametrize(
+    ("slots", "definition_px", "explicit_radius", "message", "context"),
+    [
+        # Two pinned rows overlap: the later row is named.
+        (
+            (
+                _pinned("gc_content", "dinucleotide_content", 50.0),
+                _pinned("PRIVATE_SLOT", "dinucleotide_skew", 55.0),
+            ),
+            None,
+            False,
+            "Pinned circular track slot 'PRIVATE_SLOT' overlaps reserved circular slot 'gc_content'.",
+            {"reason": "CANNOT_FIT", "slotIndex": 1},
+        ),
+        # A pinned row overlaps the center definition text ...
+        (
+            (_pinned("PRIVATE_SLOT", "dinucleotide_skew", 35.0),),
+            40.0,
+            False,
+            "Pinned circular track slot 'PRIVATE_SLOT' overlaps reserved circular slot 'definition'.",
+            {"reason": "DEFINITION_RESERVED", "slotIndex": 0},
+        ),
+        # ... or an explicit center_reserved_radius.
+        (
+            (_pinned("PRIVATE_SLOT", "dinucleotide_skew", 35.0),),
+            40.0,
+            True,
+            "Pinned circular track slot 'PRIVATE_SLOT' overlaps reserved circular slot 'definition'.",
+            {"reason": "CENTER_RESERVED", "slotIndex": 0},
+        ),
+        # The row after a pinned row asks for a wider gap than the pinned row leaves.
+        (
+            (
+                _pinned("gc_content", "dinucleotide_content", 60.0, 10.0),
+                CircularTrackSlot(id="PRIVATE_SLOT", renderer="dinucleotide_skew", outer_gap_px=20.0),
+            ),
+            None,
+            False,
+            "Circular track slot order cannot be honored with the supplied pinned geometry: "
+            "'PRIVATE_SLOT' would overlap or move outside 'gc_content'.",
+            {"reason": "CANNOT_FIT", "slotIndex": 1},
+        ),
+        # An outside row has no room between the axis and the pinned row above it.
+        (
+            (
+                _pinned("gc_content", "dinucleotide_content", 105.0, 4.0, side="outside"),
+                CircularTrackSlot(id="PRIVATE_SLOT", renderer="dinucleotide_skew", side="outside"),
+            ),
+            None,
+            False,
+            "Circular track slot 'PRIVATE_SLOT' cannot be placed outside without overlap.",
+            {"reason": "CANNOT_FIT", "slotIndex": 1, "innerPx": 101, "outerPx": 102},
+        ),
+    ],
+)
+def test_radial_layout_conflicts_report_track_row_without_slot_id(
+    slots, definition_px, explicit_radius, message, context
+):
+    # TK-02: every radial-layout conflict is a TRACK_LAYOUT failure, not a render failure.
+    with pytest.raises(ValidationError) as caught:
+        resolve_circular_radial_layout(
+            total_length=1000,
+            canvas_config=_small_radial_canvas(),
+            slots=list(slots),
+            definition_reserved_radius_px=definition_px,
+            center_reserved_radius_explicit=explicit_radius,
+        )
+    assert str(caught.value) == message
+    payload = _web(caught.value)
+    assert payload["code"] == "TRACK_LAYOUT"
+    assert payload["context"] == context
+    assert "PRIVATE" not in json.dumps(payload)
+
+
 @pytest.mark.parametrize("surface", ["logical", "record-major"])
 @pytest.mark.parametrize(
     ("content", "code", "context"),
@@ -304,6 +388,56 @@ def test_legend_stroke_width_failure_is_typed_not_value_error():
     assert _web(caught.value)["context"] == {"reason": "NONNEGATIVE"}
 
 
+@pytest.mark.parametrize(
+    ("prefix", "reason"),
+    [
+        ('PRIVATE:c*?"<>|', "FILENAME"),
+        ("nested/PRIVATE", "FILENAME"),
+        ("CON", "FILENAME"),
+        ("nul.txt", "FILENAME"),
+        ("PRIVATE b.", "FILENAME"),
+        ("", "REQUIRED"),
+        ("P" * 201, "FILENAME_LENGTH"),
+        # 101 two-byte characters are 202 bytes in UTF-8.
+        ("é" * 101, "FILENAME_LENGTH"),
+    ],
+    ids=["characters", "folder", "device", "device-extension", "trailing-dot", "empty", "201-bytes", "202-utf8-bytes"],
+)
+def test_output_prefix_failure_names_the_output_prefix_field(prefix: str, reason: str):
+    from gbdraw.api.requests import RenderOutputRequest
+
+    with pytest.raises(ValidationError) as caught:
+        RenderOutputRequest(output_prefix=prefix)
+    payload = serialize_web_error(caught.value, operation="generate", stage="request-validation")
+    assert payload["code"] == "INPUT_INVALID"
+    assert payload["context"] == {"field": "output_prefix", "reason": reason}
+    assert "PRIVATE" not in json.dumps(payload)
+
+
+def test_output_prefix_length_limit_counts_utf8_bytes():
+    from gbdraw.api.requests import RenderOutputRequest
+
+    assert RenderOutputRequest(output_prefix="x" * 200).output_prefix == "x" * 200
+    assert RenderOutputRequest(output_prefix="é" * 100).output_prefix == "é" * 100
+
+
+def test_radial_inner_label_fit_failure_reports_the_fixed_track_row(tmp_path: Path):
+    from gbdraw.circular import _get_args, run_circular_from_namespace
+
+    with pytest.raises(ValidationError) as caught:
+        run_circular_from_namespace(_get_args([
+            "--gbk", str(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"),
+            "-o", str(tmp_path / "radial"),
+            "--labels", "both", "--label_placement", "radial",
+            "--circular_track_slot", "features:features@r=330px,w=40px",
+            "--circular_track_slot", "gc_content:dinucleotide_content@side=inside,r=290px,w=40px",
+        ]))
+    assert str(caught.value).startswith("radial inner labels cannot fit the fixed circular geometry")
+    payload = _web(caught.value)
+    assert payload["code"] == "TRACK_LAYOUT"
+    assert payload["context"] == {"reason": "CANNOT_FIT", "slotIndex": 0}
+
+
 def test_specific_color_table_failure_reports_row_without_value(tmp_path: Path):
     from gbdraw.io.colors import read_color_table
 
@@ -351,3 +485,50 @@ def test_unparsable_genbank_is_unreadable_input_not_a_render_failure(tmp_path: P
     assert payload["code"] == "INPUT_UNREADABLE"
     assert payload["context"] == {}
     assert "PRIVATE" not in json.dumps(payload)
+
+
+def _record(record_id: str, length: int) -> SeqRecord:
+    record = SeqRecord(Seq("A" * length), id=record_id)
+    record.annotations["molecule_type"] = "DNA"
+    return record
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "message", "reason"),
+    [
+        (1000, 2000, r"Region 1000\.\.2000 starts after the end of record TINY\.1 \(60 bp\)", "RECORD_BOUNDS"),
+        (50, 10, r"Region start \(50\) must not exceed the region end \(10\)", "ORDER"),
+    ],
+)
+def test_region_outside_the_record_names_the_record_and_is_a_region_failure(start, end, message, reason):
+    # CI-01: the end was clamped before the order check, so a region wholly
+    # beyond the record read "Start position (1000) must be less than end
+    # position (2000)" and reached the Web as RENDER_FAILED.
+    from gbdraw.crop_genbank import check_start_end_coords
+
+    with pytest.raises(ValidationError, match=message) as caught:
+        check_start_end_coords(_record("TINY.1", 60), start, end)
+    payload = _web(caught.value)
+    assert payload["code"] == "REGION_INVALID"
+    assert payload["context"] == {"field": "region", "reason": reason}
+
+
+def test_linear_record_region_beyond_the_record_keeps_its_region_diagnostic():
+    from gbdraw.api import InMemoryRecordSource, RecordInput
+    from gbdraw.api.record_planning import resolve_record_inputs
+    from gbdraw.io.regions import parse_region_spec
+
+    with pytest.raises(ValidationError, match="TINY.1 \\(60 bp\\)") as caught:
+        resolve_record_inputs(
+            [RecordInput(source=InMemoryRecordSource(_record("TINY.1", 60)), region=parse_region_spec("1000-2000"))],
+            gff_candidate_features=None,
+            gff_keep_all_features=False,
+        )
+    assert _web(caught.value)["code"] == "REGION_INVALID"
+    # A partial overrun is still clamped with a warning.
+    resolved = resolve_record_inputs(
+        [RecordInput(source=InMemoryRecordSource(_record("TINY.1", 60)), region=parse_region_spec("30-2000"))],
+        gff_candidate_features=None,
+        gff_keep_all_features=False,
+    )
+    assert len(resolved.records[0]) == 31

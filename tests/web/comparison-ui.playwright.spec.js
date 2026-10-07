@@ -1312,16 +1312,40 @@ test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory
   expect(shortRow.errorCode).toBe('COMPARISON_INPUT');
   expect(shortRow.content).toBe(unrelated.content);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog.context))
-    .toEqual({ reason: 'FIELDS', row: 2, columnCount: 12 });
+    .toEqual({ reason: 'FIELDS', row: 2, columnCount: 12, queryRecordIndex: 0, subjectRecordIndex: 1 });
   await expect(page.getByRole('alert', { name: 'Generation Error' }))
     .toContainText('Required columns: 12.');
 
+  // CI-04: a swapped table names the column and the correction, as the CLI does.
   const swapped = await generateWithTable(hit('Co06B', 'Co06A'), 'swapped-ids.tsv');
   expect(swapped.status).toBe('error');
-  expect(swapped.errorCode).toBe('COMPARISON_IDENTITY');
+  expect(swapped.errorCode).toBe('COMPARISON_INPUT');
   expect(swapped.content).toBe(unrelated.content);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog.context))
+    .toEqual({ reason: 'RECORD_ID', column: 1, queryRecordIndex: 0, subjectRecordIndex: 1 });
   await expect(page.getByRole('alert', { name: 'Generation Error' }))
-    .toContainText('Comparison endpoints disagree');
+    .toContainText('Pair: #1 to #2. Column 1. A table row names another displayed record in this column. Swap the query and subject columns');
+});
+
+// CI-06: removing the BLAST TSV of an Upload pair names the pair's missing
+// file instead of an unrecognized failure.
+test('removing the BLAST TSV of an Upload pair names the missing file at Generate', async ({ page }) => {
+  test.setTimeout(300000);
+  const { hit, generateWithTable } = await prepareUploadedTablePair(page);
+  const drawn = await generateWithTable(hit('Co06A', 'Co06B'), 'pair-table.tsv');
+  expect(drawn.status, drawn.errorCode).toBe('ok');
+  await page.evaluate(() => document.querySelectorAll('details').forEach((details) => { details.open = true; }));
+  await page.getByRole('group', { name: 'BLAST TSV for #1 to #2 selection' })
+    .getByRole('button', { name: 'Remove' }).click();
+  const failed = await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    const result = await app.runAnalysis();
+    return { status: result?.status, code: app.errorLog?.code, context: app.errorLog?.context };
+  });
+  expect(failed).toEqual({ status: 'error', code: 'COMPARISON_INPUT',
+    context: { reason: 'BLAST_TSV_REQUIRED', queryRecordIndex: 0, subjectRecordIndex: 1 } });
+  await expect(page.getByRole('alert', { name: 'Generation Error' }))
+    .toContainText('Pair: #1 to #2. Choose a BLAST TSV for this pair, or set the pair to No comparison or Run LOSAT.');
 });
 
 test('unmatched uploaded table IDs show a notice that follows the Result through Save and Load', async ({ page }) => {

@@ -1065,11 +1065,14 @@ def test_declared_command_refresh_keeps_one_file_as_one_resource(
     refresh_gallery_sessions_module._declared_command_session(
         command, declared, env=refresh_gallery_sessions_module._cli_env()
     )
-    _refresh_one_session(declared, destination_path=destination)
+    _refresh_one_session(
+        declared, destination_path=destination, declared_command=True
+    )
     refresh_gallery_sessions_module._assert_declared_figure(declared, destination)
 
     session = load_session(destination)
     assert session["cliInvocation"]["args"] == shlex.split(command)[2:]
+    assert _stored_output_prefixes(session) == ("declared", "declared")
     # The Web's configuration overrides, so Session Load needs no Worker.
     options = session["renderRequest"]["diagramOptions"]
     assert options.get("config") is None
@@ -1127,11 +1130,14 @@ def test_declared_circular_command_refresh_keeps_one_file_as_one_resource(
     refresh_gallery_sessions_module._declared_command_session(
         command, declared, env=refresh_gallery_sessions_module._cli_env(), cwd=tmp_path
     )
-    _refresh_one_session(declared, destination_path=destination)
+    _refresh_one_session(
+        declared, destination_path=destination, declared_command=True
+    )
     refresh_gallery_sessions_module._assert_declared_figure(declared, destination)
 
     session = load_session(destination)
     assert session["cliInvocation"]["args"] == argv[2:]
+    assert _stored_output_prefixes(session) == ("declared", "declared")
     assert [
         (record["source"]["resourceId"], record["selector"])
         for record in session["renderRequest"]["records"]
@@ -2005,7 +2011,7 @@ def test_refresh_rewrites_retired_flags_in_the_recorded_cli_invocation(
     path.write_bytes(gzip.compress(payload) if compressed else payload)
 
     refresh_gallery_sessions_module._canonicalize_recorded_cli_invocation(
-        path, mode="linear"
+        path, mode="linear", gallery_id="s"
     )
 
     raw = path.read_bytes()
@@ -2026,3 +2032,170 @@ def test_refresh_rewrites_retired_flags_in_the_recorded_cli_invocation(
     ]
     (binding,) = session["cliInvocation"]["fileBindings"]
     assert args[binding["argIndex"]] == "A.gb"
+
+
+def _stored_output_prefixes(session: dict[str, object]) -> tuple[object, object]:
+    """The Output Prefix as the form field and the render request store it."""
+
+    return (
+        session["config"]["form"]["prefix"],  # type: ignore[index]
+        session["renderRequest"]["output"]["prefix"],  # type: ignore[index]
+    )
+
+
+def _recorded_output(args: list[str]) -> str:
+    (value,) = [
+        args[index + 1] for index, arg in enumerate(args) if arg in {"-o", "--output"}
+    ]
+    return value
+
+
+@pytest.mark.parametrize(
+    "gallery_id",
+    ["HmmtDNA_basic_circular", "HmmtDNA_ATskew", "lambda_basic_linear"],
+)
+def test_stored_session_refresh_publishes_gallery_id_and_input_file_names(
+    gallery_id: str,
+    tmp_path: Path,
+) -> None:
+    """The stored-Session route names the output and the inputs for the Gallery.
+
+    A Generate after Load names its files after the stored Output Prefix, so the
+    prefix is the Gallery id the card command uses, in the form field and the
+    render request. The recorded invocation uses the id for ``-o`` and no
+    maintainer-local path for an input.
+    """
+
+    source = _session_path(gallery_id)
+    staged = tmp_path / source.name
+    staged.write_bytes(source.read_bytes())
+    destination = tmp_path / "published" / source.name
+    destination.parent.mkdir()
+
+    _refresh_one_session(staged, destination_path=destination)
+
+    session = load_session(destination)
+    assert _stored_output_prefixes(session) == (gallery_id, gallery_id)
+    args = session["cliInvocation"]["args"]
+    assert _recorded_output(args) == gallery_id
+    assert not [arg for arg in args if arg.startswith(("/", "~"))], args
+    for binding in session["cliInvocation"]["fileBindings"]:
+        assert args[binding["argIndex"]] == binding["name"]
+
+
+def test_refresh_sets_every_stored_output_prefix() -> None:
+    session = {
+        "config": {"form": {"prefix": "out", "species": "kept"}},
+        "renderRequest": {"output": {"prefix": "out", "format": "svg"}},
+    }
+
+    assert refresh_gallery_sessions_module._set_output_prefix(session, "card-id") == 2
+    assert _stored_output_prefixes(session) == ("card-id", "card-id")
+    assert session["config"]["form"]["species"] == "kept"
+    assert refresh_gallery_sessions_module._set_output_prefix(session, "card-id") == 0
+
+
+def _write_invocation(tmp_path: Path, args: list[str], bindings: list[dict[str, object]]) -> Path:
+    path = tmp_path / "session.json"
+    path.write_text(
+        json.dumps(
+            {
+                "cliInvocation": {
+                    "schema": 1,
+                    "mode": "circular",
+                    "args": args,
+                    "fileBindings": bindings,
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_recorded_invocation_uses_gallery_id_and_input_file_names(
+    tmp_path: Path,
+) -> None:
+    root = Path(refresh_gallery_sessions_module.REPO_ROOT)
+    inside = root / "tests" / "test_inputs" / "HmmtDNA.gbk"
+    # Recorded in another checkout of the repository (a maintainer's machine).
+    foreign = "/mnt/c/Users/someone/GitHub/gbdraw/tests/test_inputs/NC_001416.gb"
+    path = _write_invocation(
+        tmp_path,
+        ["--gbk", str(inside), foreign, "-o", "/tmp/work/old", "--labels", "out"],
+        [
+            {"argIndex": 1, "slot": "files.c_gb", "name": "HmmtDNA.gbk"},
+            {"argIndex": 2, "slot": "files.c_gb2", "name": "NC_001416.gb"},
+        ],
+    )
+
+    refresh_gallery_sessions_module._canonicalize_recorded_cli_invocation(
+        path, mode="circular", gallery_id="card-id"
+    )
+
+    assert json.loads(path.read_text(encoding="utf-8"))["cliInvocation"]["args"] == [
+        "--gbk",
+        "HmmtDNA.gbk",
+        "NC_001416.gb",
+        "-o",
+        "card-id",
+        "--labels",
+        "out",
+    ]
+
+
+def test_recorded_invocation_keeps_relative_inputs(tmp_path: Path) -> None:
+    path = _write_invocation(
+        tmp_path,
+        ["--output=old", "--gbk", "HmmtDNA.gbk"],
+        [{"argIndex": 2, "slot": "files.c_gb", "name": "HmmtDNA.gbk"}],
+    )
+
+    refresh_gallery_sessions_module._canonicalize_recorded_cli_invocation(
+        path, mode="circular", gallery_id="card-id"
+    )
+
+    assert json.loads(path.read_text(encoding="utf-8"))["cliInvocation"]["args"] == [
+        "--output=card-id",
+        "--gbk",
+        "HmmtDNA.gbk",
+    ]
+
+
+@pytest.mark.parametrize(
+    "outside",
+    ["/tmp/elsewhere/HmmtDNA.gbk", "/home/someone/data/gbdraw/tests/missing.gbk", "C:\\data\\HmmtDNA.gbk"],
+)
+def test_recorded_invocation_rejects_an_input_outside_the_repository(
+    outside: str,
+    tmp_path: Path,
+) -> None:
+    path = _write_invocation(
+        tmp_path,
+        ["--gbk", outside, "-o", "x"],
+        [{"argIndex": 1, "slot": "files.c_gb", "name": "HmmtDNA.gbk"}],
+    )
+
+    with pytest.raises(ValueError, match="outside the repository"):
+        refresh_gallery_sessions_module._canonicalize_recorded_cli_invocation(
+            path, mode="circular", gallery_id="card-id"
+        )
+
+
+def test_declared_command_invocation_keeps_its_declared_inputs(tmp_path: Path) -> None:
+    path = _write_invocation(
+        tmp_path,
+        ["--gbk", "/elsewhere/in.gbk", "-o", "old"],
+        [{"argIndex": 1, "slot": "files.c_gb", "name": "in.gbk"}],
+    )
+
+    refresh_gallery_sessions_module._canonicalize_recorded_cli_invocation(
+        path, mode="circular", gallery_id="card-id", declared_command=True
+    )
+
+    assert json.loads(path.read_text(encoding="utf-8"))["cliInvocation"]["args"] == [
+        "--gbk",
+        "/elsewhere/in.gbk",
+        "-o",
+        "card-id",
+    ]

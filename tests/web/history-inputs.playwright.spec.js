@@ -166,7 +166,7 @@ test('Linear File removal choices are atomic, undoable, and preserve one slot', 
   const dialog = page.getByRole('dialog', { name: 'Clear or delete File?' });
   await expect(sources).toHaveCount(2);
   const baseline = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
-  const firstRemove = sources.first().getByRole('button', { name: /Remove$/ });
+  const firstRemove = sources.first().getByRole('button', { name: 'Remove GenBank / DDBJ File', exact: true });
 
   await firstRemove.click();
   expect(await page.evaluate(() => ({

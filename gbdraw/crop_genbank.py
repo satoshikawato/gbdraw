@@ -14,6 +14,7 @@ from gbdraw.core.record_metadata import (
     _copy_source_feature_identity,
     _feature_source_index_map,
 )
+from gbdraw.exceptions import ValidationError
 
 def _get_args():
     parser = argparse.ArgumentParser(description='Crop genbank file. ')
@@ -59,23 +60,26 @@ def gbk_to_seqrecord(in_gbk):
 def check_start_end_coords(record, start, end):
     """
     Converts 1-based inclusive start/end to 0-based exclusive slice indices.
-    Also performs boundary checks.
+
+    The order is checked before the end is clamped to the record length, so a
+    region that starts after the record ends is reported as such (CI-01).
     """
     record_len = len(record.seq)
-
-    # Convert 1-based inclusive start to 0-based slice start
-    start_0 = start - 1
-    if start_0 < 0:
-        start_0 = 0
-
-    # 1-based inclusive end is the 0-based exclusive slice end
-    end_0 = end
-    if end_0 > record_len:
-        end_0 = record_len
-
-    if start_0 >= end_0 and (start != 1 or end != record_len): # Allow full sequence
-        raise ValueError(f"Start position ({start}) must be less than end position ({end}).")
-
+    full_record = start == 1 and end == record_len
+    if start > end and not full_record:
+        raise ValidationError(
+            f"Region start ({start}) must not exceed the region end ({end}).",
+            diagnostic={"code": "REGION_INVALID", "field": "region", "reason": "ORDER"},
+        )
+    # 1-based inclusive start/end -> 0-based slice; the end is clamped.
+    start_0 = max(0, start - 1)
+    end_0 = min(end, record_len)
+    if start_0 >= end_0 and not full_record:
+        raise ValidationError(
+            f"Region {start}..{end} starts after the end of record {record.id} "
+            f"({record_len} bp). Choose a region within 1..{record_len}.",
+            diagnostic={"code": "REGION_INVALID", "field": "region", "reason": "RECORD_BOUNDS"},
+        )
     return start_0, end_0
 
 def _crop_and_shift_location(loc_before, loc_current, loc_next, crop_start_0, crop_end_0):

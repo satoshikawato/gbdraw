@@ -64,7 +64,9 @@ The exact surface controls are listed in the [Web app](web-app.md),
 Circular slots use side, radius or width, gaps, z-order, and renderer
 parameters. In the Web app, Width and Radius use numeric fields with px/×R
 selectors; R is the base circle radius. A unit change preserves the number,
-and blank means Auto. See [Circular track Width and Radius](web-app.md#circular-track-width-and-radius)
+and blank means Auto. A slot with a radius is drawn at that radius, and the
+other rows on its side keep the stack order around it: rows before it are
+placed farther from the center, rows after it closer. See [Circular track Width and Radius](web-app.md#circular-track-width-and-radius)
 for input, History, Session and Generate behavior. Linear slots use order,
 side or overlay ownership, reserved height,
 spacing, and an axis boundary. A feature slot's reserved band and the feature
