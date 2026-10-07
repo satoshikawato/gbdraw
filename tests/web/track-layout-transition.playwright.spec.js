@@ -85,7 +85,7 @@ test('Circular custom stack Reset and row moves ask before dropping a lane place
   }
 });
 
-test('Circular Separate Strands and Linear Use custom stack ask before dropping a Linear lane (R-3)', async ({ browser }, testInfo) => {
+test('Linear Use custom stack asks before dropping a Linear lane, and Circular Separate Strands leaves it (R-3)', async ({ browser }, testInfo) => {
   test.setTimeout(300000);
   const page = await load(browser, LAMBDA);
   try {
@@ -119,23 +119,25 @@ test('Circular Separate Strands and Linear Use custom stack ask before dropping 
     await expect.poll(() => layoutState(page, key)).toEqual(placed);
     await expect(custom).not.toBeChecked();
 
-    // The Circular panel's Separate Strands is the same draft input as Linear's.
+    // Each mode has its own drawing (PD-OI-086): the Circular panel's Separate
+    // Strands is the Circular drawing's, so changing it asks nothing and leaves
+    // the Linear Separate Strands and lane placement as they are.
+    const linearDraft = () => page.evaluate(async (overrideKey) => {
+      const { state } = await import('./js/state.js');
+      const drawing = state.drawings.linear;
+      return { separate: drawing.form.separate_strands,
+        row: drawing.featurePlacementOverrides[overrideKey]?.placement?.side || null };
+    }, key);
+    expect(await linearDraft()).toEqual({ separate: false, row: 'above' });
     await switchMode(page, 'circular');
     const circularStrands = await reveal(page.locator('input[type=checkbox][aria-label="Separate Strands"]'));
-    const switched = await layoutState(page, key);
+    const circularBefore = await circularStrands.isChecked();
     await circularStrands.click();
-    await expect(dialog(page)).toContainText('Changing Separate Strands to On leaves 1 Linear Feature placement without its lane.');
-    await expect(circularStrands).not.toBeChecked();
-    await page.screenshot({ path: testInfo.outputPath('circular-separate-strands-dialog.png') });
-    await cancelButton(page).click();
     await expect(dialog(page)).toBeHidden();
-    await expect(circularStrands).not.toBeChecked();
-    expect(await layoutState(page, key)).toEqual(switched);
-    await circularStrands.click();
-    await resetButton(page).click();
-    await expect(circularStrands).toBeChecked();
-    expect(await layoutState(page, key)).toEqual({ ...switched, separate: true, row: null, undo: switched.undo + 1 });
+    await expect(circularStrands).toBeChecked({ checked: !circularBefore });
+    expect(await linearDraft()).toEqual({ separate: false, row: 'above' });
     await switchMode(page, 'linear');
+    expect(await layoutState(page, key)).toMatchObject({ separate: false, linear: { side: 'above' }, row: 'above' });
     await generate(page);
   } finally {
     await page.context().close();
