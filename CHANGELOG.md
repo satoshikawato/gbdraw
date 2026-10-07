@@ -75,6 +75,10 @@ write-up of a release.
 - Legend editor (web app): a renamed feature row (for example `tRNA`) keeps its place
   in the Legend, live and after Generate, in Linear and Circular. Before, the rename
   moved the row to the end of the Legend.
+- Sessions (web app): a Session saved before Merge was limited to two rows of one
+  feature type (for example one that merged `GC skew (+)` into `GC skew (-)`) loads
+  as saved and keeps its merged row; a new Merge between such rows is no longer
+  offered.
 - Result names (web app): a live edit that redraws a loaded Session's Result (such
   as a Legend color, or Undo or Redo of a color step) keeps the Result's saved name.
   Before, the redraw renamed it after the **Output prefix** (a Gallery Session's
