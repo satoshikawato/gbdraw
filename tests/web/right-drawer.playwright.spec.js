@@ -1254,7 +1254,7 @@ test('compact Editor reconciles availability and restores its tab after failed S
   }
   const reconcile = await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
-    const { captureRightDrawerState, restoreRightDrawerState, resetRightDrawerState } = await import('./js/app/right-drawer.js');
+    const { captureRightDrawerState, restoreRightDrawerState, resetRightDrawerState } = await import('./js/services/right-drawer-state.js');
     const saved = captureRightDrawerState(state);
     state.orthogroups.value = [];
     state.similarityAlignmentPlan.value = null;

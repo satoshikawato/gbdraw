@@ -6,7 +6,7 @@ import {
   captureRightDrawerState,
   resetRightDrawerState,
   restoreRightDrawerState
-} from '../app/right-drawer.js';
+} from './right-drawer-state.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { cloneJsonData, cloneJsonValue } from './json-clone.js';

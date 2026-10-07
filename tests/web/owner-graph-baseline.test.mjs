@@ -76,7 +76,6 @@ const LAYER_IMPORT_BASELINE = {
   'layer.import-direction.v1|services/config.js->app/linear-track-slots.js': 7,
   'layer.import-direction.v1|services/config.js->app/losat-cache.js': 13,
   'layer.import-direction.v1|services/config.js->app/record-display-options.js': 1,
-  'layer.import-direction.v1|services/config.js->app/right-drawer.js': 3,
   'layer.import-direction.v1|services/config.js->app/session-feature-metadata.js': 2,
   'layer.import-direction.v1|services/export.js->app/feature-search/preview-svg.js': 1,
   'layer.import-direction.v1|services/gallery-session-migration.js->app/circular-track-slots.js': 3,
