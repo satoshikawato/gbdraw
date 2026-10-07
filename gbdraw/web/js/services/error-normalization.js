@@ -513,6 +513,21 @@ export const normalizeUserFacingError = (value, {
   return result;
 };
 
+/** @typedef {NonNullable<ReturnType<typeof normalizeUserFacingError>>} UserFacingError */
+
+// A value that a `catch` block receives is a failure even when it is falsy
+// (`throw undefined`), so it normalizes to the unknown failure instead of to
+// "no error" (OV-70).
+/**
+ * @param {unknown} value
+ * @param {Parameters<typeof normalizeUserFacingError>[1]} [options]
+ * @returns {UserFacingError}
+ */
+export const normalizeCaughtError = (value, options) => (
+  // A truthy value always normalizes to a model.
+  /** @type {UserFacingError} */ (normalizeUserFacingError(value || {}, options))
+);
+
 // A failure whose own recovery changes no input (B11, R6): the runtime failed,
 // not the request, so the same request can succeed on Retry.
 const PLAIN_RETRY_ACTIONS = new Set(['retry', 'reload', 'save-session']);

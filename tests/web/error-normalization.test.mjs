@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { normalizeCircularGeometryShortcuts } from '../../gbdraw/web/js/app/circular-track-slots.js';
-import { diagnosticError, normalizeUserFacingError } from '../../gbdraw/web/js/services/error-normalization.js';
+import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../../gbdraw/web/js/services/error-normalization.js';
 import { deserializeWorkerError, normalizeGenerationResponse } from '../../gbdraw/web/js/services/diagram-generation.js';
 globalThis.self = {};
 const { serializeError, callJsonHelper, resolveGenerationCleanupOutcome } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
@@ -327,6 +327,17 @@ test('summary shows Sequence, Line, Track row, Depth series, band and setting lo
 });
 
 // X-01: the producer contract message is a fixed identifier, never a document value.
+test('a falsy caught value normalizes to the unknown failure, not to no error (OV-70)', () => {
+  assert.equal(normalizeUserFacingError(undefined), null);
+  for (const value of [undefined, null, 0, '', false]) {
+    const model = normalizeCaughtError(value, { stage: 'request-validation' });
+    assert.deepEqual([model.code, model.stage], ['UNKNOWN', 'request-validation']);
+    assert.match(model.summary, /failed without recognized diagnostic information/);
+  }
+  const thrown = diagnosticError('REGION_INVALID', { inputOrdinal: 1, reason: 'SELECT_RECORD_FOR_REGION' });
+  assert.deepEqual(normalizeCaughtError(thrown, { stage: 'request-validation' }), normalizeUserFacingError(thrown, { stage: 'request-validation' }));
+});
+
 test('diagnosticError carries a fixed message, stage, operation and bounded context', () => {
   const error = diagnosticError('REGION_INVALID', { inputOrdinal: 1, reason: 'SELECT_RECORD_FOR_REGION' });
   assert.equal(error.message, 'REGION_INVALID/SELECT_RECORD_FOR_REGION');
