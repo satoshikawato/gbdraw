@@ -98,6 +98,9 @@
             --ui-line-strong: #cbd5e1;
             --ui-accent: #2563eb;
             --ui-accent-soft: #eff6ff;
+            --ui-danger: #b91c1c;
+            --ui-danger-soft: #fef2f2;
+            --ui-danger-line: #fca5a5;
         }
         body { font-family: 'Inter', 'Noto Sans JP', sans-serif; background-color: var(--ui-page); color: var(--ui-text-2); }
 
@@ -1319,6 +1322,9 @@
             .upload-zone i { font-size: 15px; line-height: 1; }
             .upload-zone:hover { border-color: var(--ui-accent); background-color: var(--ui-accent-soft); }
             .upload-zone.ready { border-style: solid; border-color: #86efac; background-color: #f0fdf4; }
+            /* A chosen file whose inspection failed (UI-08): no check; the message stays below the zone. */
+            .upload-zone.failed { border-style: solid; border-color: var(--ui-danger-line); background-color: var(--ui-danger-soft); }
+            .upload-zone-failed-label { color: var(--ui-danger); }
             .upload-zone:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; border-color: #3b82f6; }
 
             details > summary { @apply flex cursor-pointer select-none list-none items-center gap-2 transition-colors; font-size: 12px; font-weight: 600; line-height: 1.25; color: var(--ui-text-2); }
@@ -1417,11 +1423,11 @@
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="cInputType" value="gff" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
                         </div>
                         <div v-if="cInputType === 'gb'">
-                            <file-uploader label="GenBank/DDBJ File" v-model="files.c_gb" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"></file-uploader>
+                            <file-uploader label="GenBank/DDBJ File" v-model="files.c_gb" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"></file-uploader>
                         </div>
                         <div v-else class="grid grid-cols-1 gap-3">
-                            <file-uploader label="GFF3 File" v-model="files.c_gff" accept=".gff,.gff3,.txt,text/plain,text/*"></file-uploader>
-                            <file-uploader label="FASTA File" v-model="files.c_fasta" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>
+                            <file-uploader label="GFF3 File" v-model="files.c_gff" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gff,.gff3,.txt,text/plain,text/*"></file-uploader>
+                            <file-uploader label="FASTA File" v-model="files.c_fasta" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>
                         </div>
                         <section aria-label="Source records" class="space-y-2">
                             <p data-circular-discovery-status role="status" aria-live="polite" class="text-xs text-slate-600">
@@ -1717,6 +1723,7 @@
                                     :test-id="`linear-genbank-${sourceIndex + 1}`"
                                     accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"
                                     :model-value="source.sequence.gb"
+                                    :inspection-failed="Boolean(linearRecordSelectorError(source.sequence))"
                                     :request-clear="true"
                                     @update:model-value="setLinearSeqPrimaryFile(source.index, 'gb', $event)"
                                     @clear-request="requestLinearSourceRemoval(source, $event)"
@@ -1727,6 +1734,7 @@
                                     label="GFF3"
                                     accept=".gff,.gff3,.txt,text/plain,text/*"
                                     :model-value="source.sequence.gff"
+                                    :inspection-failed="Boolean(linearRecordSelectorError(source.sequence))"
                                     :request-clear="true"
                                     @update:model-value="setLinearSeqPrimaryFile(source.index, 'gff', $event)"
                                     @clear-request="requestLinearSourceRemoval(source, $event)"
@@ -1735,6 +1743,7 @@
                                     label="FASTA"
                                     accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"
                                     :model-value="source.sequence.fasta"
+                                    :inspection-failed="Boolean(linearRecordSelectorError(source.sequence))"
                                     :request-clear="true"
                                     @update:model-value="setLinearSeqPrimaryFile(source.index, 'fasta', $event)"
                                     @clear-request="requestLinearSourceRemoval(source, $event)"
@@ -7717,7 +7726,7 @@
         </div>
         <div
             class="upload-zone"
-            :class="{'ready': hasSelection}"
+            :class="{'ready': hasSelection && !inspectionFailed, 'failed': hasSelection && inspectionFailed}"
             role="button"
             :tabindex="uploadAvailable ? 0 : -1"
             :aria-disabled="!uploadAvailable"
@@ -7730,6 +7739,10 @@
             <div v-if="!hasSelection" class="flex items-center justify-center gap-1.5 text-slate-500">
                 <i class="ph ph-upload-simple" aria-hidden="true"></i>
                 <span :class="small ? 'text-[10px]' : 'text-xs font-bold'">Click to Browse</span>
+            </div>
+            <div v-else-if="inspectionFailed" class="upload-zone-failed-label font-bold truncate w-full px-2 flex items-center justify-center gap-1.5" :class="small ? 'text-[10px]' : 'text-xs'">
+                <i class="ph ph-warning-circle" aria-hidden="true"></i>
+                <span>{{ selectedLabel }}</span>
             </div>
             <div v-else class="text-green-700 font-bold truncate w-full px-2 flex items-center justify-center gap-1.5" :class="small ? 'text-[10px]' : 'text-xs'">
                 <i class="ph ph-check-circle" aria-hidden="true"></i>

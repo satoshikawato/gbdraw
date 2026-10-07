@@ -12,6 +12,7 @@
 // Generate bar, the Custom Track Slots title is not cut, and no track-row control
 // overlaps another or leaves its row.
 // GX-01: a pending Session operation disables every track-row control.
+// UI-08: an upload zone whose file failed inspection does not look ready.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
@@ -337,3 +338,34 @@ for (const mode of ['circular', 'linear']) {
     expect(enabled).toEqual([]);
   });
 }
+
+// UI-08: a chosen file whose inspection failed shows an error state (no check icon);
+// the inspection message below the zone explains why.
+test('an upload zone whose file failed inspection does not look ready (UI-08)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openApp(page);
+  const zone = page.getByRole('button', { name: 'Choose GenBank/DDBJ File', exact: true });
+  await page.getByLabel('GenBank/DDBJ File', { exact: true })
+    .setInputFiles({ name: 'bad.gbk', mimeType: 'text/plain', buffer: Buffer.from('hello world\n') });
+  await expect(page.locator('[data-circular-discovery-status]')).toContainText('No records were found', { timeout: 120_000 });
+  await expect(zone).toHaveClass(/\bfailed\b/);
+  await expect(zone).not.toHaveClass(/\bready\b/);
+  await expect(zone.locator('.ph-check-circle')).toHaveCount(0);
+  await expect(zone).toContainText('bad.gbk');
+  // The zone animates its colors; the final border is the danger line color.
+  await expect(zone).toHaveCSS('border-top-color', 'rgb(252, 165, 165)');
+
+  await page.getByLabel('GenBank/DDBJ File', { exact: true })
+    .setInputFiles({ name: 'HmmtDNA.gbk', mimeType: 'text/plain', buffer: genbank });
+  await expect(page.locator('[data-circular-discovery-status]')).toContainText('source record(s) inspected', { timeout: 120_000 });
+  await expect(zone).toHaveClass(/\bready\b/);
+  await expect(zone).not.toHaveClass(/\bfailed\b/);
+  await expect(zone.locator('.ph-check-circle')).toHaveCount(1);
+
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await page.getByTestId('linear-genbank-1')
+    .setInputFiles({ name: 'bad.gbk', mimeType: 'text/plain', buffer: Buffer.from('hello world\n') });
+  const linearZone = page.getByRole('button', { name: 'Choose GenBank / DDBJ File', exact: true }).first();
+  await expect(linearZone).toHaveClass(/\bfailed\b/, { timeout: 120_000 });
+  await expect(linearZone.locator('.ph-check-circle')).toHaveCount(0);
+});
