@@ -185,6 +185,16 @@ test('Interactive SVG searches on Enter, fits the Qualifier key, and titles a fe
   await query.fill('tRNA-Phe');
   await qualifier.press('Enter');
   await expect(count).toHaveText('1 / 1 features');
+  // At a 390 px viewport the bar narrows to keep its 12 px margins, and its controls stay inside it (GX-11).
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect.poll(() => page.locator('#gbdraw-feature-search-controls').evaluate((controls) => {
+    const bar = controls.querySelector('.gfs').getBoundingClientRect();
+    const inside = [...controls.querySelectorAll('input, select, button, .gfs-count')]
+      .filter((element) => element.getBoundingClientRect().width > 0)
+      .every((element) => element.getBoundingClientRect().right <= bar.right + 0.5);
+    return { fits: bar.left >= 11.5 && bar.right <= 390 - 11.5, inside };
+  })).toEqual({ fits: true, inside: true });
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.locator('[data-search-clear]').click();
 
   // The popup title follows the app popup: a tRNA is titled by its product, and

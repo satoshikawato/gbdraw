@@ -687,9 +687,12 @@ export const STANDALONE_INTERACTIVE_STYLE = `
   color: #ffffff;
 }
 .gfs-count {
+  min-width: 0;
   margin-left: auto;
+  overflow: hidden;
   color: #475569;
   font-weight: 700;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .gfs-match-detail {
@@ -3181,10 +3184,6 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
   function applySearchControlsMode() {
     if (!searchControls) return;
     searchControls.setAttribute(
-      'width',
-      String(searchControlsExpanded ? SEARCH_CONTROLS_EXPANDED_WIDTH : SEARCH_CONTROLS_COMPACT_WIDTH)
-    );
-    searchControls.setAttribute(
       'height',
       String(searchControlsExpanded
         ? SEARCH_CONTROLS_EXPANDED_HEIGHT + (popupMode === 'simple' ? 0 : SEARCH_CONTROLS_QUALIFIER_ROW_HEIGHT)
@@ -3218,7 +3217,14 @@ export const STANDALONE_INTERACTIVE_SCRIPT = `
       view.height / fallbackSize.height
     );
     var margin = 12 * unit;
-    var controlWidth = Number(searchControls.getAttribute('width')) || SEARCH_CONTROLS_EXPANDED_WIDTH;
+    // The expanded bar narrows to the visible width less both margins.
+    var controlWidth = searchControlsExpanded
+      ? Math.max(
+        SEARCH_CONTROLS_COMPACT_WIDTH,
+        Math.min(SEARCH_CONTROLS_EXPANDED_WIDTH, visibleView.width / unit - 24)
+      )
+      : SEARCH_CONTROLS_COMPACT_WIDTH;
+    searchControls.setAttribute('width', formatSvgNumber(controlWidth));
     var x = Math.max(
       visibleView.x + margin,
       visibleView.x + visibleView.width - (controlWidth * unit) - margin
