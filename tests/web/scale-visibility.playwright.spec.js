@@ -44,7 +44,7 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
 
   await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'circular';
+    app.setDiagramMode('circular');
     app.cInputType = 'gb';
     app.files.c_gb = new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
@@ -112,7 +112,7 @@ test('coordinate scale visibility follows simple controls and explicit Circular 
 
   await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     app.lInputType = 'gb';
     app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
@@ -165,7 +165,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
 
   await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'circular';
+    app.setDiagramMode('circular');
     app.cInputType = 'gb';
     app.files.c_gb = new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',
@@ -241,7 +241,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
 
   await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     app.lInputType = 'gb';
     app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',

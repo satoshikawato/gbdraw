@@ -201,6 +201,9 @@ const checkpointSvgBytes = (checkpoint) => (
  *   Creates a reactive box (Vue `ref` in the app); a plain box by default.
  * @property {(operation?: string) => HistoryBusy | null} [mutationAvailability]
  *   The Session lifecycle's busy answer (`'history'` words Undo and Redo, D-28).
+ * @property {(step: { type: string, changes?: unknown }) => HistoryBusy | null} [stepAvailability]
+ *   The composition root's busy answer for one Undo or Redo step (E1: a step
+ *   that switches the diagram mode waits as the mode buttons do).
  */
 
 /** @param {HistoryManagerOptions} options */
@@ -218,7 +221,8 @@ export const createHistoryManager = ({
   maxActions = DEFAULT_MAX_ACTIONS,
   maxBytes = DEFAULT_MAX_BYTES,
   makeRef = makeBox,
-  mutationAvailability = () => null
+  mutationAvailability = () => null,
+  stepAvailability = () => null
 } = /** @type {HistoryManagerOptions} */ ({})) => {
   if (typeof buildIntent !== 'function') {
     throw new Error('createHistoryManager requires buildIntent.');
@@ -239,6 +243,9 @@ export const createHistoryManager = ({
   // Transaction open/close notifies mutationPending() without a document revision.
   const transactionRevision = makeRef(0);
   const restoring = makeRef(false);
+  // Undo and Redo calls from their request to their end, the settle of an
+  // open intent before `restoring` included (E1: the mode switch waits for them).
+  const traversals = makeRef(0);
   const capturing = makeRef(false);
   const historyLimitMessage = makeRef('');
   const diagnostics = {
@@ -1178,11 +1185,23 @@ export const createHistoryManager = ({
     return historyAvailability();
   };
 
-  const undo = async () => {
+  /** @param {() => Promise<unknown>} step */
+  const traverse = async (step) => {
+    traversals.value += 1;
+    try {
+      return await step();
+    } finally {
+      traversals.value -= 1;
+    }
+  };
+
+  const undo = () => traverse(async () => {
     const busy = await settleBeforeTraversal();
     if (busy) return busy;
     if (restoring.value || undoStack.length === 0) return false;
     const entry = undoStack[undoStack.length - 1];
+    const stepBusy = stepAvailability(entry);
+    if (stepBusy) return stepBusy;
     if (entry.type === 'command') {
       const reverted = await applyCommandWithFlag(entry, 'undo');
       if (!reverted) {
@@ -1202,13 +1221,15 @@ export const createHistoryManager = ({
     enforceLimits();
     touch();
     return true;
-  };
+  });
 
-  const redo = async () => {
+  const redo = () => traverse(async () => {
     const busy = await settleBeforeTraversal();
     if (busy) return busy;
     if (restoring.value || redoStack.length === 0) return false;
     const entry = redoStack[redoStack.length - 1];
+    const stepBusy = stepAvailability(entry);
+    if (stepBusy) return stepBusy;
     if (entry.type === 'command') {
       const applied = await applyCommandWithFlag(entry, 'redo');
       if (!applied) {
@@ -1228,7 +1249,7 @@ export const createHistoryManager = ({
     enforceLimits();
     touch();
     return true;
-  };
+  });
 
   const canUndo = () => undoStack.length > 0 && !restoring.value && !historyAvailability();
   const canRedo = () => redoStack.length > 0 && !restoring.value && !historyAvailability();
@@ -1257,7 +1278,9 @@ export const createHistoryManager = ({
     getDiagnostics: () => ({ ...diagnostics, retainedEntryBytes: totalEntryBytes }),
     getRedoCount: () => redoStack.length,
     getUndoCount: () => undoStack.length,
+    historyAvailability,
     historyLimitMessage,
+    traversalPending: () => traversals.value > 0,
     initializeIntentBaseline,
     redo,
     redoLabel,

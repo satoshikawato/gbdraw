@@ -470,7 +470,7 @@ def run_integration(args):
                             if mode == 'circular':
                                 page.evaluate('''async text => {
                                   const app = window.__GBDRAW_APP__;
-                                  app.mode = 'circular'; app.cInputType = 'gb';
+                                  app.setDiagramMode('circular'); app.cInputType = 'gb';
                                   app.files.c_gb = new File([text], 'HmmtDNA.gbk', {type:'text/plain'});
                                   app.files.c_gff = null; app.files.c_fasta = null;
                                   await Vue.nextTick();

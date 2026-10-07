@@ -412,3 +412,141 @@ for (const adopted of [false, true]) {
   assert.equal(replaced.webFiles.bindings.c_gb.components, undefined);
   assert.equal(replaced.resources[replaced.webFiles.bindings.c_gb.resourceId].data, base64('native replacement\n'));
 }
+
+// E1: the other mode's committed request (`otherModeResult`) shares the
+// Session's one resource table. Equal bytes in both requests share one
+// resource; a positional ID that names different bytes in the two requests
+// gets a second resource, and each request's references are rewritten.
+{
+  const { adoptRuntimeCanonicalSession } = await import(
+    pathToFileURL(join(tempRoot, 'js', 'services', 'session-authority.js'))
+  );
+  const genbank = (text, name) => ({
+    kind: 'genbank', name, type: 'text/x-genbank', size: Buffer.byteLength(text),
+    lastModified: 0, encoding: 'base64', data: base64(text)
+  });
+  const request = (mode) => ({
+    schema: 9, mode, diagramOptions: {}, layout: {}, comparisons: [],
+    records: ['record-1-genbank', 'record-2-genbank'].map((resourceId, index) => ({
+      recordKey: `record-${index + 1}`, source: { kind: 'genbank', resourceId }
+    })),
+    output: { prefix: mode, formats: ['svg'], overwrite: false }
+  });
+  const circular = {
+    renderRequest: request('circular'),
+    resources: { 'record-1-genbank': genbank('CIRCULAR', 'record-1.gb'), 'record-2-genbank': genbank('SHARED', 'record-2.gb') },
+    webFiles: { resourceOriginalNames: { 'record-1-genbank': 'circular.gb' } }
+  };
+  const linear = {
+    renderRequest: request('linear'),
+    resources: { 'record-1-genbank': genbank('LINEAR', 'record-1.gb'), 'record-2-genbank': genbank('SHARED', 'record-2.gb') },
+    webFiles: { resourceOriginalNames: { 'record-1-genbank': 'linear.gb' }, linearRecordMetadata: [{ recordKey: 'record-1' }] }
+  };
+  const noInputs = { files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } };
+  const recordResource = (built, renderRequest, index) => built.resources[renderRequest.records[index].source.resourceId];
+  const text = (descriptor) => Buffer.from(descriptor.data, 'base64').toString();
+
+  const both = await buildSessionResources(noInputs, circular, drawingOf(noInputs), linear);
+  assert.equal(text(recordResource(both, both.renderRequest, 0)), 'CIRCULAR');
+  assert.equal(text(recordResource(both, both.otherRenderRequest, 0)), 'LINEAR');
+  assert.notEqual(both.renderRequest.records[0].source.resourceId, both.otherRenderRequest.records[0].source.resourceId);
+  assert.equal(both.renderRequest.records[1].source.resourceId, both.otherRenderRequest.records[1].source.resourceId,
+    'equal bytes in both modes share one resource');
+  assert.equal(Object.keys(both.resources).length, 3);
+  assert.equal(both.otherRenderRequest.mode, 'linear');
+  assert.deepEqual(both.webFiles.linearRecordMetadata, [{ recordKey: 'record-1' }]);
+  assert.equal(both.webFiles.resourceOriginalNames[both.renderRequest.records[0].source.resourceId], 'circular.gb');
+  assert.equal(both.webFiles.resourceOriginalNames[both.otherRenderRequest.records[0].source.resourceId], 'linear.gb');
+
+  // Both requests adopted from one loaded Session's table keep their IDs.
+  const table = {
+    ...circular.resources,
+    'linear-record-1-genbank': genbank('LINEAR', 'linear-record-1.gb')
+  };
+  const linearRequest = request('linear');
+  linearRequest.records[0].source.resourceId = 'linear-record-1-genbank';
+  const adopted = await buildSessionResources(
+    noInputs,
+    adoptRuntimeCanonicalSession({ renderRequest: circular.renderRequest, resources: table, webFiles: {} }),
+    drawingOf(noInputs),
+    adoptRuntimeCanonicalSession({ renderRequest: linearRequest, resources: table, webFiles: {} })
+  );
+  assert.strictEqual(adopted.renderRequest, circular.renderRequest);
+  assert.strictEqual(adopted.otherRenderRequest, linearRequest);
+  assert.deepEqual(Object.keys(adopted.resources).sort(), Object.keys(table).sort());
+  assert.strictEqual(adopted.resources['linear-record-1-genbank'], table['linear-record-1-genbank']);
+}
+
+// E1 (review m4): a Session loaded with a Result of each mode, whose Linear
+// Result is then regenerated from a replaced file, writes the new Linear bytes
+// and not the replaced ones: only resources the requests and bindings name.
+{
+  const { adoptRuntimeCanonicalSession } = await import(
+    pathToFileURL(join(tempRoot, 'js', 'services', 'session-authority.js'))
+  );
+  const genbank = (text, name) => ({
+    kind: 'genbank', name, type: 'text/x-genbank', size: Buffer.byteLength(text),
+    lastModified: 0, encoding: 'base64', data: base64(text)
+  });
+  const request = (mode, ids) => ({
+    schema: 9, mode, diagramOptions: {}, layout: {}, comparisons: [],
+    records: ids.map((resourceId, index) => ({ recordKey: `record-${index + 1}`, source: { kind: 'genbank', resourceId } })),
+    output: { prefix: mode, formats: ['svg'], overwrite: false }
+  });
+  const table = {
+    'record-1-genbank': genbank('CIRCULAR', 'record-1.gb'),
+    'linear-record-1-genbank': genbank('OLD LINEAR', 'linear-record-1.gb')
+  };
+  const loadedCircular = adoptRuntimeCanonicalSession({
+    renderRequest: request('circular', ['record-1-genbank']), resources: table, webFiles: {}
+  });
+  const freshLinear = {
+    renderRequest: request('linear', ['record-1-genbank']),
+    resources: { 'record-1-genbank': genbank('NEW LINEAR', 'new.gb') },
+    webFiles: {}
+  };
+  const draft = { files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } };
+  const built = await buildSessionResources(draft, loadedCircular, drawingOf(draft), freshLinear);
+  const written = Object.values(built.resources).map((descriptor) => Buffer.from(descriptor.data, 'base64').toString()).sort();
+  assert.deepEqual(written, ['CIRCULAR', 'NEW LINEAR']);
+}
+
+// E1 (REVIEW-2 W): a Circular Result kept in `otherModeResult` while Linear is
+// shown keeps the request metadata only a Circular commit writes: the input's
+// original file name and the LOSAT-cache conservation marker. They survive a
+// Save, the Load that adopts the two committed Sessions, and the next Save.
+{
+  const { adoptRuntimeCanonicalSession } = await import(
+    pathToFileURL(join(tempRoot, 'js', 'services', 'session-authority.js'))
+  );
+  const genbank = (text, name) => ({
+    kind: 'genbank', name, type: 'text/x-genbank', size: Buffer.byteLength(text),
+    lastModified: 0, encoding: 'base64', data: base64(text)
+  });
+  const request = (mode, id) => ({
+    schema: 9, mode, diagramOptions: {}, layout: {}, comparisons: [],
+    records: [{ recordKey: 'record-1', source: { kind: 'genbank', resourceId: id } }],
+    output: { prefix: mode, formats: ['svg'], overwrite: false }
+  });
+  const shownLinear = {
+    renderRequest: request('linear', 'record-1-genbank'),
+    resources: { 'record-1-genbank': genbank('LINEAR', 'linear.gb') },
+    webFiles: { linearRecordMetadata: [{ recordKey: 'record-1', definition: 'Linear record' }] }
+  };
+  const keptCircular = {
+    renderRequest: request('circular', 'record-1-genbank'),
+    resources: { 'record-1-genbank': genbank('CIRCULAR', 'circular.gb') },
+    webFiles: { circularInputOriginalName: 'genome.gbk', conservationBlastSource: 'losat-cache' }
+  };
+  const draft = { files: {}, linearSeqs: [], linearComparisonPlan: { edges: [] } };
+  const saved = await buildSessionResources(draft, shownLinear, drawingOf(draft), keptCircular);
+  assert.equal(saved.webFiles.circularInputOriginalName, 'genome.gbk');
+  assert.equal(saved.webFiles.conservationBlastSource, 'losat-cache');
+  assert.deepEqual(saved.webFiles.linearRecordMetadata, shownLinear.webFiles.linearRecordMetadata);
+  const loaded = (renderRequest) => adoptRuntimeCanonicalSession({
+    renderRequest, resources: saved.resources, webFiles: saved.webFiles
+  });
+  const resaved = await buildSessionResources(draft, loaded(saved.renderRequest), drawingOf(draft), loaded(saved.otherRenderRequest));
+  assert.equal(resaved.webFiles.circularInputOriginalName, 'genome.gbk');
+  assert.equal(resaved.webFiles.conservationBlastSource, 'losat-cache');
+}

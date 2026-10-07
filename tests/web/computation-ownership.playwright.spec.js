@@ -112,7 +112,7 @@ test('status, selection, and input build no tables; each Generate builds its lab
   await openApp(page);
   await page.evaluate(async (content) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     await window.Vue.nextTick();
     while (app.linearSeqs.length < 2) app.addLinearSeq();
     for (let index = 0; index < 2; index += 1) {

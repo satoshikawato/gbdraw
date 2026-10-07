@@ -22,7 +22,7 @@ const openLinear = async (page) => {
   await openFresh(page);
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    app.setMode('linear');
+    app.setDiagramMode('linear');
     Object.assign(app.form, { legend: 'none', show_gc: false, show_skew: false });
   });
   await settle(page);

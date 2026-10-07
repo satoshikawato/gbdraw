@@ -987,6 +987,85 @@ for (const [mode, addDepth] of DEPTH_ADDERS) {
   });
 }
 
+// OV-80: Legend styles are shared by both modes until the drawing model. Each mode
+// keeps its own Result (E1), and a Generate compiles only the Legend rows of its
+// own mode's Result, so a color set on one mode's Result, on a row the other mode
+// does not draw, does not fail the other mode's Generate. The color stays and
+// returns with the row. The Depth case is excused by OV-81 already (the Circular
+// request has no Depth source); it guards the case for when that changes.
+const LOCTEST_FIXTURE = 'tests/fixtures/feature_location_search.gb';
+const switchMode = async (page, target) => {
+  await page.getByRole('button', { name: target === 'linear' ? 'Linear' : 'Circular', exact: true }).click();
+  await page.waitForFunction((value) => window.__GBDRAW_APP__?.mode === value, target);
+  await settleLive(page);
+};
+const OTHER_MODE_ROWS = [
+  { name: 'a feature type only the Linear file has', from: 'linear', linearFile: LOCTEST_FIXTURE, row: 'tRNA' },
+  { name: 'a feature type only the Circular file has', from: 'circular', linearFile: LOCTEST_FIXTURE, row: 'repeat_region' },
+  ...['linear', 'circular'].map((from) => ({
+    name: `an annotation set of a selected ${from === 'linear' ? 'Linear' : 'Circular'} feature`,
+    from,
+    row: 'Region X',
+    // A selected-feature target belongs to the mode of the Result it was picked on (R2).
+    prepare: (page) => evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      app.selectedFeatureIds = [app.extractedFeatures.find((feature) => feature.type === 'CDS').svg_id];
+      await window.Vue.nextTick();
+      app.addAnnotationSet();
+      const set = app.annotationSets[app.annotationSets.length - 1];
+      await app.addSelectedFeatureAnnotations(set);
+      app.setAnnotationSetLegendLabel(set, 'Region X');
+    })
+  })),
+  {
+    name: 'a Depth series only Linear has',
+    from: 'linear',
+    row: 'depth',
+    prepare: (page) => page.evaluate((text) => {
+      const app = window.__GBDRAW_APP__;
+      app.setLinearDepthFile(app.linearSeqs[0], 0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));
+    }, DEPTH_TSV),
+    // Show Depth is shared and turns off without a Circular Depth source (OV-82).
+    beforeReturn: (page) => page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = true; })
+  }
+];
+for (const { name, from, linearFile = SINGLE_FIXTURE, row, prepare = null, beforeReturn = null } of OTHER_MODE_ROWS) {
+  test(`a Legend color on ${name} survives the other mode's Generate (OV-80)`, async ({ page }) => {
+    test.setTimeout(180_000);
+    const other = from === 'linear' ? 'circular' : 'linear';
+    await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+    await switchMode(page, 'linear');
+    await page.evaluate(async ({ text, fileName }) => {
+      window.__GBDRAW_APP__.setLinearSeqPrimaryFile(0, 'gb', new File([text], fileName, { type: 'text/plain', lastModified: 1000 }));
+      await window.Vue.nextTick();
+    }, { text: readFileSync(linearFile, 'utf8'), fileName: linearFile.split('/').pop() });
+    await settleLive(page);
+    await switchMode(page, from);
+    await generate(page);
+    if (prepare) {
+      await prepare(page);
+      await settleLive(page);
+      await generate(page);
+    }
+    await colorLegendRow(page, row);
+    await switchMode(page, other);
+    await generate(page);
+    expect((await semanticSnapshot(page)).legend.map(({ caption }) => caption), `${other} draws no ${row} row`).not.toContain(row);
+    expect(await page.evaluate(async (caption) => {
+      const { state } = await import('/gbdraw/web/js/state.js');
+      return state.legendColorOverrides[caption];
+    }, row), 'the color stays stored').toBe('#7b2cbf');
+    await switchMode(page, from);
+    if (beforeReturn) {
+      await beforeReturn(page);
+      await settleLive(page);
+    }
+    await generate(page);
+    const drawn = (await semanticSnapshot(page)).legend.find(({ caption }) => caption === row);
+    expect(drawn?.fill.toLowerCase(), `${from} draws ${row} in the color`).toBe('#7b2cbf');
+  });
+}
+
 // OV-62 (PD-OI-061 amended): two Legend rows merge only when both draw features
 // of one same type. Anything else offers Suffix and Cancel only.
 const renameRow = (page, from, to) => evaluateWithRetainedPromise(page, async ({ from, to }) => {
@@ -1386,3 +1465,191 @@ test.describe('OV-65 Legend styles follow the captions of track data', () => {
     expect(captions).not.toContain('GC content');
   });
 });
+
+// OV-104 (PD-OI-052): a Legend or plot title moved on one mode's Result. Each
+// mode keeps its own Result (E1), so the other mode's Generate reads only its
+// own mode's Results: it succeeds and carries no move, and switching back shows
+// the original Result, the same object, with its move.
+test.describe('OV-104 a decoration moved on one mode\'s Result', () => {
+  const MODE_NAMES = { circular: 'Circular', linear: 'Linear' };
+  const showMode = async (page, target) => {
+    await page.getByRole('button', { name: MODE_NAMES[target], exact: true }).click();
+    await page.waitForFunction((value) => window.__GBDRAW_APP__?.mode === value, target);
+    await settleLive(page);
+  };
+  const moveDecoration = async (page, role) => {
+    await page.evaluate(async (targetRole) => {
+      const app = window.__GBDRAW_APP__;
+      app.layoutRepositionMode = true;
+      await window.Vue.nextTick();
+      const svg = app.svgContainer.querySelector('svg');
+      const target = svg.querySelector(`[data-gbdraw-composition-role="${targetRole}"]`);
+      if (!target) throw new Error(`No ${targetRole} to move`);
+      const bounds = target.getBoundingClientRect();
+      const x = bounds.left + Math.min(bounds.width / 2, 8);
+      const y = bounds.top + Math.min(bounds.height / 2, 8);
+      const mouse = (type, dx, dy, buttons) => new MouseEvent(type, {
+        bubbles: true, cancelable: true, clientX: x + dx, clientY: y + dy, buttons, view: window
+      });
+      const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+      target.dispatchEvent(mouse('mousedown', 0, 0, 1));
+      await frame();
+      const moveTarget = targetRole === 'legend' ? svg : document;
+      moveTarget.dispatchEvent(mouse('mousemove', 12, -9, 1));
+      await frame();
+      moveTarget.dispatchEvent(mouse('mouseup', 12, -9, 0));
+    }, role);
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__?.undoLabel?.() || ''))
+      .toBe(role === 'title' ? 'Move plot title' : 'Move legend');
+    await page.evaluate(() => { window.__GBDRAW_APP__.layoutRepositionMode = false; });
+    await settleLive(page);
+  };
+  const displayedMove = (page, role) => page.evaluate(async (targetRole) => {
+    const { compositionUserDeltas } = await import('/gbdraw/web/js/app/legend-layout/composition-actions.js');
+    const { getCommittedSvgResultRuntimeIdentity } = await import('/gbdraw/web/js/services/svg-result-ingestion.js');
+    const { state } = await import('/gbdraw/web/js/state.js');
+    const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+    return {
+      mode: state.generatedMode.value,
+      identity: getCommittedSvgResultRuntimeIdentity(state.results.value[state.selectedResultIndex.value]),
+      delta: compositionUserDeltas(svg)[targetRole]
+    };
+  }, role);
+  const moved = (delta) => Array.isArray(delta) && delta.some((value) => Math.abs(value) > 0.1);
+  const expectSameMove = (actual, expected) => {
+    expect(actual).toHaveLength(2);
+    actual.forEach((value, index) => expect(value).toBeCloseTo(expected[index], 5));
+  };
+
+  for (const { from, role } of [
+    { from: 'circular', role: 'legend' },
+    { from: 'linear', role: 'legend' },
+    { from: 'circular', role: 'title' }
+  ]) {
+    const other = from === 'linear' ? 'circular' : 'linear';
+    test(`a ${role} moved on the ${MODE_NAMES[from]} Result stays with it through a ${MODE_NAMES[other]} Generate`, async ({ page }) => {
+      test.setTimeout(180_000);
+      await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+      await showMode(page, 'linear');
+      await page.evaluate(async (text) => {
+        window.__GBDRAW_APP__.setLinearSeqPrimaryFile(0, 'gb', new File([text], 'forced_label_underlay.gb', { type: 'text/plain', lastModified: 1000 }));
+        await window.Vue.nextTick();
+      }, readFileSync(SINGLE_FIXTURE, 'utf8'));
+      await settleLive(page);
+      await showMode(page, from);
+      if (role === 'title') {
+        await page.evaluate(() => {
+          const app = window.__GBDRAW_APP__;
+          app.form.plot_title = 'OV-104 title';
+          app.adv.plot_title_position = 'top';
+        });
+      }
+      await generate(page);
+      await moveDecoration(page, role);
+      const before = await displayedMove(page, role);
+      expect(before.mode).toBe(from);
+      expect(moved(before.delta), `the ${role} moved`).toBe(true);
+
+      await showMode(page, other);
+      await generate(page);
+      const otherResult = await displayedMove(page, role);
+      expect(otherResult.mode).toBe(other);
+      expect(moved(otherResult.delta), `the ${MODE_NAMES[other]} Result carries no move`).toBe(false);
+
+      await showMode(page, from);
+      const returned = await displayedMove(page, role);
+      expect(returned.mode).toBe(from);
+      expect(returned.identity, 'the original Result is shown again').toBe(before.identity);
+      expectSameMove(returned.delta, before.delta);
+
+      await generate(page);
+      const regenerated = await displayedMove(page, role);
+      expect(regenerated.mode).toBe(from);
+      expectSameMove(regenerated.delta, before.delta);
+    });
+  }
+});
+
+// OV-83: each mode keeps its own Result (E1). A track toggle of the current mode
+// applies at its next Generate when the mode has no Result yet, and the other
+// mode's Result waits in its slot unchanged: switching back shows the same
+// Result, committed SVG and drawn tracks included.
+const TRACK_TOGGLES = {
+  circular: {
+    'GC content': { form: 'suppress_gc', toggled: true, group: 'content' },
+    'GC skew': { form: 'suppress_skew', toggled: true, group: 'skew' }
+  },
+  linear: {
+    'GC content': { form: 'show_gc', toggled: false, group: 'content' },
+    'GC skew': { form: 'show_skew', toggled: false, group: 'skew' }
+  }
+};
+
+// The track group `group` is drawn in the committed Result: present and not
+// hidden by display none.
+const trackDrawn = (page, group) => page.evaluate((base) => {
+  const app = window.__GBDRAW_APP__;
+  const root = new DOMParser().parseFromString(app.results[app.selectedResultIndex].content, 'image/svg+xml').documentElement;
+  // Circular names the groups gc_content_N and skew_N, Linear gc_content and gc_skew.
+  const groups = [...root.querySelectorAll('g[id]')].filter((element) => (
+    new RegExp(`^(gc_)?${base}(_\\d+)?$`).test(element.id)
+  ));
+  return groups.length > 0 && groups.every((element) => element.getAttribute('display') !== 'none');
+}, group);
+
+const displayedResult = (page) => page.evaluate(async () => {
+  const { getCommittedSvgResultRuntimeIdentity } = await import('/gbdraw/web/js/services/svg-result-ingestion.js');
+  const app = window.__GBDRAW_APP__;
+  const result = app.results[app.selectedResultIndex] || null;
+  return {
+    mode: app.mode,
+    count: app.results.length,
+    identity: result ? getCommittedSvgResultRuntimeIdentity(result) : null,
+    content: result?.content ?? null
+  };
+});
+
+const switchTo = async (page, mode) => {
+  await page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
+  await page.waitForFunction((wanted) => window.__GBDRAW_APP__?.mode === wanted, mode);
+  await settleLive(page);
+};
+
+for (const [shown, current] of [['circular', 'linear'], ['linear', 'circular']]) {
+  for (const [track, toggle] of Object.entries(TRACK_TOGGLES[current])) {
+    test(`a ${current} ${track} toggle leaves the ${shown} Result in its slot and applies at the next ${current} Generate`, async ({ page }) => {
+      test.setTimeout(240_000);
+      await openWithGenBank(page, SINGLE_FIXTURE, () => { window.__GBDRAW_APP__.form.labels_mode = 'out'; });
+      await switchTo(page, 'linear');
+      await page.evaluate(async (text) => {
+        const app = window.__GBDRAW_APP__;
+        app.setLinearSeqPrimaryFile(0, 'gb', new File([text], 'forced_label_underlay.gb', { type: 'text/plain', lastModified: 1000 }));
+        app.form.show_gc = true;
+        app.form.show_skew = true;
+        await window.Vue.nextTick();
+      }, readFileSync(SINGLE_FIXTURE, 'utf8'));
+      await settleLive(page);
+      await switchTo(page, shown);
+      await generate(page);
+      expect(await trackDrawn(page, toggle.group), `${shown} Result draws ${track}`).toBe(true);
+      const before = await displayedResult(page);
+      await switchTo(page, current);
+      expect(await displayedResult(page), `${current} has no Result yet`).toMatchObject({ mode: current, count: 0 });
+      await page.evaluate(async ({ field, value }) => {
+        window.__GBDRAW_APP__.form[field] = value;
+        await window.Vue.nextTick();
+      }, { field: toggle.form, value: toggle.toggled });
+      await settleLive(page);
+      await switchTo(page, shown);
+      const after = await displayedResult(page);
+      expect(after.identity, `the ${shown} Result after switching back`).toBe(before.identity);
+      expect(after.content, `the ${shown} Result's committed SVG`).toBe(before.content);
+      expect(await trackDrawn(page, toggle.group)).toBe(true);
+      await switchTo(page, current);
+      await generate(page);
+      const other = Object.values(TRACK_TOGGLES[current]).find((item) => item !== toggle);
+      expect(await trackDrawn(page, toggle.group), `the next ${current} Generate hides ${track}`).toBe(false);
+      expect(await trackDrawn(page, other.group), `the next ${current} Generate keeps the other track`).toBe(true);
+    });
+  }
+}

@@ -8,6 +8,45 @@ session files, canonical render requests, and saved LOSAT results. The concise
 documents current support. Tutorials and the FAQ describe what a user should
 do; release notes record when a format changed.
 
+## Unreleased: Session 45 keeps a Result for each diagram mode
+
+Session version 45 gains one optional top-level field, `otherModeResult`. The
+Web app keeps a Result for Circular and one for Linear: a Generate replaces
+only its own mode's Result, and switching modes shows that mode's Result with
+its moves and edits, or the empty Preview. **Save Session** writes every Result.
+In a Session the Web app writes, the top-level `renderRequest`, `results`,
+`editorState.featureCatalog`, `runMetadata`, and `cliInvocation` hold the shown
+mode's set when it has a Result, otherwise the other mode's set;
+`otherModeResult` holds the remaining set only when it has a Result. Its fields
+mirror the top-level ones:
+`renderRequest` (the other mode, the same request schema), `results` (at least
+one), `editorState` (`featureCatalog`, `alignmentResetReceipt`, and the
+Result's generated Legend order, colors, and stroke defaults), `ui` (the
+selected Result and the generated legend, title, and palette), `runMetadata`,
+and `cliInvocation`. Its request names resources in the one top-level
+`resources` table. A settings-only Session (`renderRequest: null`) cannot hold
+the field, and Sessions before 45 are read as before.
+
+**Load Session** shows the saved mode (`ui.mode`) when that mode has a Result,
+otherwise the mode that has one; the other mode's Result waits for the mode
+button. The settings, Legend edits, and caches stay shared between the modes,
+as before. A Gallery Session shows one mode and has no `otherModeResult`.
+
+On the command line, `gbdraw circular --session` and `gbdraw linear --session`
+render the set of their own mode, at the top level or in `otherModeResult`. A
+re-save with `--save_session` or `--session_output` always writes the
+subcommand's set at the top level and the other set in `otherModeResult`. It
+keeps `ui.mode`, so the Web app still opens on the saved mode. The re-save
+replaces the subcommand's set with the new render and keeps the other set. It
+also changes these parts that both sets share:
+
+- `losatCache` holds the entries that the render returns, and
+  `losatDerivedCache` is emptied.
+- `proteinIdentityManifest` and `legacyArtifacts` are replaced by the render's.
+- When the render migrates legacy protein IDs, the protein references are
+  rewritten throughout the Session, `otherModeResult` included.
+- Resources that neither set's request nor the Web files name are dropped.
+
 ## Unreleased: Web Load of 0.13.0 Sessions
 
 Session version 45 is unchanged. Sessions 27–30, written by gbdraw 0.13.0 and

@@ -85,6 +85,50 @@ const createLayoutPreferences = () => ({
   await history.redo();
   assert.equal(value, 1);
   assert.equal(history.getUndoCount(), 1);
+
+  // E1: an Undo or Redo is pending from its call, before it restores, to its
+  // end; the diagram mode switch waits for it.
+  assert.equal(history.traversalPending(), false);
+  const undoing = history.undo();
+  assert.equal(history.traversalPending(), true);
+  assert.equal(history.restoring.value, false);
+  await undoing;
+  assert.equal(history.traversalPending(), false);
+  const redoing = history.redo();
+  assert.equal(history.traversalPending(), true);
+  await redoing;
+  assert.equal(history.traversalPending(), false);
+}
+
+// E1 (REVIEW-2 P-a): the composition root may report one Undo or Redo step
+// busy (a step that switches the diagram mode while a label rerender runs);
+// that step is not applied and stays on its stack.
+{
+  let value = 0;
+  /** @type {{ status: string, reason: string } | null} */
+  let busy = null;
+  const buildState = async () => ({ value });
+  const applyState = async (snapshot) => { value = snapshot.value; };
+  const history = createHistoryManager({
+    buildIntent: buildState,
+    applyIntent: applyState,
+    buildCheckpoint: buildState,
+    applyCheckpoint: applyState,
+    stepAvailability: (step) => (step.type === 'intent' ? busy : null)
+  });
+  await history.captureBaseline('initial');
+  await history.runUndoable('Increment', () => { value = 1; });
+  busy = { status: 'busy', reason: 'Updating diagram. Retry after the update finishes.' };
+  assert.deepEqual(await history.undo(), busy);
+  assert.equal(value, 1);
+  assert.equal(history.getUndoCount(), 1);
+  busy = null;
+  assert.equal(await history.undo(), true);
+  assert.equal(value, 0);
+  busy = { status: 'busy', reason: 'Updating diagram. Retry after the update finishes.' };
+  assert.deepEqual(await history.redo(), busy);
+  assert.equal(value, 0);
+  assert.equal(history.getRedoCount(), 1);
 }
 
 {

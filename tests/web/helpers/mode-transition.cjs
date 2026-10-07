@@ -86,8 +86,9 @@ const snapshot = page => page.evaluate(async () => {
   const { state: s } = await import('./js/state.js');
   const ingestion = await import('./js/services/svg-result-ingestion.js');
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
-  const root = s.svgContainer.value.querySelector('svg');
-  const result = s.results.value[s.selectedResultIndex.value];
+  // A mode without its own Result shows the empty Preview (E1).
+  const root = s.svgContainer.value?.querySelector('svg') || null;
+  const result = s.results.value[s.selectedResultIndex.value] || null;
   return {
     mode: s.mode.value, generation: s.resultGenerationKey.value,
     // Per-feature edits by identity key, one map per edited field.
@@ -97,10 +98,10 @@ const snapshot = page => page.evaluate(async () => {
     bulkLabels: { ...s.labelTextBulkOverrides }, visibilityRules: [...s.featureVisibilityManualRules],
     colors: { ...s.featureColorOverrides }, rules: s.manualSpecificRules.map(rule => ({ ...rule, fromFile: Boolean(rule.fromFile) })),
     featureCount: s.extractedFeatures.value.length,
-    resultIdentity: ingestion.getCommittedSvgResultRuntimeIdentity(result),
-    markedMounted: ingestion.isCommittedSvgResultMounted(result),
-    result: result.content, payload: s.svgContent.value, mounted: root.outerHTML,
-    sameRoot: root === window.__MODE_EDITED_ROOT__,
+    resultIdentity: result ? ingestion.getCommittedSvgResultRuntimeIdentity(result) : null,
+    markedMounted: result ? ingestion.isCommittedSvgResultMounted(result) : false,
+    result: result?.content ?? null, payload: s.svgContent.value, mounted: root?.outerHTML ?? null,
+    sameRoot: Boolean(root) && root === window.__MODE_EDITED_ROOT__,
     mountEvents: window.__MODE_EVENTS__.filter(e => e.name === 'preview.mount-observed'),
     request: getCommittedCanonicalRenderRequest()
   };

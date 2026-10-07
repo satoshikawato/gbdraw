@@ -27,6 +27,9 @@ import {
  * @property {readonly string[]} [requiredLabelFeatureIds]
  * @property {readonly string[]} [optionalLabelFeatureIds]
  * @property {{ featureIds: readonly string[], report: (error: unknown) => void }} [reportedLabelBinding]
+ * @property {{ legendRows: readonly Record<string, any>[] | null }} [modeSwitch] E1: the Result is shown again
+ *   by a mode switch (or opened on its mode by Session Load); its Legend rows are rebuilt from these rows
+ *   (null: from its SVG) and the shared Legend edits.
  */
 
 /**
@@ -252,6 +255,15 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
   let nextRestoreToken = 1;
   /** @type {{ root: SVGSVGElement, resultIdentity: string, bindSequence: number } | null} */
   let lastObservedMount = null;
+  // A root released with its Result (a mode switch, a Session reset) stays in
+  // the container until the next render replaces it. An edit made before that
+  // render must not commit it into another Result selected now (E1); the same
+  // Result selected again (a Load rolled back) takes the root back.
+  /** @type {{ root: SVGSVGElement, resultIdentity: string } | null} */
+  let released = null;
+  const selectedResultIdentity = () => resultRuntimeIdentity(
+    state.results.value[Number(state.selectedResultIndex?.value || 0)]
+  );
   const fallbackResultIdentities = new WeakMap();
   const invalidatedReceipts = new WeakSet();
 
@@ -407,6 +419,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       return activeRuntime;
     }
     releaseActiveResult();
+    released = null;
     activeRuntime = makeRuntime({
       resultIndex: normalizedIndex,
       svg,
@@ -426,6 +439,11 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       null,
       readinessError('The mounted preview was cleared.', 'PREVIEW_RUNTIME_CLEARED')
     );
+    // A root released again before any mount still shows the Result it was
+    // first released with (a Load's rollback resets the baseline again).
+    const root = getMountedSvg();
+    released = !root ? null
+      : released?.root === root ? released : { root, resultIdentity: selectedResultIdentity() };
     releaseActiveResult();
     activeRuntime = null;
     pendingBind = null;
@@ -437,6 +455,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
   const ensureRuntimeForCurrentSvg = () => {
     const svg = getMountedSvg();
     if (!svg) return null;
+    if (released?.root === svg) {
+      if (released.resultIdentity !== selectedResultIdentity()) return null;
+      released = null;
+    }
     const resultIndex = Number(state.selectedResultIndex?.value || 0);
     if (!activeRuntime || activeRuntime.svg !== svg || activeRuntime.resultIndex !== resultIndex) {
       return mountResultSvg(resultIndex, svg);
@@ -976,6 +998,35 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return true;
   };
 
+  // The readiness of a Result about to be displayed by selection: a batch
+  // Result picked, or a mode's own Result shown by the mode switch (E1). The
+  // binder projects the editor intent onto it and adopts its Legend inventory.
+  /**
+   * @param {number} resultIndex
+   * @param {Record<string, any>} [bindingOptions]
+   */
+  const expectResultSelection = (resultIndex, bindingOptions = {}) => {
+    const result = state.results.value[resultIndex];
+    if (!result) return null;
+    const expectation = registerReadinessExpectation({
+      result,
+      resultIndex,
+      artifactIdentity: activeRuntime?.artifactIdentity || `selection:${resultRuntimeIdentity(result)}`,
+      generationToken: `result-selection:${nextBindSequence}`,
+      catalogState: state.featureCatalog?.value || null,
+      phase: 'result-selection',
+      bindingOptions,
+      // Editor intent projected while binding replaces the Result content,
+      // never its committed identity (D-07).
+      isCurrent: () => (
+        resultRuntimeIdentity(state.results.value[resultIndex]) === resultRuntimeIdentity(result)
+        && Number(state.selectedResultIndex.value) === resultIndex
+      )
+    });
+    void expectation.promise.catch(() => {});
+    return expectation;
+  };
+
   const selectResult = (index) => {
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
@@ -983,29 +1034,21 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     const numeric = Number(index);
     const nextIndex = Number.isInteger(numeric) ? Math.max(0, Math.min(numeric, Math.max(0, count - 1))) : 0;
     if (state.selectedResultIndex.value === nextIndex) return false;
-    const nextResult = state.results.value[nextIndex];
-    const expectation = nextResult
-      ? registerReadinessExpectation({
-          result: nextResult,
-          resultIndex: nextIndex,
-          artifactIdentity: activeRuntime?.artifactIdentity || `selection:${resultRuntimeIdentity(nextResult)}`,
-          generationToken: `result-selection:${nextBindSequence}`,
-          catalogState: state.featureCatalog?.value || null,
-          phase: 'result-selection',
-          // Editor intent projected while binding replaces the Result content,
-          // never its committed identity (D-07).
-          isCurrent: () => (
-            resultRuntimeIdentity(state.results.value[nextIndex]) === resultRuntimeIdentity(nextResult)
-            && Number(state.selectedResultIndex.value) === nextIndex
-          )
-        })
-      : null;
-    if (expectation) void expectation.promise.catch(() => {});
+    expectResultSelection(nextIndex);
     releaseActiveResult();
     activeRuntime = null;
     state.selectedResultIndex.value = nextIndex;
     return true;
   };
+
+  // E1: the mode switch installed the arriving mode's artifact after
+  // `clearActiveRuntime` released the departing Result. Its selected Result,
+  // if any, is shown as a selection; `bindingOptions` reach the binder.
+  /** @param {Record<string, any>} [bindingOptions] */
+  const presentSelectedResult = (bindingOptions = {}) => expectResultSelection(
+    Number(state.selectedResultIndex.value) || 0,
+    bindingOptions
+  );
 
   const buildFeatureIndex = (runtime) => {
     const indexed = runtime?.svg ? getFeatureElementIndex(runtime.svg) : new Map();
@@ -1118,6 +1161,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     invalidatePreviewIndexes,
     isActiveResultReady,
     mountResultSvg,
+    presentSelectedResult,
     registerReadinessExpectation,
     restorePreviousSelectedResult,
     selectResult

@@ -636,9 +636,26 @@ test('Checkpoint Undo and Redo keep the admitted feature catalog through a mode 
         .toEqual(direction === 'Undo' ? before.counts.map((count, index) => count + index) : colored.counts);
       expect(await catalogState(), direction).toEqual(retained);
     }
+    // Each Undo or Redo of a Legend source asks for the automatic rerender
+    // (OV-43), whose Results come with their own catalog (R-5); the mode switch
+    // waits for it (OIPC-C07), where dev's switch dropped it. The catalog the
+    // settled Result holds is kept by reference through the round trip, and
+    // nothing replaces it once the shown Result settles again.
+    await settleLive(page);
+    const roundTripCatalog = () => page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      const catalog = window.Vue.toRaw(state.featureCatalog.value);
+      window.__P09_ROUND_TRIP_CATALOG__ ??= catalog;
+      return catalog === window.__P09_ROUND_TRIP_CATALOG__;
+    });
+    expect(await roundTripCatalog()).toBe(true);
+    expect(await catalogState()).toMatchObject({ adopted: true, features: 37 });
     await switchMode(page, 'linear');
     await switchMode(page, 'circular');
-    await expect.poll(catalogState).toEqual(retained);
+    expect(await roundTripCatalog(), 'the same catalog across the round trip').toBe(true);
+    await settleLive(page);
+    expect(await roundTripCatalog(), 'the same catalog once the Result settles').toBe(true);
+    expect(await catalogState()).toMatchObject({ adopted: true, features: 37 });
     expect(errors).toEqual([]);
     // N-20: the checkpoint JSON holds no copy of the catalog.
     expect(colored).toMatchObject({ checkpoint: true, checkpointHasCatalog: false });

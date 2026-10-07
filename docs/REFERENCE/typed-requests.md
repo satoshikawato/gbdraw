@@ -137,6 +137,15 @@ Materialized paths expire when the materialization context closes. `session_to_r
 Session conversion rejects values from the wrong mode. For example, a Circular
 request containing Linear track values raises `SessionConversionError`.
 
+A Session 45 saved by the Web app can hold a Result set of each mode, the second
+in `otherModeResult`. `SessionDocument.drawings` names the sets by mode
+(`("circular", "linear")`, the top-level set first), and
+`SessionDocument.drawing("linear")` returns the document with that set at the
+top level. Pass `drawing="circular"` or `drawing="linear"` to
+`session_to_request()` and `render_session()` for such a Session; without it,
+they and `SessionDocument.mode` raise `SessionDrawingSelectionError`. A Session
+with one set works as before.
+
 Canonical request schemas 6 and 7 record each input's runtime cardinality. This lets a
 selectorless source retain `RecordCardinality.ALL` until record planning expands
 it. Deferred table paths, record-derived output naming, and collection-level

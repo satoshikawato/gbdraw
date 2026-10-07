@@ -469,6 +469,16 @@ _TABLE_FIELDS = frozenset(
         "depth_table",
     }
 )
+# The text styling tables. Every cell is text, as `read_literal_table` reads a
+# table file: an empty cell is "" and "NA" or "nan" is that text.
+_TEXT_TABLE_FIELDS = frozenset(
+    {
+        "feature_visibility_table",
+        "label_whitelist_table",
+        "qualifier_priority_table",
+        "label_override_table",
+    }
+)
 _FILE_FIELDS = frozenset(
     {
         "feature_visibility_table_file",
@@ -2661,7 +2671,12 @@ def _decode_option_value(
     if name == "depth_tracks":
         return _decode_depth_tracks(value, resource_paths=resource_paths)
     if name in _TABLE_FIELDS:
-        return _decode_table_ref(value, name=name, resource_paths=resource_paths)
+        return _decode_table_ref(
+            value,
+            name=name,
+            resource_paths=resource_paths,
+            text_cells=name in _TEXT_TABLE_FIELDS,
+        )
     if name in _FILE_FIELDS:
         return str(_decode_file_ref(value, name=name, resource_paths=resource_paths))
     if name in _TABLE_SEQUENCE_FIELDS:
@@ -2874,6 +2889,7 @@ def _decode_colors(
                 payload["colorTable"],
                 name="colors-color-table",
                 resource_paths=resource_paths,
+                text_cells=True,
             )
             if payload["colorTable"] is not None
             else None
@@ -2894,6 +2910,7 @@ def _decode_colors(
                 payload["defaultColors"],
                 name="colors-default-colors",
                 resource_paths=resource_paths,
+                text_cells=True,
             )
             if payload["defaultColors"] is not None
             else None
@@ -3228,7 +3245,12 @@ def _decode_annotations(
             )
         )
     table = (
-        _decode_table_ref(payload["table"], name="annotations-table", resource_paths=resource_paths)
+        _decode_table_ref(
+            payload["table"],
+            name="annotations-table",
+            resource_paths=resource_paths,
+            text_cells=True,
+        )
         if payload["table"] is not None else None
     )
     table_file = (
@@ -4137,6 +4159,7 @@ def _decode_table_ref(
     *,
     name: str,
     resource_paths: Mapping[str, str | Path],
+    text_cells: bool = False,
 ) -> DataFrame:
     ref = _resource_ref(value, path=f"resource reference {name}", representation="canonicalTsv")
     return _read_canonical_table(
@@ -4146,6 +4169,7 @@ def _decode_table_ref(
             resource_paths=resource_paths,
         ),
         context=name,
+        text_cells=text_cells,
     )
 
 
@@ -4179,9 +4203,16 @@ def _resource_ref(
     return ref
 
 
-def _read_canonical_table(file_path: Path, *, context: str) -> DataFrame:
+def _read_canonical_table(
+    file_path: Path, *, context: str, text_cells: bool = False
+) -> DataFrame:
+    # A text table keeps every cell as written (an empty label text stays "");
+    # the numeric tables (depth, comparisons) take pandas' inferred dtypes.
+    text_options: dict[str, Any] = (
+        {"dtype": str, "keep_default_na": False} if text_cells else {}
+    )
     try:
-        table = read_csv(file_path, sep="\t")
+        table = read_csv(file_path, sep="\t", **text_options)
     except Exception as exc:
         raise CanonicalRequestDecodingError(
             f"Could not decode canonical TSV resource for {context}."

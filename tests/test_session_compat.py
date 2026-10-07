@@ -1717,3 +1717,31 @@ def test_session_44_hash_annotation_targets_move_in_the_cli_sidecar(
         "INFO: 1 annotation(s) from Session version 44 named a feature by hash=; "
         "in the written Session each names that feature by its source."
     ]
+
+
+def test_cli_resave_keeps_an_empty_label_text_and_draws_no_label(tmp_path: Path) -> None:
+    # A row with an empty label text hides the label, as the Web app draws it.
+    # The canonical TSV round trip used to read the empty cell as a missing
+    # value, which replayed the label as the text "nan" (OV-138).
+    fixture = Path(__file__).parent / "fixtures" / "sessions" / "feature-edits-circular.v33.gbdraw-session.json.gz"
+    first = tmp_path / "first.gbdraw-session.json"
+    second = tmp_path / "second.gbdraw-session.json"
+
+    circular_main(
+        ["--session", str(fixture), "--output", str(tmp_path / "first"),
+         "--format", "svg", "--session_output", str(first)]
+    )
+    circular_main(
+        ["--session", str(first), "--output", str(tmp_path / "second"),
+         "--format", "svg", "--session_output", str(second)]
+    )
+
+    for sidecar in (first, second):
+        table = load_session_document(sidecar).to_dict()["resources"]["label-override-table"]
+        rows = base64.b64decode(table["data"]).decode("utf-8").splitlines()
+        assert rows[1].split("\t") == ["NC_012920.1", "CDS", "hash", "^f48b7bf2f$", ""]
+    first_svg = (tmp_path / "first.svg").read_text(encoding="utf-8")
+    second_svg = (tmp_path / "second.svg").read_text(encoding="utf-8")
+    assert ">nan<" not in second_svg
+    # The replay of the re-saved Session draws the figure the first replay drew.
+    assert second_svg == first_svg

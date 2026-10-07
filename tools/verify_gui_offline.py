@@ -504,7 +504,7 @@ def _verify_linear_losat(page, left_gbk: str, right_gbk: str) -> None:
         """
         async ({ leftText, rightText }) => {
           const app = window.__GBDRAW_APP__;
-          app.mode = 'linear';
+          app.setDiagramMode('linear');
           app.lInputType = 'gb';
           if (app.linearSeqs.length < 2) {
             app.addLinearSeq();
@@ -804,7 +804,7 @@ def _run_browser_contract(contract: str) -> None:
             """
             ({ gbText }) => {
               const app = window.__GBDRAW_APP__;
-              app.mode = 'circular';
+              app.setDiagramMode('circular');
               app.cInputType = 'gb';
               app.files.c_gb = new File([gbText], 'HmmtDNA.gbk', { type: 'text/plain' });
               app.files.c_gff = null;

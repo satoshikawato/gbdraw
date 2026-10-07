@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { ArtifactSlot } from './artifact-slot.js' */
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
 import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
@@ -9,6 +10,7 @@ import {
   mapResourceBackedCanonicalComparison
 } from './canonical-comparisons.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
+import { ARTIFACT_SLOT_EMPTY, ARTIFACT_SLOT_KEYS, createArtifactSlot } from './artifact-slot.js';
 
 export { cloneJsonData };
 
@@ -310,13 +312,13 @@ const buildFallbackUiStateData = (state, drawing) => ({
   plotTitleUserOffset: { ...(state.plotTitleUserOffset || {}) }
 });
 
+// `mode` is restored by the mode transition (`restoreMode`), not here.
 /**
  * @param {Record<string, any>} state
  * @param {HistorySnapshotDrawing} drawing
  */
 const applyFallbackUiStateData = (state, drawing, ui = {}) => {
   if (typeof ui.title === 'string') setRef(state.sessionTitle, ui.title);
-  if (ui.mode) setRef(state.mode, ui.mode === 'linear' ? 'linear' : 'circular');
   if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
   if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
   if (ui.losatProgram) setRef(drawing.losatProgram, ui.losatProgram);
@@ -743,6 +745,42 @@ export const createHistorySnapshotService = ({
     captures[name] = typeof capture === 'function' ? capture : null;
   };
 
+  // E1: the composition root's mode transition and the committed Session of
+  // each mode's artifact, registered once they exist (R13). A History restore
+  // of a mode switch runs the transition, so Undo and Redo swap the modes'
+  // artifact slots. `restoreMode` is the one mode writer of the History
+  // restores; it writes `mode` itself only for a service without a
+  // composition root (unit tests).
+  /** @type {((mode: 'circular' | 'linear') => unknown) | null} */
+  let modeTransition = null;
+  /** @type {((mode: 'circular' | 'linear') => Record<string, any> | null) | null} */
+  let modeCommittedSession = null;
+  /** @param {((mode: 'circular' | 'linear') => unknown) | null} transition */
+  const registerModeTransition = (transition) => {
+    modeTransition = typeof transition === 'function' ? transition : null;
+  };
+  /** @param {((mode: 'circular' | 'linear') => Record<string, any> | null) | null} reader */
+  const registerModeCommittedSession = (reader) => {
+    modeCommittedSession = typeof reader === 'function' ? reader : null;
+  };
+  /** @param {string} mode */
+  const restoreMode = async (mode) => {
+    const next = mode === 'linear' ? 'linear' : 'circular';
+    if (getGeneratedArtifactRef(state.mode, 'circular') === next) return;
+    if (modeTransition) modeTransition(next);
+    else setGeneratedArtifactRef(state.mode, next);
+    await nextTick();
+  };
+  // An artifact handle or checkpoint restores the displayed mode's artifact.
+  // History is last in, first out, so it finds the mode it was captured in; a
+  // mismatch is counted, and the transition shows that mode first.
+  /** @param {string} mode */
+  const restoreArtifactMode = async (mode) => {
+    if (getGeneratedArtifactRef(state.mode, 'circular') === (mode === 'linear' ? 'linear' : 'circular')) return;
+    recordStructuralMetric('artifactRestoreModeMismatchCount', 1);
+    await restoreMode(mode);
+  };
+
   const setGeneratedArtifactRuntimeOwner = (owner) => {
     generatedArtifactRuntimeOwner = (
       owner
@@ -930,6 +968,51 @@ export const createHistorySnapshotService = ({
     setGeneratedArtifactRef(state.appliedPaletteColors, ownerSet.appliedPaletteColors || {});
     setGeneratedArtifactRef(drawing.pendingPaletteName, ownerSet.pendingPaletteName || '');
     setGeneratedArtifactRef(drawing.pendingPaletteColors, ownerSet.pendingPaletteColors || {});
+  };
+
+  // E1: the displayed mode's generated artifact, by reference, key by key.
+  // The state's `generatedMode` names the slot's mode; the Legend rows shown
+  // with it are its drawing's.
+  const captureArtifactSlot = () => createArtifactSlot({
+    mode: getGeneratedArtifactRef(state.generatedMode, null),
+    values: Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [
+      key, artifactOwnedValue(getGeneratedArtifactRef(state[key], null))
+    ])),
+    legendInventory: getGeneratedArtifactRef(state.originalLegendOrder, []) || [],
+    legendRows: getGeneratedArtifactRef(
+      drawingOfMode(state, getGeneratedArtifactRef(state.generatedMode, null)).legendEntries, null
+    ),
+    matchSequenceOwner: state.matchSequenceRegistry?.captureTrustedOwner?.() || null,
+    runtimeState: generatedArtifactRuntimeOwner?.capture?.() || null,
+    transportIdentity: currentGeneratedArtifactIdentity,
+    retainedBytes: currentGeneratedArtifactRetainedBytes
+  });
+
+  // Installs one mode's slot, or an empty slot of `mode` (no Result, no
+  // committed Session), as the displayed artifact. Nothing outside the slot
+  // changes, so the draft, the editor intent and the caches stay shared.
+  /**
+   * @param {Readonly<ArtifactSlot> | null} slot
+   * @param {{ mode: 'circular' | 'linear', ui?: { canvasPan?: { x: number, y: number } } }} options
+   *   `ui.canvasPan` is the pan the runtime owner's viewport reset keeps.
+   */
+  const installArtifactSlot = (slot, { mode, ui = {} }) => {
+    const slotMode = mode === 'linear' ? 'linear' : 'circular';
+    if (slot && slot.mode !== slotMode) {
+      throw new Error(`A ${slot.mode} artifact cannot be installed for ${slotMode}.`);
+    }
+    ARTIFACT_SLOT_KEYS.forEach((key) => {
+      setGeneratedArtifactRef(state[key], slot
+        ? slot.values[key]
+        : ARTIFACT_SLOT_EMPTY[key](slotMode, getGeneratedArtifactRef(state[key], null)));
+    });
+    if (slot?.matchSequenceOwner) state.matchSequenceRegistry?.replaceTrustedOwner?.(slot.matchSequenceOwner);
+    else state.matchSequenceRegistry?.reset?.();
+    generatedArtifactRuntimeOwner?.restore?.(slot?.runtimeState ?? null, { ui });
+    currentGeneratedArtifactIdentity = /** @type {HistorySnapshotTransportIdentity | null} */ (
+      slot?.transportIdentity ?? null
+    );
+    currentGeneratedArtifactRetainedBytes = slot?.retainedBytes ?? 0;
   };
 
   /**
@@ -1184,10 +1267,8 @@ export const createHistorySnapshotService = ({
       closeTransientState(state);
       const mutableIntent = handle.mutableIntent || {};
       const ui = mutableIntent.ui || {};
-      const drawing = drawingOfMode(state, ui.mode || getRef(state.mode, 'circular'));
-      if (ui.mode) {
-        setGeneratedArtifactRef(state.mode, ui.mode === 'linear' ? 'linear' : 'circular');
-      }
+      if (ui.mode) await restoreArtifactMode(ui.mode);
+      const drawing = drawingOfMode(state, getRef(state.mode, 'circular'));
       if (ui.cInputType) setGeneratedArtifactRef(state.cInputType, ui.cInputType);
       if (ui.lInputType) setGeneratedArtifactRef(state.lInputType, ui.lInputType);
       await nextTick();
@@ -1459,8 +1540,17 @@ export const createHistorySnapshotService = ({
             'editorState', 'orthogroupState'
           ]
     );
+    // The alignment receipt is read against the committed Session of the
+    // step's mode before anything is applied; a mode switch then shows that
+    // mode with its own artifact.
+    const currentMode = getGeneratedArtifactRef(state.mode, 'circular') === 'linear' ? 'linear' : 'circular';
+    const stepMode = domains.has('ui') && intent.ui?.mode
+      ? (intent.ui.mode === 'linear' ? 'linear' : 'circular')
+      : currentMode;
     if (domains.has('alignmentState')) {
-      const canonical = generatedArtifactRuntimeOwner?.capture?.()?.canonical?.committedCanonicalSession;
+      const canonical = stepMode === currentMode || !modeCommittedSession
+        ? generatedArtifactRuntimeOwner?.capture?.()?.canonical?.committedCanonicalSession
+        : modeCommittedSession(stepMode);
       await validateSimilarityAlignmentResetReceipt(intent.alignmentState?.receipt, canonical && {
         ...canonical,
         renderRequest: { ...canonical.renderRequest, layout: {
@@ -1468,6 +1558,7 @@ export const createHistorySnapshotService = ({
         } }
       });
     }
+    await restoreMode(stepMode);
     const retainedComparisonFiles = domains.has('config') && !domains.has('files')
       ? new Map(
           (Array.isArray(drawing.linearComparisonPlan?.edges)
@@ -1484,7 +1575,6 @@ export const createHistorySnapshotService = ({
     try {
       if (domains.has('ui')) {
         const ui = intent.ui || {};
-        if (ui.mode) setRef(state.mode, ui.mode === 'linear' ? 'linear' : 'circular');
         if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
         if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
         await nextTick();
@@ -1564,12 +1654,10 @@ export const createHistorySnapshotService = ({
       closeTransientState(state);
 
       const ui = snapshot.ui || {};
-      const drawing = drawingOfMode(state, ui.mode || getRef(state.mode, 'circular'));
-      if (ui.mode) setRef(state.mode, ui.mode === 'linear' ? 'linear' : 'circular');
+      if (ui.mode) await restoreArtifactMode(ui.mode);
+      const drawing = drawingOfMode(state, getRef(state.mode, 'circular'));
       if (ui.cInputType) setRef(state.cInputType, ui.cInputType);
       if (ui.lInputType) setRef(state.lInputType, ui.lInputType);
-      // The mode watcher clears generated metadata. Let that reset finish before
-      // restoring snapshot-owned feature, label, and orthogroup state.
       await nextTick();
 
       if (typeof applyConfigData === 'function' && snapshot.config) {
@@ -1621,8 +1709,12 @@ export const createHistorySnapshotService = ({
     collectCurrentFileIds: () => collectCurrentFileIds(state, fileStore),
     compareGeneratedArtifactHandles,
     buildHistoryIntent,
+    captureArtifactSlot,
+    installArtifactSlot,
     installGeneratedArtifactOwnerSet,
     registerCapture,
+    registerModeCommittedSession,
+    registerModeTransition,
     restoreGeneratedArtifactHandle,
     setGeneratedArtifactIdentity,
     setGeneratedArtifactRuntimeOwner,

@@ -57,7 +57,7 @@ const expectIntact = async page => {
 // template assertion. Invalid arguments deliberately ensure busy wins admission.
 const blockedActions = [
   ['selectResult', [0]], ['setOptionalNumberInputValue', [null, 'label_rotation', '45', true]],
-  ['setMode', ['linear']], ['setCircularInputType', ['gff']],
+  ['setDiagramMode', ['linear']], ['setCircularInputType', ['gff']],
   ['runAnalysis', []], ['cancelGeneration', []],
   ['setLabelFilterMode', ['Whitelist']], ['addWhitelistRule', []],
   ['removeWhitelistRule', [0]], ['removePriorityRule', [0]], ['resetSettings', []], ['resetLayout', []],
@@ -314,7 +314,7 @@ test('uncataloged multi-record draft Save prepares records privately without exp
   const download = page.waitForEvent('download');
   await page.evaluate(async text => {
     const app = window.__GBDRAW_APP__;
-    app.setMode('linear');
+    app.setDiagramMode('linear');
     app.sessionTitle = 'Private draft';
     app.linearSeqs[0].gb = new File([text, text], 'two-records.gb');
     window.draftSource = app.linearSeqs[0];

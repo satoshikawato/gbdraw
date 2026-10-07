@@ -8,6 +8,7 @@ import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js
 import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
 import { canonicalFeatureOverrides, validateFeatureIdentityNotices } from './feature-placement.js';
 import { RENDERED_ID_FEATURE_EDIT_FIELDS, migrateSessionFeaturePlacements } from './feature-edit-migration.js';
+import { collectCanonicalResourceIds } from './canonical-resource-references.js';
 
 // Session 44 introduced the current active-config and record-display draft
 // shapes; Session 45 keys per-feature edits by source identity (design Q4).
@@ -35,6 +36,7 @@ export const SESSION_TOP_LEVEL_AUTHORITY = Object.freeze({
   proteinIdentityManifest: 'artifact',
   legacyArtifacts: 'artifact',
   runMetadata: 'artifact',
+  otherModeResult: 'artifact',
   cliInvocation: 'provenance'
 });
 
@@ -352,6 +354,129 @@ const validateSettingsOnlyDocument = data => {
   }
 };
 
+// One committed Result set: the top-level fields, or `otherModeResult`, whose
+// fields mirror them.
+/**
+ * @param {Record<string, any>} set
+ * @param {number | string} version
+ */
+const validateCommittedResultSet = (set, version) => {
+  if (!Array.isArray(set.results)) {
+    throw new Error(`Session version ${String(version)} requires a results array.`);
+  }
+  set.results.forEach((result) => {
+    const resultName = (
+      isPlainObject(result) && typeof result.name === 'string'
+        ? result.name.trim()
+        : ''
+    );
+    const content = isPlainObject(result) ? result.content : null;
+    if (
+      !resultName
+      || resultName.toLowerCase().endsWith('.interactive.svg')
+      || typeof content !== 'string'
+      || !content.includes('<svg')
+      || content.includes('gbdraw-interactive-feature-metadata')
+      || content.includes('gbdraw-interactive-feature-script')
+    ) {
+      throw new Error('Each current Session Result must be a named plain SVG.');
+    }
+  });
+  const editorState = set.editorState;
+  if (
+    !isPlainObject(editorState)
+    || !Object.prototype.hasOwnProperty.call(editorState, 'featureCatalog')
+  ) {
+    throw new Error(
+      `Session version ${String(version)} requires editorState.featureCatalog.`
+    );
+  }
+  if (set.renderRequest?.schema >= 8
+    && set.renderRequest.layout?.similarityAlignment
+    && !Object.hasOwn(editorState, 'alignmentResetReceipt')) {
+    throw new Error('Current alignment Session requires editorState.alignmentResetReceipt.');
+  }
+  validateAlignmentResetReceiptShape(editorState.alignmentResetReceipt, set.renderRequest);
+  const featureCatalog = editorState.featureCatalog;
+  const expectedCatalogSchema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION[Number(version)] ?? 3;
+  if (
+    featureCatalog !== null
+    && (!isPlainObject(featureCatalog) || featureCatalog.schema !== expectedCatalogSchema)
+  ) {
+    throw new Error(
+      `Session version ${String(version)} requires a schema-${expectedCatalogSchema} editorState.featureCatalog.`
+    );
+  }
+  if (
+    Array.isArray(set.results)
+    && set.results.length > 0
+    && featureCatalog === null
+  ) {
+    throw new Error(
+      `Session version ${String(version)} requires a feature catalog for saved results.`
+    );
+  }
+};
+
+const OTHER_MODE_RESULT_FIELDS = new Set([
+  'renderRequest', 'results', 'editorState', 'ui', 'runMetadata', 'cliInvocation'
+]);
+// The per-set part of the shared `ui` and `editorState` objects.
+const OTHER_MODE_RESULT_UI_FIELDS = new Set([
+  'selectedResultIndex', 'generatedLegendPosition', 'generatedMultiRecordCanvas',
+  'generatedCircularPlotTitlePosition', 'appliedPaletteName', 'appliedPaletteColors'
+]);
+const OTHER_MODE_RESULT_EDITOR_FIELDS = new Set([
+  'featureCatalog', 'alignmentResetReceipt', 'legend', 'originalSvgStroke'
+]);
+const OTHER_MODE_RESULT_LEGEND_FIELDS = new Set(['originalOrder', 'originalColors']);
+const OTHER_MODE_RESULT_RUN_METADATA_FIELDS = new Set([
+  'trackSlotGeometry', 'annotationWarnings', 'featureIdentityNotices', 'comparisonWarnings'
+]);
+
+// E1: Session 45 keeps the other diagram mode's Result set beside the
+// top-level set. It needs a committed top-level request of the other mode, at
+// least one Result, and resources in the top-level table.
+/**
+ * @param {Record<string, any>} sessionData
+ * @param {number | string} version
+ */
+const validateOtherModeResult = (sessionData, version) => {
+  const other = sessionData.otherModeResult;
+  if (!isPlainObject(other) || Object.keys(other).some((key) => !OTHER_MODE_RESULT_FIELDS.has(key))) {
+    throw new Error('Session otherModeResult must contain only a committed Result set.');
+  }
+  const mode = other.renderRequest?.mode;
+  if (!isPlainObject(sessionData.renderRequest) || !isPlainObject(other.renderRequest)
+    || !['circular', 'linear'].includes(mode) || mode === sessionData.renderRequest.mode
+    || other.renderRequest.schema !== sessionData.renderRequest.schema) {
+    throw new Error('Session otherModeResult requires a committed request of the other mode.');
+  }
+  validateCommittedResultSet(other, version);
+  if (other.results.length === 0) throw new Error('Session otherModeResult requires a Result.');
+  const missing = [...collectCanonicalResourceIds(other.renderRequest)]
+    .filter((resourceId) => !Object.hasOwn(sessionData.resources || {}, resourceId));
+  if (missing.length > 0) {
+    throw new Error(`Session otherModeResult names missing resource(s): ${missing.join(', ')}`);
+  }
+  // One rule with gbdraw/session_io.py: a present field is an object (null is not).
+  const ui = Object.hasOwn(other, 'ui') ? other.ui : {};
+  const legend = Object.hasOwn(other.editorState, 'legend') ? other.editorState.legend : {};
+  const runMetadata = Object.hasOwn(other, 'runMetadata') ? other.runMetadata : {};
+  if (!isPlainObject(ui) || Object.keys(ui).some((key) => !OTHER_MODE_RESULT_UI_FIELDS.has(key))
+    || Object.keys(other.editorState).some((key) => !OTHER_MODE_RESULT_EDITOR_FIELDS.has(key))
+    || !isPlainObject(legend) || Object.keys(legend).some((key) => !OTHER_MODE_RESULT_LEGEND_FIELDS.has(key))) {
+    throw new Error('Session otherModeResult editorState and ui hold only that Result set\'s fields.');
+  }
+  if (!isPlainObject(runMetadata)
+    || Object.keys(runMetadata).some((key) => !OTHER_MODE_RESULT_RUN_METADATA_FIELDS.has(key))) {
+    throw new Error('Session otherModeResult.runMetadata holds only that Result set\'s metadata.');
+  }
+  validateAnnotationWarnings(runMetadata.annotationWarnings, other.results);
+  validateFeatureIdentityNotices(runMetadata.featureIdentityNotices, other.results);
+  validateComparisonWarnings(runMetadata.comparisonWarnings, other.results);
+};
+
 /**
  * @param {Record<string, any>} sessionData Unvalidated Session data.
  * @param {number | string} version
@@ -362,6 +487,9 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
     throw new Error('Session authority inventory requires an object.');
   }
   assertSafeObjectKeys(sessionData, 'Session');
+  if (Object.hasOwn(sessionData, 'otherModeResult') && Number(version) < FEATURE_IDENTITY_SESSION_VERSION) {
+    throw new Error(`Session version ${String(version)} cannot contain otherModeResult.`);
+  }
   const bindings = validateWebFileBindings(sessionData.webFiles, sessionData.resources);
   if (bindings?.schema === 2 && ![41, 42, 44, 45].includes(Number(version))) {
     throw new Error('Web binding schema 2 requires session version 41, 42, 44, or 45.');
@@ -429,62 +557,9 @@ export const validateSessionAuthorityInventory = (sessionData, version) => {
         `Session version ${String(version)} cannot contain duplicated orthogroup groups.`
       );
     }
-    if (!Array.isArray(sessionData.results)) {
-      throw new Error(`Session version ${String(version)} requires a results array.`);
-    }
-    sessionData.results.forEach((result) => {
-      const resultName = (
-        isPlainObject(result) && typeof result.name === 'string'
-          ? result.name.trim()
-          : ''
-      );
-      const content = isPlainObject(result) ? result.content : null;
-      if (
-        !resultName
-        || resultName.toLowerCase().endsWith('.interactive.svg')
-        || typeof content !== 'string'
-        || !content.includes('<svg')
-        || content.includes('gbdraw-interactive-feature-metadata')
-        || content.includes('gbdraw-interactive-feature-script')
-      ) {
-        throw new Error('Each current Session Result must be a named plain SVG.');
-      }
-    });
-    const editorState = sessionData.editorState;
-    if (
-      !isPlainObject(editorState)
-      || !Object.prototype.hasOwnProperty.call(editorState, 'featureCatalog')
-    ) {
-      throw new Error(
-        `Session version ${String(version)} requires editorState.featureCatalog.`
-      );
-    }
-    if (sessionData.renderRequest?.schema >= 8
-      && sessionData.renderRequest.layout?.similarityAlignment
-      && !Object.hasOwn(editorState, 'alignmentResetReceipt')) {
-      throw new Error('Current alignment Session requires editorState.alignmentResetReceipt.');
-    }
-    validateAlignmentResetReceiptShape(editorState.alignmentResetReceipt, sessionData.renderRequest);
-    const featureCatalog = editorState.featureCatalog;
-    const expectedCatalogSchema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION[Number(version)] ?? 3;
-    if (
-      featureCatalog !== null
-      && (!isPlainObject(featureCatalog) || featureCatalog.schema !== expectedCatalogSchema)
-    ) {
-      throw new Error(
-        `Session version ${String(version)} requires a schema-${expectedCatalogSchema} editorState.featureCatalog.`
-      );
-    }
-    if (
-      Array.isArray(sessionData.results)
-      && sessionData.results.length > 0
-      && featureCatalog === null
-    ) {
-      throw new Error(
-        `Session version ${String(version)} requires a feature catalog for saved results.`
-      );
-    }
+    validateCommittedResultSet(sessionData, version);
   }
+  if (Object.hasOwn(sessionData, 'otherModeResult')) validateOtherModeResult(sessionData, version);
   const unknown = Object.keys(sessionData).filter(
     (key) => !Object.prototype.hasOwnProperty.call(SESSION_TOP_LEVEL_AUTHORITY, key)
   );
