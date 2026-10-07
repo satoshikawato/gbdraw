@@ -23,6 +23,7 @@ const setup = (evaluate = evaluatePythonRules) => {
   let previousIntents = [];
   let openTransaction = null;
   const legendApplies = [];
+  let rerenders = 0;
   const transact = scope => async (label, commit) => {
     const before=JSON.stringify(state.manualSpecificRules);
     openTransaction = label;
@@ -44,8 +45,8 @@ const setup = (evaluate = evaluatePythonRules) => {
       state.legendEntries.value=intents;
       state.results.value=[{name:'figure',content:'after'}];
     } };
-  }, projectPaletteAndRules:()=>true, nextTick:async()=>{}});
-  return {state,actions,preparation,notices,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents};
+  }, projectPaletteAndRules:()=>true, ports:{requestAutomaticRerender:()=>{rerenders+=1;return true;}}, nextTick:async()=>{}});
+  return {state,actions,preparation,notices,transactions,transactionScopes,legendApplies, setLegendPreparation: fn => {prepareLegend=fn;}, previousIntents:()=>previousIntents, rerenders:()=>rerenders};
 };
 const rules = [
   {feat:'CDS',qual:'gene',val:'a',color:'#112233',cap:'Shared',fromFile:true},
@@ -274,4 +275,39 @@ test('a rule commit retires the Legend color a popup edit left on a row it recol
   assert.equal(await s.actions.commitSpecificRules([{ ...rule, color: '#445566' }]), true);
   assert.equal(Object.hasOwn(s.state.legendColorOverrides, 'Shared'), false, 'the recolored row drops the stale Legend color');
   assert.equal(s.state.legendColorOverrides.Other, '#abcdef', 'a row the commit does not draw keeps its Legend color');
+});
+
+test('a rule commit that removes a rule row retires the Legend color copied from its rule (OV-152)', async () => {
+  const s = setup();
+  const shared = { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'Shared' };
+  const kept = { feat: 'CDS', qual: 'gene', val: 'b', color: '#445566', cap: 'Kept' };
+  const unmatched = { feat: 'CDS', qual: 'gene', val: 'none', color: '#778899', cap: 'Unmatched' };
+  s.state.errorLog = { value: null };
+  s.state.manualSpecificRules.push({ ...shared }, { ...kept }, { ...unmatched });
+  // The popup's copy of the rule color, a Legend color set on a row no rule
+  // draws, and copies on rows whose rules stay.
+  Object.assign(s.state.legendColorOverrides, {
+    Shared: '#112233', Direct: '#abcdef', Kept: '#445566', Unmatched: '#778899'
+  });
+  assert.equal(await s.actions.removeSpecificRule(0), true);
+  assert.equal(Object.hasOwn(s.state.legendColorOverrides, 'Shared'), false, 'the removed rule row drops the copied color');
+  assert.deepEqual(s.state.legendColorOverrides, { Direct: '#abcdef', Kept: '#445566', Unmatched: '#778899' },
+    'rows no removed rule drew keep their Legend colors, also a rule that draws no feature now');
+  assert.equal(s.transactions.length, 1, 'the retirement is part of the rule step');
+
+  // A Legend color that is not the removed rule's color is no copy of it.
+  s.state.legendColorOverrides.Kept = '#000000';
+  assert.equal(await s.actions.clearAllSpecificRules(), true);
+  assert.deepEqual(s.state.legendColorOverrides, { Direct: '#abcdef', Kept: '#000000' },
+    'Clear All retires the copies of every rule it removes and keeps the other colors');
+
+  // Rules that recolor a whole type keep its caption; removing the last of
+  // them asks Python to draw the type's default row again.
+  const typeRule = { feat: 'CDS', qual: 'gene', val: 'a', color: '#112233', cap: 'CDS' };
+  assert.equal(await s.actions.commitSpecificRules([{ ...typeRule }, { ...typeRule, val: 'b' }]), true);
+  const before = s.rerenders();
+  assert.equal(await s.actions.removeSpecificRule(0), true);
+  assert.equal(s.rerenders(), before, 'a rule of the type row remains');
+  assert.equal(await s.actions.removeSpecificRule(0), true);
+  assert.equal(s.rerenders(), before + 1, 'the last rule of the type row asks for the rerender');
 });

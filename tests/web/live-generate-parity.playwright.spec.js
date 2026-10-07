@@ -698,6 +698,63 @@ test('a Legend color on a row only one Result draws survives the next Generate',
   expect(after[1]).toEqual(before[1]);
 });
 
+// OV-152 (GUI audit FL-02): a popup color for a whole Legend row writes rules
+// and keeps a copy of their color as the row's Legend color. Removing those
+// rules (Clear All, or deleting the last of them) retires the copy in the same
+// History step, so the row takes the palette color its features return to,
+// live and at Generate. Undo brings back the rules and the copy. A Legend color
+// set on a row that no rule draws stays.
+const COPIED_LEGEND_COLOR_CASES = {
+  'Clear All after Apply to all CDS': {
+    states: { mode: 'circular', results: 'single', reflow: 'off' },
+    color: (page) => popupEdit(page, 'FL1', { fill: '#e63946', scope: 'caption' }),
+    caption: 'CDS',
+    direct: 'repeat_region',
+    remove: (page) => appAction(page, 'clearAllSpecificRules')
+  },
+  'deleting the rule of a one-feature row': {
+    states: { mode: 'linear', results: 'single', reflow: 'on' },
+    color: (page) => popupEdit(page, { type: 'repeat_region' }, { fill: '#e63946' }),
+    caption: 'repeat_region',
+    direct: 'CDS',
+    remove: (page) => appAction(page, 'removeSpecificRule', 0)
+  }
+};
+for (const [name, { states, color, caption, direct, remove }] of Object.entries(COPIED_LEGEND_COLOR_CASES)) {
+  test(`a Legend color copied from popup rules leaves with them: ${name} (${states.mode})`, async ({ page }) => {
+    test.setTimeout(180_000);
+    await open(page, states);
+    const stored = () => page.evaluate(async () => ({ ...(await import('/gbdraw/web/js/state.js')).state.legendColorOverrides }));
+    const ruleCount = () => page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.length);
+    const liveFill = async () => (await semanticSnapshot(page)).legend.find((row) => row.caption === caption)?.fill;
+    await legendRowColor(page, direct, '#7b2cbf');
+    await color(page);
+    const colored = await stored();
+    expect(colored).toEqual({ [direct]: '#7b2cbf', [caption]: '#e63946' });
+    const rules = await ruleCount();
+    expect(rules).toBeGreaterThan(0);
+
+    await remove(page);
+    expect(await ruleCount()).toBe(0);
+    expect(await stored(), 'the copy leaves; the Legend color of a row no rule draws stays')
+      .toEqual({ [direct]: '#7b2cbf' });
+    await history(page, 'undo');
+    expect(await ruleCount(), 'Undo brings back the rules').toBe(rules);
+    expect(await stored(), 'and the copy, in the same step').toEqual(colored);
+    expect(await liveFill()).toBe('#e63946');
+    await history(page, 'redo');
+    expect(await stored()).toEqual({ [direct]: '#7b2cbf' });
+
+    const palette = (await page.evaluate(async (type) => (
+      String((await import('/gbdraw/web/js/state.js')).state.appliedPaletteColors.value[type])
+    ), caption)).toLowerCase();
+    expect(await liveFill(), 'the live row takes the palette color').toBe(palette);
+    const { generated } = await expectLiveEqualsGenerate(page, { label: `${name}: after the removal` });
+    expect(generated.legend.find((row) => row.caption === caption)?.fill, 'Generate draws the palette color').toBe(palette);
+    expect(generated.legend.find((row) => row.caption === direct)?.fill).toBe('#7b2cbf');
+  });
+}
+
 // OV-66: Undo of a Depth source removal brings back the Depth track and its
 // tick text, and Redo hides them again; the live Result equals what Generate
 // draws. A Depth source History step restores files, which suppresses the

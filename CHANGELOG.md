@@ -58,6 +58,13 @@ write-up of a release.
   renamed in the Legend editor, Generate draws the Legend and the canvas as the
   rename left them, and the rows keep their spacing. Before, Generate moved only the
   renamed row, which left uneven gaps, and kept the earlier canvas width.
+- Legend colors (web app): after **Apply to all** in the feature popup colors every
+  feature of a Legend row, removing the rules it wrote (**Clear All** in SPECIFIC
+  RULES, or deleting the last of them) also removes the Legend color it stored for
+  the row, in the same Undo step. The row then takes the palette color its features
+  return to, live and after Generate. Before, Generate drew the row in the popup's
+  color, and the saved Session kept it. A Legend color set on a row in the Legend
+  editor is kept.
 - Result names (web app): a live edit that redraws a loaded Session's Result (such
   as a Legend color, or Undo or Redo of a color step) keeps the Result's saved name.
   Before, the redraw renamed it after the **Output prefix** (a Gallery Session's
