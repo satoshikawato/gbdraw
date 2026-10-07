@@ -222,6 +222,62 @@ for (const mode of ['linear', 'circular']) {
   });
 }
 
+// The caption box [left, top, right, bottom] of each drawn Legend row of the
+// mounted SVG, and the canvas [width, height], in canvas units.
+const legendCaptionBoxes = page => page.evaluate(async () => {
+  const { state: s } = await import('./js/state.js');
+  const svg = s.svgContainer.value.querySelector('svg');
+  const width = svg.viewBox.baseVal?.width || svg.width.baseVal.value;
+  const height = svg.viewBox.baseVal?.height || svg.height.baseVal.value;
+  const frame = svg.getBoundingClientRect();
+  const scale = frame.width / width;
+  const rows = [...svg.querySelectorAll('#legend g[data-legend-key]')]
+    .filter(entry => !entry.closest('[display="none"]'))
+    .map(entry => {
+      const box = entry.querySelector('text').getBoundingClientRect();
+      const left = (box.left - frame.left) / scale;
+      const top = (box.top - frame.top) / scale;
+      return [entry.getAttribute('data-legend-key'), [left, top, left + box.width / scale, top + box.height / scale]];
+    });
+  return { canvas: [width, height], rows: Object.fromEntries(rows) };
+});
+const expectInsideCanvas = ({ canvas: [width, height], rows }) => {
+  const outside = Object.entries(rows).filter(([, [left, top, right, bottom]]) => (
+    left < 0 || top < 0 || right > width || bottom > height
+  ));
+  expect(outside).toEqual([]);
+};
+const expectSameBoxes = (actual, expected) => {
+  const near = (left, right) => left.length === right.length && left.every((value, index) => Math.abs(value - right[index]) <= 1);
+  expect(Object.keys(actual.rows).sort()).toEqual(Object.keys(expected.rows).sort());
+  expect(near(actual.canvas, expected.canvas), `canvas ${actual.canvas} vs ${expected.canvas}`).toBe(true);
+  const moved = Object.keys(expected.rows).filter(caption => !near(actual.rows[caption], expected.rows[caption]))
+    .map(caption => `${caption}: ${actual.rows[caption].map(Math.round)} vs ${expected.rows[caption].map(Math.round)}`);
+  expect(moved).toEqual([]);
+};
+
+// OV-122 (PD-OI-066, OIC-027): Generate draws a row added in the Legend editor,
+// and the Legend around it, where the live add placed them, inside the canvas.
+for (const mode of ['linear', 'circular']) {
+  test(`M3 ${mode}: a Legend editor added row stays where the live add placed it, inside the canvas`, async ({ browser }) => {
+    test.setTimeout(600_000);
+    const page = await loadGenerated(browser, mode);
+    try {
+      await addLegendRow(page, 'Manual row', '#118833');
+      const live = await legendCaptionBoxes(page);
+      expect(Object.keys(live.rows)).toContain('Manual row');
+      expectInsideCanvas(live);
+      await generate(page);
+      const generated = await legendCaptionBoxes(page);
+      expectInsideCanvas(generated);
+      expectSameBoxes(generated, live);
+      expect(page.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+    }
+  });
+}
+
 test('L1-L8 generated legend categories reconcile while valid category and layout preferences survive', async ({ browser }, testInfo) => {
   test.setTimeout(1_800_000);
   const page = await load(browser, seeds.lambda);

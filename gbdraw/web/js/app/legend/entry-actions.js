@@ -477,16 +477,7 @@ export const createLegendEntryActions = ({
         group.appendChild(entryGroup);
       }
 
-      if (shouldReflow) {
-        const hasDualLegends =
-          !!legendGroup.querySelector('#legend_horizontal') && !!legendGroup.querySelector('#legend_vertical');
-        if (hasDualLegends) {
-          reflowDualLegendLayout(svg);
-        } else {
-          updatePairwiseLegendPositions(svg);
-        }
-        onLegendGeometryChanged();
-      }
+      if (shouldReflow) layOutAddedRows(svg);
 
       if (shouldCommit) {
         persistLegendReconciliation();
@@ -619,6 +610,27 @@ export const createLegendEntryActions = ({
     );
     if (hasDualLegends) reflowDualLegendLayout(svg);
     else updatePairwiseLegendPositions(svg);
+  };
+
+  // The layout of a Legend with a row added here: every row reflowed, then the
+  // Legend docked again by the layout owner.
+  /** @param {SVGSVGElement} svg */
+  const layOutAddedRows = (svg) => {
+    relayoutLegend(svg);
+    onLegendGeometryChanged();
+  };
+
+  // Python lays out only the rows it draws. Generate and the display of a batch
+  // Result add the rows added here (services/svg-result-ingestion.js) at anchors
+  // read from the live layout, whose frame Python's layout does not share, so a
+  // mounted Result with such a row receives the live add's layout (OV-122,
+  // PD-OI-066). Returns whether the Legend has an added row.
+  /** @param {SVGSVGElement} svg */
+  const layOutMountedAddedRows = (svg) => {
+    const added = getAllFeatureLegendGroups(svg)
+      .some((group) => group.querySelector('g[data-legend-owner="direct-editor"]'));
+    if (added) layOutAddedRows(svg);
+    return added;
   };
 
   // Whether a captured Legend list lists exactly the entries the mounted
@@ -1320,6 +1332,7 @@ export const createLegendEntryActions = ({
     extractLegendEntries,
     legendEntryExists,
     hasRetiredResultLegend,
+    layOutMountedAddedRows,
     onLegendGeometryChanged,
     orderMountedLegend,
     prepareDisplayedResultLegend,

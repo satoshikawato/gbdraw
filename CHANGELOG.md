@@ -21,6 +21,9 @@ write-up of a release.
   when it is added and after Generate: the stroke of the first Legend row as the
   diagram drew it. Before, the row took that row's edited stroke, and the Block
   Stroke settings before Generate, until the next Generate drew the drawn stroke.
+- Legend editor (web app): Generate draws the Legend with a row added in the Legend
+  editor where the add placed it. Before, Generate moved the added row away from the
+  other rows, in Linear past the right edge of the canvas, where its caption was cut.
 - CLI: `gbdraw circular|linear --session <file> --session_output out.json` (and
   `--save_session`) keeps the resource IDs and file names of the Session's unchanged
   inputs. Before, the rewritten Session renamed them to positional IDs such as
