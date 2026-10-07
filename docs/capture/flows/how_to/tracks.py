@@ -728,7 +728,8 @@ def capture_gui_quantitative_tracks(
         custom_slots = open_ancestor_details(
             page.get_by_role(
                 "button",
-                name=re.compile(r"Custom Track Slots Applies on Generate$"),
+                name="Custom Track Slots",
+                exact=True,
                 include_hidden=True,
             )
         )
@@ -870,7 +871,8 @@ def capture_gui_annotation_tracks(
         custom_slots = open_ancestor_details(
             page.get_by_role(
                 "button",
-                name=re.compile(r"Custom Track Slots Applies on Generate$"),
+                name="Custom Track Slots",
+                exact=True,
                 include_hidden=True,
             )
         )

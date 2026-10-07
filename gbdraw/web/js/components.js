@@ -220,9 +220,12 @@ export const ColorValueControl = {
   `
 };
 
+// `inspectionFailed` is the slot's existing inspection status, passed by the
+// parent that shows its message (for example "No records were found"): a
+// selected file whose inspection failed is not shown as ready (UI-08).
 export const FileUploader = {
   template: '#file-uploader-template',
-  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'artifactHistory'],
+  props: ['label', 'accept', 'modelValue', 'small', 'multiple', 'testId', 'afterChange', 'requestClear', 'artifactHistory', 'inspectionFailed'],
   emits: ['update:modelValue', 'clearRequest'],
   setup(props, { emit }) {
     const input = ref(null);
