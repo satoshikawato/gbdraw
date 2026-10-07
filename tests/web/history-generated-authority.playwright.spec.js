@@ -230,7 +230,7 @@ test('Circular definition settings apply on Generate and keep crop length, GC% a
     for (const [owner, field, value] of edits) {
       await page.evaluate(async ({ owner, field, value }) => {
         const { state } = await import('./js/state.js');
-        state[owner][field] = value;
+        state.activeDrawing()[owner][field] = value;
         await window.Vue.nextTick();
       }, { owner, field, value });
       await expectUnchangedResult(page, committed);

@@ -165,12 +165,14 @@ const placeLane = (page, side) => page.evaluate(async (lane) => {
   return { key: JSON.stringify([feature.record_key, feature.biological_feature_id]), product: feature.product };
 }, side);
 const placeOutward = (page) => placeLane(page, 'outward');
+// The placements are Circular edits: `row` is the Circular drawing's row, also
+// while Linear is shown (PD-OI-086).
 const placementState = (page, key) => page.evaluate(async (overrideKey) => {
   const { state } = await import('./js/state.js');
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
-  return { row: state.activeDrawing().featurePlacementOverrides[overrideKey]?.placement?.side || null,
+  return { row: state.drawings.circular.featurePlacementOverrides[overrideKey]?.placement?.side || null,
     committed: getCommittedCanonicalRenderRequest().diagramOptions.featurePlacements.map((row) => row.placement.side || 'main'),
     pending: app.recordDisplayControls.hasPendingChanges.value,
     popup: feature ? app.featurePlacementActions.valueFor(feature) : null };

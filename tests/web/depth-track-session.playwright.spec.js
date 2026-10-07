@@ -874,7 +874,16 @@ test('Custom Track disclosure and editable IDs preserve transient row identity i
 
   const result = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    app.setDiagramMode('linear');
+    // Each mode has its own drawing (PD-OI-086): `app.adv` is the shown one, so
+    // each part waits until its mode is shown (a switch waits while busy).
+    const showMode = async (target) => {
+      for (let tries = 0; tries < 300 && app.mode !== target; tries += 1) {
+        app.setDiagramMode(target);
+        if (app.mode !== target) await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      if (app.mode !== target) throw new Error(`The app stays in ${app.mode}`);
+    };
+    await showMode('linear');
     app.adv.linear_track_slots.splice(
       0,
       app.adv.linear_track_slots.length,
@@ -948,7 +957,7 @@ test('Custom Track disclosure and editable IDs preserve transient row identity i
       ![...linearOriginalKeys.values()].includes(linearDuplicateKey)
     );
 
-    app.setDiagramMode('circular');
+    await showMode('circular');
     app.adv.circular_track_slots.splice(
       0,
       app.adv.circular_track_slots.length,
