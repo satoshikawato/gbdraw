@@ -29,6 +29,10 @@ write-up of a release.
   change the features as Generate draws them. A feature with a stroke of its own from
   the feature popup keeps it. Before, Generate drew the row's features without the
   row's stroke, and the row's stroke replaced a feature's own stroke until Generate.
+- Legend editor (web app): after a Legend row is removed, Generate draws the Legend
+  and the canvas as the removal left them, in Linear and Circular: the other rows
+  close the gap. Before, Generate kept the gap and the earlier canvas size. A batch
+  Result shown after the removal is laid out the same way.
 - Feature strokes (web app): a stroke set on one feature in the feature popup is no
   longer lost when Generate draws a Result without that feature, such as a Generate
   in the other mode (Circular or Linear). The stroke stays in the draft and in a

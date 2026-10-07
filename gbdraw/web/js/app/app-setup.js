@@ -2423,10 +2423,11 @@ export const createAppSetup = () => {
         legendActions.adoptResultInventory(context.resultIdentity, { restored: true });
         return;
       }
-      // OV-122: a generated or newly displayed Result shows the rows added in
-      // the Legend editor with the live add's layout before its entries are read.
+      // OV-122, OV-124: a generated or newly displayed Result shows the rows
+      // added and deleted in the Legend editor with the live layout before its
+      // entries are read.
       if (!context.bindingOptions.isIncrementalEdit && shouldBindComposition(context)) {
-        legendActions.layOutMountedAddedRows(context.root);
+        legendActions.layOutMountedLegendEdits(context.root);
       }
       if (context.bindingOptions.skipLegendExtraction) return;
       recordStructuralMetric('legendDomFullScanCount', 1, {

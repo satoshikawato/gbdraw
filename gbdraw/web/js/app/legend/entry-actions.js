@@ -622,13 +622,21 @@ export const createLegendEntryActions = ({
 
   // Python lays out only the rows it draws. Generate and the display of a batch
   // Result add the rows added here (services/svg-result-ingestion.js) at anchors
-  // read from the live layout, whose frame Python's layout does not share, so a
-  // mounted Result with such a row receives the live add's layout (OV-122,
-  // PD-OI-066). Returns whether the Legend has an added row.
+  // read from the live layout, whose frame Python's layout does not share, and
+  // remove the rows deleted here without closing their gap. A mounted Result
+  // whose Legend the editor changed so receives the layout of the live add
+  // (OV-122) or, after a deletion, of the live delete (OV-124, PD-OI-066).
+  // Returns whether the Legend was laid out again.
   /** @param {SVGSVGElement} svg */
-  const layOutMountedAddedRows = (svg) => {
-    const added = getAllFeatureLegendGroups(svg)
-      .some((group) => group.querySelector('g[data-legend-owner="direct-editor"]'));
+  const layOutMountedLegendEdits = (svg) => {
+    const groups = getAllFeatureLegendGroups(svg);
+    if (groups.length === 0) return false;
+    if (deletedLegendEntries.value.length > 0) {
+      compactLegendEntries(svg);
+      onLegendGeometryChanged();
+      return true;
+    }
+    const added = groups.some((group) => group.querySelector('g[data-legend-owner="direct-editor"]'));
     if (added) layOutAddedRows(svg);
     return added;
   };
@@ -1332,7 +1340,7 @@ export const createLegendEntryActions = ({
     extractLegendEntries,
     legendEntryExists,
     hasRetiredResultLegend,
-    layOutMountedAddedRows,
+    layOutMountedLegendEdits,
     onLegendGeometryChanged,
     orderMountedLegend,
     prepareDisplayedResultLegend,
