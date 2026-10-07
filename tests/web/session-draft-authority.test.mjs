@@ -48,7 +48,7 @@ const {
 } = await import('../../gbdraw/web/js/services/session-request.js');
 state.selectedOrthogroupAlignmentFeature.value = 'legacy-selection';
 assert.equal(
-  Object.hasOwn(buildOrthogroupStateData(), 'selectedOrthogroupAlignmentFeature'),
+  Object.hasOwn(buildOrthogroupStateData(state.activeDrawing()), 'selectedOrthogroupAlignmentFeature'),
   false
 );
 state.selectedOrthogroupAlignmentFeature.value = '';
@@ -280,7 +280,7 @@ Object.assign(state.importedComparisonIntent, {
   message: 'Preserved for the current Session.',
   hasCommittedComparison: true
 });
-assert.deepEqual(buildConfigData().importedComparisonResolution, { action: 'INHERIT' });
+assert.deepEqual(buildConfigData(state.activeDrawing()).importedComparisonResolution, { action: 'INHERIT' });
 Object.assign(state.importedComparisonIntent, {
   disposition: 'EDITABLE',
   action: null,
@@ -492,7 +492,7 @@ assert.deepEqual({
   }
 }, dormantComparisonDraft);
 assert.deepEqual(
-  JSON.parse(JSON.stringify(buildConfigData().losat.blastp)),
+  JSON.parse(JSON.stringify(buildConfigData(state.activeDrawing()).losat.blastp)),
   JSON.parse(JSON.stringify(state.losat.blastp)),
   'the current Session writer must retain every editable LOSATP value'
 );
@@ -1131,11 +1131,11 @@ const sessionImportRollbackState = createSessionImportRollbackState({
 
 const jsonClone = (value) => JSON.parse(JSON.stringify(value));
 const rollbackState = () => ({
-  config: jsonClone(buildConfigData()),
-  ui: jsonClone(buildUiStateData()),
-  features: jsonClone(buildFeatureStateData()),
-  editorState: jsonClone(buildEditorStateData()),
-  orthogroupState: jsonClone(buildOrthogroupStateData()),
+  config: jsonClone(buildConfigData(state.activeDrawing())),
+  ui: jsonClone(buildUiStateData(state.activeDrawing())),
+  features: jsonClone(buildFeatureStateData(state.activeDrawing())),
+  editorState: jsonClone(buildEditorStateData(state.activeDrawing())),
+  orthogroupState: jsonClone(buildOrthogroupStateData(state.activeDrawing())),
   runState: jsonClone(buildRunStateData()),
   results: jsonClone(state.results.value),
   mode: state.mode.value,

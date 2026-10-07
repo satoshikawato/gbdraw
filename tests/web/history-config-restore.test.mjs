@@ -36,7 +36,7 @@ for (const [domain, key, first, second] of [
   assert.equal(state[domain][key], first, `${domain}.${key}: Redo explicit value`);
 }
 
-applyConfigData({ form: JSON.parse('{"unknown":1,"__proto__":{"polluted":true}}') });
+applyConfigData(state.activeDrawing(), { form: JSON.parse('{"unknown":1,"__proto__":{"polluted":true}}') });
 assert.equal(Object.hasOwn(state.form, 'unknown'), false);
 assert.equal({}.polluted, undefined);
 
@@ -119,9 +119,9 @@ console.log('History restores nullable config values and preserves key guards.')
     assert.equal(featureStateFromCatalog(liveCatalog(), { mode: 'circular' }).extractedFeatures.length, 1);
   }
 
-  applyEditorStateData(buildEditorStateData({ preserveAdoptedCatalog: true }));
+  applyEditorStateData(state.activeDrawing(), buildEditorStateData(state.activeDrawing()));
   assert.strictEqual(liveCatalog(), catalog, 'Session rollback restores the admitted catalog');
-  applyEditorStateData({ featureCatalog: structuredClone(catalog) });
+  applyEditorStateData(state.activeDrawing(), { featureCatalog: structuredClone(catalog) });
   assert.equal(state.featureCatalog.value, null, 'an unadmitted catalog never enters state');
   state.featureCatalog.value = null;
   state.results.value = [];
@@ -164,7 +164,7 @@ console.log('History restores nullable config values and preserves key guards.')
     originalSvgStroke: { color: 'gray', width: 1 }
   });
   const settings = () => JSON.stringify({
-    config: buildConfigData(), layoutPreferences: buildUiStateData().layoutPreferences
+    config: buildConfigData(state.activeDrawing()), layoutPreferences: buildUiStateData(state.activeDrawing()).layoutPreferences
   });
   const restoreSnapshots = createHistorySnapshotService({
     state, fileStore: createHistoryFileStore(), buildConfigData, applyConfigData,

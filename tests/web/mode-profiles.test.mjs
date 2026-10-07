@@ -557,7 +557,7 @@ assert.deepEqual(
   state.form.show_scale = false;
   state.losat.blastp.collinearSearchScope = 'adjacent';
   state.unmanagedConfigOverrides['objects.blast_match.curve_tension'] = 0.25;
-  const savedConfig = structuredClone(buildConfigData());
+  const savedConfig = structuredClone(buildConfigData(state.activeDrawing()));
 
   assert.equal(savedConfig.form.show_scale, false);
   assert.equal(savedConfig.modeProfiles.profiles.circular.values.identity, 88);
@@ -573,7 +573,7 @@ assert.deepEqual(
   state.modeProfileStateManager.reset('linear', state.adv);
   state.form.show_scale = true;
   state.unmanagedConfigOverrides.stale = true;
-  applyConfigData(savedConfig);
+  applyConfigData(state.activeDrawing(), savedConfig);
   assert.equal(state.form.show_scale, false);
   assert.equal(state.adv.identity, 77);
   assert.deepEqual(state.unmanagedConfigOverrides, {
@@ -592,21 +592,21 @@ assert.deepEqual(
     const layoutConfig = structuredClone(savedConfig);
     if (layout === undefined) delete layoutConfig.linearRecordLayout;
     else layoutConfig.linearRecordLayout = layout;
-    applyConfigData(layoutConfig);
+    applyConfigData(state.activeDrawing(), layoutConfig);
     assert.equal(state.linearRecordLayoutEnabled.value, expected, JSON.stringify(layout));
   }
 
   const cliProjectedNumericConfig = structuredClone(savedConfig);
   cliProjectedNumericConfig.adv.arrow_head_length_ratio = '1.25';
   cliProjectedNumericConfig.adv.arrow_shaft_width_ratio = '0.25';
-  applyConfigData(cliProjectedNumericConfig);
+  applyConfigData(state.activeDrawing(), cliProjectedNumericConfig);
   assert.equal(state.adv.arrow_head_length_ratio, 1.25);
   assert.equal(state.adv.arrow_shaft_width_ratio, 0.25);
 
   const cliProjectedAutoConfig = structuredClone(savedConfig);
   cliProjectedAutoConfig.adv.arrow_head_length_ratio = 'auto';
   cliProjectedAutoConfig.adv.arrow_shaft_width_ratio = '1';
-  applyConfigData(cliProjectedAutoConfig);
+  applyConfigData(state.activeDrawing(), cliProjectedAutoConfig);
   assert.equal(state.adv.arrow_head_length_ratio, null);
   assert.equal(state.adv.arrow_shaft_width_ratio, 1.0);
 
@@ -615,7 +615,7 @@ assert.deepEqual(
   state.mode.value = 'linear';
   Object.assign(state.adv, createDefaultAdv('linear'));
   state.modeProfileStateManager.reset('linear', state.adv);
-  applyConfigData(version39Config);
+  applyConfigData(state.activeDrawing(), version39Config);
   const migratedProfiles = state.modeProfileStateManager.exportState();
   assert.equal(migratedProfiles.profiles.linear.values.identity, 77);
   assert.equal(migratedProfiles.profiles.linear.managed.identity, false);

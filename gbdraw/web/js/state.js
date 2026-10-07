@@ -878,6 +878,72 @@ export const sessionOperationAvailability = (
   return reason ? { status: 'busy', reason } : null;
 };
 
+// The drawing of a diagram mode: its settings, its editor edits, and the
+// values derived from them, under their `state` names and kinds (a ref stays a
+// ref). A service reads them from the drawing it is given, never from `state`;
+// an owner passes `state.activeDrawing()`. Both modes still share one drawing,
+// so the members are the objects above.
+const sharedDrawing = Object.freeze({
+  // Settings
+  form,
+  adv,
+  losat,
+  losatProgram,
+  circularConservation,
+  linearComparisonPlan,
+  linearRecordLayoutEnabled,
+  linearRecordGap,
+  linearRecordRows,
+  recordDisplayDrafts,
+  unmanagedConfigOverrides,
+  importedComparisonIntent,
+  layoutPreferences,
+  linearTypographyLinked,
+  modeProfileStateManager,
+  // Editor edits
+  featureOverrides,
+  featurePlacementOverrides,
+  featureColorOverrides,
+  featureStrokeOverrides,
+  featureVisibilityManualRules,
+  labelTextBulkOverrides,
+  canonicalLabelOverrideRows,
+  legendEntries,
+  deletedLegendEntries,
+  legendColorOverrides,
+  legendStrokeOverrides,
+  addedLegendCaptions,
+  fileLegendCaptions,
+  manualSpecificRules,
+  manualPriorityRules,
+  filterMode,
+  manualBlacklist,
+  manualWhitelist,
+  selectedPalette,
+  currentColors,
+  pendingPaletteName,
+  pendingPaletteColors,
+  annotationSets,
+  orthogroupNameOverrides,
+  orthogroupDescriptionOverrides,
+  orthogroupDormantOverrides,
+  canvasPadding,
+  // Derived from the members above
+  activeLayoutPreferences,
+  linearComparisonResolution,
+  hasLinearComparisonIntent,
+  hasActiveLinearLosatIntent,
+  hasActiveLinearUploadIntent,
+  featureVisibilityRules,
+  hasPendingPaletteDraft
+});
+/** @typedef {'circular' | 'linear'} DiagramMode */
+/** @typedef {typeof sharedDrawing} DrawingState */
+/** @type {Readonly<Record<DiagramMode, DrawingState>>} */
+const drawings = Object.freeze({ circular: sharedDrawing, linear: sharedDrawing });
+/** @returns {DrawingState} */
+const activeDrawing = () => drawings[mode.value === 'linear' ? 'linear' : 'circular'];
+
 export const state = {
   processing,
   processingStatus,
@@ -914,6 +980,8 @@ export const state = {
   canvasPan,
   canvasContainerRef,
   mode,
+  drawings,
+  activeDrawing,
   layoutPreferences,
   activeLayoutPreferences,
   suppressCircularMultiRecordDefaults,

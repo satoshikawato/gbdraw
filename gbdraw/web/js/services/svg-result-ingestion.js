@@ -434,7 +434,7 @@ const removeAttributeIfPresent = (element, name) => {
 
 const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
   /** @type {{ featureElements: Map<string, Element[]> | null, legendEntries: Map<string, Element[]> | null, legendGroups: Element[] | null }} */
-  const state = {
+  const built = {
     featureElements: null,
     legendEntries: null,
     legendGroups: null
@@ -448,9 +448,9 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
   return {
     features() {
       announce();
-      if (state.featureElements) return state.featureElements;
+      if (built.featureElements) return built.featureElements;
       const featureElements = new Map();
-      state.featureElements = featureElements;
+      built.featureElements = featureElements;
       Array.from(svg.querySelectorAll(FEATURE_SELECTOR)).forEach((element) => {
         const renderedId = getFeatureIdentity(element);
         if (!renderedId) return;
@@ -459,19 +459,19 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
         /** @type {Element[]} */ (featureElements.get(renderedId)).push(element);
       });
       recordStructuralMetric('featureDomFullScanCount', 1, { phase, resultIndex });
-      return state.featureElements;
+      return built.featureElements;
     },
     legends() {
       announce();
-      if (state.legendEntries) return {
-        entries: state.legendEntries,
+      if (built.legendEntries) return {
+        entries: built.legendEntries,
         // `legendGroups` is set together with `legendEntries` below.
-        groups: /** @type {Element[]} */ (state.legendGroups)
+        groups: /** @type {Element[]} */ (built.legendGroups)
       };
       const legendEntries = new Map();
-      state.legendEntries = legendEntries;
-      state.legendGroups = getAllFeatureLegendGroups(svg);
-      state.legendGroups.forEach((group) => {
+      built.legendEntries = legendEntries;
+      built.legendGroups = getAllFeatureLegendGroups(svg);
+      built.legendGroups.forEach((group) => {
         const seen = new Set();
         Array.from(group.querySelectorAll('g[data-legend-key]')).forEach((entry) => {
           const caption = text(entry.getAttribute('data-legend-key'));
@@ -485,7 +485,7 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
         });
       });
       recordStructuralMetric('legendDomFullScanCount', 1, { phase, resultIndex });
-      return { entries: state.legendEntries, groups: state.legendGroups };
+      return { entries: built.legendEntries, groups: built.legendGroups };
     }
   };
 };

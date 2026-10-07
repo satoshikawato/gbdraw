@@ -99,7 +99,8 @@ test('an applicable bulk label override remains dormant across mode navigation',
     // Normal feature scope UI resolves matching labels into feature-specific keys.
     await page.evaluate(async () => {
       const { buildFeatureStateData, applyFeatureStateData } = await import('./js/services/config.js');
-      applyFeatureStateData({ ...buildFeatureStateData(),
+      const drawing = (await import('./js/state.js')).state.activeDrawing();
+      applyFeatureStateData(drawing, { ...buildFeatureStateData(drawing),
         labelTextBulkOverrides: { 'tRNA-Phe': 'BULK_RETAINED_LABEL' } });
       window.__GBDRAW_APP__.syncLabelEditor();
     });

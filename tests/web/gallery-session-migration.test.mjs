@@ -194,7 +194,7 @@ const cliEditorProjection = projectCanonicalSessionRequest({
 });
 webState.mode.value = 'linear';
 webState.lInputType.value = cliEditorProjection.inputType;
-applyConfigData(promotedSyntheticCli.config);
+applyConfigData(webState.activeDrawing(), promotedSyntheticCli.config);
 const cliNextComparisonSnapshot = resolveLinearComparisonPlan({
   plan: webState.linearComparisonPlan,
   sequences: cliEditorProjection.files.linearSeqs,
