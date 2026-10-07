@@ -36,9 +36,6 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
     reset_source = (WEB_ROOT / "js" / "services" / "reset.js").read_text(
         encoding="utf-8"
     )
-    setup_source = (WEB_ROOT / "js" / "app" / "app-setup.js").read_text(
-        encoding="utf-8"
-    )
     run_source = (WEB_ROOT / "js" / "app" / "run-analysis.js").read_text(
         encoding="utf-8"
     )
@@ -62,13 +59,8 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
     assert "'data-gbdraw-orientation'" in sanitization_source
     assert "createDefaultAdv(state.mode.value)" in reset_source
     assert "modeProfileStateManager?.reset?" in reset_source
-    mode_watch = setup_source.split("watch(mode, (nextMode, previousMode) => {", 1)[1].split("});", 1)[0]
-    assert "if (state.semanticFileWatchersSuppressed.value) return;" in mode_watch
-    assert "modeProfileStateManager.invalidate(nextMode)" not in mode_watch
-    assert (
-        "modeProfileStateManager.transition(adv, previousMode, nextMode)"
-        in setup_source
-    )
+    # The mode transition swaps the profiles; tests/web/session-active-mode
+    # ("each mode keeps its own title and fonts") covers it in the browser.
 
     # Each mode resolves its thresholds with its own defaults (X-02: one
     # resolver on the generated domains; Generate keeps the draft).

@@ -48,17 +48,20 @@ for (const mode of ['circular', 'linear']) {
       expect(edited.resultIdentity).not.toBe(original.resultIdentity);
       await page.evaluate(() => { window.__MODE_EDITED_ROOT__ = document.querySelector('.origin-top svg'); });
       await switchMode(page, mode === 'circular' ? 'linear' : 'circular');
+      // E1: the other mode keeps its own (empty) Result slot.
+      expect(await page.evaluate(() => ({ results: window.__GBDRAW_APP__.results.length,
+        svg: Boolean(document.querySelector('.origin-top svg')) }))).toEqual({ results: 0, svg: false });
       if (mode === 'circular') {
         const scale = page.getByLabel('Show Coordinate Scale (Linear)', { exact: true });
         for (const details of await scale.locator('xpath=ancestor::details').all()) {
           if (await details.getAttribute('open') === null) await details.locator(':scope > summary').press('Enter');
         }
         await scale.uncheck();
-        expect((await snapshot(page)).request).toEqual(edited.request);
       }
-      await agree(page, edited, testInfo, 'inactive');
       await switchMode(page, mode);
       const returned = await agree(page, edited, testInfo, 'returned');
+      // A draft edit in the other mode leaves this mode's committed request.
+      expect(returned.request).toEqual(edited.request);
       expect(returned.sameRoot).toBe(false);
       expect(returned.resultIdentity).toBe(edited.resultIdentity);
       expect(returned.generation).toBe(edited.generation);

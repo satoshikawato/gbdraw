@@ -399,7 +399,7 @@ test('independent Linear typography follows linked, imported, and History journe
   await openApp(page);
   await page.evaluate(async (genbankText) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     app.lInputType = 'gb';
     app.setLinearSeqPrimaryFile(0, 'gb', new File([genbankText], 'HmmtDNA.gbk', {
       type: 'text/plain',

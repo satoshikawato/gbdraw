@@ -5,6 +5,8 @@
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { AnnotationCatalogSource } from './annotations/record-catalog.js' */
 /** @import { LegacyResultSvgTransform } from '../services/config.js' */
+/** @import { ArtifactSlot } from '../services/artifact-slot.js' */
+/** @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan } from './candidate-render.js';
 import {
@@ -232,6 +234,11 @@ const loadExportService = () => {
 
 /**
  * @typedef {object} SessionImportRollbackOptions
+ * @property {Record<'circular' | 'linear', Readonly<ArtifactSlot> | null>} artifactSlots
+ *   The modes' stashed generated artifacts (E1), held by reference.
+ * @property {() => Readonly<ArtifactSlot>} captureDisplayedArtifact The History snapshot service's slot capture.
+ * @property {(slot: Readonly<ArtifactSlot>) => void} installDisplayedArtifact
+ *   Installs a captured slot after the import rollback restored the document.
  * @property {{ circular: number }} depthTrackUiCounts
  * @property {Record<string, any>[]} depthTracks
  * @property {{ value: number }} featureListScrollTop
@@ -243,6 +250,9 @@ const loadExportService = () => {
 
 /** @param {SessionImportRollbackOptions} options */
 export const createSessionImportRollbackState = ({
+  artifactSlots,
+  captureDisplayedArtifact,
+  installDisplayedArtifact,
   depthTrackUiCounts,
   depthTracks,
   featureListScrollTop,
@@ -252,6 +262,10 @@ export const createSessionImportRollbackState = ({
   restoreSpecificRulePatternDrafts = null
 }) => ({
   capture: () => ({
+    artifactSlots: { ...artifactSlots },
+    // The displayed artifact's parts outside state: its transport identity,
+    // match-sequence owner, committed Session and CLI helper files.
+    displayedArtifact: captureDisplayedArtifact(),
     circularDepthTrackUiCount: depthTrackUiCounts.circular,
     depthTracks: cloneJsonData(depthTracks),
     featureListScrollTop: featureListScrollTop.value,
@@ -259,6 +273,8 @@ export const createSessionImportRollbackState = ({
     ...(captureSpecificRulePatternDrafts ? { specificRulePatternDrafts: captureSpecificRulePatternDrafts() } : {})
   }),
   restore: async (snapshot) => {
+    Object.assign(artifactSlots, snapshot.artifactSlots);
+    installDisplayedArtifact(snapshot.displayedArtifact);
     depthTrackUiCounts.circular = snapshot.circularDepthTrackUiCount;
     depthTracks.splice(
       0,
@@ -294,6 +310,12 @@ export const transformLegacyResultSvg = (svg, { composition, strokes }) => {
   const strokeCount = applyStrokeOverridesToSvg({ svg, ...strokes });
   return compositionChanged || strokeCount > 0;
 };
+
+const HISTORY_RESTORE_BUSY = Object.freeze({ status: 'busy', reason: 'Undo or Redo in progress. Retry after it finishes.' });
+// E1: a History step that switches the diagram mode; its changes name `ui.mode`.
+/** @param {unknown} changes */
+const historyStepSwitchesMode = (changes) => (Array.isArray(changes) ? changes : [])
+  .some((/** @type {{ path?: unknown[] }} */ { path } = {}) => path?.[0] === 'ui' && path[1] === 'mode');
 
 export const createAppSetup = () => {
   setUnmanagedConfigOverrideValidator((payload) => runDiagramHelperOperation(
@@ -1263,7 +1285,11 @@ export const createAppSetup = () => {
     fileStore: historyFileStore,
     collectCurrentFileIds: historySnapshots.collectCurrentFileIds,
     makeRef: ref,
-    mutationAvailability: sessionOperationAvailability
+    mutationAvailability: sessionOperationAvailability,
+    // An Undo or Redo of a mode switch waits as the mode buttons do (E1).
+    stepAvailability: (/** @type {{ changes?: unknown }} */ { changes }) => (
+      historyStepSwitchesMode(changes) ? diagramModeOperationBusy() : null
+    )
   }));
   const recordDisplayControls = createRecordDisplayControls({ state, computed, watch,
     linearRecordsFor: linearRecordSelector.recordsFor,
@@ -1451,17 +1477,6 @@ export const createAppSetup = () => {
   watch(selectedResultIndex, () => {
     featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
   });
-  const setDiagramMode = (nextMode) => {
-    if (!['circular', 'linear'].includes(nextMode) || nextMode === mode.value) return;
-    const busy = sessionOperationAvailability();
-    if (busy) return busy;
-    featureActions.suspendSpecificRulePatternDrafts();
-    return setMode(nextMode);
-  };
-  watch(mode, () => {
-    featureActions.suspendSpecificRulePatternDrafts();
-    featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
-  }, { flush: 'sync' });
   watch(svgContent, () => {
     similarityAlignmentPorts.refreshCanvas();
     if (!skipCaptureBaseConfig.value) {
@@ -2131,20 +2146,11 @@ export const createAppSetup = () => {
     },
     { deep: true, immediate: true }
   );
-  watch(
-    () => [canShowDepthTrack.value, form.show_depth],
-    ([available, showDepth]) => {
-      if (!available && showDepth) form.show_depth = false;
-    },
-    { immediate: true }
-  );
-  watch(mode, (nextMode, previousMode) => {
-    if (nextMode === previousMode) return;
-    if (state.semanticFileWatchersSuppressed.value) return;
-    state.modeProfileStateManager.transition(adv, previousMode, nextMode);
-    matchSequenceRegistry?.reset?.();
-    clickedPairwiseMatch.value = null;
-  });
+  // Show Depth is off where the shown mode has no Depth source.
+  const repairShowDepth = () => {
+    if (!canShowDepthTrack.value && form.show_depth) form.show_depth = false;
+  };
+  watch(() => [canShowDepthTrack.value, form.show_depth], repairShowDepth, { immediate: true });
   const isCircularConservationUploadSource = () => (
     String(circularConservation.source || '').trim().toLowerCase() === 'upload'
   );
@@ -2424,6 +2430,20 @@ export const createAppSetup = () => {
     || context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
     || (!context.bindingOptions.isIncrementalEdit && context.sourceClass !== 'legacy-import')
   );
+  // E1: each mode's generated artifact. The displayed mode's artifact is the
+  // installed state; the other mode's waits here, by reference, until the mode
+  // transition installs it. Only the transition and Session Load (with its
+  // rollback) write it.
+  /** @type {Record<'circular' | 'linear', Readonly<ArtifactSlot> | null>} */
+  const artifactSlots = { circular: null, linear: null };
+  // The Results of both modes. The per-Result caches (Legend inventories,
+  // retired Legend entries, projected editor state) keep a stashed Result's
+  // entries while the other mode is shown.
+  const liveResultIdentities = () => [
+    ...results.value,
+    ...(artifactSlots.circular?.values.results || []),
+    ...(artifactSlots.linear?.values.results || [])
+  ].map(previewRuntime.getResultIdentity);
   previewRuntime.configureMountedResultBinder({
     async adoptLegend(context) {
       // OV-47: each Result has its own default Legend order. A Result being
@@ -2431,11 +2451,26 @@ export const createAppSetup = () => {
       // its own inventory, so a Generate or rerender made while another Result
       // was displayed does not replace it.
       const selecting = context.phase === 'result-selection' && !context.bindingOptions.trustedRestore;
-      const liveResultIdentities = results.value.map(previewRuntime.getResultIdentity);
-      if (selecting) {
+      // E1: a Result shown by a mode switch, or opened by Session Load on the
+      // mode of the Session's other Result set, rebuilds its Legend rows from
+      // its own rows and the shared Legend edits before its editor intent is
+      // projected, so the projection never reads the other mode's rows.
+      const modeSwitch = selecting || context.phase === 'session-load' ? context.bindingOptions.modeSwitch : null;
+      if (modeSwitch) {
+        if (!selecting) rememberCommittedEditorState(context);
         const resultLegendOrder = legendActions.captureResultInventory(context.root, {
           resultIdentity: context.resultIdentity,
-          liveResultIdentities
+          liveResultIdentities: liveResultIdentities()
+        });
+        const arrival = legendActions.adoptArrivingResultRows(context.root, {
+          ownRows: modeSwitch.legendRows, inventory: resultLegendOrder, resultIdentity: context.resultIdentity
+        });
+        legendActions.adoptResultInventory(context.resultIdentity);
+        await projectEditorIntentOnDisplay(context, resultLegendOrder, arrival);
+      } else if (selecting) {
+        const resultLegendOrder = legendActions.captureResultInventory(context.root, {
+          resultIdentity: context.resultIdentity,
+          liveResultIdentities: liveResultIdentities()
         });
         await projectEditorIntentOnDisplay(context, resultLegendOrder);
         legendActions.adoptResultInventory(context.resultIdentity);
@@ -2457,10 +2492,13 @@ export const createAppSetup = () => {
         phase: context.phase,
         rootGeneration: context.rootGeneration
       });
+      // A draw that replays an edited Legend order replays it on the displayed
+      // mode's Results only.
       legendActions.extractLegendEntries({
         replaceGeneratedInventory: !selecting && (!context.bindingOptions.isIncrementalEdit
           || Boolean(context.bindingOptions.replaceGeneratedLegend)),
-        liveResultIdentities
+        liveResultIdentities: results.value.map(previewRuntime.getResultIdentity),
+        byCaption: Boolean(modeSwitch)
       });
     },
     bindComposition(context) {
@@ -2550,6 +2588,8 @@ export const createAppSetup = () => {
     assertActiveModeInputs,
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
+    // E1 (OV-80): the Legend inventory of the other mode's Result.
+    readOtherModeLegendInventory: () => artifactSlots[mode.value === 'linear' ? 'circular' : 'linear']?.legendInventory || [],
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts,
     getCommittedCanonicalSession,
@@ -2664,14 +2704,18 @@ export const createAppSetup = () => {
       ...captureGeneratedArtifactRuntimeState(),
       canonical: canonicalRenderArtifactOwner.capture()
     }),
+    // `null` is an empty mode slot (E1): no committed Session, no CLI helper files.
     restore: (snapshot, options) => {
-      canonicalRenderArtifactOwner.restore(snapshot.canonical);
-      return restoreGeneratedArtifactRuntimeState(snapshot, options);
+      canonicalRenderArtifactOwner.restore(snapshot?.canonical ?? null);
+      return restoreGeneratedArtifactRuntimeState(snapshot ?? {}, options);
     }
   });
   const resultsManager = createResultsManager({ state });
 
-  const { waitForAuxiliaryFileImport, auxiliaryFileImportPending, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure } = setupWatchers({
+  const {
+    waitForAuxiliaryFileImport, auxiliaryFileImportPending, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure,
+    resetModeTransientUi
+  } = setupWatchers({
     state,
     rulePreparation,
     ref, computed, watch,
@@ -2717,7 +2761,10 @@ export const createAppSetup = () => {
       await afterPaint();
       recordSessionLifecycleEvent('session-import-paint-opportunity-completed');
     },
-    beforePreviewMount: ({ results: importedResults, resultIndex }) => {
+    installLoadedArtifactSlots: (/** @type {LoadedArtifactSlots} */ slots) => installLoadedArtifactSlots(slots),
+    beforePreviewMount: (/** @type {{ results: any[], resultIndex: number, opensOtherSet: boolean }} */ {
+      results: importedResults, resultIndex, opensOtherSet
+    }) => {
       const selectedResult = importedResults[resultIndex] || null;
       if (!selectedResult) return null;
       const token = `session-load:${nextSessionPreviewToken++}`;
@@ -2728,7 +2775,11 @@ export const createAppSetup = () => {
         generationToken: token,
         catalogState: state.featureCatalog?.value || null,
         phase: 'session-load',
-        bindingOptions: { isIncrementalEdit: true },
+        // E1: a Session opened on its other set's mode shows that Result with
+        // Legend rows rebuilt from its own inventory and the saved Legend edits.
+        bindingOptions: opensOtherSet
+          ? { isIncrementalEdit: true, modeSwitch: Object.freeze({ legendRows: null }) }
+          : { isIncrementalEdit: true },
         isCurrent: () => (
           results.value[resultIndex] === selectedResult
           && Number(selectedResultIndex.value) === resultIndex
@@ -2736,6 +2787,12 @@ export const createAppSetup = () => {
       }));
     },
     rollbackState: createSessionImportRollbackState({
+      artifactSlots,
+      captureDisplayedArtifact: historySnapshots.captureArtifactSlot,
+      // The rollback restored the pan already; the install keeps it.
+      installDisplayedArtifact: (slot) => historySnapshots.installArtifactSlot(slot, {
+        mode: slot.mode, ui: { canvasPan: { x: canvasPan.x, y: canvasPan.y } }
+      }),
       depthTrackUiCounts,
       depthTracks: adv.depth_tracks,
       featureListScrollTop,
@@ -2746,6 +2803,14 @@ export const createAppSetup = () => {
     }),
     afterImport: async (result) => {
       if (result?.status === 'ok' || result?.status === 'legacy') {
+        historySnapshots.clearGeneratedArtifactIdentity({
+          retainedBytes: result?.status === 'ok'
+            ? Number(result.decompressedCharacters || 0) * 2
+            : 0
+        });
+        // A replaced document resets transient UI: the selection named features
+        // of the previous Session.
+        featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
         await nextTick();
         recordSessionLifecycleEvent('history-baseline-start');
         if (!await history.initializeIntentBaseline('Loaded session', { isCurrent: result.isCurrent })) {
@@ -2754,11 +2819,6 @@ export const createAppSetup = () => {
         featureActions.clearSpecificRulePatternDrafts();
         annotationImportNotice.value = '';
         specificRuleNotice.value = '';
-        historySnapshots.clearGeneratedArtifactIdentity({
-          retainedBytes: result?.status === 'ok'
-            ? Number(result.decompressedCharacters || 0) * 2
-            : 0
-        });
         recordSessionLifecycleEvent('history-baseline-end');
         if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = false;
       }
@@ -2893,6 +2953,9 @@ export const createAppSetup = () => {
 
   historySnapshots.setAfterApplyHistoryIntent(async (_intent, /** @type {{ domains?: Set<string>, changes?: Record<string, any>, direction?: string }} */ { domains, changes, direction } = {}) => {
     if (!svgContainer.value?.querySelector?.('svg')) return;
+    // E1: a step that switched the mode showed that mode's own Result through
+    // the transition, which projects the editor intent onto it on display.
+    if (historyStepSwitchesMode(changes)) return;
     const changedDomains = domains instanceof Set ? domains : new Set();
     // B17: restore the offsets of each Result whose composition this step changed.
     const compositionResults = new Set();
@@ -2977,15 +3040,46 @@ export const createAppSetup = () => {
   const sameColors = (left, right) => left[0] === right[0] && left[1] === right[1];
   const rememberCommittedEditorState = (context) => {
     const current = currentEditorProjectionState();
-    const identities = new Set(results.value.map(previewRuntime.getResultIdentity).filter(Boolean));
+    const identities = new Set(liveResultIdentities().filter(Boolean));
     identities.forEach((identity) => {
       if (!projectedEditorStateByResult.has(identity)) projectedEditorStateByResult.set(identity, current);
     });
     [...projectedEditorStateByResult.keys()].forEach((identity) => {
       if (!identities.has(identity)) projectedEditorStateByResult.delete(identity);
     });
+    [...departedResultIntent.keys()].forEach((identity) => {
+      if (!identities.has(identity)) departedResultIntent.delete(identity);
+    });
     lastBoundResultIdentity = context.resultIdentity;
   };
+  // E1: the Result shown until a mode switch followed every live edit. When
+  // it is shown again with the same editor intent, nothing is projected and
+  // its bytes stay; otherwise the edits made since are projected onto it.
+  /** @type {Map<string, string>} */
+  const departedResultIntent = new Map();
+  const displayedIntentSignature = () => JSON.stringify([
+    currentEditorProjectionState(),
+    featureStrokeOverrides,
+    legendStrokeOverrides,
+    deletedLegendEntries.value.map((entry) => entry.originalCaption || entry.caption),
+    [...(addedLegendCaptions.value || [])],
+    legendEntries.value.filter((entry) => entry.caption !== entry.originalCaption)
+      .map((entry) => [entry.originalCaption, entry.caption]),
+    // The direct additions, which no Result's inventory lists.
+    legendEntries.value.filter((entry) => !originalLegendOrder.value.includes(entry.originalCaption || entry.caption))
+      .map((entry) => entry.caption)
+  ]);
+  const rememberDepartingResultProjection = () => {
+    if (lastBoundResultIdentity && projectedEditorStateByResult.has(lastBoundResultIdentity)) {
+      projectedEditorStateByResult.set(lastBoundResultIdentity, currentEditorProjectionState());
+      departedResultIntent.set(lastBoundResultIdentity, displayedIntentSignature());
+    }
+    lastBoundResultIdentity = '';
+  };
+  /**
+   * @param {number} resultIndex
+   * @param {{ replayDefaultLegendOrder?: string[] | null }} [options]
+   */
   const compileDisplayedResultOperations = (resultIndex, { replayDefaultLegendOrder = null } = {}) => {
     const catalog = toRaw(state.featureCatalog.value);
     if (!catalog) return null;
@@ -3011,10 +3105,28 @@ export const createAppSetup = () => {
   ]);
   // D-07 (PD-OI-062): a batch Result shows the canonical color, visibility,
   // Legend, and label edits when it is displayed. Labels follow in the
-  // binder's label step.
-  const projectEditorIntentOnDisplay = async (context, resultLegendOrder) => {
+  // binder's label step. `arrival` (E1): a Result shown by a mode switch whose
+  // rebuilt rows removed an entry from it or list another order than it shows.
+  /**
+   * @param {any} context
+   * @param {string[]} resultLegendOrder
+   * @param {{ legendChanged: boolean, reorder: boolean } | null} [arrival]
+   */
+  const projectEditorIntentOnDisplay = async (context, resultLegendOrder, arrival = null) => {
     const identity = context.resultIdentity;
     const current = currentEditorProjectionState();
+    const departedIntent = departedResultIntent.get(identity);
+    departedResultIntent.delete(identity);
+    if (!arrival?.legendChanged && !arrival?.reorder
+      && departedIntent !== undefined && departedIntent === displayedIntentSignature()) {
+      lastBoundResultIdentity = identity;
+      labelProjectionResultIdentity = '';
+      recordStructuralMetric('displayedResultEditorProjectionCount', 0, {
+        phase: context.phase,
+        rootGeneration: context.rootGeneration
+      });
+      return;
+    }
     // The Result shown until now followed every live edit.
     if (lastBoundResultIdentity && lastBoundResultIdentity !== identity
       && projectedEditorStateByResult.has(lastBoundResultIdentity)) {
@@ -3027,7 +3139,8 @@ export const createAppSetup = () => {
     labelProjectionResultIdentity = previous.labels !== current.labels ? identity : '';
     // B20: a Result last shown with another Legend order receives the current
     // order, also the default order, which is its own generated order (OV-47).
-    const replayDefaultLegendOrder = previous.legendOrder !== current.legendOrder ? resultLegendOrder : null;
+    const replayDefaultLegendOrder = arrival?.reorder || previous.legendOrder !== current.legendOrder
+      ? resultLegendOrder : null;
     /** @type {ReturnType<typeof compileDisplayedResultOperations>} */
     let operations = null;
     try {
@@ -3039,11 +3152,11 @@ export const createAppSetup = () => {
       && DISPLAY_PROJECTED_DOMAINS.some((domain) => operations[domain].length > 0);
     const legend = {
       resultIdentity: identity,
-      liveResultIdentities: results.value.map(previewRuntime.getResultIdentity),
+      liveResultIdentities: liveResultIdentities(),
       deletedCaptions: (operations?.legendDeletes || []).map(({ caption }) => caption)
     };
     const restoresLegend = legendActions.hasRetiredResultLegend(legend);
-    const projects = colors || visibility || hasOperations || restoresLegend;
+    const projects = colors || visibility || hasOperations || restoresLegend || Boolean(arrival?.legendChanged);
     recordStructuralMetric('displayedResultEditorProjectionCount', projects ? 1 : 0, {
       phase: context.phase,
       rootGeneration: context.rootGeneration
@@ -3051,7 +3164,8 @@ export const createAppSetup = () => {
     if (!projects) return;
     try {
       await projectMountedEditorIntent({ colors, visibility });
-      const legendChanged = legendActions.prepareDisplayedResultLegend(context.root, legend);
+      const legendChanged = legendActions.prepareDisplayedResultLegend(context.root, legend)
+        || Boolean(arrival?.legendChanged);
       previewRuntime.applyEditorOperations(hasOperations ? operations : null, {
         afterApply: (root) => { if (legendChanged) legendActions.compactLegendEntries(root); }
       });
@@ -3059,6 +3173,140 @@ export const createAppSetup = () => {
     } catch (error) {
       console.error('Editor edits could not be shown on the displayed Result.', normalizeUserFacingError(error));
     }
+  };
+
+  // E1: shows `nextMode`'s artifact. Keeps the displayed one in its mode's
+  // slot and installs the arriving slot, or an empty one. The Legend owner
+  // keeps each Result's inventory (OV-47): the arriving Result's goes to it,
+  // and the binder adopts it when the Result is displayed, as for a batch
+  // Result.
+  /** @param {Readonly<ArtifactSlot>} slot An installed slot. */
+  const rememberShownResultInventory = (slot) => {
+    const shown = results.value[Number(selectedResultIndex.value) || 0];
+    if (shown) legendActions.rememberResultInventory(previewRuntime.getResultIdentity(shown), [...slot.legendInventory]);
+  };
+  /**
+   * @param {'circular' | 'linear'} nextMode
+   * @returns {Readonly<ArtifactSlot> | null} The installed slot (null: the mode has no artifact yet).
+   */
+  const swapArtifactSlots = (nextMode) => {
+    previewRuntime.clearActiveRuntime();
+    const departing = historySnapshots.captureArtifactSlot();
+    artifactSlots[departing.mode] = departing;
+    const arriving = artifactSlots[nextMode];
+    historySnapshots.installArtifactSlot(arriving, { mode: nextMode });
+    artifactSlots[nextMode] = null;
+    if (arriving) rememberShownResultInventory(arriving);
+    return arriving;
+  };
+  // The arriving Result is shown as a selection; its Legend rows are rebuilt
+  // from the rows it was last shown with (E1).
+  /** @param {Readonly<ArtifactSlot> | null} arriving */
+  const presentArrivingResult = (arriving) => previewRuntime.presentSelectedResult(arriving && results.value.length > 0
+    ? { modeSwitch: Object.freeze({ legendRows: arriving.legendRows }) }
+    : {});
+  // The specific color rules each mode's Result was last shown with. A rule
+  // edit made while the other mode was shown may change the Legend rows this
+  // Result draws (a Legend rename of a feature row is a rule): once it is shown
+  // again, it asks for the automatic rerender, as an Undo of a rule edit does
+  // (OV-43). The rows Python draws then equal its next Generate's.
+  /** @type {Record<'circular' | 'linear', Record<string, any>[] | null>} */
+  const rulesShownWith = { circular: null, linear: null };
+  /**
+   * @param {'circular' | 'linear'} arrivingMode
+   * @param {{ promise: Promise<unknown> } | null} expectation The arriving Result's readiness.
+   */
+  const followRulesOnArrival = (arrivingMode, expectation) => {
+    const rules = rulesShownWith[arrivingMode];
+    rulesShownWith[arrivingMode] = null;
+    if (!rules || !expectation) return;
+    expectation.promise.then(() => {
+      if (mode.value === arrivingMode) specificRuleRestorePorts.followRestoredSpecificRules(rules);
+    }, () => {});
+  };
+
+  // E1 (R10, R13): the one transition between the diagram modes, in one task
+  // so a switch is one History step. Undo and Redo of a switch run it through
+  // the History port; no watcher writes state on a mode change. Callers check
+  // availability first (`setDiagramMode`); the History port calls it inside
+  // its own operation. Steps, each one call:
+  //   1. Settle the departing mode: pending rule-pattern work, the feature
+  //      selection, and the displayed Result's projection state (it followed
+  //      every live edit until now).
+  //   2. Swap the artifact slots (`swapArtifactSlots`).
+  //   3. Set `mode`.
+  //   4. Swap the settings profile (mode profiles).
+  //   5. Repair Show Depth for the arriving mode.
+  //   6. Reset the departing mode's transient UI.
+  //   7. Show the arriving Result as a selection; it asks for the automatic
+  //      rerender when the rule table changed since it was last shown.
+  /**
+   * @param {'circular' | 'linear'} nextMode
+   * @returns {boolean} Whether the mode changed.
+   */
+  const transitionDiagramMode = (nextMode) => {
+    const previousMode = mode.value;
+    if (nextMode === previousMode) return false;
+    // 1. Settle the departing mode.
+    featureActions.suspendSpecificRulePatternDrafts();
+    featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
+    rememberDepartingResultProjection();
+    rulesShownWith[previousMode] = results.value.length > 0 ? manualSpecificRules.map((rule) => ({ ...rule })) : null;
+    // 2. Artifact slots.
+    const arriving = swapArtifactSlots(nextMode);
+    // 3. Mode.
+    mode.value = nextMode;
+    // 4. Settings profile.
+    state.modeProfileStateManager.transition(adv, previousMode, nextMode);
+    // 5. Show Depth.
+    repairShowDepth();
+    // 6. Transient UI. "Showing the last successful result" named the
+    // departing mode's Result.
+    resetModeTransientUi();
+    failedGeneratePreservedResult.value = false;
+    // 7. Presentation, then the rerender a changed rule table asks for.
+    followRulesOnArrival(nextMode, presentArrivingResult(arriving));
+    return true;
+  };
+  historySnapshots.registerModeTransition(transitionDiagramMode);
+  // The committed Session of a mode's artifact, shown or kept in its slot.
+  historySnapshots.registerModeCommittedSession((targetMode) => (
+    targetMode === mode.value
+      ? getCommittedCanonicalSession()
+      : artifactSlots[targetMode]?.runtimeState?.canonical?.committedCanonicalSession ?? null
+  ));
+  // A switch waits for Generate, a label rerender, Save and Load, so each
+  // Result lands in its own mode's slot (OIPC-C07): the mode buttons and an
+  // Undo or Redo of a switch read this one predicate. The buttons also wait
+  // for a History restore or open History transaction, so a restore finds the
+  // mode it was captured in.
+  const diagramModeOperationBusy = () => sessionOperationAvailability('history');
+  const diagramModeSwitchBusy = () => diagramModeOperationBusy()
+    || history.historyAvailability()
+    || (history.restoring.value || history.traversalPending() ? HISTORY_RESTORE_BUSY : null);
+  const diagramModeSwitchAvailable = computed(() => !diagramModeSwitchBusy());
+  /** @param {string} nextMode */
+  const setDiagramMode = (nextMode) => {
+    if ((nextMode !== 'circular' && nextMode !== 'linear') || nextMode === mode.value) return false;
+    const busy = diagramModeSwitchBusy();
+    if (busy) return busy;
+    transitionDiagramMode(nextMode);
+    return { status: 'ok' };
+  };
+  // Session Load (E1): the loaded Session's artifact slots, before its preview
+  // mounts. `opening` is the other Result set's slot when the Session opens on
+  // that set's mode; `stashed` waits in its mode. The stash starts again with
+  // the loaded Session.
+  /** @param {LoadedArtifactSlots} slots */
+  const installLoadedArtifactSlots = ({ opening, stashed }) => {
+    artifactSlots.circular = null;
+    artifactSlots.linear = null;
+    rulesShownWith.circular = null;
+    rulesShownWith.linear = null;
+    if (stashed) artifactSlots[stashed.mode] = stashed;
+    if (!opening) return;
+    historySnapshots.installArtifactSlot(opening, { mode: opening.mode });
+    rememberShownResultInventory(opening);
   };
 
   const { updatePalette, resetColors } = resultsManager;
@@ -3318,6 +3566,17 @@ export const createAppSetup = () => {
         }
       }
     });
+  };
+  // E1 (PD-OI-079): an error about another diagram mode's Result (Save of a
+  // legacy Result kept in that mode) offers Generate there: the action shows
+  // that mode first.
+  const generateFromError = () => {
+    const target = errorLog.value?.context?.diagramMode;
+    if ((target === 'circular' || target === 'linear') && target !== mode.value) {
+      const switched = setDiagramMode(target);
+      if (switched && switched.status === 'busy') return switched;
+    }
+    return runAnalysis();
   };
 
   const chooseImportedComparisonAction = (action) => history.runUndoable(
@@ -4133,6 +4392,8 @@ export const createAppSetup = () => {
   const saveSessionWithTitle = () => exportSession(null, {
     availability: sessionSaveLoadAvailability,
     recordDisplayRows: recordDisplayControls.allRows,
+    // Save writes every Result: the other mode's slot goes beside the shown one (E1).
+    readOtherModeArtifact: () => artifactSlots[mode.value === 'linear' ? 'circular' : 'linear'],
     resolveTitle: () => {
       let title = normalizeSessionTitle(sessionTitle.value);
       if (!title) {
@@ -4146,21 +4407,20 @@ export const createAppSetup = () => {
       }
       return title;
     },
-    beforeExport: async () => {
+    beforeExport: async (/** @type {{ draftRequest: boolean }} */ { draftRequest }) => {
       await nextTick();
       await afterPaint();
       recordSessionLifecycleEvent('session-save-paint-opportunity-completed');
       recordSessionLifecycleEvent('session-save-catalog-preparation-start');
-      const committedSession = getCommittedCanonicalSession();
       /** @type {Awaited<ReturnType<typeof prepareLinearRecordCatalog>>['catalog']} */
       let catalog = null;
       let error = '';
-      if (!committedSession) {
+      if (draftRequest) {
         ({ catalog, error } = await prepareLinearRecordCatalog({ privateCandidate: true }));
         await afterPaint();
       }
       recordSessionLifecycleEvent('session-save-catalog-preparation-end', {
-        reusedCommittedSession: Boolean(committedSession)
+        reusedCommittedSession: !draftRequest
       });
       if (error) throw error;
       return { linearRecordCatalog: catalog };
@@ -4624,12 +4884,6 @@ export const createAppSetup = () => {
     return true;
   };
 
-  const setMode = (value) => {
-    const busy = sessionOperationAvailability();
-    if (busy) return busy;
-    mode.value = value;
-    return { status: 'ok' };
-  };
   const setCircularInputType = (value) => {
     const busy = sessionOperationAvailability();
     if (busy) return busy;
@@ -4707,6 +4961,7 @@ export const createAppSetup = () => {
     canRetryInteractiveSvgExport,
     reloadAfterOperationError,
     setDiagramMode,
+    diagramModeSwitchAvailable,
     canRetrySpecificRuleFailure: featureActions.canRetrySpecificRuleFailure,
     canEditSpecificRuleFailure: featureActions.canEditSpecificRuleFailure,
     canRetryLabelImportFailure: featureActions.canRetryLabelImportFailure,
@@ -4753,7 +5008,6 @@ export const createAppSetup = () => {
     sidebarWidth,
     startResizing,
     mode,
-    setMode,
     setCircularInputType,
     cInputType,
     lInputType,
@@ -5389,6 +5643,7 @@ export const createAppSetup = () => {
     isDefinitionLineStyleMuted,
     downloadDpi,
     runAnalysis,
+    generateFromError,
     cancelGeneration,
     downloadSVG,
     downloadInteractiveSVG,

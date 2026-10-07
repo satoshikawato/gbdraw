@@ -301,7 +301,14 @@ test('the operation error panel offers Generate and no Save after a failed Save 
   const exportInput = normalizeUserFacingError({ code: 'EXPORT_INPUT' }, { operation: 'export-png' });
   assert.ok(exportInput.actions.includes('generate'));
   const indexHtml = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
-  assert.match(indexHtml, /errorDisplay\.actions\.includes\('generate'\) && errorDisplay\.operation !== 'generate'" type="button" @click="runAnalysis"/);
+  // E1: an error about the other mode's Result runs Generate in that mode.
+  assert.match(indexHtml, /errorDisplay\.actions\.includes\('generate'\) && errorDisplay\.operation !== 'generate'" type="button" @click="generateFromError"/);
+  const hiddenMode = normalizeUserFacingError(diagnosticError(
+    'SESSION_SAVE_REQUIRES_GENERATE', { diagramMode: 'linear' }, { operation: 'session-save', stage: 'result-admission' }
+  ));
+  assert.equal(hiddenMode.context.diagramMode, 'linear');
+  assert.match(hiddenMode.summary, / Diagram: Linear\.$/);
+  assert.deepEqual(hiddenMode.actions, ['generate']);
   assert.match(indexHtml, /errorDisplay\.actions\.includes\('save-session'\) && errorDisplay\.operation !== 'session-save'/);
   const saveFailure = normalizeUserFacingError(new Error('PRIVATE'), { operation: 'session-save' });
   assert.equal(saveFailure.code, 'UNKNOWN');

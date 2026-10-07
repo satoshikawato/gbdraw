@@ -33,6 +33,7 @@ const renderRequest = {
   }))
 };
 const state = () => ({
+  mode: ref('linear'),
   featureCatalog: ref({ items: [{
     recordKeys: ['a', 'b', 'c'],
     sequenceSources: [{ sequence: 'A'.repeat(300) }, { sequence: 'C'.repeat(300) },
@@ -727,6 +728,22 @@ test('missing saved reference blocks regeneration while preserving plan and Resu
   assert.equal(fixture.state.results.value, previous);
   assert.equal(fixture.state.similarityAlignmentPlan.value, plan);
   assert.equal(fixture.actions.repair.value.kind, 'reference');
+});
+
+// E1: the plan is Linear draft state; a Circular Generate does not draw it, so
+// a plan whose reference left the Circular Result's groups does not block it.
+test('a Circular Generate is not blocked by the Linear alignment plan', async () => {
+  const fixture = create();
+  await startReview(fixture);
+  await fixture.actions.applyDraft();
+  const plan = fixture.state.similarityAlignmentPlan.value;
+  fixture.currentGroup.members.splice(0, 1);
+  fixture.state.mode.value = 'circular';
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(), { status: 'ok' });
+  assert.equal(fixture.state.similarityAlignmentPlan.value, plan);
+  fixture.state.mode.value = 'linear';
+  assert.deepEqual(await fixture.actions.validateBeforeGenerate(),
+    { status: 'blocked', reason: 'stale-reference' });
 });
 
 test('a committed schema-2 plan regenerates after its transient groups leave the catalog', async () => {

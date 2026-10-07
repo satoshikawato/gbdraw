@@ -335,6 +335,31 @@ const canonicalRecordTranslations = (value, recordKeys, path, { requireCoverage 
   return translations;
 };
 
+// E1: the similarity alignment plan and record translations of a committed
+// Linear request, admitted with the rules the request projection applies;
+// Session Load takes them from the Linear Result set wherever it sits.
+/** @param {Record<string, any>} renderRequest */
+export const canonicalLinearRecordLayout = (renderRequest) => {
+  const layout = renderRequest?.layout || {};
+  if (renderRequest?.mode !== 'linear' || renderRequest.schema < 8 || Object.keys(layout).length === 0) {
+    return { similarityAlignment: null, recordTranslations: [] };
+  }
+  const recordKeys = (Array.isArray(renderRequest.records) ? renderRequest.records : [])
+    .map((/** @type {Record<string, any>} */ record, /** @type {number} */ index) => requireCanonicalText(
+      record?.recordKey, `renderRequest.records[${index}].recordKey`
+    ));
+  const similarityAlignment = canonicalSimilarityAlignment(
+    layout.similarityAlignment ?? null, recordKeys, 'renderRequest.layout.similarityAlignment'
+  );
+  return {
+    similarityAlignment,
+    recordTranslations: canonicalRecordTranslations(
+      layout.recordTranslations ?? [], recordKeys, 'renderRequest.layout.recordTranslations',
+      { requireCoverage: similarityAlignment !== null }
+    )
+  };
+};
+
 const canonicalRecordDisplay = (raw) => {
   if (!raw || Object.keys(raw).sort().join(',') !== 'isCircular,startCoordinate'
     || (raw.isCircular !== null && typeof raw.isCircular !== 'boolean')

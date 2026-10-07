@@ -1486,6 +1486,8 @@ export const createSimilarityAlignmentActions = ({
       repair.value = null;
       return { status: 'ok' };
     }
+    // The plan is Linear draft state: only a Linear request draws it.
+    if (state.mode.value !== 'linear') return { status: 'ok' };
     const group = getOrthogroupById(plan.groupId);
     if (!group) {
       // A saved Result can retain its exact plan after comparison groups have

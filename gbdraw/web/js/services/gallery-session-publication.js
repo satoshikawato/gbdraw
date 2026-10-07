@@ -47,6 +47,8 @@ const isCliWritten = (session) => !has(session, 'config') && session?.cliInvocat
 const validateEnvelope = (session) => {
   if (!isObject(session) || session.format !== 'gbdraw-session') throw new Error('Gallery publication requires a gbdraw-session document.'); if (Number(session.version) !== CURRENT_VERSION) throw new Error(`Gallery publication requires session version ${CURRENT_VERSION}.`);
   if (!isObject(session.renderRequest) || !ACCEPTED_REQUEST_SCHEMAS.has(Number(session.renderRequest.schema))) throw new Error(`Gallery publication requires canonical renderRequest schema ${CURRENT_REQUEST_SCHEMA}.`);
+  // A Gallery Session shows one diagram mode (E1: `otherModeResult` holds a second).
+  if (has(session, 'otherModeResult')) throw new Error('Gallery publication requires a Session with one diagram mode.');
   return session;
 };
 const validateCurrent = (session) => {

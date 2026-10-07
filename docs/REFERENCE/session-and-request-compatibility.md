@@ -49,15 +49,24 @@ target loads unchanged. A catalog of schema 3 or
 whose rendered ID carries its source hash was drawn with its source
 coordinates, so its source values serve until then.
 
+A Session 45 can also hold `otherModeResult`: the Result set of the diagram
+mode that the top-level set does not draw (Circular or Linear), written when
+both modes have a Result. Its `renderRequest`, `results`, `editorState`
+(`featureCatalog`, `alignmentResetReceipt`, and the Result's generated Legend
+order, colors, and stroke defaults), `ui`, `runMetadata`, and `cliInvocation`
+mirror the top-level fields; its request names resources in the top-level
+`resources` table. It needs a top-level request of the other mode and at least
+one Result, so a settings-only Session cannot hold it.
+
 Session versions 34–38 and request schemas 3–4 were development-only and are
 rejected. Do not change a version number, resource hash, or runtime binding by
 hand; changing metadata does not migrate its content.
 
 ## What a session preserves
 
-A current session embeds its input resources, normalized settings, last
-committed render request, generated result, and supported editor and comparison
-state. Replay does not depend on the original file path remaining valid.
+A current session embeds its input resources, normalized settings, the last
+committed render request and generated Result of each diagram mode, and
+supported editor and comparison state. Replay does not depend on the original file path remaining valid.
 Treat the session as sensitive when its embedded source data is sensitive.
 
 An embedded resource may declare `checksum`, the SHA-256 digest of its bytes as
@@ -76,9 +85,11 @@ accepted. The web app writes compressed sessions by default. The command line
 writes `<output>.gbdraw-session.json` by default. `--session_output` selects an
 explicit path and implies saving; a `.gz` suffix selects compression.
 
-The web app's **Save Session** writes the current committed result and editable
-state. **Load Session** restores saved values instead of applying fresh browser
-defaults. Generate when you want the Result to reflect changed controls; saving before
+The web app keeps one Result for each diagram mode. **Save Session** writes
+every Result and the editable state: the shown mode's Result at the top level
+when it has one, and the other mode's in `otherModeResult`. **Load Session**
+restores saved values instead of applying fresh browser defaults, and shows the
+saved mode when that mode has a Result, otherwise the mode that has one. Generate when you want the Result to reflect changed controls; saving before
 Generate deliberately preserves the newer draft alongside the earlier Result. Loading and regenerating should preserve biological identities, labels,
 record placement, comparison artifacts, and supported editor state; SVG bytes
 or text metrics can still differ across gbdraw versions.
@@ -246,17 +257,23 @@ is distinct from a malformed `format: "gbdraw-session", version: 41` envelope.
 
 ## Replay boundaries
 
-On the command line, replay a session with the same `circular` or `linear`
-subcommand that created it. Output prefix, format, session-output, and overwrite
-options may replace their saved counterparts. Other diagram options are
+On the command line, replay a session with the `circular` or `linear`
+subcommand of the Result to render: each renders its own mode's set, at the top
+level or in `otherModeResult`, and fails when the Session has no Result of that
+mode. Output prefix, format, session-output, and overwrite options may replace
+their saved counterparts. Other diagram options are
 rejected because they would combine persisted and new settings ambiguously.
 
-With `--session_output`, canonical CLI replay writes the regenerated Result and
-preserves the editable draft's component bytes, order and File metadata. A
-resource whose bytes are unchanged keeps its ID and file name; a resource whose
-bytes changed is stored under a new ID, and resources that nothing names any
-more are dropped. Explicit Web bindings, including null and empty lists, take
-precedence over historical direct-source lists.
+With `--save_session` or `--session_output`, canonical CLI replay writes the
+regenerated Result set at the top level, keeps the other mode's set in
+`otherModeResult` and the saved `ui.mode`, and preserves the editable draft's
+component bytes, order and File metadata. The Web writer instead puts the shown
+mode's set at the top level. The re-save also replaces the shared protein
+artifacts, as the [compatibility history](../SESSION_COMPATIBILITY.md) lists. A resource whose bytes are unchanged
+keeps its ID and file name; a resource whose bytes changed is stored under a new
+ID, and resources that nothing names any more are dropped. Explicit Web
+bindings, including null and empty lists, take precedence over historical
+direct-source lists.
 
 In Python, `render_session()` is the persisted-session entry point.
 `load_session_document()` validates a document, and `materialize_session()`

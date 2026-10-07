@@ -80,9 +80,32 @@ CURRENT_SESSION_TOP_LEVEL_FIELDS = frozenset(
         "proteinIdentityManifest",
         "legacyArtifacts",
         "runMetadata",
+        "otherModeResult",
         "cliInvocation",
     }
 )
+# Session 45 keeps the other diagram mode's Result set in ``otherModeResult``:
+# the fields of one committed set, named as at the top level.
+OTHER_MODE_RESULT_FIELDS = frozenset(
+    {"renderRequest", "results", "editorState", "ui", "runMetadata", "cliInvocation"}
+)
+# The per-set part of the shared ``ui`` and ``editorState`` objects.
+OTHER_MODE_RESULT_UI_FIELDS = frozenset(
+    {
+        "selectedResultIndex",
+        "generatedLegendPosition",
+        "generatedMultiRecordCanvas",
+        "generatedCircularPlotTitlePosition",
+        "appliedPaletteName",
+        "appliedPaletteColors",
+    }
+)
+OTHER_MODE_RESULT_EDITOR_FIELDS = frozenset(
+    {"featureCatalog", "alignmentResetReceipt", "legend", "originalSvgStroke"}
+)
+OTHER_MODE_RESULT_LEGEND_FIELDS = frozenset({"originalOrder", "originalColors"})
+# The Web reader names an unusable ``otherModeResult`` as a Session field error.
+_OTHER_MODE_RESULT_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = frozenset(
     {
         "extractedFeatures",
@@ -589,6 +612,10 @@ def validate_session(session: Mapping[str, Any]) -> None:
         )
     if version not in SUPPORTED_SESSION_VERSIONS:
         raise ValidationError(f"Unsupported session version: {version}.")
+    if "otherModeResult" in session and version < CURRENT_SESSION_VERSION:
+        raise ValidationError(
+            f"Session version {version} cannot contain otherModeResult.", diagnostic=_OTHER_MODE_RESULT_INVALID
+        )
     if version >= CANONICAL_SESSION_MIN_VERSION:
         render_request = session.get("renderRequest")
         resources = session.get("resources")
@@ -627,10 +654,12 @@ def validate_session(session: Mapping[str, Any]) -> None:
     if version >= CURRENT_ARTIFACT_SESSION_MIN_VERSION:
         validate_current_session_artifacts(session)
     if version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
+        _validate_current_top_level_fields(session)
         _validate_current_retired_active_config_paths(session)
         _validate_current_comparison_authority(session)
         _validate_current_feature_catalog_authority(session, version)
         _validate_alignment_reset_receipt(session)
+        _validate_other_mode_result(session, version)
     if version >= 41:
         _validate_display_placement_drafts(session, version)
     if version >= CURRENT_SESSION_VERSION:
@@ -1216,14 +1245,7 @@ def _validate_alignment_reset_receipt(session: Mapping[str, Any]) -> None:
         raise ValidationError("Alignment reset receipt source or plan binding changed.")
 
 
-def _validate_current_feature_catalog_authority(
-    session: Mapping[str, Any],
-    version: int,
-) -> None:
-    """Require the version-owned catalog and reject duplicated payloads."""
-
-    catalog_schema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION.get(version, 3)
-
+def _validate_current_top_level_fields(session: Mapping[str, Any]) -> None:
     unknown_fields = sorted(
         str(field)
         for field in session
@@ -1235,6 +1257,197 @@ def _validate_current_feature_catalog_authority(
             + ", ".join(unknown_fields)
             + "."
         )
+
+
+def other_mode_result_view(session: Mapping[str, Any]) -> dict[str, Any]:
+    """The Session as its ``otherModeResult`` set would be at the top level."""
+    other = session.get("otherModeResult")
+    if not isinstance(other, Mapping):
+        raise ValidationError("Session has no otherModeResult.", diagnostic=_OTHER_MODE_RESULT_INVALID)
+    return {**session, **other}
+
+
+def _validate_other_mode_result(session: Mapping[str, Any], version: int) -> None:
+    """Admit the other diagram mode's committed Result set (Session 45)."""
+    if "otherModeResult" not in session:
+        return
+    other = session["otherModeResult"]
+    if not isinstance(other, Mapping) or set(other) - OTHER_MODE_RESULT_FIELDS:
+        raise ValidationError("Session otherModeResult must contain only a committed Result set.", diagnostic=_OTHER_MODE_RESULT_INVALID)
+    top_request = session.get("renderRequest")
+    request = other.get("renderRequest")
+    if (
+        not isinstance(top_request, Mapping)
+        or not isinstance(request, Mapping)
+        or request.get("mode") not in ("circular", "linear")
+        or request.get("mode") == top_request.get("mode")
+        or request.get("schema") != top_request.get("schema")
+    ):
+        raise ValidationError("Session otherModeResult requires a committed request of the other mode.", diagnostic=_OTHER_MODE_RESULT_INVALID)
+    view = other_mode_result_view(session)
+    _validate_current_feature_catalog_authority(view, version)
+    if not other.get("results"):
+        raise ValidationError("Session otherModeResult requires a Result.", diagnostic=_OTHER_MODE_RESULT_INVALID)
+    _validate_alignment_reset_receipt(view)
+    from .session_resources import canonical_resource_ids
+
+    missing = sorted(canonical_resource_ids(request) - set(session.get("resources") or {}))
+    if missing:
+        raise ValidationError(
+            "Session otherModeResult names missing resource(s): " + ", ".join(missing) + ".",
+            diagnostic=_OTHER_MODE_RESULT_INVALID,
+        )
+    editor = other.get("editorState")
+    legend = editor.get("legend", {}) if isinstance(editor, Mapping) else None
+    ui = other.get("ui", {})
+    _validate_other_mode_run_metadata(other.get("runMetadata", {}), other["results"])
+    if (
+        not isinstance(editor, Mapping)
+        or set(editor) - OTHER_MODE_RESULT_EDITOR_FIELDS
+        or not isinstance(legend, Mapping)
+        or set(legend) - OTHER_MODE_RESULT_LEGEND_FIELDS
+        or not isinstance(ui, Mapping)
+        or set(ui) - OTHER_MODE_RESULT_UI_FIELDS
+    ):
+        raise ValidationError("Session otherModeResult editorState and ui hold only that Result set's fields.", diagnostic=_OTHER_MODE_RESULT_INVALID)
+
+
+_ANNOTATION_WARNING_FIELDS = frozenset(
+    {"code", "setId", "annotationId", "recordId", "recordIndex", "missingCount", "message", "resultIndex", "resultName"}
+)
+_ANNOTATION_WARNING_CODES = frozenset(
+    {"feature_selector_unmatched", "empty_span", "out_of_bounds_skipped", "out_of_bounds_clipped"}
+)
+_COMPARISON_WARNING_FIELDS = frozenset(
+    {
+        "code", "queryRecordIndex", "subjectRecordIndex", "queryRecordId", "subjectRecordId",
+        "rowCount", "exampleIds", "message", "resultIndex", "resultName",
+    }
+)
+_FEATURE_IDENTITY_NOTICE_FIELDS = frozenset({"biologicalFeatureId", "kinds", "recordKey", "resultIndex", "status"})
+_FEATURE_IDENTITY_NOTICE_STATUSES = frozenset({"crop_excluded", "absent", "unresolved"})
+_FEATURE_IDENTITY_NOTICE_KINDS = frozenset({"placement", "feature_visibility", "label_visibility", "label_text"})
+OTHER_MODE_RESULT_RUN_METADATA_FIELDS = frozenset(
+    {"trackSlotGeometry", "annotationWarnings", "featureIdentityNotices", "comparisonWarnings"}
+)
+
+
+def _index(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _validate_other_mode_run_metadata(run_metadata: Any, results: list[Any]) -> None:
+    """The other set's ``runMetadata``, checked as the Web reader checks it."""
+    if not isinstance(run_metadata, Mapping) or set(run_metadata) - OTHER_MODE_RESULT_RUN_METADATA_FIELDS:
+        raise ValidationError("Session otherModeResult.runMetadata holds only that Result set's metadata.", diagnostic=_OTHER_MODE_RESULT_INVALID)
+    for key in ("annotationWarnings", "comparisonWarnings", "featureIdentityNotices"):
+        if key in run_metadata and not isinstance(run_metadata[key], list):
+            raise ValidationError(f"Session otherModeResult.runMetadata.{key} must be an array.", diagnostic=_OTHER_MODE_RESULT_INVALID)
+
+    def result_named(index: Any, name: Any) -> bool:
+        return (
+            _index(index) and index < len(results) and isinstance(results[index], Mapping)
+            and results[index].get("name") == name
+        )
+
+    for warning in run_metadata.get("annotationWarnings", []):
+        if (
+            not isinstance(warning, Mapping) or set(warning) != _ANNOTATION_WARNING_FIELDS
+            or warning["code"] not in _ANNOTATION_WARNING_CODES
+            or not all(isinstance(warning[key], str) for key in ("setId", "annotationId", "recordId", "message", "resultName"))
+            or not warning["setId"] or not warning["annotationId"]
+            or not all(_index(warning[key]) for key in ("recordIndex", "missingCount", "resultIndex"))
+            or (warning["code"] == "feature_selector_unmatched") != (warning["missingCount"] > 0)
+            or not result_named(warning["resultIndex"], warning["resultName"])
+        ):
+            raise ValidationError("Annotation warnings do not match the successful Result metadata schema.", diagnostic=_OTHER_MODE_RESULT_INVALID)
+    for warning in run_metadata.get("comparisonWarnings", []):
+        if (
+            not isinstance(warning, Mapping) or set(warning) != _COMPARISON_WARNING_FIELDS
+            or warning["code"] != "comparison_record_id_unmatched"
+            or not all(isinstance(warning[key], str) for key in ("queryRecordId", "subjectRecordId", "message", "resultName"))
+            or not warning["message"]
+            or not isinstance(warning["exampleIds"], list)
+            or not all(isinstance(item, str) for item in warning["exampleIds"])
+            or not all(_index(warning[key]) for key in ("queryRecordIndex", "subjectRecordIndex", "resultIndex"))
+            or not _index(warning["rowCount"]) or warning["rowCount"] < 1
+            or not result_named(warning["resultIndex"], warning["resultName"])
+        ):
+            raise ValidationError("Comparison warnings do not match the successful Result metadata schema.", diagnostic=_OTHER_MODE_RESULT_INVALID)
+    for notice in run_metadata.get("featureIdentityNotices", []):
+        if (
+            not isinstance(notice, Mapping) or set(notice) != _FEATURE_IDENTITY_NOTICE_FIELDS
+            or not isinstance(notice["recordKey"], str) or not notice["recordKey"]
+            or not isinstance(notice["biologicalFeatureId"], str) or not notice["biologicalFeatureId"]
+            or notice["status"] not in _FEATURE_IDENTITY_NOTICE_STATUSES
+            or not isinstance(notice["kinds"], list) or not notice["kinds"]
+            or not all(kind in _FEATURE_IDENTITY_NOTICE_KINDS for kind in notice["kinds"])
+            or not _index(notice["resultIndex"]) or notice["resultIndex"] >= len(results)
+        ):
+            raise ValidationError("runMetadata.featureIdentityNotices contains an invalid notice.", diagnostic=_OTHER_MODE_RESULT_INVALID)
+
+
+def session_with_other_mode_result_at_top(session: Mapping[str, Any]) -> dict[str, Any]:
+    """The same Session with its two Result sets swapped (Session 45).
+
+    The ``otherModeResult`` set moves to the top level and the top-level set
+    moves into ``otherModeResult``; the shared draft, Legend edits, ``ui``
+    preferences and caches stay where they are. A per-set field that the moved
+    set lacks is absent at the top level, so a reader takes its default; it is
+    never the other set's value.
+    """
+    other = session.get("otherModeResult")
+    if not isinstance(other, Mapping):
+        raise ValidationError("Session has no otherModeResult.", diagnostic=_OTHER_MODE_RESULT_INVALID)
+
+    def mapping(value: Any) -> Mapping[str, Any]:
+        return value if isinstance(value, Mapping) else {}
+
+    set_fields = ("renderRequest", "results", "runMetadata", "cliInvocation")
+    editor_fields = OTHER_MODE_RESULT_EDITOR_FIELDS - {"legend"}
+    top_editor = mapping(session.get("editorState"))
+    top_legend = mapping(top_editor.get("legend"))
+    top_ui = mapping(session.get("ui"))
+    other_editor = mapping(other.get("editorState"))
+    other_legend = mapping(other_editor.get("legend"))
+    other_ui = mapping(other.get("ui"))
+
+    def per_set(source: Mapping[str, Any], fields: frozenset[str] | set[str]) -> dict[str, Any]:
+        return {key: source[key] for key in fields if key in source}
+
+    def shared(source: Mapping[str, Any], fields: frozenset[str] | set[str]) -> dict[str, Any]:
+        return {key: value for key, value in source.items() if key not in fields}
+
+    moved_top: dict[str, Any] = per_set(session, set(set_fields))
+    moved_top["editorState"] = {
+        **per_set(top_editor, editor_fields),
+        "legend": per_set(top_legend, OTHER_MODE_RESULT_LEGEND_FIELDS),
+    }
+    moved_top["ui"] = per_set(top_ui, OTHER_MODE_RESULT_UI_FIELDS)
+    swapped = shared(session, {*set_fields, "otherModeResult"})
+    swapped.update(per_set(other, set(set_fields)))
+    swapped["editorState"] = {
+        **shared(top_editor, OTHER_MODE_RESULT_EDITOR_FIELDS),
+        **per_set(other_editor, editor_fields),
+        "legend": {
+            **shared(top_legend, OTHER_MODE_RESULT_LEGEND_FIELDS),
+            **per_set(other_legend, OTHER_MODE_RESULT_LEGEND_FIELDS),
+        },
+    }
+    swapped["ui"] = {**shared(top_ui, OTHER_MODE_RESULT_UI_FIELDS), **per_set(other_ui, OTHER_MODE_RESULT_UI_FIELDS)}
+    # The field holds a set only when it has a Result.
+    if moved_top.get("results"):
+        swapped["otherModeResult"] = moved_top
+    return swapped
+
+
+def _validate_current_feature_catalog_authority(
+    session: Mapping[str, Any],
+    version: int,
+) -> None:
+    """Require the version-owned catalog and reject duplicated payloads."""
+
+    catalog_schema = FEATURE_CATALOG_SCHEMA_BY_SESSION_VERSION.get(version, 3)
 
     features = session.get("features")
     if isinstance(features, Mapping):
