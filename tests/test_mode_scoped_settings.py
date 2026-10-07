@@ -234,7 +234,8 @@ def test_split_gives_the_saved_results_mode_the_legend_and_feature_edits() -> No
     assert circular["features"]["labelTextBulkOverrides"] == {"a": "b"}
     assert linear["editorState"] == {"legend": {"entries": [{"caption": "CDS"}]}, "featureStrokes": {"overrides": {}}}
     assert "editorState" not in circular
-    assert result["editorState"] == {"legend": {"originalOrder": ["CDS"]}, "originalSvgStroke": {"color": "gray", "width": 1}}
+    # The original SVG stroke is read as Web Load reads it: a color name as hex (OV-160).
+    assert result["editorState"] == {"legend": {"originalOrder": ["CDS"]}, "originalSvgStroke": {"color": "#808080", "width": 1}}
     assert circular["ui"]["canvasPadding"] == linear["ui"]["canvasPadding"] == {"top": 1}
     assert "canvasPadding" not in result["ui"]
     assert "features" not in result
