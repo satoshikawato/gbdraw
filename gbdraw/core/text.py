@@ -4,6 +4,7 @@
 import functools
 import logging
 import os
+import re
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET
@@ -456,6 +457,21 @@ def _resolve_font_path(
 # ------------------------------------------------------------------
 #  Logic ported from find_font_files.py to remove dependency
 # ------------------------------------------------------------------
+_SVG_SPACE_RUN = re.compile(" +")
+
+
+def collapse_svg_white_space(text: str) -> str:
+    """Collapse white space as an SVG renderer draws ``text``.
+
+    gbdraw writes text without ``xml:space``, so renderers turn tabs and line
+    breaks into spaces and runs of spaces into one. Leading and trailing
+    spaces are kept: callers also measure the styled fragments (``tspan``) of
+    one text, and a renderer drops spaces only at the ends of the whole text.
+    """
+    spaced = text.replace("\r\n", " ").translate({0x09: 0x20, 0x0A: 0x20, 0x0D: 0x20})
+    return _SVG_SPACE_RUN.sub(" ", spaced)
+
+
 def get_text_bbox_size_pixels(font_path, text, font_size, dpi, *, svg_units: bool = False):
     """
     Directly parses the font file using fontTools to calculate text dimensions.
@@ -464,6 +480,11 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi, *, svg_units: boo
     The width calculation accounts for pair kerning: the GPOS ``kern`` feature
     when the font has one, else the legacy ``kern`` table (see
     ``_get_kerning_value``), as browsers shaping with HarfBuzz apply it.
+
+    White space is collapsed as renderers draw it
+    (``collapse_svg_white_space``). A character the face lacks counts as an
+    em box (advance and ink one em wide, ``hhea`` ascent to descent high), as
+    a fallback font draws it.
 
     Args:
         font_path (str): Path to the font file (e.g., .ttf, .otf).
@@ -494,7 +515,7 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi, *, svg_units: boo
     ymaxes = []
     ymins = []
 
-    text_str = str(text)
+    text_str = collapse_svg_white_space(str(text))
     if not text_str:
         return 0.0, 0.0
 
@@ -508,20 +529,25 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi, *, svg_units: boo
         else:
             glyph_index = 0
 
-        try:
-            # Try to get vertical metrics from glyf table if available
-            if "glyf" in font:
-                g = font["glyf"][glyph_index]
-                ymax = g.yMax if hasattr(g, "yMax") else 0
-                ymin = g.yMin if hasattr(g, "yMin") else 0
-                xmax = g.xMax if hasattr(g, "xMax") else 0
-            else:
-                # Fallback for OTF/CFF fonts without glyf table
-                ymax = head.yMax
-                ymin = head.yMin
-                xmax = 0
-        except Exception:
-            ymax, ymin, xmax = 0, 0, 0
+        if glyph_index == 0:
+            # The face lacks the character, so a renderer draws it from a
+            # fallback font, typically one em wide (CJK): an em box.
+            ymax, ymin, xmax = font["hhea"].ascent, font["hhea"].descent, units_per_em
+        else:
+            try:
+                # Try to get vertical metrics from glyf table if available
+                if "glyf" in font:
+                    g = font["glyf"][glyph_index]
+                    ymax = g.yMax if hasattr(g, "yMax") else 0
+                    ymin = g.yMin if hasattr(g, "yMin") else 0
+                    xmax = g.xMax if hasattr(g, "xMax") else 0
+                else:
+                    # Fallback for OTF/CFF fonts without glyf table
+                    ymax = head.yMax
+                    ymin = head.yMin
+                    xmax = 0
+            except Exception:
+                ymax, ymin, xmax = 0, 0, 0
 
         ymaxes.append(ymax)
         ymins.append(ymin)
@@ -533,10 +559,13 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi, *, svg_units: boo
             total_advance_width += kerning_value
 
         # Calculate horizontal advance
-        try:
-            advance_width, lsb = hmtx[glyph_index]
-        except KeyError:
-            advance_width, lsb = 1000, 0
+        if glyph_index == 0:
+            advance_width, lsb = units_per_em, 0
+        else:
+            try:
+                advance_width, lsb = hmtx[glyph_index]
+            except KeyError:
+                advance_width, lsb = units_per_em, 0
 
         total_advance_width += advance_width
 
@@ -826,6 +855,7 @@ __all__ = [
     "FontVerticalMetrics",
     "calculate_bbox_dimensions",
     "calculate_svg_bbox_dimensions",
+    "collapse_svg_white_space",
     "create_text_element",
     "dominant_baseline_shift_em",
     "font_pair_kerning_table",
