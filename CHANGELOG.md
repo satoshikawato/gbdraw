@@ -18,6 +18,10 @@ write-up of a release.
   diagrams do not move. Hebrew text in Liberation Sans (the default font, also used
   for `Arial`, `Helvetica`, and `sans-serif`) is now kerned, so its labels and Legend
   rows can shift by up to about 1 px per kerned letter pair at 14 pt.
+- SVG output: the Legend part (`legendReflow`) of the `data-gbdraw-composition`
+  metadata also records the font file, font size, DPI, and wrap width the Legend was
+  laid out with, and the diagram bounds it was placed against, so that the web app
+  can lay out an edited Legend as Python does. Drawn content is unchanged.
 - Legend colors (web app): Generate no longer fails with "The generated result could
   not be accepted" after a color or stroke is set on a row added in the Legend editor,
   in Linear and Circular. The added row is drawn with its color and stroke after

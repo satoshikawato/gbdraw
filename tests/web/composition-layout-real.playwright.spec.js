@@ -566,10 +566,22 @@ const expectValidComposition = (
   });
   if (hasLegend) {
     expect(snapshot.metadata.legend).toEqual(expect.any(Object));
+    // Python's Legend layout inputs survive every edit, History step, Session
+    // round trip, and export below.
     expect(snapshot.metadata.legendReflow).toMatchObject({
       colorRectSize: expect.any(Number),
+      dpi: 96,
+      fontFile: 'LiberationSans-Regular',
+      fontSize: expect.any(Number),
       lineHeight: expect.any(Number),
-      textXOffset: expect.any(Number)
+      primaryLocalBounds: {
+        minX: expect.any(Number),
+        minY: expect.any(Number),
+        maxX: expect.any(Number),
+        maxY: expect.any(Number)
+      },
+      textXOffset: expect.any(Number),
+      wrapWidth: expect.any(Number)
     });
     expect(snapshot.roleCounts.legend).toBe(1);
     if (['left', 'right', 'top', 'bottom'].includes(legendSide)) {
