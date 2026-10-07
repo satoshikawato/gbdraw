@@ -2,6 +2,8 @@ const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { load, generate, switchMode, download } = require('./helpers/mode-transition.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+const { openBatch } = require('./helpers/audit-browser.cjs');
+const { showResult } = require('./helpers/live-generate-parity.cjs');
 
 const seeds = {
   lambda: 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json',
@@ -271,6 +273,80 @@ for (const mode of ['linear', 'circular']) {
       const generated = await legendCaptionBoxes(page);
       expectInsideCanvas(generated);
       expectSameBoxes(generated, live);
+      expect(page.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+    }
+  });
+}
+
+const deleteLegendRow = async (page, caption) => {
+  await page.evaluate(row => {
+    const app = window.__GBDRAW_APP__;
+    app.deleteLegendEntry(app.legendEntries.findIndex(e => e.caption === row));
+  }, caption);
+  await expect.poll(() => page.evaluate(legendIndex, caption)).toBe(-1);
+};
+// The Legend rows and the canvas after Generate are those of the live Result.
+const expectGenerateKeepsLegend = async (page, step) => {
+  const live = await legendCaptionBoxes(page);
+  expectInsideCanvas(live);
+  await generate(page);
+  const generated = await legendCaptionBoxes(page);
+  await test.step(step, () => expectSameBoxes(generated, live));
+};
+
+// OV-124 (PD-OI-066, OIC-027): Generate draws a Legend from which the Legend
+// editor deleted a row as the live delete laid it out: the other rows close the
+// gap, and the Legend and the canvas are fitted again.
+for (const mode of ['linear', 'circular']) {
+  test(`M4 ${mode}: a Legend without a deleted row is laid out live and at Generate alike`, async ({ browser }) => {
+    test.setTimeout(600_000);
+    const page = await loadGenerated(browser, mode);
+    try {
+      await deleteLegendRow(page, 'repeat_region');
+      await expectGenerateKeepsLegend(page, 'delete a generated row');
+      expect(page.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+    }
+  });
+}
+
+// OV-124 on a batch Result displayed after the delete (D-07, PD-OI-062): the
+// display and the display after Generate lay out its Legend alike.
+test('M6 circular batch: a Result displayed after a Legend row delete is laid out as after Generate', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  const page = await context.newPage();
+  try {
+    await openBatch(page);
+    await deleteLegendRow(page, 'GC content');
+    await showResult(page, 1);
+    const displayed = await legendCaptionBoxes(page);
+    expect(Object.keys(displayed.rows)).not.toContain('GC content');
+    expectInsideCanvas(displayed);
+    await generate(page);
+    await showResult(page, 1);
+    expectSameBoxes(await legendCaptionBoxes(page), displayed);
+  } finally {
+    await context.close();
+  }
+});
+
+// OV-124 with OV-122: rows added and deleted in the Legend editor, in either order.
+for (const mode of ['linear', 'circular']) {
+  test(`M5 ${mode}: Legend rows added and deleted in the editor are laid out live and at Generate alike`, async ({ browser }) => {
+    test.setTimeout(600_000);
+    const page = await loadGenerated(browser, mode);
+    try {
+      await addLegendRow(page, 'Manual row', '#118833');
+      await deleteLegendRow(page, 'repeat_region');
+      await expectGenerateKeepsLegend(page, 'add a row, then delete a generated row');
+      await deleteLegendRow(page, 'Manual row');
+      await expectGenerateKeepsLegend(page, 'delete the added row');
+      await addLegendRow(page, 'Second row', '#7b2cbf');
+      await expectGenerateKeepsLegend(page, 'add a row after the deletions');
       expect(page.externalRequests).toEqual([]);
     } finally {
       await page.context().close();

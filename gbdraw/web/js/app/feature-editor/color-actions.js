@@ -4,7 +4,7 @@ import { ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { resolveColorToHex } from '../../utils/color-utils.js';
 import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } from '../../services/feature-utils.js';
 import { exactRegexValue } from '../../services/feature-selector.js';
-import { getAllFeatureLegendGroups } from '../legend/utils.js';
+import { getAllFeatureLegendGroups, mountedLegendRowFeatureIds, setsFeatureStroke } from '../legend/utils.js';
 import {
   featureOverrideKey,
   getFeatureOverride
@@ -215,6 +215,22 @@ export const createFeatureColorActions = ({
   const clearFeatureStrokeOverride = (featureLike, fallbackSvgId = '') => {
     const key = featureStrokeKey(featureLike, fallbackSvgId);
     if (key) delete featureStrokeOverrides[key];
+  };
+
+  // The stroke a Legend row edit gives a feature without a stroke edit of its
+  // own, which the feature shows once its own edit is removed, as Generate
+  // draws it (`legendRowFeatureIds`, OV-123). Null when no row's stroke reaches it.
+  /**
+   * @param {Element} svg
+   * @param {Record<string, any>} feature
+   * @param {string} svgId
+   * @returns {Record<string, any> | null}
+   */
+  const legendRowStrokeOf = (svg, feature, svgId) => {
+    const namedCaption = normalizeCaption(getFeatureOverride(featureColorOverrides, feature)?.caption);
+    return Object.entries(legendStrokeOverrides).find(([caption]) => mountedLegendRowFeatureIds(
+      svg, caption, legendEntries.value, { namedIds: caption === namedCaption ? [svgId] : [] }
+    ).includes(svgId))?.[1] || null;
   };
 
   const findLegendEntryByCaption = (caption) => {
@@ -1232,8 +1248,11 @@ export const createFeatureColorActions = ({
     const svgId = clickedFeature.value.svg_id;
     const elements = getFeatureElements(svg, svgId);
 
-    const originalColor = originalSvgStroke.value.color;
-    const originalWidth = normalizeStrokeWidthValue(originalSvgStroke.value.width);
+    // Without its own stroke edit, the feature shows its Legend row's stroke.
+    const rowStroke = legendRowStrokeOf(svg, clickedFeature.value.feat || clickedFeature.value, svgId);
+    const originalColor = String(rowStroke?.strokeColor || '').trim() || originalSvgStroke.value.color;
+    const originalWidth = normalizeStrokeWidthValue(rowStroke?.strokeWidth)
+      ?? normalizeStrokeWidthValue(originalSvgStroke.value.width);
     let changed = false;
 
     elements.forEach((element) => {
@@ -1301,9 +1320,13 @@ export const createFeatureColorActions = ({
     const feature = clickedFeature.value.feat || clickedFeature.value;
     const key = featureStrokeKey(feature, clickedFeature.value.svg_id);
     const override = key ? featureStrokeOverrides[key] : null;
-    const inheritedColor = override && hasOwn(override, 'originalStrokeColor')
+    // Without a stroke edit of its own left, the feature shows its Legend row's stroke.
+    const rowStroke = setsFeatureStroke({ strokeWidth: override?.strokeWidth })
+      ? null
+      : legendRowStrokeOf(svg, feature, clickedFeature.value.svg_id);
+    const inheritedColor = String(rowStroke?.strokeColor || '').trim() || (override && hasOwn(override, 'originalStrokeColor')
       ? override.originalStrokeColor
-      : (clickedFeature.value.originalStrokeColor ?? originalSvgStroke.value.color);
+      : (clickedFeature.value.originalStrokeColor ?? originalSvgStroke.value.color));
     const elements = getFeatureElements(svg, clickedFeature.value.svg_id);
     const domChanged = elements.some((element) => !strokeColorAttributeMatches(element, inheritedColor));
     const stateChanged = Boolean(override && hasOwn(override, 'strokeColor'));

@@ -17,7 +17,6 @@ export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null
   const {
     svgContainer,
     canvasPadding,
-    originalSvgStroke,
     diagramElements,
     diagramElementOriginalTransforms,
     diagramOffset,
@@ -51,18 +50,6 @@ export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null
     canvasPadding.bottom = 0;
     canvasPadding.left = 0;
     return applyCanvasPadding();
-  };
-
-  const captureOriginalStroke = () => {
-    const svg = currentSvg();
-    if (!svg) return;
-    const firstFeaturePath = svg.querySelector('path[id^="f"]');
-    if (!firstFeaturePath) return;
-    const strokeWidth = Number.parseFloat(firstFeaturePath.getAttribute('stroke-width'));
-    originalSvgStroke.value = {
-      color: firstFeaturePath.getAttribute('stroke'),
-      width: Number.isFinite(strokeWidth) ? strokeWidth : null
-    };
   };
 
   const captureBaseConfig = () => {
@@ -117,7 +104,6 @@ export const createLegendCanvasActions = ({ state, commitActiveResultEdit = null
   return {
     applyCanvasPadding,
     captureBaseConfig,
-    captureOriginalStroke,
     resetCanvasPadding
   };
 };

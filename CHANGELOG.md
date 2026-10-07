@@ -24,6 +24,15 @@ write-up of a release.
 - Legend editor (web app): Generate draws the Legend with a row added in the Legend
   editor where the add placed it. Before, Generate moved the added row away from the
   other rows, in Linear past the right edge of the canvas, where its caption was cut.
+- Legend editor (web app): a stroke set on a Legend row stays on the row's features
+  after Generate, in Linear and Circular, and Undo, Redo, and Reset of that stroke
+  change the features as Generate draws them. A feature with a stroke of its own from
+  the feature popup keeps it. Before, Generate drew the row's features without the
+  row's stroke, and the row's stroke replaced a feature's own stroke until Generate.
+- Legend editor (web app): after a Legend row is removed, Generate draws the Legend
+  and the canvas as the removal left them, in Linear and Circular: the other rows
+  close the gap. Before, Generate kept the gap and the earlier canvas size. A batch
+  Result shown after the removal is laid out the same way.
 - Result names (web app): a live edit that redraws a loaded Session's Result (such
   as a Legend color, or Undo or Redo of a color step) keeps the Result's saved name.
   Before, the redraw renamed it after the **Output prefix** (a Gallery Session's
