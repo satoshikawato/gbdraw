@@ -966,6 +966,22 @@ const colorDepthRow = (mode = 'circular') => async (page) => {
   await generate(page);
   await colorLegendRow(page, await depthCaption(page));
 };
+// OV-87: the setup of a renamed case: a row drawn once, renamed in the Legend
+// and colored under its new name; `generateAfter` draws the renamed row once.
+const renameAndColorRow = (draw, from, to, { generateAfter = false } = {}) => async (page) => {
+  await draw(page);
+  await renameRow(page, typeof from === 'function' ? await from(page) : from, to);
+  await settleLive(page);
+  await colorLegendRow(page, to);
+  if (generateAfter) await generate(page);
+};
+const drawDepthFile = (mode = 'circular') => async (page) => {
+  await addDepthFile(page, 'depth.tsv', mode);
+  await generate(page);
+};
+const legendNames = (page) => page.evaluate(() => (
+  window.__GBDRAW_APP__.legendEntries.map((entry) => `${entry.originalCaption}=>${entry.caption}`)
+));
 const depthFileName = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   return (app.mode === 'linear' ? app.linearSeqs[0]?.depth?.[0] : app.files.c_depth?.[0]?.[0])?.name ?? null;
@@ -1075,13 +1091,66 @@ const RETIRING_CASES = [
     change: (page) => typeIntoLabel(page, 'Depth TSV tracks', 'Depth legend title', 'Coverage'),
     restored: (page) => page.evaluate(() => window.__GBDRAW_APP__.adv.depth_tracks[0]?.label === 'depth'),
     drawn: ['Coverage']
+  },
+  // OV-87: names follow the caption as styles do. The data change also retires
+  // the Legend rename of the row and the styles stored under the new name.
+  {
+    name: 'removing the depth file of a row renamed in the Legend',
+    caption: async () => 'Coverage',
+    renamedFrom: 'depth',
+    setup: renameAndColorRow(drawDepthFile(), depthCaption, 'Coverage'),
+    change: (page) => inHistoryStep(page, 'Change uploaded file', (app) => app.setCircularDepthFile(0, null)),
+    restored: async (page) => await depthFileName(page) === 'depth.tsv'
+  },
+  {
+    name: 'removing the Depth track of a row renamed in the Legend',
+    caption: async () => 'Coverage',
+    renamedFrom: 'depth',
+    setup: renameAndColorRow(drawDepthFile(), depthCaption, 'Coverage'),
+    change: (page) => inHistoryStep(page, 'Remove Depth', (app) => app.removeCircularDepthTrack(0)),
+    restored: async (page) => await depthFileName(page) === 'depth.tsv'
+  },
+  {
+    name: 'replacing the depth file of a row renamed in the Legend with a file of another name',
+    caption: async () => 'Coverage',
+    renamedFrom: 'depth',
+    setup: renameAndColorRow(drawDepthFile(), depthCaption, 'Coverage'),
+    change: (page) => addDepthFile(page, 'cov2.tsv'),
+    restored: async (page) => await depthFileName(page) === 'depth.tsv',
+    drawn: ['cov2']
+  },
+  {
+    name: 'removing the Depth track of a row renamed in the Legend in Linear',
+    mode: 'linear',
+    caption: async () => 'Coverage',
+    renamedFrom: 'depth',
+    setup: renameAndColorRow(drawDepthFile('linear'), depthCaption, 'Coverage'),
+    change: (page) => inHistoryStep(page, 'Remove Depth', (app) => app.removeLinearDepthTrack(0)),
+    restored: async (page) => await depthFileName(page) === 'depth.tsv'
+  },
+  {
+    name: 'removing the depth file of a renamed row drawn once in Linear',
+    mode: 'linear',
+    caption: async () => 'Coverage',
+    renamedFrom: 'depth',
+    setup: renameAndColorRow(drawDepthFile('linear'), depthCaption, 'Coverage', { generateAfter: true }),
+    change: (page) => inHistoryStep(page, 'Change uploaded file', (app) => app.setLinearDepthFile(app.linearSeqs[0], 0, null)),
+    restored: async (page) => await depthFileName(page) === 'depth.tsv'
+  },
+  {
+    name: 'removing an annotation set whose row is renamed in the Legend',
+    caption: async () => 'Region Y',
+    renamedFrom: 'Region X',
+    setup: renameAndColorRow((page) => addAnnotationRow(page, 'Region X'), 'Region X', 'Region Y'),
+    change: (page) => inHistoryStep(page, 'Delete set', (app) => app.removeAnnotationSet(app.annotationSets[0])),
+    restored: (page) => page.evaluate(() => window.__GBDRAW_APP__.annotationSets.length === 1)
   }
 ];
 
 test.describe('OV-65 Legend styles follow the captions of track data', () => {
   test.beforeEach(() => { test.setTimeout(180_000); });
 
-  for (const { name, mode = 'circular', caption, setup, change, restored, drawn = [] } of RETIRING_CASES) {
+  for (const { name, mode = 'circular', caption, renamedFrom = null, setup, change, restored, drawn = [] } of RETIRING_CASES) {
     test(`${name} retires the styles of its rows, and Generate succeeds`, async ({ page }) => {
       await openCanvas(page, mode, null);
       await setup(page);
@@ -1090,9 +1159,14 @@ test.describe('OV-65 Legend styles follow the captions of track data', () => {
       await change(page);
       await settleLive(page);
       expect(await legendStyleOf(page, row)).toEqual(NO_STYLE);
+      if (renamedFrom) {
+        expect(await legendStyleOf(page, renamedFrom)).toEqual(NO_STYLE);
+        expect(await legendNames(page), 'the rename is retired').not.toContain(`${renamedFrom}=>${row}`);
+      }
       await generate(page);
       const captions = await drawnLegendCaptions(page);
       expect(captions).not.toContain(row);
+      if (renamedFrom) expect(captions).not.toContain(renamedFrom);
       for (const kept of drawn) expect(captions).toContain(kept);
     });
 
@@ -1105,6 +1179,7 @@ test.describe('OV-65 Legend styles follow the captions of track data', () => {
       await undo(page);
       expect(await restored(page), 'data restored').toBe(true);
       expect((await legendStyleOf(page, row)).color).toBe(COLORED);
+      if (renamedFrom) expect(await legendNames(page), 'the rename is restored').toContain(`${renamedFrom}=>${row}`);
       await expectLiveEqualsGenerate(page, { label: `${name}, Undo` });
     });
   }
@@ -1118,6 +1193,16 @@ test.describe('OV-65 Legend styles follow the captions of track data', () => {
     await addDepthFile(page, 'depth.tsv');
     expect((await legendStyleOf(page, caption)).color).toBe(COLORED);
     await expectLiveEqualsGenerate(page, { label: 'depth file replaced, same label' });
+  });
+
+  test('replacing the depth file with the label unchanged keeps the Legend rename and its style (OV-87)', async ({ page }) => {
+    await openCanvas(page, 'circular', null);
+    await renameAndColorRow(drawDepthFile(), depthCaption, 'Coverage')(page);
+    await addDepthFile(page, 'depth.tsv');
+    expect(await legendNames(page)).toContain('depth=>Coverage');
+    expect((await legendStyleOf(page, 'Coverage')).color).toBe(COLORED);
+    await expectLiveEqualsGenerate(page, { label: 'renamed depth row, file replaced with the same label' });
+    expect(await drawnLegendCaptions(page)).toContain('Coverage');
   });
 
   test('replacing the annotation data with the legendLabel unchanged keeps the row style', async ({ page }) => {
