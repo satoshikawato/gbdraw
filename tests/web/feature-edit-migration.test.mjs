@@ -412,7 +412,7 @@ test('R-7: the Session 44 fixture moves only the annotation whose feature is cer
   ]);
 });
 
-// The same vector pins the Python reader (tests/test_session_io.py).
+// The same vector pins the Python reader (tests/test_session_compat.py).
 test('Session 41-44 placement drafts migrate to the vector both readers share', () => {
   const vector = JSON.parse(readFileSync(new URL('../fixtures/feature-placement-migration.json', import.meta.url), 'utf8'));
   assert.deepEqual(migrateSessionFeaturePlacements(structuredClone(vector.input)), vector.expected);
