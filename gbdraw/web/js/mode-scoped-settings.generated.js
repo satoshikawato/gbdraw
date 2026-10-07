@@ -193,6 +193,7 @@ export const MODE_SCOPED_SETTINGS = deepFreeze({
     {"domain": "config.losat", "key": null, "migrate": "copy", "modes": "both", "path": "blastn"},
     {"domain": "config.losat", "key": null, "migrate": "own", "modes": "linear", "path": "blastp"},
     {"domain": "config", "key": null, "migrate": "copy", "modes": "both", "path": "colors"},
+    {"domain": "config", "key": null, "migrate": "copy", "modes": "both", "path": "colorsAreOverrides"},
     {"domain": "config", "key": null, "migrate": "copy", "modes": "both", "path": "palette"},
     {"domain": "config", "key": null, "migrate": "copy", "modes": "both", "path": "rules"},
     {"domain": "config", "key": null, "migrate": "copy", "modes": "both", "path": "qualifierPriorityRules"},
