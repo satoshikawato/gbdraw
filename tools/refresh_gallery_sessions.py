@@ -732,7 +732,10 @@ def _validate_staged_gallery_session(
             f"{session_path.name} has no canonical schema-"
             f"{expected_request_schema} render request"
         )
-    config = session.get("config")
+    modes = session.get("modes")
+    # Session 46 keeps the Linear draft in its Linear slice.
+    linear = modes.get("linear") if isinstance(modes, Mapping) else None
+    config = linear.get("config") if isinstance(linear, Mapping) else session.get("config")
     if isinstance(config, Mapping) and "linearRecordLayout" in config:
         plan = config.get("linearComparisonPlan")
         if not isinstance(plan, Mapping):
