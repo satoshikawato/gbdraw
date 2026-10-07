@@ -113,6 +113,7 @@ import {
 } from './circular-track-slots.js';
 import { createLinearTrackSlotEditor } from './linear-track-slots.js';
 import { createAnnotationEditor } from './annotations.js';
+import { buildLegendStyleRetirement, trackDataLegendCaptions } from './legend/track-data-styles.js';
 import {
   annotationSourceKey,
   buildAnnotationRecordCatalog
@@ -299,14 +300,12 @@ export const createAppSetup = () => {
     featureIdentityNotices,
     featureEditRemovalCount,
     comparisonWarnings,
-    pairwiseMatchFactors,
     matchSequenceRegistry,
     svgContent,
     svgResultIdentity,
     zoom,
     layoutRepositionMode,
     isPanning,
-    panStart,
     canvasPan,
     canvasContainerRef,
     mode,
@@ -344,7 +343,6 @@ export const createAppSetup = () => {
     rightDrawerTab,
     linearReorderNotice,
     circularRecordList,
-    circularRecordDiscovery,
     paletteDefinitions,
     paletteNames,
     selectedPalette,
@@ -412,7 +410,6 @@ export const createAppSetup = () => {
     featureVisibilityRules,
     featureOverrides,
     featureStrokeOverrides,
-    resultGenerationKey,
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
@@ -436,32 +433,16 @@ export const createAppSetup = () => {
     hiddenLabelTextDialog,
     labelOnDialog,
     sidebarWidth,
-    isResizing,
     legendEntries,
     deletedLegendEntries,
     originalLegendOrder,
-    originalLegendColors,
     newLegendCaption,
     newLegendColor,
     legendStrokeOverrides,
     legendColorOverrides,
-    originalSvgStroke,
-    legendDragging,
-    legendDragStart,
-    legendOriginalTransform,
-    legendInitialTransform,
-    legendCurrentOffset,
-    diagramDragging,
-    diagramDragStart,
-    diagramOffset,
-    diagramElementIds,
-    diagramElementOriginalTransforms,
-    diagramElements,
     canvasPadding,
     showCanvasControls,
-    generatedLegendPosition,
     skipCaptureBaseConfig,
-    skipExtractOnSvgChange,
     featureKeys,
     defaultColorKeys,
     newColorFeat,
@@ -470,7 +451,6 @@ export const createAppSetup = () => {
     newPriorityRule,
     newFeatureToAdd,
     addedLegendCaptions,
-    fileLegendCaptions,
     filteredFeatures,
     featureListState
   } = state;
@@ -1536,11 +1516,29 @@ export const createAppSetup = () => {
   const circularConservationFastaInput = ref(null);
   // The stack editors receive the feature placement transition as one port (R10, R13).
   const { changeTrackLayout } = featureActions.placementActions;
+  // Legend styles follow the captions that track data names (OV-65): the
+  // annotation editor receives this one port, and the Depth source and label
+  // transitions below run through it.
+  const retireLegendStylesOfUnnamedCaptions = buildLegendStyleRetirement({
+    legendColorOverrides,
+    legendStrokeOverrides,
+    namedCaptions: () => trackDataLegendCaptions({
+      annotationSets,
+      depthTracks: adv.depth_tracks,
+      ...(mode.value === 'linear'
+        ? { depthSlots: adv.linear_track_slots, sourcedDepthTrackIndexes: activeDepthTrackIndices(linearDepthRows()) }
+        : {
+            depthSlots: adv.circular_track_slots,
+            sourcedDepthTrackIndexes: circularDepthRepresentatives()
+              .flatMap((file, index) => (file ? [index] : []))
+          })
+    })
+  });
   const circularTrackSlotEditor = createCircularTrackSlotEditor({ state, changeTrackLayout });
   const linearTrackSlotEditor = createLinearTrackSlotEditor({ state, changeTrackLayout });
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
-    state, getRecordCatalog: getAnnotationRecordCatalog,
+    state, getRecordCatalog: getAnnotationRecordCatalog, retireLegendStylesOfUnnamedCaptions,
     onImportNotice: (notice) => { annotationImportNotice.value = notice; }
   });
   watch(
@@ -1855,8 +1853,10 @@ export const createAppSetup = () => {
     if (sessionBusy) return sessionBusy;
     const idx = Math.max(0, Number(index) || 0);
     const config = depthTrackConfigForIndex(idx);
-    config.label = String(value ?? '');
-    syncDepthTrackSlotLabelsForTrack(idx);
+    retireLegendStylesOfUnnamedCaptions(() => {
+      config.label = String(value ?? '');
+      syncDepthTrackSlotLabelsForTrack(idx);
+    });
   };
   const getDepthTrackLegendLabelForSlot = (slot) => (
     getDepthTrackLabel(normalizeDepthSlotTrackIndex(slot))
@@ -1866,14 +1866,16 @@ export const createAppSetup = () => {
     if (sessionBusy) return sessionBusy;
     if (!slot) return;
     const idx = normalizeDepthSlotTrackIndex(slot);
-    slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
-    const label = String(value ?? '');
-    if (label.trim()) {
-      slot.params.legend_label = label;
-    } else {
-      delete slot.params.legend_label;
-    }
-    setDepthTrackLabel(idx, label);
+    retireLegendStylesOfUnnamedCaptions(() => {
+      slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
+      const label = String(value ?? '');
+      if (label.trim()) {
+        slot.params.legend_label = label;
+      } else {
+        delete slot.params.legend_label;
+      }
+      setDepthTrackLabel(idx, label);
+    });
   };
   const syncDepthTrackSlotLabel = (slot) => {
     if (!slot || slot.renderer !== 'depth') return;
@@ -1928,16 +1930,19 @@ export const createAppSetup = () => {
     depthTrackUiCounts.circular = Math.max(depthTrackUiCounts.circular, idx + 1);
     const rows = circularDepthRows();
     const previousFile = circularDepthRepresentatives()[idx] || null;
-    circularTrackSlotEditor.changeCircularDepthSources(() => {
-      rows.forEach((row) => {
-        row[idx] = file || null;
+    // A new file can rename an auto-labeled series, so the label follows in the same retirement.
+    retireLegendStylesOfUnnamedCaptions(() => {
+      circularTrackSlotEditor.changeCircularDepthSources(() => {
+        rows.forEach((row) => {
+          row[idx] = file || null;
+        });
+        files.c_depth = rows.map((row) => compactDepthFileSlots(row));
       });
-      files.c_depth = rows.map((row) => compactDepthFileSlots(row));
+      if (file) {
+        updateDepthTrackLabelFromFile(idx, file, previousFile);
+        form.show_depth = true;
+      }
     });
-    if (file) {
-      updateDepthTrackLabelFromFile(idx, file, previousFile);
-      form.show_depth = true;
-    }
   };
   const getLinearDepthFile = (seq, index) => depthFileSlotsFromValue(seq?.depth)[Number(index)] || null;
   const setLinearDepthFiles = (sequences, index, file) => {
@@ -1950,21 +1955,23 @@ export const createAppSetup = () => {
     padLinearDepthRows(logicalWidth);
     ensureDepthTrackConfigCount(logicalWidth);
     const previousFile = getLinearDepthFile(targets[0], idx);
-    linearTrackSlotEditor.changeLinearDepthSources(() => {
-      targets.forEach((seq) => {
-        const slots = depthFileSlotsFromValue(seq.depth);
-        if (file) {
-          slots[idx] = file;
-          seq.depth = slots;
-        } else {
-          seq.depth = clearDepthTrackSourceAt(slots, idx, logicalWidth);
-        }
+    retireLegendStylesOfUnnamedCaptions(() => {
+      linearTrackSlotEditor.changeLinearDepthSources(() => {
+        targets.forEach((seq) => {
+          const slots = depthFileSlotsFromValue(seq.depth);
+          if (file) {
+            slots[idx] = file;
+            seq.depth = slots;
+          } else {
+            seq.depth = clearDepthTrackSourceAt(slots, idx, logicalWidth);
+          }
+        });
       });
+      if (file) {
+        updateDepthTrackLabelFromFile(idx, file, previousFile);
+        form.show_depth = true;
+      }
     });
-    if (file) {
-      updateDepthTrackLabelFromFile(idx, file, previousFile);
-      form.show_depth = true;
-    }
   };
   const setLinearDepthFile = (seq, index, file) => setLinearDepthFiles([seq], index, file);
   const setLinearSourceDepthFile = (source, index, file) => setLinearDepthFiles(
@@ -1996,35 +2003,38 @@ export const createAppSetup = () => {
     if (sessionBusy) return sessionBusy;
     const idx = Number(index);
     if (!Number.isInteger(idx) || idx < 0) return;
-    const count = sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular);
-    const previousFiles = circularDepthRepresentatives();
-    files.c_depth = removeDepthTrackColumnAt(circularDepthRows(), idx)
-      .map((row) => compactDepthFileSlots(row));
-    if (idx < adv.depth_tracks.length) adv.depth_tracks.splice(idx, 1);
-    depthTrackUiCounts.circular = count <= 1 ? 1 : Math.max(1, count - 1);
-    refreshDepthTrackLabelsAfterRemoval(previousFiles, circularDepthRepresentatives(), idx);
-    ensureDepthTrackConfigCount(activeDepthTrackCount());
-    const activeFileCount = circularDepthRepresentatives().length;
-    // The removed series' rows before the Axis lower its index, as in Linear,
-    // so no other row crosses the Axis (R10).
-    const axis = adv.circular_track_slots_axis_index;
-    const removedBeforeAxis = Number.isInteger(axis)
-      ? adv.circular_track_slots.slice(0, axis)
-        .filter((slot) => isDefaultManagedDepthSlot(slot) && depthSlotTrackIndex(slot) === idx).length
-      : 0;
-    adv.circular_track_slots.splice(
-      0,
-      adv.circular_track_slots.length,
-      ...reindexDepthSlots(/** @type {any} */ ({
-        slots: adv.circular_track_slots,
-        removedIndex: idx,
-        activeCount: activeFileCount,
-        managedPredicate: isDefaultManagedDepthSlot
-      }))
-    );
-    if (removedBeforeAxis) adv.circular_track_slots_axis_index = axis - removedBeforeAxis;
-    syncDepthTrackSlotLabelsForTrack(idx);
-    circularTrackSlotEditor.normalizeCircularTrackSlots();
+    // Removing a series retires the Legend styles of its rows (OV-65).
+    retireLegendStylesOfUnnamedCaptions(() => {
+      const count = sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular);
+      const previousFiles = circularDepthRepresentatives();
+      files.c_depth = removeDepthTrackColumnAt(circularDepthRows(), idx)
+        .map((row) => compactDepthFileSlots(row));
+      if (idx < adv.depth_tracks.length) adv.depth_tracks.splice(idx, 1);
+      depthTrackUiCounts.circular = count <= 1 ? 1 : Math.max(1, count - 1);
+      refreshDepthTrackLabelsAfterRemoval(previousFiles, circularDepthRepresentatives(), idx);
+      ensureDepthTrackConfigCount(activeDepthTrackCount());
+      const activeFileCount = circularDepthRepresentatives().length;
+      // The removed series' rows before the Axis lower its index, as in Linear,
+      // so no other row crosses the Axis (R10).
+      const axis = adv.circular_track_slots_axis_index;
+      const removedBeforeAxis = Number.isInteger(axis)
+        ? adv.circular_track_slots.slice(0, axis)
+          .filter((slot) => isDefaultManagedDepthSlot(slot) && depthSlotTrackIndex(slot) === idx).length
+        : 0;
+      adv.circular_track_slots.splice(
+        0,
+        adv.circular_track_slots.length,
+        ...reindexDepthSlots(/** @type {any} */ ({
+          slots: adv.circular_track_slots,
+          removedIndex: idx,
+          activeCount: activeFileCount,
+          managedPredicate: isDefaultManagedDepthSlot
+        }))
+      );
+      if (removedBeforeAxis) adv.circular_track_slots_axis_index = axis - removedBeforeAxis;
+      syncDepthTrackSlotLabelsForTrack(idx);
+      circularTrackSlotEditor.normalizeCircularTrackSlots();
+    });
   };
   const removeLinearDepthTrack = (index) => {
     const sessionBusy = sessionOperationAvailability();
@@ -2033,39 +2043,42 @@ export const createAppSetup = () => {
     if (!Number.isInteger(idx) || idx < 0) return;
     const logicalWidth = linearDepthLogicalWidth();
     if (idx >= logicalWidth) return;
-    const nextRows = removeDepthTrackColumnAt(linearDepthRows(), idx);
-    linearSeqs.forEach((seq, recordIndex) => {
-      seq.depth = nextRows[recordIndex] || [];
-    });
-    if (idx < adv.depth_tracks.length) adv.depth_tracks.splice(idx, 1);
-    depthTrackAutoLabels.splice(idx, 1);
-    ensureDepthTrackConfigCount(activeDepthTrackCount());
-    const previousAxisIndex = Number(adv.linear_track_slots_axis_index);
-    const removedManagedSlotCountBeforeAxis = Number.isInteger(previousAxisIndex)
-      ? adv.linear_track_slots.reduce((count, slot, slotIndex) => {
-          if (slotIndex >= previousAxisIndex || !isDefaultManagedDepthSlot(slot)) return count;
-          return depthSlotTrackIndex(slot) === idx ? count + 1 : count;
-        }, 0)
-      : 0;
-    adv.linear_track_slots.splice(
-      0,
-      adv.linear_track_slots.length,
-      ...reindexDepthSlots(/** @type {any} */ ({
-        slots: adv.linear_track_slots,
-        removedIndex: idx,
-        activeCount: Math.max(0, logicalWidth - 1),
-        managedPredicate: isDefaultManagedDepthSlot
-      }))
-    );
-    if (Number.isInteger(previousAxisIndex)) {
-      adv.linear_track_slots_axis_index = Math.max(
+    // Removing a series retires the Legend styles of its rows (OV-65).
+    retireLegendStylesOfUnnamedCaptions(() => {
+      const nextRows = removeDepthTrackColumnAt(linearDepthRows(), idx);
+      linearSeqs.forEach((seq, recordIndex) => {
+        seq.depth = nextRows[recordIndex] || [];
+      });
+      if (idx < adv.depth_tracks.length) adv.depth_tracks.splice(idx, 1);
+      depthTrackAutoLabels.splice(idx, 1);
+      ensureDepthTrackConfigCount(activeDepthTrackCount());
+      const previousAxisIndex = Number(adv.linear_track_slots_axis_index);
+      const removedManagedSlotCountBeforeAxis = Number.isInteger(previousAxisIndex)
+        ? adv.linear_track_slots.reduce((count, slot, slotIndex) => {
+            if (slotIndex >= previousAxisIndex || !isDefaultManagedDepthSlot(slot)) return count;
+            return depthSlotTrackIndex(slot) === idx ? count + 1 : count;
+          }, 0)
+        : 0;
+      adv.linear_track_slots.splice(
         0,
-        previousAxisIndex - removedManagedSlotCountBeforeAxis
+        adv.linear_track_slots.length,
+        ...reindexDepthSlots(/** @type {any} */ ({
+          slots: adv.linear_track_slots,
+          removedIndex: idx,
+          activeCount: Math.max(0, logicalWidth - 1),
+          managedPredicate: isDefaultManagedDepthSlot
+        }))
       );
-    }
-    syncDepthTrackSlotLabelsForTrack(0);
-    linearTrackSlotEditor.syncLinearDepthSlotHeightsFromDepthTracks();
-    linearTrackSlotEditor.normalizeLinearTrackSlots();
+      if (Number.isInteger(previousAxisIndex)) {
+        adv.linear_track_slots_axis_index = Math.max(
+          0,
+          previousAxisIndex - removedManagedSlotCountBeforeAxis
+        );
+      }
+      syncDepthTrackSlotLabelsForTrack(0);
+      linearTrackSlotEditor.syncLinearDepthSlotHeightsFromDepthTracks();
+      linearTrackSlotEditor.normalizeLinearTrackSlots();
+    });
   };
   watch(
     () => [
@@ -3120,7 +3133,7 @@ export const createAppSetup = () => {
   const runInfoHasCliHelperFiles = computed(() =>
     Array.isArray(lastRunInfo.value?.helperFiles) && lastRunInfo.value.helperFiles.length > 0
   );
-  const copyRunInfoCommand = async (commandValue, status, description) => {
+  const copyRunInfoCommand = async (commandValue, status) => {
     const command = String(commandValue || '');
     if (!command) return;
     try {
@@ -3139,13 +3152,11 @@ export const createAppSetup = () => {
   };
   const copyRunCommand = () => copyRunInfoCommand(
     lastRunInfo.value?.sourceRecipe?.command || lastRunInfo.value?.command,
-    runInfoCopyStatus,
-    'source recipe'
+    runInfoCopyStatus
   );
   const copyExactReplayCommand = () => copyRunInfoCommand(
     lastRunInfo.value?.exactReplay?.command || lastRunInfo.value?.sessionCommand,
-    exactReplayCopyStatus,
-    'exact replay command'
+    exactReplayCopyStatus
   );
 
   const catalogIssueError = (catalog) => {
@@ -3202,7 +3213,7 @@ export const createAppSetup = () => {
         };
   }
 
-  const runAnalysis = (options = null) => {
+  const runAnalysis = () => {
     const patternDrafts = featureActions.captureSpecificRulePatternDrafts();
     return runGeneratedDiagramAnalysis(null, null, null, {
       prepareGenerate: async () => {
@@ -4349,9 +4360,9 @@ export const createAppSetup = () => {
       });
     }
     // Removing a File can remove the last source of a Depth series.
-    linearTrackSlotEditor.changeLinearDepthSources(() => {
+    retireLegendStylesOfUnnamedCaptions(() => linearTrackSlotEditor.changeLinearDepthSources(() => {
       linearSeqs.splice(0, linearSeqs.length, ...next);
-    });
+    }));
     const activeUids = new Set(next.map((seq) => seq.uid));
     pendingLinearRecordExpansions.forEach((uid) => {
       if (!activeUids.has(uid)) pendingLinearRecordExpansions.delete(uid);
@@ -4690,6 +4701,7 @@ export const createAppSetup = () => {
     renameAnnotationSet: annotationEditor.renameAnnotationSet,
     duplicateAnnotationSet: annotationEditor.duplicateAnnotationSet,
     removeAnnotationSet: annotationEditor.removeAnnotationSet,
+    setAnnotationSetLegendLabel: annotationEditor.setAnnotationSetLegendLabel,
     addCoordinateAnnotation: annotationEditor.addCoordinateAnnotation,
     addSelectedFeatureAnnotations: annotationEditor.addSelectedFeatures,
     removeAnnotation: annotationEditor.removeAnnotation,

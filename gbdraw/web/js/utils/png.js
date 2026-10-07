@@ -5,7 +5,9 @@ export const setDpiInPng = async (blob, dpi) => {
   const view = new DataView(buffer);
   const uint8 = new Uint8Array(buffer);
   let offset = 8;
+  /** @type {number | null} */
   let physChunk = null;
+  /** @type {number | null} */
   let idatOffset = null;
   while (offset < view.byteLength) {
     const length = view.getUint32(offset);
@@ -63,9 +65,11 @@ export const setDpiInPng = async (blob, dpi) => {
     newBuffer.set(uint8.slice(physChunk + 12 + oldLen), physChunk + 21);
     return new Blob([newBuffer], { type: 'image/png' });
   }
+  // The only caller passes a canvas.toBlob PNG, which always has an IDAT chunk when it has no pHYs.
+  const insertAt = /** @type {number} */ (idatOffset);
   const newBuffer = new Uint8Array(buffer.byteLength + 21);
-  newBuffer.set(uint8.slice(0, idatOffset), 0);
-  newBuffer.set(newChunk, idatOffset);
-  newBuffer.set(uint8.slice(idatOffset), idatOffset + 21);
+  newBuffer.set(uint8.slice(0, insertAt), 0);
+  newBuffer.set(newChunk, insertAt);
+  newBuffer.set(uint8.slice(insertAt), insertAt + 21);
   return new Blob([newBuffer], { type: 'image/png' });
 };

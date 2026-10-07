@@ -15,6 +15,7 @@ const unavailable = () => diagnosticError('SESSION_IMPORT_UNAVAILABLE', {}, { st
  */
 export const importSessionFile = (file, { signal } = {}) => new Promise((resolve, reject) => {
   const operationId = nextOperationId++;
+  /** @type {Worker | null} */
   let worker = null;
   let settled = false;
   const assembly = createBoundedJsonReceiver();
@@ -49,7 +50,8 @@ export const importSessionFile = (file, { signal } = {}) => new Promise((resolve
     if (reply.status === 'part') {
       try {
         assembly.receivePart(reply);
-        worker.postMessage({ operationId, ack: true });
+        // `settled` is false here, and only `settle` clears `worker`, so the started Worker is still held.
+        /** @type {Worker} */ (worker).postMessage({ operationId, ack: true });
       } catch { unreadable(); }
     } else if (reply.status === 'error') {
       const { code = 'UNKNOWN', stage = 'transport', context = {} } = reply.error || {};

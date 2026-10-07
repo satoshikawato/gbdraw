@@ -203,11 +203,13 @@ export const createModeProfileStateManager = (initialMode, initialState, formSta
   const readProfileValues = (source) => readManagedState(source, formState);
   const writeProfileValues = (target, values) => writeManagedState(target, formState, values);
   let activeMode = normalizeMode(initialMode);
+  /** @type {Record<string, any> | null} */
   let activeBaseline = null;
+  /** @type {Record<string, boolean> | null} */
   let activeManaged = null;
   let stateSource = initialState;
 
-  const install = (mode, snapshot, target = null) => {
+  const install = (mode, snapshot, target = /** @type {Record<string, any> | null} */ (null)) => {
     activeMode = normalizeMode(mode);
     activeBaseline = { ...snapshot.values };
     activeManaged = { ...snapshot.managed };
@@ -229,19 +231,22 @@ export const createModeProfileStateManager = (initialMode, initialState, formSta
   };
 
   const detectEdits = (source) => {
-    if (!activeBaseline || !activeManaged) return;
+    // The callback runs synchronously, so these are the values checked here.
+    const baseline = activeBaseline;
+    const managed = activeManaged;
+    if (!baseline || !managed) return;
     const current = readProfileValues(source);
     PROFILE_MANAGED_FIELDS.forEach((field) => {
       if (
-        activeManaged[field] &&
-        !valuesEquivalent(current[field], activeBaseline[field])
+        managed[field] &&
+        !valuesEquivalent(current[field], baseline[field])
       ) {
-        activeManaged[field] = false;
+        managed[field] = false;
       }
     });
   };
 
-  const reset = (mode, source = null) => {
+  const reset = (mode, source = /** @type {Record<string, any> | null} */ (null)) => {
     const normalizedMode = normalizeMode(mode);
     const defaults = managedStateForMode(normalizedMode);
     const values = source ? readProfileValues(source) : defaults;
@@ -333,7 +338,7 @@ export const createModeProfileStateManager = (initialMode, initialState, formSta
 
   // A field missing from a saved snapshot takes the flat value for the active
   // mode (the only value an older writer stored) and the fresh default otherwise.
-  const normalizeImportedSnapshot = (mode, candidate, activeValues = null) => {
+  const normalizeImportedSnapshot = (mode, candidate, activeValues = /** @type {Record<string, any> | null} */ (null)) => {
     const defaults = defaultSnapshot(mode);
     if (activeValues) {
       PROFILE_MANAGED_FIELDS.forEach((field) => {

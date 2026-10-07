@@ -307,7 +307,7 @@ export const requestFeatureOverrides = (overrides, mode, records = [], { bulkLab
     const labelText = normalizeFeatureOverrideLabelText(text);
     if (row?.labelText || !labelText) return;
     const identity = parseFeatureIdentityKey(key);
-    if (!rowBelongsToRequest(identity, mode, records)) return;
+    if (!identity || !rowBelongsToRequest(identity, mode, records)) return;
     rows.set(key, { ...(row || emptyOverrideRow(identity)), labelText });
   });
   return /** @type {FeatureOverrideDraftRow[]} */ (
@@ -349,7 +349,8 @@ export const featureOverrideValue = (overrides, feature, field) => {
 export const updateFeatureOverride = (overrides, feature, patch) => {
   const key = featureIdentityKeyOf(feature);
   if (!key || !overrides) return false;
-  const next = { ...(overrides[key] || emptyOverrideRow(parseFeatureIdentityKey(key))) };
+  // A non-empty key is the JSON of a valid identity, so it parses back.
+  const next = { ...(overrides[key] || emptyOverrideRow(/** @type {FeatureIdentity} */ (parseFeatureIdentityKey(key)))) };
   Object.entries(patch || {}).forEach(([field, value]) => {
     if (!(field in next) || ['scope', 'recordKey', 'biologicalFeatureId'].includes(field)) return;
     next[field] = value === undefined ? null : value;

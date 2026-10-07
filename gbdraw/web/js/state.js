@@ -867,7 +867,10 @@ const filteredEditableLabels = computed(() => {
 // `preparationBusyReason` words an edit still applying, whose owners only the
 // composition root holds: it passes it for Save and Load (R13). History words
 // its own pending edit the same way, so it passes none.
-export const sessionOperationAvailability = (operation = 'mutation', preparationBusyReason = null) => {
+export const sessionOperationAvailability = (
+  operation = 'mutation',
+  preparationBusyReason = /** @type {(() => string | null | undefined) | null} */ (null)
+) => {
   let reason = '';
   if (sessionImportPending.value) reason = 'Loading session. Retry after loading finishes.';
   else if (sessionSavePending.value) reason = 'Saving session. Retry after saving finishes.';

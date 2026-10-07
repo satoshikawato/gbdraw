@@ -8,7 +8,7 @@
 // the Legend fixes of OV-42 to OV-44 ask of the automatic rerender.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
-const { evaluateWithRetainedPromise, generateAndWaitForResult } = require('./helpers/app-lifecycle.cjs');
+const { evaluateWithRetainedPromise, generateAndWaitForResult, reveal } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 
@@ -663,10 +663,10 @@ const openCanvas = async (page, mode, canvas) => {
   }
 };
 
-// OV-65 (open): a Legend color on a row named only by a track's data (an annotation
-// set) fails Generate once the track data is removed; the case below is marked
-// test.fail until the Web retires such a preference. Removing the depth file turns
-// Show Depth off, so its Depth row is excused as in the OV-81 cases (it passes).
+// OV-65: a Legend color on a row named only by a track's data (an annotation set,
+// a depth file) follows the caption: a data change retires the styles of the
+// captions the data no longer names, in the History step of the change, so
+// Undo brings back the data and the style (RETIRING_CASES, further below).
 // A region annotation with a legend label draws a Legend row from its set; the
 // slot of the set is added through the track slot control.
 const addAnnotationRow = async (page, label) => {
@@ -724,39 +724,6 @@ const SIBLINGS = [
         const app = window.__GBDRAW_APP__;
         app.removeCircularTrackSlot(app.adv.circular_track_slots.findIndex((slot) => slot.id === 'gc_content'));
       });
-      await settleLive(page);
-    }
-  },
-  {
-    name: 'annotation set row after its set is removed',
-    mode: 'circular',
-    knownMismatch: 'OV-65: no data of the draft names the row, so Python reports it neither drawn nor suppressed and admission rejects the Legend color',
-    absent: ['Region X'],
-    run: async (page) => {
-      await addAnnotationRow(page, 'Region X');
-      await colorLegendRow(page, 'Region X');
-      await page.evaluate(() => {
-        const app = window.__GBDRAW_APP__;
-        app.removeAnnotationSet(app.annotationSets[0]);
-      });
-      await settleLive(page);
-    }
-  },
-  {
-    name: 'Depth row after its depth file is removed',
-    mode: 'circular',
-    absent: ['Depth'],
-    run: async (page) => {
-      await page.evaluate(() => {
-        const app = window.__GBDRAW_APP__;
-        const rows = Array.from({ length: 4 }, (_, index) => `FORCEDLBL\t${index * 700 + 1}\t${10 + index}`);
-        app.files.c_depth = [[new File([rows.join('\n')], 'depth.tsv', { type: 'text/tab-separated-values' })]];
-        app.form.show_depth = true;
-      });
-      await settleLive(page);
-      await generate(page);
-      await colorLegendRow(page, 'Depth');
-      await page.evaluate(() => { window.__GBDRAW_APP__.files.c_depth = []; });
       await settleLive(page);
     }
   },
@@ -834,9 +801,8 @@ const SIBLINGS = [
   }
 ];
 
-for (const { name, mode, canvas = null, absent = null, knownMismatch, run } of SIBLINGS) {
+for (const { name, mode, canvas = null, absent = null, run } of SIBLINGS) {
   test(`a Legend color survives Generate: ${name}`, async ({ page }) => {
-    if (knownMismatch) test.fail(true, knownMismatch);
     test.setTimeout(120_000);
     await openCanvas(page, mode, canvas);
     await run(page);
@@ -942,4 +908,250 @@ test('a Legend rename of a rule row onto another rule row of one feature type eq
   expect(await page.evaluate(() => window.__GBDRAW_APP__.legendRenameDialog.show), 'a rule-owned caption does not ask').toBe(false);
   await settleLive(page);
   await expectLiveEqualsGenerate(page, { label: 'same-type rule row renamed onto a rule row' });
+});
+
+// OV-65: Legend styles follow the captions that track data names. Each data
+// change below runs in one History step, as its control's does.
+const inHistoryStep = (page, label, body, arg) => page.evaluate(
+  async ({ stepLabel, source, value }) => {
+    const change = new Function('app', 'value', `return (${source})(app, value);`);
+    await window.__GBDRAW_HISTORY__.runUndoable(stepLabel, () => change(window.__GBDRAW_APP__, value));
+  },
+  { stepLabel: label, source: body.toString(), value: arg }
+);
+
+const legendStyleOf = (page, caption) => page.evaluate(async (target) => {
+  const { state } = await import('/gbdraw/web/js/state.js');
+  return {
+    color: state.legendColorOverrides[target] ?? null,
+    stroke: state.legendStrokeOverrides[target] ?? null
+  };
+}, caption);
+
+const undo = async (page) => {
+  await page.evaluate(() => window.__GBDRAW_APP__.undoHistory());
+  await settleLive(page);
+};
+
+// Types a new text into a label field of an opened section, and leaves the
+// field, as the reader does; the History step commits when the field loses focus.
+const typeIntoLabel = async (page, section, label, text) => {
+  await page.evaluate((name) => {
+    document.querySelectorAll('details > summary').forEach((summary) => {
+      if (summary.textContent.trim().startsWith(name) || summary.getAttribute('aria-label') === name) {
+        summary.parentElement.open = true;
+      }
+    });
+  }, section);
+  const field = page.getByLabel(label, { exact: true });
+  await field.fill(text);
+  await field.blur();
+  await settleLive(page);
+};
+
+const addDepthFile = async (page, name, mode = 'circular') => {
+  await inHistoryStep(page, 'Change uploaded file', (app, { text, fileName, linear }) => {
+    const file = new File([text], fileName, { type: 'text/tab-separated-values' });
+    if (linear) app.setLinearDepthFile(app.linearSeqs[0], 0, file);
+    else app.setCircularDepthFile(0, file);
+  }, { text: DEPTH_TSV, fileName: name, linear: mode === 'linear' });
+  await settleLive(page);
+};
+const depthCaption = (page) => page.evaluate(() => (
+  window.__GBDRAW_APP__.legendEntries.find((entry) => /depth/i.test(entry.caption))?.caption ?? null
+));
+// The setup of a Depth case: a file `depth.tsv` drawn once, with a Legend color on its row.
+const colorDepthRow = (mode = 'circular') => async (page) => {
+  await addDepthFile(page, 'depth.tsv', mode);
+  await generate(page);
+  await colorLegendRow(page, await depthCaption(page));
+};
+const depthFileName = (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  return (app.mode === 'linear' ? app.linearSeqs[0]?.depth?.[0] : app.files.c_depth?.[0]?.[0])?.name ?? null;
+});
+
+const ANNOTATION_TSV = (legendLabel) => [
+  'set_id\tid\tmark\tstart\tend\tlegend_label',
+  `regions\tregion_1\thighlight\t100\t400\t${legendLabel}`
+].join('\n');
+
+const drawnLegendCaptions = async (page) => (await semanticSnapshot(page)).legend.map(({ caption }) => caption);
+const NO_STYLE = { color: null, stroke: null };
+const COLORED = '#7b2cbf';
+
+// Each case runs a data change that removes a caption's rows as one History
+// step. The style is retired in that step: Generate succeeds and draws no row
+// of the data; Undo brings back the data and the style, and the live Result
+// equals Generate.
+const RETIRING_CASES = [
+  {
+    name: 'removing an annotation set',
+    caption: async () => 'Region X',
+    setup: async (page) => {
+      await addAnnotationRow(page, 'Region X');
+      await colorLegendRow(page, 'Region X');
+    },
+    change: (page) => inHistoryStep(page, 'Delete set', (app) => app.removeAnnotationSet(app.annotationSets[0])),
+    restored: (page) => page.evaluate(() => window.__GBDRAW_APP__.annotationSets.length === 1)
+  },
+  {
+    name: 'removing the depth file',
+    caption: async (page) => depthCaption(page),
+    setup: colorDepthRow(),
+    change: (page) => inHistoryStep(page, 'Change uploaded file', (app) => app.setCircularDepthFile(0, null)),
+    restored: async (page) => await depthFileName(page) === 'depth.tsv'
+  },
+  // A Depth track removal and a file of another name reach the same rule.
+  {
+    name: 'removing the Depth track',
+    caption: async (page) => depthCaption(page),
+    setup: colorDepthRow(),
+    change: (page) => inHistoryStep(page, 'Remove Depth', (app) => app.removeCircularDepthTrack(0)),
+    restored: async (page) => await depthFileName(page) === 'depth.tsv'
+  },
+  {
+    name: 'replacing the depth file with a file of another name',
+    caption: async (page) => depthCaption(page),
+    setup: colorDepthRow(),
+    change: (page) => addDepthFile(page, 'coverage.tsv'),
+    restored: async (page) => await depthFileName(page) === 'depth.tsv',
+    drawn: ['coverage']
+  },
+  {
+    name: 'removing the Depth track in Linear',
+    mode: 'linear',
+    caption: async (page) => depthCaption(page),
+    setup: colorDepthRow('linear'),
+    change: (page) => inHistoryStep(page, 'Remove Depth', (app) => app.removeLinearDepthTrack(0)),
+    restored: async (page) => await depthFileName(page) === 'depth.tsv'
+  },
+  {
+    name: 'replacing the depth file with a file of another name in Linear',
+    mode: 'linear',
+    caption: async (page) => depthCaption(page),
+    setup: colorDepthRow('linear'),
+    change: (page) => addDepthFile(page, 'coverage.tsv', 'linear'),
+    restored: async (page) => await depthFileName(page) === 'depth.tsv',
+    drawn: ['coverage']
+  },
+  {
+    name: 'replacing the annotation data with another legendLabel',
+    caption: async () => 'Region X',
+    setup: async (page) => {
+      await addAnnotationRow(page, 'Region X');
+      await colorLegendRow(page, 'Region X');
+    },
+    change: (page) => inHistoryStep(page, 'Import annotations', async (app, tsv) => {
+      await app.importAnnotationTableFile({ target: { files: [new File([tsv], 'annotations.tsv')], value: '' } });
+    }, ANNOTATION_TSV('Region Y')),
+    restored: (page) => page.evaluate(() => window.__GBDRAW_APP__.annotationSets[0]?.annotations[0]?.legendLabel === 'Region X'),
+    drawn: ['Region Y']
+  },
+  // OV-67: a label edit is a data change of the caption. The edits go through
+  // the label fields a reader types into.
+  {
+    name: 'editing the legend label of an annotation set',
+    caption: async () => 'Region X',
+    setup: async (page) => {
+      await page.evaluate(() => {
+        const app = window.__GBDRAW_APP__;
+        const set = app.addAnnotationSet('regions');
+        app.addCoordinateAnnotation(set, { start: 100, end: 400 });
+        set.legendLabel = 'Region X';
+      });
+      await settleLive(page);
+      await generate(page);
+      await colorLegendRow(page, 'Region X');
+    },
+    change: (page) => typeIntoLabel(page, 'Region Annotations', 'Set legend label', 'Region Z'),
+    restored: (page) => page.evaluate(() => window.__GBDRAW_APP__.annotationSets[0]?.legendLabel === 'Region X'),
+    drawn: ['Region Z']
+  },
+  {
+    name: 'editing the legend title of a Depth series',
+    caption: async (page) => depthCaption(page),
+    setup: colorDepthRow(),
+    change: (page) => typeIntoLabel(page, 'Depth TSV tracks', 'Depth legend title', 'Coverage'),
+    restored: (page) => page.evaluate(() => window.__GBDRAW_APP__.adv.depth_tracks[0]?.label === 'depth'),
+    drawn: ['Coverage']
+  }
+];
+
+test.describe('OV-65 Legend styles follow the captions of track data', () => {
+  test.beforeEach(() => { test.setTimeout(180_000); });
+
+  for (const { name, mode = 'circular', caption, setup, change, restored, drawn = [] } of RETIRING_CASES) {
+    test(`${name} retires the styles of its rows, and Generate succeeds`, async ({ page }) => {
+      await openCanvas(page, mode, null);
+      await setup(page);
+      const row = await caption(page);
+      expect(row, 'row caption').toBeTruthy();
+      await change(page);
+      await settleLive(page);
+      expect(await legendStyleOf(page, row)).toEqual(NO_STYLE);
+      await generate(page);
+      const captions = await drawnLegendCaptions(page);
+      expect(captions).not.toContain(row);
+      for (const kept of drawn) expect(captions).toContain(kept);
+    });
+
+    test(`${name}: Undo restores the data and the style, and live equals Generate`, async ({ page }) => {
+      await openCanvas(page, mode, null);
+      await setup(page);
+      const row = await caption(page);
+      await change(page);
+      await settleLive(page);
+      await undo(page);
+      expect(await restored(page), 'data restored').toBe(true);
+      expect((await legendStyleOf(page, row)).color).toBe(COLORED);
+      await expectLiveEqualsGenerate(page, { label: `${name}, Undo` });
+    });
+  }
+
+  test('replacing the depth file with the label unchanged keeps the row style', async ({ page }) => {
+    await openCanvas(page, 'circular', null);
+    await addDepthFile(page, 'depth.tsv');
+    await generate(page);
+    const caption = await depthCaption(page);
+    await colorLegendRow(page, caption);
+    await addDepthFile(page, 'depth.tsv');
+    expect((await legendStyleOf(page, caption)).color).toBe(COLORED);
+    await expectLiveEqualsGenerate(page, { label: 'depth file replaced, same label' });
+  });
+
+  test('replacing the annotation data with the legendLabel unchanged keeps the row style', async ({ page }) => {
+    await openCanvas(page, 'circular', null);
+    await addAnnotationRow(page, 'Region X');
+    await colorLegendRow(page, 'Region X');
+    await inHistoryStep(page, 'Import annotations', async (app, tsv) => {
+      await app.importAnnotationTableFile({ target: { files: [new File([tsv], 'annotations.tsv')], value: '' } });
+    }, ANNOTATION_TSV('Region X'));
+    await settleLive(page);
+    expect((await legendStyleOf(page, 'Region X')).color).toBe(COLORED);
+    await expectLiveEqualsGenerate(page, { label: 'annotation data replaced, same legendLabel' });
+  });
+
+  // OV-68: the generic Track legend label of a slot renames a GC row. Python
+  // lists the default GC caption among the rows it can produce (OV-63), so the
+  // Legend color on the old caption stays stored, as for a switched-off track,
+  // and Generate succeeds. The case guards that.
+  test('renaming the GC content row through its Track legend label keeps Generate working', async ({ page }) => {
+    await openCanvas(page, 'circular', null);
+    await colorLegendRow(page, 'GC content');
+    const panel = page.locator('button[aria-controls="circular-custom-track-slots-panel"]');
+    await reveal(panel);
+    if (await panel.getAttribute('aria-expanded') !== 'true') await panel.click({ timeout: 15_000 });
+    await page.getByText('Use custom stack', { exact: true }).locator('input').check({ timeout: 15_000 });
+    await settleLive(page);
+    const field = page.getByRole('group', { name: 'Circular track slot gc_content', exact: true })
+      .getByRole('textbox', { name: 'Track legend label' });
+    await field.fill('Custom GC', { timeout: 15_000 });
+    await field.blur();
+    await settleLive(page);
+    await generate(page);
+    const captions = await drawnLegendCaptions(page);
+    expect(captions).toContain('Custom GC');
+    expect(captions).not.toContain('GC content');
+  });
 });

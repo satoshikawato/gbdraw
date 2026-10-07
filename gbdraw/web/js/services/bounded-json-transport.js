@@ -70,7 +70,9 @@ export const sendBoundedJson = async (value, sendPart, path = [], { consume = fa
 
 export const createBoundedJsonReceiver = () => {
   let candidate;
+  /** @type {{ path: any, chunks: string[] } | null} */
   let pendingString = null;
+  /** @type {{ bytes: Uint8Array, offset: number } | null} */
   let pendingBytes = null;
   const resolvePath = (path) => {
     if (!Array.isArray(path)) throw new Error('Invalid bounded JSON transport path.');

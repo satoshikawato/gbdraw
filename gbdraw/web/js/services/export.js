@@ -16,7 +16,9 @@ const SVG2PDF_SCRIPT_URL = new URL(
   import.meta.url
 );
 
+/** @type {Promise<typeof import('./standalone-interactivity.js')> | null} */
 let standaloneInteractivityPromise = null;
+/** @type {Promise<void> | null} */
 let pdfLibrariesPromise = null;
 
 const loadStandaloneInteractivity = () => {

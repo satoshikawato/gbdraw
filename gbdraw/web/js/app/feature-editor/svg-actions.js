@@ -29,7 +29,6 @@ import {
   FEATURE_SELECTOR,
   buildFeatureElementIndex,
   clearFeatureElementIndex,
-  filterFeatureFillTargets,
   getFeatureElementIndex,
   getFeatureElements,
   getFeatureFillElements,

@@ -396,7 +396,7 @@ export const splitLegacyVisibilityRules = (rules) => {
 // edits and rules are the current ones, which a label rerender and Generate
 // both carry.
 export const featureDrawnContext = (state, {
-  diagramOptions = null,
+  diagramOptions = /** @type {{ selectedFeaturesSet?: unknown } | null} */ (null),
   featureOverrides = state?.featureOverrides
 } = {}) => ({
   featureOverrides: featureOverrides || {},

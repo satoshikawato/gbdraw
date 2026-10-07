@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { FeatureCatalog, FeatureCatalogItem } from './feature-catalog.js' */
+/** @import { FeatureCatalog, FeatureCatalogItem, FeatureCatalogRow } from './feature-catalog.js' */
 import { normalizeStringArray } from '../app/feature-utils.js';
 import { readRecordSourceSpan, recordSourceInterval } from '../app/record-source-coordinates.js';
 import { FEATURE_CATALOG_SCHEMA } from './feature-catalog.js';
@@ -687,7 +687,8 @@ const catalogItemWithStandaloneOverrides = (sourceItem, context) => {
   }
   const renderedKeys = new Set();
   const renderedIds = new Set();
-  item.features = (Array.isArray(item.features) ? item.features : []).map((reference) => {
+  // A null entry makes the check below return null, which drops this local clone.
+  item.features = /** @type {FeatureCatalogRow[]} */ ((Array.isArray(item.features) ? item.features : []).map((reference) => {
     const recordKey = String(reference?.recordKey || '').trim();
     const biologicalFeatureId = String(reference?.biologicalFeatureId || '').trim();
     if (!recordKey || !biologicalFeatureId) return null;
@@ -708,10 +709,11 @@ const catalogItemWithStandaloneOverrides = (sourceItem, context) => {
     return displayLabel && displayLabel !== fallbackLabel
       ? { ...reference, displayLabel }
       : reference;
-  });
+  }));
   if (item.features.some((reference) => !reference)) return null;
   const groupIds = new Set();
-  item.orthogroups = (Array.isArray(item.orthogroups) ? item.orthogroups : [])
+  // A null entry makes the check below return null, which drops this local clone.
+  item.orthogroups = /** @type {FeatureCatalogRow[]} */ ((Array.isArray(item.orthogroups) ? item.orthogroups : [])
     .map((group) => {
       const identity = standaloneConsistentTextAlias(
         group,
@@ -731,7 +733,7 @@ const catalogItemWithStandaloneOverrides = (sourceItem, context) => {
         ...(displayName ? { display_name: displayName } : {}),
         ...(description ? { description } : {})
       };
-    });
+    }));
   if (item.orthogroups.some((group) => !group)) return null;
   return item;
 };

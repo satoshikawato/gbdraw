@@ -17,6 +17,8 @@ const DEFAULT_THREADED_MIN_FASTA_CHARS = 500000;
 const THREADED_TRAP_RETRY_LIMIT = 2;
 const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
 
+/** @typedef {NonNullable<ReturnType<typeof normalizeUserFacingError>>} UserFacingDiagnostic */
+
 /**
  * One pair job, as planned by `linear-sources.js`. Only the fields this module
  * reads are named; the rest travels to the worker and back unread.
@@ -118,6 +120,7 @@ const SUPPORTED_PROGRAMS = new Set(['blastn', 'tblastx', 'blastp']);
  * @property {AbortSignal} [signal]
  */
 
+/** @type {Promise<any> | null} */
 let wasiShimPromise = null;
 const wasmModulePromises = new Map();
 const threadedSupportPromises = new Map();
@@ -125,7 +128,8 @@ const threadedSupportPromises = new Map();
 const resolveAssetUrl = (path) => new URL(path, window.location.href).toString();
 const resolveWorkerUrl = () => new URL('../workers/losat-worker.js', import.meta.url).toString();
 const resolveThreadedWorkerUrl = () => new URL('../workers/losat-threaded-worker.js', import.meta.url).toString();
-const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
+// `performance` may be absent outside a browser, so the check reads a possibly missing `now`.
+const getNow = () => ((/** @type {Performance | undefined} */ (globalThis.performance))?.now ? performance.now() : Date.now());
 const formatDuration = (startedAt) => `${((getNow() - startedAt) / 1000).toFixed(2)}s`;
 
 const createAbortError = () => {
@@ -243,7 +247,10 @@ export const getLosatThreadingSupport = async ({
     })().catch((error) =>
       buildThreadingStatus(
         'unavailable',
-        normalizeUserFacingError(error || { code: 'UNKNOWN' }, { operation: 'generate', stage: 'initialization' }).summary
+        // The argument is never falsy (`error || {...}`), so a model is returned, not null.
+        /** @type {UserFacingDiagnostic} */ (
+          normalizeUserFacingError(error || { code: 'UNKNOWN' }, { operation: 'generate', stage: 'initialization' })
+        ).summary
       )
     ));
   }
@@ -557,6 +564,7 @@ const runLosatPairsWithWorkers = async (
   }
 
   return new Promise((resolve, reject) => {
+    /** @type {(() => void) | null} */
     let handleAbort = null;
     const cleanup = () => {
       if (handleAbort) signal?.removeEventListener?.('abort', handleAbort);
@@ -693,7 +701,8 @@ const runLosatPairsThreaded = async (
   const sequenceStore = normalizeSequenceStore(sequences);
   const workerCount = Math.min(
     jobs.length,
-    Math.max(1, Number.isFinite(concurrency) ? Math.floor(concurrency) : 1)
+    // `Number.isFinite` is false for an undefined `concurrency`.
+    Math.max(1, Number.isFinite(concurrency) ? Math.floor(/** @type {number} */ (concurrency)) : 1)
   );
   if (workerCount <= 0) return [];
 
@@ -713,6 +722,7 @@ const runLosatPairsThreaded = async (
   let settled = false;
 
   return new Promise((resolve, reject) => {
+    /** @type {(() => void) | null} */
     let handleAbort = null;
     const cleanup = () => {
       if (handleAbort) signal?.removeEventListener?.('abort', handleAbort);
@@ -942,7 +952,10 @@ export const runLosatPairsParallel = async (jobs, options = {}) => {
       } catch (error) {
         if (isAbortError(error, options.signal)) throw getAbortReason(options.signal);
         if (executionMode === 'threaded') throw error;
-        const diagnostic = normalizeUserFacingError(error || { code: 'UNKNOWN' }, { operation: 'generate', stage: 'helper' });
+        // The argument is never falsy (`error || {...}`), so a model is returned, not null.
+        const diagnostic = /** @type {UserFacingDiagnostic} */ (
+          normalizeUserFacingError(error || { code: 'UNKNOWN' }, { operation: 'generate', stage: 'helper' })
+        );
         threadedFallbackReason = diagnostic.summary;
         console.warn('Threaded LOSAT failed; falling back to serial browser execution.', diagnostic);
       }

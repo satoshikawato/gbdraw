@@ -54,10 +54,13 @@ export const materializeLegacySimilarityAlignment = ({
     return recordKeys[member.recordIndex];
   };
   const groupsById = groups.filter((group) => String(group?.id || '') === legacyTarget);
+  /** @type {Record<string, any> | null} */
   let group = null;
+  /** @type {Record<string, any> | null} */
   let selectedMember = null;
   if (groupsById.length === 1) {
-    group = groupsById[0];
+    // The length check above makes this the one matching group.
+    group = /** @type {Record<string, any>} */ (groupsById[0]);
     const members = Array.isArray(group.members) ? group.members : [];
     selectedMember = members.find((member) => member?.representative === true) || members[0] || null;
   } else if (groupsById.length > 1) {
@@ -197,16 +200,17 @@ export const migrateLegacyOrthogroupMembers = (groups, records) => {
     ...group,
     members: (Array.isArray(group?.members) ? group.members : []).map((member) => {
       const identity = featureIdentity(member);
+      // `recordIndex.supplied` is checked below, and a supplied valid index has a number value.
       if (!identity.valid || identity.recordKey.supplied || identity.biologicalId.supplied ||
           !identity.recordIndex.supplied || !identity.sourceIndex.supplied ||
-          !identity.stableId.supplied || typeof recordKeys[identity.recordIndex.value] !== 'string' ||
-          !recordKeys[identity.recordIndex.value]) return member;
+          !identity.stableId.supplied || typeof recordKeys[/** @type {number} */ (identity.recordIndex.value)] !== 'string' ||
+          !recordKeys[/** @type {number} */ (identity.recordIndex.value)]) return member;
       const { featureIndex: _legacyIndex, feature_index: _legacySnakeIndex,
         sourceFeatureIndex: _legacySourceIndex,
         source_feature_index: _legacySnakeSourceIndex, ...stableMember } = member;
       return {
         ...stableMember,
-        recordKey: recordKeys[identity.recordIndex.value],
+        recordKey: recordKeys[/** @type {number} */ (identity.recordIndex.value)],
         biologicalFeatureId: identity.stableId.value
       };
     })

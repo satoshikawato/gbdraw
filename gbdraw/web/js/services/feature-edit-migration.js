@@ -1,5 +1,5 @@
 // @ts-check
-/** @import { FeatureOverrideDraft, FeatureRequestRecord } from './feature-placement.js' */
+/** @import { FeatureOverrideDraft, FeatureOverrideDraftRow, FeatureRequestRecord } from './feature-placement.js' */
 import {
   featureIdentityKey,
   featureIdentityKeyOf,
@@ -40,6 +40,10 @@ export const FEATURE_VISIBILITY_NARROWED_NOTICE = (count) => (
  * @property {Record<string, any> | null} [legacy]
  */
 
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, any>}
+ */
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const text = (value) => String(value ?? '').trim();
 const RENDERED_PART_SUFFIX = /__(?:part|line)\d+$/;
@@ -50,7 +54,9 @@ const INSTANCE_SUFFIX = /__instance_([A-Za-z0-9_.-]+?)_[0-9a-f]{16}$/;
 // position in its Result, and the source feature index of a duplicate.
 const parseRenderedId = (renderedId) => {
   let rest = text(renderedId).replace(RENDERED_PART_SUFFIX, '');
+  /** @type {number | null} */
   let recordOrdinal = null;
+  /** @type {number | null} */
   let sourceIndex = null;
   for (let match = rest.match(INSTANCE_SUFFIX); match; match = rest.match(INSTANCE_SUFFIX)) {
     const instance = match[1];
@@ -141,7 +147,8 @@ const legacyIndex = ({ features = [], biologicalFeatures = [], records = [], mod
     : listed);
   const recordCounts = new Map();
   [...listed, ...sources].forEach(({ input, recordIndex }) => {
-    recordCounts.set(input, Math.max(recordCounts.get(input) || 1, recordIndex + 1));
+    // `listed` and `sources` were filtered above to entries whose `recordIndex` is not null.
+    recordCounts.set(input, Math.max(recordCounts.get(input) || 1, /** @type {number} */ (recordIndex) + 1));
   });
   const recordOf = (input, recordIndex) => (
     linear ? requestRecords[input] : requestRecords[requestRecords.length > 1 ? recordIndex : 0]
@@ -260,13 +267,15 @@ export const migrateRenderedIdFeatureEdits = ({ features, mode, catalog = null, 
   const index = catalog ? catalogIndex(catalog, mode) : legacyIndex({ ...legacy, mode });
   const rowFor = (key) => {
     if (!rows[key]) {
-      rows[key] = {
+      // `key` comes from `featureIdentityKey` through the index, so `parseFeatureIdentityKey`
+      // reads it back whole (scope, recordKey, biologicalFeatureId).
+      rows[key] = /** @type {FeatureOverrideDraftRow} */ ({
         ...parseFeatureIdentityKey(key),
         featureVisibility: null,
         labelVisibility: null,
         labelText: null,
         labelSourceText: null
-      };
+      });
     }
     return rows[key];
   };

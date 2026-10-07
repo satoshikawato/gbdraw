@@ -433,6 +433,7 @@ const removeAttributeIfPresent = (element, name) => {
 };
 
 const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
+  /** @type {{ featureElements: Map<string, Element[]> | null, legendEntries: Map<string, Element[]> | null, legendGroups: Element[] | null }} */
   const state = {
     featureElements: null,
     legendEntries: null,
@@ -448,12 +449,14 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
     features() {
       announce();
       if (state.featureElements) return state.featureElements;
-      state.featureElements = new Map();
+      const featureElements = new Map();
+      state.featureElements = featureElements;
       Array.from(svg.querySelectorAll(FEATURE_SELECTOR)).forEach((element) => {
         const renderedId = getFeatureIdentity(element);
         if (!renderedId) return;
-        if (!state.featureElements.has(renderedId)) state.featureElements.set(renderedId, []);
-        state.featureElements.get(renderedId).push(element);
+        if (!featureElements.has(renderedId)) featureElements.set(renderedId, []);
+        // `get` holds the array set on the line above.
+        /** @type {Element[]} */ (featureElements.get(renderedId)).push(element);
       });
       recordStructuralMetric('featureDomFullScanCount', 1, { phase, resultIndex });
       return state.featureElements;
@@ -462,9 +465,11 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
       announce();
       if (state.legendEntries) return {
         entries: state.legendEntries,
-        groups: state.legendGroups
+        // `legendGroups` is set together with `legendEntries` below.
+        groups: /** @type {Element[]} */ (state.legendGroups)
       };
-      state.legendEntries = new Map();
+      const legendEntries = new Map();
+      state.legendEntries = legendEntries;
       state.legendGroups = getAllFeatureLegendGroups(svg);
       state.legendGroups.forEach((group) => {
         const seen = new Set();
@@ -474,8 +479,9 @@ const createLazyMutationIndex = (svg, { phase, resultIndex }) => {
             throw new Error('Current SVG contains an ambiguous Legend binding.');
           }
           seen.add(caption);
-          if (!state.legendEntries.has(caption)) state.legendEntries.set(caption, []);
-          state.legendEntries.get(caption).push(entry);
+          if (!legendEntries.has(caption)) legendEntries.set(caption, []);
+          // `get` holds the array set on the line above.
+          /** @type {Element[]} */ (legendEntries.get(caption)).push(entry);
         });
       });
       recordStructuralMetric('legendDomFullScanCount', 1, { phase, resultIndex });
@@ -534,7 +540,7 @@ const updateLegendCaption = (entry, caption) => {
 
 // `mayBeAbsent(caption)` says whether Python's Legend row facts let a required row
 // be missing from this Result (OV-63).
-const applyLegendOperations = (index, operations, { displayed = false, mayBeAbsent = undefined } = {}) => {
+const applyLegendOperations = (index, operations, { displayed = false, mayBeAbsent = /** @type {((caption: string) => boolean) | undefined} */ (undefined) } = {}) => {
   const requireRow = (operation) => requireLegendEntries(index, operation.caption, operation, mayBeAbsent);
   operations.legendFills.forEach((operation) => {
     const { color } = operation;
@@ -673,7 +679,7 @@ const admitCurrentResult = (
 
 /**
  * @param {SvgResultSource} source
- * @param {SvgMutationPlan} mutationPlan
+ * @param {SvgMutationPlan | undefined} mutationPlan `requireCurrentMutationPlan` throws when it is missing.
  * @param {SvgAdmissionRuntime} [options]
  */
 const admitCatalogBackedResults = (
@@ -711,7 +717,8 @@ const admitCatalogBackedResults = (
   recordSessionLifecycleEvent('artifact.candidate-completed', {
     phase: sourceClass,
     resultCount: admitted.length,
-    catalogFootprint: catalogAdmission.scalarMetrics
+    // `requireAlignedCatalogAdmission` above throws for a null admission.
+    catalogFootprint: /** @type {FeatureCatalogAdmission} */ (catalogAdmission).scalarMetrics
   });
   return admitted;
 };

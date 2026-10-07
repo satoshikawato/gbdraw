@@ -304,7 +304,7 @@ export const createCombinedSessionResourceFileView = (
       readBytes: () => materializeBytes(backing)
     }))),
     sourceBackings: backings,
-    bytesPromise: null,
+    bytesPromise: /** @type {Promise<Uint8Array> | null} */ (null),
     textPromise: null,
     filePromise: null,
     dirty: false

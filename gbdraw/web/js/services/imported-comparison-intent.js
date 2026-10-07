@@ -163,7 +163,7 @@ const rowsAreEditable = (records, comparisons) => {
   return comparisons.every((comparison) => {
     const query = Number(comparison.queryRecordIndex);
     const subject = Number(comparison.subjectRecordIndex);
-    return Math.abs(rowPosition.get(rows[query]) - rowPosition.get(rows[subject])) === 1;
+    return Math.abs((rowPosition.get(rows[query]) ?? NaN) - (rowPosition.get(rows[subject]) ?? NaN)) === 1;
   });
 };
 
@@ -257,6 +257,7 @@ export const classifyImportedComparisonIntent = ({
     return decision('The saved comparison has no available records.');
   }
 
+  /** @type {Record<string, any> | null} */
   let pipeline = null;
   const singletonKinds = new Set();
   for (const comparison of comparisons) {
@@ -320,7 +321,7 @@ export const classifyImportedComparisonIntent = ({
 export const restoreImportedComparisonIntent = (
   target,
   classification,
-  storedResolution = null
+  storedResolution = /** @type {{ action?: unknown } | null} */ (null)
 ) => {
   Object.assign(target, createImportedComparisonIntentState(), classification || {});
   const storedAction = String(storedResolution?.action || '').trim().toUpperCase();
