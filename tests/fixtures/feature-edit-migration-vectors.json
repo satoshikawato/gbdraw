@@ -1,0 +1,1100 @@
+{
+  "description": "Session 44 and older per-feature edit maps keyed by rendered SVG ID (input.features, with the Session's diagram mode and its saved feature catalog, projected to the fields the readers use) and the Session 45 features both readers must produce: features.featureOverrides rows keyed by [mode, recordKey, biologicalFeatureId], the four maps removed, labelOverrideRows cleared when a label map was migrated, and the counts of dropped and narrowed edits. A case with `fixture` is projected from that Session saved by first-parent main. Read by tests/test_session_compat.py (session_io.migrate_session_feature_edits) and tests/web/feature-edit-migration.test.mjs (migrateSessionFeatureEdits).",
+  "cases": [
+    {
+      "name": "Session 44 Linear, cropped and reverse-complemented records: rule 1 for every map",
+      "fixture": "sessions/feature-edits-crop-rc.v44.gbdraw-session.json.gz",
+      "input": {
+        "features": {
+          "selectedFeatureRecordIdx": 0,
+          "featureColorOverrides": {
+            "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9\u0000fcecf4036": {
+              "color": "#c83366",
+              "caption": "misc_feature at 2400..2500"
+            }
+          },
+          "featureVisibilityManualRules": [],
+          "featureVisibilityOverrides": {
+            "f3b928d8c_record_1": "off",
+            "f64320c02_record_2": "off"
+          },
+          "labelTextFeatureOverrides": {
+            "f32bdefd9_record_1": "PROBE_A_TRNA"
+          },
+          "labelOverrideRows": [],
+          "labelTextBulkOverrides": {},
+          "labelTextFeatureOverrideSources": {
+            "f32bdefd9_record_1": "tRNA-Leu"
+          },
+          "labelVisibilityOverrides": {
+            "f64320c02_record_2": "off"
+          }
+        },
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "linear-seq-2a9b35b3-8bae-454d-a73d-59b0b5f0b025",
+                "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9"
+              ],
+              "features": [
+                {
+                  "svgId": "fbd3d0b74_record_1",
+                  "recordKey": "linear-seq-2a9b35b3-8bae-454d-a73d-59b0b5f0b025",
+                  "biologicalFeatureId": "f3ccacda4"
+                },
+                {
+                  "svgId": "fab2facf4_record_1",
+                  "recordKey": "linear-seq-2a9b35b3-8bae-454d-a73d-59b0b5f0b025",
+                  "biologicalFeatureId": "ffa1f4c4a"
+                },
+                {
+                  "svgId": "f9ee6ddc8_record_1",
+                  "recordKey": "linear-seq-2a9b35b3-8bae-454d-a73d-59b0b5f0b025",
+                  "biologicalFeatureId": "f779210b8"
+                },
+                {
+                  "svgId": "f1c991841_record_1",
+                  "recordKey": "linear-seq-2a9b35b3-8bae-454d-a73d-59b0b5f0b025",
+                  "biologicalFeatureId": "fef810304"
+                },
+                {
+                  "svgId": "f9df18bc8_record_1",
+                  "recordKey": "linear-seq-2a9b35b3-8bae-454d-a73d-59b0b5f0b025",
+                  "biologicalFeatureId": "f01237d96"
+                },
+                {
+                  "svgId": "f3b928d8c_record_1",
+                  "recordKey": "linear-seq-2a9b35b3-8bae-454d-a73d-59b0b5f0b025",
+                  "biologicalFeatureId": "fb5977f81"
+                },
+                {
+                  "svgId": "f32bdefd9_record_1",
+                  "recordKey": "linear-seq-2a9b35b3-8bae-454d-a73d-59b0b5f0b025",
+                  "biologicalFeatureId": "f571eb983"
+                },
+                {
+                  "svgId": "f811dc37d_record_2",
+                  "recordKey": "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9",
+                  "biologicalFeatureId": "f5aa08bf5"
+                },
+                {
+                  "svgId": "f64320c02_record_2",
+                  "recordKey": "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9",
+                  "biologicalFeatureId": "f88047061"
+                },
+                {
+                  "svgId": "ffb26b768_record_2",
+                  "recordKey": "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9",
+                  "biologicalFeatureId": "fcecf4036"
+                },
+                {
+                  "svgId": "f2869b912_record_2",
+                  "recordKey": "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9",
+                  "biologicalFeatureId": "fbc76b20f"
+                },
+                {
+                  "svgId": "f2bf39381_record_2",
+                  "recordKey": "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9",
+                  "biologicalFeatureId": "f5eb0c689"
+                },
+                {
+                  "svgId": "f18376efe_record_2",
+                  "recordKey": "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9",
+                  "biologicalFeatureId": "fd6a65bce"
+                },
+                {
+                  "svgId": "fe45e2b17_record_2",
+                  "recordKey": "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9",
+                  "biologicalFeatureId": "f3f7207f4"
+                },
+                {
+                  "svgId": "fcf2870a4_record_2",
+                  "recordKey": "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9",
+                  "biologicalFeatureId": "fbf6c27e1"
+                }
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "linear-seq-2a9b35b3-8bae-454d-a73d-59b0b5f0b025",
+                  "biologicalFeatureId": "f3ccacda4",
+                  "sourceFeatureIndex": 1
+                },
+                {
+                  "recordKey": "linear-seq-2a9b35b3-8bae-454d-a73d-59b0b5f0b025",
+                  "biologicalFeatureId": "ffa1f4c4a",
+                  "sourceFeatureIndex": 2
+                },
+                {
+                  "recordKey": "linear-seq-2a9b35b3-8bae-454d-a73d-59b0b5f0b025",
+                  "biologicalFeatureId": "f779210b8",
+                  "sourceFeatureIndex": 4
+                },
+                {
+                  "recordKey": "linear-seq-2a9b35b3-8bae-454d-a73d-59b0b5f0b025",
+                  "biologicalFeatureId": "fef810304",
+                  "sourceFeatureIndex": 5
+                },
+                {
+                  "recordKey": "linear-seq-2a9b35b3-8bae-454d-a73d-59b0b5f0b025",
+                  "biologicalFeatureId": "f01237d96",
+                  "sourceFeatureIndex": 6
+                },
+                {
+                  "recordKey": "linear-seq-2a9b35b3-8bae-454d-a73d-59b0b5f0b025",
+                  "biologicalFeatureId": "fb5977f81",
+                  "sourceFeatureIndex": 7
+                },
+                {
+                  "recordKey": "linear-seq-2a9b35b3-8bae-454d-a73d-59b0b5f0b025",
+                  "biologicalFeatureId": "f571eb983",
+                  "sourceFeatureIndex": 8
+                },
+                {
+                  "recordKey": "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9",
+                  "biologicalFeatureId": "f5aa08bf5",
+                  "sourceFeatureIndex": 3
+                },
+                {
+                  "recordKey": "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9",
+                  "biologicalFeatureId": "f88047061",
+                  "sourceFeatureIndex": 8
+                },
+                {
+                  "recordKey": "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9",
+                  "biologicalFeatureId": "fcecf4036",
+                  "sourceFeatureIndex": 7
+                },
+                {
+                  "recordKey": "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9",
+                  "biologicalFeatureId": "fbc76b20f",
+                  "sourceFeatureIndex": 6
+                },
+                {
+                  "recordKey": "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9",
+                  "biologicalFeatureId": "f5eb0c689",
+                  "sourceFeatureIndex": 5
+                },
+                {
+                  "recordKey": "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9",
+                  "biologicalFeatureId": "fd6a65bce",
+                  "sourceFeatureIndex": 4
+                },
+                {
+                  "recordKey": "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9",
+                  "biologicalFeatureId": "f3f7207f4",
+                  "sourceFeatureIndex": 2
+                },
+                {
+                  "recordKey": "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9",
+                  "biologicalFeatureId": "fbf6c27e1",
+                  "sourceFeatureIndex": 1
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "features": {
+          "selectedFeatureRecordIdx": 0,
+          "featureColorOverrides": {
+            "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9\u0000fcecf4036": {
+              "color": "#c83366",
+              "caption": "misc_feature at 2400..2500"
+            }
+          },
+          "featureVisibilityManualRules": [],
+          "labelOverrideRows": [],
+          "labelTextBulkOverrides": {},
+          "featureOverrides": {
+            "[\"linear\",\"linear-seq-2a9b35b3-8bae-454d-a73d-59b0b5f0b025\",\"fb5977f81\"]": {
+              "scope": "linear",
+              "recordKey": "linear-seq-2a9b35b3-8bae-454d-a73d-59b0b5f0b025",
+              "biologicalFeatureId": "fb5977f81",
+              "featureVisibility": "off",
+              "labelVisibility": null,
+              "labelText": null,
+              "labelSourceText": null
+            },
+            "[\"linear\",\"linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9\",\"f88047061\"]": {
+              "scope": "linear",
+              "recordKey": "linear-seq-1fe84ff4-08a1-41cb-a8fc-6c9a597490c9",
+              "biologicalFeatureId": "f88047061",
+              "featureVisibility": "off",
+              "labelVisibility": "off",
+              "labelText": null,
+              "labelSourceText": null
+            },
+            "[\"linear\",\"linear-seq-2a9b35b3-8bae-454d-a73d-59b0b5f0b025\",\"f571eb983\"]": {
+              "scope": "linear",
+              "recordKey": "linear-seq-2a9b35b3-8bae-454d-a73d-59b0b5f0b025",
+              "biologicalFeatureId": "f571eb983",
+              "featureVisibility": null,
+              "labelVisibility": null,
+              "labelText": "PROBE_A_TRNA",
+              "labelSourceText": "tRNA-Leu"
+            }
+          }
+        },
+        "droppedCount": 0,
+        "narrowedVisibilityCount": 0
+      }
+    },
+    {
+      "name": "Session 44 Circular, one record twice: rule 2 for a hidden feature and a narrowed Feature visibility edit",
+      "fixture": "sessions/feature-edits-circular-copies.v44.gbdraw-session.json.gz",
+      "input": {
+        "features": {
+          "selectedFeatureRecordIdx": 0,
+          "featureColorOverrides": {
+            "record-1\u0000ffa1f4c4a": {
+              "color": "#c83366",
+              "caption": "duplicate protein"
+            }
+          },
+          "featureVisibilityManualRules": [],
+          "featureVisibilityOverrides": {
+            "f3ccacda4__instance_record_1_25cba05a594010cc": "off"
+          },
+          "labelTextFeatureOverrides": {
+            "f01237d96__instance_record_1_25cba05a594010cc": "COPY1_ONLY"
+          },
+          "labelOverrideRows": [],
+          "labelTextBulkOverrides": {},
+          "labelTextFeatureOverrideSources": {
+            "f01237d96__instance_record_1_25cba05a594010cc": "gtg start"
+          },
+          "labelVisibilityOverrides": {
+            "fef810304__instance_record_1_25cba05a594010cc": "off"
+          }
+        },
+        "mode": "circular",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "record-1",
+                "record-2"
+              ],
+              "features": [
+                {
+                  "svgId": "ffa1f4c4a__instance_record_1_25cba05a594010cc",
+                  "recordKey": "record-1",
+                  "biologicalFeatureId": "ffa1f4c4a"
+                },
+                {
+                  "svgId": "fcd5590a9__instance_record_1_25cba05a594010cc",
+                  "recordKey": "record-1",
+                  "biologicalFeatureId": "fcd5590a9"
+                },
+                {
+                  "svgId": "f779210b8__instance_record_1_25cba05a594010cc",
+                  "recordKey": "record-1",
+                  "biologicalFeatureId": "f779210b8"
+                },
+                {
+                  "svgId": "fef810304__instance_record_1_25cba05a594010cc",
+                  "recordKey": "record-1",
+                  "biologicalFeatureId": "fef810304"
+                },
+                {
+                  "svgId": "f01237d96__instance_record_1_25cba05a594010cc",
+                  "recordKey": "record-1",
+                  "biologicalFeatureId": "f01237d96"
+                },
+                {
+                  "svgId": "f571eb983__instance_record_1_25cba05a594010cc",
+                  "recordKey": "record-1",
+                  "biologicalFeatureId": "f571eb983"
+                },
+                {
+                  "svgId": "ffa1f4c4a__instance_record_2_aea9d1330ccd675f",
+                  "recordKey": "record-2",
+                  "biologicalFeatureId": "ffa1f4c4a"
+                },
+                {
+                  "svgId": "fcd5590a9__instance_record_2_aea9d1330ccd675f",
+                  "recordKey": "record-2",
+                  "biologicalFeatureId": "fcd5590a9"
+                },
+                {
+                  "svgId": "f779210b8__instance_record_2_aea9d1330ccd675f",
+                  "recordKey": "record-2",
+                  "biologicalFeatureId": "f779210b8"
+                },
+                {
+                  "svgId": "fef810304__instance_record_2_aea9d1330ccd675f",
+                  "recordKey": "record-2",
+                  "biologicalFeatureId": "fef810304"
+                },
+                {
+                  "svgId": "f01237d96__instance_record_2_aea9d1330ccd675f",
+                  "recordKey": "record-2",
+                  "biologicalFeatureId": "f01237d96"
+                },
+                {
+                  "svgId": "f571eb983__instance_record_2_aea9d1330ccd675f",
+                  "recordKey": "record-2",
+                  "biologicalFeatureId": "f571eb983"
+                }
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "record-1",
+                  "biologicalFeatureId": "f3ccacda4",
+                  "sourceFeatureIndex": 1
+                },
+                {
+                  "recordKey": "record-1",
+                  "biologicalFeatureId": "ffa1f4c4a",
+                  "sourceFeatureIndex": 2
+                },
+                {
+                  "recordKey": "record-1",
+                  "biologicalFeatureId": "fcd5590a9",
+                  "sourceFeatureIndex": 3
+                },
+                {
+                  "recordKey": "record-1",
+                  "biologicalFeatureId": "f779210b8",
+                  "sourceFeatureIndex": 4
+                },
+                {
+                  "recordKey": "record-1",
+                  "biologicalFeatureId": "fef810304",
+                  "sourceFeatureIndex": 5
+                },
+                {
+                  "recordKey": "record-1",
+                  "biologicalFeatureId": "f01237d96",
+                  "sourceFeatureIndex": 6
+                },
+                {
+                  "recordKey": "record-1",
+                  "biologicalFeatureId": "fb5977f81",
+                  "sourceFeatureIndex": 7
+                },
+                {
+                  "recordKey": "record-1",
+                  "biologicalFeatureId": "f571eb983",
+                  "sourceFeatureIndex": 8
+                },
+                {
+                  "recordKey": "record-2",
+                  "biologicalFeatureId": "f3ccacda4",
+                  "sourceFeatureIndex": 1
+                },
+                {
+                  "recordKey": "record-2",
+                  "biologicalFeatureId": "ffa1f4c4a",
+                  "sourceFeatureIndex": 2
+                },
+                {
+                  "recordKey": "record-2",
+                  "biologicalFeatureId": "fcd5590a9",
+                  "sourceFeatureIndex": 3
+                },
+                {
+                  "recordKey": "record-2",
+                  "biologicalFeatureId": "f779210b8",
+                  "sourceFeatureIndex": 4
+                },
+                {
+                  "recordKey": "record-2",
+                  "biologicalFeatureId": "fef810304",
+                  "sourceFeatureIndex": 5
+                },
+                {
+                  "recordKey": "record-2",
+                  "biologicalFeatureId": "f01237d96",
+                  "sourceFeatureIndex": 6
+                },
+                {
+                  "recordKey": "record-2",
+                  "biologicalFeatureId": "fb5977f81",
+                  "sourceFeatureIndex": 7
+                },
+                {
+                  "recordKey": "record-2",
+                  "biologicalFeatureId": "f571eb983",
+                  "sourceFeatureIndex": 8
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": {
+        "features": {
+          "selectedFeatureRecordIdx": 0,
+          "featureColorOverrides": {
+            "record-1\u0000ffa1f4c4a": {
+              "color": "#c83366",
+              "caption": "duplicate protein"
+            }
+          },
+          "featureVisibilityManualRules": [],
+          "labelOverrideRows": [],
+          "labelTextBulkOverrides": {},
+          "featureOverrides": {
+            "[\"circular\",\"record-1\",\"f3ccacda4\"]": {
+              "scope": "circular",
+              "recordKey": "record-1",
+              "biologicalFeatureId": "f3ccacda4",
+              "featureVisibility": "off",
+              "labelVisibility": null,
+              "labelText": null,
+              "labelSourceText": null
+            },
+            "[\"circular\",\"record-1\",\"fef810304\"]": {
+              "scope": "circular",
+              "recordKey": "record-1",
+              "biologicalFeatureId": "fef810304",
+              "featureVisibility": null,
+              "labelVisibility": "off",
+              "labelText": null,
+              "labelSourceText": null
+            },
+            "[\"circular\",\"record-1\",\"f01237d96\"]": {
+              "scope": "circular",
+              "recordKey": "record-1",
+              "biologicalFeatureId": "f01237d96",
+              "featureVisibility": null,
+              "labelVisibility": null,
+              "labelText": "COPY1_ONLY",
+              "labelSourceText": "gtg start"
+            }
+          }
+        },
+        "droppedCount": 0,
+        "narrowedVisibilityCount": 1
+      }
+    },
+    {
+      "name": "Rule 2 suffixes, value spellings, and unmatched edits",
+      "input": {
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "seq-a",
+                "seq-b"
+              ],
+              "features": [],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "f1~3",
+                  "stableFeatureId": "f1",
+                  "sourceFeatureIndex": 3
+                },
+                {
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "f1~4",
+                  "stableFeatureId": "f1",
+                  "sourceFeatureIndex": 4
+                },
+                {
+                  "recordKey": "seq-b",
+                  "biologicalFeatureId": "f2",
+                  "sourceFeatureIndex": 1
+                }
+              ]
+            }
+          ]
+        },
+        "features": {
+          "featureVisibilityOverrides": {
+            "f1_record_1__instance_4_0123456789abcdef": "off",
+            "f1_record_1": "on",
+            "f2_record_2": " Suppress ",
+            "f2__instance_record_2_0123456789abcdef__part3": "OFF",
+            "f2_record_1": "off",
+            "f1__instance_9_0123456789abcdef": "off"
+          },
+          "labelVisibilityOverrides": {
+            "f1__instance_3_0123456789abcdef": "ON",
+            "f2_record_2": "hidden"
+          },
+          "labelTextFeatureOverrides": {
+            "f1__instance_3_0123456789abcdef": " \t ",
+            "f2_record_2": "line one\nline\ttwo"
+          },
+          "labelTextFeatureOverrideSources": {
+            "f2_record_2": "src\u0000text",
+            "f1_record_1__instance_4_0123456789abcdef": "Source F1",
+            "f9_record_1": "gone"
+          },
+          "labelOverrideRows": [
+            {
+              "recordId": "seq-a",
+              "featureType": "CDS",
+              "qualifier": "product",
+              "valueRegex": "^hypothetical",
+              "labelText": "hyp."
+            }
+          ]
+        }
+      },
+      "expected": {
+        "features": {
+          "labelOverrideRows": [],
+          "featureOverrides": {
+            "[\"linear\",\"seq-a\",\"f1~4\"]": {
+              "scope": "linear",
+              "recordKey": "seq-a",
+              "biologicalFeatureId": "f1~4",
+              "featureVisibility": "off",
+              "labelVisibility": null,
+              "labelText": null,
+              "labelSourceText": "Source F1"
+            },
+            "[\"linear\",\"seq-b\",\"f2\"]": {
+              "scope": "linear",
+              "recordKey": "seq-b",
+              "biologicalFeatureId": "f2",
+              "featureVisibility": "exclude_matching",
+              "labelVisibility": null,
+              "labelText": "line one line two",
+              "labelSourceText": null
+            },
+            "[\"linear\",\"seq-a\",\"f1~3\"]": {
+              "scope": "linear",
+              "recordKey": "seq-a",
+              "biologicalFeatureId": "f1~3",
+              "featureVisibility": null,
+              "labelVisibility": "on",
+              "labelText": null,
+              "labelSourceText": null
+            }
+          }
+        },
+        "droppedCount": 4,
+        "narrowedVisibilityCount": 1
+      }
+    },
+    {
+      "name": "Rule 1: a rendered ID drawn for several features, part suffixes, and blank label text",
+      "input": {
+        "mode": "circular",
+        "catalog": {
+          "schema": 3,
+          "items": [
+            {
+              "recordKeys": [
+                "r",
+                "rec é"
+              ],
+              "features": [
+                {
+                  "svgId": "fx",
+                  "recordKey": "r",
+                  "biologicalFeatureId": "fx"
+                },
+                {
+                  "svgId": "fx__part2",
+                  "recordKey": "r",
+                  "biologicalFeatureId": "fx"
+                },
+                {
+                  "svgId": "fy",
+                  "recordKey": "r",
+                  "biologicalFeatureId": "fy~1"
+                },
+                {
+                  "svgId": "fy",
+                  "recordKey": "rec é",
+                  "biologicalFeatureId": "fy~1"
+                },
+                {
+                  "svgId": "fz",
+                  "recordKey": "rec é",
+                  "biologicalFeatureId": "fz"
+                },
+                {
+                  "svgId": "",
+                  "recordKey": "r",
+                  "biologicalFeatureId": "fw"
+                },
+                {
+                  "svgId": "fv",
+                  "recordKey": " ",
+                  "biologicalFeatureId": "fv"
+                }
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "r",
+                  "biologicalFeatureId": "fx",
+                  "sourceFeatureIndex": 1
+                },
+                {
+                  "recordKey": "r",
+                  "biologicalFeatureId": "fy~1",
+                  "stableFeatureId": "fy",
+                  "sourceFeatureIndex": 2
+                },
+                {
+                  "recordKey": "r",
+                  "biologicalFeatureId": "fy~3",
+                  "stableFeatureId": "fy",
+                  "sourceFeatureIndex": 3
+                },
+                {
+                  "recordKey": "rec é",
+                  "biologicalFeatureId": "fy~1",
+                  "stableFeatureId": "fy",
+                  "sourceFeatureIndex": 2
+                },
+                {
+                  "recordKey": "rec é",
+                  "biologicalFeatureId": "fz",
+                  "sourceFeatureIndex": 4
+                }
+              ]
+            }
+          ]
+        },
+        "features": {
+          "featureVisibilityOverrides": {
+            "fy": "Exclude_Matching",
+            "fx__part1": "off",
+            "fv": "off"
+          },
+          "labelVisibilityOverrides": {
+            "fz": "off"
+          },
+          "labelTextFeatureOverrides": {
+            "fx": "",
+            "fz": "Z\r\nlabel",
+            "fw": "W"
+          },
+          "labelTextFeatureOverrideSources": {
+            "fz": "z source"
+          },
+          "labelOverrideRows": []
+        }
+      },
+      "expected": {
+        "features": {
+          "labelOverrideRows": [],
+          "featureOverrides": {
+            "[\"circular\",\"r\",\"fy~1\"]": {
+              "scope": "circular",
+              "recordKey": "r",
+              "biologicalFeatureId": "fy~1",
+              "featureVisibility": "exclude_matching",
+              "labelVisibility": null,
+              "labelText": null,
+              "labelSourceText": null
+            },
+            "[\"circular\",\"rec é\",\"fy~1\"]": {
+              "scope": "circular",
+              "recordKey": "rec é",
+              "biologicalFeatureId": "fy~1",
+              "featureVisibility": "exclude_matching",
+              "labelVisibility": null,
+              "labelText": null,
+              "labelSourceText": null
+            },
+            "[\"circular\",\"r\",\"fx\"]": {
+              "scope": "circular",
+              "recordKey": "r",
+              "biologicalFeatureId": "fx",
+              "featureVisibility": "off",
+              "labelVisibility": "off",
+              "labelText": null,
+              "labelSourceText": null
+            },
+            "[\"circular\",\"rec é\",\"fz\"]": {
+              "scope": "circular",
+              "recordKey": "rec é",
+              "biologicalFeatureId": "fz",
+              "featureVisibility": null,
+              "labelVisibility": "off",
+              "labelText": "Z label",
+              "labelSourceText": "z source"
+            }
+          }
+        },
+        "droppedCount": 2,
+        "narrowedVisibilityCount": 1
+      }
+    },
+    {
+      "name": "A label source text alone is kept, and the label table stays",
+      "input": {
+        "mode": "linear",
+        "catalog": {
+          "schema": 5,
+          "items": [
+            {
+              "recordKeys": [
+                "seq-a"
+              ],
+              "features": [
+                {
+                  "svgId": "f5_record_1",
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "f5"
+                }
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "f5",
+                  "sourceFeatureIndex": 1
+                }
+              ]
+            }
+          ]
+        },
+        "features": {
+          "featureVisibilityOverrides": {},
+          "labelVisibilityOverrides": {},
+          "labelTextFeatureOverrides": {},
+          "labelTextFeatureOverrideSources": {
+            "f5_record_1": "five",
+            "f6_record_1": "gone",
+            "f5": ""
+          },
+          "labelOverrideRows": [
+            {
+              "recordId": "seq-a",
+              "featureType": "CDS",
+              "qualifier": "product",
+              "valueRegex": "^hypothetical",
+              "labelText": "hyp."
+            }
+          ]
+        }
+      },
+      "expected": {
+        "features": {
+          "labelOverrideRows": [
+            {
+              "recordId": "seq-a",
+              "featureType": "CDS",
+              "qualifier": "product",
+              "valueRegex": "^hypothetical",
+              "labelText": "hyp."
+            }
+          ],
+          "featureOverrides": {
+            "[\"linear\",\"seq-a\",\"f5\"]": {
+              "scope": "linear",
+              "recordKey": "seq-a",
+              "biologicalFeatureId": "f5",
+              "featureVisibility": null,
+              "labelVisibility": null,
+              "labelText": null,
+              "labelSourceText": "five"
+            }
+          }
+        },
+        "droppedCount": 0,
+        "narrowedVisibilityCount": 0
+      }
+    },
+    {
+      "name": "Without a catalog every edit is dropped",
+      "input": {
+        "mode": "circular",
+        "catalog": null,
+        "features": {
+          "featureVisibilityOverrides": {
+            "f1": "off"
+          },
+          "labelVisibilityOverrides": {
+            "f2": "off"
+          },
+          "labelTextFeatureOverrides": {
+            "f3": "T"
+          },
+          "labelTextFeatureOverrideSources": {
+            "f3": "S"
+          },
+          "labelOverrideRows": [
+            {
+              "recordId": "seq-a",
+              "featureType": "CDS",
+              "qualifier": "product",
+              "valueRegex": "^hypothetical",
+              "labelText": "hyp."
+            }
+          ]
+        }
+      },
+      "expected": {
+        "features": {
+          "labelOverrideRows": [],
+          "featureOverrides": {}
+        },
+        "droppedCount": 3,
+        "narrowedVisibilityCount": 0
+      }
+    },
+    {
+      "name": "A mode other than circular or linear names no feature",
+      "input": {
+        "mode": "",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "seq-a"
+              ],
+              "features": [
+                {
+                  "svgId": "f5",
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "f5"
+                }
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "f5",
+                  "sourceFeatureIndex": 1
+                }
+              ]
+            }
+          ]
+        },
+        "features": {
+          "featureVisibilityOverrides": {
+            "f5": "off"
+          },
+          "labelOverrideRows": [
+            {
+              "recordId": "seq-a",
+              "featureType": "CDS",
+              "qualifier": "product",
+              "valueRegex": "^hypothetical",
+              "labelText": "hyp."
+            }
+          ]
+        }
+      },
+      "expected": {
+        "features": {
+          "labelOverrideRows": [
+            {
+              "recordId": "seq-a",
+              "featureType": "CDS",
+              "qualifier": "product",
+              "valueRegex": "^hypothetical",
+              "labelText": "hyp."
+            }
+          ],
+          "featureOverrides": {}
+        },
+        "droppedCount": 1,
+        "narrowedVisibilityCount": 0
+      }
+    },
+    {
+      "name": "A Session 44 without edits loses only its empty maps",
+      "input": {
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": []
+        },
+        "features": {
+          "selectedFeatureRecordIdx": 0,
+          "featureColorOverrides": {},
+          "featureVisibilityManualRules": [],
+          "featureVisibilityOverrides": {},
+          "labelTextFeatureOverrides": {},
+          "labelOverrideRows": [
+            {
+              "recordId": "seq-a",
+              "featureType": "CDS",
+              "qualifier": "product",
+              "valueRegex": "^hypothetical",
+              "labelText": "hyp."
+            }
+          ],
+          "labelTextBulkOverrides": {},
+          "labelTextFeatureOverrideSources": {},
+          "labelVisibilityOverrides": {}
+        }
+      },
+      "expected": {
+        "features": {
+          "selectedFeatureRecordIdx": 0,
+          "featureColorOverrides": {},
+          "featureVisibilityManualRules": [],
+          "labelOverrideRows": [
+            {
+              "recordId": "seq-a",
+              "featureType": "CDS",
+              "qualifier": "product",
+              "valueRegex": "^hypothetical",
+              "labelText": "hyp."
+            }
+          ],
+          "labelTextBulkOverrides": {},
+          "featureOverrides": {}
+        },
+        "droppedCount": 0,
+        "narrowedVisibilityCount": 0
+      }
+    },
+    {
+      "name": "Edit maps that are not objects are removed",
+      "input": {
+        "mode": "circular",
+        "catalog": null,
+        "features": {
+          "featureVisibilityOverrides": [
+            "f1"
+          ],
+          "labelVisibilityOverrides": "off",
+          "labelTextFeatureOverrides": null,
+          "featureColorOverrides": {}
+        }
+      },
+      "expected": {
+        "features": {
+          "featureColorOverrides": {},
+          "featureOverrides": {}
+        },
+        "droppedCount": 0,
+        "narrowedVisibilityCount": 0
+      }
+    },
+    {
+      "name": "No features object",
+      "input": {
+        "mode": "circular",
+        "catalog": null,
+        "features": null
+      },
+      "expected": {
+        "features": {
+          "featureOverrides": {}
+        },
+        "droppedCount": 0,
+        "narrowedVisibilityCount": 0
+      }
+    },
+    {
+      "name": "Feature visibility values that name Object.prototype members are dropped",
+      "input": {
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "seq-a"
+              ],
+              "features": [
+                {
+                  "svgId": "fp1_record_1",
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp1"
+                },
+                {
+                  "svgId": "fp2_record_1",
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp2"
+                },
+                {
+                  "svgId": "fp3_record_1",
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp3"
+                },
+                {
+                  "svgId": "fp4_record_1",
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp4"
+                },
+                {
+                  "svgId": "fp5_record_1",
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp5"
+                }
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp1",
+                  "sourceFeatureIndex": 1
+                },
+                {
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp2",
+                  "sourceFeatureIndex": 2
+                },
+                {
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp3",
+                  "sourceFeatureIndex": 3
+                },
+                {
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp4",
+                  "sourceFeatureIndex": 4
+                },
+                {
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp5",
+                  "sourceFeatureIndex": 5
+                }
+              ]
+            }
+          ]
+        },
+        "features": {
+          "featureVisibilityOverrides": {
+            "fp1_record_1": "constructor",
+            "fp2_record_1": "toString",
+            "fp3_record_1": "__proto__",
+            "fp4_record_1": " CONSTRUCTOR ",
+            "fp5_record_1": "off"
+          },
+          "labelVisibilityOverrides": {
+            "fp1_record_1": "constructor"
+          },
+          "labelOverrideRows": [
+            {
+              "recordId": "seq-a",
+              "featureType": "CDS",
+              "qualifier": "product",
+              "valueRegex": "^hypothetical",
+              "labelText": "hyp."
+            }
+          ]
+        }
+      },
+      "expected": {
+        "features": {
+          "labelOverrideRows": [],
+          "featureOverrides": {
+            "[\"linear\",\"seq-a\",\"fp5\"]": {
+              "scope": "linear",
+              "recordKey": "seq-a",
+              "biologicalFeatureId": "fp5",
+              "featureVisibility": "off",
+              "labelVisibility": null,
+              "labelText": null,
+              "labelSourceText": null
+            }
+          }
+        },
+        "droppedCount": 5,
+        "narrowedVisibilityCount": 0
+      }
+    }
+  ]
+}

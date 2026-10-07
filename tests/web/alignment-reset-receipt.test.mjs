@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { spawnSync } from 'node:child_process';
-const { buildSimilarityAlignmentResetReceipt: build, validateSimilarityAlignmentResetReceipt: admit } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
+const { buildSimilarityAlignmentResetReceipt: build, validateSimilarityAlignmentResetReceipt: admit,
+  validateAlignmentResetReceiptShape: admitShape } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
+const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
+// OV-130 (R6): a stale or malformed receipt is a diagnostic, not an unknown failure.
+const stale = { code: 'ALIGNMENT_RESET_EVIDENCE' };
 const source = Buffer.from('source bytes remain biological authority');
 const resource = { name: 'record.gbk', kind: 'genbank', encoding: 'base64', data: source.toString('base64'), size: source.length };
 const anchor = (recordKey) => ({ recordKey, biologicalFeatureId: `gene-${recordKey}`, sourceFeatureIndex: 1, stableFeatureSvgId: null });
@@ -58,7 +62,7 @@ for (const [name, mutate] of [
   ['plan removal', f => { f.after.renderRequest.layout.similarityAlignment = null; }]
 ]) test(`reject changed ${name} without dropping evidence`, async () => {
   const f = fixture(); const receipt = await build(f); mutate(f);
-  await assert.rejects(admit(receipt, f.after), /receipt/);
+  await assert.rejects(admit(receipt, f.after), stale);
 });
 test('missing historical evidence and empty modern delta are distinct', async () => {
   const f = fixture(); assert.equal(await admit(undefined, f.after), null);
@@ -75,7 +79,28 @@ test('malformed modern receipt never becomes absent historical evidence', async 
     {...receipt, referenceDeltaX:{recordKey:'b',deltaX:1}},
     {...receipt, referenceDeltaX:{recordKey:'a',deltaX:Infinity}},
     {...receipt, mode:'left'} ];
-  for (const invalid of variants) await assert.rejects(admit(invalid, f.after), /receipt/);
+  for (const invalid of variants) await assert.rejects(admit(invalid, f.after), stale);
+});
+// OV-115 and OV-130: a Linear receipt checked against a Circular request (and any
+// stale receipt) reaches Generate and Save as a specific diagnostic with a way out.
+test('a stale receipt names the Reset alignment evidence and the ways out', async () => {
+  const f = fixture(); const receipt = await build(f);
+  const circular = { ...f.after.renderRequest, mode: 'circular' };
+  assert.throws(() => admitShape(receipt, circular), stale);
+  const changed = structuredClone(f.after); changed.renderRequest.records[1].selector.id = 'another-record';
+  const failures = [];
+  try { admitShape(receipt, circular); } catch (error) { failures.push(error); }
+  await admit(receipt, changed).catch((error) => failures.push(error));
+  assert.equal(failures.length, 2);
+  for (const error of failures) {
+    for (const [operation, stage] of [['generate', 'render'], ['session-save', 'unknown']]) {
+      const model = normalizeUserFacingError(error, { operation, stage });
+      assert.deepEqual([model.code, model.operation, model.stage, model.context, model.actions],
+        ['ALIGNMENT_RESET_EVIDENCE', operation, 'request-validation', {}, ['edit-input']]);
+      assert.equal(model.summary, 'The Reset alignment evidence of the latest Align does not match the current records'
+        + ' or alignment plan. Undo the changes made after Align, or select Align\u2026 again.');
+    }
+  }
 });
 test('new Align replaces evidence relative to immediately preceding artifact', async () => {
   const a = fixture(); const first = await build(a); const b = structuredClone(a.after);

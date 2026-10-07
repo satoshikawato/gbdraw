@@ -55,6 +55,229 @@ const reveal = async locator => {
   return locator;
 };
 
+// The swatch of row `caption` in each Legend group of the selected Result and of the mounted SVG.
+const rowStyle = (page, caption) => page.evaluate(async target => {
+  const { state: s } = await import('./js/state.js');
+  const { getAllFeatureLegendGroups, getLegendEntrySwatch } = await import('./js/app/legend/utils.js');
+  const styles = svg => getAllFeatureLegendGroups(svg).map(group => {
+    const swatch = getLegendEntrySwatch(group.querySelector(`g[data-legend-key="${CSS.escape(target)}"]`));
+    return swatch && [swatch.getAttribute('fill'), swatch.getAttribute('stroke'), swatch.getAttribute('stroke-width')];
+  });
+  const content = s.results.value[s.selectedResultIndex.value].content;
+  return {
+    result: styles(new DOMParser().parseFromString(content, 'image/svg+xml').documentElement),
+    mounted: styles(s.svgContainer.value.querySelector('svg'))
+  };
+}, caption);
+const legendIndex = caption => window.__GBDRAW_APP__.legendEntries.findIndex(e => e.caption === caption);
+const expectRow = async (page, caption, style) => {
+  const current = await rowStyle(page, caption);
+  expect(current.result.length).toBeGreaterThan(0);
+  expect(current.result).toEqual(current.result.map(() => style));
+  expect(current.mounted).toEqual(current.result);
+};
+
+// OV-86: a style on a row the Legend editor added failed every later Generate.
+for (const mode of ['linear', 'circular']) {
+  test(`M1 ${mode}: a style on a Legend editor added row survives Generate, rename, Session replay, and removal`, async ({ browser }, testInfo) => {
+    test.setTimeout(900_000);
+    const page = await load(browser);
+    page.setDefaultTimeout(180_000);
+    let fresh;
+    try {
+      if (mode === 'linear') await switchMode(page, 'linear');
+      const input = mode === 'linear'
+        ? page.getByTestId('linear-genbank-1')
+        : page.getByLabel('GenBank/DDBJ File', { exact: true });
+      await input.setInputFiles('tests/fixtures/forced_label_underlay.gb');
+      await generate(page);
+      await page.evaluate(async () => {
+        const app = window.__GBDRAW_APP__;
+        app.newLegendCaption = 'Manual row';
+        app.newLegendColor = '#118833';
+        await app.addNewLegendEntry();
+      });
+      await expect.poll(() => page.evaluate(legendIndex, 'Manual row')).toBeGreaterThanOrEqual(0);
+      await generate(page);
+      // Linear styles the fill first and Circular the stroke; each alone failed.
+      const edits = {
+        fill: () => page.evaluate(caption => {
+          const app = window.__GBDRAW_APP__;
+          return app.updateLegendEntryColor(app.legendEntries.findIndex(e => e.caption === caption), '#7b2cbf');
+        }, 'Manual row'),
+        stroke: () => page.evaluate(caption => {
+          const app = window.__GBDRAW_APP__;
+          const index = app.legendEntries.findIndex(e => e.caption === caption);
+          return app.updateLegendEntryStrokeColor(index, '#e63946') && app.updateLegendEntryStrokeWidth(index, 2);
+        }, 'Manual row')
+      };
+      for (const edit of mode === 'linear' ? ['fill', 'stroke'] : ['stroke', 'fill']) {
+        expect(await edits[edit]()).toBe(true);
+        await generate(page);
+      }
+      const styled = ['#7b2cbf', '#e63946', '2'];
+      await expectRow(page, 'Manual row', styled);
+      await evaluateWithRetainedPromise(page, async index => {
+        await window.__GBDRAW_APP__.renameLegendEntry(index, 'Manual renamed');
+      }, await page.evaluate(legendIndex, 'Manual row'));
+      await expect.poll(() => page.evaluate(legendIndex, 'Manual renamed')).toBeGreaterThanOrEqual(0);
+      await generate(page);
+      await expectRow(page, 'Manual renamed', styled);
+      await expectRow(page, 'Manual row', null);
+      const saved = testInfo.outputPath(`added-row-style-${mode}.gbdraw-session.json.gz`);
+      await download(page, 'Save Session', saved);
+      fresh = await load(browser, saved);
+      await expectRow(fresh, 'Manual renamed', styled);
+      await generate(fresh);
+      await expectRow(fresh, 'Manual renamed', styled);
+      await fresh.evaluate(caption => {
+        const app = window.__GBDRAW_APP__;
+        app.deleteLegendEntry(app.legendEntries.findIndex(e => e.caption === caption));
+      }, 'Manual renamed');
+      await generate(fresh);
+      await expectRow(fresh, 'Manual renamed', null);
+      expect(page.externalRequests).toEqual([]);
+      expect(fresh.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+      if (fresh) await fresh.context().close();
+    }
+  });
+}
+
+// `forced_label_underlay.gb` generated in `mode`.
+const loadGenerated = async (browser, mode) => {
+  const page = await load(browser);
+  page.setDefaultTimeout(180_000);
+  if (mode === 'linear') await switchMode(page, 'linear');
+  const input = mode === 'linear'
+    ? page.getByTestId('linear-genbank-1')
+    : page.getByLabel('GenBank/DDBJ File', { exact: true });
+  await input.setInputFiles('tests/fixtures/forced_label_underlay.gb');
+  await generate(page);
+  return page;
+};
+const addLegendRow = async (page, caption, color) => {
+  await evaluateWithRetainedPromise(page, async row => {
+    const app = window.__GBDRAW_APP__;
+    app.newLegendCaption = row.caption;
+    app.newLegendColor = row.color;
+    await app.addNewLegendEntry();
+  }, { caption, color });
+  await expect.poll(() => page.evaluate(legendIndex, caption)).toBeGreaterThanOrEqual(0);
+};
+// The swatch stroke of row `caption` (color normalized, width as a number) in each
+// Legend group of the selected Result and of the mounted SVG.
+const rowStroke = (page, caption) => page.evaluate(async target => {
+  const { state: s } = await import('./js/state.js');
+  const { getAllFeatureLegendGroups, getLegendEntrySwatch } = await import('./js/app/legend/utils.js');
+  const paint = document.createElement('canvas').getContext('2d');
+  const color = value => { paint.fillStyle = '#010203'; paint.fillStyle = String(value); return String(paint.fillStyle); };
+  const strokes = svg => getAllFeatureLegendGroups(svg).map(group => {
+    const swatch = getLegendEntrySwatch(group.querySelector(`g[data-legend-key="${CSS.escape(target)}"]`));
+    return swatch && [color(swatch.getAttribute('stroke')), Number(swatch.getAttribute('stroke-width'))];
+  });
+  const content = s.results.value[s.selectedResultIndex.value].content;
+  return {
+    result: strokes(new DOMParser().parseFromString(content, 'image/svg+xml').documentElement),
+    mounted: strokes(s.svgContainer.value.querySelector('svg'))
+  };
+}, caption);
+const expectStroke = async (page, caption, stroke) => {
+  const current = await rowStroke(page, caption);
+  expect(current.result.length).toBeGreaterThan(0);
+  expect(current.result).toEqual(current.result.map(() => stroke));
+  expect(current.mounted).toEqual(current.result);
+};
+
+// OV-121 (PD-OI-066): a row added in the Legend editor without a stroke of its own
+// takes the renderer's first row as Generate copies it, before that row's own
+// stroke edit, live and at Generate; a later edit of the first row leaves it.
+for (const mode of ['linear', 'circular']) {
+  test(`M2 ${mode}: a Legend editor added row takes the first row's drawn stroke live and at Generate`, async ({ browser }) => {
+    test.setTimeout(600_000);
+    const page = await loadGenerated(browser, mode);
+    try {
+      const first = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries[0].caption);
+      const [drawn] = (await rowStroke(page, first)).result;
+      const strokeFirstRow = (color, width) => page.evaluate(edit => {
+        const app = window.__GBDRAW_APP__;
+        return app.updateLegendEntryStrokeColor(0, edit.color) && app.updateLegendEntryStrokeWidth(0, edit.width);
+      }, { color, width });
+      expect(await strokeFirstRow('#e63946', 3)).toBe(true);
+      await addLegendRow(page, 'Manual row', '#118833');
+      await expectStroke(page, 'Manual row', drawn);
+      await generate(page);
+      await expectStroke(page, first, ['#e63946', 3]);
+      await expectStroke(page, 'Manual row', drawn);
+      expect(await strokeFirstRow('#2a9d8f', 1)).toBe(true);
+      await expectStroke(page, 'Manual row', drawn);
+      await generate(page);
+      await expectStroke(page, first, ['#2a9d8f', 1]);
+      await expectStroke(page, 'Manual row', drawn);
+      expect(page.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+    }
+  });
+}
+
+// The caption box [left, top, right, bottom] of each drawn Legend row of the
+// mounted SVG, and the canvas [width, height], in canvas units.
+const legendCaptionBoxes = page => page.evaluate(async () => {
+  const { state: s } = await import('./js/state.js');
+  const svg = s.svgContainer.value.querySelector('svg');
+  const width = svg.viewBox.baseVal?.width || svg.width.baseVal.value;
+  const height = svg.viewBox.baseVal?.height || svg.height.baseVal.value;
+  const frame = svg.getBoundingClientRect();
+  const scale = frame.width / width;
+  const rows = [...svg.querySelectorAll('#legend g[data-legend-key]')]
+    .filter(entry => !entry.closest('[display="none"]'))
+    .map(entry => {
+      const box = entry.querySelector('text').getBoundingClientRect();
+      const left = (box.left - frame.left) / scale;
+      const top = (box.top - frame.top) / scale;
+      return [entry.getAttribute('data-legend-key'), [left, top, left + box.width / scale, top + box.height / scale]];
+    });
+  return { canvas: [width, height], rows: Object.fromEntries(rows) };
+});
+const expectInsideCanvas = ({ canvas: [width, height], rows }) => {
+  const outside = Object.entries(rows).filter(([, [left, top, right, bottom]]) => (
+    left < 0 || top < 0 || right > width || bottom > height
+  ));
+  expect(outside).toEqual([]);
+};
+const expectSameBoxes = (actual, expected) => {
+  const near = (left, right) => left.length === right.length && left.every((value, index) => Math.abs(value - right[index]) <= 1);
+  expect(Object.keys(actual.rows).sort()).toEqual(Object.keys(expected.rows).sort());
+  expect(near(actual.canvas, expected.canvas), `canvas ${actual.canvas} vs ${expected.canvas}`).toBe(true);
+  const moved = Object.keys(expected.rows).filter(caption => !near(actual.rows[caption], expected.rows[caption]))
+    .map(caption => `${caption}: ${actual.rows[caption].map(Math.round)} vs ${expected.rows[caption].map(Math.round)}`);
+  expect(moved).toEqual([]);
+};
+
+// OV-122 (PD-OI-066, OIC-027): Generate draws a row added in the Legend editor,
+// and the Legend around it, where the live add placed them, inside the canvas.
+for (const mode of ['linear', 'circular']) {
+  test(`M3 ${mode}: a Legend editor added row stays where the live add placed it, inside the canvas`, async ({ browser }) => {
+    test.setTimeout(600_000);
+    const page = await loadGenerated(browser, mode);
+    try {
+      await addLegendRow(page, 'Manual row', '#118833');
+      const live = await legendCaptionBoxes(page);
+      expect(Object.keys(live.rows)).toContain('Manual row');
+      expectInsideCanvas(live);
+      await generate(page);
+      const generated = await legendCaptionBoxes(page);
+      expectInsideCanvas(generated);
+      expectSameBoxes(generated, live);
+      expect(page.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+    }
+  });
+}
+
 test('L1-L8 generated legend categories reconcile while valid category and layout preferences survive', async ({ browser }, testInfo) => {
   test.setTimeout(1_800_000);
   const page = await load(browser, seeds.lambda);

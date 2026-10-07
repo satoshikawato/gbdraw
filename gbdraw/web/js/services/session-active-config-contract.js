@@ -302,7 +302,8 @@ const sortedValue = (value) => Array.isArray(value)
 
 export const validateAlignmentResetReceiptShape = (receipt, request) => {
   if (receipt === null || receipt === undefined) return null;
-  const invalid = () => { throw new Error('Alignment reset receipt is malformed or stale.'); };
+  // A malformed or stale receipt (OV-115, OV-130) is one user-facing failure.
+  const invalid = () => { throw diagnosticError('ALIGNMENT_RESET_EVIDENCE'); };
   if (!isObject(receipt)
     || Object.keys(receipt).sort().join(',') !== 'binding,directions,referenceDeltaX'
     || !/^[0-9a-f]{64}$/.test(receipt.binding)
@@ -364,7 +365,7 @@ const resetBinding = async (canonical) => {
 export const validateSimilarityAlignmentResetReceipt = async (receipt, canonical) => {
   const validated = validateAlignmentResetReceiptShape(receipt, canonical?.renderRequest);
   if (validated && validated.binding !== await resetBinding(canonical)) {
-    throw new Error('Alignment reset receipt source or plan binding changed.');
+    throw diagnosticError('ALIGNMENT_RESET_EVIDENCE');
   }
   return validated;
 };

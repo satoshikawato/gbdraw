@@ -830,7 +830,8 @@ follows the shared entries when they move. Showing another Result records no
 **Undo** step. A **Layout edit** drag or a position
 reset moves only the displayed Result; **Undo** and **Redo** restore the Result
 it was made on, also while another Result is displayed, and keep the displayed Result. **Load Label TSV** matches its rows against the labels
-of every Result and records the import as one **Undo** step. A Result that was never displayed keeps its earlier
+of every Result and records the import as one **Undo** step; a table that
+applies to no label keeps the label edits, records no step, and says so. A Result that was never displayed keeps its earlier
 SVG in a saved Session until it is displayed or Generate runs. An undone legend
 rename or legend color reaches another Result at the next Generate.
 

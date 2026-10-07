@@ -535,7 +535,13 @@ def expand_session_feature_catalog(
 
 
 def load_session(path: str | Path) -> dict[str, Any]:
-    """Load and validate a plain or gzip-compressed gbdraw GUI session JSON file."""
+    """Load and validate a plain or gzip-compressed gbdraw GUI session JSON file.
+
+    It validates the document as ``gbdraw.session.load_session_document`` does,
+    canonical resource descriptors included.
+    """
+
+    from .session import _validate_document
 
     session_path = Path(path)
     try:
@@ -550,7 +556,7 @@ def load_session(path: str | Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValidationError("Session JSON must be an object.")
     payload = expand_session_feature_catalog(payload)
-    validate_session(payload)
+    _validate_document(payload)
     return payload
 
 
@@ -1514,19 +1520,483 @@ def _migrate_session_feature_placements(placements: object) -> object:
             migrated[key] = row
         for scope in modes:
             scoped = {"scope": scope, **fields}
-            record_key = scoped.get("recordKey")
-            feature_id = scoped.get("biologicalFeatureId")
-            if (
-                isinstance(record_key, str)
-                and isinstance(feature_id, str)
-                and record_key.strip()
-                and feature_id.strip()
-                and "\0" not in record_key + feature_id
-            ):
-                migrated[_draft_identity_key(scope, record_key, feature_id)] = scoped
-            else:
-                migrated[key] = scoped
+            migrated[_feature_identity_key_of(scoped) or key] = scoped
     return migrated
+
+
+# The Web readers' ``String(value ?? '')`` and ``.trim()`` (ECMAScript white
+# space and line terminators), so the twins below read text as the Web does.
+_JS_WHITESPACE = (
+    "\t\n\v\f\r \u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006"
+    "\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+)
+
+
+def _js_string(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, str):
+        return value
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, float):
+        return str(int(value)) if value.is_integer() and abs(value) < 1e21 else repr(value)
+    if isinstance(value, list):
+        return ",".join(_js_string(item) for item in value)
+    return "[object Object]"
+
+
+def _js_text(value: object) -> str:
+    return _js_string(value).strip(_JS_WHITESPACE)
+
+
+def _feature_identity_key(scope: object, record_key: object, feature_id: object) -> str:
+    """The draft key of one feature in one mode, or ``""`` for an invalid identity.
+
+    The twin of ``featureIdentityKey`` in the Web ``feature-placement.js``.
+    """
+
+    if (
+        scope in DRAFT_SCOPES
+        and isinstance(record_key, str)
+        and isinstance(feature_id, str)
+        and record_key.strip(_JS_WHITESPACE)
+        and feature_id.strip(_JS_WHITESPACE)
+        and "\0" not in record_key + feature_id
+    ):
+        return _draft_identity_key(str(scope), record_key, feature_id)
+    return ""
+
+
+def _feature_identity_key_of(row: Mapping[str, Any]) -> str:
+    record_key = row.get("record_key")
+    feature_id = row.get("biological_feature_id")
+    return _feature_identity_key(
+        row.get("scope"),
+        row.get("recordKey") if record_key is None else record_key,
+        row.get("biologicalFeatureId") if feature_id is None else feature_id,
+    )
+
+
+# Session 44 and older kept per-feature edits in four maps keyed by rendered SVG
+# ID (RETIRED_RENDERED_ID_FEATURE_FIELDS). A rendered ID is
+# ``<hash>[_record_<n>][__instance_<s>_<digest>]``, optionally with a part suffix.
+_RENDERED_PART_SUFFIX = re.compile(r"__(?:part|line)[0-9]+\Z")
+_RENDERED_INSTANCE_SUFFIX = re.compile(r"__instance_([A-Za-z0-9_.-]+?)_[0-9a-f]{16}\Z")
+_RENDERED_RECORD_INSTANCE = re.compile(r"record_([1-9][0-9]*)")
+_RENDERED_SOURCE_INSTANCE = re.compile(r"0|[1-9][0-9]*")
+_RENDERED_LINEAR_RECORD = re.compile(r"([^\n\r\u2028\u2029]*)_record_([1-9][0-9]*)\Z")
+_FEATURE_VISIBILITY_EDIT_VALUES = {
+    "on": "on",
+    "off": "off",
+    "exclude_matching": "exclude_matching",
+    "suppress": "exclude_matching",
+}
+_FEATURE_EDIT_DRAFT_FIELDS = ("featureVisibility", "labelVisibility", "labelText", "labelSourceText")
+_JS_MAX_SAFE_INTEGER = 2**53 - 1
+
+
+def _rendered_id_without_part(rendered_id: object) -> str:
+    return _RENDERED_PART_SUFFIX.sub("", _js_text(rendered_id), count=1)
+
+
+def _parse_rendered_id(rendered_id: object) -> tuple[str, int | None, int | None]:
+    """The stable hash, one-based record position, and source index of a rendered ID."""
+
+    rest = _rendered_id_without_part(rendered_id)
+    record_ordinal: int | None = None
+    source_index: int | None = None
+    match = _RENDERED_INSTANCE_SUFFIX.search(rest)
+    while match:
+        instance = match.group(1)
+        record = _RENDERED_RECORD_INSTANCE.fullmatch(instance)
+        if record:
+            if record_ordinal is None:
+                record_ordinal = int(record.group(1))
+        elif _RENDERED_SOURCE_INSTANCE.fullmatch(instance) and source_index is None:
+            source_index = int(instance)
+        rest = rest[: match.start()]
+        match = _RENDERED_INSTANCE_SUFFIX.search(rest)
+    linear_record = _RENDERED_LINEAR_RECORD.match(rest)
+    if linear_record:
+        rest = linear_record.group(1)
+        if record_ordinal is None:
+            record_ordinal = int(linear_record.group(2))
+    return rest, record_ordinal, source_index
+
+
+def _safe_integer(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, float) and value.is_integer():
+        value = int(value)
+    if isinstance(value, int) and abs(value) <= _JS_MAX_SAFE_INTEGER:
+        return value
+    return None
+
+
+def _mapping_list(value: object) -> list[Mapping[str, Any]]:
+    """The entries of a JSON array, each read as an object (a non-object reads as empty)."""
+
+    return [item if isinstance(item, Mapping) else {} for item in value] if isinstance(value, list) else []
+
+
+@dataclass(frozen=True)
+class FeatureEditMigration:
+    """The Session 45 ``features`` of an older Session and what Load would report."""
+
+    features: dict[str, Any]
+    dropped_count: int
+    narrowed_visibility_count: int
+
+
+def migrate_session_feature_edits(
+    features: object, *, mode: object, catalog: object
+) -> FeatureEditMigration:
+    """Move the rendered-ID edit maps of a Session 44 or older to draft rows.
+
+    Each edit becomes a ``features.featureOverrides`` row keyed by
+    ``[mode, recordKey, biologicalFeatureId]`` through the Session's saved
+    feature catalog (schema 3, 4, or 5). Rule 1: a rendered ID of the catalog
+    names every identity drawn with it. Rule 2: otherwise the hash, record
+    position, and source index of its suffixes must name exactly one catalog
+    feature. Any other edit is dropped and counted (a label source text is not
+    an edit of its own). A Feature visibility edit that now names fewer features
+    than its hash did is counted as narrowed. When a label map is migrated the
+    saved label table (``labelOverrideRows``) is cleared, as it was built from
+    those maps.
+
+    This is the twin of ``migrateSessionFeatureEdits`` in the Web
+    ``feature-edit-migration.js`` for a Session with a catalog;
+    ``tests/fixtures/feature-edit-migration-vectors.json`` pins both. The Web
+    maps a Session without a catalog through its sources read again, which has
+    no twin here: with ``catalog=None`` every edit is dropped.
+    """
+
+    source = features if isinstance(features, Mapping) else {}
+    rows: dict[str, dict[str, Any]] = {}
+    dropped_count = 0
+    narrowed_visibility_count = 0
+
+    def non_empty_map(field: str) -> bool:
+        value = source.get(field)
+        return isinstance(value, Mapping) and len(value) > 0
+
+    migrated_label_edits = non_empty_map("labelVisibilityOverrides") or non_empty_map(
+        "labelTextFeatureOverrides"
+    )
+    if any(non_empty_map(field) for field in RETIRED_RENDERED_ID_FEATURE_FIELDS):
+        rendered_by_id: dict[str, dict[str, None]] = {}
+        biological: list[tuple[str, str, int | None, int]] = []
+        items = catalog.get("items") if isinstance(catalog, Mapping) else None
+        for item in _mapping_list(items):
+            record_keys_value = item.get("recordKeys")
+            record_keys = (
+                [_js_text(record_key) for record_key in record_keys_value]
+                if isinstance(record_keys_value, list)
+                else []
+            )
+            for feature in _mapping_list(item.get("features")):
+                key = _feature_identity_key(
+                    mode, _js_text(feature.get("recordKey")), _js_text(feature.get("biologicalFeatureId"))
+                )
+                svg_id = _rendered_id_without_part(feature.get("svgId"))
+                if key and svg_id:
+                    rendered_by_id.setdefault(svg_id, {})[key] = None
+            for feature in _mapping_list(item.get("biologicalFeatures")):
+                record_key = _js_text(feature.get("recordKey"))
+                feature_id = _js_text(feature.get("biologicalFeatureId"))
+                key = _feature_identity_key(mode, record_key, feature_id)
+                if key:
+                    biological.append(
+                        (
+                            key,
+                            _js_text(feature.get("stableFeatureId")) or feature_id,
+                            _safe_integer(feature.get("sourceFeatureIndex")),
+                            record_keys.index(record_key) + 1 if record_key in record_keys else 0,
+                        )
+                    )
+        by_hash: dict[str, dict[str, None]] | None = None
+
+        def resolve(old_key: str) -> list[str]:
+            drawn = rendered_by_id.get(_rendered_id_without_part(old_key))
+            if drawn:
+                return list(drawn)
+            stable_id, record_ordinal, source_index = _parse_rendered_id(old_key)
+            if not stable_id:
+                return []
+            candidates = [
+                key
+                for key, feature_stable_id, feature_source_index, feature_ordinal in biological
+                if feature_stable_id == stable_id
+                and (record_ordinal is None or feature_ordinal == record_ordinal)
+                and (source_index is None or feature_source_index == source_index)
+            ]
+            return candidates if len(candidates) == 1 else []
+
+        def identities_with_hash(stable_id: str) -> dict[str, None]:
+            # Every identity the `hash` row of a Session before 45 reached.
+            nonlocal by_hash
+            if by_hash is None:
+                by_hash = {}
+                for svg_id, keys in rendered_by_id.items():
+                    by_hash.setdefault(_parse_rendered_id(svg_id)[0], {}).update(keys)
+                for key, feature_stable_id, _, _ in biological:
+                    by_hash.setdefault(feature_stable_id, {})[key] = None
+            return by_hash.get(stable_id, {})
+
+        def row_for(key: str) -> dict[str, Any]:
+            if key not in rows:
+                scope, record_key, feature_id = json.loads(key)
+                rows[key] = {
+                    "scope": scope,
+                    "recordKey": record_key,
+                    "biologicalFeatureId": feature_id,
+                    **dict.fromkeys(_FEATURE_EDIT_DRAFT_FIELDS),
+                }
+            return rows[key]
+
+        def assign_feature_visibility(row: dict[str, Any], value: object) -> bool:
+            visibility = _FEATURE_VISIBILITY_EDIT_VALUES.get(_js_text(value).lower())
+            if visibility is None:
+                return False
+            if row["featureVisibility"] is None:
+                row["featureVisibility"] = visibility
+            return True
+
+        def assign_label_visibility(row: dict[str, Any], value: object) -> bool:
+            visibility = _js_text(value).lower()
+            if visibility not in ("on", "off"):
+                return False
+            if row["labelVisibility"] is None:
+                row["labelVisibility"] = visibility
+            return True
+
+        def assign_label_text(row: dict[str, Any], value: object) -> bool:
+            label_text = re.sub(r"[\t\r\n\0]+", " ", _js_string(value))
+            if label_text.strip(_JS_WHITESPACE):
+                if row["labelText"] is None:
+                    row["labelText"] = label_text
+            elif row["labelVisibility"] != "on":
+                # A blank text hid the label (its table row drew an empty label).
+                row["labelVisibility"] = "off"
+            return True
+
+        def assign_label_source_text(row: dict[str, Any], value: object) -> bool:
+            source_text = _js_string(value)
+            if not source_text or "\0" in source_text:
+                return False
+            if row["labelSourceText"] is None:
+                row["labelSourceText"] = source_text
+            return True
+
+        for field, assign in (
+            ("featureVisibilityOverrides", assign_feature_visibility),
+            ("labelVisibilityOverrides", assign_label_visibility),
+            ("labelTextFeatureOverrides", assign_label_text),
+            ("labelTextFeatureOverrideSources", assign_label_source_text),
+        ):
+            edits = source.get(field)
+            for old_key, value in (edits.items() if isinstance(edits, Mapping) else ()):
+                keys = resolve(old_key)
+                if not keys or not all(assign(row_for(key), value) for key in keys):
+                    if field != "labelTextFeatureOverrideSources":
+                        dropped_count += 1
+                elif field == "featureVisibilityOverrides" and any(
+                    key not in keys for key in identities_with_hash(_parse_rendered_id(old_key)[0])
+                ):
+                    narrowed_visibility_count += 1
+        # A source text alone is kept only for a feature a bulk label edit can reach.
+        rows = {
+            key: row
+            for key, row in rows.items()
+            if any(row[field] is not None for field in _FEATURE_EDIT_DRAFT_FIELDS)
+        }
+
+    migrated = {
+        key: value for key, value in source.items() if key not in RETIRED_RENDERED_ID_FEATURE_FIELDS
+    }
+    migrated["featureOverrides"] = rows
+    if migrated_label_edits:
+        migrated["labelOverrideRows"] = []
+    return FeatureEditMigration(migrated, dropped_count, narrowed_visibility_count)
+
+
+# A record selector's position is read as a JavaScript array index: the
+# canonical decimal text of the value.
+_JS_ARRAY_INDEX = re.compile(r"0|[1-9][0-9]*")
+_EXPANDED_RECORD_ORDINAL = re.compile(r"[1-9][0-9]*")
+_SOURCE_INDEX_SUFFIX = re.compile(r"~[0-9]+\Z")
+
+
+def _js_truthy(value: object) -> bool:
+    if value is None or isinstance(value, bool):
+        return bool(value)
+    if isinstance(value, (int, float)):
+        return value != 0 and value == value
+    if isinstance(value, str):
+        return value != ""
+    # Every JavaScript object and array is true, an empty one too.
+    return True
+
+
+def _drawn_transformed(record: Mapping[str, Any]) -> bool:
+    """Whether a request record is drawn cropped, reverse-complemented, or rotated.
+
+    The twin of ``drawnTransformed`` in the Web ``feature-edit-migration.js``.
+    """
+
+    presentation = record.get("presentation")
+    display = record.get("display")
+    return (
+        _js_truthy(record.get("region"))
+        or (isinstance(presentation, Mapping) and _js_truthy(presentation.get("reverseComplement")))
+        or (isinstance(display, Mapping) and _safe_integer(display.get("startCoordinate")) is not None)
+    )
+
+
+def _record_key_belongs_to_record(record_key: str, record: Mapping[str, Any]) -> bool:
+    """Whether a record key names a request record (an ALL record owns ``<key>:<n>``).
+
+    The twin of ``recordKeyBelongsToRequest`` in the Web ``feature-placement.js``
+    for a decoded request, whose record keys are strings.
+    """
+
+    request_key = record.get("recordKey")
+    if not isinstance(request_key, str):
+        return False
+    return record_key == request_key or (
+        record.get("cardinality") == "all"
+        and record_key.startswith(f"{request_key}:")
+        and _EXPANDED_RECORD_ORDINAL.fullmatch(record_key[len(request_key) + 1 :]) is not None
+    )
+
+
+@dataclass(frozen=True)
+class AnnotationTargetMigration:
+    """The annotation sets of an older Session and how many targets moved."""
+
+    annotation_sets: Any
+    migrated_count: int
+
+
+def migrate_session_annotation_targets(
+    annotation_sets: object, *, mode: object, catalog: object, records: object
+) -> AnnotationTargetMigration:
+    """Move the certain ``hash=`` annotation targets of a Session 44 or older.
+
+    A Session before 45 named a selected feature in an annotation by
+    ``hash=<hash>`` (a featureSpan target with one hash selector), which the
+    renderer matches in the drawn record. Such a target becomes a
+    featureIdentity target in ``mode`` only when the figure cannot change: the
+    record it binds (the saved catalog's records in order, as the renderer
+    binds them) is drawn without a crop, reverse complement, or rotation by its
+    request record in ``records``, and the hash names exactly one feature of
+    the saved ``catalog``, in that record. A moved target keeps the saved
+    ``envelope`` and ``circularPath`` it has. Every other target stays as
+    saved; when none moves, ``annotation_sets`` is returned as is.
+
+    This is the twin of ``migrateSessionAnnotationTargets`` in the Web
+    ``feature-edit-migration.js`` (R-7);
+    ``tests/fixtures/annotation-target-migration-vectors.json`` pins both.
+    Without a catalog nothing moves, as in the Web app, which reads no sources
+    again for these targets.
+    """
+
+    record_ids: dict[str, set[str]] = {}
+    features_by_hash: dict[str, dict[tuple[str, str], None]] = {}
+    items = catalog.get("items") if isinstance(catalog, Mapping) else None
+    for item in _mapping_list(items):
+        item_record_keys = item.get("recordKeys")
+        for record_key in item_record_keys if isinstance(item_record_keys, list) else ():
+            record_ids.setdefault(_js_text(record_key), set())
+        for feature in _mapping_list(item.get("biologicalFeatures")):
+            record_key = _js_text(feature.get("recordKey"))
+            feature_id = _js_text(feature.get("biologicalFeatureId"))
+            if not record_key or not feature_id:
+                continue
+            # A record listed only by a later item has no ID from this feature.
+            if record_key in record_ids:
+                record_id = feature.get("record_id")
+                record_ids[record_key].add(
+                    _js_text(feature.get("recordId") if record_id is None else record_id)
+                )
+            source_hash = _js_text(feature.get("stableFeatureId")) or _SOURCE_INDEX_SUFFIX.sub(
+                "", feature_id, count=1
+            )
+            features_by_hash.setdefault(source_hash, {})[(record_key, feature_id)] = None
+    catalog_record_keys = list(record_ids)
+    request_records = (
+        [record for record in records if isinstance(record, Mapping)] if isinstance(records, list) else []
+    )
+
+    def bound_record_key(selector: object) -> str:
+        if selector is None:
+            return catalog_record_keys[0] if len(catalog_record_keys) == 1 else ""
+        if not isinstance(selector, Mapping):
+            return ""
+        if selector.get("kind") == "recordIndex":
+            index = _js_string(selector.get("index"))
+            position = int(index) if _JS_ARRAY_INDEX.fullmatch(index) else len(catalog_record_keys)
+            return catalog_record_keys[position] if position < len(catalog_record_keys) else ""
+        if selector.get("kind") != "recordId":
+            return ""
+        # A record without catalog features has no known ID, so the binding is not certain.
+        if any(len(record_ids[record_key]) != 1 for record_key in catalog_record_keys):
+            return ""
+        record_id = _js_text(selector.get("value"))
+        matches = [record_key for record_key in catalog_record_keys if record_id in record_ids[record_key]]
+        return matches[0] if len(matches) == 1 else ""
+
+    def identity_target(target: object) -> dict[str, Any] | None:
+        if not isinstance(target, Mapping) or target.get("kind") != "featureSpan":
+            return None
+        selectors = target.get("selectors")
+        selector = selectors[0] if isinstance(selectors, list) and len(selectors) == 1 else None
+        if not isinstance(selector, Mapping) or selector.get("key") != "hash":
+            return None
+        record_key = bound_record_key(target.get("record"))
+        matches = list(features_by_hash.get(_js_text(selector.get("value")), {}))
+        if not record_key or len(matches) != 1 or matches[0][0] != record_key:
+            return None
+        request = next(
+            (record for record in request_records if _record_key_belongs_to_record(record_key, record)),
+            None,
+        )
+        if request is None or _drawn_transformed(request):
+            return None
+        migrated: dict[str, Any] = {
+            "kind": "featureIdentity",
+            "scope": mode,
+            "recordKey": matches[0][0],
+            "biologicalFeatureId": matches[0][1],
+        }
+        for field in ("envelope", "circularPath"):
+            if field in target:
+                migrated[field] = target[field]
+        return migrated if _feature_identity_key_of(migrated) else None
+
+    migrated_count = 0
+    migrated_sets: list[Any] = []
+    for annotation_set in annotation_sets if isinstance(annotation_sets, list) else []:
+        annotations = annotation_set.get("annotations") if isinstance(annotation_set, Mapping) else None
+        if not isinstance(annotations, list):
+            migrated_sets.append(annotation_set)
+            continue
+        migrated_annotations: list[Any] = []
+        for annotation in annotations:
+            target = identity_target(annotation.get("target") if isinstance(annotation, Mapping) else None)
+            if target is None:
+                migrated_annotations.append(annotation)
+                continue
+            migrated_count += 1
+            migrated_annotations.append({**annotation, "target": target})
+        migrated_sets.append({**annotation_set, "annotations": migrated_annotations})
+    return AnnotationTargetMigration(
+        migrated_sets if migrated_count else annotation_sets, migrated_count
+    )
 
 
 def migrate_persisted_web_state_field_names(config: object) -> object:
@@ -2580,13 +3050,21 @@ def _embedded_entry_bytes(entry: Mapping[str, Any]) -> bytes | None:
 
 
 def _embedded_resource_bytes(entry: Mapping[str, Any]) -> bytes:
-    """The bytes of a resource descriptor, checked against its size and checksum."""
+    """The bytes of a resource descriptor, checked against its size and checksum.
+
+    The one check of a declared ``checksum``: the SHA-256 hex digest of the
+    bytes, bare or as ``sha256:<hex>``, in any case. Null or empty declares
+    none, as in the Web reader (``services/session-resource-backing.js``).
+    """
 
     data = _embedded_entry_bytes(entry)
     if data is None or len(data) != entry.get("size"):
         raise ValidationError("Invalid embedded resource bytes or byte size.")
     checksum = entry.get("checksum")
-    if checksum and hashlib.sha256(data).hexdigest() != str(checksum).lower().removeprefix("sha256:"):
+    if checksum not in (None, "") and (
+        not isinstance(checksum, str)
+        or checksum.strip().lower().removeprefix("sha256:") != hashlib.sha256(data).hexdigest()
+    ):
         raise ValidationError("Embedded resource checksum does not match.")
     return data
 
@@ -4627,6 +5105,7 @@ def _as_list(value: Any) -> list[Any]:
 
 
 __all__ = [
+    "AnnotationTargetMigration",
     "CURRENT_SESSION_VERSION",
     "RETIRED_RENDERED_ID_FEATURE_FIELDS",
     "CANONICAL_SESSION_MIN_VERSION",
@@ -4634,6 +5113,7 @@ __all__ = [
     "DEPTH_FILE_SCHEMA",
     "FEATURE_CATALOG_ENCODING",
     "FEATURE_CATALOG_SCHEMA",
+    "FeatureEditMigration",
     "LEGACY_LOSAT_DERIVED_CACHE_SCHEMA",
     "LEGACY_PROTEIN_CANDIDATE_SCHEMA",
     "LOSAT_DERIVED_CACHE_SCHEMA",
@@ -4658,6 +5138,8 @@ __all__ = [
     "materialize_embedded_file",
     "migrate_legacy_linear_comparison_draft_for_current_writer",
     "migrate_persisted_web_state_field_names",
+    "migrate_session_annotation_targets",
+    "migrate_session_feature_edits",
     "migrate_legacy_repeat_feature_shape_args",
     "normalize_current_session_artifacts",
     "safe_embedded_filename",

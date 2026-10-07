@@ -12,10 +12,70 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Legend colors (web app): Generate no longer fails with "The generated result could
+  not be accepted" after a color or stroke is set on a row added in the Legend editor,
+  in Linear and Circular. The added row is drawn with its color and stroke after
+  Generate, a rename, and Session Save and Load. At Generate, an added row no longer
+  takes the edited stroke of the first Legend row.
+- Legend editor (web app): a row added in the Legend editor now has the same stroke
+  when it is added and after Generate: the stroke of the first Legend row as the
+  diagram drew it. Before, the row took that row's edited stroke, and the Block
+  Stroke settings before Generate, until the next Generate drew the drawn stroke.
+- Legend editor (web app): Generate draws the Legend with a row added in the Legend
+  editor where the add placed it. Before, Generate moved the added row away from the
+  other rows, in Linear past the right edge of the canvas, where its caption was cut.
+- Legend names (web app): Generate no longer fails with "The generated result
+  could not be accepted" after a **Depth** row renamed in the Legend is hidden by
+  **Show Depth**, in Linear and Circular. The row is not drawn; as for a renamed GC
+  row that is switched off, it returns under its series caption when Depth is
+  shown again.
+- Legend names (web app): a Legend rename of a row that only track data names
+  (a Depth series, an annotation set legend label) is now retired together with
+  that data, with the color and stroke stored under the new name. Generate no
+  longer fails with "The generated result could not be accepted" after the Depth
+  file or track of a renamed row is removed, or the file is replaced by one with
+  another label. A replacement that keeps the row's caption keeps the rename, and
+  Undo restores the data, the name, and the styles.
+- Depth tracks (web app): a Depth series that no record gives a Depth TSV now
+  fails Generate with "The depth input or settings are invalid. Depth series N.
+  Supply the required value." and the **Depth** actions. The same failure showed
+  "The operation failed without recognized diagnostic information".
 - Feature strokes (web app): a stroke set on one feature in the feature popup is no
   longer lost when Generate draws a Result without that feature, such as a Generate
   in the other mode (Circular or Linear). The stroke stays in the draft and in a
   saved Session, and the next Generate that draws the feature draws it again.
+- Web: Load of a Session 44 or older whose Feature visibility edit holds a value such
+  as `constructor` (a hand edit; no writer saves one) drops that edit and reports it
+  with the other dropped edits, as the CLI does. Before, Load failed with an invalid
+  draft. A Session 41-44 Feature placement draft keyed `__proto__` is now rejected by
+  Load like any other key that does not name its feature, as the CLI rejects it.
+  Before, Load lost the row without a message.
+- CLI: `gbdraw circular|linear --session <Session 40-44> --session_output out.json`
+  (and `--save_session`) moves an annotation's `hash=` target to the feature's
+  source identity where the Session's saved feature catalog makes the figure
+  certain, as the Web app does on Load. Before, the rewritten Session kept the
+  `hash=` target in `config.annotationSets`, so after a later crop or reverse
+  complement the annotation no longer matched its feature. The replay logs how many
+  targets moved.
+- CLI: `gbdraw circular|linear --session <Session 40-44> --session_output out.json`
+  (and `--save_session`) keeps the Feature visibility, Label visibility, and label
+  text edits that the Web app saved by rendered feature ID. Before, the rewritten
+  Session dropped them: the diagram kept their effect through the request's tables,
+  but the Web app no longer listed them as edits. The replay now moves each edit to
+  `features.featureOverrides` through the Session's saved feature catalog, as the
+  Web app does on Load, and logs how many edits it dropped or now applies to fewer
+  features.
+- Labels (web app): **Load Label TSV** with a table that applies to no label of the
+  displayed Results no longer removes the existing label edits. Before, it cleared the
+  bulk and per-feature label edits, recorded a "Load label edits" Undo step, and
+  reported "Applied to 0 label(s)." It now changes nothing, records no step, and says
+  that no row matched and that the existing label edits were kept.
+- Sessions: a Session whose resource declares `checksum` (the SHA-256 digest of its
+  bytes, as `sha256:<hex>` or bare hex) now loads in Python and on the command line,
+  as it already did in the web app. `load_session_document()` and
+  `gbdraw circular|linear --session` failed with "has unknown field(s): checksum",
+  also for such a Session after the web app saved it again. A resource whose bytes
+  do not match its `checksum` is rejected when the Session is loaded.
 - CLI: `gbdraw circular|linear --session <file> --session_output out.json` (and
   `--save_session`) keeps the resource IDs and file names of the Session's unchanged
   inputs. Before, the rewritten Session renamed them to positional IDs such as
