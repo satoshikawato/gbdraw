@@ -269,6 +269,46 @@ def _table() -> pd.DataFrame:
     )
 
 
+def test_canonical_text_tables_keep_empty_and_na_like_cells(tmp_path: Path) -> None:
+    # The styling tables are text: an empty label text and a cell that reads
+    # "NA" or "nan" must come back as the text they were saved with, not as
+    # missing values (OV-138). The numeric depth table keeps its dtypes.
+    label_table = pd.DataFrame(
+        {
+            "record_id": ["NC_1", "NC_1", "NC_1"],
+            "feature_type": ["CDS", "CDS", "CDS"],
+            "qualifier": ["hash", "gene", "gene"],
+            "value": ["^f1$", "^NA$", "^nan$"],
+            "label_text": ["", "NA", "nan"],
+        }
+    )
+    depth_table = pd.DataFrame({"record_id": ["NC_1"], "position": [1], "depth": [2.5]})
+    request = LinearDiagramRequest(
+        records=(RecordInput(source=GenBankInputSource(_source_file(tmp_path / "a.gbk"))),),
+        options=LinearDiagramOptions(
+            label_override_table=label_table,
+            colors=ColorOptions(color_table=label_table.copy()),
+            depth_tracks=(DepthTrackInput(source=depth_table, label="Coverage"),),
+        ),
+    )
+    encoded = encode_canonical_request(request)
+    decoded = decode_canonical_request(
+        encoded.payload,
+        resource_paths=_materialize_resources(encoded, tmp_path / "materialized"),
+        output_directory=tmp_path / "out",
+    )
+
+    assert isinstance(decoded, LinearDiagramRequest)
+    pd.testing.assert_frame_equal(decoded.options.label_override_table, label_table)
+    pd.testing.assert_frame_equal(decoded.options.colors.color_table, label_table)
+    assert decoded.options.depth_tracks is not None
+    decoded_depth = decoded.options.depth_tracks[0].source
+    assert isinstance(decoded_depth, pd.DataFrame)
+    assert decoded_depth["position"].dtype.kind == "i"
+    assert decoded_depth["depth"].dtype.kind == "f"
+    assert encode_canonical_request(decoded).payload == encoded.payload
+
+
 def test_schema6_round_trips_circular_batch_grouping_and_outputs(
     tmp_path: Path,
 ) -> None:
@@ -1586,7 +1626,7 @@ def test_schema2_migrates_removed_feature_table_field(
 ) -> None:
     record = SeqRecord(Seq("ATGC"), id="record", annotations={"molecule_type": "DNA"})
     table = pd.DataFrame(
-        [{"record_id": "record", "feature_type": "CDS", "visible": True}]
+        [{"record_id": "record", "feature_type": "CDS", "visible": "True"}]
     )
     encoded = encode_canonical_request(
         LinearDiagramRequest(
