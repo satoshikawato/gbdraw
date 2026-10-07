@@ -1,9 +1,10 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
+const { gunzipSync } = require('node:zlib');
 const { load, generate, switchMode, download } = require('./helpers/mode-transition.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { openBatch, openWithGenBank } = require('./helpers/audit-browser.cjs');
-const { settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
+const { expectLiveEqualsGenerate, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 
 const seeds = {
   lambda: 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json',
@@ -464,12 +465,11 @@ for (const mode of ['linear', 'circular']) {
       }, stroked)]);
       await expectSteps('delete a row', [() => deleteLegendRow(page, 'repeat_region')]);
       await expectSteps('add a row', [() => addLegendRow(page, 'Manual row', '#118833')]);
-      // The second delete uses the editor's Remove entry control.
+      // The second delete uses the editor's Remove control of the row.
       await expectSteps('add a row, then delete it', [
         () => addLegendRow(page, 'Second row', '#7b2cbf'),
         async () => {
-          const index = await page.evaluate(legendIndex, 'Second row');
-          await page.locator('.right-drawer').getByRole('button', { name: 'Remove entry' }).nth(index).click();
+          await page.locator('.right-drawer').getByRole('button', { name: 'Remove Second row', exact: true }).click();
           await expect.poll(() => page.evaluate(legendIndex, 'Second row')).toBe(-1);
         }
       ]);
@@ -614,6 +614,257 @@ for (const mode of ['linear', 'circular']) {
       expect(mounted).toEqual(mounted.map(() => drawn));
       await generate(page);
       await expectStroke(page, 'Manual renamed', drawn);
+      expect(page.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+    }
+  });
+}
+
+// The editor captions, and the number of drawn rows of each caption the reader sees.
+const legendRowsByCaption = page => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  const svg = app.svgContainer.querySelector('svg');
+  const drawn = {};
+  for (const entry of svg.querySelectorAll('#legend g[data-legend-key]')) {
+    if (entry.closest('[display="none"]')) continue;
+    const caption = entry.querySelector('text')?.textContent.trim() || '';
+    drawn[caption] = (drawn[caption] || 0) + 1;
+  }
+  return { editor: app.legendEntries.map(e => e.caption), drawn };
+});
+const oneRowEach = ({ editor }) => Object.fromEntries(editor.map(caption => [caption, 1]));
+
+// OV-151 (GUI audit FL-04, PD-OI-061 revision 2): GC skew (+) and GC skew (-)
+// draw no features, so renaming one onto the other offers Suffix and Cancel,
+// never Merge, and a forced Merge changes nothing. After Suffix each caption has
+// one drawn row, live and at Generate, and the editor order stays. The renamed
+// row is the last row; in Linear a renamed row before it moves at Generate
+// (OV-156, owned by the Legend layout port).
+for (const mode of ['linear', 'circular']) {
+  test(`M12 ${mode}: a GC skew row renamed onto the other GC skew row offers no Merge`, async ({ browser }) => {
+    test.setTimeout(600_000);
+    const page = await loadGenerated(browser, mode);
+    try {
+      if (mode === 'linear') {
+        await page.evaluate(() => {
+          const { form } = window.__GBDRAW_APP__;
+          form.show_gc = true;
+          form.show_skew = true;
+        });
+        await generate(page);
+      }
+      const before = await legendRowsByCaption(page);
+      expect(before.editor.slice(-2)).toEqual(['GC skew (+)', 'GC skew (-)']);
+      expect(before.drawn).toEqual(oneRowEach(before));
+      const rename = () => evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        await app.renameLegendEntry(app.legendEntries.findIndex(e => e.caption === 'GC skew (-)'), 'GC skew (+)');
+      });
+      const dialog = page.locator('div.fixed', { has: page.getByRole('heading', { name: 'Legend Name Conflict' }) });
+
+      await rename();
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole('button', { name: /^Merge into existing/ })).toHaveCount(0);
+      await expect(dialog.getByRole('button', { name: 'Keep current color and add a suffix' })).toHaveCount(1);
+      await expect(dialog.getByRole('button', { name: 'Cancel' })).toHaveCount(1);
+      await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.handleLegendRenameChoice('merge'));
+      await expect(dialog).toHaveCount(0);
+      await settleLive(page);
+      expect(await legendRowsByCaption(page), 'a forced Merge changes nothing').toEqual(before);
+
+      await rename();
+      await dialog.getByRole('button', { name: 'Keep current color and add a suffix' }).click();
+      await expect.poll(() => page.evaluate(legendIndex, 'GC skew (+) (1)')).toBeGreaterThanOrEqual(0);
+      await settleLive(page);
+      const renamed = await legendRowsByCaption(page);
+      expect(renamed.editor).toEqual([...before.editor.slice(0, -1), 'GC skew (+) (1)']);
+      expect(renamed.drawn, 'one drawn row per caption, live').toEqual(oneRowEach(renamed));
+      await expectGenerateKeepsLegend(page, 'Generate after the Suffix');
+      expect(await legendRowsByCaption(page), 'one drawn row per caption at Generate, editor order kept').toEqual(renamed);
+      expect(page.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+    }
+  });
+}
+
+// A saved Session file as JSON (gzip or plain).
+const readSession = bytes => JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8'));
+
+// OV-157 (R11): a row's Stroke options button only shows or hides its stroke
+// controls. It records no History step, and neither the Legend entries (which
+// History and the Session hold) nor the saved Session carry it; a stroke edit
+// made in it is still one step and is saved.
+test('M13 circular: Stroke options is a disclosure without a History step or a saved field', async ({ browser }, testInfo) => {
+  test.setTimeout(600_000);
+  const page = await loadGenerated(browser, 'circular');
+  try {
+    const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+    await page.locator('.drawer-toggle').click();
+    await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
+    const drawer = page.locator('.right-drawer');
+    const caption = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries[0].caption);
+    const toggle = drawer.getByRole('button', { name: `Stroke options for ${caption}`, exact: true });
+    const start = await undoCount();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(drawer.getByLabel('Legend stroke color').first()).toBeVisible();
+    await settleLive(page);
+    expect(await undoCount(), 'opening the stroke options records no step').toBe(start);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.filter(e => Object.hasOwn(e, 'showStroke')).length),
+      'the Legend entries do not hold the disclosure').toBe(0);
+
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.updateLegendEntryStrokeWidth(0, 2));
+    await settleLive(page);
+    expect(await undoCount(), 'a stroke width edit in it is one step').toBe(start + 1);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await settleLive(page);
+    expect(await undoCount(), 'closing it records no step').toBe(start + 1);
+
+    const saved = readSession(await download(page, 'Save Session', testInfo.outputPath('stroke-options.gbdraw-session.json.gz')));
+    const { legend } = saved.editorState;
+    expect(legend.entries.filter(e => Object.hasOwn(e, 'showStroke')), 'the Session does not save the disclosure').toEqual([]);
+    expect(Number(legend.strokeOverrides[caption]?.strokeWidth), 'the stroke edit is saved').toBe(2);
+    expect(page.externalRequests).toEqual([]);
+  } finally {
+    await page.context().close();
+  }
+});
+
+// The drawn Legend captions in reading order (top to bottom, then left to right).
+const drawnLegendOrder = page => page.evaluate(() => {
+  const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+  return [...svg.querySelectorAll('#legend g[data-legend-key]')]
+    .filter(entry => !entry.closest('[display="none"]'))
+    .map(entry => ({ caption: entry.querySelector('text')?.textContent.trim() || '', box: entry.querySelector('text').getBoundingClientRect() }))
+    .sort((left, right) => (Math.abs(left.box.y - right.box.y) < 2 ? left.box.x - right.box.x : left.box.y - right.box.y))
+    .map(({ caption }) => caption);
+});
+// `loadGenerated` with GC content in Linear too, so each mode has a middle row.
+const loadWithGc = async (browser, mode) => {
+  const page = await loadGenerated(browser, mode);
+  if (mode === 'linear') {
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_gc = true; });
+    await generate(page);
+  }
+  return page;
+};
+
+// OV-154: the Legend editor lists the rows it deleted, each with Restore, and
+// Restore all. Each click is one History step; a restored row returns at once
+// where Generate draws it, and the Session saves the shorter deleted list.
+for (const mode of ['linear', 'circular']) {
+  test(`M14 ${mode}: deleted Legend rows return through Restore and Restore all`, async ({ browser }, testInfo) => {
+    test.setTimeout(900_000);
+    const page = await loadWithGc(browser, mode);
+    let fresh;
+    try {
+      const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+      const step = async direction => {
+        await evaluateWithRetainedPromise(page, name => window.__GBDRAW_HISTORY__[name](), direction);
+        await settleLive(page);
+      };
+      await page.locator('.drawer-toggle').click();
+      await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
+      const drawer = page.locator('.right-drawer');
+      const deletedList = drawer.getByRole('list', { name: 'Deleted items' });
+      const generated = await legendRowsByCaption(page);
+      expect(generated.editor).toEqual(expect.arrayContaining(['CDS', 'repeat_region', 'GC content']));
+      await expect(deletedList).toHaveCount(0);
+      await deleteLegendRow(page, 'repeat_region');
+      await deleteLegendRow(page, 'CDS');
+      await settleLive(page);
+      await expect(deletedList.getByRole('listitem')).toHaveCount(2);
+      const without = caption => generated.editor.filter(entry => entry !== caption);
+
+      let start = await undoCount();
+      await deletedList.getByRole('button', { name: 'Restore repeat_region' }).click();
+      await expect.poll(() => page.evaluate(legendIndex, 'repeat_region')).toBeGreaterThanOrEqual(0);
+      await settleLive(page);
+      expect(await undoCount(), 'Restore is one step').toBe(start + 1);
+      await expect(deletedList.getByRole('listitem')).toHaveCount(1);
+      const one = await legendRowsByCaption(page);
+      expect(one.editor, 'the row returns at its place').toEqual(without('CDS'));
+      expect(one.drawn).toEqual(oneRowEach(one));
+      expect(await drawnLegendOrder(page)).toEqual(without('CDS'));
+      await step('undo');
+      expect((await legendRowsByCaption(page)).editor).toEqual(without('CDS').filter(entry => entry !== 'repeat_region'));
+      await expect(deletedList.getByRole('listitem')).toHaveCount(2);
+      await step('redo');
+      expect(await legendRowsByCaption(page)).toEqual(one);
+      await expect(deletedList.getByRole('listitem')).toHaveCount(1);
+
+      const saved = testInfo.outputPath(`restore-${mode}.gbdraw-session.json.gz`);
+      const session = readSession(await download(page, 'Save Session', saved));
+      expect(session.editorState.legend.deletedEntries.map(entry => entry.caption), 'the Session saves the shorter list').toEqual(['CDS']);
+      await expectLiveEqualsGenerate(page, { label: `${mode}: Restore` });
+      expect((await legendRowsByCaption(page)).editor).toEqual(without('CDS'));
+
+      start = await undoCount();
+      await drawer.getByRole('button', { name: 'Restore all' }).click();
+      await expect.poll(() => page.evaluate(legendIndex, 'CDS')).toBeGreaterThanOrEqual(0);
+      await settleLive(page);
+      expect(await undoCount(), 'Restore all is one step').toBe(start + 1);
+      await expect(deletedList).toHaveCount(0);
+      const all = await legendRowsByCaption(page);
+      expect(all.editor, 'every row returns at its place').toEqual(generated.editor);
+      expect(await drawnLegendOrder(page)).toEqual(generated.editor);
+      await expectLiveEqualsGenerate(page, { label: `${mode}: Restore all` });
+      expect(await legendRowsByCaption(page)).toEqual(all);
+
+      fresh = await load(browser, saved);
+      fresh.setDefaultTimeout(180_000);
+      await fresh.locator('.drawer-toggle').click();
+      await fresh.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
+      const loadedList = fresh.locator('.right-drawer').getByRole('list', { name: 'Deleted items' });
+      await expect(loadedList.getByRole('listitem')).toHaveCount(1);
+      await loadedList.getByRole('button', { name: 'Restore CDS' }).click();
+      // The first Python helper after a Load starts the diagram Worker.
+      await expect.poll(() => fresh.evaluate(legendIndex, 'CDS'), { timeout: 180_000 }).toBeGreaterThanOrEqual(0);
+      await settleLive(fresh);
+      expect((await legendRowsByCaption(fresh)).editor, 'a loaded Session restores its row').toEqual(generated.editor);
+      expect(page.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+      if (fresh) await fresh.context().close();
+    }
+  });
+}
+
+// OV-158 (Owner decision 2026-10-07): renaming a feature row in the Legend
+// editor turns it into a rule row, which the live edit appended to the Legend
+// and Generate kept last. The row keeps its place, live and at Generate,
+// recorded as an edited order (PD-OI-063), and Sort by default keeps it there.
+for (const mode of ['linear', 'circular']) {
+  test(`M15 ${mode}: a renamed feature row keeps its place live and at Generate`, async ({ browser }) => {
+    test.setTimeout(600_000);
+    const page = await loadWithGc(browser, mode);
+    try {
+      const before = (await legendRowsByCaption(page)).editor;
+      const index = before.indexOf('repeat_region');
+      expect(index, 'a middle row').toBeGreaterThan(0);
+      expect(index).toBeLessThan(before.length - 1);
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        await app.renameLegendEntry(app.legendEntries.findIndex(e => e.caption === 'repeat_region'), 'Repeats');
+      });
+      await expect.poll(() => page.evaluate(legendIndex, 'Repeats')).toBeGreaterThanOrEqual(0);
+      await settleLive(page);
+      const renamed = before.map(caption => (caption === 'repeat_region' ? 'Repeats' : caption));
+      expect((await legendRowsByCaption(page)).editor, 'live').toEqual(renamed);
+      expect(await drawnLegendOrder(page), 'live, drawn').toEqual(renamed);
+      await expectLiveEqualsGenerate(page, { label: `${mode}: rename` });
+      expect((await legendRowsByCaption(page)).editor, 'after Generate').toEqual(renamed);
+      expect(await drawnLegendOrder(page), 'after Generate, drawn').toEqual(renamed);
+
+      await page.evaluate(() => window.__GBDRAW_APP__.sortLegendEntriesByDefault());
+      await settleLive(page);
+      expect((await legendRowsByCaption(page)).editor, 'Sort by default').toEqual(renamed);
+      expect(await drawnLegendOrder(page), 'Sort by default, drawn').toEqual(renamed);
+      await expectLiveEqualsGenerate(page, { label: `${mode}: Sort by default` });
+      expect((await legendRowsByCaption(page)).editor).toEqual(renamed);
       expect(page.externalRequests).toEqual([]);
     } finally {
       await page.context().close();

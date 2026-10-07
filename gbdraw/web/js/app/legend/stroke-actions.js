@@ -181,8 +181,20 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
     featureColorOverrides,
     featureStrokeOverrides,
     originalSvgStroke,
-    svgContainer
+    svgContainer,
+    legendStrokeOptionsOpen
   } = state;
+
+  // OV-157: a row's Stroke options button shows or hides its stroke controls.
+  // That is view state, kept out of the Legend entries, so the click records
+  // no History step and the Session does not save it.
+  /** @param {string} caption */
+  const isLegendStrokeOptionsOpen = (caption) => Boolean(legendStrokeOptionsOpen?.has(caption));
+  /** @param {string} caption */
+  const toggleLegendStrokeOptions = (caption) => {
+    if (!legendStrokeOptionsOpen?.delete(caption)) legendStrokeOptionsOpen?.add(caption);
+  };
+  const closeLegendStrokeOptions = () => legendStrokeOptionsOpen?.clear();
 
   const captureLegendSwatchStroke = (caption) => {
     const svg = svgContainer.value?.querySelector?.('svg');
@@ -605,13 +617,16 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
   return {
     applyStrokeToFeaturesByCaption,
     captureOriginalStroke,
+    closeLegendStrokeOptions,
     getLegendEntryStrokeColor,
     getLegendEntryStrokeWidth,
+    isLegendStrokeOptionsOpen,
     reconcileStrokeOverrides,
     reapplyStrokeOverrides,
     resetAllStrokes,
     resetLegendEntryStroke,
     setLegendEntryStrokeColorValue,
+    toggleLegendStrokeOptions,
     updateLegendEntryStrokeColor,
     updateLegendEntryStrokeWidth
   };

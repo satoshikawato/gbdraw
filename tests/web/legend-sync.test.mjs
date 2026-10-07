@@ -282,25 +282,24 @@ const mockLegendEntry = (caption, color, x) => {
     state.legendEntries.value.map((entry) => ({
       caption: entry.caption,
       color: entry.color,
-      showStroke: entry.showStroke,
       featureIds: entry.featureIds
     })),
     [
       {
         caption: 'Beta',
         color: '#abcdef',
-        showStroke: true,
         featureIds: ['feature-safe']
       },
       {
         caption: 'Gamma',
         color: '#778899',
-        showStroke: false,
         featureIds: []
       }
     ],
     'the sanitized mounted legend remains visual authority and mismatched metadata is ignored'
   );
+  assert.equal(state.legendEntries.value.some((entry) => Object.hasOwn(entry, 'showStroke')), false,
+    'the Stroke options disclosure is view state, not a Legend entry field (OV-157)');
 
   const capturedOwners = actions.captureLegendEntryOwners();
   featureLegend.children[0].setAttribute('data-legend-owner', 'specific-color-file');

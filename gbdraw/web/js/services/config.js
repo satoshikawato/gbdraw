@@ -822,11 +822,14 @@ const normalizeSessionLegendEntries = (entries) => {
     const color = normalizeSessionLegendColor(entry.color);
     if (!caption || !color || captions.has(caption)) return;
     captions.add(caption);
+    // `showStroke`, the Stroke options disclosure that earlier Sessions saved,
+    // is view state (OV-157).
+    const stored = cloneJsonData(entry);
+    delete stored.showStroke;
     normalized.push({
-      ...cloneJsonData(entry),
+      ...stored,
       caption,
       color,
-      showStroke: Boolean(entry.showStroke),
       featureIds: Array.isArray(entry.featureIds)
         ? entry.featureIds.map((id) => String(id || '').trim()).filter(Boolean)
         : []

@@ -216,6 +216,32 @@ for (const mode of ['circular', 'linear']) {
   });
 }
 
+// Each Legend editor row names its caption field and its icon buttons by its
+// caption, so two rows never share a name (R12, gui-fix UI-04).
+test('Legend editor rows name their controls by the row caption', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const page = await load(browser, seeds.circular);
+  try {
+    await page.locator('.drawer-toggle').click();
+    await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
+    const drawer = page.locator('.right-drawer');
+    const captions = (await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.map((entry) => entry.caption))).slice(0, 2);
+    expect(captions).toHaveLength(2);
+    const controls = [
+      ['textbox', (caption) => `Legend entry ${caption} name`],
+      ['button', (caption) => `Move ${caption} up`],
+      ['button', (caption) => `Move ${caption} down`],
+      ['button', (caption) => `Stroke options for ${caption}`],
+      ['button', (caption) => `Remove ${caption}`]
+    ];
+    for (const [role, nameOf] of controls) {
+      const names = captions.map(nameOf);
+      expect(new Set(names).size, names.join(' / ')).toBe(2);
+      for (const name of names) await expect(drawer.getByRole(role, { name, exact: true })).toHaveCount(1);
+    }
+  } finally { await page.context().close(); }
+});
+
 for (const mode of ['circular', 'linear']) {
   test(`${mode} controls have names and every help tip is a reachable disclosure`, async ({ page }) => {
     test.setTimeout(240_000);

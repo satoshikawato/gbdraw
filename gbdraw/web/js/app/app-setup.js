@@ -2781,6 +2781,7 @@ export const createAppSetup = () => {
         });
         recordSessionLifecycleEvent('history-baseline-end');
         if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = false;
+        closeLegendStrokeOptions();
       }
     }
   });
@@ -2796,13 +2797,17 @@ export const createAppSetup = () => {
     resetLegendPosition,
     getLegendEntryStrokeColor,
     getLegendEntryStrokeWidth,
+    isLegendStrokeOptionsOpen,
+    toggleLegendStrokeOptions,
+    closeLegendStrokeOptions,
     setLegendEntryStrokeColorValue,
     updateLegendEntryStrokeColor,
     updateLegendEntryStrokeWidth,
     reconcileLegendEntries,
     reconcileStrokeOverrides,
     resetLegendEntryStroke,
-    resetAllStrokes
+    resetAllStrokes,
+    restoreDeletedLegendEntries
   } = legendActions;
 
   const {
@@ -2910,6 +2915,16 @@ export const createAppSetup = () => {
     if (labels) reconcileLabelOverrides();
     return true;
   };
+
+  /**
+   * @param {string} label
+   * @param {number[] | null} indexes
+   */
+  const restoreLegendItems = (label, indexes) => history.runUndoableCheckpoint(label, async () => {
+    const restored = await restoreDeletedLegendEntries(indexes);
+    if (restored === true) await projectMountedEditorIntent({ colors: true, prepareRules: false });
+    return restored;
+  });
 
   historySnapshots.setAfterApplyHistoryIntent(async (_intent, /** @type {{ domains?: Set<string>, changes?: Record<string, any>, direction?: string }} */ { domains, changes, direction } = {}) => {
     if (!svgContainer.value?.querySelector?.('svg')) return;
@@ -5380,6 +5395,11 @@ export const createAppSetup = () => {
       () => deleteLegendEntry(index)
     ),
     addNewLegendEntry: () => history.runUndoableCheckpoint('Add legend item', addNewLegendEntry),
+    // OV-154: a Restore returns deleted rows in one checkpoint step, as a delete
+    // removes them; the palette then reaches the returned rows.
+    deletedLegendEntries,
+    restoreDeletedLegendEntry: /** @param {number} index */ (index) => restoreLegendItems('Restore legend item', [index]),
+    restoreAllDeletedLegendEntries: () => restoreLegendItems('Restore legend items', null),
     moveLegendEntryUp,
     moveLegendEntryDown,
     sortLegendEntries,
@@ -5387,6 +5407,8 @@ export const createAppSetup = () => {
     resetLegendPosition: undoableAction('Reset legend position', resetLegendPosition),
     getLegendEntryStrokeColor,
     getLegendEntryStrokeWidth,
+    isLegendStrokeOptionsOpen,
+    toggleLegendStrokeOptions,
     setLegendEntryStrokeColorValue: setLegendEntryStrokeColorValueWithHistory,
     updateLegendEntryStrokeColor,
     updateLegendEntryStrokeWidth: undoableAction('Change legend stroke width', updateLegendEntryStrokeWidth),

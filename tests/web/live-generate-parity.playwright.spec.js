@@ -77,6 +77,18 @@ const popupEdit = async (page, match, edit = {}) => {
       if (app.featureStyleScopeDialog.show) await app.handleFeatureStyleScopeChoice(change.scope || 'single');
     }
     if (change.resetStroke) await app.resetClickedFeatureStroke();
+    if (change.legendName !== undefined) {
+      app.clickedFeature.legendName = change.legendName;
+      await app.handleLegendNameCommit();
+      if (app.legendRenameDialog.show && app.legendRenameDialog.mode === 'scope') {
+        await app.handleLegendRenameChoice(change.scope || 'single');
+      }
+      if (app.legendRenameDialog.show) throw new Error(`unexpected Legend name dialog: ${app.legendRenameDialog.mode}`);
+    }
+    if (change.resetFill) {
+      await app.resetClickedFeatureFillColor();
+      if (app.resetColorDialog.show) await app.handleResetColorChoice(change.scope || 'this');
+    }
     if (change.visibility) {
       app.clickedFeature.featureVisibility = change.visibility;
       await app.updateClickedFeatureVisibility(change.visibility);
@@ -179,7 +191,8 @@ const FL1_ALPHA = { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e6394
 const KINDS = [
   'visibility rule add', 'visibility rule action', 'visibility rule delete', 'feature Off', 'feature On',
   'label text', 'label Off', 'label On', 'color rule add', 'color rule color', 'color rule delete', 'feature color',
-  'undo', 'redo', 'Result switch', 'legend color', 'legend add', 'legend stroke', 'feature stroke'
+  'undo', 'redo', 'Result switch', 'legend color', 'legend add', 'legend stroke', 'feature stroke',
+  'feature legend name', 'feature color reset'
 ];
 
 // The matrix: one edit kind in one set of states, with the setup before the
@@ -537,6 +550,36 @@ const CASES = [
     },
     run: (page) => addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '.', color: '#c83366', cap: 'Zeta' })
   },
+  // UJ-03 (GUI journeys 2026-10-06, fixed by #857): a popup Legend name for
+  // one feature of a shared row, and Reset fill color after a This feature
+  // only color, change the rows Python derives (`other proteins`); the
+  // automatic rerender shows them live.
+  {
+    kind: 'feature legend name',
+    edit: 'Legend name (popup, this feature only) for one feature of a shared row',
+    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'unbound' },
+    run: (page) => popupEdit(page, 'FL1', { legendName: 'Complex IV' })
+  },
+  {
+    kind: 'feature legend name',
+    edit: 'Legend name (popup, this feature only) for one feature of a shared row',
+    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'bound' },
+    run: (page) => popupEdit(page, 'FL1', { legendName: 'Complex IV' })
+  },
+  {
+    kind: 'feature color reset',
+    edit: 'Reset fill color (popup) after a This feature only color',
+    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'bound' },
+    setup: (page) => popupEdit(page, 'FL1', { fill: '#c83366' }),
+    run: (page) => popupEdit(page, 'FL1', { resetFill: true })
+  },
+  {
+    kind: 'feature color reset',
+    edit: 'Reset fill color (popup) of a This feature only color Generate drew',
+    states: { mode: 'linear', results: 'single', reflow: 'on', labels: 'unbound' },
+    setup: async (page) => { await popupEdit(page, 'FL1', { fill: '#c83366' }); await generate(page); },
+    run: (page) => popupEdit(page, 'FL1', { resetFill: true })
+  },
   {
     kind: 'Result switch',
     edit: 'Result switch after deleting a same-product rule Generate drew',
@@ -697,6 +740,63 @@ test('a Legend color on a row only one Result draws survives the next Generate',
   expect(after[0].find(({ caption }) => caption === 'other proteins').fill.toLowerCase()).toBe('#00aa00');
   expect(after[1]).toEqual(before[1]);
 });
+
+// OV-152 (GUI audit FL-02): a popup color for a whole Legend row writes rules
+// and keeps a copy of their color as the row's Legend color. Removing those
+// rules (Clear All, or deleting the last of them) retires the copy in the same
+// History step, so the row takes the palette color its features return to,
+// live and at Generate. Undo brings back the rules and the copy. A Legend color
+// set on a row that no rule draws stays.
+const COPIED_LEGEND_COLOR_CASES = {
+  'Clear All after Apply to all CDS': {
+    states: { mode: 'circular', results: 'single', reflow: 'off' },
+    color: (page) => popupEdit(page, 'FL1', { fill: '#e63946', scope: 'caption' }),
+    caption: 'CDS',
+    direct: 'repeat_region',
+    remove: (page) => appAction(page, 'clearAllSpecificRules')
+  },
+  'deleting the rule of a one-feature row': {
+    states: { mode: 'linear', results: 'single', reflow: 'on' },
+    color: (page) => popupEdit(page, { type: 'repeat_region' }, { fill: '#e63946' }),
+    caption: 'repeat_region',
+    direct: 'CDS',
+    remove: (page) => appAction(page, 'removeSpecificRule', 0)
+  }
+};
+for (const [name, { states, color, caption, direct, remove }] of Object.entries(COPIED_LEGEND_COLOR_CASES)) {
+  test(`a Legend color copied from popup rules leaves with them: ${name} (${states.mode})`, async ({ page }) => {
+    test.setTimeout(180_000);
+    await open(page, states);
+    const stored = () => page.evaluate(async () => ({ ...(await import('/gbdraw/web/js/state.js')).state.legendColorOverrides }));
+    const ruleCount = () => page.evaluate(() => window.__GBDRAW_APP__.manualSpecificRules.length);
+    const liveFill = async () => (await semanticSnapshot(page)).legend.find((row) => row.caption === caption)?.fill;
+    await legendRowColor(page, direct, '#7b2cbf');
+    await color(page);
+    const colored = await stored();
+    expect(colored).toEqual({ [direct]: '#7b2cbf', [caption]: '#e63946' });
+    const rules = await ruleCount();
+    expect(rules).toBeGreaterThan(0);
+
+    await remove(page);
+    expect(await ruleCount()).toBe(0);
+    expect(await stored(), 'the copy leaves; the Legend color of a row no rule draws stays')
+      .toEqual({ [direct]: '#7b2cbf' });
+    await history(page, 'undo');
+    expect(await ruleCount(), 'Undo brings back the rules').toBe(rules);
+    expect(await stored(), 'and the copy, in the same step').toEqual(colored);
+    expect(await liveFill()).toBe('#e63946');
+    await history(page, 'redo');
+    expect(await stored()).toEqual({ [direct]: '#7b2cbf' });
+
+    const palette = (await page.evaluate(async (type) => (
+      String((await import('/gbdraw/web/js/state.js')).state.appliedPaletteColors.value[type])
+    ), caption)).toLowerCase();
+    expect(await liveFill(), 'the live row takes the palette color').toBe(palette);
+    const { generated } = await expectLiveEqualsGenerate(page, { label: `${name}: after the removal` });
+    expect(generated.legend.find((row) => row.caption === caption)?.fill, 'Generate draws the palette color').toBe(palette);
+    expect(generated.legend.find((row) => row.caption === direct)?.fill).toBe('#7b2cbf');
+  });
+}
 
 // OV-66: Undo of a Depth source removal brings back the Depth track and its
 // tick text, and Redo hides them again; the live Result equals what Generate
