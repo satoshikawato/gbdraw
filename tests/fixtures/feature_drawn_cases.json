@@ -2,7 +2,7 @@
   "comment": [
     "Shared expectations for \"is this feature drawn?\" (R4).",
     "gbdraw/features/visibility.py::should_render_feature decides it for Generate.",
-    "gbdraw/web/js/app/feature-visibility.js::resolveFeatureDrawn answers it for the Label On dialog and the",
+    "gbdraw/web/js/services/feature-visibility.js::resolveFeatureDrawn answers it for the Label On dialog and the",
     "live preview, with the rule matches of the Python helper (gbdraw/web_support/rule_matching.py).",
     "tests/test_web_rule_matching.py checks should_render_feature and the helper against these cases, and",
     "tests/web/feature-drawn-resolver.test.mjs checks the JavaScript resolver with the helper's matches.",

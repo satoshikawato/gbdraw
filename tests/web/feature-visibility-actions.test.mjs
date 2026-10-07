@@ -3,7 +3,7 @@ import { createFeatureVisibilityActions } from '../../gbdraw/web/js/app/feature-
 import {
   requestFeatureVisibilityRules,
   setFeatureVisibilityOverride
-} from '../../gbdraw/web/js/app/feature-visibility.js';
+} from '../../gbdraw/web/js/services/feature-visibility.js';
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
 import { resultCatalogFeatures } from '../../gbdraw/web/js/services/feature-catalog.js';
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';

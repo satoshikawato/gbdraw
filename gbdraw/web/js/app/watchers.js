@@ -12,9 +12,9 @@ import {
   prepareSpecificColorImport
 } from '../services/specific-color-rules.js';
 import {
-  normalizeCircularPlotTitlePosition
-} from './plot-title-position.js';
-import { resolveCircularLayoutPreference } from './layout-preferences.js';
+  normalizeCircularPlotTitlePosition,
+  resolveCircularLayoutPreference
+} from '../services/layout-preferences.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js';
 import { featureStateFromCatalog } from '../services/feature-catalog.js';

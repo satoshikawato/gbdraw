@@ -13,7 +13,7 @@ await cp(sourceRoot, join(tempRoot, 'js'), { recursive: true });
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
 
 const { analyzeCatalogSequenceSourceCoverage } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'app', 'match-sequences.js'))
+  pathToFileURL(join(tempRoot, 'js', 'services', 'match-sequences.js'))
 );
 const { projectCanonicalSessionRequest } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))

@@ -1,7 +1,7 @@
 // @ts-check
-import { exactRegexValue } from '../services/feature-selector.js';
-import { firstMatchingRuleIfKnown, ruleMatchesFeature, visibilityRuleMatchesFeature } from './rule-matching.js';
-import { resultCatalogFeatures, stableFeatureOverrideKey as stableKeyOf } from '../services/feature-catalog.js';
+import { exactRegexValue } from './feature-selector.js';
+import { firstMatchingRuleIfKnown, ruleMatchesFeature, visibilityRuleMatchesFeature } from './rule-matchers.js';
+import { resultCatalogFeatures, stableFeatureOverrideKey as stableKeyOf } from './feature-catalog.js';
 import {
   featureIdentityKey,
   featureIdentityKeyOf,
@@ -9,10 +9,10 @@ import {
   parseFeatureIdentityKey,
   rowBelongsToRequest,
   updateFeatureOverride
-} from '../services/feature-placement.js';
+} from './feature-placement.js';
 import { normalizeTsvCell as normalizeCell } from '../utils/tsv-cell.js';
-/** @import { FeatureRequestRecord } from '../services/feature-placement.js' */
-export { escapeRegexLiteral, exactRegexValue } from '../services/feature-selector.js';
+/** @import { FeatureRequestRecord } from './feature-placement.js' */
+export { escapeRegexLiteral, exactRegexValue } from './feature-selector.js';
 
 const REQUIRED_COLUMNS = ['record_id', 'feature_type', 'qualifier', 'value', 'action'];
 const COMMON_QUALIFIERS = ['product', 'gene', 'protein_id', 'locus_tag', 'hash', 'location', 'record_location'];

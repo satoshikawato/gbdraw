@@ -7,7 +7,7 @@ import {
   resultLegendSources,
   sameLegendSources,
   setFeatureVisibilityOverride
-} from '../../gbdraw/web/js/app/feature-visibility.js';
+} from '../../gbdraw/web/js/services/feature-visibility.js';
 
 // OV-42, OV-43 (Owner decision 2026-10-06, option A): a live edit that changes
 // what a Result's Legend derives from asks for the automatic rerender, so the

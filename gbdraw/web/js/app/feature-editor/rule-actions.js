@@ -1,7 +1,8 @@
 // @ts-check
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
-import { ruleMatchesFeature, firstMatchingRule, ruleMatchesReady, runWhenPrepared } from '../rule-matching.js';
+import { firstMatchingRule, ruleMatchesReady, runWhenPrepared } from '../rule-matching.js';
+import { ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { resolveColorToHex } from '../../utils/color-utils.js';
 import { parseSpecificRules, serializeSpecificRules } from '../../services/file-imports.js';
 import { getFeatureColorRuleHash } from '../../services/feature-utils.js';
@@ -20,7 +21,7 @@ import {
   normalizeFeatureRendering
 } from '../../utils/feature-rendering.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
-import { featureDrawnContext, resultLegendSources, sameLegendSources } from '../feature-visibility.js';
+import { featureDrawnContext, resultLegendSources, sameLegendSources } from '../../services/feature-visibility.js';
 
 // R13: `projectPaletteAndRules` is the composition root's projection of the
 // palette and the specific-color rules (R3); this owner calls it after a rule

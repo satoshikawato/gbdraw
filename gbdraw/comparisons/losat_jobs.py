@@ -8,7 +8,7 @@ This is the Python owner of the rules that the Web keeps in
 ``planLosatSourceJobs``, ``prepareLosatSourceBatches`` and
 ``splitLosatSourceResult`` (``gbdraw/web/js/app/linear-sources.js``), the
 LOSATP record-pair searches of ``buildLosatJobSpecs``
-(``gbdraw/web/js/app/linear-comparisons.js``), the nucleotide FASTA text of
+(``gbdraw/web/js/services/linear-comparisons.js``), the nucleotide FASTA text of
 ``extractLosatFastaFast`` and the nucleotide raw key of
 ``buildLosatCachePayload`` (``gbdraw/web/js/app/run-analysis.js``). The Web
 needs its own copy for the Settings job estimate without Python (CW-01, design

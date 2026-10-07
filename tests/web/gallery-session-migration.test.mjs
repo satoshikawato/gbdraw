@@ -57,7 +57,7 @@ const {
   createDefaultLinearComparisonPlan,
   resolveLinearComparisonPlan
 } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'app', 'linear-comparisons.js'))
+  pathToFileURL(join(tempRoot, 'js', 'services', 'linear-comparisons.js'))
 );
 const {
   admitGallerySession,

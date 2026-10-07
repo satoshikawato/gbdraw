@@ -28,7 +28,7 @@ import {
 import {
   parseFeatureVisibilityRules,
   serializeFeatureVisibilityRules
-} from '../app/feature-visibility.js';
+} from './feature-visibility.js';
 import {
   applyCircularGeometryShortcuts,
   buildCircularTrackSlotPayload,
@@ -103,7 +103,7 @@ import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 import {
   createDefaultLayoutPreferences,
   updateActiveLayoutPreference
-} from '../app/layout-preferences.js';
+} from './layout-preferences.js';
 import {
   migratePersistedCircularMultiRecordSizeMode,
   migratePersistedLinearLabelPlacement,
@@ -154,7 +154,7 @@ import {
   createSessionResourceFileView,
   validateWebFileBindings
 } from './session-resource-backing.js';
-import { normalizeLinearComparisonPlan } from '../app/linear-comparisons.js';
+import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
 import {
   getResourcePayloadOwner,
   setResourcePayloadOwner

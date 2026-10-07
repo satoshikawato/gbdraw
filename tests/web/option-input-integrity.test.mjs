@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { buildCanonicalRenderRequest } from '../../gbdraw/web/js/services/session-request.js';
-import { createDefaultLinearComparisonPlan } from '../../gbdraw/web/js/app/linear-comparisons.js';
+import { createDefaultLinearComparisonPlan } from '../../gbdraw/web/js/services/linear-comparisons.js';
 import { resolveComparisonThresholds } from '../../gbdraw/web/js/mode-profiles.js';
 import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 

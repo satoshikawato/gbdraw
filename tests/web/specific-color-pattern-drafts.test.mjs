@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import { execFileSync } from 'node:child_process';
 import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor/rule-actions.js';
 import { DiagramGenerationCanceledError } from '../../gbdraw/web/js/services/diagram-generation.js';
-import { createRulePreparation, ruleMatchesFeature } from '../../gbdraw/web/js/app/rule-matching.js';
+import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
+import { ruleMatchesFeature } from '../../gbdraw/web/js/services/rule-matchers.js';
 
 const nativeEvaluate = async payload => {
   const response = JSON.parse(execFileSync(process.env.PYTHON || 'python', ['-c', `

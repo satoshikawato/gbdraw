@@ -54,19 +54,19 @@ import {
 } from './linear-label-visibility.js';
 import { isCliInvocationSessionExportable } from '../app/run-info.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
-import { normalizeCircularPlotTitlePosition } from '../app/plot-title-position.js';
 import {
   migrateLegacyLayoutPreferences,
+  normalizeCircularPlotTitlePosition,
   normalizeLayoutPreferences,
   replaceLayoutPreferences,
   resolveActiveLayoutPreference
-} from '../app/layout-preferences.js';
+} from './layout-preferences.js';
 import { reconcileImportedLinearTypographyLink } from '../app/linear-typography.js';
 import {
   serializeFeatureVisibilityRules,
   normalizeFeatureVisibilityRule,
   splitLegacyVisibilityRules
-} from '../app/feature-visibility.js';
+} from './feature-visibility.js';
 import { canonicalFeatureOverrides, featureDraftMap } from './feature-placement.js';
 import {
   ANNOTATION_TARGET_MIGRATION_NOTICE,
@@ -86,7 +86,7 @@ import {
   analyzeCatalogSequenceSourceCoverage,
   buildRestoredMatchSequenceSources,
   resolveCircularComparisonSequenceAvailability
-} from '../app/match-sequences.js';
+} from './match-sequences.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
   buildCanonicalRenderRequest,
@@ -103,7 +103,7 @@ import {
   normalizeLinearComparisonPlan,
   reconcileLinearComparisonPlan,
   resolveLinearComparisonPlan
-} from '../app/linear-comparisons.js';
+} from './linear-comparisons.js';
 import { buildSessionResources as assembleSessionResources } from './session-resources.js';
 import {
   base64ToBytes,

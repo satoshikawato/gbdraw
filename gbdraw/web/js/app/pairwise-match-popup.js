@@ -5,7 +5,7 @@ import {
   resolveDisplayProteinId
 } from '../services/feature-utils.js';
 import { buildFeatureSequenceFastas } from '../services/feature-sequence-fasta.js';
-import { buildMatchSequenceBundle } from './match-sequences.js';
+import { buildMatchSequenceBundle } from '../services/match-sequences.js';
 import { readRecordSourceSpan, recordSourceInterval } from '../services/record-source-coordinates.js';
 import {
   groupMetadataScopeLabel,
@@ -102,7 +102,7 @@ import {
  * @property {Record<string, any>[]} [orthogroups]
  * @property {OrthogroupTextOverrides} [orthogroupNameOverrides]
  * @property {OrthogroupTextOverrides} [orthogroupDescriptionOverrides]
- * @property {import('./match-sequences.js').SequenceSourceResolver | null} [resolveSequenceSource]
+ * @property {import('../services/match-sequences.js').SequenceSourceResolver | null} [resolveSequenceSource]
  */
 
 /**
