@@ -3,6 +3,7 @@
 import {
   LINEAR_COMPARISON_MODES,
   LINEAR_COMPARISON_SOURCES,
+  linearComparisonEdgeKey,
   normalizeLinearComparisonPlan
 } from '../services/linear-comparisons.js';
 import { comparisonStateForMode } from '../mode-profiles.js';
@@ -153,12 +154,35 @@ const normalizeBlastpMode = (value) => {
     : 'orthogroup';
 };
 
+// A Selected plan whose included pairs are exactly the adjacent pairs, all
+// uploads, is the Upload intent: uploading the table of a pair makes it
+// Selected (UJ-05). Selected LOSAT stays Custom, because the Selected
+// topology limits the LOSATP modes.
+/**
+ * @param {ReturnType<typeof normalizeLinearComparisonPlan>} plan
+ * @param {readonly string[]} adjacentEdgeKeys
+ */
+const isAdjacentUploadPlan = (plan, adjacentEdgeKeys) => {
+  const included = plan.edges.filter((edge) => edge.included === true);
+  const keys = new Set(included.map((edge) => linearComparisonEdgeKey(edge.queryUid, edge.subjectUid)));
+  const adjacent = new Set(adjacentEdgeKeys);
+  return adjacent.size > 0 && keys.size === included.length && keys.size === adjacent.size
+    && [...keys].every((key) => adjacent.has(key))
+    && included.every((edge) => edge.source === LINEAR_COMPARISON_SOURCES.UPLOAD);
+};
+
+/**
+ * @param {ReturnType<typeof normalizeLinearComparisonPlan>} plan
+ * @param {readonly string[]} adjacentEdgeKeys
+ */
 const intentKeyForPlan = (plan, adjacentEdgeKeys) => {
   if (plan.mode === LINEAR_COMPARISON_MODES.NONE) {
     return LINEAR_COMPARISON_INTENT_KEYS.NONE;
   }
   if (plan.mode === LINEAR_COMPARISON_MODES.SELECTED) {
-    return LINEAR_COMPARISON_INTENT_KEYS.CUSTOM;
+    return isAdjacentUploadPlan(plan, adjacentEdgeKeys)
+      ? LINEAR_COMPARISON_INTENT_KEYS.UPLOAD
+      : LINEAR_COMPARISON_INTENT_KEYS.CUSTOM;
   }
   return plan.defaultSource === LINEAR_COMPARISON_SOURCES.UPLOAD
     ? LINEAR_COMPARISON_INTENT_KEYS.UPLOAD
@@ -498,6 +522,7 @@ export const projectLinearComparisonLosatpModeSelection = ({
  * @param {{
  *   plan?: Record<string, any>,
  *   resolution?: Partial<LinearComparisonResolution>,
+ *   adjacentEdgeKeys?: readonly string[],
  *   losatProgram?: string,
  *   blastpMode?: string,
  *   filters?: Record<string, any>
@@ -506,13 +531,14 @@ export const projectLinearComparisonLosatpModeSelection = ({
 export const projectLinearComparisonUi = ({
   plan = {},
   resolution = {},
+  adjacentEdgeKeys = [],
   losatProgram = 'blastn',
   blastpMode = 'orthogroup',
   filters = {}
 } = {}) => {
   const normalizedPlan = normalizeLinearComparisonPlan(plan);
   const activeEdges = Array.isArray(resolution?.edges) ? resolution.edges : [];
-  const intentKey = intentKeyForPlan(normalizedPlan);
+  const intentKey = intentKeyForPlan(normalizedPlan, adjacentEdgeKeys);
   const planned = plannedSources(normalizedPlan);
   const selectedTopology = normalizedPlan.mode === LINEAR_COMPARISON_MODES.SELECTED;
   const losatModeKey = normalizeLosatProgram(losatProgram);

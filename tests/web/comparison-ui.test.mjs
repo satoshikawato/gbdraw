@@ -560,3 +560,22 @@ test('an adjacent plan that resolves no pair says why Generate draws no comparis
   assert.equal(project(createDefaultLinearComparisonPlan()).emptyPlanNotice, '');
   assert.equal(project({ mode: 'selected', defaultSource: 'upload', edges: [] }).emptyPlanNotice, '');
 });
+
+test('a Selected plan of exactly the adjacent pairs from uploads keeps the Upload intent (UJ-05)', () => {
+  // Uploading a table into the only pair turns All adjacent pairs into a
+  // Selected plan with that one included edge.
+  const pair = createLinearComparisonEdge({
+    id: 'a-b', queryUid: 'a', subjectUid: 'b', source: 'upload', file: file('a-b.tsv'), fileActive: true
+  });
+  const plan = { mode: 'selected', defaultSource: 'upload', edges: [pair] };
+  const intent = (adjacentEdgeKeys, edges = plan.edges) => project({ ...plan, edges }, { adjacentEdgeKeys }).intentKey;
+  assert.equal(intent(['a->b']), 'upload');
+  // Genuinely custom plans stay Custom: a pair left out, a pair that is not
+  // adjacent, a LOSAT pair (Selected topology limits the LOSATP modes), or an
+  // omitted (dormant) pair standing in for an adjacent one.
+  assert.equal(intent(['a->b', 'b->c']), 'custom');
+  assert.equal(intent(['b->c']), 'custom');
+  assert.equal(intent(['a->b'], [{ ...pair, source: 'losat' }]), 'custom');
+  assert.equal(intent(['a->b'], [{ ...pair, included: false }]), 'custom');
+  assert.equal(intent([]), 'custom');
+});
