@@ -621,6 +621,74 @@ for (const mode of ['linear', 'circular']) {
   });
 }
 
+// The editor captions, and the number of drawn rows of each caption the reader sees.
+const legendRowsByCaption = page => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  const svg = app.svgContainer.querySelector('svg');
+  const drawn = {};
+  for (const entry of svg.querySelectorAll('#legend g[data-legend-key]')) {
+    if (entry.closest('[display="none"]')) continue;
+    const caption = entry.querySelector('text')?.textContent.trim() || '';
+    drawn[caption] = (drawn[caption] || 0) + 1;
+  }
+  return { editor: app.legendEntries.map(e => e.caption), drawn };
+});
+const oneRowEach = ({ editor }) => Object.fromEntries(editor.map(caption => [caption, 1]));
+
+// OV-151 (GUI audit FL-04, PD-OI-061 revision 2): GC skew (+) and GC skew (-)
+// draw no features, so renaming one onto the other offers Suffix and Cancel,
+// never Merge, and a forced Merge changes nothing. After Suffix each caption has
+// one drawn row, live and at Generate, and the editor order stays. The renamed
+// row is the last row; in Linear a renamed row before it moves at Generate
+// (OV-156, owned by the Legend layout port).
+for (const mode of ['linear', 'circular']) {
+  test(`M12 ${mode}: a GC skew row renamed onto the other GC skew row offers no Merge`, async ({ browser }) => {
+    test.setTimeout(600_000);
+    const page = await loadGenerated(browser, mode);
+    try {
+      if (mode === 'linear') {
+        await page.evaluate(() => {
+          const { form } = window.__GBDRAW_APP__;
+          form.show_gc = true;
+          form.show_skew = true;
+        });
+        await generate(page);
+      }
+      const before = await legendRowsByCaption(page);
+      expect(before.editor.slice(-2)).toEqual(['GC skew (+)', 'GC skew (-)']);
+      expect(before.drawn).toEqual(oneRowEach(before));
+      const rename = () => evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        await app.renameLegendEntry(app.legendEntries.findIndex(e => e.caption === 'GC skew (-)'), 'GC skew (+)');
+      });
+      const dialog = page.locator('div.fixed', { has: page.getByRole('heading', { name: 'Legend Name Conflict' }) });
+
+      await rename();
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByRole('button', { name: /^Merge into existing/ })).toHaveCount(0);
+      await expect(dialog.getByRole('button', { name: 'Keep current color and add a suffix' })).toHaveCount(1);
+      await expect(dialog.getByRole('button', { name: 'Cancel' })).toHaveCount(1);
+      await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.handleLegendRenameChoice('merge'));
+      await expect(dialog).toHaveCount(0);
+      await settleLive(page);
+      expect(await legendRowsByCaption(page), 'a forced Merge changes nothing').toEqual(before);
+
+      await rename();
+      await dialog.getByRole('button', { name: 'Keep current color and add a suffix' }).click();
+      await expect.poll(() => page.evaluate(legendIndex, 'GC skew (+) (1)')).toBeGreaterThanOrEqual(0);
+      await settleLive(page);
+      const renamed = await legendRowsByCaption(page);
+      expect(renamed.editor).toEqual([...before.editor.slice(0, -1), 'GC skew (+) (1)']);
+      expect(renamed.drawn, 'one drawn row per caption, live').toEqual(oneRowEach(renamed));
+      await expectGenerateKeepsLegend(page, 'Generate after the Suffix');
+      expect(await legendRowsByCaption(page), 'one drawn row per caption at Generate, editor order kept').toEqual(renamed);
+      expect(page.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+    }
+  });
+}
+
 test('L1-L8 generated legend categories reconcile while valid category and layout preferences survive', async ({ browser }, testInfo) => {
   test.setTimeout(1_800_000);
   const page = await load(browser, seeds.lambda);
