@@ -1067,6 +1067,7 @@ def test_feature_width_75_auto_repositions_ticks_outside_feature_band_when_overl
         len(record.seq),
         str(cfg.canvas.circular.track_type),
         bool(cfg.canvas.strandedness),
+        length_threshold=int(cfg.labels.length_threshold.circular),
     )
     tick_annulus = (ticks_center * tick_min_ratio, ticks_center * tick_max_ratio)
     assert not _annulus_overlaps_band(tick_annulus, widened_band)

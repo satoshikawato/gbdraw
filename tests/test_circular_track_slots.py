@@ -228,6 +228,7 @@ def _capture_circular_core_geometry(
                 str(canvas_config.profile.config.canvas.circular.track_type),
                 bool(canvas_config.profile.strandedness),
                 tick_track_channel_override=tick_track_channel_override,
+                length_threshold=int(canvas_config.profile.config.labels.length_threshold.circular),
             )
             width_px = center * (max(float(tick_min_ratio), float(tick_max_ratio)) - min(float(tick_min_ratio), float(tick_max_ratio)))
         captured["ticks"] = (

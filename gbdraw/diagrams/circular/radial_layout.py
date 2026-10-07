@@ -431,6 +431,7 @@ def _tick_layout_from_params(
         side=params.get("_slot_side"),
     )
     tick_length_px = float(width_px) if explicit_width and width_px > 0 else None
+    length_threshold = int(cfg.labels.length_threshold.circular)
 
     if tick_side in {"none", ""}:
         tick_band = RadialBand(anchor_radius_px, anchor_radius_px)
@@ -445,6 +446,7 @@ def _tick_layout_from_params(
             tick_side=tick_side,
             tick_length_px=tick_length_px,
             length_reference_radius_px=base_radius,
+            length_threshold=length_threshold,
         )
         tick_band = RadialBand(tick_inner, tick_outer)
 
@@ -464,6 +466,7 @@ def _tick_layout_from_params(
         tick_length_px=tick_length_px,
         tick_width=float(cfg.objects.ticks.tick_width),
         length_reference_radius_px=base_radius,
+        length_threshold=length_threshold,
     )
     if label_bounds is not None:
         label_band = RadialBand(*label_bounds)

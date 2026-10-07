@@ -170,6 +170,7 @@ def _tick_slot_for_preset(
         preset,
         bool(context.strandedness),
         tick_track_channel_override=context.tick_track_channel_override,
+        length_threshold=int(context.cfg.labels.length_threshold.circular),
     )
     tick_inner_ratio, tick_outer_ratio = sorted((float(tick_inner_ratio), float(tick_outer_ratio)))
     placement_side = "inside" if tick_outer_ratio <= 1.0 else "outside"
@@ -196,6 +197,7 @@ def _tick_slot_for_preset(
             tick_side=tick_side,
             tick_length_px=tick_width_px,
             length_reference_radius_px=base_radius,
+            length_threshold=int(context.cfg.labels.length_threshold.circular),
         )
         if label_bounds is not None:
             label_center = (float(label_bounds[0]) + float(label_bounds[1])) / 2.0
