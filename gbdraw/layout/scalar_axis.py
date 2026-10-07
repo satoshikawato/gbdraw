@@ -9,19 +9,17 @@ from .record_coordinates import DisplaySeries, RecordDisplayTransform, SeriesPoi
 
 
 def project_scalar_samples(
-    positions, values, transform: RecordDisplayTransform, *, source_positions: bool = False,
+    positions, values, transform: RecordDisplayTransform
 ) -> tuple[DisplaySeries, ...]:
     """Project one existing continuous track after its domain/value adapters.
 
-    GC windows are record-local. Depth bins already contain zero-based source
-    boundaries from depth_df (missing input bases there mean zero coverage).
+    GC windows and Depth bins are record-local: depth_df maps source positions
+    through the record coordinate map (missing input bases mean zero coverage).
     Projection never recalculates windows, normalizes values, or flips skew.
     """
     points = tuple(SeriesPoint(float(position), float(value))
                    for position, value in zip(positions, values, strict=True))
-    if source_positions:
-        return transform.project_series(points)
-    # Every caller reaches this branch only when ``transform.start_coordinate`` is set,
+    # Every caller reaches this point only when ``transform.start_coordinate`` is set,
     # where project_local_series returns DisplaySeries (it returns the input points when unset).
     return cast(tuple[DisplaySeries, ...], transform.project_local_series(points))
 

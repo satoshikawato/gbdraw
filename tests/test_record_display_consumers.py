@@ -137,10 +137,10 @@ def test_plan_series_preserve_samples_and_open_svg_seam(mode, reverse, start, mo
     owner = circular_paths if mode == "circular" else linear_paths
     project = owner.project_scalar_samples
     observed = []
-    def capture(positions, values, transform, **kwargs):
+    def capture(positions, values, transform):
         values = list(values)
-        result = project(positions, values, transform, **kwargs)
-        observed.append((list(positions), values, result, kwargs))
+        result = project(positions, values, transform)
+        observed.append((list(positions), values, result))
         return result
     monkeypatch.setattr(owner, "project_scalar_samples", capture)
     depth = pd.DataFrame({"reference_name": ["duplicate"] * 10000,
@@ -151,7 +151,7 @@ def test_plan_series_preserve_samples_and_open_svg_seam(mode, reverse, start, mo
     request = replace(request, options=replace(request.options, depth_table=depth, depth_window=2500, depth_step=2500))
     _, root = _svg(request)
     assert len(observed) == 3
-    for positions, values, segments, kwargs in observed:
+    for positions, values, segments in observed:
         segment, = segments
         assert positions == [0, 2500, 5000, 7500]
         assert segment.points[0].position == 0
@@ -164,10 +164,9 @@ def test_plan_series_preserve_samples_and_open_svg_seam(mode, reverse, start, mo
                 assert sample.value == values[index]
                 seen.add(index)
         assert seen == {0, 1, 2, 3}
-        # Independent boundary oracle: GC is already record-local after RC;
-        # depth_df adapted the original source positions from 1-based input.
-        local_cut = (10000 - start) if reverse else start - 1
-        cut = (start if reverse else start - 1) if kwargs.get("source_positions") else local_cut
+        # Independent boundary oracle: GC and Depth are record-local after RC;
+        # depth_df maps the 1-based source positions through the coordinate map.
+        cut = (10000 - start) if reverse else start - 1
         sampled = cut % 2500 == 0
         assert segment.seam_sampled == sampled
         left = (cut // 2500) % 4
@@ -181,10 +180,8 @@ def test_plan_series_preserve_samples_and_open_svg_seam(mode, reverse, start, mo
         for path in paths:
             points = _xy(path.get("d"))
             assert len(points) >= 5
-            cut = ((start if reverse else start - 1) if name == "depth"
-                   else ((10000 - start) if reverse else start - 1))
-            direction = -1 if name == "depth" and reverse else 1
-            offsets = sorted({0, 10000, *[(direction * (p - cut)) % 10000 for p in (0, 2500, 5000, 7500)]})
+            cut = (10000 - start) if reverse else start - 1
+            offsets = sorted({0, 10000, *[(p - cut) % 10000 for p in (0, 2500, 5000, 7500)]})
             if mode == "linear":
                 # Only baseline closure returns from the right edge to the left.
                 assert all(b[0] >= a[0] or a[1] == pytest.approx(b[1])
@@ -322,14 +319,27 @@ def test_rotation_preserves_physical_and_value_axes_and_definition_visibility(mo
                                             ("linear", "rows"), ("linear", "multi")])
 def test_multi_record_consumers_keep_instance_order_and_sparse_depth(mode, layout_kind, monkeypatch, tmp_path):
     from gbdraw.api.options import CircularMultiRecordOptions, LinearMultiRecordOptions
+    import gbdraw.render.drawers.circular.depth as circular_depth
+    import gbdraw.render.drawers.linear.depth as linear_depth
     import gbdraw.svg.circular_tracks as circular_paths
     import gbdraw.svg.linear_tracks as linear_paths
     owner = circular_paths if mode == "circular" else linear_paths
     project = owner.project_scalar_samples
+    depth_owner, depth_name = ((circular_depth, "generate_circular_depth_path_desc") if mode == "circular"
+                               else (linear_depth, "calculate_depth_path_desc"))
+    draw_depth = getattr(depth_owner, depth_name)
+    drawing_depth = []
     observed = []
-    def capture(positions, values, transform, **kwargs):
-        observed.append((transform.length, transform.start_coordinate, transform.source_step, kwargs.get("source_positions", False)))
-        return project(positions, values, transform, **kwargs)
+    def capture_depth(*args, **kwargs):
+        drawing_depth.append(True)
+        try:
+            return draw_depth(*args, **kwargs)
+        finally:
+            drawing_depth.pop()
+    def capture(positions, values, transform):
+        observed.append((transform.length, transform.start_coordinate, transform.source_step, bool(drawing_depth)))
+        return project(positions, values, transform)
+    monkeypatch.setattr(depth_owner, depth_name, capture_depth)
     monkeypatch.setattr(owner, "project_scalar_samples", capture)
     first = _request(mode, _record(), 4001, overrides={"canvas.show_gc": True, "canvas.show_skew": True})
     second = replace(first.records[0], source=InMemoryRecordSource(_record(12000)), record_key="second",
