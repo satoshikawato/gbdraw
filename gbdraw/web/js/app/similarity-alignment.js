@@ -145,6 +145,14 @@ const catalogBiologicalFeatures = (catalog) => (Array.isArray(catalog?.items) ? 
 
 // Presentation label or definition plus accession; the display position is
 // appended only to tell otherwise identical records apart.
+/**
+ * @param {{
+ *   recordKeys: string[],
+ *   request?: Record<string, any> | null,
+ *   linearSeqs?: Record<string, any>[],
+ *   catalog?: Record<string, any> | null
+ * }} options
+ */
 const recordNames = ({ recordKeys, request = null, linearSeqs = [], catalog = null }) => {
   const accessions = new Map();
   catalogBiologicalFeatures(catalog).forEach((feature) => {
@@ -253,6 +261,14 @@ const successfulSummary = (plan, reversed) => {
 
 const baseReverseComplement = canonicalRecordReverseComplement;
 
+/**
+ * @param {Record<string, any> | null | undefined} plan
+ * @param {{
+ *   linearSeqs?: Record<string, any>[],
+ *   catalog?: Record<string, any> | null,
+ *   request?: Record<string, any> | null
+ * }} [options]
+ */
 const inspectActivePlan = (plan, { linearSeqs = [], catalog = null, request = null } = {}) => {
   if (!plan || plan.schema !== 2 || !Array.isArray(plan.records)) return null;
   const records = new Map(
@@ -612,7 +628,8 @@ export const validateSimilarityAlignmentResolution = (value, request) => {
     schema: 2, status: raw.status, groupId: raw.groupId, reference,
     referenceDisplayedStrand: raw.referenceDisplayedStrand,
     referenceDisplayCenter: raw.referenceDisplayCenter,
-    records, plan: null, projection: validateProjection(raw.projection, request)
+    records, plan: /** @type {Record<string, any> | null} */ (null),
+    projection: validateProjection(raw.projection, request)
   };
   response.projection?.records.forEach((fact, index) => {
     const current = fact.variants[Number(fact.beforeReverseComplement)];
@@ -839,6 +856,26 @@ const anchorsAgree = (left, right) => {
  */
 
 /**
+ * One committed alignment baseline: the canonical Session that `projectCommittedAlignment`
+ * returned, its render request, and the record translations it carries.
+ * @typedef {object} AlignmentBaseline
+ * @property {Record<string, any>} canonical
+ * @property {any} request
+ * @property {any} translations
+ */
+
+/**
+ * What `captureArtifact` records to tell whether a draft's source artifact changed.
+ * @typedef {object} AlignmentArtifactStamp
+ * @property {string} records
+ * @property {string} group
+ * @property {any} selectedGroup
+ * @property {any} catalog
+ * @property {any} result
+ * @property {string} translations
+ */
+
+/**
  * @param {SimilarityAlignmentActionsOptions} options
  */
 export const createSimilarityAlignmentActions = ({
@@ -883,17 +920,25 @@ export const createSimilarityAlignmentActions = ({
   const automaticApply = ref(false);
   const resetScope = ref('positions');
   let actionId = 0;
+  /** @type {Record<string, any> | null} */
   let activeRequest = null;
+  /** @type {Promise<Record<string, any>> | null} */
   let activeApply = null;
+  /** @type {AlignmentBaseline | null} */
   let activeBaseline = null;
   let displayFacts = new Map();
   let recordLabels = new Map();
+  /** @type {AlignmentArtifactStamp | null} */
   let artifactStamp = null;
   let materializedRecordDrag = false;
+  /** @type {AlignmentBaseline | null} */
   let pendingRecordDragBaseline = null;
 
   const publishError = (value, notify = true) => {
-    const normalized = normalizeUserFacingError(value || { code: 'UNKNOWN' }, { operation: 'align', stage: 'helper' });
+    // The value is always truthy (`value || { code: 'UNKNOWN' }`), and only a falsy value normalizes to null.
+    const normalized = /** @type {Record<string, any>} */ (
+      normalizeUserFacingError(value || { code: 'UNKNOWN' }, { operation: 'align', stage: 'helper' })
+    );
     error.value = normalized;
     if (notify && typeof onError === 'function') onError(normalized);
     return normalized;
@@ -936,7 +981,8 @@ export const createSimilarityAlignmentActions = ({
   };
 
   const currentRecordKeys = () => (
-    (Array.isArray(currentRequest()?.records) ? currentRequest().records : [])
+    // The same committed request: its `records` was just checked to be an array.
+    (Array.isArray(currentRequest()?.records) ? /** @type {Record<string, any>} */ (currentRequest()).records : [])
       .map(({ recordKey }) => String(recordKey || ''))
       .filter(Boolean)
   );
@@ -1013,9 +1059,18 @@ export const createSimilarityAlignmentActions = ({
     status.value = 'reviewing';
   };
 
+  /**
+   * @param {{
+   *   canonical: Record<string, any>,
+   *   label: string,
+   *   alignmentResetBefore?: Record<string, any> | null,
+   *   alignmentResetReceipt?: Record<string, any> | null
+   * }} options
+   */
   const runAlignmentCandidate = async ({ canonical, label, alignmentResetBefore = null,
     alignmentResetReceipt = undefined }) => {
-    const beforeRecords = new Map(currentRequest().records.map(record => [record.recordKey, record]));
+    // Both callers ran `baseline()` first, which throws when no render request is committed.
+    const beforeRecords = new Map(/** @type {Record<string, any>} */ (currentRequest()).records.map(record => [record.recordKey, record]));
     const changed = canonical.renderRequest.records.filter(record => (
       baseReverseComplement(record) !== baseReverseComplement(beforeRecords.get(record.recordKey))
     )).map(record => ({recordKey: record.recordKey, reverseComplement: baseReverseComplement(record)}));
@@ -1032,11 +1087,14 @@ export const createSimilarityAlignmentActions = ({
     }
     const orientations = projected.records.map(({ recordKey, afterReverseComplement }) => ({
       recordKey, reverseComplement: afterReverseComplement }));
-    const canonical = projectCommittedAlignment({ committed: activeBaseline.canonical,
+    // An applying draft has its baseline: `start` and `prepareStaleTargetRepair` set it with
+    // `activeRequest`, and every clear of one is followed by a stale `actionId`, checked above.
+    const canonical = projectCommittedAlignment({
+      committed: /** @type {AlignmentBaseline} */ (activeBaseline).canonical,
       plan: response.plan, orientations,
       translations: projected.records.map(({ recordKey, translation }) => ({recordKey, ...translation})) });
     const promise = runAlignmentCandidate({canonical, label: 'Align Similarity Group',
-      alignmentResetBefore: activeBaseline.canonical});
+      alignmentResetBefore: /** @type {AlignmentBaseline} */ (activeBaseline).canonical});
     activeApply = promise;
     let outcome;
     try { outcome = await promise; }
@@ -1059,10 +1117,12 @@ export const createSimilarityAlignmentActions = ({
   const resolveRequest = async (request, expectedActionId, mode) => {
     let response;
     try {
+      // `start` sets the baseline right before it resolves; nothing clears it in between.
       const helper = await runHelperOperation(resolveOperation, { request,
-        projection: { canonicalRequest: activeBaseline.request, orientations: Object.fromEntries(
-          request.records.map(record => [record.recordKey, baseReverseComplement(record)])) },
-        resources: activeBaseline.canonical.resources });
+        projection: { canonicalRequest: /** @type {AlignmentBaseline} */ (activeBaseline).request,
+          orientations: Object.fromEntries(
+            request.records.map(record => [record.recordKey, baseReverseComplement(record)])) },
+        resources: /** @type {AlignmentBaseline} */ (activeBaseline).canonical.resources });
       if (expectedActionId !== actionId) return { status: 'stale' };
       response = validateSimilarityAlignmentResolution(helper?.result, request);
       if (!artifactIsCurrent()) return rejectStaleDraft();
@@ -1168,9 +1228,10 @@ export const createSimilarityAlignmentActions = ({
     const orientations = Object.fromEntries(preview.records.map(record => [record.recordKey, record.afterReverseComplement]));
     status.value = 'applying';
     try {
+      // An open draft (`activeRequest`, checked above) always has its baseline (see `applyPlan`).
       const helper = await runHelperOperation(resolveOperation, { request,
-        projection: { canonicalRequest: activeBaseline.request, orientations },
-        resources: activeBaseline.canonical.resources });
+        projection: { canonicalRequest: /** @type {AlignmentBaseline} */ (activeBaseline).request, orientations },
+        resources: /** @type {AlignmentBaseline} */ (activeBaseline).canonical.resources });
       if (expectedActionId !== actionId) return { status: 'stale' };
       const response = validateSimilarityAlignmentResolution(helper?.result, request);
       if (!artifactIsCurrent()) return rejectStaleDraft();
@@ -1208,7 +1269,8 @@ export const createSimilarityAlignmentActions = ({
     const id = String(groupId || '').trim();
     const group = getOrthogroupById(id);
     if (!group) return [];
-    const candidates = getEnrichedOrthogroupMembers(group).map((member) => {
+    // `filter(Boolean)` drops the members whose anchor does not resolve (the `null` results).
+    const candidates = /** @type {{ anchor: ReturnType<typeof anchorFromSource>, canonicalKey: string, key: string, label: string }[]} */ (getEnrichedOrthogroupMembers(group).map((member) => {
       try {
         const anchor = anchorFromSource(member, 'Drawer reference');
         return {
@@ -1222,7 +1284,7 @@ export const createSimilarityAlignmentActions = ({
       } catch (_error) {
         return null;
       }
-    }).filter(Boolean);
+    }).filter(Boolean));
     const counts = new Map();
     candidates.forEach(({ canonicalKey }) => {
       counts.set(canonicalKey, (counts.get(canonicalKey) || 0) + 1);

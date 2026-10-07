@@ -144,6 +144,8 @@ export const createFeatureEditor = ({
     state, ref, computed, getCommittedSession, readResourceRecordCount, readFeatureOverrideTable,
     projectFeatureEdits
   });
+  /** @param {Record<string, any>} feat
+   *  @param {{ clientX: number, clientY: number } | null} [eventLike] */
   const openFeatureEditorForFeature = (feat, eventLike = null) => {
     return featureSvgActions.openFeatureEditorForFeature(feat, eventLike);
   };

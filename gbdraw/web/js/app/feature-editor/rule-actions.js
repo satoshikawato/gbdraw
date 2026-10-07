@@ -262,6 +262,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (applied && redrawsLegend) ports.requestAutomaticRerender();
     return applied;
   };
+  /** @param {Element | null} [input] The input a failed commit offers for editing. */
   const commitPrepared = async (rules, label, afterCommit = () => {}, input = null, sourceRows = rules.map(rule => manualSpecificRules.includes(rule) ? rule : null)) => {
     patternDrafts.suspend();
     const snapshot = rulePreparation.snapshot();
@@ -288,6 +289,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const busy = state.sessionOperationAvailability?.();
     return busy || patternDrafts.edit(row, value);
   };
+  /** @param {HTMLInputElement | null} [input] */
   const revertSpecificRulePattern = (row, input = null) => {
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
@@ -330,6 +332,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const draft = patternDrafts.get(row);
     return draft && !draft.pending ? applySpecificRulePattern(row, draft.text) : false;
   };
+  /** @param {HTMLInputElement | null} [input] */
   const setSpecificRuleField = (index, field, value, input = null) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -655,6 +658,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     return count;
   };
 
+  /** @param {string | null} [caption] */
   const findFeaturesWithSameLegendItem = (currentFeat, caption = null) => {
     const targetCaption = normalizeCaption(caption || getEffectiveLegendCaption(currentFeat));
     if (!targetCaption) return [];
@@ -664,6 +668,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     });
   };
 
+  /** @param {string | null} [label] */
   const findFeaturesWithSameIndividualLabel = (currentFeat, label = null) => {
     const targetLabel = normalizeCaption(label || getIndividualFeatureLabel(currentFeat));
     if (!targetLabel) return [];
@@ -674,6 +679,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     });
   };
 
+  /** @param {string | null} [label] */
   const findFeaturesWithSameDisplayedLabel = (currentFeat, label = null) => {
     const targetLabel = normalizeCaption(label || getDisplayedFeatureLabel(currentFeat));
     if (!targetLabel) return [];

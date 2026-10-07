@@ -191,6 +191,7 @@ export const createRecordDisplayControls = ({
   getCommittedRequest, getCommittedSession
 }) => {
   let committedRows = [];
+  /** @type {Record<string, any> | null} */
   let boundRequest = null;
   let boundSources = [];
   const sources = computed(() => [

@@ -62,6 +62,17 @@ const normalizeStrokeWidth = (value) => {
   return width;
 };
 
+/**
+ * The planner's mutable form of one Result's operations (the shape
+ * services/svg-result-ingestion.js declares as `SvgMutationOperations`).
+ * @typedef {Record<
+ *   'featureFills' | 'featureStrokes' | 'featureVisibility' | 'labelText' | 'labelVisibility'
+ *   | 'legendFills' | 'legendStrokes' | 'legendRenames' | 'legendDeletes' | 'legendAdds' | 'legendOrder',
+ *   Record<string, any>[]
+ * > & { callerTransforms: SvgResultTransform[] }} MutableOperations
+ */
+
+/** @returns {MutableOperations} */
 const emptyOperations = () => ({
   featureFills: [],
   featureStrokes: [],
@@ -320,7 +331,7 @@ const compilePlanBundle = ({
     if (deletedCaptions.has(originalCaption)) return;
     const isOriginal = originalCaptions.has(originalCaption);
     const targetCaption = isOriginal ? originalCaption : caption;
-    const legendRenderedIds = entry?.featureIds.length > 0
+    const legendRenderedIds = entry && entry.featureIds.length > 0
       ? entry.featureIds : [...(renderedIdsByDirectCaption.get(caption) || [])];
     const allowMissing = !entry || (sourceReplaced && isOriginal) || unrequestedDepth.has(caption)
       || (rendererDerivedCaptions.has(caption)

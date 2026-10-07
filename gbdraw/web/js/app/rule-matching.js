@@ -37,6 +37,7 @@ const declinesLiveMatch = (feature, rule) => drawnSelectorUnknown(feature)
 export const ruleMatchDeclined = (feature, rules) => rules
   .some((rule) => cacheOf(feature)?.get(ruleKey(rule))?.declined === true);
 export const firstMatchingRule = (feature, rules) => {
+  /** @type {Record<string, any> | null} */
   let winner = null;
   let priority = Infinity;
   for (const rule of rules) {
@@ -53,6 +54,7 @@ export const firstMatchingRule = (feature, rules) => {
 // declined.
 export const firstMatchingRuleIfKnown = (feature, rules) => {
   const cache = cacheOf(feature);
+  /** @type {Record<string, any> | null} */
   let winner = null;
   let priority = Infinity;
   for (const rule of rules) {

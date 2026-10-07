@@ -98,6 +98,7 @@ export const createLegendEntryActions = ({
     legendColorOverrides
   } = state;
 
+  /** @type {(() => void) | null} */
   let legendGeometryChangedHandler = null;
   const retiredEntryTemplates = new Map();
 
@@ -693,7 +694,8 @@ export const createLegendEntryActions = ({
     // returned entry takes its place in the order, and own entries follow. A
     // step that leaves the default order of the Result it was made on gives
     // this Result its own default order (OV-47).
-    const ownInventory = inventoryByResult.get(identity);
+    // No inventory is stored under an empty identity, so the guard only states what get() returned.
+    const ownInventory = identity ? inventoryByResult.get(identity) : undefined;
     const directCaptions = new Set(entryOwners.flatMap((group) => group.entries)
       .filter((entry) => entry.owner === 'direct-editor').map((entry) => entry.caption));
     const generatedEntries = restored.filter((entry) => !directCaptions.has(legendCaption(entry)));

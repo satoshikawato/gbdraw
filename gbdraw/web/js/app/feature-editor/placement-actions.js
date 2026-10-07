@@ -1,6 +1,6 @@
 // @ts-check
-/** @import { FeaturePlacementTarget } from '../../services/feature-placement.js' */
-/** @import { ChangeTrackLayout } from '../track-slot-edits.js' */
+/** @import { FeaturePlacementDraftRow, FeaturePlacementTarget } from '../../services/feature-placement.js' */
+/** @import { ChangeTrackLayout, LayoutControl } from '../track-slot-edits.js' */
 import {
   canonicalFeaturePlacements,
   featureIdentityKeyOf,
@@ -109,8 +109,9 @@ export const createFeaturePlacementActions = ({
         const key = featureIdentityKeyOf(feature);
         if (value === 'auto') delete state.featurePlacementOverrides[key];
         else {
-          const row = { ...parseFeatureIdentityKey(key), placement: /** @type {FeaturePlacementTarget} */ (value === 'main'
-            ? { kind: 'main' } : { kind: 'lane', side: value, level: 1 }) };
+          // `key` comes from featureIdentityKeyOf, so parseFeatureIdentityKey reads it back; canonicalFeaturePlacements validates the row.
+          const row = /** @type {FeaturePlacementDraftRow} */ ({ ...parseFeatureIdentityKey(key), placement: /** @type {FeaturePlacementTarget} */ (value === 'main'
+            ? { kind: 'main' } : { kind: 'lane', side: value, level: 1 }) });
           canonicalFeaturePlacements({ [key]: row });
           state.featurePlacementOverrides[key] = row;
         }
@@ -128,6 +129,7 @@ export const createFeaturePlacementActions = ({
   // The composition root passes `changeTrackLayout` to the track stack editors
   // as their one port (R13); each routes its feature-slot edits through it.
   const layoutChange = reactive({ open: false, count: 0, setting: '', value: '', scope: '' });
+  /** @type {{ control: LayoutControl | null, apply: () => any } | null} */
   let pendingLayout = null;
   const laneSides = () => Object.fromEntries(Object.keys(SIDES).map((mode) => [mode,
     draftPlacementTargets({ mode, form: state.form, adv: state.adv }).map((target) => target.side).filter(Boolean)]));

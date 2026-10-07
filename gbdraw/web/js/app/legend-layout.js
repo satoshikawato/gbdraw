@@ -97,8 +97,10 @@ export const createLegendLayout = ({
   const resultIdentity = (result) => previewRuntime?.getResultIdentity?.(result) || '';
   const captureCompositionIntent = () => {
     const runtime = previewRuntime?.getActiveRuntime?.() || null;
-    const svg = state.svgContainer.value?.querySelector?.('svg') || null;
+    // state is untyped; the container holds our own Result, so this is an SVG or null.
+    const svg = /** @type {SVGSVGElement | null} */ (state.svgContainer.value?.querySelector?.('svg') || null);
     if (svg && runtime?.svg === svg && runtime.resultIdentity) {
+      /** @type {Record<string, any> | null} */
       let deltas = null;
       try {
         deltas = compositionUserDeltas(svg);

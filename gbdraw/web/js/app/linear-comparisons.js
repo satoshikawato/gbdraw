@@ -280,6 +280,7 @@ export const adjacentRowPairs = (sequences = [], layout = [], allPairs = false) 
   return pairs;
 };
 
+/** @param {LinearComparisonEdge | null} [edge] */
 const validationIssue = (code, message, edge = null) => ({
   code,
   message,
@@ -287,6 +288,9 @@ const validationIssue = (code, message, edge = null) => ({
   edgeKey: edge ? linearComparisonEdgeKey(edge.queryUid, edge.subjectUid) : ''
 });
 
+/**
+ * @param {{ edges?: any[], sequences?: any[], layout?: any[] }} [options]
+ */
 export const validateLinearComparisonEdges = ({
   edges = [],
   sequences = [],
@@ -320,7 +324,8 @@ export const validateLinearComparisonEdges = ({
     if (queryRow === subjectRow) {
       issues.push(validationIssue('same-row', 'Comparisons must connect records in different rows.', edge));
     } else if (
-      Math.abs(rowPositionByNumber.get(queryRow) - rowPositionByNumber.get(subjectRow)) !== 1
+      // Every valid uid has a row and every row has a position (linearComparisonRowTopology).
+      Math.abs(/** @type {number} */ (rowPositionByNumber.get(queryRow)) - /** @type {number} */ (rowPositionByNumber.get(subjectRow))) !== 1
     ) {
       issues.push(validationIssue('non-adjacent', 'Comparisons must connect adjacent rows.', edge));
     }
@@ -546,6 +551,13 @@ const presentationSource = ({ normalizedPlan, candidateKind, draft, resolved }) 
   return 'none';
 };
 
+/**
+ * @typedef {{ upperRow: number, lowerRow: number, pairs: any[] }} LinearComparisonBoundary The pairs drawn between two adjacent rows.
+ */
+
+/**
+ * @param {{ sequences?: any[], layout?: any[], plan?: Record<string, any>, resolution?: LinearComparisonResolution | null }} [options]
+ */
 export const buildLinearComparisonTimeline = ({
   sequences = [],
   layout = [],
@@ -563,6 +575,7 @@ export const buildLinearComparisonTimeline = ({
   } = linearComparisonRowTopology(sequenceList, layout);
   const boundariesByKey = new Map();
   const rows = orderedRows.map((row, index) => {
+    /** @type {LinearComparisonBoundary | null} */
     let boundaryAfter = null;
     if (index < orderedRows.length - 1) {
       const lowerRow = orderedRows[index + 1];
@@ -771,7 +784,7 @@ export const buildPairwiseLosatJobSpecs = ({
  */
 export const buildLosatJobSpecs = ({
   resolution,
-  recordCount,
+  recordCount = 0,
   recordUids = [],
   program = 'blastn',
   blastpMode = 'pairwise',

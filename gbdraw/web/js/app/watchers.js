@@ -258,7 +258,8 @@ export const setupWatchers = ({
       const resultIndex = Number(selectedResultIndex.value) || 0;
       const result = results.value[resultIndex] || null;
       try {
-        const context = previewRuntime.createMountedResultContext({
+        // app/app-setup.js, the only caller, always passes the preview runtime here.
+        const context = /** @type {WatchersPreviewRuntime} */ (previewRuntime).createMountedResultContext({
           root,
           result,
           resultIndex,
@@ -269,7 +270,7 @@ export const setupWatchers = ({
             trustedRestore: Boolean(trustedArtifactRestoreInProgress.value)
           }
         });
-        await previewRuntime.bindMountedResult(context);
+        await /** @type {WatchersPreviewRuntime} */ (previewRuntime).bindMountedResult(context);
       } catch (error) {
         if ([
           'PREVIEW_BIND_STALE',

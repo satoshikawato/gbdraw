@@ -397,6 +397,7 @@ export const alignRecoveredFeatureIdsToRenderedSvg = ({
     const recordKey = stableRecordKey(stableId, recordIndex);
     const recordMatches = recordKey ? rendered.byStableRecordKey.get(recordKey) || [] : [];
     const stableMatches = stableId ? rendered.byStableId.get(stableId) || [] : [];
+    /** @type {Record<string, any> | null} */
     let match = null;
     let method = '';
 
