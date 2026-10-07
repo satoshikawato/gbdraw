@@ -589,11 +589,20 @@ authority-only change. A new module is checked from its first commit.
   `tests/web/types/web-globals.d.ts`.
 - `@ts-ignore`, `@ts-expect-error`, and `@ts-nocheck` are not used: fix the
   type, cast with JSDoc, or fix the code.
+- `noImplicitAny` is not yet on in the guard config.
+  `tests/web/types/tsconfig.no-implicit-any.json` is the guard config plus
+  `noImplicitAny`, and `NO_IMPLICIT_ANY_BASELINE` in
+  `tests/web/no-implicit-any-ratchet.test.mjs` caps its diagnostics across
+  `js/`. A pull request keeps the count at or below the cap and may lower the
+  cap to the new count: a new parameter or variable declares its type, or the
+  collection a callback iterates is typed. Raising the cap is an
+  authority-only change.
 
-Guard: `tests/web/typed-boundaries.test.mjs` (the checked set, the compiler
-run, declared factory parameters, no suppression, type-import direction). It
-runs the `typescript` version pinned in `package.json` and fails until
-`npm ci` has installed it.
+Guards: `tests/web/typed-boundaries.test.mjs` (the checked set, the compiler
+run, declared factory parameters, no suppression, type-import direction) and
+`tests/web/no-implicit-any-ratchet.test.mjs` (the `noImplicitAny` cap). They
+run the `typescript` version pinned in `package.json` and fail until `npm ci`
+has installed it.
 
 ## Computation ownership
 
