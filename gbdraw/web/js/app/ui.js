@@ -352,9 +352,15 @@ export const setupGlobalUiEvents = ({
     showCanvasControls
   } = state;
 
+  // UI-02: a modal dialog answers Escape and its own clicks (its Cancel), so
+  // nothing behind it closes. The target is read through closest() because
+  // a choice unmounts the dialog before this document listener runs.
+  const modalDialogOpen = () => Boolean(document.querySelector('[role="dialog"][aria-modal="true"]'));
+
   const closeFeaturePopup = (e) => {
     if (
-      !e.target.closest('.feature-popup')
+      !e.target.closest('[data-modal-overlay], [aria-modal="true"]')
+      && !e.target.closest('.feature-popup')
       && !e.target.closest('.pairwise-match-popup')
       && !e.target.closest('.label-popup')
       && !e.target.closest('[data-similarity-alignment-overlay]')
@@ -366,7 +372,7 @@ export const setupGlobalUiEvents = ({
   };
 
   const handleEscapeKey = (e) => {
-    if (e.key === 'Escape') {
+    if (e.key === 'Escape' && !modalDialogOpen()) {
       if (clickedFeature.value) clickedFeature.value = null;
       if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
       if (clickedLabel.value) clickedLabel.value = null;

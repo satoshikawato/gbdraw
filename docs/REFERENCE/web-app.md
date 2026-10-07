@@ -131,9 +131,9 @@ Generate or apply draft settings. A review's guide, candidate numbers, and
 unapplied choices are excluded from saved and exported artifacts.
 
 For Linear diagrams, the DOM and keyboard order is **Input Genomes**,
-**Comparison**, **Basic**, **Generate Diagram**, then **Advanced comparison and
-layout**. The fixed Generate bar remains visible while its DOM anchor stays in
-that order.
+**Comparison**, **Basic**, then **Advanced comparison and layout**. In both
+modes, **Generate Diagram** is the last keyboard stop of the settings panel,
+after every section, and its bar stays fixed at the bottom of the panel.
 
 ### Save and Load Sessions
 

@@ -885,10 +885,14 @@ def capture_gui_annotation_tracks(
         skew_slot = page.get_by_role(
             "group", name="Circular track slot gc_skew", exact=True
         )
-        track_nt = skew_slot.get_by_label("Track dinucleotide", exact=True)
+        track_nt = skew_slot.get_by_label(
+            "Circular track slot gc_skew Track dinucleotide", exact=True
+        )
         track_nt.fill("AT")
         expect(track_nt).to_have_value("AT")
-        track_legend = skew_slot.get_by_label("Track legend label", exact=True)
+        track_legend = skew_slot.get_by_label(
+            "Circular track slot gc_skew Track legend label", exact=True
+        )
         track_legend.fill("AT skew")
         expect(track_legend).to_have_value("AT skew")
 
@@ -902,7 +906,9 @@ def capture_gui_annotation_tracks(
             "group", name="Circular track slot annotations", exact=True
         )
         expect(annotation_slot).to_be_visible()
-        annotation_set = annotation_slot.get_by_label("Annotation set", exact=True)
+        annotation_set = annotation_slot.get_by_label(
+            "Circular track slot annotations Annotation set", exact=True
+        )
         annotation_set.select_option("plastome_regions")
         expect(annotation_set).to_have_value("plastome_regions")
         move_outside = annotation_slot.get_by_title("Move outside Axis", exact=True)
@@ -911,10 +917,12 @@ def capture_gui_annotation_tracks(
         annotation_slot = page.get_by_role(
             "group", name="Circular track slot annotations", exact=True
         )
-        placement = annotation_slot.get_by_label("Annotation placement", exact=True)
+        placement = annotation_slot.get_by_label(
+            "Circular track slot annotations Annotation placement", exact=True
+        )
         expect(placement).to_have_value("outside")
         show_labels = annotation_slot.get_by_label(
-            "Show annotation labels", exact=True
+            "Circular track slot annotations Show annotation labels", exact=True
         )
         show_labels.check()
         expect(show_labels).to_be_checked()

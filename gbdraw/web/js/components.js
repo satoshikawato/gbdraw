@@ -8,7 +8,75 @@ import {
 
 import { normalizeUserFacingError, operationErrorTitle, generationRecoveryGuidance } from './utils/error-normalization.js';
 
-const { ref, reactive, computed, nextTick, watch, useId } = window.Vue;
+const { ref, reactive, computed, nextTick, watch, useId, onMounted } = window.Vue;
+
+/** @typedef {{ element: HTMLElement, returnFocus: HTMLElement | null }} FocusScope */
+/** @type {FocusScope[]} */
+const focusScopes = [];
+
+// UI-02, UI-03: a dialog takes focus when it mounts (its element marked
+// data-dialog-initial-focus, else its first enabled button, else the dialog)
+// and, when it unmounts with focus inside it or lost, returns focus to the
+// element that had it before. A dialog that closes while it holds the return
+// target of a later one hands that one its own return target.
+export const dialogFocus = {
+  /** @param {HTMLElement} element */
+  beforeMount(element) {
+    const active = document.activeElement;
+    focusScopes.push({ element, returnFocus: active instanceof HTMLElement && active !== document.body ? active : null });
+  },
+  /** @param {HTMLElement} element */
+  mounted(element) {
+    const dialog = element.matches('[role="dialog"]') ? element : element.querySelector('[role="dialog"]');
+    const target = element.querySelector('[data-dialog-initial-focus]')
+      || dialog?.querySelector('button:not(:disabled)') || dialog;
+    if (target instanceof HTMLElement) target.focus({ preventScroll: true });
+  },
+  /** @param {HTMLElement} element */
+  beforeUnmount(element) {
+    const index = focusScopes.findIndex((scope) => scope.element === element);
+    if (index < 0) return;
+    const [{ returnFocus }] = focusScopes.splice(index, 1);
+    for (const scope of focusScopes) {
+      if (scope.returnFocus && element.contains(scope.returnFocus)) scope.returnFocus = returnFocus;
+    }
+    const active = document.activeElement;
+    if (active && active !== document.body && !element.contains(active)) return;
+    if (returnFocus?.isConnected) returnFocus.focus({ preventScroll: true });
+  }
+};
+
+// UI-02: a modal choice. The panel is the dialog, named by the heading and
+// described by the text that `labelledby` and `describedby` name. Escape and a
+// backdrop click emit `cancel`, which a use binds to its Cancel handler; a use
+// binds Tab to `trapDialogFocus`.
+export const ChoiceDialog = {
+  template: '#choice-dialog-template',
+  props: {
+    labelledby: { type: String, required: true },
+    describedby: { type: String, default: null }
+  },
+  emits: ['cancel']
+};
+
+/** @param {Node} node @returns {string} */
+const visibleText = (node) => {
+  if (node.nodeType === Node.TEXT_NODE) return node.textContent || '';
+  if (!(node instanceof Element) || node.matches('button, input, select, textarea, [hidden], [aria-hidden="true"]')) return '';
+  return Array.from(node.childNodes, visibleText).join(' ');
+};
+
+// R12 (UI-04): a tip is named after what it explains, "Help: <label>": the
+// author name or visible text of the element that holds it, after the name of
+// the row group it is in. `label` names a tip whose holder has no such text.
+/** @param {Element | null} tip */
+const helpTipName = (tip) => {
+  const holder = tip?.parentElement;
+  const group = holder?.closest('[role="group"][aria-label]')?.getAttribute('aria-label') || '';
+  const label = holder?.getAttribute('aria-label') || (holder ? visibleText(holder) : '');
+  const name = `${group} ${label}`.replace(/\s+/g, ' ').trim();
+  return name ? `Help: ${name}` : 'Help';
+};
 
 // Every tip is a disclosure button (PD-OI-057). One text source feeds the
 // visible tooltip and the accessible description, identified by `id` or an
@@ -25,6 +93,7 @@ export const HelpTip = {
   setup(props) {
     const automaticId = `help-tip-${useId()}`;
     const descriptionId = computed(() => props.id || automaticId);
+    const name = ref('Help');
     const hovered = ref(false);
     const keyboardFocus = ref(false);
     const pinned = ref(false);
@@ -75,7 +144,8 @@ export const HelpTip = {
       pinned.value = false;
     };
     const toggle = () => { pinned.value = !pinned.value; };
-    return { descriptionId, visible, style, trigger, onEnter, onLeave, onFocus, close, toggle };
+    onMounted(() => { name.value = helpTipName(trigger.value?.closest('.help-tip') || null); });
+    return { descriptionId, name, visible, style, trigger, onEnter, onLeave, onFocus, close, toggle };
   }
 };
 

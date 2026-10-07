@@ -1457,6 +1457,7 @@
                                 Single-record crop, orientation and titles
                             </summary>
                             <div class="pt-2 space-y-2">
+                                <p v-if="!circularSingleRecordPresentationEnabled" id="circular-record-presentation-reason" class="ui-hint">{{ form.multi_record_canvas ? 'Available when Multi-Record Canvas is off and one record is selected.' : 'Available when one record is selected.' }}</p>
                                 <div class="grid grid-cols-1 gap-2" :class="circularSingleRecordPresentationEnabled ? '' : 'opacity-60'">
                                     <div>
                                         <span class="input-label text-[10px]">Record label <help-tip id="help-circular-record-label" text="Overrides the inferred organism line for this Circular record. Leave empty to keep inference."></help-tip></span>
@@ -1465,7 +1466,7 @@
                                             v-model="form.circular_record_label"
                                             :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled"
                                             aria-label="Circular record label"
-                                            aria-describedby="help-circular-record-label"
+                                            :aria-describedby="`help-circular-record-label${circularSingleRecordPresentationEnabled ? '' : ' circular-record-presentation-reason'}`"
                                             placeholder="e.g. Streptomyces fradiae"
                                             class="form-input px-1 py-1 text-xs"
                                         >
@@ -1477,7 +1478,7 @@
                                             v-model="form.circular_record_subtitle"
                                             :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled"
                                             aria-label="Circular record subtitle"
-                                            aria-describedby="help-circular-subtitle"
+                                            :aria-describedby="`help-circular-subtitle${circularSingleRecordPresentationEnabled ? '' : ' circular-record-presentation-reason'}`"
                                             placeholder="e.g. Neomycin biosynthetic gene cluster"
                                             class="form-input px-1 py-1 text-xs"
                                         >
@@ -1490,16 +1491,16 @@
                                         <div class="grid grid-cols-2 gap-2">
                                             <div>
                                                 <label class="text-[9px] block">Start</label>
-                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_start" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" aria-label="Circular region start" aria-describedby="help-circular-region" placeholder="1000" class="form-input px-1 py-0.5 text-xs">
+                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_start" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" aria-label="Circular region start" :aria-describedby="`help-circular-region${circularSingleRecordPresentationEnabled ? '' : ' circular-record-presentation-reason'}`" placeholder="1000" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                             <div>
                                                 <label class="text-[9px] block">End</label>
-                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_end" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" aria-label="Circular region end" aria-describedby="help-circular-region" placeholder="9000" class="form-input px-1 py-0.5 text-xs">
+                                                <input type="number" min="1" step="1" v-model.number="form.circular_region_end" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" aria-label="Circular region end" :aria-describedby="`help-circular-region${circularSingleRecordPresentationEnabled ? '' : ' circular-record-presentation-reason'}`" placeholder="9000" class="form-input px-1 py-0.5 text-xs">
                                             </div>
                                         </div>
                                     </div>
                                     <label class="flex items-center gap-2 text-[10px] text-slate-600">
-                                        <input type="checkbox" v-model="form.circular_reverse" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" aria-label="Circular reverse complement" class="form-checkbox"> Reverse complement
+                                        <input type="checkbox" v-model="form.circular_reverse" :disabled="!semanticMutationAvailable || !circularSingleRecordPresentationEnabled" aria-label="Circular reverse complement" :aria-describedby="circularSingleRecordPresentationEnabled ? null : 'circular-record-presentation-reason'" class="form-checkbox"> Reverse complement
                                     </label>
                                 </div>
                             </div>
@@ -2487,18 +2488,6 @@
                     </div>
                 </div>
 
-            <div class="generate-bar shrink-0 py-4 px-1 bg-white/95 backdrop-blur-sm border-y border-slate-100 z-30">
-            <div v-if="circularConservationLayoutWarning" class="mb-3 flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800">
-                <i class="ph ph-warning-circle text-sm mt-0.5" aria-hidden="true"></i>
-                <span>{{ circularConservationLayoutWarning }}</span>
-            </div>
-            <button data-history-managed type="button" aria-label="Generate Diagram" @click="runAnalysis" :disabled="!semanticMutationAvailable || (processing)"
-                class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
-                <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl" aria-hidden="true"></i> Generate Diagram</span>
-                <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl" aria-hidden="true"></i> {{ generationCancelRequested ? 'Canceling...' : 'Processing...' }}</span>
-            </button>
-            </div>
-
                 <div v-if="mode === 'linear'" data-linear-advanced-comparison class="card bg-slate-50/50">
                     <details data-linear-comparison-disclosure="advanced">
                         <summary role="button" aria-label="Advanced comparison and layout"><i class="ph ph-gear-six" aria-hidden="true"></i> Advanced comparison and layout</summary>
@@ -2768,13 +2757,14 @@
                                     </div>
                                 </div>
                                 <div class="flex gap-2">
-                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs w-full" :disabled="losatCacheInfo.length === 0">
+                                    <button @click="downloadLosatCache" class="btn btn-secondary text-xs w-full" :disabled="losatCacheInfo.length === 0" :aria-describedby="losatCacheInfo.length === 0 ? 'circular-losat-cache-reason' : null">
                                         <i class="ph ph-download-simple" aria-hidden="true"></i> Save Raw LOSAT TSV
                                     </button>
-                                    <button @click="clearLosatCache" class="btn btn-danger text-xs w-full" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)">
+                                    <button @click="clearLosatCache" class="btn btn-danger text-xs w-full" :disabled="!semanticMutationAvailable || (losatCacheInfo.length === 0)" :aria-describedby="losatCacheInfo.length === 0 ? 'circular-losat-cache-reason' : null">
                                         <i class="ph ph-trash" aria-hidden="true"></i> Clear Cache
                                     </button>
                                 </div>
+                                <p v-if="losatCacheInfo.length === 0" id="circular-losat-cache-reason" class="ui-hint">Available after a LOSAT comparison has run.</p>
                             </div>
                             <div v-if="circularConservation.source === 'upload' && circularConservationSeriesRows.length === 0">
                                 <span class="text-[9px] flex items-center">Series names <help-tip id="help-circular-comparison-series-names" text="Optional fallback names for rings, one per source. Use new lines or commas."></help-tip></span>
@@ -3051,6 +3041,8 @@
                                                 v-for="entry in linearTrackStackEntries()"
                                                 :key="entry.kind === 'axis' ? 'linear-axis-row' : linearTrackSlotEditorKey(entry.slot)"
                                                 :data-capture="entry.kind === 'axis' ? 'linear-track-axis-row' : `linear-track-slot-${entry.slot.id}`"
+                                                role="group"
+                                                :aria-label="entry.kind === 'axis' ? 'Linear track axis' : `Linear track slot ${entry.slot.id}`"
                                             >
                                                 <div
                                                     v-if="entry.kind === 'axis'"
@@ -3080,13 +3072,13 @@
                                                             <option v-for="renderer in linearTrackRenderers" :key="renderer" :value="renderer">{{ linearTrackRendererLabel(renderer) }}</option>
                                                         </select>
                                                         <div class="track-slot-row-actions">
-                                                            <button aria-label="Move up within side" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlot(entry.index, entry.index - 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlot(entry.index, -1))" title="Move up within side"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
-                                                            <button aria-label="Move down within side" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlot(entry.index, entry.index + 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlot(entry.index, 1))" title="Move down within side"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
-                                                            <button aria-label="Move above Axis" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotAbove(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotAbove(entry.index))" title="Move above Axis"><i class="ph ph-arrow-line-up" aria-hidden="true"></i></button>
-                                                            <button aria-label="Move below Axis" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotBelow(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotBelow(entry.index))" title="Move below Axis"><i class="ph ph-arrow-line-down" aria-hidden="true"></i></button>
-                                                            <button aria-label="Track on Axis" v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotToAxis(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotToAxis(entry.index))" title="Track on Axis"><i class="ph ph-record" aria-hidden="true"></i></button>
-                                                            <button type="button" aria-label="Duplicate" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateLinearTrackSlot(entry.index, $event)" :disabled="!canDuplicateLinearTrackSlot(entry.slot)" :title="canDuplicateLinearTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid'"><i class="ph ph-copy" aria-hidden="true"></i></button>
-                                                            <button aria-label="Delete" type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeLinearTrackSlot(entry.index, $event)" title="Delete" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
+                                                            <button :aria-label="`Linear track slot ${entry.slot.id} Move up within side`" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlot(entry.index, entry.index - 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlot(entry.index, -1))" title="Move up within side"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
+                                                            <button :aria-label="`Linear track slot ${entry.slot.id} Move down within side`" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlot(entry.index, entry.index + 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlot(entry.index, 1))" title="Move down within side"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
+                                                            <button :aria-label="`Linear track slot ${entry.slot.id} Move above Axis`" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotAbove(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotAbove(entry.index))" title="Move above Axis"><i class="ph ph-arrow-line-up" aria-hidden="true"></i></button>
+                                                            <button :aria-label="`Linear track slot ${entry.slot.id} Move below Axis`" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotBelow(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotBelow(entry.index))" title="Move below Axis"><i class="ph ph-arrow-line-down" aria-hidden="true"></i></button>
+                                                            <button :aria-label="`Linear track slot ${entry.slot.id} Track on Axis`" v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotToAxis(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotToAxis(entry.index))" title="Track on Axis"><i class="ph ph-record" aria-hidden="true"></i></button>
+                                                            <button type="button" :aria-label="`Linear track slot ${entry.slot.id} Duplicate`" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateLinearTrackSlot(entry.index, $event)" :disabled="!canDuplicateLinearTrackSlot(entry.slot)" :title="canDuplicateLinearTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid'"><i class="ph ph-copy" aria-hidden="true"></i></button>
+                                                            <button :aria-label="`Linear track slot ${entry.slot.id} Delete`" type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeLinearTrackSlot(entry.index, $event)" title="Delete" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                                         </div>
                                                     </div>
                                                     <div class="track-slot-geometry-grid">
@@ -3095,7 +3087,7 @@
                                                             <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!linearTrackSlotGeometryHasManual(entry.slot, 'height')" class="track-slot-auto-placeholder">{{ linearTrackSlotGeometryAutoText(entry.slot, entry.index, 'height') }}</span>
                                                                 <input
-                                                                    aria-label="Height"
+                                                                    :aria-label="`Linear track slot ${entry.slot.id} Height`"
                                                                     :aria-describedby="`help-linear-slot-height-${entry.index}`"
                                                                     :value="linearTrackSlotHeightValue(entry.slot)"
                                                                     @input="setLinearTrackSlotHeight(entry.slot, $event.target.value)"
@@ -3109,7 +3101,7 @@
                                                             <span class="track-slot-field-label">spacing <help-tip :id="`help-linear-slot-spacing-${entry.index}`" :text="entry.slot.renderer === 'features' ? 'Clearance between the reserved feature band and its adjacent outer track, in pixels (px optional; nonnegative). Leave blank for the automatic record-specific value.' : 'Linear vertical spacing after the track, in pixels (px optional; nonnegative). Leave blank for the automatic spacing.'"></help-tip></span>
                                                             <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!linearTrackSlotGeometryHasManual(entry.slot, 'spacing')" class="track-slot-auto-placeholder">{{ linearTrackSlotGeometryAutoText(entry.slot, entry.index, 'spacing') }}</span>
-                                                                <input v-model.trim="entry.slot.spacing" aria-label="Spacing" :aria-describedby="`help-linear-slot-spacing-${entry.index}`" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Spacing" placeholder="px optional" :disabled="!semanticMutationAvailable">
+                                                                <input v-model.trim="entry.slot.spacing" :aria-label="`Linear track slot ${entry.slot.id} Spacing`" :aria-describedby="`help-linear-slot-spacing-${entry.index}`" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Spacing" placeholder="px optional" :disabled="!semanticMutationAvailable">
                                                                 <span v-if="linearTrackSlotGeometryUnitSuffix(entry.slot, 'spacing')" class="track-slot-unit-suffix">{{ linearTrackSlotGeometryUnitSuffix(entry.slot, 'spacing') }}</span>
                                                             </div>
                                                         </div>
@@ -3119,7 +3111,7 @@
                                                             :value="entry.slot.side"
                                                             @change="updateLinearTrackSlotPlacement(entry.slot, $event.target.value, $event)"
                                                             class="form-input px-1 py-0.5 text-[10px]"
-                                                            title="Track placement" aria-label="Track placement"
+                                                            title="Track placement" :aria-label="`Linear track slot ${entry.slot.id} Track placement`"
                                                          :disabled="!semanticMutationAvailable">
                                                             <option value="above">Above axis</option>
                                                             <option value="overlay">On axis</option>
@@ -3130,34 +3122,34 @@
                                                         {{ linearTrackSlotPlacementLabel(entry.slot) }}
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'annotations'" class="grid grid-cols-2 gap-1">
-                                                        <select v-model="entry.slot.params.set_id" class="form-input px-1 py-0.5 text-[10px]" title="Annotation set" aria-label="Annotation set" :disabled="!semanticMutationAvailable">
+                                                        <select v-model="entry.slot.params.set_id" class="form-input px-1 py-0.5 text-[10px]" title="Annotation set" :aria-label="`Linear track slot ${entry.slot.id} Annotation set`" :disabled="!semanticMutationAvailable">
                                                             <option value="">Select annotation set</option>
                                                             <option v-for="set in annotationSets" :key="`linear-annotation-set-${set.id}`" :value="set.id">{{ set.id }}</option>
                                                         </select>
-                                                        <select v-model="entry.slot.params.overflow" class="form-input px-1 py-0.5 text-[10px]" title="Overflow behavior" aria-label="Overflow behavior" :disabled="!semanticMutationAvailable"><option value="error">Error on overflow</option><option value="compress">Compress</option><option value="clip">Clip</option></select>
-                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.anchor_slot" class="form-input px-1 py-0.5 text-[10px]" title="Enabled drawable anchor" aria-label="Enabled drawable anchor" :disabled="!semanticMutationAvailable">
+                                                        <select v-model="entry.slot.params.overflow" class="form-input px-1 py-0.5 text-[10px]" title="Overflow behavior" :aria-label="`Linear track slot ${entry.slot.id} Overflow behavior`" :disabled="!semanticMutationAvailable"><option value="error">Error on overflow</option><option value="compress">Compress</option><option value="clip">Clip</option></select>
+                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.anchor_slot" class="form-input px-1 py-0.5 text-[10px]" title="Enabled drawable anchor" :aria-label="`Linear track slot ${entry.slot.id} Enabled drawable anchor`" :disabled="!semanticMutationAvailable">
                                                             <option value="">Select anchor</option>
                                                             <option v-if="!linearAnnotationAnchorIsKnown(entry.slot) && entry.slot.params.anchor_slot" :value="entry.slot.params.anchor_slot">Invalid: {{ entry.slot.params.anchor_slot }}</option>
                                                             <option v-for="option in linearAnnotationAnchorOptions(entry.slot)" :key="`linear-anchor-${linearTrackSlotEditorKey(entry.slot)}-${option.id}`" :value="option.id">{{ option.label }}</option>
                                                         </select>
-                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.layer" aria-label="Annotation layer" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="underlay">Underlay</option><option value="foreground">Foreground</option></select>
-                                                        <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" v-model="entry.slot.params.show_labels" :disabled="!semanticMutationAvailable"> Labels</label>
+                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.layer" :aria-label="`Linear track slot ${entry.slot.id} Annotation layer`" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="underlay">Underlay</option><option value="foreground">Foreground</option></select>
+                                                        <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" v-model="entry.slot.params.show_labels" :aria-label="`Linear track slot ${entry.slot.id} Show annotation labels`" :disabled="!semanticMutationAvailable"> Labels</label>
                                                         <label v-if="entry.slot.side === 'overlay'" class="flex items-center gap-1 text-[10px]">
-                                                            <input type="checkbox" :checked="linearAnnotationCoverAnchor(entry.slot)" @change="setLinearAnnotationCoverAnchor(entry.slot, $event.target.checked)" :disabled="!semanticMutationAvailable">
+                                                            <input type="checkbox" :checked="linearAnnotationCoverAnchor(entry.slot)" :aria-label="`Linear track slot ${entry.slot.id} Cover anchor`" @change="setLinearAnnotationCoverAnchor(entry.slot, $event.target.checked)" :disabled="!semanticMutationAvailable">
                                                             Cover anchor
                                                         </label>
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">lane gap <help-tip :id="`help-linear-slot-lane-gap-${entry.index}`" text="Gap between annotation lanes in pixels. Default: 3."></help-tip></span>
-                                                            <input type="number" min="0" step="0.5" :value="linearAnnotationLaneGapValue(entry.slot)" @input="setLinearAnnotationLaneGap(entry.slot, $event.target.value)" aria-label="Lane gap" :aria-describedby="`help-linear-slot-lane-gap-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
+                                                            <input type="number" min="0" step="0.5" :value="linearAnnotationLaneGapValue(entry.slot)" @input="setLinearAnnotationLaneGap(entry.slot, $event.target.value)" :aria-label="`Linear track slot ${entry.slot.id} Lane gap`" :aria-describedby="`help-linear-slot-lane-gap-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
                                                         </div>
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">padding <help-tip :id="`help-linear-slot-padding-${entry.index}`" text="Padding around annotation marks in pixels. Default: 2."></help-tip></span>
-                                                            <input type="number" min="0" step="0.5" :value="linearAnnotationPaddingValue(entry.slot)" @input="setLinearAnnotationPadding(entry.slot, $event.target.value)" aria-label="Padding" :aria-describedby="`help-linear-slot-padding-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
+                                                            <input type="number" min="0" step="0.5" :value="linearAnnotationPaddingValue(entry.slot)" @input="setLinearAnnotationPadding(entry.slot, $event.target.value)" :aria-label="`Linear track slot ${entry.slot.id} Padding`" :aria-describedby="`help-linear-slot-padding-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
                                                         </div>
                                                         <div class="col-span-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-1">
                                                             <span class="text-[9px] font-medium text-slate-500">Marks</span>
                                                             <label v-for="mark in annotationTrackMarkOptions" :key="`linear-mark-${linearTrackSlotEditorKey(entry.slot)}-${mark}`" class="inline-flex items-center gap-1 text-[9px] capitalize">
-                                                                <input type="checkbox" :checked="linearAnnotationMarkSelected(entry.slot, mark)" @change="setLinearAnnotationMarkSelected(entry.slot, mark, $event.target.checked)" :disabled="!semanticMutationAvailable">
+                                                                <input type="checkbox" :checked="linearAnnotationMarkSelected(entry.slot, mark)" :aria-label="`Linear track slot ${entry.slot.id} mark ${mark}`" @change="setLinearAnnotationMarkSelected(entry.slot, mark, $event.target.checked)" :disabled="!semanticMutationAvailable">
                                                                 {{ mark }}
                                                             </label>
                                                         </div>
@@ -3184,7 +3176,7 @@
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">legend label <help-tip :id="`help-linear-slot-depth-legend-label-${entry.index}`" text="Text shown for this enabled Depth slot in custom-stack order. Leave blank to use the selected logical series title; unselected series are omitted."></help-tip></span>
                                                             <input
-                                                                aria-label="Depth legend label"
+                                                                :aria-label="`Linear track slot ${entry.slot.id} Depth legend label`"
                                                                 :aria-describedby="`help-linear-slot-depth-legend-label-${entry.index}`"
                                                                 :value="getDepthTrackLegendLabelForSlot(entry.slot)"
                                                                 @input="setDepthTrackLegendLabelForSlot(entry.slot, $event.target.value)"
@@ -3203,7 +3195,7 @@
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">dinucleotide <help-tip :id="`help-linear-slot-dinucleotide-${entry.index}`" text="Two-base code used for this content/skew track, such as GC or AT."></help-tip></span>
                                                             <input
-                                                                aria-label="Track dinucleotide"
+                                                                :aria-label="`Linear track slot ${entry.slot.id} Track dinucleotide`"
                                                                 :aria-describedby="`help-linear-slot-dinucleotide-${entry.index}`"
                                                                 v-model.trim="entry.slot.params.nt"
                                                                 class="form-input px-1 py-0.5 text-[10px]"
@@ -3213,7 +3205,7 @@
                                                         </div>
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">legend label <help-tip :id="`help-linear-slot-legend-label-${entry.index}`" text="Base text shown in the diagram legend. Leave blank to use the auto label shown here; two-color tracks add (+) and (-)."></help-tip></span>
-                                                            <input v-model.trim="entry.slot.params.legend_label" aria-label="Track legend label" :aria-describedby="`help-linear-slot-legend-label-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" :placeholder="linearTrackSlotLegendLabelPlaceholder(entry.slot)" :disabled="!semanticMutationAvailable">
+                                                            <input v-model.trim="entry.slot.params.legend_label" :aria-label="`Linear track slot ${entry.slot.id} Track legend label`" :aria-describedby="`help-linear-slot-legend-label-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" :placeholder="linearTrackSlotLegendLabelPlaceholder(entry.slot)" :disabled="!semanticMutationAvailable">
                                                         </div>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
@@ -3223,10 +3215,10 @@
                                                                 class="h-6 w-7 shrink-0 rounded border border-slate-200 bg-white p-0"
                                                                 :value="linearTrackSlotSkewColorValue(entry.slot, 'positive_color')"
                                                                 @input="setLinearTrackSlotSkewColor(entry.slot, 'positive_color', $event.target.value)"
-                                                                title="Positive skew color" aria-label="Positive skew color"
+                                                                title="Positive skew color" :aria-label="`Linear track slot ${entry.slot.id} Positive skew color`"
                                                             >
                                                             <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ linearTrackSlotHasSkewColorOverride(entry.slot, 'positive_color') ? 'Custom +' : 'Inherited +' }}</span>
-                                                            <button aria-label="Inherit positive skew color"
+                                                            <button :aria-label="`Linear track slot ${entry.slot.id} Inherit positive skew color`"
                                                                 type="button"
                                                                 class="btn btn-secondary h-6 w-6 p-0 text-[10px]"
                                                                 :disabled="!semanticMutationAvailable || (!linearTrackSlotHasSkewColorOverride(entry.slot, 'positive_color'))"
@@ -3240,10 +3232,10 @@
                                                                 class="h-6 w-7 shrink-0 rounded border border-slate-200 bg-white p-0"
                                                                 :value="linearTrackSlotSkewColorValue(entry.slot, 'negative_color')"
                                                                 @input="setLinearTrackSlotSkewColor(entry.slot, 'negative_color', $event.target.value)"
-                                                                title="Negative skew color" aria-label="Negative skew color"
+                                                                title="Negative skew color" :aria-label="`Linear track slot ${entry.slot.id} Negative skew color`"
                                                             >
                                                             <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ linearTrackSlotHasSkewColorOverride(entry.slot, 'negative_color') ? 'Custom -' : 'Inherited -' }}</span>
-                                                            <button aria-label="Inherit negative skew color"
+                                                            <button :aria-label="`Linear track slot ${entry.slot.id} Inherit negative skew color`"
                                                                 type="button"
                                                                 class="btn btn-secondary h-6 w-6 p-0 text-[10px]"
                                                                 :disabled="!semanticMutationAvailable || (!linearTrackSlotHasSkewColorOverride(entry.slot, 'negative_color'))"
@@ -3447,13 +3439,13 @@
                                                             </option>
                                                         </select>
                                                         <div class="track-slot-row-actions">
-                                                            <button aria-label="Move outward" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index - 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlot(entry.index, -1))" title="Move outward"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
-                                                            <button aria-label="Move inward" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index + 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlot(entry.index, 1))" title="Move inward"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
-                                                            <button aria-label="Move outside Axis" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotOutside(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotOutside(entry.index))" title="Move outside Axis"><i class="ph ph-arrow-line-up" aria-hidden="true"></i></button>
-                                                            <button aria-label="Move inside Axis" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotInside(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotInside(entry.index))" title="Move inside Axis"><i class="ph ph-arrow-line-down" aria-hidden="true"></i></button>
-                                                            <button aria-label="Track on Axis" v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'ticks' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotToAxis(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotToAxis(entry.index))" title="Track on Axis"><i class="ph ph-record" aria-hidden="true"></i></button>
-                                                            <button type="button" aria-label="Duplicate" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index, $event)" :disabled="!canDuplicateCircularTrackSlot(entry.slot)" :title="isManagedCircularConservationSlot(entry.slot) ? 'Comparison tracks are managed by Series' : (canDuplicateCircularTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid')"><i class="ph ph-copy" aria-hidden="true"></i></button>
-                                                            <button type="button" aria-label="Remove" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(entry.index, $event)" :disabled="!semanticMutationAvailable || (isManagedCircularConservationSlot(entry.slot))" :title="isManagedCircularConservationSlot(entry.slot) ? 'Remove this source in Pairwise Comparisons' : 'Remove'"><i class="ph ph-trash" aria-hidden="true"></i></button>
+                                                            <button :aria-label="`Circular track slot ${entry.slot.id} Move outward`" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index - 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlot(entry.index, -1))" title="Move outward"><i class="ph ph-arrow-up" aria-hidden="true"></i></button>
+                                                            <button :aria-label="`Circular track slot ${entry.slot.id} Move inward`" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlot(entry.index, entry.index + 1, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlot(entry.index, 1))" title="Move inward"><i class="ph ph-arrow-down" aria-hidden="true"></i></button>
+                                                            <button :aria-label="`Circular track slot ${entry.slot.id} Move outside Axis`" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotOutside(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotOutside(entry.index))" title="Move outside Axis"><i class="ph ph-arrow-line-up" aria-hidden="true"></i></button>
+                                                            <button :aria-label="`Circular track slot ${entry.slot.id} Move inside Axis`" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotInside(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotInside(entry.index))" title="Move inside Axis"><i class="ph ph-arrow-line-down" aria-hidden="true"></i></button>
+                                                            <button :aria-label="`Circular track slot ${entry.slot.id} Track on Axis`" v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'ticks' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotToAxis(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotToAxis(entry.index))" title="Track on Axis"><i class="ph ph-record" aria-hidden="true"></i></button>
+                                                            <button type="button" :aria-label="`Circular track slot ${entry.slot.id} Duplicate`" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index, $event)" :disabled="!canDuplicateCircularTrackSlot(entry.slot)" :title="isManagedCircularConservationSlot(entry.slot) ? 'Comparison tracks are managed by Series' : (canDuplicateCircularTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid')"><i class="ph ph-copy" aria-hidden="true"></i></button>
+                                                            <button type="button" :aria-label="`Circular track slot ${entry.slot.id} Remove`" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(entry.index, $event)" :disabled="!semanticMutationAvailable || (isManagedCircularConservationSlot(entry.slot))" :title="isManagedCircularConservationSlot(entry.slot) ? 'Remove this source in Pairwise Comparisons' : 'Remove'"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                                         </div>
                                                     </div>
                                                     <div v-if="circularTrackSlotHiddenBySuppress(entry.slot)" class="inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-medium text-amber-700">
@@ -3486,7 +3478,7 @@
                                                             <span class="track-slot-field-label">inner gap <help-tip :id="`help-circular-slot-inner-gap-${entry.index}`" text="Physical radial gap on the side closer to the center, in pixels (px optional; nonnegative). Leave blank for auto."></help-tip></span>
                                                             <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'inner_gap_px')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'inner_gap_px') }}</span>
-                                                                <input v-model.trim="entry.slot.inner_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Inner gap" aria-label="Inner gap" :aria-describedby="`help-circular-slot-inner-gap-${entry.index}`" placeholder="px optional" :disabled="!semanticMutationAvailable">
+                                                                <input v-model.trim="entry.slot.inner_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Inner gap" :aria-label="`Circular track slot ${entry.slot.id} Inner gap`" :aria-describedby="`help-circular-slot-inner-gap-${entry.index}`" placeholder="px optional" :disabled="!semanticMutationAvailable">
                                                                 <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'inner_gap_px')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'inner_gap_px') }}</span>
                                                             </div>
                                                         </div>
@@ -3494,7 +3486,7 @@
                                                             <span class="track-slot-field-label">outer gap <help-tip :id="`help-circular-slot-outer-gap-${entry.index}`" text="Physical radial gap on the side farther from the center, in pixels (px optional; nonnegative). Leave blank for auto."></help-tip></span>
                                                             <div class="track-slot-value-field track-slot-pixel-field">
                                                                 <span v-if="!circularTrackSlotGeometryHasManual(entry.slot, 'outer_gap_px')" class="track-slot-auto-placeholder">{{ circularTrackSlotGeometryAutoText(entry.slot, entry.index, 'outer_gap_px') }}</span>
-                                                                <input v-model.trim="entry.slot.outer_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Outer gap" aria-label="Outer gap" :aria-describedby="`help-circular-slot-outer-gap-${entry.index}`" placeholder="px optional" :disabled="!semanticMutationAvailable">
+                                                                <input v-model.trim="entry.slot.outer_gap_px" class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]" title="Outer gap" :aria-label="`Circular track slot ${entry.slot.id} Outer gap`" :aria-describedby="`help-circular-slot-outer-gap-${entry.index}`" placeholder="px optional" :disabled="!semanticMutationAvailable">
                                                                 <span v-if="circularTrackSlotGeometryUnitSuffix(entry.slot, 'outer_gap_px')" class="track-slot-unit-suffix">{{ circularTrackSlotGeometryUnitSuffix(entry.slot, 'outer_gap_px') }}</span>
                                                             </div>
                                                         </div>
@@ -3521,35 +3513,35 @@
                                                         </select>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'annotations'" class="grid grid-cols-2 gap-1">
-                                                        <select v-model="entry.slot.params.set_id" aria-label="Annotation set" class="form-input px-1 py-0.5 text-[10px]" title="Annotation set" :disabled="!semanticMutationAvailable">
+                                                        <select v-model="entry.slot.params.set_id" :aria-label="`Circular track slot ${entry.slot.id} Annotation set`" class="form-input px-1 py-0.5 text-[10px]" title="Annotation set" :disabled="!semanticMutationAvailable">
                                                             <option value="">Select annotation set</option>
                                                             <option v-for="set in annotationSets" :key="`circular-annotation-set-${set.id}`" :value="set.id">{{ set.id }}</option>
                                                         </select>
-                                                        <select :value="entry.slot.side" @change="updateCircularTrackSlotPlacement(entry.slot, $event.target.value, $event)" aria-label="Annotation placement" class="form-input px-1 py-0.5 text-[10px]" title="Placement" :disabled="!semanticMutationAvailable"><option value="outside">Outside axis</option><option value="inside">Inside axis</option><option value="overlay">Overlay anchor</option></select>
-                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.anchor_slot" class="form-input px-1 py-0.5 text-[10px]" title="Enabled drawable anchor" aria-label="Enabled drawable anchor" :disabled="!semanticMutationAvailable">
+                                                        <select :value="entry.slot.side" @change="updateCircularTrackSlotPlacement(entry.slot, $event.target.value, $event)" :aria-label="`Circular track slot ${entry.slot.id} Annotation placement`" class="form-input px-1 py-0.5 text-[10px]" title="Placement" :disabled="!semanticMutationAvailable"><option value="outside">Outside axis</option><option value="inside">Inside axis</option><option value="overlay">Overlay anchor</option></select>
+                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.anchor_slot" class="form-input px-1 py-0.5 text-[10px]" title="Enabled drawable anchor" :aria-label="`Circular track slot ${entry.slot.id} Enabled drawable anchor`" :disabled="!semanticMutationAvailable">
                                                             <option value="">Select anchor</option>
                                                             <option v-if="!circularAnnotationAnchorIsKnown(entry.slot) && entry.slot.params.anchor_slot" :value="entry.slot.params.anchor_slot">Invalid: {{ entry.slot.params.anchor_slot }}</option>
                                                             <option v-for="option in circularAnnotationAnchorOptions(entry.slot)" :key="`circular-anchor-${circularTrackSlotEditorKey(entry.slot)}-${option.id}`" :value="option.id">{{ option.label }}</option>
                                                         </select>
-                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.layer" aria-label="Annotation layer" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="underlay">Underlay</option><option value="foreground">Foreground</option></select>
-                                                        <select v-model="entry.slot.params.overflow" aria-label="Overflow behavior" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="error">Error on overflow</option><option value="compress">Compress</option><option value="clip">Clip</option></select>
-                                                        <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" v-model="entry.slot.params.show_labels" aria-label="Show annotation labels" :disabled="!semanticMutationAvailable"> Labels</label>
+                                                        <select v-if="entry.slot.side === 'overlay'" v-model="entry.slot.params.layer" :aria-label="`Circular track slot ${entry.slot.id} Annotation layer`" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="underlay">Underlay</option><option value="foreground">Foreground</option></select>
+                                                        <select v-model="entry.slot.params.overflow" :aria-label="`Circular track slot ${entry.slot.id} Overflow behavior`" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="error">Error on overflow</option><option value="compress">Compress</option><option value="clip">Clip</option></select>
+                                                        <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" v-model="entry.slot.params.show_labels" :aria-label="`Circular track slot ${entry.slot.id} Show annotation labels`" :disabled="!semanticMutationAvailable"> Labels</label>
                                                         <label v-if="entry.slot.side === 'overlay'" class="flex items-center gap-1 text-[10px]">
-                                                            <input type="checkbox" :checked="circularAnnotationCoverAnchor(entry.slot)" @change="setCircularAnnotationCoverAnchor(entry.slot, $event.target.checked)" :disabled="!semanticMutationAvailable">
+                                                            <input type="checkbox" :checked="circularAnnotationCoverAnchor(entry.slot)" :aria-label="`Circular track slot ${entry.slot.id} Cover anchor`" @change="setCircularAnnotationCoverAnchor(entry.slot, $event.target.checked)" :disabled="!semanticMutationAvailable">
                                                             Cover anchor
                                                         </label>
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">lane gap <help-tip :id="`help-circular-slot-lane-gap-${entry.index}`" text="Gap between annotation lanes in pixels. Default: 3."></help-tip></span>
-                                                            <input type="number" min="0" step="0.5" :value="circularAnnotationLaneGapValue(entry.slot)" @input="setCircularAnnotationLaneGap(entry.slot, $event.target.value)" aria-label="Lane gap" :aria-describedby="`help-circular-slot-lane-gap-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
+                                                            <input type="number" min="0" step="0.5" :value="circularAnnotationLaneGapValue(entry.slot)" @input="setCircularAnnotationLaneGap(entry.slot, $event.target.value)" :aria-label="`Circular track slot ${entry.slot.id} Lane gap`" :aria-describedby="`help-circular-slot-lane-gap-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
                                                         </div>
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">padding <help-tip :id="`help-circular-slot-padding-${entry.index}`" text="Padding around annotation marks in pixels. Default: 2."></help-tip></span>
-                                                            <input type="number" min="0" step="0.5" :value="circularAnnotationPaddingValue(entry.slot)" @input="setCircularAnnotationPadding(entry.slot, $event.target.value)" aria-label="Padding" :aria-describedby="`help-circular-slot-padding-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
+                                                            <input type="number" min="0" step="0.5" :value="circularAnnotationPaddingValue(entry.slot)" @input="setCircularAnnotationPadding(entry.slot, $event.target.value)" :aria-label="`Circular track slot ${entry.slot.id} Padding`" :aria-describedby="`help-circular-slot-padding-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
                                                         </div>
                                                         <div class="col-span-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-1">
                                                             <span class="text-[9px] font-medium text-slate-500">Marks</span>
                                                             <label v-for="mark in annotationTrackMarkOptions" :key="`circular-mark-${circularTrackSlotEditorKey(entry.slot)}-${mark}`" class="inline-flex items-center gap-1 text-[9px] capitalize">
-                                                                <input type="checkbox" :checked="circularAnnotationMarkSelected(entry.slot, mark)" @change="setCircularAnnotationMarkSelected(entry.slot, mark, $event.target.checked)" :disabled="!semanticMutationAvailable">
+                                                                <input type="checkbox" :checked="circularAnnotationMarkSelected(entry.slot, mark)" :aria-label="`Circular track slot ${entry.slot.id} mark ${mark}`" @change="setCircularAnnotationMarkSelected(entry.slot, mark, $event.target.checked)" :disabled="!semanticMutationAvailable">
                                                                 {{ mark }}
                                                             </label>
                                                         </div>
@@ -3562,7 +3554,7 @@
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">legend label <help-tip :id="`help-circular-slot-depth-legend-label-${entry.index}`" text="Text shown for this enabled Depth slot. Leave blank to use the selected logical series title."></help-tip></span>
                                                             <input
-                                                                aria-label="Depth legend label"
+                                                                :aria-label="`Circular track slot ${entry.slot.id} Depth legend label`"
                                                                 :aria-describedby="`help-circular-slot-depth-legend-label-${entry.index}`"
                                                                 :value="getDepthTrackLegendLabelForSlot(entry.slot)"
                                                                 @input="setDepthTrackLegendLabelForSlot(entry.slot, $event.target.value)"
@@ -3574,11 +3566,11 @@
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">dinucleotide <help-tip :id="`help-circular-slot-dinucleotide-${entry.index}`" text="Two-base code used for this content/skew track, such as GC or AT."></help-tip></span>
-                                                            <input v-model.trim="entry.slot.params.nt" aria-label="Track dinucleotide" :aria-describedby="`help-circular-slot-dinucleotide-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" placeholder="GC" :disabled="!semanticMutationAvailable">
+                                                            <input v-model.trim="entry.slot.params.nt" :aria-label="`Circular track slot ${entry.slot.id} Track dinucleotide`" :aria-describedby="`help-circular-slot-dinucleotide-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" placeholder="GC" :disabled="!semanticMutationAvailable">
                                                         </div>
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">legend label <help-tip :id="`help-circular-slot-legend-label-${entry.index}`" text="Base text shown in the diagram legend. Leave blank to use the auto label shown here; two-color tracks add (+) and (-)."></help-tip></span>
-                                                            <input v-model.trim="entry.slot.params.legend_label" aria-label="Track legend label" :aria-describedby="`help-circular-slot-legend-label-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" :placeholder="circularTrackSlotLegendLabelPlaceholder(entry.slot)" :disabled="!semanticMutationAvailable">
+                                                            <input v-model.trim="entry.slot.params.legend_label" :aria-label="`Circular track slot ${entry.slot.id} Track legend label`" :aria-describedby="`help-circular-slot-legend-label-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" :placeholder="circularTrackSlotLegendLabelPlaceholder(entry.slot)" :disabled="!semanticMutationAvailable">
                                                         </div>
                                                     </div>
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
@@ -3588,10 +3580,10 @@
                                                                 class="h-6 w-7 shrink-0 rounded border border-slate-200 bg-white p-0"
                                                                 :value="circularTrackSlotSkewColorValue(entry.slot, 'positive_color')"
                                                                 @input="setCircularTrackSlotSkewColor(entry.slot, 'positive_color', $event.target.value)"
-                                                                title="Positive skew color" aria-label="Positive skew color"
+                                                                title="Positive skew color" :aria-label="`Circular track slot ${entry.slot.id} Positive skew color`"
                                                             >
                                                             <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ circularTrackSlotHasSkewColorOverride(entry.slot, 'positive_color') ? 'Custom +' : 'Inherited +' }}</span>
-                                                            <button aria-label="Inherit positive skew color"
+                                                            <button :aria-label="`Circular track slot ${entry.slot.id} Inherit positive skew color`"
                                                                 type="button"
                                                                 class="btn btn-secondary h-6 w-6 p-0 text-[10px]"
                                                                 :disabled="!semanticMutationAvailable || (!circularTrackSlotHasSkewColorOverride(entry.slot, 'positive_color'))"
@@ -3605,10 +3597,10 @@
                                                                 class="h-6 w-7 shrink-0 rounded border border-slate-200 bg-white p-0"
                                                                 :value="circularTrackSlotSkewColorValue(entry.slot, 'negative_color')"
                                                                 @input="setCircularTrackSlotSkewColor(entry.slot, 'negative_color', $event.target.value)"
-                                                                title="Negative skew color" aria-label="Negative skew color"
+                                                                title="Negative skew color" :aria-label="`Circular track slot ${entry.slot.id} Negative skew color`"
                                                             >
                                                             <span class="min-w-0 flex-1 truncate text-[9px] text-slate-500">{{ circularTrackSlotHasSkewColorOverride(entry.slot, 'negative_color') ? 'Custom -' : 'Inherited -' }}</span>
-                                                            <button aria-label="Inherit negative skew color"
+                                                            <button :aria-label="`Circular track slot ${entry.slot.id} Inherit negative skew color`"
                                                                 type="button"
                                                                 class="btn btn-secondary h-6 w-6 p-0 text-[10px]"
                                                                 :disabled="!semanticMutationAvailable || (!circularTrackSlotHasSkewColorOverride(entry.slot, 'negative_color'))"
@@ -4822,6 +4814,18 @@
                     </details>
                 </div>
 
+            <!-- UI-12 (Owner decision 2026-10-07): last in Tab order; CSS keeps the bar fixed at the bottom. -->
+            <div class="generate-bar shrink-0 py-4 px-1 bg-white/95 backdrop-blur-sm border-y border-slate-100 z-30">
+            <div v-if="circularConservationLayoutWarning" class="mb-3 flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800">
+                <i class="ph ph-warning-circle text-sm mt-0.5" aria-hidden="true"></i>
+                <span>{{ circularConservationLayoutWarning }}</span>
+            </div>
+            <button data-history-managed type="button" aria-label="Generate Diagram" @click="runAnalysis" :disabled="!semanticMutationAvailable || (processing)"
+                class="btn w-full py-4 text-lg relative overflow-hidden group text-white bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 border-b-4 border-blue-800 active:border-b-0 active:translate-y-1 active:shadow-none transition-all">
+                <span v-if="!processing" class="flex items-center justify-center gap-2"><i class="ph ph-rocket-launch text-2xl" aria-hidden="true"></i> Generate Diagram</span>
+                <span v-else class="flex items-center justify-center gap-2"><i class="ph ph-spinner animate-spin text-xl" aria-hidden="true"></i> {{ generationCancelRequested ? 'Canceling...' : 'Processing...' }}</span>
+            </button>
+            </div>
             </div>
 
 
@@ -4868,7 +4872,7 @@
                             <span v-if="failedGeneratePreservedResult">Last Successful Result</span>
                             <span v-else-if="results.length === 1">Result Preview</span>
                             <span v-else>
-                                <select data-history-ignore :disabled="!semanticMutationAvailable" :value="selectedResultIndex" @change="selectResult($event.target.value)" class="bg-white border border-green-300 text-green-700 text-sm font-bold rounded py-1 px-2 cursor-pointer focus:ring-2 focus:ring-green-500 max-w-full">
+                                <select data-history-ignore :disabled="!semanticMutationAvailable" :value="selectedResultIndex" @change="selectResult($event.target.value)" aria-label="Displayed Result" class="bg-white border border-green-300 text-green-700 text-sm font-bold rounded py-1 px-2 cursor-pointer focus:ring-2 focus:ring-green-500 max-w-full">
                                     <option v-for="(res, idx) in results" :key="idx" :value="idx">Preview: {{ res.name }}</option>
                                 </select>
                             </span>
@@ -5265,6 +5269,7 @@
                     <!-- Feature Editor Popup -->
                     <div v-if="clickedFeature"
                          v-show="!similarityAlignmentCompact || !similarityAlignmentDialogOpen"
+                         v-dialog-focus
                          ref="featurePopupRef"
                          @mousedown="startFeaturePopupDrag"
                          role="dialog"
@@ -5277,7 +5282,7 @@
                         <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100">
                             <div class="w-4 h-4 rounded mt-1 shrink-0" :style="{ backgroundColor: clickedFeature.color }"></div>
                             <div class="min-w-0 flex-1">
-                                <div class="text-base font-bold text-slate-700 truncate max-w-[260px]">{{ clickedFeature.label }}</div>
+                                <div tabindex="-1" data-dialog-initial-focus class="text-base font-bold text-slate-700 truncate max-w-[260px]">{{ clickedFeature.label }}</div>
                                 <div class="text-xs text-slate-500 mt-0.5 break-all" data-feature-popup-summary>{{ clickedFeatureSummary }}</div>
                             </div>
                             <button @click="closeFeaturePopup" class="text-slate-400 hover:text-slate-600 ml-auto text-xl shrink-0" aria-label="Close feature popup">
@@ -6232,11 +6237,11 @@
                     </div>
 
                     <!-- Feature Visibility Scope Dialog -->
-                    <div v-if="featureVisibilityScopeDialog.show"
+                    <choice-dialog v-if="featureVisibilityScopeDialog.show" labelledby="feature-visibility-scope-title" describedby="feature-visibility-scope-description"
+                         @cancel="handleFeatureVisibilityScopeChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
-                        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
-                            <h3 class="text-lg font-bold text-slate-800 mb-2">Feature Visibility Scope</h3>
-                            <p class="text-sm text-slate-600 mb-4">
+                            <h3 id="feature-visibility-scope-title" class="text-lg font-bold text-slate-800 mb-2">Feature Visibility Scope</h3>
+                            <p id="feature-visibility-scope-description" class="text-sm text-slate-600 mb-4">
                                 Choose how to apply this visibility mode.
                             </p>
                             <div class="flex flex-col gap-2">
@@ -6257,15 +6262,14 @@
                                     class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
                                 Cancel
                             </button>
-                        </div>
-                    </div>
+                    </choice-dialog>
 
                     <!-- Label Text Scope Dialog -->
-                    <div v-if="labelTextScopeDialog.show"
+                    <choice-dialog v-if="labelTextScopeDialog.show" labelledby="label-text-scope-title" describedby="label-text-scope-description"
+                         @cancel="handleLabelTextScopeChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
-                        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
-                            <h3 class="text-lg font-bold text-slate-800 mb-2">Label Text Scope</h3>
-                            <p class="text-sm text-slate-600 mb-4">
+                            <h3 id="label-text-scope-title" class="text-lg font-bold text-slate-800 mb-2">Label Text Scope</h3>
+                            <p id="label-text-scope-description" class="text-sm text-slate-600 mb-4">
                                 Choose how to apply the label text change for "<span class="font-mono text-slate-700">{{ labelTextScopeDialog.sourceText }}</span>".
                             </p>
 
@@ -6293,15 +6297,14 @@
                                     class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
                                 Cancel
                             </button>
-                        </div>
-                    </div>
+                    </choice-dialog>
 
                     <!-- Hidden Label Text Dialog -->
-                    <div v-if="hiddenLabelTextDialog.show"
+                    <choice-dialog v-if="hiddenLabelTextDialog.show" labelledby="hidden-label-text-title" describedby="hidden-label-text-description"
+                         @cancel="handleHiddenLabelTextChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center">
-                        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
-                            <h3 class="text-lg font-bold text-slate-800 mb-2">Label Not Shown</h3>
-                            <p class="text-sm text-slate-600 mb-4">
+                            <h3 id="hidden-label-text-title" class="text-lg font-bold text-slate-800 mb-2">Label Not Shown</h3>
+                            <p id="hidden-label-text-description" class="text-sm text-slate-600 mb-4">
                                 {{ hiddenLabelTextMessage }}
                             </p>
                             <div class="flex flex-col gap-2">
@@ -6318,14 +6321,12 @@
                                     <span>Keep hidden (apply text only)</span>
                                 </button>
                             </div>
-                        </div>
-                    </div>
+                    </choice-dialog>
 
                     <!-- Label Visibility On Dialog: Owner decisions Q1 and Q2 (2026-10-04) -->
-                    <div v-if="labelOnDialog.show"
+                    <choice-dialog v-if="labelOnDialog.show" labelledby="label-on-dialog-title" describedby="label-on-dialog-description"
+                         @cancel="handleLabelOnChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center">
-                        <div role="dialog" aria-modal="true" aria-labelledby="label-on-dialog-title" aria-describedby="label-on-dialog-description"
-                             class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
                             <h3 id="label-on-dialog-title" class="text-lg font-bold text-slate-800 mb-2">
                                 {{ labelOnDialog.reason === 'hidden' ? 'Feature Is Hidden' : (labelOnDialog.reason === 'underlay' ? 'Label Cannot Be Drawn' : 'Label Does Not Fit') }}
                             </h3>
@@ -6367,17 +6368,16 @@
                                     class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
                                 Cancel
                             </button>
-                        </div>
-                    </div>
+                    </choice-dialog>
 
                     <!-- Feature Style Scope Dialog -->
-                    <div v-if="featureStyleScopeDialog.show"
+                    <choice-dialog v-if="featureStyleScopeDialog.show" labelledby="feature-style-scope-title" describedby="feature-style-scope-description"
+                         @cancel="handleFeatureStyleScopeChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
-                        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
-                            <h3 class="text-lg font-bold text-slate-800 mb-2">
+                            <h3 id="feature-style-scope-title" class="text-lg font-bold text-slate-800 mb-2">
                                 {{ featureStyleScopeDialog.kind === 'stroke' ? 'Stroke Change Scope' : 'Color Change Scope' }}
                             </h3>
-                            <p class="text-sm text-slate-600 mb-4">
+                            <p id="feature-style-scope-description" class="text-sm text-slate-600 mb-4">
                                 <template v-if="featureStyleScopeDialog.matchingRule">
                                     This feature matches the rule "<span class="font-bold text-blue-600">{{ featureStyleScopeDialog.matchingRule?.cap || featureStyleScopeDialog.matchingRule?.val }}</span>" ({{ featureStyleScopeDialog.ruleMatchCount }} features).
                                     <template v-if="featureStyleScopeDialog.siblingCount > 0">
@@ -6462,26 +6462,25 @@
                                     class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
                                 Cancel
                             </button>
-                        </div>
-                    </div>
+                    </choice-dialog>
 
                     <!-- Legend Rename Dialog -->
-                    <div v-if="legendRenameDialog.show"
+                    <choice-dialog v-if="legendRenameDialog.show" labelledby="legend-rename-title" describedby="legend-rename-description"
+                         @cancel="handleLegendRenameChoice('cancel')" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[65] flex items-center justify-center">
-                        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
-                            <h3 class="text-lg font-bold text-slate-800 mb-2">
+                            <h3 id="legend-rename-title" class="text-lg font-bold text-slate-800 mb-2">
                                 {{ legendRenameDialog.mode === 'scope' ? 'Legend Name Scope' : 'Legend Name Conflict' }}
                             </h3>
-                            <p v-if="legendRenameDialog.mode === 'scope'" class="text-sm text-slate-600 mb-4">
+                            <p v-if="legendRenameDialog.mode === 'scope'" id="legend-rename-description" class="text-sm text-slate-600 mb-4">
                                 Legend item "<span class="font-bold text-blue-600">{{ legendRenameDialog.oldCaption }}</span>" is currently shared by
                                 {{ legendRenameDialog.siblingCount + 1 }} features.
                                 <br>Apply the rename to "<span class="font-bold text-emerald-600">{{ legendRenameDialog.newCaption }}</span>" for this feature only, or for all current uses?
                             </p>
-                            <p v-else-if="!legendRenameDialog.mergeAvailable" class="text-sm text-slate-600 mb-4">
+                            <p v-else-if="!legendRenameDialog.mergeAvailable" id="legend-rename-description" class="text-sm text-slate-600 mb-4">
                                 "<span class="font-bold text-blue-600">{{ legendRenameDialog.newCaption }}</span>" already exists, and "{{ legendRenameDialog.oldCaption }}" is not the same type of item, so the two cannot be merged.
                                 <br>Keep "{{ legendRenameDialog.oldCaption }}" as its own Legend item with a suffix, or cancel.
                             </p>
-                            <p v-else class="text-sm text-slate-600 mb-4">
+                            <p v-else id="legend-rename-description" class="text-sm text-slate-600 mb-4">
                                 "<span class="font-bold text-blue-600">{{ legendRenameDialog.newCaption }}</span>" already exists with a different color.
                                 <br>Existing color:
                                 <span class="inline-flex items-center gap-2 font-mono text-slate-700">
@@ -6533,15 +6532,14 @@
                                     class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
                                 Cancel
                             </button>
-                        </div>
-                    </div>
+                    </choice-dialog>
 
                     <!-- Reset Color Dialog -->
-                    <div v-if="resetColorDialog.show"
+                    <choice-dialog v-if="resetColorDialog.show" labelledby="reset-color-title" describedby="reset-color-description"
+                         @cancel="resetColorDialog.show = false" @keydown.tab="trapDialogFocus"
                          class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
-                        <div class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
-                            <h3 class="text-lg font-bold text-slate-800 mb-2">Reset Fill Color</h3>
-                            <p class="text-sm text-slate-600 mb-4">
+                            <h3 id="reset-color-title" class="text-lg font-bold text-slate-800 mb-2">Reset Fill Color</h3>
+                            <p id="reset-color-description" class="text-sm text-slate-600 mb-4">
                                 There are <span class="font-bold text-blue-600">{{ resetColorDialog.siblingCount }}</span> other features with the caption "<span class="font-bold text-blue-600">{{ resetColorDialog.caption }}</span>".
                                 <br>How do you want to reset the color?
                             </p>
@@ -6576,8 +6574,7 @@
                                     class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
                                 Cancel
                             </button>
-                        </div>
-                    </div>
+                    </choice-dialog>
 
                     </Teleport>
                 </div>
@@ -6697,7 +6694,7 @@
                     </div>
 
                     <div class="grid grid-cols-3 gap-1 p-2 border-b border-slate-200 bg-white shrink-0">
-                        <button @click="openRightDrawerTab('legend')"
+                        <button @click="openRightDrawerTab('legend')" :aria-pressed="rightDrawerTab === 'legend'" aria-controls="right-drawer-panel-legend"
                                 :class="[
                                   'text-xs rounded px-2 py-1.5 flex items-center justify-center gap-1',
                                   rightDrawerTab === 'legend' ? 'bg-purple-100 text-purple-700 font-semibold' : 'text-slate-500 hover:bg-slate-100'
@@ -6705,7 +6702,7 @@
                             <i class="ph ph-list-bullets" aria-hidden="true"></i>
                             <span>Legend</span>
                         </button>
-                        <button @click="openRightDrawerTab('features')"
+                        <button @click="openRightDrawerTab('features')" :aria-pressed="rightDrawerTab === 'features'" aria-controls="right-drawer-panel-features"
                                 :class="[
                                   'text-xs rounded px-2 py-1.5 flex items-center justify-center gap-1',
                                   rightDrawerTab === 'features' ? 'bg-blue-100 text-blue-700 font-semibold' : 'text-slate-500 hover:bg-slate-100'
@@ -6713,7 +6710,7 @@
                             <i class="ph ph-paint-brush" aria-hidden="true"></i>
                             <span>Features</span>
                         </button>
-                        <button @click="openRightDrawerTab('orthogroups')"
+                        <button @click="openRightDrawerTab('orthogroups')" :aria-pressed="rightDrawerTab === 'orthogroups'" aria-controls="right-drawer-panel-orthogroups"
                                 :disabled="!isRightDrawerTabAvailable('orthogroups')"
                                 :class="[
                                   'text-xs rounded px-2 py-1.5 flex items-center justify-center gap-1',
@@ -6725,7 +6722,7 @@
                         </button>
                     </div>
 
-                    <div v-show="rightDrawerTab === 'legend'" class="flex-1 min-h-0 flex flex-col">
+                    <div v-show="rightDrawerTab === 'legend'" id="right-drawer-panel-legend" class="flex-1 min-h-0 flex flex-col">
                         <p class="px-4 py-2 text-[10px] text-slate-500">Live edit: legend text, order, stroke, and removal update the current Result.</p>
                         <div class="px-3 py-2 border-b border-slate-100 bg-slate-50/50 shrink-0">
                             <div class="flex items-center justify-between">
@@ -6754,19 +6751,19 @@
                             <div v-for="(entry, idx) in legendEntries" :key="idx" class="p-2 bg-slate-50 rounded border border-slate-100">
                                 <div class="flex items-center gap-1">
                                     <div class="flex flex-col shrink-0">
-                                        <button aria-label="Move up" @click="moveLegendEntryUp(idx)" :disabled="!semanticMutationAvailable || (idx === 0)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move up">
+                                        <button :aria-label="`Move ${entry.caption} up`" @click="moveLegendEntryUp(idx)" :disabled="!semanticMutationAvailable || (idx === 0)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move up">
                                             <i class="ph ph-caret-up text-xs" aria-hidden="true"></i>
                                         </button>
-                                        <button aria-label="Move down" @click="moveLegendEntryDown(idx)" :disabled="!semanticMutationAvailable || (idx === legendEntries.length - 1)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move down">
+                                        <button :aria-label="`Move ${entry.caption} down`" @click="moveLegendEntryDown(idx)" :disabled="!semanticMutationAvailable || (idx === legendEntries.length - 1)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move down">
                                             <i class="ph ph-caret-down text-xs" aria-hidden="true"></i>
                                         </button>
                                     </div>
                                     <div class="w-6 h-6 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: entry.color }" :title="entry.color"></div>
-                                    <input type="text" :value="entry.caption" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0" :disabled="!semanticMutationAvailable">
-                                    <button aria-label="Stroke options" :aria-expanded="entry.showStroke ? 'true' : 'false'" @click="entry.showStroke = !entry.showStroke" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="entry.showStroke ? 'Hide stroke options' : 'Show stroke options'">
+                                    <input type="text" :value="entry.caption" @change="renameLegendEntry(idx, $event.target.value)" :aria-label="`Legend entry ${idx + 1} caption`" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0" :disabled="!semanticMutationAvailable">
+                                    <button :aria-label="`Stroke options for ${entry.caption}`" :aria-expanded="entry.showStroke ? 'true' : 'false'" @click="entry.showStroke = !entry.showStroke" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="entry.showStroke ? 'Hide stroke options' : 'Show stroke options'">
                                         <i class="ph text-xs" :class="entry.showStroke ? 'ph-caret-up' : 'ph-sliders-horizontal'" aria-hidden="true"></i>
                                     </button>
-                                    <button aria-label="Remove entry" @click="deleteLegendEntry(idx)" class="text-red-400 hover:text-red-600 shrink-0" title="Remove entry" :disabled="!semanticMutationAvailable">
+                                    <button :aria-label="`Remove legend entry ${entry.caption}`" @click="deleteLegendEntry(idx)" class="text-red-400 hover:text-red-600 shrink-0" title="Remove entry" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-trash text-sm" aria-hidden="true"></i>
                                     </button>
                                 </div>
@@ -6776,11 +6773,11 @@
                                         :model-value="getLegendEntryStrokeColor(idx)"
                                         fallback="#000000"
                                         @update:model-value="setLegendEntryStrokeColorValue(idx, $event)"
-                                        aria-label="Legend stroke color"
+                                        :aria-label="`Stroke color for ${entry.caption}`"
                                         class="w-28 shrink-0">
                                     </color-value-control>
-                                    <input type="number" :value="getLegendEntryStrokeWidth(idx)" @change="updateLegendEntryStrokeWidth(idx, $event.target.value)" class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5" placeholder="Width" step="0.5" min="0" title="Stroke width" :disabled="!semanticMutationAvailable">
-                                    <button aria-label="Reset stroke to default" @click="resetLegendEntryStroke(idx)" class="text-slate-400 hover:text-slate-600 shrink-0" title="Reset stroke to default" :disabled="!semanticMutationAvailable">
+                                    <input type="number" :value="getLegendEntryStrokeWidth(idx)" @change="updateLegendEntryStrokeWidth(idx, $event.target.value)" class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5" placeholder="Width" step="0.5" min="0" title="Stroke width" :aria-label="`Stroke width for ${entry.caption}`" :disabled="!semanticMutationAvailable">
+                                    <button :aria-label="`Reset stroke of ${entry.caption} to default`" @click="resetLegendEntryStroke(idx)" class="text-slate-400 hover:text-slate-600 shrink-0" title="Reset stroke to default" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-arrow-counter-clockwise text-xs" aria-hidden="true"></i>
                                     </button>
                                 </div>
@@ -6796,7 +6793,7 @@
                         </div>
                     </div>
 
-                    <div v-if="isFeatureDrawerMounted" class="flex-1 min-h-0 flex flex-col overflow-y-auto">
+                    <div v-if="isFeatureDrawerMounted" id="right-drawer-panel-features" class="flex-1 min-h-0 flex flex-col overflow-y-auto">
                         <p class="px-4 py-2 text-[10px] text-slate-500">Live edit: feature color, label text, and visibility update the current Result; geometry may rerender automatically.</p>
                         <div class="px-4 py-2 border-b border-slate-100 shrink-0 bg-white">
                             <div class="flex items-center justify-between gap-2">
@@ -6805,12 +6802,12 @@
                             </div>
                         </div>
                         <div v-if="featureRecordPickerVisible" class="px-4 py-2 border-b border-slate-100 shrink-0">
-                            <select v-model="selectedFeatureRecordIdx" class="form-select text-xs w-full">
+                            <select v-model="selectedFeatureRecordIdx" aria-label="Feature list record" class="form-select text-xs w-full">
                                 <option v-for="(rid, idx) in featureRecordIds" :key="idx" :value="idx">{{ rid }}</option>
                             </select>
                         </div>
                         <div class="px-4 py-2 border-b border-slate-100 shrink-0">
-                            <input v-model="featureSearchInput" data-history-ignore placeholder="Search by feature or annotation..." class="form-input text-xs w-full">
+                            <input v-model="featureSearchInput" data-history-ignore placeholder="Search by feature or annotation..." aria-label="Search by feature or annotation" class="form-input text-xs w-full">
                         </div>
                         <div ref="featureListScrollRef" class="flex-grow min-h-[64px] overflow-y-auto custom-scrollbar" @scroll="handleFeatureListScroll">
                             <div v-if="featureExtractionPending && extractedFeatures.length === 0" class="p-4 text-center text-slate-400 text-xs">
@@ -6857,7 +6854,7 @@
                                 <div class="flex items-center gap-2 shrink-0">
                                     <button @click="downloadLabelOverrideTable" class="text-[10px] px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white">Export Label TSV</button>
                                     <button @click="$refs.labelTableInput.click()" :disabled="!semanticMutationAvailable" class="text-[10px] px-2 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 border border-blue-200">Load Label TSV</button>
-                                    <help-tip text="Label TSV value patterns use case-insensitive Python regex. Examples: (?i)NADH and (?P&lt;name&gt;NADH)."></help-tip>
+                                    <help-tip label="Help: Label TSV" text="Label TSV value patterns use case-insensitive Python regex. Examples: (?i)NADH and (?P&lt;name&gt;NADH)."></help-tip>
                                     <input data-history-managed type="file" ref="labelTableInput" accept=".tsv,.txt,text/tab-separated-values,text/plain" class="hidden" @change="loadLabelOverrideTable" :disabled="!semanticMutationAvailable">
                                     <button @click="resetAllLabelTextOverrides" class="text-[10px] px-2 py-1 rounded bg-slate-200 hover:bg-slate-300 text-slate-700" :disabled="!semanticMutationAvailable">Reset Label Edits</button>
                                 </div>
@@ -6865,7 +6862,7 @@
                             <div class="flex items-center gap-2">
                                 <button @click="downloadFeatureEditTable" aria-describedby="help-feature-edits-tsv" class="text-[10px] px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white">Export Feature Edits TSV</button>
                                 <button @click="$refs.featureEditTableInput.click()" :disabled="!semanticMutationAvailable" aria-describedby="help-feature-edits-tsv" class="text-[10px] px-2 py-1 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 border border-blue-200">Load Feature Edits TSV</button>
-                                <help-tip id="help-feature-edits-tsv" text="Per-feature Feature visibility, Label visibility, and label text edits of this diagram's records, in the --feature_override_table format of the CLI and Python API. Load replaces those edits; rows that name no record or feature here are counted and not applied."></help-tip>
+                                <help-tip id="help-feature-edits-tsv" label="Help: Feature Edits TSV" text="Per-feature Feature visibility, Label visibility, and label text edits of this diagram's records, in the --feature_override_table format of the CLI and Python API. Load replaces those edits; rows that name no record or feature here are counted and not applied."></help-tip>
                                 <input data-history-managed type="file" ref="featureEditTableInput" accept=".tsv,.txt,text/tab-separated-values,text/plain" class="hidden" @change="loadFeatureEditTable" :disabled="!semanticMutationAvailable">
                             </div>
                             <div class="flex items-center justify-between gap-2">
@@ -6884,7 +6881,7 @@
                         </div>
                     </div>
 
-                    <div v-show="rightDrawerTab === 'orthogroups'" class="flex-1 min-h-0 flex flex-col overflow-y-auto">
+                    <div v-show="rightDrawerTab === 'orthogroups'" id="right-drawer-panel-orthogroups" class="flex-1 min-h-0 flex flex-col overflow-y-auto">
                         <div class="px-4 py-2 border-b border-slate-100 bg-white shrink-0 space-y-2">
                             <div class="flex items-center justify-between text-xs">
                                 <span class="font-semibold text-slate-600">{{ orthogroupCount }} similarity groups</span>
@@ -6894,8 +6891,8 @@
                                 </span>
                             </div>
                             <div class="grid grid-cols-[1fr_120px] gap-2">
-                                <input v-model="orthogroupSearch" data-history-ignore placeholder="Search similarity groups..." class="form-input text-xs w-full">
-                                <select v-model="orthogroupSortMode" data-history-ignore class="form-select text-xs w-full">
+                                <input v-model="orthogroupSearch" data-history-ignore placeholder="Search similarity groups..." aria-label="Search similarity groups" class="form-input text-xs w-full">
+                                <select v-model="orthogroupSortMode" data-history-ignore aria-label="Sort similarity groups" class="form-select text-xs w-full">
                                     <option value="id">ID</option>
                                     <option value="name">Name</option>
                                     <option value="member_count">Members</option>
@@ -7613,6 +7610,15 @@
     </div>
 </div>
 
+<script type="text/x-template" id="choice-dialog-template">
+    <div v-dialog-focus data-modal-overlay @click.self="$emit('cancel')" @keydown.esc.prevent.stop="$emit('cancel')">
+        <div role="dialog" aria-modal="true" :aria-labelledby="labelledby" :aria-describedby="describedby" tabindex="-1"
+             class="bg-white rounded-xl shadow-2xl p-6 max-w-md mx-4">
+            <slot></slot>
+        </div>
+    </div>
+</script>
+
 <script type="text/x-template" id="circular-measure-input-template">
     <div class="track-slot-field circular-measure-field">
         <label :for="controlId" class="track-slot-field-label">{{ label }}</label>
@@ -7671,7 +7677,7 @@
     <span class="help-tip inline-block align-text-bottom">
         <button type="button" ref="trigger" data-history-ignore
                 class="help-tip-trigger inline-flex text-slate-400 hover:text-blue-500 focus-visible:text-blue-600 cursor-help rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
-                :aria-label="label || 'Help'" :aria-describedby="descriptionId" :aria-expanded="visible"
+                :aria-label="label || name" :aria-describedby="descriptionId" :aria-expanded="visible"
                 @pointerenter="onEnter" @pointerleave="onLeave" @focus="onFocus" @blur="close"
                 @click.stop.prevent="toggle" @keydown.esc.stop="close">
             <i class="ph ph-question" aria-hidden="true"></i>

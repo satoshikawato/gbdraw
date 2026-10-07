@@ -334,3 +334,181 @@ for (const width of [390, 1280, 1920]) {
     });
   }
 }
+
+// The author-provided accessible name, as auditButtons and auditPage read it.
+const NAME_OF = (element) => {
+  const text = (value) => String(value || '').replace(/\s+/g, ' ').trim();
+  const content = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent;
+    if (node.nodeType !== Node.ELEMENT_NODE || node.getAttribute('aria-hidden') === 'true') return '';
+    return Array.from(node.childNodes, content).join(' ');
+  };
+  return text((element.getAttribute('aria-labelledby') || '').split(/\s+/).filter(Boolean)
+    .map((id) => content(document.getElementById(id) || document.createTextNode(''))).join(' '))
+    || text(element.getAttribute('aria-label'))
+    || text(Array.from(element.labels || []).map((label) => content(label)).join(' '))
+    || (element.matches('button, [role="button"]') ? text(content(element)) : '');
+};
+
+// UI-04, TK-16 (R12): a stack row's controls and help tips carry the slot id,
+// so no two controls in one Custom Track Slots panel share a name, and every
+// help tip on the page is named after the label it explains.
+for (const mode of ['circular', 'linear']) {
+  test(`${mode} Custom Track Slots names are unique and help tips name their labels`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await loadMode(page, mode);
+    const names = await page.evaluate(({ mode, nameOf }) => {
+      const name = new Function(`return (${nameOf})`)();
+      const visible = (element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: false });
+      const panel = document.getElementById(`${mode}-custom-track-slots-panel`);
+      const controls = Array.from(panel?.querySelectorAll('input:not([type="file"]), select, textarea, button') || [])
+        .filter(visible).map(name);
+      const tips = Array.from(document.querySelectorAll('.help-tip > button')).filter(visible).map(name);
+      return { controls, tips };
+    }, { mode, nameOf: NAME_OF.toString() });
+    expect(names.controls.length).toBeGreaterThan(30);
+    const repeated = names.controls.filter((name, index) => names.controls.indexOf(name) !== index);
+    expect([...new Set(repeated)], 'names repeated inside one Custom Track Slots panel').toEqual([]);
+    expect(names.tips.length).toBeGreaterThan(60);
+    expect(names.tips.filter((name) => !/^Help: \S/.test(name)), 'help tips not named after a label').toEqual([]);
+    await expect(page.getByRole('button', { name: 'Help: Window', exact: true })).toHaveCount(1);
+  });
+}
+
+// UI-12 (Owner decision 2026-10-07): Generate Diagram is the last stop of the
+// settings panel in Tab order, and the bar stays fixed at the bottom.
+test('the Generate bar is the last settings Tab stop in both modes and stays fixed', async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openApp(page);
+  for (const mode of ['circular', 'linear']) {
+    await page.getByRole('button', { name: mode === 'circular' ? 'Circular' : 'Linear', exact: true }).click();
+    const order = await page.evaluate(() => {
+      const visible = (element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: false });
+      const stops = Array.from(document.querySelector('.settings-pane').querySelectorAll(
+        'a[href], button, input, select, textarea, summary, [tabindex]'
+      )).filter((element) => visible(element) && !element.disabled && element.tabIndex >= 0);
+      const bar = document.querySelector('.generate-bar');
+      const box = bar.getBoundingClientRect();
+      return {
+        last: stops.at(-1)?.getAttribute('aria-label') || '',
+        position: getComputedStyle(bar).position,
+        bottomGap: Math.round(innerHeight - box.bottom)
+      };
+    });
+    expect(order, mode).toEqual({ last: 'Generate Diagram', position: 'fixed', bottomGap: 32 });
+  }
+});
+
+// UI-09: a control disabled for a reason the section does not show names it
+// in one visible line that the control references.
+test('disabled Single-record and LOSAT cache controls reference a visible reason', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openApp(page);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true })
+    .setInputFiles({ name: 'HmmtDNA.gbk', mimeType: 'text/plain', buffer: Buffer.from(genbank) });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length),
+    { timeout: 120_000 }).toBeGreaterThan(0);
+  await page.evaluate(() => document.querySelectorAll('details').forEach((details) => { details.open = true; }));
+  for (const name of ['Circular record label', 'Circular record subtitle', 'Circular region start', 'Circular region end',
+    'Circular reverse complement', 'Save Raw LOSAT TSV', 'Clear Cache']) {
+    const control = page.getByLabel(name, { exact: true }).or(page.getByRole('button', { name, exact: true })).first();
+    await expect(control, name).toBeDisabled();
+    const reason = await control.evaluate((element) => (element.getAttribute('aria-describedby') || '').split(/\s+/)
+      .map((id) => document.getElementById(id)).filter((target) => target?.checkVisibility()
+        && /^Available /.test(target.textContent.trim())).map((target) => target.textContent.trim())[0] || '');
+    expect(reason, `${name} names why it is disabled`).toMatch(/^Available /);
+  }
+});
+
+// The visible choice dialogs and the element that has focus.
+const focusState = (page) => page.evaluate(() => {
+  const active = document.activeElement;
+  return {
+    inDialog: Boolean(active?.closest('[role="dialog"][aria-modal="true"]')),
+    inPopup: Boolean(active?.closest('.feature-popup')),
+    name: active?.getAttribute('aria-label') || active?.textContent?.replace(/\s+/g, ' ').trim().slice(0, 40) || active?.tagName
+  };
+});
+
+const CHOICE_DIALOGS = [
+  ['featureVisibilityScopeDialog', { scopes: [{ id: 'product', label: 'All with this product', description: 'Product' }] }, 'Feature Visibility Scope'],
+  ['labelTextScopeDialog', { sourceText: 'ND1', matchingCount: 2, featureId: 'f1' }, 'Label Text Scope'],
+  ['hiddenLabelTextDialog', { featureId: '', reason: '' }, 'Label Not Shown'],
+  ['labelOnDialog', { reason: 'hidden', featureType: 'CDS' }, 'Feature Is Hidden'],
+  ['featureStyleScopeDialog', { kind: 'fill' }, 'Color Change Scope'],
+  ['legendRenameDialog', { mode: 'scope', oldCaption: 'CDS', newCaption: 'Coding', siblingCount: 1 }, 'Legend Name Scope'],
+  ['resetColorDialog', { siblingCount: 1, caption: 'CDS' }, 'Reset Fill Color']
+];
+
+// UI-02, UI-03, UI-04: each choice dialog is a named modal that takes focus,
+// keeps Tab inside, cancels on Escape without closing the feature popup, and
+// returns focus to its opener; the popup takes focus from the keyboard opener
+// and returns it on Escape and Close; the drawer tabs announce the shown tab.
+test('choice dialogs and the feature popup move focus in and back, and drawer tabs announce the shown tab', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const page = await load(browser, seeds.circular);
+  try {
+    await popup(page);
+    const featurePopup = page.locator('.feature-popup');
+    const opener = featurePopup.getByRole('button', { name: 'Close feature popup', exact: true });
+    for (const [dialogState, fields, heading] of CHOICE_DIALOGS) {
+      await opener.focus();
+      await page.evaluate(({ dialogState, fields }) => {
+        Object.assign(window.__GBDRAW_APP__[dialogState], fields, { show: true });
+      }, { dialogState, fields });
+      const dialog = page.getByRole('dialog', { name: heading });
+      await expect(dialog, heading).toHaveAttribute('aria-modal', 'true');
+      await expect.poll(() => focusState(page), heading).toMatchObject({ inDialog: true });
+      const stops = await dialog.locator('button:enabled').count();
+      for (const key of [...Array(stops + 1).fill('Tab'), ...Array(stops + 1).fill('Shift+Tab')]) {
+        await page.keyboard.press(key);
+        expect((await focusState(page)).inDialog, `${heading}: ${key} stays inside`).toBe(true);
+      }
+      await page.keyboard.press('Escape');
+      await expect(dialog, `${heading} closes on Escape`).toHaveCount(0);
+      await expect(featurePopup, `${heading}: Escape keeps the popup`).toBeVisible();
+      await expect(opener, `${heading}: focus returns`).toBeFocused();
+    }
+
+    await opener.click();
+    await expect(featurePopup).toHaveCount(0);
+    const search = page.getByRole('searchbox', { name: 'Search features' });
+    await search.fill('ND1');
+    await search.press('Enter');
+    const open = page.getByRole('button', { name: 'Open active feature', exact: true });
+    for (const close of ['Escape', 'Close feature popup']) {
+      await open.focus();
+      await page.keyboard.press('Enter');
+      await expect(featurePopup).toBeVisible();
+      await expect.poll(() => focusState(page), 'focus moves into the popup').toMatchObject({ inPopup: true });
+      if (close === 'Escape') await page.keyboard.press('Escape');
+      else { await opener.focus(); await page.keyboard.press('Enter'); }
+      await expect(featurePopup).toHaveCount(0);
+      await expect(open, `${close} returns focus to the opener`).toBeFocused();
+    }
+
+    if (!await page.locator('.right-drawer').isVisible()) await page.locator('.drawer-toggle').click();
+    const drawer = page.locator('.right-drawer');
+    for (const tab of ['Legend', 'Features']) {
+      await drawer.getByRole('button', { name: tab, exact: true }).click();
+      const tabs = await drawer.locator('button[aria-controls^="right-drawer-panel-"]').evaluateAll((buttons) => buttons
+        .map((button) => ({ name: button.textContent.trim(), pressed: button.getAttribute('aria-pressed'),
+          panel: Boolean(document.getElementById(button.getAttribute('aria-controls'))?.checkVisibility()) })));
+      expect(tabs, tab).toEqual(['Legend', 'Features', 'Similarity groups'].map((name) => ({
+        name, pressed: String(name === tab), panel: name === tab })));
+    }
+    await drawer.getByRole('button', { name: 'Legend', exact: true }).click();
+    const legendNames = await drawer.locator('#right-drawer-panel-legend').locator('button:visible, input:visible')
+      .evaluateAll((elements, nameOf) => elements.map(new Function(`return (${nameOf})`)()), NAME_OF.toString());
+    expect(legendNames.length).toBeGreaterThan(10);
+    expect(legendNames.filter((name, index) => !name || legendNames.indexOf(name) !== index),
+      'legend rows without a name or with a repeated name').toEqual([]);
+    for (const placeholder of ['Search similarity groups...']) {
+      await expect(drawer.locator(`input[placeholder="${placeholder}"]`)).toHaveAttribute('aria-label', 'Search similarity groups');
+    }
+    await expect(drawer.locator('select:has(option[value="member_count"])')).toHaveAttribute('aria-label', 'Sort similarity groups');
+  } finally { await page.context().close(); }
+});
+
