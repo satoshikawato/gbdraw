@@ -728,6 +728,37 @@ const SIBLINGS = [
     }
   },
   {
+    name: 'Depth row after Show Depth is switched off, Circular',
+    mode: 'circular',
+    absent: ['depth'],
+    run: async (page) => {
+      await page.evaluate((text) => {
+        window.__GBDRAW_APP__.setCircularDepthFile(0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));
+      }, DEPTH_TSV);
+      await settleLive(page);
+      await generate(page);
+      await colorLegendRow(page, 'depth');
+      await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = false; });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'Depth row after Show Depth is switched off, Linear',
+    mode: 'linear',
+    absent: ['depth'],
+    run: async (page) => {
+      await page.evaluate((text) => {
+        const app = window.__GBDRAW_APP__;
+        app.setLinearDepthFile(app.linearSeqs[0], 0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));
+      }, DEPTH_TSV);
+      await settleLive(page);
+      await generate(page);
+      await colorLegendRow(page, 'depth');
+      await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = false; });
+      await settleLive(page);
+    }
+  },
+  {
     name: 'GC skew row after GC skew is switched off',
     mode: 'circular',
     absent: ['GC skew (-)'],
@@ -782,6 +813,31 @@ for (const { name, mode, canvas = null, absent = null, run } of SIBLINGS) {
     await generate(page);
     const captions = (await semanticSnapshot(page)).legend.map(({ caption }) => caption);
     for (const caption of absent) expect(captions, name).not.toContain(caption);
+  });
+}
+
+// OV-81: the Legend color of a Depth row hidden by Show Depth is kept; showing
+// Depth again draws the row in that color.
+for (const [mode, addDepth] of [
+  ['circular', (text) => { window.__GBDRAW_APP__.setCircularDepthFile(0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' })); }],
+  ['linear', (text) => { const app = window.__GBDRAW_APP__; app.setLinearDepthFile(app.linearSeqs[0], 0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' })); }]
+]) {
+  test(`a Depth Legend color returns when Show Depth is switched on again (${mode})`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await openCanvas(page, mode, null);
+    await page.evaluate(addDepth, DEPTH_TSV);
+    await settleLive(page);
+    await generate(page);
+    await colorLegendRow(page, 'depth', '#7b2cbf');
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = false; });
+    await settleLive(page);
+    await generate(page);
+    expect((await semanticSnapshot(page)).legend.map(({ caption }) => caption)).not.toContain('depth');
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = true; });
+    await settleLive(page);
+    await generate(page);
+    const row = (await semanticSnapshot(page)).legend.find(({ caption }) => caption === 'depth');
+    expect(row?.fill.toLowerCase()).toBe('#7b2cbf');
   });
 }
 

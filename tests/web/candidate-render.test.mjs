@@ -343,3 +343,28 @@ test('a Legend row in a single Result stays required in that Result', () => {
     { caption: 'other proteins', color: '#00aa00', allowMissing: false }
   ]);
 });
+
+// OV-81: Show Depth off sends Python no Depth source, so it cannot report the Depth
+// row; the draft names it, and only that row may be absent (a Ghost row stays stale).
+test('a Legend style on a Depth series the request left out may miss its row', () => {
+  const compile = (unrequestedDepthCaptions) => compileDirectEditorMutationPlan({
+    catalogAdmission: admission(),
+    legendEntries: [
+      { caption: 'depth', originalCaption: 'depth', color: '#7b2cbf' },
+      { caption: 'Ghost', originalCaption: 'Ghost', color: '#123456' }
+    ],
+    originalLegendOrder: ['depth', 'Ghost'],
+    legendColorOverrides: { depth: '#7b2cbf', Ghost: '#123456' },
+    legendStrokeOverrides: { depth: { strokeColor: '#445566', strokeWidth: 2 } },
+    unrequestedDepthCaptions
+  }).operationsByResult[0];
+  const requested = compile([]);
+  assert.deepEqual(requested.legendFills.map(({ caption, allowMissing }) => [caption, allowMissing]), [
+    ['depth', false], ['Ghost', false]
+  ]);
+  const hidden = compile(['depth']);
+  assert.deepEqual(hidden.legendFills.map(({ caption, allowMissing }) => [caption, allowMissing]), [
+    ['depth', true], ['Ghost', false]
+  ]);
+  assert.deepEqual(hidden.legendStrokes.map(({ caption, allowMissing }) => [caption, allowMissing]), [['depth', true]]);
+});

@@ -61,6 +61,7 @@ import {
   depthTrackMatrixWidth,
   isRecordMajorDepthFileMatrix,
   normalizeRecordMajorDepthFileRows,
+  depthSeriesLegendCaptions,
   representativeDepthFiles,
   syncDepthSlotLabels
 } from './depth-track-state.js';
@@ -1335,6 +1336,16 @@ export const createRunAnalysis = ({
     const override = globalThis.__GBDRAW_LOSAT_EXECUTOR__;
     return (typeof override === 'function' ? override : runLosatPairsParallel)(...args);
   };
+  // Show Depth off leaves the Depth sources out of the request, so Python cannot name
+  // the Depth rows a Legend style may still address; the draft names them (OV-81).
+  const unrequestedDepthCaptions = (canonical) => (
+    canonical.renderRequest.diagramOptions?.depthTracks
+      ? []
+      : depthSeriesLegendCaptions({
+          depthTracks: adv.depth_tracks,
+          slots: canonical.renderRequest.mode === 'linear' ? adv.linear_track_slots : adv.circular_track_slots
+        })
+  );
   let pendingReflowRequestId = 0;
   let activeReflowRequestId = 0;
   // A rerender requested while Generate (or a committed-candidate run) is in
@@ -4599,6 +4610,7 @@ export const createRunAnalysis = ({
           deletedLegendEntries: deletedLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
           addedLegendCaptions: addedLegendCaptions.value,
+          unrequestedDepthCaptions: unrequestedDepthCaptions(canonical),
           legendColorOverrides,
           legendStrokeOverrides,
           manualSpecificRules: candidateRules
@@ -5140,6 +5152,7 @@ export const createRunAnalysis = ({
           deletedLegendEntries: deletedLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
           addedLegendCaptions: addedLegendCaptions.value,
+          unrequestedDepthCaptions: unrequestedDepthCaptions(canonical),
           legendColorOverrides,
           legendStrokeOverrides,
           manualSpecificRules
@@ -5475,6 +5488,7 @@ export const createRunAnalysis = ({
           deletedLegendEntries: deletedLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
           addedLegendCaptions: addedLegendCaptions.value,
+          unrequestedDepthCaptions: unrequestedDepthCaptions(canonical),
           legendColorOverrides,
           legendStrokeOverrides,
           manualSpecificRules: candidateRules
