@@ -56,7 +56,7 @@ const snapshot = page => page.evaluate(async () => {
   return {
     mode: state.mode.value,
     generatedMode: state.generatedMode.value,
-    config: buildConfigData(),
+    config: buildConfigData(state.activeDrawing()),
     request: getCommittedCanonicalRenderRequest(),
     results: state.results.value.map(result => ({ name: result.name, content: result.content })),
     selectedResultIndex: state.selectedResultIndex.value,

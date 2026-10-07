@@ -117,7 +117,14 @@ const rewriteOriginalNameHints = (webFiles, aliases) => {
   return rewritten;
 };
 
-export const buildSessionResources = async (state, committedRequest) => {
+/**
+ * `state` holds the Files and the Linear records; `drawing` holds the Linear
+ * comparison plan, whose uploaded comparison files the Session also binds.
+ * @param {Record<string, any>} state
+ * @param {any} committedRequest
+ * @param {Record<string, any>} [drawing]
+ */
+export const buildSessionResources = async (state, committedRequest, drawing) => {
   if (
     committedRequest === null
       ? hasBiologicalSessionInputs({ ...state?.files, linearSeqs: state?.linearSeqs })
@@ -297,8 +304,8 @@ export const buildSessionResources = async (state, committedRequest) => {
 
   const files = state?.files || {};
   const linearSeqs = Array.isArray(state?.linearSeqs) ? state.linearSeqs : [];
-  const linearComparisons = Array.isArray(state?.linearComparisonPlan?.edges)
-    ? state.linearComparisonPlan.edges
+  const linearComparisons = Array.isArray(drawing?.linearComparisonPlan?.edges)
+    ? drawing.linearComparisonPlan.edges
     : [];
 
   const bindings = {

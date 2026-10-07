@@ -95,10 +95,15 @@ export const serializeCleanSvg = (svg, options = {}) => {
 // The standalone popup reads label text by rendered ID; each per-feature label
 // edit of the Result's mode (identity-keyed, design Q4 6.4, R2) is projected
 // onto the rendered IDs of the exported Result's catalog item.
-const renderedLabelTextOverrides = (state, resultIndex) => {
+/**
+ * @param {Record<string, any>} state
+ * @param {Record<string, any>} drawing
+ * @param {number} resultIndex
+ */
+const renderedLabelTextOverrides = (state, drawing, resultIndex) => {
   const overrides = {};
   const mode = state.generatedMode?.value;
-  const textByFeature = new Map(Object.values(state.featureOverrides || {})
+  const textByFeature = new Map(Object.values(drawing.featureOverrides || {})
     .filter((row) => row?.scope === mode && typeof row.labelText === 'string' && row.labelText)
     .map((row) => [`${row.recordKey}\u0000${row.biologicalFeatureId}`, row.labelText]));
   const item = state.featureCatalog?.value?.items?.[resultIndex];
@@ -110,7 +115,9 @@ const renderedLabelTextOverrides = (state, resultIndex) => {
 };
 
 // Capture the selected Result before any lazy export modules or libraries load.
+// Its popup settings and edits are those of the Result's mode: that mode's drawing.
 export const captureSvgExport = (state, { interactive = false } = {}) => {
+  const drawing = state.drawings[state.generatedMode?.value === 'linear' ? 'linear' : 'circular'];
   const resultIndex = Number(state.selectedResultIndex.value);
   const name = state.results.value?.[resultIndex]?.name || 'gbdraw.svg';
   return {
@@ -119,7 +126,7 @@ export const captureSvgExport = (state, { interactive = false } = {}) => {
     name,
     dpi: state.downloadDpi.value,
     ...(interactive ? { interactivity: {
-      popupMode: state.adv.rich_feature_popup === false ? 'simple' : 'rich',
+      popupMode: drawing.adv.rich_feature_popup === false ? 'simple' : 'rich',
       featureCatalog: state.featureCatalog?.value,
       catalogResultIndex: resultIndex,
       catalogResultName: name,
@@ -127,10 +134,10 @@ export const captureSvgExport = (state, { interactive = false } = {}) => {
       editableLabels: (state.editableLabels?.value || []).map(({ featureId, text, sourceText }) => ({
         featureId, text, sourceText
       })),
-      labelTextFeatureOverrides: renderedLabelTextOverrides(state, resultIndex),
-      labelTextBulkOverrides: { ...state.labelTextBulkOverrides },
-      orthogroupNameOverrides: { ...state.orthogroupNameOverrides },
-      orthogroupDescriptionOverrides: { ...state.orthogroupDescriptionOverrides }
+      labelTextFeatureOverrides: renderedLabelTextOverrides(state, drawing, resultIndex),
+      labelTextBulkOverrides: { ...drawing.labelTextBulkOverrides },
+      orthogroupNameOverrides: { ...drawing.orthogroupNameOverrides },
+      orthogroupDescriptionOverrides: { ...drawing.orthogroupDescriptionOverrides }
     } } : {})
   };
 };

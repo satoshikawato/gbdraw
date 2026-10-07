@@ -104,7 +104,7 @@ for (const composite of [false, true]) {
           resources: Object.fromEntries(Object.entries(session.resources).map(([id, descriptor]) => [id, { size: descriptor.size, name: descriptor.name }])),
           source: { name: state.files.c_gb.name, size: state.files.c_gb.size,
             components: binding?.descriptors?.map((part) => part.resourceId) || [] },
-          form: config.buildConfigData().form, geometry: state.trackSlotResolvedGeometry.value,
+          form: config.buildConfigData(state.activeDrawing()).form, geometry: state.trackSlotResolvedGeometry.value,
           catalog: state.featureCatalog.value, placements: state.featurePlacementOverrides };
       });
       await fs.writeFile(testInfo.outputPath(`${stage}.json`), JSON.stringify({ selected, enabled, ...state }, null, 2));
