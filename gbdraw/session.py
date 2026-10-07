@@ -26,6 +26,7 @@ from gbdraw.session_io import (
     SESSION_FORMAT,
     _read_session_text,
     _attach_current_web_file_bindings,
+    _embedded_resource_bytes,
     _reject_duplicate_json_keys,
     expand_session_feature_catalog,
     materialize_embedded_file,
@@ -47,7 +48,7 @@ _RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 _RESOURCE_REQUIRED_FIELDS = frozenset(
     {"kind", "name", "type", "size", "encoding", "data"}
 )
-_RESOURCE_OPTIONAL_FIELDS = frozenset({"lastModified"})
+_RESOURCE_OPTIONAL_FIELDS = frozenset({"lastModified", "checksum"})
 class SessionError(ValidationError):
     """Base error for the public session bridge."""
 
@@ -640,6 +641,13 @@ def _validate_document(data: Mapping[str, Any]) -> None:
             raise SessionResourceError(
                 f"Canonical resource {resource_id!r} has invalid size metadata."
             )
+        if "checksum" in entry:
+            try:
+                _embedded_resource_bytes(entry)
+            except ValidationError as exc:
+                raise SessionResourceError(
+                    f"Canonical resource {resource_id!r} is invalid: {exc}"
+                ) from exc
     from gbdraw.session_resources import canonical_resource_ids
 
     unresolved = canonical_resource_ids(data.get("renderRequest")) - set(resources)

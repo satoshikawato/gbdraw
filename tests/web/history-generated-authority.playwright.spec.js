@@ -5,6 +5,7 @@ const { readFileSync } = require('node:fs');
 const { semantics } = require('./helpers/visual-state.cjs');
 const { seeds, load, generate, switchMode, snapshot, download, popup, closeEditor } = require('./helpers/mode-transition.cjs');
 const { evaluateWithRetainedPromise, reveal } = require('./helpers/app-lifecycle.cjs');
+const { settleLive } = require('./helpers/live-generate-parity.cjs');
 
 // PD-OI-037 revision 2: there is no derived application status. Draft edits stay
 // free of Worker, byte, digest, and SVG-clone work, and never replace the
@@ -641,6 +642,54 @@ test('Checkpoint Undo and Redo keep the admitted feature catalog through a mode 
     expect(errors).toEqual([]);
     // N-20: the checkpoint JSON holds no copy of the catalog.
     expect(colored).toMatchObject({ checkpoint: true, checkpointHasCatalog: false });
+  } finally { await page.context().close(); }
+});
+
+// OV-136: a label rerender draws the committed Results again, so a loaded
+// Session's Result keeps its saved name (not the `out` output prefix) in the
+// catalog, the Export file name, and Save Session, also when Undo and Redo ask
+// for the rerender again.
+test('A label rerender keeps the loaded Result name through Undo and Redo (OV-136)', async ({ browser }, info) => {
+  test.setTimeout(300000);
+  const page = await load(browser);
+  try {
+    const kept = 'HmmtDNA_basic_circular';
+    const names = () => page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      const catalog = window.Vue.toRaw(state.featureCatalog.value);
+      (window.__OV136_CATALOGS__ ??= []).push(catalog);
+      const seen = window.__OV136_CATALOGS__;
+      return {
+        rerendered: seen.length === 1 || !seen.slice(0, -1).includes(catalog),
+        results: state.results.value.map(result => result.name),
+        catalog: catalog.items.map(item => item.resultName),
+        error: state.labelReflowLastError.value
+      };
+    });
+    const exportName = async () => {
+      const [svg] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByRole('button', { name: 'SVG', exact: true }).click()
+      ]);
+      return svg.suggestedFilename();
+    };
+    const expected = { rerendered: true, results: [kept], catalog: [kept], error: null };
+    expect(await names()).toEqual(expected);
+    expect(await exportName()).toBe(`${kept}.svg`);
+    // A color that adds a Legend entry asks for the label rerender (OV-43).
+    await page.evaluate(async () => {
+      const app = window.__GBDRAW_APP__;
+      await app.setFeatureColorValue(app.extractedFeatures.find(feature => feature.type === 'CDS'), '#123456');
+    });
+    for (const step of ['colored', 'Undo', 'Redo']) {
+      if (step !== 'colored') await page.getByRole('button', { name: step, exact: true }).click();
+      await settleLive(page);
+      expect(await names(), step).toEqual(expected);
+      expect(await exportName(), step).toBe(`${kept}.svg`);
+    }
+    const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', info.outputPath('ov136.gbdraw-session.json.gz'))));
+    expect(saved.results.map(result => result.name)).toEqual([kept]);
+    expect(saved.editorState.featureCatalog.items.map(item => item.resultName)).toEqual([kept]);
   } finally { await page.context().close(); }
 });
 

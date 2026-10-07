@@ -986,6 +986,115 @@
         "droppedCount": 0,
         "narrowedVisibilityCount": 0
       }
+    },
+    {
+      "name": "Feature visibility values that name Object.prototype members are dropped",
+      "input": {
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "seq-a"
+              ],
+              "features": [
+                {
+                  "svgId": "fp1_record_1",
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp1"
+                },
+                {
+                  "svgId": "fp2_record_1",
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp2"
+                },
+                {
+                  "svgId": "fp3_record_1",
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp3"
+                },
+                {
+                  "svgId": "fp4_record_1",
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp4"
+                },
+                {
+                  "svgId": "fp5_record_1",
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp5"
+                }
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp1",
+                  "sourceFeatureIndex": 1
+                },
+                {
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp2",
+                  "sourceFeatureIndex": 2
+                },
+                {
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp3",
+                  "sourceFeatureIndex": 3
+                },
+                {
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp4",
+                  "sourceFeatureIndex": 4
+                },
+                {
+                  "recordKey": "seq-a",
+                  "biologicalFeatureId": "fp5",
+                  "sourceFeatureIndex": 5
+                }
+              ]
+            }
+          ]
+        },
+        "features": {
+          "featureVisibilityOverrides": {
+            "fp1_record_1": "constructor",
+            "fp2_record_1": "toString",
+            "fp3_record_1": "__proto__",
+            "fp4_record_1": " CONSTRUCTOR ",
+            "fp5_record_1": "off"
+          },
+          "labelVisibilityOverrides": {
+            "fp1_record_1": "constructor"
+          },
+          "labelOverrideRows": [
+            {
+              "recordId": "seq-a",
+              "featureType": "CDS",
+              "qualifier": "product",
+              "valueRegex": "^hypothetical",
+              "labelText": "hyp."
+            }
+          ]
+        }
+      },
+      "expected": {
+        "features": {
+          "labelOverrideRows": [],
+          "featureOverrides": {
+            "[\"linear\",\"seq-a\",\"fp5\"]": {
+              "scope": "linear",
+              "recordKey": "seq-a",
+              "biologicalFeatureId": "fp5",
+              "featureVisibility": "off",
+              "labelVisibility": null,
+              "labelText": null,
+              "labelSourceText": null
+            }
+          }
+        },
+        "droppedCount": 5,
+        "narrowedVisibilityCount": 0
+      }
     }
   ]
 }

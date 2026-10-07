@@ -60,6 +60,11 @@ committed render request, generated result, and supported editor and comparison
 state. Replay does not depend on the original file path remaining valid.
 Treat the session as sensitive when its embedded source data is sensitive.
 
+An embedded resource may declare `checksum`, the SHA-256 digest of its bytes as
+`sha256:<hex>` or as bare hex. gbdraw does not add one. The web app keeps it
+when it saves the session again, and gbdraw rejects a resource whose bytes do
+not match it.
+
 Replay reads embedded BLAST outfmt 6/7 resources with the current [comparison
 table rules](input-formats-and-tsv-schemas.md#comparison-and-numeric-tables).
 A saved table with more than 12 columns replays from its first 12 columns. A

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import shutil
 import subprocess
@@ -40,7 +42,8 @@ from gbdraw.api import (
     normalize_request_records,
 )
 from gbdraw.api.options import losatp_analysis_mode
-from gbdraw.session_io import CURRENT_SESSION_VERSION
+from gbdraw.exceptions import ValidationError
+from gbdraw.session_io import CURRENT_SESSION_VERSION, load_session
 
 
 def _record(record_id: str = "record") -> RecordInput:
@@ -238,6 +241,113 @@ def test_duplicate_sanitized_resource_name_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(SessionResourceError, match="Duplicate canonical resource filename"):
         load_session_document(data)
+
+
+def _session_with_resource_field(tmp_path: Path, field: str, value) -> tuple[dict, Path]:
+    """A saved Session whose GenBank resource also carries ``field``.
+
+    ``value`` maps the SHA-256 hex digest of the resource bytes to the value.
+    """
+
+    data = build_session_document(CircularDiagramRequest(records=(_record(),))).to_dict()
+    resource = data["resources"]["record-1-genbank"]
+    resource[field] = value(hashlib.sha256(base64.b64decode(resource["data"])).hexdigest())
+    path = tmp_path / "resource-field.gbdraw-session.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return data, path
+
+
+@pytest.mark.parametrize(
+    "checksum",
+    (
+        lambda digest: f"sha256:{digest}",
+        lambda digest: digest,
+        lambda digest: f"SHA256:{digest.upper()}",
+    ),
+    ids=("prefixed", "bare-hex", "upper-case"),
+)
+def test_resource_checksum_loads_through_both_session_loaders(
+    tmp_path: Path,
+    checksum,
+) -> None:
+    data, path = _session_with_resource_field(tmp_path, "checksum", checksum)
+    declared = data["resources"]["record-1-genbank"]["checksum"]
+
+    document = load_session_document(path)
+    assert document.to_dict()["resources"]["record-1-genbank"]["checksum"] == declared
+    assert load_session_document(data).to_dict() == document.to_dict()
+    assert load_session(path)["resources"]["record-1-genbank"]["checksum"] == declared
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        records = normalize_request_records(session_to_request(materialized))
+    assert [record.id for record in records] == ["record"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (
+        ("checksum", lambda digest: "sha256:" + "0" * 64, "checksum does not match"),
+        ("checksum", lambda digest: "md5:" + digest[:32], "checksum does not match"),
+        ("checksum", lambda digest: 7, "checksum does not match"),
+        ("sha256", lambda digest: digest, r"unknown field\(s\): sha256"),
+    ),
+    ids=("wrong-digest", "other-algorithm", "not-a-string", "unknown-field"),
+)
+def test_both_session_loaders_reject_the_same_resource_descriptor(
+    tmp_path: Path,
+    field: str,
+    value,
+    message: str,
+) -> None:
+    data, path = _session_with_resource_field(tmp_path, field, value)
+
+    with pytest.raises(SessionResourceError, match=message):
+        load_session_document(data)
+    with pytest.raises(SessionResourceError, match=message):
+        load_session_document(path)
+    with pytest.raises(ValidationError, match=message):
+        load_session(path)
+
+
+@pytest.mark.browser
+def test_web_saved_resource_checksum_loads_through_both_session_loaders(
+    tmp_path: Path,
+) -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not available")
+    data, path = _session_with_resource_field(
+        tmp_path, "checksum", lambda digest: f"sha256:{digest}"
+    )
+    completed = subprocess.run(
+        [node, "tests/web/session-request.test.mjs", "--round-trip-session", str(path)],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).parents[1],
+    )
+    canonical = json.loads(completed.stdout)
+    # The Web writer keeps the checksum of a resource it adopted from a Session.
+    assert (
+        canonical["resources"]["record-1-genbank"]["checksum"]
+        == data["resources"]["record-1-genbank"]["checksum"]
+    )
+    saved_path = tmp_path / "web-saved.gbdraw-session.json"
+    saved_path.write_text(
+        json.dumps(
+            {
+                **data,
+                "renderRequest": canonical["renderRequest"],
+                "resources": canonical["resources"],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    document = load_session_document(saved_path)
+    assert load_session(saved_path)["resources"] == document.to_dict()["resources"]
+    with materialize_session(document, output_directory=tmp_path) as materialized:
+        records = normalize_request_records(session_to_request(materialized))
+    assert [record.id for record in records] == ["record"]
 
 
 def test_partial_materialization_failure_cleans_owned_directory(tmp_path: Path) -> None:
