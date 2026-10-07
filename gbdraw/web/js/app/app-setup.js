@@ -2446,10 +2446,13 @@ export const createAppSetup = () => {
         legendActions.adoptResultInventory(context.resultIdentity, { restored: true });
         return;
       }
-      // OV-122, OV-124: a generated or newly displayed Result shows the rows
-      // added and deleted in the Legend editor with the live layout before its
-      // entries are read.
-      if (!context.bindingOptions.isIncrementalEdit && shouldBindComposition(context)) {
+      // A Result the renderer drew: generated, newly displayed, or drawn again
+      // by an automatic rerender.
+      const drawn = !context.bindingOptions.isIncrementalEdit
+        || Boolean(context.bindingOptions.replaceGeneratedLegend);
+      // OV-122, OV-124, OV-126: it shows the Legend editor's edits with the live
+      // layout before its entries are read.
+      if (drawn && shouldBindComposition(context)) {
         legendActions.layOutMountedLegendEdits(context.root);
       }
       if (context.bindingOptions.skipLegendExtraction) return;
@@ -2458,8 +2461,7 @@ export const createAppSetup = () => {
         rootGeneration: context.rootGeneration
       });
       legendActions.extractLegendEntries({
-        replaceGeneratedInventory: !selecting && (!context.bindingOptions.isIncrementalEdit
-          || Boolean(context.bindingOptions.replaceGeneratedLegend)),
+        replaceGeneratedInventory: !selecting && drawn,
         liveResultIdentities
       });
     },
@@ -5353,8 +5355,13 @@ export const createAppSetup = () => {
     newLegendColor,
     updateLegendEntryColor,
     renameLegendEntry,
-    deleteLegendEntry,
-    addNewLegendEntry,
+    // A Legend that gains or loses a row is one checkpoint step, so Undo and
+    // Redo return the Legend as it was laid out, canvas included (OV-125).
+    deleteLegendEntry: /** @param {number} index */ (index) => history.runUndoableCheckpoint(
+      'Delete legend item',
+      () => deleteLegendEntry(index)
+    ),
+    addNewLegendEntry: () => history.runUndoableCheckpoint('Add legend item', addNewLegendEntry),
     moveLegendEntryUp,
     moveLegendEntryDown,
     sortLegendEntries,
@@ -5364,8 +5371,8 @@ export const createAppSetup = () => {
     getLegendEntryStrokeWidth,
     setLegendEntryStrokeColorValue: setLegendEntryStrokeColorValueWithHistory,
     updateLegendEntryStrokeColor,
-    updateLegendEntryStrokeWidth,
-    resetLegendEntryStroke,
+    updateLegendEntryStrokeWidth: undoableAction('Change legend stroke width', updateLegendEntryStrokeWidth),
+    resetLegendEntryStroke: undoableAction('Reset legend stroke', resetLegendEntryStroke),
     resetAllStrokes,
     resetAllPositions: undoableAction('Reset positions', resetAllPositions),
     resetLayout: undoableAction('Reset layout', resetLayout),

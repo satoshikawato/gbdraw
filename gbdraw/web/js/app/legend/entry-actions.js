@@ -86,7 +86,6 @@ export const createLegendEntryActions = ({
 }) => {
   const {
     results,
-    selectedResultIndex,
     svgContainer,
     legendEntries,
     deletedLegendEntries,
@@ -620,18 +619,23 @@ export const createLegendEntryActions = ({
     onLegendGeometryChanged();
   };
 
-  // Python lays out only the rows it draws. Generate and the display of a batch
-  // Result add the rows added here (services/svg-result-ingestion.js) at anchors
-  // read from the live layout, whose frame Python's layout does not share, and
-  // remove the rows deleted here without closing their gap. A mounted Result
-  // whose Legend the editor changed so receives the layout of the live add
-  // (OV-122) or, after a deletion, of the live delete (OV-124, PD-OI-066).
-  // Returns whether the Legend was laid out again.
+  // Python lays out only the rows it draws. Generate, the display of a batch
+  // Result, and an automatic rerender add the rows added here
+  // (services/svg-result-ingestion.js) at anchors read from the live layout,
+  // whose frame Python's layout does not share, remove the rows deleted here
+  // without closing their gap, and give a renamed row its caption in place. A
+  // mounted Result whose Legend the editor changed so receives the layout of
+  // the live add (OV-122) or, after a deletion or a rename, of the live delete
+  // and rename (OV-124, OV-127, PD-OI-066). Returns whether the Legend was laid
+  // out again.
   /** @param {SVGSVGElement} svg */
   const layOutMountedLegendEdits = (svg) => {
     const groups = getAllFeatureLegendGroups(svg);
     if (groups.length === 0) return false;
-    if (deletedLegendEntries.value.length > 0) {
+    const renamed = (legendEntries.value || []).some(
+      /** @param {Record<string, any>} entry */ (entry) => legendCaption(entry) !== generatedCaption(entry)
+    );
+    if (deletedLegendEntries.value.length > 0 || renamed) {
       compactLegendEntries(svg);
       onLegendGeometryChanged();
       return true;
@@ -1298,11 +1302,9 @@ export const createLegendEntryActions = ({
     if (added) {
       newLegendCaption.value = '';
       newLegendColor.value = '#808080';
-      const result = results.value[selectedResultIndex.value];
-      setTimeout(() => {
-        if (!state.sessionOperationAvailability?.()
-          && results.value[selectedResultIndex.value] === result) extractLegendEntries();
-      }, 100);
+      // The editor lists the row within the add, so the add's History step
+      // holds it (OV-125).
+      extractLegendEntries();
     }
   };
 

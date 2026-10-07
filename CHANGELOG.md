@@ -33,6 +33,19 @@ write-up of a release.
   and the canvas as the removal left them, in Linear and Circular: the other rows
   close the gap. Before, Generate kept the gap and the earlier canvas size. A batch
   Result shown after the removal is laid out the same way.
+- Legend editor (web app): removing a row, adding a row, changing a row's stroke
+  width, and Reset Stroke are each one Undo step, as the stroke color is. Undo and
+  Redo of a removed or added row return the Legend and the canvas as they were.
+  Before, these edits made no Undo step when they were not made through a control,
+  adding a row never made one, and Undo of a removal left the rows out of place.
+- Legend editor (web app): rows added or removed in the Legend editor keep their
+  layout through an automatic rerender (for example after a Feature Visibility
+  rule), as Generate draws them. Before, the rerender moved an added row, in Linear
+  far to the right of the other rows, and kept the earlier canvas size.
+- Legend editor (web app): after a row without features, such as GC content, is
+  renamed in the Legend editor, Generate draws the Legend and the canvas as the
+  rename left them. Before, Generate moved only the renamed row and kept the earlier
+  canvas width.
 - Legend names (web app): Generate no longer fails with "The generated result
   could not be accepted" after a **Depth** row renamed in the Legend is hidden by
   **Show Depth**, in Linear and Circular. The row is not drawn; as for a renamed GC

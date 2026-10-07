@@ -3,7 +3,7 @@ const fs = require('node:fs/promises');
 const { load, generate, switchMode, download } = require('./helpers/mode-transition.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { openBatch } = require('./helpers/audit-browser.cjs');
-const { showResult } = require('./helpers/live-generate-parity.cjs');
+const { settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 
 const seeds = {
   lambda: 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json',
@@ -347,6 +347,201 @@ for (const mode of ['linear', 'circular']) {
       await expectGenerateKeepsLegend(page, 'delete the added row');
       await addLegendRow(page, 'Second row', '#7b2cbf');
       await expectGenerateKeepsLegend(page, 'add a row after the deletions');
+      expect(page.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+    }
+  });
+}
+
+// The mounted Legend as the editor shows it: the caption boxes and the canvas
+// (`legendCaptionBoxes`), the editor rows, and the strokes (color normalized,
+// width as a number) of each row's swatch and of each feature.
+const legendView = async page => ({
+  ...await legendCaptionBoxes(page),
+  ...await page.evaluate(async () => {
+    const { state: s } = await import('./js/state.js');
+    const { getAllFeatureLegendGroups, getLegendEntrySwatch } = await import('./js/app/legend/utils.js');
+    const svg = s.svgContainer.value.querySelector('svg');
+    const paint = document.createElement('canvas').getContext('2d');
+    const stroke = element => {
+      const color = element?.getAttribute('stroke') ?? 'none';
+      paint.fillStyle = '#010203';
+      paint.fillStyle = color;
+      return `${color === 'none' ? color : paint.fillStyle} ${Number(element?.getAttribute('stroke-width'))}`;
+    };
+    const features = {};
+    svg.querySelectorAll('[data-gbdraw-feature-id]').forEach(element => {
+      const id = element.getAttribute('data-gbdraw-rendered-feature-id') || element.getAttribute('data-gbdraw-feature-id');
+      (features[id] ||= new Set()).add(stroke(element));
+    });
+    return {
+      entries: s.legendEntries.value.map(entry => `${entry.caption} ${entry.color}`),
+      swatches: getAllFeatureLegendGroups(svg).map(group => [...group.querySelectorAll('g[data-legend-key]')]
+        .map(row => `${row.getAttribute('data-legend-key')}: ${stroke(getLegendEntrySwatch(row))}`).sort()),
+      features: Object.fromEntries(Object.entries(features).map(([id, strokes]) => [id, [...strokes].sort().join(', ')]))
+    };
+  })
+});
+// How the Legend view `actual` differs from `expected`; places within 1 unit.
+const legendViewDifferences = (actual, expected) => {
+  const near = (left, right) => Boolean(left && right) && left.length === right.length
+    && left.every((value, index) => Math.abs(value - right[index]) <= 1);
+  const shown = value => (value ? value.map(Math.round).join(',') : 'none');
+  const differences = [];
+  if (!near(actual.canvas, expected.canvas)) differences.push(`canvas ${shown(actual.canvas)} vs ${shown(expected.canvas)}`);
+  new Set([...Object.keys(actual.rows), ...Object.keys(expected.rows)]).forEach(caption => {
+    if (!near(actual.rows[caption], expected.rows[caption])) {
+      differences.push(`row ${caption}: ${shown(actual.rows[caption])} vs ${shown(expected.rows[caption])}`);
+    }
+  });
+  ['entries', 'swatches'].forEach(key => {
+    if (JSON.stringify(actual[key]) !== JSON.stringify(expected[key])) {
+      differences.push(`${key}: ${JSON.stringify(actual[key])} vs ${JSON.stringify(expected[key])}`);
+    }
+  });
+  new Set([...Object.keys(actual.features), ...Object.keys(expected.features)]).forEach(id => {
+    if (actual.features[id] !== expected.features[id]) {
+      differences.push(`feature ${id}: ${actual.features[id]} vs ${expected.features[id]}`);
+    }
+  });
+  return differences;
+};
+
+// OV-125 (R11): each Legend editor action, through the editor's function or its
+// control, is one History step. Undo restores the Legend before it (the rows,
+// their order and places, the canvas, and the strokes of the swatches and the
+// features), Redo the Legend after it, and Generate then draws what live shows.
+for (const mode of ['linear', 'circular']) {
+  test(`M7 ${mode}: each Legend editor action is one History step that Undo and Redo restore`, async ({ browser }) => {
+    test.setTimeout(900_000);
+    const page = await loadGenerated(browser, mode);
+    const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+    const step = async direction => {
+      await evaluateWithRetainedPromise(page, name => window.__GBDRAW_HISTORY__[name](), direction);
+      await settleLive(page);
+    };
+    // `actions` change the Legend one after another, each in one step: Undo
+    // then returns each view before an action, and Redo each view after it.
+    const expectSteps = (name, actions) => test.step(name, async () => {
+      const views = [await legendView(page)];
+      const start = await undoCount();
+      for (const act of actions) {
+        await act();
+        await settleLive(page);
+        views.push(await legendView(page));
+        expect.soft(legendViewDifferences(views.at(-1), views.at(-2)), `${name}: the action changes the Legend`)
+          .not.toEqual([]);
+      }
+      const recorded = await undoCount();
+      expect.soft(recorded, `${name}: one Undo step per action`).toBe(start + actions.length);
+      if (recorded !== start + actions.length) return;
+      for (let index = actions.length - 1; index >= 0; index -= 1) {
+        await step('undo');
+        expect.soft(legendViewDifferences(await legendView(page), views[index]), `${name}: Undo ${index + 1}`).toEqual([]);
+      }
+      for (let index = 1; index <= actions.length; index += 1) {
+        await step('redo');
+        expect.soft(legendViewDifferences(await legendView(page), views[index]), `${name}: Redo ${index}`).toEqual([]);
+      }
+      expect.soft(await undoCount(), `${name}: Redo returns the steps`).toBe(start + actions.length);
+    });
+    const strokeWidth = (caption, width) => () => evaluateWithRetainedPromise(page, async row => {
+      const app = window.__GBDRAW_APP__;
+      await app.updateLegendEntryStrokeWidth(app.legendEntries.findIndex(e => e.caption === row.caption), row.width);
+    }, { caption, width });
+    // Reset Stroke and the History restore give a row's features the stroke of
+    // the renderer's first feature, so each mode strokes a row whose features
+    // the renderer draws with that stroke.
+    const stroked = mode === 'linear' ? 'CDS' : 'repeat_region';
+    try {
+      await page.locator('.drawer-toggle').click();
+      await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
+      await expectSteps('stroke width', [strokeWidth(stroked, 3)]);
+      await expectSteps('Reset Stroke', [strokeWidth(stroked, 2), () => evaluateWithRetainedPromise(page, async caption => {
+        const app = window.__GBDRAW_APP__;
+        await app.resetLegendEntryStroke(app.legendEntries.findIndex(e => e.caption === caption));
+      }, stroked)]);
+      await expectSteps('delete a row', [() => deleteLegendRow(page, 'repeat_region')]);
+      await expectSteps('add a row', [() => addLegendRow(page, 'Manual row', '#118833')]);
+      // The second delete uses the editor's Remove entry control.
+      await expectSteps('add a row, then delete it', [
+        () => addLegendRow(page, 'Second row', '#7b2cbf'),
+        async () => {
+          const index = await page.evaluate(legendIndex, 'Second row');
+          await page.locator('.right-drawer').getByRole('button', { name: 'Remove entry' }).nth(index).click();
+          await expect.poll(() => page.evaluate(legendIndex, 'Second row')).toBe(-1);
+        }
+      ]);
+      // After an Undo, Generate draws the Legend live shows.
+      await step('undo');
+      const live = await legendView(page);
+      expect.soft(Object.keys(live.rows)).toContain('Second row');
+      expectInsideCanvas(live);
+      await generate(page);
+      expect(legendViewDifferences(await legendView(page), live), 'Generate after Undo').toEqual([]);
+      expect(page.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+    }
+  });
+}
+
+// OV-126 (PD-OI-066): an automatic rerender draws the Legend editor's rows as
+// Generate does. A Feature Visibility rule that hides FL1 changes a Legend
+// source, so it draws the Result again (OV-42).
+for (const mode of ['linear', 'circular']) {
+  test(`M8 ${mode}: Legend rows added and deleted in the editor keep the live layout through an automatic rerender`, async ({ browser }) => {
+    test.setTimeout(600_000);
+    const page = await loadGenerated(browser, mode);
+    try {
+      await addLegendRow(page, 'Manual row', '#118833');
+      await deleteLegendRow(page, 'repeat_region');
+      await settleLive(page);
+      const edited = await legendCaptionBoxes(page);
+      await page.evaluate(() => {
+        window.__renders = 0;
+        window.__GBDRAW_TEST_HOOKS__.beforeDiagramGenerationResponse = () => { window.__renders += 1; };
+      });
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        await app.addFeatureVisibilityRule();
+        const index = app.featureVisibilityManualRules.length - 1;
+        const fields = { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' };
+        for (const [field, value] of Object.entries(fields)) await app.setFeatureVisibilityRuleField(index, field, value);
+      });
+      await settleLive(page);
+      expect(await page.evaluate(() => window.__renders), 'one automatic rerender').toBe(1);
+      const rerendered = await legendCaptionBoxes(page);
+      expect(Object.keys(rerendered.rows).sort()).toEqual(Object.keys(edited.rows).sort());
+      await expectGenerateKeepsLegend(page, 'Generate after the rerender');
+      expect(page.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+    }
+  });
+}
+
+// OV-127 (PD-OI-066): a rename of a row without features lays the Legend out
+// again live; Generate draws the renamed Legend with that layout.
+for (const mode of ['linear', 'circular']) {
+  test(`M9 ${mode}: a Legend row renamed in the editor is laid out live and at Generate alike`, async ({ browser }) => {
+    test.setTimeout(600_000);
+    const page = await loadGenerated(browser, mode);
+    try {
+      if (mode === 'linear') {
+        await page.evaluate(() => { window.__GBDRAW_APP__.form.show_gc = true; });
+        await generate(page);
+      }
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        await app.renameLegendEntry(app.legendEntries.findIndex(e => e.caption === 'GC content'),
+          'A much longer Legend caption for this row');
+      });
+      await expect.poll(() => page.evaluate(legendIndex, 'A much longer Legend caption for this row'))
+        .toBeGreaterThanOrEqual(0);
+      await settleLive(page);
+      await expectGenerateKeepsLegend(page, 'rename a row without features');
       expect(page.externalRequests).toEqual([]);
     } finally {
       await page.context().close();
