@@ -364,7 +364,7 @@
             top: 0;
             z-index: 1;
             background: #ffffff;
-            color: #94a3b8;
+            color: var(--ui-muted);
             font-size: 10px;
             font-weight: 700;
             text-transform: uppercase;
@@ -389,7 +389,8 @@
         }
         .pairwise-match-feature-sub {
             margin-top: 0.15rem;
-            color: #94a3b8;
+            /* The row's mono-cell color: --ui-muted is only 4.37:1 on the row's hover ground. */
+            color: #475569;
             font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
             font-size: 10px;
             overflow-wrap: anywhere;

@@ -3,7 +3,8 @@ const { load, seeds } = require('./helpers/mode-transition.cjs');
 
 // Small UI fixes from the 2026-10-05 re-audit: panel wording that states what a
 // preset or the rule order does (FL-11, FL-12), and two overlays that must not
-// cover the header controls (Reset alignment) or the footer (match popup).
+// cover the header controls (Reset alignment) or the footer (match popup), whose
+// text also reaches 4.5:1 (GX-15).
 // The Session load is the only setup; each overlay is opened through its state.
 
 const open = browser => load(browser, seeds.circular, { width: 1600, height: 1000 });
@@ -65,7 +66,30 @@ test('Reset alignment opens as a centred modal that covers no header control', a
   }
 });
 
-test('the match popup stays above the footer when it opens low in the window', async ({ browser }, info) => {
+// GX-15: text in the match popup under 4.5:1 on its own ground (a hovered feature row
+// has the row's hover ground).
+const faintText = popup => popup.evaluate(root => {
+  const rgb = value => (value.match(/[\d.]+/g) || []).map(Number);
+  const luminance = color => color.slice(0, 3).map(v => v / 255)
+    .map(v => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+    .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const ground = element => {
+    for (let node = element; node; node = node.parentElement) {
+      const color = rgb(getComputedStyle(node).backgroundColor);
+      if (color.length === 3 || color[3] > 0) return color;
+    }
+    return [255, 255, 255];
+  };
+  return Array.from(root.querySelectorAll('*'))
+    .filter(element => Array.from(element.childNodes).some(node => node.nodeType === 3 && node.textContent.trim()))
+    .map(element => {
+      const [a, b] = [luminance(rgb(getComputedStyle(element).color)), luminance(ground(element))];
+      return { text: element.textContent.trim().slice(0, 40), ratio: Math.round(((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)) * 100) / 100 };
+    })
+    .filter(({ ratio }) => ratio < 4.5);
+});
+
+test('the match popup stays above the footer and its text reaches 4.5:1', async ({ browser }, info) => {
   test.setTimeout(300000);
   const page = await open(browser);
   try {
@@ -78,6 +102,12 @@ test('the match popup stays above the footer when it opens low in the window', a
         sections: [{
           title: 'Summary',
           rows: Array.from({ length: 24 }, (_, i) => ({ label: `Row ${i + 1}`, value: `value ${i + 1}` }))
+        }, {
+          title: 'Features',
+          featureRows: [{
+            key: 'f1', label: 'nad1', subLabel: 'CDS 3307..4262', record: 'NC_012920.1', location: '3307..4262',
+            product: 'NADH dehydrogenase subunit 1', canOpen: true, copyText: 'nad1'
+          }]
         }]
       };
       state.clickedPairwiseMatchPos.x = 884;
@@ -88,6 +118,10 @@ test('the match popup stays above the footer when it opens low in the window', a
     const footer = await page.locator('[data-app-footer]').boundingBox();
     const popupBox = await popup.boundingBox();
     expect(popupBox.y + popupBox.height).toBeLessThanOrEqual(footer.y + 0.5);
+    expect(await faintText(popup), 'popup text under 4.5:1').toEqual([]);
+    await popup.locator('.pairwise-match-feature-row').first().hover();
+    await expect(popup.locator('.pairwise-match-feature-row').first()).toHaveCSS('background-color', 'rgb(239, 246, 255)');
+    expect(await faintText(popup), 'popup text under 4.5:1 with a feature row hovered').toEqual([]);
     await info.attach('match-popup', { body: await page.screenshot(), contentType: 'image/png' });
   } finally {
     await page.context().close();
