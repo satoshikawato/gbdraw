@@ -95,3 +95,27 @@ decompressed SHA-256 values are
 `46d72e44f6f54c0fbf6c9c93c806a2f11570e1d024fa3f7552312042637abbad` (lambda) and
 `e532e83bf78d6ad63cfb228336b7ff3dcb3b82076a399da787e771b69abce649` (HmmtDNA).
 `gallery-session-publication.test.mjs` promotes them to the current writer.
+
+`two-mode-project.v44.gbdraw-session.json.gz` is a Web **Save Session**
+download, kept unchanged, from first-parent `main` commit `fe6861f0`
+(Session 44). Both modes were used: Circular holds `TESTA.gb` with a Depth TSV
+and Circular title, font, legend, GC, and Depth settings; Linear holds `TESTA.gb`
+(same Depth TSV) and `TESTB.gb` (reverse complemented) with Legend edits, a color
+rule, a feature placement, and a label edit. The Linear Result is the committed
+Result while `ui.mode` is `circular`, both modes have a staged record-display
+row, and the inactive Linear profile holds an edited plot title. It is the
+positive fixture for the reader that splits one Session 27–44 draft into
+drawings; `TESTA.gb` and the Depth TSV are stored once for both modes.
+`inactive-class-m.v44.gbdraw-session.json.gz` is a Web **Save Session**
+download from the same commit: Circular has `TESTA.gb` and a Result, and Linear
+has no inputs but an edited plot title, Accession, Length, and legend position.
+It is the control that shows whether inactive-mode values survive. The steps,
+inputs, deviations, and hashes are in `two-mode-project.provenance.json`.
+
+`two-mode-thresholds.v42.gbdraw-session.json.gz` is a Web **Save Session**
+download, kept unchanged, from first-parent `main` commit `3fd50841`
+(Session 42). Linear holds `TESTA.gb` and `TESTB.gb` with the flat title
+`FLAT_TITLE`; the Circular E-value and Identity thresholds, which Session 42
+stores as a five-field `modeProfiles` entry, were edited while Circular held no
+inputs. It is the positive fixture for the Session 40–42 reader. The steps,
+inputs, and hashes are in `two-mode-thresholds.provenance.json`.
