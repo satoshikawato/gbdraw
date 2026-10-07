@@ -1312,12 +1312,15 @@ test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory
   await expect(page.getByRole('alert', { name: 'Generation Error' }))
     .toContainText('Required columns: 12.');
 
+  // CI-04: a swapped table names the column and the correction, as the CLI does.
   const swapped = await generateWithTable(hit('Co06B', 'Co06A'), 'swapped-ids.tsv');
   expect(swapped.status).toBe('error');
-  expect(swapped.errorCode).toBe('COMPARISON_IDENTITY');
+  expect(swapped.errorCode).toBe('COMPARISON_INPUT');
   expect(swapped.content).toBe(unrelated.content);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog.context))
+    .toEqual({ reason: 'RECORD_ID', column: 1 });
   await expect(page.getByRole('alert', { name: 'Generation Error' }))
-    .toContainText('Comparison endpoints disagree');
+    .toContainText('Column 1. A table row names another displayed record in this column. Swap the query and subject columns');
 });
 
 test('unmatched uploaded table IDs show a notice that follows the Result through Save and Load', async ({ page }) => {

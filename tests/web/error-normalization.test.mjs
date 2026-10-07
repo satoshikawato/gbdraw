@@ -579,3 +579,13 @@ test('a region wholly beyond the record keeps the region correction (CI-01)', ()
   assert.equal(producerSummary('REGION_INVALID', { field: 'region', reason: 'RECORD_BOUNDS' }),
     'The region is invalid. Field: region. Keep the region within the record length.');
 });
+
+test('a BLAST table error names its locator and correction, not the sequence-file sentence (CI-04)', () => {
+  assert.equal(producerSummary('COMPARISON_INPUT', { reason: 'FINITE', row: 2, column: 11 }),
+    'The comparison input is invalid. Line 2. Column 11. Use a finite number.');
+  assert.match(producerSummary('COMPARISON_INPUT', { reason: 'RECORD_ID', column: 1 }),
+    /^The comparison input is invalid\. Column 1\. A table row names another displayed record in this column\. Swap the query and subject columns/);
+  // A producer that names no reason keeps the comparison-source guidance.
+  assert.equal(producerSummary('COMPARISON_INPUT'),
+    'The comparison input is invalid. Supply a comparison sequence file (FASTA, GenBank, or DDBJ) or BLAST outfmt 6/7 as required.');
+});

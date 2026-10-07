@@ -372,12 +372,11 @@ def test_swapped_query_and_subject_table_is_rejected() -> None:
         _render_svg(_pair_records("R2", "R3"), [LinearComparison(0, 1, _hits("R3", "R2"))])
 
     assert error.value.reason == "RECORD_ID"
-    # The Web receives the comparison-identity code instead of an unclassified error.
-    from gbdraw.web_support.error_adapter import serialize_web_error
-
-    assert serialize_web_error(error.value, operation="generate", stage="render")["code"] == (
-        "COMPARISON_IDENTITY"
-    )
+    # CI-04: the Web names the correction and the column instead of the generic
+    # comparison-identity text.
+    payload = _web(error.value)
+    assert payload["code"] == "COMPARISON_INPUT"
+    assert payload["context"] == {"reason": "RECORD_ID", "column": 1}
 
 
 def test_table_naming_another_displayed_record_is_rejected() -> None:

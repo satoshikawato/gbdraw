@@ -260,7 +260,11 @@ def project_search_frame_comparisons(
                     f"{str(getattr(record, 'id', '')).strip()!r} (for example "
                     f"{first[columns[0]]}..{first[columns[1]]}). Comparison tables use coordinates "
                     "of the selected and cropped record in the source strand.",
-                    diagnostic={"code": "COMPARISON_INPUT", "reason": "SEARCH_FRAME"},
+                    diagnostic={
+                        "code": "COMPARISON_INPUT",
+                        "reason": "SEARCH_FRAME",
+                        "column": 7 if role == "query" else 9,  # qstart or sstart
+                    },
                 )
         projected.append(reverse_unbound_endpoint_rows(
             comparison,
@@ -405,6 +409,11 @@ def validate_linear_comparison_record_ids(
                         f"which is {target}, not the {role} record. Swap the query and subject "
                         "columns of the table or assign the table to the matching record pair.",
                         reason="RECORD_ID",
+                        diagnostic={
+                            "code": "COMPARISON_INPUT",
+                            "reason": "RECORD_ID",
+                            "column": 1 if role == "query" else 2,  # BLAST outfmt 6 column
+                        },
                     )
             unknown_rows |= table_ids.isin(unknown_role_ids)
             unknown_ids.extend(value for value in unknown_role_ids if value not in unknown_ids)

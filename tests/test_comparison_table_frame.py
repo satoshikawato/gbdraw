@@ -138,7 +138,8 @@ def test_row_outside_its_record_reports_a_comparison_diagnostic() -> None:
             [LinearComparison(0, 1, _frame((1, 10, 70, 90)))], _records(reverse_subject=False)
         )
     error = serialize_web_error(caught.value, operation="generate", stage="render")
-    assert (error["code"], error["context"]) == ("COMPARISON_INPUT", {"reason": "SEARCH_FRAME"})
+    # CI-04: the column of the first coordinate of the failing endpoint (sstart).
+    assert (error["code"], error["context"]) == ("COMPARISON_INPUT", {"reason": "SEARCH_FRAME", "column": 9})
 
 
 _SESSIONS = Path(__file__).parent / "fixtures" / "sessions"
