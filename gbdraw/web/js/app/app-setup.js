@@ -2763,6 +2763,7 @@ export const createAppSetup = () => {
         });
         recordSessionLifecycleEvent('history-baseline-end');
         if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = false;
+        closeLegendStrokeOptions();
       }
     }
   });
@@ -2778,6 +2779,9 @@ export const createAppSetup = () => {
     resetLegendPosition,
     getLegendEntryStrokeColor,
     getLegendEntryStrokeWidth,
+    isLegendStrokeOptionsOpen,
+    toggleLegendStrokeOptions,
+    closeLegendStrokeOptions,
     setLegendEntryStrokeColorValue,
     updateLegendEntryStrokeColor,
     updateLegendEntryStrokeWidth,
@@ -5369,6 +5373,8 @@ export const createAppSetup = () => {
     resetLegendPosition: undoableAction('Reset legend position', resetLegendPosition),
     getLegendEntryStrokeColor,
     getLegendEntryStrokeWidth,
+    isLegendStrokeOptionsOpen,
+    toggleLegendStrokeOptions,
     setLegendEntryStrokeColorValue: setLegendEntryStrokeColorValueWithHistory,
     updateLegendEntryStrokeColor,
     updateLegendEntryStrokeWidth: undoableAction('Change legend stroke width', updateLegendEntryStrokeWidth),

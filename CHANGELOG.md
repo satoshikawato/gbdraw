@@ -65,6 +65,9 @@ write-up of a release.
   return to, live and after Generate. Before, Generate drew the row in the popup's
   color, and the saved Session kept it. A Legend color set on a row in the Legend
   editor is kept.
+- Legend editor (web app): opening or closing a row's **Stroke options** no longer
+  makes an Undo step, and Sessions no longer save which rows show their stroke
+  options. Loading a Session closes them.
 - Result names (web app): a live edit that redraws a loaded Session's Result (such
   as a Legend color, or Undo or Redo of a color step) keeps the Result's saved name.
   Before, the redraw renamed it after the **Output prefix** (a Gallery Session's

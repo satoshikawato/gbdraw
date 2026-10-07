@@ -1038,7 +1038,6 @@ export const createLegendEntryActions = ({
         entry.caption === caption
         && normalizedColor(entry.color) === normalizedColor(color)
       ));
-      const showStroke = existingEntry?.showStroke || false;
       const existingFeatureIds = existingEntry?.featureIds || [];
       const originalCaption = existingEntry?.originalCaption || caption;
       if (entryGroup.getAttribute('data-legend-owner') !== 'direct-editor') {
@@ -1051,7 +1050,6 @@ export const createLegendEntryActions = ({
         color,
         xPos,
         yPos,
-        showStroke,
         featureIds: existingFeatureIds
       });
     });

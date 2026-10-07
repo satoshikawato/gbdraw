@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
+const { gunzipSync } = require('node:zlib');
 const { load, generate, switchMode, download } = require('./helpers/mode-transition.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { openBatch, openWithGenBank } = require('./helpers/audit-browser.cjs');
@@ -688,6 +689,50 @@ for (const mode of ['linear', 'circular']) {
     }
   });
 }
+
+// A saved Session file as JSON (gzip or plain).
+const readSession = bytes => JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8'));
+
+// OV-157 (R11): a row's Stroke options button only shows or hides its stroke
+// controls. It records no History step, and neither the Legend entries (which
+// History and the Session hold) nor the saved Session carry it; a stroke edit
+// made in it is still one step and is saved.
+test('M13 circular: Stroke options is a disclosure without a History step or a saved field', async ({ browser }, testInfo) => {
+  test.setTimeout(600_000);
+  const page = await loadGenerated(browser, 'circular');
+  try {
+    const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+    await page.locator('.drawer-toggle').click();
+    await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
+    const drawer = page.locator('.right-drawer');
+    const toggle = drawer.getByRole('button', { name: 'Stroke options' }).first();
+    const start = await undoCount();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(drawer.getByLabel('Legend stroke color').first()).toBeVisible();
+    await settleLive(page);
+    expect(await undoCount(), 'opening the stroke options records no step').toBe(start);
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.filter(e => Object.hasOwn(e, 'showStroke')).length),
+      'the Legend entries do not hold the disclosure').toBe(0);
+
+    await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.updateLegendEntryStrokeWidth(0, 2));
+    await settleLive(page);
+    expect(await undoCount(), 'a stroke width edit in it is one step').toBe(start + 1);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await settleLive(page);
+    expect(await undoCount(), 'closing it records no step').toBe(start + 1);
+
+    const caption = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries[0].caption);
+    const saved = readSession(await download(page, 'Save Session', testInfo.outputPath('stroke-options.gbdraw-session.json.gz')));
+    const { legend } = saved.editorState;
+    expect(legend.entries.filter(e => Object.hasOwn(e, 'showStroke')), 'the Session does not save the disclosure').toEqual([]);
+    expect(Number(legend.strokeOverrides[caption]?.strokeWidth), 'the stroke edit is saved').toBe(2);
+    expect(page.externalRequests).toEqual([]);
+  } finally {
+    await page.context().close();
+  }
+});
 
 test('L1-L8 generated legend categories reconcile while valid category and layout preferences survive', async ({ browser }, testInfo) => {
   test.setTimeout(1_800_000);
