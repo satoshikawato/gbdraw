@@ -1387,7 +1387,7 @@ const buildMatchSpans = (element, matchKind) => {
 const buildSequenceBundleForMatch = (element, matchKind, matchId, resolveSequenceSource) => {
   const spans = buildMatchSpans(element, matchKind);
   if (!spans.length) return null;
-  return buildMatchSequenceBundle(spans, {
+  const bundle = buildMatchSequenceBundle(spans, {
     matchId,
     resolveSequenceSource: (sourceKey, recordId, context) => {
       const resolved = typeof resolveSequenceSource === 'function'
@@ -1415,6 +1415,13 @@ const buildSequenceBundleForMatch = (element, matchKind, matchId, resolveSequenc
       span.identityValid ? '' : 'The sequence identity metadata for this match is invalid.'
     )
   });
+  // The span rows show input-file coordinates, as the Interval rows and the
+  // FASTA headers do (R5, CI-05); the bases are read on the displayed record.
+  bundle.entries = bundle.entries.map((entry, index) => {
+    const source = recordSourceInterval(spans[index].sourceSpan, entry.span.start, entry.span.end);
+    return source ? { ...entry, span: { ...entry.span, start: source.start, end: source.end } } : entry;
+  });
+  return bundle;
 };
 
 /**

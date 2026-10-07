@@ -9,6 +9,7 @@ import csv
 import io
 import logging
 import os
+import sys
 from pathlib import Path
 from typing import List
 
@@ -44,6 +45,18 @@ _INTEGER_COLUMNS = frozenset(
 # Producer diagnostics (gbdraw.web_support.error_adapter): identifiers and
 # 1-based line/column locators only, never a file name or cell value.
 _UNREADABLE = {"code": "INPUT_UNREADABLE", "field": "comparison"}
+# The outfmt 7 "# Fields:" names of the 12 standard columns; BLAST+ names the
+# IDs after the -outfmt specifier (qseqid "query id", qaccver "query acc.ver").
+_STANDARD_FIELD_NAMES = (
+    "query acc.ver", "subject acc.ver", "% identity", "alignment length", "mismatches",
+    "gap opens", "q. start", "q. end", "s. start", "s. end", "evalue", "bit score",
+)
+_FIELD_NAMES = {
+    **dict(zip(_STANDARD_FIELD_NAMES, COMPARISON_COLUMNS)),
+    **dict.fromkeys(("query id", "query acc.", "query gi"), "query"),
+    **dict.fromkeys(("subject id", "subject acc.", "subject gi"), "subject"),
+}
+_STANDARD_POSITIONS = tuple(range(len(COMPARISON_COLUMNS)))
 
 
 class _InvalidCell(Exception):
@@ -55,10 +68,9 @@ class _InvalidCell(Exception):
         self.column = column
         self.reason = reason
         self.detail = detail
-
-    @property
-    def column_number(self) -> int:
-        return COMPARISON_COLUMNS.index(self.column) + 1
+        # The 1-based column in the file; read_comparison_table sets it for a
+        # table read in the order of its "# Fields:" line.
+        self.column_number = COMPARISON_COLUMNS.index(column) + 1
 
     def location(self) -> str:
         return f"column {self.column_number} ({self.column})"
@@ -175,37 +187,77 @@ def _is_data_line(line: bytes) -> bool:
     return bool(text) and not text.startswith(b"#")
 
 
-def _short_row_error(name: str, line_number: int, field_count: int) -> ValidationError:
+def _short_row_error(name: str, line_number: int, field_count: int, required: int) -> ValidationError:
     return ValidationError(
-        f"{name}: line {line_number}: expected at least {len(COMPARISON_COLUMNS)} "
+        f"{name}: line {line_number}: expected at least {required} "
         f"tab-separated BLAST outfmt 6 columns; found {field_count}.",
         diagnostic={
             "code": "COMPARISON_INPUT",
             "reason": "FIELDS",
             "row": line_number,
-            "columnCount": len(COMPARISON_COLUMNS),
+            "columnCount": required,
         },
     )
 
 
-def _scan_lines(lines: list[bytes], name: str) -> tuple[list[int], int]:
-    """Return 0-based non-data line indexes and the widest data row (0 if none)."""
+def _field_positions(line: bytes, line_number: int, name: str) -> tuple[int, ...]:
+    """The 0-based file position of each standard column named by a "# Fields:" line.
+
+    A line that names every standard field gives their order (CI-07d). A line
+    whose recognized fields all sit at their standard positions keeps the
+    positional read; any other line would misread the table, so it fails.
+    """
+
+    names = line.strip()[len(b"# Fields:"):].decode("utf-8", "replace").split(",")
+    positions: dict[str, int] = {}
+    for position, field_name in enumerate(names):
+        column = _FIELD_NAMES.get(field_name.strip().lower())
+        if column is not None:
+            positions.setdefault(column, position)
+    if len(positions) == len(COMPARISON_COLUMNS):
+        return tuple(positions[column] for column in COMPARISON_COLUMNS)
+    if all(position == COMPARISON_COLUMNS.index(column) for column, position in positions.items()):
+        return _STANDARD_POSITIONS
+    missing = [label for column, label in zip(COMPARISON_COLUMNS, _STANDARD_FIELD_NAMES) if column not in positions]
+    raise ValidationError(
+        f"{name}: line {line_number}: the outfmt 7 '# Fields:' line lists the standard BLAST "
+        f"outfmt 6 fields in another order but lacks {', '.join(missing)}.",
+        diagnostic={"code": "COMPARISON_INPUT", "reason": "OUTFMT7_FIELDS", "row": line_number},
+    )
+
+
+def _scan_lines(lines: list[bytes], name: str) -> tuple[list[int], int, tuple[int, ...]]:
+    """Return non-data line indexes, the widest data row (0 if none), and column positions.
+
+    Indexes are 0-based; the positions come from the first outfmt 7 "# Fields:" line.
+    """
 
     skipped: list[int] = []
     widest = 0
+    positions: tuple[int, ...] | None = None
+    narrow_width, narrow_index = sys.maxsize, 0  # the narrowest data row
     for index, line in enumerate(lines):
         width = line.count(b"\t") + 1
         # Fast path: an ordinary data row needs no whitespace or comment check.
         if width >= len(COMPARISON_COLUMNS) and line[:1] not in _LINE_STARTS_NEEDING_CHECK:
             widest = max(widest, width)
+            if width < narrow_width:
+                narrow_width, narrow_index = width, index
             continue
         if not _is_data_line(line):
             skipped.append(index)
+            if positions is None and line.strip().startswith(b"# Fields:"):
+                positions = _field_positions(line, index + 1, name)
             continue
         if width < len(COMPARISON_COLUMNS):
-            raise _short_row_error(name, index + 1, width)
+            raise _short_row_error(name, index + 1, width, len(COMPARISON_COLUMNS))
         widest = max(widest, width)
-    return skipped, widest
+        if width < narrow_width:
+            narrow_width, narrow_index = width, index
+    positions = positions or _STANDARD_POSITIONS
+    if widest and narrow_width <= max(positions):
+        raise _short_row_error(name, narrow_index + 1, narrow_width, max(positions) + 1)
+    return skipped, widest, positions
 
 
 def read_comparison_table(
@@ -244,28 +296,31 @@ def read_comparison_table(
     lines = data.splitlines()
     if lines and lines[0].startswith(codecs.BOM_UTF8):
         lines[0] = lines[0][len(codecs.BOM_UTF8) :]
-    skipped, widest = _scan_lines(lines, name)
+    skipped, widest, positions = _scan_lines(lines, name)
     if not widest:
         return _empty_comparison_frame()
     if widest > len(COMPARISON_COLUMNS):
         logger.info(
-            "INFO: %s: using the first 12 BLAST outfmt 6 columns and ignoring %d extra column(s).",
+            "INFO: %s: using the 12 standard BLAST outfmt 6 columns and ignoring %d extra column(s).",
             name,
             widest - len(COMPARISON_COLUMNS),
         )
+    file_columns = [f"column_{position}" for position in range(max(positions) + 1)]
     try:
         raw = pd.read_csv(
             io.BytesIO(data),
             sep="\t",
             header=None,
-            names=COMPARISON_COLUMNS,
-            usecols=range(len(COMPARISON_COLUMNS)),
-            dtype={column: str for column in _ID_COLUMNS},
+            names=file_columns,
+            usecols=[file_columns[position] for position in positions],
+            dtype={file_columns[positions[index]]: str for index in range(len(_ID_COLUMNS))},
             na_filter=False,
             quoting=csv.QUOTE_NONE,
             skiprows=skipped or None,
             encoding="utf-8-sig",
         )
+        raw = raw.loc[:, [file_columns[position] for position in positions]]
+        raw.columns = list(COMPARISON_COLUMNS)
     except UnicodeError as exc:
         raise ValidationError(
             f"{name}: the comparison file could not be read: {exc}", diagnostic=_UNREADABLE
@@ -285,6 +340,7 @@ def read_comparison_table(
             (number for index, number in enumerate(data_line_numbers) if index == cell.row),
             cell.row + 1,
         )
+        cell.column_number = positions[COMPARISON_COLUMNS.index(cell.column)] + 1
         raise ValidationError(
             f"{name}: line {line_number}, {cell.location()}: {cell.detail}.",
             diagnostic=cell.diagnostic(line_number),

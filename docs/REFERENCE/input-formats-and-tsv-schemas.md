@@ -115,6 +115,11 @@ One records-table row represents one displayed record. A table uses either
 GenBank rows or GFF3/FASTA rows; it cannot mix the two forms. `record_id`
 selects from a multi-record source. A row-scoped `region` contains coordinates
 only and applies after selection. `reverse_complement` is a row-scoped boolean.
+The two apply in different orders: `region=1000-9000:rc` crops 1000..9000 of
+the record as stored in the file and then reverse-complements the crop, while
+`reverse_complement=1` reverse-complements the whole record first, so a
+`region` in the same row counts its coordinates on the reverse-complemented
+record. `--region` and `--reverse_complement` follow the same order.
 
 `order`, `row`, and `column` are positive integers. Explicit `order` values
 sort before blank values; equal values retain table order. When placement is

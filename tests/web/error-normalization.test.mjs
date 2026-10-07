@@ -572,3 +572,44 @@ test('a forced label that the diagram does not draw names the feature (OV-06)', 
   assert.deepEqual(roundtrip({ code: 'LABEL_NOT_DRAWN', context: { featureType: "5'UTR", featureStart: 1, featureEnd: 20000000 } }).context,
     { featureType: "5'UTR", featureStart: 1, featureEnd: 20000000 });
 });
+
+const producerSummary = (code, context = {}) => normalizeUserFacingError({ code, stage: 'helper', context }).summary;
+
+test('a region wholly beyond the record keeps the region correction (CI-01)', () => {
+  assert.equal(producerSummary('REGION_INVALID', { field: 'region', reason: 'RECORD_BOUNDS' }),
+    'The region is invalid. Field: region. Keep the region within the record length.');
+});
+
+test('a BLAST table error names its locator and correction, not the sequence-file sentence (CI-04)', () => {
+  assert.equal(producerSummary('COMPARISON_INPUT', { reason: 'FINITE', row: 2, column: 11 }),
+    'The comparison input is invalid. Line 2. Column 11. Use a finite number.');
+  assert.match(producerSummary('COMPARISON_INPUT', { reason: 'RECORD_ID', column: 1 }),
+    /^The comparison input is invalid\. Column 1\. A table row names another displayed record in this column\. Swap the query and subject columns/);
+  // A producer that names no reason keeps the comparison-source guidance.
+  assert.equal(producerSummary('COMPARISON_INPUT'),
+    'The comparison input is invalid. Supply a comparison sequence file (FASTA, GenBank, or DDBJ) or BLAST outfmt 6/7 as required.');
+});
+
+test('a comparison error names its record pair as the comparison panel does (CI-04)', () => {
+  assert.equal(producerSummary('COMPARISON_INPUT', { reason: 'FINITE', row: 2, column: 11, queryRecordIndex: 0, subjectRecordIndex: 1 }),
+    'The comparison input is invalid. Pair: #1 to #2. Line 2. Column 11. Use a finite number.');
+  // The locator is bounded like the other indexes and needs both endpoints.
+  assert.doesNotMatch(producerSummary('COMPARISON_INPUT', { reason: 'FINITE', queryRecordIndex: 0 }), /Pair/);
+  assert.doesNotMatch(producerSummary('COMPARISON_INPUT', { reason: 'FINITE', queryRecordIndex: -1, subjectRecordIndex: 1.5 }), /Pair/);
+});
+
+test('an Upload pair without its BLAST TSV names the missing file (CI-06)', () => {
+  assert.match(producerSummary('COMPARISON_INPUT', { reason: 'BLAST_TSV_REQUIRED' }), /Choose a BLAST TSV for this pair/);
+  assert.match(producerSummary('COMPARISON_INPUT', { reason: 'PAIR_TOPOLOGY' }), /adjacent rows/);
+});
+
+test('an outfmt 7 Fields line that cannot be read names the line (CI-07d)', () => {
+  assert.match(producerSummary('COMPARISON_INPUT', { reason: 'OUTFMT7_FIELDS', row: 2 }), /^The comparison input is invalid\. Line 2\. List all 12 standard/);
+});
+
+test('a GenBank slot file without records says what it looks like (UJ-07)', () => {
+  assert.equal(producerSummary('NO_RECORDS', { reason: 'FASTA_IN_GENBANK' }),
+    'No records were found. Choose input containing records. This file looks like FASTA. Use GFF3 + FASTA input, or a GenBank/DDBJ flat file.');
+  assert.match(producerSummary('NO_RECORDS', { reason: 'EMPTY_FILE' }), / The file is empty\.$/);
+  assert.match(producerSummary('NO_RECORDS', { reason: 'NOT_GENBANK' }), / The file is not a GenBank\/DDBJ flat file \(it has no LOCUS line\)\.$/);
+});

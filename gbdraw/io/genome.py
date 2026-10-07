@@ -24,6 +24,18 @@ logger = logging.getLogger(__name__)
 _UNREADABLE_INPUT = {"code": "INPUT_UNREADABLE"}
 
 
+def genbank_absence_diagnostic(path: str) -> dict[str, str]:
+    """The NO_RECORDS diagnostic of a GenBank/DDBJ file that has no record (UJ-07).
+
+    Its first non-blank line tells an empty file, a FASTA file, and other text apart.
+    """
+
+    with open(path, "rb") as handle:
+        first = next((line.strip() for line in handle if line.strip()), b"")
+    reason = "EMPTY_FILE" if not first else "FASTA_IN_GENBANK" if first.startswith(b">") else "NOT_GENBANK"
+    return {"code": "NO_RECORDS", "reason": reason}
+
+
 def _attach_source_annotations(record: SeqRecord, source_file: str) -> None:
     if getattr(record, "annotations", None) is None:
         record.annotations = {}

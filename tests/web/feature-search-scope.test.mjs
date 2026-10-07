@@ -220,3 +220,39 @@ test('match popup feature sections show the shared split location', () => {
   assert.deepEqual(query.featureRows.map((row) => row.location), ['3901..4000, 1..200 (+)']);
   assert.equal(createEmbeddedSearch('rich').locationText(rendered), '3901..4000, 1..200 (+)');
 });
+
+test('match popup span rows use the input-file coordinates of the Interval rows (CI-05)', () => {
+  // Record 0 is source 3000..8000 (crop); record 1 is source 1000..12000
+  // reverse-complemented. data-qstart/qend/sstart/send are record-local.
+  const groups = {
+    0: { 'data-gbdraw-record-source-start': '3000', 'data-gbdraw-record-source-end': '8000', 'data-gbdraw-record-source-step': '1' },
+    1: { 'data-gbdraw-record-source-start': '1000', 'data-gbdraw-record-source-end': '12000', 'data-gbdraw-record-source-step': '-1' }
+  };
+  const svg = { querySelector: (selector) => {
+    const group = groups[/data-gbdraw-record-index="(\d+)"/.exec(selector)?.[1] ?? ''];
+    return group ? { getAttribute: (name) => group[name] ?? null } : null;
+  } };
+  const attributes = {
+    'data-gbdraw-pairwise-match-id': 'm1', 'data-match-kind': 'pairwise', 'data-source-index': '0',
+    'data-query-record-id': 'Q', 'data-subject-record-id': 'S',
+    'data-query-record-index': '0', 'data-subject-record-index': '1',
+    'data-qstart': '1', 'data-qend': '4', 'data-sstart': '4', 'data-send': '1'
+  };
+  const sequences = { 'linear:record:0': 'ACGTACGT', 'linear:record:1': 'TTGGCCAA' };
+  const payload = buildMatchPopupPayload(
+    { ownerSVGElement: svg, style: { fill: '' }, getAttribute: (name) => attributes[name] || '' },
+    { resolveSequenceSource: (key) => ({ source: { recordId: key, sequence: sequences[key] } }) }
+  );
+  const rows = Object.fromEntries(payload.sections.flatMap((section) => section.rows).map((row) => [row.label, row.value]));
+  const spans = payload.sequenceBundle.entries.map(({ span }) => `${span.start}..${span.end}`);
+  assert.deepEqual(spans, [rows['Query interval'], rows['Subject interval']]);
+  assert.deepEqual(spans, ['3000..3003', '11997..12000']);
+  // The bases and the FASTA headers are unchanged.
+  assert.match(payload.sequenceBundle.entries[0].fasta, /coords=3000\.\.3003\|strand=\+\nACGT\n$/);
+  // A record shown as in its file (rotate only) keeps its coordinates.
+  const plain = buildMatchPopupPayload(
+    { ownerSVGElement: { querySelector: () => null }, style: { fill: '' }, getAttribute: (name) => attributes[name] || '' },
+    { resolveSequenceSource: (key) => ({ source: { recordId: key, sequence: sequences[key] } }) }
+  );
+  assert.deepEqual(plain.sequenceBundle.entries.map(({ span }) => `${span.start}..${span.end}`), ['1..4', '4..1']);
+});

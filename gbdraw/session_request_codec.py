@@ -3809,6 +3809,12 @@ def _decode_comparisons(
                 resource_paths=resource_paths,
             )
             if schema >= 2:
+                query_index = _non_negative_index(
+                    item["queryRecordIndex"], f"{path}.queryRecordIndex"
+                )
+                subject_index = _non_negative_index(
+                    item["subjectRecordIndex"], f"{path}.subjectRecordIndex"
+                )
                 # The resource text stays on the edge, so a re-saved Session
                 # writes the same nucleotideBlast resource.
                 try:
@@ -3817,15 +3823,14 @@ def _decode_comparisons(
                         StringIO(text), label=f"BLAST resource {item['resourceId']!r}"
                     )
                 except (OSError, UnicodeError, ValidationError) as exc:
+                    # The reader's diagnostic plus the record pair the Web names (CI-04).
+                    cause = getattr(exc, "diagnostic", None) or (
+                        None if isinstance(exc, ValidationError) else {"code": "INPUT_UNREADABLE", "field": "comparison"}
+                    )
                     raise CanonicalRequestDecodingError(
-                        f"Could not decode {path}: {exc}"
+                        f"Could not decode {path}: {exc}",
+                        diagnostic=cause and {**cause, "queryRecordIndex": query_index, "subjectRecordIndex": subject_index},
                     ) from exc
-                query_index = _non_negative_index(
-                    item["queryRecordIndex"], f"{path}.queryRecordIndex"
-                )
-                subject_index = _non_negative_index(
-                    item["subjectRecordIndex"], f"{path}.subjectRecordIndex"
-                )
                 explicit_comparisons.append(
                     LinearComparison(query_index, subject_index, table, search_frame_text=text)
                 )

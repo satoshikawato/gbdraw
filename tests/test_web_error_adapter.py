@@ -212,3 +212,35 @@ def test_unknown_config_path_keeps_correction_without_private_path():
     assert model['code'] == 'INPUT_INVALID'
     assert model['context'] == {'field': 'configOverrides', 'reason': 'UNKNOWN_CONFIG_PATH'}
     assert 'PRIVATE_' not in json.dumps(model)
+
+
+def test_undecodable_input_is_unreadable_not_unclassified_validation(helpers, tmp_path):
+    # CI-08: UnicodeDecodeError is a ValueError, so the validation flag hid the
+    # INPUT_UNREADABLE branch and a gzip GenBank read VALIDATION_UNCLASSIFIED.
+    error = UnicodeDecodeError('utf-8', b'\x1f\x8b', 0, 1, 'invalid start byte')
+    assert serialize_web_error(error, operation='listSequenceRecords', stage='helper')['code'] == 'INPUT_UNREADABLE'
+    wrapped = ValidationError('Could not decode PRIVATE')
+    wrapped.__cause__ = error
+    assert serialize_web_error(wrapped, operation='generate', stage='request-validation')['code'] == 'INPUT_UNREADABLE'
+    gzipped = tmp_path / 'PRIVATE.gbk'
+    gzipped.write_bytes(b'\x1f\x8b\x08\x00' + bytes(range(128, 256)))
+    result = json.loads(helpers['list_sequence_records'](str(gzipped), 'genbank'))
+    assert result['error'] == {'code': 'INPUT_UNREADABLE', 'operation': 'listSequenceRecords',
+                               'stage': 'helper', 'context': {}}
+
+
+@pytest.mark.parametrize(('content', 'reason'), [
+    (b'', 'EMPTY_FILE'),
+    (b'\n  \r\n', 'EMPTY_FILE'),
+    (b'\n>PRIVATE_ID description\nACGT\n', 'FASTA_IN_GENBANK'),
+    (b'<?xml version="1.0"?>\n<svg PRIVATE/>\n', 'NOT_GENBANK'),
+    (b'PRIVATE plain text\n', 'NOT_GENBANK'),
+])
+def test_a_genbank_slot_file_without_records_says_what_it_looks_like(helpers, tmp_path, content, reason):
+    # UJ-07: every file without a GenBank record read "No records were found".
+    path = tmp_path / 'PRIVATE.gbk'
+    path.write_bytes(content)
+    result = json.loads(helpers['list_sequence_records'](str(path), 'genbank'))
+    assert result['error'] == {'code': 'NO_RECORDS', 'operation': 'listSequenceRecords',
+                               'stage': 'helper', 'context': {'reason': reason}}
+    assert 'PRIVATE' not in json.dumps(result)
