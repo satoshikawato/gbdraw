@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="
@@ -87,7 +87,19 @@
             font-weight: 700;
             font-display: swap;
         }
-        body { font-family: 'Inter', 'Noto Sans JP', sans-serif; background-color: #f8fafc; color: #334155; }
+        /* Color tokens for the component rules (UI-01): one blue accent; green and red only for success and errors. */
+        :root {
+            --ui-page: #eef2f6;
+            --ui-surface: #ffffff;
+            --ui-text: #1e293b;
+            --ui-text-2: #334155;
+            --ui-muted: #64748b;
+            --ui-line: #e2e8f0;
+            --ui-line-strong: #cbd5e1;
+            --ui-accent: #2563eb;
+            --ui-accent-soft: #eff6ff;
+        }
+        body { font-family: 'Inter', 'Noto Sans JP', sans-serif; background-color: var(--ui-page); color: var(--ui-text-2); }
 
         /* Custom Scrollbar */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -95,14 +107,8 @@
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        .card { @apply bg-white p-3 rounded-xl shadow-sm border border-slate-200 mb-2 transition-all; }
-        .card-header { @apply text-lg font-bold mb-2 text-slate-700 flex items-center gap-2 border-b pb-2; }
-        .input-label { @apply block text-base font-bold text-slate-500 uppercase tracking-wider mb-0.5 flex items-center gap-1; }
-        .form-input { @apply w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2 transition-all; }
-        .form-checkbox { @apply w-5 h-5 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2; }
         input, select, textarea, button { font-family: inherit; }
         .help-tip { margin-left: 0.25rem; }
-        .input-label-sm { font-size: 10px; letter-spacing: 0.04em; }
         [v-cloak] { display: none !important; }
         #app-boot-splash {
             position: fixed;
@@ -154,12 +160,6 @@
         #app:not([v-cloak]) + #app-boot-splash {
             display: none;
         }
-        .adv-section-title { font-size: 10px; letter-spacing: 0.04em; }
-        .adv-options .input-label { font-size: 10px; letter-spacing: 0.04em; }
-        .adv-options .form-input { font-size: 10px; padding: 0.25rem 0.5rem; line-height: 1.2; }
-        .adv-options .form-input.text-xs { font-size: 10px; }
-        .form-input-compact { font-size: 10px; padding: 0.2rem 0.5rem; line-height: 1.2; height: 1.5rem; }
-        .adv-options .form-input-compact { font-size: 10px; padding: 0.2rem 0.5rem; line-height: 1.2; height: 1.5rem; }
         .track-slot-geometry-grid {
             display: grid;
             grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -218,14 +218,6 @@
             background: #ffffff;
             border-radius: 0.5rem;
         }
-        .auto-value-input {
-            display: block;
-            width: 100%;
-            box-sizing: border-box;
-            background: transparent;
-            position: relative;
-            z-index: 1;
-        }
         .auto-value-placeholder {
             position: absolute;
             inset: 0;
@@ -240,13 +232,6 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-        }
-        .track-slot-geometry-input {
-            height: 1.5rem;
-            padding-right: 1.55rem !important;
-            background: transparent;
-            position: relative;
-            z-index: 1;
         }
         .track-slot-pixel-field .track-slot-geometry-input::placeholder {
             color: transparent;
@@ -285,7 +270,6 @@
             pointer-events: none;
             z-index: 2;
         }
-        .basic-settings .input-label { font-size: 10px; letter-spacing: 0.04em; }
         .basic-settings .form-input { font-size: 10px; padding: 0.25rem 0.5rem; line-height: 1.2; }
         .basic-settings .form-input.text-xs { font-size: 10px; }
         .feature-popup {
@@ -1218,30 +1202,6 @@
             }
         }
 
-        .btn { @apply font-bold rounded-lg text-base px-4 py-2 shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2; }
-        .btn-primary { @apply text-white bg-blue-600 hover:bg-blue-700; }
-        .btn-secondary { @apply text-slate-700 bg-white border border-slate-300 hover:bg-slate-50; }
-        .btn-danger { @apply text-red-600 bg-white border border-red-200 hover:bg-red-50; }
-        .btn-sm { @apply px-2 py-1 text-xs; }
-        .btn-icon-sm { @apply inline-flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed; }
-
-        /* Highlighted Generate Button Style */
-        .btn-generate {
-            @apply text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 border-b-4 border-indigo-800 shadow-lg shadow-indigo-200;
-        }
-        .btn-generate:active { @apply border-b-0 translate-y-1; }
-
-        .upload-zone {
-            background-color: #fefce8;
-            @apply border-2 border-dashed border-slate-300 rounded-lg p-3 text-center cursor-pointer select-none hover:border-blue-500 hover:bg-blue-50 relative transition-colors flex flex-col items-center justify-center min-h-[60px];
-        }
-        .upload-zone.ready { @apply bg-green-50 border-green-500; }
-        .upload-zone:focus-visible {
-            outline: 2px solid #3b82f6;
-            outline-offset: 2px;
-            border-color: #3b82f6;
-        }
-
         .linear-primary-label {
             color: #475569;
             font-size: 0.875rem;
@@ -1301,12 +1261,6 @@
         }
         .settings-scroll { margin-bottom: 10rem; }
 
-        details > summary { @apply list-none cursor-pointer font-bold text-slate-600 hover:text-blue-600 transition-colors flex items-center gap-2 select-none text-xs; }
-        details > summary::-webkit-details-marker { display: none; }
-        details[open] > summary { @apply mb-2 text-blue-600; }
-        details > summary::before { content: ''; @apply w-4 h-4 bg-contain bg-no-repeat transition-transform duration-200; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9 18 15 12 9 6'%3E%3C/polyline%3E%3C/svg%3E"); }
-        details[open] > summary::before { transform: rotate(90deg); }
-
         .result-pane:has(.alignment-review-compact) {
             height: auto !important;
             min-height: 0 !important;
@@ -1322,6 +1276,55 @@
            During compact review, page scroll must expose its native controls. */
         @media (max-height: 32rem) {
             body:has(.alignment-review-compact) .app-header { position: relative; }
+        }
+    </style>
+    <style type="text/tailwindcss">
+        /* Component rules. Tailwind Play compiles @apply only in a typed style and emits this layer after the
+           plain style above, so a rule that refines a component sits here after the component it refines.
+           Utilities on an element still win over these rules. */
+        @layer components {
+            .card { @apply mb-2 rounded-xl border p-3 shadow-sm transition-all; background-color: var(--ui-surface); border-color: var(--ui-line); }
+
+            /* Type scale: card title, nested disclosure (details below), group heading, field label, hint. */
+            .card-header { @apply mb-2 flex items-center gap-2; font-size: 14px; font-weight: 600; color: var(--ui-text); }
+            .card-header > i { font-size: 16px; color: var(--ui-muted); }
+            .group-heading { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ui-muted); }
+            .input-label { @apply flex items-center gap-1; margin-bottom: 3px; font-size: 12px; font-weight: 500; line-height: 1.3; color: var(--ui-text-2); }
+            .ui-hint { font-size: 11px; line-height: 1.45; color: var(--ui-muted); }
+
+            .form-input { @apply block w-full rounded-lg border bg-slate-50 p-2 text-sm transition-all focus:border-blue-500 focus:ring-blue-500; border-color: var(--ui-line); color: var(--ui-text-2); }
+            /* After .form-input: its padding would clip the compact fields, and its background would hide
+               the "(auto)" value drawn behind a transparent input. */
+            .form-input-compact { font-size: 10px; padding: 0.2rem 0.5rem; line-height: 1.2; height: 1.5rem; }
+            .auto-value-input { display: block; width: 100%; box-sizing: border-box; background: transparent; position: relative; z-index: 1; }
+            .track-slot-geometry-input { height: 1.5rem; padding-right: 1.55rem !important; background: transparent; position: relative; z-index: 1; }
+            .form-checkbox { @apply h-4 w-4 rounded border-gray-300 bg-gray-100 text-blue-600 focus:ring-2 focus:ring-blue-500; }
+
+            /* Not text-base: its 24 px line height would survive a per-element text size. */
+            .btn { @apply flex items-center justify-center gap-2 rounded-lg px-4 py-2 font-bold shadow-sm transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50; font-size: 1rem; line-height: 1.25; }
+            .btn-primary { @apply text-white hover:bg-blue-700; background-color: var(--ui-accent); }
+            .btn-secondary { @apply border hover:bg-slate-50; color: var(--ui-text-2); background-color: var(--ui-surface); border-color: var(--ui-line-strong); }
+            .btn-danger { @apply border border-red-200 bg-white text-red-600 hover:bg-red-50; }
+            .btn-sm { @apply px-2 py-1 text-xs; }
+            .btn-icon-sm { @apply inline-flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed; }
+            .app-config-button { @apply flex items-center gap-0.5 rounded border px-1 py-0.5 font-bold transition-colors; font-size: 11px; color: #475569; background-color: var(--ui-surface); border-color: var(--ui-line); }
+            .app-config-button:hover:not(:disabled) { color: var(--ui-accent); border-color: var(--ui-accent); }
+
+            /* One row, about 32 px; neutral until a file is chosen. */
+            .upload-zone { @apply relative flex cursor-pointer select-none flex-col items-center justify-center text-center transition-colors; min-height: 2rem; padding: 6px 10px; border: 1px dashed var(--ui-line-strong); border-radius: 8px; background-color: #f8fafc; }
+            .upload-zone i { font-size: 15px; line-height: 1; }
+            .upload-zone:hover { border-color: var(--ui-accent); background-color: var(--ui-accent-soft); }
+            .upload-zone.ready { border-style: solid; border-color: #86efac; background-color: #f0fdf4; }
+            .upload-zone:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; border-color: #3b82f6; }
+
+            details > summary { @apply flex cursor-pointer select-none list-none items-center gap-2 transition-colors; font-size: 12px; font-weight: 600; line-height: 1.25; color: var(--ui-text-2); }
+            details > summary::-webkit-details-marker { display: none; }
+            details > summary::before { content: ''; @apply h-4 w-4 bg-contain bg-no-repeat transition-transform duration-200; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='9 18 15 12 9 6'%3E%3C/polyline%3E%3C/svg%3E"); }
+            details[open] > summary { @apply mb-2; }
+            details[open] > summary::before { transform: rotate(90deg); }
+            .card > details > summary { font-size: 14px; color: var(--ui-text); }
+            .card > details[open] > summary { margin-bottom: 10px; }
+            details > summary:hover { color: var(--ui-accent); }
         }
     </style>
 </head>
@@ -1351,21 +1354,21 @@
 
                 <div class="app-toolbar flex items-center gap-2 min-w-0">
                 <div class="app-history-actions flex gap-0.5">
-                    <button @click="undoHistory" :disabled="!canUndoHistory" data-history-ignore class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1.5 py-0.5 rounded border border-slate-200 bg-white flex items-center disabled:opacity-40 disabled:cursor-not-allowed" :title="undoHistoryTitle" aria-label="Undo">
+                    <button @click="undoHistory" :disabled="!canUndoHistory" data-history-ignore class="app-config-button px-1.5 disabled:opacity-40 disabled:cursor-not-allowed" :title="undoHistoryTitle" aria-label="Undo">
                         <i class="ph ph-arrow-u-up-left" aria-hidden="true"></i>
                     </button>
-                    <button @click="redoHistory" :disabled="!canRedoHistory" data-history-ignore class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1.5 py-0.5 rounded border border-slate-200 bg-white flex items-center disabled:opacity-40 disabled:cursor-not-allowed" :title="redoHistoryTitle" aria-label="Redo">
+                    <button @click="redoHistory" :disabled="!canRedoHistory" data-history-ignore class="app-config-button px-1.5 disabled:opacity-40 disabled:cursor-not-allowed" :title="redoHistoryTitle" aria-label="Redo">
                         <i class="ph ph-arrow-u-up-right" aria-hidden="true"></i>
                     </button>
                 </div>
                 <div class="app-file-actions ml-2 flex gap-0.5 border-l border-slate-300 pl-2">
-                    <button data-history-managed @click="resetSettings" class="app-config-button text-[11px] font-bold text-slate-500 hover:text-amber-700 px-1 py-0.5 rounded border border-amber-200 bg-amber-50 flex items-center gap-0.5" title="Reset Settings" aria-label="Reset Settings" :disabled="!semanticMutationAvailable">
+                    <button data-history-managed @click="resetSettings" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" title="Reset Settings" aria-label="Reset Settings" :disabled="!semanticMutationAvailable">
                         <i class="ph ph-arrow-clockwise" aria-hidden="true"></i> Reset Settings
                     </button>
-                    <button data-history-ignore @click="saveSessionWithTitle" :disabled="!sessionSaveAvailable" :aria-busy="sessionSavePending" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5 disabled:opacity-40 disabled:cursor-wait" title="Save the current Result and settings draft without generating" aria-label="Save Session" aria-describedby="session-save-help">
+                    <button data-history-ignore @click="saveSessionWithTitle" :disabled="!sessionSaveAvailable" :aria-busy="sessionSavePending" class="app-config-button disabled:opacity-40 disabled:cursor-wait" title="Save the current Result and settings draft without generating" aria-label="Save Session" aria-describedby="session-save-help">
                         <i :class="sessionSavePending ? 'ph ph-spinner animate-spin' : 'ph ph-archive'" aria-hidden="true"></i> Save Session
                     </button>
-                    <button data-history-managed @click="$refs.sessionInput.click()" :disabled="!sessionLoadAvailable" :aria-busy="sessionImportPending" class="app-config-button text-[11px] font-bold text-slate-600 hover:text-blue-700 px-1 py-0.5 rounded border border-blue-200 bg-blue-50 flex items-center gap-0.5 disabled:opacity-40 disabled:cursor-not-allowed" title="Load Session" aria-label="Load Session">
+                    <button data-history-managed @click="$refs.sessionInput.click()" :disabled="!sessionLoadAvailable" :aria-busy="sessionImportPending" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" title="Load Session" aria-label="Load Session">
                         <i class="ph ph-archive-tray" aria-hidden="true"></i> Load Session
                     </button>
                     <input data-history-managed type="file" ref="sessionInput" accept=".json,.gz,application/json,application/gzip" class="hidden" @change="importSession">
@@ -1397,9 +1400,9 @@
 
             <div class="settings-scroll flex-grow overflow-y-auto custom-scrollbar pr-2 pb-4 space-y-2">
 
-                <div class="card border-l-4 border-l-blue-500">
+                <div class="card">
                     <div class="card-header min-w-0">
-                        <i class="ph ph-folder-open text-xl" aria-hidden="true"></i>
+                        <i class="ph ph-folder-open" aria-hidden="true"></i>
                         <span class="min-w-0 flex-1">Input Genomes</span>
                     </div>
 
@@ -1441,14 +1444,14 @@
                                         :value="option.value"
                                     >{{ option.label }}</option>
                                 </select>
-                                <p v-if="form.multi_record_canvas" class="mt-1 text-[9px] text-slate-500">Multi-Record Canvas uses a grid. Turn it off to select one record.</p>
+                                <p v-if="form.multi_record_canvas" class="ui-hint mt-1">Multi-Record Canvas uses a grid. Turn it off to select one record.</p>
                                 <p v-else-if="circularRecordPresentationError" class="mt-1 text-[9px] text-red-600">{{ circularRecordPresentationError }}</p>
                                 <button v-if="form.multi_record_canvas" type="button" data-history-ignore @click="showCircularCanvasSetting" class="mt-1 text-xs text-blue-600">Show Multi-Record Canvas setting</button>
-                                <p v-if="!form.multi_record_canvas && circularRecordDiscoveryState.status === 'ready' && !circularSingleRecordPresentationEnabled" class="mt-1 text-[9px] text-slate-500">Select one record to edit crop, orientation, and title lines.</p>
+                                <p v-if="!form.multi_record_canvas && circularRecordDiscoveryState.status === 'ready' && !circularSingleRecordPresentationEnabled" class="ui-hint mt-1">Select one record to edit crop, orientation, and title lines.</p>
                             </div>
                         </section>
                         <section aria-label="Record rotation" class="space-y-2">
-                            <p class="text-[10px] text-slate-500">Applies on Generate: record rotation.</p>
+                            <p class="ui-hint">Applies on Generate: record rotation.</p>
                             <record-display-control v-for="row in recordDisplayControls.rowsFor('circular')" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
                         </section>
                         <details ref="circularRecordPresentationPanel" data-circular-record-presentation class="rounded border border-slate-200 bg-white/70 p-2">
@@ -1897,8 +1900,8 @@
                                     <help-tip :id="`help-linear-region-${seq.uid}`" text="Show only a sub-region (1-based, inclusive). For multi-record files, specify the record ID or #index."></help-tip>
                                 </div>
                                 <div class="grid grid-cols-1 gap-2">
-                                    <div class="grid grid-cols-2 gap-2 items-end">
-                                        <div class="min-w-0">
+                                    <div class="flex flex-wrap items-end gap-2">
+                                        <div class="min-w-0 flex-1 basis-24">
                                             <label class="text-[9px] block">Record (optional)</label>
                                             <select
                                                 :value="seq.region_record_id"
@@ -1922,7 +1925,7 @@
                                                 {{ linearRecordSelectorWarning(seq) }}
                                             </p>
                                         </div>
-                                        <label class="flex min-w-0 items-center gap-2 text-[10px] text-slate-600 pb-1">
+                                        <label class="flex shrink-0 items-center gap-2 text-[10px] text-slate-600 pb-1">
                                             <input type="checkbox"
                                                    v-model="seq.region_reverse"
                                                    :aria-label="`Reverse complement for sequence ${idx + 1}`"
@@ -2488,7 +2491,7 @@
                     </div>
                 </div>
 
-                <div v-if="mode === 'linear'" data-linear-advanced-comparison class="card bg-slate-50/50">
+                <div v-if="mode === 'linear'" data-linear-advanced-comparison class="card">
                     <details data-linear-comparison-disclosure="advanced">
                         <summary role="button" aria-label="Advanced comparison and layout"><i class="ph ph-gear-six" aria-hidden="true"></i> Advanced comparison and layout</summary>
                         <div class="mt-2 min-w-0 space-y-4 border-t border-slate-200 pt-3">
@@ -2625,7 +2628,7 @@
                     </details>
                 </div>
 
-                <div class="card bg-slate-50/50">
+                <div class="card">
                     <details>
                         <summary aria-label="Region Annotations"><i class="ph ph-brackets-curly" aria-hidden="true"></i> Region Annotations <help-tip text="Highlights render automatically behind the feature track. Line, Bracket, and Band render in a separate annotation lane. Custom Track Slots can override this automatic placement."></help-tip></summary>
                         <div class="mt-2 space-y-2 pt-2 border-t border-slate-200">
@@ -2707,7 +2710,7 @@
                     </details>
                 </div>
 
-                <div v-if="mode === 'circular'" class="card bg-slate-50/50">
+                <div v-if="mode === 'circular'" class="card">
                     <details>
                         <summary aria-label="Pairwise Comparisons"><i class="ph ph-arrows-left-right" aria-hidden="true"></i> Pairwise Comparisons <help-tip text="Draw one circular pairwise comparison ring per uploaded BLAST outfmt 6/7 file or browser LOSATN/TLOSATX comparison sequence file (FASTA, GenBank, or DDBJ). Reverse BLAST coordinates are shown as reverse hits, not origin-spanning hits."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
@@ -2901,7 +2904,7 @@
                 </div>
 
 
-                <div class="card bg-slate-50/50">
+                <div class="card">
                     <details :open="mode === 'linear'">
                         <summary aria-label="Layout"><i class="ph ph-layout" aria-hidden="true"></i> Layout <help-tip text="Control track placement and layout-related options."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
@@ -3706,13 +3709,13 @@
                     </details>
                 </div>
 
-                <div class="card bg-slate-50/50">
+                <div class="card">
                     <details>
                         <summary aria-label="Titles and Record Labels"><i class="ph ph-textbox" aria-hidden="true"></i> Titles &amp; Record Labels <help-tip text="Adjust the plot title and record-label text."></help-tip></summary>
                         <p class="mt-2 text-[10px] text-slate-500">Applies on Generate: plot title and record-label settings.</p>
                         <div class="mt-2 space-y-4 pt-2 border-t border-slate-200">
                             <section aria-labelledby="plot-title-settings-heading" class="space-y-2">
-                                <h4 id="plot-title-settings-heading" class="text-[11px] font-bold text-slate-600">Plot Title</h4>
+                                <h4 id="plot-title-settings-heading" class="group-heading">Plot Title</h4>
                                 <div>
                                     <span class="input-label text-[10px] mb-1">
                                         Text
@@ -3749,7 +3752,7 @@
                             </section>
 
                             <section aria-labelledby="record-label-settings-heading" class="space-y-2 border-t border-slate-200 pt-3">
-                                <h4 id="record-label-settings-heading" class="text-[11px] font-bold text-slate-600">Record Labels</h4>
+                                <h4 id="record-label-settings-heading" class="group-heading">Record Labels</h4>
                                 <div>
                                     <span class="input-label text-[10px] mb-0">Default font size <help-tip id="help-title-default-font-size" text="Font size for record-label text (species/strain in circular; organism/replicon/accession/length stack in linear)."></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.def_font_size, 'definitionFontSize')" :text="autoValueText('definitionFontSize')">
@@ -3802,7 +3805,7 @@
                     </details>
                 </div>
 
-                <div class="card bg-slate-50/50">
+                <div class="card">
                     <details>
                         <summary aria-label="Legend settings"><i class="ph ph-list-bullets" aria-hidden="true"></i> Legend · {{ legendPositionLabel(form.legend) }} <help-tip text="Adjust legend position and typography."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
@@ -3839,17 +3842,17 @@
                     </details>
                 </div>
 
-                <div class="card bg-slate-50/50">
+                <div class="card">
                     <details>
                         <summary aria-label="Colors"><i class="ph ph-palette" aria-hidden="true"></i> Colors <help-tip text="Customize palettes, default colors, and specific color rules."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="bg-blue-50/60 border border-blue-200 rounded-lg p-3">
                                 <div class="flex items-center justify-between mb-2">
-                                    <h4 class="text-[11px] font-bold text-slate-600" aria-label="PRESET SCHEMES">PRESET SCHEMES <help-tip id="help-colors-preset-schemes" text="Applies both default colors (-d) and specific rules (-t)."></help-tip></h4>
+                                    <h4 class="group-heading" aria-label="PRESET SCHEMES">PRESET SCHEMES <help-tip id="help-colors-preset-schemes" text="Applies both default colors (-d) and specific rules (-t)."></help-tip></h4>
                                     <span class="text-[9px] font-semibold text-blue-600">Affects -d &amp; -t</span>
                                 </div>
                                 <div class="flex items-center gap-2">
-                                    <select v-model="selectedSpecificPreset" aria-label="Preset scheme" aria-describedby="help-colors-preset-schemes" class="form-input text-xs h-7 flex-grow bg-white">
+                                    <select v-model="selectedSpecificPreset" aria-label="Preset scheme" aria-describedby="help-colors-preset-schemes" class="form-input text-xs h-7 py-1 flex-grow bg-white">
                                         <option disabled value="">Select preset...</option>
                                         <option v-for="p in specificRulePresets" :value="p.id">{{ p.label }}</option>
                                     </select>
@@ -3864,7 +3867,7 @@
 
                             <div>
                                 <div class="flex justify-between items-center mb-2">
-                                    <h4 class="text-[11px] font-bold text-slate-500" aria-label="DEFAULT COLORS">DEFAULT COLORS <help-tip text="Base colors for features, comparison tracks, and collinear blocks. The selected palette supplies unchanged colors; colors you edit override it."></help-tip></h4>
+                                    <h4 class="group-heading" aria-label="DEFAULT COLORS">DEFAULT COLORS <help-tip text="Base colors for features, comparison tracks, and collinear blocks. The selected palette supplies unchanged colors; colors you edit override it."></help-tip></h4>
                                     <button @click="resetColors" class="text-[10px] text-blue-600 hover:underline" :disabled="!semanticMutationAvailable">Reset</button>
                                 </div>
                                 <div class="mb-2 p-2 bg-slate-50 rounded border border-slate-200 space-y-1.5">
@@ -3923,7 +3926,7 @@
                             <div data-history-managed>
                                 <p v-if="ruleMatchingPending" role="status" class="text-xs text-slate-500">Checking color rules…</p>
                                 <div class="flex items-center justify-between mb-2">
-                                    <h4 class="text-[11px] font-bold text-slate-500" aria-label="SPECIFIC RULES (-t)">SPECIFIC RULES (-t) <help-tip text="Color features matching qualifier values with case-insensitive Python regex. Examples: (?i)NADH and (?P&lt;name&gt;NADH). Choose a suggested qualifier or type any qualifier name."></help-tip></h4>
+                                    <h4 class="group-heading" aria-label="SPECIFIC RULES (-t)">SPECIFIC RULES (-t) <help-tip text="Color features matching qualifier values with case-insensitive Python regex. Examples: (?i)NADH and (?P&lt;name&gt;NADH). Choose a suggested qualifier or type any qualifier name."></help-tip></h4>
                                     <div v-if="manualSpecificRules.length > 0" class="flex items-center gap-2">
                                         <button @click="downloadSpecificRulesTsv" class="text-[10px] text-blue-600 hover:text-blue-700 hover:underline"><i class="ph ph-download-simple" aria-hidden="true"></i> TSV</button>
                                         <button @click="clearAllSpecificRules" class="text-[10px] text-red-500 hover:text-red-700 hover:underline" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i> Clear All</button>
@@ -3958,8 +3961,8 @@
                                             <p class="mt-1">Save Session and Generate use the last accepted rule. Export uses the current Result. This draft is not saved.</p>
                                             <operation-error v-if="specificRulePatternDraft(rule).error" :error="specificRulePatternDraft(rule).error" class="mt-2"></operation-error>
                                             <div class="mt-2 flex flex-wrap gap-2">
-                                                <button type="button" @click="retrySpecificRulePattern(rule)" :disabled="!semanticMutationAvailable || specificRulePatternDraft(rule).pending" class="btn-secondary text-xs">Retry</button>
-                                                <button type="button" :disabled="!semanticMutationAvailable" @pointerdown.prevent @click="revertSpecificRulePattern(rule, $event.currentTarget.closest('[data-color-rule-row]').querySelector('input[data-history-ignore]'))" class="btn-secondary text-xs">Revert</button>
+                                                <button type="button" @click="retrySpecificRulePattern(rule)" :disabled="!semanticMutationAvailable || specificRulePatternDraft(rule).pending" class="btn btn-secondary btn-sm">Retry</button>
+                                                <button type="button" :disabled="!semanticMutationAvailable" @pointerdown.prevent @click="revertSpecificRulePattern(rule, $event.currentTarget.closest('[data-color-rule-row]').querySelector('input[data-history-ignore]'))" class="btn btn-secondary btn-sm">Revert</button>
                                             </div>
                                         </div>
                                     </div>
@@ -3996,12 +3999,12 @@
                     </details>
                 </div>
 
-                <div class="card bg-slate-50/50">
+                <div class="card">
                     <details>
                         <summary aria-label="Features"><i class="ph ph-shapes" aria-hidden="true"></i> Features <help-tip text="Choose each feature type's rendering. Underlay removes it from feature lanes and labels, then highlights the full feature track behind foreground features."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div>
-                                <span class="input-label adv-section-title">Feature Types <help-tip id="help-feature-feature-types" text="Select which feature types to draw."></help-tip></span>
+                                <span class="input-label">Feature Types <help-tip id="help-feature-feature-types" text="Select which feature types to draw."></help-tip></span>
                                 <div class="flex flex-wrap gap-1.5 mb-1.5 p-1.5 bg-slate-50 rounded border border-slate-200 min-h-[30px]">
                                     <span v-for="f in adv.features" :key="f" class="inline-flex items-center gap-1 text-[10px] bg-white text-blue-700 px-2 py-1 rounded border border-blue-200 shadow-sm">
                                         <span class="font-medium">{{ f }}</span>
@@ -4033,7 +4036,7 @@
                             </div>
 
                             <div class="bg-slate-50 p-2 rounded border border-slate-200">
-                                <span class="input-label adv-section-title">Arrow Geometry <help-tip id="help-feature-arrow-geometry" text="Head length and shaft width apply to Arrow features and remain available even when no feature currently uses that rendering."></help-tip></span>
+                                <span class="input-label">Arrow Geometry <help-tip id="help-feature-arrow-geometry" text="Head length and shaft width apply to Arrow features and remain available even when no feature currently uses that rendering."></help-tip></span>
                                 <div class="grid grid-cols-2 gap-2">
                                     <div>
                                         <span class="input-label text-[10px]">Head Length Ratio <help-tip id="help-feature-head-length-ratio" text="Head length divided by the full rendered feature thickness. Leave blank for Auto. Auto starts from the mode-specific default and lengthens the head as the shaft narrows."></help-tip></span>
@@ -4066,7 +4069,7 @@
 
                             <div>
                                 <div class="flex items-center justify-between gap-2 mb-1.5">
-                                    <span class="input-label adv-section-title mb-0">Feature Visibility <help-tip id="help-feature-feature-visibility" text="Rules are evaluated from top to bottom. Off hides the feature and excludes it from protein comparisons; Exclude from matching keeps it visible but omits it from protein comparisons."></help-tip></span>
+                                    <span class="input-label mb-0">Feature Visibility <help-tip id="help-feature-feature-visibility" text="Rules are evaluated from top to bottom. Off hides the feature and excludes it from protein comparisons; Exclude from matching keeps it visible but omits it from protein comparisons."></help-tip></span>
                                     <div class="flex items-center gap-2">
                                         <button
                                             v-if="featureVisibilityRules.length > 0"
@@ -4133,7 +4136,7 @@
                             </div>
 
                             <div>
-                                <span class="input-label adv-section-title">Feature Appearance <help-tip id="help-feature-feature-appearance" text="Adjust feature dimensions and the stroke color and width for feature blocks and intron lines."></help-tip></span>
+                                <span class="input-label">Feature Appearance <help-tip id="help-feature-feature-appearance" text="Adjust feature dimensions and the stroke color and width for feature blocks and intron lines."></help-tip></span>
                                 <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
                                     <div v-if="mode === 'linear'" class="grid grid-cols-2 gap-1.5">
                                         <div>
@@ -4204,7 +4207,7 @@
                     </details>
                 </div>
 
-                <div class="card bg-slate-50/50">
+                <div class="card">
                     <details>
                         <summary aria-label="Labels"><i class="ph ph-text-t" aria-hidden="true"></i> Labels <help-tip text="Control label visibility, filtering, text settings, and circular label geometry."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
@@ -4231,7 +4234,7 @@
                                 class="space-y-3"
                             >
                                 <div>
-                                    <h4 class="text-[11px] font-bold text-slate-500 mb-2" aria-label="LABEL FILTERING">LABEL FILTERING <help-tip text="Control which feature labels are displayed using Blacklist or Whitelist. Whitelist patterns use case-insensitive Python regex search, matching the -t color table semantics."></help-tip></h4>
+                                    <h4 class="group-heading mb-2" aria-label="LABEL FILTERING">LABEL FILTERING <help-tip text="Control which feature labels are displayed using Blacklist or Whitelist. Whitelist patterns use case-insensitive Python regex search, matching the -t color table semantics."></help-tip></h4>
                                     <div class="flex gap-2 mb-2">
                                         <button v-for="m in ['None', 'Blacklist', 'Whitelist']" @click="setLabelFilterMode(m)" :disabled="!semanticMutationAvailable" :class="filterMode===m ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border'" class="flex-1 py-1 rounded text-xs font-bold transition-colors">{{m}}</button>
                                     </div>
@@ -4258,7 +4261,7 @@
                                 </div>
 
                                 <div class="pt-3 border-t border-slate-100">
-                                    <h4 class="text-[11px] font-bold text-slate-500 mb-2" aria-label="QUALIFIER PRIORITY">QUALIFIER PRIORITY <help-tip text="Define label priority order (e.g. CDS -> product,gene,locus_tag)."></help-tip></h4>
+                                    <h4 class="group-heading mb-2" aria-label="QUALIFIER PRIORITY">QUALIFIER PRIORITY <help-tip text="Define label priority order (e.g. CDS -> product,gene,locus_tag)."></help-tip></h4>
 
                                     <div class="space-y-1 mb-3">
                                         <div v-for="(rule, i) in manualPriorityRules" :key="i" class="flex items-center gap-1 bg-white p-1 rounded border border-slate-200 text-[10px]">
@@ -4389,7 +4392,7 @@
                                 </div>
 
                                 <div v-if="mode === 'circular' && adv.circular_label_placement !== 'radial'" class="pt-3 border-t border-slate-100">
-                                    <h4 class="text-[11px] font-bold text-slate-500 mb-2" aria-label="LABEL GEOMETRY">LABEL GEOMETRY <help-tip text="Adjust radius offset factors for circular labels."></help-tip></h4>
+                                    <h4 class="group-heading mb-2" aria-label="LABEL GEOMETRY">LABEL GEOMETRY <help-tip text="Adjust radius offset factors for circular labels."></help-tip></h4>
                                     <div class="grid grid-cols-2 gap-1.5">
                                         <div>
                                             <label class="input-label text-[10px]">Outer X Offset</label>
@@ -4428,7 +4431,7 @@
                     </details>
                 </div>
 
-                <div v-if="mode === 'linear'" class="card bg-slate-50/50">
+                <div v-if="mode === 'linear'" class="card">
                     <details>
                         <summary aria-label="Axis &amp; Scale"><i class="ph ph-ruler" aria-hidden="true"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings plus the linear scale bar or ruler style."></help-tip></summary>
                         <p class="mt-2 text-[10px] text-slate-500">Applies on Generate: scale visibility, style, interval, label sizes, and axis and scale line colors and widths.</p>
@@ -4568,7 +4571,7 @@
                     </details>
                 </div>
 
-                <div v-if="mode === 'circular'" class="card bg-slate-50/50">
+                <div v-if="mode === 'circular'" class="card">
                     <details>
                         <summary aria-label="Axis &amp; Scale"><i class="ph ph-paint-brush" aria-hidden="true"></i> Axis &amp; Scale <help-tip text="Adjust axis stroke settings and the circular scale interval."></help-tip></summary>
                         <p class="mt-2 text-[10px] text-slate-500">Applies on Generate: scale visibility, interval, label sizes, and axis line colors and widths.</p>
@@ -4636,7 +4639,7 @@
                     </details>
                 </div>
 
-                <div class="card bg-slate-50/50">
+                <div class="card">
                     <details>
                         <summary aria-label="Dinucleotide content/skew"><i class="ph ph-dna" aria-hidden="true"></i> Dinucleotide content/skew <help-tip text="Adjust dinucleotide content/skew calculation parameters and GC/skew track sizing."></help-tip></summary>
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
@@ -4758,7 +4761,7 @@
                 </div>
 
 
-                <div class="card bg-slate-50/50">
+                <div class="card">
                     <details>
                         <summary><i class="ph ph-info" aria-hidden="true"></i> About & Citation</summary>
                         <div class="mt-4 space-y-4 pt-4 border-t border-slate-200 text-xs text-slate-600">
@@ -4845,44 +4848,44 @@
                 :error="errorLog" :recovery="errorDisplay.operation === 'generate' || errorDisplay.operation === 'align' ? generationFailureRecovery : null"
                 class="card border-l-4 border-l-red-500 bg-red-50 mb-0 shrink-0">
                 <div class="mt-2 flex flex-wrap gap-2">
-                    <button v-if="errorDisplay.operation === 'generate' && errorDisplay.actions.includes('retry')" type="button" @click="runAnalysis" :disabled="processing" class="btn-secondary text-xs">Retry Generate</button>
-                    <button v-if="canRetryAuxiliaryImportFailure" type="button" @click="retryAuxiliaryImportFailure" :disabled="!semanticMutationAvailable" class="btn-secondary text-xs">Retry table import</button>
-                    <button v-if="canRetryLabelImportFailure" type="button" @click="retryLabelImportFailure" class="btn-secondary text-xs">Retry Label TSV import</button>
-                    <button v-if="canRetryLabelImportFailure" type="button" @click="editLabelImportFailure" class="btn-secondary text-xs">Reselect Label TSV</button>
-                    <button v-if="canRetryFeatureEditTableImport" type="button" @click="retryFeatureEditTableImport" class="btn-secondary text-xs">Retry Feature Edits TSV import</button>
-                    <button v-if="canRetryFeatureEditTableImport" type="button" @click="reselectFeatureEditTable" class="btn-secondary text-xs">Reselect Feature Edits TSV</button>
-                    <button v-if="canRetrySpecificRuleFailure" type="button" @click="retrySpecificRuleFailure" :disabled="!semanticMutationAvailable" class="btn-secondary text-xs">Retry rule operation</button>
+                    <button v-if="errorDisplay.operation === 'generate' && errorDisplay.actions.includes('retry')" type="button" @click="runAnalysis" :disabled="processing" class="btn btn-secondary btn-sm">Retry Generate</button>
+                    <button v-if="canRetryAuxiliaryImportFailure" type="button" @click="retryAuxiliaryImportFailure" :disabled="!semanticMutationAvailable" class="btn btn-secondary btn-sm">Retry table import</button>
+                    <button v-if="canRetryLabelImportFailure" type="button" @click="retryLabelImportFailure" class="btn btn-secondary btn-sm">Retry Label TSV import</button>
+                    <button v-if="canRetryLabelImportFailure" type="button" @click="editLabelImportFailure" class="btn btn-secondary btn-sm">Reselect Label TSV</button>
+                    <button v-if="canRetryFeatureEditTableImport" type="button" @click="retryFeatureEditTableImport" class="btn btn-secondary btn-sm">Retry Feature Edits TSV import</button>
+                    <button v-if="canRetryFeatureEditTableImport" type="button" @click="reselectFeatureEditTable" class="btn btn-secondary btn-sm">Reselect Feature Edits TSV</button>
+                    <button v-if="canRetrySpecificRuleFailure" type="button" @click="retrySpecificRuleFailure" :disabled="!semanticMutationAvailable" class="btn btn-secondary btn-sm">Retry rule operation</button>
                     <button v-if="canEditSpecificRuleFailure && errorDisplay.actions.includes('edit-pattern')" type="button" @click="editSpecificRuleFailure" class="btn-secondary text-xs">Edit pattern</button>
                     <button v-if="errorDisplay.actions.includes('generate') && errorDisplay.operation !== 'generate'" type="button" @click="runAnalysis" :disabled="processing" class="btn-secondary text-xs">Generate</button>
                     <button v-if="(errorDisplay.actions.includes('save-session') && errorDisplay.operation !== 'session-save') || generationFailureRecovery === 'restore-failed'" type="button" @click="saveSessionWithTitle" :disabled="sessionImportPending" class="btn-secondary text-xs">Save Session</button>
-                    <button v-if="generationFailureRecovery === 'restore-failed' || errorDisplay.actions.includes('reload')" type="button" @click="reloadAfterOperationError" class="btn-secondary text-xs">Reload</button>
-                    <button v-if="errorDisplay.operation.startsWith('export-') && errorDisplay.actions.includes('use-svg')" type="button" @click="downloadSVG" class="btn-secondary text-xs">Use SVG</button>
-                    <button v-if="errorDisplay.operation === 'export-svg' && !canRetryInteractiveSvgExport && errorDisplay.actions.includes('retry')" type="button" @click="downloadSVG" class="btn-secondary text-xs">Retry SVG export</button>
-                    <button v-if="canRetryInteractiveSvgExport && errorDisplay.actions.includes('retry')" type="button" @click="downloadInteractiveSVG" class="btn-secondary text-xs">Retry Interactive SVG export</button>
-                    <button v-if="errorDisplay.operation === 'export-png' && errorDisplay.actions.includes('retry')" type="button" @click="downloadPNG" class="btn-secondary text-xs">Retry PNG export</button>
-                    <button v-if="errorDisplay.operation === 'export-pdf' && errorDisplay.actions.includes('retry')" type="button" @click="downloadPDF" class="btn-secondary text-xs">Retry PDF export</button>
+                    <button v-if="generationFailureRecovery === 'restore-failed' || errorDisplay.actions.includes('reload')" type="button" @click="reloadAfterOperationError" class="btn btn-secondary btn-sm">Reload</button>
+                    <button v-if="errorDisplay.operation.startsWith('export-') && errorDisplay.actions.includes('use-svg')" type="button" @click="downloadSVG" class="btn btn-secondary btn-sm">Use SVG</button>
+                    <button v-if="errorDisplay.operation === 'export-svg' && !canRetryInteractiveSvgExport && errorDisplay.actions.includes('retry')" type="button" @click="downloadSVG" class="btn btn-secondary btn-sm">Retry SVG export</button>
+                    <button v-if="canRetryInteractiveSvgExport && errorDisplay.actions.includes('retry')" type="button" @click="downloadInteractiveSVG" class="btn btn-secondary btn-sm">Retry Interactive SVG export</button>
+                    <button v-if="errorDisplay.operation === 'export-png' && errorDisplay.actions.includes('retry')" type="button" @click="downloadPNG" class="btn btn-secondary btn-sm">Retry PNG export</button>
+                    <button v-if="errorDisplay.operation === 'export-pdf' && errorDisplay.actions.includes('retry')" type="button" @click="downloadPDF" class="btn btn-secondary btn-sm">Retry PDF export</button>
                 </div>
             </operation-error>
 
-            <div v-if="results.length > 0" role="region" aria-label="Result Preview" :class="{ 'alignment-review-compact': similarityAlignmentCompact && similarityAlignmentDialogOpen }" class="card border-2 border-green-100 ring-4 ring-green-50/50 flex flex-col flex-grow overflow-hidden relative">
-                <div class="card-header bg-green-50/50 -m-4 mb-0 p-3 pl-5 pr-6 border-green-100 flex justify-between items-center shrink-0 flex-wrap gap-2">
+            <div v-if="results.length > 0" role="region" aria-label="Result Preview" :class="{ 'alignment-review-compact': similarityAlignmentCompact && similarityAlignmentDialogOpen }" class="card p-0 flex flex-col flex-grow overflow-hidden relative">
+                <div class="card-header mb-0 py-2 pl-5 pr-6 border-b border-slate-200 flex justify-between items-center shrink-0 flex-wrap gap-x-2 gap-y-1">
                     <div class="flex items-center gap-3 flex-wrap min-w-0">
-                        <h2 class="text-green-600 flex items-center gap-2 text-base font-bold min-w-0">
-                            <i class="ph ph-check-circle text-xl shrink-0" aria-hidden="true"></i>
+                        <h2 class="flex items-center gap-2 text-[15px] font-semibold text-slate-800 min-w-0">
+                            <i class="ph ph-check-circle text-xl text-green-600 shrink-0" aria-hidden="true"></i>
                             <span v-if="failedGeneratePreservedResult">Last Successful Result</span>
                             <span v-else-if="results.length === 1">Result Preview</span>
                             <span v-else>
-                                <select data-history-ignore :disabled="!semanticMutationAvailable" :value="selectedResultIndex" @change="selectResult($event.target.value)" aria-label="Displayed Result" class="bg-white border border-green-300 text-green-700 text-sm font-bold rounded py-1 px-2 cursor-pointer focus:ring-2 focus:ring-green-500 max-w-full">
+                                <select data-history-ignore :disabled="!semanticMutationAvailable" :value="selectedResultIndex" @change="selectResult($event.target.value)" aria-label="Displayed Result" class="bg-white border border-slate-300 text-slate-800 text-sm font-semibold rounded py-1 px-2 cursor-pointer focus:ring-2 focus:ring-blue-500 max-w-full">
                                     <option v-for="(res, idx) in results" :key="idx" :value="idx">Preview: {{ res.name }}</option>
                                 </select>
                             </span>
                         </h2>
-                        <div class="result-tabs inline-flex items-center gap-1 rounded border border-green-200 bg-white p-1">
+                        <div class="result-tabs inline-flex items-center gap-1 rounded border border-slate-200 bg-white p-0.5">
                             <button type="button"
                                     @click="resultPanelTab = 'preview'"
                                     :class="[
                                       'px-3 py-1.5 text-xs font-bold rounded flex items-center gap-1',
-                                      resultPanelTab === 'preview' ? 'bg-green-100 text-green-800' : 'text-slate-500 hover:bg-slate-50'
+                                      resultPanelTab === 'preview' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50'
                                     ]"
                                     :aria-pressed="resultPanelTab === 'preview'">
                                 <i class="ph ph-image" aria-hidden="true"></i>
@@ -4893,7 +4896,7 @@
                                     :disabled="!lastRunInfo"
                                     :class="[
                                       'px-3 py-1.5 text-xs font-bold rounded flex items-center gap-1',
-                                      resultPanelTab === 'run-info' ? 'bg-green-100 text-green-800' : 'text-slate-500 hover:bg-slate-50',
+                                      resultPanelTab === 'run-info' ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50',
                                       !lastRunInfo ? 'opacity-50 cursor-not-allowed hover:bg-transparent' : ''
                                     ]"
                                     :aria-pressed="resultPanelTab === 'run-info'">
@@ -4903,10 +4906,10 @@
                         </div>
                     </div>
                     <span id="session-export-help" class="sr-only">Save stores the current Result and settings draft. Export outputs the current Result. Neither applies pending settings.</span>
-                    <div v-if="resultPanelTab === 'preview'" class="preview-toolbar flex gap-2 items-center flex-wrap mr-2" aria-describedby="session-export-help">
+                    <div v-if="resultPanelTab === 'preview'" class="preview-toolbar flex gap-x-2 gap-y-1 items-center flex-wrap mr-2" aria-describedby="session-export-help">
                         <p id="preview-layout-help" class="basis-full text-xs text-slate-600">Turn on Layout edit to move a legend, title, or Linear scale. When off, drag to pan. Use the Layout edit button with click, tap, Space, or Enter.</p>
-                        <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded border border-green-200">
-                            <span class="text-sm font-bold text-green-700">DPI</span>
+                        <div class="flex items-center gap-2 bg-white px-3 py-1 rounded border border-slate-300">
+                            <span class="text-sm font-bold text-slate-700">DPI</span>
                             <select v-model="downloadDpi" aria-label="PNG DPI" class="text-sm bg-transparent border-none focus:ring-0 p-0 text-slate-600 font-mono outline-none cursor-pointer">
                                 <option value="72">72 (Web)</option>
                                 <option value="96">96 (Screen)</option>
@@ -4915,10 +4918,10 @@
                                 <option value="600">600 (High)</option>
                             </select>
                         </div>
-                        <button type="button" aria-label="SVG" @click="downloadSVG" aria-describedby="session-export-help" class="btn btn-secondary text-sm" title="Download a static SVG for publication and conversion workflows"><i class="ph ph-download-simple" aria-hidden="true"></i> SVG</button>
-                        <button @click="downloadInteractiveSVG" aria-describedby="session-export-help" class="btn btn-secondary text-sm" title="Browser-oriented SVG with embedded controls. Rich Feature Popup controls how much feature detail is embedded."><i class="ph ph-cursor-click" aria-hidden="true"></i> Interactive SVG</button>
-                        <button @click="downloadPNG" aria-describedby="session-export-help" class="btn btn-primary text-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> PNG</button>
-                        <button @click="downloadPDF" aria-describedby="session-export-help" class="btn btn-secondary text-sm"><i class="ph ph-file-pdf" aria-hidden="true"></i> PDF</button>
+                        <button type="button" aria-label="SVG" @click="downloadSVG" aria-describedby="session-export-help" class="btn btn-secondary px-3 py-1 text-sm" title="Download a static SVG for publication and conversion workflows"><i class="ph ph-download-simple" aria-hidden="true"></i> SVG</button>
+                        <button @click="downloadInteractiveSVG" aria-describedby="session-export-help" class="btn btn-secondary px-3 py-1 text-sm" title="Browser-oriented SVG with embedded controls. Rich Feature Popup controls how much feature detail is embedded."><i class="ph ph-cursor-click" aria-hidden="true"></i> Interactive SVG</button>
+                        <button @click="downloadPNG" aria-describedby="session-export-help" class="btn btn-secondary px-3 py-1 text-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> PNG</button>
+                        <button @click="downloadPDF" aria-describedby="session-export-help" class="btn btn-secondary px-3 py-1 text-sm"><i class="ph ph-file-pdf" aria-hidden="true"></i> PDF</button>
                     </div>
                 </div>
 
@@ -7664,8 +7667,8 @@
                 <summary class="cursor-pointer text-xs font-semibold text-red-700">Details</summary>
                 <textarea ref="diagnosticText" :value="diagnostics" readonly aria-label="Safe diagnostics" rows="5" class="mt-2 w-full min-w-0 resize-y rounded border border-red-100 bg-white p-2 font-mono text-xs text-red-800" data-history-ignore></textarea>
                 <div class="mt-2 flex flex-wrap gap-2">
-                    <button type="button" @click="copyDiagnostics" class="btn-secondary text-xs">Copy diagnostics</button>
-                    <button type="button" @click="selectDiagnostics" class="btn-secondary text-xs">Select diagnostics</button>
+                    <button type="button" @click="copyDiagnostics" class="btn btn-secondary btn-sm">Copy diagnostics</button>
+                    <button type="button" @click="selectDiagnostics" class="btn btn-secondary btn-sm">Select diagnostics</button>
                 </div>
                 <p role="status" aria-live="polite" class="mt-1 text-xs text-red-800">{{ copyStatus }}</p>
             </details>
@@ -7676,7 +7679,7 @@
 <script type="text/x-template" id="help-tip-template">
     <span class="help-tip inline-block align-text-bottom">
         <button type="button" ref="trigger" data-history-ignore
-                class="help-tip-trigger inline-flex text-slate-400 hover:text-blue-500 focus-visible:text-blue-600 cursor-help rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
+                class="help-tip-trigger inline-flex text-slate-500 hover:text-blue-500 focus-visible:text-blue-600 cursor-help rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600"
                 :aria-label="label || name" :aria-describedby="descriptionId" :aria-expanded="visible"
                 @pointerenter="onEnter" @pointerleave="onLeave" @focus="onFocus" @blur="close"
                 @click.stop.prevent="toggle" @keydown.esc.stop="close">
@@ -7694,12 +7697,12 @@
 <script type="text/x-template" id="file-uploader-template">
     <div class="w-full" data-history-managed role="group" :aria-label="($attrs['data-input-aria-label'] || label) + ' selection'">
         <div class="flex justify-between items-end mb-1">
-            <label :class="['input-label mb-0', small ? 'input-label-sm' : '']">{{ label }}</label>
+            <label class="input-label mb-0">{{ label }}</label>
             <button v-if="hasSelection" @click.stop="clearFile" :disabled="!uploadAvailable" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash" aria-hidden="true"></i> Remove</button>
         </div>
         <div
-            class="upload-zone cursor-pointer"
-            :class="{'ready': hasSelection, 'py-0.5 min-h-[30px]': small}"
+            class="upload-zone"
+            :class="{'ready': hasSelection}"
             role="button"
             :tabindex="uploadAvailable ? 0 : -1"
             :aria-disabled="!uploadAvailable"
@@ -7709,12 +7712,12 @@
             @keydown.space.prevent="uploadAvailable && $refs.input.click()"
         >
             <input type="file" ref="input" :multiple="multiple" :disabled="!uploadAvailable" :accept="accept || '.gb,.gbk,.gbff,.genbank,.ddbj,.gff,.gff3,.fa,.fas,.fasta,.fna,.ffn,.faa,.tsv,.tab,.txt,.out,.blast,text/plain,text/tab-separated-values,text/*'" :aria-label="$attrs['data-input-aria-label'] || label" @change="handleFile" :data-testid="testId || undefined" class="hidden">
-            <div v-if="!hasSelection" class="flex items-center justify-center gap-2 text-slate-400 group-hover:text-blue-600 transition-colors">
-                <i class="ph ph-upload-simple" :class="small ? 'text-base' : 'text-xl'" aria-hidden="true"></i>
+            <div v-if="!hasSelection" class="flex items-center justify-center gap-1.5 text-slate-500">
+                <i class="ph ph-upload-simple" aria-hidden="true"></i>
                 <span :class="small ? 'text-[10px]' : 'text-xs font-bold'">Click to Browse</span>
             </div>
-            <div v-else class="text-green-700 font-bold truncate w-full px-2 flex items-center justify-center gap-2" :class="small ? 'text-[10px]' : 'text-xs'">
-                <i class="ph ph-check-circle text-lg" aria-hidden="true"></i>
+            <div v-else class="text-green-700 font-bold truncate w-full px-2 flex items-center justify-center gap-1.5" :class="small ? 'text-[10px]' : 'text-xs'">
+                <i class="ph ph-check-circle" aria-hidden="true"></i>
                 <span>{{ selectedLabel }}</span>
             </div>
         </div>
