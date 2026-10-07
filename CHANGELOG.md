@@ -24,6 +24,12 @@ write-up of a release.
 - Legend editor (web app): Generate draws the Legend with a row added in the Legend
   editor where the add placed it. Before, Generate moved the added row away from the
   other rows, in Linear past the right edge of the canvas, where its caption was cut.
+- Result names (web app): a live edit that redraws a loaded Session's Result (such
+  as a Legend color, or Undo or Redo of a color step) keeps the Result's saved name.
+  Before, the redraw renamed it after the **Output prefix** (a Gallery Session's
+  `HmmtDNA_basic_circular` became `out.svg`), so **SVG**, **PNG** and **PDF**
+  downloaded `out.*` and **Save Session** saved the new name. Generate still names
+  its Results after the **Output prefix**.
 - Legend names (web app): Generate no longer fails with "The generated result
   could not be accepted" after a **Depth** row renamed in the Legend is hidden by
   **Show Depth**, in Linear and Circular. The row is not drawn; as for a renamed GC

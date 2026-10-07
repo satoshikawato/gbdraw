@@ -501,6 +501,38 @@ test('canonical execution carries the Worker comparison table ID warnings to the
   );
 });
 
+test('a rerender admits the Results it draws again under their kept names (OV-136)', async () => {
+  const admitted = [];
+  const outcome = await executeCanonicalRenderCandidate({
+    canonical: { renderRequest: { schema: 7 }, resources: {} },
+    mode: 'circular',
+    kind: 'reflow',
+    resultNames: ['HmmtDNA_basic_circular'],
+    generationExecutor: async () => ({
+      results: [{ name: 'out.svg', content: '<svg/>' }],
+      metadata: {
+        featureCatalog: { items: [{ resultIndex: 0, resultName: 'out.svg' }] },
+        annotationWarnings: [{
+          code: 'empty_span', setId: 's', annotationId: 'a', recordId: 'NC_012920.1', recordIndex: 0,
+          missingCount: 0, message: 'Empty span.', resultIndex: 0, resultName: 'out.svg'
+        }]
+      }
+    }),
+    catalogAdmission: (catalog, results) => {
+      admitted.push({ items: catalog.items, names: results.map((result) => result.name) });
+      return { catalog };
+    },
+    prepareCommit: ({ generationResponse }) => ({ results: generationResponse.results })
+  });
+  assert.equal(outcome.status, 'ok');
+  assert.deepEqual(admitted, [{
+    items: [{ resultIndex: 0, resultName: 'HmmtDNA_basic_circular' }],
+    names: ['HmmtDNA_basic_circular']
+  }]);
+  assert.deepEqual(outcome.commit.results.map((result) => result.name), ['HmmtDNA_basic_circular']);
+  assert.equal(outcome.annotationWarnings[0].resultName, 'HmmtDNA_basic_circular');
+});
+
 test('audit-5 owner: direct simple createRunAnalysis path is worker-only and catalog-transactional', async () => {
   const structuralMetrics = {};
   const lifecycleEvents = [];
