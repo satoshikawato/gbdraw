@@ -402,3 +402,9 @@ None blocks. The Owner may want to override these delegated choices:
   files. The largest are `services/session-request.js` 582,
   `services/config.js` 466, `app/app-setup.js` 406, `app/run-analysis.js` 404,
   and `app/circular-track-slots.js` 397. The final report measures it again.
+- Outcome (Owner decision of 2026-10-07): phase 4 is deferred to v0.15.0.
+  Until then, `tests/web/no-implicit-any-ratchet.test.mjs` caps the
+  `noImplicitAny` count of the whole tree at 7,951 (dev `6602ad30`). It is
+  one number, not one per module: a count per module would read each `git mv`
+  of the layering pull requests B to D as an expansion (D21). Phase 4 replaces
+  the cap with a count per module after layering D.
