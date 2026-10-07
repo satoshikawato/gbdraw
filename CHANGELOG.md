@@ -12,6 +12,10 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Specific color rules (web app): a rule added or edited while an automatic
+  rerender is updating the diagram is applied once the rerendered diagram is
+  ready. Before, it could be dropped without a message when the diagram finished
+  updating during the edit.
 - Color names (CLI and Python API): `seashell` now resolves to `#FFF5EE`, the CSS
   color, so the CLI draws it as the Web app does. Before, it resolved to `#2E8B57`
   (seagreen). `rebeccapurple` (`#663399`) is now accepted. The other 146 CSS color

@@ -183,7 +183,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // The automatic rerender replaces the Results the candidate was prepared
   // against, which makes the candidate stale (#857). An edit made while one runs
   // waits for it and, when it replaced the Results under an unchanged rule
-  // table, prepares again instead of dropping the edit.
+  // table, prepares again instead of dropping the edit. The rerender is idle
+  // before the binder has read the Result it wrote, so a preparation can also
+  // go stale on that binding with the Results unchanged (OV-166): any change
+  // of the inputs the candidate was prepared from counts, unless another
+  // commit, the caller, or a Session operation superseded this one.
   /** @returns {Promise<void>} */
   const rerenderIdle = () => (state.labelReflowProcessing?.value
     ? new Promise((resolve) => {
@@ -233,9 +237,15 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     for (let attempt = 0; ; attempt += 1) {
       const results = state.results.value;
       const table = JSON.stringify(manualSpecificRules);
+      const inputs = rulePreparation.snapshot();
+      const revision = preparationRevision;
       const outcome = await commitOnce(rules, label, options);
-      if (outcome || attempt === 2 || state.results.value === results
-        || JSON.stringify(manualSpecificRules) !== table) return outcome;
+      const stale = state.results.value !== results || !rulePreparation.isCurrent(inputs);
+      if (outcome || attempt === 2 || !stale
+        || JSON.stringify(manualSpecificRules) !== table
+        || preparationRevision !== revision + 1
+        || options.isCurrent?.() === false
+        || state.sessionOperationAvailability?.()) return outcome;
       await rerenderIdle();
     }
   };
