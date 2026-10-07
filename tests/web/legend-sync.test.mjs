@@ -87,7 +87,10 @@ assert.match(configSource, /skipCaptureBaseConfig\.value = true;\s+applyResultsD
 const sessionLegendSyncSource = appSetupSource.match(
   /adoptLegend\(context\)[\s\S]*?\n    bindComposition/
 )?.[0] || '';
-assert.match(sessionLegendSyncSource, /extractLegendEntries\(\{\s*replaceGeneratedInventory: !selecting && \(!context\.bindingOptions\.isIncrementalEdit/);
+assert.match(
+  sessionLegendSyncSource,
+  /const drawn = !context\.bindingOptions\.isIncrementalEdit\s*\|\| Boolean\(context\.bindingOptions\.replaceGeneratedLegend\);[\s\S]+extractLegendEntries\(\{\s*replaceGeneratedInventory: !selecting && drawn,/
+);
 assert.doesNotMatch(sessionLegendSyncSource, /initPyodide|addLegendEntry|removeLegendEntry/);
 assert.doesNotMatch(appSetupSource, /restoreLoadedSessionLegendEntries/);
 assert.match(configSource, /entries: normalizeSessionLegendEntries\(legend\.entries\)/);
