@@ -5,6 +5,7 @@ import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor
 import { DiagramGenerationCanceledError } from '../../gbdraw/web/js/services/diagram-generation.js';
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
 import { ruleMatchesFeature } from '../../gbdraw/web/js/services/rule-matchers.js';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const nativeEvaluate = async payload => {
   const response = JSON.parse(execFileSync(process.env.PYTHON || 'python', ['-c', `
@@ -35,14 +36,14 @@ const setup = ({ features = [{ type: 'CDS', svg_id: 'one', qualifiers: { product
   const calls = [], history = [];
   let available = true;
   let finalize = async () => {};
-  const preparation = createRulePreparation({ state, evaluate: payload => { calls.push(payload.kind); return evaluate(payload); } });
+  const preparation = createRulePreparation({ state: withDrawings(state), evaluate: payload => { calls.push(payload.kind); return evaluate(payload); } });
   const transact = async (label, commit) => {
     const before = JSON.stringify(state.manualSpecificRules);
     await commit();
     if (before !== JSON.stringify(state.manualSpecificRules)) history.push(label);
     await finalize();
   };
-  const actions = createFeatureRuleActions({ state, ref: value => ({ value }), computed: get => ({ get value() { return get(); } }),
+  const actions = createFeatureRuleActions({ state: withDrawings(state), ref: value => ({ value }), computed: get => ({ get value() { return get(); } }),
     rulePreparation: preparation, isPatternEditAvailable: () => available, nextTick: async () => {},
     runUndoableCheckpoint: transact, runUndoable: transact,
     prepareFileLegendEntries: async (_, { isCurrent }) => isCurrent() && {

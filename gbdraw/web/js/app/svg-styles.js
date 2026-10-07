@@ -69,14 +69,9 @@ export const createSvgStyles = ({
     extractedFeatures,
     featuresBySvgId,
     appliedPaletteColors,
-    manualSpecificRules,
-    featureColorOverrides,
-    legendColorOverrides,
     pairwiseMatchFactors,
     svgContainer,
-    adv,
-    mode,
-    form
+    mode
   } = state;
 
   const updatePairwiseLegendGradientStops = (pairwiseLegend, colors) => {
@@ -100,11 +95,12 @@ export const createSvgStyles = ({
     recolorPairwise = false,
     recolorCollinear = false
   } = {}) => {
+    const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
     if (!svgContent.value || !extractedFeatures.value.length) return;
     if (!svgContainer.value) return;
-    if (!ruleMatchesReady(extractedFeatures.value, manualSpecificRules)) return;
+    if (!ruleMatchesReady(extractedFeatures.value, drawing.manualSpecificRules)) return;
 
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -123,11 +119,11 @@ export const createSvgStyles = ({
       const paletteColor = colors[feat.type] || colors.default;
       if (!paletteColor) return;
       // A declined live match keeps the color Generate drew (R4).
-      if (ruleMatchDeclined(feat, manualSpecificRules)) return;
+      if (ruleMatchDeclined(feat, drawing.manualSpecificRules)) return;
 
-      const hasSpecificRule = manualSpecificRules.some((rule) => ruleMatchesFeature(feat, rule));
+      const hasSpecificRule = drawing.manualSpecificRules.some((rule) => ruleMatchesFeature(feat, rule));
 
-      if (!hasSpecificRule && !getFeatureOverride(featureColorOverrides, feat)) {
+      if (!hasSpecificRule && !getFeatureOverride(drawing.featureColorOverrides, feat)) {
         const currentFill = path.getAttribute('fill');
         if (currentFill !== paletteColor) {
           path.setAttribute('fill', paletteColor);
@@ -159,11 +155,11 @@ export const createSvgStyles = ({
       skewGroups.forEach((skewGroup) => {
         const slotId = String(skewGroup.getAttribute('data-gbdraw-slot-id') || '').trim();
         const customSlotsEnabled = mode.value === 'circular'
-          ? adv.circular_track_slots_enabled
-          : adv.linear_track_slots_enabled;
+          ? drawing.adv.circular_track_slots_enabled
+          : drawing.adv.linear_track_slots_enabled;
         const slots = mode.value === 'circular'
-          ? adv.circular_track_slots
-          : adv.linear_track_slots;
+          ? drawing.adv.circular_track_slots
+          : drawing.adv.linear_track_slots;
         const slot = customSlotsEnabled && Array.isArray(slots)
           ? slots.find((candidate) => (
               candidate?.enabled !== false &&
@@ -308,7 +304,7 @@ export const createSvgStyles = ({
         entryGroups.forEach((entryGroup) => {
           const legendKey = entryGroup.getAttribute('data-legend-key');
           if (!legendKey) return;
-          if (legendColorOverrides[legendKey]) return;
+          if (drawing.legendColorOverrides[legendKey]) return;
 
           const newColor = resolveLegendColor(legendKey, colors);
           if (!newColor) return;
@@ -328,7 +324,7 @@ export const createSvgStyles = ({
         texts.forEach((textEl) => {
           const textContent = textEl.textContent?.trim();
           if (!textContent) return;
-          if (legendColorOverrides[textContent]) return;
+          if (drawing.legendColorOverrides[textContent]) return;
 
           const newColor = resolveLegendColor(textContent, colors);
           if (!newColor) return;
@@ -370,12 +366,13 @@ export const createSvgStyles = ({
   };
 
   const applySpecificRulesToSvg = () => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!svgContent.value || !extractedFeatures.value.length) return;
-    if (!manualSpecificRules.length) return;
+    if (!drawing.manualSpecificRules.length) return;
     if (!svgContainer.value) return;
-    if (!ruleMatchesReady(extractedFeatures.value, manualSpecificRules)) return;
+    if (!ruleMatchesReady(extractedFeatures.value, drawing.manualSpecificRules)) return;
 
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -386,9 +383,9 @@ export const createSvgStyles = ({
     extractedFeatures.value.forEach((feat) => {
       if (!feat.svg_id) return;
       // A declined live match keeps the color Generate drew (R4).
-      if (ruleMatchDeclined(feat, manualSpecificRules)) return;
+      if (ruleMatchDeclined(feat, drawing.manualSpecificRules)) return;
 
-      const matchingRule = firstMatchingRule(feat, manualSpecificRules);
+      const matchingRule = firstMatchingRule(feat, drawing.manualSpecificRules);
 
       const elements = getFeatureFillElements(svg, feat.svg_id, featureElementIndex);
       if (elements.length > 0) {
@@ -411,6 +408,7 @@ export const createSvgStyles = ({
   };
 
   const applyTrackVisibility = () => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!svgContent.value) return;
@@ -427,7 +425,7 @@ export const createSvgStyles = ({
       ['dinucleotide_content']
     );
     if (gcContentGroups.length > 0) {
-      const shouldHide = mode.value === 'circular' ? form.suppress_gc : !form.show_gc;
+      const shouldHide = mode.value === 'circular' ? drawing.form.suppress_gc : !drawing.form.show_gc;
       gcContentGroups.forEach((gcContentGroup) => {
         const currentDisplay = gcContentGroup.getAttribute('display');
         if (shouldHide && currentDisplay !== 'none') {
@@ -446,7 +444,7 @@ export const createSvgStyles = ({
       ['dinucleotide_skew']
     );
     if (skewGroups.length > 0) {
-      const shouldHide = mode.value === 'circular' ? form.suppress_skew : !form.show_skew;
+      const shouldHide = mode.value === 'circular' ? drawing.form.suppress_skew : !drawing.form.show_skew;
       skewGroups.forEach((skewGroup) => {
         const currentDisplay = skewGroup.getAttribute('display');
         if (shouldHide && currentDisplay !== 'none') {
@@ -461,7 +459,7 @@ export const createSvgStyles = ({
 
     const depthGroups = getGroupsByBaseIds(svg, ['depth'], ['depth']);
     if (depthGroups.length > 0) {
-      const shouldHide = !form.show_depth;
+      const shouldHide = !drawing.form.show_depth;
       depthGroups.forEach((depthGroup) => {
         const currentDisplay = depthGroup.getAttribute('display');
         if (shouldHide && currentDisplay !== 'none') {
@@ -507,7 +505,10 @@ export const createSvgStyles = ({
   );
 
   watch(
-    () => [form.suppress_gc, form.suppress_skew, form.show_gc, form.show_skew, form.show_depth],
+    () => {
+      const drawing = state.activeDrawing();
+      return [drawing.form.suppress_gc, drawing.form.suppress_skew, drawing.form.show_gc, drawing.form.show_skew, drawing.form.show_depth];
+    },
     () => {
       if (state.semanticFileWatchersSuppressed?.value || state.sessionOperationAvailability?.()) return;
       applyTrackVisibility();

@@ -67,14 +67,14 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
     mode_profiles_source = (WEB_ROOT / "js" / "mode-profiles.js").read_text(encoding="utf-8")
     resolver = mode_profiles_source.split("export const resolveComparisonThresholds", 1)[1]
     assert "comparisonFiltersForMode(mode)" in resolver.split("export const", 1)[0]
-    assert "resolveComparisonThresholds(adv, 'circular')" in run_source
-    assert "resolveComparisonThresholds(adv, 'linear')" in run_source
+    assert "resolveComparisonThresholds(drawing.adv, 'circular')" in run_source
+    assert "resolveComparisonThresholds(drawing.adv, 'linear')" in run_source
     assert "normalizeBlastThreshold" not in run_source
-    assert "resolveComparisonThresholds(state.adv, state.mode.value)" in request_source
+    assert "resolveComparisonThresholds(drawing.adv, state.mode.value)" in request_source
     assert "comparisonFiltersForMode('linear')" in run_source
     assert not (WEB_ROOT / "js" / "app" / "cli-args.js").exists()
     assert "effectiveLinearAxisColor({" in request_source
-    assert "state.modeProfileStateManager?.isManaged?." in request_source
+    assert "drawing.modeProfileStateManager?.isManaged?." in request_source
     blast_config = SimpleNamespace()
     color_modes = configure_pairwise_identity_legend_from_comparisons(
         blast_config,

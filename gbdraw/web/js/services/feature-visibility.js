@@ -409,16 +409,17 @@ export const splitLegacyVisibilityRules = (rules) => {
 // request's diagram options (a label rerender keeps the last Generate's); the
 // edits and rules are the current ones, which a label rerender and Generate
 // both carry.
-export const featureDrawnContext = (state, {
+/** @param {Record<string, any>} drawing The drawing whose edits and rules decide. */
+export const featureDrawnContext = (drawing, {
   diagramOptions = /** @type {{ selectedFeaturesSet?: unknown } | null} */ (null),
-  featureOverrides = state?.featureOverrides
+  featureOverrides = drawing?.featureOverrides
 } = {}) => ({
   featureOverrides: featureOverrides || {},
-  rules: requestFeatureVisibilityRules(state?.featureVisibilityManualRules),
+  rules: requestFeatureVisibilityRules(drawing?.featureVisibilityManualRules),
   selectedTypes: Array.isArray(diagramOptions?.selectedFeaturesSet)
     ? new Set(diagramOptions.selectedFeaturesSet.map(String))
     : null,
-  colorRules: Array.isArray(state?.manualSpecificRules) ? state.manualSpecificRules : []
+  colorRules: Array.isArray(drawing?.manualSpecificRules) ? drawing.manualSpecificRules : []
 });
 
 // "Is this feature drawn?" as Generate answers it

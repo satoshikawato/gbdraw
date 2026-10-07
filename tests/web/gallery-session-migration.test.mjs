@@ -204,6 +204,7 @@ const cliNextComparisonSnapshot = resolveLinearComparisonPlan({
 });
 const cliNextWebRequest = buildCanonicalRenderRequest({
   state: webState,
+  drawing: webState.activeDrawing(),
   filesData: cliEditorProjection.files,
   comparisonPlanSnapshot: cliNextComparisonSnapshot
 });

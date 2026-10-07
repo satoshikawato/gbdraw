@@ -121,13 +121,13 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
           )));
           assert.deepEqual(state.linearComparisonPlan, { mode: 'none', defaultSource: 'losat', edges: [] });
           assert.notEqual(state.losatProgram.value, 'blastp');
-          const filesData = await serializeActiveRenderFiles('linear', state);
+          const filesData = await serializeActiveRenderFiles('linear', state, state.activeDrawing());
           const comparisonPlanSnapshot = resolveLinearComparisonPlan({
             plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
             losatProgram: state.losatProgram.value, blastpMode: state.losat.blastp.mode
           });
           assert.equal(comparisonPlanSnapshot.hasLosatIntent, false);
-          const candidate = buildCanonicalRenderRequest({ state, filesData, comparisonPlanSnapshot });
+          const candidate = buildCanonicalRenderRequest({ state, drawing: state.activeDrawing(), filesData, comparisonPlanSnapshot });
           assert.deepEqual(candidate.renderRequest.comparisons, []);
         }
         const projectedFiles = mode === 'linear' ? state.linearSeqs.map(seq => seq.gb)
@@ -209,9 +209,10 @@ await test('a multi-record CLI Linear BLAST Session inherits its comparison onto
     assert.equal(state.importedComparisonIntent.disposition, 'PRESERVED_READ_ONLY');
     assertNoReplacementDraft();
     // The candidate Generate builds after Inherit (run-analysis.js: empty plan, committed comparison).
-    const filesData = await serializeActiveRenderFiles('linear', state);
+    const filesData = await serializeActiveRenderFiles('linear', state, state.activeDrawing());
     const candidate = buildCanonicalRenderRequest({
       state,
+      drawing: state.activeDrawing(),
       filesData: { ...filesData, linearCanonicalComparisons: [] },
       comparisonPlanSnapshot: resolveLinearComparisonPlan({
         plan: { mode: 'none', defaultSource: 'losat', edges: [] },
@@ -261,12 +262,12 @@ await test('a CLI Linear protein Session keeps the adjacent LOSATP plan it drew'
     assert.equal(state.importedComparisonIntent.disposition, 'EDITABLE');
     assert.deepEqual(state.linearComparisonPlan, { ...DEFAULT_PLAN, mode: 'adjacent' });
     assert.equal(state.losatProgram.value, 'blastp');
-    const filesData = await serializeActiveRenderFiles('linear', state);
+    const filesData = await serializeActiveRenderFiles('linear', state, state.activeDrawing());
     const comparisonPlanSnapshot = resolveLinearComparisonPlan({
       plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
       losatProgram: state.losatProgram.value, blastpMode: state.losat.blastp.mode
     });
-    const candidate = buildCanonicalRenderRequest({ state, filesData, comparisonPlanSnapshot });
+    const candidate = buildCanonicalRenderRequest({ state, drawing: state.activeDrawing(), filesData, comparisonPlanSnapshot });
     assert.deepEqual(candidate.renderRequest.comparisons.map(item => [item.kind, item.mode]),
       [['generatedProteinComparison', 'orthogroup']]);
   } finally {
@@ -289,12 +290,12 @@ await test('a 0.13.0 CLI Linear protein sidecar keeps the adjacent LOSATP plan i
   const loadDraft = async (document) => {
     const result = await load(JSON.stringify(document));
     assert.equal(result.status, 'ok', result.error?.stack);
-    const filesData = await serializeActiveRenderFiles('linear', state);
+    const filesData = await serializeActiveRenderFiles('linear', state, state.activeDrawing());
     const comparisonPlanSnapshot = resolveLinearComparisonPlan({
       plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [],
       losatProgram: state.losatProgram.value, blastpMode: state.losat.blastp.mode
     });
-    const candidate = buildCanonicalRenderRequest({ state, filesData, comparisonPlanSnapshot });
+    const candidate = buildCanonicalRenderRequest({ state, drawing: state.activeDrawing(), filesData, comparisonPlanSnapshot });
     return {
       plan: structuredClone(state.linearComparisonPlan),
       program: state.losatProgram.value,

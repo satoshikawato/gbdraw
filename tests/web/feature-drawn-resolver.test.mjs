@@ -9,6 +9,7 @@ import {
 } from '../../gbdraw/web/js/services/feature-visibility.js';
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 // R4: tests/test_web_rule_matching.py runs the same cases through
 // gbdraw/features/visibility.py::should_render_feature, which Generate uses.
@@ -31,7 +32,7 @@ const catalogFeature = (name, index) => {
 };
 
 const preparationFor = (state, evaluate = evaluatePythonRules) => createRulePreparation({
-  state,
+  state: withDrawings(state),
   evaluate,
   visibilityRules: () => requestFeatureVisibilityRules(state.featureVisibilityManualRules)
 });

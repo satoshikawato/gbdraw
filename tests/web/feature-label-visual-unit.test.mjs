@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { LABEL_ABSENCE_REASONS, createFeatureLabelActions } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
 import { installFakeSvgDom } from './fake-svg-dom.mjs';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 installFakeSvgDom();
 globalThis.CSS ||= { escape: (value) => String(value) };
@@ -101,7 +102,7 @@ const buildHarness = ({
   };
   const actions = createFeatureLabelActions({
     ref, computed: get => ({ get value() { return get(); } }),
-    state,
+    state: withDrawings(state),
     commitActiveResultEdit(reason) {
       assert.equal(reason, 'feature-label');
       mutations.commit += 1;

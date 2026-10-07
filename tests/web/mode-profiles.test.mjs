@@ -692,6 +692,7 @@ for (const modeName of ['circular', 'linear']) {
     : null;
   const canonical = buildCanonicalRenderRequest({
     state,
+    drawing: state.activeDrawing(),
     filesData,
     comparisonPlanSnapshot
   });
@@ -751,6 +752,7 @@ const defaultCollinearSnapshot = resolveLinearComparisonPlan({
 });
 const defaultCollinearRequest = buildCanonicalRenderRequest({
   state,
+  drawing: state.activeDrawing(),
   filesData: {
     linearSeqs: defaultCollinearRecords,
     linearComparisons: [],

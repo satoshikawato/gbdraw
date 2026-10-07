@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { DrawingState } from '../../state.js' */
 // Sort and Move compute the requested caption order; the Legend entry owner
 // orders the mounted Legend through the `orderMountedLegend` port (R3, R13).
 /**
@@ -14,21 +15,22 @@
 
 /** @param {LegendSortActionsOptions} options */
 export const createLegendSortActions = ({ state, extractLegendEntries, orderMountedLegend, commitActiveResultEdit = null }) => {
-  const { legendEntries, originalLegendOrder } = state;
+  const { originalLegendOrder } = state;
 
   const persistLegendOrder = () => {
     commitActiveResultEdit?.('legend-order');
     extractLegendEntries();
   };
 
-  const applyLegendEntryOrder = (captionOrder) => {
+  /** @param {DrawingState} drawing */
+  const applyLegendEntryOrder = (drawing, captionOrder) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const changed = orderMountedLegend(captionOrder);
     if (changed === null) return;
 
     if (!changed) {
-      const currentOrder = legendEntries.value.map((entry) => entry.caption);
+      const currentOrder = drawing.legendEntries.value.map((entry) => entry.caption);
       const normalizedRequested = captionOrder.filter(Boolean);
       if (
         currentOrder.length === normalizedRequested.length &&
@@ -41,7 +43,8 @@ export const createLegendSortActions = ({ state, extractLegendEntries, orderMoun
     persistLegendOrder();
   };
 
-  const getVisibleLegendOrder = () => legendEntries.value.map((entry) => entry.caption).filter(Boolean);
+  /** @param {DrawingState} drawing */
+  const getVisibleLegendOrder = (drawing) => drawing.legendEntries.value.map((entry) => entry.caption).filter(Boolean);
 
   const moveLegendEntryUp = (idx) => {
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -51,16 +54,18 @@ export const createLegendSortActions = ({ state, extractLegendEntries, orderMoun
   };
 
   const moveLegendEntryDown = (idx) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    if (idx >= legendEntries.value.length - 1) return;
+    if (idx >= drawing.legendEntries.value.length - 1) return;
     swapLegendEntries(idx, idx + 1);
   };
 
   const sortLegendEntries = (direction = 'asc') => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const currentOrder = getVisibleLegendOrder();
+    const currentOrder = getVisibleLegendOrder(drawing);
     if (currentOrder.length < 2) return;
 
     const currentIndex = new Map(currentOrder.map((caption, idx) => [caption, idx]));
@@ -72,19 +77,20 @@ export const createLegendSortActions = ({ state, extractLegendEntries, orderMoun
       return direction === 'asc' ? cmp : -cmp;
     });
 
-    applyLegendEntryOrder(sortedOrder);
+    applyLegendEntryOrder(drawing, sortedOrder);
   };
 
   const sortLegendEntriesByDefault = () => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const currentOrder = getVisibleLegendOrder();
+    const currentOrder = getVisibleLegendOrder(drawing);
     if (currentOrder.length < 2) return;
     if (originalLegendOrder.value.length === 0) return;
 
     const currentIndex = new Map(currentOrder.map((caption, idx) => [caption, idx]));
     // A renamed generated entry keeps its generated caption as its default slot.
-    const generatedCaption = new Map(legendEntries.value.map((entry) => [entry.caption, entry.originalCaption || entry.caption]));
+    const generatedCaption = new Map(drawing.legendEntries.value.map((entry) => [entry.caption, entry.originalCaption || entry.caption]));
     const sortedOrder = [...currentOrder].sort((a, b) => {
       const aOrigIdx = originalLegendOrder.value.indexOf(generatedCaption.get(a) ?? a);
       const bOrigIdx = originalLegendOrder.value.indexOf(generatedCaption.get(b) ?? b);
@@ -99,18 +105,19 @@ export const createLegendSortActions = ({ state, extractLegendEntries, orderMoun
       return (currentIndex.get(a) ?? 0) - (currentIndex.get(b) ?? 0);
     });
 
-    applyLegendEntryOrder(sortedOrder);
+    applyLegendEntryOrder(drawing, sortedOrder);
   };
 
   const swapLegendEntries = (idx1, idx2) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const currentOrder = getVisibleLegendOrder();
+    const currentOrder = getVisibleLegendOrder(drawing);
     if (idx1 < 0 || idx2 < 0 || idx1 >= currentOrder.length || idx2 >= currentOrder.length) return;
 
     const nextOrder = [...currentOrder];
     [nextOrder[idx1], nextOrder[idx2]] = [nextOrder[idx2], nextOrder[idx1]];
-    applyLegendEntryOrder(nextOrder);
+    applyLegendEntryOrder(drawing, nextOrder);
   };
 
   return {

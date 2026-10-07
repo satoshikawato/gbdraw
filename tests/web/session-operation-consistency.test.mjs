@@ -4,6 +4,7 @@ import { cp, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const root = await mkdtemp(join(tmpdir(), 'gbdraw-session-operations-'));
 await cp(join(process.cwd(), 'gbdraw/web/js'), join(root, 'js'), { recursive: true });
@@ -289,7 +290,7 @@ test('late rule helper replies cannot publish cache entries while Session is pen
   const feature = { type: 'CDS', record: 'record', id: 'gene', qualifiers: {} };
   const rule = { feat: '*', qual: 'product', val: 'gene' };
   const owner = createRulePreparation({
-    state: { extractedFeatures: { value: [feature] }, manualSpecificRules: [rule], sessionOperationAvailability },
+    state: withDrawings({ extractedFeatures: { value: [feature] }, manualSpecificRules: [rule], sessionOperationAvailability }),
     evaluate: () => reply.promise
   });
   const pending = owner.prepare([rule]);

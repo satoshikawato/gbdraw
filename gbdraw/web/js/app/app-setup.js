@@ -2577,8 +2577,8 @@ export const createAppSetup = () => {
     rulePreparation,
     settleComparisonRecordLabels,
     isCurrentFeature: isCurrentResultFeature,
-    serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog, runState) => (
-      serializeActiveRenderFiles(runState.mode.value, runState, {
+    serializeCanonicalFiles: (comparisonPlanSnapshot, linearRecordCatalog, drawing) => (
+      serializeActiveRenderFiles(state.mode.value, state, drawing, {
         comparisonPlan: comparisonPlanSnapshot,
         linearRecordCatalog
       })

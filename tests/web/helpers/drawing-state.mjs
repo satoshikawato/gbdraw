@@ -102,12 +102,12 @@ export const drawingOf = (fixture) => Object.freeze(Object.fromEntries(
   DRAWING_KEYS.filter((key) => Object.hasOwn(fixture, key)).map((key) => [key, fixture[key]])
 ));
 
-// The fixture with the drawing store that services read (`state.drawings`):
-// both modes share the fixture's drawing, as in state.js.
-export const withDrawings = (fixture) => {
-  const drawing = drawingOf(fixture);
-  return Object.assign(fixture, {
-    drawings: Object.freeze({ circular: drawing, linear: drawing }),
-    activeDrawing: () => drawing
-  });
-};
+// The fixture with the drawing store that services and owners read
+// (`state.drawings`, `state.activeDrawing()`): the fixture is the one drawing
+// of both modes, as in state.js, so a member the test replaces later is read.
+// The store is not enumerable, so a test that clones or serializes the
+// fixture sees only its members.
+export const withDrawings = (fixture) => Object.defineProperties(fixture, {
+  drawings: { value: Object.freeze({ circular: fixture, linear: fixture }), configurable: true },
+  activeDrawing: { value: () => fixture, configurable: true }
+});

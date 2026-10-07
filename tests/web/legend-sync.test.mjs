@@ -3,6 +3,7 @@ import { cp, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 globalThis.CSS = { escape: (value) => String(value) };
@@ -218,7 +219,7 @@ const mockLegendEntry = (caption, color, x) => {
     skipCaptureBaseConfig: ref(false)
   };
   const actions = createLegendEntryActions({
-    state,
+    state: withDrawings(state),
     compactLegendEntries: () => {},
     reflowDualLegendLayout: () => { layoutRefreshes += 1; },
     updatePairwiseLegendPositions: () => { layoutRefreshes += 1; },
@@ -319,7 +320,7 @@ const mockLegendEntry = (caption, color, x) => {
   state.featureStrokeOverrides = {};
   state.originalSvgStroke = ref({ color: null, width: null });
   const strokeActions = createLegendStrokeActions({
-    state,
+    state: withDrawings(state),
     commitActiveResultEdit: () => {
       dirtyMarks += 1;
       return true;
@@ -448,7 +449,7 @@ const mockLegendEntry = (caption, color, x) => {
     skipCaptureBaseConfig: ref(false)
   };
   const actions = createLegendEntryActions({
-    state,
+    state: withDrawings(state),
     compactLegendEntries: () => {},
     reflowDualLegendLayout: () => {},
     updatePairwiseLegendPositions: () => {},
@@ -528,7 +529,7 @@ const mockLegendEntry = (caption, color, x) => {
   };
   let commits = 0;
   const actions = createLegendEntryActions({
-    state,
+    state: withDrawings(state),
     compactLegendEntries: () => {},
     reflowDualLegendLayout: () => {},
     updatePairwiseLegendPositions: () => {},
@@ -563,7 +564,7 @@ const mockLegendEntry = (caption, color, x) => {
   // ordering History restore uses (R3).
   let sortCommits = 0;
   const sortActions = createLegendSortActions({
-    state,
+    state: withDrawings(state),
     extractLegendEntries: actions.extractLegendEntries,
     orderMountedLegend: actions.orderMountedLegend,
     commitActiveResultEdit: (reason) => { if (reason === 'legend-order') sortCommits += 1; }
@@ -626,7 +627,7 @@ const mockLegendEntry = (caption, color, x) => {
   let identity = 'result-2';
   const live = ['result-1', 'result-2'];
   const actions = createLegendEntryActions({
-    state,
+    state: withDrawings(state),
     compactLegendEntries: () => {},
     reflowDualLegendLayout: () => {},
     updatePairwiseLegendPositions: () => {},

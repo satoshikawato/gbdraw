@@ -11,10 +11,16 @@ import {
  * @typedef {object} PaletteLoaderState
  * @property {{ value: any }} paletteDefinitions
  * @property {{ value: string[] }} paletteNames
- * @property {{ value: string }} selectedPalette
- * @property {{ value: Record<string, string> }} currentColors
  * @property {{ value: string }} appliedPaletteName
  * @property {{ value: Record<string, string> }} appliedPaletteColors
+ * @property {() => PaletteLoaderDrawing} activeDrawing The shown mode's drawing.
+ */
+
+/**
+ * The palette members of a drawing (`DrawingState` of state.js).
+ * @typedef {object} PaletteLoaderDrawing
+ * @property {{ value: string }} selectedPalette
+ * @property {{ value: Record<string, string> }} currentColors
  * @property {{ value: string }} pendingPaletteName
  * @property {{ value: Record<string, string> }} pendingPaletteColors
  */
@@ -29,12 +35,8 @@ export const createPaletteLoader = ({ state }) => {
   const {
     paletteDefinitions,
     paletteNames,
-    selectedPalette,
-    currentColors,
     appliedPaletteName,
-    appliedPaletteColors,
-    pendingPaletteName,
-    pendingPaletteColors
+    appliedPaletteColors
   } = state;
 
   const hasColorEntries = (colors) => (
@@ -50,31 +52,32 @@ export const createPaletteLoader = ({ state }) => {
   );
 
   const applyPalettes = (allPalettes) => {
+    const drawing = state.activeDrawing();
     if (!allPalettes || typeof allPalettes !== 'object') return false;
     const normalizedPalettes = normalizePaletteDefinitions(allPalettes);
     if (Object.keys(normalizedPalettes).length === 0) return false;
     paletteDefinitions.value = normalizedPalettes;
     paletteNames.value = Object.keys(normalizedPalettes).sort();
-    const requestedPalette = String(selectedPalette.value || 'default').trim() || 'default';
+    const requestedPalette = String(drawing.selectedPalette.value || 'default').trim() || 'default';
     const resolvedPalette = normalizedPalettes[requestedPalette] ? requestedPalette : 'default';
     const resolvedColors = normalizePaletteColors(
       normalizedPalettes[resolvedPalette] || normalizedPalettes.default || {}
     );
-    const currentHasPaletteColors = hasPaletteColorEntries(currentColors.value);
+    const currentHasPaletteColors = hasPaletteColorEntries(drawing.currentColors.value);
     const appliedHasColors = hasPaletteColorEntries(appliedPaletteColors.value);
-    const pendingHasColors = hasPaletteColorEntries(pendingPaletteColors.value);
+    const pendingHasColors = hasPaletteColorEntries(drawing.pendingPaletteColors.value);
 
-    selectedPalette.value = resolvedPalette;
-    if (!currentHasPaletteColors) currentColors.value = resolvedColors;
+    drawing.selectedPalette.value = resolvedPalette;
+    if (!currentHasPaletteColors) drawing.currentColors.value = resolvedColors;
     if (!appliedHasColors) {
       appliedPaletteName.value = resolvedPalette;
       appliedPaletteColors.value = {
-        ...(currentHasPaletteColors ? currentColors.value : resolvedColors)
+        ...(currentHasPaletteColors ? drawing.currentColors.value : resolvedColors)
       };
     }
-    if (String(pendingPaletteName.value || '').trim() && !pendingHasColors) {
-      pendingPaletteColors.value = {
-        ...(currentHasPaletteColors ? currentColors.value : resolvedColors)
+    if (String(drawing.pendingPaletteName.value || '').trim() && !pendingHasColors) {
+      drawing.pendingPaletteColors.value = {
+        ...(currentHasPaletteColors ? drawing.currentColors.value : resolvedColors)
       };
     }
     return true;

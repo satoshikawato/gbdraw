@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { DrawingState } from '../../state.js' */
 import { reportRuleRunFailure } from '../rule-matching.js';
 import { ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { resolveColorToHex } from '../../utils/color-utils.js';
@@ -59,23 +60,16 @@ export const createFeatureColorActions = ({
 }) => {
   const {
     appliedPaletteColors,
-    manualSpecificRules,
     extractedFeatures,
     biologicalFeatures,
-    featureColorOverrides,
     svgContainer,
     clickedFeature,
     featureStyleScopeDialog,
     resetColorDialog,
     legendRenameDialog,
-    legendEntries,
-    legendStrokeOverrides,
-    legendColorOverrides,
     originalLegendOrder,
     originalLegendColors,
-    originalSvgStroke,
-    featureStrokeOverrides,
-    addedLegendCaptions
+    originalSvgStroke
   } = state;
 
   const {
@@ -120,6 +114,7 @@ export const createFeatureColorActions = ({
   };
 
   const colorAction = (action) => (...args) => {
+    const drawing = state.activeDrawing();
     const prepareTargets = () => {
       const targets = new Set();
       const add = (feature) => { if (feature?.type && feature?.svg_id) targets.add(feature); };
@@ -131,7 +126,7 @@ export const createFeatureColorActions = ({
         findFeaturesWithSameDisplayedLabel(feature).forEach(add);
         findFeaturesWithSameIndividualLabel(feature).forEach(add);
       }
-      const candidates = [...manualSpecificRules];
+      const candidates = [...drawing.manualSpecificRules];
       targets.forEach((feature) => {
         const hash = getFeatureQualifier(feature);
         if (hash) candidates.push({ feat: feature.type, ...hash });
@@ -140,9 +135,9 @@ export const createFeatureColorActions = ({
           if (rule) candidates.push(rule);
         }
       });
-      return runWithRuleMatches(candidates, () => runColorAction(() => action(...args)));
+      return runWithRuleMatches(candidates, () => runColorAction(() => action(drawing, ...args)));
     };
-    return reportRuleRunFailure(state, 'evaluateRules', () => runWithRuleMatches(manualSpecificRules, prepareTargets));
+    return reportRuleRunFailure(state, 'evaluateRules', () => runWithRuleMatches(drawing.manualSpecificRules, prepareTargets));
   };
 
   const hashRuleTargetsFeatureExactly = (rule, feature) => {
@@ -182,17 +177,18 @@ export const createFeatureColorActions = ({
   };
 
   /**
+   * @param {DrawingState} drawing
    * @param {Record<string, any>} featureLike
    * @param {{ strokeColor?: string | null, strokeWidth?: number | null, originalStrokeColor?: string | null, originalStrokeWidth?: string | number | null }} [overrides]
    */
   const recordFeatureStrokeOverride = (
-    featureLike,
+    drawing, featureLike,
     { strokeColor = null, strokeWidth = null, originalStrokeColor = null, originalStrokeWidth = null } = {}
   ) => {
     const key = featureStrokeKey(featureLike, featureLike?.svg_id);
     if (!key) return;
 
-    const existing = featureStrokeOverrides[key] || {};
+    const existing = drawing.featureStrokeOverrides[key] || {};
     const next = { ...existing };
     if (!hasOwn(next, 'originalStrokeColor')) {
       next.originalStrokeColor = originalStrokeColor;
@@ -208,43 +204,47 @@ export const createFeatureColorActions = ({
       next.strokeWidth = widthVal;
     }
     if (hasOwn(next, 'strokeColor') || hasOwn(next, 'strokeWidth')) {
-      featureStrokeOverrides[key] = next;
+      drawing.featureStrokeOverrides[key] = next;
     }
   };
 
-  const clearFeatureStrokeOverride = (featureLike, fallbackSvgId = '') => {
+  /** @param {DrawingState} drawing */
+  const clearFeatureStrokeOverride = (drawing, featureLike, fallbackSvgId = '') => {
     const key = featureStrokeKey(featureLike, fallbackSvgId);
-    if (key) delete featureStrokeOverrides[key];
+    if (key) delete drawing.featureStrokeOverrides[key];
   };
 
   // The stroke a Legend row edit gives a feature without a stroke edit of its
   // own, which the feature shows once its own edit is removed, as Generate
   // draws it (`legendRowFeatureIds`, OV-123). Null when no row's stroke reaches it.
   /**
+   * @param {DrawingState} drawing
    * @param {Element} svg
    * @param {Record<string, any>} feature
    * @param {string} svgId
    * @returns {Record<string, any> | null}
    */
-  const legendRowStrokeOf = (svg, feature, svgId) => {
-    const namedCaption = normalizeCaption(getFeatureOverride(featureColorOverrides, feature)?.caption);
-    return Object.entries(legendStrokeOverrides).find(([caption]) => mountedLegendRowFeatureIds(
-      svg, caption, legendEntries.value, { namedIds: caption === namedCaption ? [svgId] : [] }
+  const legendRowStrokeOf = (drawing, svg, feature, svgId) => {
+    const namedCaption = normalizeCaption(getFeatureOverride(drawing.featureColorOverrides, feature)?.caption);
+    return Object.entries(drawing.legendStrokeOverrides).find(([caption]) => mountedLegendRowFeatureIds(
+      svg, caption, drawing.legendEntries.value, { namedIds: caption === namedCaption ? [svgId] : [] }
     ).includes(svgId))?.[1] || null;
   };
 
-  const findLegendEntryByCaption = (caption) => {
+  /** @param {DrawingState} drawing */
+  const findLegendEntryByCaption = (drawing, caption) => {
     const normalizedCaption = normalizeCaptionKey(caption);
     if (!normalizedCaption) return null;
 
     return (
-      legendEntries.value.find(
+      drawing.legendEntries.value.find(
         (entry) => normalizeCaptionKey(entry?.caption) === normalizedCaption
       ) || null
     );
   };
 
-  const findExistingCaptionColor = (feat, caption) => {
+  /** @param {DrawingState} drawing */
+  const findExistingCaptionColor = (drawing, feat, caption) => {
     const existingCaption = findExistingColorForCaption(feat, caption);
     if (existingCaption?.color) {
       return {
@@ -254,7 +254,7 @@ export const createFeatureColorActions = ({
       };
     }
 
-    const legendEntry = findLegendEntryByCaption(caption);
+    const legendEntry = findLegendEntryByCaption(drawing, caption);
     if (legendEntry?.color) {
       return {
         caption: legendEntry.caption,
@@ -372,7 +372,8 @@ export const createFeatureColorActions = ({
     pendingCommitReason ||= reason;
   };
 
-  const exactHashRulesForFeature = (feature) => manualSpecificRules.filter(
+  /** @param {DrawingState} drawing */
+  const exactHashRulesForFeature = (drawing, feature) => drawing.manualSpecificRules.filter(
     (rule) => hashRuleTargetsFeatureExactly(rule, feature)
   );
 
@@ -394,17 +395,18 @@ export const createFeatureColorActions = ({
     );
   };
 
+  /** @param {DrawingState} drawing */
   const featureColorAssignmentMatches = (
-    feature,
+    drawing, feature,
     color,
     caption,
     { requireLegend = true } = {}
   ) => {
-    const override = getFeatureOverride(featureColorOverrides, feature);
+    const override = getFeatureOverride(drawing.featureColorOverrides, feature);
     if (!override || !colorsMatch(override.color, color) || !captionsMatch(override.caption, caption)) {
       return false;
     }
-    const matchingRules = exactHashRulesForFeature(feature);
+    const matchingRules = exactHashRulesForFeature(drawing, feature);
     if (!matchingRules.some(
       (rule) => colorsMatch(rule.color, color) && captionsMatch(rule.cap, caption)
     )) {
@@ -412,7 +414,7 @@ export const createFeatureColorActions = ({
     }
     if (!liveFeatureColorMatches(feature, color)) return false;
     if (!requireLegend) return true;
-    const legendEntry = findLegendEntryByCaption(caption);
+    const legendEntry = findLegendEntryByCaption(drawing, caption);
     return Boolean(legendEntry && colorsMatch(legendEntry.color, color));
   };
 
@@ -435,18 +437,19 @@ export const createFeatureColorActions = ({
   };
 
 
-  const moveAddedLegendCaption = (oldCaption, newCaption) => {
+  /** @param {DrawingState} drawing */
+  const moveAddedLegendCaption = (drawing, oldCaption, newCaption) => {
     if (!oldCaption || !newCaption || oldCaption === newCaption) return;
     let matchedCaption = null;
-    for (const caption of addedLegendCaptions.value) {
+    for (const caption of drawing.addedLegendCaptions.value) {
       if (captionsMatch(caption, oldCaption)) {
         matchedCaption = caption;
         break;
       }
     }
     if (!matchedCaption) return;
-    addedLegendCaptions.value.delete(matchedCaption);
-    addedLegendCaptions.value.add(newCaption);
+    drawing.addedLegendCaptions.value.delete(matchedCaption);
+    drawing.addedLegendCaptions.value.add(newCaption);
   };
 
 
@@ -480,7 +483,8 @@ export const createFeatureColorActions = ({
     clickedFeature.value.appliedLegendName = caption;
   };
 
-  const clearLegendRenameDialog = ({ restoreInput = false } = {}) => {
+  /** @param {DrawingState} drawing */
+  const clearLegendRenameDialog = (drawing, { restoreInput = false } = {}) => {
     const pendingRequest = legendRenameDialog.pendingRequest;
 
     if (restoreInput) {
@@ -496,7 +500,7 @@ export const createFeatureColorActions = ({
           normalizeCaption(getEffectiveLegendCaption(pendingRequest.feat));
         clickedFeature.value.legendName = fallbackCaption;
       } else if (pendingRequest?.source === 'legend') {
-        legendEntries.value = [...legendEntries.value];
+        drawing.legendEntries.value = [...drawing.legendEntries.value];
       }
     }
 
@@ -512,7 +516,8 @@ export const createFeatureColorActions = ({
     legendRenameDialog.pendingRequest = null;
   };
 
-  const getCurrentFeatureFillColor = (feat) => {
+  /** @param {DrawingState} drawing */
+  const getCurrentFeatureFillColor = (drawing, feat) => {
     if (!feat) return '#cccccc';
 
     if (clickedFeature.value && clickedFeature.value.svg_id === feat.svg_id && clickedFeature.value.color) {
@@ -528,7 +533,7 @@ export const createFeatureColorActions = ({
       }
     }
 
-    const overrideColor = getFeatureOverride(featureColorOverrides, feat)?.color;
+    const overrideColor = getFeatureOverride(drawing.featureColorOverrides, feat)?.color;
     if (overrideColor) {
       return resolveColorToHex(overrideColor) || overrideColor;
     }
@@ -543,7 +548,8 @@ export const createFeatureColorActions = ({
     return extractedFeatures.value.filter((feat) => captionsMatch(getEffectiveLegendCaption(feat), normalizedCaption));
   };
 
-  const getUniqueLegendCaption = (caption, options = {}) => {
+  /** @param {DrawingState} drawing */
+  const getUniqueLegendCaption = (drawing, caption, options = {}) => {
     const normalizedCaption = normalizeCaption(caption);
     if (!normalizedCaption) return '';
 
@@ -554,15 +560,15 @@ export const createFeatureColorActions = ({
     );
 
     const existingKeys = new Set();
-    legendEntries.value.forEach((entry) => {
+    drawing.legendEntries.value.forEach((entry) => {
       const key = normalizeCaptionKey(entry?.caption);
       if (key) existingKeys.add(key);
     });
-    manualSpecificRules.forEach((rule) => {
+    drawing.manualSpecificRules.forEach((rule) => {
       const key = normalizeCaptionKey(rule?.cap);
       if (key) existingKeys.add(key);
     });
-    Object.values(featureColorOverrides).forEach((override) => {
+    Object.values(drawing.featureColorOverrides).forEach((override) => {
       const key = normalizeCaptionKey(override?.caption);
       if (key) existingKeys.add(key);
     });
@@ -579,9 +585,10 @@ export const createFeatureColorActions = ({
     return finalCaption;
   };
 
-  const featureRuleCandidate = (features, color, caption, { preferLabelRules = false } = {}) => {
-    const rules = manualSpecificRules.map(rule => ({ ...rule }));
-    const labelRule = preferLabelRules ? getSafeLabelSpecificRule(features, caption) : null;
+  /** @param {DrawingState} drawing */
+  const featureRuleCandidate = (drawing, features, color, caption, { preferLabelRules = false } = {}) => {
+    const rules = drawing.manualSpecificRules.map(rule => ({ ...rule }));
+    const labelRule = preferLabelRules ? getSafeLabelSpecificRule(drawing, features, caption) : null;
     if (labelRule) {
       for (let i = rules.length - 1; i >= 0; i--) {
         if (features.some(feature => hashRuleTargetsFeatureExactly(rules[i], feature))
@@ -609,7 +616,8 @@ export const createFeatureColorActions = ({
     feature?.id || `${feature?.type || ''}:${feature?.svg_id || ''}`
   );
 
-  const getSafeLabelSpecificRule = (features, label) => {
+  /** @param {DrawingState} drawing */
+  const getSafeLabelSpecificRule = (drawing, features, label) => {
     if (typeof getLabelSpecificRule !== 'function') return null;
     const candidates = features.map((feature) => getLabelSpecificRule(feature, label));
     if (candidates.some((rule) => !rule)) return null;
@@ -639,7 +647,7 @@ export const createFeatureColorActions = ({
       return null;
     }
 
-    const hasPrecedenceConflict = manualSpecificRules.some((existing) => {
+    const hasPrecedenceConflict = drawing.manualSpecificRules.some((existing) => {
       const matchingSelected = features.filter((feature) => ruleMatchesFeature(feature, existing));
       if (matchingSelected.length === 0) return false;
       if (isHashSpecificRule(existing)) {
@@ -653,7 +661,8 @@ export const createFeatureColorActions = ({
     return hasPrecedenceConflict ? null : first;
   };
 
-  const renameLegendEntryInSvg = (oldCaption, newCaption, color = null) => {
+  /** @param {DrawingState} drawing */
+  const renameLegendEntryInSvg = (drawing, oldCaption, newCaption, color = null) => {
     const svg = getCurrentSvg();
     if (!svg) return false;
 
@@ -690,20 +699,20 @@ export const createFeatureColorActions = ({
 
     // The renamed row takes the caption: a style that an earlier row left under
     // that caption does not follow it, as Generate would otherwise apply it (OV-60).
-    if (!findLegendEntryByCaption(newCaption)) {
-      for (const store of [legendColorOverrides, legendStrokeOverrides]) {
+    if (!findLegendEntryByCaption(drawing, newCaption)) {
+      for (const store of [drawing.legendColorOverrides, drawing.legendStrokeOverrides]) {
         const staleKey = findCaptionKey(store, newCaption);
         if (staleKey) delete store[staleKey];
       }
     }
-    moveCaptionStateKey(legendColorOverrides, oldCaption, newCaption);
-    moveCaptionStateKey(legendStrokeOverrides, oldCaption, newCaption);
-    moveAddedLegendCaption(oldCaption, newCaption);
+    moveCaptionStateKey(drawing.legendColorOverrides, oldCaption, newCaption);
+    moveCaptionStateKey(drawing.legendStrokeOverrides, oldCaption, newCaption);
+    moveAddedLegendCaption(drawing, oldCaption, newCaption);
 
     // A renderer-generated row keeps its generated caption as its identity, so
     // Generate replays the rename onto the regenerated row (PV-02). Rows the
     // editor added are identified by their current caption.
-    const legendEntry = legendEntries.value.find((entry) => captionsMatch(entry?.caption, oldCaption));
+    const legendEntry = drawing.legendEntries.value.find((entry) => captionsMatch(entry?.caption, oldCaption));
     const generatedRow = Boolean(legendEntry) && originalLegendOrder.value.some(
       (caption) => captionsMatch(caption, legendEntry.originalCaption || legendEntry.caption)
     );
@@ -722,7 +731,8 @@ export const createFeatureColorActions = ({
     return true;
   };
 
-  const applyLegendRenameRequest = async (request) => {
+  /** @param {DrawingState} drawing */
+  const applyLegendRenameRequest = async (drawing, request) => {
     const oldCaption = normalizeCaption(request.oldCaption);
     const caption = normalizeCaption(request.finalCaption || request.newCaption);
     const color = resolveColorToHex(request.finalColor || request.currentColor) || '#cccccc';
@@ -731,20 +741,20 @@ export const createFeatureColorActions = ({
     const sourceRules = getLegendRowRules(oldCaption);
     if (sourceRules.length || features.length) {
       const rules = request.sourceScope === 'group' && sourceRules.length
-        ? manualSpecificRules.map(rule => sourceRules.includes(rule) ? { ...rule, cap: caption, color } : { ...rule })
-        : featureRuleCandidate(features, color, caption);
+        ? drawing.manualSpecificRules.map(rule => sourceRules.includes(rule) ? { ...rule, cap: caption, color } : { ...rule })
+        : featureRuleCandidate(drawing, features, color, caption);
       const selected = new Set(features.map(feature => feature.svg_id));
       const retireOld = features.length > 0 && getFeaturesForLegendCaption(oldCaption)
         .every(feature => selected.has(feature.svg_id));
-      const oldEntry = findLegendEntryByCaption(oldCaption);
+      const oldEntry = findLegendEntryByCaption(drawing, oldCaption);
       return ruleActions.commitSpecificRules(rules, 'Rename legend item', {
         previousLegendIntents: retireOld && oldEntry ? [{ caption: oldCaption, color: oldEntry.color }] : [],
         afterCommit: () => {
           if (retireOld && !sourceRules.length) {
             const adoptedCaption = getEffectiveLegendCaption(features[0]);
-            moveCaptionStateKey(legendColorOverrides, oldCaption, adoptedCaption);
-            moveCaptionStateKey(legendStrokeOverrides, oldCaption, adoptedCaption);
-            moveAddedLegendCaption(oldCaption, adoptedCaption);
+            moveCaptionStateKey(drawing.legendColorOverrides, oldCaption, adoptedCaption);
+            moveCaptionStateKey(drawing.legendStrokeOverrides, oldCaption, adoptedCaption);
+            moveAddedLegendCaption(drawing, oldCaption, adoptedCaption);
             syncOriginalLegendMetadataRename(oldCaption, adoptedCaption, color);
           }
           for (const feature of features) updateClickedFeatureLegendState(feature, getEffectiveLegendCaption(feature), color);
@@ -752,7 +762,7 @@ export const createFeatureColorActions = ({
       });
     }
     // Unrelated manual legend rows retain their existing editor semantics.
-    renameLegendEntryInSvg(oldCaption, caption, color);
+    renameLegendEntryInSvg(drawing, oldCaption, caption, color);
     extractLegendEntries();
     return true;
   };
@@ -782,19 +792,20 @@ export const createFeatureColorActions = ({
     legendRenameDialog.pendingRequest = request;
   };
 
-  const continueLegendRenameRequest = async (request) => {
+  /** @param {DrawingState} drawing */
+  const continueLegendRenameRequest = async (drawing, request) => {
     if (!request) return;
 
     const oldCaption = normalizeCaption(request.oldCaption);
     const newCaption = normalizeCaption(request.newCaption);
     if (!oldCaption || !newCaption || newCaption === oldCaption) {
-      clearLegendRenameDialog({ restoreInput: true });
+      clearLegendRenameDialog(drawing, { restoreInput: true });
       return;
     }
 
     const currentColor =
       resolveColorToHex(request.currentColor) ||
-      (request.feat ? getCurrentFeatureFillColor(request.feat) : resolveColorToHex(findLegendEntryByCaption(oldCaption)?.color)) ||
+      (request.feat ? getCurrentFeatureFillColor(drawing, request.feat) : resolveColorToHex(findLegendEntryByCaption(drawing, oldCaption)?.color)) ||
       '#cccccc';
 
     let features = Array.isArray(request.features) ? request.features.filter(Boolean) : [];
@@ -828,7 +839,7 @@ export const createFeatureColorActions = ({
     // D-06 (PD-OI-061): a rename onto another entry of a different color asks
     // Merge, Suffix, or Cancel, with or without features. A target owned by a
     // specific-color rule keeps the PD-OI-042 caption disambiguation instead.
-    const targetEntry = findLegendEntryByCaption(newCaption);
+    const targetEntry = findLegendEntryByCaption(drawing, newCaption);
     const isDistinctTargetEntry = targetEntry && !captionsMatch(targetEntry.caption, oldCaption);
     const ruleOwnedTarget = isDistinctTargetEntry && getLegendRowRules(targetEntry.caption).length > 0;
     const featureOrRuleRename = features.length > 0 || getLegendRowRules(oldCaption).length > 0;
@@ -847,9 +858,9 @@ export const createFeatureColorActions = ({
 
     if (featureOrRuleRename && (!isDistinctTargetEntry
       || (mergeAllowed && (ruleOwnedTarget || colorsMatch(targetEntry.color, currentColor))))) {
-      await applyLegendRenameRequest({ ...request, currentColor, features,
+      await applyLegendRenameRequest(drawing, { ...request, currentColor, features,
         finalCaption: newCaption, finalColor: currentColor });
-      clearLegendRenameDialog();
+      clearLegendRenameDialog(drawing);
       return;
     }
 
@@ -868,31 +879,31 @@ export const createFeatureColorActions = ({
       }
 
       if (request.targetResolution === 'merge' && !mergeAllowed) {
-        clearLegendRenameDialog({ restoreInput: true });
+        clearLegendRenameDialog(drawing, { restoreInput: true });
         return;
       }
 
       if (request.targetResolution === 'merge') {
-        await applyLegendRenameRequest({
+        await applyLegendRenameRequest(drawing, {
           ...request,
           currentColor,
           features,
           finalCaption: targetEntry.caption,
           finalColor: targetEntry.color
         });
-        clearLegendRenameDialog();
+        clearLegendRenameDialog(drawing);
         return;
       }
 
       if (request.targetResolution === 'suffix') {
-        await applyLegendRenameRequest({
+        await applyLegendRenameRequest(drawing, {
           ...request,
           currentColor,
           features,
-          finalCaption: getUniqueLegendCaption(newCaption, { ignoreCaptions: [oldCaption] }),
+          finalCaption: getUniqueLegendCaption(drawing, newCaption, { ignoreCaptions: [oldCaption] }),
           finalColor: currentColor
         });
-        clearLegendRenameDialog();
+        clearLegendRenameDialog(drawing);
         return;
       }
     }
@@ -902,25 +913,26 @@ export const createFeatureColorActions = ({
     const finalColor =
       isDistinctTargetEntry && colorsMatch(targetEntry.color, currentColor) ? targetEntry.color : currentColor;
 
-    await applyLegendRenameRequest({
+    await applyLegendRenameRequest(drawing, {
       ...request,
       currentColor,
       features,
       finalCaption,
       finalColor
     });
-    clearLegendRenameDialog();
+    clearLegendRenameDialog(drawing);
   };
 
-  const applyColorToFeatureGroup = async (features, caption, color, options = {}) => {
+  /** @param {DrawingState} drawing */
+  const applyColorToFeatureGroup = async (drawing, features, caption, color, options = {}) => {
     if (!features?.length || !normalizeCaption(caption)) return false;
-    const existingEntry = findLegendEntryByCaption(caption);
+    const existingEntry = findLegendEntryByCaption(drawing, caption);
     const contributors = getFeaturesForLegendCaption(caption);
     const selectedIds = new Set(features.map(feature => feature.svg_id));
     const replacesExistingGroup = existingEntry && contributors.length > 0
       && features.every(feature => captionsMatch(getEffectiveLegendCaption(feature), caption))
       && contributors.every(feature => selectedIds.has(feature.svg_id));
-    const rules = featureRuleCandidate(features, color, normalizeCaption(caption), options);
+    const rules = featureRuleCandidate(drawing, features, color, normalizeCaption(caption), options);
     return ruleActions.commitSpecificRules(rules, 'Change feature color', {
       previousLegendIntents: replacesExistingGroup
         ? [{ caption: existingEntry.caption, color: existingEntry.color }] : [],
@@ -928,31 +940,33 @@ export const createFeatureColorActions = ({
         if (replacesExistingGroup) {
           const intent = intents.find(entry => captionsMatch(entry.caption, caption)
             && colorsMatch(entry.color, color));
-          if (intent) legendColorOverrides[intent.caption] = intent.color;
+          if (intent) drawing.legendColorOverrides[intent.caption] = intent.color;
         }
         for (const feature of features) updateClickedFeatureLegendState(feature, getEffectiveLegendCaption(feature), color);
       }
     });
   };
 
-  const applyColorToLegendSpecificRules = async (caption, color) => {
+  /** @param {DrawingState} drawing */
+  const applyColorToLegendSpecificRules = async (drawing, caption, color) => {
     const rowRules = getLegendRowRules(caption);
     const specificRules = rowRules.filter(rule => !isHashSpecificRule(rule));
     if (!specificRules.length) return false;
     const covered = extractedFeatures.value.filter(feature => specificRules.some(rule => ruleMatchesFeature(feature, rule)));
-    const rules = manualSpecificRules.filter(rule => !(rowRules.includes(rule) && isHashSpecificRule(rule)
+    const rules = drawing.manualSpecificRules.filter(rule => !(rowRules.includes(rule) && isHashSpecificRule(rule)
       && covered.some(feature => hashRuleTargetsFeatureExactly(rule, feature))))
       .map(rule => rowRules.includes(rule) ? { ...rule, color } : { ...rule });
     return ruleActions.commitSpecificRules(rules, 'Change legend color');
   };
 
   /**
+   * @param {DrawingState} drawing
    * @param {Record<string, any>} feat
    * @param {string} color
    * @param {string | null} [requestedLegendName]
    * @param {{ closePopupOnDialog?: boolean }} [options]
    */
-  const requestFeatureColorChange = async (feat, color, requestedLegendName = null, options = {}) => {
+  const requestFeatureColorChange = async (drawing, feat, color, requestedLegendName = null, options = {}) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!feat) return;
@@ -965,7 +979,7 @@ export const createFeatureColorActions = ({
         feat,
         scope,
         color,
-        existingCaption: findExistingCaptionColor(feat, scope.legendName),
+        existingCaption: findExistingCaptionColor(drawing, feat, scope.legendName),
         closePopup: options.closePopupOnDialog
       });
       return;
@@ -977,20 +991,22 @@ export const createFeatureColorActions = ({
         clickedFeature.value.legendName = scope.requestedCaption;
       }
     }
-    await setFeatureColor(feat, color, scope.legendName);
+    await setFeatureColor(drawing, feat, color, scope.legendName);
   };
 
-  const updateClickedFeatureColor = async (color) => {
+  /** @param {DrawingState} drawing */
+  const updateClickedFeatureColor = async (drawing, color) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return;
     const feat = clickedFeature.value.feat;
     if (!feat) return;
     const customName = normalizeCaption(clickedFeature.value.legendName);
-    await requestFeatureColorChange(feat, color, customName, { closePopupOnDialog: true });
+    await requestFeatureColorChange(drawing, feat, color, customName, { closePopupOnDialog: true });
   };
 
-  const handleLegendNameCommit = async () => {
+  /** @param {DrawingState} drawing */
+  const handleLegendNameCommit = async (drawing) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return;
@@ -1012,36 +1028,38 @@ export const createFeatureColorActions = ({
       return;
     }
 
-    await continueLegendRenameRequest({
+    await continueLegendRenameRequest(drawing, {
       source: 'popup',
       feat,
       oldCaption: currentCaption,
       newCaption: requestedCaption,
-      currentColor: getCurrentFeatureFillColor(feat),
+      currentColor: getCurrentFeatureFillColor(drawing, feat),
       sourceScope: null
     });
   };
 
-  const selectLegendNameOption = async (caption) => {
+  /** @param {DrawingState} drawing */
+  const selectLegendNameOption = async (drawing, caption) => {
     if (!clickedFeature.value) return;
     const selectedCaption = String(caption || '').trim();
     if (!selectedCaption) return;
     clickedFeature.value.legendName = selectedCaption;
-    await handleLegendNameCommit();
+    await handleLegendNameCommit(drawing);
   };
 
-  const handleLegendRenameChoice = async (choice) => {
+  /** @param {DrawingState} drawing */
+  const handleLegendRenameChoice = async (drawing, choice) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const pendingRequest = legendRenameDialog.pendingRequest;
     if (!pendingRequest || choice === 'cancel') {
-      clearLegendRenameDialog({ restoreInput: true });
+      clearLegendRenameDialog(drawing, { restoreInput: true });
       return;
     }
 
     if (legendRenameDialog.mode === 'scope') {
       if (choice === 'single') {
-        await continueLegendRenameRequest({
+        await continueLegendRenameRequest(drawing, {
           ...pendingRequest,
           sourceScope: 'single',
           targetResolution: null
@@ -1050,7 +1068,7 @@ export const createFeatureColorActions = ({
       }
 
       if (choice === 'group') {
-        await continueLegendRenameRequest({
+        await continueLegendRenameRequest(drawing, {
           ...pendingRequest,
           sourceScope: 'group',
           targetResolution: null
@@ -1061,7 +1079,7 @@ export const createFeatureColorActions = ({
 
     if (legendRenameDialog.mode === 'target') {
       if (choice === 'merge') {
-        await continueLegendRenameRequest({
+        await continueLegendRenameRequest(drawing, {
           ...pendingRequest,
           targetResolution: 'merge'
         });
@@ -1069,7 +1087,7 @@ export const createFeatureColorActions = ({
       }
 
       if (choice === 'suffix') {
-        await continueLegendRenameRequest({
+        await continueLegendRenameRequest(drawing, {
           ...pendingRequest,
           targetResolution: 'suffix'
         });
@@ -1077,20 +1095,21 @@ export const createFeatureColorActions = ({
       }
     }
 
-    clearLegendRenameDialog({ restoreInput: true });
+    clearLegendRenameDialog(drawing, { restoreInput: true });
   };
 
-  const renameLegendEntry = async (idx, newCaption) => {
-    const entry = legendEntries.value[idx];
+  /** @param {DrawingState} drawing */
+  const renameLegendEntry = async (drawing, idx, newCaption) => {
+    const entry = drawing.legendEntries.value[idx];
     if (!entry) return;
 
     const requestedCaption = normalizeCaption(newCaption);
     if (!requestedCaption || requestedCaption === normalizeCaption(entry.caption)) {
-      legendEntries.value = [...legendEntries.value];
+      drawing.legendEntries.value = [...drawing.legendEntries.value];
       return;
     }
 
-    await continueLegendRenameRequest({
+    await continueLegendRenameRequest(drawing, {
       source: 'legend',
       oldCaption: normalizeCaption(entry.caption),
       newCaption: requestedCaption,
@@ -1100,7 +1119,8 @@ export const createFeatureColorActions = ({
     });
   };
 
-  const handleColorScopeChoice = async (choice) => {
+  /** @param {DrawingState} drawing */
+  const handleColorScopeChoice = async (drawing, choice) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const { feat, color, matchingRule, legendName, existingCaptionColor } = featureStyleScopeDialog;
@@ -1110,7 +1130,7 @@ export const createFeatureColorActions = ({
     }
 
     if (choice === 'rule') {
-      if (matchingRule) await ruleActions.commitSpecificRules(manualSpecificRules.map(rule => rule === matchingRule
+      if (matchingRule) await ruleActions.commitSpecificRules(drawing.manualSpecificRules.map(rule => rule === matchingRule
         ? { ...rule, color } : { ...rule }), 'Change specific color rule');
     } else if (choice === 'caption') {
       const targetLegendName = normalizeCaption(legendName) || normalizeCaption(getEffectiveLegendCaption(feat));
@@ -1120,8 +1140,8 @@ export const createFeatureColorActions = ({
       }
       const siblings = findFeaturesWithSameLegendItem(feat, targetLegendName);
       const allFeatures = [feat, ...siblings];
-      if (!(await applyColorToLegendSpecificRules(targetLegendName, color))) {
-        await applyColorToFeatureGroup(allFeatures, targetLegendName, color);
+      if (!(await applyColorToLegendSpecificRules(drawing, targetLegendName, color))) {
+        await applyColorToFeatureGroup(drawing, allFeatures, targetLegendName, color);
       }
     } else if (choice === 'displayLabel') {
       const displayLabel =
@@ -1132,7 +1152,7 @@ export const createFeatureColorActions = ({
       }
       const displaySiblings = findFeaturesWithSameDisplayedLabel(feat, displayLabel);
       const allFeatures = [feat, ...displaySiblings];
-      await applyColorToFeatureGroup(allFeatures, displayLabel, color, { preferLabelRules: true });
+      await applyColorToFeatureGroup(drawing, allFeatures, displayLabel, color, { preferLabelRules: true });
     } else if (choice === 'single') {
       let singleCaption = legendName;
       if (featureStyleScopeDialog.siblingCount > 0 || (matchingRule && featureStyleScopeDialog.ruleMatchCount > 1)) {
@@ -1141,7 +1161,7 @@ export const createFeatureColorActions = ({
           singleCaption = getIndividualFeatureLabel(feat);
         }
       }
-      await setFeatureColor(feat, color, singleCaption);
+      await setFeatureColor(drawing, feat, color, singleCaption);
     } else if (choice === 'annotationLabel') {
       const annotationLabel =
         normalizeCaption(featureStyleScopeDialog.annotationLabel) || normalizeCaption(getIndividualFeatureLabel(feat));
@@ -1151,18 +1171,19 @@ export const createFeatureColorActions = ({
       }
       const annotationSiblings = findFeaturesWithSameIndividualLabel(feat, annotationLabel);
       const allFeatures = [feat, ...annotationSiblings];
-      await applyColorToFeatureGroup(allFeatures, annotationLabel, color, { preferLabelRules: true });
+      await applyColorToFeatureGroup(drawing, allFeatures, annotationLabel, color, { preferLabelRules: true });
     } else if (choice === 'useExisting') {
       if (existingCaptionColor) {
         const targetLegendName = normalizeCaption(legendName) || normalizeCaption(getEffectiveLegendCaption(feat));
-        await setFeatureColor(feat, existingCaptionColor, targetLegendName);
+        await setFeatureColor(drawing, feat, existingCaptionColor, targetLegendName);
       }
     }
 
     clearFeatureStyleScopeDialog();
   };
 
-  const updateClickedFeatureStroke = (strokeColor, strokeWidth) => {
+  /** @param {DrawingState} drawing */
+  const updateClickedFeatureStroke = (drawing, strokeColor, strokeWidth) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return false;
@@ -1194,7 +1215,7 @@ export const createFeatureColorActions = ({
     });
 
     if (!changed) return false;
-    recordFeatureStrokeOverride(clickedFeature.value.feat || clickedFeature.value, {
+    recordFeatureStrokeOverride(drawing, clickedFeature.value.feat || clickedFeature.value, {
       strokeColor: normalizedStrokeColor,
       strokeWidth: normalizedStrokeWidth,
       originalStrokeColor: clickedFeature.value.originalStrokeColor ?? null,
@@ -1208,7 +1229,8 @@ export const createFeatureColorActions = ({
     return true;
   };
 
-  const requestClickedFeatureStrokeChange = (strokeColor, strokeWidth) => {
+  /** @param {DrawingState} drawing */
+  const requestClickedFeatureStrokeChange = (drawing, strokeColor, strokeWidth) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return false;
@@ -1233,10 +1255,11 @@ export const createFeatureColorActions = ({
       return false;
     }
 
-    return updateClickedFeatureStroke(normalizedStrokeColor, normalizedStrokeWidth);
+    return updateClickedFeatureStroke(drawing, normalizedStrokeColor, normalizedStrokeWidth);
   };
 
-  const resetClickedFeatureStroke = () => {
+  /** @param {DrawingState} drawing */
+  const resetClickedFeatureStroke = (drawing) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return false;
@@ -1249,7 +1272,7 @@ export const createFeatureColorActions = ({
     const elements = getFeatureElements(svg, svgId);
 
     // Without its own stroke edit, the feature shows its Legend row's stroke.
-    const rowStroke = legendRowStrokeOf(svg, clickedFeature.value.feat || clickedFeature.value, svgId);
+    const rowStroke = legendRowStrokeOf(drawing, svg, clickedFeature.value.feat || clickedFeature.value, svgId);
     const originalColor = String(rowStroke?.strokeColor || '').trim() || originalSvgStroke.value.color;
     const originalWidth = normalizeStrokeWidthValue(rowStroke?.strokeWidth)
       ?? normalizeStrokeWidthValue(originalSvgStroke.value.width);
@@ -1270,60 +1293,62 @@ export const createFeatureColorActions = ({
 
     const feature = clickedFeature.value.feat || clickedFeature.value;
     const overrideKey = featureStrokeKey(feature, svgId);
-    const hadOverride = Boolean(overrideKey && featureStrokeOverrides[overrideKey]);
+    const hadOverride = Boolean(overrideKey && drawing.featureStrokeOverrides[overrideKey]);
     if (!changed && !hadOverride) return false;
     clickedFeature.value.strokeColor = originalColor || '';
     clickedFeature.value.strokeWidth = originalWidth ?? '';
-    clearFeatureStrokeOverride(feature, svgId);
+    clearFeatureStrokeOverride(drawing, feature, svgId);
 
     if (changed) persistCurrentSvg(svg, 'feature-stroke');
     return true;
   };
 
   const getFeatureStrokeColorValue = (featureLike) => {
+    const drawing = state.activeDrawing();
     const feature = featureLike?.feat || featureLike;
-    const override = getFeatureOverride(featureStrokeOverrides, feature);
+    const override = getFeatureOverride(drawing.featureStrokeOverrides, feature);
     return override && hasOwn(override, 'strokeColor')
       ? override.strokeColor
       : null;
   };
 
-  const setClickedFeatureStrokeColorValue = (value) => {
+  /** @param {DrawingState} drawing */
+  const setClickedFeatureStrokeColorValue = (drawing, value) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (value !== null) {
       if (!clickedFeature.value) return false;
       const feature = clickedFeature.value.feat || clickedFeature.value;
-      const override = getFeatureOverride(featureStrokeOverrides, feature);
+      const override = getFeatureOverride(drawing.featureStrokeOverrides, feature);
       if (
         !hasOwn(override, 'strokeColor')
         && colorsMatch(resolveColorToHex(value), resolveColorToHex(clickedFeature.value.strokeColor))
       ) {
         const normalizedValue = String(value || '').trim();
-        if (updateClickedFeatureStroke(normalizedValue, null)) return true;
+        if (updateClickedFeatureStroke(drawing, normalizedValue, null)) return true;
         const svg = getCurrentSvg();
         if (!svg) return false;
         const elements = getFeatureElements(svg, clickedFeature.value.svg_id);
         if (elements.length === 0) return false;
-        recordFeatureStrokeOverride(feature, {
+        recordFeatureStrokeOverride(drawing, feature, {
           strokeColor: normalizedValue,
           originalStrokeColor: clickedFeature.value.originalStrokeColor ?? elements[0]?.getAttribute('stroke') ?? null,
           originalStrokeWidth: clickedFeature.value.originalStrokeWidth ?? elements[0]?.getAttribute('stroke-width') ?? null
         });
         return true;
       }
-      return requestClickedFeatureStrokeChange(value, clickedFeature.value.strokeWidth);
+      return requestClickedFeatureStrokeChange(drawing, value, clickedFeature.value.strokeWidth);
     }
     if (!clickedFeature.value || !svgContainer.value) return false;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;
     const feature = clickedFeature.value.feat || clickedFeature.value;
     const key = featureStrokeKey(feature, clickedFeature.value.svg_id);
-    const override = key ? featureStrokeOverrides[key] : null;
+    const override = key ? drawing.featureStrokeOverrides[key] : null;
     // Without a stroke edit of its own left, the feature shows its Legend row's stroke.
     const rowStroke = setsFeatureStroke({ strokeWidth: override?.strokeWidth })
       ? null
-      : legendRowStrokeOf(svg, feature, clickedFeature.value.svg_id);
+      : legendRowStrokeOf(drawing, svg, feature, clickedFeature.value.svg_id);
     const inheritedColor = String(rowStroke?.strokeColor || '').trim() || (override && hasOwn(override, 'originalStrokeColor')
       ? override.originalStrokeColor
       : (clickedFeature.value.originalStrokeColor ?? originalSvgStroke.value.color));
@@ -1333,7 +1358,7 @@ export const createFeatureColorActions = ({
     if (!domChanged && !stateChanged) return false;
     if (override) {
       delete override.strokeColor;
-      if (!hasOwn(override, 'strokeWidth')) delete featureStrokeOverrides[key];
+      if (!hasOwn(override, 'strokeWidth')) delete drawing.featureStrokeOverrides[key];
     }
     elements.forEach((element) => {
       if (strokeColorAttributeMatches(element, inheritedColor)) return;
@@ -1348,17 +1373,19 @@ export const createFeatureColorActions = ({
     return true;
   };
 
-  const setClickedFeatureStrokeWidthValue = (value) => {
+  /** @param {DrawingState} drawing */
+  const setClickedFeatureStrokeWidthValue = (drawing, value) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return false;
     const normalizedStrokeWidth = normalizeStrokeWidthValue(value);
     const currentStrokeWidth = normalizeStrokeWidthValue(clickedFeature.value.strokeWidth);
     if (normalizedStrokeWidth === null || normalizedStrokeWidth === currentStrokeWidth) return false;
-    return requestClickedFeatureStrokeChange(clickedFeature.value.strokeColor, normalizedStrokeWidth);
+    return requestClickedFeatureStrokeChange(drawing, clickedFeature.value.strokeColor, normalizedStrokeWidth);
   };
 
-  const resetClickedFeatureFillColor = () => {
+  /** @param {DrawingState} drawing */
+  const resetClickedFeatureFillColor = (drawing) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return;
@@ -1384,25 +1411,27 @@ export const createFeatureColorActions = ({
       resetColorDialog.caption = caption;
       resetColorDialog.siblingCount = siblings.length;
     } else {
-      doResetFillColor('this');
+      doResetFillColor(drawing, 'this');
     }
   };
 
-  const handleResetColorChoice = async (choice) => {
+  /** @param {DrawingState} drawing */
+  const handleResetColorChoice = async (drawing, choice) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     resetColorDialog.show = false;
-    await doResetFillColor(choice);
+    await doResetFillColor(drawing, choice);
   };
 
-  const doResetFillColor = async (choice) => {
+  /** @param {DrawingState} drawing */
+  const doResetFillColor = async (drawing, choice) => {
     const feature = clickedFeature.value?.feat;
     if (!feature || choice === 'cancel') return false;
     const caption = getEffectiveLegendCaption(feature);
     // The reset color is the palette default of the feature being reset.
     const color = appliedPaletteColors.value[feature.type];
-    if (choice === 'this_with_legend') return setFeatureColor(feature, color, caption);
-    let rules = manualSpecificRules.filter(rule => choice === 'all'
+    if (choice === 'this_with_legend') return setFeatureColor(drawing, feature, color, caption);
+    let rules = drawing.manualSpecificRules.filter(rule => choice === 'all'
       ? rule.cap !== caption : !hashRuleTargetsFeatureExactly(rule, feature));
     if (choice === 'this' && rules.some(rule => ruleMatchesFeature(feature, rule))) {
       const qualifier = getFeatureQualifier(feature);
@@ -1424,18 +1453,20 @@ export const createFeatureColorActions = ({
     });
   };
 
-  const applyColorToSelectedFeatures = async (features, color, caption) => {
+  /** @param {DrawingState} drawing */
+  const applyColorToSelectedFeatures = async (drawing, features, color, caption) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const targetFeatures = uniqueFeaturesBySvgId(features);
     const targetColor = resolveColorToHex(color) || String(color || '').trim();
     const targetCaption = normalizeCaption(caption);
     if (targetFeatures.length === 0 || !targetColor || !targetCaption) return false;
-    await applyColorToFeatureGroup(targetFeatures, targetCaption, targetColor);
+    await applyColorToFeatureGroup(drawing, targetFeatures, targetCaption, targetColor);
     return true;
   };
 
-  const applyStrokeToSelectedFeatures = (features, strokeColor, strokeWidth) => {
+  /** @param {DrawingState} drawing */
+  const applyStrokeToSelectedFeatures = (drawing, features, strokeColor, strokeWidth) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const targetFeatures = uniqueFeaturesBySvgId(features);
@@ -1457,7 +1488,7 @@ export const createFeatureColorActions = ({
       ));
       if (!needsUpdate) return;
       const firstElement = elements[0] || null;
-      recordFeatureStrokeOverride(feature, {
+      recordFeatureStrokeOverride(drawing, feature, {
         strokeColor: normalizedStrokeColor || null,
         strokeWidth: normalizedStrokeWidth,
         originalStrokeColor: firstElement?.getAttribute('stroke') ?? null,
@@ -1487,8 +1518,9 @@ export const createFeatureColorActions = ({
     return updatedCount > 0;
   };
 
-  const applyStrokeToLegendEntry = (caption, strokeColor, strokeWidth) => {
-    const targetLegendEntry = findLegendEntryByCaption(caption);
+  /** @param {DrawingState} drawing */
+  const applyStrokeToLegendEntry = (drawing, caption, strokeColor, strokeWidth) => {
+    const targetLegendEntry = findLegendEntryByCaption(drawing, caption);
     const svg = getCurrentSvg();
     if (!targetLegendEntry || !svg) return false;
 
@@ -1529,7 +1561,7 @@ export const createFeatureColorActions = ({
     }
 
     const overrideKey = targetLegendEntry.caption;
-    const previousOverride = legendStrokeOverrides[overrideKey] || {};
+    const previousOverride = drawing.legendStrokeOverrides[overrideKey] || {};
     const nextOverride = { ...previousOverride };
     if (
       !hasOwn(previousOverride, 'strokeColor')
@@ -1544,12 +1576,13 @@ export const createFeatureColorActions = ({
       !colorsMatch(previousOverride.strokeColor, nextOverride.strokeColor)
       || normalizeStrokeWidthValue(previousOverride.strokeWidth)
         !== normalizeStrokeWidthValue(nextOverride.strokeWidth);
-    if (stateChanged) legendStrokeOverrides[overrideKey] = nextOverride;
+    if (stateChanged) drawing.legendStrokeOverrides[overrideKey] = nextOverride;
     if (domChanged) persistCurrentSvg(svg, 'feature-stroke');
     return domChanged || stateChanged;
   };
 
-  const handleStrokeScopeChoice = (choice) => {
+  /** @param {DrawingState} drawing */
+  const handleStrokeScopeChoice = (drawing, choice) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const {
@@ -1584,45 +1617,48 @@ export const createFeatureColorActions = ({
       targetFeatures = [feat];
     }
 
-    const featureChanged = applyStrokeToSelectedFeatures(targetFeatures, strokeColor, strokeWidth);
+    const featureChanged = applyStrokeToSelectedFeatures(drawing, targetFeatures, strokeColor, strokeWidth);
     const legendChanged = legendCaption
-      ? applyStrokeToLegendEntry(legendCaption, strokeColor, strokeWidth)
+      ? applyStrokeToLegendEntry(drawing, legendCaption, strokeColor, strokeWidth)
       : false;
     clearFeatureStyleScopeDialog();
     return featureChanged || legendChanged;
   };
 
-  const handleFeatureStyleScopeChoice = (choice) => (
+  /** @param {DrawingState} drawing */
+  const handleFeatureStyleScopeChoice = (drawing, choice) => (
     featureStyleScopeDialog.kind === 'stroke'
-      ? handleStrokeScopeChoice(choice)
-      : handleColorScopeChoice(choice)
+      ? handleStrokeScopeChoice(drawing, choice)
+      : handleColorScopeChoice(drawing, choice)
   );
 
   /**
+   * @param {DrawingState} drawing
    * @param {Record<string, any>} feature
    * @param {string} color
    * @param {string | null} [customCaption]
    */
-  const setFeatureColor = async (feature, color, customCaption = null) => {
+  const setFeatureColor = async (drawing, feature, color, customCaption = null) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!feature || !getFeatureQualifier(feature)) return false;
     const caption = normalizeCaption(customCaption || getIndividualFeatureLabel(feature));
-    if (!caption || featureColorAssignmentMatches(feature, color, caption)) return false;
-    return applyColorToFeatureGroup([feature], caption, resolveColorToHex(color) || color);
+    if (!caption || featureColorAssignmentMatches(drawing, feature, color, caption)) return false;
+    return applyColorToFeatureGroup(drawing, [feature], caption, resolveColorToHex(color) || color);
   };
 
-  const setFeatureColorValue = async (feature, value, customCaption = null) => {
+  /** @param {DrawingState} drawing */
+  const setFeatureColorValue = async (drawing, feature, value, customCaption = null) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!feature) return false;
     if (value === null) {
-      return ruleActions.commitSpecificRules(manualSpecificRules.filter(rule => !hashRuleTargetsFeatureExactly(rule, feature)), 'Reset feature color');
+      return ruleActions.commitSpecificRules(drawing.manualSpecificRules.filter(rule => !hashRuleTargetsFeatureExactly(rule, feature)), 'Reset feature color');
     }
     if (String(value).trim().toLowerCase() === 'none') {
-      return applyColorToFeatureGroup([feature], normalizeCaption(customCaption || getEffectiveLegendCaption(feature) || feature.type), 'none');
+      return applyColorToFeatureGroup(drawing, [feature], normalizeCaption(customCaption || getEffectiveLegendCaption(feature) || feature.type), 'none');
     }
-    return setFeatureColor(feature, value, customCaption);
+    return setFeatureColor(drawing, feature, value, customCaption);
   };
 
   return {

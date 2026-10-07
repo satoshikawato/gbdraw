@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { DrawingState } from '../../state.js' */
 import { diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
 import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride } from '../../services/feature-visibility.js';
@@ -467,8 +468,6 @@ export const createFeatureLabelActions = ({
     labelTextScopeDialog,
     hiddenLabelTextDialog,
     labelOnDialog,
-    featureOverrides,
-    labelTextBulkOverrides,
     autoLabelReflowEnabled,
     labelReflowRequestSeq,
     labelReflowForceRequestSeq,
@@ -479,11 +478,12 @@ export const createFeatureLabelActions = ({
   // The label edits of the identity-keyed draft: Label visibility, label text,
   // and the label's source text (design Q4); Feature visibility stays.
   const LABEL_FIELDS = Object.freeze(['labelVisibility', 'labelText', 'labelSourceText']);
-  const clearOverrides = () => {
-    Object.values(featureOverrides).forEach((row) => {
-      updateFeatureOverride(featureOverrides, row, Object.fromEntries(LABEL_FIELDS.map((field) => [field, null])));
+  /** @param {DrawingState} drawing */
+  const clearOverrides = (drawing) => {
+    Object.values(drawing.featureOverrides).forEach((row) => {
+      updateFeatureOverride(drawing.featureOverrides, row, Object.fromEntries(LABEL_FIELDS.map((field) => [field, null])));
     });
-    Object.keys(labelTextBulkOverrides).forEach((key) => delete labelTextBulkOverrides[key]);
+    Object.keys(drawing.labelTextBulkOverrides).forEach((key) => delete drawing.labelTextBulkOverrides[key]);
   };
 
   // A mounted label names its feature by rendered ID; the displayed Result's
@@ -496,32 +496,38 @@ export const createFeatureLabelActions = ({
     const key = normalizeKeyToken(featureId);
     return (extractedFeatures.value || []).find((feature) => normalizeKeyToken(feature?.svg_id) === key) || null;
   };
-  const rowOf = (feature) => {
+  /** @param {DrawingState} drawing */
+  const rowOf = (drawing, feature) => {
     const key = featureIdentityKeyOf(feature);
-    return key ? featureOverrides[key] || null : null;
+    return key ? drawing.featureOverrides[key] || null : null;
   };
-  const labelRow = (featureId, displayed) => rowOf(labelFeature(featureId, displayed));
+  /** @param {DrawingState} drawing */
+  const labelRow = (drawing, featureId, displayed) => rowOf(drawing, labelFeature(featureId, displayed));
 
   // Whether the label rerender after this edit draws the feature: the last
   // Generate's request with the current edits and rules (F-3, Owner Q2). The
   // feature visibility owner's resolver answers as Generate does.
-  const drawnContext = () => featureDrawnContext(state, { diagramOptions: getCommittedRequest()?.diagramOptions });
-  const featureHidden = (feature, context = drawnContext()) => (
+  /** @param {DrawingState} drawing */
+  const drawnContext = (drawing) => featureDrawnContext(drawing, { diagramOptions: getCommittedRequest()?.diagramOptions });
+  /** @param {DrawingState} drawing */
+  const featureHidden = (drawing, feature, context = drawnContext(drawing)) => (
     featureDrawnInResult(feature, context, resultCatalogFeatures(state)) === false
   );
   // Owner decisions Q1 and Q2 (2026-10-04): Label visibility On takes effect
   // only when the diagram can draw the label. Returns 'hidden', 'underlay', or
   // 'embedded_only', or '' when the label is drawn.
-  const labelOnBlocker = (feature, diagramOptions) => (
-    featureHidden(feature) ? 'hidden' : labelDrawingBlocker(feature, diagramOptions)
+  /** @param {DrawingState} drawing */
+  const labelOnBlocker = (drawing, feature, diagramOptions) => (
+    featureHidden(drawing, feature) ? 'hidden' : labelDrawingBlocker(feature, diagramOptions)
   );
   // Why the displayed Result has no label for the feature: the blocker, unless
   // a scope or filter reason applies to Default label visibility first.
   // '' or a LABEL_ABSENCE_REASONS key.
-  const labelAbsenceReason = (feature, diagramOptions) => {
-    const blocker = labelOnBlocker(feature, diagramOptions);
+  /** @param {DrawingState} drawing */
+  const labelAbsenceReason = (drawing, feature, diagramOptions) => {
+    const blocker = labelOnBlocker(drawing, feature, diagramOptions);
     if (blocker === 'hidden' || blocker === 'underlay'
-      || normalizeVisibilityMode(rowOf(feature)?.labelVisibility) === 'on') return blocker;
+      || normalizeVisibilityMode(rowOf(drawing, feature)?.labelVisibility) === 'on') return blocker;
     return labelScopeFilterReason(feature, diagramOptions) || blocker;
   };
 
@@ -550,11 +556,12 @@ export const createFeatureLabelActions = ({
     return normalized === 'on' || normalized === 'off' ? normalized : 'default';
   };
 
-  const resetLabelsToSourceText = (svg) => {
+  /** @param {DrawingState} drawing */
+  const resetLabelsToSourceText = (drawing, svg) => {
     let changed = false;
     const displayed = displayedFeatures();
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl) => {
-      const sourceText = labelRow(textEl.getAttribute('data-label-feature-id'), displayed)?.labelSourceText
+      const sourceText = labelRow(drawing, textEl.getAttribute('data-label-feature-id'), displayed)?.labelSourceText
         ?? textEl.getAttribute('data-label-source-text');
       if (sourceText === null) return;
       if (getLabelText(textEl) === sourceText) return;
@@ -569,15 +576,16 @@ export const createFeatureLabelActions = ({
   // override, else the bulk override of its source text, else that source
   // text. A label edited, imported, undone, or reset while another Result was
   // displayed therefore shows the current intent here (R3).
-  const projectLabelTextIntent = (svg) => {
+  /** @param {DrawingState} drawing */
+  const projectLabelTextIntent = (drawing, svg) => {
     let changed = false;
     const displayed = displayedFeatures();
     svg.querySelectorAll(EDITABLE_LABEL_SELECTOR).forEach((textEl) => {
-      const row = labelRow(textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE), displayed);
+      const row = labelRow(drawing, textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE), displayed);
       const sourceText = row?.labelSourceText
         ?? textEl.getAttribute('data-label-source-text') ?? getLabelText(textEl);
       textEl.setAttribute('data-label-source-text', sourceText);
-      const desiredText = row?.labelText ?? labelTextBulkOverrides[sourceText] ?? sourceText;
+      const desiredText = row?.labelText ?? drawing.labelTextBulkOverrides[sourceText] ?? sourceText;
       if (getLabelText(textEl) === desiredText) return;
       setLabelText(textEl, desiredText);
       changed = true;
@@ -627,11 +635,12 @@ export const createFeatureLabelActions = ({
     return { available: true, changed };
   };
 
-  const applyStoredVisibilityOverridesToSvg = (svg) => {
+  /** @param {DrawingState} drawing */
+  const applyStoredVisibilityOverridesToSvg = (drawing, svg) => {
     let changed = false;
     let unavailableOverride = false;
     const displayed = displayedFeatures();
-    const context = drawnContext();
+    const context = drawnContext(drawing);
     svg.querySelectorAll(VISIBILITY_LABEL_SELECTOR).forEach((textEl) => {
       const featureId = String(
         textEl.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE) || ''
@@ -640,7 +649,7 @@ export const createFeatureLabelActions = ({
       // A hidden feature hides its label through this projection too (F-3).
       const visibilityMode = !featureId
         ? 'default'
-        : (featureHidden(feature, context) ? 'off' : rowOf(feature)?.labelVisibility);
+        : (featureHidden(drawing, feature, context) ? 'off' : rowOf(drawing, feature)?.labelVisibility);
       const projection = applyLabelVisibilityPreview(svg, textEl, visibilityMode);
       changed = projection.changed || changed;
       if (normalizeVisibilityMode(visibilityMode) !== 'default' && !projection.available) {
@@ -689,10 +698,11 @@ export const createFeatureLabelActions = ({
   };
 
   const syncClickedFeatureLabelState = () => {
+    const drawing = state.activeDrawing();
     if (!clickedFeature.value) return;
     const featureId = String(clickedFeature.value.svg_id || clickedFeature.value.id || '').trim();
     const entry = getEditableLabelByFeatureId(featureId);
-    const row = rowOf(clickedFeature.value.feat);
+    const row = rowOf(drawing, clickedFeature.value.feat);
     const fallbackText = row?.labelText || clickedFeature.value.labelText || clickedFeature.value.label || '';
     const fallbackSource = row?.labelSourceText || clickedFeature.value.labelSourceText
       || clickedFeature.value.label || '';
@@ -725,6 +735,7 @@ export const createFeatureLabelActions = ({
     reportedLabelBinding = null,
     queueIncompleteVisibility = true
   } = {}) => {
+    const drawing = state.activeDrawing();
     // The retained Result can outlive its active mode. Keep its label intent
     // dormant until its own mode can project and reconcile those identities.
     if (generatedMode.value !== mode.value) return;
@@ -766,7 +777,7 @@ export const createFeatureLabelActions = ({
       { allowMissing: true, features }
     );
 
-    projectLabelIntent(svg, { queueIncompleteVisibility });
+    projectLabelIntent(drawing, svg, { queueIncompleteVisibility });
     // A label reflow keeps its Result: the same check reports to the reflow
     // after the binding completes instead of failing it.
     if (reportedLabelBinding) {
@@ -780,9 +791,10 @@ export const createFeatureLabelActions = ({
 
   // One projection of the label intent onto the mounted Result, shared by a
   // live edit, a Label TSV import, History apply, and the display of a Result.
-  const projectLabelIntent = (svg, { queueIncompleteVisibility = true } = {}) => {
-    const textChanged = projectLabelTextIntent(svg);
-    const visibilityProjection = applyStoredVisibilityOverridesToSvg(svg);
+  /** @param {DrawingState} drawing */
+  const projectLabelIntent = (drawing, svg, { queueIncompleteVisibility = true } = {}) => {
+    const textChanged = projectLabelTextIntent(drawing, svg);
+    const visibilityProjection = applyStoredVisibilityOverridesToSvg(drawing, svg);
     refreshEditableList(svg);
     syncClickedFeatureLabelState();
     const changed = textChanged || visibilityProjection.changed;
@@ -794,8 +806,9 @@ export const createFeatureLabelActions = ({
   };
 
   const reconcileLabelOverrides = () => {
+    const drawing = state.activeDrawing();
     const svg = svgContainer.value?.querySelector?.('svg');
-    return svg ? projectLabelIntent(svg) : false;
+    return svg ? projectLabelIntent(drawing, svg) : false;
   };
 
   // A feature visibility edit shows or hides the feature's label in the same
@@ -803,10 +816,11 @@ export const createFeatureLabelActions = ({
   // that draws a feature the Result does not draw (`rerender`) always reruns
   // the rerender, which draws it and its label (R-5).
   const applyFeatureVisibilityToLabels = ({ reflow = true, rerender = false } = {}) => {
+    const drawing = state.activeDrawing();
     if (generatedMode.value !== mode.value) return false;
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return false;
-    const projection = applyStoredVisibilityOverridesToSvg(svg);
+    const projection = applyStoredVisibilityOverridesToSvg(drawing, svg);
     if (projection.changed) commitLabelEdit();
     if (reflow || rerender) queueLabelReflow(rerender || projection.unavailableOverride);
     return projection.changed;
@@ -863,10 +877,11 @@ export const createFeatureLabelActions = ({
   };
 
   // Stores one feature's Label visibility and shows it in its open popup.
-  const setLabelVisibilityOverride = (feature, modeRaw) => {
+  /** @param {DrawingState} drawing */
+  const setLabelVisibilityOverride = (drawing, feature, modeRaw) => {
     const nextMode = normalizeVisibilityMode(modeRaw);
-    const previousMode = normalizeVisibilityMode(rowOf(feature)?.labelVisibility);
-    updateFeatureOverride(featureOverrides, feature, { labelVisibility: nextMode === 'default' ? null : nextMode });
+    const previousMode = normalizeVisibilityMode(rowOf(drawing, feature)?.labelVisibility);
+    updateFeatureOverride(drawing.featureOverrides, feature, { labelVisibility: nextMode === 'default' ? null : nextMode });
     if (featureIdentityKeyOf(clickedFeature.value?.feat) === featureIdentityKeyOf(feature)) {
       clickedFeature.value.labelVisibility = nextMode;
     }
@@ -875,14 +890,15 @@ export const createFeatureLabelActions = ({
 
   // One feature's label text edit: the text equal to the label's own text
   // removes the edit; any other text is one line, kept with its source text.
-  const applyDirectFeatureLabelOverride = (feature, labelTextRaw, sourceTextRaw, baselineTextRaw) => {
+  /** @param {DrawingState} drawing */
+  const applyDirectFeatureLabelOverride = (drawing, feature, labelTextRaw, sourceTextRaw, baselineTextRaw) => {
     if (!featureIdentityKeyOf(feature)) return false;
     const nextText = String(labelTextRaw ?? '');
     const sourceText = String(sourceTextRaw ?? '').trim();
     if (nextText === String(baselineTextRaw ?? '')) {
-      return updateFeatureOverride(featureOverrides, feature, { labelText: null, labelSourceText: null });
+      return updateFeatureOverride(drawing.featureOverrides, feature, { labelText: null, labelSourceText: null });
     }
-    return updateFeatureOverride(featureOverrides, feature, {
+    return updateFeatureOverride(drawing.featureOverrides, feature, {
       labelText: normalizeFeatureOverrideLabelText(nextText),
       ...(sourceText ? { labelSourceText: sourceText } : {})
     });
@@ -914,9 +930,10 @@ export const createFeatureLabelActions = ({
   };
 
   // One popup Label edit: the overrides, then the displayed Result.
-  const applyPopupLabelEdit = (feature, featureId, edit, { forceReflow = false } = {}) => {
-    const visibilityChanged = setLabelVisibilityOverride(feature, edit.visibility);
-    const textChanged = applyDirectFeatureLabelOverride(feature, edit.text, edit.sourceText, edit.sourceText);
+  /** @param {DrawingState} drawing */
+  const applyPopupLabelEdit = (drawing, feature, featureId, edit, { forceReflow = false } = {}) => {
+    const visibilityChanged = setLabelVisibilityOverride(drawing, feature, edit.visibility);
+    const textChanged = applyDirectFeatureLabelOverride(drawing, feature, edit.text, edit.sourceText, edit.sourceText);
 
     const textProjection = edit.hasEditableLabel
       ? applyDirectTextToCurrentSvg(featureId, edit.text)
@@ -937,7 +954,7 @@ export const createFeatureLabelActions = ({
       && edit.visibility === 'default'
       && !getEditableLabelByFeatureId(featureId)) {
       hiddenLabelTextDialog.featureId = featureId;
-      hiddenLabelTextDialog.reason = labelAbsenceReason(feature, getCommittedRequest()?.diagramOptions);
+      hiddenLabelTextDialog.reason = labelAbsenceReason(drawing, feature, getCommittedRequest()?.diagramOptions);
       hiddenLabelTextDialog.show = true;
       return;
     }
@@ -953,6 +970,7 @@ export const createFeatureLabelActions = ({
   };
 
   const updateClickedFeatureLabelText = async () => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!clickedFeature.value) return;
@@ -975,9 +993,9 @@ export const createFeatureLabelActions = ({
       clickedFeature.value.labelText = sourceText;
       clickedFeature.value.labelVisibility = edit.visibility;
     }
-    const apply = (options) => applyPopupLabelEdit(feature, featureId, edit, options);
-    if (edit.visibility === 'on' && normalizeVisibilityMode(rowOf(feature)?.labelVisibility) !== 'on') {
-      return applyLabelOn(featureId, apply);
+    const apply = (options) => applyPopupLabelEdit(drawing, feature, featureId, edit, options);
+    if (edit.visibility === 'on' && normalizeVisibilityMode(rowOf(drawing, feature)?.labelVisibility) !== 'on') {
+      return applyLabelOn(drawing, featureId, apply);
     }
     return apply();
   };
@@ -989,6 +1007,7 @@ export const createFeatureLabelActions = ({
   };
 
   const handleHiddenLabelTextChoice = (choice) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!hiddenLabelTextDialog.show) return;
@@ -997,8 +1016,8 @@ export const createFeatureLabelActions = ({
     if (choice !== 'show' || !featureId) return;
     const feature = featureById(featureId);
     if (!featureIdentityKeyOf(feature)) return;
-    return applyLabelOn(featureId, ({ forceReflow = false } = {}) => {
-      setLabelVisibilityOverride(feature, 'on');
+    return applyLabelOn(drawing, featureId, ({ forceReflow = false } = {}) => {
+      setLabelVisibilityOverride(drawing, feature, 'on');
       const projection = applyDirectVisibilityToCurrentSvg(featureId, 'on');
       queueLabelReflow(forceReflow || !projection.available);
     });
@@ -1011,15 +1030,16 @@ export const createFeatureLabelActions = ({
   // (Keep without label). The caller's History step stays open until the
   // choice, so a choice is one step and Cancel, which leaves the label intent
   // as it was, records none. Global settings never change.
-  const applyLabelOn = async (featureId, apply) => {
+  /** @param {DrawingState} drawing */
+  const applyLabelOn = async (drawing, featureId, apply) => {
     // The blocker reads Python's rule matches; prepared ones answer at once.
     const prepared = /** @type {any} */ (prepareDrawnFeatureMatches());
     if (typeof prepared?.then === 'function') await prepared;
     const feature = featureById(featureId);
     const diagramOptions = getCommittedRequest()?.diagramOptions;
-    const blocker = labelOnBlocker(feature, diagramOptions);
+    const blocker = labelOnBlocker(drawing, feature, diagramOptions);
     if (!blocker) return apply();
-    return confirmLabelOn({ featureId, feature, diagramOptions, blocker, apply });
+    return confirmLabelOn(drawing, { featureId, feature, diagramOptions, blocker, apply });
   };
 
   /** @type {((choice: string) => void) | null} */
@@ -1045,11 +1065,13 @@ export const createFeatureLabelActions = ({
     return false;
   };
 
-  const captureFeatureLabelIntent = (feature) => {
-    const row = rowOf(feature);
+  /** @param {DrawingState} drawing */
+  const captureFeatureLabelIntent = (drawing, feature) => {
+    const row = rowOf(drawing, feature);
     return Object.fromEntries(LABEL_FIELDS.map((field) => [field, row?.[field] ?? null]));
   };
-  const restoreFeatureLabelIntent = (feature, captured) => updateFeatureOverride(featureOverrides, feature, captured);
+  /** @param {DrawingState} drawing */
+  const restoreFeatureLabelIntent = (drawing, feature, captured) => updateFeatureOverride(drawing.featureOverrides, feature, captured);
 
   // Whether the label reflow that this Apply queued drew the feature's label;
   // null when no reflow replaced the Result (it was skipped or failed, or a
@@ -1076,7 +1098,8 @@ export const createFeatureLabelActions = ({
       .some((element) => normalizeKeyToken(element.getAttribute(LABEL_FEATURE_ID_ATTRIBUTE)) === key);
   };
 
-  const confirmLabelOn = async ({ featureId, feature, diagramOptions, blocker, apply }) => {
+  /** @param {DrawingState} drawing */
+  const confirmLabelOn = async (drawing, { featureId, feature, diagramOptions, blocker, apply }) => {
     const showFeature = blocker === 'hidden';
     if (showFeature) {
       const choice = await askLabelOn('hidden', feature);
@@ -1084,22 +1107,22 @@ export const createFeatureLabelActions = ({
       if (choice !== 'show') return cancelLabelOn();
     }
     // A feature shown here can still be drawn as underlay or with Embedded Only.
-    const drawing = showFeature ? labelDrawingBlocker(feature, diagramOptions) : blocker;
-    if (drawing === 'underlay' && await askLabelOn('underlay', feature) !== 'keep') return cancelLabelOn();
-    const embeddedOnly = drawing === 'embedded_only';
-    const labelIntent = captureFeatureLabelIntent(feature);
-    const featureVisibility = getFeatureVisibilityOverride(featureOverrides, feature);
+    const drawnAs = showFeature ? labelDrawingBlocker(feature, diagramOptions) : blocker;
+    if (drawnAs === 'underlay' && await askLabelOn('underlay', feature) !== 'keep') return cancelLabelOn();
+    const embeddedOnly = drawnAs === 'embedded_only';
+    const labelIntent = captureFeatureLabelIntent(drawing, feature);
+    const featureVisibility = getFeatureVisibilityOverride(drawing.featureOverrides, feature);
     if (showFeature) setFeatureVisibility?.(feature, 'on', { triggerReflow: false });
     apply({ forceReflow: embeddedOnly });
     if (!embeddedOnly) return true;
-    const applied = JSON.stringify(captureFeatureLabelIntent(feature));
+    const applied = JSON.stringify(captureFeatureLabelIntent(drawing, feature));
     const drawn = await reflowDrawsLabel(featureId);
     // A later edit of this label decides instead of this Apply.
-    if (drawn !== false || JSON.stringify(captureFeatureLabelIntent(feature)) !== applied) return true;
+    if (drawn !== false || JSON.stringify(captureFeatureLabelIntent(drawing, feature)) !== applied) return true;
     if (await askLabelOn('embedded_only', feature) === 'keep') return true;
     // Cancel restores the label intent and feature visibility this Apply
     // changed, and the label reflow draws the Result they describe again.
-    restoreFeatureLabelIntent(feature, labelIntent);
+    restoreFeatureLabelIntent(drawing, feature, labelIntent);
     if (showFeature) setFeatureVisibility?.(feature, featureVisibility, { triggerReflow: false });
     reconcileLabelOverrides();
     queueLabelReflow(true);
@@ -1109,6 +1132,7 @@ export const createFeatureLabelActions = ({
   // The popup note when the displayed Result draws no label for the clicked
   // feature: why the diagram cannot draw it (Owner Q1, Q2), or that On shows it.
   const clickedFeatureLabelHint = computed(() => {
+    const drawing = state.activeDrawing();
     const clicked = clickedFeature.value;
     if (!clicked?.hasEditableLabel) return '';
     const draft = normalizeVisibilityMode(clicked.labelVisibility);
@@ -1118,18 +1142,18 @@ export const createFeatureLabelActions = ({
     const featureId = clickedFeatureId();
     const feature = featureById(featureId);
     const diagramOptions = getCommittedRequest()?.diagramOptions;
-    const blocker = labelOnBlocker(feature, diagramOptions);
+    const blocker = labelOnBlocker(drawing, feature, diagramOptions);
     // A hidden feature's label is hidden with it (F-3).
     if (clicked.labelKey && blocker !== 'hidden') return '';
     let next = '';
-    if (normalizeVisibilityMode(rowOf(clicked.feat)?.labelVisibility) === 'on') {
+    if (normalizeVisibilityMode(rowOf(drawing, clicked.feat)?.labelVisibility) === 'on') {
       next = ` Its Label visibility "On" applies when ${blocker === 'hidden' ? 'the feature is shown' : 'the label can be drawn'}.`;
     } else if (!blocker && draft === 'default') {
       next = ' Choose On to show it.';
     } else if (!blocker) {
       return '';
     }
-    const reason = labelAbsenceReason(feature, diagramOptions);
+    const reason = labelAbsenceReason(drawing, feature, diagramOptions);
     return `${LABEL_ABSENT_PREFIX}${LABEL_ABSENCE_REASONS[reason] || ''}${next}`;
   });
 
@@ -1141,14 +1165,16 @@ export const createFeatureLabelActions = ({
 
   // A label list edit: one line of text, or an empty text, which hides the
   // label (Label visibility Off) as an empty label-table text does.
-  const applyLabelTextEdit = (feature, text, sourceText) => {
+  /** @param {DrawingState} drawing */
+  const applyLabelTextEdit = (drawing, feature, text, sourceText) => {
     const labelText = normalizeFeatureOverrideLabelText(String(text ?? ''));
-    return updateFeatureOverride(featureOverrides, feature, labelText
+    return updateFeatureOverride(drawing.featureOverrides, feature, labelText
       ? { labelText, labelSourceText: sourceText || null }
       : { labelText: null, labelVisibility: 'off', labelSourceText: sourceText || null });
   };
 
   const handleLabelTextScopeChoice = (choice) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (choice === 'cancel' || !labelTextScopeDialog.show) {
@@ -1180,16 +1206,16 @@ export const createFeatureLabelActions = ({
         matchedCount += 1;
         const candidate = labelFeature(textEl.getAttribute('data-label-feature-id'), displayed);
         if (featureIdentityKeyOf(candidate)) {
-          applyLabelTextEdit(candidate, newText, candidateSource);
+          applyLabelTextEdit(drawing, candidate, newText, candidateSource);
         } else {
           hasUntrackableMatch = true;
         }
         setLabelText(textEl, newText);
       });
       if (hasUntrackableMatch || matchedCount === 0) {
-        labelTextBulkOverrides[sourceText] = newText;
-      } else if (Object.prototype.hasOwnProperty.call(labelTextBulkOverrides, sourceText)) {
-        delete labelTextBulkOverrides[sourceText];
+        drawing.labelTextBulkOverrides[sourceText] = newText;
+      } else if (Object.prototype.hasOwnProperty.call(drawing.labelTextBulkOverrides, sourceText)) {
+        delete drawing.labelTextBulkOverrides[sourceText];
       }
     } else if (choice === 'single' && targetKey) {
       const targetEl = svg.querySelector(`text[data-label-key="${CSS.escape(targetKey)}"]`);
@@ -1197,7 +1223,7 @@ export const createFeatureLabelActions = ({
         setLabelText(targetEl, newText);
       }
       const feature = labelFeature(featureId);
-      if (featureIdentityKeyOf(feature)) applyLabelTextEdit(feature, newText, sourceText);
+      if (featureIdentityKeyOf(feature)) applyLabelTextEdit(drawing, feature, newText, sourceText);
     } else {
       closeLabelTextScopeDialog();
       return;
@@ -1210,11 +1236,12 @@ export const createFeatureLabelActions = ({
   };
 
   const resetAllLabelTextOverrides = () => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const svg = svgContainer.value?.querySelector('svg');
-    if (svg) resetLabelsToSourceText(svg);
-    clearOverrides();
+    if (svg) resetLabelsToSourceText(drawing, svg);
+    clearOverrides(drawing);
     if (!svgContainer.value) {
       editableLabels.value = [];
       closeLabelTextScopeDialog();
@@ -1222,7 +1249,7 @@ export const createFeatureLabelActions = ({
       return;
     }
     if (!svg) return;
-    applyStoredVisibilityOverridesToSvg(svg);
+    applyStoredVisibilityOverridesToSvg(drawing, svg);
 
     closeLabelTextScopeDialog();
     closeHiddenLabelTextDialog();
@@ -1234,18 +1261,20 @@ export const createFeatureLabelActions = ({
   // A Label TSV row selects labels in every Result of a batch. The displayed
   // Result binds its labels as the editor does; the committed content of
   // another Result carries the renderer's label bindings (B6).
-  const labelSourceText = (element, feature) => (
-    rowOf(feature)?.labelSourceText
+  /** @param {DrawingState} drawing */
+  const labelSourceText = (drawing, element, feature) => (
+    rowOf(drawing, feature)?.labelSourceText
     ?? element.getAttribute('data-label-source-text') ?? getLabelText(element)
   );
-  const labelImportTargets = (svg) => {
+  /** @param {DrawingState} drawing */
+  const labelImportTargets = (drawing, svg) => {
     const elements = collectEditableLabelElements(svg, mode.value);
     const assignments = assignFeatureIdsToLabels(svg, elements, collectFeatureGeometry(svg), mode.value);
     const displayed = displayedFeatures();
     const targets = elements.map((element) => {
       const featureId = assignments.get(element) || '';
       const feature = featureId ? labelFeature(featureId, displayed) : null;
-      return { featureId, feature, sourceText: labelSourceText(element, feature) };
+      return { featureId, feature, sourceText: labelSourceText(drawing, element, feature) };
     });
     const seen = new Set(targets.map(({ feature }) => featureIdentityKeyOf(feature)).filter(Boolean));
     results.value.forEach((result, index) => {
@@ -1258,7 +1287,7 @@ export const createFeatureLabelActions = ({
         const key = featureIdentityKeyOf(feature);
         if (!key || seen.has(key)) return;
         seen.add(key);
-        targets.push({ featureId, feature, sourceText: labelSourceText(element, feature) });
+        targets.push({ featureId, feature, sourceText: labelSourceText(drawing, element, feature) });
       });
     });
     return targets;
@@ -1266,17 +1295,22 @@ export const createFeatureLabelActions = ({
 
   let labelImportRevision = 0;
   const labelImportFailure = ref(null);
-  const canRetryLabelImportFailure = computed(() => Boolean(labelImportFailure.value
-    && state.errorLog?.value === labelImportFailure.value.error
-    && labelImportFailure.value.revision === labelImportRevision
-    && rulePreparation.isCurrent(labelImportFailure.value.snapshot)
-    && labelImportFailure.value.intent === labelIntentSignature()));
+  const canRetryLabelImportFailure = computed(() => {
+    const drawing = state.activeDrawing();
+    return Boolean(labelImportFailure.value
+      && state.errorLog?.value === labelImportFailure.value.error
+      && labelImportFailure.value.revision === labelImportRevision
+      && rulePreparation.isCurrent(labelImportFailure.value.snapshot)
+      && labelImportFailure.value.intent === labelIntentSignature(drawing));
+  });
   const retryLabelImportFailure = () => canRetryLabelImportFailure.value ? labelImportFailure.value.retry() : false;
   const editLabelImportFailure = () => {
     if (canRetryLabelImportFailure.value) labelImportFailure.value.input?.click?.();
   };
-  const labelIntentSignature = () => JSON.stringify([featureOverrides, labelTextBulkOverrides]);
+  /** @param {DrawingState} drawing */
+  const labelIntentSignature = (drawing) => JSON.stringify([drawing.featureOverrides, drawing.labelTextBulkOverrides]);
   const loadLabelOverrideTable = async (event) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const input = event?.target;
@@ -1284,7 +1318,7 @@ export const createFeatureLabelActions = ({
     if (!file) return;
     const sourceSvg = svgContainer.value?.querySelector('svg') || null;
     const before = rulePreparation.snapshot();
-    const labelIntent = labelIntentSignature();
+    const labelIntent = labelIntentSignature(drawing);
     const revision = ++labelImportRevision;
     const previousError = state.errorLog?.value;
 
@@ -1295,7 +1329,7 @@ export const createFeatureLabelActions = ({
       const rows = parseLabelOverrideTsv(text);
 
       const svg = sourceSvg;
-      const labels = svg ? labelImportTargets(svg) : [];
+      const labels = svg ? labelImportTargets(drawing, svg) : [];
       const evaluation = await evaluateLabelRules({
         kind: 'label', rules: rows,
         features: labels.map((entry) => ruleFeaturePayload(
@@ -1303,7 +1337,7 @@ export const createFeatureLabelActions = ({
         ))
       });
       if (state.sessionOperationAvailability?.()) return state.sessionOperationAvailability();
-      if (revision !== labelImportRevision || labelIntent !== labelIntentSignature()
+      if (revision !== labelImportRevision || labelIntent !== labelIntentSignature(drawing)
         || input.files?.[0] !== file || !rulePreparation.isCurrent(before)
         || (svgContainer.value?.querySelector('svg') || null) !== sourceSvg) return;
       if (!svg) {
@@ -1349,13 +1383,13 @@ export const createFeatureLabelActions = ({
           : 'no row matched a label of the diagram'}. The existing label edits were kept.`);
         return;
       }
-      clearOverrides();
+      clearOverrides(drawing);
       applicable.forEach(({ entry, matchedRow, tracked }) => {
         if (matchedRow.isGlobalLabelRule) {
-          labelTextBulkOverrides[entry.sourceText] = String(matchedRow.labelText ?? '');
-          if (tracked) updateFeatureOverride(featureOverrides, entry.feature, { labelSourceText: entry.sourceText || null });
+          drawing.labelTextBulkOverrides[entry.sourceText] = String(matchedRow.labelText ?? '');
+          if (tracked) updateFeatureOverride(drawing.featureOverrides, entry.feature, { labelSourceText: entry.sourceText || null });
         } else {
-          applyLabelTextEdit(entry.feature, matchedRow.labelText, entry.sourceText);
+          applyLabelTextEdit(drawing, entry.feature, matchedRow.labelText, entry.sourceText);
         }
       });
 
@@ -1388,12 +1422,13 @@ export const createFeatureLabelActions = ({
   // label table, or the bulk label edits as `* * label` rows. Per-feature label
   // edits are identity rows; Export Feature Edits TSV writes them (design Q4 6.4).
   const downloadLabelOverrideTable = () => {
-    const savedTable = serializeLabelOverrideRows(state.canonicalLabelOverrideRows?.value);
+    const drawing = state.activeDrawing();
+    const savedTable = serializeLabelOverrideRows(drawing.canonicalLabelOverrideRows?.value);
     const rows = savedTable
       ? savedTable.trimEnd().split('\n')
-      : Object.keys(labelTextBulkOverrides).sort((a, b) => a.localeCompare(b)).filter(Boolean)
+      : Object.keys(drawing.labelTextBulkOverrides).sort((a, b) => a.localeCompare(b)).filter(Boolean)
         .map((sourceText) => `*\t*\tlabel\t^${escapeRegexLiteral(sourceText)}$\t${
-          normalizeTsvCell(labelTextBulkOverrides[sourceText])}`);
+          normalizeTsvCell(drawing.labelTextBulkOverrides[sourceText])}`);
     if (rows.length === 0) {
       window.alert('No label rules to export. Export Feature Edits TSV writes per-feature label edits.');
       return;

@@ -620,21 +620,20 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
   const config = migratedDraft.config;
   const filesData = migratedDraft.filesData;
   hydrateLinearFilePresentations(filesData, args);
-  const state = /** @type {Record<string, any>} */ (
-    buildCanonicalRequestState({ session, projection, config, filesData })
-  );
-  restoreConservationFiles(session, filesData, state.circularConservation);
+  const { state, drawing } = buildCanonicalRequestState({ session, projection, config, filesData });
+  restoreConservationFiles(session, filesData, drawing.circularConservation);
   const comparisonPlanSnapshot = projection.mode === 'linear'
     ? resolveLinearComparisonPlan({
-        plan: state.linearComparisonPlan,
+        plan: drawing.linearComparisonPlan,
         sequences: filesData.linearSeqs,
-        layout: state.linearRecordLayoutEnabled.value ? state.linearRecordRows : [],
-        losatProgram: state.losatProgram.value,
-        blastpMode: state.losat?.blastp?.mode
+        layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [],
+        losatProgram: drawing.losatProgram.value,
+        blastpMode: drawing.losat?.blastp?.mode
       })
     : null;
   const promotedCore = buildCanonicalRenderRequest({
     state,
+    drawing,
     filesData,
     comparisonPlanSnapshot
   });

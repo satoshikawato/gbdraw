@@ -116,11 +116,11 @@ const rebuildIntent = async (session, owners) => {
   if (projection.mode === 'linear') filesData.linearSeqs.forEach((sequence, index) => {
     sequence.cardinality = renderRequest.records[index]?.cardinality;
   });
-  const state = owners.buildRequestState({ session, projection, config, filesData });
-  const plan = projection.mode === 'linear' ? owners.resolveComparisonPlan({ plan: state.linearComparisonPlan, sequences: filesData.linearSeqs,
-    layout: state.linearRecordLayoutEnabled.value ? state.linearRecordRows : [],
-    losatProgram: state.losatProgram.value, blastpMode: state.losat?.blastp?.mode }) : null;
-  const rebuilt = owners.buildRequest({ state, filesData, comparisonPlanSnapshot: plan });
+  const { state, drawing } = owners.buildRequestState({ session, projection, config, filesData });
+  const plan = projection.mode === 'linear' ? owners.resolveComparisonPlan({ plan: drawing.linearComparisonPlan, sequences: filesData.linearSeqs,
+    layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [],
+    losatProgram: drawing.losatProgram.value, blastpMode: drawing.losat?.blastp?.mode }) : null;
+  const rebuilt = owners.buildRequest({ state, drawing, filesData, comparisonPlanSnapshot: plan });
   if (!isObject(rebuilt.renderRequest.output) || !isObject(session.renderRequest.output)) throw new Error('Gallery publication cannot preserve committed output metadata policy.');
   rebuilt.renderRequest.output.interactiveMetadataPolicy = session.renderRequest.output.interactiveMetadataPolicy;
   // A CLI-written request carries the resolved configuration; publication
@@ -173,7 +173,8 @@ const mergeReplayResources = (prepared, replayed) => {
  *   Promotes a historical Session to the current version.
  * @property {(input: Record<string, any>) => Promise<Record<string, any>>} assertRequestsEquivalent
  * @property {(input: Record<string, any>) => Record<string, any>} buildRequest
- * @property {(input: Record<string, any>) => Record<string, any>} buildRequestState
+ * @property {(input: Record<string, any>) => { state: Record<string, any>, drawing: Record<string, any> }} buildRequestState
+ *   The request inputs of a Session: project inputs and artifacts (`state`) and settings and edits (`drawing`).
  * @property {(request: Record<string, any>, promotion?: Record<string, any>) => Record<string, any>} promoteRequest
  * @property {(input: Record<string, any>) => Record<string, any>} projectRequest
  * @property {(input: Record<string, any>) => any} resolveComparisonPlan

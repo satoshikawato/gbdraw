@@ -14,14 +14,14 @@ await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 
 const {
   CANONICAL_REQUEST_SCHEMA,
-  buildCanonicalRenderRequest: buildCanonicalRenderRequestRaw,
+  buildCanonicalRenderRequest: buildDrawingRenderRequest,
   bindCanonicalTypedResource,
   canonicalLinearRecordLayout,
   decodeCanonicalResourceText,
   managedConfigOverridePathsForMode,
   normalizeWebGridColumnOrdering,
   promoteCanonicalRenderRequestToCurrent,
-  projectCommittedEditorIntent,
+  projectCommittedEditorIntent: projectDrawingEditorIntent,
   projectCommittedRecordTransform,
   projectCanonicalSessionRequest
 } = await import(
@@ -76,6 +76,9 @@ assert.deepEqual(
   ]
 );
 
+// A fixture state is its own drawing.
+const buildCanonicalRenderRequestRaw = (args) => buildDrawingRenderRequest({ drawing: args.state, ...args });
+const projectCommittedEditorIntent = (args) => projectDrawingEditorIntent({ drawing: args.state, ...args });
 const characterizedRequests = [];
 const buildCanonicalRenderRequest = (args) => {
   const result = buildCanonicalRenderRequestRaw({

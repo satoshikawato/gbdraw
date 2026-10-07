@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { DrawingState } from '../../state.js' */
 /** @import { FeaturePlacementDraftRow, FeaturePlacementTarget } from '../../services/feature-placement.js' */
 /** @import { ChangeTrackLayout, LayoutControl } from '../track-slot-edits.js' */
 import {
@@ -78,16 +79,19 @@ export const createFeaturePlacementActions = ({
   state, runUndoable, getCommittedRequest, isCurrentFeature,
   reactive = (value) => value, nextTick = () => Promise.resolve()
 }) => {
-  const draft = () => ({ mode: state.mode.value, form: state.form, adv: state.adv });
-  const targetsFor = (features) => {
+  /** @param {DrawingState} drawing */
+  const draft = (drawing) => ({ mode: state.mode.value, form: drawing.form, adv: drawing.adv });
+  /** @param {DrawingState} drawing */
+  const targetsFor = (drawing, features) => {
     const mode = state.mode.value;
     if (!features.length || getCommittedRequest()?.mode !== mode) return [];
     const items = state.featureCatalog.value?.items || [];
     if (!features.every((feature) => items.some((item) => item.recordKeys.includes(feature?.record_key)))) return [];
-    return draftPlacementTargets(draft());
+    return draftPlacementTargets(draft(drawing));
   };
   const choices = (features) => {
-    const targets = targetsFor(features);
+    const drawing = state.activeDrawing();
+    const targets = targetsFor(drawing, features);
     return ['auto', 'main', ...SIDES[state.mode.value]].map((value) => {
       const enabled = features.length > 0 && features.every((feature) => {
         if (!featureIdentityKeyOf(feature) || !isCurrentFeature(feature)) return false;
@@ -100,6 +104,7 @@ export const createFeaturePlacementActions = ({
     });
   };
   const setPlacement = (features, value) => {
+    const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
     const choice = choices(features).find((entry) => entry.value === value);
@@ -107,13 +112,13 @@ export const createFeaturePlacementActions = ({
     return runUndoable(features.length === 1 ? 'Change feature placement' : 'Change selected feature placements', () => {
       for (const feature of features) {
         const key = featureIdentityKeyOf(feature);
-        if (value === 'auto') delete state.featurePlacementOverrides[key];
+        if (value === 'auto') delete drawing.featurePlacementOverrides[key];
         else {
           // `key` comes from featureIdentityKeyOf, so parseFeatureIdentityKey reads it back; canonicalFeaturePlacements validates the row.
           const row = /** @type {FeaturePlacementDraftRow} */ ({ ...parseFeatureIdentityKey(key), placement: /** @type {FeaturePlacementTarget} */ (value === 'main'
             ? { kind: 'main' } : { kind: 'lane', side: value, level: 1 }) });
           canonicalFeaturePlacements({ [key]: row });
-          state.featurePlacementOverrides[key] = row;
+          drawing.featurePlacementOverrides[key] = row;
         }
       }
     });
@@ -131,12 +136,14 @@ export const createFeaturePlacementActions = ({
   const layoutChange = reactive({ open: false, count: 0, setting: '', value: '', scope: '' });
   /** @type {{ control: LayoutControl | null, apply: () => any } | null} */
   let pendingLayout = null;
-  const laneSides = () => Object.fromEntries(Object.keys(SIDES).map((mode) => [mode,
-    draftPlacementTargets({ mode, form: state.form, adv: state.adv }).map((target) => target.side).filter(Boolean)]));
-  const lostLaneKeys = (before) => {
-    const after = laneSides();
-    return Object.keys(state.featurePlacementOverrides).filter((key) => {
-      const { scope, placement } = state.featurePlacementOverrides[key] || {};
+  /** @param {DrawingState} drawing */
+  const laneSides = (drawing) => Object.fromEntries(Object.keys(SIDES).map((mode) => [mode,
+    draftPlacementTargets({ mode, form: drawing.form, adv: drawing.adv }).map((target) => target.side).filter(Boolean)]));
+  /** @param {DrawingState} drawing */
+  const lostLaneKeys = (drawing, before) => {
+    const after = laneSides(drawing);
+    return Object.keys(drawing.featurePlacementOverrides).filter((key) => {
+      const { scope, placement } = drawing.featurePlacementOverrides[key] || {};
       return before[scope]?.includes(placement?.side) && !after[scope].includes(placement?.side);
     });
   };
@@ -146,20 +153,21 @@ export const createFeaturePlacementActions = ({
    * @type {ChangeTrackLayout}
    */
   const changeTrackLayout = (apply, control = null) => {
+    const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    if (!Object.values(state.featurePlacementOverrides).some((row) => row?.placement?.kind === 'lane')) return apply();
-    const before = laneSides();
-    const saved = saveTrackLayout(state);
+    if (!Object.values(drawing.featurePlacementOverrides).some((row) => row?.placement?.kind === 'lane')) return apply();
+    const before = laneSides(drawing);
+    const saved = saveTrackLayout(drawing);
     const result = apply();
-    const lost = lostLaneKeys(before);
+    const lost = lostLaneKeys(drawing, before);
     if (!lost.length) return result;
-    restoreTrackLayout(state, saved);
+    restoreTrackLayout(drawing, saved);
     const checkbox = control?.type === 'checkbox';
     const value = checkbox ? (control.checked ? 'On' : 'Off') : control?.selectedOptions?.[0]?.text || '';
     // The checkbox shows the kept value again; a bound select re-renders to it.
     if (checkbox) control.checked = !control.checked;
-    const scopes = [...new Set(lost.map((key) => state.featurePlacementOverrides[key].scope))]
+    const scopes = [...new Set(lost.map((key) => drawing.featurePlacementOverrides[key].scope))]
       .filter((scope) => scope !== state.mode.value);
     pendingLayout = { control, apply };
     Object.assign(layoutChange, { open: true, count: lost.length, value,
@@ -170,29 +178,32 @@ export const createFeaturePlacementActions = ({
     return false;
   };
   const resolveLayoutChange = async (choice) => {
+    const drawing = state.activeDrawing();
     const change = pendingLayout;
     pendingLayout = null;
     layoutChange.open = false;
     if (!change) return false;
     const result = choice === 'reset' && await runUndoable('Change setting and reset Feature placements', () => {
-      const before = laneSides();
+      const before = laneSides(drawing);
       change.apply();
-      for (const key of lostLaneKeys(before)) delete state.featurePlacementOverrides[key];
+      for (const key of lostLaneKeys(drawing, before)) delete drawing.featurePlacementOverrides[key];
     });
     void focusAfterRender(() => change.control);
     return result;
   };
   const changeLayoutSetting = (event, field) => {
+    const drawing = state.activeDrawing();
     const control = event.target;
     const value = control.type === 'checkbox' ? control.checked : control.value;
-    return changeTrackLayout(() => { state.form[field] = value; }, control);
+    return changeTrackLayout(() => { drawing.form[field] = value; }, control);
   };
 
   return { choices, setPlacement, layoutChange, resolveLayoutChange, changeLayoutSetting, changeTrackLayout,
     valueFor: (feature) => {
+      const drawing = state.activeDrawing();
       // The control lists this mode's placements; a feature of the other
       // mode's Result reads as Auto until that mode is active (R2).
-      const row = state.featurePlacementOverrides[featureIdentityKeyOf(feature)];
+      const row = drawing.featurePlacementOverrides[featureIdentityKeyOf(feature)];
       const target = row?.scope === state.mode.value ? row.placement : null;
       return target?.kind === 'main' ? 'main' : target?.side || 'auto';
     } };

@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { DrawingState } from '../state.js' */
 import { createLegendDragActions } from './legend/drag-actions.js';
 import { createLegendEntryActions } from './legend/entry-actions.js';
 import { createLegendLayoutActions } from './legend/layout-actions.js';
@@ -56,9 +57,10 @@ export const createLegendManager = ({
     commitActiveResultEdit
   });
   const strokeActions = createLegendStrokeActions({ state, commitActiveResultEdit });
-  const rowRulesAt = (index) => legendRowRules(state.legendEntries.value[index]?.caption, {
-    rules: state.manualSpecificRules,
-    legendEntries: state.legendEntries.value,
+  /** @param {DrawingState} drawing */
+  const rowRulesAt = (drawing, index) => legendRowRules(drawing.legendEntries.value[index]?.caption, {
+    rules: drawing.manualSpecificRules,
+    legendEntries: drawing.legendEntries.value,
     originalLegendOrder: state.originalLegendOrder?.value || []
   });
   const dragActions = createLegendDragActions({
@@ -75,16 +77,18 @@ export const createLegendManager = ({
     // that rule through the rule owner's port (R13); any other row is a
     // legend-only edit.
     updateLegendEntryColor: (index, color) => {
-      const rowRules = rowRulesAt(index);
+      const drawing = state.activeDrawing();
+      const rowRules = rowRulesAt(drawing, index);
       if (rowRules.length) {
-        return commitLegendRowRules(state.manualSpecificRules.map(rule => rowRules.includes(rule) ? { ...rule, color } : { ...rule }), 'Change legend color');
+        return commitLegendRowRules(drawing.manualSpecificRules.map(rule => rowRules.includes(rule) ? { ...rule, color } : { ...rule }), 'Change legend color');
       }
       return entryActions.updateLegendEntryColor(index, color);
     },
     updateLegendEntryCaption: (index, caption) => {
-      const rowRules = rowRulesAt(index);
+      const drawing = state.activeDrawing();
+      const rowRules = rowRulesAt(drawing, index);
       if (rowRules.length) {
-        return commitLegendRowRules(state.manualSpecificRules.map(rule => rowRules.includes(rule) ? { ...rule, cap: caption } : { ...rule }), 'Rename legend item');
+        return commitLegendRowRules(drawing.manualSpecificRules.map(rule => rowRules.includes(rule) ? { ...rule, cap: caption } : { ...rule }), 'Rename legend item');
       }
       return entryActions.updateLegendEntryCaption(index, caption);
     },

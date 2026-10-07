@@ -168,32 +168,37 @@ export const createRulePreparation = ({
   const features = () => [...new Set([
     ...(state.extractedFeatures.value || []), ...(state.biologicalFeatures?.value || [])
   ])];
-  const snapshot = () => ({
-    catalog: state.extractedFeatures.value,
-    biology: state.biologicalFeatures?.value,
-    result: state.svgResultIdentity?.value,
-    mode: state.mode?.value,
-    inputKinds: JSON.stringify([state.cInputType?.value, state.lInputType?.value]),
-    rules: JSON.stringify(state.manualSpecificRules),
-    file: state.files?.t_color,
-    linearFiles: [...(state.linearSeqs || [])].flatMap(sequence => [sequence.gb, sequence.gff, sequence.fasta]),
-    resultNames: JSON.stringify((state.results?.value || []).map(result => result.name)),
-    selectedResult: state.selectedResultIndex?.value,
-    legend: JSON.stringify(state.legendEntries?.value || []),
-    legendColors: JSON.stringify(state.legendColorOverrides || {}),
-    legendStrokes: JSON.stringify(state.legendStrokeOverrides || {}),
-    featureColors: JSON.stringify(state.featureColorOverrides || {}),
-    featureVisibility: JSON.stringify(Object.values(state.featureOverrides || {})
-      .map((row) => [row.scope, row.recordKey, row.biologicalFeatureId, row.featureVisibility])),
-    // Physical source, palette, and selector inputs retain their identity while
-    // request-owned comparison artifacts are published independently.
-    inputFiles: [
-      state.files?.c_gb, state.files?.c_gff, state.files?.c_fasta, state.files?.c_depth,
-      state.files?.d_color, state.files?.blacklist, state.files?.whitelist, state.files?.qualifier_priority,
-      state.files?.c_conservation_blasts, state.files?.c_conservation_blasts_source,
-      state.files?.c_conservation_fastas, state.files?.c_conservation_sequence_sources
-    ].flatMap(input => Array.isArray(input) ? [input, ...input] : [input])
-  });
+  const snapshot = () => {
+    const drawing = state.activeDrawing();
+    return (
+  {
+      catalog: state.extractedFeatures.value,
+      biology: state.biologicalFeatures?.value,
+      result: state.svgResultIdentity?.value,
+      mode: state.mode?.value,
+      inputKinds: JSON.stringify([state.cInputType?.value, state.lInputType?.value]),
+      rules: JSON.stringify(drawing.manualSpecificRules),
+      file: state.files?.t_color,
+      linearFiles: [...(state.linearSeqs || [])].flatMap(sequence => [sequence.gb, sequence.gff, sequence.fasta]),
+      resultNames: JSON.stringify((state.results?.value || []).map(result => result.name)),
+      selectedResult: state.selectedResultIndex?.value,
+      legend: JSON.stringify(drawing.legendEntries?.value || []),
+      legendColors: JSON.stringify(drawing.legendColorOverrides || {}),
+      legendStrokes: JSON.stringify(drawing.legendStrokeOverrides || {}),
+      featureColors: JSON.stringify(drawing.featureColorOverrides || {}),
+      featureVisibility: JSON.stringify(Object.values(drawing.featureOverrides || {})
+        .map((row) => [row.scope, row.recordKey, row.biologicalFeatureId, row.featureVisibility])),
+      // Physical source, palette, and selector inputs retain their identity while
+      // request-owned comparison artifacts are published independently.
+      inputFiles: [
+        state.files?.c_gb, state.files?.c_gff, state.files?.c_fasta, state.files?.c_depth,
+        state.files?.d_color, state.files?.blacklist, state.files?.whitelist, state.files?.qualifier_priority,
+        state.files?.c_conservation_blasts, state.files?.c_conservation_blasts_source,
+        state.files?.c_conservation_fastas, state.files?.c_conservation_sequence_sources
+      ].flatMap(input => Array.isArray(input) ? [input, ...input] : [input])
+    }
+    );
+  };
   const isCurrent = (before) => {
     const after = snapshot();
     return Object.keys(before).every((key) => key === 'linearFiles' || key === 'inputFiles'
@@ -203,7 +208,7 @@ export const createRulePreparation = ({
   const matchesPrepared = (targets, draft) => !draft.length || (
     draft.every((rule) => validated.has(ruleKey(rule))) && ruleMatchesReady(targets, draft)
   );
-  const isPrepared = (rules = state.manualSpecificRules) => {
+  const isPrepared = (rules = state.activeDrawing().manualSpecificRules) => {
     const draft = [...new Map(rules.map((rule) => [ruleKey(rule), rule])).values()];
     return matchesPrepared(features(), draft);
   };
@@ -212,7 +217,7 @@ export const createRulePreparation = ({
   // read from known matches (`retain`).
   let retained = [];
   const retain = (rules = []) => { retained = rules; };
-  const prepare = (rules = state.manualSpecificRules, options = {}) => {
+  const prepare = (rules = state.activeDrawing().manualSpecificRules, options = {}) => {
     const targets = features();
     const draft = [...new Map([...rules, ...retained].map((rule) => [ruleKey(rule), { feat: rule.feat, qual: rule.qual, val: rule.val }])).values()];
     // Empty catalogs still require syntax validation at input boundaries.
@@ -271,7 +276,8 @@ export const createRulePreparation = ({
   // `strict` preparation is a run's: a failed color preparation rejects and a
   // stale one resolves to false (`runWhenPrepared`).
   const prepareDrawn = ({ strict = false } = {}) => {
-    const colors = prepare(state.manualSpecificRules || []);
+    const drawing = state.activeDrawing();
+    const colors = prepare(drawing.manualSpecificRules || []);
     const visibility = prepareVisibility();
     if (colors === true && visibility === true) return true;
     return Promise.all([strict ? colors : Promise.resolve(colors).catch(() => false), visibility])
@@ -282,7 +288,7 @@ export const createRulePreparation = ({
   // are the caller's evaluation options (a run's progress observer). A run
   // that only reads the matches of rules it keeps as they are asks for
   // `captions: false`: the rules are prepared as given and no caption changes.
-  const prepareCandidate = async (rules = state.manualSpecificRules, { captions = true, ...options } = {}) => {
+  const prepareCandidate = async (rules = state.activeDrawing().manualSpecificRules, { captions = true, ...options } = {}) => {
     const before = snapshot();
     if (!captions) {
       return await prepare(rules, options) && isCurrent(before)

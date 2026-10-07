@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const ref = (value) => ({ value });
 const watchers = [];
@@ -103,7 +104,7 @@ const { createPreviewFeatureSearch } = await import(
   '../../gbdraw/web/js/app/feature-search/preview-actions.js'
 );
 const search = createPreviewFeatureSearch({
-  state,
+  state: withDrawings(state),
   watch(source, callback) {
     watchers.push({ source, callback });
   },

@@ -78,8 +78,9 @@ const filesFor = (mode) => (mode === 'circular'
   ? { c_gb: genbank, linearSeqs: [] }
   : { linearSeqs: [{ uid: 'first', gb: genbank, losat_gencode: 1, region_record_id: '', region_start: null, region_end: null, region_reverse: false }] });
 const comparisonPlanSnapshot = { hasComparisonIntent: true, hasLosatIntent: false, edges: [] };
-const project = (mode, adv) => buildCanonicalRenderRequest({
-  state: baseState(mode, adv),
+const project = (mode, adv, state = baseState(mode, adv)) => buildCanonicalRenderRequest({
+  state,
+  drawing: state,
   filesData: filesFor(mode),
   ...(mode === 'linear' ? { comparisonPlanSnapshot } : {})
 }).renderRequest;
@@ -207,7 +208,7 @@ test('Generate keeps the numeric draft: no Generate-path draft assignments are a
   const BASELINE = 46;
   const source = readFileSync(new URL('../../gbdraw/web/js/app/run-analysis.js', import.meta.url), 'utf8');
   const assignments = source.split('\n').filter((line) => (
-    /^\s*(adv|form|circularConservation|losat(\.[a-z]+)?)\.[a-zA-Z_]+(\[[^\]]*\])?\s*=[^=]/.test(line)
+    /^\s*(drawing\.)?(adv|form|circularConservation|losat(\.[a-z]+)?)\.[a-zA-Z_]+(\[[^\]]*\])?\s*=[^=]/.test(line)
     || /(adv|form|circularConservation)\.[a-z_]+\.splice\(/.test(line)
   ));
   assert.equal(assignments.length, BASELINE, assignments.join('\n'));

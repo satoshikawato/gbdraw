@@ -91,6 +91,7 @@ state.adv.circular_track_slots.splice(
 );
 const committed = buildCanonicalRenderRequest({
   state,
+  drawing: state.activeDrawing(),
   filesData: {
     c_gb: {
       name: 'legacy.gbk',

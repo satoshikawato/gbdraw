@@ -682,9 +682,9 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
         });
       } : null;
     },
-    serializeCanonicalFiles: () => {
+    serializeCanonicalFiles: (_snapshot, _catalog, drawing) => {
       assert.equal(state.processingStatus.value, 'Preparing render inputs and session...');
-      return serializeActiveRenderFiles(state.mode.value, state);
+      return serializeActiveRenderFiles(state.mode.value, state, drawing);
     },
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: (canonical) => {
@@ -1551,7 +1551,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     ...generatedArtifactHandleOptions,
     state,
     recordDisplayRows,
-    serializeCanonicalFiles: (_snapshot, _catalog, runState) => serializeActiveRenderFiles(runState.mode.value, runState),
+    serializeCanonicalFiles: (_snapshot, _catalog, drawing) => serializeActiveRenderFiles(state.mode.value, state, drawing),
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts: (canonical) => {
       if (failLateArtifactAdoption) {
@@ -2279,11 +2279,11 @@ test('Linear mode none ignores dormant comparison state while active depth and a
   const runner = wireGeneratedArtifactRuntimeOwner(createRunAnalysis({
     ...generatedArtifactHandleOptions,
     state,
-    serializeCanonicalFiles: (snapshot, recordCatalog, runState) => {
+    serializeCanonicalFiles: (snapshot, recordCatalog, drawing) => {
       serializeCalls += 1;
       serializedSnapshot = snapshot;
       serializedRecordCatalog = recordCatalog;
-      return serializeActiveRenderFiles(runState.mode.value, runState, snapshot);
+      return serializeActiveRenderFiles(state.mode.value, state, drawing, snapshot);
     },
     prepareLinearRecordCatalog: (...args) => prepareLinearRecordCatalogImpl(...args),
     canonicalSessionVersion: SESSION_VERSION,

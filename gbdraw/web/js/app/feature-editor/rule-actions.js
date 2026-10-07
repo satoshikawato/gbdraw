@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { DrawingState } from '../../state.js' */
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { firstMatchingRule, ruleMatchesReady, runWhenPrepared } from '../rule-matching.js';
@@ -67,26 +68,17 @@ import { featureDrawnContext, resultLegendSources, sameLegendSources } from '../
 /** @param {FeatureRuleActionsOptions} options */
 export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rulePreparation, runUndoable, runUndoableCheckpoint, projectPaletteAndRules, ports, getCommittedRequest = () => null, ref, computed, watch, isPatternEditAvailable = () => true }) => {
   const {
-    currentColors,
     appliedPaletteColors,
     newColorFeat,
     newColorVal,
-    manualSpecificRules,
     newSpecRule,
     specificRulePresets,
     selectedSpecificPreset,
     specificRulePresetLoading,
-    manualPriorityRules,
     newPriorityRule,
-    adv,
     newFeatureToAdd,
     extractedFeatures,
-    featureColorOverrides,
-    editableLabels,
-    featureOverrides,
-    labelTextBulkOverrides,
-    addedLegendCaptions,
-    fileLegendCaptions
+    editableLabels
   } = state;
 
   const normalizeCaption = (value) => String(value || '').trim();
@@ -97,7 +89,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
 
   let preparationRevision = 0;
   const patternDrafts = createSpecificRulePatternDrafts({
-    rules: manualSpecificRules, ref, invalidate: () => { preparationRevision += 1; }
+    rules: () => state.activeDrawing().manualSpecificRules, ref, invalidate: () => { preparationRevision += 1; }
   });
   const ruleFailure = ref(null);
   const canRetrySpecificRuleFailure = computed(() => Boolean(ruleFailure.value
@@ -117,20 +109,21 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // the commit retires: those the current rules draw (so it retires the row
   // Generate drew) and `retiredLegendIntents`, rows this commit replaces, which
   // are no renderer rows for the N-06 caption allocation.
-  const candidateLegendIntents = (candidateRules, retiredLegendIntents) => {
+  /** @param {DrawingState} drawing */
+  const candidateLegendIntents = (drawing, candidateRules, retiredLegendIntents) => {
     const rendered = (extractedFeatures.value || []).filter(feature =>
-      featureOverrideValue(featureOverrides, feature, 'featureVisibility') !== 'off');
+      featureOverrideValue(drawing.featureOverrides, feature, 'featureVisibility') !== 'off');
     const used = new Set(rendered.map(feature => firstMatchingRule(feature, candidateRules)).filter(Boolean));
     const rendererRows = rendererLegendRows({
-      legendEntries: state.legendEntries?.value,
+      legendEntries: drawing.legendEntries?.value,
       originalLegendOrder: state.originalLegendOrder?.value,
-      rules: [...manualSpecificRules, ...candidateRules,
+      rules: [...drawing.manualSpecificRules, ...candidateRules,
         ...retiredLegendIntents.map(intent => ({ cap: intent?.caption, color: intent?.color }))]
     });
-    const currentCaption = createRuleLegendCaptions(manualSpecificRules, rendererRows);
+    const currentCaption = createRuleLegendCaptions(drawing.manualSpecificRules, rendererRows);
     return {
       intents: buildLegendIntents(candidateRules.filter(rule => used.has(rule)), rendererRows).intents,
-      previousIntents: [...manualSpecificRules.filter(rule => rule.cap)
+      previousIntents: [...drawing.manualSpecificRules.filter(rule => rule.cap)
         .map(rule => ({ caption: currentCaption(rule), color: rule.color })), ...retiredLegendIntents]
     };
   };
@@ -138,22 +131,27 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // changes a Result's Legend source, read with the current Feature
   // visibility before and after. Python redraws the Legend rows, their order,
   // and the "other <type>s" rows in the automatic rerender.
-  const legendSourceContext = (rules) => ({
-    ...featureDrawnContext(state, { diagramOptions: getCommittedRequest()?.diagramOptions }),
+  /** @param {DrawingState} drawing */
+  const legendSourceContext = (drawing, rules) => ({
+    ...featureDrawnContext(drawing, { diagramOptions: getCommittedRequest()?.diagramOptions }),
     colorRules: rules
   });
-  const changesLegendSource = (before, after) => !sameLegendSources(
-    resultLegendSources(state, legendSourceContext(before)),
-    resultLegendSources(state, legendSourceContext(after))
+  /** @param {DrawingState} drawing */
+  const changesLegendSource = (drawing, before, after) => !sameLegendSources(
+    resultLegendSources(state, legendSourceContext(drawing, before)),
+    resultLegendSources(state, legendSourceContext(drawing, after))
   );
   // Undo and Redo of a rule edit restore the rules; the composition root
   // passes the rules they replaced, and a changed Legend source asks for the
   // rerender, as the edit did.
-  const followRestoredRules = (previousRules) => (
-    JSON.stringify(previousRules) !== JSON.stringify(manualSpecificRules)
-    && changesLegendSource(previousRules, manualSpecificRules)
-    && ports.requestAutomaticRerender()
-  );
+  const followRestoredRules = (previousRules) => {
+    const drawing = state.activeDrawing();
+    return (
+      JSON.stringify(previousRules) !== JSON.stringify(drawing.manualSpecificRules)
+      && changesLegendSource(drawing, previousRules, drawing.manualSpecificRules)
+      && ports.requestAutomaticRerender()
+    );
+  };
   // The automatic rerender replaces the Results the candidate was prepared
   // against, which makes the candidate stale (#857). An edit made while one runs
   // waits for it and, when it replaced the Results under an unchanged rule
@@ -169,8 +167,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // popup stores the caption's color when it recolors a whole group) would
   // win at Generate over the recolored rule, so a commit that recolors the row
   // retires it; `afterCommit` may store a new one.
-  const retireSupersededLegendColors = (intents) => {
-    const overrides = state.legendColorOverrides;
+  /** @param {DrawingState} drawing */
+  const retireSupersededLegendColors = (drawing, intents) => {
+    const overrides = drawing.legendColorOverrides;
     for (const { caption, color } of intents) {
       if (Object.hasOwn(overrides, caption) && resolveColorToHex(overrides[caption]) !== resolveColorToHex(color)) {
         delete overrides[caption];
@@ -186,15 +185,16 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
    * @param {CommitSpecificRulesOptions} [options]
    */
   const commitSpecificRules = async (rules, label = 'Change specific color rules', options = {}) => {
+    const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
     await rerenderIdle();
     for (let attempt = 0; ; attempt += 1) {
       const results = state.results.value;
-      const table = JSON.stringify(manualSpecificRules);
-      const outcome = await commitOnce(rules, label, options);
+      const table = JSON.stringify(drawing.manualSpecificRules);
+      const outcome = await commitOnce(drawing, rules, label, options);
       if (outcome || attempt === 2 || state.results.value === results
-        || JSON.stringify(manualSpecificRules) !== table) return outcome;
+        || JSON.stringify(drawing.manualSpecificRules) !== table) return outcome;
       await rerenderIdle();
     }
   };
@@ -212,26 +212,27 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     state, () => [rulePreparation.isPrepared(rules) || prepareRules(rules, { captions: false })], commit
   );
   /**
+   * @param {DrawingState} drawing
    * @param {Record<string, any>[]} rules
    * @param {string} label
    * @param {CommitSpecificRulesOptions} [options]
    */
-  const commitOnce = async (rules, label, { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], sourceRows = rules.map(rule => manualSpecificRules.includes(rule) ? rule : null) } = {}) => {
+  const commitOnce = async (drawing, rules, label, { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], sourceRows = rules.map(rule => drawing.manualSpecificRules.includes(rule) ? rule : null) } = {}) => {
     const revision = ++preparationRevision;
     const candidate = await prepareRules(rules);
     if (!candidate) return false;
     const current = () => revision === preparationRevision && !state.sessionOperationAvailability?.() && isCurrent()
       && rulePreparation.isCurrent(candidate.snapshot);
     if (!current()) return false;
-    const { intents, previousIntents } = candidateLegendIntents(candidate.rules, previousLegendIntents);
+    const { intents, previousIntents } = candidateLegendIntents(drawing, candidate.rules, previousLegendIntents);
     const previousCaptions = new Set(previousIntents.map(intent => intent.caption));
-    const legend = await prepareFileLegendEntries(intents.filter(intent => !(state.deletedLegendEntries?.value || [])
+    const legend = await prepareFileLegendEntries(intents.filter(intent => !(drawing.deletedLegendEntries?.value || [])
       .some(entry => (entry.originalCaption || entry.caption) === intent.caption)), {
       previousFileIntents: previousIntents,
       isCurrent: current
     });
     if (!legend) return false;
-    const redrawsLegend = changesLegendSource([...manualSpecificRules], candidate.rules);
+    const redrawsLegend = changesLegendSource(drawing, [...drawing.manualSpecificRules], candidate.rules);
     let applied = false;
     // One History step: the rule transition first, then the legend rows it
     // draws (R13); a checkpoint when the legend gains or loses a row.
@@ -239,7 +240,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       ? runUndoableCheckpoint : runUndoable;
     await transact(label, () => {
       if (!current() || !legend.isCurrent()) return false;
-      manualSpecificRules.splice(0, manualSpecificRules.length, ...candidate.rules.map((rule, index) => {
+      drawing.manualSpecificRules.splice(0, drawing.manualSpecificRules.length, ...candidate.rules.map((rule, index) => {
         const row = sourceRows[index];
         if (!row) return rule;
         Object.assign(row, rule);
@@ -247,13 +248,13 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
         return row;
       }));
       patternDrafts.reconcile();
-      fileLegendCaptions.value = new Set(candidate.rules.filter(rule => rule.fromFile && rule.cap).map(rule => rule.cap));
-      addedLegendCaptions.value = new Set([
-        ...[...addedLegendCaptions.value].filter(caption => !previousCaptions.has(caption)),
+      drawing.fileLegendCaptions.value = new Set(candidate.rules.filter(rule => rule.fromFile && rule.cap).map(rule => rule.cap));
+      drawing.addedLegendCaptions.value = new Set([
+        ...[...drawing.addedLegendCaptions.value].filter(caption => !previousCaptions.has(caption)),
         ...intents.map(intent => intent.caption)
       ]);
       applyRulePreview();
-      retireSupersededLegendColors(intents);
+      retireSupersededLegendColors(drawing, intents);
       afterCommit(intents);
       applied = true;
       legend.apply();
@@ -263,8 +264,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     if (applied && redrawsLegend) ports.requestAutomaticRerender();
     return applied;
   };
-  /** @param {Element | null} [input] The input a failed commit offers for editing. */
-  const commitPrepared = async (rules, label, afterCommit = () => {}, input = null, sourceRows = rules.map(rule => manualSpecificRules.includes(rule) ? rule : null)) => {
+  /**
+   * @param {DrawingState} drawing
+   * @param {Element | null} [input] The input a failed commit offers for editing.
+   */
+  const commitPrepared = async (drawing, rules, label, afterCommit = () => {}, input = null, sourceRows = rules.map(rule => drawing.manualSpecificRules.includes(rule) ? rule : null)) => {
     patternDrafts.suspend();
     const snapshot = rulePreparation.snapshot();
     const previousError = state.errorLog?.value;
@@ -277,7 +281,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       if (!rulePreparation.isCurrent(snapshot) || state.errorLog?.value !== previousError) return false;
       const error = normalizeUserFacingError(cause, { operation: 'evaluateRules', stage: 'resource-staging' });
       if (state.errorLog) state.errorLog.value = error;
-      ruleFailure.value = { error, snapshot, input, retry: () => commitPrepared(rules, label, afterCommit, input, sourceRows) };
+      ruleFailure.value = { error, snapshot, input, retry: () => commitPrepared(drawing, rules, label, afterCommit, input, sourceRows) };
       return false;
     }
   };
@@ -300,17 +304,18 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       input.focus();
     }
   };
-  const applySpecificRulePattern = async (row, value) => {
+  /** @param {DrawingState} drawing */
+  const applySpecificRulePattern = async (drawing, row, value) => {
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    if (!manualSpecificRules.includes(row) || !isPatternEditAvailable()
+    if (!drawing.manualSpecificRules.includes(row) || !isPatternEditAvailable()
       || (state.generatedMode?.value && state.mode?.value !== state.generatedMode.value)) return false;
     const token = patternDrafts.begin(row, value);
     const snapshot = rulePreparation.snapshot();
     const attemptRevision = preparationRevision + 1;
     const current = () => preparationRevision === attemptRevision && patternDrafts.isCurrent(row, token) && rulePreparation.isCurrent(snapshot)
       && isPatternEditAvailable();
-    const sourceRows = [...manualSpecificRules];
+    const sourceRows = [...drawing.manualSpecificRules];
     const rules = sourceRows.map(rule => {
       if (rule !== row) return { ...rule };
       const next = { ...rule, val: String(value ?? '') };
@@ -330,40 +335,44 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     }
   };
   const retrySpecificRulePattern = (row) => {
+    const drawing = state.activeDrawing();
     const draft = patternDrafts.get(row);
-    return draft && !draft.pending ? applySpecificRulePattern(row, draft.text) : false;
+    return draft && !draft.pending ? applySpecificRulePattern(drawing, row, draft.text) : false;
   };
   /** @param {HTMLInputElement | null} [input] */
   const setSpecificRuleField = (index, field, value, input = null) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!specificRuleFields.has(field)) return;
-    const current = manualSpecificRules[index];
+    const current = drawing.manualSpecificRules[index];
     if (!current) return;
-    if (field === 'val') return applySpecificRulePattern(current, value);
+    if (field === 'val') return applySpecificRulePattern(drawing, current, value);
     const nextValue = field === 'color' ? resolveColorToHex(String(value || '#000000')) : String(value ?? '');
     const nextRule = { ...current, [field]: nextValue };
     delete nextRule.fromFile;
-    const sourceRows = [...manualSpecificRules];
+    const sourceRows = [...drawing.manualSpecificRules];
     const rules = sourceRows.map(rule => rule === current ? nextRule : { ...rule });
-    return commitPrepared(rules, 'Edit specific color rule', () => {}, input, sourceRows)?.finally(() => {
-      if (input?.isConnected && manualSpecificRules.includes(current)) input.value = current[field] ?? '';
+    return commitPrepared(drawing, rules, 'Edit specific color rule', () => {}, input, sourceRows)?.finally(() => {
+      if (input?.isConnected && drawing.manualSpecificRules.includes(current)) input.value = current[field] ?? '';
     });
   };
 
-  const moveSpecificRule = (index, offset) => {
+  /** @param {DrawingState} drawing */
+  const moveSpecificRule = (drawing, index, offset) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const sourceRows = [...manualSpecificRules];
+    const sourceRows = [...drawing.manualSpecificRules];
     const target = index + offset;
     if (target < 0 || target >= sourceRows.length) return;
     const [row] = sourceRows.splice(index, 1);
     sourceRows.splice(target, 0, row);
-    return commitPrepared(sourceRows.map(rule => ({ ...rule })), 'Move specific color rule', () => {}, null, sourceRows);
+    return commitPrepared(drawing, sourceRows.map(rule => ({ ...rule })), 'Move specific color rule', () => {}, null, sourceRows);
   };
 
   const downloadSpecificRulesTsv = () => {
-    const text = serializeSpecificRules(manualSpecificRules);
+    const drawing = state.activeDrawing();
+    const text = serializeSpecificRules(drawing.manualSpecificRules);
     if (!text.trim()) {
       alert('No specific rules to export.');
       return;
@@ -385,42 +394,48 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   };
 
   const getDisplayedFeatureLabel = (feat) => {
+    const drawing = state.activeDrawing();
     if (!feat) return '';
 
     const editableEntry = getEditableLabelEntryForFeature(feat);
     const editableText = normalizeCaption(editableEntry?.text);
     if (editableText) return editableText;
 
-    const normalizedOverride = normalizeCaption(featureOverrideValue(featureOverrides, feat, 'labelText'));
+    const normalizedOverride = normalizeCaption(featureOverrideValue(drawing.featureOverrides, feat, 'labelText'));
     if (normalizedOverride) return normalizedOverride;
 
     const sourceText = normalizeCaption(editableEntry?.sourceText);
     if (sourceText) {
-      const normalizedBulk = normalizeCaption(labelTextBulkOverrides[sourceText]);
+      const normalizedBulk = normalizeCaption(drawing.labelTextBulkOverrides[sourceText]);
       if (normalizedBulk) return normalizedBulk;
     }
 
     return normalizeCaption(getIndividualFeatureLabel(feat));
   };
 
-  const legendRowContext = () => ({
-    rules: manualSpecificRules,
-    legendEntries: state.legendEntries?.value || [],
+  /** @param {DrawingState} drawing */
+  const legendRowContext = (drawing) => ({
+    rules: drawing.manualSpecificRules,
+    legendEntries: drawing.legendEntries?.value || [],
     originalLegendOrder: state.originalLegendOrder?.value || []
   });
   // The rules a legend row draws; editing the row edits them (N-06).
-  const getLegendRowRules = (caption) => legendRowRules(caption, legendRowContext());
+  const getLegendRowRules = (caption) => {
+    const drawing = state.activeDrawing();
+    return legendRowRules(caption, legendRowContext(drawing));
+  };
 
   // Resolve the effective legend item label used by current SVG coloring
   // priority: a rule's feature belongs to the row Generate draws for it (N-06).
   const getEffectiveLegendCaption = (feat) => {
+    const drawing = state.activeDrawing();
     if (!feat) return '';
 
-    const rule = firstMatchingRule(feat, manualSpecificRules);
-    if (rule && normalizeCaption(rule.cap)) return ruleLegendCaption(rule, legendRowContext());
+    const rule = firstMatchingRule(feat, drawing.manualSpecificRules);
+    if (rule && normalizeCaption(rule.cap)) return ruleLegendCaption(rule, legendRowContext(drawing));
 
     const overrideCaption = normalizeCaption(
-      getFeatureOverride(featureColorOverrides, feat)?.caption
+      getFeatureOverride(drawing.featureColorOverrides, feat)?.caption
     );
     if (overrideCaption) return overrideCaption;
 
@@ -428,49 +443,56 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   };
 
   const addCustomColor = () => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!newColorFeat.value) return;
-    currentColors.value = {
-      ...currentColors.value,
+    drawing.currentColors.value = {
+      ...drawing.currentColors.value,
       [newColorFeat.value]: newColorVal.value
     };
   };
 
   const setLabelFilterMode = (value) => {
+    const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    state.filterMode.value = value;
+    drawing.filterMode.value = value;
   };
   const addWhitelistRule = () => {
+    const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    state.manualWhitelist.push({ feat: 'CDS', qual: 'product', key: '' });
+    drawing.manualWhitelist.push({ feat: 'CDS', qual: 'product', key: '' });
   };
   const removeWhitelistRule = (index) => {
+    const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    state.manualWhitelist.splice(index, 1);
+    drawing.manualWhitelist.splice(index, 1);
   };
   const removePriorityRule = (index) => {
+    const drawing = state.activeDrawing();
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    manualPriorityRules.splice(index, 1);
+    drawing.manualPriorityRules.splice(index, 1);
   };
 
   const addPriorityRule = () => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!newPriorityRule.order) return;
-    const idx = manualPriorityRules.findIndex((r) => r.feat === newPriorityRule.feat);
+    const idx = drawing.manualPriorityRules.findIndex((r) => r.feat === newPriorityRule.feat);
     if (idx >= 0) {
-      manualPriorityRules[idx].order = newPriorityRule.order;
+      drawing.manualPriorityRules[idx].order = newPriorityRule.order;
     } else {
-      manualPriorityRules.push({ feat: newPriorityRule.feat, order: newPriorityRule.order });
+      drawing.manualPriorityRules.push({ feat: newPriorityRule.feat, order: newPriorityRule.order });
     }
   };
 
   const addSpecificRule = async () => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!newSpecRule.val) return;
@@ -498,12 +520,13 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       color: String(newSpecRule.color || '#000000'),
       cap: String(newSpecRule.cap || '')
     };
-    return commitPrepared([...manualSpecificRules, rule], 'Add specific color rule', () => {
+    return commitPrepared(drawing, [...drawing.manualSpecificRules, rule], 'Add specific color rule', () => {
       if (newSpecRule.val === rule.val) newSpecRule.val = '';
     }, document.querySelector?.('[data-new-specific-rule-pattern]'));
   };
 
   const applySpecificRulePreset = async () => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (specificRulePresetLoading.value) return;
@@ -530,9 +553,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
         isCurrent: () => selectedSpecificPreset.value === presetId,
         afterCommit: () => {
           if (presetId === 'bakta') {
-            currentColors.value = { ...currentColors.value, CDS: '#cccccc' };
-            adv.legend_box_size = 12;
-            adv.legend_font_size = 12;
+            drawing.currentColors.value = { ...drawing.currentColors.value, CDS: '#cccccc' };
+            drawing.adv.legend_box_size = 12;
+            drawing.adv.legend_font_size = 12;
           }
         }
       });
@@ -548,48 +571,53 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   };
 
   const addFeature = () => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    if (newFeatureToAdd.value && !adv.features.includes(newFeatureToAdd.value)) {
-      adv.features.push(newFeatureToAdd.value);
-      if (!adv.feature_shapes || typeof adv.feature_shapes !== 'object') {
-        adv.feature_shapes = {};
+    if (newFeatureToAdd.value && !drawing.adv.features.includes(newFeatureToAdd.value)) {
+      drawing.adv.features.push(newFeatureToAdd.value);
+      if (!drawing.adv.feature_shapes || typeof drawing.adv.feature_shapes !== 'object') {
+        drawing.adv.feature_shapes = {};
       }
-      if (!Object.prototype.hasOwnProperty.call(adv.feature_shapes, newFeatureToAdd.value)) {
-        adv.feature_shapes[newFeatureToAdd.value] = defaultFeatureRendering(newFeatureToAdd.value);
+      if (!Object.prototype.hasOwnProperty.call(drawing.adv.feature_shapes, newFeatureToAdd.value)) {
+        drawing.adv.feature_shapes[newFeatureToAdd.value] = defaultFeatureRendering(newFeatureToAdd.value);
       }
     }
   };
 
   const removeFeature = (featureType) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const idx = adv.features.indexOf(featureType);
+    const idx = drawing.adv.features.indexOf(featureType);
     if (idx >= 0) {
-      adv.features.splice(idx, 1);
+      drawing.adv.features.splice(idx, 1);
     }
   };
 
   const getFeatureShape = (featureType) => {
-    if (!adv.feature_shapes || typeof adv.feature_shapes !== 'object') {
+    const drawing = state.activeDrawing();
+    if (!drawing.adv.feature_shapes || typeof drawing.adv.feature_shapes !== 'object') {
       return defaultFeatureRendering(featureType);
     }
-    return Object.prototype.hasOwnProperty.call(adv.feature_shapes, featureType)
-      ? normalizeFeatureRendering(adv.feature_shapes[featureType])
+    return Object.prototype.hasOwnProperty.call(drawing.adv.feature_shapes, featureType)
+      ? normalizeFeatureRendering(drawing.adv.feature_shapes[featureType])
       : defaultFeatureRendering(featureType);
   };
 
   const setFeatureShape = (featureType, shape) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    if (!adv.feature_shapes || typeof adv.feature_shapes !== 'object') {
-      adv.feature_shapes = {};
+    if (!drawing.adv.feature_shapes || typeof drawing.adv.feature_shapes !== 'object') {
+      drawing.adv.feature_shapes = {};
     }
-    adv.feature_shapes[featureType] = normalizeFeatureRendering(shape);
+    drawing.adv.feature_shapes[featureType] = normalizeFeatureRendering(shape);
   };
 
   const getFeatureColor = (feat) => {
-    const override = getFeatureOverride(featureColorOverrides, feat);
+    const drawing = state.activeDrawing();
+    const override = getFeatureOverride(drawing.featureColorOverrides, feat);
     if (override) {
       return resolveColorToHex(override.color || override);
     }
@@ -597,7 +625,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   };
 
   const getFeatureColorValue = (feat) => {
-    const override = getFeatureOverride(featureColorOverrides, feat);
+    const drawing = state.activeDrawing();
+    const override = getFeatureOverride(drawing.featureColorOverrides, feat);
     if (!override) return null;
     return Object.prototype.hasOwnProperty.call(override, 'color')
       ? override.color
@@ -614,8 +643,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   };
 
   const getLabelSpecificRule = (feat, label) => {
+    const drawing = state.activeDrawing();
     if (!feat) return null;
-    const priorityRule = manualPriorityRules.find((rule) => rule.feat === feat.type);
+    const priorityRule = drawing.manualPriorityRules.find((rule) => rule.feat === feat.type);
     const priority = String(priorityRule?.order || '')
       .split(',')
       .map((qualifier) => qualifier.trim())
@@ -630,21 +660,23 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   };
 
   const refreshFeatureOverrides = (features) => {
-    if (!features || features.length === 0 || !ruleMatchesReady(features, manualSpecificRules)) return;
-    migrateLegacyFeatureOverrides(featureColorOverrides, features);
+    const drawing = state.activeDrawing();
+    if (!features || features.length === 0 || !ruleMatchesReady(features, drawing.manualSpecificRules)) return;
+    migrateLegacyFeatureOverrides(drawing.featureColorOverrides, features);
 
     for (const feat of features) {
-      const rule = firstMatchingRule(feat, manualSpecificRules);
+      const rule = firstMatchingRule(feat, drawing.manualSpecificRules);
       const key = featureOverrideKey(feat);
       if (key) {
-        if (rule) featureColorOverrides[key] = { color: rule.color, caption: rule.cap };
-        else delete featureColorOverrides[key];
+        if (rule) drawing.featureColorOverrides[key] = { color: rule.color, caption: rule.cap };
+        else delete drawing.featureColorOverrides[key];
       }
     }
   };
 
   const findMatchingRegexRule = (feat) => {
-    return firstMatchingRule(feat, manualSpecificRules.filter((rule) => rule.qual !== 'hash'));
+    const drawing = state.activeDrawing();
+    return firstMatchingRule(feat, drawing.manualSpecificRules.filter((rule) => rule.qual !== 'hash'));
   };
 
   const countFeaturesMatchingRule = (rule) => {
@@ -692,16 +724,17 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   };
 
   const findExistingColorForCaption = (_currentFeat, caption) => {
+    const drawing = state.activeDrawing();
     const targetCaption = normalizeCaption(caption);
     if (!targetCaption) return null;
 
-    for (const rule of manualSpecificRules) {
+    for (const rule of drawing.manualSpecificRules) {
       if (captionMatches(rule.cap, targetCaption) && String(rule.qual || '').toLowerCase() === 'hash') {
         return { rule, color: rule.color };
       }
     }
 
-    for (const rule of manualSpecificRules) {
+    for (const rule of drawing.manualSpecificRules) {
       if (captionMatches(rule.cap, targetCaption) && String(rule.qual || '').toLowerCase() !== 'hash') {
         return { rule, color: rule.color };
       }
@@ -733,7 +766,10 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     addSpecificRule,
     applySpecificRulePreset,
     canEditFeatureColor,
-    clearAllSpecificRules: () => commitPrepared([], 'Clear specific color rules'),
+    clearAllSpecificRules: () => {
+      const drawing = state.activeDrawing();
+      return commitPrepared(drawing, [], 'Clear specific color rules');
+    },
     commitSpecificRules,
     followRestoredRules,
     countFeaturesMatchingRule,
@@ -752,13 +788,20 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     getFeatureQualifier,
     getLabelSpecificRule,
     getLegendRowRules,
-    moveSpecificRuleDown: (index) => moveSpecificRule(index, 1),
-    moveSpecificRuleUp: (index) => moveSpecificRule(index, -1),
+    moveSpecificRuleDown: (index) => {
+      const drawing = state.activeDrawing();
+      return moveSpecificRule(drawing, index, 1);
+    },
+    moveSpecificRuleUp: (index) => {
+      const drawing = state.activeDrawing();
+      return moveSpecificRule(drawing, index, -1);
+    },
     refreshFeatureOverrides,
     runWithRuleMatches,
     removeSpecificRule: (index) => {
-      const sourceRows = manualSpecificRules.filter((_, i) => i !== index);
-      return commitPrepared(sourceRows.map(rule => ({ ...rule })), 'Remove specific color rule', () => {}, null, sourceRows);
+      const drawing = state.activeDrawing();
+      const sourceRows = drawing.manualSpecificRules.filter((_, i) => i !== index);
+      return commitPrepared(drawing, sourceRows.map(rule => ({ ...rule })), 'Remove specific color rule', () => {}, null, sourceRows);
     },
     setSpecificRuleField
   };

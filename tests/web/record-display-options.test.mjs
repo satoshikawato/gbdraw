@@ -15,6 +15,7 @@ import { createDefaultForm, createDefaultAdv } from '../../gbdraw/web/js/service
 import { adoptCurrentSessionResources, createCombinedSessionResourceFileView, createSessionResourceFileView } from '../../gbdraw/web/js/services/session-resource-backing.js';
 import { readFileBytes } from '../../gbdraw/web/js/services/file-content-cache.js';
 import { createHistoryManager } from '../../gbdraw/web/js/services/history.js';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const source = {};
 const records = [
@@ -179,7 +180,7 @@ const compositeControls = ({ linear = false, discovered = true, createHistory = 
     linearRecordStatusFor: () => linearDiscovery.status, linearRecordErrorFor: () => linearDiscovery.error,
     runUndoable: history.runUndoable, getCommittedRequest, getCommittedSession: () => committed });
   // The composition root's port: the pure check over the record display's binding.
-  const actions = createFeaturePlacementActions({ state, runUndoable: history.runUndoable, getCommittedRequest,
+  const actions = createFeaturePlacementActions({ state: withDrawings(state), runUndoable: history.runUndoable, getCommittedRequest,
     isCurrentFeature: (feature) => isCurrentFeature(feature, controls.sourceBinding()) });
   const feature = { scope: state.mode.value, record_key: 'record-2', biological_feature_id: 'logical-feature' };
   return { state, actions, controls, feature, file, makeFile, linearDiscovery, history,

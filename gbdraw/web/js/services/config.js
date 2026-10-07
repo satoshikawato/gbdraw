@@ -3137,9 +3137,10 @@ export const applyOrthogroupStateData = (
   }
 };
 
-const customDepthRequested = (mode, sourceState) => {
-  const adv = sourceState?.adv || {};
-  const form = sourceState?.form || {};
+/** @param {string} mode @param {DrawingState} drawing */
+const customDepthRequested = (mode, drawing) => {
+  const adv = drawing?.adv || {};
+  const form = drawing?.form || {};
   const customEnabled = mode === 'linear'
     ? Boolean(adv.linear_track_slots_enabled)
     : Boolean(adv.circular_track_slots_enabled);
@@ -3205,13 +3206,15 @@ export const materializeLinearRecordFiles = (
 };
 
 /**
- * @param {string} [mode]
- * @param {Record<string, any>} [sourceState]
+ * @param {string} mode
+ * @param {Record<string, any>} sourceState The project inputs (`state`).
+ * @param {DrawingState} drawing The drawing whose settings choose the inputs.
  * @param {Record<string, any> | null} [comparisonPlanOrOptions]
  */
 export const serializeActiveRenderFiles = async (
-  mode = state.mode.value,
-  sourceState = state,
+  mode,
+  sourceState,
+  drawing,
   comparisonPlanOrOptions = null
 ) => {
   if (!['circular', 'linear'].includes(mode)) {
@@ -3221,7 +3224,7 @@ export const serializeActiveRenderFiles = async (
   const normalizedLinearSeqs = mode === 'linear'
     ? normalizeLinearSeqList(sourceState.linearSeqs)
     : [];
-  const depthRequested = customDepthRequested(mode, sourceState);
+  const depthRequested = customDepthRequested(mode, drawing);
   const serializedLinearSeqs = await Promise.all(
     normalizedLinearSeqs.map(async (seq) => ({
       uid: seq.uid,
@@ -3255,17 +3258,17 @@ export const serializeActiveRenderFiles = async (
   const linearSeqs = materializeLinearRecordFiles(
     serializedLinearSeqs,
     optionBag?.linearRecordCatalog ?? null,
-    { layoutEnabled: Boolean(sourceState.linearRecordLayoutEnabled?.value) }
+    { layoutEnabled: Boolean(drawing.linearRecordLayoutEnabled?.value) }
   );
   const resolvedComparisonPlan = mode === 'linear'
     ? suppliedComparisonPlan || resolveLinearComparisonPlan({
-        plan: sourceState.linearComparisonPlan,
+        plan: drawing.linearComparisonPlan,
         sequences: normalizedLinearSeqs,
-        layout: sourceState.linearRecordLayoutEnabled?.value
-          ? sourceState.linearRecordRows
+        layout: drawing.linearRecordLayoutEnabled?.value
+          ? drawing.linearRecordRows
           : [],
-        losatProgram: sourceState.losatProgram?.value,
-        blastpMode: sourceState.losat?.blastp?.mode
+        losatProgram: drawing.losatProgram?.value,
+        blastpMode: drawing.losat?.blastp?.mode
       })
     : null;
   const linearComparisons = resolvedComparisonPlan ? await Promise.all(
@@ -3294,8 +3297,8 @@ export const serializeActiveRenderFiles = async (
     )
     : [];
   const conservationEnabled = mode === 'circular'
-    && Boolean(sourceState.circularConservation?.enabled);
-  const conservationSource = String(sourceState.circularConservation?.source || 'upload');
+    && Boolean(drawing.circularConservation?.enabled);
+  const conservationSource = String(drawing.circularConservation?.source || 'upload');
   const includeConservationBlasts = conservationEnabled && (
     conservationSource === 'upload'
     || sourceFiles.c_conservation_blasts_source === 'losat-cache'
@@ -4617,6 +4620,7 @@ const exportSessionDocument = async (
     const activeFiles = await serializeActiveRenderFiles(
       state.mode.value,
       state,
+      drawing,
       {
         comparisonPlan: comparisonPlanSnapshot,
         linearRecordCatalog
@@ -4624,6 +4628,7 @@ const exportSessionDocument = async (
     );
     committed = buildCanonicalRenderRequest({
       state,
+      drawing,
       filesData: activeFiles,
       recordDisplayRows: recordDisplayRows?.value || [],
       comparisonPlanSnapshot

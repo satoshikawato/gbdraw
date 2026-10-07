@@ -3,6 +3,7 @@ import { evaluatePythonRules } from './python-rule-evaluator.mjs';
 import { createSvgStyles } from '../../../gbdraw/web/js/app/svg-styles.js';
 import { createPreviewRuntime } from '../../../gbdraw/web/js/app/preview-runtime.js';
 import { serializeCleanSvg } from '../../../gbdraw/web/js/services/svg-serialization.js';
+import { withDrawings } from './drawing-state.mjs';
 
 const ref = value => ({ value });
 globalThis.XMLSerializer = class { serializeToString(svg) { return svg.snapshot(); } };
@@ -22,6 +23,7 @@ export const fixture = (colors, rules) => {
     appliedPaletteColors: ref(colors), manualSpecificRules: rules, featureColorOverrides: {}, legendColorOverrides: {},
     pairwiseMatchFactors: ref({}), results: ref([{ content: JSON.stringify({ fill: '#000000', depth: {} }) }]), selectedResultIndex: ref(0),
     skipCaptureBaseConfig: ref(false), svgContainer: ref({ querySelector: () => svg }), adv: {}, mode: ref('circular'), form: { show_depth: true } };
+  withDrawings(state);
   const rulePreparation = createRulePreparation({ state, evaluate: evaluatePythonRules });
   const ready = rulePreparation.prepare();
   // Style edits commit through the app's preview runtime (R1).

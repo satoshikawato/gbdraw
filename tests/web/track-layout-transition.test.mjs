@@ -15,6 +15,7 @@ import {
 } from '../../gbdraw/web/js/app/feature-editor/placement-actions.js';
 import { createCircularTrackSlotEditor } from '../../gbdraw/web/js/app/circular-track-slots.js';
 import { createLinearTrackSlotEditor } from '../../gbdraw/web/js/app/linear-track-slots.js';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const WEB = 'gbdraw/web';
 const MODES = ['circular', 'linear'];
@@ -42,7 +43,7 @@ const everything = ({ form, adv }) => JSON.stringify({ form, adv });
 test('a stack edit that drops a lane asks, Cancel keeps the draft, and Reset is one step (Q3)', async () => {
   const state = draftState('circular');
   const steps = [];
-  const placement = createFeaturePlacementActions({ state, getCommittedRequest: () => null, isCurrentFeature: () => true,
+  const placement = createFeaturePlacementActions({ state: withDrawings(state), getCommittedRequest: () => null, isCurrentFeature: () => true,
     runUndoable: async (label, fn) => { steps.push(label); fn(); } });
   const editor = createCircularTrackSlotEditor({ state, changeTrackLayout: placement.changeTrackLayout });
   editor.normalizeCircularTrackSlots();

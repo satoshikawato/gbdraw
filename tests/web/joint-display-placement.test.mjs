@@ -16,6 +16,7 @@ import {
 } from '../../gbdraw/web/js/services/feature-placement.js';
 
 import { resolveLinearComparisonPlan } from '../../gbdraw/web/js/services/linear-comparisons.js';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const target = (recordKey = 'card', biologicalFeatureId = 'feature') => ({
   recordKey, biologicalFeatureId, placement: { kind: 'main' }
@@ -23,11 +24,15 @@ const target = (recordKey = 'card', biologicalFeatureId = 'feature') => ({
 const draft = (row, startCoordinate) => ({ scope: row.scope, sourceUid: row.sourceUid,
   selector: row.selector, recordId: row.recordId, topologyOverride: null, startCoordinate,
   reverseComplementOverride: null, anchorIntent: null });
-const stateFor = (mode) => buildCanonicalRequestState({
-  session: { renderRequest: { records: [] } },
-  projection: { mode, inputType: 'gb', files: {}, config: {} },
-  config: { form: createDefaultForm(), adv: createDefaultAdv(mode), colors: {} }
-});
+// One fixture holds the request state and its drawing.
+const stateFor = (mode) => {
+  const { state, drawing } = buildCanonicalRequestState({
+    session: { renderRequest: { records: [] } },
+    projection: { mode, inputType: 'gb', files: {}, config: {} },
+    config: { form: createDefaultForm(), adv: createDefaultAdv(mode), colors: {} }
+  });
+  return Object.assign(state, drawing);
+};
 const text = 'LOCUS       same 100 bp DNA circular\n//\nLOCUS       same 100 bp DNA circular\n//\n';
 const file = { name: 'same.gb', size: text.length, type: 'text/plain', lastModified: 0, data: btoa(text) };
 
@@ -71,7 +76,7 @@ for (const mode of ['circular', 'linear']) {
     const draftRow = { scope: mode, ...override };
     state.featurePlacementOverrides = { [JSON.stringify([mode, recordKey, 'feature'])]: draftRow };
     const filesData = { c_gb: file, linearSeqs: [{ uid: 'card', gb: file }] };
-    const result = buildCanonicalRenderRequest({ state, filesData, recordDisplayRows: rows, comparisonPlanSnapshot: mode === 'linear'
+    const result = buildCanonicalRenderRequest({ state, drawing: state, filesData, recordDisplayRows: rows, comparisonPlanSnapshot: mode === 'linear'
       ? resolveLinearComparisonPlan({ plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [], losatProgram: 'blastn', blastpMode: 'orthogroup' }) : null });
     assert.equal(result.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
     assert.deepEqual(result.renderRequest.records.map((record) => record.display.startCoordinate), [1, 71]);
@@ -114,7 +119,7 @@ test('a request carries only its records\' placement rows and the draft keeps th
   state.featureOverrides = { [JSON.stringify(['circular', 'card', 'main'])]: edit('circular', 'off'),
     [JSON.stringify(['linear', 'card', 'main'])]: edit('linear', 'on') };
   const filesData = { linearSeqs: [{ uid: 'card', gb: file }] };
-  const { renderRequest } = buildCanonicalRenderRequest({ state, filesData, comparisonPlanSnapshot:
+  const { renderRequest } = buildCanonicalRenderRequest({ state, drawing: state, filesData, comparisonPlanSnapshot:
     resolveLinearComparisonPlan({ plan: state.linearComparisonPlan, sequences: filesData.linearSeqs, layout: [], losatProgram: 'blastn', blastpMode: 'orthogroup' }) });
   const requestRow = ({ scope: _scope, ...entry }) => entry;
   assert.deepEqual(renderRequest.diagramOptions.featurePlacements, [requestRow(rows[1]), requestRow(rows[2])]);
@@ -166,7 +171,7 @@ test('Main, resolved side, bulk Auto and history share one draft owner', async (
     featureCatalog: { value: { items: [{ recordKeys: ['card'] }] } },
     trackSlotResolvedGeometry: { value: { mode: 'linear', records: [{ recordIndex: 0, resultIndex: 0,
       featurePlacementTargets: [{ kind: 'main' }, { kind: 'lane', side: 'below', level: 1 }] }] } } };
-  const actions = createFeaturePlacementActions({ state, isCurrentFeature: () => true,
+  const actions = createFeaturePlacementActions({ state: withDrawings(state), isCurrentFeature: () => true,
     getCommittedRequest: () => ({ mode: 'linear', records: [{ recordKey: 'card' }], grouping: 'single' }),
     runUndoable: async (label, fn) => { transactions.push({ label, before: structuredClone(overrides) }); fn(); } });
   assert.equal(actions.choices(features).find((choice) => choice.value === 'above').enabled, true);
@@ -188,7 +193,7 @@ for (const mode of ['circular', 'linear']) {
       featurePlacementOverrides: {}, featureCatalog: { value: { items: [{ recordKeys: ['record-1'] }] } },
       trackSlotResolvedGeometry: { value: { mode, records: [] } } };
     const geometry = structuredClone(state.trackSlotResolvedGeometry.value);
-    const actions = createFeaturePlacementActions({ state, getCommittedRequest: () => ({ mode }),
+    const actions = createFeaturePlacementActions({ state: withDrawings(state), getCommittedRequest: () => ({ mode }),
       isCurrentFeature: (entry) => entry === feature, runUndoable: (_label, fn) => fn() });
     const sides = mode === 'circular' ? ['outward', 'inward'] : ['above', 'below'];
     const check = (enabled) => {
@@ -248,7 +253,7 @@ test('a layout edit that drops lanes asks before it resets those placements', as
   const state = { mode: { value: 'circular' }, form: { ...createDefaultForm(), track_type: 'middle' },
     adv: createDefaultAdv('circular'), featurePlacementOverrides: overrides };
   const steps = [];
-  const actions = createFeaturePlacementActions({ state, getCommittedRequest: () => null, isCurrentFeature: () => true,
+  const actions = createFeaturePlacementActions({ state: withDrawings(state), getCommittedRequest: () => null, isCurrentFeature: () => true,
     runUndoable: async (label, fn) => { steps.push(label); fn(); } });
   const select = (value, label) => ({ target: { type: 'select-one', value, labels: [{ textContent: ` ${label} ` }],
     selectedOptions: [{ text: `${value[0].toUpperCase()}${value.slice(1)}` }] } });
