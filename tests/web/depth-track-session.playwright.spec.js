@@ -957,6 +957,8 @@ test('Custom Track disclosure and editable IDs preserve transient row identity i
       ![...linearOriginalKeys.values()].includes(linearDuplicateKey)
     );
 
+    // The Linear drawing's first row, read while Linear is shown.
+    const linearId = app.adv.linear_track_slots[0].id;
     await showMode('circular');
     app.adv.circular_track_slots.splice(
       0,
@@ -1053,7 +1055,7 @@ test('Custom Track disclosure and editable IDs preserve transient row identity i
     );
 
     return {
-      linearId: app.adv.linear_track_slots[0].id,
+      linearId,
       linearKeyBefore,
       linearKeyAfter,
       linearLifecycleKeysPreserved,
