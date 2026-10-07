@@ -15,6 +15,7 @@ import {
   extname,
   isAbsolute,
   join,
+  posix,
   relative,
   resolve,
   sep
@@ -229,6 +230,22 @@ const importersOf = (target) => [...directImports]
   .map(([owner]) => owner)
   .sort();
 
+// The Web layering slice S6 moves three modules from app/ to services/. The exact
+// lists below name whichever path exists, so the move is a runtime-only change.
+// The cleanup that follows the slice drops this table and keeps the new paths.
+const SLICE_MOVES = Object.freeze({
+  'app/feature-metadata-extraction.js': 'services/feature-metadata-extraction.js',
+  'app/record-discovery.js': 'services/record-discovery.js',
+  'app/session-feature-metadata.js': 'services/session-feature-recovery.js'
+});
+const atCurrentPath = (path) => (
+  productionSources.has(path) ? path : (SLICE_MOVES[path] ?? path)
+);
+const specifierFrom = (owner, target) => {
+  const specifier = posix.relative(posix.dirname(owner), target);
+  return specifier.startsWith('.') ? specifier : `./${specifier}`;
+};
+
 // These two request/Session callers may use the pure warning validator, not
 // rendered-identity collection. The metadata admission callers remain exact.
 const assertMetadataImportOwners = (sources) => {
@@ -252,8 +269,8 @@ const assertMetadataImportOwners = (sources) => {
     `${owner}: only the named pure warning validator is permitted`);
   }
   assert.deepEqual(identityCallers.sort(), [
-    'app/session-feature-metadata.js', 'services/svg-result-ingestion.js'
-  ]);
+    atCurrentPath('app/session-feature-metadata.js'), 'services/svg-result-ingestion.js'
+  ].sort());
 };
 
 // The Result replacement ceilings below count Result writes and SVG serialization
@@ -359,7 +376,7 @@ test('Worker construction and the diagram-generation client have explicit owners
   assert.deepEqual(
     occurrenceOwners(/\brunFeatureExtraction\b/g),
     new Map([
-      ['app/feature-metadata-extraction.js', 2],
+      [atCurrentPath('app/feature-metadata-extraction.js'), 2],
       ['services/diagram-generation.js', 1],
       ['workers/diagram-generation-worker.js', 2]
     ])
@@ -372,7 +389,7 @@ test('Worker construction and the diagram-generation client have explicit owners
       'app/legend/entry-actions.js',
       'app/record-discovery.js',
       'app/run-analysis.js'
-    ],
+    ].map(atCurrentPath),
     ['app/results.js']
   ));
 });
@@ -495,7 +512,7 @@ test('History intent and SVG admission have one production ownership path', () =
     'app/watchers.js',
     'services/config.js',
     'state.js'
-  ]);
+  ].map(atCurrentPath).sort());
   assertMetadataImportOwners(productionSources);
   assert.deepEqual(importersOf('services/svg-result-normalization.js'), importersWithRetiringOwners(
     'services/svg-result-normalization.js',
@@ -503,7 +520,7 @@ test('History intent and SVG admission have one production ownership path', () =
     ['app/svg-styles.js']
   ));
   assert.doesNotMatch(
-    productionSources.get('app/session-feature-metadata.js'),
+    productionSources.get(atCurrentPath('app/session-feature-metadata.js')),
     /DOMParser|parseFromString|result\?\.content/
   );
   assert.match(
@@ -827,8 +844,9 @@ test('shared privileged detectors preserve the characterized current-source fact
 });
 
 test('metadata validation callers cannot acquire identity or namespace access', () => {
+  const recovery = atCurrentPath('app/session-feature-metadata.js');
   const admission = new Map([
-    ['app/session-feature-metadata.js', "import { normalizeRenderedFeatureId } from '../services/session-feature-metadata.js';"],
+    [recovery, `import { normalizeRenderedFeatureId } from '${specifierFrom(recovery, 'services/session-feature-metadata.js')}';`],
     ['services/svg-result-ingestion.js', "import { collectRenderedFeatureIdentitiesFromSvgRoot } from './session-feature-metadata.js';"]
   ]);
   assertMetadataImportOwners(admission);
