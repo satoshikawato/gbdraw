@@ -666,6 +666,8 @@ Allowed columns:
 
 One table row represents one displayed record. A table must use either all GenBank rows or all GFF3/FASTA rows; do not mix `gbk` with `gff`/`fasta`. Put `row`/`column` placement in the table instead of using `--multi_record_position`. In linear mode, put per-record labels, subtitles, selectors, crops, and orientation in the table instead of combining `--records_table` with `--record_label`, `--record_subtitle`, `--record_id`, `--region`, or `--reverse_complement`.
 
+A `:rc` suffix and `reverse_complement` apply in different orders. `region=1000-9000:rc` crops 1000..9000 of the record as stored in the file, then reverse-complements the crop. `reverse_complement=1` reverse-complements the whole record first, so a `region` in the same row counts its coordinates on the reverse-complemented record. `--region` and `--reverse_complement` follow the same order.
+
 For Linear input without a records table, repeat `--multi_record_position SELECTOR@ROW` once for every loaded record. `SELECTOR` uses the usual record selector syntax, including `#1`; quote values containing `#` in a shell. Records assigned to one row share one bp/px scale and are ordered by input order. `--linear_record_gap` controls only the fixed gap between them. Multi-record rows cannot be combined with `--normalize_length`.
 
 Minimal GenBank records table:
