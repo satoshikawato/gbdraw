@@ -1,4 +1,4 @@
-"""Session 45 keeps a Result set of each diagram mode (E1, ``otherModeResult``).
+"""Session 46 keeps a Result set of each diagram mode (E1, ``otherModeResult``).
 
 The Web app keeps one Result per mode and saves both: the shown mode's set at
 the top level and the other in ``otherModeResult``. The validator admits the
@@ -41,7 +41,7 @@ def _first_source_bytes(data: dict) -> str:
     return data["resources"][data["renderRequest"]["records"][0]["source"]["resourceId"]]["data"]
 
 
-def test_session_45_admits_the_other_mode_result_set() -> None:
+def test_session_46_admits_the_other_mode_result_set() -> None:
     session = two_mode_session()
     validate_session(session)
     assert set(session["otherModeResult"]) <= {
@@ -62,7 +62,7 @@ def test_session_45_admits_the_other_mode_result_set() -> None:
             resourceId="record-9-genbank"), "missing resource\\(s\\): record-9-genbank"),
     ),
 )
-def test_session_45_rejects_an_unusable_other_mode_result_set(change, message) -> None:
+def test_session_46_rejects_an_unusable_other_mode_result_set(change, message) -> None:
     session = two_mode_session()
     change(session)
     with pytest.raises(ValidationError, match=message):
@@ -87,9 +87,9 @@ def test_session_document_names_each_mode_as_a_drawing(tmp_path: Path) -> None:
     data = linear.to_dict()
     assert data["renderRequest"]["mode"] == "linear"
     assert data["otherModeResult"]["renderRequest"]["mode"] == "circular"
-    # The swap keeps the shared draft and moves only the Result sets.
-    assert data["config"] == document.to_dict()["config"]
-    assert data["features"] == document.to_dict()["features"]
+    # The swap keeps the mode slices and moves only the Result sets.
+    assert data["modes"] == document.to_dict()["modes"]
+    assert data.get("cliOptions") == document.to_dict().get("cliOptions")
     assert linear.drawing("circular").to_dict()["renderRequest"] == document.to_dict()["renderRequest"]
     with materialize_session(document, output_directory=tmp_path) as materialized:
         with pytest.raises(SessionDrawingSelectionError):
@@ -166,7 +166,7 @@ SESSION_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "sessions"
         "conservation-fasta.v39.gbdraw-session.json.gz",
     ),
 )
-def test_sessions_before_45_reject_another_mode_result_set(fixture: str) -> None:
+def test_sessions_before_46_reject_another_mode_result_set(fixture: str) -> None:
     session = json.loads(gzip.decompress((SESSION_FIXTURES / fixture).read_bytes()))
     session["otherModeResult"] = two_mode_session()["otherModeResult"]
     with pytest.raises(ValidationError, match="cannot contain otherModeResult"):
@@ -229,4 +229,5 @@ def test_the_swap_resets_per_set_fields_the_moved_set_lacks() -> None:
     assert swapped["otherModeResult"]["editorState"]["legend"]["originalOrder"] == ["CDS", "repeat_region"]
     # The shared draft and preferences stay.
     assert swapped["ui"]["mode"] == session["ui"]["mode"]
-    assert swapped["config"] == session["config"]
+    assert swapped["modes"] == session["modes"]
+    assert swapped.get("cliOptions") == session.get("cliOptions")

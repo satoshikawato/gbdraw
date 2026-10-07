@@ -31,6 +31,7 @@ from .analysis.protein_artifacts import (
 )
 from .definition_line_styles import DEFINITION_LINE_KINDS
 from .exceptions import GbdrawError, ValidationError
+from .io.colors import named_color_hex
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
 from .render.formats import normalize_format_token
 from .render.output_paths import commit_staged_output_file
@@ -2747,6 +2748,101 @@ def _split_setting(
     return split
 
 
+_SHORT_HEX_COLOR = re.compile(r"#([0-9a-fA-F]{3})")
+_LONG_HEX_COLOR = re.compile(r"#[0-9a-fA-F]{6}")
+
+
+def _optional_hex_color(value: object) -> str | None:
+    """``normalizeOptionalHexColor`` of the Web ``services/config.js``.
+
+    A 3- or 6-digit hex code, or a color name through the shared named-color
+    table (``gbdraw.io.colors``), becomes lowercase 6-digit hex; anything else
+    is ``None`` (OV-160).
+    """
+
+    if value is None or value == "":
+        return None
+    text = _js_text(value)
+    if text and not text.startswith("#"):
+        text = named_color_hex(text) or text
+    short = _SHORT_HEX_COLOR.fullmatch(text)
+    if short:
+        return "#" + "".join(char * 2 for char in short.group(1)).lower()
+    return text.lower() if _LONG_HEX_COLOR.fullmatch(text) else None
+
+
+def _stroke_width(value: object) -> int | float | None:
+    """``normalizeStrokeWidth`` of the Web ``services/config.js``."""
+
+    if value is None or value == "":
+        return None
+    number = _js_number(value)
+    return _js_integral(number) if math.isfinite(number) and number >= 0 else None
+
+
+def _stroke_override_map(source: object) -> dict[str, Any]:
+    """``normalizeStrokeOverrideMap(source, { requireOverride: true })`` of the Web."""
+
+    normalized: dict[str, Any] = {}
+    if not isinstance(source, Mapping):
+        return normalized
+    for key, value in source.items():
+        name = _js_text(key)
+        if not name or not isinstance(value, Mapping):
+            continue
+        override: dict[str, Any] = {}
+        color = _optional_hex_color(value.get("strokeColor"))
+        width = _stroke_width(value.get("strokeWidth"))
+        if color is not None:
+            override["strokeColor"] = color
+        if width is not None:
+            override["strokeWidth"] = width
+        if not override:
+            continue
+        if "originalStrokeColor" in value:
+            override["originalStrokeColor"] = _optional_hex_color(value["originalStrokeColor"])
+        if "originalStrokeWidth" in value:
+            override["originalStrokeWidth"] = _stroke_width(value["originalStrokeWidth"])
+        normalized[name] = override
+    return normalized
+
+
+def _legend_color_overrides(source: object) -> dict[str, str]:
+    """``normalizeLegendColorOverrides`` of the Web ``services/config.js``."""
+
+    normalized: dict[str, str] = {}
+    if not isinstance(source, Mapping):
+        return normalized
+    for key, value in source.items():
+        caption = _js_text(key)
+        color = _optional_hex_color(value)
+        if caption and color:
+            normalized[caption] = color
+    return normalized
+
+
+def _with_normalized_editor_colors(draft: Mapping[str, Any]) -> Mapping[str, Any]:
+    """The draft with the Legend and feature stroke and color edits as Web Load
+    reads them (``normalizeEditorStateData``); absent fields stay absent."""
+
+    editor = draft.get("editorState")
+    if not isinstance(editor, Mapping):
+        return draft
+    changed = dict(editor)
+    legend = editor.get("legend")
+    if isinstance(legend, Mapping):
+        changed_legend = dict(legend)
+        if "strokeOverrides" in legend:
+            changed_legend["strokeOverrides"] = _stroke_override_map(legend["strokeOverrides"])
+        if "colorOverrides" in legend:
+            changed_legend["colorOverrides"] = _legend_color_overrides(legend["colorOverrides"])
+        changed["legend"] = changed_legend
+    strokes = editor.get("featureStrokes")
+    if isinstance(strokes, Mapping) and "overrides" in strokes:
+        changed["featureStrokes"] = {**strokes, "overrides": _stroke_override_map(strokes["overrides"])}
+    return {**draft, "editorState": changed}
+
+
 def split_draft_into_modes(
     draft: Mapping[str, Any],
     *,
@@ -2771,7 +2867,9 @@ def split_draft_into_modes(
     ``config.paletteInstantPreviewEnabled`` to ``ui`` (over a saved ``ui``
     value, as Load applies it last), and ``config.cliOptions`` to
     ``cliOptions``. ``config.colorsAreOverrides`` is resolved into ``colors``
-    over ``palette_colors`` (``mode_split_palette_colors``) and dropped.
+    over ``palette_colors`` (``mode_split_palette_colors``) and dropped. The
+    Legend and feature stroke and color edits are read as Web Load reads them
+    (hex colors, color names through the shared table, else ``None``).
 
     ``committed_mode`` is the saved Result's mode (``renderRequest.mode``, else
     ``ui.mode``). ``mode_profiles`` defaults to ``config.modeProfiles``, and
@@ -2790,6 +2888,7 @@ def split_draft_into_modes(
             "Splitting a Session draft by mode requires the saved Result's mode.",
             diagnostic=_SESSION_FIELDS_INVALID,
         )
+    draft = _with_normalized_editor_colors(draft)
     config_value = draft.get("config")
     if isinstance(config_value, Mapping) and "colorsAreOverrides" in config_value:
         config_value = _with_resolved_override_colors(config_value, palette_colors)
