@@ -820,7 +820,7 @@ def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
 def _validate_display_placement_draft_config(
     config: Mapping[str, Any],
     *,
-    mode: object,
+    mode: str,
     scoped: bool,
     current: bool,
 ) -> None:
@@ -2437,7 +2437,7 @@ def split_draft_into_modes(
     *,
     committed_mode: object,
     mode_profiles: object = None,
-    depth_sources: Mapping[str, object] | None = None,
+    depth_sources: Mapping[DiagramMode, int] | Mapping[str, object] | None = None,
 ) -> dict[str, Any]:
     """Split the flat Web draft of a Session 27-44 into Session 46 mode slices.
 
