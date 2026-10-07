@@ -178,8 +178,20 @@ def _gallery_cases() -> list[dict[str, Any]]:
                     row["minValue"] = float(min_label.rstrip("%"))
             auto = meta["primary"]["automaticTranslation"]
             final = meta["primary"]["finalBounds"]
-            primary = [final["x"] - auto[0], final["y"] - auto[1]]
-            primary += [primary[0] + final["width"], primary[1] + final["height"]]
+            reflow = meta["legendReflow"]
+            if "wrapWidth" in reflow:
+                # The inputs Python laid the Legend out with (`legendReflow`).
+                if reflow["fontFile"] != _font_file(family):
+                    raise SystemExit(f"{path.name}#{index}: legendReflow.fontFile {reflow['fontFile']!r} "
+                                     f"is not the face of {family!r}")
+                recorded = reflow["primaryLocalBounds"]
+                primary = [recorded["minX"], recorded["minY"], recorded["maxX"], recorded["maxY"]]
+                wrap_width, size, dpi = reflow["wrapWidth"], reflow["fontSize"], reflow["dpi"]
+            else:
+                # A Result written before Python recorded them: the Web's fallbacks.
+                primary = [final["x"] - auto[0], final["y"] - auto[1]]
+                primary += [primary[0] + final["width"], primary[1] + final["height"]]
+                wrap_width, dpi = final["width"], DPI
             title = meta.get("title")
             cases.append({
                 "name": f"{path.name.split('.gbdraw')[0]}#{index}",
@@ -187,9 +199,9 @@ def _gallery_cases() -> list[dict[str, Any]]:
                 "edit": "none",
                 "rows": solids + gradients,
                 "options": {
-                    "side": meta["legendSide"], "wrapWidth": final["width"], "fontFile": _font_file(family),
-                    "fontFamily": family, "fontSize": size, "dpi": DPI,
-                    "colorRectSize": meta["legendReflow"]["colorRectSize"],
+                    "side": meta["legendSide"], "wrapWidth": wrap_width, "fontFile": _font_file(family),
+                    "fontFamily": family, "fontSize": size, "dpi": dpi,
+                    "colorRectSize": reflow["colorRectSize"],
                 },
                 "composition": {
                     "primary": primary,
