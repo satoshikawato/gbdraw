@@ -77,6 +77,18 @@ const popupEdit = async (page, match, edit = {}) => {
       if (app.featureStyleScopeDialog.show) await app.handleFeatureStyleScopeChoice(change.scope || 'single');
     }
     if (change.resetStroke) await app.resetClickedFeatureStroke();
+    if (change.legendName !== undefined) {
+      app.clickedFeature.legendName = change.legendName;
+      await app.handleLegendNameCommit();
+      if (app.legendRenameDialog.show && app.legendRenameDialog.mode === 'scope') {
+        await app.handleLegendRenameChoice(change.scope || 'single');
+      }
+      if (app.legendRenameDialog.show) throw new Error(`unexpected Legend name dialog: ${app.legendRenameDialog.mode}`);
+    }
+    if (change.resetFill) {
+      await app.resetClickedFeatureFillColor();
+      if (app.resetColorDialog.show) await app.handleResetColorChoice(change.scope || 'this');
+    }
     if (change.visibility) {
       app.clickedFeature.featureVisibility = change.visibility;
       await app.updateClickedFeatureVisibility(change.visibility);
@@ -179,7 +191,8 @@ const FL1_ALPHA = { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e6394
 const KINDS = [
   'visibility rule add', 'visibility rule action', 'visibility rule delete', 'feature Off', 'feature On',
   'label text', 'label Off', 'label On', 'color rule add', 'color rule color', 'color rule delete', 'feature color',
-  'undo', 'redo', 'Result switch', 'legend color', 'legend add', 'legend stroke', 'feature stroke'
+  'undo', 'redo', 'Result switch', 'legend color', 'legend add', 'legend stroke', 'feature stroke',
+  'feature legend name', 'feature color reset'
 ];
 
 // The matrix: one edit kind in one set of states, with the setup before the
@@ -536,6 +549,36 @@ const CASES = [
       await settleLive(page);
     },
     run: (page) => addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '.', color: '#c83366', cap: 'Zeta' })
+  },
+  // UJ-03 (GUI journeys 2026-10-06, fixed by #857): a popup Legend name for
+  // one feature of a shared row, and Reset fill color after a This feature
+  // only color, change the rows Python derives (`other proteins`); the
+  // automatic rerender shows them live.
+  {
+    kind: 'feature legend name',
+    edit: 'Legend name (popup, this feature only) for one feature of a shared row',
+    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'unbound' },
+    run: (page) => popupEdit(page, 'FL1', { legendName: 'Complex IV' })
+  },
+  {
+    kind: 'feature legend name',
+    edit: 'Legend name (popup, this feature only) for one feature of a shared row',
+    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'bound' },
+    run: (page) => popupEdit(page, 'FL1', { legendName: 'Complex IV' })
+  },
+  {
+    kind: 'feature color reset',
+    edit: 'Reset fill color (popup) after a This feature only color',
+    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'bound' },
+    setup: (page) => popupEdit(page, 'FL1', { fill: '#c83366' }),
+    run: (page) => popupEdit(page, 'FL1', { resetFill: true })
+  },
+  {
+    kind: 'feature color reset',
+    edit: 'Reset fill color (popup) of a This feature only color Generate drew',
+    states: { mode: 'linear', results: 'single', reflow: 'on', labels: 'unbound' },
+    setup: async (page) => { await popupEdit(page, 'FL1', { fill: '#c83366' }); await generate(page); },
+    run: (page) => popupEdit(page, 'FL1', { resetFill: true })
   },
   {
     kind: 'Result switch',
