@@ -427,3 +427,14 @@ test('rendered-ID feature edits migrate to the vectors both readers share', () =
     assert.deepEqual({ features, droppedCount, narrowedVisibilityCount }, expected, name);
   }
 });
+
+// The same vectors pin the Python reader (tests/test_session_compat.py), which
+// the CLI uses when it replays a Session 40-44 with --session_output.
+test('hash annotation targets migrate to the vectors both readers share', () => {
+  const { cases } = JSON.parse(readFileSync(new URL('../fixtures/annotation-target-migration-vectors.json', import.meta.url), 'utf8'));
+  for (const { name, input, expected } of cases) {
+    const result = migrateSessionAnnotationTargets(structuredClone(input));
+    // As saved: a target field the saved target did not have is absent.
+    assert.deepEqual(JSON.parse(JSON.stringify(result)), expected, name);
+  }
+});

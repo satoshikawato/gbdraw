@@ -33,6 +33,13 @@ write-up of a release.
   in the other mode (Circular or Linear). The stroke stays in the draft and in a
   saved Session, and the next Generate that draws the feature draws it again.
 - CLI: `gbdraw circular|linear --session <Session 40-44> --session_output out.json`
+  (and `--save_session`) moves an annotation's `hash=` target to the feature's
+  source identity where the Session's saved feature catalog makes the figure
+  certain, as the Web app does on Load. Before, the rewritten Session kept the
+  `hash=` target in `config.annotationSets`, so after a later crop or reverse
+  complement the annotation no longer matched its feature. The replay logs how many
+  targets moved.
+- CLI: `gbdraw circular|linear --session <Session 40-44> --session_output out.json`
   (and `--save_session`) keeps the Feature visibility, Label visibility, and label
   text edits that the Web app saved by rendered feature ID. Before, the rewritten
   Session dropped them: the diagram kept their effect through the request's tables,

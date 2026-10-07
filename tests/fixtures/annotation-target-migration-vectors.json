@@ -1,0 +1,6344 @@
+{
+  "description": "Session 44 and older annotation sets (input.annotationSets, the Session's config.annotationSets) with the Session's diagram mode, its saved feature catalog (projected to the fields the readers use), and its request records, and the annotation sets both readers must produce: a featureSpan target with one hash selector moves to a featureIdentity target in that mode when the record it binds is drawn without a crop, reverse complement, or rotation and the hash names exactly one catalog feature, in that record. migratedCount counts the moved targets; with none, the input is returned as saved. Expected outputs are JSON: a target field the saved target did not have is absent. A case with `fixture` is projected from that Session saved by first-parent main. Read by tests/test_session_compat.py (session_io.migrate_session_annotation_targets) and tests/web/feature-edit-migration.test.mjs (migrateSessionAnnotationTargets).",
+  "cases": [
+    {
+      "name": "Session 44 Linear: only the annotation whose feature is certain moves",
+      "fixture": "sessions/selected-feature-annotations.v44.gbdraw-session.json.gz",
+      "input": {
+        "annotationSets": [
+          {
+            "id": "annotations",
+            "annotations": [
+              {
+                "id": "feature_1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "TESTA"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "fef810304"
+                    }
+                  ],
+                  "envelope": "outer_bounds",
+                  "circularPath": "shortest"
+                },
+                "label": "",
+                "mark": "highlight",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "_gbdraw_web_target_record_key": "[\"linear\",\"linear-seq-2a202a77-de61-437d-babb-3058902ec696\",\"gb\",[\"record-1.gb\",7033],null]::[0,\"TESTA\",4000]"
+                }
+              },
+              {
+                "id": "feature_2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "TESTA"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f3ccacda4"
+                    }
+                  ],
+                  "envelope": "outer_bounds",
+                  "circularPath": "shortest"
+                },
+                "label": "",
+                "mark": "highlight",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "_gbdraw_web_target_record_key": "[\"linear\",\"linear-seq-2a202a77-de61-437d-babb-3058902ec696\",\"gb\",[\"record-1.gb\",7033],null]::[0,\"TESTA\",4000]"
+                }
+              },
+              {
+                "id": "feature_3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "TESTB"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "fbc76b20f"
+                    }
+                  ],
+                  "envelope": "outer_bounds",
+                  "circularPath": "shortest"
+                },
+                "label": "",
+                "mark": "highlight",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "_gbdraw_web_target_record_key": "[\"linear\",\"linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62\",\"gb\",[\"record-2.gb\",6921],null]::[0,\"TESTB\",4000]"
+                }
+              }
+            ],
+            "defaultStyle": {
+              "stroke": "#404040",
+              "strokeWidth": 1.5,
+              "strokeDasharray": [],
+              "lineCap": "tick",
+              "fill": "#94a3b8",
+              "fillOpacity": 0.2,
+              "hatch": null,
+              "labelColor": "#202020",
+              "labelFontSize": null,
+              "labelOrientation": "auto",
+              "labelPosition": "center",
+              "labelOffset": 4
+            },
+            "legendLabel": null
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+                "linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62"
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+                  "biologicalFeatureId": "f3ccacda4~1",
+                  "stableFeatureId": "f3ccacda4",
+                  "record_id": "TESTA"
+                },
+                {
+                  "recordKey": "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+                  "biologicalFeatureId": "f3ccacda4~2",
+                  "stableFeatureId": "f3ccacda4",
+                  "record_id": "TESTA"
+                },
+                {
+                  "recordKey": "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+                  "biologicalFeatureId": "ffa1f4c4a",
+                  "record_id": "TESTA"
+                },
+                {
+                  "recordKey": "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+                  "biologicalFeatureId": "fcd5590a9",
+                  "record_id": "TESTA"
+                },
+                {
+                  "recordKey": "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+                  "biologicalFeatureId": "f779210b8",
+                  "record_id": "TESTA"
+                },
+                {
+                  "recordKey": "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+                  "biologicalFeatureId": "fef810304",
+                  "record_id": "TESTA"
+                },
+                {
+                  "recordKey": "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+                  "biologicalFeatureId": "f01237d96",
+                  "record_id": "TESTA"
+                },
+                {
+                  "recordKey": "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+                  "biologicalFeatureId": "fb5977f81",
+                  "record_id": "TESTA"
+                },
+                {
+                  "recordKey": "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+                  "biologicalFeatureId": "f571eb983",
+                  "record_id": "TESTA"
+                },
+                {
+                  "recordKey": "linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62",
+                  "biologicalFeatureId": "f5aa08bf5",
+                  "record_id": "TESTB"
+                },
+                {
+                  "recordKey": "linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62",
+                  "biologicalFeatureId": "f88047061",
+                  "record_id": "TESTB"
+                },
+                {
+                  "recordKey": "linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62",
+                  "biologicalFeatureId": "fcecf4036",
+                  "record_id": "TESTB"
+                },
+                {
+                  "recordKey": "linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62",
+                  "biologicalFeatureId": "fbc76b20f",
+                  "record_id": "TESTB"
+                },
+                {
+                  "recordKey": "linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62",
+                  "biologicalFeatureId": "f5eb0c689",
+                  "record_id": "TESTB"
+                },
+                {
+                  "recordKey": "linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62",
+                  "biologicalFeatureId": "fd6a65bce",
+                  "record_id": "TESTB"
+                },
+                {
+                  "recordKey": "linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62",
+                  "biologicalFeatureId": "f3f7207f4",
+                  "record_id": "TESTB"
+                },
+                {
+                  "recordKey": "linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62",
+                  "biologicalFeatureId": "fbf6c27e1",
+                  "record_id": "TESTB"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+            "cardinality": "all",
+            "source": {
+              "kind": "genbank",
+              "resourceId": "record-1-genbank"
+            },
+            "selector": null,
+            "region": null,
+            "presentation": {
+              "label": "<i>Testus fixturus</i> A1",
+              "subtitle": null,
+              "reverseComplement": false,
+              "gridRow": 1,
+              "gridColumn": null
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62",
+            "cardinality": "all",
+            "source": {
+              "kind": "genbank",
+              "resourceId": "record-2-genbank"
+            },
+            "selector": null,
+            "region": null,
+            "presentation": {
+              "label": "<i>Secundus alternus</i> B2",
+              "subtitle": null,
+              "reverseComplement": true,
+              "gridRow": 2,
+              "gridColumn": null
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "annotationSets": [
+          {
+            "id": "annotations",
+            "annotations": [
+              {
+                "id": "feature_1",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "linear-seq-2a202a77-de61-437d-babb-3058902ec696",
+                  "biologicalFeatureId": "fef810304",
+                  "envelope": "outer_bounds",
+                  "circularPath": "shortest"
+                },
+                "label": "",
+                "mark": "highlight",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "_gbdraw_web_target_record_key": "[\"linear\",\"linear-seq-2a202a77-de61-437d-babb-3058902ec696\",\"gb\",[\"record-1.gb\",7033],null]::[0,\"TESTA\",4000]"
+                }
+              },
+              {
+                "id": "feature_2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "TESTA"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f3ccacda4"
+                    }
+                  ],
+                  "envelope": "outer_bounds",
+                  "circularPath": "shortest"
+                },
+                "label": "",
+                "mark": "highlight",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "_gbdraw_web_target_record_key": "[\"linear\",\"linear-seq-2a202a77-de61-437d-babb-3058902ec696\",\"gb\",[\"record-1.gb\",7033],null]::[0,\"TESTA\",4000]"
+                }
+              },
+              {
+                "id": "feature_3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "TESTB"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "fbc76b20f"
+                    }
+                  ],
+                  "envelope": "outer_bounds",
+                  "circularPath": "shortest"
+                },
+                "label": "",
+                "mark": "highlight",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "_gbdraw_web_target_record_key": "[\"linear\",\"linear-seq-b1ef06a7-93eb-49e8-a324-c59b199ade62\",\"gb\",[\"record-2.gb\",6921],null]::[0,\"TESTB\",4000]"
+                }
+              }
+            ],
+            "defaultStyle": {
+              "stroke": "#404040",
+              "strokeWidth": 1.5,
+              "strokeDasharray": [],
+              "lineCap": "tick",
+              "fill": "#94a3b8",
+              "fillOpacity": 0.2,
+              "hatch": null,
+              "labelColor": "#202020",
+              "labelFontSize": null,
+              "labelOrientation": "auto",
+              "labelPosition": "center",
+              "labelOffset": 4
+            },
+            "legendLabel": null
+          }
+        ],
+        "migratedCount": 1
+      }
+    },
+    {
+      "name": "A unique hash of an untransformed record moves, bound by record ID, position, or the only record",
+      "input": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f1"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 2
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f5"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": null,
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f5"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              },
+              {
+                "id": "a5",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L5",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "5"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "other"
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "other",
+                  "record_id": "B",
+                  "biologicalFeatureId": "f4"
+                },
+                {
+                  "recordKey": "other",
+                  "record_id": "B",
+                  "biologicalFeatureId": "f5"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "other",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f1"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "other",
+                  "biologicalFeatureId": "f4",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 2
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f5"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "other",
+                  "biologicalFeatureId": "f5",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              },
+              {
+                "id": "a5",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "other",
+                  "biologicalFeatureId": "f4",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L5",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "5"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "migratedCount": 3
+      }
+    },
+    {
+      "name": "The record a target binds is read as the renderer reads it",
+      "input": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 2
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 3
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              },
+              {
+                "id": "a5",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "A"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f1"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L5",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "5"
+                }
+              },
+              {
+                "id": "a6",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": null,
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L6",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "6"
+                }
+              },
+              {
+                "id": "a7",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f1"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L7",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "7"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "plain",
+                "copy",
+                "other"
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "plain",
+                  "record_id": "A",
+                  "biologicalFeatureId": "f1"
+                },
+                {
+                  "recordKey": "plain",
+                  "record_id": "A",
+                  "biologicalFeatureId": "f2~2"
+                },
+                {
+                  "recordKey": "plain",
+                  "record_id": "A",
+                  "biologicalFeatureId": "f2~3"
+                },
+                {
+                  "recordKey": "plain",
+                  "record_id": "A",
+                  "biologicalFeatureId": "f3"
+                },
+                {
+                  "recordKey": "copy",
+                  "record_id": "A",
+                  "biologicalFeatureId": "f3"
+                },
+                {
+                  "recordKey": "other",
+                  "record_id": "B",
+                  "biologicalFeatureId": "f4"
+                },
+                {
+                  "recordKey": "other",
+                  "record_id": "B",
+                  "biologicalFeatureId": "f5"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "plain",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "copy",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "other",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "other",
+                  "biologicalFeatureId": "f4",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "other",
+                  "biologicalFeatureId": "f4",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 3
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              },
+              {
+                "id": "a5",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "A"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f1"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L5",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "5"
+                }
+              },
+              {
+                "id": "a6",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": null,
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L6",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "6"
+                }
+              },
+              {
+                "id": "a7",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "plain",
+                  "biologicalFeatureId": "f1",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L7",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "7"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "migratedCount": 3
+      }
+    },
+    {
+      "name": "A record drawn cropped, reverse-complemented, or rotated keeps its hash targets (JavaScript truthiness)",
+      "input": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R1"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h1"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R2"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h2"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R3"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h3"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R4"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              },
+              {
+                "id": "a5",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R5"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h5"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L5",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "5"
+                }
+              },
+              {
+                "id": "a6",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R6"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h6"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L6",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "6"
+                }
+              },
+              {
+                "id": "a7",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R7"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h7"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L7",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "7"
+                }
+              },
+              {
+                "id": "a8",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R8"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h8"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L8",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "8"
+                }
+              },
+              {
+                "id": "a9",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R9"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h9"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L9",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "9"
+                }
+              },
+              {
+                "id": "a10",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R10"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h10"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L10",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "10"
+                }
+              },
+              {
+                "id": "a11",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R11"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L11",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "11"
+                }
+              },
+              {
+                "id": "a12",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R12"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h12"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L12",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "12"
+                }
+              },
+              {
+                "id": "a13",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R13"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h13"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L13",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "13"
+                }
+              },
+              {
+                "id": "a14",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R14"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h14"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L14",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "14"
+                }
+              },
+              {
+                "id": "a15",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R15"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h15"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L15",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "15"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "t1",
+                "t2",
+                "t3",
+                "t4",
+                "t5",
+                "t6",
+                "t7",
+                "t8",
+                "t9",
+                "t10",
+                "t11",
+                "t12",
+                "t13",
+                "t14",
+                "t15"
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "t1",
+                  "record_id": "R1",
+                  "biologicalFeatureId": "h1"
+                },
+                {
+                  "recordKey": "t2",
+                  "record_id": "R2",
+                  "biologicalFeatureId": "h2"
+                },
+                {
+                  "recordKey": "t3",
+                  "record_id": "R3",
+                  "biologicalFeatureId": "h3"
+                },
+                {
+                  "recordKey": "t4",
+                  "record_id": "R4",
+                  "biologicalFeatureId": "h4"
+                },
+                {
+                  "recordKey": "t5",
+                  "record_id": "R5",
+                  "biologicalFeatureId": "h5"
+                },
+                {
+                  "recordKey": "t6",
+                  "record_id": "R6",
+                  "biologicalFeatureId": "h6"
+                },
+                {
+                  "recordKey": "t7",
+                  "record_id": "R7",
+                  "biologicalFeatureId": "h7"
+                },
+                {
+                  "recordKey": "t8",
+                  "record_id": "R8",
+                  "biologicalFeatureId": "h8"
+                },
+                {
+                  "recordKey": "t9",
+                  "record_id": "R9",
+                  "biologicalFeatureId": "h9"
+                },
+                {
+                  "recordKey": "t10",
+                  "record_id": "R10",
+                  "biologicalFeatureId": "h10"
+                },
+                {
+                  "recordKey": "t11",
+                  "record_id": "R11",
+                  "biologicalFeatureId": "h11"
+                },
+                {
+                  "recordKey": "t12",
+                  "record_id": "R12",
+                  "biologicalFeatureId": "h12"
+                },
+                {
+                  "recordKey": "t13",
+                  "record_id": "R13",
+                  "biologicalFeatureId": "h13"
+                },
+                {
+                  "recordKey": "t14",
+                  "record_id": "R14",
+                  "biologicalFeatureId": "h14"
+                },
+                {
+                  "recordKey": "t15",
+                  "record_id": "R15",
+                  "biologicalFeatureId": "h15"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "t1",
+            "cardinality": "exactly_one",
+            "region": {
+              "selector": null,
+              "start": 1,
+              "end": 4000,
+              "reverseComplement": false
+            }
+          },
+          {
+            "recordKey": "t2",
+            "cardinality": "exactly_one",
+            "presentation": {
+              "reverseComplement": true
+            }
+          },
+          {
+            "recordKey": "t3",
+            "cardinality": "exactly_one",
+            "display": {
+              "isCircular": null,
+              "startCoordinate": 101
+            }
+          },
+          {
+            "recordKey": "t4",
+            "cardinality": "exactly_one",
+            "region": {}
+          },
+          {
+            "recordKey": "t5",
+            "cardinality": "exactly_one",
+            "region": []
+          },
+          {
+            "recordKey": "t6",
+            "cardinality": "exactly_one",
+            "region": 0
+          },
+          {
+            "recordKey": "t7",
+            "cardinality": "exactly_one",
+            "region": ""
+          },
+          {
+            "recordKey": "t8",
+            "cardinality": "exactly_one",
+            "presentation": {
+              "reverseComplement": "false"
+            }
+          },
+          {
+            "recordKey": "t9",
+            "cardinality": "exactly_one",
+            "display": {
+              "isCircular": null,
+              "startCoordinate": "101"
+            }
+          },
+          {
+            "recordKey": "t10",
+            "cardinality": "exactly_one",
+            "display": {
+              "isCircular": null,
+              "startCoordinate": 1.5
+            }
+          },
+          {
+            "recordKey": "t11",
+            "cardinality": "exactly_one",
+            "display": {
+              "isCircular": null,
+              "startCoordinate": 0
+            }
+          },
+          {
+            "recordKey": "t12",
+            "cardinality": "exactly_one",
+            "display": {
+              "isCircular": null,
+              "startCoordinate": -5
+            }
+          },
+          {
+            "recordKey": "t13",
+            "cardinality": "exactly_one",
+            "display": {
+              "isCircular": null,
+              "startCoordinate": 9007199254740992
+            }
+          },
+          {
+            "recordKey": "t14",
+            "cardinality": "exactly_one",
+            "presentation": "rc",
+            "display": null
+          },
+          {
+            "recordKey": "t15",
+            "cardinality": "exactly_one"
+          }
+        ]
+      },
+      "expected": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R1"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h1"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R2"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h2"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R3"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h3"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R4"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              },
+              {
+                "id": "a5",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R5"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h5"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L5",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "5"
+                }
+              },
+              {
+                "id": "a6",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "t6",
+                  "biologicalFeatureId": "h6",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L6",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "6"
+                }
+              },
+              {
+                "id": "a7",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "t7",
+                  "biologicalFeatureId": "h7",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L7",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "7"
+                }
+              },
+              {
+                "id": "a8",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R8"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h8"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L8",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "8"
+                }
+              },
+              {
+                "id": "a9",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "t9",
+                  "biologicalFeatureId": "h9",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L9",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "9"
+                }
+              },
+              {
+                "id": "a10",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "t10",
+                  "biologicalFeatureId": "h10",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L10",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "10"
+                }
+              },
+              {
+                "id": "a11",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R11"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L11",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "11"
+                }
+              },
+              {
+                "id": "a12",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "R12"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "h12"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L12",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "12"
+                }
+              },
+              {
+                "id": "a13",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "t13",
+                  "biologicalFeatureId": "h13",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L13",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "13"
+                }
+              },
+              {
+                "id": "a14",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "t14",
+                  "biologicalFeatureId": "h14",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L14",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "14"
+                }
+              },
+              {
+                "id": "a15",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "t15",
+                  "biologicalFeatureId": "h15",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L15",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "15"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "migratedCount": 7
+      }
+    },
+    {
+      "name": "A hash that names no feature or several features keeps its target",
+      "input": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f9"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f2"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f2~2"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f3"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "plain",
+                "copy",
+                "other"
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "plain",
+                  "record_id": "A",
+                  "biologicalFeatureId": "f1"
+                },
+                {
+                  "recordKey": "plain",
+                  "record_id": "A",
+                  "biologicalFeatureId": "f2~2"
+                },
+                {
+                  "recordKey": "plain",
+                  "record_id": "A",
+                  "biologicalFeatureId": "f2~3"
+                },
+                {
+                  "recordKey": "plain",
+                  "record_id": "A",
+                  "biologicalFeatureId": "f3"
+                },
+                {
+                  "recordKey": "copy",
+                  "record_id": "A",
+                  "biologicalFeatureId": "f3"
+                },
+                {
+                  "recordKey": "other",
+                  "record_id": "B",
+                  "biologicalFeatureId": "f4"
+                },
+                {
+                  "recordKey": "other",
+                  "record_id": "B",
+                  "biologicalFeatureId": "f5"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "plain",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "copy",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "other",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f9"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f2"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f2~2"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f3"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "migratedCount": 0
+      }
+    },
+    {
+      "name": "Only a featureSpan with one hash selector moves",
+      "input": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "locus_tag",
+                      "value": "B_1"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    },
+                    {
+                      "key": "hash",
+                      "value": "f5"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": null,
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "HASH",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              },
+              {
+                "id": "a5",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": {
+                    "key": "hash",
+                    "value": "f4"
+                  },
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L5",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "5"
+                }
+              },
+              {
+                "id": "a6",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L6",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "6"
+                }
+              },
+              {
+                "id": "a7",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    "hash"
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L7",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "7"
+                }
+              },
+              {
+                "id": "a8",
+                "target": {
+                  "kind": "coordinateSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L8",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "8"
+                }
+              },
+              {
+                "id": "a9",
+                "target": {
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L9",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "9"
+                }
+              },
+              {
+                "id": "a10",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "other",
+                  "biologicalFeatureId": "f5"
+                },
+                "label": "L10",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "10"
+                }
+              },
+              {
+                "id": "a11",
+                "target": null,
+                "label": "L11",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "11"
+                }
+              },
+              {
+                "id": "a12",
+                "target": "hash=f4",
+                "label": "L12",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "12"
+                }
+              },
+              {
+                "id": "a13",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f5"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L13",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "13"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "plain",
+                "copy",
+                "other"
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "plain",
+                  "record_id": "A",
+                  "biologicalFeatureId": "f1"
+                },
+                {
+                  "recordKey": "plain",
+                  "record_id": "A",
+                  "biologicalFeatureId": "f2~2"
+                },
+                {
+                  "recordKey": "plain",
+                  "record_id": "A",
+                  "biologicalFeatureId": "f2~3"
+                },
+                {
+                  "recordKey": "plain",
+                  "record_id": "A",
+                  "biologicalFeatureId": "f3"
+                },
+                {
+                  "recordKey": "copy",
+                  "record_id": "A",
+                  "biologicalFeatureId": "f3"
+                },
+                {
+                  "recordKey": "other",
+                  "record_id": "B",
+                  "biologicalFeatureId": "f4"
+                },
+                {
+                  "recordKey": "other",
+                  "record_id": "B",
+                  "biologicalFeatureId": "f5"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "plain",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "copy",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "other",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "locus_tag",
+                      "value": "B_1"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    },
+                    {
+                      "key": "hash",
+                      "value": "f5"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": null,
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "HASH",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              },
+              {
+                "id": "a5",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": {
+                    "key": "hash",
+                    "value": "f4"
+                  },
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L5",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "5"
+                }
+              },
+              {
+                "id": "a6",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L6",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "6"
+                }
+              },
+              {
+                "id": "a7",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    "hash"
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L7",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "7"
+                }
+              },
+              {
+                "id": "a8",
+                "target": {
+                  "kind": "coordinateSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L8",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "8"
+                }
+              },
+              {
+                "id": "a9",
+                "target": {
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L9",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "9"
+                }
+              },
+              {
+                "id": "a10",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "other",
+                  "biologicalFeatureId": "f5"
+                },
+                "label": "L10",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "10"
+                }
+              },
+              {
+                "id": "a11",
+                "target": null,
+                "label": "L11",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "11"
+                }
+              },
+              {
+                "id": "a12",
+                "target": "hash=f4",
+                "label": "L12",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "12"
+                }
+              },
+              {
+                "id": "a13",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "other",
+                  "biologicalFeatureId": "f5",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L13",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "13"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "migratedCount": 1
+      }
+    },
+    {
+      "name": "A record of an ALL input is read through its request record",
+      "input": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "C"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f6"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "D"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f7"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f1"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "all-input:1",
+                "all-input:2",
+                "all-input:01",
+                "single:1"
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "all-input:1",
+                  "record_id": "A",
+                  "biologicalFeatureId": "f1"
+                },
+                {
+                  "recordKey": "all-input:2",
+                  "record_id": "B",
+                  "biologicalFeatureId": "f4"
+                },
+                {
+                  "recordKey": "all-input:01",
+                  "record_id": "C",
+                  "biologicalFeatureId": "f6"
+                },
+                {
+                  "recordKey": "single:1",
+                  "record_id": "D",
+                  "biologicalFeatureId": "f7"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "all-input",
+            "cardinality": "all",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "single",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          "not a record",
+          7
+        ]
+      },
+      "expected": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "all-input:2",
+                  "biologicalFeatureId": "f4",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "C"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f6"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "D"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f7"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "all-input:1",
+                  "biologicalFeatureId": "f1",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "migratedCount": 2
+      }
+    },
+    {
+      "name": "A reverse-complemented ALL input keeps the hash targets of its records",
+      "input": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f1"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "all-input:1",
+                "all-input:2"
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "all-input:1",
+                  "record_id": "A",
+                  "biologicalFeatureId": "f1"
+                },
+                {
+                  "recordKey": "all-input:2",
+                  "record_id": "B",
+                  "biologicalFeatureId": "f4"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "all-input",
+            "cardinality": "all",
+            "region": null,
+            "presentation": {
+              "reverseComplement": true
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f1"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "migratedCount": 0
+      }
+    },
+    {
+      "name": "Record selectors are read as JavaScript reads an array index or a record ID",
+      "input": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": "1"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 1.0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": [
+                      1
+                    ]
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": true
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              },
+              {
+                "id": "a5",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": -1
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L5",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "5"
+                }
+              },
+              {
+                "id": "a6",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": "length"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L6",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "6"
+                }
+              },
+              {
+                "id": "a7",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": "01"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L7",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "7"
+                }
+              },
+              {
+                "id": "a8",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": null
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L8",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "8"
+                }
+              },
+              {
+                "id": "a9",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 1.5
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L9",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "9"
+                }
+              },
+              {
+                "id": "a10",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": " 1"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L10",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "10"
+                }
+              },
+              {
+                "id": "a11",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": "B",
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L11",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "11"
+                }
+              },
+              {
+                "id": "a12",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": [],
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L12",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "12"
+                }
+              },
+              {
+                "id": "a13",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": " B "
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L13",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "13"
+                }
+              },
+              {
+                "id": "a14",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "b"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L14",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "14"
+                }
+              },
+              {
+                "id": "a15",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "RecordIndex",
+                    "index": 1
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L15",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "15"
+                }
+              },
+              {
+                "id": "a16",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L16",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "16"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "r0",
+                "r1",
+                "r2"
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "r0",
+                  "record_id": "A",
+                  "biologicalFeatureId": "f10"
+                },
+                {
+                  "recordKey": "r1",
+                  "record_id": "B",
+                  "biologicalFeatureId": "f11"
+                },
+                {
+                  "recordKey": "r2",
+                  "record_id": "C",
+                  "biologicalFeatureId": "f12"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "r0",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "r1",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "r2",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "r1",
+                  "biologicalFeatureId": "f11",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "r1",
+                  "biologicalFeatureId": "f11",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "r1",
+                  "biologicalFeatureId": "f11",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": true
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              },
+              {
+                "id": "a5",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": -1
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L5",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "5"
+                }
+              },
+              {
+                "id": "a6",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": "length"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L6",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "6"
+                }
+              },
+              {
+                "id": "a7",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": "01"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L7",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "7"
+                }
+              },
+              {
+                "id": "a8",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": null
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L8",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "8"
+                }
+              },
+              {
+                "id": "a9",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 1.5
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L9",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "9"
+                }
+              },
+              {
+                "id": "a10",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": " 1"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L10",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "10"
+                }
+              },
+              {
+                "id": "a11",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": "B",
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L11",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "11"
+                }
+              },
+              {
+                "id": "a12",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": [],
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L12",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "12"
+                }
+              },
+              {
+                "id": "a13",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "r1",
+                  "biologicalFeatureId": "f11",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L13",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "13"
+                }
+              },
+              {
+                "id": "a14",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "b"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L14",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "14"
+                }
+              },
+              {
+                "id": "a15",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "RecordIndex",
+                    "index": 1
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L15",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "15"
+                }
+              },
+              {
+                "id": "a16",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f11"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L16",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "16"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "migratedCount": 4
+      }
+    },
+    {
+      "name": "Record IDs come from record_id or recordId",
+      "input": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "A"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "g1"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "g2"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "X"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "g3"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "C"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "g3"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "r0",
+                "r1",
+                "r2"
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "r0",
+                  "record_id": null,
+                  "recordId": "A",
+                  "biologicalFeatureId": "g1"
+                },
+                {
+                  "recordKey": "r1",
+                  "recordId": "B",
+                  "biologicalFeatureId": "g2"
+                },
+                {
+                  "recordKey": "r2",
+                  "record_id": "C",
+                  "recordId": "X",
+                  "biologicalFeatureId": "g3"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "r0",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "r1",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "r2",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "r0",
+                  "biologicalFeatureId": "g1",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "r1",
+                  "biologicalFeatureId": "g2",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "X"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "g3"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "r2",
+                  "biologicalFeatureId": "g3",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "migratedCount": 3
+      }
+    },
+    {
+      "name": "A record without catalog features, or with two record IDs, leaves no record-ID binding certain",
+      "input": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "C"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "g3"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 2
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "g3"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "g1"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "r0",
+                "r1",
+                "r2"
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "r0",
+                  "record_id": "A",
+                  "biologicalFeatureId": "g1"
+                },
+                {
+                  "recordKey": "r0",
+                  "record_id": "A2",
+                  "biologicalFeatureId": "g2"
+                },
+                {
+                  "recordKey": "r2",
+                  "record_id": "C",
+                  "biologicalFeatureId": "g3"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "r0",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "r1",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "r2",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "C"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "g3"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "r2",
+                  "biologicalFeatureId": "g3",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "r0",
+                  "biologicalFeatureId": "g1",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "migratedCount": 2
+      }
+    },
+    {
+      "name": "Catalog text is trimmed, a source hash comes from stableFeatureId or the feature ID, and items are read in order",
+      "input": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "k1"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "s2"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "k2"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "k3"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              },
+              {
+                "id": "a5",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "k4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L5",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "5"
+                }
+              },
+              {
+                "id": "a6",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "k5\u0000x"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L6",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "6"
+                }
+              },
+              {
+                "id": "a7",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": ""
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L7",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "7"
+                }
+              },
+              {
+                "id": "a8",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "Z"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "k9"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L8",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "8"
+                }
+              },
+              {
+                "id": "a9",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "Y"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "k9"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L9",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "9"
+                }
+              },
+              {
+                "id": "a10",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": " k1 "
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L10",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "10"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                " r0 "
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "r0 ",
+                  "record_id": "A",
+                  "biologicalFeatureId": " k1 "
+                },
+                {
+                  "recordKey": "r0",
+                  "record_id": "A",
+                  "biologicalFeatureId": "k2~7",
+                  "stableFeatureId": "s2"
+                },
+                {
+                  "recordKey": "r0",
+                  "record_id": "A",
+                  "biologicalFeatureId": "k3~12"
+                },
+                {
+                  "recordKey": "r0",
+                  "record_id": "A",
+                  "biologicalFeatureId": "k4"
+                },
+                {
+                  "recordKey": "r0",
+                  "record_id": "A",
+                  "biologicalFeatureId": "k5\u0000x"
+                },
+                {
+                  "recordKey": "r0",
+                  "record_id": "A",
+                  "biologicalFeatureId": "~1"
+                },
+                {
+                  "recordKey": "r9",
+                  "record_id": "Z",
+                  "biologicalFeatureId": "k9"
+                }
+              ]
+            },
+            {
+              "recordKeys": [
+                "r0",
+                "r9"
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "r0",
+                  "record_id": "A",
+                  "biologicalFeatureId": "k4"
+                },
+                {
+                  "recordKey": "r9",
+                  "record_id": "Y",
+                  "biologicalFeatureId": "k10"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "r0",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          },
+          {
+            "recordKey": "r9",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "r0",
+                  "biologicalFeatureId": "k1",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "r0",
+                  "biologicalFeatureId": "k2~7",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "k2"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "r0",
+                  "biologicalFeatureId": "k3~12",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              },
+              {
+                "id": "a5",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "r0",
+                  "biologicalFeatureId": "k4",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L5",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "5"
+                }
+              },
+              {
+                "id": "a6",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordIndex",
+                    "index": 0
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "k5\u0000x"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L6",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "6"
+                }
+              },
+              {
+                "id": "a7",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "r0",
+                  "biologicalFeatureId": "~1",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L7",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "7"
+                }
+              },
+              {
+                "id": "a8",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "Z"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "k9"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L8",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "8"
+                }
+              },
+              {
+                "id": "a9",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "r9",
+                  "biologicalFeatureId": "k9",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L9",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "9"
+                }
+              },
+              {
+                "id": "a10",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "r0",
+                  "biologicalFeatureId": "k1",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L10",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "10"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "migratedCount": 7
+      }
+    },
+    {
+      "name": "A moved target keeps the saved envelope and circular path, and drops the other target fields",
+      "input": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": null,
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "c1"
+                    }
+                  ]
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": null,
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "c1"
+                    }
+                  ],
+                  "envelope": null,
+                  "circularPath": null
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": null,
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "c1"
+                    }
+                  ],
+                  "envelope": "outer_bounds",
+                  "circularPath": "shortest",
+                  "wrapsOrigin": true
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": null,
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "c1"
+                    }
+                  ],
+                  "envelope": "odd",
+                  "circularPath": 3
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "mode": "circular",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "record-1"
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "record-1",
+                  "record_id": "C1",
+                  "biologicalFeatureId": "c1"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "record-1",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "circular",
+                  "recordKey": "record-1",
+                  "biologicalFeatureId": "c1"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "circular",
+                  "recordKey": "record-1",
+                  "biologicalFeatureId": "c1",
+                  "envelope": null,
+                  "circularPath": null
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              },
+              {
+                "id": "a3",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "circular",
+                  "recordKey": "record-1",
+                  "biologicalFeatureId": "c1",
+                  "envelope": "outer_bounds",
+                  "circularPath": "shortest"
+                },
+                "label": "L3",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "3"
+                }
+              },
+              {
+                "id": "a4",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "circular",
+                  "recordKey": "record-1",
+                  "biologicalFeatureId": "c1",
+                  "envelope": "odd",
+                  "circularPath": 3
+                },
+                "label": "L4",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "4"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "migratedCount": 4
+      }
+    },
+    {
+      "name": "Without a saved catalog nothing moves",
+      "input": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": null,
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "mode": "linear",
+        "catalog": null,
+        "records": [
+          {
+            "recordKey": "other",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              },
+              {
+                "id": "a2",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": null,
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L2",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "2"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "migratedCount": 0
+      }
+    },
+    {
+      "name": "A mode other than circular or linear moves nothing",
+      "input": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "mode": "Linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "other"
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "other",
+                  "record_id": "B",
+                  "biologicalFeatureId": "f4"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "other",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "migratedCount": 0
+      }
+    },
+    {
+      "name": "Records that are not a list name no request record",
+      "input": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "other"
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "other",
+                  "record_id": "B",
+                  "biologicalFeatureId": "f4"
+                }
+              ]
+            }
+          ]
+        },
+        "records": {
+          "0": {
+            "recordKey": "other",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        }
+      },
+      "expected": {
+        "annotationSets": [
+          {
+            "id": "marks",
+            "annotations": [
+              {
+                "id": "a1",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": {
+                    "kind": "recordId",
+                    "value": "B"
+                  },
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                },
+                "label": "L1",
+                "mark": "band",
+                "lane": null,
+                "style": null,
+                "legendLabel": null,
+                "metadata": {
+                  "kept": "1"
+                }
+              }
+            ],
+            "defaultStyle": {},
+            "legendLabel": null
+          }
+        ],
+        "migratedCount": 0
+      }
+    },
+    {
+      "name": "Annotation sets that are not a list are returned as saved",
+      "input": {
+        "annotationSets": {
+          "id": "marks",
+          "annotations": [
+            {
+              "id": "a1",
+              "target": {
+                "kind": "featureSpan",
+                "record": null,
+                "selectors": [
+                  {
+                    "key": "hash",
+                    "value": "f4"
+                  }
+                ],
+                "envelope": "segments",
+                "circularPath": "reverse"
+              }
+            }
+          ]
+        },
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "other"
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "other",
+                  "record_id": "B",
+                  "biologicalFeatureId": "f4"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "other",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "annotationSets": {
+          "id": "marks",
+          "annotations": [
+            {
+              "id": "a1",
+              "target": {
+                "kind": "featureSpan",
+                "record": null,
+                "selectors": [
+                  {
+                    "key": "hash",
+                    "value": "f4"
+                  }
+                ],
+                "envelope": "segments",
+                "circularPath": "reverse"
+              }
+            }
+          ]
+        },
+        "migratedCount": 0
+      }
+    },
+    {
+      "name": "No annotation sets",
+      "input": {
+        "annotationSets": null,
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "other"
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "other",
+                  "record_id": "B",
+                  "biologicalFeatureId": "f4"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "other",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "annotationSets": null,
+        "migratedCount": 0
+      }
+    },
+    {
+      "name": "Entries that are not sets or annotations are kept",
+      "input": {
+        "annotationSets": [
+          null,
+          "set",
+          {
+            "id": "text",
+            "annotations": "a1"
+          },
+          {
+            "id": "mixed",
+            "annotations": [
+              null,
+              "a1",
+              3,
+              {
+                "id": "a4"
+              },
+              {
+                "id": "a5",
+                "target": {
+                  "kind": "featureSpan",
+                  "record": null,
+                  "selectors": [
+                    {
+                      "key": "hash",
+                      "value": "f4"
+                    }
+                  ],
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                }
+              }
+            ],
+            "extra": {
+              "kept": true
+            }
+          }
+        ],
+        "mode": "linear",
+        "catalog": {
+          "schema": 4,
+          "items": [
+            {
+              "recordKeys": [
+                "other"
+              ],
+              "biologicalFeatures": [
+                {
+                  "recordKey": "other",
+                  "record_id": "B",
+                  "biologicalFeatureId": "f4"
+                }
+              ]
+            }
+          ]
+        },
+        "records": [
+          {
+            "recordKey": "other",
+            "cardinality": "exactly_one",
+            "region": null,
+            "presentation": {
+              "reverseComplement": false
+            },
+            "display": {
+              "isCircular": null,
+              "startCoordinate": null
+            }
+          }
+        ]
+      },
+      "expected": {
+        "annotationSets": [
+          null,
+          "set",
+          {
+            "id": "text",
+            "annotations": "a1"
+          },
+          {
+            "id": "mixed",
+            "annotations": [
+              null,
+              "a1",
+              3,
+              {
+                "id": "a4"
+              },
+              {
+                "id": "a5",
+                "target": {
+                  "kind": "featureIdentity",
+                  "scope": "linear",
+                  "recordKey": "other",
+                  "biologicalFeatureId": "f4",
+                  "envelope": "segments",
+                  "circularPath": "reverse"
+                }
+              }
+            ],
+            "extra": {
+              "kept": true
+            }
+          }
+        ],
+        "migratedCount": 1
+      }
+    }
+  ]
+}

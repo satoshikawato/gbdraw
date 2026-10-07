@@ -58,6 +58,7 @@ from gbdraw.session import (
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     migrate_persisted_web_state_field_names,
+    migrate_session_annotation_targets,
     migrate_session_feature_edits,
 )
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
@@ -1573,3 +1574,99 @@ def test_session_44_rendered_id_feature_edits_survive_the_cli_sidecar(
         if narrowed
         else []
     )
+
+
+_ANNOTATION_TARGET_VECTORS = json.loads(
+    (Path(__file__).parent / "fixtures" / "annotation-target-migration-vectors.json").read_text(
+        encoding="utf-8"
+    )
+)["cases"]
+_MAIN_ANNOTATION_TARGET_VECTOR = next(
+    case for case in _ANNOTATION_TARGET_VECTORS if "fixture" in case
+)
+
+
+@pytest.mark.parametrize(
+    "case", _ANNOTATION_TARGET_VECTORS, ids=[case["name"] for case in _ANNOTATION_TARGET_VECTORS]
+)
+def test_hash_annotation_targets_migrate_to_the_vectors_shared_with_the_web_reader(
+    case: dict[str, Any],
+) -> None:
+    # tests/web/feature-edit-migration.test.mjs checks the same vectors against
+    # migrateSessionAnnotationTargets.
+    source = json.loads(json.dumps(case["input"]))
+
+    migration = migrate_session_annotation_targets(
+        source["annotationSets"],
+        mode=source["mode"],
+        catalog=source["catalog"],
+        records=source["records"],
+    )
+
+    assert {
+        "annotationSets": migration.annotation_sets,
+        "migratedCount": migration.migrated_count,
+    } == case["expected"]
+    assert source == case["input"]
+
+
+def test_annotation_target_vector_holds_the_sets_of_the_session_saved_by_main() -> None:
+    case = _MAIN_ANNOTATION_TARGET_VECTOR
+    session = json.loads(
+        gzip.decompress((Path(__file__).parent / "fixtures" / case["fixture"]).read_bytes())
+    )
+    assert session["version"] == 44
+    assert case["input"]["annotationSets"] == session["config"]["annotationSets"]
+    assert case["input"]["mode"] == session["renderRequest"]["mode"]
+    assert case["input"]["records"] == session["renderRequest"]["records"]
+    # The vector keeps only the catalog fields the readers use: the full saved
+    # catalog gives the same result.
+    migration = migrate_session_annotation_targets(
+        session["config"]["annotationSets"],
+        mode=session["renderRequest"]["mode"],
+        catalog=session["editorState"]["featureCatalog"],
+        records=session["renderRequest"]["records"],
+    )
+    assert migration.annotation_sets == case["expected"]["annotationSets"]
+
+
+# The Session saved by main (selected-feature-annotations.provenance.json) with
+# three hash= annotation targets made from selected features.
+def test_session_44_hash_annotation_targets_move_in_the_cli_sidecar(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    case = _MAIN_ANNOTATION_TARGET_VECTOR
+    fixture = Path(__file__).parent / "fixtures" / case["fixture"]
+    source = json.loads(gzip.decompress(fixture.read_bytes()))
+    sidecar = tmp_path / "replay.gbdraw-session.json"
+    caplog.set_level("INFO", logger=cli_session_module.__name__)
+
+    linear_main(
+        [
+            "--session", str(fixture),
+            "--output", str(tmp_path / "replay"),
+            "--format", "svg",
+            "--session_output", str(sidecar),
+        ]
+    )
+
+    assert (tmp_path / "replay.svg").is_file()
+    saved = load_session_document(sidecar).to_dict()
+    assert saved["version"] == CURRENT_SESSION_VERSION
+    # The draft names the certain feature by its source identity, as the Web
+    # app moves it on Load; the other two targets stay as saved.
+    assert saved["config"]["annotationSets"] == case["expected"]["annotationSets"]
+    # The request is the one that drew the saved figure. As after a Web Load,
+    # it keeps the hash= targets until the next Generate sends the draft.
+    assert (
+        saved["renderRequest"]["diagramOptions"]["annotations"]
+        == source["renderRequest"]["diagramOptions"]["annotations"]
+    )
+    assert [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == cli_session_module.__name__
+    ] == [
+        "INFO: 1 annotation(s) from Session version 44 named a feature by hash=; "
+        "in the written Session each names that feature by its source."
+    ]

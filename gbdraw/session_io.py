@@ -1818,6 +1818,181 @@ def migrate_session_feature_edits(
     return FeatureEditMigration(migrated, dropped_count, narrowed_visibility_count)
 
 
+# A record selector's position is read as a JavaScript array index: the
+# canonical decimal text of the value.
+_JS_ARRAY_INDEX = re.compile(r"0|[1-9][0-9]*")
+_EXPANDED_RECORD_ORDINAL = re.compile(r"[1-9][0-9]*")
+_SOURCE_INDEX_SUFFIX = re.compile(r"~[0-9]+\Z")
+
+
+def _js_truthy(value: object) -> bool:
+    if value is None or isinstance(value, bool):
+        return bool(value)
+    if isinstance(value, (int, float)):
+        return value != 0 and value == value
+    if isinstance(value, str):
+        return value != ""
+    # Every JavaScript object and array is true, an empty one too.
+    return True
+
+
+def _drawn_transformed(record: Mapping[str, Any]) -> bool:
+    """Whether a request record is drawn cropped, reverse-complemented, or rotated.
+
+    The twin of ``drawnTransformed`` in the Web ``feature-edit-migration.js``.
+    """
+
+    presentation = record.get("presentation")
+    display = record.get("display")
+    return (
+        _js_truthy(record.get("region"))
+        or (isinstance(presentation, Mapping) and _js_truthy(presentation.get("reverseComplement")))
+        or (isinstance(display, Mapping) and _safe_integer(display.get("startCoordinate")) is not None)
+    )
+
+
+def _record_key_belongs_to_record(record_key: str, record: Mapping[str, Any]) -> bool:
+    """Whether a record key names a request record (an ALL record owns ``<key>:<n>``).
+
+    The twin of ``recordKeyBelongsToRequest`` in the Web ``feature-placement.js``
+    for a decoded request, whose record keys are strings.
+    """
+
+    request_key = record.get("recordKey")
+    if not isinstance(request_key, str):
+        return False
+    return record_key == request_key or (
+        record.get("cardinality") == "all"
+        and record_key.startswith(f"{request_key}:")
+        and _EXPANDED_RECORD_ORDINAL.fullmatch(record_key[len(request_key) + 1 :]) is not None
+    )
+
+
+@dataclass(frozen=True)
+class AnnotationTargetMigration:
+    """The annotation sets of an older Session and how many targets moved."""
+
+    annotation_sets: Any
+    migrated_count: int
+
+
+def migrate_session_annotation_targets(
+    annotation_sets: object, *, mode: object, catalog: object, records: object
+) -> AnnotationTargetMigration:
+    """Move the certain ``hash=`` annotation targets of a Session 44 or older.
+
+    A Session before 45 named a selected feature in an annotation by
+    ``hash=<hash>`` (a featureSpan target with one hash selector), which the
+    renderer matches in the drawn record. Such a target becomes a
+    featureIdentity target in ``mode`` only when the figure cannot change: the
+    record it binds (the saved catalog's records in order, as the renderer
+    binds them) is drawn without a crop, reverse complement, or rotation by its
+    request record in ``records``, and the hash names exactly one feature of
+    the saved ``catalog``, in that record. A moved target keeps the saved
+    ``envelope`` and ``circularPath`` it has. Every other target stays as
+    saved; when none moves, ``annotation_sets`` is returned as is.
+
+    This is the twin of ``migrateSessionAnnotationTargets`` in the Web
+    ``feature-edit-migration.js`` (R-7);
+    ``tests/fixtures/annotation-target-migration-vectors.json`` pins both.
+    Without a catalog nothing moves, as in the Web app, which reads no sources
+    again for these targets.
+    """
+
+    record_ids: dict[str, set[str]] = {}
+    features_by_hash: dict[str, dict[tuple[str, str], None]] = {}
+    items = catalog.get("items") if isinstance(catalog, Mapping) else None
+    for item in _mapping_list(items):
+        item_record_keys = item.get("recordKeys")
+        for record_key in item_record_keys if isinstance(item_record_keys, list) else ():
+            record_ids.setdefault(_js_text(record_key), set())
+        for feature in _mapping_list(item.get("biologicalFeatures")):
+            record_key = _js_text(feature.get("recordKey"))
+            feature_id = _js_text(feature.get("biologicalFeatureId"))
+            if not record_key or not feature_id:
+                continue
+            # A record listed only by a later item has no ID from this feature.
+            if record_key in record_ids:
+                record_id = feature.get("record_id")
+                record_ids[record_key].add(
+                    _js_text(feature.get("recordId") if record_id is None else record_id)
+                )
+            source_hash = _js_text(feature.get("stableFeatureId")) or _SOURCE_INDEX_SUFFIX.sub(
+                "", feature_id, count=1
+            )
+            features_by_hash.setdefault(source_hash, {})[(record_key, feature_id)] = None
+    catalog_record_keys = list(record_ids)
+    request_records = (
+        [record for record in records if isinstance(record, Mapping)] if isinstance(records, list) else []
+    )
+
+    def bound_record_key(selector: object) -> str:
+        if selector is None:
+            return catalog_record_keys[0] if len(catalog_record_keys) == 1 else ""
+        if not isinstance(selector, Mapping):
+            return ""
+        if selector.get("kind") == "recordIndex":
+            index = _js_string(selector.get("index"))
+            position = int(index) if _JS_ARRAY_INDEX.fullmatch(index) else len(catalog_record_keys)
+            return catalog_record_keys[position] if position < len(catalog_record_keys) else ""
+        if selector.get("kind") != "recordId":
+            return ""
+        # A record without catalog features has no known ID, so the binding is not certain.
+        if any(len(record_ids[record_key]) != 1 for record_key in catalog_record_keys):
+            return ""
+        record_id = _js_text(selector.get("value"))
+        matches = [record_key for record_key in catalog_record_keys if record_id in record_ids[record_key]]
+        return matches[0] if len(matches) == 1 else ""
+
+    def identity_target(target: object) -> dict[str, Any] | None:
+        if not isinstance(target, Mapping) or target.get("kind") != "featureSpan":
+            return None
+        selectors = target.get("selectors")
+        selector = selectors[0] if isinstance(selectors, list) and len(selectors) == 1 else None
+        if not isinstance(selector, Mapping) or selector.get("key") != "hash":
+            return None
+        record_key = bound_record_key(target.get("record"))
+        matches = list(features_by_hash.get(_js_text(selector.get("value")), {}))
+        if not record_key or len(matches) != 1 or matches[0][0] != record_key:
+            return None
+        request = next(
+            (record for record in request_records if _record_key_belongs_to_record(record_key, record)),
+            None,
+        )
+        if request is None or _drawn_transformed(request):
+            return None
+        migrated: dict[str, Any] = {
+            "kind": "featureIdentity",
+            "scope": mode,
+            "recordKey": matches[0][0],
+            "biologicalFeatureId": matches[0][1],
+        }
+        for field in ("envelope", "circularPath"):
+            if field in target:
+                migrated[field] = target[field]
+        return migrated if _feature_identity_key_of(migrated) else None
+
+    migrated_count = 0
+    migrated_sets: list[Any] = []
+    for annotation_set in annotation_sets if isinstance(annotation_sets, list) else []:
+        annotations = annotation_set.get("annotations") if isinstance(annotation_set, Mapping) else None
+        if not isinstance(annotations, list):
+            migrated_sets.append(annotation_set)
+            continue
+        migrated_annotations: list[Any] = []
+        for annotation in annotations:
+            target = identity_target(annotation.get("target") if isinstance(annotation, Mapping) else None)
+            if target is None:
+                migrated_annotations.append(annotation)
+                continue
+            migrated_count += 1
+            migrated_annotations.append({**annotation, "target": target})
+        migrated_sets.append({**annotation_set, "annotations": migrated_annotations})
+    return AnnotationTargetMigration(
+        migrated_sets if migrated_count else annotation_sets, migrated_count
+    )
+
+
 def migrate_persisted_web_state_field_names(config: object) -> object:
     """Project released Web config into the current shape without mutation."""
 
@@ -4916,6 +5091,7 @@ def _as_list(value: Any) -> list[Any]:
 
 
 __all__ = [
+    "AnnotationTargetMigration",
     "CURRENT_SESSION_VERSION",
     "RETIRED_RENDERED_ID_FEATURE_FIELDS",
     "CANONICAL_SESSION_MIN_VERSION",
@@ -4948,6 +5124,7 @@ __all__ = [
     "materialize_embedded_file",
     "migrate_legacy_linear_comparison_draft_for_current_writer",
     "migrate_persisted_web_state_field_names",
+    "migrate_session_annotation_targets",
     "migrate_session_feature_edits",
     "migrate_legacy_repeat_feature_shape_args",
     "normalize_current_session_artifacts",
