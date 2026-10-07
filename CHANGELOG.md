@@ -28,6 +28,10 @@ write-up of a release.
   fails Generate with "The depth input or settings are invalid. Depth series N.
   Supply the required value." and the **Depth** actions. The same failure showed
   "The operation failed without recognized diagnostic information".
+- Feature strokes (web app): a stroke set on one feature in the feature popup is no
+  longer lost when Generate draws a Result without that feature, such as a Generate
+  in the other mode (Circular or Linear). The stroke stays in the draft and in a
+  saved Session, and the next Generate that draws the feature draws it again.
 - CLI: `gbdraw circular|linear --session <file> --session_output out.json` (and
   `--save_session`) keeps the resource IDs and file names of the Session's unchanged
   inputs. Before, the rewritten Session renamed them to positional IDs such as

@@ -232,7 +232,7 @@ and toolbar matrix, drawer transitions, focus, zoom, short viewport, and soft
 keyboard viewport are reproduced by:
 
 ```bash
-GBDRAW_WEB_TEST_PORT=46211 PYTHONPATH="$PWD" npx playwright test --config=playwright.functional.config.js tests/web/preview-navigation.playwright.spec.js tests/web/right-drawer.playwright.spec.js --grep 'docked search and controls|background pan preserves|preview pan leaves|zoom controls do not overlap|mobile overlays preserve mode|compact Editor scroll recovery' --workers=1 --retries=0
+GBDRAW_WEB_TEST_PORT=46211 PYTHONPATH="$PWD" npx playwright test --config=tests/web/playwright/functional.config.js tests/web/preview-navigation.playwright.spec.js tests/web/right-drawer.playwright.spec.js --grep 'docked search and controls|background pan preserves|preview pan leaves|zoom controls do not overlap|mobile overlays preserve mode|compact Editor scroll recovery' --workers=1 --retries=0
 ```
 
 These are loopback-only regression captures. The source Gallery sessions are

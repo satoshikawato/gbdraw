@@ -699,7 +699,7 @@ jobs:
       - name: Run Playwright functional tests
         if: steps.shard.outputs.files != ''
         env:
-          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/functional-report.json
+          PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/functional-report.json
           FUNCTIONAL_SPECS: ${{ steps.shard.outputs.files }}
         # Each shard runs the spec files that tests/ci/functional-shards.json assigns
         # to it by measured duration; docs/internal/SELECTIVE_CI.md explains rebalancing.
@@ -932,7 +932,7 @@ jobs:
       ((github.event_name == 'push' && github.ref == 'refs/heads/dev') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/dev'))
     runs-on: ubuntu-latest
-    # playwright.vibrio.config.js allows the one long test 20 minutes.
+    # tests/web/playwright/vibrio.config.js allows the one long test 20 minutes.
     timeout-minutes: 35
     steps:
       - name: Checkout

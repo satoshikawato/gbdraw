@@ -80,11 +80,11 @@ const BASE_PLAYWRIGHT_CONFIG = readFileSync(
   'utf8'
 );
 const FUNCTIONAL_PLAYWRIGHT_CONFIG = readFileSync(
-  join(REPOSITORY_ROOT, 'playwright.functional.config.js'),
+  join(REPOSITORY_ROOT, 'tests/web/playwright/functional.config.js'),
   'utf8'
 );
 const PR_SMOKE_PLAYWRIGHT_CONFIG = readFileSync(
-  join(REPOSITORY_ROOT, 'playwright.pr-smoke.config.js'),
+  join(REPOSITORY_ROOT, 'tests/web/playwright/pr-smoke.config.js'),
   'utf8'
 );
 const WORKFLOW_NAMES = readdirSync(
@@ -1615,11 +1615,11 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
 test('PR smoke selection is explicit while the full functional inventory stays wide', () => {
   assert.equal(
     PACKAGE_SCRIPTS['test:web:functional-full'],
-    'playwright test --config=playwright.functional.config.js'
+    'playwright test --config=tests/web/playwright/functional.config.js'
   );
   assert.equal(
     PACKAGE_SCRIPTS['test:web:pr-smoke'],
-    'playwright test --config=playwright.pr-smoke.config.js'
+    'playwright test --config=tests/web/playwright/pr-smoke.config.js'
   );
   assert.equal(
     PACKAGE_SCRIPTS['test:web:functional-smoke'],
@@ -1758,7 +1758,7 @@ test('Gallery readiness routes jobs from direct-parent evidence and aggregates t
   assert.doesNotMatch(browser, /matrix|Vibrio|test:web:vibrio-generate/);
   assert.equal(
     PACKAGE_SCRIPTS['test:web:vibrio-generate'],
-    'playwright test --config=playwright.vibrio.config.js'
+    'playwright test --config=tests/web/playwright/vibrio.config.js'
   );
   assert.match(DEPLOY_WORKFLOW, /npm run test:web:vibrio-generate/);
 
