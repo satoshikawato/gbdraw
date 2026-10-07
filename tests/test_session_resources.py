@@ -205,18 +205,19 @@ def test_a_request_reference_must_resolve() -> None:
 # request, written by the per-request allocator before the Session resource
 # table existed (3522c0bc): a table without seed resources must reproduce the
 # single-request writer byte for byte. A codec change that changes a fixture's
-# single-request output updates its digest here.
+# single-request output updates its digest here; so does a Session version
+# bump (46: only the version field changed).
 _SINGLE_REQUEST_DIGESTS = {
     "synthetic_conservation.gbdraw-session.json.gz":
-        "5169d265c8f034382a97eb0ec59e10c6f88b0a6be8b547a29461a987d61bf275",
+        "3cc4fba653c38fa6fad1b74739856a08452f5b563445d35833575c5e9ffd4752",
     "q-frame-main-web-upload.v42.gbdraw-session.json.gz":
-        "fb04d983c55dc29a6a55fa189bf34fd2fabdc5bdfea51172c95682a341178bcd",
+        "7d56b108825c3efb59beadf3e7c9e282b1e4f0e2af36bd5812dc41a07356adf2",
     "composite-circular-three-files.v44-schema8.gbdraw-session.json.gz":
-        "9ecce263f8d25346d6f9a2e830f8ad8617d1645be0a8ae1aa1f9dc439a5a61ca",
+        "1c00cfa3e9f3ed00a5011e6d2f1d0703ce2b319400f60ffc4870b4fa3a0b44cd",
     "feature-edits-crop-rc.v44.gbdraw-session.json.gz":
-        "e82961ce4fecb9a430cdf6cf05ab90d84dad00b7b262cc5aec2e3f3c8a58cfc5",
+        "859c5c600e63d6869cdf26ea37b7dc5c2e8c5a46c213723c645d14bea1d76cfe",
     "selected-feature-annotations.v44.gbdraw-session.json.gz":
-        "0931b4ee5ae98d5bd99ca7deb9400e0610449d68173c32eab5b85fdf1ca048ee",
+        "4b343bc039845d2ebb69fac8630391b111f523777a40d0d0207ab3dcb543dd43",
 }
 
 

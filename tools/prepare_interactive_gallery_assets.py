@@ -394,21 +394,24 @@ def _session_raw_args(session: dict[str, Any]) -> list[str]:
     if isinstance(args, list):
         return [str(arg) for arg in args]
 
-    config = session.get("config")
-    if isinstance(config, dict):
-        cli_options = config.get("cliOptions")
-        if isinstance(cli_options, dict):
-            raw_args = cli_options.get("rawArgs")
-            if isinstance(raw_args, list):
-                return [str(arg) for arg in raw_args]
+    cli_options = _session_cli_options(session)
+    raw_args = cli_options.get("rawArgs")
+    if isinstance(raw_args, list):
+        return [str(arg) for arg in raw_args]
     return []
+
+
+def _session_cli_options(session: dict[str, Any]) -> dict[str, Any]:
+    # Session 46 keeps a draft's CLI options at the top level.
+    config = session.get("config") if isinstance(session.get("config"), dict) else {}
+    cli_options = session.get("cliOptions", config.get("cliOptions"))
+    return cli_options if isinstance(cli_options, dict) else {}
 
 
 def _session_command(session: dict[str, Any]) -> str:
     cli = _session_cli_invocation(session)
-    config = session.get("config") if isinstance(session.get("config"), dict) else {}
     ui = session.get("ui") if isinstance(session.get("ui"), dict) else {}
-    cli_options = config.get("cliOptions") if isinstance(config.get("cliOptions"), dict) else {}
+    cli_options = _session_cli_options(session)
     mode = str(cli.get("mode") or cli_options.get("mode") or ui.get("mode") or "linear")
     raw_args = _session_raw_args(session)
     if raw_args:

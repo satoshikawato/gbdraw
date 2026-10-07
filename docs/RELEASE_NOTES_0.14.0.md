@@ -116,8 +116,9 @@ ranking, and multi-hop automatic selection are unsupported.
 
 ## Session / replay / save compatibility
 
-Current writers emit session version 45 and canonical `renderRequest` schema 9.
-Save Session also preserves settings before the first source is loaded. Supported
+Current writers emit session version 46 and canonical `renderRequest` schema 9.
+Session 46 keeps the settings and edits of the Circular and Linear modes
+separately. Save Session also preserves settings before the first source is loaded. Supported
 older Sessions and legacy settings JSON remain readable; settings-only Sessions
 need a biological source before rendering.
 Schema 8 stores Linear Similarity alignment as an exact nested schema-2 plan

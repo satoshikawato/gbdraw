@@ -259,7 +259,10 @@ def _legacy_derived_evidence_entries(
 
 
 def _session_protein_mode(artifacts: Mapping[str, Any]) -> ProteinBlastpMode | None:
-    config = artifacts.get("config")
+    # Session 46 keeps the LOSATP settings in the Linear slice.
+    modes = artifacts.get("modes")
+    linear = modes.get("linear") if isinstance(modes, Mapping) else None
+    config = linear.get("config") if isinstance(linear, Mapping) else artifacts.get("config")
     losat = config.get("losat") if isinstance(config, Mapping) else None
     blastp = losat.get("blastp") if isinstance(losat, Mapping) else None
     configured = blastp.get("mode") if isinstance(blastp, Mapping) else None

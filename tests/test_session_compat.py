@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import copy
 import gzip
 import json
 import re
@@ -129,8 +130,10 @@ def test_released_session_44_schema_7_catalog_4_is_typed_readable(
         assert isinstance(session_to_request(materialized), CircularDiagramRequest)
 
 
-def test_cli_writer_projects_released_web_config_to_session_44() -> None:
+def test_cli_writer_projects_released_web_config_to_session_46_mode_slices() -> None:
     source = {
+        "version": 41,
+        "ui": {"mode": "circular"},
         "config": {
             "adv": {
                 "linear_show_accession": True,
@@ -157,14 +160,29 @@ def test_cli_writer_projects_released_web_config_to_session_44() -> None:
     )
 
     assert web_file_inventory is None
-    assert adjunct["config"]["adv"] == {
+    assert "config" not in adjunct
+    circular = adjunct["modes"]["circular"]["config"]
+    linear = adjunct["modes"]["linear"]["config"]
+    # The renamed Linear-only fields go to the Linear slice.
+    assert linear["adv"] == {
         "linear_accession_visibility": "show",
         "linear_length_visibility": "hide",
     }
-    assert adjunct["config"]["recordDisplayDrafts"][0][
-        "reverseComplementOverride"
-    ] is None
-    assert adjunct["config"]["recordDisplayDrafts"][0]["anchorIntent"] is None
+    # A draft without a pairwise match style drew ribbons in its shown mode.
+    assert circular["adv"] == {"pairwise_match_style": "ribbon"}
+    # A record display row goes to the slice of its mode, without the mode.
+    assert circular["recordDisplayDrafts"] == [
+        {
+            "sourceUid": "source-1",
+            "selector": "#1",
+            "recordId": "record-1",
+            "topologyOverride": None,
+            "startCoordinate": 3,
+            "reverseComplementOverride": None,
+            "anchorIntent": None,
+        }
+    ]
+    assert linear["recordDisplayDrafts"] == []
     assert "reverseComplementOverride" not in source["config"][
         "recordDisplayDrafts"
     ][0]
@@ -949,14 +967,14 @@ def test_released_schema_v2_fixture_cli_sidecar_is_current_and_rerenders(
     payload = saved.to_dict()
     assert saved.version == CURRENT_SESSION_VERSION
     assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
-    assert "depth_tick_interval" not in payload["config"]["adv"]
-    assert all(
-        "tick_interval" not in track
-        for track in payload["config"]["adv"]["depth_tracks"]
-    )
+    assert "config" not in payload
+    for mode in ("circular", "linear"):
+        adv = payload["modes"][mode]["config"]["adv"]
+        assert "depth_tick_interval" not in adv
+        assert all("tick_interval" not in track for track in adv["depth_tracks"])
     assert (
         "collinearMaxGeneGap"
-        not in payload["config"]["losat"]["blastp"]
+        not in payload["modes"]["linear"]["config"]["losat"]["blastp"]
     )
 
     rerendered_prefix = tmp_path / "released-rerender"
@@ -1033,7 +1051,7 @@ def test_version_39_typed_replay_retains_dormant_comparison_resource(
             web_file_inventory=web_file_inventory,
         ).to_dict()
 
-    assert rewritten["config"]["linearComparisonPlan"]["edges"] == [
+    assert rewritten["modes"]["linear"]["config"]["linearComparisonPlan"]["edges"] == [
         {
             "id": "dormant-v39-upload",
             "queryUid": record_uids[0],
@@ -1246,19 +1264,17 @@ def test_released_noncanonical_linear_cli_replay_promotes_current_sidecar(
     payload = saved.to_dict()
     assert saved.version == CURRENT_SESSION_VERSION
     assert payload["renderRequest"]["schema"] == CANONICAL_REQUEST_SCHEMA
-    assert "depth_tick_interval" not in payload["config"]["adv"]
-    assert payload["config"]["adv"]["depth_large_tick_interval"] == 10
-    assert payload["config"]["adv"]["depth_tracks"] == [
-        {"large_tick_interval": 5}
-    ]
-    assert (
-        payload["config"]["losat"]["blastp"]["collinearMaxUnitGap"]
-        == 2
-    )
-    assert (
-        "collinearMaxGeneGap"
-        not in payload["config"]["losat"]["blastp"]
-    )
+    assert "config" not in payload
+    for mode in ("circular", "linear"):
+        adv = payload["modes"][mode]["config"]["adv"]
+        assert "depth_tick_interval" not in adv
+        assert adv["depth_large_tick_interval"] == 10
+        assert adv["depth_tracks"] == [{"large_tick_interval": 5}]
+        assert payload["modes"][mode]["config"]["form"] == {"prefix": "legacy"}
+    blastp = payload["modes"]["linear"]["config"]["losat"]["blastp"]
+    assert blastp["collinearMaxUnitGap"] == 2
+    assert "collinearMaxGeneGap" not in blastp
+    assert "losat" not in payload["modes"]["circular"]["config"]
 
     rerendered_prefix = tmp_path / "legacy-rerender"
     linear_main(
@@ -1317,16 +1333,23 @@ def test_cli_replay_validates_the_sidecar_drafts_before_it_renders(
     }
     source = tmp_path / "placements.v44.json"
     source.write_text(json.dumps(session), encoding="utf-8")
-    # A migrator that leaves the Session 44 rows unscoped: the sidecar the CLI
-    # would write is invalid, so the run fails before any diagram exists.
-    monkeypatch.setattr(
-        cli_session_module,
-        "migrate_persisted_web_state_field_names",
-        lambda config: config,
-    )
+    split = cli_session_module.split_draft_into_modes
+
+    def split_without_scopes(draft: Any, **context: Any) -> dict[str, Any]:
+        # A split that puts every row in the Circular slice: the sidecar the
+        # CLI would write is invalid, so the run fails before any diagram exists.
+        result = split(draft, **context)
+        result["modes"]["circular"]["config"]["featurePlacementOverrides"] = {
+            key: row
+            for slice_ in result["modes"].values()
+            for key, row in slice_["config"]["featurePlacementOverrides"].items()
+        }
+        return result
+
+    monkeypatch.setattr(cli_session_module, "split_draft_into_modes", split_without_scopes)
     sidecar = tmp_path / "out.gbdraw-session.json"
 
-    with pytest.raises(ValidationError, match="require a circular or linear scope"):
+    with pytest.raises(ValidationError):
         linear_main(
             [
                 "--session", str(source),
@@ -1372,8 +1395,8 @@ def test_session_44_placement_drafts_survive_the_cli_sidecar(
     saved = load_session_document(sidecar)
     assert saved.version == CURRENT_SESSION_VERSION
 
-    def key(scope: str, feature: str) -> str:
-        return json.dumps([scope, record_key, feature], separators=(",", ":"))
+    def key(feature: str) -> str:
+        return json.dumps([record_key, feature], separators=(",", ":"))
 
     lane = {
         "recordKey": record_key,
@@ -1385,12 +1408,14 @@ def test_session_44_placement_drafts_survive_the_cli_sidecar(
         "biologicalFeatureId": "fbe3a7c0c",
         "placement": {"kind": "main"},
     }
-    # A lane keeps only its own mode; Main reaches both.
-    assert saved.to_dict()["config"]["featurePlacementOverrides"] == {
-        key(mode, "f406d90f1"): {"scope": mode, **lane},
-        key("circular", "fbe3a7c0c"): {"scope": "circular", **main_row},
-        key("linear", "fbe3a7c0c"): {"scope": "linear", **main_row},
+    # A lane keeps only its own mode's slice; Main reaches both.
+    other = "linear" if mode == "circular" else "circular"
+    modes = saved.to_dict()["modes"]
+    assert modes[mode]["config"]["featurePlacementOverrides"] == {
+        key("f406d90f1"): lane,
+        key("fbe3a7c0c"): main_row,
     }
+    assert modes[other]["config"]["featurePlacementOverrides"] == {key("fbe3a7c0c"): main_row}
     assert saved.to_dict()["renderRequest"]["diagramOptions"]["featurePlacements"] == [
         lane,
         main_row,
@@ -1556,10 +1581,23 @@ def test_session_44_rendered_id_feature_edits_survive_the_cli_sidecar(
     assert (tmp_path / "replay.svg").is_file()
     saved = load_session_document(sidecar)
     assert saved.version == CURRENT_SESSION_VERSION
-    # The edits become identity drafts in the mode of the Session's diagram,
-    # as the Web app moves them on Load.
-    assert saved.to_dict()["features"] == case["expected"]["features"]
-    assert saved.to_dict()["features"]["featureOverrides"]
+    # The edits become identity drafts in the slice of the Session diagram's
+    # mode (R1-3), as the Web app moves them on Load; shared edits reach both.
+    expected = case["expected"]["features"]
+    mode = saved.to_dict()["renderRequest"]["mode"]
+    other = "linear" if mode == "circular" else "circular"
+    modes = saved.to_dict()["modes"]
+    assert modes[mode]["features"]["featureOverrides"] == {
+        json.dumps([row["recordKey"], row["biologicalFeatureId"]], separators=(",", ":")): {
+            field: value for field, value in row.items() if field != "scope"
+        }
+        for row in expected["featureOverrides"].values()
+    }
+    assert modes[mode]["features"]["featureOverrides"]
+    assert modes[mode]["features"]["featureColorOverrides"] == expected["featureColorOverrides"]
+    assert {"featureOverrides", "featureColorOverrides"}.isdisjoint(modes[other].get("features", {}))
+    for shared in ("featureVisibilityManualRules", "labelOverrideRows", "labelTextBulkOverrides"):
+        assert modes[mode]["features"][shared] == modes[other]["features"][shared] == expected[shared]
     narrowed = case["expected"]["narrowedVisibilityCount"]
     assert [
         record.getMessage()
@@ -1654,8 +1692,17 @@ def test_session_44_hash_annotation_targets_move_in_the_cli_sidecar(
     saved = load_session_document(sidecar).to_dict()
     assert saved["version"] == CURRENT_SESSION_VERSION
     # The draft names the certain feature by its source identity, as the Web
-    # app moves it on Load; the other two targets stay as saved.
-    assert saved["config"]["annotationSets"] == case["expected"]["annotationSets"]
+    # app moves it on Load; the other two targets stay as saved. Each target is
+    # bound to a Linear record, so the annotations stay in the Linear slice,
+    # whose rows name no mode.
+    expected_sets = copy.deepcopy(case["expected"]["annotationSets"])
+    for annotation_set in expected_sets:
+        for annotation in annotation_set["annotations"]:
+            annotation["target"].pop("scope", None)
+    assert saved["modes"]["linear"]["config"]["annotationSets"] == expected_sets
+    assert saved["modes"]["circular"]["config"]["annotationSets"] == [
+        {**annotation_set, "annotations": []} for annotation_set in expected_sets
+    ]
     # The request is the one that drew the saved figure. As after a Web Load,
     # it keeps the hash= targets until the next Generate sends the draft.
     assert (

@@ -2,28 +2,36 @@
 
 # Session and request compatibility
 
-Current writers emit session version 45 and canonical `renderRequest` schema 9.
+Current writers emit session version 46 and canonical `renderRequest` schema 9.
 
 | Persisted format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 45 | 27–33, 39–42, 44, and 45 |
+| gbdraw session | 46 | 27–33, 39–42, 44, and 46 |
 | Canonical `renderRequest` | 9 | 1, 2, 5, 6, 7, 8, and 9 |
-| Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 45 |
+| Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46 |
 
 Session 44 documents written with canonical request schema 7 or 8 remain
-readable. Current saves promote that request to schema 9 and the Session to 45,
+readable. Current saves promote that request to schema 9 and the Session to 46,
 and keep the saved preview until the next Generate. Schema 9 adds
 `diagramOptions.featureOverrides` (see
 [Feature identity overrides](typed-requests.md#feature-identity-overrides));
 a schema-8 request reads as one without overrides.
 
-Session 45 stores the Web app's per-feature edits (Feature visibility, Label
-visibility, and label text) in `features.featureOverrides`, one row per
-original-source feature named by `recordKey` and `biologicalFeatureId`, as the
-request does, and by the mode the edit belongs to (`scope`); Feature placement
-drafts and the `featureIdentity` targets of annotations made from selected
-features name their mode the same way. Both modes can use the same record key, so
-a request carries only the rows and targets of its own mode. Its feature catalog is schema 5, which records the selector
+Session 46 keeps the Web app's settings and edits of each diagram mode in its
+own slice, `modes.circular` and `modes.linear`: the draft configuration
+(`config`), the per-feature edits (`features`), the Legend edits and
+per-feature strokes (`editorState`), and the mode's layout, padding, and
+pending palette (`ui`). A field missing from a slice reads as that mode's
+default. The top-level `config` and `features` of Sessions 44 and older are
+rejected in a Session 46, and reading an older Session splits its draft into
+the two slices. A Session that the CLI or the Python API writes from a request
+has no slices; a CLI re-save keeps or splits the source's draft. Session 46 stores the
+per-feature edits (Feature visibility, Label visibility, and label text) in
+each slice's `features.featureOverrides`, one row per original-source feature
+named by `recordKey` and `biologicalFeatureId`, as the request does; Feature
+placement drafts and the `featureIdentity` targets of annotations made from
+selected features are kept per mode the same way. Both modes can use the same
+record key, so a request carries only the rows and targets of its own mode. Its feature catalog is schema 5, which records the selector
 values each drawn feature had (`drawnSelector`). Loading a Session 44, or a
 Web Session 31–33, moves its edits keyed by rendered feature ID onto the
 feature they name: a rendered ID in the saved feature catalog names its
@@ -158,7 +166,7 @@ its components for rendering.
 Schema-1 ordinary bindings and File arrays remain supported. Existing sessions
 without explicit bindings retain their request-derived source initialization;
 original components cannot be recovered if their membership was never saved.
-Schema 2 is accepted with sessions 41–42, 44, and 45. Unknown or malformed bindings reject
+Schema 2 is accepted with sessions 41–42, 44, and 46. Unknown or malformed bindings reject
 before import replaces the current work. Older schema-1 readers reject new
 schema-2 documents; changing the schema number does not convert them.
 
@@ -247,9 +255,9 @@ this variant. Auxiliary files retain their ordinary resource bindings and bytes.
 Python can load and materialize a settings-only Session. CLI replay,
 `session_to_request()` and `render_session()` report that it has no biological
 render request. Existing supported full Sessions remain readable. Current
-settings-only writers emit session 45, while current readers also accept the
+settings-only writers emit session 46, while current readers also accept the
 session-42 and session-44 forms. Readers whose maximum version is 42 or 44
-reject newly written session-45 files.
+reject newly written session-46 files.
 
 Older settings JSON without a `format` field (containing `form` or `adv`) still
 uses the legacy configuration import. It does not need a render request. This
@@ -283,7 +291,7 @@ request. Rendering that request alone does not replay saved comparison
 artifacts; use `render_session()` when those artifacts belong in the result.
 
 `render_request()` accepts current typed requests, not historical session
-envelopes. Public typed session conversion accepts full versions 31–33, 39–42, 44, and 45;
+envelopes. Public typed session conversion accepts full versions 31–33, 39–42, 44, and 46;
 versions 27–30 have no canonical request: the CLI replays them, and the Web app
 loads them from their saved settings. Canonical schema 9 retains schema 7's
 display values and schema 6's input cardinality, including selectorless `all`
