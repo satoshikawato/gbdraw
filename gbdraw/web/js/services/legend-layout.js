@@ -21,7 +21,6 @@ const LEGEND_TEXT_OFFSET_RATIO = 22.0 / 14.0;
 const GRADIENT_BAR_WIDTH_RATIO = 10;
 const GRADIENT_LABEL_GAP_RATIO = 0.2;
 const SINGLE_GRADIENT_TRAILING_GAP_RATIO = 0.35;
-const MISSING_GLYPH = Object.freeze([1000, 0, 0, 0, 0]);
 const GLYPH_FIELDS = 5;
 const KERNING_KEY_BASE = 65536;
 const FALLBACK_FAMILY = 'LiberationSans';
@@ -35,6 +34,8 @@ const OVERLAY_SIDES = new Set(['upper_left', 'upper_right', 'lower_left', 'lower
  * @property {number} unitsPerEm
  * @property {ReadonlyMap<number, number>} glyphByCodePoint
  * @property {readonly number[]} glyphs Flat [advance, lsb, xMax, yMax, yMin, ...] by glyph index.
+ * @property {readonly number[]} missingGlyph The facts of a character the face lacks: an em box
+ *   ([unitsPerEm, 0, unitsPerEm, hhea ascent, hhea descent]), as Python measures it.
  * @property {ReadonlyMap<number, number>} kerning Keyed `left * 65536 + right`.
  */
 
@@ -106,7 +107,8 @@ export const createLegendFontMetrics = (table) => {
     for (let index = 0; index < face.kerning.length; index += 3) {
       kerning.set(face.kerning[index] * KERNING_KEY_BASE + face.kerning[index + 1], face.kerning[index + 2]);
     }
-    faces.set(name, Object.freeze({ unitsPerEm: face.unitsPerEm, glyphByCodePoint, glyphs: face.glyphs, kerning }));
+    const missingGlyph = Object.freeze([face.unitsPerEm, 0, face.unitsPerEm, face.ascent, face.descent]);
+    faces.set(name, Object.freeze({ unitsPerEm: face.unitsPerEm, glyphByCodePoint, glyphs: face.glyphs, kerning, missingGlyph }));
   });
   return Object.freeze({ faces, familyAliases: table.familyAliases, bundledFaces: table.bundledFaces });
 };
@@ -130,6 +132,17 @@ export const loadLegendFontMetrics = () => {
   }
   return pendingFontMetrics;
 };
+
+/**
+ * Python's `collapse_svg_white_space` (gbdraw/core/text.py): a line break or
+ * tab becomes a space and a run of spaces one space, with no trimming; NBSP and
+ * the other Unicode spaces stay.
+ * @param {string} value
+ */
+const collapseSvgWhiteSpace = (value) => value
+  .replace(/\r\n/g, ' ')
+  .replace(/[\t\n\r]/g, ' ')
+  .replace(/ +/g, ' ');
 
 /** @param {string} value */
 const normalizeFamily = (value) => value.trim().replace(/^["']+|["']+$/g, '').trim();
@@ -178,8 +191,9 @@ export const resolveBundledFontFace = (metrics, fontFamily) => {
  * gbdraw positions SVG elements in these numbers directly; at dpi 96 they are
  * 4/3 of the extent in CSS px of the same text at `fontSize` px. The width is
  * the ink-tight extent with Python's kerning (not the advance sum); the height
- * is the extent from the lowest glyph bottom to the highest glyph top. A
- * character the face lacks counts 1,000 font units of advance and no height.
+ * is the extent from the lowest glyph bottom to the highest glyph top. White
+ * space collapses as an SVG renderer draws it (`collapseSvgWhiteSpace`), and a
+ * character the face lacks counts as an em box (OV-165).
  * @param {LegendFontMetrics} metrics From `loadLegendFontMetrics()` or `createLegendFontMetrics()`.
  * @param {{ text: string, fontFile: string, fontSize: number, dpi: number }} request
  *   `fontFile`: a measured face stem (`resolveBundledFontFace`, or a Result's `legendReflow.fontFile`).
@@ -188,7 +202,7 @@ export const resolveBundledFontFace = (metrics, fontFamily) => {
 export const measureTextBox = (metrics, { text: value, fontFile, fontSize, dpi }) => {
   const face = metrics.faces.get(fontFile);
   if (!face) throw new Error(`No bundled font metrics for ${JSON.stringify(fontFile)}.`);
-  const characters = Array.from(text(value));
+  const characters = Array.from(collapseSvgWhiteSpace(text(value)));
   if (characters.length === 0) return { width: 0.0, height: 0.0 };
   let totalWidth = 0;
   let rsbPrevious = 0;
@@ -199,7 +213,7 @@ export const measureTextBox = (metrics, { text: value, fontFile, fontSize, dpi }
   characters.forEach((character, index) => {
     const glyph = face.glyphByCodePoint.get(/** @type {number} */ (character.codePointAt(0)));
     const offset = glyph === undefined ? -1 : glyph * GLYPH_FIELDS;
-    const facts = offset < 0 ? MISSING_GLYPH : face.glyphs.slice(offset, offset + GLYPH_FIELDS);
+    const facts = offset < 0 ? face.missingGlyph : face.glyphs.slice(offset, offset + GLYPH_FIELDS);
     const [advanceWidth, lsb, xmax, ymax, ymin] = facts;
     maxY = Math.max(maxY, ymax);
     minY = Math.min(minY, ymin);

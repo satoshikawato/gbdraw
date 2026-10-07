@@ -70,6 +70,10 @@ MEASUREMENT_TEXTS = (
     "Wolf", "Pairwise match identity", "rRNA [#ff0000]", "Core biosynthetic genes",
     "Café crème", "Δ-proteobacteria", "日本語", "emoji 🧬 row", "ﬁ ligature", "  spaced  ",
     "a b", "ab", "a中b", "中", "😀", "אל", "שלום עולם", "e\u0301 combining", "Ünïcödé Ωmega",
+    # OV-165 part 1: white space collapses as a renderer draws it (no trimming,
+    # NBSP kept); a character the face lacks is an em box.
+    "a  b", "a\tb", "a\nb", "a\r\nb", "a\u00a0\u00a0b", " a ", " ", "Plain  ", "Plain ",
+    "\tTabbed\n", "漢字 and ASCII",
 )
 MEASUREMENT_FAMILIES = (
     "'Liberation Sans', 'Arial', 'Helvetica', 'Nimbus Sans L', sans-serif",
