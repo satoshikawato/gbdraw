@@ -541,11 +541,54 @@ test('History intent and SVG admission have one production ownership path', () =
   );
   assert.doesNotMatch(
     productionSources.get('app/app-setup.js'),
-    /normalizeLegacySvg|normalizeLegacyComposition/
+    /normalizeLegacySvg/
   );
-  assert.match(
-    productionSources.get('services/config.js'),
-    /normalizeLegacyLegendEntryGroups\(svg\)[\s\S]+normalizeLegacyComposition\(svg,/
+  // An older Session's Result gets the legacy composition once, in the
+  // admission transform of services/config.js after its legend entry groups
+  // and before its strokes. Exactly one of two forms holds: services/config.js
+  // calls the owner directly, or it calls the composition root's
+  // transformLegacyResultSvg port (R13 layering plan D4 B1) and app/app-setup.js
+  // calls the owners; the owners stay in app/ either way.
+  const configSource = productionSources.get('services/config.js');
+  const setupSource = productionSources.get('app/app-setup.js');
+  const configImports = directImports.get('services/config.js');
+  const legacyOwnerModules = [
+    'app/legend-layout/composition-actions.js',
+    'app/legend/stroke-actions.js'
+  ];
+  const legacyCompositionCalls = occurrenceOwners(/\bnormalizeLegacyComposition\(svg,/g);
+  const legacyStrokeCalls = occurrenceOwners(/\bapplyStrokeOverridesToSvg\(\{/g);
+  assert.deepEqual(
+    occurrenceOwners(/\bexport const (?:normalizeLegacyComposition|applyStrokeOverridesToSvg)\b/g),
+    new Map([
+      ['app/legend-layout/composition-actions.js', 1],
+      ['app/legend/stroke-actions.js', 1]
+    ])
+  );
+  const directForm = /normalizeLegacyLegendEntryGroups\(svg\)[\s\S]+normalizeLegacyComposition\(svg,[\s\S]+applyStrokeOverridesToSvg\(\{/
+    .test(configSource)
+    && legacyOwnerModules.every((module) => configImports.has(module))
+    && !/\btransformLegacyResultSvg\b/.test(configSource)
+    && !/\btransformLegacyResultSvg\b/.test(setupSource)
+    && legacyCompositionCalls.size === 1
+    && legacyCompositionCalls.get('services/config.js') === 1
+    && legacyStrokeCalls.get('services/config.js') === 1
+    && !legacyStrokeCalls.has('app/app-setup.js');
+  const portForm = /normalizeLegacyLegendEntryGroups\(svg\)[\s\S]+transformLegacyResultSvg\(svg,/
+    .test(configSource)
+    && legacyOwnerModules.every((module) => !configImports.has(module))
+    && !/\bnormalizeLegacyComposition\b|\bapplyStrokeOverridesToSvg\b/.test(configSource)
+    && /export const transformLegacyResultSvg\b[\s\S]+COMPOSITION_SCHEMA_ATTRIBUTE\) === null[\s\S]+COMPOSITION_METADATA_ATTRIBUTE\) === null[\s\S]+normalizeLegacyComposition\(svg,[\s\S]+applyStrokeOverridesToSvg\(\{/
+      .test(setupSource)
+    && legacyOwnerModules.every((module) => directImports.get('app/app-setup.js').has(module))
+    && legacyCompositionCalls.size === 1
+    && legacyCompositionCalls.get('app/app-setup.js') === 1
+    && legacyStrokeCalls.get('app/app-setup.js') === 1
+    && !legacyStrokeCalls.has('services/config.js')
+    && occurrenceOwners(/\btransformLegacyResultSvg\(svg,/g).get('services/config.js') === 1;
+  assert.ok(
+    directForm !== portForm,
+    `legacy Session Result transform must match exactly one form: ${JSON.stringify({ directForm, portForm })}`
   );
   assert.deepEqual(occurrenceOwners(/\bbuildHistorySnapshot\b/g), new Map());
   assert.deepEqual(occurrenceOwners(/\bapplyHistorySnapshot\b/g), new Map());
