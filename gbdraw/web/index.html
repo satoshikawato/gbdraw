@@ -1612,6 +1612,7 @@
                                                 :aria-label="track.index === 0 ? 'Depth legend title' : `Depth ${track.index + 1} legend title`"
                                                 :aria-describedby="`help-circular-depth-legend-title-${track.index}`"
                                                 :placeholder="track.index === 0 ? 'Depth' : `Depth ${track.index + 1}`"
+                                                :disabled="!semanticMutationAvailable"
                                             >
                                         </div>
                                         <div>
@@ -2055,6 +2056,7 @@
                                                 @input="setDepthTrackLabel(track.index, $event.target.value)"
                                                 class="form-input form-input-compact"
                                                 :placeholder="track.index === 0 ? 'Depth' : `Depth ${track.index + 1}`"
+                                                :disabled="!semanticMutationAvailable"
                                             >
                                         </div>
                                         <div>
@@ -3094,7 +3096,7 @@
                                                             <button aria-label="Move above Axis" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotAbove(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotAbove(entry.index))" title="Move above Axis"><i class="ph ph-arrow-line-up" aria-hidden="true"></i></button>
                                                             <button aria-label="Move below Axis" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotBelow(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotBelow(entry.index))" title="Move below Axis"><i class="ph ph-arrow-line-down" aria-hidden="true"></i></button>
                                                             <button aria-label="Track on Axis" v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotToAxis(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotToAxis(entry.index))" title="Track on Axis"><i class="ph ph-record" aria-hidden="true"></i></button>
-                                                            <button type="button" aria-label="Duplicate" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateLinearTrackSlot(entry.index, $event)" :disabled="!canDuplicateLinearTrackSlot(entry.slot)" :title="canDuplicateLinearTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid'"><i class="ph ph-copy" aria-hidden="true"></i></button>
+                                                            <button type="button" aria-label="Duplicate" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateLinearTrackSlot(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canDuplicateLinearTrackSlot(entry.slot))" :title="canDuplicateLinearTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid'"><i class="ph ph-copy" aria-hidden="true"></i></button>
                                                             <button aria-label="Delete" type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeLinearTrackSlot(entry.index, $event)" title="Delete" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                                         </div>
                                                     </div>
@@ -3110,6 +3112,7 @@
                                                                     @input="setLinearTrackSlotHeight(entry.slot, $event.target.value)"
                                                                     class="form-input track-slot-geometry-input px-1 py-0.5 text-[10px]"
                                                                     title="Height" placeholder="px optional"
+                                                                    :disabled="!semanticMutationAvailable"
                                                                 >
                                                                 <span v-if="linearTrackSlotGeometryUnitSuffix(entry.slot, 'height')" class="track-slot-unit-suffix">{{ linearTrackSlotGeometryUnitSuffix(entry.slot, 'height') }}</span>
                                                             </div>
@@ -3157,11 +3160,11 @@
                                                         </label>
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">lane gap <help-tip :id="`help-linear-slot-lane-gap-${entry.index}`" text="Gap between annotation lanes in pixels. Default: 3."></help-tip></span>
-                                                            <input type="number" min="0" step="0.5" :value="linearAnnotationLaneGapValue(entry.slot)" @input="setLinearAnnotationLaneGap(entry.slot, $event.target.value)" aria-label="Lane gap" :aria-describedby="`help-linear-slot-lane-gap-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
+                                                            <input type="number" min="0" step="0.5" :value="linearAnnotationLaneGapValue(entry.slot)" @input="setLinearAnnotationLaneGap(entry.slot, $event.target.value)" :disabled="!semanticMutationAvailable" aria-label="Lane gap" :aria-describedby="`help-linear-slot-lane-gap-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
                                                         </div>
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">padding <help-tip :id="`help-linear-slot-padding-${entry.index}`" text="Padding around annotation marks in pixels. Default: 2."></help-tip></span>
-                                                            <input type="number" min="0" step="0.5" :value="linearAnnotationPaddingValue(entry.slot)" @input="setLinearAnnotationPadding(entry.slot, $event.target.value)" aria-label="Padding" :aria-describedby="`help-linear-slot-padding-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
+                                                            <input type="number" min="0" step="0.5" :value="linearAnnotationPaddingValue(entry.slot)" @input="setLinearAnnotationPadding(entry.slot, $event.target.value)" :disabled="!semanticMutationAvailable" aria-label="Padding" :aria-describedby="`help-linear-slot-padding-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
                                                         </div>
                                                         <div class="col-span-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-1">
                                                             <span class="text-[9px] font-medium text-slate-500">Marks</span>
@@ -3199,6 +3202,7 @@
                                                                 @input="setDepthTrackLegendLabelForSlot(entry.slot, $event.target.value)"
                                                                 class="form-input px-1 py-0.5 text-[10px]"
                                                                 placeholder="Legend label"
+                                                                :disabled="!semanticMutationAvailable"
                                                             >
                                                         </div>
                                                     </div>
@@ -3229,6 +3233,7 @@
                                                         <div class="flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1 py-0.5">
                                                             <input
                                                                 type="color"
+                                                                :disabled="!semanticMutationAvailable"
                                                                 class="h-6 w-7 shrink-0 rounded border border-slate-200 bg-white p-0"
                                                                 :value="linearTrackSlotSkewColorValue(entry.slot, 'positive_color')"
                                                                 @input="setLinearTrackSlotSkewColor(entry.slot, 'positive_color', $event.target.value)"
@@ -3246,6 +3251,7 @@
                                                         <div class="flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1 py-0.5">
                                                             <input
                                                                 type="color"
+                                                                :disabled="!semanticMutationAvailable"
                                                                 class="h-6 w-7 shrink-0 rounded border border-slate-200 bg-white p-0"
                                                                 :value="linearTrackSlotSkewColorValue(entry.slot, 'negative_color')"
                                                                 @input="setLinearTrackSlotSkewColor(entry.slot, 'negative_color', $event.target.value)"
@@ -3466,7 +3472,7 @@
                                                             <button aria-label="Move outside Axis" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotOutside(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotOutside(entry.index))" title="Move outside Axis"><i class="ph ph-arrow-line-up" aria-hidden="true"></i></button>
                                                             <button aria-label="Move inside Axis" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotInside(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotInside(entry.index))" title="Move inside Axis"><i class="ph ph-arrow-line-down" aria-hidden="true"></i></button>
                                                             <button aria-label="Track on Axis" v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'ticks' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotToAxis(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotToAxis(entry.index))" title="Track on Axis"><i class="ph ph-record" aria-hidden="true"></i></button>
-                                                            <button type="button" aria-label="Duplicate" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index, $event)" :disabled="!canDuplicateCircularTrackSlot(entry.slot)" :title="isManagedCircularConservationSlot(entry.slot) ? 'Comparison tracks are managed by Series' : (canDuplicateCircularTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid')"><i class="ph ph-copy" aria-hidden="true"></i></button>
+                                                            <button type="button" aria-label="Duplicate" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canDuplicateCircularTrackSlot(entry.slot))" :title="isManagedCircularConservationSlot(entry.slot) ? 'Comparison tracks are managed by Series' : (canDuplicateCircularTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid')"><i class="ph ph-copy" aria-hidden="true"></i></button>
                                                             <button type="button" aria-label="Remove" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(entry.index, $event)" :disabled="!semanticMutationAvailable || (isManagedCircularConservationSlot(entry.slot))" :title="isManagedCircularConservationSlot(entry.slot) ? 'Remove this source in Pairwise Comparisons' : 'Remove'"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                                         </div>
                                                     </div>
@@ -3554,11 +3560,11 @@
                                                         </label>
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">lane gap <help-tip :id="`help-circular-slot-lane-gap-${entry.index}`" text="Gap between annotation lanes in pixels. Default: 3."></help-tip></span>
-                                                            <input type="number" min="0" step="0.5" :value="circularAnnotationLaneGapValue(entry.slot)" @input="setCircularAnnotationLaneGap(entry.slot, $event.target.value)" aria-label="Lane gap" :aria-describedby="`help-circular-slot-lane-gap-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
+                                                            <input type="number" min="0" step="0.5" :value="circularAnnotationLaneGapValue(entry.slot)" @input="setCircularAnnotationLaneGap(entry.slot, $event.target.value)" :disabled="!semanticMutationAvailable" aria-label="Lane gap" :aria-describedby="`help-circular-slot-lane-gap-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
                                                         </div>
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">padding <help-tip :id="`help-circular-slot-padding-${entry.index}`" text="Padding around annotation marks in pixels. Default: 2."></help-tip></span>
-                                                            <input type="number" min="0" step="0.5" :value="circularAnnotationPaddingValue(entry.slot)" @input="setCircularAnnotationPadding(entry.slot, $event.target.value)" aria-label="Padding" :aria-describedby="`help-circular-slot-padding-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
+                                                            <input type="number" min="0" step="0.5" :value="circularAnnotationPaddingValue(entry.slot)" @input="setCircularAnnotationPadding(entry.slot, $event.target.value)" :disabled="!semanticMutationAvailable" aria-label="Padding" :aria-describedby="`help-circular-slot-padding-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]">
                                                         </div>
                                                         <div class="col-span-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-1">
                                                             <span class="text-[9px] font-medium text-slate-500">Marks</span>
@@ -3582,6 +3588,7 @@
                                                                 @input="setDepthTrackLegendLabelForSlot(entry.slot, $event.target.value)"
                                                                 class="form-input px-1 py-0.5 text-[10px]"
                                                                 placeholder="Legend label"
+                                                                :disabled="!semanticMutationAvailable"
                                                             >
                                                         </div>
                                                     </div>
@@ -3599,6 +3606,7 @@
                                                         <div class="flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1 py-0.5">
                                                             <input
                                                                 type="color"
+                                                                :disabled="!semanticMutationAvailable"
                                                                 class="h-6 w-7 shrink-0 rounded border border-slate-200 bg-white p-0"
                                                                 :value="circularTrackSlotSkewColorValue(entry.slot, 'positive_color')"
                                                                 @input="setCircularTrackSlotSkewColor(entry.slot, 'positive_color', $event.target.value)"
@@ -3616,6 +3624,7 @@
                                                         <div class="flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1 py-0.5">
                                                             <input
                                                                 type="color"
+                                                                :disabled="!semanticMutationAvailable"
                                                                 class="h-6 w-7 shrink-0 rounded border border-slate-200 bg-white p-0"
                                                                 :value="circularTrackSlotSkewColorValue(entry.slot, 'negative_color')"
                                                                 @input="setCircularTrackSlotSkewColor(entry.slot, 'negative_color', $event.target.value)"

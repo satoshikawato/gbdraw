@@ -11,6 +11,7 @@
 // G03 (UI-13, TK-11): the pane does not scroll sideways or leave a gap above the
 // Generate bar, the Custom Track Slots title is not cut, and no track-row control
 // overlaps another or leaves its row.
+// GX-01: a pending Session operation disables every track-row control.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
@@ -311,3 +312,28 @@ test('linear: every visible settings text is 11 px or more and 4.5:1 (UI-06)', a
   expect.soft(result.faintText, 'text under 4.5:1').toEqual([]);
   expect.soft(result.faintIcons, 'icon-only buttons under 3:1').toEqual([]);
 });
+
+// GX-01: while a Session operation runs, every setter refuses edits, so every track-row
+// control (and each Depth series' legend title) must look and be disabled; an enabled
+// one would show the typed value and silently drop it when the operation ends.
+for (const mode of ['circular', 'linear']) {
+  test(`${mode}: a pending Session operation disables every track-row control (GX-01)`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await stackWithEveryRowKind(page, mode);
+    const renderers = await page.evaluate((mode) => window.__GBDRAW_APP__.adv[`${mode}_track_slots`]
+      .map((slot) => slot.renderer), mode);
+    expect(renderers).toEqual(expect.arrayContaining(['depth', 'annotations', 'dinucleotide_skew']));
+    await page.evaluate(() => { window.__GBDRAW_APP__.sessionSavePending = true; });
+    const enabled = await page.evaluate((mode) => {
+      const rows = [
+        ...document.querySelectorAll(`[data-capture^="${mode}-track-slot-"]`),
+        ...Array.from(document.querySelectorAll('input[aria-label$="legend title"]'))
+      ];
+      return rows.flatMap((root) => (root.matches('input') ? [root] : Array.from(root.querySelectorAll('input, select, textarea, button'))))
+        .filter((control) => control.checkVisibility() && !control.closest('.help-tip') && !control.disabled)
+        .map((control) => control.getAttribute('aria-label') || control.getAttribute('title') || control.outerHTML.slice(0, 80));
+    }, mode);
+    await page.evaluate(() => { window.__GBDRAW_APP__.sessionSavePending = false; });
+    expect(enabled).toEqual([]);
+  });
+}
