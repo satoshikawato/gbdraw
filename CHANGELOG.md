@@ -12,6 +12,10 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Feature strokes (web app): a stroke set on one feature in the feature popup is no
+  longer lost when Generate draws a Result without that feature, such as a Generate
+  in the other mode (Circular or Linear). The stroke stays in the draft and in a
+  saved Session, and the next Generate that draws the feature draws it again.
 - Legend colors (web app): a Legend color or stroke on a row that only track data
   names (an annotation set legend label, a Depth series) is retired together with
   that data, so Generate no longer fails with "The generated result could not be
