@@ -834,6 +834,45 @@ for (const mode of ['linear', 'circular']) {
   });
 }
 
+// OV-158 (Owner decision 2026-10-07): renaming a feature row in the Legend
+// editor turns it into a rule row, which the live edit appended to the Legend
+// and Generate kept last. The row keeps its place, live and at Generate,
+// recorded as an edited order (PD-OI-063), and Sort by default keeps it there.
+for (const mode of ['linear', 'circular']) {
+  test(`M15 ${mode}: a renamed feature row keeps its place live and at Generate`, async ({ browser }) => {
+    test.setTimeout(600_000);
+    const page = await loadWithGc(browser, mode);
+    try {
+      const before = (await legendRowsByCaption(page)).editor;
+      const index = before.indexOf('repeat_region');
+      expect(index, 'a middle row').toBeGreaterThan(0);
+      expect(index).toBeLessThan(before.length - 1);
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        await app.renameLegendEntry(app.legendEntries.findIndex(e => e.caption === 'repeat_region'), 'Repeats');
+      });
+      await expect.poll(() => page.evaluate(legendIndex, 'Repeats')).toBeGreaterThanOrEqual(0);
+      await settleLive(page);
+      const renamed = before.map(caption => (caption === 'repeat_region' ? 'Repeats' : caption));
+      expect((await legendRowsByCaption(page)).editor, 'live').toEqual(renamed);
+      expect(await drawnLegendOrder(page), 'live, drawn').toEqual(renamed);
+      await expectLiveEqualsGenerate(page, { label: `${mode}: rename` });
+      expect((await legendRowsByCaption(page)).editor, 'after Generate').toEqual(renamed);
+      expect(await drawnLegendOrder(page), 'after Generate, drawn').toEqual(renamed);
+
+      await page.evaluate(() => window.__GBDRAW_APP__.sortLegendEntriesByDefault());
+      await settleLive(page);
+      expect((await legendRowsByCaption(page)).editor, 'Sort by default').toEqual(renamed);
+      expect(await drawnLegendOrder(page), 'Sort by default, drawn').toEqual(renamed);
+      await expectLiveEqualsGenerate(page, { label: `${mode}: Sort by default` });
+      expect((await legendRowsByCaption(page)).editor).toEqual(renamed);
+      expect(page.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+    }
+  });
+}
+
 test('L1-L8 generated legend categories reconcile while valid category and layout preferences survive', async ({ browser }, testInfo) => {
   test.setTimeout(1_800_000);
   const page = await load(browser, seeds.lambda);

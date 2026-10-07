@@ -879,7 +879,11 @@ export const createLegendEntryActions = ({
   // of the mounted legend (R13). The rule owner runs its transition and then
   // `apply` in one History step, while `isCurrent` holds; no rule mutation runs
   // here. Resolves to false when the Result or the caller became stale.
-  const prepareFileLegendEntries = async (intents, { previousFileIntents = [], isCurrent = () => true } = {}) => {
+  /**
+   * @param {Record<string, any>[]} intents
+   * @param {{ previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean, placement?: { caption: string, at: string } | null }} [options]
+   */
+  const prepareFileLegendEntries = async (intents, { previousFileIntents = [], isCurrent = () => true, placement = null } = {}) => {
     const mountedSvg = svgContainer.value?.querySelector('svg');
     const svg = mountedSvg?.cloneNode(true);
     const targetGroups = svg ? getAllFeatureLegendGroups(svg) : [];
@@ -961,6 +965,15 @@ export const createLegendEntryActions = ({
           reflow: false,
           throwOnError: true
         });
+      }
+
+      // OV-158 (Owner decision 2026-10-07): the row a rename draws takes the
+      // place of the row it renames, through the one ordering of a Legend, so
+      // the editor list records the edited order Generate replays (PD-OI-063).
+      if (placement && intents.some((intent) => intent.caption === placement.caption)) {
+        const order = (legendEntries.value || []).map(legendCaption)
+          .map((/** @type {string} */ caption) => (caption === placement.at ? placement.caption : caption));
+        targetGroups.forEach((group) => orderLegendEntries(group, order));
       }
 
       const legendGroup = svg.getElementById('legend');

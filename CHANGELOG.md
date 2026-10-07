@@ -72,6 +72,9 @@ write-up of a release.
   **Deleted items**, each with **Restore**, and **Restore all** returns every one. A
   restored row returns at once where Generate draws it; each click is one Undo step,
   and Sessions save the rows still removed. Before, only Undo returned a removed row.
+- Legend editor (web app): a renamed feature row (for example `tRNA`) keeps its place
+  in the Legend, live and after Generate, in Linear and Circular. Before, the rename
+  moved the row to the end of the Legend.
 - Result names (web app): a live edit that redraws a loaded Session's Result (such
   as a Legend color, or Undo or Redo of a color step) keeps the Result's saved name.
   Before, the redraw renamed it after the **Output prefix** (a Gallery Session's

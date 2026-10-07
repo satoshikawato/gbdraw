@@ -36,6 +36,11 @@ import { featureDrawnContext, resultLegendSources, sameLegendSources } from '../
  */
 
 /**
+ * A Legend row a rule commit draws in the place of the row `at` (OV-158).
+ * @typedef {{ caption: string, at: string }} LegendPlacement
+ */
+
+/**
  * The Legend rows a rule commit draws, prepared and not yet applied.
  * @typedef {object} PreparedFileLegend
  * @property {{ add: any[], update: any[], remove: any[], unchanged: any[] }} diff
@@ -46,7 +51,7 @@ import { featureDrawnContext, resultLegendSources, sameLegendSources } from '../
 /**
  * @typedef {object} FeatureRuleActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(intents: Record<string, any>[], options?: { previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
+ * @property {(intents: Record<string, any>[], options?: { previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean, placement?: LegendPlacement | null }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
  *   The Legend owner's preparation of the rows the rules draw.
  * @property {import('../rule-matching.js').RulePreparation} rulePreparation
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
@@ -214,7 +219,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     }
   };
   /**
-   * @typedef {{ isCurrent?: () => boolean, afterCommit?: (intents: Record<string, any>[]) => void, previousLegendIntents?: Record<string, any>[], sourceRows?: (Record<string, any> | null)[] }} CommitSpecificRulesOptions
+   * @typedef {{ isCurrent?: () => boolean, afterCommit?: (intents: Record<string, any>[]) => void, previousLegendIntents?: Record<string, any>[], sourceRows?: (Record<string, any> | null)[], legendPlacement?: LegendPlacement | null }} CommitSpecificRulesOptions
    */
   /**
    * @param {Record<string, any>[]} rules
@@ -252,7 +257,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
    * @param {string} label
    * @param {CommitSpecificRulesOptions} [options]
    */
-  const commitOnce = async (rules, label, { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], sourceRows = rules.map(rule => manualSpecificRules.includes(rule) ? rule : null) } = {}) => {
+  const commitOnce = async (rules, label, { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], sourceRows = rules.map(rule => manualSpecificRules.includes(rule) ? rule : null), legendPlacement = null } = {}) => {
     const revision = ++preparationRevision;
     const candidate = await prepareRules(rules);
     if (!candidate) return false;
@@ -264,7 +269,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const legend = await prepareFileLegendEntries(intents.filter(intent => !(state.deletedLegendEntries?.value || [])
       .some(entry => (entry.originalCaption || entry.caption) === intent.caption)), {
       previousFileIntents: previousIntents,
-      isCurrent: current
+      isCurrent: current,
+      placement: legendPlacement
     });
     if (!legend) return false;
     const redrawsLegend = redrawsLegendFor([...manualSpecificRules], candidate.rules);

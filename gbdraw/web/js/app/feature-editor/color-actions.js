@@ -739,6 +739,10 @@ export const createFeatureColorActions = ({
       const oldEntry = findLegendEntryByCaption(oldCaption);
       return ruleActions.commitSpecificRules(rules, 'Rename legend item', {
         previousLegendIntents: retireOld && oldEntry ? [{ caption: oldCaption, color: oldEntry.color }] : [],
+        // OV-158 (Owner decision 2026-10-07): a renamed row keeps its place;
+        // a row that joins another row keeps that row's place.
+        legendPlacement: retireOld && oldEntry && !findLegendEntryByCaption(caption)
+          ? { caption, at: oldEntry.caption } : null,
         afterCommit: () => {
           if (retireOld && !sourceRules.length) {
             const adoptedCaption = getEffectiveLegendCaption(features[0]);
