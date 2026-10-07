@@ -590,6 +590,14 @@ test('a BLAST table error names its locator and correction, not the sequence-fil
     'The comparison input is invalid. Supply a comparison sequence file (FASTA, GenBank, or DDBJ) or BLAST outfmt 6/7 as required.');
 });
 
+test('a comparison error names its record pair as the comparison panel does (CI-04)', () => {
+  assert.equal(producerSummary('COMPARISON_INPUT', { reason: 'FINITE', row: 2, column: 11, queryRecordIndex: 0, subjectRecordIndex: 1 }),
+    'The comparison input is invalid. Pair: #1 to #2. Line 2. Column 11. Use a finite number.');
+  // The locator is bounded like the other indexes and needs both endpoints.
+  assert.doesNotMatch(producerSummary('COMPARISON_INPUT', { reason: 'FINITE', queryRecordIndex: 0 }), /Pair/);
+  assert.doesNotMatch(producerSummary('COMPARISON_INPUT', { reason: 'FINITE', queryRecordIndex: -1, subjectRecordIndex: 1.5 }), /Pair/);
+});
+
 test('an Upload pair without its BLAST TSV names the missing file (CI-06)', () => {
   assert.match(producerSummary('COMPARISON_INPUT', { reason: 'BLAST_TSV_REQUIRED' }), /Choose a BLAST TSV for this pair/);
   assert.match(producerSummary('COMPARISON_INPUT', { reason: 'PAIR_TOPOLOGY' }), /adjacent rows/);

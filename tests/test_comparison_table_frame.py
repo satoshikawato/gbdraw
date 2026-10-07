@@ -139,7 +139,9 @@ def test_row_outside_its_record_reports_a_comparison_diagnostic() -> None:
         )
     error = serialize_web_error(caught.value, operation="generate", stage="render")
     # CI-04: the column of the first coordinate of the failing endpoint (sstart).
-    assert (error["code"], error["context"]) == ("COMPARISON_INPUT", {"reason": "SEARCH_FRAME", "column": 9})
+    assert (error["code"], error["context"]) == ("COMPARISON_INPUT", {
+        "reason": "SEARCH_FRAME", "column": 9, "queryRecordIndex": 0, "subjectRecordIndex": 1,
+    })
 
 
 _SESSIONS = Path(__file__).parent / "fixtures" / "sessions"

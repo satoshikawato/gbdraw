@@ -1890,7 +1890,11 @@ export const requireLinearComparisonPlanSnapshot = (snapshot) => {
   }
   const issue = Array.isArray(snapshot.errors) ? snapshot.errors[0] : null;
   if (issue || String(snapshot.error || '').trim()) {
-    throw diagnosticError('COMPARISON_INPUT', { reason: PLAN_ISSUE_REASONS[issue?.code] || 'PAIR_TOPOLOGY' });
+    const edge = snapshot.edges.find((item) => item?.id && item.id === issue?.edgeId);
+    throw diagnosticError('COMPARISON_INPUT', {
+      reason: PLAN_ISSUE_REASONS[issue?.code] || 'PAIR_TOPOLOGY',
+      queryRecordIndex: edge?.queryIndex, subjectRecordIndex: edge?.subjectIndex
+    });
   }
   return snapshot;
 };
@@ -2152,7 +2156,9 @@ const buildComparisons = ({
     if (edge.source === 'upload') {
       const file = uploadFilesByEdgeId.get(String(edge.id || ''));
       if (!file) {
-        throw diagnosticError('COMPARISON_INPUT', { reason: 'BLAST_TSV_REQUIRED' });
+        throw diagnosticError('COMPARISON_INPUT', {
+          reason: 'BLAST_TSV_REQUIRED', queryRecordIndex: edge.queryIndex, subjectRecordIndex: edge.subjectIndex
+        });
       }
       const resourceId = `comparison-nucleotide-${edge.ordinal + 1}`;
       comparisons.push({

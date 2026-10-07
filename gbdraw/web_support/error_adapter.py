@@ -58,7 +58,9 @@ REFERENCE_REQUIRED REFERENCE_MISMATCH DISPLAY_START_BOUNDS ADJACENT_ALL COLLINEA
 LOSAT_OPTION_PROGRAM LOSAT_PLAN LOSAT_TASK UNAVAILABLE FAILED OUTPUT
 RING_LOSAT_PROGRAM RING_LOSAT_INPUT SEQUENCE_MISSING SPLIT_LANES OVERLAY_LANES CIRCULAR_SETTING LINEAR_SETTING
 ORDER RECORD_BOUNDS EMPTY_FILE FASTA_IN_GENBANK NOT_GENBANK RECORD_ID OUTFMT7_FIELDS""".split())
-_DIAGNOSTIC_INTEGER_KEYS = frozenset("row column columnCount seriesIndex slotIndex innerPx outerPx placementIndex".split())
+_DIAGNOSTIC_INTEGER_KEYS = frozenset(
+    "row column columnCount seriesIndex slotIndex innerPx outerPx placementIndex queryRecordIndex subjectRecordIndex".split()
+)
 
 # The engine computes a Result from the request alone, so an unclassified failure
 # in these stages repeats for the same inputs (RENDER_FAILED offers no Retry).

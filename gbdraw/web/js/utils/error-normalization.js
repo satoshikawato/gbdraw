@@ -454,7 +454,7 @@ const contextFor = (value) => {
   if (typeof value.sessionTable === 'string' && Object.hasOwn(SESSION_TABLE_LABELS, value.sessionTable)) context.sessionTable = value.sessionTable;
   // The diagram mode whose Result the failure concerns, when it is not the one shown (E1).
   if (value.diagramMode === 'circular' || value.diagramMode === 'linear') context.diagramMode = value.diagramMode;
-  for (const key of ['position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'placementIndex']) {
+  for (const key of ['position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex']) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= (key === 'codepoint' ? 0x10ffff : 10000000)) {
       if (key !== 'position' || context.positionUnit === 'python-character') context[key] = value[key];
     }
@@ -494,6 +494,9 @@ export const normalizeUserFacingError = (value, {
     diagramMode !== undefined ? `Diagram: ${diagramMode === 'linear' ? 'Linear' : 'Circular'}.` : '',
     sessionTable !== undefined ? `Session table: ${SESSION_TABLE_LABELS[sessionTable]}.` : '',
     inputOrdinal !== undefined ? `${ORDINAL_LABELS[result.code] || 'Sequence'} ${inputOrdinal}.` : '',
+    // A comparison pair as the comparison panel numbers it (#1 to #2).
+    result.context.queryRecordIndex !== undefined && result.context.subjectRecordIndex !== undefined
+      ? `Pair: #${result.context.queryRecordIndex + 1} to #${result.context.subjectRecordIndex + 1}.` : '',
     featureCaption !== undefined ? `Feature: ${featureCaption}.` : '',
     row !== undefined ? `Line ${row}.` : '',
     column !== undefined ? `Column ${column}.` : '',

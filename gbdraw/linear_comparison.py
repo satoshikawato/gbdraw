@@ -264,6 +264,8 @@ def project_search_frame_comparisons(
                         "code": "COMPARISON_INPUT",
                         "reason": "SEARCH_FRAME",
                         "column": 7 if role == "query" else 9,  # qstart or sstart
+                        "queryRecordIndex": comparison.query_record_index,
+                        "subjectRecordIndex": comparison.subject_record_index,
                     },
                 )
         projected.append(reverse_unbound_endpoint_rows(
@@ -413,6 +415,8 @@ def validate_linear_comparison_record_ids(
                             "code": "COMPARISON_INPUT",
                             "reason": "RECORD_ID",
                             "column": 1 if role == "query" else 2,  # BLAST outfmt 6 column
+                            "queryRecordIndex": endpoints["query"],
+                            "subjectRecordIndex": endpoints["subject"],
                         },
                     )
             unknown_rows |= table_ids.isin(unknown_role_ids)

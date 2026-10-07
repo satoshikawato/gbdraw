@@ -1308,7 +1308,7 @@ test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory
   expect(shortRow.errorCode).toBe('COMPARISON_INPUT');
   expect(shortRow.content).toBe(unrelated.content);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog.context))
-    .toEqual({ reason: 'FIELDS', row: 2, columnCount: 12 });
+    .toEqual({ reason: 'FIELDS', row: 2, columnCount: 12, queryRecordIndex: 0, subjectRecordIndex: 1 });
   await expect(page.getByRole('alert', { name: 'Generation Error' }))
     .toContainText('Required columns: 12.');
 
@@ -1318,9 +1318,9 @@ test('uploaded BLAST IDs bind to endpoint records and malformed or contradictory
   expect(swapped.errorCode).toBe('COMPARISON_INPUT');
   expect(swapped.content).toBe(unrelated.content);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog.context))
-    .toEqual({ reason: 'RECORD_ID', column: 1 });
+    .toEqual({ reason: 'RECORD_ID', column: 1, queryRecordIndex: 0, subjectRecordIndex: 1 });
   await expect(page.getByRole('alert', { name: 'Generation Error' }))
-    .toContainText('Column 1. A table row names another displayed record in this column. Swap the query and subject columns');
+    .toContainText('Pair: #1 to #2. Column 1. A table row names another displayed record in this column. Swap the query and subject columns');
 });
 
 // CI-06: removing the BLAST TSV of an Upload pair names the pair's missing
@@ -1338,9 +1338,10 @@ test('removing the BLAST TSV of an Upload pair names the missing file at Generat
     const result = await app.runAnalysis();
     return { status: result?.status, code: app.errorLog?.code, context: app.errorLog?.context };
   });
-  expect(failed).toEqual({ status: 'error', code: 'COMPARISON_INPUT', context: { reason: 'BLAST_TSV_REQUIRED' } });
+  expect(failed).toEqual({ status: 'error', code: 'COMPARISON_INPUT',
+    context: { reason: 'BLAST_TSV_REQUIRED', queryRecordIndex: 0, subjectRecordIndex: 1 } });
   await expect(page.getByRole('alert', { name: 'Generation Error' }))
-    .toContainText('Choose a BLAST TSV for this pair, or set the pair to No comparison or Run LOSAT.');
+    .toContainText('Pair: #1 to #2. Choose a BLAST TSV for this pair, or set the pair to No comparison or Run LOSAT.');
 });
 
 test('unmatched uploaded table IDs show a notice that follows the Result through Save and Load', async ({ page }) => {

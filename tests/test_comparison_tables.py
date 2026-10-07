@@ -139,7 +139,13 @@ def test_every_comparison_reader_follows_the_shared_outfmt_vectors(
             read(path)
         if entry_point in _DIAGNOSTIC_ENTRY_POINTS:
             payload = _web(caught.value)
-            assert {key: payload[key] for key in ("code", "context")} == expect["diagnostic"]
+            diagnostic = expect["diagnostic"]
+            if entry_point == "canonical codec (Web)":
+                # The Web request names the record pair of the table (CI-04).
+                diagnostic = {**diagnostic, "context": {
+                    **diagnostic["context"], "queryRecordIndex": 0, "subjectRecordIndex": 1,
+                }}
+            assert {key: payload[key] for key in ("code", "context")} == diagnostic
         return
 
     frame = read(path)
@@ -288,7 +294,9 @@ def test_web_generate_reports_a_malformed_blast_table_line_as_a_comparison_diagn
 
     error = result["error"]
     assert (error["code"], error["operation"]) == ("COMPARISON_INPUT", "generate")
-    assert error["context"] == {"reason": "INTEGER", "row": 3, "column": 7}
+    assert error["context"] == {
+        "reason": "INTEGER", "row": 3, "column": 7, "queryRecordIndex": 0, "subjectRecordIndex": 1,
+    }
     assert "101.5" not in json.dumps(error)
     assert not workspace.exists()
 
@@ -380,7 +388,9 @@ def test_swapped_query_and_subject_table_is_rejected() -> None:
     # comparison-identity text.
     payload = _web(error.value)
     assert payload["code"] == "COMPARISON_INPUT"
-    assert payload["context"] == {"reason": "RECORD_ID", "column": 1}
+    assert payload["context"] == {
+        "reason": "RECORD_ID", "column": 1, "queryRecordIndex": 0, "subjectRecordIndex": 1,
+    }
 
 
 def test_table_naming_another_displayed_record_is_rejected() -> None:
