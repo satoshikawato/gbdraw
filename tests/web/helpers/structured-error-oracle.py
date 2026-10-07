@@ -31,7 +31,7 @@ def python_helpers():
     return namespace
 
 
-def render_failure(namespace, pattern, display_start=None, genbank_text=None):
+def render_failure(namespace, pattern, display_start=None, genbank_text=None, config_overrides=None):
     record = SeqRecord(Seq('ATGC' * 25), id='PRIVATE_RECORD_SENTINEL')
     record.annotations['molecule_type'] = 'DNA'
     document = build_session_document(CircularDiagramRequest(
@@ -42,6 +42,8 @@ def render_failure(namespace, pattern, display_start=None, genbank_text=None):
     )).to_dict()
     if display_start is not None:
         document['renderRequest']['records'][0]['display']['startCoordinate'] = display_start
+    if config_overrides is not None:
+        document['renderRequest']['diagramOptions']['configOverrides'].update(config_overrides)
     with TemporaryDirectory(prefix='structured-error-') as root:
         workspace = Path(root) / 'gbdraw-web-render-1'
         resources = workspace / 'resources'
@@ -83,8 +85,9 @@ def main():
     namespace = python_helpers()
     if payload.get('raise'):
         result = [engine_phase_failure(namespace, name, stage) for name, stage in payload['raise']]
-    elif payload.get('displayStart') is not None or payload.get('genbankText') is not None:
-        result = render_failure(namespace, 'VALID_PLACEHOLDER', payload.get('displayStart'), payload.get('genbankText'))
+    elif any(payload.get(key) is not None for key in ('displayStart', 'genbankText', 'configOverrides')):
+        result = render_failure(namespace, 'VALID_PLACEHOLDER', payload.get('displayStart'), payload.get('genbankText'),
+                                payload.get('configOverrides'))
     elif payload.get('render'):
         result = render_failure(namespace, payload['pattern'])
     else:
