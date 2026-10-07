@@ -2156,6 +2156,7 @@
                                 <span v-if="linearComparisonUi.intentKey === 'custom'" class="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700">Custom</span>
                                 <span v-if="linearComparisonUi.errorBadge" class="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">{{ linearComparisonUi.errorBadge.label }}</span>
                             </div>
+                            <p v-if="linearComparisonUi.emptyPlanNotice" data-linear-comparison-empty-notice class="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] leading-snug text-amber-800">{{ linearComparisonUi.emptyPlanNotice }}</p>
                             <p v-if="!linearComparisonResolution.valid" class="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[10px] text-red-700">
                                 {{ linearComparisonResolution.error }}
                             </p>

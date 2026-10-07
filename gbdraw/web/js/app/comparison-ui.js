@@ -128,6 +128,13 @@ const ISSUE_ROUTES = Object.freeze({
   })
 });
 
+// Why an All adjacent pairs plan that resolves no pair draws no comparison (CI-07a, CI-07b).
+/** @type {Readonly<Record<string, string>>} */
+const EMPTY_PLAN_NOTICES = Object.freeze({
+  [LINEAR_COMPARISON_INTENT_KEYS.LOSAT]: 'No record pair to compare. Records on the same Linear row are not compared: give each record its own row under Advanced comparison and layout (Record Layout), or add a sequence.',
+  [LINEAR_COMPARISON_INTENT_KEYS.UPLOAD]: 'No pair has a BLAST TSV yet, so Generate draws no comparison. Choose a file for a pair under Selected pairs.'
+});
+
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 
 const pluralizedPairs = (count, qualifier) => (
@@ -146,7 +153,7 @@ const normalizeBlastpMode = (value) => {
     : 'orthogroup';
 };
 
-const intentKeyForPlan = (plan) => {
+const intentKeyForPlan = (plan, adjacentEdgeKeys) => {
   if (plan.mode === LINEAR_COMPARISON_MODES.NONE) {
     return LINEAR_COMPARISON_INTENT_KEYS.NONE;
   }
@@ -543,6 +550,7 @@ export const projectLinearComparisonUi = ({
     activeLosatpModeKey: losatpModeKey,
     activeLosatpModeLabel: losatpModeLabel,
     losatpModes: projectLosatpModes(normalizedPlan, losatpModeKey),
+    emptyPlanNotice: activePairCount === 0 ? EMPTY_PLAN_NOTICES[intentKey] || '' : '',
     filterSummary: filterSummary.text,
     filterSummaryIsDefault: filterSummary.isDefault,
     retainedDormantDraftCount: dormantDraftCount,

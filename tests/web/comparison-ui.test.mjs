@@ -544,3 +544,19 @@ test('projection does not mutate plan, resolution, filters, or retained file ref
   assert(Object.isFrozen(projection.sectionKeys.settings));
   assert(Object.isFrozen(projection.errorTargets));
 });
+
+test('an adjacent plan that resolves no pair says why Generate draws no comparison (CI-07a, CI-07b)', () => {
+  // a) Run LOSAT with every record on one Linear row: no adjacent pair.
+  const sameRow = project({ mode: 'adjacent', defaultSource: 'losat', edges: [] }, {
+    layout: sequences.map(({ uid }) => ({ uid, row: 1 }))
+  });
+  assert.equal(sameRow.activePairCount, 0);
+  assert.match(sameRow.emptyPlanNotice, /^No record pair to compare\. Records on the same Linear row are not compared/);
+  // b) Upload BLAST TSV for all adjacent pairs, but no pair has a file.
+  const noFile = project({ mode: 'adjacent', defaultSource: 'upload', edges: [] });
+  assert.match(noFile.emptyPlanNotice, /^No pair has a BLAST TSV yet, so Generate draws no comparison\./);
+  // Pairs to compare, No comparison, and an explicit Selected plan need no notice.
+  assert.equal(project({ mode: 'adjacent', defaultSource: 'losat', edges: [] }).emptyPlanNotice, '');
+  assert.equal(project(createDefaultLinearComparisonPlan()).emptyPlanNotice, '');
+  assert.equal(project({ mode: 'selected', defaultSource: 'upload', edges: [] }).emptyPlanNotice, '');
+});
