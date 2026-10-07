@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from typing import Mapping, cast
 
 from ..core.text import calculate_bbox_dimensions
-from .metrics import compensated_sum, legend_line_height, legend_text_x_offset
+from ..core.numeric import compensated_sum
+from .metrics import legend_line_height, legend_text_x_offset
 
 
 GRADIENT_BAR_WIDTH_RATIO = 10

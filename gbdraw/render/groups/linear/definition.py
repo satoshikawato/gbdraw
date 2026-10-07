@@ -14,6 +14,7 @@ from svgwrite.text import Text, TSpan
 from ....canvas import LinearCanvasConfigurator
 from ....config.models import GbdrawConfig
 from ....core.record_metadata import format_replicon_label, infer_record_source_metadata
+from ....core.numeric import compensated_sum
 from ....core.text import (
     calculate_bbox_dimensions,
     calculate_svg_bbox_dimensions,
@@ -133,7 +134,7 @@ class DefinitionGroup:
             return
 
         max_width = max(line.width for line in self.definition_lines)
-        total_height = sum(line.height for line in self.definition_lines)
+        total_height = compensated_sum(line.height for line in self.definition_lines)
         if len(self.definition_lines) > 1:
             total_height += self.interval * (len(self.definition_lines) - 1)
 

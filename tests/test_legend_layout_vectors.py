@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from gbdraw.core.text import calculate_bbox_dimensions
-from gbdraw.legend.metrics import compensated_sum
+from gbdraw.core.numeric import compensated_sum
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 VECTORS = REPO_ROOT / "tests" / "fixtures" / "legend_layout_vectors.json"
