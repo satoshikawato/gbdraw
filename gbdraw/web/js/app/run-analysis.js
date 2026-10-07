@@ -3,6 +3,7 @@
 /** @import { PreviousResultRestoreOptions, ReadinessExpectation, ReadinessExpectationOptions, ReadyReceipt } from './preview-runtime.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
+import { keepResultNames } from '../services/result-normalization.js';
 import {
   nameFeaturePlacementFailure,
   requestFeatureOverrides,
@@ -1077,6 +1078,8 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
  * @property {Record<string, any>} [prepareCommitInput]
  * @property {((canonical: Record<string, any>, catalogState: any) => any) | null} [decorationContinuity]
  * @property {any[]} [timingEntries]
+ * @property {readonly string[] | null} [resultNames] The names of the Results a rerender draws again,
+ *   which they keep (OV-136); Generate's Results take the names the engine gives them.
  */
 
 /** @param {CanonicalRenderCandidateExecutionOptions} options */
@@ -1091,7 +1094,8 @@ export const executeCanonicalRenderCandidate = async ({
   prepareCommit = prepareCandidateRenderCommit,
   prepareCommitInput = {},
   decorationContinuity = null,
-  timingEntries = []
+  timingEntries = [],
+  resultNames = null
 }) => {
   if (!canonical?.renderRequest || !canonical?.resources) {
     throw new Error('Canonical candidate execution requires a request and resources.');
@@ -1122,6 +1126,7 @@ export const executeCanonicalRenderCandidate = async ({
   if (!Array.isArray(results)) {
     throw new Error('The diagram engine returned an invalid Result list.');
   }
+  keepResultNames(generationResponse, resultNames);
   const metadata = generationResponse.metadata
     && typeof generationResponse.metadata === 'object'
     && !Array.isArray(generationResponse.metadata)
@@ -5534,6 +5539,8 @@ export const createRunAnalysis = ({
       labelReflowLastError.value = liveEditFailure(formatError(diagnosticError('LIVE_EDIT_REQUIRES_GENERATE')));
       return { status: 'skipped' };
     }
+    // The reflow draws the committed Session's Results again, so they keep their names (OV-136).
+    const committedResultNames = results.value.map((/** @type {{ name: string }} */ result) => result.name);
     const generationToken = ++latestGenerationToken;
     /** @type {Awaited<ReturnType<typeof prepareAndAdmitCandidate>>} */
     let colorCandidate = null;
@@ -5578,7 +5585,8 @@ export const createRunAnalysis = ({
           legendStrokeOverrides,
           manualSpecificRules: candidateRules
         },
-        timingEntries
+        timingEntries,
+        resultNames: committedResultNames
       });
       console.info(`gbdraw ${canonical.renderRequest.mode} typed request render: ${formatDuration(execution.elapsedMs)}.`);
       if (execution.status === 'superseded' || !isCurrent()) return { status: 'stale' };
