@@ -742,6 +742,25 @@ const drawnLegendOrder = page => page.evaluate(() => {
     .sort((left, right) => (Math.abs(left.box.y - right.box.y) < 2 ? left.box.x - right.box.x : left.box.y - right.box.y))
     .map(({ caption }) => caption);
 });
+// The drawn Legend's numbers: the canvas, the Legend's offset, and each shown
+// row's caption and swatch translations. Zero shift: a live Legend edit and
+// the next Generate give the same numbers exactly.
+const legendLayoutNumbers = page => page.evaluate(() => {
+  const numbers = value => (String(value || '').match(/[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g) || []).map(Number);
+  const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+  const legend = svg.getElementById('legend');
+  return {
+    canvas: [...numbers(svg.getAttribute('width')), ...numbers(svg.getAttribute('height')), ...numbers(svg.getAttribute('viewBox'))],
+    legend: numbers(legend.getAttribute('transform')),
+    rows: [...legend.querySelectorAll('g[data-legend-key]')]
+      .filter(entry => !entry.closest('[display="none"]') && !entry.closest('[data-gbdraw-role="comparison-legend"]'))
+      .map(entry => [
+        entry.getAttribute('data-legend-key'),
+        numbers(entry.querySelector('text')?.getAttribute('transform')),
+        [...entry.querySelectorAll('path')].flatMap(path => numbers(path.getAttribute('transform')))
+      ])
+  };
+});
 // `loadGenerated` with GC content in Linear too, so each mode has a middle row.
 const loadWithGc = async (browser, mode) => {
   const page = await loadGenerated(browser, mode);
@@ -799,7 +818,9 @@ for (const mode of ['linear', 'circular']) {
       const saved = testInfo.outputPath(`restore-${mode}.gbdraw-session.json.gz`);
       const session = readSession(await download(page, 'Save Session', saved));
       expect(session.editorState.legend.deletedEntries.map(entry => entry.caption), 'the Session saves the shorter list').toEqual(['CDS']);
+      const restored = await legendLayoutNumbers(page);
       await expectLiveEqualsGenerate(page, { label: `${mode}: Restore` });
+      expect(await legendLayoutNumbers(page), 'Restore: the screen is the Generate').toEqual(restored);
       expect((await legendRowsByCaption(page)).editor).toEqual(without('CDS'));
 
       start = await undoCount();
@@ -811,7 +832,9 @@ for (const mode of ['linear', 'circular']) {
       const all = await legendRowsByCaption(page);
       expect(all.editor, 'every row returns at its place').toEqual(generated.editor);
       expect(await drawnLegendOrder(page)).toEqual(generated.editor);
+      const restoredAll = await legendLayoutNumbers(page);
       await expectLiveEqualsGenerate(page, { label: `${mode}: Restore all` });
+      expect(await legendLayoutNumbers(page), 'Restore all: the screen is the Generate').toEqual(restoredAll);
       expect(await legendRowsByCaption(page)).toEqual(all);
 
       fresh = await load(browser, saved);
