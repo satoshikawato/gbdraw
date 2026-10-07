@@ -32,7 +32,8 @@ const settle = async (page) => {
   }))).toBe(true);
 };
 
-// Margins of the rendered SVG inside the preview frame's visible client area.
+// Margins of the rendered SVG inside the visible preview frame: the canvas
+// client area left of an open Editor drawer that lies over it.
 const fitGeometry = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   const container = app.canvasContainerRef;
@@ -40,17 +41,19 @@ const fitGeometry = (page) => page.evaluate(() => {
   const box = app.svgContainer.querySelector('svg').getBoundingClientRect();
   const left = frame.left + container.clientLeft;
   const top = frame.top + container.clientTop;
+  const bottom = top + container.clientHeight;
+  let right = left + container.clientWidth;
+  const drawer = document.querySelector('.right-drawer[aria-hidden="false"]')?.getBoundingClientRect();
+  const covered = drawer && drawer.top < bottom && drawer.bottom > top && drawer.left < right
+    ? right - drawer.left : 0;
+  right -= covered;
   return {
     zoom: app.zoom,
     pan: { ...app.canvasPan },
-    frame: { width: container.clientWidth, height: container.clientHeight },
+    covered,
+    frame: { width: right - left, height: container.clientHeight },
     unscaled: { width: box.width / app.zoom, height: box.height / app.zoom },
-    margins: {
-      left: box.left - left,
-      right: left + container.clientWidth - box.right,
-      top: box.top - top,
-      bottom: top + container.clientHeight - box.bottom
-    }
+    margins: { left: box.left - left, right: right - box.right, top: box.top - top, bottom: bottom - box.bottom }
   };
 });
 
@@ -59,11 +62,18 @@ const expectFitted = (geometry, label) => {
   for (const margin of Object.values(geometry.margins)) expect(margin, detail).toBeGreaterThanOrEqual(-1);
   expect(Math.abs(geometry.margins.left - geometry.margins.right), detail).toBeLessThanOrEqual(2);
   expect(Math.abs(geometry.margins.top - geometry.margins.bottom), detail).toBeLessThanOrEqual(2);
-  // The next zoom step would no longer fit on the limiting axis.
-  const largest = Math.min(geometry.frame.width / geometry.unscaled.width,
-    geometry.frame.height / geometry.unscaled.height);
-  expect(geometry.zoom + 0.1, detail).toBeGreaterThan(largest);
+  // Fit fills the frame: a whole percent, and on the limiting axis only the
+  // 8 px margins and less than one 1% step stay free.
+  expect(Math.round(geometry.zoom * 100) / 100, detail).toBe(geometry.zoom);
+  const widthLimited = geometry.frame.width / geometry.unscaled.width
+    < geometry.frame.height / geometry.unscaled.height;
+  const free = widthLimited ? geometry.margins.left + geometry.margins.right
+    : geometry.margins.top + geometry.margins.bottom;
+  const size = widthLimited ? geometry.unscaled.width : geometry.unscaled.height;
+  expect(free, detail).toBeLessThanOrEqual(16 + 0.01 * size + 2);
 };
+
+const appZoom = (page) => page.evaluate(() => window.__GBDRAW_APP__.zoom);
 
 const fit = async (page) => {
   await expect(fitButton(page)).toBeVisible();
@@ -110,7 +120,13 @@ test('Fit shows the whole Circular diagram centred at 1280x800 and 1920x1080, al
   await expect(page.getByRole('button', { name: 'Reset zoom', exact: true }))
     .toHaveText(`${Math.round(fitted.zoom * 100)}%`);
 
-  for (let step = 0; step < 3; step += 1) await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  const zoomIn = page.getByRole('button', { name: 'Zoom in', exact: true });
+  // From a whole-percent Fit, the buttons step back onto the 0.1 grid.
+  let expected = fitted.zoom;
+  for (let step = 0; step < 3; step += 1) {
+    await zoomIn.click();
+    expected = Math.round((expected + 0.1) * 10) / 10;
+  }
   const point = await backgroundPoint(page);
   await page.mouse.move(point.x, point.y);
   await page.mouse.down();
@@ -118,7 +134,7 @@ test('Fit shows the whole Circular diagram centred at 1280x800 and 1920x1080, al
   await page.mouse.up();
   await settle(page);
   const moved = await fitGeometry(page);
-  expect(moved.zoom).toBeCloseTo(fitted.zoom + 0.3, 5);
+  expect(moved.zoom).toBe(expected);
   expect(moved.pan).not.toEqual(fitted.pan);
   const refitted = await fit(page);
   expectFitted(refitted, '1280x800 after zoom and pan');
@@ -130,8 +146,7 @@ test('Fit shows the whole Circular diagram centred at 1280x800 and 1920x1080, al
   expectFitted(await fit(page), '1920x1080');
 });
 
-test('Fit shows the whole Linear comparison centred', async ({ page }) => {
-  test.setTimeout(180000);
+const openLinearSession = async (page) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await openApp(page);
   page.on('dialog', (dialog) => dialog.dismiss());
@@ -140,5 +155,47 @@ test('Fit shows the whole Linear comparison centred', async ({ page }) => {
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
   await settle(page);
-  expectFitted(await fit(page), 'Linear 1280x800');
+};
+
+test('Fit shows the whole Linear comparison centred, left of an open Editor', async ({ page }) => {
+  test.setTimeout(180000);
+  await openLinearSession(page);
+  const plain = await fit(page);
+  expectFitted(plain, 'Linear 1280x800');
+  expect(plain.covered).toBe(0);
+
+  // The open Editor drawer lies over the right of the canvas; Fit uses the rest.
+  await page.getByRole('button', { name: 'Editor', exact: true }).click();
+  await expect(page.locator('.right-drawer')).toHaveAttribute('aria-hidden', 'false');
+  await page.locator('.right-drawer').evaluate((drawer) => Promise.all(
+    drawer.getAnimations().map((animation) => animation.finished.catch(() => {}))
+  ));
+  const beside = await fit(page);
+  expect(beside.covered).toBeGreaterThan(300);
+  expectFitted(beside, 'Linear 1280x800 with the Editor open');
+  expect(beside.zoom).toBeLessThanOrEqual(plain.zoom);
+});
+
+// GX-02: the buttons keep the wheel's range and 0.1 steps.
+test('Zoom in stops at 500% and Zoom out at 10%, on exact 0.1 steps', async ({ page }) => {
+  test.setTimeout(180000);
+  await openLinearSession(page);
+  const zoomIn = page.getByRole('button', { name: 'Zoom in', exact: true });
+  const zoomOut = page.getByRole('button', { name: 'Zoom out', exact: true });
+  const resetZoom = page.getByRole('button', { name: 'Reset zoom', exact: true });
+  await resetZoom.click();
+  const steps = [];
+  for (let step = 0; step < 45; step += 1) {
+    await zoomIn.click();
+    steps.push(await appZoom(page));
+  }
+  expect(steps.filter((value) => value !== Math.round(value * 10) / 10)).toEqual([]);
+  expect(steps.slice(0, 3)).toEqual([1.1, 1.2, 1.3]);
+  expect(steps.at(-1)).toBe(5);
+  await expect(resetZoom).toHaveText('500%');
+  for (let step = 0; step < 3; step += 1) await zoomOut.click();
+  expect(await appZoom(page)).toBe(4.7);
+  for (let step = 0; step < 50; step += 1) await zoomOut.click();
+  expect(await appZoom(page)).toBe(0.1);
+  await expect(resetZoom).toHaveText('10%');
 });
