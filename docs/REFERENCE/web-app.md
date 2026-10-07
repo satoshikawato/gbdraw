@@ -939,6 +939,8 @@ Feature search stays in its own row above the canvas, and the zoom and layout
 controls stay in a row below it. Open or close **Editor** without moving the
 search bar over the diagram; the search bar can no longer be dragged to a free
 position. On a short screen, scroll the Result or page to reach both rows.
+**Fit to preview** (**Fit**) in the zoom controls shows the whole diagram
+centred in the canvas, at the largest 10% zoom step that fits.
 
 To adjust a legend, plot title, or Linear scale, select **Layout edit** in the
 lower control row, then drag the item in the Preview. The explanation beside
