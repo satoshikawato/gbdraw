@@ -294,7 +294,7 @@ export const hasBiologicalSessionInputs = (files = {}) => (
  * @param {Record<string, any> | null | undefined} data
  * @returns {boolean}
  */
-export const isSettingsOnlySessionDocument = data => [42, 44, 45].includes(data?.version)
+export const isSettingsOnlySessionDocument = data => data != null && [42, 44, 45].includes(data.version)
   && Object.hasOwn(data, 'renderRequest') && data.renderRequest === null;
 
 const validateSettingsOnlyDocument = data => {

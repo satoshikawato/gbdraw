@@ -129,6 +129,18 @@ const checkpointSvgBytes = (checkpoint) => (
  *   The editable intent (config, files, ui, features, ...); the snapshot service builds and applies it.
  * @typedef {Record<string, any>} HistoryCheckpoint
  *   An artifact checkpoint: intent plus the generated Result domains.
+ * @typedef {{
+ *   label: string,
+ *   before: any,
+ *   closed: boolean,
+ *   source: string,
+ *   owner?: any,
+ *   deferAdapterCommit?: boolean,
+ *   beforeSignature?: string,
+ *   beforeFileIds?: Set<any>,
+ *   beforeIntentCheckpoint?: any
+ * }} HistoryTransaction
+ *   An open Undo transaction: an intent edit (`begin`), an artifact checkpoint, or an artifact replacement.
  * @typedef {{ path: string[], before: any, after: any, beforeHas: boolean, afterHas: boolean }} HistoryIntentChange
  *   One changed leaf of an intent; `path[0]` is the domain.
  * @typedef {{
@@ -237,8 +249,11 @@ export const createHistoryManager = ({
   let currentCheckpointSignature = '';
   let currentFileIds = new Set();
   let totalEntryBytes = 0;
+  /** @type {HistoryTransaction | null} */
   let activeTransaction = null;
+  /** @type {HistoryTransaction | null} */
   let activeCheckpoint = null;
+  /** @type {HistoryTransaction | null} */
   let activeReplacement = null;
 
   const touch = () => {
@@ -462,6 +477,7 @@ export const createHistoryManager = ({
     const before = await captureIntent();
     if (mutationAvailability()) return null;
     emitHistoryDiagnostic({ type: 'begin', scope: 'intent', label });
+    /** @type {HistoryTransaction} */
     const tx = {
       label,
       before: before.intent,

@@ -162,7 +162,7 @@ export const validateTrackSlotBindingInvariants = (
     supportedRenderers,
     supportedSides,
     anchorlessRenderers,
-    depthTrackCount = null
+    depthTrackCount = /** @type {number | null | undefined} */ (null)
   }
 ) => {
   if (!Array.isArray(slots)) {

@@ -355,7 +355,8 @@ const nativeValidation = (message) => {
   if (/^Invalid managed flag for (?:circular|linear)\.[a-z_]+\.$/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'config', reason: 'FIELDS' } };
   if (/^Missing canonical resource:/.test(message) || /^Session resource [\s\S]* has an unsupported encoded payload\.$/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'FIELDS' } };
   if (/^The SVG composition metadata is not valid JSON:/.test(message)) return { code: 'INPUT_INVALID', stage: 'request-validation', context: { field: 'schema', reason: 'JSON_FORMAT' } };
-  if (NATIVE_VALIDATIONS.has(message)) return NATIVE_VALIDATIONS.get(message);
+  // has() holds here, and every stored entry is a NativeValidation.
+  if (NATIVE_VALIDATIONS.has(message)) return /** @type {NativeValidation} */ (NATIVE_VALIDATIONS.get(message));
   if (/^Invalid region (?:spec|coordinates) for LOSAT FASTA extraction: [\s\S]*$/.test(message)) {
     return { code: 'REGION_INVALID', stage: 'request-validation', context: { reason: 'REGION_FORMAT' } };
   }
@@ -465,7 +466,7 @@ export const normalizeUserFacingError = (value, {
     operation: identifier(operation === 'unknown' ? source.operation : operation, OPERATIONS, 'unknown'),
     stage: identifier(source.stage === 'unknown' ? stage : source.stage, STAGES, identifier(stage, STAGES, 'unknown')),
     context: contextFor(source.context),
-    secondary: []
+    secondary: /** @type {{ code: string, stage: string }[]} */ ([])
   };
   for (const item of Array.isArray(source.secondary) ? source.secondary.slice(0, 2) : []) {
     if (item?.code !== 'CLEANUP_FAILED' || item?.stage !== 'cleanup') continue;

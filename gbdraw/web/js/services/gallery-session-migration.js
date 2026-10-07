@@ -605,9 +605,10 @@ const promoteGuiAuthoredSession = (session, args, forceWebDraft = true) => {
   const migratedConfig = migratePersistedGalleryConfig(
     mergedGuiConfig(session, projection)
   );
+  // projection.files.linearSeqs is an untyped empty array literal in session-request.js; its rows are plain records.
   const projectedFiles = {
     ...projection.files,
-    linearSeqs: (projection.files.linearSeqs || []).map((record) => ({ ...record })),
+    linearSeqs: (/** @type {Record<string, any>[]} */ (projection.files.linearSeqs) || []).map((record) => ({ ...record })),
     linearComparisons: (projection.files.linearComparisons || []).map((comparison) => ({
       ...comparison
     }))
