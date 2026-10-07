@@ -160,8 +160,12 @@ write-up of a release.
   `drawings=[...]` (typed requests or `SessionDrawingSpec` values) and
   `active_drawing=`; the undocumented `adjunct=` argument is replaced by
   `SessionDrawingSpec(state=...)`. The new `upgrade_session_document()` returns
-  a Session 31–44 in the current version without rendering it. Session 46
-  holds at most one Circular and one Linear drawing, named by their mode.
+  a Session 31–44 in the current version without rendering it, as a
+  `SessionUpgrade` with the `document` and its `warnings`. Sessions 31–39
+  saved no feature catalog, so the upgrade drops their Results; each such
+  drawing gets a warning that names every dropped Result, also logged.
+  Session 46 holds at most one Circular and one Linear drawing, named by their
+  mode.
 - Legend colors (web app): Generate no longer fails with "The generated result could
   not be accepted" after a color or stroke is set on a row added in the Legend editor,
   in Linear and Circular. The added row is drawn with its color and stroke after

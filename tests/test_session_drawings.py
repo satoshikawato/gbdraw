@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -29,6 +30,7 @@ from gbdraw.api import (
     SessionDrawingSpec,
     SessionFormatError,
     SessionRenderError,
+    SessionUpgrade,
     SessionVersionError,
     build_session_document,
     load_session_document,
@@ -338,7 +340,8 @@ def test_upgrade_returns_a_current_document_unchanged() -> None:
     circular, _linear = _requests()
     document = build_session_document(circular)
 
-    assert upgrade_session_document(document) is document
+    assert upgrade_session_document(document) == SessionUpgrade(document)
+    assert upgrade_session_document(document).document is document
 
 
 def test_upgrade_refuses_sessions_without_a_canonical_request() -> None:
@@ -348,14 +351,52 @@ def test_upgrade_refuses_sessions_without_a_canonical_request() -> None:
 
 def test_upgrade_keeps_a_settings_only_session_settings_only() -> None:
     source = _fixture("settings-only.v42.json.gz")
-    upgraded = upgrade_session_document(source)
+    upgrade = upgrade_session_document(source)
+    upgraded = upgrade.document
 
+    assert upgrade.warnings == ()
     assert upgraded.version == CURRENT_SESSION_VERSION
     assert upgraded.drawings == (SessionDrawing("circular", "Circular", "circular", False),)
     # The flat draft is split into the mode slices; Circular keeps its values.
     assert "config" not in upgraded.to_dict()
     form = upgraded.to_dict()["modes"]["circular"]["config"]["form"]
     assert form and all(source["config"]["form"][key] == value for key, value in form.items())
+
+
+def test_upgrade_names_and_logs_each_result_it_drops(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # Session 33 saved no feature catalog, so its Results cannot be kept.
+    source = _fixture("feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz")
+    source["results"].append({**source["results"][0], "name": "second.svg"})
+    assert [result["name"] for result in source["results"]] == ["out.svg", "second.svg"]
+
+    with caplog.at_level(logging.WARNING, logger="gbdraw.session"):
+        upgrade = upgrade_session_document(source, temporary_directory=tmp_path)
+
+    assert upgrade.document.to_dict()["results"] == []
+    assert upgrade.warnings == (
+        f"Upgrading Session 33 to {CURRENT_SESSION_VERSION} dropped the linear drawing's "
+        "2 Result(s) 'out.svg', 'second.svg': Session 33 saved no feature catalog "
+        "for them. Render the drawing and save the Session to write new Results.",
+    )
+    assert [record.getMessage() for record in caplog.records] == [
+        f"WARNING: {warning}" for warning in upgrade.warnings
+    ]
+    assert all(record.levelno == logging.WARNING for record in caplog.records)
+
+
+def test_upgrade_without_results_to_drop_warns_nothing(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    source = _fixture("feature-edits-linear-crop-rc.v33.gbdraw-session.json.gz")
+    source["results"] = []
+
+    with caplog.at_level(logging.WARNING, logger="gbdraw.session"):
+        upgrade = upgrade_session_document(source, temporary_directory=tmp_path)
+
+    assert upgrade.warnings == ()
+    assert not caplog.records
 
 
 def _render_svgs(document: SessionDocument, directory: Path) -> list[bytes]:
@@ -402,19 +443,27 @@ _SLOW_UPGRADE_FIXTURES = tuple(
 @pytest.mark.parametrize("fixture", (*_UPGRADE_FIXTURES, *_SLOW_UPGRADE_FIXTURES))
 def test_an_upgraded_session_renders_its_drawing_as_before(fixture: str, tmp_path: Path) -> None:
     source = load_session_document(SESSION_FIXTURES / fixture)
-    upgraded = upgrade_session_document(source, temporary_directory=tmp_path / "materialized")
+    upgrade = upgrade_session_document(source, temporary_directory=tmp_path / "materialized")
+    upgraded = upgrade.document
 
     assert source.version < upgraded.version == CURRENT_SESSION_VERSION
     assert upgraded.drawings == source.drawings
     catalog = source.to_dict().get("editorState", {}).get("featureCatalog")
-    # Sessions 31-39 saved no catalog: their Results wait for the next render.
-    expected_results = source.to_dict()["results"] if catalog else []
+    # Sessions 31-39 saved no catalog: their Results wait for the next render,
+    # and the upgrade names each one it drops.
+    source_results = source.to_dict()["results"]
+    expected_results = source_results if catalog else []
     assert upgraded.to_dict()["results"] == expected_results
+    if catalog or not source_results:
+        assert upgrade.warnings == ()
+    else:
+        (warning,) = upgrade.warnings
+        assert all(repr(result["name"]) in warning for result in source_results)
     assert _render_svgs(upgraded, tmp_path / "upgraded") == _render_svgs(source, tmp_path / "source")
 
 
 def test_an_upgraded_v33_label_override_with_empty_text_renders_as_before(tmp_path: Path) -> None:
     source = load_session_document(SESSION_FIXTURES / "feature-edits-circular.v33.gbdraw-session.json.gz")
-    upgraded = upgrade_session_document(source)
+    upgraded = upgrade_session_document(source).document
 
     assert _render_svgs(upgraded, tmp_path / "upgraded") == _render_svgs(source, tmp_path / "source")

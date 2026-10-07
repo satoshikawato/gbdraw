@@ -1078,11 +1078,45 @@ def save_session_document(
     return _write_session_document(path, document, overwrite=overwrite)
 
 
+@dataclass(frozen=True)
+class SessionUpgrade:
+    """A Session in the current version, from :func:`upgrade_session_document`.
+
+    ``warnings`` has one line per drawing whose Results the upgrade dropped,
+    naming each dropped Result; the same lines are logged as warnings.
+    Rendering the drawing and saving the Session writes new Results.
+    """
+
+    document: SessionDocument
+    warnings: tuple[str, ...] = ()
+
+
+def _dropped_results_warning(
+    source_version: int,
+    drawing_id: str,
+    results: Any,
+) -> str | None:
+    if not isinstance(results, list) or not results:
+        return None
+    names = ", ".join(
+        repr(result.get("name"))
+        if isinstance(result, Mapping) and isinstance(result.get("name"), str)
+        else f"#{index + 1}"
+        for index, result in enumerate(results)
+    )
+    return (
+        f"Upgrading Session {source_version} to {CURRENT_SESSION_VERSION} dropped "
+        f"the {drawing_id} drawing's {len(results)} Result(s) {names}: Session "
+        f"{source_version} saved no feature catalog for them. Render the drawing "
+        "and save the Session to write new Results."
+    )
+
+
 def upgrade_session_document(
     document: SessionDocument | Mapping[str, Any] | str | Path,
     *,
     temporary_directory: str | Path | None = None,
-) -> SessionDocument:
+) -> SessionUpgrade:
     """Return a Session in the current version without rendering it.
 
     A current document is returned unchanged. A Session 31-44 gets the
@@ -1091,15 +1125,16 @@ def upgrade_session_document(
     artifacts) and encoded again with the same resource IDs, and its
     Web-owned fields are migrated. Results with a feature catalog (Sessions
     40-44) are kept. Sessions 31-39 saved no catalog, so their Results are
-    dropped and the drawing waits for its next render. The resources are
-    materialized under ``temporary_directory`` while the request is adapted.
-    Sessions 27-30 have no canonical request and raise
-    :class:`SessionVersionError`.
+    dropped and the drawing waits for its next render; each drawing with
+    dropped Results gets a warning in :attr:`SessionUpgrade.warnings` that
+    names them, and the warning is logged. The resources are materialized
+    under ``temporary_directory`` while the request is adapted. Sessions
+    27-30 have no canonical request and raise :class:`SessionVersionError`.
     """
 
     loaded = load_session_document(document)
     if loaded.version == CURRENT_SESSION_VERSION:
-        return loaded
+        return SessionUpgrade(loaded)
     if loaded.version < CANONICAL_SESSION_MIN_VERSION:
         raise SessionVersionError(
             "Sessions version 27 through 30 have no canonical request; replay one with "
@@ -1125,10 +1160,12 @@ def upgrade_session_document(
     # A Session before the current version holds one drawing.
     drawing = loaded._drawing_parts()
     if drawing.request is None:
-        return _build_session_document_from_drawings(
-            (_DrawingBuild(mode=drawing.mode, request=None, state=state),),
-            web_file_inventory=web_file_inventory,
-            resources=source["resources"],
+        return SessionUpgrade(
+            _build_session_document_from_drawings(
+                (_DrawingBuild(mode=drawing.mode, request=None, state=state),),
+                web_file_inventory=web_file_inventory,
+                resources=source["resources"],
+            )
         )
     from gbdraw.api.session_compat import (
         adapt_session_request,
@@ -1164,12 +1201,18 @@ def upgrade_session_document(
         )
         if isinstance(catalog, Mapping) and catalog.get("schema") in (3, 4):
             catalog = promote_legacy_feature_catalog(catalog)
+        warnings: list[str] = []
         if not isinstance(catalog, Mapping):
             catalog = None
+            dropped = _dropped_results_warning(
+                loaded.version, drawing.id, state.get("results")
+            )
+            if dropped is not None:
+                warnings.append(dropped)
             state["results"] = []
             state.pop("runMetadata", None)
         replace_current_derived_feature_state(state, catalog)
-        return _build_session_document_from_drawings(
+        upgraded = _build_session_document_from_drawings(
             (
                 _DrawingBuild(
                     mode=drawing.mode,
@@ -1183,6 +1226,9 @@ def upgrade_session_document(
             web_file_inventory=web_file_inventory,
             resources=source["resources"],
         )
+    for warning in warnings:
+        logger.warning("WARNING: %s", warning)
+    return SessionUpgrade(upgraded, tuple(warnings))
 
 
 def with_request_output(
@@ -1371,6 +1417,7 @@ __all__ = [
     "SessionFormatError",
     "SessionRenderError",
     "SessionResourceError",
+    "SessionUpgrade",
     "SessionVersionError",
     "build_session_document",
     "load_session_document",
