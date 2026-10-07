@@ -7305,9 +7305,10 @@
                         </button>
                         <!-- Zoom controls -->
                         <div data-history-ignore class="flex gap-1 bg-white shadow rounded-lg p-1.5 border border-slate-200">
-                            <button @click="zoom+=0.1" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" aria-label="Zoom in"><i class="ph ph-plus" aria-hidden="true"></i></button>
+                            <button @click="zoom = Math.min(5, Math.round((zoom + 0.1) * 10) / 10)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" aria-label="Zoom in"><i class="ph ph-plus" aria-hidden="true"></i></button>
                             <button @click="zoom = 1.0" class="w-16 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 text-sm font-mono rounded" aria-label="Reset zoom">{{Math.round(zoom*100)}}%</button>
-                            <button @click="zoom = Math.max(0.1, zoom-0.1)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" aria-label="Zoom out"><i class="ph ph-minus" aria-hidden="true"></i></button>
+                            <button @click="zoom = Math.max(0.1, Math.round((zoom - 0.1) * 10) / 10)" class="w-10 h-10 flex items-center justify-center hover:bg-slate-100 text-slate-600 rounded text-lg" aria-label="Zoom out"><i class="ph ph-minus" aria-hidden="true"></i></button>
+                            <button @click="fitPreviewToViewport" class="h-10 px-2 flex items-center justify-center gap-1 hover:bg-slate-100 text-slate-600 text-sm rounded" aria-label="Fit to preview" title="Fit to preview"><i class="ph ph-corners-in text-lg" aria-hidden="true"></i><span>Fit</span></button>
                         </div>
                     </div>
 

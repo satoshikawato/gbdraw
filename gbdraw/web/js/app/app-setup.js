@@ -1354,6 +1354,7 @@ export const createAppSetup = () => {
     doPan,
     endPan,
     resetPreviewViewport,
+    fitPreviewToViewport,
     cancelPreviewTransformInteraction,
     disposePanZoom,
     previewTransformInteraction
@@ -5000,6 +5001,7 @@ export const createAppSetup = () => {
     layoutRepositionMode,
     isPanning,
     handleWheel,
+    fitPreviewToViewport,
     canvasPan,
     canvasContainerRef,
     startPan,

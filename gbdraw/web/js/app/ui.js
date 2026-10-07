@@ -5,6 +5,30 @@ import { recordStructuralMetric } from '../services/runtime-test-hooks.js';
 // also absorbs browser delivery delay between nominally 80 ms wheel inputs.
 const WHEEL_BURST_QUIET_MS = 220;
 const WHEEL_TRANSITION_FALLBACK_MS = 260;
+// The preview zoom range; the zoom-in and zoom-out buttons repeat it in index.html.
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 5;
+// Fit leaves the canvas padding (p-2) free around the diagram.
+const FIT_MARGIN_PX = 8;
+
+/** @param {number} value The zoom range and the wheel's 0.1 steps. */
+const clampZoom = (value) => Math.round(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value)) * 10) / 10;
+
+/**
+ * The width the open Editor drawer covers at the right of the canvas: the
+ * stylesheet's `--preview-editor-reserve`, which the search and controls keep
+ * free too (0 when the drawer is closed or docked below the canvas).
+ * @param {HTMLElement} container The preview canvas.
+ */
+const editorReserveWidth = (container) => {
+  const probe = container.ownerDocument?.createElement?.('div');
+  if (!probe) return 0;
+  probe.style.cssText = 'position:absolute;visibility:hidden;height:0;width:var(--preview-editor-reserve,0px)';
+  container.appendChild(probe);
+  const { width } = probe.getBoundingClientRect();
+  probe.remove();
+  return width;
+};
 
 /** @param {Record<string, any>} state Shape owned by state.js. */
 export const createPanZoom = (state) => {
@@ -188,31 +212,68 @@ export const createPanZoom = (state) => {
     return nextPan;
   };
 
-  /** @param {{ resetZoom?: boolean, pan?: { x?: number, y?: number } | null }} [options] */
-  const resetPreviewViewport = ({ resetZoom = false, pan = null } = {}) => {
+  /**
+   * Replace the whole preview viewport; Reset and Fit both end here.
+   * @param {{ x: number, y: number }} pan
+   * @param {number} zoomLevel
+   */
+  const setPreviewViewport = (pan, zoomLevel) => {
     cancelPreviewTransformInteraction({ reconcile: false });
     panStart.x = 0;
     panStart.y = 0;
     panStart.panX = 0;
     panStart.panY = 0;
-    canvasPan.x = Number(pan?.x) || 0;
-    canvasPan.y = Number(pan?.y) || 0;
-    if (resetZoom) {
-      zoom.value = 1.0;
-    }
-
-    const container = canvasContainerRef.value;
-    if (container) {
-      container.style.cursor = 'grab';
-    }
+    canvasPan.x = pan.x;
+    canvasPan.y = pan.y;
+    zoom.value = zoomLevel;
     applyPreviewTransform(canvasPan.x, canvasPan.y, zoom.value, false);
+  };
+
+  /** @param {{ resetZoom?: boolean, pan?: { x?: number, y?: number } | null }} [options] */
+  const resetPreviewViewport = ({ resetZoom = false, pan = null } = {}) => setPreviewViewport(
+    { x: Number(pan?.x) || 0, y: Number(pan?.y) || 0 },
+    resetZoom ? 1.0 : zoom.value
+  );
+
+  // Fit (UI-11): the largest whole-percent zoom that shows the whole diagram in
+  // the visible preview frame (the canvas left of an open Editor drawer), and
+  // the pan that centres it under the top-center origin.
+  const fitPreviewToViewport = () => {
+    const container = canvasContainerRef.value;
+    const surface = svgContainer.value;
+    const svg = surface?.querySelector?.('svg');
+    if (!container || !svg) return;
+    // Measure the current transform itself, not a frame of its transition.
+    applyPreviewTransform(canvasPan.x, canvasPan.y, zoom.value, true);
+    const surfaceBox = surface.getBoundingClientRect();
+    const svgBox = svg.getBoundingClientRect();
+    const frameBox = container.getBoundingClientRect();
+    const frameWidth = container.clientWidth - editorReserveWidth(container);
+    const width = svgBox.width / zoom.value;
+    const height = svgBox.height / zoom.value;
+    if (!(width > 0 && height > 0)) return;
+    const largest = Math.min(
+      (frameWidth - 2 * FIT_MARGIN_PX) / width,
+      (container.clientHeight - 2 * FIT_MARGIN_PX) / height
+    );
+    // Round down to a whole percent so the diagram fills the frame without
+    // overflowing it; the wheel and buttons step by 0.1 from there.
+    const nextZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.floor(largest * 100 + 1e-9) / 100));
+    // The transform origin without the current pan, and the diagram centre's
+    // unscaled offset from it.
+    const originX = surfaceBox.left + surfaceBox.width / 2 - canvasPan.x;
+    const originY = surfaceBox.top - canvasPan.y;
+    const centerX = (svgBox.left + svgBox.width / 2 - surfaceBox.left - surfaceBox.width / 2) / zoom.value;
+    const centerY = (svgBox.top + svgBox.height / 2 - surfaceBox.top) / zoom.value;
+    setPreviewViewport({
+      x: frameBox.left + container.clientLeft + frameWidth / 2 - originX - nextZoom * centerX,
+      y: frameBox.top + container.clientTop + container.clientHeight / 2 - originY - nextZoom * centerY
+    }, nextZoom);
   };
 
   const handleWheel = (event) => {
     beginWheelInteraction(event);
-    const delta = event.deltaY > 0 ? -0.1 : 0.1;
-    const newZoom = Math.max(0.1, Math.min(5, zoom.value + delta));
-    zoom.value = Math.round(newZoom * 10) / 10;
+    zoom.value = clampZoom(zoom.value + (event.deltaY > 0 ? -0.1 : 0.1));
     applyPreviewTransform(canvasPan.x, canvasPan.y, zoom.value, isPanning.value);
   };
 
@@ -299,6 +360,7 @@ export const createPanZoom = (state) => {
     doPan,
     endPan,
     resetPreviewViewport,
+    fitPreviewToViewport,
     cancelPreviewTransformInteraction,
     disposePanZoom,
     previewTransformInteraction
