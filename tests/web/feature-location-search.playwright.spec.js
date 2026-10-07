@@ -130,6 +130,73 @@ test('Interactive SVG searches names in All and shows split locations and length
   await expect(page.locator('#gbdraw-feature-popup .gfi-subtitle')).toHaveText(SPLIT);
 });
 
+test('Interactive SVG searches on Enter, fits the Qualifier key, and titles a feature as the app popup does', async ({ page }, testInfo) => {
+  test.setTimeout(120000);
+  const prefix = testInfo.outputPath('hmmt');
+  execFileSync('python', [
+    '-m', 'gbdraw.cli', 'circular', '--gbk', join(process.cwd(), 'tests/test_inputs/HmmtDNA.gbk'),
+    '-o', prefix, '-f', 'interactive_svg'
+  ], { cwd: process.cwd(), stdio: 'ignore' });
+  const svgPath = `${prefix}.interactive.svg`;
+  const metadata = /<metadata id="gbdraw-interactive-feature-metadata"[^>]*>([\s\S]*?)<\/metadata>/
+    .exec(fs.readFileSync(svgPath, 'utf8'))[1]
+    .replaceAll('&quot;', '"').replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&amp;', '&');
+  const item = JSON.parse(metadata).items[0];
+  const trnf = item.biologicalFeatures.find((feature) => (
+    feature.type === 'tRNA' && (feature.qualifiers?.product || []).includes('tRNA-Phe')
+  ));
+  const trnfId = item.features.find((feature) => feature.biologicalFeatureId === trnf.biologicalFeatureId).svgId;
+  await page.goto(pathToFileURL(svgPath).href);
+  await page.getByRole('button', { name: 'Expand feature search' }).click();
+  const query = page.locator('[data-search-query]');
+  const count = page.locator('[data-search-count]');
+  const popup = page.locator('#gbdraw-feature-popup');
+
+  // Enter searches as the Search button does (FL-08); a second Enter opens the active match.
+  await query.fill('CYTB');
+  await query.press('Enter');
+  await expect(count).toHaveText('1 / 1 features');
+  await query.press('Enter');
+  await expect(popup.locator('.gfi-title')).toHaveText('cytochrome b');
+  await expect(popup.locator('.gfi-content')).toContainText('Protein IDYP_003024038.1');
+  await popup.locator('[data-close]').click();
+  // Enter on a focused button presses that button.
+  await page.locator('[data-search-clear]').focus();
+  await page.keyboard.press('Enter');
+  // The bar's inputs are XHTML in an SVG document, which toHaveValue does not read.
+  await expect.poll(() => query.evaluate((input) => input.value)).toBe('');
+  await expect(count).toHaveText('0 / 37 features');
+  await expect(popup).toBeHidden();
+
+  // The Qualifier key input takes a row of the bar, and the bar shows all of its rows (FL-09).
+  await page.locator('[data-search-field]').selectOption('qualifier-value');
+  const qualifier = page.locator('[data-search-qualifier]');
+  const fit = await qualifier.evaluate((input) => {
+    const controls = input.closest('foreignObject');
+    const bar = input.closest('.gfs');
+    return {
+      share: input.getBoundingClientRect().width / bar.getBoundingClientRect().width,
+      overflow: bar.scrollHeight - Number(controls.getAttribute('height'))
+    };
+  });
+  expect(fit.share).toBeGreaterThan(0.9);
+  expect(fit.overflow).toBeLessThanOrEqual(0);
+  await qualifier.fill('product');
+  await query.fill('tRNA-Phe');
+  await qualifier.press('Enter');
+  await expect(count).toHaveText('1 / 1 features');
+  await page.locator('[data-search-clear]').click();
+
+  // The popup title follows the app popup: a tRNA is titled by its product, and
+  // Details has no Protein ID row without a protein_id (GX-08).
+  const point = await featurePoint(page, 'svg', trnfId);
+  expect(point).not.toBeNull();
+  await page.mouse.click(point.x, point.y);
+  await expect(popup.locator('.gfi-title')).toHaveText('tRNA-Phe');
+  await expect(popup.locator('.gfi-content')).toContainText('577..647 (+)');
+  await expect(popup.locator('.gfi-content')).not.toContainText('Protein ID');
+});
+
 test('a none Specific Table color survives Generate, Save, and Load', async ({ page }, testInfo) => {
   test.setTimeout(360000);
   page.on('dialog', (dialog) => dialog.dismiss());

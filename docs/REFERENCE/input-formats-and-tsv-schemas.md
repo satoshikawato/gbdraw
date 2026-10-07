@@ -205,7 +205,8 @@ also accept their documented header row.
 | Feature visibility | `record_id`, `feature_type`, `qualifier`, `value`, `action` |
 
 In every table in the list above, a line whose first non-blank character is `#`
-is a comment. A `#` after other text is
+is a comment, and a line of only tabs and spaces is blank; both are skipped, and
+error messages count every line of the file. A `#` after other text is
 part of the cell value, so `foo#bar` and `Gene #1` are read as written.
 
 These tables are not CSV: a `"` is part of the cell value and never quotes a
