@@ -46,12 +46,12 @@ import {
   normalizeCollinearAnchorMode,
   normalizeCollinearSearchScope,
   normalizeOrthogroupMembershipMode
-} from '../app/losat-normalization.js';
-import { normalizeDefinitionLineStyleState } from '../app/definition-line-style-state.js';
+} from './losat-normalization.js';
+import { normalizeDefinitionLineStyleState } from './definition-line-style-state.js';
 import {
   migrateLegacyLinearLabelVisibility,
   requireLinearLabelVisibilityMode
-} from '../app/linear-label-visibility.js';
+} from './linear-label-visibility.js';
 import { isCliInvocationSessionExportable } from '../app/run-info.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
 import { normalizeCircularPlotTitlePosition } from '../app/plot-title-position.js';
@@ -152,8 +152,8 @@ import {
 import { importSessionFile } from './session-import-client.js';
 import { convertMainSessionComparisonFrames } from './main-session-comparison-frame.js';
 import { downloadBlob } from './text-download.js';
-import { normalizeAnnotationSets } from '../app/annotations/state.js';
-import { applySpecificRuleProvenance } from '../app/specific-color-rules.js';
+import { normalizeAnnotationSets } from './annotation-state.js';
+import { applySpecificRuleProvenance } from './specific-color-rules.js';
 import { applyStrokeOverridesToSvg } from '../app/legend/stroke-actions.js';
 import { normalizeLegacyLegendEntryGroups } from './svg-result-normalization.js';
 import {
@@ -211,7 +211,7 @@ import {
   requireCurrentLinearLabelPlacement,
   requireCurrentLinearTrackLayout,
   requireCurrentWebStateFieldNames
-} from '../app/current-option-values.js';
+} from './current-option-values.js';
 import {
   validateSimilarityAlignmentResetReceipt,
   CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,

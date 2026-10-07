@@ -13,7 +13,7 @@ import { parseCompositionMetadata } from '../legend-layout/composition-actions.j
 import {
   diffLegendIntents,
   SPECIFIC_COLOR_FILE_OWNER
-} from '../specific-color-rules.js';
+} from '../../services/specific-color-rules.js';
 import {
   DIAGRAM_HELPER_OPERATIONS,
   runDiagramHelperOperation

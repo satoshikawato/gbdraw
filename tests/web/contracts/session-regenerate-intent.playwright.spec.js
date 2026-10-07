@@ -1160,7 +1160,7 @@ const expectSvgEquivalent = (left, right, label) => {
 const applyDivergentDraft = async (page) => evaluateWithRetainedPromise(page, async () => {
   const { state } = await import('/gbdraw/web/js/state.js');
   const { normalizePaletteColors } = await import('/gbdraw/web/js/utils/color-utils.js');
-  const { createAnnotationSet } = await import('/gbdraw/web/js/app/annotations/state.js');
+  const { createAnnotationSet } = await import('/gbdraw/web/js/services/annotation-state.js');
   const app = window.__GBDRAW_APP__;
   const history = window.__GBDRAW_HISTORY__;
   state.autoLabelReflowEnabled.value = false;

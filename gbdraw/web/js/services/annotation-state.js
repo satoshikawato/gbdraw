@@ -1,9 +1,10 @@
 // @ts-check
-import { diagnosticError } from '../../utils/error-normalization.js';
-import { featureIdentityKeyOf, rowBelongsToRequest } from '../../services/feature-placement.js';
+import { diagnosticError } from '../utils/error-normalization.js';
+import { featureIdentityKeyOf, rowBelongsToRequest } from './feature-placement.js';
 
 /**
- * @import { AnnotationRecordSelector } from './target-actions.js'
+ * A record named by a target: a 0-based position or a record ID.
+ * @typedef {{ kind: 'recordId', value: string } | { kind: 'recordIndex', index: number }} AnnotationRecordSelector
  */
 
 /**

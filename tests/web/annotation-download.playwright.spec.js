@@ -61,7 +61,7 @@ for (const width of [1440, 390]) {
     await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending, null, { timeout: 180000 });
     expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(1);
     await page.evaluate(async () => {
-      const { normalizeAnnotationSets } = await import('./js/app/annotations/state.js');
+      const { normalizeAnnotationSets } = await import('./js/services/annotation-state.js');
       const { coordinateTarget, featureTarget } = await import('./js/app/annotations/target-actions.js');
       const app = window.__GBDRAW_APP__;
       app.annotationSets.splice(0, app.annotationSets.length, ...normalizeAnnotationSets([

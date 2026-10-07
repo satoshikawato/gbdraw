@@ -1,7 +1,7 @@
 // @ts-check
-import { escapeRegexLiteral } from '../../services/feature-selector.js';
-import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
-import { normalizeTsvCell } from '../../utils/tsv-cell.js';
+import { escapeRegexLiteral } from './feature-selector.js';
+import { recordStructuralMetric } from './runtime-test-hooks.js';
+import { normalizeTsvCell } from '../utils/tsv-cell.js';
 
 const LABEL_OVERRIDE_COLUMN_COUNT = 5;
 const PRIMARY_HEADER = ['record_id', 'feature_type', 'qualifier', 'value', 'label_text'];

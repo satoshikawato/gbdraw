@@ -132,7 +132,7 @@ import {
   formatRecordLength,
   resolveCircularRequestRecordSet,
   resolveDisambiguatedRecordSelection
-} from './record-options.js';
+} from '../services/record-options.js';
 import {
   linearRecordLayoutHasSharedRow,
   linearRecordPositionTokens,
@@ -140,12 +140,12 @@ import {
   planLinearSourceRowMove,
   reconcileLinearRecordLayout,
   setLinearRecordRow as updateLinearRecordRow
-} from './linear-record-layout.js';
+} from '../services/linear-record-layout.js';
 import {
   describeLinearLabelVisibility,
   requireLinearLabelVisibilityMode,
   resolveLinearLabelVisibility
-} from './linear-label-visibility.js';
+} from '../services/linear-label-visibility.js';
 import {
   LINEAR_COMPARISON_MODES,
   LINEAR_COMPARISON_SOURCES,

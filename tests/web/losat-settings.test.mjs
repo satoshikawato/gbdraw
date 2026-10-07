@@ -35,7 +35,7 @@ const tempNormalizationPath = join(tempDir, 'losat-normalization.mjs');
 const source = await readFile(new URL('losat-settings.js', sourceRoot), 'utf8');
 await writeFile(
   tempModulePath,
-  source.replace("./losat-normalization.js", "./losat-normalization.mjs")
+  source.replace("../services/losat-normalization.js", "./losat-normalization.mjs")
     .replace("./linear-comparisons.js", new URL("linear-comparisons.js", sourceRoot).href)
     .replace("./linear-sources.js", new URL("linear-sources.js", sourceRoot).href)
     .replace("../services/losat-thread-plan.js", new URL("../services/losat-thread-plan.js", sourceRoot).href)
@@ -43,7 +43,7 @@ await writeFile(
 );
 await writeFile(
   tempNormalizationPath,
-  await readFile(new URL('losat-normalization.js', sourceRoot), 'utf8')
+  await readFile(new URL('../services/losat-normalization.js', sourceRoot), 'utf8')
 );
 
 const { createLosatSettings } = await import(pathToFileURL(tempModulePath));

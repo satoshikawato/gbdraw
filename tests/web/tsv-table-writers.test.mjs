@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 const jsRoot = join(process.cwd(), 'gbdraw', 'web', 'js');
 const { normalizeTsvCell } = await import(pathToFileURL(join(jsRoot, 'utils', 'tsv-cell.js')));
 const { serializeLabelWhitelistRules, serializeQualifierPriorityRules } = await import(
-  pathToFileURL(join(jsRoot, 'app', 'file-imports.js'))
+  pathToFileURL(join(jsRoot, 'services', 'file-imports.js'))
 );
 
 test('a TSV cell never carries a tab or line break and is trimmed', () => {

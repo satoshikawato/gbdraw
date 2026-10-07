@@ -9,7 +9,7 @@ import {
   getVisibleFeatureLegendGroup,
   isCurrentLegendHorizontal
 } from './legend/utils.js';
-import { legendRowRules } from './specific-color-rules.js';
+import { legendRowRules } from '../services/specific-color-rules.js';
 
 /**
  * @typedef {object} LegendManagerOptions

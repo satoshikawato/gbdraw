@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
 const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'preview-runtime.js');
-const featureDomSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-dom.js');
+const featureDomSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'feature-dom.js');
 const legendUtilsSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'legend', 'utils.js');
 const legendTransformSourcePath = join(
   repoRoot,
@@ -33,7 +33,7 @@ await mkdir(join(tempDir, 'app', 'legend'), { recursive: true });
 await mkdir(join(tempDir, 'app', 'legend-layout'), { recursive: true });
 await mkdir(join(tempDir, 'services'), { recursive: true });
 await writeFile(join(tempDir, 'app', 'preview-runtime.js'), await readFile(sourcePath, 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'app', 'feature-dom.js'), await readFile(featureDomSourcePath, 'utf8'), 'utf8');
+await writeFile(join(tempDir, 'services', 'feature-dom.js'), await readFile(featureDomSourcePath, 'utf8'), 'utf8');
 await writeFile(
   join(tempDir, 'app', 'legend', 'utils.js'),
   await readFile(legendUtilsSourcePath, 'utf8'),

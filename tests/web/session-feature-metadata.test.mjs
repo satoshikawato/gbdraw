@@ -23,8 +23,8 @@ const copyModule = async (sourceRelative, targetRelative) => {
 
 await copyModule('gbdraw/web/js/app/session-feature-metadata.js', 'app/session-feature-metadata.js');
 await copyModule('gbdraw/web/js/app/feature-metadata-extraction.js', 'app/feature-metadata-extraction.js');
-await copyModule('gbdraw/web/js/app/losat-normalization.js', 'app/losat-normalization.js');
-await copyModule('gbdraw/web/js/app/feature-dom.js', 'app/feature-dom.js');
+await copyModule('gbdraw/web/js/services/losat-normalization.js', 'services/losat-normalization.js');
+await copyModule('gbdraw/web/js/services/feature-dom.js', 'services/feature-dom.js');
 await copyModule('gbdraw/web/js/app/legend/utils.js', 'app/legend/utils.js');
 await copyModule(
   'gbdraw/web/js/app/legend-layout/transform-utils.js',

@@ -30,7 +30,7 @@ const { migrateLegacyOrthogroupMembers } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'legacy-similarity-alignment.js'))
 );
 const { linearRecordLayoutHasSharedRow, reconcileLinearRecordLayout } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'app', 'linear-record-layout.js'))
+  pathToFileURL(join(tempRoot, 'js', 'services', 'linear-record-layout.js'))
 );
 const {
   createDefaultLinearComparisonPlan,

@@ -3,11 +3,11 @@ import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { ruleMatchesFeature, firstMatchingRule, ruleMatchesReady, runWhenPrepared } from '../rule-matching.js';
 import { resolveColorToHex } from '../../utils/color-utils.js';
-import { parseSpecificRules, serializeSpecificRules } from '../file-imports.js';
+import { parseSpecificRules, serializeSpecificRules } from '../../services/file-imports.js';
 import { getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
   buildLegendIntents, createRuleLegendCaptions, legendRowRules, rendererLegendRows, ruleLegendCaption
-} from '../specific-color-rules.js';
+} from '../../services/specific-color-rules.js';
 import { resolveFeatureLabelSelector } from '../../services/feature-selector.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import {

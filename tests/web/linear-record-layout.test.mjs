@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-linear-layout-'));
 await cp(
-  join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'linear-record-layout.js'),
+  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'linear-record-layout.js'),
   join(tempRoot, 'linear-record-layout.js')
 );
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');

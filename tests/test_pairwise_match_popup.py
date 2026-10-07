@@ -68,7 +68,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
     )
     losat_normalization_path = tmp_path / "losat-normalization.mjs"
     losat_normalization_path.write_text(
-        (WEB_ROOT / "js" / "app" / "losat-normalization.js").read_text(encoding="utf-8"),
+        (WEB_ROOT / "js" / "services" / "losat-normalization.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     feature_identity_path = tmp_path / "feature-identity.mjs"
@@ -84,7 +84,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .replace("../services/feature-utils.js", "./feature-utils.mjs")
         .replace("../services/feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
         .replace("./match-sequences.js", "./match-sequences.mjs")
-        .replace("./losat-normalization.js", "./losat-normalization.mjs")
+        .replace("../services/losat-normalization.js", "./losat-normalization.mjs")
         .replace("../services/feature-identity.js", "./feature-identity.mjs")
         + "\nexport { buildFallbackOrthogroupWithContext, createPairwisePayloadContext, featureOrthogroupIdStatus, getOrthogroupById, integerAttr };\n",
         encoding="utf-8",

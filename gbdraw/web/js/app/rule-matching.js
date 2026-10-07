@@ -1,5 +1,5 @@
 // @ts-check
-import { normalizeSpecificRule } from './specific-color-rules.js';
+import { normalizeSpecificRule } from '../services/specific-color-rules.js';
 import { normalizeFeatureSelectorMetadata } from '../services/feature-selector.js';
 import { getFeatureColorRuleHash } from '../services/feature-utils.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';

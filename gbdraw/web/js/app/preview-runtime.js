@@ -3,7 +3,7 @@ import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
   getFeatureElementIndex,
   normalizeFeatureIdentity
-} from './feature-dom.js';
+} from '../services/feature-dom.js';
 import {
   applyEditorOperationsToMountedSvg,
   getCommittedSvgResultMetadata,

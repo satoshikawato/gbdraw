@@ -22,7 +22,7 @@ const copyModule = async (sourceRelative, targetRelative) => {
 
 await copyModule('gbdraw/web/js/services/feature-utils.js', 'services/feature-utils.js');
 await copyModule('gbdraw/web/js/services/feature-sequence-fasta.js', 'services/feature-sequence-fasta.js');
-await copyModule('gbdraw/web/js/app/losat-normalization.js', 'app/losat-normalization.js');
+await copyModule('gbdraw/web/js/services/losat-normalization.js', 'services/losat-normalization.js');
 await copyModule('gbdraw/web/js/services/record-source-coordinates.js', 'services/record-source-coordinates.js');
 await copyModule('gbdraw/web/js/app/feature-search/search-core.js', 'app/feature-search/search-core.js');
 await copyModule(
