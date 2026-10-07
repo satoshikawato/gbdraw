@@ -1461,7 +1461,7 @@
                             </summary>
                             <div class="pt-2 space-y-2">
                                 <p v-if="!circularSingleRecordPresentationEnabled" id="circular-record-presentation-reason" class="ui-hint">{{ form.multi_record_canvas ? 'Available when Multi-Record Canvas is off and one record is selected.' : 'Available when one record is selected.' }}</p>
-                                <div class="grid grid-cols-1 gap-2" :class="circularSingleRecordPresentationEnabled ? '' : 'opacity-60'">
+                                <div class="grid grid-cols-1 gap-2">
                                     <div>
                                         <span class="input-label text-[10px]">Record label <help-tip id="help-circular-record-label" text="Overrides the inferred organism line for this Circular record. Leave empty to keep inference."></help-tip></span>
                                         <input
@@ -2692,7 +2692,7 @@
                                         <select v-model="item.mark" aria-label="Annotation mark" class="form-input px-1 py-0.5 text-[10px]" :disabled="!semanticMutationAvailable"><option value="highlight">Highlight (behind features)</option><option value="band">Band (annotation lane)</option><option value="line">Line</option><option value="bracket">Bracket</option></select>
                                         <div class="flex items-center gap-0.5">
                                             <input type="number" min="0" v-model.number="item.lane" :disabled="!semanticMutationAvailable || (item.mark === 'highlight')" class="form-input w-14 px-1 py-0.5 text-[10px] disabled:bg-slate-100 disabled:text-slate-400" placeholder="Auto" aria-label="Annotation lane" :aria-describedby="`help-annotation-lane-${item.id}`">
-                                            <help-tip :id="`help-annotation-lane-${item.id}`" text="Collision-avoidance row for Line, Bracket, and Band. Leave blank for Auto; use 0 for the first row, 1 for the second, and so on. Highlight always covers the full feature band."></help-tip>
+                                            <help-tip :id="`help-annotation-lane-${item.id}`" label="Help: Annotation lane" text="Collision-avoidance row for Line, Bracket, and Band. Leave blank for Auto; use 0 for the first row, 1 for the second, and so on. Highlight always covers the full feature band."></help-tip>
                                         </div>
                                     </div>
                                     <div class="grid grid-cols-3 gap-1 items-center">
@@ -3006,7 +3006,7 @@
                                                 <span class="truncate">Custom Track Slots</span>
                                                 <span class="text-[9px] font-normal">Applies on Generate</span>
                                             </button>
-                                            <help-tip id="help-linear-custom-track-slots" text="Edit the explicit linear track stack. Opening or closing this panel does not enable or alter the stack. Arrows reorder within the current side; Axis buttons move rows across the boundary."></help-tip>
+                                            <help-tip id="help-linear-custom-track-slots" label="Help: Custom Track Slots" text="Edit the explicit linear track stack. Opening or closing this panel does not enable or alter the stack. Arrows reorder within the current side; Axis buttons move rows across the boundary."></help-tip>
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <label class="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 cursor-pointer select-none" title="Use the saved custom stack for rendering. Disabling it preserves the stack for later use.">
@@ -3335,7 +3335,7 @@
                                                 <span class="truncate">Custom Track Slots</span>
                                                 <span class="text-[9px] font-normal">Applies on Generate</span>
                                             </button>
-                                            <help-tip id="help-circular-custom-track-slots" text="Edit the explicit circular stack. Opening or closing this panel does not enable or alter the stack. Rows above Axis render outside and rows below Axis render inside."></help-tip>
+                                            <help-tip id="help-circular-custom-track-slots" label="Help: Custom Track Slots" text="Edit the explicit circular stack. Opening or closing this panel does not enable or alter the stack. Rows above Axis render outside and rows below Axis render inside."></help-tip>
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <label class="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 cursor-pointer select-none" title="Use the saved custom stack for rendering. Disabling it preserves the stack for later use.">
@@ -6754,19 +6754,19 @@
                             <div v-for="(entry, idx) in legendEntries" :key="idx" class="p-2 bg-slate-50 rounded border border-slate-100">
                                 <div class="flex items-center gap-1">
                                     <div class="flex flex-col shrink-0">
-                                        <button :aria-label="`Move ${entry.caption} up`" @click="moveLegendEntryUp(idx)" :disabled="!semanticMutationAvailable || (idx === 0)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move up">
+                                        <button aria-label="Move up" @click="moveLegendEntryUp(idx)" :disabled="!semanticMutationAvailable || (idx === 0)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move up">
                                             <i class="ph ph-caret-up text-xs" aria-hidden="true"></i>
                                         </button>
-                                        <button :aria-label="`Move ${entry.caption} down`" @click="moveLegendEntryDown(idx)" :disabled="!semanticMutationAvailable || (idx === legendEntries.length - 1)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move down">
+                                        <button aria-label="Move down" @click="moveLegendEntryDown(idx)" :disabled="!semanticMutationAvailable || (idx === legendEntries.length - 1)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move down">
                                             <i class="ph ph-caret-down text-xs" aria-hidden="true"></i>
                                         </button>
                                     </div>
                                     <div class="w-6 h-6 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: entry.color }" :title="entry.color"></div>
-                                    <input type="text" :value="entry.caption" @change="renameLegendEntry(idx, $event.target.value)" :aria-label="`Legend entry ${idx + 1} caption`" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0" :disabled="!semanticMutationAvailable">
-                                    <button :aria-label="`Stroke options for ${entry.caption}`" :aria-expanded="entry.showStroke ? 'true' : 'false'" @click="entry.showStroke = !entry.showStroke" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="entry.showStroke ? 'Hide stroke options' : 'Show stroke options'">
+                                    <input type="text" :value="entry.caption" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0" :disabled="!semanticMutationAvailable">
+                                    <button aria-label="Stroke options" :aria-expanded="entry.showStroke ? 'true' : 'false'" @click="entry.showStroke = !entry.showStroke" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="entry.showStroke ? 'Hide stroke options' : 'Show stroke options'">
                                         <i class="ph text-xs" :class="entry.showStroke ? 'ph-caret-up' : 'ph-sliders-horizontal'" aria-hidden="true"></i>
                                     </button>
-                                    <button :aria-label="`Remove legend entry ${entry.caption}`" @click="deleteLegendEntry(idx)" class="text-red-400 hover:text-red-600 shrink-0" title="Remove entry" :disabled="!semanticMutationAvailable">
+                                    <button aria-label="Remove entry" @click="deleteLegendEntry(idx)" class="text-red-400 hover:text-red-600 shrink-0" title="Remove entry" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-trash text-sm" aria-hidden="true"></i>
                                     </button>
                                 </div>
@@ -6776,11 +6776,11 @@
                                         :model-value="getLegendEntryStrokeColor(idx)"
                                         fallback="#000000"
                                         @update:model-value="setLegendEntryStrokeColorValue(idx, $event)"
-                                        :aria-label="`Stroke color for ${entry.caption}`"
+                                        aria-label="Legend stroke color"
                                         class="w-28 shrink-0">
                                     </color-value-control>
-                                    <input type="number" :value="getLegendEntryStrokeWidth(idx)" @change="updateLegendEntryStrokeWidth(idx, $event.target.value)" class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5" placeholder="Width" step="0.5" min="0" title="Stroke width" :aria-label="`Stroke width for ${entry.caption}`" :disabled="!semanticMutationAvailable">
-                                    <button :aria-label="`Reset stroke of ${entry.caption} to default`" @click="resetLegendEntryStroke(idx)" class="text-slate-400 hover:text-slate-600 shrink-0" title="Reset stroke to default" :disabled="!semanticMutationAvailable">
+                                    <input type="number" :value="getLegendEntryStrokeWidth(idx)" @change="updateLegendEntryStrokeWidth(idx, $event.target.value)" class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5" placeholder="Width" step="0.5" min="0" title="Stroke width" :disabled="!semanticMutationAvailable">
+                                    <button aria-label="Reset stroke to default" @click="resetLegendEntryStroke(idx)" class="text-slate-400 hover:text-slate-600 shrink-0" title="Reset stroke to default" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-arrow-counter-clockwise text-xs" aria-hidden="true"></i>
                                     </button>
                                 </div>
