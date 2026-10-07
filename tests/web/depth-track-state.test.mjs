@@ -15,6 +15,7 @@ await writeFile(join(tempDir, 'track-slot-display.js'), await readFile(displaySo
 const {
   activeDepthTrackIndices,
   clearDepthTrackSourceAt,
+  depthSeriesLegendCaptions,
   depthTrackCoverageCount,
   depthFileSlotsFromValue,
   depthSlotTrackIndex,
@@ -169,4 +170,16 @@ console.log(`depth-track-state tests passed (${fileURLToPath(sourceUrl)})`);
   assert.equal(lost.slots[0], manual, 'kept rows keep their identity');
   const gained = reconcileManagedDepthSlots({ slots: [manual, removed], previousSourced: [], sourced: [2, 0, 1] });
   assert.deepEqual(gained.additions, [1, 2], 'a removed-series row references no series');
+}
+
+{
+  // OV-81: the captions a Depth series draws: its label and the legend label of its rows.
+  const tracks = [{ label: ' depth ' }, { label: 'Depth 2' }, { label: '' }, null];
+  const slots = [
+    { renderer: 'depth', params: { legend_label: 'Coverage' } },
+    { renderer: 'depth', enabled: false, params: { legend_label: 'depth' } },
+    { renderer: 'gc_content', params: { legend_label: 'GC content' } }
+  ];
+  assert.deepEqual(depthSeriesLegendCaptions({ depthTracks: tracks, slots }), ['depth', 'Depth 2', 'Coverage']);
+  assert.deepEqual(depthSeriesLegendCaptions(), []);
 }
