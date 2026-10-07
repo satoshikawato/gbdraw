@@ -599,7 +599,15 @@ test('right drawer availability and transitions have one production owner', () =
     ...occurrenceOwners(/\b(?:showRightDrawer|rightDrawerTab)\.value\s*=(?!=)/g).keys()
   ];
 
-  assert.deepEqual(transitionOwners, ['app/right-drawer.js']);
+  // Exactly one module writes the drawer state. R13 layering slice S8 moves the
+  // state functions from app/right-drawer.js to services/right-drawer-state.js
+  // and leaves the controller in app/right-drawer.js; until the POST layering
+  // guard pins the new path, either path may be the one owner.
+  assert.equal(transitionOwners.length, 1, `right drawer transitions have one owner: ${JSON.stringify(transitionOwners)}`);
+  assert.ok(
+    ['app/right-drawer.js', 'services/right-drawer-state.js'].includes(transitionOwners[0]),
+    `right drawer transitions are owned by a known module: ${JSON.stringify(transitionOwners)}`
+  );
   assert.deepEqual(
     occurrenceOwners(/\b(?:showFeaturePanel|showLegendPanel)\b/g),
     new Map()
