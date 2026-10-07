@@ -1471,11 +1471,17 @@ def _coerce_resolved_collection(
     return ResolvedRecordCollection(records, tuple(provenance))
 
 
+def resolve_request_records(request: DiagramRequest) -> ResolvedRecordCollection:
+    """Load the records ``request`` draws, with the provenance of each."""
+
+    # Every request mode loads its records the same way.
+    return _load_request_records(cast(Any, request), _prepare_diagram_inputs(request))[1]
+
+
 def normalize_request_records(request: DiagramRequest) -> tuple[SeqRecord, ...]:
     """Resolve typed record inputs according to their explicit cardinality."""
 
-    # Every request mode loads its records the same way.
-    return _load_request_records(cast(Any, request), _prepare_diagram_inputs(request))[1].records
+    return resolve_request_records(request).records
 
 
 def _materialized_record_inputs(

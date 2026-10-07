@@ -128,6 +128,7 @@ Use `render_session()` for a supported saved session and
 | `with_request_output()` | replace output settings without mutating the request |
 | `render_session()` | migrate supported persisted state and replay one drawing's request plus saved analysis artifacts |
 | `render_session_drawings()` | render several drawings together, with distinct output names |
+| `derive_region_drawing()` | derive a new drawing of selected regions from a materialized session |
 
 `build_session_document()` and `save_session_document()` accept optional
 `title` and `created_at` values. If `created_at` is omitted, the writer records
@@ -135,6 +136,38 @@ the current UTC save time. A fixed timestamp can make a test fixture
 byte-reproducible; it does not make a replay universally reproducible.
 
 Materialized paths expire when the materialization context closes. `session_to_request()` followed by `render_request()` renders only the decoded typed request; use `render_session()` when saved comparison artifacts must also be replayed.
+
+`derive_region_drawing(materialized, regions)` returns a `RegionDrawing`. Its
+source is the session's only drawing, or the drawing that `drawing=` names by
+ID or name, as in `session_to_request()`. Each
+`RegionSelection(record_key, start, end)` names a record of the source drawing
+and a region in source coordinates (1-based, inclusive); give at most one
+region per record. `drawing` in the result is a `SessionDrawingSpec` for
+`build_session_document(drawings=...)`, and `drawing.request` draws the same
+files cut to those regions, in source order. The current Session version names
+each drawing by its mode, so it cannot write a `name` other than `Linear` or
+`Circular`. It keeps the drawing's settings, colors and rules,
+label tables, and the per-feature edits, placements, annotations, and Depth
+inside the regions:
+
+- `margin` adds bases on each side, clamped to the record ends.
+- The mode is Linear, or the source's mode for one whole record. `mode` can
+  choose Circular for one record; a Circular region is drawn as a closed
+  circle numbered from 1.
+- Each record keeps its orientation unless `reverse_complement` is given.
+- A region whose start is after its end (one that crosses the origin of a
+  circular record) is refused.
+- A size you set (label font, stroke and axis widths, feature height, track
+  widths, windows, tick interval, tick fonts) is kept only when its Auto value
+  is the same at the new length and mode. Otherwise it returns to Auto and is
+  listed in `adaptation.reset` with both Auto values. Pass `adapt_sizes=False`
+  to keep every size.
+- Comparison tables and ring tables are not carried, because they use the
+  coordinates of the whole records. A LOSAT search runs again on the new
+  records. `dropped` lists every setting or item that was not carried.
+
+The request reads the materialized files, so build or render it before the
+materialization context closes.
 
 Session conversion rejects values from the wrong mode. For example, a Circular
 request containing Linear track values raises `SessionConversionError`.

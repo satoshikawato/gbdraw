@@ -183,6 +183,11 @@ write-up of a release.
   drawing gets a warning that names every dropped Result, also logged.
   Session 46 holds at most one Circular and one Linear drawing, named by their
   mode.
+- Python API: `gbdraw.api.derive_region_drawing()` derives a new drawing of
+  selected regions (`RegionSelection`) from a materialized Session. It keeps the
+  drawing's look for those records, refuses regions that cross the origin, and
+  returns a size you set to Auto only when its Auto value changes at the new
+  length and mode (`adaptation.reset` lists each one).
 - Legend colors (web app): Generate no longer fails with "The generated result could
   not be accepted" after a color or stroke is set on a row added in the Legend editor,
   in Linear and Circular. The added row is drawn with its color and stroke after

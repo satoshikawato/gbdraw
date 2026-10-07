@@ -105,20 +105,22 @@ _MODE_CONFIG_OVERRIDE_PREFIXES: dict[DiagramMode, tuple[str, ...]] = {
 }
 
 
+def config_override_mode(path: str) -> DiagramMode | None:
+    """Return the only mode that draws config override ``path``; None when both do."""
+    for mode, prefixes in _MODE_CONFIG_OVERRIDE_PREFIXES.items():
+        if any(path == prefix or path.startswith(f"{prefix}.") for prefix in prefixes):
+            return mode
+    return None
+
+
 def _validate_mode_config_overrides(
     overrides: Mapping[str, object] | None,
     *,
     mode: DiagramMode,
 ) -> None:
     other_mode: DiagramMode = "linear" if mode == "circular" else "circular"
-    other_prefixes = _MODE_CONFIG_OVERRIDE_PREFIXES[other_mode]
     wrong_paths = sorted(
-        path
-        for path in (overrides or {})
-        if any(
-            path == prefix or path.startswith(f"{prefix}.")
-            for prefix in other_prefixes
-        )
+        path for path in (overrides or {}) if config_override_mode(path) == other_mode
     )
     if not wrong_paths:
         return

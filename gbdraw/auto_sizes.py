@@ -244,10 +244,85 @@ def auto_setting_values(
     return values
 
 
+@dataclass(frozen=True)
+class SettingReset:
+    """A hand-set size that returns to Auto because its Auto value differs.
+
+    An Auto value of ``None`` means that drawing's mode does not draw the setting.
+    """
+
+    setting: str
+    explicit: AutoValue
+    source_auto: AutoValue | None
+    target_auto: AutoValue | None
+
+
+@dataclass(frozen=True)
+class SettingAdaptation:
+    """The hand-set sizes a new drawing keeps, and those that return to Auto."""
+
+    kept: Mapping[str, AutoValue]
+    reset: tuple[SettingReset, ...]
+
+
+def adapt_explicit_settings(
+    explicit: Mapping[str, AutoValue],
+    *,
+    source: DrawnExtent,
+    target: DrawnExtent,
+    cfg: GbdrawConfig,
+) -> SettingAdaptation:
+    """Keep a hand-set size only where its Auto value is the same in ``target``.
+
+    ``explicit`` is keyed as ``auto_setting_values`` is. A setting whose Auto
+    value changes with the size class, a tier or the mode returns to Auto and
+    is listed in ``reset``; the other sizes are listed in ``kept``. A value
+    that neither drawing lists is not a size and is in neither. The tick fonts
+    are compared at the track thickness each drawing ends with.
+    """
+
+    def thickness(mode: DiagramMode, values: Mapping[str, AutoValue]) -> dict[str, float]:
+        return {
+            track: float(values[setting])
+            for track, setting in _TRACK_THICKNESS_SETTINGS[mode].items()
+            if setting in values
+        }
+
+    source_auto = auto_setting_values(
+        source, cfg, track_thickness_px=thickness(source.mode, explicit)
+    )
+    target_auto = auto_setting_values(target, cfg)
+    unchanged = {
+        setting: value
+        for setting, value in explicit.items()
+        if source_auto.get(setting) == target_auto.get(setting)
+    }
+    # The thickness settings never depend on a thickness, so this pass only
+    # moves the tick fonts to the thickness the target keeps.
+    target_auto = auto_setting_values(
+        target, cfg, track_thickness_px=thickness(target.mode, unchanged)
+    )
+    kept: dict[str, AutoValue] = {}
+    reset: list[SettingReset] = []
+    for setting, value in explicit.items():
+        if setting not in source_auto and setting not in target_auto:
+            continue
+        if source_auto.get(setting) == target_auto.get(setting):
+            kept[setting] = value
+        else:
+            reset.append(
+                SettingReset(setting, value, source_auto.get(setting), target_auto.get(setting))
+            )
+    return SettingAdaptation(kept=kept, reset=tuple(reset))
+
+
 __all__ = [
     "AutoValue",
     "DrawnExtent",
+    "SettingAdaptation",
+    "SettingReset",
     "SizeClass",
+    "adapt_explicit_settings",
     "auto_setting_values",
     "circular_tick_intervals",
     "circular_track_width_px",
