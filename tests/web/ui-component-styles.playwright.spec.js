@@ -8,6 +8,9 @@
 // disclosure open.
 // G02 (UI-06): hints use .ui-hint; every visible text in the settings pane is 11 px or
 // more and reaches 4.5:1 on its own background (icons of icon-only buttons 3:1).
+// G03 (UI-13, TK-11): the pane does not scroll sideways or leave a gap above the
+// Generate bar, the Custom Track Slots title is not cut, and no track-row control
+// overlaps another or leaves its row.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
@@ -176,6 +179,40 @@ const measure = async (page) => {
         .map(({ button, value }) => `${value.toFixed(2)} ${button.getAttribute('aria-label') || button.className}`);
       return { smallText: small, faintText: faint, faintIcons };
     };
+    const auditPaneLayout = () => {
+      const scroll = document.querySelector('.settings-scroll');
+      const bar = document.querySelector('.generate-bar');
+      const shown = (element) => element.checkVisibility({ visibilityProperty: true, opacityProperty: true })
+        && element.getClientRects().length > 0;
+      const CONTROLS = 'input:not([type="hidden"]), select, textarea, button';
+      // Track-row controls stay inside their row and apart from each other (TK-11).
+      const rowProblems = [];
+      for (const row of document.querySelectorAll('[data-capture^="circular-track-slot-"]')) {
+        if (!shown(row)) continue;
+        const box = row.getBoundingClientRect();
+        const name = (control) => control.getAttribute('aria-label') || control.getAttribute('title') || control.type;
+        const controls = Array.from(row.querySelectorAll(CONTROLS)).filter(shown)
+          .map((control) => ({ control, rect: control.getBoundingClientRect() }));
+        for (const { control, rect } of controls) {
+          if (rect.left < box.left - 0.5 || rect.right > box.right + 0.5) rowProblems.push(`${row.dataset.capture}: ${name(control)} leaves the row`);
+        }
+        controls.forEach((a, i) => controls.slice(i + 1).forEach((b) => {
+          const width = Math.min(a.rect.right, b.rect.right) - Math.max(a.rect.left, b.rect.left);
+          const height = Math.min(a.rect.bottom, b.rect.bottom) - Math.max(a.rect.top, b.rect.top);
+          if (width > 1 && height > 1) rowProblems.push(`${row.dataset.capture}: ${name(a.control)} overlaps ${name(b.control)}`);
+        }));
+      }
+      const title = Array.from(document.querySelectorAll('button[aria-controls="circular-custom-track-slots-panel"] span'))
+        .find((span) => span.textContent.trim() === 'Custom Track Slots');
+      const fixedBar = getComputedStyle(bar).position === 'fixed' && getComputedStyle(scroll).overflowY === 'auto';
+      return {
+        rowProblems,
+        paneOverflowX: scroll.scrollWidth - scroll.clientWidth,
+        titleCut: title ? title.scrollWidth - title.clientWidth : null,
+        // Space between the end of the scrolling settings and the fixed Generate bar (desktop layout).
+        barGap: fixedBar ? Math.round(bar.getBoundingClientRect().top - scroll.getBoundingClientRect().bottom) : null
+      };
+    };
     const NON_TEXT = new Set(['checkbox', 'radio', 'range', 'color', 'file', 'button', 'submit', 'reset', 'image']);
     const visible = (element) => element.checkVisibility({ visibilityProperty: true })
       && element.getClientRects().length > 0;
@@ -204,6 +241,7 @@ const measure = async (page) => {
       groupHeadings: level('.settings-scroll h4'),
       fieldLabels: level('.settings-scroll .input-label'),
       ...auditSettingsPane(),
+      ...auditPaneLayout(),
       hints: all('.settings-scroll .ui-hint').map((element) => {
         const style = getComputedStyle(element);
         return {
@@ -251,6 +289,14 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
       expect.soft(result.smallText, 'text under 11 px').toEqual([]);
       expect.soft(result.faintText, 'text under 4.5:1').toEqual([]);
       expect.soft(result.faintIcons, 'icon-only buttons under 3:1').toEqual([]);
+      // 6. Layout (UI-13, TK-11).
+      expect.soft(result.paneOverflowX, 'settings pane horizontal overflow').toBeLessThanOrEqual(0);
+      expect.soft(result.titleCut, 'Custom Track Slots title cut').toBe(0);
+      if (result.barGap !== null) {
+        expect.soft(result.barGap, 'gap above the Generate bar').toBeGreaterThanOrEqual(0);
+        expect.soft(result.barGap, 'gap above the Generate bar').toBeLessThanOrEqual(8);
+      }
+      expect.soft(result.rowProblems, 'track-row controls').toEqual([]);
     });
   });
 }

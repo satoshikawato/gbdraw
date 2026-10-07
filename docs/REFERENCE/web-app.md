@@ -255,9 +255,9 @@ the restored draft. Invalid drafts cannot be saved as valid Sessions.
 
 **Use custom stack** draws the saved stack. Turning it on for the first time
 uses the saved default stack as it is, including its **Ticks** row. **Reset**
-and **Reset to Tuckin**, **Reset to Middle**, or **Reset to Spreadout** rebuild
-the stack from **Show Coordinate Scale**, **Hide GC Content**, **Hide GC Skew**,
-and the loaded Depth series.
+and, in Circular, the **Tuckin**, **Middle**, or **Spreadout** button under
+**Reset to preset** rebuild the stack from **Show Coordinate Scale**,
+**Hide GC Content**, **Hide GC Skew**, and the loaded Depth series.
 
 Depth rows follow Depth files the same way in Circular and Linear. When a
 logical Depth series gets its first file, the stack gains one Depth row for it,

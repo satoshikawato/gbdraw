@@ -1259,7 +1259,11 @@
             bottom: 2rem;
             width: var(--settings-pane-width);
         }
-        .settings-scroll { margin-bottom: 10rem; }
+        /* Room for the fixed Generate bar (UI-13): the bar is 102 px tall and sits 2rem above the viewport
+           bottom, 0.75rem below the pane's bottom edge, so it covers the pane's last 90 px; 4 px more keeps a
+           seam. A layout warning above the button (up to two lines) makes the bar about 63 px taller. */
+        .settings-scroll { margin-bottom: 5.875rem; }
+        .settings-pane:has(.generate-bar > div) .settings-scroll { margin-bottom: 9.875rem; }
 
         .result-pane:has(.alignment-review-compact) {
             height: auto !important;
@@ -3000,23 +3004,25 @@
                                     </div>
                                 </div>
                                 <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
-                                    <div class="flex items-center justify-between gap-2">
-                                        <div class="inline-flex min-w-0 items-center gap-1 text-xs font-semibold">
-                                            <button
-                                                type="button"
-                                                class="inline-flex min-w-0 items-center gap-1 text-left select-none"
-                                                :class="linearTrackSlotsPanelOpen ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'"
-                                                :aria-expanded="linearTrackSlotsPanelOpen ? 'true' : 'false'"
-                                                aria-controls="linear-custom-track-slots-panel"
-                                                aria-describedby="help-linear-custom-track-slots"
-                                                :title="linearTrackSlotsPanelOpen ? 'Close Custom Track Slots' : 'Open Custom Track Slots'"
-                                                @click="toggleLinearTrackSlotsPanel"
-                                            >
-                                                <i class="ph" :class="linearTrackSlotsPanelOpen ? 'ph-caret-down' : 'ph-caret-right'" aria-hidden="true"></i>
-                                                <span class="truncate">Custom Track Slots</span>
-                                                <span class="text-[9px] font-normal">Applies on Generate</span>
-                                            </button>
-                                            <help-tip id="help-linear-custom-track-slots" text="Edit the explicit linear track stack. Opening or closing this panel does not enable or alter the stack. Arrows reorder within the current side; Axis buttons move rows across the boundary."></help-tip>
+                                    <div class="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+                                        <div class="min-w-0">
+                                            <div class="inline-flex min-w-0 max-w-full items-center gap-1 text-xs font-semibold">
+                                                <button
+                                                    type="button"
+                                                    class="inline-flex min-w-0 items-center gap-1 text-left select-none"
+                                                    :class="linearTrackSlotsPanelOpen ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'"
+                                                    :aria-expanded="linearTrackSlotsPanelOpen ? 'true' : 'false'"
+                                                    aria-controls="linear-custom-track-slots-panel"
+                                                    aria-describedby="linear-custom-track-slots-timing help-linear-custom-track-slots"
+                                                    :title="linearTrackSlotsPanelOpen ? 'Close Custom Track Slots' : 'Open Custom Track Slots'"
+                                                    @click="toggleLinearTrackSlotsPanel"
+                                                >
+                                                    <i class="ph" :class="linearTrackSlotsPanelOpen ? 'ph-caret-down' : 'ph-caret-right'" aria-hidden="true"></i>
+                                                    <span class="truncate">Custom Track Slots</span>
+                                                </button>
+                                                <help-tip id="help-linear-custom-track-slots" text="Edit the explicit linear track stack. Opening or closing this panel does not enable or alter the stack. Arrows reorder within the current side; Axis buttons move rows across the boundary."></help-tip>
+                                            </div>
+                                            <p id="linear-custom-track-slots-timing" class="ui-hint">Applies on Generate</p>
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <label class="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 cursor-pointer select-none" title="Use the saved custom stack for rendering. Disabling it preserves the stack for later use.">
@@ -3327,23 +3333,25 @@
                                 </div>
 
                                 <div class="bg-slate-50 p-2 rounded border border-slate-200 space-y-2">
-                                    <div class="flex items-center justify-between gap-2">
-                                        <div class="inline-flex min-w-0 items-center gap-1 text-xs font-semibold">
-                                            <button
-                                                type="button"
-                                                class="inline-flex min-w-0 items-center gap-1 text-left select-none"
-                                                :class="circularTrackSlotsPanelOpen ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'"
-                                                :aria-expanded="circularTrackSlotsPanelOpen ? 'true' : 'false'"
-                                                aria-controls="circular-custom-track-slots-panel"
-                                                aria-describedby="help-circular-custom-track-slots"
-                                                :title="circularTrackSlotsPanelOpen ? 'Close Custom Track Slots' : 'Open Custom Track Slots'"
-                                                @click="toggleCircularTrackSlotsPanel"
-                                            >
-                                                <i class="ph" :class="circularTrackSlotsPanelOpen ? 'ph-caret-down' : 'ph-caret-right'" aria-hidden="true"></i>
-                                                <span class="truncate">Custom Track Slots</span>
-                                                <span class="text-[9px] font-normal">Applies on Generate</span>
-                                            </button>
-                                            <help-tip id="help-circular-custom-track-slots" text="Edit the explicit circular stack. Opening or closing this panel does not enable or alter the stack. Rows above Axis render outside and rows below Axis render inside."></help-tip>
+                                    <div class="flex flex-wrap items-start justify-between gap-x-2 gap-y-1">
+                                        <div class="min-w-0">
+                                            <div class="inline-flex min-w-0 max-w-full items-center gap-1 text-xs font-semibold">
+                                                <button
+                                                    type="button"
+                                                    class="inline-flex min-w-0 items-center gap-1 text-left select-none"
+                                                    :class="circularTrackSlotsPanelOpen ? 'text-blue-600' : 'text-slate-700 hover:text-blue-600'"
+                                                    :aria-expanded="circularTrackSlotsPanelOpen ? 'true' : 'false'"
+                                                    aria-controls="circular-custom-track-slots-panel"
+                                                    aria-describedby="circular-custom-track-slots-timing help-circular-custom-track-slots"
+                                                    :title="circularTrackSlotsPanelOpen ? 'Close Custom Track Slots' : 'Open Custom Track Slots'"
+                                                    @click="toggleCircularTrackSlotsPanel"
+                                                >
+                                                    <i class="ph" :class="circularTrackSlotsPanelOpen ? 'ph-caret-down' : 'ph-caret-right'" aria-hidden="true"></i>
+                                                    <span class="truncate">Custom Track Slots</span>
+                                                </button>
+                                                <help-tip id="help-circular-custom-track-slots" text="Edit the explicit circular stack. Opening or closing this panel does not enable or alter the stack. Rows above Axis render outside and rows below Axis render inside."></help-tip>
+                                            </div>
+                                            <p id="circular-custom-track-slots-timing" class="ui-hint">Applies on Generate</p>
                                         </div>
                                         <div class="flex items-center gap-2">
                                             <label class="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 cursor-pointer select-none" title="Use the saved custom stack for rendering. Disabling it preserves the stack for later use.">
@@ -3370,10 +3378,13 @@
                                         <div v-if="!adv.circular_track_slots_enabled" class="rounded border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] text-amber-700">
                                             Custom stack is saved but inactive; generation uses the simple track controls.
                                         </div>
-                                        <div class="grid grid-cols-3 gap-1">
-                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('tuckin', $event)" title="Replace the current custom stack with the Tuckin template" :disabled="!semanticMutationAvailable">Reset to Tuckin</button>
-                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('middle', $event)" title="Replace the current custom stack with the Middle template" :disabled="!semanticMutationAvailable">Reset to Middle</button>
-                                            <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('spreadout', $event)" title="Replace the current custom stack with the Spreadout template" :disabled="!semanticMutationAvailable">Reset to Spreadout</button>
+                                        <div role="group" aria-labelledby="circular-track-preset-reset-heading">
+                                            <div id="circular-track-preset-reset-heading" class="track-slot-field-label">Reset to preset</div>
+                                            <div class="grid grid-cols-3 gap-1">
+                                                <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('tuckin', $event)" aria-label="Reset to Tuckin" title="Replace the current custom stack with the Tuckin template" :disabled="!semanticMutationAvailable">Tuckin</button>
+                                                <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('middle', $event)" aria-label="Reset to Middle" title="Replace the current custom stack with the Middle template" :disabled="!semanticMutationAvailable">Middle</button>
+                                                <button type="button" class="btn btn-secondary text-[10px] py-1 px-2" @click="resetCircularTrackSlotsToPreset('spreadout', $event)" aria-label="Reset to Spreadout" title="Replace the current custom stack with the Spreadout template" :disabled="!semanticMutationAvailable">Spreadout</button>
+                                            </div>
                                         </div>
                                         <div class="rounded border border-sky-200 bg-sky-50 px-2 py-1.5 text-[10px] leading-snug text-slate-600">
                                             <div class="flex items-center gap-1 font-semibold text-sky-800">
