@@ -961,10 +961,10 @@ for (const [mode, addDepth] of DEPTH_ADDERS) {
     expect(row?.fill.toLowerCase()).toBe('#7b2cbf');
   });
 
-  // OV-88: a Depth row renamed in the Legend is excused like an unrenamed one:
-  // its rename and the styles under the new name do not fail the Generate. As
-  // for a renamed GC row that is switched off, the Result without the row ends
-  // the rename, so the row returns under its series caption.
+  // OV-88, OV-120: a Depth row renamed in the Legend is excused like an
+  // unrenamed one: its rename and the styles under the new name do not fail the
+  // Generate. The Result without the row keeps the rename and its color dormant,
+  // so the row returns as `Coverage` in its color.
   test(`a Depth row renamed in the Legend does not fail Generate while Show Depth hides it (${mode})`, async ({ page }) => {
     test.setTimeout(120_000);
     await openCanvas(page, mode, null);
@@ -983,16 +983,16 @@ for (const [mode, addDepth] of DEPTH_ADDERS) {
     await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = true; });
     await settleLive(page);
     await generate(page);
-    expect((await semanticSnapshot(page)).legend.map(({ caption }) => caption)).toContain('depth');
+    const returned = (await semanticSnapshot(page)).legend;
+    expect(returned.map(({ caption }) => caption), 'the row returns under its rename').not.toContain('depth');
+    expect(returned.find(({ caption }) => caption === 'Coverage')?.fill.toLowerCase(), 'Coverage in its color').toBe('#7b2cbf');
   });
 }
 
-// OV-80: Legend styles are shared by both modes until the drawing model. Each mode
-// keeps its own Result (E1), and a Generate compiles only the Legend rows of its
-// own mode's Result, so a color set on one mode's Result, on a row the other mode
-// does not draw, does not fail the other mode's Generate. The color stays and
-// returns with the row. The Depth case is excused by OV-81 already (the Circular
-// request has no Depth source); it guards the case for when that changes.
+// OV-80: Legend styles belong to the drawing of their mode (PD-OI-086). A color
+// set on one mode's Result, on a row the other mode does not draw, stays in that
+// mode's drawing only, does not fail the other mode's Generate, and returns with
+// the row. Show Depth is per mode, so the Depth case returns with Depth on.
 const LOCTEST_FIXTURE = 'tests/fixtures/feature_location_search.gb';
 const switchMode = async (page, target) => {
   await page.getByRole('button', { name: target === 'linear' ? 'Linear' : 'Circular', exact: true }).click();
@@ -1024,12 +1024,10 @@ const OTHER_MODE_ROWS = [
     prepare: (page) => page.evaluate((text) => {
       const app = window.__GBDRAW_APP__;
       app.setLinearDepthFile(app.linearSeqs[0], 0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));
-    }, DEPTH_TSV),
-    // Show Depth is shared and turns off without a Circular Depth source (OV-82).
-    beforeReturn: (page) => page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = true; })
+    }, DEPTH_TSV)
   }
 ];
-for (const { name, from, linearFile = SINGLE_FIXTURE, row, prepare = null, beforeReturn = null } of OTHER_MODE_ROWS) {
+for (const { name, from, linearFile = SINGLE_FIXTURE, row, prepare = null } of OTHER_MODE_ROWS) {
   test(`a Legend color on ${name} survives the other mode's Generate (OV-80)`, async ({ page }) => {
     test.setTimeout(180_000);
     const other = from === 'linear' ? 'circular' : 'linear';
@@ -1051,15 +1049,14 @@ for (const { name, from, linearFile = SINGLE_FIXTURE, row, prepare = null, befor
     await switchMode(page, other);
     await generate(page);
     expect((await semanticSnapshot(page)).legend.map(({ caption }) => caption), `${other} draws no ${row} row`).not.toContain(row);
-    expect(await page.evaluate(async (caption) => {
+    expect(await page.evaluate(async ({ caption, own, shown }) => {
       const { state } = await import('/gbdraw/web/js/state.js');
-      return state.activeDrawing().legendColorOverrides[caption];
-    }, row), 'the color stays stored').toBe('#7b2cbf');
+      return {
+        stored: state.drawings[own].legendColorOverrides[caption] ?? null,
+        other: state.drawings[shown].legendColorOverrides[caption] ?? null
+      };
+    }, { caption: row, own: from, shown: other }), `the color stays stored in ${from} only`).toEqual({ stored: '#7b2cbf', other: null });
     await switchMode(page, from);
-    if (beforeReturn) {
-      await beforeReturn(page);
-      await settleLive(page);
-    }
     await generate(page);
     const drawn = (await semanticSnapshot(page)).legend.find(({ caption }) => caption === row);
     expect(drawn?.fill.toLowerCase(), `${from} draws ${row} in the color`).toBe('#7b2cbf');
