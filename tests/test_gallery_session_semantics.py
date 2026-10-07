@@ -93,7 +93,7 @@ def test_lambda_basic_linear_gallery_session_opts_out_of_comparisons(
 ) -> None:
     _, session = gallery_sessions["lambda_basic_linear"]
 
-    plan = session["config"]["linearComparisonPlan"]
+    plan = session["modes"]["linear"]["config"]["linearComparisonPlan"]
     assert plan["mode"] == "none"
     assert plan["edges"] == []
     assert _request(session)["comparisons"] == []
