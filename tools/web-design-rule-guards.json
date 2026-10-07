@@ -184,6 +184,7 @@
       "id": "R14",
       "heading": "R14: Typed boundaries",
       "guards": [
+        "tests/web/no-implicit-any-ratchet.test.mjs",
         "tests/web/typed-boundaries.test.mjs"
       ],
       "allowlists": [
@@ -191,6 +192,11 @@
           "path": "tests/web/typed-boundaries.test.mjs",
           "symbol": "UNCHECKED_MODULES",
           "kind": "set"
+        },
+        {
+          "path": "tests/web/no-implicit-any-ratchet.test.mjs",
+          "symbol": "NO_IMPLICIT_ANY_BASELINE",
+          "kind": "count"
         }
       ]
     }
