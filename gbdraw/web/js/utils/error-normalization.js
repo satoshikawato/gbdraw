@@ -103,7 +103,7 @@ const REASONS = Object.freeze({
   NO_MATCH: 'Choose an available record.', AMBIGUOUS: 'Use #index to distinguish records with the same ID.',
   SELECTOR_FORMAT: 'Use #<number> or a record ID.', SELECT_ONE: 'Select exactly one record.',
   REGION_FORMAT: 'Use record_id:start-end[:rc] or #index:start-end[:rc].',
-  CANNOT_FIT: 'Move the track, reduce widths, disable conflicting labels, or place it outside.',
+  CANNOT_FIT: 'Move the track, reduce widths, disable conflicting labels, or place it on the other side of the Axis.',
   DEFINITION_RESERVED: 'The center definition text limits the inside tracks. Shorten Species or Strain, reduce Default font size, set a smaller Center Reserved Radius, or place tracks outside.',
   CENTER_RESERVED: 'The Center Reserved Radius limits the inside tracks. Set a smaller Center Reserved Radius or place tracks outside.',
   SPLIT_LANES: 'Set that feature\'s Feature placement to Auto or Main, or use split feature lanes (Track Preset Middle).',
@@ -150,7 +150,7 @@ const DEFINITIONS = Object.freeze({
   COMPARISON_IDENTITY: ['Comparison endpoints disagree with the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.', ['edit-comparison', 'retry', 'save-session']],
   ANNOTATION_TARGET: ['The region annotation target is invalid.', ['edit-annotation', 'retry']],
   TRACK_INVALID: ['The track settings are invalid.', ['edit-track', 'retry']],
-  TRACK_LAYOUT: ['A circular track does not fit inside.', ['edit-track', 'retry']],
+  TRACK_LAYOUT: ['A circular track does not fit.', ['edit-track', 'retry']],
   FEATURE_PLACEMENT: ['A Feature placement uses a lane that the current feature track does not have.', ['edit-track', 'retry']],
   FEATURE_IDENTITY: ['A feature edit does not identify a record of the current inputs. Generate again; if it continues, save a Session for investigation.', ['retry', 'save-session']],
   // The same request fails the same way until the setting or the mode changes.

@@ -324,7 +324,7 @@ test('summary shows Sequence, Line, Track row, Depth series, band and setting lo
     [diagnosticError('TABLE_INVALID', { row: 3, field: 'color', reason: 'COLOR' }), /^The table is invalid\. Line 3\. Field: color\. Use none/],
     [{ code: 'COMPARISON_INPUT', context: { reason: 'NONNEGATIVE_INTEGER', row: 4, column: 7 } }, / Line 4\. Column 7\. Use an integer of zero or greater\.$/],
     [{ code: 'TRACK_LAYOUT', context: { reason: 'CANNOT_FIT', slotIndex: 1, innerPx: 181, outerPx: 209 } },
-      /^A circular track does not fit inside\. Track row 2\. Move the track.*outside\. Available band: 181–209 px\.$/],
+      /^A circular track does not fit\. Track row 2\. Move the track.*the other side of the Axis\. Available band: 181–209 px\.$/],
     [{ code: 'DEPTH_INVALID', context: { reason: 'DEPTH_VALUES', seriesIndex: 0 } }, / Depth series 1\. Use integer positions/],
     [{ code: 'INPUT_INVALID', context: { reason: 'INTEGER', configPath: 'objects.scale.interval' } }, / Setting: objects\.scale\.interval\. Use an integer\.$/]
   ]) assert.match(roundtrip(source).summary, pattern);
@@ -379,7 +379,7 @@ test('a Circular placement limited by the center reservation names that cause', 
     const layout = roundtrip({ code: 'TRACK_LAYOUT', operation: 'generate', stage: 'render', context: { reason } });
     assert.equal(layout.code, 'TRACK_LAYOUT');
     assert.equal(layout.context.reason, reason);
-    assert.match(layout.summary, /^A circular track does not fit inside\./);
+    assert.match(layout.summary, /^A circular track does not fit\./);
     assert.match(layout.summary, pattern);
     assert.deepEqual(layout.actions, ['edit-track', 'retry']);
   }
