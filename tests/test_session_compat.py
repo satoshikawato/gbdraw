@@ -1267,8 +1267,7 @@ def test_released_noncanonical_linear_cli_replay_promotes_current_sidecar(
     for mode in ("circular", "linear"):
         adv = payload["modes"][mode]["config"]["adv"]
         assert "depth_tick_interval" not in adv
-        # Session 46 retires the flat Depth tick fallback; this series has its own.
-        assert "depth_large_tick_interval" not in adv
+        assert adv["depth_large_tick_interval"] == 10
         assert adv["depth_tracks"] == [{"large_tick_interval": 5}]
         assert payload["modes"][mode]["config"]["form"] == {"prefix": "legacy"}
     blastp = payload["modes"]["linear"]["config"]["losat"]["blastp"]

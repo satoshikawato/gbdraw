@@ -1527,8 +1527,7 @@ def test_current_writer_requires_typed_request_to_promote_legacy_schema() -> Non
     assert "config" not in promoted
     for mode in ("circular", "linear"):
         adv = promoted["modes"][mode]["config"]["adv"]
-        # The retired flat Depth tick fallback is read only by a series without its own.
-        assert "depth_large_tick_interval" not in adv
+        assert adv["depth_large_tick_interval"] == 10
         assert adv["depth_tracks"] == [{"large_tick_interval": 5}]
     # LOSATP settings belong to the Linear slice.
     assert "blastp" not in promoted["modes"]["circular"]["config"].get("losat", {})

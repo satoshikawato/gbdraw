@@ -788,8 +788,7 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
     assert "config" not in adjunct
     for mode in ("circular", "linear"):
         adv = adjunct["modes"][mode]["config"]["adv"]
-        # Session 46 retires the flat Depth tick fallback; this series has its own.
-        assert "depth_large_tick_interval" not in adv
+        assert adv["depth_large_tick_interval"] == 10
         assert adv["depth_tracks"] == [{"large_tick_interval": 5}]
     linear = adjunct["modes"]["linear"]["config"]
     assert linear["losat"]["blastp"]["collinearMaxUnitGap"] == 2

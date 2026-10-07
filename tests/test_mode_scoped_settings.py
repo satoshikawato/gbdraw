@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import csv
 import gzip
 import json
 import subprocess
@@ -32,6 +33,7 @@ from gbdraw.web_support.mode_scoped_settings import (
     DIAGRAM_MODES,
     MIGRATION_TOKENS,
     MODE_SCOPED_SETTINGS,
+    MODE_SCOPED_SETTINGS_REVISION,
     SLICE_CONTAINERS,
     unmanaged_config_override_modes,
 )
@@ -65,10 +67,34 @@ def test_registry_rows_are_unique_and_use_known_tokens() -> None:
         # A row that goes to its own mode names that mode.
         assert (row.migrate == "own") == (row.modes != "both" and row.migrate != "profile"), row
     assert {row.key for row in MODE_SCOPED_SETTINGS if row.key} == {
-        "annotation-set", "record-display", "placement", "feature",
+        "id", "JSON[sourceUid,selector]", "JSON[recordKey,biologicalFeatureId]", "recordKey\\0featureId",
     }
     assert SLICE_CONTAINERS[""] == {"config", "features", "editorState", "ui"}
     assert SLICE_CONTAINERS["config.losat"] == {"outfmt", "blastn", "blastp"}
+
+
+def test_registry_rows_match_the_phase_e_registry_table() -> None:
+    # The table (Phase E's registry-v46.tsv, revision 5) is the readable form
+    # of the registry: each of its slice rows is a row here, and the reverse.
+    assert MODE_SCOPED_SETTINGS_REVISION == 5
+    with (FIXTURES / "mode-scoped-settings-registry-v46.tsv").open(encoding="utf-8", newline="") as handle:
+        table = list(csv.DictReader(handle, delimiter="\t"))
+    assert len(table) == 277
+    rows = set()
+    for row in table:
+        if row["migrate"] == "-":
+            continue
+        path, modes = row["registry_entry"].split(" | modes=")
+        assert modes == row["modes"], row["item"]
+        # One table row names both pending palette keys.
+        paths = (
+            ("ui.pendingPaletteName", "ui.pendingPaletteColors")
+            if path == "ui.pendingPaletteName/Colors"
+            else (path,)
+        )
+        rows |= {(name, row["modes"], row["key"] or None, row["migrate"]) for name in paths}
+
+    assert rows == {(f"{row.domain}.{row.path}", row.modes, row.key, row.migrate) for row in MODE_SCOPED_SETTINGS}
 
 
 def test_generated_web_mode_scoped_settings_match_python_source() -> None:
@@ -171,13 +197,15 @@ def test_split_moves_layout_slots_depth_and_show_depth_per_mode() -> None:
     assert "layoutPreferences" not in result["ui"]
     assert circular["config"]["form"]["show_depth"] is True
     assert linear["config"]["form"]["show_depth"] is False
-    # The retired flat tick fallback fills a series without its own value.
+    # Each slice keeps its own sources' series, and the flat tick value that a
+    # series without its own reads.
     assert circular["config"]["adv"]["depth_tracks"] == [
-        {"label": "a", "large_tick_interval": 9},
-        {"label": "b", "large_tick_interval": 9},
+        {"label": "a", "large_tick_interval": None},
+        {"label": "b"},
     ]
-    assert linear["config"]["adv"]["depth_tracks"] == [{"label": "a", "large_tick_interval": 9}]
-    assert "depth_large_tick_interval" not in circular["config"]["adv"]
+    assert linear["config"]["adv"]["depth_tracks"] == [{"label": "a", "large_tick_interval": None}]
+    assert circular["config"]["adv"]["depth_large_tick_interval"] == 9
+    assert linear["config"]["adv"]["depth_large_tick_interval"] == 9
 
 
 def test_split_gives_the_saved_results_mode_the_legend_and_feature_edits() -> None:
@@ -262,8 +290,17 @@ def test_split_moves_losat_execution_to_the_app_and_blastp_to_linear() -> None:
              "blastp": {"mode": "collinear", "candidateLimit": 7,
                         "hitLimitsByMode": {"collinear": {"candidateLimit": 5}}}}
 
-    result = _split(_draft(losat=losat, paletteInstantPreviewEnabled=True))
+    result = _split(_draft(
+        losat=losat, paletteInstantPreviewEnabled=True, adv={"rich_feature_popup": False},
+        cliOptions={"rawArgs": ["--gbk", "a.gb"]},
+    ))
 
+    # App-level settings and Session provenance leave the slices.
+    assert result["ui"]["richFeaturePopup"] is False
+    assert result["cliOptions"] == {"rawArgs": ["--gbk", "a.gb"]}
+    for mode in DIAGRAM_MODES:
+        assert "rich_feature_popup" not in result["modes"][mode]["config"].get("adv", {})
+        assert "cliOptions" not in result["modes"][mode]["config"]
     circular, linear = (result["modes"][mode]["config"]["losat"] for mode in DIAGRAM_MODES)
     assert circular == {"outfmt": "6", "blastn": {"task": "megablast"}}
     # PD-OI-002: blastp moves unchanged; the flat limit stays the effective one.

@@ -93,6 +93,8 @@ CURRENT_SESSION_TOP_LEVEL_FIELDS = frozenset(
         "runMetadata",
         "cliInvocation",
         "modes",
+        # Session 46: the CLI options a Session 27-44 draft kept in config.
+        "cliOptions",
         # E1 (Q0): the other diagram mode's committed Result set.
         "otherModeResult",
     }
@@ -1000,9 +1002,10 @@ def _session_draft_configs(
 # and the Legend edit, per-feature stroke, and per-mode ``ui`` keys.
 _RETIRED_MODE_SCOPED_FIELDS: dict[str, frozenset[str]] = {
     "": FLAT_DRAFT_TOP_LEVEL_FIELDS,
+    "editorState": frozenset({"featureStrokes"}),
     **{
         domain: frozenset(row.path for row in MODE_SCOPED_SETTINGS if row.domain == domain)
-        for domain in ("editorState", "editorState.legend", "ui")
+        for domain in ("editorState.legend", "ui")
     },
 }
 
@@ -1011,11 +1014,14 @@ def _validate_mode_scoped_fields(session: Mapping[str, Any], version: int) -> No
     """Admit ``modes`` in Session 46 only, and its draft nowhere else."""
 
     if version < MODE_SCOPED_SESSION_MIN_VERSION:
-        if "modes" in session:
-            raise ValidationError(
-                f"Session version {version} cannot contain modes.", diagnostic=_SESSION_FIELDS_INVALID
-            )
+        for field in ("modes", "cliOptions"):
+            if field in session:
+                raise ValidationError(
+                    f"Session version {version} cannot contain {field}.", diagnostic=_SESSION_FIELDS_INVALID
+                )
         return
+    if "cliOptions" in session and not isinstance(session["cliOptions"], Mapping):
+        raise ValidationError("Session cliOptions must be an object.", diagnostic=_SESSION_FIELDS_INVALID)
     retired = sorted(
         f"{domain}.{field}" if domain else field
         for domain, fields in _RETIRED_MODE_SCOPED_FIELDS.items()
@@ -2248,13 +2254,8 @@ def migrate_persisted_web_state_field_names(config: object) -> object:
 # draft of such a Session holds that value for the active mode (the twin of
 # ``withHistoricalPairwiseMatchStyleFallback`` in the Web ``services/config.js``).
 _HISTORICAL_FLAT_PROFILE_VALUES = {"pairwise_match_style": "ribbon"}
-# The flat Depth fallbacks a Depth series without a value of its own reads;
-# Session 46 retires them into each series (``normalizeDepthTrackConfig``).
-_DEPTH_TRACK_FALLBACKS = (
-    ("large_tick_interval", "depth_large_tick_interval"),
-    ("small_tick_interval", "depth_small_tick_interval"),
-    ("tick_font_size", "depth_tick_font_size"),
-)
+# A registry value that a Session 44 or older saved elsewhere.
+_FLAT_DRAFT_SOURCES = {("ui", "selectedFeatureRecordIdx"): ("features", "selectedFeatureRecordIdx")}
 _ANNOTATION_RECORD_BINDING_KEY = "_gbdraw_web_target_record_key"
 _JSON_DECODER = json.JSONDecoder()
 _ABSENT = object()
@@ -2309,18 +2310,21 @@ def _mode_profile_values(mode_profiles: object, mode: DiagramMode) -> Mapping[st
     return values if isinstance(values, Mapping) else {}
 
 
-def _with_depth_track_fallbacks(tracks: object, adv: Mapping[str, Any]) -> object:
-    if not isinstance(tracks, list):
-        return tracks
-    fallbacks = [(field, adv[flat]) for field, flat in _DEPTH_TRACK_FALLBACKS if adv.get(flat) is not None]
-    if not fallbacks:
-        return tracks
-    return [
-        {**track, **{field: value for field, value in fallbacks if track.get(field) is None}}
-        if isinstance(track, Mapping)
-        else track
-        for track in tracks
-    ]
+def _profile_active_mode(draft: Mapping[str, Any], mode_profiles: object) -> DiagramMode | None:
+    """The mode whose values a flat draft holds for the mode-profile fields.
+
+    ``ui.mode``, else ``renderRequest.mode``, else ``modeProfiles.activeMode``:
+    the twin of the rule of ``withHistoricalPairwiseMatchStyleFallback`` in the
+    Web ``services/config.js``.
+    """
+
+    ui = draft.get("ui")
+    request = draft.get("renderRequest")
+    return (
+        _diagram_mode(ui.get("mode") if isinstance(ui, Mapping) else None)
+        or _diagram_mode(request.get("mode") if isinstance(request, Mapping) else None)
+        or _diagram_mode(mode_profiles.get("activeMode") if isinstance(mode_profiles, Mapping) else None)
+    )
 
 
 def _unscoped_rows(rows: object, mode: DiagramMode) -> object:
@@ -2391,7 +2395,6 @@ def _split_setting(
     *,
     committed: DiagramMode,
     widths: Mapping[DiagramMode, int],
-    adv: Mapping[str, Any],
 ) -> dict[DiagramMode, Any]:
     """The value each slice takes for one saved registry value."""
 
@@ -2408,9 +2411,7 @@ def _split_setting(
             # ``show_depth && hasSource``
             split[mode] = (widths[mode] > 0) if _js_truthy(value) else value
         elif row.migrate == "depth" and isinstance(value, list):
-            tracks = _with_depth_track_fallbacks(value, adv)
-            assert isinstance(tracks, list)
-            split[mode] = _json_clone(tracks[: max(1, widths[mode])])
+            split[mode] = _json_clone(value[: max(1, widths[mode])])
         elif row.migrate == "by-scope" and isinstance(value, list):
             split[mode] = [
                 {field: item for field, item in _json_clone(draft).items() if field != "scope"}
@@ -2449,15 +2450,16 @@ def split_draft_into_modes(
     gets none, and its slice values are dropped): each registry row
     (MODE_SCOPED_SETTINGS) fills the slices by its ``migrate`` token, a value
     that a slice does not take is absent there (that mode's default), and a
-    field that no row names is dropped. ``config.losat``'s execution settings
-    move to ``ui.losatExecution``.
+    field that no row names is dropped. App-level settings move to the top
+    level: ``config.losat``'s execution settings to ``ui.losatExecution``,
+    ``config.adv.rich_feature_popup`` to ``ui.richFeaturePopup``, and
+    ``config.cliOptions`` to ``cliOptions``.
 
     ``committed_mode`` is the saved Result's mode (``renderRequest.mode``, else
     ``ui.mode``). ``mode_profiles`` defaults to ``config.modeProfiles``, and
     ``depth_sources`` (each mode's Depth series count) to the counts in
     ``webFiles.bindings``, else in the legacy ``files``. The draft's own mode
-    (``ui.mode``, else ``modeProfiles.activeMode``) holds the flat values of
-    the mode-profile fields.
+    (``_profile_active_mode``) holds the flat values of the mode-profile fields.
 
     This is the twin of ``splitDraftIntoModes`` in the Web
     ``services/mode-scoped-migration.js``;
@@ -2475,11 +2477,7 @@ def split_draft_into_modes(
     ui_value = draft.get("ui")
     ui: Mapping[str, Any] = ui_value if isinstance(ui_value, Mapping) else {}
     profiles = config.get("modeProfiles") if mode_profiles is None else mode_profiles
-    active = (
-        _diagram_mode(ui.get("mode"))
-        or _diagram_mode(profiles.get("activeMode") if isinstance(profiles, Mapping) else None)
-        or committed
-    )
+    active = _profile_active_mode(draft, profiles) or committed
     if depth_sources is None:
         web_files = draft.get("webFiles")
         bindings = web_files.get("bindings") if isinstance(web_files, Mapping) else draft.get("files")
@@ -2491,21 +2489,22 @@ def split_draft_into_modes(
 
     slices: dict[DiagramMode, dict[str, Any]] = {mode: {} for mode in DIAGRAM_MODES}
     for row in MODE_SCOPED_SETTINGS:
-        container = _container_at(draft, row.domain)
+        source_domain, source_path = _FLAT_DRAFT_SOURCES.get((row.domain, row.path), (row.domain, row.path))
+        container = _container_at(draft, source_domain)
         if not isinstance(container, Mapping):
             continue
         split: dict[DiagramMode, Any]
         if row.migrate == "profile":
             split = {}
-            flat = container.get(row.path, _HISTORICAL_FLAT_PROFILE_VALUES.get(row.path, _ABSENT))
+            flat = container.get(source_path, _HISTORICAL_FLAT_PROFILE_VALUES.get(source_path, _ABSENT))
             if flat is not _ABSENT:
                 split[active] = _json_clone(flat)
             other: DiagramMode = "linear" if active == "circular" else "circular"
             saved = _mode_profile_values(profiles, other)
-            if row.path in saved:
-                split[other] = _json_clone(saved[row.path])
-        elif row.path in container:
-            split = _split_setting(row, container[row.path], committed=committed, widths=widths, adv=adv)
+            if source_path in saved:
+                split[other] = _json_clone(saved[source_path])
+        elif source_path in container:
+            split = _split_setting(row, container[source_path], committed=committed, widths=widths)
         else:
             continue
         for mode, value in split.items():
@@ -2538,14 +2537,19 @@ def split_draft_into_modes(
         for field in LOSAT_EXECUTION_FIELDS
         if isinstance(losat, Mapping) and field in losat
     }
+    # App-level settings leave the draft: LOSAT execution, the rich feature
+    # popup (a missing value reads true), and Instant Preview.
+    app_ui = {"losatExecution": execution} if execution else {}
+    if "rich_feature_popup" in adv:
+        app_ui["richFeaturePopup"] = _json_clone(adv["rich_feature_popup"])
     preview = config.get("paletteInstantPreviewEnabled")
-    if execution or (isinstance(preview, bool) and "paletteInstantPreviewEnabled" not in ui):
-        next_ui = dict(result.get("ui") or {})
-        if execution:
-            next_ui["losatExecution"] = execution
-        if isinstance(preview, bool):
-            next_ui.setdefault("paletteInstantPreviewEnabled", preview)
-        result["ui"] = next_ui
+    if isinstance(preview, bool) and "paletteInstantPreviewEnabled" not in ui:
+        app_ui["paletteInstantPreviewEnabled"] = preview
+    if app_ui:
+        result["ui"] = {**(result.get("ui") or {}), **app_ui}
+    # Session provenance, written only when the draft has it.
+    if "cliOptions" in config:
+        result["cliOptions"] = _json_clone(config["cliOptions"])
     if isinstance(config_value, Mapping):
         result["modes"] = {mode: slices[mode] for mode in DIAGRAM_MODES}
     return result

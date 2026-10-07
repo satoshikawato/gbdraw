@@ -1,0 +1,3738 @@
+{
+  "schemaVersion": 1,
+  "registryRevision": 5,
+  "cases": [
+    {
+      "name": "copy: shared form, adv and draft-level values go to both slices",
+      "token": "copy",
+      "input": {
+        "config": {
+          "form": {
+            "show_scale": false,
+            "separate_strands": false
+          },
+          "adv": {
+            "label_font_size": 12,
+            "window_size": 500,
+            "step_size": 50,
+            "nt": "AT",
+            "depth_min": 5,
+            "gc_content_mode": "percent"
+          },
+          "palette": "default",
+          "colors": {
+            "CDS": "#123456"
+          },
+          "rules": [
+            {
+              "feat": "CDS",
+              "qual": "product",
+              "val": "hypothetical",
+              "color": "#778899",
+              "cap": ""
+            },
+            {
+              "feat": "tRNA",
+              "qual": "hash",
+              "val": "f571eb983",
+              "color": "#e8b441",
+              "cap": "tRNA_X"
+            }
+          ],
+          "filterMode": "Blacklist",
+          "blacklistText": "hypothetical",
+          "whitelist": []
+        },
+        "features": {
+          "labelTextBulkOverrides": {
+            "hypothetical protein": "HP"
+          }
+        },
+        "ui": {
+          "mode": "circular",
+          "canvasPadding": {
+            "top": 10,
+            "right": 0,
+            "bottom": 0,
+            "left": 5
+          }
+        }
+      },
+      "context": {
+        "committedMode": "circular"
+      },
+      "expect": {
+        "/modes/circular/config/form/show_scale": false,
+        "/modes/linear/config/form/show_scale": false,
+        "/modes/circular/config/form/separate_strands": false,
+        "/modes/linear/config/form/separate_strands": false,
+        "/modes/circular/config/adv/label_font_size": 12,
+        "/modes/linear/config/adv/label_font_size": 12,
+        "/modes/circular/config/adv/window_size": 500,
+        "/modes/linear/config/adv/window_size": 500,
+        "/modes/circular/config/adv/step_size": 50,
+        "/modes/linear/config/adv/step_size": 50,
+        "/modes/circular/config/adv/nt": "AT",
+        "/modes/linear/config/adv/nt": "AT",
+        "/modes/circular/config/adv/depth_min": 5,
+        "/modes/linear/config/adv/depth_min": 5,
+        "/modes/circular/config/adv/gc_content_mode": "percent",
+        "/modes/linear/config/adv/gc_content_mode": "percent",
+        "/modes/circular/config/palette": "default",
+        "/modes/linear/config/palette": "default",
+        "/modes/circular/config/colors": {
+          "CDS": "#123456"
+        },
+        "/modes/linear/config/colors": {
+          "CDS": "#123456"
+        },
+        "/modes/circular/config/rules": [
+          {
+            "feat": "CDS",
+            "qual": "product",
+            "val": "hypothetical",
+            "color": "#778899",
+            "cap": ""
+          },
+          {
+            "feat": "tRNA",
+            "qual": "hash",
+            "val": "f571eb983",
+            "color": "#e8b441",
+            "cap": "tRNA_X"
+          }
+        ],
+        "/modes/linear/config/rules": [
+          {
+            "feat": "CDS",
+            "qual": "product",
+            "val": "hypothetical",
+            "color": "#778899",
+            "cap": ""
+          },
+          {
+            "feat": "tRNA",
+            "qual": "hash",
+            "val": "f571eb983",
+            "color": "#e8b441",
+            "cap": "tRNA_X"
+          }
+        ],
+        "/modes/circular/config/filterMode": "Blacklist",
+        "/modes/linear/config/filterMode": "Blacklist",
+        "/modes/circular/config/blacklistText": "hypothetical",
+        "/modes/linear/config/blacklistText": "hypothetical",
+        "/modes/circular/config/whitelist": [],
+        "/modes/linear/config/whitelist": [],
+        "/modes/circular/features/labelTextBulkOverrides": {
+          "hypothetical protein": "HP"
+        },
+        "/modes/linear/features/labelTextBulkOverrides": {
+          "hypothetical protein": "HP"
+        },
+        "/modes/circular/ui/canvasPadding": {
+          "top": 10,
+          "right": 0,
+          "bottom": 0,
+          "left": 5
+        },
+        "/modes/linear/ui/canvasPadding": {
+          "top": 10,
+          "right": 0,
+          "bottom": 0,
+          "left": 5
+        }
+      },
+      "expectAbsent": []
+    },
+    {
+      "name": "own: Linear-only fields go to Linear and Circular takes its defaults, whichever mode is shown",
+      "token": "own",
+      "input": {
+        "config": {
+          "form": {
+            "show_labels_linear": "all",
+            "scale_style": "ruler"
+          },
+          "adv": {
+            "linear_accession_visibility": "show",
+            "comparison_height": 30
+          },
+          "losatProgram": "blastp",
+          "linearRecordLayout": {
+            "enabled": false,
+            "recordGap": 40,
+            "rows": []
+          }
+        },
+        "ui": {
+          "mode": "circular",
+          "linearTypographyLinked": false
+        }
+      },
+      "context": {
+        "committedMode": "circular"
+      },
+      "expect": {
+        "/modes/circular/config/form/show_labels_linear": "none",
+        "/modes/linear/config/form/show_labels_linear": "all",
+        "/modes/circular/config/form/scale_style": "bar",
+        "/modes/linear/config/form/scale_style": "ruler",
+        "/modes/circular/config/adv/linear_accession_visibility": "auto",
+        "/modes/linear/config/adv/linear_accession_visibility": "show",
+        "/modes/circular/config/adv/comparison_height": null,
+        "/modes/linear/config/adv/comparison_height": 30,
+        "/modes/circular/config/losatProgram": "blastn",
+        "/modes/linear/config/losatProgram": "blastp",
+        "/modes/circular/config/linearRecordLayout": {
+          "enabled": true,
+          "recordGap": 24,
+          "rows": []
+        },
+        "/modes/linear/config/linearRecordLayout": {
+          "enabled": false,
+          "recordGap": 40,
+          "rows": []
+        },
+        "/modes/circular/ui/linearTypographyLinked": true,
+        "/modes/linear/ui/linearTypographyLinked": false
+      },
+      "expectAbsent": []
+    },
+    {
+      "name": "own: Circular-only fields and split-field halves go to their own mode while Linear is shown",
+      "token": "own",
+      "input": {
+        "config": {
+          "form": {
+            "species": "Testus fixturus",
+            "track_type": "spreadout",
+            "suppress_gc": true,
+            "show_gc": true
+          },
+          "adv": {
+            "feature_width_circular": 30,
+            "feature_height": 40
+          }
+        },
+        "ui": {
+          "mode": "linear"
+        }
+      },
+      "context": {
+        "committedMode": "linear"
+      },
+      "expect": {
+        "/modes/circular/config/form/species": "Testus fixturus",
+        "/modes/linear/config/form/species": "",
+        "/modes/circular/config/form/track_type": "spreadout",
+        "/modes/linear/config/form/track_type": "tuckin",
+        "/modes/circular/config/form/suppress_gc": true,
+        "/modes/linear/config/form/suppress_gc": false,
+        "/modes/circular/config/form/show_gc": false,
+        "/modes/linear/config/form/show_gc": true,
+        "/modes/circular/config/adv/feature_width_circular": 30,
+        "/modes/linear/config/adv/feature_width_circular": null,
+        "/modes/circular/config/adv/feature_height": null,
+        "/modes/linear/config/adv/feature_height": 40
+      },
+      "expectAbsent": []
+    },
+    {
+      "name": "profile: the shown mode takes the flat value and the other mode its profile value; the Result mode does not matter",
+      "token": "profile",
+      "input": {
+        "config": {
+          "form": {
+            "plot_title": "C_TITLE"
+          },
+          "adv": {
+            "plot_title_font_size": "20",
+            "def_font_size": "14",
+            "evalue": "1e-4",
+            "identity": 70,
+            "min_bitscore": 50,
+            "alignment_length": 0,
+            "axis_stroke_color": null,
+            "pairwise_match_style": "ribbon"
+          }
+        },
+        "ui": {
+          "mode": "circular"
+        }
+      },
+      "context": {
+        "committedMode": "linear",
+        "modeProfiles": {
+          "schema": 1,
+          "activeMode": "circular",
+          "profiles": {
+            "circular": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-4",
+                "identity": 70,
+                "alignment_length": 0,
+                "axis_stroke_color": null,
+                "pairwise_match_style": "ribbon",
+                "plot_title_font_size": "20",
+                "def_font_size": "14",
+                "plot_title": "C_TITLE"
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": false,
+                "identity": true,
+                "alignment_length": true,
+                "axis_stroke_color": true,
+                "pairwise_match_style": true,
+                "plot_title_font_size": false,
+                "def_font_size": false,
+                "plot_title": false
+              }
+            },
+            "linear": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-1",
+                "identity": 30,
+                "alignment_length": 0,
+                "axis_stroke_color": "black",
+                "pairwise_match_style": "curve",
+                "plot_title_font_size": null,
+                "def_font_size": "12",
+                "plot_title": "L_TITLE"
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": false,
+                "identity": false,
+                "alignment_length": true,
+                "axis_stroke_color": false,
+                "pairwise_match_style": true,
+                "plot_title_font_size": true,
+                "def_font_size": false,
+                "plot_title": false
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "/modes/circular/config/form/plot_title": "C_TITLE",
+        "/modes/linear/config/form/plot_title": "L_TITLE",
+        "/modes/circular/config/adv/plot_title_font_size": "20",
+        "/modes/linear/config/adv/plot_title_font_size": null,
+        "/modes/circular/config/adv/def_font_size": "14",
+        "/modes/linear/config/adv/def_font_size": "12",
+        "/modes/circular/config/adv/evalue": "1e-4",
+        "/modes/linear/config/adv/evalue": "1e-1",
+        "/modes/circular/config/adv/identity": 70,
+        "/modes/linear/config/adv/identity": 30,
+        "/modes/circular/config/adv/axis_stroke_color": null,
+        "/modes/linear/config/adv/axis_stroke_color": "black",
+        "/modes/circular/config/adv/pairwise_match_style": "ribbon",
+        "/modes/linear/config/adv/pairwise_match_style": "curve",
+        "/modes/circular/config/adv/min_bitscore": 50,
+        "/modes/linear/config/adv/min_bitscore": 50,
+        "/modes/circular/config/adv/alignment_length": 0,
+        "/modes/linear/config/adv/alignment_length": 0
+      },
+      "expectAbsent": [
+        "/modes/circular/config/modeProfiles",
+        "/modes/linear/config/modeProfiles"
+      ]
+    },
+    {
+      "name": "profile: a field missing from the other mode's profile (Session 40-42 five-field profile) takes that mode's default",
+      "token": "profile",
+      "input": {
+        "config": {
+          "form": {
+            "plot_title": "FLAT"
+          },
+          "adv": {
+            "def_font_size": "16",
+            "evalue": "1e-2",
+            "identity": 0,
+            "min_bitscore": 50,
+            "alignment_length": 0,
+            "axis_stroke_color": "lightgray",
+            "pairwise_match_style": "curve"
+          }
+        },
+        "ui": {
+          "mode": "linear"
+        }
+      },
+      "context": {
+        "committedMode": "linear",
+        "modeProfiles": {
+          "schema": 1,
+          "activeMode": "linear",
+          "profiles": {
+            "circular": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-3",
+                "identity": 50,
+                "alignment_length": 0,
+                "axis_stroke_color": null
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": false,
+                "identity": false,
+                "alignment_length": true,
+                "axis_stroke_color": true
+              }
+            },
+            "linear": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-2",
+                "identity": 0,
+                "alignment_length": 0,
+                "axis_stroke_color": "lightgray"
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": true,
+                "identity": true,
+                "alignment_length": true,
+                "axis_stroke_color": true
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "/modes/circular/config/form/plot_title": "",
+        "/modes/linear/config/form/plot_title": "FLAT",
+        "/modes/circular/config/adv/def_font_size": null,
+        "/modes/linear/config/adv/def_font_size": "16",
+        "/modes/circular/config/adv/plot_title_font_size": null,
+        "/modes/linear/config/adv/plot_title_font_size": null,
+        "/modes/circular/config/adv/evalue": "1e-3",
+        "/modes/linear/config/adv/evalue": "1e-2",
+        "/modes/circular/config/adv/identity": 50,
+        "/modes/linear/config/adv/identity": 0,
+        "/modes/circular/config/adv/axis_stroke_color": null,
+        "/modes/linear/config/adv/axis_stroke_color": "lightgray",
+        "/modes/circular/config/adv/pairwise_match_style": "ribbon",
+        "/modes/linear/config/adv/pairwise_match_style": "curve"
+      },
+      "expectAbsent": []
+    },
+    {
+      "name": "profile: without modeProfiles the other mode takes its defaults",
+      "token": "profile",
+      "input": {
+        "config": {
+          "form": {
+            "plot_title": "T"
+          },
+          "adv": {
+            "evalue": "1e-3",
+            "identity": 40,
+            "axis_stroke_color": "#000000",
+            "pairwise_match_style": "curve"
+          }
+        },
+        "ui": {
+          "mode": "linear"
+        }
+      },
+      "context": {
+        "committedMode": "linear"
+      },
+      "expect": {
+        "/modes/circular/config/form/plot_title": "",
+        "/modes/linear/config/form/plot_title": "T",
+        "/modes/circular/config/adv/evalue": "1e-5",
+        "/modes/linear/config/adv/evalue": "1e-3",
+        "/modes/circular/config/adv/identity": 70,
+        "/modes/linear/config/adv/identity": 40,
+        "/modes/circular/config/adv/axis_stroke_color": null,
+        "/modes/linear/config/adv/axis_stroke_color": "#000000",
+        "/modes/circular/config/adv/pairwise_match_style": "ribbon",
+        "/modes/linear/config/adv/pairwise_match_style": "curve"
+      },
+      "expectAbsent": []
+    },
+    {
+      "name": "profile: a draft without pairwise_match_style gives the shown Linear mode the historical ribbon (folded withHistoricalPairwiseMatchStyleFallback)",
+      "token": "profile",
+      "input": {
+        "config": {
+          "form": {
+            "plot_title": ""
+          },
+          "adv": {
+            "evalue": "1e-2",
+            "identity": 0
+          }
+        },
+        "ui": {
+          "mode": "linear"
+        }
+      },
+      "context": {
+        "committedMode": "linear",
+        "modeProfiles": {
+          "schema": 1,
+          "activeMode": "linear",
+          "profiles": {
+            "circular": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-5",
+                "identity": 70,
+                "alignment_length": 0,
+                "axis_stroke_color": null
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": true,
+                "identity": true,
+                "alignment_length": true,
+                "axis_stroke_color": true
+              }
+            },
+            "linear": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-2",
+                "identity": 0,
+                "alignment_length": 0,
+                "axis_stroke_color": "lightgray"
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": true,
+                "identity": true,
+                "alignment_length": true,
+                "axis_stroke_color": true
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "/modes/circular/config/adv/pairwise_match_style": "ribbon",
+        "/modes/linear/config/adv/pairwise_match_style": "ribbon"
+      },
+      "expectAbsent": []
+    },
+    {
+      "name": "profile: a draft without pairwise_match_style shown in Circular leaves Linear at its default curve",
+      "token": "profile",
+      "input": {
+        "config": {
+          "form": {
+            "plot_title": ""
+          },
+          "adv": {
+            "evalue": "1e-5",
+            "identity": 70
+          }
+        },
+        "ui": {
+          "mode": "circular"
+        }
+      },
+      "context": {
+        "committedMode": "circular",
+        "modeProfiles": {
+          "schema": 1,
+          "activeMode": "circular",
+          "profiles": {
+            "circular": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-5",
+                "identity": 70,
+                "alignment_length": 0,
+                "axis_stroke_color": null
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": true,
+                "identity": true,
+                "alignment_length": true,
+                "axis_stroke_color": true
+              }
+            },
+            "linear": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-2",
+                "identity": 0,
+                "alignment_length": 0,
+                "axis_stroke_color": "lightgray"
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": true,
+                "identity": true,
+                "alignment_length": true,
+                "axis_stroke_color": true
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "/modes/circular/config/adv/pairwise_match_style": "ribbon",
+        "/modes/linear/config/adv/pairwise_match_style": "curve"
+      },
+      "expectAbsent": []
+    },
+    {
+      "name": "layout: the Circular layout slots go to Circular and the Linear slot to Linear, unwrapped",
+      "token": "layout",
+      "input": {
+        "config": {
+          "form": {},
+          "adv": {}
+        },
+        "ui": {
+          "mode": "circular",
+          "layoutPreferences": {
+            "circular": {
+              "single": {
+                "legend": "right",
+                "plotTitlePosition": "top"
+              },
+              "multi": {
+                "legend": "bottom",
+                "plotTitlePosition": null
+              }
+            },
+            "linear": {
+              "legend": "top",
+              "plotTitlePosition": "center"
+            }
+          }
+        }
+      },
+      "context": {
+        "committedMode": "circular"
+      },
+      "expect": {
+        "/modes/circular/ui/layoutPreferences": {
+          "single": {
+            "legend": "right",
+            "plotTitlePosition": "top"
+          },
+          "multi": {
+            "legend": "bottom",
+            "plotTitlePosition": null
+          }
+        },
+        "/modes/linear/ui/layoutPreferences": {
+          "legend": "top",
+          "plotTitlePosition": "center"
+        }
+      },
+      "expectAbsent": [
+        "/modes/circular/ui/layoutPreferences/linear",
+        "/modes/circular/ui/layoutPreferences/circular",
+        "/modes/linear/ui/layoutPreferences/circular",
+        "/modes/linear/ui/layoutPreferences/linear",
+        "/modes/circular/config/form/legend",
+        "/modes/linear/config/form/legend",
+        "/modes/circular/config/adv/plot_title_position",
+        "/modes/linear/config/adv/plot_title_position"
+      ]
+    },
+    {
+      "name": "show-if-source: Show Depth with a Depth source only in Circular",
+      "token": "show-if-source",
+      "input": {
+        "config": {
+          "form": {
+            "show_depth": true
+          },
+          "adv": {}
+        },
+        "ui": {
+          "mode": "circular"
+        }
+      },
+      "context": {
+        "committedMode": "circular",
+        "depthSources": {
+          "circular": 1,
+          "linear": 0
+        }
+      },
+      "expect": {
+        "/modes/circular/config/form/show_depth": true,
+        "/modes/linear/config/form/show_depth": false
+      },
+      "expectAbsent": []
+    },
+    {
+      "name": "show-if-source: Show Depth with Depth sources only in Linear",
+      "token": "show-if-source",
+      "input": {
+        "config": {
+          "form": {
+            "show_depth": true
+          },
+          "adv": {}
+        },
+        "ui": {
+          "mode": "circular"
+        }
+      },
+      "context": {
+        "committedMode": "circular",
+        "depthSources": {
+          "circular": 0,
+          "linear": 2
+        }
+      },
+      "expect": {
+        "/modes/circular/config/form/show_depth": false,
+        "/modes/linear/config/form/show_depth": true
+      },
+      "expectAbsent": []
+    },
+    {
+      "name": "show-if-source: Show Depth with sources in both modes but Show Depth off",
+      "token": "show-if-source",
+      "input": {
+        "config": {
+          "form": {
+            "show_depth": false
+          },
+          "adv": {}
+        },
+        "ui": {
+          "mode": "circular"
+        }
+      },
+      "context": {
+        "committedMode": "circular",
+        "depthSources": {
+          "circular": 1,
+          "linear": 1
+        }
+      },
+      "expect": {
+        "/modes/circular/config/form/show_depth": false,
+        "/modes/linear/config/form/show_depth": false
+      },
+      "expectAbsent": []
+    },
+    {
+      "name": "depth: copied, then the Linear slice is trimmed to its one source while Circular keeps two",
+      "token": "depth",
+      "input": {
+        "config": {
+          "form": {
+            "show_depth": true
+          },
+          "adv": {
+            "depth_tracks": [
+              {
+                "label": "cov_a",
+                "color": "#aa0000",
+                "height": null,
+                "large_tick_interval": null,
+                "small_tick_interval": null,
+                "tick_font_size": null
+              },
+              {
+                "label": "cov_b",
+                "color": "#00aa00",
+                "height": null,
+                "large_tick_interval": null,
+                "small_tick_interval": null,
+                "tick_font_size": null
+              }
+            ]
+          }
+        },
+        "ui": {
+          "mode": "circular"
+        }
+      },
+      "context": {
+        "committedMode": "circular",
+        "depthSources": {
+          "circular": 2,
+          "linear": 1
+        }
+      },
+      "expect": {
+        "/modes/circular/config/adv/depth_tracks": [
+          {
+            "label": "cov_a",
+            "color": "#aa0000",
+            "height": null,
+            "large_tick_interval": null,
+            "small_tick_interval": null,
+            "tick_font_size": null
+          },
+          {
+            "label": "cov_b",
+            "color": "#00aa00",
+            "height": null,
+            "large_tick_interval": null,
+            "small_tick_interval": null,
+            "tick_font_size": null
+          }
+        ],
+        "/modes/linear/config/adv/depth_tracks": [
+          {
+            "label": "cov_a",
+            "color": "#aa0000",
+            "height": null,
+            "large_tick_interval": null,
+            "small_tick_interval": null,
+            "tick_font_size": null
+          }
+        ]
+      },
+      "expectAbsent": []
+    },
+    {
+      "name": "depth: copied, then the Circular slice is trimmed to its one source while Linear keeps two",
+      "token": "depth",
+      "input": {
+        "config": {
+          "form": {
+            "show_depth": true
+          },
+          "adv": {
+            "depth_tracks": [
+              {
+                "label": "cov_a",
+                "color": "#aa0000",
+                "height": null,
+                "large_tick_interval": null,
+                "small_tick_interval": null,
+                "tick_font_size": null
+              },
+              {
+                "label": "cov_b",
+                "color": "#00aa00",
+                "height": null,
+                "large_tick_interval": null,
+                "small_tick_interval": null,
+                "tick_font_size": null
+              }
+            ]
+          }
+        },
+        "ui": {
+          "mode": "linear"
+        }
+      },
+      "context": {
+        "committedMode": "linear",
+        "depthSources": {
+          "circular": 1,
+          "linear": 2
+        }
+      },
+      "expect": {
+        "/modes/circular/config/adv/depth_tracks": [
+          {
+            "label": "cov_a",
+            "color": "#aa0000",
+            "height": null,
+            "large_tick_interval": null,
+            "small_tick_interval": null,
+            "tick_font_size": null
+          }
+        ],
+        "/modes/linear/config/adv/depth_tracks": [
+          {
+            "label": "cov_a",
+            "color": "#aa0000",
+            "height": null,
+            "large_tick_interval": null,
+            "small_tick_interval": null,
+            "tick_font_size": null
+          },
+          {
+            "label": "cov_b",
+            "color": "#00aa00",
+            "height": null,
+            "large_tick_interval": null,
+            "small_tick_interval": null,
+            "tick_font_size": null
+          }
+        ]
+      },
+      "expectAbsent": []
+    },
+    {
+      "name": "depth: with no source in either mode each slice keeps one series (today's Math.max(1, n) reconcile)",
+      "token": "depth",
+      "input": {
+        "config": {
+          "form": {
+            "show_depth": false
+          },
+          "adv": {
+            "depth_tracks": [
+              {
+                "label": "cov_a",
+                "color": "#aa0000",
+                "height": null,
+                "large_tick_interval": null,
+                "small_tick_interval": null,
+                "tick_font_size": null
+              }
+            ]
+          }
+        },
+        "ui": {
+          "mode": "circular"
+        }
+      },
+      "context": {
+        "committedMode": "circular",
+        "depthSources": {
+          "circular": 0,
+          "linear": 0
+        }
+      },
+      "expect": {
+        "/modes/circular/config/adv/depth_tracks": [
+          {
+            "label": "cov_a",
+            "color": "#aa0000",
+            "height": null,
+            "large_tick_interval": null,
+            "small_tick_interval": null,
+            "tick_font_size": null
+          }
+        ],
+        "/modes/linear/config/adv/depth_tracks": [
+          {
+            "label": "cov_a",
+            "color": "#aa0000",
+            "height": null,
+            "large_tick_interval": null,
+            "small_tick_interval": null,
+            "tick_font_size": null
+          }
+        ]
+      },
+      "expectAbsent": []
+    },
+    {
+      "name": "copy: the flat Depth tick fallbacks stay adv fields in both slices and are not folded into series #1 (rev 5 Q10)",
+      "token": "copy",
+      "input": {
+        "config": {
+          "form": {
+            "show_depth": true
+          },
+          "adv": {
+            "depth_tracks": [
+              {
+                "label": "cov_a",
+                "color": "#aa0000",
+                "height": null,
+                "large_tick_interval": null,
+                "small_tick_interval": null,
+                "tick_font_size": null
+              },
+              {
+                "label": "cov_b",
+                "color": "#00aa00",
+                "height": null,
+                "large_tick_interval": null,
+                "small_tick_interval": null,
+                "tick_font_size": null
+              }
+            ],
+            "depth_large_tick_interval": 1000,
+            "depth_small_tick_interval": 200,
+            "depth_tick_font_size": 9
+          }
+        },
+        "ui": {
+          "mode": "circular"
+        }
+      },
+      "context": {
+        "committedMode": "circular",
+        "depthSources": {
+          "circular": 2,
+          "linear": 2
+        }
+      },
+      "expect": {
+        "/modes/circular/config/adv/depth_large_tick_interval": 1000,
+        "/modes/linear/config/adv/depth_large_tick_interval": 1000,
+        "/modes/circular/config/adv/depth_small_tick_interval": 200,
+        "/modes/linear/config/adv/depth_small_tick_interval": 200,
+        "/modes/circular/config/adv/depth_tick_font_size": 9,
+        "/modes/linear/config/adv/depth_tick_font_size": 9,
+        "/modes/circular/config/adv/depth_tracks": [
+          {
+            "label": "cov_a",
+            "color": "#aa0000",
+            "height": null,
+            "large_tick_interval": null,
+            "small_tick_interval": null,
+            "tick_font_size": null
+          },
+          {
+            "label": "cov_b",
+            "color": "#00aa00",
+            "height": null,
+            "large_tick_interval": null,
+            "small_tick_interval": null,
+            "tick_font_size": null
+          }
+        ],
+        "/modes/linear/config/adv/depth_tracks": [
+          {
+            "label": "cov_a",
+            "color": "#aa0000",
+            "height": null,
+            "large_tick_interval": null,
+            "small_tick_interval": null,
+            "tick_font_size": null
+          },
+          {
+            "label": "cov_b",
+            "color": "#00aa00",
+            "height": null,
+            "large_tick_interval": null,
+            "small_tick_interval": null,
+            "tick_font_size": null
+          }
+        ]
+      },
+      "expectAbsent": []
+    },
+    {
+      "name": "result-mode: Legend and Result-bound per-feature edits go to the committed Linear mode while Circular is shown",
+      "token": "result-mode",
+      "input": {
+        "config": {
+          "form": {},
+          "adv": {}
+        },
+        "features": {
+          "featureColorOverrides": {
+            "R1\u0000f1": {
+              "color": "#e8b441",
+              "caption": "tRNA_X"
+            }
+          },
+          "featureOverrides": {
+            "[\"linear\",\"R1\",\"f3\"]": {
+              "scope": "linear",
+              "recordKey": "R1",
+              "biologicalFeatureId": "f3",
+              "featureVisibility": "off",
+              "labelVisibility": null,
+              "labelText": "PROBE",
+              "labelSourceText": "hypothetical protein"
+            }
+          }
+        },
+        "editorState": {
+          "legend": {
+            "entries": [
+              {
+                "caption": "CDS",
+                "originalCaption": "CDS",
+                "color": "#112233",
+                "xPos": 10,
+                "yPos": 12,
+                "showStroke": false,
+                "featureIds": []
+              },
+              {
+                "caption": "MANUAL_ROW",
+                "originalCaption": "MANUAL_ROW",
+                "color": "#445566",
+                "xPos": 10,
+                "yPos": 12,
+                "showStroke": false,
+                "featureIds": []
+              }
+            ],
+            "deletedEntries": [
+              {
+                "caption": "cov_c",
+                "originalCaption": "cov_c",
+                "color": "#aa3300",
+                "xPos": 10,
+                "yPos": 12,
+                "showStroke": false,
+                "featureIds": []
+              }
+            ],
+            "colorOverrides": {
+              "CDS": "#112233"
+            },
+            "strokeOverrides": {
+              "CDS": {
+                "strokeColor": "#333333",
+                "strokeWidth": 1.5
+              }
+            },
+            "addedCaptions": [
+              "MANUAL_ROW"
+            ]
+          },
+          "featureStrokes": {
+            "overrides": {
+              "R1\u0000f2": {
+                "strokeColor": "#222222",
+                "strokeWidth": 2
+              }
+            }
+          }
+        },
+        "ui": {
+          "mode": "circular"
+        }
+      },
+      "context": {
+        "committedMode": "linear"
+      },
+      "expect": {
+        "/modes/linear/editorState/legend/entries": [
+          {
+            "caption": "CDS",
+            "originalCaption": "CDS",
+            "color": "#112233",
+            "xPos": 10,
+            "yPos": 12,
+            "showStroke": false,
+            "featureIds": []
+          },
+          {
+            "caption": "MANUAL_ROW",
+            "originalCaption": "MANUAL_ROW",
+            "color": "#445566",
+            "xPos": 10,
+            "yPos": 12,
+            "showStroke": false,
+            "featureIds": []
+          }
+        ],
+        "/modes/linear/editorState/legend/deletedEntries": [
+          {
+            "caption": "cov_c",
+            "originalCaption": "cov_c",
+            "color": "#aa3300",
+            "xPos": 10,
+            "yPos": 12,
+            "showStroke": false,
+            "featureIds": []
+          }
+        ],
+        "/modes/linear/editorState/legend/colorOverrides": {
+          "CDS": "#112233"
+        },
+        "/modes/linear/editorState/legend/strokeOverrides": {
+          "CDS": {
+            "strokeColor": "#333333",
+            "strokeWidth": 1.5
+          }
+        },
+        "/modes/linear/editorState/legend/addedCaptions": [
+          "MANUAL_ROW"
+        ],
+        "/modes/linear/editorState/featureStrokes/overrides": {
+          "R1\u0000f2": {
+            "strokeColor": "#222222",
+            "strokeWidth": 2
+          }
+        },
+        "/modes/linear/features/featureColorOverrides": {
+          "R1\u0000f1": {
+            "color": "#e8b441",
+            "caption": "tRNA_X"
+          }
+        },
+        "/modes/linear/features/featureOverrides": {
+          "[\"R1\",\"f3\"]": {
+            "recordKey": "R1",
+            "biologicalFeatureId": "f3",
+            "featureVisibility": "off",
+            "labelVisibility": null,
+            "labelText": "PROBE",
+            "labelSourceText": "hypothetical protein"
+          }
+        },
+        "/modes/circular/editorState/legend/entries": [],
+        "/modes/circular/editorState/legend/deletedEntries": [],
+        "/modes/circular/editorState/legend/colorOverrides": {},
+        "/modes/circular/editorState/legend/strokeOverrides": {},
+        "/modes/circular/editorState/legend/addedCaptions": [],
+        "/modes/circular/editorState/featureStrokes/overrides": {},
+        "/modes/circular/features/featureColorOverrides": {},
+        "/modes/circular/features/featureOverrides": {}
+      },
+      "expectAbsent": [
+        "/modes/linear/features/featureOverrides/[\"linear\",\"R1\",\"f3\"]"
+      ]
+    },
+    {
+      "name": "result-mode: Legend and Result-bound per-feature edits go to the committed Circular mode",
+      "token": "result-mode",
+      "input": {
+        "config": {
+          "form": {},
+          "adv": {}
+        },
+        "features": {
+          "featureColorOverrides": {
+            "R1\u0000f1": {
+              "color": "#e8b441",
+              "caption": "tRNA_X"
+            }
+          },
+          "featureOverrides": {
+            "[\"circular\",\"R1\",\"f3\"]": {
+              "scope": "circular",
+              "recordKey": "R1",
+              "biologicalFeatureId": "f3",
+              "featureVisibility": "off",
+              "labelVisibility": null,
+              "labelText": "PROBE",
+              "labelSourceText": "hypothetical protein"
+            }
+          }
+        },
+        "editorState": {
+          "legend": {
+            "entries": [
+              {
+                "caption": "CDS",
+                "originalCaption": "CDS",
+                "color": "#112233",
+                "xPos": 10,
+                "yPos": 12,
+                "showStroke": false,
+                "featureIds": []
+              },
+              {
+                "caption": "MANUAL_ROW",
+                "originalCaption": "MANUAL_ROW",
+                "color": "#445566",
+                "xPos": 10,
+                "yPos": 12,
+                "showStroke": false,
+                "featureIds": []
+              }
+            ],
+            "deletedEntries": [
+              {
+                "caption": "cov_c",
+                "originalCaption": "cov_c",
+                "color": "#aa3300",
+                "xPos": 10,
+                "yPos": 12,
+                "showStroke": false,
+                "featureIds": []
+              }
+            ],
+            "colorOverrides": {
+              "CDS": "#112233"
+            },
+            "strokeOverrides": {
+              "CDS": {
+                "strokeColor": "#333333",
+                "strokeWidth": 1.5
+              }
+            },
+            "addedCaptions": [
+              "MANUAL_ROW"
+            ]
+          },
+          "featureStrokes": {
+            "overrides": {
+              "R1\u0000f2": {
+                "strokeColor": "#222222",
+                "strokeWidth": 2
+              }
+            }
+          }
+        },
+        "ui": {
+          "mode": "circular"
+        }
+      },
+      "context": {
+        "committedMode": "circular"
+      },
+      "expect": {
+        "/modes/circular/editorState/legend/entries": [
+          {
+            "caption": "CDS",
+            "originalCaption": "CDS",
+            "color": "#112233",
+            "xPos": 10,
+            "yPos": 12,
+            "showStroke": false,
+            "featureIds": []
+          },
+          {
+            "caption": "MANUAL_ROW",
+            "originalCaption": "MANUAL_ROW",
+            "color": "#445566",
+            "xPos": 10,
+            "yPos": 12,
+            "showStroke": false,
+            "featureIds": []
+          }
+        ],
+        "/modes/circular/editorState/legend/deletedEntries": [
+          {
+            "caption": "cov_c",
+            "originalCaption": "cov_c",
+            "color": "#aa3300",
+            "xPos": 10,
+            "yPos": 12,
+            "showStroke": false,
+            "featureIds": []
+          }
+        ],
+        "/modes/circular/editorState/legend/colorOverrides": {
+          "CDS": "#112233"
+        },
+        "/modes/circular/editorState/legend/strokeOverrides": {
+          "CDS": {
+            "strokeColor": "#333333",
+            "strokeWidth": 1.5
+          }
+        },
+        "/modes/circular/editorState/legend/addedCaptions": [
+          "MANUAL_ROW"
+        ],
+        "/modes/circular/editorState/featureStrokes/overrides": {
+          "R1\u0000f2": {
+            "strokeColor": "#222222",
+            "strokeWidth": 2
+          }
+        },
+        "/modes/circular/features/featureColorOverrides": {
+          "R1\u0000f1": {
+            "color": "#e8b441",
+            "caption": "tRNA_X"
+          }
+        },
+        "/modes/circular/features/featureOverrides": {
+          "[\"R1\",\"f3\"]": {
+            "recordKey": "R1",
+            "biologicalFeatureId": "f3",
+            "featureVisibility": "off",
+            "labelVisibility": null,
+            "labelText": "PROBE",
+            "labelSourceText": "hypothetical protein"
+          }
+        },
+        "/modes/linear/editorState/legend/entries": [],
+        "/modes/linear/editorState/legend/deletedEntries": [],
+        "/modes/linear/editorState/legend/colorOverrides": {},
+        "/modes/linear/editorState/legend/strokeOverrides": {},
+        "/modes/linear/editorState/legend/addedCaptions": [],
+        "/modes/linear/editorState/featureStrokes/overrides": {},
+        "/modes/linear/features/featureColorOverrides": {},
+        "/modes/linear/features/featureOverrides": {}
+      },
+      "expectAbsent": [
+        "/modes/circular/features/featureOverrides/[\"circular\",\"R1\",\"f3\"]"
+      ]
+    },
+    {
+      "name": "by-scope: each record display row goes to the slice of its scope and loses scope",
+      "token": "by-scope",
+      "input": {
+        "config": {
+          "form": {},
+          "adv": {},
+          "recordDisplayDrafts": [
+            {
+              "scope": "linear",
+              "sourceUid": "linear-seq-0001",
+              "selector": "#1",
+              "recordId": "TESTB",
+              "topologyOverride": null,
+              "startCoordinate": 201,
+              "reverseComplementOverride": null,
+              "anchorIntent": null
+            },
+            {
+              "scope": "circular",
+              "sourceUid": "circular",
+              "selector": "#1",
+              "recordId": "TESTA",
+              "topologyOverride": null,
+              "startCoordinate": 101,
+              "reverseComplementOverride": null,
+              "anchorIntent": null
+            }
+          ]
+        },
+        "ui": {
+          "mode": "circular"
+        }
+      },
+      "context": {
+        "committedMode": "linear"
+      },
+      "expect": {
+        "/modes/circular/config/recordDisplayDrafts": [
+          {
+            "sourceUid": "circular",
+            "selector": "#1",
+            "recordId": "TESTA",
+            "topologyOverride": null,
+            "startCoordinate": 101,
+            "reverseComplementOverride": null,
+            "anchorIntent": null
+          }
+        ],
+        "/modes/linear/config/recordDisplayDrafts": [
+          {
+            "sourceUid": "linear-seq-0001",
+            "selector": "#1",
+            "recordId": "TESTB",
+            "topologyOverride": null,
+            "startCoordinate": 201,
+            "reverseComplementOverride": null,
+            "anchorIntent": null
+          }
+        ]
+      },
+      "expectAbsent": [
+        "/modes/circular/config/recordDisplayDrafts/0/scope",
+        "/modes/linear/config/recordDisplayDrafts/0/scope",
+        "/modes/circular/config/recordDisplayDrafts/1",
+        "/modes/linear/config/recordDisplayDrafts/1"
+      ]
+    },
+    {
+      "name": "by-side: Main rows reach both slices (dormant where the record key is the other mode's), each lane row only its side's mode; scope dropped",
+      "token": "by-side",
+      "input": {
+        "config": {
+          "form": {},
+          "adv": {},
+          "featurePlacementOverrides": {
+            "[\"circular\",\"record-1\",\"fM1\"]": {
+              "scope": "circular",
+              "recordKey": "record-1",
+              "biologicalFeatureId": "fM1",
+              "placement": {
+                "kind": "main"
+              }
+            },
+            "[\"linear\",\"record-1\",\"fM1\"]": {
+              "scope": "linear",
+              "recordKey": "record-1",
+              "biologicalFeatureId": "fM1",
+              "placement": {
+                "kind": "main"
+              }
+            },
+            "[\"circular\",\"linear-seq-0001\",\"fM2\"]": {
+              "scope": "circular",
+              "recordKey": "linear-seq-0001",
+              "biologicalFeatureId": "fM2",
+              "placement": {
+                "kind": "main"
+              }
+            },
+            "[\"linear\",\"linear-seq-0001\",\"fM2\"]": {
+              "scope": "linear",
+              "recordKey": "linear-seq-0001",
+              "biologicalFeatureId": "fM2",
+              "placement": {
+                "kind": "main"
+              }
+            },
+            "[\"circular\",\"record-1\",\"fO\"]": {
+              "scope": "circular",
+              "recordKey": "record-1",
+              "biologicalFeatureId": "fO",
+              "placement": {
+                "kind": "lane",
+                "side": "outward",
+                "level": 1
+              }
+            },
+            "[\"linear\",\"linear-seq-0001\",\"fB\"]": {
+              "scope": "linear",
+              "recordKey": "linear-seq-0001",
+              "biologicalFeatureId": "fB",
+              "placement": {
+                "kind": "lane",
+                "side": "below",
+                "level": 2
+              }
+            }
+          }
+        },
+        "ui": {
+          "mode": "linear"
+        }
+      },
+      "context": {
+        "committedMode": "linear"
+      },
+      "expect": {
+        "/modes/circular/config/featurePlacementOverrides": {
+          "[\"record-1\",\"fM1\"]": {
+            "recordKey": "record-1",
+            "biologicalFeatureId": "fM1",
+            "placement": {
+              "kind": "main"
+            }
+          },
+          "[\"linear-seq-0001\",\"fM2\"]": {
+            "recordKey": "linear-seq-0001",
+            "biologicalFeatureId": "fM2",
+            "placement": {
+              "kind": "main"
+            }
+          },
+          "[\"record-1\",\"fO\"]": {
+            "recordKey": "record-1",
+            "biologicalFeatureId": "fO",
+            "placement": {
+              "kind": "lane",
+              "side": "outward",
+              "level": 1
+            }
+          }
+        },
+        "/modes/linear/config/featurePlacementOverrides": {
+          "[\"record-1\",\"fM1\"]": {
+            "recordKey": "record-1",
+            "biologicalFeatureId": "fM1",
+            "placement": {
+              "kind": "main"
+            }
+          },
+          "[\"linear-seq-0001\",\"fM2\"]": {
+            "recordKey": "linear-seq-0001",
+            "biologicalFeatureId": "fM2",
+            "placement": {
+              "kind": "main"
+            }
+          },
+          "[\"linear-seq-0001\",\"fB\"]": {
+            "recordKey": "linear-seq-0001",
+            "biologicalFeatureId": "fB",
+            "placement": {
+              "kind": "lane",
+              "side": "below",
+              "level": 2
+            }
+          }
+        }
+      },
+      "expectAbsent": []
+    },
+    {
+      "name": "by-leaf: unmanaged overrides split by _MODE_CONFIG_OVERRIDE_PREFIXES (objects.ticks Circular, objects.blast_match Linear); other leaves go to both",
+      "token": "by-leaf",
+      "input": {
+        "config": {
+          "form": {},
+          "adv": {},
+          "unmanagedConfigOverrides": {
+            "objects.ticks.tick_width": 4,
+            "objects.blast_match.curve_tension": 0.3,
+            "objects.legends.fill": "#222222"
+          }
+        },
+        "ui": {
+          "mode": "circular"
+        }
+      },
+      "context": {
+        "committedMode": "circular"
+      },
+      "expect": {
+        "/modes/circular/config/unmanagedConfigOverrides": {
+          "objects.ticks.tick_width": 4,
+          "objects.legends.fill": "#222222"
+        },
+        "/modes/linear/config/unmanagedConfigOverrides": {
+          "objects.blast_match.curve_tension": 0.3,
+          "objects.legends.fill": "#222222"
+        }
+      },
+      "expectAbsent": [
+        "/modes/circular/config/unmanagedConfigOverrides/objects.blast_match.curve_tension",
+        "/modes/linear/config/unmanagedConfigOverrides/objects.ticks.tick_width"
+      ]
+    },
+    {
+      "name": "copy: losat leaf groups outfmt and blastn (the LOSATN task) go to both slices",
+      "token": "copy",
+      "input": {
+        "config": {
+          "form": {},
+          "adv": {},
+          "losatProgram": "blastp",
+          "losat": {
+            "outfmt": "7",
+            "executionMode": "serial",
+            "totalThreadBudget": "safe",
+            "threadsPerJob": "auto",
+            "parallelWorkers": "2",
+            "blastn": {
+              "task": "dc-megablast"
+            },
+            "blastp": {
+              "mode": "collinear",
+              "hitLimitsByMode": {
+                "pairwise": {
+                  "candidateLimit": 3,
+                  "orthogroupMemberMaxHits": null
+                },
+                "orthogroup": {
+                  "candidateLimit": null,
+                  "orthogroupMemberMaxHits": null
+                },
+                "collinear": {
+                  "candidateLimit": 5,
+                  "orthogroupMemberMaxHits": 5
+                }
+              },
+              "maxHits": 5,
+              "candidateLimit": 7,
+              "orthogroupMembershipMode": "anchor_core_v1",
+              "orthogroupMemberMaxHits": 6,
+              "collinearInferOrthogroups": false,
+              "collinearMinAnchors": 1,
+              "collinearMaxUnitGap": 0,
+              "collinearMaxDiagonalDrift": 0,
+              "collinearMaxConflictsInMergeGap": 1,
+              "collinearMaxParalogLinksPerOrthogroup": 2,
+              "collinearColorMode": "orientation",
+              "collinearUnitMode": "auto",
+              "collinearAnchorMode": "rbh",
+              "collinearMergeOrientation": "either",
+              "collinearSearchScope": "adjacent"
+            }
+          }
+        },
+        "ui": {
+          "mode": "circular"
+        }
+      },
+      "context": {
+        "committedMode": "circular"
+      },
+      "expect": {
+        "/modes/circular/config/losat/outfmt": "7",
+        "/modes/linear/config/losat/outfmt": "7",
+        "/modes/circular/config/losat/blastn": {
+          "task": "dc-megablast"
+        },
+        "/modes/linear/config/losat/blastn": {
+          "task": "dc-megablast"
+        }
+      },
+      "expectAbsent": []
+    },
+    {
+      "name": "own: losat blastp goes to Linear unchanged, stale flat-plus-map pair included; Circular takes the default; execution goes to ui.losatExecution",
+      "token": "own",
+      "input": {
+        "config": {
+          "form": {},
+          "adv": {},
+          "losatProgram": "blastp",
+          "losat": {
+            "outfmt": "7",
+            "executionMode": "serial",
+            "totalThreadBudget": "safe",
+            "threadsPerJob": "auto",
+            "parallelWorkers": "2",
+            "blastn": {
+              "task": "dc-megablast"
+            },
+            "blastp": {
+              "mode": "collinear",
+              "hitLimitsByMode": {
+                "pairwise": {
+                  "candidateLimit": 3,
+                  "orthogroupMemberMaxHits": null
+                },
+                "orthogroup": {
+                  "candidateLimit": null,
+                  "orthogroupMemberMaxHits": null
+                },
+                "collinear": {
+                  "candidateLimit": 5,
+                  "orthogroupMemberMaxHits": 5
+                }
+              },
+              "maxHits": 5,
+              "candidateLimit": 7,
+              "orthogroupMembershipMode": "anchor_core_v1",
+              "orthogroupMemberMaxHits": 6,
+              "collinearInferOrthogroups": false,
+              "collinearMinAnchors": 1,
+              "collinearMaxUnitGap": 0,
+              "collinearMaxDiagonalDrift": 0,
+              "collinearMaxConflictsInMergeGap": 1,
+              "collinearMaxParalogLinksPerOrthogroup": 2,
+              "collinearColorMode": "orientation",
+              "collinearUnitMode": "auto",
+              "collinearAnchorMode": "rbh",
+              "collinearMergeOrientation": "either",
+              "collinearSearchScope": "adjacent"
+            }
+          }
+        },
+        "ui": {
+          "mode": "circular"
+        }
+      },
+      "context": {
+        "committedMode": "circular"
+      },
+      "expect": {
+        "/modes/circular/config/losat/blastp": {
+          "mode": "orthogroup",
+          "hitLimitsByMode": {
+            "pairwise": {
+              "candidateLimit": null,
+              "orthogroupMemberMaxHits": null
+            },
+            "orthogroup": {
+              "candidateLimit": null,
+              "orthogroupMemberMaxHits": null
+            },
+            "collinear": {
+              "candidateLimit": 5,
+              "orthogroupMemberMaxHits": 5
+            }
+          },
+          "maxHits": 5,
+          "candidateLimit": null,
+          "orthogroupMembershipMode": "anchor_core_v1",
+          "orthogroupMemberMaxHits": null,
+          "collinearInferOrthogroups": false,
+          "collinearMinAnchors": 1,
+          "collinearMaxUnitGap": 0,
+          "collinearMaxDiagonalDrift": 0,
+          "collinearMaxConflictsInMergeGap": 1,
+          "collinearMaxParalogLinksPerOrthogroup": 2,
+          "collinearColorMode": "orientation",
+          "collinearUnitMode": "auto",
+          "collinearAnchorMode": "rbh",
+          "collinearMergeOrientation": "either",
+          "collinearSearchScope": "adjacent"
+        },
+        "/modes/linear/config/losat/blastp": {
+          "mode": "collinear",
+          "hitLimitsByMode": {
+            "pairwise": {
+              "candidateLimit": 3,
+              "orthogroupMemberMaxHits": null
+            },
+            "orthogroup": {
+              "candidateLimit": null,
+              "orthogroupMemberMaxHits": null
+            },
+            "collinear": {
+              "candidateLimit": 5,
+              "orthogroupMemberMaxHits": 5
+            }
+          },
+          "maxHits": 5,
+          "candidateLimit": 7,
+          "orthogroupMembershipMode": "anchor_core_v1",
+          "orthogroupMemberMaxHits": 6,
+          "collinearInferOrthogroups": false,
+          "collinearMinAnchors": 1,
+          "collinearMaxUnitGap": 0,
+          "collinearMaxDiagonalDrift": 0,
+          "collinearMaxConflictsInMergeGap": 1,
+          "collinearMaxParalogLinksPerOrthogroup": 2,
+          "collinearColorMode": "orientation",
+          "collinearUnitMode": "auto",
+          "collinearAnchorMode": "rbh",
+          "collinearMergeOrientation": "either",
+          "collinearSearchScope": "adjacent"
+        },
+        "/modes/linear/config/losat/blastp/candidateLimit": 7,
+        "/modes/linear/config/losat/blastp/hitLimitsByMode/collinear/candidateLimit": 5,
+        "/ui/losatExecution/executionMode": "serial",
+        "/ui/losatExecution/totalThreadBudget": "safe",
+        "/ui/losatExecution/threadsPerJob": "auto",
+        "/ui/losatExecution/parallelWorkers": "2"
+      },
+      "expectAbsent": [
+        "/modes/circular/config/losat/executionMode",
+        "/modes/linear/config/losat/executionMode",
+        "/modes/circular/config/losat/totalThreadBudget",
+        "/modes/linear/config/losat/totalThreadBudget",
+        "/modes/circular/config/losat/threadsPerJob",
+        "/modes/linear/config/losat/threadsPerJob",
+        "/modes/circular/config/losat/parallelWorkers",
+        "/modes/linear/config/losat/parallelWorkers"
+      ]
+    },
+    {
+      "name": "by-binding: per annotation by its record binding's mode; unbound annotations and the set fields go to both; a set left empty is kept, so slot set_id references resolve",
+      "token": "by-binding",
+      "input": {
+        "config": {
+          "form": {},
+          "adv": {
+            "circular_track_slots_enabled": true,
+            "circular_track_slots": [
+              {
+                "id": "features",
+                "renderer": "features",
+                "enabled": true,
+                "width": null,
+                "radius": null,
+                "inner_gap_px": null,
+                "outer_gap_px": null,
+                "side": "inside",
+                "z": 0,
+                "params": {
+                  "lane_direction": "inside"
+                }
+              },
+              {
+                "id": "annotations_1",
+                "renderer": "annotations",
+                "enabled": true,
+                "width": null,
+                "radius": null,
+                "inner_gap_px": null,
+                "outer_gap_px": null,
+                "side": "outside",
+                "z": 0,
+                "params": {
+                  "set_id": "s2"
+                }
+              }
+            ],
+            "linear_track_slots_enabled": true,
+            "linear_track_slots": [
+              {
+                "id": "features",
+                "renderer": "features",
+                "enabled": true,
+                "side": "overlay",
+                "height": "",
+                "spacing": "",
+                "z": 0,
+                "params": {}
+              },
+              {
+                "id": "annotations_1",
+                "renderer": "annotations",
+                "enabled": true,
+                "side": "above",
+                "height": "",
+                "spacing": "",
+                "z": 0,
+                "params": {
+                  "set_id": "s2"
+                }
+              }
+            ]
+          },
+          "annotationSets": [
+            {
+              "id": "s1",
+              "annotations": [
+                {
+                  "id": "a1",
+                  "target": {
+                    "kind": "featureSpan",
+                    "record": {
+                      "kind": "recordId",
+                      "value": "TESTA"
+                    },
+                    "selectors": [
+                      {
+                        "key": "qualifier",
+                        "value": "locus_tag=TESTA_0001"
+                      }
+                    ],
+                    "envelope": "outer_bounds",
+                    "circularPath": "shortest"
+                  },
+                  "label": "A1",
+                  "mark": "highlight",
+                  "lane": null,
+                  "style": null,
+                  "legendLabel": null,
+                  "metadata": {
+                    "_gbdraw_web_target_record_key": "[\"linear\",\"linear-seq-0001\",\"gb\",[\"TESTA.gb\",6917],null]::[0,\"TESTA\",5000]"
+                  }
+                },
+                {
+                  "id": "a2",
+                  "target": {
+                    "kind": "featureSpan",
+                    "record": {
+                      "kind": "recordId",
+                      "value": "TESTA"
+                    },
+                    "selectors": [
+                      {
+                        "key": "qualifier",
+                        "value": "locus_tag=TESTA_0001"
+                      }
+                    ],
+                    "envelope": "outer_bounds",
+                    "circularPath": "shortest"
+                  },
+                  "label": "A2",
+                  "mark": "highlight",
+                  "lane": null,
+                  "style": null,
+                  "legendLabel": null,
+                  "metadata": {
+                    "_gbdraw_web_target_record_key": "[\"circular\",\"\",\"gb\",[\"TESTA.gb\",6917],null]::[0,\"TESTA\",5000]"
+                  }
+                },
+                {
+                  "id": "a3",
+                  "target": {
+                    "kind": "featureSpan",
+                    "record": null,
+                    "selectors": [
+                      {
+                        "key": "qualifier",
+                        "value": "product=hypothetical protein"
+                      }
+                    ],
+                    "envelope": "outer_bounds",
+                    "circularPath": "shortest"
+                  },
+                  "label": "A3",
+                  "mark": "highlight",
+                  "lane": null,
+                  "style": null,
+                  "legendLabel": null,
+                  "metadata": {}
+                }
+              ],
+              "defaultStyle": null,
+              "legendLabel": "Marks"
+            },
+            {
+              "id": "s2",
+              "annotations": [
+                {
+                  "id": "a4",
+                  "target": {
+                    "kind": "featureSpan",
+                    "record": {
+                      "kind": "recordId",
+                      "value": "TESTA"
+                    },
+                    "selectors": [
+                      {
+                        "key": "qualifier",
+                        "value": "locus_tag=TESTA_0001"
+                      }
+                    ],
+                    "envelope": "outer_bounds",
+                    "circularPath": "shortest"
+                  },
+                  "label": "A4",
+                  "mark": "highlight",
+                  "lane": null,
+                  "style": null,
+                  "legendLabel": null,
+                  "metadata": {
+                    "_gbdraw_web_target_record_key": "[\"linear\",\"linear-seq-0001\",\"gb\",[\"TESTA.gb\",6917],null]::[0,\"TESTA\",5000]"
+                  }
+                }
+              ],
+              "defaultStyle": {
+                "stroke": "#222222",
+                "strokeWidth": 1
+              },
+              "legendLabel": "Linear marks"
+            }
+          ]
+        },
+        "ui": {
+          "mode": "circular"
+        }
+      },
+      "context": {
+        "committedMode": "circular"
+      },
+      "expect": {
+        "/modes/circular/config/annotationSets/0/id": "s1",
+        "/modes/linear/config/annotationSets/0/id": "s1",
+        "/modes/circular/config/annotationSets/0/legendLabel": "Marks",
+        "/modes/linear/config/annotationSets/0/legendLabel": "Marks",
+        "/modes/circular/config/annotationSets/0/defaultStyle": null,
+        "/modes/linear/config/annotationSets/0/defaultStyle": null,
+        "/modes/circular/config/annotationSets/0/annotations": [
+          {
+            "id": "a2",
+            "target": {
+              "kind": "featureSpan",
+              "record": {
+                "kind": "recordId",
+                "value": "TESTA"
+              },
+              "selectors": [
+                {
+                  "key": "qualifier",
+                  "value": "locus_tag=TESTA_0001"
+                }
+              ],
+              "envelope": "outer_bounds",
+              "circularPath": "shortest"
+            },
+            "label": "A2",
+            "mark": "highlight",
+            "lane": null,
+            "style": null,
+            "legendLabel": null,
+            "metadata": {
+              "_gbdraw_web_target_record_key": "[\"circular\",\"\",\"gb\",[\"TESTA.gb\",6917],null]::[0,\"TESTA\",5000]"
+            }
+          },
+          {
+            "id": "a3",
+            "target": {
+              "kind": "featureSpan",
+              "record": null,
+              "selectors": [
+                {
+                  "key": "qualifier",
+                  "value": "product=hypothetical protein"
+                }
+              ],
+              "envelope": "outer_bounds",
+              "circularPath": "shortest"
+            },
+            "label": "A3",
+            "mark": "highlight",
+            "lane": null,
+            "style": null,
+            "legendLabel": null,
+            "metadata": {}
+          }
+        ],
+        "/modes/linear/config/annotationSets/0/annotations": [
+          {
+            "id": "a1",
+            "target": {
+              "kind": "featureSpan",
+              "record": {
+                "kind": "recordId",
+                "value": "TESTA"
+              },
+              "selectors": [
+                {
+                  "key": "qualifier",
+                  "value": "locus_tag=TESTA_0001"
+                }
+              ],
+              "envelope": "outer_bounds",
+              "circularPath": "shortest"
+            },
+            "label": "A1",
+            "mark": "highlight",
+            "lane": null,
+            "style": null,
+            "legendLabel": null,
+            "metadata": {
+              "_gbdraw_web_target_record_key": "[\"linear\",\"linear-seq-0001\",\"gb\",[\"TESTA.gb\",6917],null]::[0,\"TESTA\",5000]"
+            }
+          },
+          {
+            "id": "a3",
+            "target": {
+              "kind": "featureSpan",
+              "record": null,
+              "selectors": [
+                {
+                  "key": "qualifier",
+                  "value": "product=hypothetical protein"
+                }
+              ],
+              "envelope": "outer_bounds",
+              "circularPath": "shortest"
+            },
+            "label": "A3",
+            "mark": "highlight",
+            "lane": null,
+            "style": null,
+            "legendLabel": null,
+            "metadata": {}
+          }
+        ],
+        "/modes/circular/config/annotationSets/1": {
+          "id": "s2",
+          "annotations": [],
+          "defaultStyle": {
+            "stroke": "#222222",
+            "strokeWidth": 1
+          },
+          "legendLabel": "Linear marks"
+        },
+        "/modes/linear/config/annotationSets/1": {
+          "id": "s2",
+          "annotations": [
+            {
+              "id": "a4",
+              "target": {
+                "kind": "featureSpan",
+                "record": {
+                  "kind": "recordId",
+                  "value": "TESTA"
+                },
+                "selectors": [
+                  {
+                    "key": "qualifier",
+                    "value": "locus_tag=TESTA_0001"
+                  }
+                ],
+                "envelope": "outer_bounds",
+                "circularPath": "shortest"
+              },
+              "label": "A4",
+              "mark": "highlight",
+              "lane": null,
+              "style": null,
+              "legendLabel": null,
+              "metadata": {
+                "_gbdraw_web_target_record_key": "[\"linear\",\"linear-seq-0001\",\"gb\",[\"TESTA.gb\",6917],null]::[0,\"TESTA\",5000]"
+              }
+            }
+          ],
+          "defaultStyle": {
+            "stroke": "#222222",
+            "strokeWidth": 1
+          },
+          "legendLabel": "Linear marks"
+        },
+        "/modes/circular/config/adv/circular_track_slots/1/params/set_id": "s2",
+        "/modes/linear/config/adv/linear_track_slots/1/params/set_id": "s2"
+      },
+      "expectAbsent": [
+        "/modes/circular/config/annotationSets/2",
+        "/modes/linear/config/annotationSets/2"
+      ]
+    },
+    {
+      "name": "by-binding: a featureIdentity target (OV-132 output, scope linear) goes to its scope's slice only and loses scope",
+      "token": "by-binding",
+      "input": {
+        "config": {
+          "form": {},
+          "adv": {},
+          "annotationSets": [
+            {
+              "id": "s2",
+              "annotations": [
+                {
+                  "id": "b1",
+                  "target": {
+                    "kind": "featureIdentity",
+                    "scope": "linear",
+                    "recordKey": "linear-seq-0001",
+                    "biologicalFeatureId": "f3f7207f4",
+                    "envelope": "outer_bounds",
+                    "circularPath": "shortest"
+                  },
+                  "label": "B1",
+                  "mark": "highlight",
+                  "lane": null,
+                  "style": null,
+                  "legendLabel": null,
+                  "metadata": {}
+                },
+                {
+                  "id": "b2",
+                  "target": {
+                    "kind": "featureSpan",
+                    "record": null,
+                    "selectors": [
+                      {
+                        "key": "qualifier",
+                        "value": "product=hypothetical protein"
+                      }
+                    ],
+                    "envelope": "outer_bounds",
+                    "circularPath": "shortest"
+                  },
+                  "label": "B2",
+                  "mark": "highlight",
+                  "lane": null,
+                  "style": null,
+                  "legendLabel": null,
+                  "metadata": {}
+                }
+              ],
+              "defaultStyle": null,
+              "legendLabel": null
+            }
+          ]
+        },
+        "ui": {
+          "mode": "circular"
+        }
+      },
+      "context": {
+        "committedMode": "linear"
+      },
+      "expect": {
+        "/modes/linear/config/annotationSets/0/annotations/0/id": "b1",
+        "/modes/linear/config/annotationSets/0/annotations/0/target": {
+          "kind": "featureIdentity",
+          "recordKey": "linear-seq-0001",
+          "biologicalFeatureId": "f3f7207f4",
+          "envelope": "outer_bounds",
+          "circularPath": "shortest"
+        },
+        "/modes/linear/config/annotationSets/0/annotations/1/id": "b2",
+        "/modes/circular/config/annotationSets/0/annotations/0/id": "b2"
+      },
+      "expectAbsent": [
+        "/modes/circular/config/annotationSets/0/annotations/1",
+        "/modes/linear/config/annotationSets/0/annotations/2",
+        "/modes/linear/config/annotationSets/0/annotations/0/target/scope"
+      ]
+    },
+    {
+      "name": "result-mode: the saved Features-list record index follows the Result's mode (Circular) while Linear is shown; the other slice takes 0 (rev 5 Q13)",
+      "token": "result-mode",
+      "input": {
+        "config": {
+          "form": {},
+          "adv": {}
+        },
+        "features": {
+          "selectedFeatureRecordIdx": 2
+        },
+        "ui": {
+          "mode": "linear"
+        }
+      },
+      "context": {
+        "committedMode": "circular"
+      },
+      "expect": {
+        "/modes/circular/ui/selectedFeatureRecordIdx": 2,
+        "/modes/linear/ui/selectedFeatureRecordIdx": 0
+      },
+      "expectAbsent": [
+        "/modes/circular/features/selectedFeatureRecordIdx",
+        "/modes/linear/features/selectedFeatureRecordIdx"
+      ]
+    },
+    {
+      "name": "app level: adv.rich_feature_popup moves to the top-level ui.richFeaturePopup and leaves both slices (rev 5 Q11)",
+      "input": {
+        "config": {
+          "form": {},
+          "adv": {
+            "rich_feature_popup": false
+          }
+        },
+        "ui": {
+          "mode": "circular"
+        }
+      },
+      "context": {
+        "committedMode": "circular"
+      },
+      "expect": {
+        "/ui/richFeaturePopup": false
+      },
+      "expectAbsent": [
+        "/modes/circular/config/adv/rich_feature_popup",
+        "/modes/linear/config/adv/rich_feature_popup"
+      ]
+    },
+    {
+      "name": "registry: retired and non-registry draft keys never enter a slice",
+      "input": {
+        "config": {
+          "form": {
+            "plot_title": "X"
+          },
+          "adv": {
+            "depth_tracks": [
+              {
+                "label": "cov_a",
+                "color": "#aa0000",
+                "height": null,
+                "large_tick_interval": null,
+                "small_tick_interval": null,
+                "tick_font_size": null
+              }
+            ],
+            "depth_large_tick_interval": null,
+            "depth_small_tick_interval": null,
+            "depth_tick_font_size": null
+          },
+          "modeProfiles": {
+            "schema": 1,
+            "activeMode": "circular",
+            "profiles": {}
+          },
+          "paletteInstantPreviewEnabled": true,
+          "losat": {
+            "outfmt": "6",
+            "executionMode": "threaded",
+            "totalThreadBudget": "safe",
+            "threadsPerJob": "auto",
+            "blastn": {
+              "task": "megablast"
+            },
+            "blastp": {
+              "mode": "orthogroup",
+              "hitLimitsByMode": {
+                "pairwise": {
+                  "candidateLimit": null,
+                  "orthogroupMemberMaxHits": null
+                },
+                "orthogroup": {
+                  "candidateLimit": null,
+                  "orthogroupMemberMaxHits": null
+                },
+                "collinear": {
+                  "candidateLimit": 5,
+                  "orthogroupMemberMaxHits": 5
+                }
+              },
+              "maxHits": 5,
+              "candidateLimit": null,
+              "orthogroupMembershipMode": "anchor_core_v1",
+              "orthogroupMemberMaxHits": null,
+              "collinearInferOrthogroups": false,
+              "collinearMinAnchors": 1,
+              "collinearMaxUnitGap": 0,
+              "collinearMaxDiagonalDrift": 0,
+              "collinearMaxConflictsInMergeGap": 1,
+              "collinearMaxParalogLinksPerOrthogroup": 2,
+              "collinearColorMode": "orientation",
+              "collinearUnitMode": "auto",
+              "collinearAnchorMode": "rbh",
+              "collinearMergeOrientation": "either",
+              "collinearSearchScope": "adjacent"
+            }
+          }
+        },
+        "features": {
+          "selectedFeatureRecordIdx": 1
+        },
+        "editorState": {
+          "legend": {
+            "entries": [],
+            "originalOrder": [
+              "CDS"
+            ],
+            "originalColors": {
+              "CDS": "#54bcf8"
+            }
+          }
+        },
+        "ui": {
+          "mode": "circular"
+        }
+      },
+      "context": {
+        "committedMode": "circular"
+      },
+      "expect": {
+        "/modes/circular/config/form/plot_title": "X",
+        "/ui/losatExecution/executionMode": "threaded"
+      },
+      "expectAbsent": [
+        "/modes/circular/config/modeProfiles",
+        "/modes/linear/config/modeProfiles",
+        "/modes/circular/config/paletteInstantPreviewEnabled",
+        "/modes/linear/config/paletteInstantPreviewEnabled",
+        "/modes/circular/config/losat/executionMode",
+        "/modes/linear/config/losat/executionMode",
+        "/modes/circular/config/losat/totalThreadBudget",
+        "/modes/linear/config/losat/totalThreadBudget",
+        "/modes/circular/config/losat/threadsPerJob",
+        "/modes/linear/config/losat/threadsPerJob",
+        "/modes/circular/config/losat/parallelWorkers",
+        "/modes/linear/config/losat/parallelWorkers",
+        "/modes/circular/features/selectedFeatureRecordIdx",
+        "/modes/linear/features/selectedFeatureRecordIdx",
+        "/modes/circular/features/featureVisibilityOverrides",
+        "/modes/linear/features/featureVisibilityOverrides",
+        "/modes/circular/features/labelTextFeatureOverrides",
+        "/modes/linear/features/labelTextFeatureOverrides",
+        "/modes/circular/features/labelVisibilityOverrides",
+        "/modes/linear/features/labelVisibilityOverrides",
+        "/modes/circular/features/labelTextFeatureOverrideSources",
+        "/modes/linear/features/labelTextFeatureOverrideSources",
+        "/modes/circular/editorState/legend/originalOrder",
+        "/modes/linear/editorState/legend/originalOrder",
+        "/modes/circular/editorState/legend/originalColors",
+        "/modes/linear/editorState/legend/originalColors",
+        "/modes/circular/editorState/originalSvgStroke",
+        "/modes/linear/editorState/originalSvgStroke",
+        "/modes/circular/editorState/featureCatalog",
+        "/modes/linear/editorState/featureCatalog",
+        "/modes/circular/config/form/legend",
+        "/modes/linear/config/form/legend",
+        "/modes/circular/config/adv/plot_title_position",
+        "/modes/linear/config/adv/plot_title_position",
+        "/modes/circular/config/adv/losatProgram",
+        "/modes/linear/config/adv/losatProgram",
+        "/modes/circular/config/adv/rich_feature_popup",
+        "/modes/linear/config/adv/rich_feature_popup",
+        "/modes/circular/config/cliOptions",
+        "/modes/linear/config/cliOptions",
+        "/modes/circular/config/colorsAreOverrides",
+        "/modes/linear/config/colorsAreOverrides"
+      ]
+    },
+    {
+      "name": "F1 two-mode-project.v44: Linear Result saved while Circular is shown (§4.7)",
+      "fixture": "tests/fixtures/sessions/two-mode-project.v44.gbdraw-session.json.gz",
+      "context": {
+        "committedMode": "linear",
+        "modeProfiles": {
+          "schema": 1,
+          "activeMode": "circular",
+          "profiles": {
+            "circular": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-5",
+                "identity": 70,
+                "alignment_length": 0,
+                "axis_stroke_color": null,
+                "pairwise_match_style": "ribbon",
+                "plot_title_font_size": "20",
+                "def_font_size": "14",
+                "plot_title": "CIRC_TITLE"
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": true,
+                "identity": true,
+                "alignment_length": true,
+                "axis_stroke_color": true,
+                "pairwise_match_style": true,
+                "plot_title_font_size": false,
+                "def_font_size": false,
+                "plot_title": false
+              }
+            },
+            "linear": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-2",
+                "identity": 0,
+                "alignment_length": 0,
+                "axis_stroke_color": "lightgray",
+                "pairwise_match_style": "curve",
+                "plot_title_font_size": null,
+                "def_font_size": null,
+                "plot_title": "LIN_TITLE"
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": true,
+                "identity": true,
+                "alignment_length": true,
+                "axis_stroke_color": true,
+                "pairwise_match_style": true,
+                "plot_title_font_size": true,
+                "def_font_size": true,
+                "plot_title": false
+              }
+            }
+          }
+        },
+        "depthSources": {
+          "circular": 1,
+          "linear": 1
+        }
+      },
+      "expect": {
+        "/version": 46,
+        "/ui/mode": "circular",
+        "/renderRequest/mode": "linear",
+        "/editorState/legend/originalOrder": [
+          "CDS",
+          "tRNA_RENAMED",
+          "cov_c"
+        ],
+        "/modes/circular/config/form/plot_title": "CIRC_TITLE",
+        "/modes/linear/config/form/plot_title": "LIN_TITLE",
+        "/modes/circular/config/adv/plot_title_font_size": "20",
+        "/modes/linear/config/adv/plot_title_font_size": null,
+        "/modes/circular/config/adv/def_font_size": "14",
+        "/modes/linear/config/adv/def_font_size": null,
+        "/modes/circular/config/adv/evalue": "1e-5",
+        "/modes/linear/config/adv/evalue": "1e-2",
+        "/modes/circular/config/adv/identity": 70,
+        "/modes/linear/config/adv/identity": 0,
+        "/modes/circular/config/adv/axis_stroke_color": null,
+        "/modes/linear/config/adv/axis_stroke_color": "lightgray",
+        "/modes/circular/config/adv/pairwise_match_style": "ribbon",
+        "/modes/linear/config/adv/pairwise_match_style": "curve",
+        "/modes/circular/config/adv/min_bitscore": 50,
+        "/modes/linear/config/adv/min_bitscore": 50,
+        "/modes/circular/config/adv/alignment_length": 0,
+        "/modes/linear/config/adv/alignment_length": 0,
+        "/modes/circular/config/adv/window_size": 500,
+        "/modes/linear/config/adv/window_size": 500,
+        "/modes/circular/config/adv/step_size": 50,
+        "/modes/linear/config/adv/step_size": 50,
+        "/modes/circular/config/adv/nt": "AT",
+        "/modes/linear/config/adv/nt": "AT",
+        "/modes/circular/config/form/separate_strands": true,
+        "/modes/linear/config/form/separate_strands": true,
+        "/modes/circular/config/form/show_depth": true,
+        "/modes/linear/config/form/show_depth": true,
+        "/modes/circular/config/adv/depth_tracks/0/label": "cov_c",
+        "/modes/linear/config/adv/depth_tracks/0/label": "cov_c",
+        "/modes/circular/config/adv/depth_tracks/0/color": "#aa3300",
+        "/modes/linear/config/adv/depth_tracks/0/color": "#aa3300",
+        "/modes/circular/ui/layoutPreferences": {
+          "single": {
+            "legend": "left",
+            "plotTitlePosition": "none"
+          },
+          "multi": {
+            "legend": "right",
+            "plotTitlePosition": "none"
+          }
+        },
+        "/modes/linear/ui/layoutPreferences": {
+          "legend": "top",
+          "plotTitlePosition": "bottom"
+        },
+        "/modes/circular/config/adv/linear_accession_visibility": "auto",
+        "/modes/linear/config/adv/linear_accession_visibility": "show",
+        "/modes/circular/config/form/show_labels_linear": "none",
+        "/modes/linear/config/form/show_labels_linear": "all",
+        "/modes/circular/config/form/labels_mode": "none",
+        "/modes/linear/config/form/labels_mode": "none",
+        "/modes/circular/config/losatProgram": "blastn",
+        "/modes/linear/config/losatProgram": "blastp",
+        "/modes/circular/config/linearComparisonPlan": {
+          "mode": "none",
+          "defaultSource": "losat",
+          "edges": []
+        },
+        "/modes/linear/config/linearComparisonPlan": {
+          "mode": "none",
+          "defaultSource": "losat",
+          "edges": []
+        },
+        "/modes/circular/config/linearRecordLayout": {
+          "enabled": true,
+          "recordGap": 24,
+          "rows": []
+        },
+        "/modes/linear/config/linearRecordLayout": {
+          "enabled": true,
+          "recordGap": 24,
+          "rows": [
+            {
+              "uid": "linear-seq-ef7a0f8d-dab1-4f47-8f0d-dc1d649be659",
+              "row": 1
+            },
+            {
+              "uid": "linear-seq-832fe38d-918f-461d-9b27-04a79997a8a0",
+              "row": 2
+            }
+          ]
+        },
+        "/modes/circular/config/rules/0/qual": "hash",
+        "/modes/linear/config/rules/0/qual": "hash",
+        "/modes/circular/config/rules/0/val": "f571eb983",
+        "/modes/linear/config/rules/0/val": "f571eb983",
+        "/modes/circular/config/rules/0/cap": "tRNA_RENAMED",
+        "/modes/linear/config/rules/0/cap": "tRNA_RENAMED",
+        "/modes/circular/config/rules/1/qual": "hash",
+        "/modes/linear/config/rules/1/qual": "hash",
+        "/modes/circular/config/rules/1/val": "f64320c02",
+        "/modes/linear/config/rules/1/val": "f64320c02",
+        "/modes/circular/config/rules/1/cap": "tRNA_RENAMED",
+        "/modes/linear/config/rules/1/cap": "tRNA_RENAMED",
+        "/modes/circular/config/rules/2/feat": "CDS",
+        "/modes/linear/config/rules/2/feat": "CDS",
+        "/modes/circular/config/rules/2/qual": "product",
+        "/modes/linear/config/rules/2/qual": "product",
+        "/modes/circular/config/rules/2/val": "hypothetical",
+        "/modes/linear/config/rules/2/val": "hypothetical",
+        "/modes/circular/config/rules/2/color": "#778899",
+        "/modes/linear/config/rules/2/color": "#778899",
+        "/modes/linear/editorState/legend/entries/0/caption": "CDS",
+        "/modes/linear/editorState/legend/entries/0/color": "#112233",
+        "/modes/linear/editorState/legend/entries/1/caption": "MANUAL_ROW",
+        "/modes/linear/editorState/legend/entries/1/color": "#445566",
+        "/modes/linear/editorState/legend/entries/2/caption": "tRNA_RENAMED",
+        "/modes/linear/editorState/legend/deletedEntries/0/caption": "cov_c",
+        "/modes/linear/editorState/legend/colorOverrides": {
+          "CDS": "#112233"
+        },
+        "/modes/linear/editorState/legend/strokeOverrides/tRNA_RENAMED/strokeColor": "#333333",
+        "/modes/linear/editorState/legend/strokeOverrides/tRNA_RENAMED/strokeWidth": 1.5,
+        "/modes/linear/editorState/legend/addedCaptions": [
+          "tRNA_RENAMED"
+        ],
+        "/modes/circular/editorState/legend/entries": [],
+        "/modes/circular/editorState/legend/deletedEntries": [],
+        "/modes/circular/editorState/legend/colorOverrides": {},
+        "/modes/circular/editorState/legend/strokeOverrides": {},
+        "/modes/circular/editorState/legend/addedCaptions": [],
+        "/modes/circular/features/featureColorOverrides": {},
+        "/modes/linear/features/featureColorOverrides": {
+          "linear-seq-ef7a0f8d-dab1-4f47-8f0d-dc1d649be659\u0000f571eb983": {
+            "color": "#e8b441",
+            "caption": "tRNA_RENAMED"
+          },
+          "linear-seq-832fe38d-918f-461d-9b27-04a79997a8a0\u0000f88047061": {
+            "color": "#e8b441",
+            "caption": "tRNA_RENAMED"
+          }
+        },
+        "/modes/circular/features/featureOverrides": {},
+        "/modes/linear/features/featureOverrides": {
+          "[\"linear-seq-832fe38d-918f-461d-9b27-04a79997a8a0\",\"f3f7207f4\"]": {
+            "recordKey": "linear-seq-832fe38d-918f-461d-9b27-04a79997a8a0",
+            "biologicalFeatureId": "f3f7207f4",
+            "featureVisibility": null,
+            "labelVisibility": null,
+            "labelText": "PROBE_L",
+            "labelSourceText": "duplicate protein"
+          }
+        },
+        "/modes/circular/editorState/featureStrokes/overrides": {},
+        "/modes/linear/editorState/featureStrokes/overrides": {},
+        "/modes/circular/config/featurePlacementOverrides": {
+          "[\"linear-seq-832fe38d-918f-461d-9b27-04a79997a8a0\",\"fbf6c27e1\"]": {
+            "recordKey": "linear-seq-832fe38d-918f-461d-9b27-04a79997a8a0",
+            "biologicalFeatureId": "fbf6c27e1",
+            "placement": {
+              "kind": "main"
+            }
+          }
+        },
+        "/modes/linear/config/featurePlacementOverrides": {
+          "[\"linear-seq-832fe38d-918f-461d-9b27-04a79997a8a0\",\"fbf6c27e1\"]": {
+            "recordKey": "linear-seq-832fe38d-918f-461d-9b27-04a79997a8a0",
+            "biologicalFeatureId": "fbf6c27e1",
+            "placement": {
+              "kind": "main"
+            }
+          }
+        },
+        "/modes/circular/config/recordDisplayDrafts": [
+          {
+            "sourceUid": "circular",
+            "selector": "#1",
+            "recordId": "TESTA",
+            "topologyOverride": null,
+            "startCoordinate": 101,
+            "reverseComplementOverride": null,
+            "anchorIntent": null
+          }
+        ],
+        "/modes/linear/config/recordDisplayDrafts": [
+          {
+            "sourceUid": "linear-seq-832fe38d-918f-461d-9b27-04a79997a8a0",
+            "selector": "#1",
+            "recordId": "TESTB",
+            "topologyOverride": null,
+            "startCoordinate": 201,
+            "reverseComplementOverride": null,
+            "anchorIntent": null
+          }
+        ],
+        "/modes/circular/config/losat/outfmt": "6",
+        "/modes/linear/config/losat/outfmt": "6",
+        "/modes/circular/config/losat/blastn": {
+          "task": "megablast"
+        },
+        "/modes/linear/config/losat/blastn": {
+          "task": "megablast"
+        },
+        "/modes/circular/config/losat/blastp": {
+          "mode": "orthogroup",
+          "hitLimitsByMode": {
+            "pairwise": {
+              "candidateLimit": null,
+              "orthogroupMemberMaxHits": null
+            },
+            "orthogroup": {
+              "candidateLimit": null,
+              "orthogroupMemberMaxHits": null
+            },
+            "collinear": {
+              "candidateLimit": 5,
+              "orthogroupMemberMaxHits": 5
+            }
+          },
+          "maxHits": 5,
+          "candidateLimit": null,
+          "orthogroupMembershipMode": "anchor_core_v1",
+          "orthogroupMemberMaxHits": null,
+          "collinearInferOrthogroups": false,
+          "collinearMinAnchors": 1,
+          "collinearMaxUnitGap": 0,
+          "collinearMaxDiagonalDrift": 0,
+          "collinearMaxConflictsInMergeGap": 1,
+          "collinearMaxParalogLinksPerOrthogroup": 2,
+          "collinearColorMode": "orientation",
+          "collinearUnitMode": "auto",
+          "collinearAnchorMode": "rbh",
+          "collinearMergeOrientation": "either",
+          "collinearSearchScope": "adjacent"
+        },
+        "/modes/linear/config/losat/blastp": {
+          "mode": "collinear",
+          "hitLimitsByMode": {
+            "pairwise": {
+              "candidateLimit": null,
+              "orthogroupMemberMaxHits": null
+            },
+            "orthogroup": {
+              "candidateLimit": null,
+              "orthogroupMemberMaxHits": null
+            },
+            "collinear": {
+              "candidateLimit": 5,
+              "orthogroupMemberMaxHits": 5
+            }
+          },
+          "maxHits": 5,
+          "candidateLimit": 7,
+          "orthogroupMembershipMode": "anchor_core_v1",
+          "orthogroupMemberMaxHits": 5,
+          "collinearInferOrthogroups": false,
+          "collinearMinAnchors": 1,
+          "collinearMaxUnitGap": 0,
+          "collinearMaxDiagonalDrift": 0,
+          "collinearMaxConflictsInMergeGap": 1,
+          "collinearMaxParalogLinksPerOrthogroup": 2,
+          "collinearColorMode": "orientation",
+          "collinearUnitMode": "auto",
+          "collinearAnchorMode": "rbh",
+          "collinearMergeOrientation": "either",
+          "collinearSearchScope": "adjacent"
+        },
+        "/modes/linear/config/losat/blastp/mode": "collinear",
+        "/modes/linear/config/losat/blastp/candidateLimit": 7,
+        "/modes/linear/config/losat/blastp/hitLimitsByMode/collinear/candidateLimit": 5,
+        "/ui/losatExecution/executionMode": "threaded",
+        "/ui/losatExecution/totalThreadBudget": "safe",
+        "/ui/losatExecution/threadsPerJob": "auto",
+        "/modes/circular/ui/canvasPadding": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        },
+        "/modes/linear/ui/canvasPadding": {
+          "top": 0,
+          "right": 0,
+          "bottom": 0,
+          "left": 0
+        },
+        "/modes/circular/config/palette": "default",
+        "/modes/linear/config/palette": "default",
+        "/modes/circular/config/colors/CDS": "#54bcf8",
+        "/modes/linear/config/colors/CDS": "#54bcf8",
+        "/modes/circular/config/colors/tRNA": "#e8b441",
+        "/modes/linear/config/colors/tRNA": "#e8b441",
+        "/ui/paletteInstantPreviewEnabled": false,
+        "/ui/richFeaturePopup": true,
+        "/modes/circular/ui/selectedFeatureRecordIdx": 0,
+        "/modes/linear/ui/selectedFeatureRecordIdx": 0
+      },
+      "expectAbsent": [
+        "/config",
+        "/features",
+        "/editorState/legend/entries",
+        "/editorState/legend/deletedEntries",
+        "/editorState/legend/colorOverrides",
+        "/editorState/legend/strokeOverrides",
+        "/editorState/legend/addedCaptions",
+        "/editorState/featureStrokes",
+        "/ui/layoutPreferences",
+        "/ui/canvasPadding",
+        "/ui/pendingPaletteName",
+        "/ui/pendingPaletteColors",
+        "/ui/linearTypographyLinked",
+        "/otherModeResult",
+        "/modes/circular/config/modeProfiles",
+        "/modes/linear/config/modeProfiles",
+        "/modes/circular/config/paletteInstantPreviewEnabled",
+        "/modes/linear/config/paletteInstantPreviewEnabled",
+        "/modes/circular/config/losat/executionMode",
+        "/modes/linear/config/losat/executionMode",
+        "/modes/circular/config/losat/totalThreadBudget",
+        "/modes/linear/config/losat/totalThreadBudget",
+        "/modes/circular/config/losat/threadsPerJob",
+        "/modes/linear/config/losat/threadsPerJob",
+        "/modes/circular/config/losat/parallelWorkers",
+        "/modes/linear/config/losat/parallelWorkers",
+        "/modes/circular/features/selectedFeatureRecordIdx",
+        "/modes/linear/features/selectedFeatureRecordIdx",
+        "/modes/circular/features/featureVisibilityOverrides",
+        "/modes/linear/features/featureVisibilityOverrides",
+        "/modes/circular/features/labelTextFeatureOverrides",
+        "/modes/linear/features/labelTextFeatureOverrides",
+        "/modes/circular/features/labelVisibilityOverrides",
+        "/modes/linear/features/labelVisibilityOverrides",
+        "/modes/circular/features/labelTextFeatureOverrideSources",
+        "/modes/linear/features/labelTextFeatureOverrideSources",
+        "/modes/circular/editorState/legend/originalOrder",
+        "/modes/linear/editorState/legend/originalOrder",
+        "/modes/circular/editorState/legend/originalColors",
+        "/modes/linear/editorState/legend/originalColors",
+        "/modes/circular/editorState/originalSvgStroke",
+        "/modes/linear/editorState/originalSvgStroke",
+        "/modes/circular/editorState/featureCatalog",
+        "/modes/linear/editorState/featureCatalog",
+        "/modes/circular/config/form/legend",
+        "/modes/linear/config/form/legend",
+        "/modes/circular/config/adv/plot_title_position",
+        "/modes/linear/config/adv/plot_title_position",
+        "/modes/circular/config/adv/losatProgram",
+        "/modes/linear/config/adv/losatProgram",
+        "/modes/circular/config/adv/rich_feature_popup",
+        "/modes/linear/config/adv/rich_feature_popup",
+        "/modes/circular/config/cliOptions",
+        "/modes/linear/config/cliOptions",
+        "/modes/linear/editorState/legend/entries/3",
+        "/modes/linear/editorState/legend/deletedEntries/1",
+        "/modes/linear/config/adv/depth_tracks/1",
+        "/modes/circular/config/adv/depth_tracks/1",
+        "/modes/circular/config/rules/3",
+        "/modes/linear/config/rules/3"
+      ]
+    },
+    {
+      "name": "F2 inactive-class-m.v44: Linear set up from settings alone, Circular Result (§4.7)",
+      "fixture": "tests/fixtures/sessions/inactive-class-m.v44.gbdraw-session.json.gz",
+      "context": {
+        "committedMode": "circular",
+        "modeProfiles": {
+          "schema": 1,
+          "activeMode": "circular",
+          "profiles": {
+            "circular": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-5",
+                "identity": 70,
+                "alignment_length": 0,
+                "axis_stroke_color": null,
+                "pairwise_match_style": "ribbon",
+                "plot_title_font_size": null,
+                "def_font_size": null,
+                "plot_title": ""
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": true,
+                "identity": true,
+                "alignment_length": true,
+                "axis_stroke_color": true,
+                "pairwise_match_style": true,
+                "plot_title_font_size": true,
+                "def_font_size": true,
+                "plot_title": true
+              }
+            },
+            "linear": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-2",
+                "identity": 0,
+                "alignment_length": 0,
+                "axis_stroke_color": "lightgray",
+                "pairwise_match_style": "curve",
+                "plot_title_font_size": null,
+                "def_font_size": null,
+                "plot_title": "LIN_ONLY"
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": true,
+                "identity": true,
+                "alignment_length": true,
+                "axis_stroke_color": true,
+                "pairwise_match_style": true,
+                "plot_title_font_size": true,
+                "def_font_size": true,
+                "plot_title": false
+              }
+            }
+          }
+        },
+        "depthSources": {
+          "circular": 0,
+          "linear": 0
+        }
+      },
+      "expect": {
+        "/version": 46,
+        "/ui/mode": "circular",
+        "/modes/circular/config/form/plot_title": "",
+        "/modes/linear/config/form/plot_title": "LIN_ONLY",
+        "/modes/circular/config/adv/linear_accession_visibility": "auto",
+        "/modes/linear/config/adv/linear_accession_visibility": "show",
+        "/modes/circular/config/adv/linear_length_visibility": "auto",
+        "/modes/linear/config/adv/linear_length_visibility": "hide",
+        "/modes/circular/ui/layoutPreferences": {
+          "single": {
+            "legend": "left",
+            "plotTitlePosition": "none"
+          },
+          "multi": {
+            "legend": null,
+            "plotTitlePosition": "none"
+          }
+        },
+        "/modes/linear/ui/layoutPreferences": {
+          "legend": "top",
+          "plotTitlePosition": "bottom"
+        },
+        "/modes/circular/config/form/show_depth": false,
+        "/modes/linear/config/form/show_depth": false,
+        "/modes/circular/editorState/legend/entries/0/caption": "CDS",
+        "/modes/circular/editorState/legend/entries/4/caption": "GC skew (-)",
+        "/modes/linear/editorState/legend/entries": [],
+        "/ui/losatExecution/executionMode": "threaded"
+      },
+      "expectAbsent": [
+        "/config",
+        "/features",
+        "/editorState/legend/entries",
+        "/editorState/legend/deletedEntries",
+        "/editorState/legend/colorOverrides",
+        "/editorState/legend/strokeOverrides",
+        "/editorState/legend/addedCaptions",
+        "/editorState/featureStrokes",
+        "/ui/layoutPreferences",
+        "/ui/canvasPadding",
+        "/ui/pendingPaletteName",
+        "/ui/pendingPaletteColors",
+        "/ui/linearTypographyLinked",
+        "/otherModeResult",
+        "/modes/circular/config/modeProfiles",
+        "/modes/linear/config/modeProfiles",
+        "/modes/circular/config/paletteInstantPreviewEnabled",
+        "/modes/linear/config/paletteInstantPreviewEnabled",
+        "/modes/circular/config/losat/executionMode",
+        "/modes/linear/config/losat/executionMode",
+        "/modes/circular/config/losat/totalThreadBudget",
+        "/modes/linear/config/losat/totalThreadBudget",
+        "/modes/circular/config/losat/threadsPerJob",
+        "/modes/linear/config/losat/threadsPerJob",
+        "/modes/circular/config/losat/parallelWorkers",
+        "/modes/linear/config/losat/parallelWorkers",
+        "/modes/circular/features/selectedFeatureRecordIdx",
+        "/modes/linear/features/selectedFeatureRecordIdx",
+        "/modes/circular/features/featureVisibilityOverrides",
+        "/modes/linear/features/featureVisibilityOverrides",
+        "/modes/circular/features/labelTextFeatureOverrides",
+        "/modes/linear/features/labelTextFeatureOverrides",
+        "/modes/circular/features/labelVisibilityOverrides",
+        "/modes/linear/features/labelVisibilityOverrides",
+        "/modes/circular/features/labelTextFeatureOverrideSources",
+        "/modes/linear/features/labelTextFeatureOverrideSources",
+        "/modes/circular/editorState/legend/originalOrder",
+        "/modes/linear/editorState/legend/originalOrder",
+        "/modes/circular/editorState/legend/originalColors",
+        "/modes/linear/editorState/legend/originalColors",
+        "/modes/circular/editorState/originalSvgStroke",
+        "/modes/linear/editorState/originalSvgStroke",
+        "/modes/circular/editorState/featureCatalog",
+        "/modes/linear/editorState/featureCatalog",
+        "/modes/circular/config/form/legend",
+        "/modes/linear/config/form/legend",
+        "/modes/circular/config/adv/plot_title_position",
+        "/modes/linear/config/adv/plot_title_position",
+        "/modes/circular/config/adv/losatProgram",
+        "/modes/linear/config/adv/losatProgram",
+        "/modes/circular/config/adv/rich_feature_popup",
+        "/modes/linear/config/adv/rich_feature_popup",
+        "/modes/circular/config/cliOptions",
+        "/modes/linear/config/cliOptions",
+        "/modes/circular/editorState/legend/entries/5"
+      ]
+    },
+    {
+      "name": "F3 two-mode-thresholds.v42: five-field profile, flat title, edited inactive Circular thresholds (§4.7)",
+      "fixture": "tests/fixtures/sessions/two-mode-thresholds.v42.gbdraw-session.json.gz",
+      "context": {
+        "committedMode": "linear",
+        "modeProfiles": {
+          "schema": 1,
+          "activeMode": "linear",
+          "profiles": {
+            "circular": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-3",
+                "identity": 50,
+                "alignment_length": 0,
+                "axis_stroke_color": null
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": false,
+                "identity": false,
+                "alignment_length": true,
+                "axis_stroke_color": true
+              }
+            },
+            "linear": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-2",
+                "identity": 0,
+                "alignment_length": 0,
+                "axis_stroke_color": "lightgray"
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": true,
+                "identity": true,
+                "alignment_length": true,
+                "axis_stroke_color": true
+              }
+            }
+          }
+        },
+        "depthSources": {
+          "circular": 0,
+          "linear": 0
+        }
+      },
+      "expect": {
+        "/version": 46,
+        "/ui/mode": "linear",
+        "/modes/circular/config/form/plot_title": "",
+        "/modes/linear/config/form/plot_title": "FLAT_TITLE",
+        "/modes/circular/config/adv/evalue": "1e-3",
+        "/modes/linear/config/adv/evalue": "1e-2",
+        "/modes/circular/config/adv/identity": 50,
+        "/modes/linear/config/adv/identity": 0,
+        "/modes/circular/config/adv/pairwise_match_style": "ribbon",
+        "/modes/linear/config/adv/pairwise_match_style": "ribbon",
+        "/modes/circular/config/adv/plot_title_font_size": null,
+        "/modes/linear/config/adv/plot_title_font_size": null,
+        "/modes/circular/config/adv/def_font_size": null,
+        "/modes/linear/config/adv/def_font_size": null,
+        "/modes/circular/config/adv/axis_stroke_color": null,
+        "/modes/linear/config/adv/axis_stroke_color": "lightgray",
+        "/modes/circular/config/adv/linear_accession_visibility": "auto",
+        "/modes/linear/config/adv/linear_accession_visibility": "show",
+        "/modes/circular/config/adv/linear_length_visibility": "auto",
+        "/modes/linear/config/adv/linear_length_visibility": "show",
+        "/modes/linear/editorState/legend/entries/0/caption": "CDS",
+        "/modes/linear/editorState/legend/entries/1/caption": "tRNA",
+        "/modes/circular/editorState/legend/entries": [],
+        "/ui/losatExecution/executionMode": "auto"
+      },
+      "expectAbsent": [
+        "/config",
+        "/features",
+        "/editorState/legend/entries",
+        "/editorState/legend/deletedEntries",
+        "/editorState/legend/colorOverrides",
+        "/editorState/legend/strokeOverrides",
+        "/editorState/legend/addedCaptions",
+        "/editorState/featureStrokes",
+        "/ui/layoutPreferences",
+        "/ui/canvasPadding",
+        "/ui/pendingPaletteName",
+        "/ui/pendingPaletteColors",
+        "/ui/linearTypographyLinked",
+        "/otherModeResult",
+        "/modes/circular/config/modeProfiles",
+        "/modes/linear/config/modeProfiles",
+        "/modes/circular/config/paletteInstantPreviewEnabled",
+        "/modes/linear/config/paletteInstantPreviewEnabled",
+        "/modes/circular/config/losat/executionMode",
+        "/modes/linear/config/losat/executionMode",
+        "/modes/circular/config/losat/totalThreadBudget",
+        "/modes/linear/config/losat/totalThreadBudget",
+        "/modes/circular/config/losat/threadsPerJob",
+        "/modes/linear/config/losat/threadsPerJob",
+        "/modes/circular/config/losat/parallelWorkers",
+        "/modes/linear/config/losat/parallelWorkers",
+        "/modes/circular/features/selectedFeatureRecordIdx",
+        "/modes/linear/features/selectedFeatureRecordIdx",
+        "/modes/circular/features/featureVisibilityOverrides",
+        "/modes/linear/features/featureVisibilityOverrides",
+        "/modes/circular/features/labelTextFeatureOverrides",
+        "/modes/linear/features/labelTextFeatureOverrides",
+        "/modes/circular/features/labelVisibilityOverrides",
+        "/modes/linear/features/labelVisibilityOverrides",
+        "/modes/circular/features/labelTextFeatureOverrideSources",
+        "/modes/linear/features/labelTextFeatureOverrideSources",
+        "/modes/circular/editorState/legend/originalOrder",
+        "/modes/linear/editorState/legend/originalOrder",
+        "/modes/circular/editorState/legend/originalColors",
+        "/modes/linear/editorState/legend/originalColors",
+        "/modes/circular/editorState/originalSvgStroke",
+        "/modes/linear/editorState/originalSvgStroke",
+        "/modes/circular/editorState/featureCatalog",
+        "/modes/linear/editorState/featureCatalog",
+        "/modes/circular/config/form/legend",
+        "/modes/linear/config/form/legend",
+        "/modes/circular/config/adv/plot_title_position",
+        "/modes/linear/config/adv/plot_title_position",
+        "/modes/circular/config/adv/losatProgram",
+        "/modes/linear/config/adv/losatProgram",
+        "/modes/circular/config/adv/rich_feature_popup",
+        "/modes/linear/config/adv/rich_feature_popup",
+        "/modes/circular/config/cliOptions",
+        "/modes/linear/config/cliOptions",
+        "/modes/circular/config/adv/linear_show_accession",
+        "/modes/linear/config/adv/linear_show_accession",
+        "/modes/circular/config/adv/linear_show_length",
+        "/modes/linear/config/adv/linear_show_length",
+        "/modes/linear/editorState/legend/entries/2"
+      ]
+    },
+    {
+      "name": "feature-placements-linear.v44 (#908): the above lane row stays in Linear, the Main row reaches both (§4.7 negative control)",
+      "fixture": "tests/fixtures/sessions/feature-placements-linear.v44.gbdraw-session.json.gz",
+      "context": {
+        "committedMode": "linear",
+        "modeProfiles": {
+          "schema": 1,
+          "activeMode": "linear",
+          "profiles": {
+            "circular": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-5",
+                "identity": 70,
+                "alignment_length": 0,
+                "axis_stroke_color": null,
+                "pairwise_match_style": "ribbon",
+                "plot_title_font_size": null,
+                "def_font_size": null,
+                "plot_title": ""
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": true,
+                "identity": true,
+                "alignment_length": true,
+                "axis_stroke_color": true,
+                "pairwise_match_style": true,
+                "plot_title_font_size": true,
+                "def_font_size": true,
+                "plot_title": true
+              }
+            },
+            "linear": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-2",
+                "identity": 0,
+                "alignment_length": 0,
+                "axis_stroke_color": "lightgray",
+                "pairwise_match_style": "curve",
+                "plot_title_font_size": null,
+                "def_font_size": null,
+                "plot_title": ""
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": true,
+                "identity": true,
+                "alignment_length": true,
+                "axis_stroke_color": true,
+                "pairwise_match_style": true,
+                "plot_title_font_size": true,
+                "def_font_size": true,
+                "plot_title": true
+              }
+            }
+          }
+        },
+        "depthSources": {
+          "circular": 0,
+          "linear": 0
+        }
+      },
+      "expect": {
+        "/version": 46,
+        "/modes/circular/config/featurePlacementOverrides": {
+          "[\"linear-seq-0e36bd52-f7fc-48d5-b173-b04eb8d0ec7c\",\"fbe3a7c0c\"]": {
+            "recordKey": "linear-seq-0e36bd52-f7fc-48d5-b173-b04eb8d0ec7c",
+            "biologicalFeatureId": "fbe3a7c0c",
+            "placement": {
+              "kind": "main"
+            }
+          }
+        },
+        "/modes/linear/config/featurePlacementOverrides": {
+          "[\"linear-seq-0e36bd52-f7fc-48d5-b173-b04eb8d0ec7c\",\"f406d90f1\"]": {
+            "recordKey": "linear-seq-0e36bd52-f7fc-48d5-b173-b04eb8d0ec7c",
+            "biologicalFeatureId": "f406d90f1",
+            "placement": {
+              "kind": "lane",
+              "side": "above",
+              "level": 1
+            }
+          },
+          "[\"linear-seq-0e36bd52-f7fc-48d5-b173-b04eb8d0ec7c\",\"fbe3a7c0c\"]": {
+            "recordKey": "linear-seq-0e36bd52-f7fc-48d5-b173-b04eb8d0ec7c",
+            "biologicalFeatureId": "fbe3a7c0c",
+            "placement": {
+              "kind": "main"
+            }
+          }
+        },
+        "/modes/linear/config/featurePlacementOverrides/[\"linear-seq-0e36bd52-f7fc-48d5-b173-b04eb8d0ec7c\",\"f406d90f1\"]/placement": {
+          "kind": "lane",
+          "side": "above",
+          "level": 1
+        }
+      },
+      "expectAbsent": [
+        "/config",
+        "/features",
+        "/editorState/legend/entries",
+        "/editorState/legend/deletedEntries",
+        "/editorState/legend/colorOverrides",
+        "/editorState/legend/strokeOverrides",
+        "/editorState/legend/addedCaptions",
+        "/editorState/featureStrokes",
+        "/ui/layoutPreferences",
+        "/ui/canvasPadding",
+        "/ui/pendingPaletteName",
+        "/ui/pendingPaletteColors",
+        "/ui/linearTypographyLinked",
+        "/otherModeResult",
+        "/modes/circular/config/modeProfiles",
+        "/modes/linear/config/modeProfiles",
+        "/modes/circular/config/paletteInstantPreviewEnabled",
+        "/modes/linear/config/paletteInstantPreviewEnabled",
+        "/modes/circular/config/losat/executionMode",
+        "/modes/linear/config/losat/executionMode",
+        "/modes/circular/config/losat/totalThreadBudget",
+        "/modes/linear/config/losat/totalThreadBudget",
+        "/modes/circular/config/losat/threadsPerJob",
+        "/modes/linear/config/losat/threadsPerJob",
+        "/modes/circular/config/losat/parallelWorkers",
+        "/modes/linear/config/losat/parallelWorkers",
+        "/modes/circular/features/selectedFeatureRecordIdx",
+        "/modes/linear/features/selectedFeatureRecordIdx",
+        "/modes/circular/features/featureVisibilityOverrides",
+        "/modes/linear/features/featureVisibilityOverrides",
+        "/modes/circular/features/labelTextFeatureOverrides",
+        "/modes/linear/features/labelTextFeatureOverrides",
+        "/modes/circular/features/labelVisibilityOverrides",
+        "/modes/linear/features/labelVisibilityOverrides",
+        "/modes/circular/features/labelTextFeatureOverrideSources",
+        "/modes/linear/features/labelTextFeatureOverrideSources",
+        "/modes/circular/editorState/legend/originalOrder",
+        "/modes/linear/editorState/legend/originalOrder",
+        "/modes/circular/editorState/legend/originalColors",
+        "/modes/linear/editorState/legend/originalColors",
+        "/modes/circular/editorState/originalSvgStroke",
+        "/modes/linear/editorState/originalSvgStroke",
+        "/modes/circular/editorState/featureCatalog",
+        "/modes/linear/editorState/featureCatalog",
+        "/modes/circular/config/form/legend",
+        "/modes/linear/config/form/legend",
+        "/modes/circular/config/adv/plot_title_position",
+        "/modes/linear/config/adv/plot_title_position",
+        "/modes/circular/config/adv/losatProgram",
+        "/modes/linear/config/adv/losatProgram",
+        "/modes/circular/config/adv/rich_feature_popup",
+        "/modes/linear/config/adv/rich_feature_popup",
+        "/modes/circular/config/cliOptions",
+        "/modes/linear/config/cliOptions",
+        "/modes/circular/config/featurePlacementOverrides/[\"linear-seq-0e36bd52-f7fc-48d5-b173-b04eb8d0ec7c\",\"f406d90f1\"]"
+      ]
+    },
+    {
+      "name": "feature-placements-circular.v44 (#908): the outward lane row stays in Circular, the Main row reaches both (§4.7 mirror)",
+      "fixture": "tests/fixtures/sessions/feature-placements-circular.v44.gbdraw-session.json.gz",
+      "context": {
+        "committedMode": "circular",
+        "modeProfiles": {
+          "schema": 1,
+          "activeMode": "circular",
+          "profiles": {
+            "circular": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-5",
+                "identity": 70,
+                "alignment_length": 0,
+                "axis_stroke_color": null,
+                "pairwise_match_style": "ribbon",
+                "plot_title_font_size": null,
+                "def_font_size": null,
+                "plot_title": ""
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": true,
+                "identity": true,
+                "alignment_length": true,
+                "axis_stroke_color": true,
+                "pairwise_match_style": true,
+                "plot_title_font_size": true,
+                "def_font_size": true,
+                "plot_title": true
+              }
+            },
+            "linear": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-2",
+                "identity": 0,
+                "alignment_length": 0,
+                "axis_stroke_color": "lightgray",
+                "pairwise_match_style": "curve",
+                "plot_title_font_size": null,
+                "def_font_size": null,
+                "plot_title": ""
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": true,
+                "identity": true,
+                "alignment_length": true,
+                "axis_stroke_color": true,
+                "pairwise_match_style": true,
+                "plot_title_font_size": true,
+                "def_font_size": true,
+                "plot_title": true
+              }
+            }
+          }
+        },
+        "depthSources": {
+          "circular": 0,
+          "linear": 0
+        }
+      },
+      "expect": {
+        "/version": 46,
+        "/modes/circular/config/featurePlacementOverrides": {
+          "[\"record-1\",\"f406d90f1\"]": {
+            "recordKey": "record-1",
+            "biologicalFeatureId": "f406d90f1",
+            "placement": {
+              "kind": "lane",
+              "side": "outward",
+              "level": 1
+            }
+          },
+          "[\"record-1\",\"fbe3a7c0c\"]": {
+            "recordKey": "record-1",
+            "biologicalFeatureId": "fbe3a7c0c",
+            "placement": {
+              "kind": "main"
+            }
+          }
+        },
+        "/modes/linear/config/featurePlacementOverrides": {
+          "[\"record-1\",\"fbe3a7c0c\"]": {
+            "recordKey": "record-1",
+            "biologicalFeatureId": "fbe3a7c0c",
+            "placement": {
+              "kind": "main"
+            }
+          }
+        },
+        "/modes/circular/config/featurePlacementOverrides/[\"record-1\",\"f406d90f1\"]/placement": {
+          "kind": "lane",
+          "side": "outward",
+          "level": 1
+        }
+      },
+      "expectAbsent": [
+        "/config",
+        "/features",
+        "/editorState/legend/entries",
+        "/editorState/legend/deletedEntries",
+        "/editorState/legend/colorOverrides",
+        "/editorState/legend/strokeOverrides",
+        "/editorState/legend/addedCaptions",
+        "/editorState/featureStrokes",
+        "/ui/layoutPreferences",
+        "/ui/canvasPadding",
+        "/ui/pendingPaletteName",
+        "/ui/pendingPaletteColors",
+        "/ui/linearTypographyLinked",
+        "/otherModeResult",
+        "/modes/circular/config/modeProfiles",
+        "/modes/linear/config/modeProfiles",
+        "/modes/circular/config/paletteInstantPreviewEnabled",
+        "/modes/linear/config/paletteInstantPreviewEnabled",
+        "/modes/circular/config/losat/executionMode",
+        "/modes/linear/config/losat/executionMode",
+        "/modes/circular/config/losat/totalThreadBudget",
+        "/modes/linear/config/losat/totalThreadBudget",
+        "/modes/circular/config/losat/threadsPerJob",
+        "/modes/linear/config/losat/threadsPerJob",
+        "/modes/circular/config/losat/parallelWorkers",
+        "/modes/linear/config/losat/parallelWorkers",
+        "/modes/circular/features/selectedFeatureRecordIdx",
+        "/modes/linear/features/selectedFeatureRecordIdx",
+        "/modes/circular/features/featureVisibilityOverrides",
+        "/modes/linear/features/featureVisibilityOverrides",
+        "/modes/circular/features/labelTextFeatureOverrides",
+        "/modes/linear/features/labelTextFeatureOverrides",
+        "/modes/circular/features/labelVisibilityOverrides",
+        "/modes/linear/features/labelVisibilityOverrides",
+        "/modes/circular/features/labelTextFeatureOverrideSources",
+        "/modes/linear/features/labelTextFeatureOverrideSources",
+        "/modes/circular/editorState/legend/originalOrder",
+        "/modes/linear/editorState/legend/originalOrder",
+        "/modes/circular/editorState/legend/originalColors",
+        "/modes/linear/editorState/legend/originalColors",
+        "/modes/circular/editorState/originalSvgStroke",
+        "/modes/linear/editorState/originalSvgStroke",
+        "/modes/circular/editorState/featureCatalog",
+        "/modes/linear/editorState/featureCatalog",
+        "/modes/circular/config/form/legend",
+        "/modes/linear/config/form/legend",
+        "/modes/circular/config/adv/plot_title_position",
+        "/modes/linear/config/adv/plot_title_position",
+        "/modes/circular/config/adv/losatProgram",
+        "/modes/linear/config/adv/losatProgram",
+        "/modes/circular/config/adv/rich_feature_popup",
+        "/modes/linear/config/adv/rich_feature_popup",
+        "/modes/circular/config/cliOptions",
+        "/modes/linear/config/cliOptions",
+        "/modes/linear/config/featurePlacementOverrides/[\"record-1\",\"f406d90f1\"]"
+      ]
+    },
+    {
+      "name": "settings-only.v42: no renderRequest, so the committed mode is ui.mode; the draft lives in modes",
+      "fixture": "tests/fixtures/sessions/settings-only.v42.json.gz",
+      "context": {
+        "committedMode": "circular",
+        "modeProfiles": {
+          "schema": 1,
+          "activeMode": "circular",
+          "profiles": {
+            "circular": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-5",
+                "identity": 70,
+                "alignment_length": 0,
+                "axis_stroke_color": null
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": true,
+                "identity": true,
+                "alignment_length": true,
+                "axis_stroke_color": true
+              }
+            },
+            "linear": {
+              "values": {
+                "min_bitscore": 50,
+                "evalue": "1e-2",
+                "identity": 0,
+                "alignment_length": 0,
+                "axis_stroke_color": "lightgray"
+              },
+              "managed": {
+                "min_bitscore": true,
+                "evalue": true,
+                "identity": true,
+                "alignment_length": true,
+                "axis_stroke_color": true
+              }
+            }
+          }
+        },
+        "depthSources": {
+          "circular": 0,
+          "linear": 0
+        }
+      },
+      "expect": {
+        "/version": 46,
+        "/renderRequest": null,
+        "/ui/mode": "circular",
+        "/modes/circular/config/adv/evalue": "1e-5",
+        "/modes/linear/config/adv/evalue": "1e-2",
+        "/modes/circular/config/adv/identity": 70,
+        "/modes/linear/config/adv/identity": 0,
+        "/modes/circular/editorState/legend/entries": [],
+        "/modes/linear/editorState/legend/entries": [],
+        "/modes/circular/config/form/show_depth": false,
+        "/modes/linear/config/form/show_depth": false
+      },
+      "expectAbsent": [
+        "/config",
+        "/features",
+        "/editorState/legend/entries",
+        "/editorState/legend/deletedEntries",
+        "/editorState/legend/colorOverrides",
+        "/editorState/legend/strokeOverrides",
+        "/editorState/legend/addedCaptions",
+        "/editorState/featureStrokes",
+        "/ui/layoutPreferences",
+        "/ui/canvasPadding",
+        "/ui/pendingPaletteName",
+        "/ui/pendingPaletteColors",
+        "/ui/linearTypographyLinked",
+        "/otherModeResult",
+        "/modes/circular/config/modeProfiles",
+        "/modes/linear/config/modeProfiles",
+        "/modes/circular/config/paletteInstantPreviewEnabled",
+        "/modes/linear/config/paletteInstantPreviewEnabled",
+        "/modes/circular/config/losat/executionMode",
+        "/modes/linear/config/losat/executionMode",
+        "/modes/circular/config/losat/totalThreadBudget",
+        "/modes/linear/config/losat/totalThreadBudget",
+        "/modes/circular/config/losat/threadsPerJob",
+        "/modes/linear/config/losat/threadsPerJob",
+        "/modes/circular/config/losat/parallelWorkers",
+        "/modes/linear/config/losat/parallelWorkers",
+        "/modes/circular/features/selectedFeatureRecordIdx",
+        "/modes/linear/features/selectedFeatureRecordIdx",
+        "/modes/circular/features/featureVisibilityOverrides",
+        "/modes/linear/features/featureVisibilityOverrides",
+        "/modes/circular/features/labelTextFeatureOverrides",
+        "/modes/linear/features/labelTextFeatureOverrides",
+        "/modes/circular/features/labelVisibilityOverrides",
+        "/modes/linear/features/labelVisibilityOverrides",
+        "/modes/circular/features/labelTextFeatureOverrideSources",
+        "/modes/linear/features/labelTextFeatureOverrideSources",
+        "/modes/circular/editorState/legend/originalOrder",
+        "/modes/linear/editorState/legend/originalOrder",
+        "/modes/circular/editorState/legend/originalColors",
+        "/modes/linear/editorState/legend/originalColors",
+        "/modes/circular/editorState/originalSvgStroke",
+        "/modes/linear/editorState/originalSvgStroke",
+        "/modes/circular/editorState/featureCatalog",
+        "/modes/linear/editorState/featureCatalog",
+        "/modes/circular/config/form/legend",
+        "/modes/linear/config/form/legend",
+        "/modes/circular/config/adv/plot_title_position",
+        "/modes/linear/config/adv/plot_title_position",
+        "/modes/circular/config/adv/losatProgram",
+        "/modes/linear/config/adv/losatProgram",
+        "/modes/circular/config/adv/rich_feature_popup",
+        "/modes/linear/config/adv/rich_feature_popup",
+        "/modes/circular/config/cliOptions",
+        "/modes/linear/config/cliOptions"
+      ]
+    },
+    {
+      "name": "conservation-fasta.v39: config.cliOptions becomes the top-level cliOptions unchanged; no modeProfiles, so Linear takes its profile defaults",
+      "fixture": "tests/fixtures/sessions/conservation-fasta.v39.gbdraw-session.json.gz",
+      "context": {
+        "committedMode": "circular",
+        "depthSources": {
+          "circular": 0,
+          "linear": 0
+        }
+      },
+      "expect": {
+        "/version": 46,
+        "/cliOptions": {
+          "schema": 1,
+          "mode": "argv",
+          "rawArgs": [
+            "--gbk",
+            "HmmtDNA.gbk",
+            "--conservation_blast",
+            "danio-human.tlosatx.tsv",
+            "--conservation_fasta",
+            "NC_002333.2.fna",
+            "--conservation_reference",
+            "subject",
+            "--conservation_labels",
+            "Danio",
+            "--identity",
+            "40",
+            "-o",
+            "argv-v39",
+            "-f",
+            "svg"
+          ],
+          "options": [
+            {
+              "option": "--gbk",
+              "key": "gbk",
+              "values": [
+                "HmmtDNA.gbk"
+              ]
+            },
+            {
+              "option": "--conservation_blast",
+              "key": "conservation_blast",
+              "values": [
+                "danio-human.tlosatx.tsv"
+              ]
+            },
+            {
+              "option": "--conservation_fasta",
+              "key": "conservation_fasta",
+              "values": [
+                "NC_002333.2.fna"
+              ]
+            },
+            {
+              "option": "--conservation_reference",
+              "key": "conservation_reference",
+              "values": [
+                "subject"
+              ]
+            },
+            {
+              "option": "--conservation_labels",
+              "key": "conservation_labels",
+              "values": [
+                "Danio"
+              ]
+            },
+            {
+              "option": "--identity",
+              "key": "identity",
+              "values": [
+                "40"
+              ]
+            },
+            {
+              "option": "-o",
+              "key": "output",
+              "values": [
+                "argv-v39"
+              ]
+            },
+            {
+              "option": "-f",
+              "key": "format",
+              "values": [
+                "svg"
+              ]
+            }
+          ],
+          "byKey": {
+            "gbk": [
+              "HmmtDNA.gbk"
+            ],
+            "conservation_blast": [
+              "danio-human.tlosatx.tsv"
+            ],
+            "conservation_fasta": [
+              "NC_002333.2.fna"
+            ],
+            "conservation_reference": [
+              "subject"
+            ],
+            "conservation_labels": [
+              "Danio"
+            ],
+            "identity": [
+              "40"
+            ],
+            "output": [
+              "argv-v39"
+            ],
+            "format": [
+              "svg"
+            ]
+          },
+          "positionals": []
+        },
+        "/modes/circular/config/adv/pairwise_match_style": "ribbon",
+        "/modes/linear/config/adv/pairwise_match_style": "curve",
+        "/modes/circular/config/adv/evalue": "1e-5",
+        "/modes/linear/config/adv/evalue": "1e-2",
+        "/modes/circular/config/form/show_depth": false,
+        "/modes/linear/config/form/show_depth": false
+      },
+      "expectAbsent": [
+        "/config",
+        "/features",
+        "/editorState/legend/entries",
+        "/editorState/legend/deletedEntries",
+        "/editorState/legend/colorOverrides",
+        "/editorState/legend/strokeOverrides",
+        "/editorState/legend/addedCaptions",
+        "/editorState/featureStrokes",
+        "/ui/layoutPreferences",
+        "/ui/canvasPadding",
+        "/ui/pendingPaletteName",
+        "/ui/pendingPaletteColors",
+        "/ui/linearTypographyLinked",
+        "/otherModeResult",
+        "/modes/circular/config/modeProfiles",
+        "/modes/linear/config/modeProfiles",
+        "/modes/circular/config/paletteInstantPreviewEnabled",
+        "/modes/linear/config/paletteInstantPreviewEnabled",
+        "/modes/circular/config/losat/executionMode",
+        "/modes/linear/config/losat/executionMode",
+        "/modes/circular/config/losat/totalThreadBudget",
+        "/modes/linear/config/losat/totalThreadBudget",
+        "/modes/circular/config/losat/threadsPerJob",
+        "/modes/linear/config/losat/threadsPerJob",
+        "/modes/circular/config/losat/parallelWorkers",
+        "/modes/linear/config/losat/parallelWorkers",
+        "/modes/circular/features/selectedFeatureRecordIdx",
+        "/modes/linear/features/selectedFeatureRecordIdx",
+        "/modes/circular/features/featureVisibilityOverrides",
+        "/modes/linear/features/featureVisibilityOverrides",
+        "/modes/circular/features/labelTextFeatureOverrides",
+        "/modes/linear/features/labelTextFeatureOverrides",
+        "/modes/circular/features/labelVisibilityOverrides",
+        "/modes/linear/features/labelVisibilityOverrides",
+        "/modes/circular/features/labelTextFeatureOverrideSources",
+        "/modes/linear/features/labelTextFeatureOverrideSources",
+        "/modes/circular/editorState/legend/originalOrder",
+        "/modes/linear/editorState/legend/originalOrder",
+        "/modes/circular/editorState/legend/originalColors",
+        "/modes/linear/editorState/legend/originalColors",
+        "/modes/circular/editorState/originalSvgStroke",
+        "/modes/linear/editorState/originalSvgStroke",
+        "/modes/circular/editorState/featureCatalog",
+        "/modes/linear/editorState/featureCatalog",
+        "/modes/circular/config/form/legend",
+        "/modes/linear/config/form/legend",
+        "/modes/circular/config/adv/plot_title_position",
+        "/modes/linear/config/adv/plot_title_position",
+        "/modes/circular/config/adv/losatProgram",
+        "/modes/linear/config/adv/losatProgram",
+        "/modes/circular/config/adv/rich_feature_popup",
+        "/modes/linear/config/adv/rich_feature_popup",
+        "/modes/circular/config/cliOptions",
+        "/modes/linear/config/cliOptions"
+      ]
+    }
+  ]
+}

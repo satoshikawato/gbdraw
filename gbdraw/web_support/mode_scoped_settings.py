@@ -12,8 +12,8 @@ A row is ``{domain, path, modes, key, migrate}``:
   ``config``, ``editorState.legend``, ...).
 - ``path``: the key of the value inside ``domain``.
 - ``modes``: ``both``, or the one mode a MODE-ONLY value belongs to.
-- ``key``: for a keyed-row domain, the name of the row key (compared entry by
-  entry by the 46 -> 47 step); otherwise ``None``.
+- ``key``: for a keyed-row domain, how a row's key is formed (rows are compared
+  entry by entry by the 46 -> 47 step); otherwise ``None``.
 - ``migrate``: the token by which the split of a Session 27-44 draft fills the
   two slices (``MIGRATION_TOKENS``).
 
@@ -30,8 +30,8 @@ DiagramMode = Literal["circular", "linear"]
 RowModes = Literal["both", "circular", "linear"]
 
 DIAGRAM_MODES: tuple[DiagramMode, ...] = ("circular", "linear")
-# The registry revision of Phase E's row list this table follows.
-MODE_SCOPED_SETTINGS_REVISION = 3
+# The revision of Phase E's registry table (``registry-v46.tsv``) these rows follow.
+MODE_SCOPED_SETTINGS_REVISION = 5
 
 # The split tokens (Phase E plan 4.2):
 #   copy            the value goes to both slices.
@@ -165,6 +165,10 @@ _ADV_ROWS = _rows(
     ("depth_normalize", "both", "copy"),
     ("depth_show_axis", "both", "copy"),
     ("depth_show_ticks", "both", "copy"),
+    # The flat Depth tick values that a series without its own value reads.
+    ("depth_large_tick_interval", "both", "copy"),
+    ("depth_small_tick_interval", "both", "copy"),
+    ("depth_tick_font_size", "both", "copy"),
     ("linear_track_slots_enabled", "linear", "own"),
     ("linear_track_slots_schema_version", "linear", "own"),
     ("linear_track_slots_axis_index", "linear", "own"),
@@ -213,9 +217,6 @@ _ADV_ROWS = _rows(
     ("evalue", "both", "profile"),
     ("identity", "both", "profile"),
     ("alignment_length", "both", "profile"),
-    # Registry revision 3 classes the rich feature popup as app-level but
-    # keeps its Session 46 path in the draft; revision 4 settles it.
-    ("rich_feature_popup", "both", "copy"),
 )
 
 # ``losat`` is listed by leaf group; its execution keys are app-level
@@ -231,9 +232,6 @@ _CONFIG_ROWS = (
     *_rows(
         "config",
         ("colors", "both", "copy"),
-        # Not in registry revision 3; real Sessions 40-44 hold it, and it says
-        # whether ``colors`` replaces or overrides the palette.
-        ("colorsAreOverrides", "both", "copy"),
         ("palette", "both", "copy"),
         ("rules", "both", "copy"),
         ("qualifierPriorityRules", "both", "copy"),
@@ -247,19 +245,19 @@ _CONFIG_ROWS = (
         ("linearComparisonPlan", "linear", "own"),
         ("importedComparisonResolution", "linear", "own"),
         ("webEdits", "linear", "own"),
-        # The committed request's CLI options travel with its mode's slice.
-        ("cliOptions", "both", "result-mode"),
     ),
-    ModeScopedSetting("config", "annotationSets", "both", "annotation-set", "by-binding"),
-    ModeScopedSetting("config", "recordDisplayDrafts", "both", "record-display", "by-scope"),
-    ModeScopedSetting("config", "featurePlacementOverrides", "both", "placement", "by-side"),
+    ModeScopedSetting("config", "annotationSets", "both", "id", "by-binding"),
+    ModeScopedSetting("config", "recordDisplayDrafts", "both", "JSON[sourceUid,selector]", "by-scope"),
+    ModeScopedSetting(
+        "config", "featurePlacementOverrides", "both", "JSON[recordKey,biologicalFeatureId]", "by-side"
+    ),
 )
 
 _FEATURES_ROWS = (
-    ModeScopedSetting("features", "featureOverrides", "both", "feature", "result-mode"),
+    ModeScopedSetting("features", "featureOverrides", "both", "JSON[recordKey,biologicalFeatureId]", "result-mode"),
+    ModeScopedSetting("features", "featureColorOverrides", "both", "recordKey\\0featureId", "result-mode"),
     *_rows(
         "features",
-        ("featureColorOverrides", "both", "result-mode"),
         ("featureVisibilityManualRules", "both", "copy"),
         ("labelOverrideRows", "both", "copy"),
         ("labelTextBulkOverrides", "both", "copy"),
@@ -275,7 +273,7 @@ _EDITOR_ROWS = (
         ("strokeOverrides", "both", "result-mode"),
         ("addedCaptions", "both", "result-mode"),
     ),
-    *_rows("editorState", ("featureStrokes", "both", "result-mode")),
+    ModeScopedSetting("editorState.featureStrokes", "overrides", "both", "recordKey\\0featureId", "result-mode"),
 )
 
 _UI_ROWS = _rows(
@@ -285,6 +283,9 @@ _UI_ROWS = _rows(
     ("pendingPaletteName", "both", "copy"),
     ("pendingPaletteColors", "both", "copy"),
     ("linearTypographyLinked", "linear", "own"),
+    # Saved as ``features.selectedFeatureRecordIdx`` by Sessions 44 and older:
+    # an index into the displayed Result's record list.
+    ("selectedFeatureRecordIdx", "both", "result-mode"),
 )
 
 MODE_SCOPED_SETTINGS: tuple[ModeScopedSetting, ...] = (
