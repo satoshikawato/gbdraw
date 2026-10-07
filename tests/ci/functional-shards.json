@@ -59,6 +59,7 @@
     "tests/web/mobile-feature-popup.playwright.spec.js": 2,
     "tests/web/mode-record-identity.playwright.spec.js": 5,
     "tests/web/mode-scoped-feature-edits.playwright.spec.js": 4,
+    "tests/web/mode-scoped-settings.playwright.spec.js": 18.88,
     "tests/web/mode-transition-editor-state.playwright.spec.js": 6,
     "tests/web/mode-transition-result.playwright.spec.js": 4,
     "tests/web/multi-result-edit-matrix.playwright.spec.js": 8,
@@ -94,7 +95,8 @@
       "tests/web/definition-replay-visual-state.playwright.spec.js",
       "tests/web/history-comparison.playwright.spec.js",
       "tests/web/live-generate-parity.playwright.spec.js",
-      "tests/web/mobile-feature-popup.playwright.spec.js"
+      "tests/web/mobile-feature-popup.playwright.spec.js",
+      "tests/web/mode-scoped-settings.playwright.spec.js"
     ],
     [
       "tests/web/color-captions.playwright.spec.js",
