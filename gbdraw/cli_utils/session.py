@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,6 +41,7 @@ from gbdraw.session_io import (
     get_session_slot,
     migrate_legacy_linear_comparison_draft_for_current_writer,
     migrate_persisted_web_state_field_names,
+    migrate_session_feature_edits,
     safe_embedded_filename,
     serialize_file_entry,
     validate_current_display_drafts,
@@ -50,6 +52,8 @@ from gbdraw.session_io import (
 if TYPE_CHECKING:
     from gbdraw.api.requests import DiagramRequest
     from gbdraw.render.interactive_svg import InteractiveSvgContext
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -822,9 +826,50 @@ def _project_session_adjunct_for_current_write(
         }
     }
     features = adjunct.get("features")
-    if isinstance(features, Mapping) and RETIRED_RENDERED_ID_FEATURE_FIELDS & set(features):
-        # The CLI cannot map rendered-ID edits to source identities; the
-        # request's tables keep their rows (design Q4, 4.2).
+    saved_editor_state = adjunct.get("editorState")
+    saved_catalog = (
+        saved_editor_state.get("featureCatalog")
+        if isinstance(saved_editor_state, Mapping)
+        else None
+    )
+    if (
+        source_version < CURRENT_SESSION_VERSION
+        and isinstance(features, Mapping)
+        and isinstance(saved_catalog, Mapping)
+    ):
+        # The rendered-ID edit maps become identity drafts through the
+        # Session's saved catalog, as the Web app moves them on Load.
+        render_request = session.get("renderRequest")
+        migration = migrate_session_feature_edits(
+            features,
+            mode=(
+                render_request.get("mode")
+                if isinstance(render_request, Mapping)
+                else None
+            ),
+            catalog=saved_catalog,
+        )
+        adjunct["features"] = migration.features
+        if migration.dropped_count:
+            logger.warning(
+                "WARNING: %d feature edit(s) from Session version %d could not "
+                "be matched to a feature of its saved diagram and were dropped "
+                "from the written Session.",
+                migration.dropped_count,
+                source_version,
+            )
+        if migration.narrowed_visibility_count:
+            logger.warning(
+                "WARNING: %d Feature visibility edit(s) from Session version %d "
+                "hid every feature with the same hash; in the written Session "
+                "each applies only to the feature that was edited.",
+                migration.narrowed_visibility_count,
+                source_version,
+            )
+    elif isinstance(features, Mapping) and RETIRED_RENDERED_ID_FEATURE_FIELDS & set(features):
+        # A Session without a saved catalog: the Web app reads its sources
+        # again to move these edits, and the CLI does not. The request's
+        # tables keep their effect (design Q4, 4.2).
         adjunct["features"] = {
             key: value
             for key, value in features.items()

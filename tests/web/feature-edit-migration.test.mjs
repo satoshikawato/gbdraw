@@ -417,3 +417,13 @@ test('Session 41-44 placement drafts migrate to the vector both readers share', 
   const vector = JSON.parse(readFileSync(new URL('../fixtures/feature-placement-migration.json', import.meta.url), 'utf8'));
   assert.deepEqual(migrateSessionFeaturePlacements(structuredClone(vector.input)), vector.expected);
 });
+
+// The same vectors pin the Python reader (tests/test_session_compat.py), which
+// the CLI uses when it replays a Session 44 with --session_output.
+test('rendered-ID feature edits migrate to the vectors both readers share', () => {
+  const { cases } = JSON.parse(readFileSync(new URL('../fixtures/feature-edit-migration-vectors.json', import.meta.url), 'utf8'));
+  for (const { name, input, expected } of cases) {
+    const { features, droppedCount, narrowedVisibilityCount } = migrateSessionFeatureEdits(structuredClone(input));
+    assert.deepEqual({ features, droppedCount, narrowedVisibilityCount }, expected, name);
+  }
+});

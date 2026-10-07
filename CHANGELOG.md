@@ -32,6 +32,14 @@ write-up of a release.
   longer lost when Generate draws a Result without that feature, such as a Generate
   in the other mode (Circular or Linear). The stroke stays in the draft and in a
   saved Session, and the next Generate that draws the feature draws it again.
+- CLI: `gbdraw circular|linear --session <Session 40-44> --session_output out.json`
+  (and `--save_session`) keeps the Feature visibility, Label visibility, and label
+  text edits that the Web app saved by rendered feature ID. Before, the rewritten
+  Session dropped them: the diagram kept their effect through the request's tables,
+  but the Web app no longer listed them as edits. The replay now moves each edit to
+  `features.featureOverrides` through the Session's saved feature catalog, as the
+  Web app does on Load, and logs how many edits it dropped or now applies to fewer
+  features.
 - Labels (web app): **Load Label TSV** with a table that applies to no label of the
   displayed Results no longer removes the existing label edits. Before, it cleared the
   bulk and per-feature label edits, recorded a "Load label edits" Undo step, and
