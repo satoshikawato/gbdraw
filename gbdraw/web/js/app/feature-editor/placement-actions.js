@@ -7,8 +7,8 @@ import {
   featureIdentityKeyOf,
   parseFeatureIdentityKey
 } from '../../services/feature-placement.js';
-import { resolveCircularTrackFeaturePlacement } from '../circular-track-slots.js';
-import { createDefaultLinearTrackSlots, effectiveLinearSlotPlacement } from '../linear-track-slots.js';
+import { resolveCircularTrackFeaturePlacement } from '../../services/circular-track-slot-model.js';
+import { createDefaultLinearTrackSlots, effectiveLinearSlotPlacement } from '../../services/linear-track-slot-model.js';
 import { validateCustomTrackPlan } from '../../services/track-slot-validation.js';
 
 const SIDES = { circular: ['outward', 'inward'], linear: ['above', 'below'] };

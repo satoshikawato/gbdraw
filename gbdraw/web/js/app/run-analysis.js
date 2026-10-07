@@ -40,11 +40,13 @@ import {
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
 import {
   applyCircularSuppressControlsToSlots,
+  hasEnabledCircularTrackRenderer
+} from './circular-track-slots.js';
+import {
   applyCircularTrackOrderPlacements,
   clampCircularTrackAxisIndex,
-  hasEnabledCircularTrackRenderer,
   inferLegacyAxisIndexFromFeature
-} from './circular-track-slots.js';
+} from '../services/circular-track-slot-model.js';
 import {
   normalizeFileList,
   orderedConservationSources
@@ -54,7 +56,7 @@ import {
   clampLinearTrackAxisIndex,
   normalizeLinearTrackSlots,
   resolveLinearTrackAxisIndex
-} from './linear-track-slots.js';
+} from '../services/linear-track-slot-model.js';
 import { getDepthTrackFallbackLabel } from './depth-tracks.js';
 import {
   activeDepthTrackIndices,

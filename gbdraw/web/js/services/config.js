@@ -18,7 +18,7 @@ import {
   migrateLegacyCircularTrackSlotSpec,
   parseCircularTrackSlotSpec,
   normalizeCircularTrackSlots
-} from '../app/circular-track-slots.js';
+} from './circular-track-slot-model.js';
 import {
   applyLinearTrackOrderPlacements,
   clampLinearTrackAxisIndex,
@@ -27,7 +27,7 @@ import {
   migrateLinearTrackSlotsToCurrentSchema,
   normalizeLinearTrackSlots,
   resolveLinearTrackAxisIndex
-} from '../app/linear-track-slots.js';
+} from './linear-track-slot-model.js';
 import {
   depthFileSlotsFromValue,
   depthTrackMatrixWidth,

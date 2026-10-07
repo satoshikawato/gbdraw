@@ -30,7 +30,8 @@ await cp(
 );
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 // The track-slot leaves the slot editors import.
-for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js']) {
+for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js',
+  'circular-track-slot-model.js', 'linear-track-slot-model.js']) {
   await cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf),
     join(tempRoot, 'services', leaf)
@@ -46,16 +47,23 @@ const {
   pathToFileURL(join(tempRoot, 'services', 'track-slot-validation.js'))
 );
 const {
-  buildLinearTrackSlotPayload,
   buildLinearTrackSlotSpec,
-  normalizeLinearTrackSlots,
-  parseLinearTrackSlotSpec,
   createLinearTrackSlotEditor
 } = await import(
   pathToFileURL(join(tempRoot, 'app', 'linear-track-slots.js'))
 );
-const { buildCircularTrackSlotPayload, buildCircularTrackSlotSpec, normalizeCircularTrackSlot, parseCircularTrackSlotSpec } = await import(
+const {
+  buildLinearTrackSlotPayload,
+  normalizeLinearTrackSlots,
+  parseLinearTrackSlotSpec
+} = await import(
+  pathToFileURL(join(tempRoot, 'services', 'linear-track-slot-model.js'))
+);
+const { buildCircularTrackSlotSpec } = await import(
   pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js'))
+);
+const { buildCircularTrackSlotPayload, normalizeCircularTrackSlot, parseCircularTrackSlotSpec } = await import(
+  pathToFileURL(join(tempRoot, 'services', 'circular-track-slot-model.js'))
 );
 
 const feature = (id = 'features', overrides = {}) => ({

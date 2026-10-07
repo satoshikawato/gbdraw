@@ -30,7 +30,8 @@ await cp(
 );
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
 // The track-slot leaves the slot editors import.
-for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js']) {
+for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js',
+  'circular-track-slot-model.js', 'linear-track-slot-model.js']) {
   await cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf),
     join(tempRoot, 'services', leaf)

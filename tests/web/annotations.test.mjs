@@ -35,8 +35,10 @@ const {
   encodeAnnotationTable, encodeAnnotationTableWithNotice, parseAnnotationTable, parseAnnotationTableWithNotice
 } = await load('app/annotations/table-codec.js');
 const { createAnnotationEditor } = await load('app/annotations.js');
-const { buildLinearTrackSlotSpec, normalizeLinearTrackSlots } = await load('app/linear-track-slots.js');
-const { buildCircularTrackSlotSpec, normalizeCircularTrackSlots } = await load('app/circular-track-slots.js');
+const { buildLinearTrackSlotSpec } = await load('app/linear-track-slots.js');
+const { normalizeLinearTrackSlots } = await load('services/linear-track-slot-model.js');
+const { buildCircularTrackSlotSpec } = await load('app/circular-track-slots.js');
+const { normalizeCircularTrackSlots } = await load('services/circular-track-slot-model.js');
 const {
   createLinearComparisonEdge,
   hasLinearComparisonIntent,

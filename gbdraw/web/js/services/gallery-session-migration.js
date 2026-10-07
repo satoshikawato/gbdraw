@@ -3,7 +3,7 @@ import {
   migrateLegacyCircularTrackSlot,
   migrateLegacyCircularTrackSlotSpec,
   parseCircularTrackSlotSpec
-} from '../app/circular-track-slots.js';
+} from './circular-track-slot-model.js';
 import {
   migratePersistedCircularMultiRecordSizeMode,
   migratePersistedLinearLabelPlacement,

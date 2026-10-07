@@ -65,7 +65,7 @@ test('source-free Save emits no render metadata and preserves valid raw scalar d
 const { writeCircularMeasureValue, changeCircularMeasureUnit } = await import(
   '../../gbdraw/web/js/services/circular-track-measure.js'
 );
-const { buildCircularTrackSlotPayload } = await import('../../gbdraw/web/js/app/circular-track-slots.js');
+const { buildCircularTrackSlotPayload } = await import('../../gbdraw/web/js/services/circular-track-slot-model.js');
 const { projectSettingsOnlySession } = await import('../../gbdraw/web/js/services/session-request.js');
 const scalarFixtures = JSON.parse(await readFile(new URL(
   '../../docs/internal/issue-619-implementation-plan-20260927/SESSION_RESULTS/scalar-fixtures.json', import.meta.url

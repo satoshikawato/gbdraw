@@ -40,7 +40,7 @@ import {
   migrateLegacyCircularTrackSlotSpec,
   normalizeCircularTrackSlot,
   parseCircularTrackSlotSpecs
-} from '../app/circular-track-slots.js';
+} from './circular-track-slot-model.js';
 import { countGenBankRecords } from './genbank-header.js';
 import { projectCircularMeasureDraft } from './circular-track-measure.js';
 import {
@@ -49,7 +49,7 @@ import {
   LINEAR_TRACK_SLOT_SCHEMA_VERSION,
   migrateLinearTrackSlotsToCurrentSchema,
   parseLinearTrackSlotSpecs
-} from '../app/linear-track-slots.js';
+} from './linear-track-slot-model.js';
 import {
   isRecordMajorDepthFileMatrix,
   normalizeRecordMajorDepthFileRows,

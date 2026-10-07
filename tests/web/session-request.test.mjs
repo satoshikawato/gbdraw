@@ -91,24 +91,32 @@ const buildCanonicalRenderRequest = (args) => {
   return result;
 };
 const {
-  buildLinearTrackSlotPayload,
   buildLinearTrackSlotSpec,
-  linearTrackAxisIndexForEnabledSlots,
-  migrateLinearTrackSlotsToCurrentSchema,
-  parseLinearTrackSlotSpec,
-  parseLinearTrackSlotSpecs
+  linearTrackAxisIndexForEnabledSlots
 } = await import(
   pathToFileURL(join(tempRoot, 'js', 'app', 'linear-track-slots.js'))
 );
 const {
+  buildLinearTrackSlotPayload,
+  migrateLinearTrackSlotsToCurrentSchema,
+  parseLinearTrackSlotSpec,
+  parseLinearTrackSlotSpecs
+} = await import(
+  pathToFileURL(join(tempRoot, 'js', 'services', 'linear-track-slot-model.js'))
+);
+const {
+  buildCircularTrackSlotSpec
+} = await import(
+  pathToFileURL(join(tempRoot, 'js', 'app', 'circular-track-slots.js'))
+);
+const {
   buildCircularTrackSlotPayload,
-  buildCircularTrackSlotSpec,
   migrateLegacyCircularTrackSlot,
   migrateLegacyCircularTrackSlotSpec,
   parseCircularTrackSlotSpec,
   resolveCircularTrackFeaturePlacement
 } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'app', 'circular-track-slots.js'))
+  pathToFileURL(join(tempRoot, 'js', 'services', 'circular-track-slot-model.js'))
 );
 const { validateTrackSlotBindingInvariants } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'track-slot-validation.js'))

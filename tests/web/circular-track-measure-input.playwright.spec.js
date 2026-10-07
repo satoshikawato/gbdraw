@@ -422,7 +422,7 @@ test('typed and legacy scalars display without writes; decimal, exponent, and pr
     expect(await workerCounts(page)).toEqual(workers);
     await edit(page, text);
     const projected = await page.evaluate(async () => {
-      const { buildCircularTrackSlotPayload } = await import('./js/app/circular-track-slots.js');
+      const { buildCircularTrackSlotPayload } = await import('./js/services/circular-track-slot-model.js');
       return buildCircularTrackSlotPayload(window.__GBDRAW_APP__.adv.circular_track_slots.find(row => row.id === 'gc_content')).width;
     });
     expect(projected).toEqual(value === null ? null : { value, unit });

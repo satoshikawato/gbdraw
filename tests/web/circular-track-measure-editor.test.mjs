@@ -8,7 +8,7 @@ import {
 import {
   parseOptionalCircularScalar, validateCustomTrackPlan
 } from '../../gbdraw/web/js/services/track-slot-validation.js';
-import { buildCircularTrackSlotPayload } from '../../gbdraw/web/js/app/circular-track-slots.js';
+import { buildCircularTrackSlotPayload } from '../../gbdraw/web/js/services/circular-track-slot-model.js';
 import {
   createDefaultAdv, createDefaultForm, validateCurrentWriterActiveConfig
 } from '../../gbdraw/web/js/services/session-active-config-contract.js';
