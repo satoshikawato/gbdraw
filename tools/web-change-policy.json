@@ -24,7 +24,9 @@
       "app/feature-metadata-extraction.js",
       "app/legend/entry-actions.js",
       "app/record-discovery.js",
-      "app/run-analysis.js"
+      "app/run-analysis.js",
+      "services/feature-metadata-extraction.js",
+      "services/record-discovery.js"
     ],
     "services/diagram-resource-staging.js": [
       "services/diagram-generation.js"
@@ -66,6 +68,7 @@
       "app/session-feature-metadata.js",
       "app/watchers.js",
       "services/config.js",
+      "services/session-feature-recovery.js",
       "state.js"
     ],
     "services/svg-sanitization.js": [

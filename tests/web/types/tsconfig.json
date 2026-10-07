@@ -13,7 +13,9 @@
     "strictFunctionTypes": true,
     "strictBindCallApply": true,
     "noImplicitThis": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   },
   "include": ["../../../gbdraw/web/js/**/*.js", "web-globals.d.ts"],
   "exclude": ["../../../gbdraw/web/js/workers/**"]

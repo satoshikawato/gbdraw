@@ -4,7 +4,7 @@
 // unclassified throw site, and a baseline is lowered as soon as a site is
 // migrated (the Python half is tests/test_web_error_producer_coverage.py).
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { normalizeUserFacingError } from '../../gbdraw/web/js/services/error-normalization.js';
 
@@ -34,13 +34,31 @@ const UNCLASSIFIED_THROW_BASELINE = {
   'app/track-slot-validation.js': 31,
   'mode-profiles.js': 9,
   'services/config.js': 15,
+  'services/current-option-values.js': 7,
+  'services/feature-metadata-extraction.js': 2,
+  'services/file-imports.js': 0,
   'services/session-file.js': 6,
   'services/session-import-client.js': 0,
   'services/session-request.js': 94,
   'services/svg-result-ingestion.js': 22,
+  'services/track-slot-validation.js': 31,
   'utils/feature-rendering.js': 3,
   'utils/optional-positive-number.js': 0
 };
+
+// Web layering slices S3, S4 and S6 move four of these modules from app/ to
+// services/. A move PR is a runtime change and may not rename a key of this
+// registered baseline, so each new key sits beside the old one (same count when
+// written) and names the file it replaces. Exactly one of the pair exists; the
+// move PR deletes the old key, and the cleanup after the slices deletes this
+// table.
+const PENDING_MOVES = {
+  'services/current-option-values.js': 'app/current-option-values.js',
+  'services/feature-metadata-extraction.js': 'app/feature-metadata-extraction.js',
+  'services/file-imports.js': 'app/file-imports.js',
+  'services/track-slot-validation.js': 'app/track-slot-validation.js'
+};
+const fileExists = (file) => existsSync(new URL(file, WEB_ROOT));
 
 // Literal parts of the first argument of `throw new Error(`; null is a hole.
 const literalAt = (source, index) => {
@@ -97,6 +115,12 @@ const unclassifiedThrowSites = (file) => {
 
 test('JS validation throw sites normalize to a recognized diagnostic or shrink (G-G(2))', () => {
   for (const [file, baseline] of Object.entries(UNCLASSIFIED_THROW_BASELINE)) {
+    if (!fileExists(file)) {
+      const old = PENDING_MOVES[file];
+      assert.ok(old && fileExists(old) && old in UNCLASSIFIED_THROW_BASELINE,
+        `${file}: no such file; delete the key (a move PR deletes the old key, not this one)`);
+      continue;
+    }
     const sites = unclassifiedThrowSites(file);
     assert.ok(sites.length <= baseline,
       `${file}: new unclassified throw sites; raise them with diagnosticError(code, context):\n${sites.join('\n')}`);
