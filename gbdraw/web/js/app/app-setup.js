@@ -2153,6 +2153,8 @@ export const createAppSetup = () => {
       files.c_depth = removeDepthTrackColumnAt(circularDepthRows(), idx)
         .map((row) => compactDepthFileSlots(row));
       if (idx < drawing.adv.depth_tracks.length) drawing.adv.depth_tracks.splice(idx, 1);
+      // Show Depth goes off with the drawing's last Depth source (OV-82).
+      if (!hasCircularDepthFiles.value) drawing.form.show_depth = false;
       depthTrackUiCounts.circular = count <= 1 ? 1 : Math.max(1, count - 1);
       refreshDepthTrackLabelsAfterRemoval(drawing, previousFiles, circularDepthRepresentatives(), idx);
       ensureDepthTrackConfigCount(drawing, activeDepthTrackCount('circular'));
@@ -2194,6 +2196,8 @@ export const createAppSetup = () => {
         seq.depth = nextRows[recordIndex] || [];
       });
       if (idx < drawing.adv.depth_tracks.length) drawing.adv.depth_tracks.splice(idx, 1);
+      // Show Depth goes off with the drawing's last Depth source (OV-82).
+      if (!hasAnyLinearDepthFiles.value) drawing.form.show_depth = false;
       depthTrackAutoLabels.splice(idx, 1);
       ensureDepthTrackConfigCount(drawing, activeDepthTrackCount('linear'));
       const previousAxisIndex = Number(drawing.adv.linear_track_slots_axis_index);
