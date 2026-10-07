@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const fs = require('node:fs/promises');
 const { load, generate, switchMode, download } = require('./helpers/mode-transition.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
-const { openBatch } = require('./helpers/audit-browser.cjs');
+const { openBatch, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 
 const seeds = {
@@ -458,7 +458,7 @@ for (const mode of ['linear', 'circular']) {
       await page.locator('.drawer-toggle').click();
       await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
       await expectSteps('stroke width', [strokeWidth(stroked, 3)]);
-      await expectSteps('Reset Stroke', [strokeWidth(stroked, 2), () => evaluateWithRetainedPromise(page, async caption => {
+      await expectSteps('Reset Stroke', [strokeWidth(stroked, 1), () => evaluateWithRetainedPromise(page, async caption => {
         const app = window.__GBDRAW_APP__;
         await app.resetLegendEntryStroke(app.legendEntries.findIndex(e => e.caption === caption));
       }, stroked)]);
@@ -542,6 +542,78 @@ for (const mode of ['linear', 'circular']) {
         .toBeGreaterThanOrEqual(0);
       await settleLive(page);
       await expectGenerateKeepsLegend(page, 'rename a row without features');
+      expect(page.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+    }
+  });
+}
+
+// GUI audit FL-07, OV-127: HmmtDNA, Circular, Legend on the left; `GC skew (+)`
+// renamed through the Legend editor's text field. The rows keep Python's pitch
+// (41.14 units) live and after Generate.
+test('M10 circular: a GC skew row renamed in the Legend editor keeps the row pitch live and at Generate', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  const page = await context.newPage();
+  const rowTops = () => page.evaluate(() => {
+    const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+    return [...svg.querySelectorAll('#legend g[data-legend-key]')].filter(entry => !entry.closest('[display="none"]'))
+      .map(entry => entry.querySelector('text').getCTM().f).sort((a, b) => a - b);
+  });
+  const expectPitch = (tops, step) => expect(tops.slice(1).map((top, index) => Math.round((top - tops[index]) * 10) / 10),
+    step).toEqual(tops.slice(1).map(() => 41.1));
+  try {
+    await openWithGenBank(page, 'tests/test_inputs/HmmtDNA.gbk', () => { window.__GBDRAW_APP__.form.legend = 'left'; });
+    await generate(page);
+    expectPitch(await rowTops(), 'Generate');
+    await page.locator('.drawer-toggle').click();
+    await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
+    const field = page.locator('.right-drawer input[type="text"]').nth(await page.evaluate(() => (
+      [...document.querySelectorAll('.right-drawer input[type="text"]')].findIndex(input => input.value === 'GC skew (+)')
+    )));
+    await field.fill('skew plus');
+    await field.press('Tab');
+    await expect.poll(() => page.evaluate(legendIndex, 'skew plus')).toBeGreaterThanOrEqual(0);
+    await settleLive(page);
+    expectPitch(await rowTops(), 'live rename');
+    await expectGenerateKeepsLegend(page, 'Generate after the rename');
+    expectPitch(await rowTops(), 'Generate after the rename');
+  } finally {
+    await context.close();
+  }
+});
+
+// OV-128: a row added in the Legend editor, renamed, removed, and returned by
+// Undo keeps the first row's drawn stroke (OV-121), not that row's stroke edit,
+// live and at Generate.
+for (const mode of ['linear', 'circular']) {
+  test(`M11 ${mode}: a removed added row returned by Undo keeps its stroke live and at Generate`, async ({ browser }) => {
+    test.setTimeout(600_000);
+    const page = await loadGenerated(browser, mode);
+    try {
+      const [drawn] = (await rowStroke(page, 'CDS')).result;
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        const index = app.legendEntries.findIndex(e => e.caption === 'CDS');
+        await app.setLegendEntryStrokeColorValue(index, '#e63946');
+        await app.updateLegendEntryStrokeWidth(index, 3);
+      });
+      await addLegendRow(page, 'Manual row', '#118833');
+      await evaluateWithRetainedPromise(page, async () => {
+        const app = window.__GBDRAW_APP__;
+        await window.__GBDRAW_HISTORY__.runUndoable('Rename legend item', () => (
+          app.renameLegendEntry(app.legendEntries.findIndex(e => e.caption === 'Manual row'), 'Manual renamed')));
+      });
+      await expect.poll(() => page.evaluate(legendIndex, 'Manual renamed')).toBeGreaterThanOrEqual(0);
+      await deleteLegendRow(page, 'Manual renamed');
+      await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
+      await settleLive(page);
+      const { mounted } = await rowStroke(page, 'Manual renamed');
+      expect(mounted.length).toBeGreaterThan(0);
+      expect(mounted).toEqual(mounted.map(() => drawn));
+      await generate(page);
+      await expectStroke(page, 'Manual renamed', drawn);
       expect(page.externalRequests).toEqual([]);
     } finally {
       await page.context().close();

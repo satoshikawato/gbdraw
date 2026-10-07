@@ -35,17 +35,18 @@ write-up of a release.
   Result shown after the removal is laid out the same way.
 - Legend editor (web app): removing a row, adding a row, changing a row's stroke
   width, and Reset Stroke are each one Undo step, as the stroke color is. Undo and
-  Redo of a removed or added row return the Legend and the canvas as they were.
-  Before, these edits made no Undo step when they were not made through a control,
-  adding a row never made one, and Undo of a removal left the rows out of place.
+  Redo of a removed or added row return the Legend, its strokes, and the canvas as
+  they were. Before, these edits made no Undo step when they were not made through
+  a control, adding a row never made one, Undo of a removal left the rows out of
+  place, and an added row that Undo returned took the first row's stroke edit.
 - Legend editor (web app): rows added or removed in the Legend editor keep their
   layout through an automatic rerender (for example after a Feature Visibility
   rule), as Generate draws them. Before, the rerender moved an added row, in Linear
   far to the right of the other rows, and kept the earlier canvas size.
 - Legend editor (web app): after a row without features, such as GC content, is
   renamed in the Legend editor, Generate draws the Legend and the canvas as the
-  rename left them. Before, Generate moved only the renamed row and kept the earlier
-  canvas width.
+  rename left them, and the rows keep their spacing. Before, Generate moved only the
+  renamed row, which left uneven gaps, and kept the earlier canvas width.
 - Result names (web app): a live edit that redraws a loaded Session's Result (such
   as a Legend color, or Undo or Redo of a color step) keeps the Result's saved name.
   Before, the redraw renamed it after the **Output prefix** (a Gallery Session's
