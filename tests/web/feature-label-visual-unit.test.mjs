@@ -546,6 +546,51 @@ test('a Label TSV import writes the label intent of every batch Result once (B6)
   assert.deepEqual(messages, ['Loaded 2 row(s). Applied to 2 label(s).']);
 });
 
+// OV-131: a Label TSV that applies to no label changes nothing. The import
+// replaces the label edits only when it applies, so the bulk and per-feature
+// label edits stay, no state change reaches History, and the message says why.
+const KEPT = 'The existing label edits were kept.';
+for (const [name, body, tsv, message] of [
+  ['no row matches a label', batchLabel('fa', 'alpha', 'dominant-baseline="central" '),
+    '*\t*\tproduct\t^no such product$\tZZ\n',
+    `Loaded 1 row(s). Not applied: no row matched a label of the diagram. ${KEPT}`],
+  ['the displayed Result has no label', '', '*\t*\tproduct\t.*\tZZ\n',
+    `Loaded 1 row(s). Not applied: no row matched a label of the diagram. ${KEPT}`],
+  ['every match lacks a feature key',
+    '<text dominant-baseline="central" data-label-source-text="alpha">alpha</text>',
+    '*\tCDS\tlabel\t^alpha$\tZZ\n',
+    `Loaded 1 row(s). Not applied: the 1 matched label(s) lacked a feature key. ${KEPT}`]
+]) {
+  test(`a Label TSV import keeps the label edits when ${name} (OV-131)`, async () => {
+    const svg = new DOMParser().parseFromString(`<svg>${body}</svg>`, 'image/svg+xml').documentElement;
+    const harness = buildHarness({
+      svg,
+      featureId: 'fa',
+      rulePreparation: { snapshot: () => ({}), isCurrent: () => true },
+      async evaluateLabelRules({ features, rules }) {
+        return { winners: features.map((feature) => rules.findIndex((rule) => (
+          rule.qualifier === 'label' && new RegExp(rule.valueRegex).test(feature.label)
+        ))) };
+      }
+    });
+    const { state, actions } = harness;
+    state.errorLog = ref(null);
+    state.labelTextBulkOverrides.ND1 = 'MyLabel';
+    setRow(state, 'fa', { labelText: 'EDITED', labelSourceText: 'alpha' });
+    const before = structuredClone({ rows: state.featureOverrides, bulk: state.labelTextBulkOverrides });
+    const messages = [];
+    globalThis.window = { alert: (text) => messages.push(text) };
+    try {
+      await actions.loadLabelOverrideTable({ target: { files: [{ text: async () => tsv }], value: 'labels.tsv' } });
+    } finally {
+      delete globalThis.window;
+    }
+    assert.deepEqual({ rows: state.featureOverrides, bulk: state.labelTextBulkOverrides }, before);
+    assert.deepEqual(harness.mutations, { commit: 0 });
+    assert.deepEqual(messages, [message]);
+  });
+}
+
 // The display of a Result projects the current label intent, also when an
 // Undo or another import removed the intent it was last shown with.
 test('displaying a Result shows the current label intent when none remains (B6, R3)', () => {
