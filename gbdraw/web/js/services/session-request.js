@@ -156,6 +156,7 @@ import {
   validateWebFileBindings
 } from './session-resource-backing.js';
 import { normalizeLinearComparisonPlan } from './linear-comparisons.js';
+import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import {
   getResourcePayloadOwner,
   setResourcePayloadOwner
@@ -2448,7 +2449,12 @@ export const buildCanonicalRequestState = ({ session, projection, config,
   };
   /** @param {Record<string, any>} values */
   const refsOf = (values) => Object.fromEntries(Object.entries(values).map(([key, value]) => [key, publicationRef(value)]));
-  return { state: { ...refsOf(stateRefs), canonicalPublicationFiles }, drawing: {
+  // How LOSAT runs is app-level (`state.losatExecution`): the request's thread
+  // count, which the projection puts in `config.losat`, over the defaults.
+  const savedLosat = config?.losat && typeof config.losat === 'object' ? config.losat : {};
+  const losatExecution = Object.fromEntries(Object.entries(createDefaultLosatExecution())
+    .map(([field, value]) => [field, Object.hasOwn(savedLosat, field) ? savedLosat[field] : value]));
+  return { state: { ...refsOf(stateRefs), canonicalPublicationFiles, losatExecution }, drawing: {
     ...refsOf(drawingRefs),
     form: config.form || {}, adv: config.adv || {},
     manualSpecificRules: publicationClone(config.rules || []), manualWhitelist: publicationClone(config.whitelist || []), manualPriorityRules: publicationClone(config.qualifierPriorityRules || []),

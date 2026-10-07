@@ -370,17 +370,20 @@ const divergentSession = JSON.parse(await readFile(
   'gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json',
   'utf8'
 ));
+// The Linear drawing's draft is its Session 46 slice.
+const divergentSlice = divergentSession.modes.linear;
+divergentSlice.ui ||= {};
 // This test isolates comparison draft behavior from the unreleased schema-1 Gallery plan.
 divergentSession.renderRequest.layout.similarityAlignment = null;
 const committedComparisonCount = divergentSession.renderRequest.comparisons.length;
 assert.ok(committedComparisonCount > 0);
-divergentSession.config.linearComparisonPlan = {
+divergentSlice.config.linearComparisonPlan = {
   mode: 'none',
   defaultSource: 'losat',
   edges: []
 };
-divergentSession.config.losatProgram = 'tblastx';
-Object.assign(divergentSession.config.adv, {
+divergentSlice.config.losatProgram = 'tblastx';
+Object.assign(divergentSlice.config.adv, {
   comparison_height: 73,
   min_bitscore: 123,
   evalue: '1e-37',
@@ -388,7 +391,7 @@ Object.assign(divergentSession.config.adv, {
   alignment_length: 456,
   pairwise_match_style: 'ribbon'
 });
-Object.assign(divergentSession.config.losat.blastp, {
+Object.assign(divergentSlice.config.losat.blastp, {
   mode: 'collinear',
   maxHits: 17,
   candidateLimit: 11,
@@ -402,52 +405,46 @@ Object.assign(divergentSession.config.losat.blastp, {
   collinearColorMode: 'orientation_identity'
 });
 const dormantComparisonDraft = structuredClone({
-  losatProgram: divergentSession.config.losatProgram,
+  losatProgram: divergentSlice.config.losatProgram,
   adv: {
-    comparison_height: divergentSession.config.adv.comparison_height,
-    min_bitscore: divergentSession.config.adv.min_bitscore,
-    evalue: divergentSession.config.adv.evalue,
-    identity: divergentSession.config.adv.identity,
-    alignment_length: divergentSession.config.adv.alignment_length,
-    pairwise_match_style: divergentSession.config.adv.pairwise_match_style
+    comparison_height: divergentSlice.config.adv.comparison_height,
+    min_bitscore: divergentSlice.config.adv.min_bitscore,
+    evalue: divergentSlice.config.adv.evalue,
+    identity: divergentSlice.config.adv.identity,
+    alignment_length: divergentSlice.config.adv.alignment_length,
+    pairwise_match_style: divergentSlice.config.adv.pairwise_match_style
   },
   blastp: {
-    mode: divergentSession.config.losat.blastp.mode,
-    maxHits: divergentSession.config.losat.blastp.maxHits,
-    candidateLimit: divergentSession.config.losat.blastp.candidateLimit,
+    mode: divergentSlice.config.losat.blastp.mode,
+    maxHits: divergentSlice.config.losat.blastp.maxHits,
+    candidateLimit: divergentSlice.config.losat.blastp.candidateLimit,
     orthogroupMemberMaxHits:
-      divergentSession.config.losat.blastp.orthogroupMemberMaxHits,
+      divergentSlice.config.losat.blastp.orthogroupMemberMaxHits,
     collinearMinAnchors:
-      divergentSession.config.losat.blastp.collinearMinAnchors,
+      divergentSlice.config.losat.blastp.collinearMinAnchors,
     collinearMaxUnitGap:
-      divergentSession.config.losat.blastp.collinearMaxUnitGap,
+      divergentSlice.config.losat.blastp.collinearMaxUnitGap,
     collinearUnitMode:
-      divergentSession.config.losat.blastp.collinearUnitMode,
+      divergentSlice.config.losat.blastp.collinearUnitMode,
     collinearAnchorMode:
-      divergentSession.config.losat.blastp.collinearAnchorMode,
+      divergentSlice.config.losat.blastp.collinearAnchorMode,
     collinearMergeOrientation:
-      divergentSession.config.losat.blastp.collinearMergeOrientation,
+      divergentSlice.config.losat.blastp.collinearMergeOrientation,
     collinearSearchScope:
-      divergentSession.config.losat.blastp.collinearSearchScope,
+      divergentSlice.config.losat.blastp.collinearSearchScope,
     collinearColorMode:
-      divergentSession.config.losat.blastp.collinearColorMode
+      divergentSlice.config.losat.blastp.collinearColorMode
   }
 });
 divergentSession.renderRequest.diagramOptions.output.legend = 'right';
-divergentSession.config.form.legend = 'right';
 divergentSession.ui.generatedLegendPosition = 'right';
-divergentSession.ui.layoutPreferences = {
-  circular: {
-    single: { legend: 'left', plotTitlePosition: 'none' },
-    multi: { legend: null, plotTitlePosition: null }
-  },
-  linear: { legend: 'bottom', plotTitlePosition: 'bottom' }
-};
+// The Linear slot of the layout (the slice holds its own mode's slot).
+divergentSlice.ui.layoutPreferences = { legend: 'bottom', plotTitlePosition: 'bottom' };
 divergentSession.ui.paletteInstantPreviewEnabled = false;
 divergentSession.ui.appliedPaletteName = 'orchid';
 divergentSession.ui.appliedPaletteColors = { CDS: '#123456' };
-divergentSession.ui.pendingPaletteName = 'mint';
-divergentSession.ui.pendingPaletteColors = { CDS: '#abcdef' };
+divergentSlice.ui.pendingPaletteName = 'mint';
+divergentSlice.ui.pendingPaletteColors = { CDS: '#abcdef' };
 const importEvent = {
   target: {
     files: [new Blob([JSON.stringify(divergentSession)], { type: 'application/json' })],
@@ -531,7 +528,7 @@ const legacyLayoutFields = [
 ];
 const withoutStoredLayoutPreferences = () => {
   const payload = structuredClone(divergentSession);
-  delete payload.ui.layoutPreferences;
+  delete payload.modes.linear.ui.layoutPreferences;
   legacyLayoutFields.forEach((field) => delete payload.ui[field]);
   return payload;
 };
@@ -586,7 +583,7 @@ for (const savedPlan of [{
   }]
 }]) {
   const savedPlanSession = structuredClone(divergentSession);
-  savedPlanSession.config.linearComparisonPlan = structuredClone(savedPlan);
+  savedPlanSession.modes.linear.config.linearComparisonPlan = structuredClone(savedPlan);
   const savedPlanImport = await importPayload(savedPlanSession);
   assert.equal(savedPlanImport.status, 'ok');
   assert.deepEqual(state.activeDrawing().linearComparisonPlan, {
@@ -607,20 +604,21 @@ assert.equal(state.activeDrawing().form.legend, 'right');
 assert.equal(state.generatedLegendPosition.value, 'right');
 assert.equal(state.activeDrawing().layoutPreferences.linear.legend, 'right');
 
+// Session 46 reads the layout from the slice only: the `ui` fields of the
+// layout before Session 44 are not read, so the committed request's layout
+// fills the slot.
 const legacyLayoutSession = withoutStoredLayoutPreferences();
 legacyLayoutSession.ui.legend = 'bottom';
-legacyLayoutSession.ui.linearPlotTitlePosition = 'bottom';
+legacyLayoutSession.ui.linearPlotTitlePosition = 'top';
 legacyLayoutSession.ui.generatedLegendPosition = 'right';
 const legacyLayoutImport = await importPayload(legacyLayoutSession);
 assert.equal(legacyLayoutImport.status, 'ok');
-assert.equal(state.activeDrawing().form.legend, 'bottom');
+assert.equal(state.activeDrawing().form.legend, 'right');
 assert.equal(state.generatedLegendPosition.value, 'right');
-assert.equal(state.activeDrawing().layoutPreferences.linear.legend, 'bottom');
+assert.equal(state.activeDrawing().layoutPreferences.linear.legend, 'right');
 
 const partialLayoutSession = withoutStoredLayoutPreferences();
-partialLayoutSession.ui.layoutPreferences = {
-  linear: { legend: 'top' }
-};
+partialLayoutSession.modes.linear.ui.layoutPreferences = { legend: 'top' };
 partialLayoutSession.ui.generatedLegendPosition = 'right';
 const partialLayoutImport = await importPayload(partialLayoutSession);
 assert.equal(partialLayoutImport.status, 'ok');
@@ -649,19 +647,17 @@ const activeIntentSession = JSON.parse(await readFile(
 ));
 const activeFeature = activeIntentSession.editorState.featureCatalog.items[0].features[0];
 const activeFeatureId = activeFeature.svgId;
-// Session 45 keys per-feature edits by the feature's source identity in the
-// mode of its Result (R2).
-const activeFeatureIdentity = JSON.stringify([
-  activeIntentSession.renderRequest.mode, activeFeature.recordKey, activeFeature.biologicalFeatureId
-]);
-Object.assign(activeIntentSession.config.form, {
+// The Circular drawing's draft is its Session 46 slice; per-feature edits are
+// keyed by the feature's source identity (R2).
+const activeSlice = activeIntentSession.modes.circular;
+activeSlice.ui ||= {};
+const activeFeatureIdentity = JSON.stringify([activeFeature.recordKey, activeFeature.biologicalFeatureId]);
+Object.assign(activeSlice.config.form, {
   plot_title: 'Saved active draft',
   labels_mode: 'both',
-  show_scale: false,
-  legend: 'left'
+  show_scale: false
 });
-Object.assign(activeIntentSession.config.adv, {
-  plot_title_position: 'top',
+Object.assign(activeSlice.config.adv, {
   axis_stroke_width: 7,
   label_font_size: 31,
   feature_width_circular: 19,
@@ -676,10 +672,9 @@ Object.assign(activeIntentSession.config.adv, {
     outer_gap_px: 5
   }]
 });
-Object.assign(activeIntentSession.config, {
+Object.assign(activeSlice.config, {
   colors: { CDS: '#123456', tRNA: '#abcdef' },
   palette: 'orange',
-  paletteInstantPreviewEnabled: false,
   rules: [{
     feat: 'CDS',
     qual: 'gene',
@@ -711,24 +706,20 @@ Object.assign(activeIntentSession.config, {
 activeIntentSession.ui.paletteInstantPreviewEnabled = false;
 activeIntentSession.ui.appliedPaletteName = 'default';
 activeIntentSession.ui.appliedPaletteColors = { CDS: '#e8b441', tRNA: '#71ee7d' };
-activeIntentSession.ui.pendingPaletteName = 'orange';
-activeIntentSession.ui.pendingPaletteColors = { CDS: '#123456', tRNA: '#abcdef' };
-activeIntentSession.ui.layoutPreferences = {
-  circular: {
-    single: { legend: 'left', plotTitlePosition: 'top' },
-    multi: { legend: 'right', plotTitlePosition: 'bottom' }
-  },
-  linear: { legend: 'bottom', plotTitlePosition: 'bottom' }
+activeSlice.ui.pendingPaletteName = 'orange';
+activeSlice.ui.pendingPaletteColors = { CDS: '#123456', tRNA: '#abcdef' };
+activeSlice.ui.selectedFeatureRecordIdx = 0;
+activeSlice.ui.layoutPreferences = {
+  single: { legend: 'left', plotTitlePosition: 'top' },
+  multi: { legend: 'right', plotTitlePosition: 'bottom' }
 };
-activeIntentSession.features = {
-  selectedFeatureRecordIdx: 0,
+activeSlice.features = {
   featureColorOverrides: {
     [activeFeatureId]: { color: '#334455', caption: 'Saved feature fill' }
   },
   featureVisibilityManualRules: [],
   featureOverrides: {
     [activeFeatureIdentity]: {
-      scope: activeIntentSession.renderRequest.mode,
       recordKey: activeFeature.recordKey,
       biologicalFeatureId: activeFeature.biologicalFeatureId,
       featureVisibility: 'off',
@@ -738,17 +729,12 @@ activeIntentSession.features = {
     }
   },
   labelOverrideRows: [],
-  labelTextBulkOverrides: {},
-  // A current reader ignores this retired writer field.
-  labelOverrideContextKey: 'saved-active-context'
+  labelTextBulkOverrides: {}
 };
-activeIntentSession.editorState = {
-  ...activeIntentSession.editorState,
+activeSlice.editorState = {
   legend: {
     entries: [],
     deletedEntries: [],
-    originalOrder: [],
-    originalColors: {},
     colorOverrides: { 'Saved feature fill': '#334455' },
     strokeOverrides: {
       'Saved feature fill': { strokeColor: '#112233', strokeWidth: 2 }
@@ -759,7 +745,11 @@ activeIntentSession.editorState = {
     overrides: {
       [activeFeatureId]: { strokeColor: '#654321', strokeWidth: 3 }
     }
-  },
+  }
+};
+activeIntentSession.editorState = {
+  ...activeIntentSession.editorState,
+  legend: { originalOrder: [], originalColors: {} },
   originalSvgStroke: { color: '#000000', width: 1 }
 };
 
@@ -774,11 +764,11 @@ const expectedActiveIntent = {
     pendingColors: { CDS: '#123456', tRNA: '#abcdef' },
     instantPreview: false
   },
-  specificRules: structuredClone(activeIntentSession.config.rules),
-  qualifierPriorityRules: structuredClone(activeIntentSession.config.qualifierPriorityRules),
+  specificRules: structuredClone(activeSlice.config.rules),
+  qualifierPriorityRules: structuredClone(activeSlice.config.qualifierPriorityRules),
   filters: {
     mode: 'Whitelist',
-    whitelist: structuredClone(activeIntentSession.config.whitelist),
+    whitelist: structuredClone(activeSlice.config.whitelist),
     blacklistText: 'hypothetical, draft-only'
   },
   form: {
@@ -802,15 +792,18 @@ const expectedActiveIntent = {
     slots: [{ id: 'disabled-draft', renderer: 'depth', enabled: false }]
   },
   layout: {
-    preferences: structuredClone(activeIntentSession.ui.layoutPreferences),
-    linearRecordLayout: structuredClone(activeIntentSession.config.linearRecordLayout)
+    // The Circular drawing's slot; its Linear slot keeps the defaults.
+    preferences: {
+      circular: structuredClone(activeSlice.ui.layoutPreferences),
+      linear: { legend: 'bottom', plotTitlePosition: 'bottom' }
+    },
+    linearRecordLayout: structuredClone(activeSlice.config.linearRecordLayout)
   },
   editorOverrides: {
-    fills: structuredClone(activeIntentSession.features.featureColorOverrides),
-    strokes: structuredClone(activeIntentSession.editorState.featureStrokes.overrides),
+    fills: structuredClone(activeSlice.features.featureColorOverrides),
+    strokes: structuredClone(activeSlice.editorState.featureStrokes.overrides),
     featureOverrides: {
       [activeFeatureIdentity]: {
-        scope: activeIntentSession.renderRequest.mode,
         recordKey: activeFeature.recordKey,
         biologicalFeatureId: activeFeature.biologicalFeatureId,
         featureVisibility: 'off',
@@ -819,8 +812,8 @@ const expectedActiveIntent = {
         labelSourceText: 'Original label'
       }
     },
-    legendColors: structuredClone(activeIntentSession.editorState.legend.colorOverrides),
-    legendStrokes: structuredClone(activeIntentSession.editorState.legend.strokeOverrides)
+    legendColors: structuredClone(activeSlice.editorState.legend.colorOverrides),
+    legendStrokes: structuredClone(activeSlice.editorState.legend.strokeOverrides)
   }
 };
 
@@ -863,14 +856,14 @@ assert.equal(firstGeneratedProjection.config.colors.CDS, '#123456');
 assert.equal(firstGeneratedProjection.config.colors.tRNA, '#abcdef');
 assert.deepEqual(
   firstGeneratedProjection.config.rules,
-  activeIntentSession.config.rules.map(({ fromFile: _fromFile, ...rule }) => rule)
+  activeSlice.config.rules.map(({ fromFile: _fromFile, ...rule }) => rule)
 );
 assert.deepEqual(
   firstGeneratedProjection.config.qualifierPriorityRules,
-  activeIntentSession.config.qualifierPriorityRules
+  activeSlice.config.qualifierPriorityRules
 );
 assert.equal(firstGeneratedProjection.config.filterMode, 'Whitelist');
-assert.deepEqual(firstGeneratedProjection.config.whitelist, activeIntentSession.config.whitelist);
+assert.deepEqual(firstGeneratedProjection.config.whitelist, activeSlice.config.whitelist);
 assert.equal(firstGeneratedProjection.config.form.plot_title, 'Saved active draft');
 assert.equal(firstGeneratedProjection.config.form.labels_mode, 'both');
 assert.equal(firstGeneratedProjection.config.form.show_scale, false);
@@ -896,7 +889,7 @@ const stateBeforeInvalidActiveConfig = {
   sessionTitle: state.sessionTitle.value
 };
 const invalidActiveConfigSession = structuredClone(activeIntentSession);
-invalidActiveConfigSession.config.form.linear_track_layout = 'spreadout';
+invalidActiveConfigSession.modes.circular.config.form.linear_track_layout = 'spreadout';
 const invalidActiveConfigEvent = {
   target: {
     files: [new Blob([JSON.stringify(invalidActiveConfigSession)], { type: 'application/json' })],
@@ -1004,13 +997,7 @@ assert.deepEqual(alerts, [
   'Legacy configuration loaded. Save as a session to use the current format.'
 ]);
 
-const modeBeforeRollbackSetup = state.mode.value;
 state.mode.value = 'circular';
-state.activeDrawing().modeProfileStateManager.transition(
-  state.activeDrawing().adv,
-  modeBeforeRollbackSetup,
-  state.mode.value
-);
 state.activeDrawing().form.multi_record_canvas = false;
 state.activeDrawing().form.legend = 'left';
 state.activeDrawing().adv.plot_title_position = 'none';
