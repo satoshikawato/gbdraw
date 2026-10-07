@@ -15,8 +15,8 @@ write-up of a release.
 - Legend colors (web app): Generate no longer fails with "The generated result could
   not be accepted" after a color or stroke is set on a row added in the Legend editor,
   in Linear and Circular. The added row is drawn with its color and stroke after
-  Generate, a rename, and Session Save and Load. An added row no longer takes the
-  stroke of the first Legend row when that row's stroke was edited.
+  Generate, a rename, and Session Save and Load. At Generate, an added row no longer
+  takes the edited stroke of the first Legend row.
 - CLI: `gbdraw circular|linear --session <file> --session_output out.json` (and
   `--save_session`) keeps the resource IDs and file names of the Session's unchanged
   inputs. Before, the rewritten Session renamed them to positional IDs such as
