@@ -98,14 +98,14 @@ procedure and the checklist. The admission rules for a `PROMOTION` stay in
    promotion.
 6. Run the seeded live-vs-Generate random walk
    ([`live-generate-random-walk.promotion.spec.js`](../../tests/web/live-generate-random-walk.promotion.spec.js),
-   run by `playwright.promotion.config.js`; no PR or dev workflow collects it).
+   run by `tests/web/playwright/promotion.config.js`; no PR or dev workflow collects it).
    Use a fixed seed and the default budget (20 steps on each of a Circular
    Result, a Linear Result, and a two-Result Circular batch), and rebuild the
    browser wheel first when Python under `gbdraw/` changed
    (`python tools/prepare_browser_wheel.py`):
 
    ```bash
-   GBDRAW_RANDOM_WALK_SEED=20261006 npx playwright test --config=playwright.promotion.config.js --workers=1
+   GBDRAW_RANDOM_WALK_SEED=20261006 npx playwright test --config=tests/web/playwright/promotion.config.js --workers=1
    ```
 
    After each step (feature fill with each scope choice, label text and

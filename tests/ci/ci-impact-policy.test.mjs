@@ -51,7 +51,6 @@ test('metadata allowlist is deliberately narrow', () => {
     '.codex/config.toml',
     '.cursor/rules/example.mdc',
     '.github/pull_request_template.md',
-    '.dockerignore',
     '.gitattributes',
     '.gitignore',
     'CITATION.cff',
@@ -86,6 +85,9 @@ test('subsystem paths classify without making unknown production paths selective
     ['gbdraw/web/js/services/losat.js', 'losat-integration'],
     ['tests/test_regression.py', 'tests-only'],
     ['.github/workflows/test.yml', 'ci-only'],
+    ['playwright.config.js', 'ci-only'],
+    ['tests/web/playwright/functional.config.js', 'ci-only'],
+    ['playwright.functional.config.js', 'full'],
     ['docs/internal/PRODUCT_IMPACT_RATCHET.md', 'policy-documentation'],
     ['pyproject.toml', 'packaging'],
     ['package-lock.json', 'packaging'],
@@ -494,7 +496,7 @@ test('leaf test kinds follow the routing table and exclude shared or control-pla
     'tests/web/promotion-readiness.test.mjs',
     'tests/ci/ci-impact-cli.test.mjs',
     'tests/nested/test_example.py',
-    'playwright.functional.config.js',
+    'tests/web/playwright/functional.config.js',
     'docs/FAQ.md',
     'gbdraw/web/js/app.js'
   ]) assert.equal(leafTestKind(path), null, path);
@@ -503,9 +505,9 @@ test('leaf test kinds follow the routing table and exclude shared or control-pla
 test('the serial spec constants are the specs their Playwright configurations run', async () => {
   const { readFileSync } = await import('node:fs');
   const config = (name) => readFileSync(new URL(`../../${name}`, import.meta.url), 'utf8');
-  assert.match(config('playwright.gallery-publication.config.js'),
+  assert.match(config('tests/web/playwright/gallery-publication.config.js'),
     new RegExp(`testMatch: '${GALLERY_PARITY_SPEC.split('/').pop().replaceAll('.', '\\.')}'`));
-  assert.match(config('playwright.vibrio.config.js'),
+  assert.match(config('tests/web/playwright/vibrio.config.js'),
     new RegExp(`testMatch: '${VIBRIO_FULL_GENERATION_SPEC.split('/').pop().replaceAll('.', '\\.')}'`));
 });
 

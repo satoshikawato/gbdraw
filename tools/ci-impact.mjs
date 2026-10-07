@@ -17,6 +17,7 @@ import {
   createImpactPlan,
   isFullObjectId,
   isDocumentationOnly,
+  isPlaywrightConfigPath,
   knownJobsFor,
   leafJobsFor,
   leafTestKind,
@@ -265,7 +266,7 @@ const REFERENCE_SCAN_EXCLUSIONS = Object.freeze([
   'docs/', '.agents/', '.claude/', '.codex/', '.cursor/', 'tests/ci/', '.github/workflows/'
 ].map((path) => `:(exclude)${path}`));
 const isRunnerList = (path) => path.startsWith('tests/ci/') || path.startsWith('.github/workflows/')
-  || /^playwright[^/]*\.config\.js$/.test(path) || path === 'package.json';
+  || isPlaywrightConfigPath(path) || path === 'package.json';
 const PYTEST_SELECTION_MARKER = /\bmark\.(recipe|gallery|browser|slow)\b/g;
 const UNREADABLE_PYTEST_MARKER = /getattr\(\s*(?:pytest\.)?mark\b|\bmark\s*\[|add_marker|MarkDecorator/;
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

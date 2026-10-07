@@ -1,6 +1,6 @@
 // @ts-check
 const { defineConfig } = require('@playwright/test');
-const baseConfig = require('./playwright.config.js');
+const baseConfig = require('../../../playwright.config.js');
 
 module.exports = defineConfig({
   ...baseConfig,

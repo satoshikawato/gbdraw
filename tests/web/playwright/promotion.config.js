@@ -1,6 +1,6 @@
 // @ts-check
 const { defineConfig } = require('@playwright/test');
-const baseConfig = require('./playwright.config.js');
+const baseConfig = require('../../../playwright.config.js');
 
 // Promotion-only checks (docs/internal/WEB_PERIODIC_AUDIT.md). No PR or dev
 // workflow runs this configuration, and the shared configurations match
