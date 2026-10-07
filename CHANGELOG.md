@@ -70,6 +70,12 @@ write-up of a release.
   bulk and per-feature label edits, recorded a "Load label edits" Undo step, and
   reported "Applied to 0 label(s)." It now changes nothing, records no step, and says
   that no row matched and that the existing label edits were kept.
+- Sessions: a Session whose resource declares `checksum` (the SHA-256 digest of its
+  bytes, as `sha256:<hex>` or bare hex) now loads in Python and on the command line,
+  as it already did in the web app. `load_session_document()` and
+  `gbdraw circular|linear --session` failed with "has unknown field(s): checksum",
+  also for such a Session after the web app saved it again. A resource whose bytes
+  do not match its `checksum` is rejected when the Session is loaded.
 - CLI: `gbdraw circular|linear --session <file> --session_output out.json` (and
   `--save_session`) keeps the resource IDs and file names of the Session's unchanged
   inputs. Before, the rewritten Session renamed them to positional IDs such as
