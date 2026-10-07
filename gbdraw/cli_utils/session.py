@@ -42,6 +42,7 @@ from gbdraw.session_io import (
     migrate_persisted_web_state_field_names,
     safe_embedded_filename,
     serialize_file_entry,
+    validate_current_display_drafts,
     validate_current_web_state_field_names,
     write_session_json,
 )
@@ -543,6 +544,7 @@ def render_canonical_session_if_present(
                 source_version=document.version,
             )
             validate_current_web_state_field_names(adjunct.get("config"))
+            validate_current_display_drafts(adjunct.get("config"))
 
         rendered = _render_request(
             request,

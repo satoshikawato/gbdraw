@@ -1,0 +1,143 @@
+{
+  "description": "Session 41-44 Feature placement drafts (input, keyed by [recordKey, biologicalFeatureId]) and the Session 45 drafts both readers must produce. A Main row is kept for both modes, a lane row for the mode of its side, and a row whose key does not encode its identity is kept as is. Read by tests/test_session_io.py (session_io) and tests/web/feature-edit-migration.test.mjs (feature-edit-migration.js).",
+  "input": {
+    "[\"rec-1\",\"f1\"]": {
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f1",
+      "placement": {
+        "kind": "main"
+      }
+    },
+    "[\"rec-1\",\"f2\"]": {
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f2",
+      "placement": {
+        "kind": "lane",
+        "side": "outward",
+        "level": 1
+      }
+    },
+    "[\"rec-1\",\"f3\"]": {
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f3",
+      "placement": {
+        "kind": "lane",
+        "side": "inward",
+        "level": 1
+      }
+    },
+    "[\"rec-1\",\"f4\"]": {
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f4",
+      "placement": {
+        "kind": "lane",
+        "side": "above",
+        "level": 1
+      }
+    },
+    "[\"rec-1\",\"f5\"]": {
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f5",
+      "placement": {
+        "kind": "lane",
+        "side": "below",
+        "level": 1
+      }
+    },
+    "[\"rec é\",\"f6\"]": {
+      "recordKey": "rec é",
+      "biologicalFeatureId": "f6",
+      "placement": {
+        "kind": "lane",
+        "side": "above",
+        "level": 1
+      }
+    },
+    "not-an-identity-key": {
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f7",
+      "placement": {
+        "kind": "lane",
+        "side": "outward",
+        "level": 1
+      }
+    }
+  },
+  "expected": {
+    "[\"circular\",\"rec-1\",\"f1\"]": {
+      "scope": "circular",
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f1",
+      "placement": {
+        "kind": "main"
+      }
+    },
+    "[\"linear\",\"rec-1\",\"f1\"]": {
+      "scope": "linear",
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f1",
+      "placement": {
+        "kind": "main"
+      }
+    },
+    "[\"circular\",\"rec-1\",\"f2\"]": {
+      "scope": "circular",
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f2",
+      "placement": {
+        "kind": "lane",
+        "side": "outward",
+        "level": 1
+      }
+    },
+    "[\"circular\",\"rec-1\",\"f3\"]": {
+      "scope": "circular",
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f3",
+      "placement": {
+        "kind": "lane",
+        "side": "inward",
+        "level": 1
+      }
+    },
+    "[\"linear\",\"rec-1\",\"f4\"]": {
+      "scope": "linear",
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f4",
+      "placement": {
+        "kind": "lane",
+        "side": "above",
+        "level": 1
+      }
+    },
+    "[\"linear\",\"rec-1\",\"f5\"]": {
+      "scope": "linear",
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f5",
+      "placement": {
+        "kind": "lane",
+        "side": "below",
+        "level": 1
+      }
+    },
+    "[\"linear\",\"rec é\",\"f6\"]": {
+      "scope": "linear",
+      "recordKey": "rec é",
+      "biologicalFeatureId": "f6",
+      "placement": {
+        "kind": "lane",
+        "side": "above",
+        "level": 1
+      }
+    },
+    "not-an-identity-key": {
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f7",
+      "placement": {
+        "kind": "lane",
+        "side": "outward",
+        "level": 1
+      }
+    }
+  }
+}

@@ -1484,6 +1484,62 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
         _validate_legacy_derived_evidence(derived_evidence)
 
 
+_PLACEMENT_LANE_MODES = {
+    "outward": "circular",
+    "inward": "circular",
+    "above": "linear",
+    "below": "linear",
+}
+
+
+def _migrate_session_feature_placements(placements: object) -> object:
+    """Scope the Session 41-44 placement drafts keyed by [recordKey, featureId].
+
+    Such a row reached every request with its record key, so a Main row is kept
+    for both modes and a lane row for the mode of its side. A row whose key does
+    not encode its identity is kept as is, and the draft check rejects it. This
+    is the twin of ``migrateSessionFeaturePlacements`` in the Web
+    ``feature-edit-migration.js``; ``tests/fixtures/feature-placement-migration.json``
+    pins both.
+    """
+
+    if not isinstance(placements, Mapping):
+        return placements
+    migrated: dict[str, Any] = {}
+    for key, row in placements.items():
+        fields = row if isinstance(row, Mapping) else {}
+        target = fields.get("placement")
+        target = target if isinstance(target, Mapping) else {}
+        encoded = json.dumps(
+            [fields.get("recordKey"), fields.get("biologicalFeatureId")],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        modes: list[str] = []
+        if key == encoded:
+            if target.get("kind") == "main":
+                modes = ["circular", "linear"]
+            elif isinstance(target.get("side"), str) and target["side"] in _PLACEMENT_LANE_MODES:
+                modes = [_PLACEMENT_LANE_MODES[target["side"]]]
+        if not modes:
+            migrated[key] = row
+        for scope in modes:
+            scoped = {"scope": scope, **fields}
+            record_key = scoped.get("recordKey")
+            feature_id = scoped.get("biologicalFeatureId")
+            if (
+                isinstance(record_key, str)
+                and isinstance(feature_id, str)
+                and record_key.strip()
+                and feature_id.strip()
+                and "\0" not in record_key + feature_id
+            ):
+                migrated[_draft_identity_key(scope, record_key, feature_id)] = scoped
+            else:
+                migrated[key] = scoped
+    return migrated
+
+
 def migrate_persisted_web_state_field_names(config: object) -> object:
     """Project released Web config into the current shape without mutation."""
 
@@ -1557,6 +1613,10 @@ def migrate_persisted_web_state_field_names(config: object) -> object:
             migrated_losat = dict(losat)
             migrated_losat["blastp"] = migrated_blastp
             migrated["losat"] = migrated_losat
+    if "featurePlacementOverrides" in config:
+        migrated["featurePlacementOverrides"] = _migrate_session_feature_placements(
+            config["featurePlacementOverrides"]
+        )
     drafts = config.get("recordDisplayDrafts")
     if isinstance(drafts, list):
         migrated["recordDisplayDrafts"] = [
@@ -1614,6 +1674,16 @@ def validate_current_web_state_field_names(
             "Web state field losat.blastp.collinearMaxGeneGap is obsolete; "
             "use losat.blastp.collinearMaxUnitGap."
         )
+
+
+def validate_current_display_drafts(config: object) -> None:
+    """Reject Record display and Feature placement drafts the current writer would refuse.
+
+    The CLI runs this on a projected sidecar config before it renders, so a
+    failing sidecar writes no diagram.
+    """
+
+    _validate_display_placement_drafts({"config": config}, CURRENT_SESSION_VERSION)
 
 
 def normalize_current_session_artifacts(
@@ -4675,6 +4745,7 @@ __all__ = [
     "session_to_cli_args",
     "validate_session",
     "validate_current_session_artifacts",
+    "validate_current_display_drafts",
     "validate_current_web_state_field_names",
     "write_session_json",
 ]
