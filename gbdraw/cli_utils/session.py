@@ -31,22 +31,20 @@ from gbdraw.render.track_slot_metadata import (
 )
 from gbdraw.session_io import (
     CURRENT_AUTHORITY_SESSION_MIN_VERSION,
-    CURRENT_SESSION_VERSION,
-    CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS,
-    RETIRED_RENDERED_ID_FEATURE_FIELDS,
+    MODE_SCOPED_SESSION_MIN_VERSION,
     SessionBuildContext,
     SessionFileBinding,
     _project_web_file_binding,
     build_session_json,
     get_session_slot,
     migrate_legacy_linear_comparison_draft_for_current_writer,
-    migrate_persisted_web_state_field_names,
-    migrate_session_annotation_targets,
-    migrate_session_feature_edits,
+    migrate_session_flat_draft,
     safe_embedded_filename,
     serialize_file_entry,
-    validate_current_display_drafts,
-    validate_current_web_state_field_names,
+    session_depth_source_widths,
+    session_mode,
+    split_draft_into_modes,
+    validate_current_mode_slices,
     write_session_json,
 )
 
@@ -340,18 +338,14 @@ def _replace_current_derived_feature_state(
     payload: dict[str, Any],
     feature_catalog: Mapping[str, object],
 ) -> None:
+    # The catalog stays at the top level, with the committed set; the draft is
+    # in the mode slices (Session 46).
     editor_state = payload.get("editorState")
     editor_state = (
         dict(editor_state) if isinstance(editor_state, Mapping) else {}
     )
     editor_state["featureCatalog"] = dict(feature_catalog)
     payload["editorState"] = editor_state
-
-    features = payload.get("features")
-    features = dict(features) if isinstance(features, Mapping) else {}
-    for key in CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS | RETIRED_RENDERED_ID_FEATURE_FIELDS:
-        features.pop(key, None)
-    payload["features"] = features
 
     orthogroup_state = payload.get("orthogroupState")
     orthogroup_state = (
@@ -551,8 +545,7 @@ def render_canonical_session_if_present(
                 source_session,
                 source_version=document.version,
             )
-            validate_current_web_state_field_names(adjunct.get("config"))
-            validate_current_display_drafts(adjunct.get("config"))
+            validate_current_mode_slices(adjunct.get("modes"))
 
         rendered = _render_request(
             request,
@@ -826,36 +819,22 @@ def _project_session_adjunct_for_current_write(
             "files",
         }
     }
-    features = adjunct.get("features")
-    saved_editor_state = adjunct.get("editorState")
-    saved_catalog = (
-        saved_editor_state.get("featureCatalog")
-        if isinstance(saved_editor_state, Mapping)
-        else None
-    )
-    render_request_value = session.get("renderRequest")
-    render_request = (
-        render_request_value if isinstance(render_request_value, Mapping) else {}
-    )
-    if (
-        source_version < CURRENT_SESSION_VERSION
-        and isinstance(features, Mapping)
-        and isinstance(saved_catalog, Mapping)
-    ):
-        # The rendered-ID edit maps become identity drafts through the
-        # Session's saved catalog, as the Web app moves them on Load.
-        migration = migrate_session_feature_edits(
-            features,
-            mode=render_request.get("mode"),
-            catalog=saved_catalog,
-        )
-        adjunct["features"] = migration.features
-        if migration.dropped_count:
+    if source_version < MODE_SCOPED_SESSION_MIN_VERSION:
+        # The older draft migrations, in Web Load's order: the rendered-ID edit
+        # maps become identity drafts through the Session's saved catalog, and
+        # a hash= annotation target moves to its source feature where that
+        # catalog makes the figure certain (R-7). The request keeps the targets
+        # that drew the figure.
+        migration = migrate_session_flat_draft(session)
+        for key in ("config", "features"):
+            if key in migration.session:
+                adjunct[key] = migration.session[key]
+        if migration.dropped_feature_edit_count:
             logger.warning(
                 "WARNING: %d feature edit(s) from Session version %d could not "
                 "be matched to a feature of its saved diagram and were dropped "
                 "from the written Session.",
-                migration.dropped_count,
+                migration.dropped_feature_edit_count,
                 source_version,
             )
         if migration.narrowed_visibility_count:
@@ -866,15 +845,14 @@ def _project_session_adjunct_for_current_write(
                 migration.narrowed_visibility_count,
                 source_version,
             )
-    elif isinstance(features, Mapping) and RETIRED_RENDERED_ID_FEATURE_FIELDS & set(features):
-        # A Session without a saved catalog: the Web app reads its sources
-        # again to move these edits, and the CLI does not. The request's
-        # tables keep their effect (design Q4, 4.2).
-        adjunct["features"] = {
-            key: value
-            for key, value in features.items()
-            if key not in RETIRED_RENDERED_ID_FEATURE_FIELDS
-        }
+        if migration.migrated_annotation_count:
+            logger.info(
+                "INFO: %d annotation(s) from Session version %d named a feature "
+                "by hash=; in the written Session each names that feature by "
+                "its source.",
+                migration.migrated_annotation_count,
+                source_version,
+            )
     orthogroup_state = adjunct.get("orthogroupState")
     if isinstance(orthogroup_state, Mapping):
         projected_orthogroup_state = dict(orthogroup_state)
@@ -937,37 +915,9 @@ def _project_session_adjunct_for_current_write(
             editor_state["featureCatalog"] = promote_legacy_feature_catalog(catalog)
             adjunct["editorState"] = editor_state
     web_file_inventory = _project_web_file_inventory(session)
-    config = adjunct.get("config")
-    if source_version < CURRENT_SESSION_VERSION and isinstance(config, Mapping):
-        migrated_config = migrate_persisted_web_state_field_names(config)
-        assert isinstance(migrated_config, Mapping)
-        config = migrated_config
-        adjunct["config"] = config
-    if (
-        CURRENT_AUTHORITY_SESSION_MIN_VERSION <= source_version < CURRENT_SESSION_VERSION
-        and isinstance(config, Mapping)
-    ):
-        # R-7: a hash= annotation target moves to its source feature where the
-        # Session's saved catalog makes the figure certain, as the Web app
-        # moves it on Load. The request keeps the targets that drew the figure.
-        annotation_migration = migrate_session_annotation_targets(
-            config.get("annotationSets"),
-            mode=render_request.get("mode"),
-            catalog=saved_catalog,
-            records=render_request.get("records"),
-        )
-        if annotation_migration.migrated_count:
-            config = {**config, "annotationSets": annotation_migration.annotation_sets}
-            adjunct["config"] = config
-            logger.info(
-                "INFO: %d annotation(s) from Session version %d named a feature "
-                "by hash=; in the written Session each names that feature by "
-                "its source.",
-                annotation_migration.migrated_count,
-                source_version,
-            )
     if source_version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
-        return adjunct, web_file_inventory
+        return _split_session_adjunct(adjunct, session, source_version), web_file_inventory
+    config = adjunct.get("config")
 
     if isinstance(config, Mapping):
         source_files = session.get("files")
@@ -1032,7 +982,31 @@ def _project_session_adjunct_for_current_write(
                 for metadata in metadata_value
             ]
         adjunct["webFiles"] = web_files
-    return adjunct, web_file_inventory
+    return _split_session_adjunct(adjunct, session, source_version), web_file_inventory
+
+
+def _split_session_adjunct(
+    adjunct: dict[str, Any],
+    session: Mapping[str, Any],
+    source_version: int,
+) -> dict[str, Any]:
+    """Move an older source's flat draft into the Session 46 mode slices.
+
+    A Session 46 source keeps its ``modes`` (and ``otherModeResult``) as they
+    are. Each mode's Depth sources are counted in the source's bindings.
+    """
+
+    if source_version >= MODE_SCOPED_SESSION_MIN_VERSION:
+        return adjunct
+    web_files = session.get("webFiles")
+    bindings = web_files.get("bindings") if isinstance(web_files, Mapping) else None
+    return split_draft_into_modes(
+        adjunct,
+        committed_mode=session_mode(session),
+        depth_sources=session_depth_source_widths(
+            bindings if isinstance(bindings, Mapping) else session.get("files")
+        ),
+    )
 
 
 def _render_request(

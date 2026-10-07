@@ -71,7 +71,11 @@ from gbdraw.layout.similarity_alignment import (
 from gbdraw.config.models import GbdrawConfig
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.shapes import resolve_feature_rendering
-from gbdraw.session_io import CURRENT_SESSION_TOP_LEVEL_FIELDS, CURRENT_SESSION_VERSION
+from gbdraw.session_io import (
+    CURRENT_SESSION_TOP_LEVEL_FIELDS,
+    CURRENT_SESSION_VERSION,
+    FLAT_DRAFT_TOP_LEVEL_FIELDS,
+)
 from gbdraw.session_request_codec import (
     CANONICAL_REQUEST_SCHEMA,
     SUPPORTED_CANONICAL_REQUEST_SCHEMAS,
@@ -3010,10 +3014,11 @@ _WEB_CONFIG_JS = Path(__file__).parents[1] / "gbdraw" / "web" / "js" / "services
 
 def test_web_gbdraw_session_typedef_matches_session_io_fields_and_version() -> None:
     source = _WEB_CONFIG_JS.read_text(encoding="utf-8")
-    # `files` is accepted only for Sessions older than version 40; the current
-    # writer never writes it and the current reader rejects it.
+    # `files` is accepted only for Sessions older than version 40, and the flat
+    # `config` and `features` only for Sessions older than version 46; the
+    # current writer never writes them and the current reader rejects them.
     assert _jsdoc_typedef_property_names(source, "GbdrawSession") == (
-        set(CURRENT_SESSION_TOP_LEVEL_FIELDS) - {"files"}
+        set(CURRENT_SESSION_TOP_LEVEL_FIELDS) - {"files"} - FLAT_DRAFT_TOP_LEVEL_FIELDS
     )
     assert f"export const SESSION_VERSION = {CURRENT_SESSION_VERSION};" in source
 

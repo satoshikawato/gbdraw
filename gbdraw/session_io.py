@@ -32,16 +32,27 @@ from .exceptions import GbdrawError, ValidationError
 from .io.filenames import _SAFE_FILENAME_RE, safe_embedded_filename
 from .render.formats import normalize_format_token
 from .render.output_paths import commit_staged_output_file
+from .web_support.mode_scoped_settings import (
+    DIAGRAM_MODES,
+    LOSAT_EXECUTION_FIELDS,
+    MODE_SCOPED_SETTINGS,
+    SLICE_CONTAINERS,
+    DiagramMode,
+    ModeScopedSetting,
+    unmanaged_config_override_modes,
+)
 
 if TYPE_CHECKING:
     from .analysis.protein_colinearity import ProteinIdentityManifest
     from .api.requests import DiagramRequest
 
 SESSION_FORMAT = "gbdraw-session"
-CURRENT_SESSION_VERSION = 45
+CURRENT_SESSION_VERSION = 46
 # Version 44 is the first with the current active-config and record-display
-# draft shapes; version 45 keys per-feature edits by source identity.
+# draft shapes; version 46 keeps the Web draft of each diagram mode in
+# ``modes`` (PD-OI-086) and keys per-feature edits by source identity.
 TYPED_DRAFT_SESSION_MIN_VERSION = 44
+MODE_SCOPED_SESSION_MIN_VERSION = 46
 CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40
 CANONICAL_SESSION_MIN_VERSION = 31
 SUPPORTED_SESSION_VERSIONS = frozenset(
@@ -81,8 +92,14 @@ CURRENT_SESSION_TOP_LEVEL_FIELDS = frozenset(
         "legacyArtifacts",
         "runMetadata",
         "cliInvocation",
+        "modes",
+        # E1 (Q0): the other diagram mode's committed Result set.
+        "otherModeResult",
     }
 )
+# The flat Web draft of Sessions 44 and older; Session 46 keeps it per mode in
+# ``modes`` (MODE_SCOPED_SETTINGS).
+FLAT_DRAFT_TOP_LEVEL_FIELDS = frozenset({"config", "features"})
 CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS = frozenset(
     {
         "extractedFeatures",
@@ -102,12 +119,14 @@ RETIRED_RENDERED_ID_FEATURE_FIELDS = frozenset(
         "labelTextFeatureOverrideSources",
     }
 )
-# A version-45 draft row names the mode of its record key (``scope``), since
-# both modes can use the same record key for the same feature.
+# While a Session 41-44 draft is migrated, a draft row names the mode of its
+# record key (``scope``), since both modes can use the same record key for the
+# same feature; the split then moves each row into that mode's slice, where the
+# row has no ``scope`` (Session 46).
 DRAFT_SCOPES = ("circular", "linear")
+# The fields of a per-feature edit draft row in a Session 46 mode slice.
 FEATURE_OVERRIDE_DRAFT_FIELDS = frozenset(
     {
-        "scope",
         "recordKey",
         "biologicalFeatureId",
         "featureVisibility",
@@ -116,6 +135,8 @@ FEATURE_OVERRIDE_DRAFT_FIELDS = frozenset(
         "labelSourceText",
     }
 )
+# A Session 46 field that names an invalid shape is a Session field error.
+_SESSION_FIELDS_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
 DEPTH_FILE_ENCODING = "gbdraw-depth-table-v1"
 DEPTH_FILE_SCHEMA = 1
 JS_MAX_SAFE_INTEGER = 9_007_199_254_740_991
@@ -627,14 +648,15 @@ def validate_session(session: Mapping[str, Any]) -> None:
     if version >= CURRENT_ARTIFACT_SESSION_MIN_VERSION:
         validate_current_session_artifacts(session)
     if version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
+        _validate_mode_scoped_fields(session, version)
         _validate_current_retired_active_config_paths(session)
         _validate_current_comparison_authority(session)
         _validate_current_feature_catalog_authority(session, version)
         _validate_alignment_reset_receipt(session)
-    if version >= 41:
-        _validate_display_placement_drafts(session, version)
-    if version >= CURRENT_SESSION_VERSION:
-        _validate_feature_override_drafts(session)
+    if version >= MODE_SCOPED_SESSION_MIN_VERSION:
+        _validate_mode_slices(session)
+    elif version >= 41:
+        _validate_display_placement_drafts(session)
     if is_settings_only_session(session):
         _validate_settings_only_session(session)
 
@@ -668,10 +690,16 @@ def _validate_settings_only_session(session: Mapping[str, Any]) -> None:
             or any(manifest.get(key) for key in ("proteinSets", "recordAnalyses", "recordInstances"))
             or bindings.get("c_conservation_blasts_source") == "losat-cache"):
         raise ValidationError("Settings-only Session cannot contain committed render artifacts.")
-    config, ui = session.get("config"), session.get("ui")
+    ui = session.get("ui")
+    mode = ui.get("mode") if isinstance(ui, Mapping) else None
+    # Session 46 keeps the shown mode's configuration in its mode slice.
+    config = (
+        _mode_slice_config(session, mode)
+        if session.get("version", 0) >= MODE_SCOPED_SESSION_MIN_VERSION
+        else session.get("config")
+    )
     if (not isinstance(config, Mapping) or not isinstance(config.get("form"), Mapping)
-            or not isinstance(config.get("adv"), Mapping) or not isinstance(ui, Mapping)
-            or ui.get("mode") not in ("circular", "linear")):
+            or not isinstance(config.get("adv"), Mapping) or mode not in DIAGRAM_MODES):
         raise ValidationError("Settings-only Session requires an active Web configuration and mode.")
     from .session_resources import canonical_resource_ids
 
@@ -692,7 +720,9 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
         raise ValidationError("Unsupported Web file binding schema.")
     current = schema == 2
     if current and (session.get("version") not in (41, 42, 44, CURRENT_SESSION_VERSION) or "c_gb" not in bindings):
-        raise ValidationError("Web binding schema 2 requires session 41, 42, 44, or 45 and c_gb.")
+        raise ValidationError(
+            f"Web binding schema 2 requires session 41, 42, 44, or {CURRENT_SESSION_VERSION} and c_gb."
+        )
     resources = session.get("resources", {})
 
     def metadata(value: Mapping[str, Any]) -> None:
@@ -773,28 +803,51 @@ def _validate_web_file_bindings(session: Mapping[str, Any]) -> None:
                     value(row.get("file"))
 
 
-def _validate_display_placement_drafts(session: Mapping[str, Any], version: int) -> None:
-    """Validate editable intent independently of the committed render request."""
-    from .api.requests import RecordDisplayOptions
-    from .features.placement import FeaturePlacementOverride, normalize_feature_placements
+def _validate_display_placement_drafts(session: Mapping[str, Any]) -> None:
+    """Validate a flat Session 41-44 draft's editable intent apart from the committed request."""
 
     config = session.get("config", {})
     if not isinstance(config, Mapping):
         return
+    _validate_display_placement_draft_config(
+        config,
+        mode=(session.get("renderRequest") or {}).get("mode") or session.get("ui", {}).get("mode"),
+        scoped=True,
+        current=session.get("version", 0) >= TYPED_DRAFT_SESSION_MIN_VERSION,
+    )
+
+
+def _validate_display_placement_draft_config(
+    config: Mapping[str, Any],
+    *,
+    mode: object,
+    scoped: bool,
+    current: bool,
+) -> None:
+    """Validate the record display and feature placement drafts of one Web draft.
+
+    A flat Session 41-44 draft names each record display row's mode
+    (``scoped``); a Session 46 mode slice holds the rows of its own mode only.
+    Placement rows are keyed by ``[recordKey, biologicalFeatureId]`` in both.
+    """
+    from .api.requests import RecordDisplayOptions
+    from .features.placement import FeaturePlacementOverride, normalize_feature_placements
+
     drafts = config.get("recordDisplayDrafts", [])
     if not isinstance(drafts, list):
         raise ValidationError("config.recordDisplayDrafts must be an array.")
-    current = version >= TYPED_DRAFT_SESSION_MIN_VERSION
     expected_fields = {
-        "scope", "sourceUid", "selector", "recordId", "topologyOverride", "startCoordinate",
+        "sourceUid", "selector", "recordId", "topologyOverride", "startCoordinate",
     }
+    if scoped:
+        expected_fields.add("scope")
     if current:
         expected_fields |= {"reverseComplementOverride", "anchorIntent"}
     keys = set()
     for row in drafts:
         if not isinstance(row, Mapping) or set(row) != expected_fields:
             raise ValidationError("Invalid record display draft fields.")
-        if row["scope"] not in {"circular", "linear"} or any(
+        if (scoped and row["scope"] not in {"circular", "linear"}) or any(
             not isinstance(row[name], str) or "\0" in row[name]
             for name in ("sourceUid", "selector", "recordId")
         ) or not row["sourceUid"] or not re.fullmatch(r"#[1-9]\d*", row["selector"]):
@@ -837,41 +890,20 @@ def _validate_display_placement_drafts(session: Mapping[str, Any], version: int)
                     or not isinstance(intent.get("orientForward"), bool)
                 ):
                     raise ValidationError("Invalid record display anchor intent.")
-        key = (row["scope"], row["sourceUid"], row["selector"])
+        key = (row.get("scope"), row["sourceUid"], row["selector"])
         if key in keys:
             raise ValidationError("Duplicate record display draft identity.")
         keys.add(key)
     placements = config.get("featurePlacementOverrides", {})
     if not isinstance(placements, Mapping):
         raise ValidationError("config.featurePlacementOverrides must be an object.")
-    if version >= CURRENT_SESSION_VERSION:
-        # Each row names its mode; the other mode's rows wait for that mode.
-        invalid = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
-        for key, row in placements.items():
-            scope = row.get("scope") if isinstance(row, Mapping) else None
-            if scope not in DRAFT_SCOPES:
-                raise ValidationError(
-                    "Feature placement drafts require a circular or linear scope.", diagnostic=invalid
-                )
-            placement = FeaturePlacementOverride.from_mapping({k: v for k, v in row.items() if k != "scope"})
-            placement.target.validate_mode(scope)
-            if key != _draft_identity_key(scope, placement.record_key, placement.biological_feature_id):
-                raise ValidationError(
-                    "Feature placement draft keys must encode their scope and identity as a JSON triple.",
-                    diagnostic=invalid,
-                )
-    else:
-        rows = normalize_feature_placements(
-            tuple(FeaturePlacementOverride.from_mapping(row) for row in placements.values())
-        )
-        if set(placements) != {
-            json.dumps([row.record_key, row.biological_feature_id], ensure_ascii=False, separators=(",", ":"))
-            for row in rows
-        }:
-            raise ValidationError("Feature placement draft keys must encode their exact identity as a JSON pair.")
-        mode = (session.get("renderRequest") or {}).get("mode") or session.get("ui", {}).get("mode")
-        for row in rows:
-            row.target.validate_mode(mode)
+    rows = normalize_feature_placements(
+        tuple(FeaturePlacementOverride.from_mapping(row) for row in placements.values())
+    )
+    if set(placements) != {_draft_pair_key(row.record_key, row.biological_feature_id) for row in rows}:
+        raise ValidationError("Feature placement draft keys must encode their exact identity as a JSON pair.")
+    for row in rows:
+        row.target.validate_mode(mode)
     adv = config.get("adv", {})
     if not isinstance(adv, Mapping):
         raise ValidationError("config.adv must be an object.")
@@ -884,38 +916,27 @@ def _draft_identity_key(scope: str, record_key: str, biological_feature_id: str)
     return json.dumps([scope, record_key, biological_feature_id], ensure_ascii=False, separators=(",", ":"))
 
 
-def _validate_feature_override_drafts(session: Mapping[str, Any]) -> None:
-    """Validate the version-45 per-feature edit drafts keyed by source identity.
+def _draft_pair_key(record_key: str, biological_feature_id: str) -> str:
+    return json.dumps([record_key, biological_feature_id], ensure_ascii=False, separators=(",", ":"))
 
-    A draft row is a request ``featureOverrides`` row plus the mode of its
-    record key (``scope``) and the Web-only ``labelSourceText``; a row may hold
-    only that source text (a bulk label edit's target). The key encodes the
-    scope and identity as a JSON triple, as placement drafts do.
+
+def _validate_feature_override_drafts(features: Mapping[str, Any]) -> None:
+    """Validate a Session 46 mode slice's per-feature edit drafts keyed by source identity.
+
+    A draft row is a request ``featureOverrides`` row plus the Web-only
+    ``labelSourceText``; a row may hold only that source text (a bulk label
+    edit's target). The key encodes the identity as a JSON pair, as placement
+    drafts do.
     """
     from .features.overrides import FeatureOverride
 
-    invalid = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
-
-    features = session.get("features", {})
-    if not isinstance(features, Mapping):
-        return
-    retired = RETIRED_RENDERED_ID_FEATURE_FIELDS & set(features)
-    if retired:
-        raise ValidationError(
-            f"Session version {session.get('version')} cannot contain rendered-ID "
-            f"feature edits: {', '.join(sorted(retired))}.",
-            diagnostic=invalid,
-        )
+    invalid = _SESSION_FIELDS_INVALID
     drafts = features.get("featureOverrides", {})
     if not isinstance(drafts, Mapping):
         raise ValidationError("features.featureOverrides must be an object.", diagnostic=invalid)
     for key, row in drafts.items():
         if not isinstance(row, Mapping) or set(row) != FEATURE_OVERRIDE_DRAFT_FIELDS:
             raise ValidationError("Invalid feature override draft fields.", diagnostic=invalid)
-        if row["scope"] not in DRAFT_SCOPES:
-            raise ValidationError(
-                "Feature override drafts require a circular or linear scope.", diagnostic=invalid
-            )
         source_text = row["labelSourceText"]
         if source_text is not None and (
             not isinstance(source_text, str) or not source_text or "\0" in source_text
@@ -941,11 +962,131 @@ def _validate_feature_override_drafts(session: Mapping[str, Any]) -> None:
                     "Feature override drafts require a record key and feature ID.",
                     diagnostic=invalid,
                 )
-        if key != _draft_identity_key(row["scope"], *identity):
+        if key != _draft_pair_key(*identity):
             raise ValidationError(
-                "Feature override draft keys must encode their scope and identity as a JSON triple.",
+                "Feature override draft keys must encode their identity as a JSON pair.",
                 diagnostic=invalid,
             )
+
+
+def _mode_slice(session: Mapping[str, Any], mode: object) -> Mapping[str, Any] | None:
+    modes = session.get("modes")
+    mode_slice = modes.get(mode) if isinstance(modes, Mapping) and isinstance(mode, str) else None
+    return mode_slice if isinstance(mode_slice, Mapping) else None
+
+
+def _mode_slice_config(session: Mapping[str, Any], mode: object) -> Mapping[str, Any] | None:
+    mode_slice = _mode_slice(session, mode)
+    config = mode_slice.get("config") if mode_slice is not None else None
+    return config if isinstance(config, Mapping) else None
+
+
+def _session_draft_configs(
+    session: Mapping[str, Any],
+) -> list[tuple[DiagramMode | None, Mapping[str, Any]]]:
+    """Each Web draft config of a Session: its mode slices' (46), else the flat one."""
+
+    if session.get("version", 0) >= MODE_SCOPED_SESSION_MIN_VERSION:
+        return [
+            (mode, config)
+            for mode in DIAGRAM_MODES
+            if (config := _mode_slice_config(session, mode)) is not None
+        ]
+    config = session.get("config")
+    return [(None, config)] if isinstance(config, Mapping) else []
+
+
+# The top-level homes that Session 46 moved into ``modes``: the flat draft,
+# and the Legend edit, per-feature stroke, and per-mode ``ui`` keys.
+_RETIRED_MODE_SCOPED_FIELDS: dict[str, frozenset[str]] = {
+    "": FLAT_DRAFT_TOP_LEVEL_FIELDS,
+    **{
+        domain: frozenset(row.path for row in MODE_SCOPED_SETTINGS if row.domain == domain)
+        for domain in ("editorState", "editorState.legend", "ui")
+    },
+}
+
+
+def _validate_mode_scoped_fields(session: Mapping[str, Any], version: int) -> None:
+    """Admit ``modes`` in Session 46 only, and its draft nowhere else."""
+
+    if version < MODE_SCOPED_SESSION_MIN_VERSION:
+        if "modes" in session:
+            raise ValidationError(
+                f"Session version {version} cannot contain modes.", diagnostic=_SESSION_FIELDS_INVALID
+            )
+        return
+    retired = sorted(
+        f"{domain}.{field}" if domain else field
+        for domain, fields in _RETIRED_MODE_SCOPED_FIELDS.items()
+        if isinstance(container := _container_at(session, domain), Mapping)
+        for field in fields & set(container)
+    )
+    if retired:
+        raise ValidationError(
+            f"Session version {version} keeps the Web draft of each mode in modes; "
+            f"it cannot contain {', '.join(retired)}.",
+            diagnostic=_SESSION_FIELDS_INVALID,
+        )
+    ui = session.get("ui")
+    execution = ui.get("losatExecution") if isinstance(ui, Mapping) else None
+    if execution is not None and (
+        not isinstance(execution, Mapping) or set(execution) - set(LOSAT_EXECUTION_FIELDS)
+    ):
+        raise ValidationError(
+            "ui.losatExecution holds only the LOSAT execution settings.", diagnostic=_SESSION_FIELDS_INVALID
+        )
+
+
+def _container_at(source: Mapping[str, Any], domain: str) -> object:
+    current: object = source
+    for part in domain.split(".") if domain else ():
+        current = current.get(part) if isinstance(current, Mapping) else None
+    return current
+
+
+def _validate_mode_slices(session: Mapping[str, Any]) -> None:
+    """Validate each Session 46 mode slice against its own mode.
+
+    A slice holds only registry fields (MODE_SCOPED_SETTINGS); a missing field
+    is that mode's default, and a missing slice is all defaults. Each slice
+    runs the draft validators with its own mode, so a lane placement or a
+    GUI-unmanaged override of one mode never reaches the other (OV-106).
+    """
+    from .web_support.config_overrides import validate_and_project_web_config_overrides
+
+    modes = session.get("modes")
+    if modes is None:
+        return
+    if not isinstance(modes, Mapping) or set(modes) - set(DIAGRAM_MODES):
+        raise ValidationError(
+            "Session modes holds a circular and a linear slice only.", diagnostic=_SESSION_FIELDS_INVALID
+        )
+    for mode, mode_slice in modes.items():
+        _validate_mode_slice_fields(mode_slice, mode)
+        config = mode_slice.get("config", {})
+        _validate_display_placement_draft_config(config, mode=mode, scoped=False, current=True)
+        _validate_feature_override_drafts(mode_slice.get("features", {}))
+        overrides = config.get("unmanagedConfigOverrides")
+        if overrides:
+            validate_and_project_web_config_overrides(mode=mode, overrides=overrides)
+
+
+def _validate_mode_slice_fields(value: object, mode: str, container: str = "") -> None:
+    """Reject a slice field that the registry does not name."""
+
+    label = f"modes.{mode}" + (f".{container}" if container else "")
+    if not isinstance(value, Mapping):
+        raise ValidationError(f"Session {label} must be an object.", diagnostic=_SESSION_FIELDS_INVALID)
+    unknown = sorted(str(field) for field in set(value) - SLICE_CONTAINERS[container])
+    if unknown:
+        raise ValidationError(
+            f"Session {label} cannot contain {', '.join(unknown)}.", diagnostic=_SESSION_FIELDS_INVALID
+        )
+    for field, child in value.items():
+        child_container = f"{container}.{field}" if container else field
+        if child_container in SLICE_CONTAINERS:
+            _validate_mode_slice_fields(child, mode, child_container)
 
 
 def _validate_current_retired_active_config_paths(
@@ -971,7 +1112,12 @@ def _validate_current_comparison_authority(
 ) -> None:
     """Reject retired v40 comparison fields and validate an optional Web draft."""
 
-    config_value = session.get("config")
+    config_value = (
+        # Session 46 keeps the comparison draft in the Linear slice.
+        _mode_slice_config(session, "linear")
+        if session.get("version", 0) >= MODE_SCOPED_SESSION_MIN_VERSION
+        else session.get("config")
+    )
     config = config_value if isinstance(config_value, Mapping) else {}
     ui_value = session.get("ui")
     ui = ui_value if isinstance(ui_value, Mapping) else {}
@@ -1387,13 +1533,14 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
     """Validate current cache, manifest, and legacy artifact boundaries."""
 
     session_version = session.get("version")
-    validate_current_web_state_field_names(
-        session.get("config"),
-        include_linear_label_visibility=(
-            isinstance(session_version, int)
-            and session_version >= TYPED_DRAFT_SESSION_MIN_VERSION
-        ),
-    )
+    for _, config in _session_draft_configs(session):
+        validate_current_web_state_field_names(
+            config,
+            include_linear_label_visibility=(
+                isinstance(session_version, int)
+                and session_version >= TYPED_DRAFT_SESSION_MIN_VERSION
+            ),
+        )
     cache_entries = _artifact_entries(session, "losatCache")
     protein_entries: list[Mapping[str, Any]] = []
     seen_cache_keys: set[str] = set()
@@ -2095,6 +2242,546 @@ def migrate_persisted_web_state_field_names(config: object) -> object:
     return migrated
 
 
+# --- Session 46: the split of a Session 27-44 draft into mode slices ---------
+
+# A Session before the pairwise match style existed drew ribbons; the flat
+# draft of such a Session holds that value for the active mode (the twin of
+# ``withHistoricalPairwiseMatchStyleFallback`` in the Web ``services/config.js``).
+_HISTORICAL_FLAT_PROFILE_VALUES = {"pairwise_match_style": "ribbon"}
+# The flat Depth fallbacks a Depth series without a value of its own reads;
+# Session 46 retires them into each series (``normalizeDepthTrackConfig``).
+_DEPTH_TRACK_FALLBACKS = (
+    ("large_tick_interval", "depth_large_tick_interval"),
+    ("small_tick_interval", "depth_small_tick_interval"),
+    ("tick_font_size", "depth_tick_font_size"),
+)
+_ANNOTATION_RECORD_BINDING_KEY = "_gbdraw_web_target_record_key"
+_JSON_DECODER = json.JSONDecoder()
+_ABSENT = object()
+
+
+def _diagram_mode(value: object) -> DiagramMode | None:
+    return cast("DiagramMode", value) if value in DIAGRAM_MODES else None
+
+
+def _depth_slots(value: object) -> list[Any]:
+    # depthFileSlotsFromValue: a list is the series slots; a value is one slot.
+    if isinstance(value, list):
+        return list(value)
+    return [value] if _js_truthy(value) else []
+
+
+def session_depth_source_widths(bindings: object) -> dict[DiagramMode, int]:
+    """Each mode's Depth series count in the Web file bindings, 0 when none is bound.
+
+    Circular reads ``c_depth`` (one row of series slots per record, or one
+    row); Linear reads each ``linearSeqs[].depth``. The width is the widest row
+    when any slot holds a file, as ``reconcileDepthTrackStateAfterSessionFiles``
+    counts it.
+    """
+
+    source = bindings if isinstance(bindings, Mapping) else {}
+    circular = source.get("c_depth")
+    circular_rows = (
+        [_depth_slots(row) for row in circular]
+        if isinstance(circular, list) and all(isinstance(row, list) for row in circular)
+        else [_depth_slots(circular)]
+    )
+    sequences = source.get("linearSeqs")
+    linear_rows = [
+        _depth_slots(sequence.get("depth"))
+        for sequence in (sequences if isinstance(sequences, list) else [])
+        if isinstance(sequence, Mapping)
+    ]
+
+    def width(rows: list[list[Any]]) -> int:
+        if not any(_js_truthy(slot) for row in rows for slot in row):
+            return 0
+        return max(len(row) for row in rows)
+
+    return {"circular": width(circular_rows), "linear": width(linear_rows)}
+
+
+def _mode_profile_values(mode_profiles: object, mode: DiagramMode) -> Mapping[str, Any]:
+    profiles = mode_profiles.get("profiles") if isinstance(mode_profiles, Mapping) else None
+    profile = profiles.get(mode) if isinstance(profiles, Mapping) else None
+    values = profile.get("values") if isinstance(profile, Mapping) else None
+    return values if isinstance(values, Mapping) else {}
+
+
+def _with_depth_track_fallbacks(tracks: object, adv: Mapping[str, Any]) -> object:
+    if not isinstance(tracks, list):
+        return tracks
+    fallbacks = [(field, adv[flat]) for field, flat in _DEPTH_TRACK_FALLBACKS if adv.get(flat) is not None]
+    if not fallbacks:
+        return tracks
+    return [
+        {**track, **{field: value for field, value in fallbacks if track.get(field) is None}}
+        if isinstance(track, Mapping)
+        else track
+        for track in tracks
+    ]
+
+
+def _unscoped_rows(rows: object, mode: DiagramMode) -> object:
+    """The ``scope``d draft rows of ``mode``, keyed by identity pair and without ``scope``."""
+
+    if not isinstance(rows, Mapping):
+        return rows
+    unscoped: dict[str, Any] = {}
+    for key, row in rows.items():
+        if isinstance(row, Mapping) and "scope" in row:
+            if row["scope"] != mode:
+                continue
+            fields = {field: value for field, value in row.items() if field != "scope"}
+            record_key, feature_id = fields.get("recordKey"), fields.get("biologicalFeatureId")
+            if isinstance(record_key, str) and isinstance(feature_id, str):
+                key = _draft_pair_key(record_key, feature_id)
+            unscoped[key] = fields
+        else:
+            unscoped[key] = row
+    return unscoped
+
+
+def _annotation_binding_mode(annotation: object) -> DiagramMode | None:
+    """The mode whose record an annotation's target names, if it names one."""
+
+    if not isinstance(annotation, Mapping):
+        return None
+    target = annotation.get("target")
+    if isinstance(target, Mapping) and target.get("kind") == "featureIdentity":
+        return _diagram_mode(target.get("scope"))
+    metadata = annotation.get("metadata")
+    binding = metadata.get(_ANNOTATION_RECORD_BINDING_KEY) if isinstance(metadata, Mapping) else None
+    if not isinstance(binding, str):
+        return None
+    # A record key starts with its source key, a JSON array whose first item
+    # is the mode (``annotationSourceKey``).
+    try:
+        source_key, _ = _JSON_DECODER.raw_decode(binding.strip(_JS_WHITESPACE))
+    except ValueError:
+        return None
+    return _diagram_mode(source_key[0]) if isinstance(source_key, list) and source_key else None
+
+
+def _annotation_sets_of_mode(sets: list[Any], mode: DiagramMode) -> list[Any]:
+    result: list[Any] = []
+    for annotation_set in sets:
+        annotations = annotation_set.get("annotations") if isinstance(annotation_set, Mapping) else None
+        if not isinstance(annotations, list):
+            result.append(_json_clone(annotation_set))
+            continue
+        kept = []
+        for annotation in annotations:
+            bound = _annotation_binding_mode(annotation)
+            if bound is not None and bound != mode:
+                continue
+            annotation = _json_clone(annotation)
+            target = annotation.get("target") if isinstance(annotation, dict) else None
+            if isinstance(target, dict) and target.get("kind") == "featureIdentity":
+                target.pop("scope", None)
+            kept.append(annotation)
+        result.append({**_json_clone(annotation_set), "annotations": kept})
+    return result
+
+
+def _split_setting(
+    row: ModeScopedSetting,
+    value: Any,
+    *,
+    committed: DiagramMode,
+    widths: Mapping[DiagramMode, int],
+    adv: Mapping[str, Any],
+) -> dict[DiagramMode, Any]:
+    """The value each slice takes for one saved registry value."""
+
+    if row.migrate == "own":
+        return {cast("DiagramMode", row.modes): _json_clone(value)}
+    if row.migrate == "result-mode":
+        return {committed: _unscoped_rows(_json_clone(value), committed)}
+    if row.migrate == "layout":
+        slots = value if isinstance(value, Mapping) else {}
+        return {mode: _json_clone(slots[mode]) for mode in DIAGRAM_MODES if mode in slots}
+    split: dict[DiagramMode, Any] = {}
+    for mode in DIAGRAM_MODES:
+        if row.migrate == "show-if-source":
+            # ``show_depth && hasSource``
+            split[mode] = (widths[mode] > 0) if _js_truthy(value) else value
+        elif row.migrate == "depth" and isinstance(value, list):
+            tracks = _with_depth_track_fallbacks(value, adv)
+            assert isinstance(tracks, list)
+            split[mode] = _json_clone(tracks[: max(1, widths[mode])])
+        elif row.migrate == "by-scope" and isinstance(value, list):
+            split[mode] = [
+                {field: item for field, item in _json_clone(draft).items() if field != "scope"}
+                for draft in value
+                if isinstance(draft, Mapping) and draft.get("scope") == mode
+            ]
+        elif row.migrate == "by-side":
+            split[mode] = _unscoped_rows(_json_clone(value), mode)
+        elif row.migrate == "by-leaf" and isinstance(value, Mapping):
+            split[mode] = {
+                path: _json_clone(leaf)
+                for path, leaf in value.items()
+                if mode in unmanaged_config_override_modes(str(path))
+            }
+        elif row.migrate == "by-binding" and isinstance(value, list):
+            split[mode] = _annotation_sets_of_mode(value, mode)
+        else:
+            split[mode] = _json_clone(value)
+    return split
+
+
+def split_draft_into_modes(
+    draft: Mapping[str, Any],
+    *,
+    committed_mode: object,
+    mode_profiles: object = None,
+    depth_sources: Mapping[str, object] | None = None,
+) -> dict[str, Any]:
+    """Split the flat Web draft of a Session 27-44 into Session 46 mode slices.
+
+    ``draft`` holds the Session's ``config``, ``features``, ``editorState``,
+    and ``ui`` after the older normalizers (field names and placement rows,
+    per-feature edits, annotation targets); other fields are kept as they are.
+    The result has ``modes`` instead of the flat draft when the draft has a
+    ``config`` (a Session written without one, by the CLI or the Python API,
+    gets none, and its slice values are dropped): each registry row
+    (MODE_SCOPED_SETTINGS) fills the slices by its ``migrate`` token, a value
+    that a slice does not take is absent there (that mode's default), and a
+    field that no row names is dropped. ``config.losat``'s execution settings
+    move to ``ui.losatExecution``.
+
+    ``committed_mode`` is the saved Result's mode (``renderRequest.mode``, else
+    ``ui.mode``). ``mode_profiles`` defaults to ``config.modeProfiles``, and
+    ``depth_sources`` (each mode's Depth series count) to the counts in
+    ``webFiles.bindings``, else in the legacy ``files``. The draft's own mode
+    (``ui.mode``, else ``modeProfiles.activeMode``) holds the flat values of
+    the mode-profile fields.
+
+    This is the twin of ``splitDraftIntoModes`` in the Web
+    ``services/mode-scoped-migration.js``;
+    ``tests/fixtures/sessions/mode-split-vectors.json`` pins both.
+    """
+
+    committed = _diagram_mode(committed_mode)
+    if committed is None:
+        raise ValidationError(
+            "Splitting a Session draft by mode requires the saved Result's mode.",
+            diagnostic=_SESSION_FIELDS_INVALID,
+        )
+    config_value = draft.get("config")
+    config: Mapping[str, Any] = config_value if isinstance(config_value, Mapping) else {}
+    ui_value = draft.get("ui")
+    ui: Mapping[str, Any] = ui_value if isinstance(ui_value, Mapping) else {}
+    profiles = config.get("modeProfiles") if mode_profiles is None else mode_profiles
+    active = (
+        _diagram_mode(ui.get("mode"))
+        or _diagram_mode(profiles.get("activeMode") if isinstance(profiles, Mapping) else None)
+        or committed
+    )
+    if depth_sources is None:
+        web_files = draft.get("webFiles")
+        bindings = web_files.get("bindings") if isinstance(web_files, Mapping) else draft.get("files")
+        widths = session_depth_source_widths(bindings)
+    else:
+        widths = {mode: _safe_integer(depth_sources.get(mode)) or 0 for mode in DIAGRAM_MODES}
+    adv_value = config.get("adv")
+    adv: Mapping[str, Any] = adv_value if isinstance(adv_value, Mapping) else {}
+
+    slices: dict[DiagramMode, dict[str, Any]] = {mode: {} for mode in DIAGRAM_MODES}
+    for row in MODE_SCOPED_SETTINGS:
+        container = _container_at(draft, row.domain)
+        if not isinstance(container, Mapping):
+            continue
+        split: dict[DiagramMode, Any]
+        if row.migrate == "profile":
+            split = {}
+            flat = container.get(row.path, _HISTORICAL_FLAT_PROFILE_VALUES.get(row.path, _ABSENT))
+            if flat is not _ABSENT:
+                split[active] = _json_clone(flat)
+            other: DiagramMode = "linear" if active == "circular" else "circular"
+            saved = _mode_profile_values(profiles, other)
+            if row.path in saved:
+                split[other] = _json_clone(saved[row.path])
+        elif row.path in container:
+            split = _split_setting(row, container[row.path], committed=committed, widths=widths, adv=adv)
+        else:
+            continue
+        for mode, value in split.items():
+            target = slices[mode]
+            for part in row.domain.split("."):
+                target = target.setdefault(part, {})
+            target[row.path] = value
+
+    result = {key: value for key, value in draft.items() if key not in FLAT_DRAFT_TOP_LEVEL_FIELDS}
+    for domain, fields in _RETIRED_MODE_SCOPED_FIELDS.items():
+        if not domain:
+            continue
+        head, _, rest = domain.partition(".")
+        container = _container_at(result, domain)
+        if not isinstance(container, Mapping) or not fields & set(container):
+            continue
+        kept = {key: value for key, value in container.items() if key not in fields}
+        if rest:
+            parent = dict(result[head])
+            if kept:
+                parent[rest] = kept
+            else:
+                parent.pop(rest, None)
+            result[head] = parent
+        else:
+            result[head] = kept
+    losat = config.get("losat")
+    execution = {
+        field: _json_clone(losat[field])
+        for field in LOSAT_EXECUTION_FIELDS
+        if isinstance(losat, Mapping) and field in losat
+    }
+    preview = config.get("paletteInstantPreviewEnabled")
+    if execution or (isinstance(preview, bool) and "paletteInstantPreviewEnabled" not in ui):
+        next_ui = dict(result.get("ui") or {})
+        if execution:
+            next_ui["losatExecution"] = execution
+        if isinstance(preview, bool):
+            next_ui.setdefault("paletteInstantPreviewEnabled", preview)
+        result["ui"] = next_ui
+    if isinstance(config_value, Mapping):
+        result["modes"] = {mode: slices[mode] for mode in DIAGRAM_MODES}
+    return result
+
+
+_DEFAULT_ANNOTATION_STYLE: dict[str, Any] = {
+    "stroke": "#404040",
+    "strokeWidth": 1.5,
+    "strokeDasharray": [],
+    "lineCap": "tick",
+    "fill": "#94a3b8",
+    "fillOpacity": 0.2,
+    "hatch": None,
+    "labelColor": "#202020",
+    "labelFontSize": None,
+    "labelOrientation": "auto",
+    "labelPosition": "center",
+    "labelOffset": 4,
+}
+_ANNOTATION_MARKS = ("line", "bracket", "band", "highlight")
+
+
+def _js_number(value: object) -> float:
+    """``Number(value)`` for JSON values (NaN for what JavaScript cannot read)."""
+
+    if value is None:
+        return 0.0
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        text = value.strip(_JS_WHITESPACE)
+        if not text:
+            return 0.0
+        try:
+            return float(text) if not re.search(r"[^0-9eE.+-]", text) else math.nan
+        except ValueError:
+            return math.nan
+    if isinstance(value, list) and len(value) <= 1:
+        return _js_number(value[0]) if value else 0.0
+    return math.nan
+
+
+def _js_integral(value: float) -> int | float:
+    return int(value) if value.is_integer() else value
+
+
+def _clean_id(value: object, fallback: str) -> str:
+    return (_js_string(value) if _js_truthy(value) else "").strip(_JS_WHITESPACE) or fallback
+
+
+def _draft_annotation_target(target: object) -> dict[str, Any]:
+    source = _json_clone(target) if isinstance(target, Mapping) else {}
+    envelope = "segments" if source.get("envelope") == "segments" else "outer_bounds"
+    circular_path = source.get("circularPath") if source.get("circularPath") in ("forward", "reverse") else "shortest"
+    if source.get("kind") == "featureIdentity":
+        if not _feature_identity_key_of(source):
+            raise ValidationError("Invalid selected-feature annotation target.", diagnostic=_SESSION_FIELDS_INVALID)
+        return {
+            "kind": "featureIdentity",
+            "scope": source.get("scope"),
+            "recordKey": source.get("recordKey"),
+            "biologicalFeatureId": source.get("biologicalFeatureId"),
+            "envelope": envelope,
+            "circularPath": circular_path,
+        }
+    if source.get("kind") == "featureSpan":
+        selectors = source.get("selectors")
+        return {
+            "kind": "featureSpan",
+            "record": source.get("record"),
+            "selectors": [
+                {
+                    "key": None
+                    if not isinstance(selector, Mapping) or selector.get("key") in (None, "")
+                    else _js_string(selector.get("key")),
+                    "value": _js_string(selector.get("value"))
+                    if isinstance(selector, Mapping) and _js_truthy(selector.get("value"))
+                    else "",
+                }
+                for selector in selectors
+            ]
+            if isinstance(selectors, list)
+            else [],
+            "envelope": envelope,
+            "circularPath": circular_path,
+        }
+    start = max(1.0, _js_number(source.get("start")) or 1.0)
+    end = max(1.0, _js_number(source.get("end")) or 1.0)
+    return {
+        "kind": "coordinateSpan",
+        "record": source.get("record"),
+        "start": _js_integral(start),
+        "end": _js_integral(end),
+        "coordinateSpace": "local" if source.get("coordinateSpace") == "local" else "source",
+        "wrapsOrigin": start > end,
+        "outOfBounds": source.get("outOfBounds") if source.get("outOfBounds") in ("skip", "error") else "clip",
+    }
+
+
+def _draft_annotation_style(style: object) -> dict[str, Any]:
+    return {**_DEFAULT_ANNOTATION_STYLE, **(_json_clone(style) if isinstance(style, Mapping) else {})}
+
+
+def _draft_annotation_sets_of_request(sets: object, mode: DiagramMode) -> list[dict[str, Any]]:
+    """The Web draft annotation sets of a request's sets, targets in ``mode``.
+
+    The twin of ``draftAnnotationSetsOfRequest`` (``normalizeAnnotationSets``)
+    in the Web ``services/annotation-state.js``.
+    """
+
+    used_set_ids: set[str] = set()
+    result: list[dict[str, Any]] = []
+    for set_index, raw_set in enumerate(sets if isinstance(sets, list) else []):
+        source = raw_set if isinstance(raw_set, Mapping) else {}
+        set_id = _clean_id(_clean_id(source.get("id"), "annotations"), f"annotations_{set_index + 1}")
+        while set_id in used_set_ids:
+            set_id = f"{set_id}_{set_index + 1}"
+        used_set_ids.add(set_id)
+        legend_label = source.get("legendLabel")
+        used_item_ids: set[str] = set()
+        annotations: list[dict[str, Any]] = []
+        raw_items = source.get("annotations")
+        for item_index, raw_item in enumerate(raw_items if isinstance(raw_items, list) else []):
+            item = _json_clone(raw_item) if isinstance(raw_item, Mapping) else {}
+            target = item.get("target")
+            if isinstance(target, Mapping) and target.get("kind") == "featureIdentity":
+                target = {"scope": mode, **target}
+            item_id = _clean_id(item.get("id"), f"region_{item_index + 1}")
+            while item_id in used_item_ids:
+                item_id = f"{item_id}_{item_index + 1}"
+            used_item_ids.add(item_id)
+            lane = item.get("lane")
+            metadata = item.get("metadata")
+            annotations.append(
+                {
+                    "id": item_id,
+                    "target": _draft_annotation_target(target),
+                    "label": _js_string(item.get("label")) if _js_truthy(item.get("label")) else "",
+                    "mark": item.get("mark") if item.get("mark") in _ANNOTATION_MARKS else "bracket",
+                    "lane": None
+                    if lane is None or lane == ""
+                    else _js_integral(max(0.0, _js_number(lane) or 0.0)),
+                    "style": None if item.get("style") is None else _draft_annotation_style(item.get("style")),
+                    "legendLabel": None if item.get("legendLabel") is None else _js_string(item.get("legendLabel")),
+                    "metadata": _json_clone(metadata) if isinstance(metadata, Mapping) else {},
+                }
+            )
+        result.append(
+            {
+                "id": set_id,
+                "annotations": annotations,
+                "defaultStyle": _draft_annotation_style(source.get("defaultStyle")),
+                "legendLabel": None if legend_label is None else _js_string(legend_label),
+            }
+        )
+    return result
+
+
+@dataclass(frozen=True)
+class SessionDraftMigration:
+    """A Session 27-44 Web draft after the migrations that Web Load runs.
+
+    ``session`` still has the flat shape (``config``, ``features``); the split
+    into mode slices (``split_draft_into_modes``) follows. A config-less
+    Session 40-44 whose request names features by ``hash=`` gets the request's
+    annotation sets as its draft (OV-135).
+    """
+
+    session: dict[str, Any]
+    dropped_feature_edit_count: int = 0
+    narrowed_visibility_count: int = 0
+    migrated_annotation_count: int = 0
+
+
+def migrate_session_flat_draft(session: Mapping[str, Any]) -> SessionDraftMigration:
+    """Run the Session 27-44 draft migrations in Web Load's order.
+
+    Field names and placement rows (``migrate_persisted_web_state_field_names``),
+    then per-feature edits through the saved catalog
+    (``migrate_session_feature_edits``; without a catalog they are dropped),
+    then the ``hash=`` annotation targets of a Session 40-44
+    (``migrate_session_annotation_targets``). A Session 40-44 without a draft
+    takes the annotation sets of its request first, as Web Load builds its
+    draft from the request, and keeps them as its draft only when a target
+    moved.
+    """
+
+    migrated: dict[str, Any] = dict(session)
+    version = session.get("version")
+    version = version if isinstance(version, int) else 0
+    request_value = session.get("renderRequest")
+    request: Mapping[str, Any] = request_value if isinstance(request_value, Mapping) else {}
+    editor_state = session.get("editorState")
+    catalog = editor_state.get("featureCatalog") if isinstance(editor_state, Mapping) else None
+    config = session.get("config")
+    if isinstance(config, Mapping):
+        config = migrate_persisted_web_state_field_names(config)
+        migrated["config"] = config
+    features = session.get("features")
+    dropped = narrowed = 0
+    if isinstance(features, Mapping) and isinstance(catalog, Mapping):
+        edits = migrate_session_feature_edits(features, mode=request.get("mode"), catalog=catalog)
+        migrated["features"] = edits.features
+        dropped, narrowed = edits.dropped_count, edits.narrowed_visibility_count
+    elif isinstance(features, Mapping) and RETIRED_RENDERED_ID_FEATURE_FIELDS & set(features):
+        # Without a saved catalog the Web reads the sources again to move these
+        # edits, and Python does not; the request's tables keep their effect.
+        migrated["features"] = {
+            key: value for key, value in features.items() if key not in RETIRED_RENDERED_ID_FEATURE_FIELDS
+        }
+    moved = 0
+    if CURRENT_AUTHORITY_SESSION_MIN_VERSION <= version < MODE_SCOPED_SESSION_MIN_VERSION:
+        mode = _diagram_mode(request.get("mode"))
+        options = request.get("diagramOptions")
+        annotations = options.get("annotations") if isinstance(options, Mapping) else None
+        draft_sets: object = (
+            config.get("annotationSets")
+            if isinstance(config, Mapping)
+            else _draft_annotation_sets_of_request(annotations.get("sets"), mode)
+            if mode is not None and isinstance(annotations, Mapping)
+            else None
+        )
+        targets = migrate_session_annotation_targets(
+            draft_sets, mode=request.get("mode"), catalog=catalog, records=request.get("records")
+        )
+        moved = targets.migrated_count
+        if moved:
+            migrated["config"] = {
+                **(config if isinstance(config, Mapping) else {}),
+                "annotationSets": targets.annotation_sets,
+            }
+    return SessionDraftMigration(migrated, dropped, narrowed, moved)
+
+
 def validate_current_web_state_field_names(
     config: object,
     *,
@@ -2135,14 +2822,19 @@ def validate_current_web_state_field_names(
         )
 
 
-def validate_current_display_drafts(config: object) -> None:
-    """Reject Record display and Feature placement drafts the current writer would refuse.
+def validate_current_mode_slices(modes: object) -> None:
+    """Reject Session 46 mode slices that the current writer would refuse.
 
-    The CLI runs this on a projected sidecar config before it renders, so a
-    failing sidecar writes no diagram.
+    The CLI runs this on a projected sidecar's ``modes`` before it renders, so
+    a failing sidecar writes no diagram.
     """
 
-    _validate_display_placement_drafts({"config": config}, CURRENT_SESSION_VERSION)
+    if modes is not None:
+        _validate_mode_slices({"modes": modes})
+        for mode in DIAGRAM_MODES:
+            config = _mode_slice_config({"modes": modes}, mode)
+            if config is not None:
+                validate_current_web_state_field_names(config)
 
 
 def normalize_current_session_artifacts(
@@ -3324,25 +4016,20 @@ def build_session_json(
     else:
         payload.setdefault("title", "gbdraw")
 
+    if source_version is not None and source_version < MODE_SCOPED_SESSION_MIN_VERSION:
+        payload = migrate_session_flat_draft(payload).session
     config = payload.get("config")
     if not isinstance(config, dict):
-        config = {}
-    elif source_version is not None and source_version < CURRENT_SESSION_VERSION:
-        migrated_config = migrate_persisted_web_state_field_names(config)
-        assert isinstance(migrated_config, dict)
-        config = migrated_config
-        payload["config"] = config
+        config = dict(config) if isinstance(config, Mapping) else {}
 
     ui = payload.get("ui")
-    if not isinstance(ui, dict):
-        ui = {}
-        payload["ui"] = ui
+    ui = dict(ui) if isinstance(ui, Mapping) else {}
+    payload["ui"] = ui
     ui["mode"] = context.mode
     ui.pop("blastSource", None)
     ui.setdefault("zoom", 1)
     ui.setdefault("selectedResultIndex", 0)
     ui.setdefault("canvasPan", {"x": 0, "y": 0})
-    ui.setdefault("canvasPadding", {"top": 0, "right": 0, "bottom": 0, "left": 0})
 
     payload["files"] = _json_clone(embedded_files)
     payload["results"] = [
@@ -3374,12 +4061,6 @@ def build_session_json(
         }
     )
     payload["editorState"] = editor_state
-
-    features = payload.get("features")
-    features = dict(features) if isinstance(features, Mapping) else {}
-    for key in CURRENT_WRITER_FORBIDDEN_FEATURE_FIELDS | RETIRED_RENDERED_ID_FEATURE_FIELDS:
-        features.pop(key, None)
-    payload["features"] = features
 
     orthogroup_state = payload.get("orthogroupState")
     orthogroup_state = (
@@ -3436,6 +4117,13 @@ def build_session_json(
             force_web_draft=force_web_comparison_draft,
         )
         payload["config"] = config
+    if source_version is not None and source_version < MODE_SCOPED_SESSION_MIN_VERSION:
+        # The flat draft of an older source goes to the mode slices (Session 46).
+        payload = split_draft_into_modes(
+            payload,
+            committed_mode=context.mode,
+            depth_sources=session_depth_source_widths(files_for_web),
+        )
     _attach_current_web_file_bindings(payload, files_for_web)
     payload.pop("files", None)
     normalize_current_session_artifacts(
@@ -5120,6 +5808,7 @@ __all__ = [
     "NUCLEOTIDE_LOSAT_CACHE_SCHEMA",
     "PROTEIN_IDENTITY_MANIFEST_SCHEMA",
     "PROTEIN_LOSAT_CACHE_SCHEMA",
+    "MODE_SCOPED_SESSION_MIN_VERSION",
     "SESSION_FORMAT",
     "SUPPORTED_SESSION_VERSIONS",
     "SessionBuildContext",
@@ -5144,11 +5833,15 @@ __all__ = [
     "normalize_current_session_artifacts",
     "safe_embedded_filename",
     "serialize_file_entry",
+    "session_depth_source_widths",
     "session_mode",
     "session_to_cli_args",
+    "split_draft_into_modes",
+    "migrate_session_flat_draft",
+    "SessionDraftMigration",
     "validate_session",
     "validate_current_session_artifacts",
-    "validate_current_display_drafts",
+    "validate_current_mode_slices",
     "validate_current_web_state_field_names",
     "write_session_json",
 ]
