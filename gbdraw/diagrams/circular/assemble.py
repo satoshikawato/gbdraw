@@ -2295,10 +2295,13 @@ def add_record_on_circular_canvas(
                             ),
                             None,
                         )
+                        # Outside rows are not frozen: they stay beyond the enlarged
+                        # axis and the feature slot moved outside, in stack order.
                         if (
                             str(slot.renderer) != "features"
                             and resolved_slot is not None
                             and resolved_slot.anchor_radius_px is not None
+                            and resolved_slot.side != "outside"
                         ):
                             frozen_slots.append(
                                 replace(
