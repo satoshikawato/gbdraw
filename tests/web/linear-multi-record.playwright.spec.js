@@ -3822,14 +3822,14 @@ test('@comparison-contract one uploaded source stays one file card through recor
   }))).toEqual({ ids: ['UpperA', 'UpperB', ''], discovered: ['', 'Replacement'] });
   await expect(sources).toHaveCount(2);
   await expect(sources.nth(1).locator('[data-linear-record-card]')).toHaveCount(1);
-  await sources.nth(1).getByRole('button', { name: /Remove$/ }).click();
+  await sources.nth(1).getByRole('button', { name: 'Remove GenBank / DDBJ File', exact: true }).click();
   const removalDialog = page.getByRole('dialog', { name: 'Clear or delete File?' });
   await expect(removalDialog).toContainText('upper.gbff');
   await removalDialog.getByRole('button', { name: 'Delete card', exact: true }).click();
   await expect(sources).toHaveCount(1);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs
     .map((seq) => seq.region_record_id))).toEqual(['UpperA', 'UpperB']);
-  await sources.first().getByRole('button', { name: /Remove$/ }).click();
+  await sources.first().getByRole('button', { name: 'Remove GenBank / DDBJ File', exact: true }).click();
   await expect(removalDialog.getByRole('button', { name: 'Delete card', exact: true })).toBeDisabled();
   await removalDialog.getByRole('button', { name: 'Clear file only', exact: true }).click();
   await expect(sources).toHaveCount(1);
