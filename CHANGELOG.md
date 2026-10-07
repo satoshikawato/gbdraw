@@ -46,6 +46,12 @@ write-up of a release.
   renamed in the Legend editor, Generate draws the Legend and the canvas as the
   rename left them. Before, Generate moved only the renamed row and kept the earlier
   canvas width.
+- Result names (web app): a live edit that redraws a loaded Session's Result (such
+  as a Legend color, or Undo or Redo of a color step) keeps the Result's saved name.
+  Before, the redraw renamed it after the **Output prefix** (a Gallery Session's
+  `HmmtDNA_basic_circular` became `out.svg`), so **SVG**, **PNG** and **PDF**
+  downloaded `out.*` and **Save Session** saved the new name. Generate still names
+  its Results after the **Output prefix**.
 - Legend names (web app): Generate no longer fails with "The generated result
   could not be accepted" after a **Depth** row renamed in the Legend is hidden by
   **Show Depth**, in Linear and Circular. The row is not drawn; as for a renamed GC
@@ -66,6 +72,12 @@ write-up of a release.
   longer lost when Generate draws a Result without that feature, such as a Generate
   in the other mode (Circular or Linear). The stroke stays in the draft and in a
   saved Session, and the next Generate that draws the feature draws it again.
+- Web: Load of a Session 44 or older whose Feature visibility edit holds a value such
+  as `constructor` (a hand edit; no writer saves one) drops that edit and reports it
+  with the other dropped edits, as the CLI does. Before, Load failed with an invalid
+  draft. A Session 41-44 Feature placement draft keyed `__proto__` is now rejected by
+  Load like any other key that does not name its feature, as the CLI rejects it.
+  Before, Load lost the row without a message.
 - CLI: `gbdraw circular|linear --session <Session 40-44> --session_output out.json`
   (and `--save_session`) moves an annotation's `hash=` target to the feature's
   source identity where the Session's saved feature catalog makes the figure
@@ -86,6 +98,12 @@ write-up of a release.
   bulk and per-feature label edits, recorded a "Load label edits" Undo step, and
   reported "Applied to 0 label(s)." It now changes nothing, records no step, and says
   that no row matched and that the existing label edits were kept.
+- Sessions: a Session whose resource declares `checksum` (the SHA-256 digest of its
+  bytes, as `sha256:<hex>` or bare hex) now loads in Python and on the command line,
+  as it already did in the web app. `load_session_document()` and
+  `gbdraw circular|linear --session` failed with "has unknown field(s): checksum",
+  also for such a Session after the web app saved it again. A resource whose bytes
+  do not match its `checksum` is rejected when the Session is loaded.
 - CLI: `gbdraw circular|linear --session <file> --session_output out.json` (and
   `--save_session`) keeps the resource IDs and file names of the Session's unchanged
   inputs. Before, the rewritten Session renamed them to positional IDs such as

@@ -535,7 +535,13 @@ def expand_session_feature_catalog(
 
 
 def load_session(path: str | Path) -> dict[str, Any]:
-    """Load and validate a plain or gzip-compressed gbdraw GUI session JSON file."""
+    """Load and validate a plain or gzip-compressed gbdraw GUI session JSON file.
+
+    It validates the document as ``gbdraw.session.load_session_document`` does,
+    canonical resource descriptors included.
+    """
+
+    from .session import _validate_document
 
     session_path = Path(path)
     try:
@@ -550,7 +556,7 @@ def load_session(path: str | Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValidationError("Session JSON must be an object.")
     payload = expand_session_feature_catalog(payload)
-    validate_session(payload)
+    _validate_document(payload)
     return payload
 
 
@@ -3044,13 +3050,21 @@ def _embedded_entry_bytes(entry: Mapping[str, Any]) -> bytes | None:
 
 
 def _embedded_resource_bytes(entry: Mapping[str, Any]) -> bytes:
-    """The bytes of a resource descriptor, checked against its size and checksum."""
+    """The bytes of a resource descriptor, checked against its size and checksum.
+
+    The one check of a declared ``checksum``: the SHA-256 hex digest of the
+    bytes, bare or as ``sha256:<hex>``, in any case. Null or empty declares
+    none, as in the Web reader (``services/session-resource-backing.js``).
+    """
 
     data = _embedded_entry_bytes(entry)
     if data is None or len(data) != entry.get("size"):
         raise ValidationError("Invalid embedded resource bytes or byte size.")
     checksum = entry.get("checksum")
-    if checksum and hashlib.sha256(data).hexdigest() != str(checksum).lower().removeprefix("sha256:"):
+    if checksum not in (None, "") and (
+        not isinstance(checksum, str)
+        or checksum.strip().lower().removeprefix("sha256:") != hashlib.sha256(data).hexdigest()
+    ):
         raise ValidationError("Embedded resource checksum does not match.")
     return data
 
