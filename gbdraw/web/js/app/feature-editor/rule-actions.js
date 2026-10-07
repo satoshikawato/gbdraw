@@ -167,17 +167,27 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   /**
    * @param {Record<string, any>[]} before
    * @param {Record<string, any>[]} after
+   * @param {(caption: string) => boolean} [shown] Whether the Legend already shows
+   *   the default row of a type (a History restore returns the rows it held).
    */
-  const redrawsLegendFor = (before, after) => {
+  const redrawsLegendFor = (before, after, shown = () => false) => {
     const kept = typeRowCaptions(after);
-    return changesLegendSource(before, after) || [...typeRowCaptions(before)].some(caption => !kept.has(caption));
+    return changesLegendSource(before, after)
+      || [...typeRowCaptions(before)].some(caption => !kept.has(caption) && !shown(caption));
   };
+  // The Legend rows a History restore returned, shown or deleted in the editor.
+  /** @param {string} caption */
+  const legendHoldsRow = (caption) => [
+    ...(state.legendEntries?.value || []), ...(state.deletedLegendEntries?.value || [])
+  ].some((entry) => captionMatches(entry?.caption, caption) || captionMatches(entry?.originalCaption, caption));
   // Undo and Redo of a rule edit restore the rules; the composition root
   // passes the rules they replaced, and a changed Legend source asks for the
-  // rerender, as the edit did.
+  // rerender, as the edit did. A removed whole-type rule asks for it only
+  // when the restored Legend lacks the type's default row (OV-169): Undo of
+  // an Apply to all returns the row it recolored, so it needs no Python run.
   const followRestoredRules = (previousRules) => (
     JSON.stringify(previousRules) !== JSON.stringify(manualSpecificRules)
-    && redrawsLegendFor(previousRules, manualSpecificRules)
+    && redrawsLegendFor(previousRules, manualSpecificRules, legendHoldsRow)
     && ports.requestAutomaticRerender()
   );
   // The automatic rerender replaces the Results the candidate was prepared
