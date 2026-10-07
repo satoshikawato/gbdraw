@@ -709,7 +709,7 @@ test('M13 circular: Stroke options is a disclosure without a History step or a s
     const start = await undoCount();
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    await expect(drawer.getByLabel('Legend stroke color').first()).toBeVisible();
+    await expect(drawer.getByLabel(`Legend stroke color for ${caption}`, { exact: true })).toBeVisible();
     await settleLive(page);
     expect(await undoCount(), 'opening the stroke options records no step').toBe(start);
     expect(await page.evaluate(() => window.__GBDRAW_APP__.legendEntries.filter(e => Object.hasOwn(e, 'showStroke')).length),

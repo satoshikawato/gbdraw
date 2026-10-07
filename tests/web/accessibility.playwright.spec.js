@@ -239,6 +239,23 @@ test('Legend editor rows name their controls by the row caption', async ({ brows
       expect(new Set(names).size, names.join(' / ')).toBe(2);
       for (const name of names) await expect(drawer.getByRole(role, { name, exact: true })).toHaveCount(1);
     }
+    // The controls inside Stroke options carry the caption too.
+    for (const caption of captions) {
+      await drawer.getByRole('button', { name: `Stroke options for ${caption}`, exact: true }).click();
+    }
+    const strokeControls = [
+      ['combobox', (caption) => `Legend stroke color for ${caption} mode`],
+      ['spinbutton', (caption) => `Legend stroke width for ${caption}`],
+      ['button', (caption) => `Reset stroke of ${caption} to default`]
+    ];
+    for (const [role, nameOf] of strokeControls) {
+      const names = captions.map(nameOf);
+      expect(new Set(names).size, names.join(' / ')).toBe(2);
+      for (const name of names) await expect(drawer.getByRole(role, { name, exact: true })).toHaveCount(1);
+    }
+    for (const caption of captions) {
+      await expect(drawer.getByLabel(`Legend stroke color for ${caption}`, { exact: true })).toHaveCount(1);
+    }
   } finally { await page.context().close(); }
 });
 
