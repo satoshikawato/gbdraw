@@ -1,4 +1,4 @@
-"""A Session 45 that keeps a Result of each diagram mode (``otherModeResult``).
+"""A Session 46 that keeps a Result of each diagram mode (``otherModeResult``).
 
 The Circular Gallery Session supplies the top-level set; the Linear Gallery
 Session supplies the other set. Both name their GenBank source

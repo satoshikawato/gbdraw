@@ -174,6 +174,12 @@ _COLOR_NAME_MAP = {
 }
 
 
+def named_color_hex(color_name: str) -> str | None:
+    """The hex code of an SVG/CSS color name (any case), or ``None``."""
+
+    return _COLOR_NAME_MAP.get(color_name.lower())
+
+
 def resolve_color_to_hex(color_str: str) -> str:
     if not isinstance(color_str, str):
         logger.error(f"Invalid color value (not a string): {color_str}.")
@@ -182,7 +188,7 @@ def resolve_color_to_hex(color_str: str) -> str:
     if color_str.startswith("#"):
         return color_str
 
-    hex_code = _COLOR_NAME_MAP.get(color_str.lower())
+    hex_code = named_color_hex(color_str)
 
     if hex_code:
         return hex_code
@@ -339,6 +345,7 @@ def read_color_table(color_table_file: str) -> Optional[DataFrame]:
 
 __all__ = [
     "load_default_colors",
+    "named_color_hex",
     "read_color_table",
     "resolve_color_to_hex",
 ]
