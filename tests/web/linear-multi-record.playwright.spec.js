@@ -3726,10 +3726,13 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
   test.setTimeout(300000);
   await installDiagramRequestObserver(page);
   await openApp(page);
-  expect(await page.evaluate(() => ({
-    circular: window.__GBDRAW_APP__.form.multi_record_canvas,
-    linear: window.__GBDRAW_APP__.linearRecordLayoutEnabled
-  }))).toEqual({ circular: true, linear: true });
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return {
+      circular: state.drawings.circular.form.multi_record_canvas,
+      linear: state.drawings.linear.linearRecordLayoutEnabled.value
+    };
+  })).toEqual({ circular: true, linear: true });
   await page.evaluate((content) => {
     const app = window.__GBDRAW_APP__;
     app.files.c_gb = new File([content], 'shared.gb', { type: 'text/plain', lastModified: 1 });
@@ -3745,9 +3748,12 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
   await uploadCompleteRecordSources(page);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.linearRecordRows.map(({ row }) => row)))
     .toEqual([1, 1, 2, 2, 2]);
+  // Each mode has its own drawing (PD-OI-086): the Circular opt-out is the
+  // Circular drawing's, set while Linear is shown.
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    app.form.multi_record_canvas = false;
+    const { state } = await import('./js/state.js');
+    state.drawings.circular.form.multi_record_canvas = false;
     await app.setLinearRecordLayoutEnabled(false);
     app.sessionTitle = 'explicit-layout-opt-outs';
   });
@@ -3759,16 +3765,22 @@ test('@comparison-contract multi-record defaults render a shared Circular canvas
   const loaded = page.waitForEvent('dialog');
   await page.locator('input[accept^=".json,"]').first().setInputFiles(savedPath);
   await (await loaded).accept();
-  expect(await page.evaluate(() => ({
-    circular: window.__GBDRAW_APP__.form.multi_record_canvas,
-    linear: window.__GBDRAW_APP__.linearRecordLayoutEnabled
-  }))).toEqual({ circular: false, linear: false });
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return {
+      circular: state.drawings.circular.form.multi_record_canvas,
+      linear: state.drawings.linear.linearRecordLayoutEnabled.value
+    };
+  })).toEqual({ circular: false, linear: false });
   page.once('dialog', (dialog) => dialog.accept());
   await page.evaluate(() => window.__GBDRAW_APP__.resetSettings());
-  expect(await page.evaluate(() => ({
-    circular: window.__GBDRAW_APP__.form.multi_record_canvas,
-    linear: window.__GBDRAW_APP__.linearRecordLayoutEnabled
-  }))).toEqual({ circular: true, linear: true });
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    return {
+      circular: state.drawings.circular.form.multi_record_canvas,
+      linear: state.drawings.linear.linearRecordLayoutEnabled.value
+    };
+  })).toEqual({ circular: true, linear: true });
 });
 
 test('@comparison-contract one uploaded source stays one file card through record moves, replacement, and removal', async ({ page }, testInfo) => {

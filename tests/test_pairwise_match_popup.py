@@ -33,7 +33,13 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
     )
     color_utils_path = tmp_path / "color-utils.mjs"
     color_utils_path.write_text(
-        (WEB_ROOT / "js" / "utils" / "color-utils.js").read_text(encoding="utf-8"),
+        (WEB_ROOT / "js" / "utils" / "color-utils.js")
+        .read_text(encoding="utf-8")
+        .replace("./named-colors.js", "./named-colors.mjs"),
+        encoding="utf-8",
+    )
+    (tmp_path / "named-colors.mjs").write_text(
+        (WEB_ROOT / "js" / "utils" / "named-colors.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     conservation_series_path = tmp_path / "conservation-series.mjs"
