@@ -2446,6 +2446,11 @@ export const createAppSetup = () => {
         legendActions.adoptResultInventory(context.resultIdentity, { restored: true });
         return;
       }
+      // OV-122: a generated or newly displayed Result shows the rows added in
+      // the Legend editor with the live add's layout before its entries are read.
+      if (!context.bindingOptions.isIncrementalEdit && shouldBindComposition(context)) {
+        legendActions.layOutMountedAddedRows(context.root);
+      }
       if (context.bindingOptions.skipLegendExtraction) return;
       recordStructuralMetric('legendDomFullScanCount', 1, {
         phase: context.phase,

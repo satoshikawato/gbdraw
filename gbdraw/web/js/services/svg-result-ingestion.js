@@ -542,6 +542,39 @@ const updateLegendCaption = (entry, caption) => {
 // be missing from this Result (OV-63).
 const applyLegendOperations = (index, operations, { displayed = false, mayBeAbsent = /** @type {((caption: string) => boolean) | undefined} */ (undefined) } = {}) => {
   const requireRow = (operation) => requireLegendEntries(index, operation.caption, operation, mayBeAbsent);
+  // Python never draws a row the Legend editor added, so the row is added first and
+  // a fill or stroke on it then finds it like a generated row (OV-86). An added row
+  // copies the first row before this pass styles that row.
+  operations.legendAdds.forEach(({ caption, color, xPos, yPos }) => {
+    const { entries, groups } = index.legends();
+    const existingEntries = entries.get(caption) || [];
+    if (existingEntries.length > 0) {
+      existingEntries.forEach((entry) => {
+        const swatch = legendSwatch(entry);
+        if (!swatch) throw new Error('Current SVG has no Legend swatch template.');
+        setAttributeIfDifferent(swatch, 'fill', color);
+        entry.setAttribute('data-legend-owner', 'direct-editor');
+        moveLegendEntryToAnchor(entry, xPos, yPos);
+      });
+      return;
+    }
+    if (groups.length === 0) {
+      throw new Error('Current SVG cannot admit the requested Legend addition.');
+    }
+    entries.set(caption, groups.map((group) => {
+      const template = group.querySelector('g[data-legend-key]');
+      const added = template?.cloneNode?.(true) || null;
+      if (!added) throw new Error('Current SVG has no Legend entry template.');
+      updateLegendCaption(added, caption);
+      const swatch = legendSwatch(added);
+      if (!swatch) throw new Error('Current SVG has no Legend swatch template.');
+      swatch.setAttribute('fill', color);
+      added.setAttribute('data-legend-owner', 'direct-editor');
+      moveLegendEntryToAnchor(added, xPos, yPos);
+      group.appendChild(added);
+      return added;
+    }));
+  });
   operations.legendFills.forEach((operation) => {
     const { color } = operation;
     requireRow(operation).forEach((entry) => {
@@ -573,35 +606,6 @@ const applyLegendOperations = (index, operations, { displayed = false, mayBeAbse
   });
   operations.legendDeletes.forEach(({ caption, allowMissing }) => {
     requireLegendEntries(index, caption, { allowMissing }).forEach((entry) => entry.remove());
-  });
-  operations.legendAdds.forEach(({ caption, color, xPos, yPos }) => {
-    const { entries, groups } = index.legends();
-    const existingEntries = entries.get(caption) || [];
-    if (existingEntries.length > 0) {
-      existingEntries.forEach((entry) => {
-        const swatch = legendSwatch(entry);
-        if (!swatch) throw new Error('Current SVG has no Legend swatch template.');
-        setAttributeIfDifferent(swatch, 'fill', color);
-        entry.setAttribute('data-legend-owner', 'direct-editor');
-        moveLegendEntryToAnchor(entry, xPos, yPos);
-      });
-      return;
-    }
-    if (groups.length === 0) {
-      throw new Error('Current SVG cannot admit the requested Legend addition.');
-    }
-    groups.forEach((group) => {
-      const template = group.querySelector('g[data-legend-key]');
-      const added = template?.cloneNode?.(true) || null;
-      if (!added) throw new Error('Current SVG has no Legend entry template.');
-      updateLegendCaption(added, caption);
-      const swatch = legendSwatch(added);
-      if (!swatch) throw new Error('Current SVG has no Legend swatch template.');
-      swatch.setAttribute('fill', color);
-      added.setAttribute('data-legend-owner', 'direct-editor');
-      moveLegendEntryToAnchor(added, xPos, yPos);
-      group.appendChild(added);
-    });
   });
   // The edited Legend order is replayed last, over the renderer's slots (D-08).
   // A displayed batch Result that already follows it keeps its order, so the

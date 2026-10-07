@@ -12,6 +12,18 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Legend colors (web app): Generate no longer fails with "The generated result could
+  not be accepted" after a color or stroke is set on a row added in the Legend editor,
+  in Linear and Circular. The added row is drawn with its color and stroke after
+  Generate, a rename, and Session Save and Load. At Generate, an added row no longer
+  takes the edited stroke of the first Legend row.
+- Legend editor (web app): a row added in the Legend editor now has the same stroke
+  when it is added and after Generate: the stroke of the first Legend row as the
+  diagram drew it. Before, the row took that row's edited stroke, and the Block
+  Stroke settings before Generate, until the next Generate drew the drawn stroke.
+- Legend editor (web app): Generate draws the Legend with a row added in the Legend
+  editor where the add placed it. Before, Generate moved the added row away from the
+  other rows, in Linear past the right edge of the canvas, where its caption was cut.
 - Legend names (web app): Generate no longer fails with "The generated result
   could not be accepted" after a **Depth** row renamed in the Legend is hidden by
   **Show Depth**, in Linear and Circular. The row is not drawn; as for a renamed GC
