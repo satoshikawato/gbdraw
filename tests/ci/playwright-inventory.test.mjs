@@ -28,8 +28,8 @@ const casesOf = (report) => specsOf(report)
 const collect = (...args) => casesOf(list(...args));
 
 test('expanded PR smoke has 8–19 cases and each remains in full functional acceptance', () => {
-  const smoke = collect('test', '--config=playwright.pr-smoke.config.js');
-  const full = new Set(collect('test', '--config=playwright.functional.config.js'));
+  const smoke = collect('test', '--config=tests/web/playwright/pr-smoke.config.js');
+  const full = new Set(collect('test', '--config=tests/web/playwright/functional.config.js'));
   assert.ok(smoke.length >= 8 && smoke.length <= 19, `collected ${smoke.length} PR cases`);
   for (const title of smoke) assert.ok(full.has(title), `missing full regression: ${title}`);
   for (const path of [
@@ -45,8 +45,8 @@ test('comparison browser contracts run in the required PR contract job and full 
   const [binary, ...args] = scripts['test:web:comparison-contracts'].split(/\s+/);
   assert.equal(binary, 'playwright');
   const contracts = collect(...args);
-  const full = new Set(collect('test', '--config=playwright.functional.config.js'));
-  const smoke = new Set(collect('test', '--config=playwright.pr-smoke.config.js'));
+  const full = new Set(collect('test', '--config=tests/web/playwright/functional.config.js'));
+  const smoke = new Set(collect('test', '--config=tests/web/playwright/pr-smoke.config.js'));
   assert.equal(contracts.length, 16);
   assert.ok(contracts.includes('comparison-ui.playwright.spec.js:comparison controls drive appearance and current Session round trips'));
   assert.ok(contracts.includes('linear-multi-record.playwright.spec.js:Collinear inference checkbox skips self searches and reuses matching evidence'));
@@ -108,9 +108,9 @@ test('functional CI shards run the checked-in spec file lists and every acceptan
   assert.match(job, /npm run test:web:functional-full -- --reporter=line,github,json \$files\n/);
   assert.doesNotMatch(job, /PWTEST_|--shard/);
 
-  const full = list('test', '--config=playwright.functional.config.js');
-  // Spec files as the workflow names them: relative to the config file's directory.
-  const root = path.dirname(full.config.configFile);
+  const full = list('test', '--config=tests/web/playwright/functional.config.js');
+  // Spec files as the workflow names them: relative to the repository root.
+  const root = process.cwd();
   const specFiles = [...new Set(specsOf(full).map((spec) => path
     .relative(root, path.join(full.config.rootDir, spec.file)).split(path.sep).join('/')))];
   assert.deepEqual(
@@ -120,7 +120,7 @@ test('functional CI shards run the checked-in spec file lists and every acceptan
   // Playwright file filters are regular expressions, so list each shard to prove
   // that no filter also selects another shard's file.
   const partition = shards.flatMap((files) => collect(
-    'test', '--config=playwright.functional.config.js', ...files
+    'test', '--config=tests/web/playwright/functional.config.js', ...files
   ));
   assert.equal(new Set(partition).size, partition.length, 'a case appears in multiple shards');
   assert.deepEqual(partition.sort(), casesOf(full).sort(), 'the CI matrix loses acceptance cases');
