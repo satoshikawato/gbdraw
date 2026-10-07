@@ -2572,8 +2572,15 @@ export const createAppSetup = () => {
           resultIdentity: context.resultIdentity,
           liveResultIdentities: liveResultIdentities()
         });
+        // A Result shown again by a mode switch arrives in its own drawing,
+        // whose Legend edits name that Result's inventory: the inventory is
+        // adopted first, so the departing mode's order is never compared with
+        // the arriving drawing's rows. A batch Result of the same drawing is
+        // compared with the order shown until now (B20, OV-47).
+        const arriving = Boolean(context.bindingOptions.modeArrival);
+        if (arriving) legendActions.adoptResultInventory(context.resultIdentity);
         await projectEditorIntentOnDisplay(drawing, context, resultLegendOrder);
-        legendActions.adoptResultInventory(context.resultIdentity);
+        if (!arriving) legendActions.adoptResultInventory(context.resultIdentity);
       } else {
         rememberCommittedEditorState(drawing, context);
       }
@@ -3333,7 +3340,7 @@ export const createAppSetup = () => {
     resetModeTransientUi();
     failedGeneratePreservedResult.value = false;
     // 5. Presentation: the arriving Result is shown as a selection.
-    previewRuntime.presentSelectedResult({});
+    previewRuntime.presentSelectedResult({ modeArrival: true });
     return true;
   };
   historySnapshots.registerModeTransition(transitionDiagramMode);
