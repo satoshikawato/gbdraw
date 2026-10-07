@@ -212,6 +212,7 @@ export const validateTrackSlotBindingInvariants = (
 
     validateSlotGeometry(slot, id, layoutKind);
 
+    /** @type {string | null} */
     let side = null;
     if (slot.side !== null && slot.side !== undefined && slot.side !== '') {
       if (typeof slot.side !== 'string') {
@@ -665,6 +666,7 @@ const collectCustomTrackIssues = ({
     }));
   }
 
+  /** @type {number | null} */
   let resolvedAxisIndex = null;
   if (axisIndex === null || axisIndex === undefined || axisIndex === '') {
     resolvedAxisIndex = inferredCustomTrackAxisIndex(draftSlots, mode, trackType);
@@ -735,6 +737,7 @@ const collectCustomTrackIssues = ({
       });
     }
 
+    /** @type {string | null} */
     let explicitSide = null;
     if (slot.side !== null && slot.side !== undefined && slot.side !== '') {
       explicitSide = typeof slot.side === 'string' ? normalizedString(slot.side) : null;
@@ -871,6 +874,7 @@ const collectCustomTrackIssues = ({
     }
 
     if (renderer === 'depth' && params) {
+      /** @type {number | null} */
       let trackIndex = null;
       try {
         trackIndex = parseDepthTrackIndexIdentity(
@@ -1140,7 +1144,7 @@ const collectCustomTrackIssues = ({
         );
         const featureLaneConflictsWithAxis = (
           slot.renderer === 'features' &&
-          ['inside', 'outside'].includes(featureLane) &&
+          featureLane !== null && ['inside', 'outside'].includes(featureLane) &&
           featureLane !== derivedSide
         );
         conflictsWithAxis = !isOverlayException && (

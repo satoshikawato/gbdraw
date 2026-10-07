@@ -39,9 +39,13 @@ export const createLegendDragActions = ({
     layoutRepositionMode,
     zoom
   } = state;
+  /** @type {number | null} */
   let legendDragFrameId = null;
+  /** @type {{ x: number, y: number } | null} */
   let pendingLegendPointer = null;
+  /** @type {Promise<any> | null} */
   let legendDragTxPromise = null;
+  /** @type {{ binding: ReturnType<typeof bindCompositionMetadata>, svg: any } | null} */
   let legendDragContext = null;
 
   const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
@@ -202,7 +206,8 @@ export const createLegendDragActions = ({
     if (svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== '1') return;
     const binding = bindCompositionMetadata(svg);
     const legendGroup = binding.legend.targets[0] || null;
-    if (!legendGroup) return;
+    // bindRole fails on a legend target without metadata, so the metadata check never differs.
+    if (!legendGroup || !binding.metadata.legend) return;
 
     const automatic = binding.metadata.legend.automaticTranslation;
     const offsets = compositionUserDeltas(svg).legend || [0, 0];

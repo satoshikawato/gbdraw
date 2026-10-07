@@ -10,7 +10,7 @@ import {
 } from './feature-placement.js';
 import { resultRenderedFeatures } from './feature-catalog.js';
 export { canonicalFeaturePlacements } from './feature-placement.js';
-import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../app/color-utils.js';
+import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../utils/color-utils.js';
 import {
   parseColorTable,
   parsePriorityRules,
@@ -19,12 +19,12 @@ import {
   serializeLabelWhitelistRules,
   serializeQualifierPriorityRules,
   serializeSpecificRules
-} from '../app/file-imports.js';
+} from './file-imports.js';
 import {
   buildBulkLabelProjection,
   parseLabelOverrideTsv,
   serializeLabelOverrideRows
-} from '../app/feature-editor/label-override-table.js';
+} from './label-override-table.js';
 import {
   parseFeatureVisibilityRules,
   serializeFeatureVisibilityRules
@@ -41,8 +41,8 @@ import {
   normalizeCircularTrackSlot,
   parseCircularTrackSlotSpecs
 } from '../app/circular-track-slots.js';
-import { countGenBankRecords } from '../app/genbank-header.js';
-import { projectCircularMeasureDraft } from '../app/circular-track-slots/measure-editor.js';
+import { countGenBankRecords } from './genbank-header.js';
+import { projectCircularMeasureDraft } from './circular-track-measure.js';
 import {
   buildLinearTrackSlotPayload,
   LINEAR_TRACK_RENDERERS,
@@ -54,16 +54,16 @@ import {
   isRecordMajorDepthFileMatrix,
   normalizeRecordMajorDepthFileRows,
   parseDepthTrackIndexIdentity
-} from '../app/depth-track-state.js';
+} from './depth-track-state.js';
 import {
   buildDisambiguatedRecordEntries,
   resolveCircularRequestRecordSet,
   resolveDisambiguatedRecordSelection
-} from '../app/record-options.js';
+} from './record-options.js';
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
-} from '../app/conservation-series.js';
+} from './conservation-series.js';
 import {
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
@@ -71,17 +71,17 @@ import {
 import {
   linearRecordLayoutHasSharedRow,
   resolveEffectiveLinearRecordRows
-} from '../app/linear-record-layout.js';
-import { resolveLinearLabelVisibility } from '../app/linear-label-visibility.js';
+} from './linear-record-layout.js';
+import { resolveLinearLabelVisibility } from './linear-label-visibility.js';
 import {
   assertValidCustomTrackPlan,
   parseOptionalPixel,
   validateCustomTrackPlan,
   validateTrackSlotBindingInvariants
-} from '../app/track-slot-validation.js';
-import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from '../app/annotations/state.js';
+} from './track-slot-validation.js';
+import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from './annotation-state.js';
 import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
-import { SESSION_TABLE_LABELS, diagnosticError, normalizeCaughtError } from './error-normalization.js';
+import { SESSION_TABLE_LABELS, diagnosticError, normalizeCaughtError } from '../utils/error-normalization.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import {
   arrowHeadLengthRatioForState,
@@ -128,12 +128,12 @@ import {
   requireCurrentProteinBlastpMaxHits,
   requireCurrentProteinBlastpMode,
   requireCurrentWebStateFieldNames
-} from '../app/current-option-values.js';
+} from './current-option-values.js';
 import {
   normalizeCollinearAnchorMode,
   normalizeCollinearSearchScope,
   normalizeOrthogroupMembershipMode
-} from '../app/losat-normalization.js';
+} from './losat-normalization.js';
 import {
   canonicalComparisonResourceKind,
   isResourceBackedCanonicalComparison,
@@ -1371,7 +1371,7 @@ const addGeneratedTableResources = (
 const addColorTableResources = (state, resources, diagramOptions) => {
   const paletteName = String(state.selectedPalette.value || 'default');
   const paletteColors = state.canonicalPublicationFiles && !state.canonicalPublicationFiles.d_color ? {}
-    : state.normalizePaletteColors(state.paletteDefinitions.value?.[paletteName]
+    : normalizePaletteColors(state.paletteDefinitions.value?.[paletteName]
       || state.paletteDefinitions.value?.default || {});
   const defaultColors = buildDefaultColorOverrideTsv({
     colors: state.currentColors.value,
@@ -2333,7 +2333,7 @@ export const buildCanonicalRequestState = ({ session, projection, config,
   };
   return {
     ...Object.fromEntries(Object.entries(refs).map(([key, value]) => [key, publicationRef(value)])),
-    form: config.form || {}, adv: config.adv || {}, normalizePaletteColors,
+    form: config.form || {}, adv: config.adv || {},
     manualSpecificRules: publicationClone(config.rules || []), manualWhitelist: publicationClone(config.whitelist || []), manualPriorityRules: publicationClone(config.qualifierPriorityRules || []),
     featureOverrides: publicationClone(features.featureOverrides || {}),
     labelTextBulkOverrides: publicationClone(features.labelTextBulkOverrides || {}),
@@ -4591,13 +4591,10 @@ export const projectCanonicalSessionRequest = ({
     ...projectedLinearTrackSlots
   ].reduce((width, slot) => {
     if (slot?.renderer !== 'depth') return width;
-    // parseDepthTrackIndexIdentity throws unless the value is a non-negative
-    // integer, so it returns a number; its `let numeric = null` makes tsc
-    // infer a `null` return, hence the cast through unknown.
-    const trackIndex = /** @type {number} */ (/** @type {unknown} */ (parseDepthTrackIndexIdentity(
+    const trackIndex = parseDepthTrackIndexIdentity(
       slot?.params?.track_index ?? 0,
       `Depth slot '${slot?.id || ''}' track_index`
-    )));
+    );
     return Math.max(width, trackIndex + 1);
   }, 0);
   const projectedDepthTrackCount = canonicalDepth

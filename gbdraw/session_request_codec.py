@@ -60,7 +60,6 @@ from gbdraw.features.placement import FeaturePlacementOverride
 from gbdraw.io.record_select import RecordSelector, parse_record_selector
 from gbdraw.io.regions import RegionSpec
 from gbdraw.io.comparisons import read_comparison_table
-from gbdraw.io.filenames import safe_embedded_filename, unique_filename
 from gbdraw.core.record_metadata import _read_coord_map
 from gbdraw.linear_comparison import (
     LinearComparison,
@@ -132,6 +131,7 @@ from .layout.similarity_alignment import (
 
 if TYPE_CHECKING:
     from gbdraw.annotations.models import RegionTarget
+    from gbdraw.session_resources import RequestResources, SessionResourceTable
 
     from .api.options import LosatpMode
 
@@ -577,91 +577,25 @@ class CanonicalRequestResource:
 
 @dataclass(frozen=True)
 class EncodedCanonicalRequest:
-    """JSON-compatible request payload plus its out-of-band resources."""
+    """JSON-compatible request payload plus the resources it added."""
 
     payload: dict[str, Any]
     resources: tuple[CanonicalRequestResource, ...]
 
 
-class _ResourceBuilder:
-    """Collect resources; each gets a file name no other resource uses.
+def encode_canonical_request(
+    request: DiagramRequest,
+    *,
+    table: SessionResourceTable | None = None,
+) -> EncodedCanonicalRequest:
+    """Encode one typed request and normalize all conversion failures.
 
-    A Session materializes its resources side by side by sanitized name, so a
-    name used before (``a/X.fna`` and ``b/X.fna``) takes the next number,
-    ``X.2.fna``, the ``--losat_output_dir`` rule. Other names stay unchanged.
+    The request's resources are allocated in ``table``, a Session's resource
+    table, or alone without one; ``resources`` lists the ones it added.
     """
 
-    def __init__(self) -> None:
-        self._resources: list[CanonicalRequestResource] = []
-        self._ids: set[str] = set()
-        self._names: set[str] = set()
-        self._renamed: set[str] = set()
-
-    def add_path(self, resource_id: str, *, kind: str, value: object) -> str:
-        if not isinstance(value, (str, Path)) or not str(value).strip():
-            raise CanonicalRequestEncodingError(
-                f"Resource {resource_id!r} must identify a materialized file."
-            )
-        path = Path(str(value))
-        if not path.is_file():
-            raise CanonicalRequestEncodingError(
-                f"Canonical request resource is not a file: {path}."
-            )
-        self._add(
-            CanonicalRequestResource(
-                resource_id=resource_id,
-                kind=kind,
-                name=path.name,
-                source_path=path,
-            )
-        )
-        return resource_id
-
-    def add_bytes(
-        self,
-        resource_id: str,
-        *,
-        kind: str,
-        name: str,
-        content: bytes,
-    ) -> str:
-        self._add(
-            CanonicalRequestResource(
-                resource_id=resource_id,
-                kind=kind,
-                name=name,
-                content=content,
-            )
-        )
-        return resource_id
-
-    def renamed(self, resource_id: str) -> bool:
-        """Whether the resource's file name was numbered to stay unique."""
-
-        return resource_id in self._renamed
-
-    def _add(self, resource: CanonicalRequestResource) -> None:
-        if resource.resource_id in self._ids:
-            raise CanonicalRequestEncodingError(
-                f"Duplicate canonical resource ID: {resource.resource_id}."
-            )
-        name = unique_filename(resource.name, self._names, key=safe_embedded_filename)
-        if name != resource.name:
-            resource = replace(resource, name=name)
-            self._renamed.add(resource.resource_id)
-        self._names.add(safe_embedded_filename(name))
-        self._ids.add(resource.resource_id)
-        self._resources.append(resource)
-
-    def result(self) -> tuple[CanonicalRequestResource, ...]:
-        return tuple(self._resources)
-
-
-def encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalRequest:
-    """Encode one typed request and normalize all conversion failures."""
-
     try:
-        return _encode_canonical_request(request)
+        return _encode_canonical_request(request, table=table)
     except CanonicalRequestCodecError:
         raise
     except (TypeError, ValueError, ValidationError) as exc:
@@ -670,7 +604,11 @@ def encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalRequest
         ) from exc
 
 
-def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalRequest:
+def _encode_canonical_request(
+    request: DiagramRequest,
+    *,
+    table: SessionResourceTable | None,
+) -> EncodedCanonicalRequest:
     """Encode without embedding files or changing the session version."""
 
     if not isinstance(
@@ -731,7 +669,9 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
     if layout is not None:
         _validate_dataclass_contract(layout, path="layout", error="encode")
 
-    resources = _ResourceBuilder()
+    from gbdraw.session_resources import SessionResourceTable
+
+    resources = (table if table is not None else SessionResourceTable()).request()
     mode: Literal["circular", "linear"] = (
         "circular"
         if isinstance(request, (CircularDiagramRequest, CircularBatchRequest))
@@ -772,7 +712,7 @@ def _encode_canonical_request(request: DiagramRequest) -> EncodedCanonicalReques
             else _encode_output(request.output)
         ),
     }
-    return EncodedCanonicalRequest(payload=payload, resources=resources.result())
+    return EncodedCanonicalRequest(payload=payload, resources=resources.added())
 
 
 def decode_canonical_request(
@@ -1059,7 +999,7 @@ def _source_region(
 def _encode_records(
     records: Sequence[RecordInput],
     *,
-    resources: _ResourceBuilder,
+    resources: RequestResources,
     per_record: bool,
 ) -> tuple[list[dict[str, Any]], tuple[tuple[int, bool], ...]]:
     """Encode records; the in-memory records of one source file share a resource.
@@ -1187,7 +1127,7 @@ def _encode_record(
     record: RecordInput,
     *,
     index: int,
-    resources: _ResourceBuilder,
+    resources: RequestResources,
     shared_source: tuple[dict[str, Any], RecordSelector | None] | None = None,
 ) -> dict[str, Any]:
     source = record.source
@@ -1713,7 +1653,7 @@ def _encode_diagram_options(
     options: CircularDiagramOptions | LinearDiagramOptions,
     *,
     record_count: int,
-    resources: _ResourceBuilder,
+    resources: RequestResources,
 ) -> dict[str, Any]:
     default_options: CircularDiagramOptions | LinearDiagramOptions
     if isinstance(options, CircularDiagramOptions):
@@ -1790,7 +1730,7 @@ def _encode_diagram_options(
 def _ring_labels_of_renamed_files(
     options: CircularDiagramOptions | LinearDiagramOptions,
     refs: object,
-    resources: _ResourceBuilder,
+    resources: RequestResources,
 ) -> tuple[str, ...] | None:
     """Ring labels to store when a ring file without a label was renamed.
 
@@ -2257,7 +2197,7 @@ def _encode_depth_source(
     value: object,
     *,
     name: str,
-    resources: _ResourceBuilder,
+    resources: RequestResources,
 ) -> dict[str, str]:
     if isinstance(value, DataFrame):
         return _table_ref(name, value, resources=resources)
@@ -2479,7 +2419,7 @@ def _canonical_depth_tracks_for_encoding(
 def _encode_depth_tracks(
     value: object,
     *,
-    resources: _ResourceBuilder,
+    resources: RequestResources,
 ) -> list[dict[str, Any]]:
     tracks = _sequence(value, name="depth_tracks")
     encoded: list[dict[str, Any]] = []
@@ -2637,7 +2577,7 @@ def _encode_option_value(
     name: str,
     value: object,
     *,
-    resources: _ResourceBuilder,
+    resources: RequestResources,
 ) -> Any:
     if name == "config":
         if isinstance(value, GbdrawConfig):
@@ -2881,7 +2821,7 @@ def _migrate_legacy_full_config(
     return migrated
 
 
-def _encode_colors(value: object, *, resources: _ResourceBuilder) -> dict[str, Any]:
+def _encode_colors(value: object, *, resources: RequestResources) -> dict[str, Any]:
     if not isinstance(value, ColorOptions):
         raise CanonicalRequestEncodingError("diagramOptions.colors must be ColorOptions.")
     return {
@@ -3123,7 +3063,7 @@ def _decode_annotation_style(value: object, *, path: str) -> RegionAnnotationSty
     )
 
 
-def _encode_annotations(value: object, *, resources: _ResourceBuilder) -> dict[str, Any]:
+def _encode_annotations(value: object, *, resources: RequestResources) -> dict[str, Any]:
     if not isinstance(value, AnnotationOptions):
         raise CanonicalRequestEncodingError("diagramOptions.annotations must be AnnotationOptions.")
     sets = []
@@ -3572,7 +3512,7 @@ def _encode_resource_matrix(
     value: object,
     *,
     table: bool,
-    resources: _ResourceBuilder,
+    resources: RequestResources,
 ) -> list[list[dict[str, str] | None]]:
     result: list[list[dict[str, str] | None]] = []
     for row_index, row in enumerate(_sequence(value, name=name), start=1):
@@ -3637,7 +3577,7 @@ def _encode_comparisons(
     options: CircularDiagramOptions | LinearDiagramOptions,
     *,
     mode: Literal["circular", "linear"],
-    resources: _ResourceBuilder,
+    resources: RequestResources,
     frames: tuple[tuple[int, bool], ...],
 ) -> list[dict[str, Any]]:
     if mode == "circular":
@@ -3792,7 +3732,7 @@ def _nucleotide_blast_resource(
     path: object,
     *,
     frames: tuple[tuple[int, bool], tuple[int, bool]],
-    resources: _ResourceBuilder,
+    resources: RequestResources,
 ) -> str:
     """Persist one ``-b`` table, rewritten for a reverse-complemented record.
 
@@ -4157,7 +4097,7 @@ def _table_ref(
     name: str,
     value: object,
     *,
-    resources: _ResourceBuilder,
+    resources: RequestResources,
 ) -> dict[str, str]:
     if not isinstance(value, DataFrame):
         raise CanonicalRequestEncodingError(f"{name} must be a pandas DataFrame.")
@@ -4171,11 +4111,11 @@ def _table_ref(
         raise CanonicalRequestEncodingError(
             f"Could not encode DataFrame resource {name!r} as canonical TSV."
         ) from exc
-    resource_id = _resource_id(name)
-    resources.add_bytes(
-        resource_id,
+    preferred_id = _resource_id(name)
+    resource_id = resources.add_bytes(
+        preferred_id,
         kind="canonical-tsv",
-        name=f"{resource_id}.tsv",
+        name=f"{preferred_id}.tsv",
         content=text.encode("utf-8"),
     )
     return {"resourceId": resource_id, "representation": "canonicalTsv"}
@@ -4185,10 +4125,10 @@ def _file_ref(
     name: str,
     value: object,
     *,
-    resources: _ResourceBuilder,
+    resources: RequestResources,
 ) -> dict[str, str]:
-    resource_id = _resource_id(name)
-    resources.add_path(resource_id, kind=_resource_id(name), value=value)
+    preferred_id = _resource_id(name)
+    resource_id = resources.add_path(preferred_id, kind=preferred_id, value=value)
     return {"resourceId": resource_id, "representation": "file"}
 
 
@@ -4257,16 +4197,15 @@ def _typed_json_resource(
     kind: str,
     value_kind: str,
     value: object,
-    resources: _ResourceBuilder,
+    resources: RequestResources,
 ) -> str:
     content = encode_canonical_typed_resource(value_kind, value)
-    resources.add_bytes(
+    return resources.add_bytes(
         resource_id,
         kind=kind,
         name=f"{resource_id}.json",
         content=content,
     )
-    return resource_id
 
 
 def encode_canonical_typed_resource(value_kind: str, value: object) -> bytes:

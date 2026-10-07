@@ -1,7 +1,7 @@
 // @ts-check
-import { normalizeUserFacingError } from '../services/error-normalization.js';
+import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { discoveryErrorIsFinal } from './record-discovery.js';
-import { buildDisambiguatedRecordEntries, formatRecordLength } from './record-options.js';
+import { buildDisambiguatedRecordEntries, formatRecordLength } from '../services/record-options.js';
 
 export const AUTOMATIC_RECORD_OPTION_LABEL = 'Automatic (no explicit selector)';
 export const RECORDS_LOADING_LABEL = 'Loading records...';
@@ -78,6 +78,7 @@ export const createLinearRecordSelector = ({
 }) => {
   const selectorStateByUid = reactive({});
   let refreshGeneration = 0;
+  /** @type {{ fingerprint: any[], promise: Promise<any> | null } | null} */
   let activeRefresh = null;
   const recordDiscoverySuppressed = () => Boolean(
     state.semanticFileWatchersSuppressed?.value ||
@@ -238,6 +239,7 @@ export const createLinearRecordSelector = ({
     if (activeRefresh && sameFingerprint(activeRefresh.fingerprint, fingerprint)) {
       return activeRefresh.promise;
     }
+    /** @type {{ fingerprint: any[], promise: Promise<any> | null }} */
     const entry = { fingerprint, promise: null };
     entry.promise = runRefresh(options).then((expanded) => {
       if (expanded) return refresh(options);

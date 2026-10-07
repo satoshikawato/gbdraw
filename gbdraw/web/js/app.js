@@ -9,7 +9,7 @@ import {
 } from './components.js';
 import { CircularMeasureInput } from './app/circular-track-slots/measure-input.js';
 import { createAppSetup } from './app/app-setup.js';
-import { formatFeatureLocation } from './app/feature-utils.js';
+import { formatFeatureLocation } from './services/feature-utils.js';
 
 const { createApp } = window.Vue;
 

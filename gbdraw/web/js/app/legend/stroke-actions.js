@@ -1,5 +1,5 @@
 // @ts-check
-import { getFeatureCaption } from '../feature-utils.js';
+import { getFeatureCaption } from '../../services/feature-utils.js';
 import {
   FEATURE_SELECTOR,
   getFeatureElementIndex,
@@ -485,6 +485,7 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
     return totalUpdated > 0;
   };
 
+  /** @param {{ changes?: unknown }} [options] `changes` is a History change list; anything else is ignored. */
   const reconcileStrokeOverrides = ({ changes = null } = {}) => {
     const svg = svgContainer.value?.querySelector?.('svg');
     if (!svg) return false;

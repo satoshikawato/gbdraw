@@ -219,7 +219,7 @@ test('an annotation of one same-coordinate feature in one copy of a record stays
     await settle(fresh);
     expect(await annotationTargets(fresh)).toEqual([target]);
     const caption = await fresh.evaluate(async (identity) => {
-      const { getFeatureCaption } = await import('/gbdraw/web/js/app/feature-utils.js');
+      const { getFeatureCaption } = await import('/gbdraw/web/js/services/feature-utils.js');
       return getFeatureCaption(window.__GBDRAW_APP__.extractedFeatures
         .find((feature) => feature.biological_feature_id === identity.id && feature.record_key === identity.key));
     }, { id: twin.identity, key: secondKey });

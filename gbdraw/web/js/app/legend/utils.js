@@ -195,7 +195,7 @@ export const defaultLegendCaptionOrder = (entries, inventory) => {
  */
 export const isLegendOrderEdited = (entries, generatedOrder) => {
   const defaultOrder = defaultLegendEntryOrder(entries, generatedOrder);
-  return Boolean(defaultOrder) && defaultOrder.some((entry, index) => entry !== entries[index]);
+  return defaultOrder !== null && defaultOrder.some((entry, index) => entry !== entries[index]);
 };
 
 const legendEntryGroups = (targetGroup) => {

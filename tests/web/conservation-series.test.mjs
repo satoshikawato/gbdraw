@@ -8,7 +8,7 @@ import test from 'node:test';
 const {
   applyComparisonSequenceRecordLabel,
   reconcileConservationSeries
-} = await import('../../gbdraw/web/js/app/conservation-series.js');
+} = await import('../../gbdraw/web/js/services/conservation-series.js');
 
 const file = (name, size = 10) => ({ name, size, lastModified: 0 });
 

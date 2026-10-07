@@ -16,9 +16,9 @@ import {
   setFeatureVisibilityOverride,
   upsertEditorQualifierFeatureVisibilityRule,
 } from '../feature-visibility.js';
-import { isInternalProteinDisplayId } from '../feature-utils.js';
+import { isInternalProteinDisplayId } from '../../services/feature-utils.js';
 import { downloadTextFile } from '../../services/text-download.js';
-import { normalizeUserFacingError } from '../../services/error-normalization.js';
+import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-identity.js';
 import { featureIdentityKeyOf } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';

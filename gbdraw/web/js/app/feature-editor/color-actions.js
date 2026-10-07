@@ -1,8 +1,8 @@
 // @ts-check
 import { reportRuleRunFailure, ruleMatchesFeature } from '../rule-matching.js';
-import { resolveColorToHex } from '../color-utils.js';
-import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } from '../feature-utils.js';
-import { exactRegexValue } from '../feature-selector.js';
+import { resolveColorToHex } from '../../utils/color-utils.js';
+import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } from '../../services/feature-utils.js';
+import { exactRegexValue } from '../../services/feature-selector.js';
 import { getAllFeatureLegendGroups } from '../legend/utils.js';
 import {
   featureOverrideKey,
@@ -180,6 +180,10 @@ export const createFeatureColorActions = ({
     return featureOverrideKey(feature) || String(fallbackSvgId || '').trim();
   };
 
+  /**
+   * @param {Record<string, any>} featureLike
+   * @param {{ strokeColor?: string | null, strokeWidth?: number | null, originalStrokeColor?: string | null, originalStrokeWidth?: string | number | null }} [overrides]
+   */
   const recordFeatureStrokeOverride = (
     featureLike,
     { strokeColor = null, strokeWidth = null, originalStrokeColor = null, originalStrokeWidth = null } = {}
@@ -264,6 +268,10 @@ export const createFeatureColorActions = ({
     featureStyleScopeDialog.existingCaptionColor = null;
   };
 
+  /**
+   * @param {Record<string, any>} feat
+   * @param {string | null} [requestedLegendName]
+   */
   const getFeatureStyleScope = (feat, requestedLegendName = null) => {
     const requestedCaption = normalizeCaption(requestedLegendName);
     const effectiveCaption = normalizeCaption(getEffectiveLegendCaption(feat));
@@ -299,6 +307,18 @@ export const createFeatureColorActions = ({
     };
   };
 
+  /**
+   * @param {{
+   *   kind: string,
+   *   feat: Record<string, any>,
+   *   scope: Record<string, any>,
+   *   color?: string | null,
+   *   strokeColor?: string | null,
+   *   strokeWidth?: number | null,
+   *   existingCaption?: { caption: string, color: string, rule: Record<string, any> | null } | null,
+   *   closePopup?: boolean
+   * }} options
+   */
   const openFeatureStyleScopeDialog = ({
     kind,
     feat,
@@ -909,6 +929,12 @@ export const createFeatureColorActions = ({
     return ruleActions.commitSpecificRules(rules, 'Change legend color');
   };
 
+  /**
+   * @param {Record<string, any>} feat
+   * @param {string} color
+   * @param {string | null} [requestedLegendName]
+   * @param {{ closePopupOnDialog?: boolean }} [options]
+   */
   const requestFeatureColorChange = async (feat, color, requestedLegendName = null, options = {}) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -1447,6 +1473,7 @@ export const createFeatureColorActions = ({
     if (!normalizedStrokeColor && normalizedStrokeWidth === null) return false;
 
     let domChanged = false;
+    /** @type {{ color: string | null, width: number | null } | null} */
     let originalSwatchStroke = null;
     const escapedCaption = globalThis.CSS?.escape
       ? globalThis.CSS.escape(targetLegendEntry.caption)
@@ -1547,6 +1574,11 @@ export const createFeatureColorActions = ({
       : handleColorScopeChoice(choice)
   );
 
+  /**
+   * @param {Record<string, any>} feature
+   * @param {string} color
+   * @param {string | null} [customCaption]
+   */
   const setFeatureColor = async (feature, color, customCaption = null) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;

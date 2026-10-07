@@ -1825,7 +1825,7 @@ def test_catalog_match_payload_reports_record_source_coordinates() -> None:
          "subject_record_index": "1", "sstart": "5", "send": "9"},
         {0: (101, 200, -1), 1: (11, 30, 1)},
     )
-    # Same values as recordSourceInterval in app/record-source-coordinates.js.
+    # Same values as recordSourceInterval in services/record-source-coordinates.js.
     assert fields == {
         "qsource_start": "121", "qsource_end": "160", "qtable_interval": "21..60",
         "ssource_start": "15", "ssource_end": "19", "stable_interval": "5..9",

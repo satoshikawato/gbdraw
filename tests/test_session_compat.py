@@ -6,6 +6,7 @@ import json
 import re
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 from Bio import SeqIO
@@ -20,6 +21,7 @@ from gbdraw.analysis.collinearity import (
     CollinearityResult,
 )
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
+from gbdraw.circular import circular_main
 from gbdraw.linear import linear_main
 import gbdraw.cli_utils.session as cli_session_module
 from gbdraw.api.request_render import (
@@ -31,6 +33,7 @@ from gbdraw.api.requests import (
     CircularBatchOutputPolicy,
     CircularBatchRequest,
     CircularDiagramRequest,
+    GenBankInputSource,
     InMemoryRecordSource,
     LinearDiagramRequest,
     RecordInput,
@@ -52,7 +55,10 @@ from gbdraw.session import (
     save_session_document,
     session_to_request,
 )
-from gbdraw.session_io import CURRENT_SESSION_VERSION
+from gbdraw.session_io import (
+    CURRENT_SESSION_VERSION,
+    migrate_persisted_web_state_field_names,
+)
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 
 _RELEASED_SCHEMA_V2_SESSION = (
@@ -60,6 +66,12 @@ _RELEASED_SCHEMA_V2_SESSION = (
     / "fixtures"
     / "sessions"
     / "BGC0000708-BGC0000713.schema-v2.gbdraw-session.json.gz"
+)
+_FEATURE_EDITS_V44_SESSION = (
+    Path(__file__).parent
+    / "fixtures"
+    / "sessions"
+    / "feature-edits-crop-rc.v44.gbdraw-session.json.gz"
 )
 _VERSION_39_SESSION = (
     Path(__file__).parent
@@ -1267,3 +1279,198 @@ def test_main_schema1_binding_witness_reads_without_promotion():
     assert document.version == 41
     assert document.to_dict()['webFiles']['bindings']['schema'] == 1
     assert document.to_dict()['renderRequest']['schema'] == 7
+
+
+_PLACEMENT_VECTOR = json.loads(
+    (Path(__file__).parent / "fixtures" / "feature-placement-migration.json").read_text(
+        encoding="utf-8"
+    )
+)
+
+
+def test_session_41_44_placement_drafts_migrate_to_the_vector_shared_with_the_web_reader() -> None:
+    # tests/web/feature-edit-migration.test.mjs checks the same vector against
+    # migrateSessionFeaturePlacements.
+    source = {"featurePlacementOverrides": json.loads(json.dumps(_PLACEMENT_VECTOR["input"]))}
+
+    migrated = migrate_persisted_web_state_field_names(source)
+
+    assert migrated["featurePlacementOverrides"] == _PLACEMENT_VECTOR["expected"]
+    assert source["featurePlacementOverrides"] == _PLACEMENT_VECTOR["input"]
+    # A second pass leaves the scoped rows alone.
+    assert (
+        migrate_persisted_web_state_field_names(migrated)["featurePlacementOverrides"]
+        == _PLACEMENT_VECTOR["expected"]
+    )
+
+
+def test_cli_replay_validates_the_sidecar_drafts_before_it_renders(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    session = json.loads(gzip.decompress(_FEATURE_EDITS_V44_SESSION.read_bytes()))
+    session["config"]["featurePlacementOverrides"] = {
+        key: row
+        for key, row in _PLACEMENT_VECTOR["input"].items()
+        if row["placement"]["kind"] == "main" or row["placement"]["side"] in {"above", "below"}
+    }
+    source = tmp_path / "placements.v44.json"
+    source.write_text(json.dumps(session), encoding="utf-8")
+    # A migrator that leaves the Session 44 rows unscoped: the sidecar the CLI
+    # would write is invalid, so the run fails before any diagram exists.
+    monkeypatch.setattr(
+        cli_session_module,
+        "migrate_persisted_web_state_field_names",
+        lambda config: config,
+    )
+    sidecar = tmp_path / "out.gbdraw-session.json"
+
+    with pytest.raises(ValidationError, match="require a circular or linear scope"):
+        linear_main(
+            [
+                "--session", str(source),
+                "--output", str(tmp_path / "diagram"),
+                "--format", "svg",
+                "--session_output", str(sidecar),
+            ]
+        )
+
+    assert not sidecar.exists()
+    assert not (tmp_path / "diagram.svg").exists()
+
+
+# Sessions saved by main (feature-placements.provenance.json): ND1 on a lane, ND2 Main.
+@pytest.mark.parametrize(
+    ("mode", "main", "lane_side"),
+    [("circular", circular_main, "outward"), ("linear", linear_main, "above")],
+)
+def test_session_44_placement_drafts_survive_the_cli_sidecar(
+    tmp_path: Path, mode: str, main: Any, lane_side: str
+) -> None:
+    fixture = (
+        Path(__file__).parent
+        / "fixtures"
+        / "sessions"
+        / f"feature-placements-{mode}.v44.gbdraw-session.json.gz"
+    )
+    source = json.loads(gzip.decompress(fixture.read_bytes()))
+    assert source["version"] == 44
+    record_key = source["renderRequest"]["records"][0]["recordKey"]
+    sidecar = tmp_path / "replay.gbdraw-session.json"
+
+    main(
+        [
+            "--session", str(fixture),
+            "--output", str(tmp_path / "replay"),
+            "--format", "svg",
+            "--session_output", str(sidecar),
+        ]
+    )
+
+    assert (tmp_path / "replay.svg").is_file()
+    saved = load_session_document(sidecar)
+    assert saved.version == CURRENT_SESSION_VERSION
+
+    def key(scope: str, feature: str) -> str:
+        return json.dumps([scope, record_key, feature], separators=(",", ":"))
+
+    lane = {
+        "recordKey": record_key,
+        "biologicalFeatureId": "f406d90f1",
+        "placement": {"kind": "lane", "side": lane_side, "level": 1},
+    }
+    main_row = {
+        "recordKey": record_key,
+        "biologicalFeatureId": "fbe3a7c0c",
+        "placement": {"kind": "main"},
+    }
+    # A lane keeps only its own mode; Main reaches both.
+    assert saved.to_dict()["config"]["featurePlacementOverrides"] == {
+        key(mode, "f406d90f1"): {"scope": mode, **lane},
+        key("circular", "fbe3a7c0c"): {"scope": "circular", **main_row},
+        key("linear", "fbe3a7c0c"): {"scope": "linear", **main_row},
+    }
+    assert saved.to_dict()["renderRequest"]["diagramOptions"]["featurePlacements"] == [
+        lane,
+        main_row,
+    ]
+
+
+def _rename_resource(session: dict[str, Any], old: str, new: str) -> None:
+    """Give one resource another ID, as a Web or multi-drawing writer may."""
+
+    def rename(value: Any) -> Any:
+        if isinstance(value, list):
+            return [rename(item) for item in value]
+        if isinstance(value, dict):
+            return {
+                key: new if key.endswith("esourceId") and item == old else rename(item)
+                for key, item in value.items()
+            }
+        return value
+
+    session["renderRequest"] = rename(session["renderRequest"])
+    session["resources"] = {
+        new if resource_id == old else resource_id: entry
+        for resource_id, entry in session["resources"].items()
+    }
+
+
+def _python_session_with_renamed_ids(tmp_path: Path) -> dict[str, Any]:
+    request = CircularDiagramRequest(
+        records=(
+            RecordInput(
+                source=GenBankInputSource(
+                    Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+                )
+            ),
+        ),
+        output=RenderOutputRequest(output_prefix="stored"),
+    )
+    session = build_session_document(request).to_dict()
+    _rename_resource(session, "record-1-genbank", "genbank-1")
+    return session
+
+
+def _gallery_session(_tmp_path: Path) -> dict[str, Any]:
+    # Written by the Web: its table resources keep their uploaded file names.
+    path = (
+        Path(__file__).parents[1]
+        / "gbdraw"
+        / "web"
+        / "gallery"
+        / "sessions"
+        / "tobacco-chloroplast.gbdraw-session.json"
+    )
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize(
+    "make_session",
+    [_python_session_with_renamed_ids, _gallery_session],
+    ids=["renamed-ids", "web-names"],
+)
+def test_cli_resave_keeps_the_ids_and_names_of_unchanged_resources(
+    tmp_path: Path, make_session: Any
+) -> None:
+    source = make_session(tmp_path)
+    assert source["renderRequest"]["mode"] == "circular"
+    source_path = tmp_path / "source.gbdraw-session.json"
+    source_path.write_text(json.dumps(source), encoding="utf-8")
+    sidecar = tmp_path / "resaved.gbdraw-session.json"
+
+    circular_main(
+        [
+            "--session", str(source_path),
+            "--output", str(tmp_path / "replay"),
+            "--format", "svg",
+            "--session_output", str(sidecar),
+        ]
+    )
+
+    saved = load_session_document(sidecar).to_dict()
+    # Every input's bytes are unchanged, so every resource keeps its ID,
+    # file name and metadata, and the request names the same resources.
+    assert saved["resources"] == source["resources"]
+    assert saved["renderRequest"]["records"][0]["source"] == (
+        source["renderRequest"]["records"][0]["source"]
+    )

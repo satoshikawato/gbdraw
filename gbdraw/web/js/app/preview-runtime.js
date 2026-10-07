@@ -1,9 +1,9 @@
 // @ts-check
-import { normalizeUserFacingError } from '../services/error-normalization.js';
+import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
   getFeatureElementIndex,
   normalizeFeatureIdentity
-} from './feature-dom.js';
+} from '../services/feature-dom.js';
 import {
   applyEditorOperationsToMountedSvg,
   getCommittedSvgResultMetadata,
@@ -255,6 +255,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
   const fallbackResultIdentities = new WeakMap();
   const invalidatedReceipts = new WeakSet();
 
+  /** @returns {SVGSVGElement | null} */
   const getMountedSvg = () => state.svgContainer?.value?.querySelector?.('svg') || null;
 
   const resultRuntimeIdentity = (result) => {
@@ -286,6 +287,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return true;
   };
 
+  /**
+   * @param {ReadinessExpectation | ReadyReceipt | string | null} [target] An expectation, a receipt, or a generation token.
+   * @param {Error | string | null} [reason]
+   */
   const invalidateReadinessExpectation = (target = null, reason = null) => {
     const expectation = activeExpectation;
     if (!expectation) return false;
@@ -293,7 +298,8 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       target
       && target !== expectation
       && target !== expectation.generationToken
-      && target?.generationToken !== expectation.generationToken
+      // A string target reads `generationToken` as undefined, which is the token mismatch below.
+      && /** @type {{ generationToken?: string }} */ (target)?.generationToken !== expectation.generationToken
     ) return false;
     const rejected = rejectExpectation(
       expectation,
@@ -764,7 +770,7 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
       activeRuntime.readyReceipt = receipt;
       if (typeof bindingSteps.afterReady === 'function') {
         queueMicrotask(() => {
-          Promise.resolve(bindingSteps.afterReady(context)).catch((error) => {
+          Promise.resolve(bindingSteps.afterReady?.(context)).catch((error) => {
             console.error('Post-ready preview work failed.', normalizeUserFacingError(error));
           });
         });
@@ -799,6 +805,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     return promise;
   };
 
+  /**
+   * @param {ReadyReceipt | null | undefined} receipt
+   * @param {string} [reason]
+   */
   const invalidateReadyReceipt = (receipt, reason = 'Preview readiness entered rollback.') => {
     if (!receipt || typeof receipt !== 'object') return false;
     invalidatedReceipts.add(receipt);
@@ -911,6 +921,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     );
   };
 
+  /**
+   * @param {string} [reason]
+   * @param {string[] | null} [keys]
+   */
   const invalidatePreviewIndexes = (reason = 'unknown', keys = null) => {
     const runtime = activeRuntime;
     if (!runtime) return;
@@ -1071,6 +1085,10 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
 
   // D-07: show the canonical editor operations on the displayed Result with
   // the executor that Generate admission uses, then persist the Result once.
+  /**
+   * @param {Record<string, any> | null | undefined} operations
+   * @param {{ afterApply?: ((svg: SVGSVGElement) => void) | null }} [options]
+   */
   const applyEditorOperations = (operations, { afterApply = null } = {}) => {
     const runtime = activeRuntime || ensureRuntimeForCurrentSvg();
     if (!runtime?.svg) return false;

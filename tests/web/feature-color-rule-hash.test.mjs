@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { getFeatureColorRuleHash } from '../../gbdraw/web/js/app/feature-utils.js';
+import { getFeatureColorRuleHash } from '../../gbdraw/web/js/services/feature-utils.js';
 import { ruleFeaturePayload } from '../../gbdraw/web/js/app/rule-matching.js';
 
 const instanceId = 'ffa1f4c4a__instance_record_1_25cba05a594010cc';

@@ -1,12 +1,12 @@
 // @ts-check
-import { formatFastaEntry } from './feature-sequence-fasta.js';
-import { recordSourceInterval } from './record-source-coordinates.js';
+import { formatFastaEntry } from '../services/feature-sequence-fasta.js';
+import { recordSourceInterval } from '../services/record-source-coordinates.js';
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
-} from './conservation-series.js';
+} from '../services/conservation-series.js';
 import { readFileText } from '../services/file-content-cache.js';
-import { genbankHeaderIds } from './genbank-header.js';
+import { genbankHeaderIds } from '../services/genbank-header.js';
 
 /**
  * A registered sequence source: one record whose bases a match span reads.
@@ -150,6 +150,9 @@ export const reverseComplementNucleotide = (sequence) => {
   return output;
 };
 
+/**
+ * @returns {{ valid: false, reason: string } | { valid: true, start: number, end: number, orientation: string }}
+ */
 export const validateMatchCoordinates = (startRaw, endRaw, sequenceLength) => {
   const start = Number(startRaw);
   const end = Number(endRaw);
@@ -746,7 +749,8 @@ export const analyzeCatalogSequenceSourceCoverage = ({
                 expectedSource.sourceIndex
               );
               if (!availability.valid) {
-                resolution = { source: null, reason: availability.reason };
+                // comparisonSourceAvailabilityAt gives every invalid result a reason.
+                resolution = { source: null, reason: /** @type {string} */ (availability.reason) };
               } else if (availability.availability === 'never-supplied') {
                 resolution = {
                   source: null,
@@ -915,7 +919,8 @@ export const buildMatchSequenceBundle = (
 export const parseSequenceRecords = (value) => {
   const input = String(value ?? '');
   const records = [];
-  let current = null;
+  // Assigned in the forEach callback, which tsc does not follow, so the initializer carries the declared type.
+  let current = /** @type {{ recordId: string, header: string, parts: string[] } | null} */ (null);
   input.split(/\r?\n/).forEach((line) => {
     if (line.startsWith('>')) {
       if (current) records.push({ ...current, sequence: current.parts.join('').toUpperCase() });
@@ -934,7 +939,7 @@ const parseGenbankSequenceRecords = (value) => {
   String(value ?? '').split(/^\/\/\s*$/m).forEach((chunk) => {
     const originMatch = chunk.match(/\nORIGIN\b([\s\S]*)$/i);
     const header = originMatch ? genbankHeaderIds(chunk) : null;
-    if (!header) return;
+    if (!header || !originMatch) return;
     const { recordId, version, accession, locus } = header;
     const sequence = normalizedSequence(originMatch[1].replace(/[^A-Za-z]/g, ''));
     if (!sequence) return;
@@ -1029,7 +1034,7 @@ export const buildRestoredMatchSequenceSources = async ({
   cInputType,
   lInputType,
   files,
-  linearSeqs,
+  linearSeqs = [],
   circularConservation
 } = {}) => {
   const sources = [];

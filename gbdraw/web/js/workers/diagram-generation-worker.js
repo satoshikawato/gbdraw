@@ -1,7 +1,7 @@
 import { sendBoundedJson } from '../services/bounded-json-transport.js';
 import { PYTHON_HELPERS } from '../app/python-helpers.js';
 import { DIAGRAM_HELPER_OPERATIONS } from '../services/diagram-worker-protocol.js';
-import { normalizeUserFacingError } from '../services/error-normalization.js';
+import { normalizeUserFacingError } from '../utils/error-normalization.js';
 
 let runtimePromise = null;
 let runtime = null;

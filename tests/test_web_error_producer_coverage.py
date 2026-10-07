@@ -22,7 +22,7 @@ from gbdraw.web_support.error_adapter import serialize_web_error
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PYTHON_HELPERS = REPO_ROOT / "gbdraw" / "web" / "js" / "app" / "python-helpers.js"
-WEB_WORDING = REPO_ROOT / "gbdraw" / "web" / "js" / "services" / "error-normalization.js"
+WEB_WORDING = REPO_ROOT / "gbdraw" / "web" / "js" / "utils" / "error-normalization.js"
 UNCLASSIFIED = {"UNKNOWN", "VALIDATION_UNCLASSIFIED"}
 # Placeholder values for interpolations: empty, numbers, private text, a #index.
 FILLS = ("", "0", "1", "PRIVATE", "#1")

@@ -1,16 +1,16 @@
 // @ts-check
 /** @import { MountedResultContext, MountedResultContextOptions } from './preview-runtime.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
-import { normalizeUserFacingError } from '../services/error-normalization.js';
+import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
   parseBlacklistWords,
   parseColorTable,
   parsePriorityRules,
   parseWhitelistRules
-} from './file-imports.js';
+} from '../services/file-imports.js';
 import {
   prepareSpecificColorImport
-} from './specific-color-rules.js';
+} from '../services/specific-color-rules.js';
 import {
   normalizeCircularPlotTitlePosition
 } from './plot-title-position.js';
@@ -258,7 +258,8 @@ export const setupWatchers = ({
       const resultIndex = Number(selectedResultIndex.value) || 0;
       const result = results.value[resultIndex] || null;
       try {
-        const context = previewRuntime.createMountedResultContext({
+        // app/app-setup.js, the only caller, always passes the preview runtime here.
+        const context = /** @type {WatchersPreviewRuntime} */ (previewRuntime).createMountedResultContext({
           root,
           result,
           resultIndex,
@@ -269,7 +270,7 @@ export const setupWatchers = ({
             trustedRestore: Boolean(trustedArtifactRestoreInProgress.value)
           }
         });
-        await previewRuntime.bindMountedResult(context);
+        await /** @type {WatchersPreviewRuntime} */ (previewRuntime).bindMountedResult(context);
       } catch (error) {
         if ([
           'PREVIEW_BIND_STALE',

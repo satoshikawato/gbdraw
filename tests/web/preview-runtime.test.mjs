@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
 const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'preview-runtime.js');
-const featureDomSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-dom.js');
+const featureDomSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'feature-dom.js');
 const legendUtilsSourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'legend', 'utils.js');
 const legendTransformSourcePath = join(
   repoRoot,
@@ -18,7 +18,6 @@ const legendTransformSourcePath = join(
   'transform-utils.js'
 );
 const serviceNames = [
-  'error-normalization.js',
   'current-worker-result-source.js',
   'runtime-test-hooks.js',
   'session-feature-metadata.js',
@@ -34,7 +33,7 @@ await mkdir(join(tempDir, 'app', 'legend'), { recursive: true });
 await mkdir(join(tempDir, 'app', 'legend-layout'), { recursive: true });
 await mkdir(join(tempDir, 'services'), { recursive: true });
 await writeFile(join(tempDir, 'app', 'preview-runtime.js'), await readFile(sourcePath, 'utf8'), 'utf8');
-await writeFile(join(tempDir, 'app', 'feature-dom.js'), await readFile(featureDomSourcePath, 'utf8'), 'utf8');
+await writeFile(join(tempDir, 'services', 'feature-dom.js'), await readFile(featureDomSourcePath, 'utf8'), 'utf8');
 await writeFile(
   join(tempDir, 'app', 'legend', 'utils.js'),
   await readFile(legendUtilsSourcePath, 'utf8'),
@@ -49,6 +48,13 @@ await Promise.all(serviceNames.map(async (name) => {
   const servicePath = join(repoRoot, 'gbdraw', 'web', 'js', 'services', name);
   await writeFile(join(tempDir, 'services', name), await readFile(servicePath, 'utf8'), 'utf8');
 }));
+
+await mkdir(join(tempDir, 'utils'), { recursive: true });
+await writeFile(
+  join(tempDir, 'utils', 'error-normalization.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'error-normalization.js'), 'utf8'),
+  'utf8'
+);
 
 const { createPreviewRuntime } = await import(pathToFileURL(join(tempDir, 'app', 'preview-runtime.js')));
 

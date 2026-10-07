@@ -1,8 +1,8 @@
 // @ts-check
-import { normalizeSpecificRule } from './specific-color-rules.js';
-import { normalizeFeatureSelectorMetadata } from './feature-selector.js';
-import { getFeatureColorRuleHash } from './feature-utils.js';
-import { normalizeUserFacingError } from '../services/error-normalization.js';
+import { normalizeSpecificRule } from '../services/specific-color-rules.js';
+import { normalizeFeatureSelectorMetadata } from '../services/feature-selector.js';
+import { getFeatureColorRuleHash } from '../services/feature-utils.js';
+import { normalizeUserFacingError } from '../utils/error-normalization.js';
 
 // Ephemeral Python results belong to feature objects, never a session or a SVG.
 // An absent result is pending, not a non-match; a declined one (`matches:
@@ -37,6 +37,7 @@ const declinesLiveMatch = (feature, rule) => drawnSelectorUnknown(feature)
 export const ruleMatchDeclined = (feature, rules) => rules
   .some((rule) => cacheOf(feature)?.get(ruleKey(rule))?.declined === true);
 export const firstMatchingRule = (feature, rules) => {
+  /** @type {Record<string, any> | null} */
   let winner = null;
   let priority = Infinity;
   for (const rule of rules) {
@@ -53,6 +54,7 @@ export const firstMatchingRule = (feature, rules) => {
 // declined.
 export const firstMatchingRuleIfKnown = (feature, rules) => {
   const cache = cacheOf(feature);
+  /** @type {Record<string, any> | null} */
   let winner = null;
   let priority = Infinity;
   for (const rule of rules) {

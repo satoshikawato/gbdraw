@@ -5,13 +5,13 @@ import {
   interpolateColor,
   resolveCollinearMatchColor,
   resolvePairwiseLegendGradientColorKeys
-} from './color-utils.js';
+} from '../utils/color-utils.js';
 import {
   getFeatureElementIndex,
   getFeatureFillElements,
   getFeatureIdentity
 } from './feature-editor/svg-actions.js';
-import { isFeatureFillTarget } from './feature-dom.js';
+import { isFeatureFillTarget } from '../services/feature-dom.js';
 import { getAllFeatureLegendGroups, PAIRWISE_LEGEND_SELECTOR, parseTransformXY } from './legend/utils.js';
 import { getFeatureOverride } from '../services/feature-override-identity.js';
 import { getGroupsByBaseIds } from '../services/svg-result-normalization.js';

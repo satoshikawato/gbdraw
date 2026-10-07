@@ -1,10 +1,9 @@
 // @ts-check
-import { isUnspecifiedRecordSelectorValue } from '../record-options.js';
+import { isUnspecifiedRecordSelectorValue } from '../../services/record-options.js';
 import { featureIdentityKeyOf } from '../../services/feature-placement.js';
 
 /**
- * A record named by a target: a 0-based position or a record ID.
- * @typedef {{ kind: 'recordId', value: string } | { kind: 'recordIndex', index: number }} AnnotationRecordSelector
+ * @import { AnnotationRecordSelector } from '../../services/annotation-state.js'
  */
 
 const cleanNullable = (value) => {
@@ -18,7 +17,7 @@ const cleanNullable = (value) => {
  */
 export const parseAnnotationRecordSelectorValue = (value) => {
   const text = cleanNullable(value);
-  if (isUnspecifiedRecordSelectorValue(text)) {
+  if (text === null || isUnspecifiedRecordSelectorValue(text)) {
     return { selector: null, error: '' };
   }
   if (!text.startsWith('#')) {
@@ -75,6 +74,9 @@ export const annotationRecordSelectorFromValue = (value) => {
   return parsed.selector;
 };
 
+/**
+ * @param {{ start: any, end: any, recordId?: string | null, recordIndex?: number | null, coordinateSpace?: string }} params
+ */
 export const coordinateTarget = ({ start, end, recordId = null, recordIndex = null, coordinateSpace = 'source' }) => ({
   kind: 'coordinateSpan',
   record: annotationRecordSelector(recordId, recordIndex),
@@ -96,6 +98,9 @@ const parseFeatureSelector = (value) => {
     : { key: null, value: text };
 };
 
+/**
+ * @param {{ selector?: any, selectors?: any[] | null, recordId?: string | null, recordIndex?: number | null, extent?: string, circularPath?: string }} params
+ */
 export const featureTarget = ({ selector, selectors = null, recordId = null, recordIndex = null, extent = 'outer_bounds', circularPath = 'shortest' }) => ({
   kind: 'featureSpan',
   record: annotationRecordSelector(recordId, recordIndex),

@@ -1122,7 +1122,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   assert.equal(state.processing.value, false);
 
   // A later operation owns the notification while this Worker response is held.
-  const { normalizeUserFacingError } = await import('../../gbdraw/web/js/services/error-normalization.js');
+  const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
   let releaseOlderFailure;
   workerResponses.push(new Promise(resolve => { releaseOlderFailure = resolve; }));
   const runsBeforeOlderFailure = workerMessages.filter(message => message.type === 'run').length;

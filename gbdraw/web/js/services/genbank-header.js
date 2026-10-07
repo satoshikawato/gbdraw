@@ -40,6 +40,7 @@ export const scanGenBankHeader = (chunk) => {
   const accessions = [];
   let recordId = '';
   let version = '';
+  /** @type {number | null} */
   let versionSuffix = null;
   let organism = '';
   const addAccessions = (text) => {

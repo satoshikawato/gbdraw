@@ -298,6 +298,10 @@ const indexedProteinIdentity = (manifest, index) => {
   return validated?.manifest === manifest ? validated : null;
 };
 
+/**
+ * @param {unknown} manifests
+ * @param {{ invalidInputMessage?: string | null }} [options]
+ */
 export const mergeProteinIdentityManifests = (manifests, { invalidInputMessage = null } = {}) => {
   const inputs = Array.isArray(manifests) ? manifests : [];
   // A caller-supplied input error takes precedence over any merge conflict.
@@ -623,6 +627,13 @@ export const validateDerivedProteinReferences = (
   );
 };
 
+/**
+ * @param {unknown} cacheMap
+ * @param {unknown} cacheKey
+ * @param {Record<string, any>} [metadata]
+ * @param {Record<string, any> | null} [manifest]
+ * @param {{ identityIndex?: object | null }} [options]
+ */
 export const getCurrentRawLosatCacheEntry = (
   cacheMap, cacheKey, metadata = {}, manifest = null, { identityIndex = null } = {}
 ) => {
@@ -704,6 +715,12 @@ export const normalizeLegacyProteinCandidateEnvelope = (value) => {
   return { schema: LEGACY_PROTEIN_CANDIDATE_SCHEMA, entries };
 };
 
+/**
+ * @param {unknown} envelope
+ * @param {number} candidateIndex
+ * @param {string} nextState
+ * @param {string | null} [rejectionReason]
+ */
 export const transitionLegacyProteinCandidate = (
   envelope,
   candidateIndex,

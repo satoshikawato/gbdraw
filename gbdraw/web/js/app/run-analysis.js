@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { RulePreparation } from './rule-matching.js' */
-/** @import { PreviousResultRestoreOptions, ReadinessExpectationOptions } from './preview-runtime.js' */
+/** @import { PreviousResultRestoreOptions, ReadinessExpectation, ReadinessExpectationOptions, ReadyReceipt } from './preview-runtime.js' */
 import { validateAnnotationWarnings } from '../services/session-feature-metadata.js';
 import { validateComparisonWarnings } from '../services/comparison-warnings.js';
 import {
@@ -46,7 +46,7 @@ import {
 import {
   normalizeFileList,
   orderedConservationSources
-} from './conservation-series.js';
+} from '../services/conservation-series.js';
 import {
   applyLinearTrackOrderPlacements,
   clampLinearTrackAxisIndex,
@@ -64,13 +64,13 @@ import {
   depthSeriesLegendCaptions,
   representativeDepthFiles,
   syncDepthSlotLabels
-} from './depth-track-state.js';
+} from '../services/depth-track-state.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import {
   CustomTrackPlanValidationError,
   customTrackPlanIssues,
   validateCustomTrackPlan
-} from './track-slot-validation.js';
+} from '../services/track-slot-validation.js';
 import { buildRunInfo, buildSourceRecipe, summarizeLosatRuntimes } from './run-info.js';
 import {
   buildLosatJobSpecs,
@@ -79,12 +79,12 @@ import {
 import {
   buildDefaultColorOverrideTsv,
   normalizePaletteColors
-} from './color-utils.js';
+} from '../utils/color-utils.js';
 import {
   serializeLabelWhitelistRules,
   serializeQualifierPriorityRules,
   serializeSpecificRules
-} from './file-imports.js';
+} from '../services/file-imports.js';
 import { rebindRuleColorOverrides } from './rule-matching.js';
 import {
   pruneUnmatchedFeatureOverrides,
@@ -92,8 +92,8 @@ import {
 } from './feature-visibility.js';
 import {
   normalizeDefinitionLineStyleState
-} from './definition-line-style-state.js';
-import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
+} from '../services/definition-line-style-state.js';
+import { requireLinearLabelVisibilityMode } from '../services/linear-label-visibility.js';
 import { createZipBlob } from '../utils/zip.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
@@ -124,14 +124,14 @@ import {
   requireCurrentProteinBlastpCandidateLimit,
   requireCurrentProteinBlastpMaxHits,
   requireCurrentProteinBlastpMode
-} from './current-option-values.js';
+} from '../services/current-option-values.js';
 import {
   circularDiscoveryForInput,
   discoverGffFastaRecords,
   discoverSequenceRecords,
   discoveryErrorIsFinal
 } from './record-discovery.js';
-import { genbankHeaderIds } from './genbank-header.js';
+import { genbankHeaderIds } from '../services/genbank-header.js';
 import {
   LOSAT_DERIVED_CACHE_SCHEMA,
   NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
@@ -152,7 +152,7 @@ import {
   webLosatRuntimeRecord
 } from './losat-cache.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
-import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../services/error-normalization.js';
+import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
   cloneFileBytesForTransfer,
   readFileBytes,
@@ -223,7 +223,7 @@ const forcedLabelFeatureIds = (operations, { features, diagramOptions }) => {
   ))].filter((featureId) => !labelDrawingBlocker(featuresById.get(featureId), diagramOptions)));
 };
 
-const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
+const getNow = () => (typeof globalThis.performance?.now === 'function' ? performance.now() : Date.now());
 const formatDuration = (ms) => `${(ms / 1000).toFixed(2)}s`;
 const fastaExtractionCache = new WeakMap();
 const FASTA_EXTRACTION_CACHE_LIMIT = 12;
@@ -325,6 +325,10 @@ export const buildLosatCachePayload = ({
   return payload;
 };
 
+/**
+ * @param {Record<string, any> | null} [manifest]
+ * @param {object | null} [identityIndex]
+ */
 const getRawLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null, identityIndex = null) => {
   if (!cacheMap) return null;
   const direct = getCurrentRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest, { identityIndex });
@@ -845,7 +849,7 @@ const selectParsedRecord = (records, selectorRaw) => {
 };
 const parseFastaRecordsFast = (text) => {
   const records = [];
-  let current = null;
+  let current = /** @type {{ id: string, parts: string[] } | null} */ (null);
   String(text || '').split(/\r?\n/).forEach((line) => {
     if (line.startsWith('>')) {
       if (current) records.push({ ...current, sequence: current.parts.join('').toUpperCase() });
@@ -864,7 +868,7 @@ const parseGenbankRecordsFast = (text) => {
   recordChunks.forEach((chunk) => {
     const originMatch = chunk.match(/\nORIGIN\b([\s\S]*)$/i);
     const header = originMatch ? genbankHeaderIds(chunk) : null;
-    if (!header) return;
+    if (!header || !originMatch) return;
     const sequence = originMatch[1].replace(/[^A-Za-z]/g, '').toUpperCase();
     if (sequence) records.push({ id: header.recordId, sequence });
   });
@@ -1060,6 +1064,22 @@ const mergeCircularRecordPositions = (records, currentPositions) => {
   );
 };
 
+/**
+ * @typedef {object} CanonicalRenderCandidateExecutionOptions
+ * @property {Record<string, any>} canonical The candidate's request and resources.
+ * @property {string} mode
+ * @property {string} [kind]
+ * @property {((progress: any) => void) | null} [onProgress]
+ * @property {() => boolean} [shouldAdmit]
+ * @property {((payload: Record<string, any>, options?: { onProgress?: ((progress: any) => void) | null }) => Promise<any>) | null} [generationExecutor] Test seam.
+ * @property {typeof admitFeatureCatalog} [catalogAdmission]
+ * @property {typeof prepareCandidateRenderCommit} [prepareCommit]
+ * @property {Record<string, any>} [prepareCommitInput]
+ * @property {((canonical: Record<string, any>, catalogState: any) => any) | null} [decorationContinuity]
+ * @property {any[]} [timingEntries]
+ */
+
+/** @param {CanonicalRenderCandidateExecutionOptions} options */
 export const executeCanonicalRenderCandidate = async ({
   canonical,
   mode,
@@ -1089,11 +1109,11 @@ export const executeCanonicalRenderCandidate = async ({
       }, { onProgress: onProgress });
   const results = generationResponse.results;
   if (!shouldAdmit()) {
-    return { status: 'superseded', generationResponse, elapsedMs: getNow() - startedAt };
+    return { status: /** @type {const} */ ('superseded'), generationResponse, elapsedMs: getNow() - startedAt };
   }
   if (results?.error) {
     return {
-      status: 'engine-error',
+      status: /** @type {const} */ ('engine-error'),
       generationResponse,
       engineError: results.error,
       elapsedMs: getNow() - startedAt
@@ -1136,7 +1156,7 @@ export const executeCanonicalRenderCandidate = async ({
   );
   recordSessionLifecycleEvent('result-admission-end');
   return {
-    status: 'ok',
+    status: /** @type {const} */ ('ok'),
     generationResponse,
     generationMetadata: metadata,
     annotationWarnings,
@@ -1155,7 +1175,7 @@ export const executeCanonicalRenderCandidate = async ({
  * Generate reads: it registers the readiness a candidate must meet, and rolls
  * the selection back when the candidate is rejected.
  * @typedef {object} RunAnalysisPreviewRuntime
- * @property {(expectation: ReadinessExpectationOptions) => any} registerReadinessExpectation
+ * @property {(expectation: ReadinessExpectationOptions) => ReadinessExpectation} registerReadinessExpectation
  * @property {(generationToken: string, reason: Error) => void} invalidateReadinessExpectation
  * @property {(receipt: any, reason: string) => void} invalidateReadyReceipt
  * @property {(options: PreviousResultRestoreOptions) => Promise<any>} restorePreviousSelectedResult
@@ -1356,8 +1376,11 @@ export const createRunAnalysis = ({
   let latestGenerationToken = 0;
   let latestOperationId = 0;
   let circularRecordRefreshGeneration = 0;
+  /** @type {{ fingerprint: any[], promise: Promise<any> | null } | null} */
   let activeCircularRecordRefresh = null;
+  /** @type {AbortController | null} */
   let activeLosatAbortController = null;
+  /** @type {readonly Record<string, any>[]} */
   let latestCliHelperFiles = Object.freeze([]);
   let latestCliHelperArchiveName = 'out-cli-files.zip';
   let latestCliHelperRetainedBytes = 0;
@@ -1400,6 +1423,10 @@ export const createRunAnalysis = ({
     }
   };
   const generatedArtifactTransactionOwner = Object.freeze({
+    /**
+     * @param {Record<string, any>} ownerSet
+     * @param {{ runtimeState?: Record<string, any> | null }} [options]
+     */
     build(ownerSet, { runtimeState = null } = {}) {
       recordSessionLifecycleEvent('artifact.candidate-completed');
       recordStructuralMetric('generatedArtifactCandidateBuildCount', 1);
@@ -1545,7 +1572,12 @@ export const createRunAnalysis = ({
   // Raw searches finish before the artifact transaction. Keep only the latest
   // search's entries for retry, without changing the saved Result. Cache owner
   // replacement (Clear Cache, Session load, or History) invalidates the retry.
+  /** @type {{ owner: any, entries: Map<string, any> } | null} */
   let completedLosatSearch = null;
+  /**
+   * @param {Record<string, any> | null} [manifest]
+   * @param {object | null} [identityIndex]
+   */
   const getReusableLosatCacheEntry = (cacheMap, cacheKey, metadata, manifest = null, identityIndex = null) => {
     if (completedLosatSearch?.owner !== losatCache.value) completedLosatSearch = null;
     return getRawLosatCacheEntry(cacheMap, cacheKey, metadata, manifest, identityIndex)
@@ -1650,6 +1682,11 @@ export const createRunAnalysis = ({
     return entries.find((entry) => String(entry?.edgeKey || '') === normalizedKey) || null;
   };
 
+  /**
+   * @param {string} edgeKey
+   * @param {{ recordId?: string } | null} [queryEntry]
+   * @param {{ recordId?: string } | null} [subjectEntry]
+   */
   const getLosatPairDefaultName = (edgeKey, queryEntry = null, subjectEntry = null) => {
     const cacheEntry = getLosatCacheInfoEntry(edgeKey);
     const edge = getResolvedLinearEdge(edgeKey) || cacheEntry;
@@ -1984,16 +2021,17 @@ export const createRunAnalysis = ({
       inputType === 'gff' ? files.c_gff : files.c_gb,
       inputType === 'gff' ? files.c_fasta : null
     ];
+    const inflightRefresh = activeCircularRecordRefresh;
     if (
-      activeCircularRecordRefresh &&
-      fingerprint.length === activeCircularRecordRefresh.fingerprint.length &&
+      inflightRefresh &&
+      fingerprint.length === inflightRefresh.fingerprint.length &&
       fingerprint.every((value, index) => (
-        Object.is(value, activeCircularRecordRefresh.fingerprint[index])
+        Object.is(value, inflightRefresh.fingerprint[index])
       ))
     ) {
-      return activeCircularRecordRefresh.promise;
+      return inflightRefresh.promise;
     }
-    const entry = { fingerprint, promise: null };
+    const entry = { fingerprint, promise: /** @type {Promise<any> | null} */ (null) };
     entry.promise = runCircularRecordRefresh(options).finally(() => {
       if (activeCircularRecordRefresh === entry) activeCircularRecordRefresh = null;
     });
@@ -2036,6 +2074,7 @@ export const createRunAnalysis = ({
   } = {}) => {
     const runState = { ...state };
     const { linearSeqs } = runState;
+    /** @type {Awaited<ReturnType<typeof prepareAndAdmitCandidate>>} */
     let colorCandidate = null;
     let candidateRules = manualSpecificRules;
     let failureStage = 'request-validation';
@@ -2066,10 +2105,14 @@ export const createRunAnalysis = ({
 
     const generationToken = ++latestGenerationToken;
     let canceledAttemptOwnsPresentation = false;
+    /** @type {AbortController | null} */
     let generationAbortController = null;
+    /** @type {AbortSignal | null} */
     let generationAbortSignal = null;
     const committedArtifactHandle = generatedArtifactHandle || await captureGeneratedArtifactHandle();
+    /** @type {ReturnType<typeof generatedArtifactTransactionOwner.build> | null} */
     let activatedGeneratedArtifactCandidate = null;
+    /** @type {ReadyReceipt | null} */
     let acceptedCandidateReadyReceipt = null;
     let workingProteinIdentityManifest = committedArtifactHandle?.ownerSet
       ?.proteinIdentityManifest ?? proteinIdentityManifest.value;
@@ -2243,10 +2286,13 @@ export const createRunAnalysis = ({
     const activeRunColors = currentColors.value;
     const manualRunStartedAt = getNow();
     const manualRunStartedAtIso = new Date().toISOString();
+    /** @type {Record<string, any> | null} */
     let structuredLosatTelemetry = null;
     const legacyPromotionTransaction = [];
     let legacyPromotionCommitted = false;
+    /** @type {((candidateOwnerSet: Record<string, any>) => { ownerSet: Record<string, any>, selectedOrthogroupAlignmentFeature: any }) | null} */
     let commitProteinMigration = null;
+    /** @type {{ cacheInfo: any[], cacheMap: Map<any, any>, derivedCacheMap: Map<any, any> | null } | null} */
     let pendingLosatCacheCommit = null;
 
     featureExtractionRequestId += 1;
@@ -2370,6 +2416,11 @@ export const createRunAnalysis = ({
           slot: resolvedSlot
         });
       };
+      /**
+       * @param {File | null | undefined} fileObj
+       * @param {string} path
+       * @param {{ cacheText?: boolean, textCache?: WeakMap<WeakKey, any> | null, slot?: string }} [options]
+       */
       const stageUploadedFile = async (fileObj, path, {
         cacheText = false,
         textCache = null,
@@ -2446,6 +2497,7 @@ export const createRunAnalysis = ({
         featureOverrides, mode.value, recordKeys.map((recordKey) => ({ recordKey }))
       ).filter((row) => row.featureVisibility !== null)
         .map((row) => ({ ...row, labelVisibility: null, labelText: null }));
+      /** @type {string | null} */
       let featureVisibilityTablePath = null;
       let featureVisibilityCacheKey = '';
       const featureVisibilityTsv = serializeFeatureVisibilityRules(featureVisibilityRules?.value || []);
@@ -2948,6 +3000,7 @@ export const createRunAnalysis = ({
         requireCurrentLinearTrackLayout(form.linear_track_layout);
         const useLinearTrackSlots = adv.linear_track_slots_enabled === true;
         let linearTrackSlots = [];
+        /** @type {number | null} */
         let linearTrackSlotAxisIndex = null;
         let linearSlotNeedsDepth = false;
         if (useLinearTrackSlots) {
@@ -2995,7 +3048,9 @@ export const createRunAnalysis = ({
           adv.linear_track_slots_axis_index = linearTrackSlotAxisIndex;
           adv.linear_track_slots.splice(0, adv.linear_track_slots.length, ...linearTrackSlots);
         }
-        const comparisonResolution = activeComparisonPlanSnapshot;
+        // This branch is Linear mode, where the 'A resolved Linear comparison plan is required.' check above
+        // throws when the snapshot is null.
+        const comparisonResolution = /** @type {NonNullable<typeof activeComparisonPlanSnapshot>} */ (activeComparisonPlanSnapshot);
         const hasComparisonIntent = comparisonResolution.hasComparisonIntent === true;
         const hasLosatIntent = comparisonResolution.hasLosatIntent === true;
         const useProteinBlastp = hasLosatIntent && losatProgram.value === 'blastp';
@@ -3230,7 +3285,7 @@ export const createRunAnalysis = ({
               helperRequestMetadataBytes: 0,
               helperRequestRawTransferBytes: 0,
               helperRequestFileCount: 0,
-              rawJobs: [],
+              rawJobs: /** @type {Record<string, any>[]} */ ([]),
               cacheHashHits: 0,
               cacheHits: 0,
               cacheMisses: 0,
@@ -3736,7 +3791,8 @@ export const createRunAnalysis = ({
           }
         }
 
-        if (useLosat) {
+        // `losatTiming` is built exactly when `useLosat` holds; the second test narrows it for this block.
+        if (useLosat && losatTiming) {
           setProcessingStatus('Preparing LOSAT jobs...');
           const losatPairs = [];
           const losatJobs = [];
@@ -3774,6 +3830,7 @@ export const createRunAnalysis = ({
             if (batch.searchContext) cacheMetadata.searchContext = batch.searchContext;
             preparedJobs.push({ spec, losatArgs, cacheMetadata, batch });
           }
+          /** @type {string[] | null} */
           let proteinCacheKeys = null;
           if (useProteinBlastp && preparedJobs.length > 0) {
             throwIfGenerationCanceled();
@@ -3833,7 +3890,8 @@ export const createRunAnalysis = ({
               const subjectEntry = await getSeqEntry(spec.subjectIndex);
               throwIfGenerationCanceled();
               const cacheKey = useProteinBlastp
-                ? proteinCacheKeys[jobIndex]
+                // The loop runs only for a non-empty `preparedJobs`, and then `proteinCacheKeys` was set above for a protein run.
+                ? /** @type {string[]} */ (proteinCacheKeys)[jobIndex]
                 : await hashText(JSON.stringify(buildLosatCachePayload(cacheMetadata)));
               throwIfGenerationCanceled();
               const queryCanonicalHash = await getSeqHash(spec.queryIndex);
@@ -4104,6 +4162,7 @@ export const createRunAnalysis = ({
             );
             const useDerivedProteinPayloadCache = useOrthogroupBlastp || useCollinearBlastp;
             let derivedCacheKey = '';
+            /** @type {Record<string, any> | null} */
             let convertedPayload = null;
             if (useDerivedProteinPayloadCache) {
               const derivedCachePayload = buildLosatDerivedPayloadCachePayload({
@@ -4183,7 +4242,8 @@ export const createRunAnalysis = ({
                   explicitDisplayPairs: Boolean(hasCanonicalGridRows)
                 }
               );
-              convertedPayload = response.result;
+              // The converter returns a JSON object (convert_losatp_blastp_pairs_to_genomic_payload in python-helpers.js).
+              convertedPayload = /** @type {Record<string, any>} */ (response.result);
               if (["orthogroup", "collinear"].includes(blastpMode)) {
                 const resourceKey = blastpMode === "collinear" ? "collinearityResult" : "orthogroupResult";
                 const canonical = convertedPayload.canonicalResource;
@@ -4550,6 +4610,7 @@ export const createRunAnalysis = ({
       const canonicalReplayName = makeSafeFilename(
         `${normalizedOutputPrefix || 'out'}.gbdraw-session.json`
       );
+      /** @type {{ results: any[] | null, featureCatalog: Record<string, any> | null | undefined }} */
       const publishedReplayArtifact = { results: null, featureCatalog: null };
       const buildCanonicalReplayText = createCanonicalReplayTextBuilder({
         version: canonicalSessionVersion,
@@ -4571,6 +4632,7 @@ export const createRunAnalysis = ({
           + canonicalResourceBase64Characters * 2
           + 65_536
       });
+      /** @type {Awaited<ReturnType<typeof buildSourceRecipe>> | null} */
       let sourceRecipe = null;
       if (manualRunStartedAt !== null) {
         const generatedFileNameHints = new Map();
@@ -4653,7 +4715,9 @@ export const createRunAnalysis = ({
         return { status: 'stale' };
       }
 
+      /** @type {ReturnType<typeof buildRunInfo> | null} */
       let candidateRunInfo = null;
+      /** @type {ReturnType<typeof buildLatestCliHelperFiles> | null} */
       let candidateCliHelpers = null;
       if (manualRunStartedAt !== null) {
         candidateRunInfo = buildRunInfo(/** @type {any} */ ({
@@ -4671,7 +4735,8 @@ export const createRunAnalysis = ({
           ),
           featureIdentityNotices: generationMetadata.featureIdentityNotices
         }));
-        sourceRecipe.generatedFiles.forEach((file) => {
+        // Assigned above under the same `manualRunStartedAt !== null` test, which always holds: it is a number.
+        /** @type {NonNullable<typeof sourceRecipe>} */ (sourceRecipe).generatedFiles.forEach((file) => {
           recordGeneratedCliFile(
             file.path,
             file.data instanceof Uint8Array ? textDecoder.decode(file.data) : file.data,
@@ -4699,6 +4764,7 @@ export const createRunAnalysis = ({
       const candidateExtractedFeatures = candidateCommit.featureState.extractedFeatures;
       const candidateBiologicalFeatures = candidateCommit.featureState.biologicalFeatures;
       const currentOwnerSet = captureGeneratedArtifactOwnerSet();
+      /** @type {Record<string, any>} */
       let candidateOwnerSet = {
         ...currentOwnerSet,
         results: candidateCommit.results,
@@ -4924,6 +4990,13 @@ export const createRunAnalysis = ({
     }
   };
 
+  /**
+   * @param {Record<string, any> | null} [comparisonPlanSnapshot]
+   * @param {Record<string, any> | null} [generatedArtifactHandle]
+   * @param {Record<string, any> | null} [comparisonExecution]
+   * @param {{ prepareGenerate?: (() => Promise<Record<string, any>>) | null,
+   *   afterGenerate?: ((outcome: Record<string, any> | null) => any) | null }} [options]
+   */
   const runAnalysis = async (
     comparisonPlanSnapshot = null,
     generatedArtifactHandle = null,
@@ -4932,14 +5005,17 @@ export const createRunAnalysis = ({
   ) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
+    /** @type {Record<string, any> | null} */
     let outcome = null;
     const operationId = ++latestOperationId;
     const isCurrentOperation = () => operationId === latestOperationId;
     const previousAlert = errorLog.value;
     const isCurrentAlert = () => isCurrentOperation()
       && (errorLog.value === previousAlert || errorLog.value === null);
+    /** @type {Record<string, any> | null} */
     let beforeHandle = null;
     const initialResults = results.value;
+    /** @type {string | null} */
     let historyRecovery = null;
     processing.value = true;
     processingStatus.value = 'Preparing input files...';
@@ -5032,7 +5108,7 @@ export const createRunAnalysis = ({
         clearLabelBuildNotices({ rerender: true });
         recordSessionLifecycleEvent('generate.completed');
       }
-      if (Object.prototype.hasOwnProperty.call(outcome || {}, 'generatedArtifactCandidate')) {
+      if (outcome && Object.prototype.hasOwnProperty.call(outcome, 'generatedArtifactCandidate')) {
         const { generatedArtifactCandidate, ...publicOutcome } = outcome;
         outcome = publicOutcome;
       }
@@ -5086,7 +5162,9 @@ export const createRunAnalysis = ({
     activeLosatAbortController = generationAbortController;
     const committedArtifactHandle = generatedArtifactHandle
       || await captureGeneratedArtifactHandle();
+    /** @type {ReturnType<typeof generatedArtifactTransactionOwner.build> | null} */
     let activatedCandidate = null;
+    /** @type {ReadyReceipt | null} */
     let acceptedReadyReceipt = null;
     const restoreCommittedArtifact = async () => {
       if (!activatedCandidate) return false;
@@ -5301,6 +5379,11 @@ export const createRunAnalysis = ({
     }
   };
 
+  /**
+   * @param {{ canonical: Record<string, any>, label?: string,
+   *   captureIntentCheckpoint?: ((...args: any[]) => any) | null, restoreIntentCheckpoint?: ((...args: any[]) => any) | null,
+   *   commitIntent?: (() => any) | null, alignmentResetBefore?: any, alignmentResetReceipt?: any, operation?: string }} options
+   */
   const runCommittedCanonicalCandidate = async ({
     canonical,
     label = 'Rotate record to feature',
@@ -5313,14 +5396,17 @@ export const createRunAnalysis = ({
   }) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
+    /** @type {Record<string, any> | null} */
     let outcome = null;
     const operationId = ++latestOperationId;
     const isCurrentOperation = () => operationId === latestOperationId;
     const previousAlert = errorLog.value;
     const isCurrentAlert = () => isCurrentOperation()
       && (errorLog.value === previousAlert || errorLog.value === null);
+    /** @type {Record<string, any> | null} */
     let beforeHandle = null;
     const initialResults = results.value;
+    /** @type {string | null} */
     let historyRecovery = null;
     processing.value = true;
     processingStatus.value = 'Preparing target record...';
@@ -5357,7 +5443,7 @@ export const createRunAnalysis = ({
       if (outcome?.status === 'ok' && outcome.generatedArtifactCandidate) {
         generatedArtifactTransactionOwner.finalize();
       }
-      if (Object.prototype.hasOwnProperty.call(outcome || {}, 'generatedArtifactCandidate')) {
+      if (outcome && Object.prototype.hasOwnProperty.call(outcome, 'generatedArtifactCandidate')) {
         const { generatedArtifactCandidate, ...publicOutcome } = outcome;
         outcome = publicOutcome;
       }
@@ -5449,6 +5535,7 @@ export const createRunAnalysis = ({
       return { status: 'skipped' };
     }
     const generationToken = ++latestGenerationToken;
+    /** @type {Awaited<ReturnType<typeof prepareAndAdmitCandidate>>} */
     let colorCandidate = null;
     clearLabelBuildNotices({ rerender: true });
     skipCaptureBaseConfig.value = true;

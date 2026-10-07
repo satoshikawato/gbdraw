@@ -1,5 +1,5 @@
 // @ts-check
-import { parseOptionalCircularScalar } from '../track-slot-validation.js';
+import { parseOptionalCircularScalar } from './track-slot-validation.js';
 
 const isTypedMeasure = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
@@ -11,14 +11,16 @@ const requireEditorUnit = (unit) => {
 export const readCircularMeasure = (scalar) => {
   const typed = isTypedMeasure(scalar);
   let valueText = String((typed ? scalar.value : scalar) ?? '');
+  /** @type {string | null} */
   let selectedUnit = typed ? String(scalar.unit ?? '').trim().toLowerCase() : 'factor';
+  /** @type {string | null} */
   let error = null;
   let isAuto = false;
   try {
     const pair = parseOptionalCircularScalar(scalar);
     isAuto = pair === null;
     selectedUnit = pair?.unit ?? null;
-    if (isAuto) valueText = '';
+    if (pair === null) valueText = '';
     else if (!typed) {
       const text = valueText.trim();
       valueText = /%$/.test(text) ? String(pair.value)

@@ -12,7 +12,7 @@ const load = (path) => import(pathToFileURL(join(tempRoot, 'js', path)));
 
 const {
   annotationOptionsPayload, createAnnotationSet, draftAnnotationSetsOfRequest, normalizeAnnotationSets
-} = await load('app/annotations/state.js');
+} = await load('services/annotation-state.js');
 const {
   annotationRecordSelector,
   annotationRecordSelectorFromValue,
@@ -23,7 +23,7 @@ const {
   parseAnnotationRecordSelectorValue
 } = await load('app/annotations/target-actions.js');
 const { buildAnnotationRecordCatalog } = await load('app/annotations/record-catalog.js');
-const { resolveCircularRequestRecordSet } = await load('app/record-options.js');
+const { resolveCircularRequestRecordSet } = await load('services/record-options.js');
 const {
   annotationRecordOptions,
   reconcileAnnotationRecordBindings,

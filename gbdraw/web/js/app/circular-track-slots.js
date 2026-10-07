@@ -6,14 +6,14 @@ import {
   normalizeFileList,
   orderedConservationSources,
   safeConservationSlotId
-} from './conservation-series.js';
+} from '../services/conservation-series.js';
 import {
   isDefaultManagedDepthSlot,
   parseDepthTrackIndexIdentity,
   reconcileManagedDepthSlots,
   representativeDepthFiles
-} from './depth-track-state.js';
-import { resolveColorToHex } from './color-utils.js';
+} from '../services/depth-track-state.js';
+import { resolveColorToHex } from '../utils/color-utils.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
 import {
   findTrackSlotGeometry,
@@ -21,11 +21,11 @@ import {
   formatRadiusFactorAuto,
   isManualSlotValue,
   normalizeOptionalText
-} from './track-slot-display.js';
+} from '../services/track-slot-display.js';
 import { featureSlotEdits } from './track-slot-edits.js';
-import { parseOptionalCircularScalar, parseOptionalPixel, validateCustomTrackPlan } from './track-slot-validation.js';
+import { parseOptionalCircularScalar, parseOptionalPixel, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 import { visibleFeatureUnderlaysForState } from '../utils/feature-rendering.js';
-import { diagnosticError } from '../services/error-normalization.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 
 const SUPPORTED_RENDERERS = [
   'features',
@@ -420,6 +420,7 @@ export const migrateLegacyCircularTrackSlotSpec = (spec) => {
 
   const head = text.slice(0, atIndex).trim();
   const retained = [];
+  /** @type {string | null} */
   let legacySpacing = null;
   let hasInnerGap = false;
   let hasOuterGap = false;
@@ -583,6 +584,7 @@ const enforceSingleOnAxisSlot = (slots, axisIndex, preset = 'tuckin') => {
   return keepIndex;
 };
 
+/** @param {number | null} [axisIndex] */
 export const applyCircularTrackOrderPlacements = (slots, defaultNt = 'GC', preset = 'tuckin', axisIndex = null) => {
   const normalized = normalizeCircularTrackSlots(slots, defaultNt, preset);
   const resolvedAxis = syncSlotsFromAxisIndex(normalized, axisIndex, preset);
@@ -590,6 +592,7 @@ export const applyCircularTrackOrderPlacements = (slots, defaultNt = 'GC', prese
   return normalized;
 };
 
+/** @param {{ id: string, renderer: string, enabled?: boolean, width?: any, radius?: any, inner_gap_px?: any, outer_gap_px?: any, side?: string | null, z?: number, params?: Record<string, any> }} slot */
 const makeSlot = ({
   id,
   renderer,
@@ -618,6 +621,7 @@ const paramsMatchExactly = (params, expected = {}) => {
   const actualEntries = Object.entries(cloneParams(params))
     .filter(([, value]) => normalizeOptionalText(value) !== null)
     .map(([key, value]) => [String(key), normalizeOptionalText(value)]);
+  /** @type {[string, string | null][]} */
   const expectedEntries = Object.entries(expected)
     .filter(([, value]) => normalizeOptionalText(value) !== null)
     .map(([key, value]) => [String(key), normalizeOptionalText(value)]);
@@ -1656,6 +1660,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     );
   };
 
+  /** @param {{ nextSlots: any[], newSlots?: any[], managedPredicate: (slot: any) => boolean, preferredInsertIndex?: number | null }} mutation */
   const commitManagedSlotMutation = ({
     nextSlots,
     newSlots = [],
@@ -1686,7 +1691,8 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     });
     if (additions.length > 0) {
       const preferred = Number.isInteger(preferredInsertIndex)
-        ? preferredInsertIndex
+        // Number.isInteger is true only for a number, so it is not null here.
+        ? /** @type {number} */ (preferredInsertIndex)
         : axis;
       const insideFloor = committed.reduce((floor, slot, index) => {
         if (
@@ -2122,6 +2128,9 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     return globalThis.confirm ? globalThis.confirm(message) : true;
   };
 
+  /** @typedef {{ target?: { checked: boolean } | null } | null} CircularSuppressToggleEvent The checkbox change event of a Suppress control. */
+
+  /** @param {CircularSuppressToggleEvent} [event] */
   const setCircularSuppressControl = (key, checked, event = null) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -2146,10 +2155,12 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     if (event?.target) event.target.checked = nextChecked;
   };
 
+  /** @param {CircularSuppressToggleEvent} [event] */
   const setCircularGcSuppressed = (checked, event = null) => {
     setCircularSuppressControl('gc_content', checked, event);
   };
 
+  /** @param {CircularSuppressToggleEvent} [event] */
   const setCircularSkewSuppressed = (checked, event = null) => {
     setCircularSuppressControl('gc_skew', checked, event);
   };

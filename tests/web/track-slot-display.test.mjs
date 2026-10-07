@@ -17,15 +17,27 @@ await cp(
   join(tempRoot, 'utils'),
   { recursive: true }
 );
-// circular-track-slots.js reports through the dependency-free wording owner.
+// circular-track-slots.js reads the conservation-series row helpers.
 await cp(
-  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'error-normalization.js'),
-  join(tempRoot, 'services', 'error-normalization.js')
+  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'conservation-series.js'),
+  join(tempRoot, 'services', 'conservation-series.js')
+);
+// linear-track-slots.js reads the current option values.
+await cp(
+  join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'current-option-values.js'),
+  join(tempRoot, 'services', 'current-option-values.js')
 );
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
+// The track-slot leaves the slot editors import.
+for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js']) {
+  await cp(
+    join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf),
+    join(tempRoot, 'services', leaf)
+  );
+}
 
 const { findTrackSlotGeometry } = await import(
-  pathToFileURL(join(tempRoot, 'app', 'track-slot-display.js'))
+  pathToFileURL(join(tempRoot, 'services', 'track-slot-display.js'))
 );
 const { createLinearTrackSlotEditor } = await import(
   pathToFileURL(join(tempRoot, 'app', 'linear-track-slots.js'))

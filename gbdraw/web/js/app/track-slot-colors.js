@@ -1,6 +1,6 @@
 // @ts-check
-import { resolveColorToHex } from './color-utils.js';
-import { normalizeOptionalText } from './track-slot-display.js';
+import { resolveColorToHex } from '../utils/color-utils.js';
+import { normalizeOptionalText } from '../services/track-slot-display.js';
 
 /**
  * Where an inherited skew color comes from. The color and palette sources may
@@ -58,6 +58,7 @@ export const resolveInheritedSkewSlotColor = ({
   paletteDefinitions = {},
   selectedPalette = 'default'
 } = {}) => {
+  if (!key) return '#777777';
   const paletteKey = SKEW_COLOR_PARAM_TO_PALETTE_KEY[key];
   if (!paletteKey) return '#777777';
 
@@ -92,6 +93,6 @@ export const resolveTrackSlotSkewColorValue = ({
     paletteDefinitions,
     selectedPalette
   });
-  const explicit = normalizeColorInputValue(slot?.params?.[key]);
+  const explicit = normalizeColorInputValue(key === undefined ? undefined : slot?.params?.[key]);
   return explicit || inherited;
 };

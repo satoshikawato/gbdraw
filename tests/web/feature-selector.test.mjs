@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
-const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'feature-selector.js');
+const sourcePath = join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'feature-selector.js');
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-selector-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await writeFile(

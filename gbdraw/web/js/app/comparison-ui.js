@@ -510,8 +510,9 @@ export const projectLinearComparisonUi = ({
   const selectedTopology = normalizedPlan.mode === LINEAR_COMPARISON_MODES.SELECTED;
   const losatModeKey = normalizeLosatProgram(losatProgram);
   const losatpModeKey = normalizeBlastpMode(blastpMode);
-  const losatModeLabel = LOSAT_MODE_BY_KEY.get(losatModeKey).label;
-  const losatpModeLabel = LOSATP_MODE_BY_KEY.get(losatpModeKey).label;
+  // normalizeLosatProgram and normalizeBlastpMode return only keys of these two tables.
+  const losatModeLabel = /** @type {ComparisonModeEntry} */ (LOSAT_MODE_BY_KEY.get(losatModeKey)).label;
+  const losatpModeLabel = /** @type {ComparisonModeEntry} */ (LOSATP_MODE_BY_KEY.get(losatpModeKey)).label;
   const sourceBreakdown = projectSourceBreakdown(activeEdges);
   const activePairCount = activeEdges.length;
   const dormantDraftCount = retainedDormantDraftCount(normalizedPlan, activeEdges);

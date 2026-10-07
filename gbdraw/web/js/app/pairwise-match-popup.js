@@ -3,14 +3,14 @@ import {
   formatFeatureLocation,
   isInternalProteinDisplayId,
   resolveDisplayProteinId
-} from './feature-utils.js';
-import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
+} from '../services/feature-utils.js';
+import { buildFeatureSequenceFastas } from '../services/feature-sequence-fasta.js';
 import { buildMatchSequenceBundle } from './match-sequences.js';
-import { readRecordSourceSpan, recordSourceInterval } from './record-source-coordinates.js';
+import { readRecordSourceSpan, recordSourceInterval } from '../services/record-source-coordinates.js';
 import {
   groupMetadataScopeLabel,
   normalizeGroupMetadataScope
-} from './losat-normalization.js';
+} from '../services/losat-normalization.js';
 import {
   RENDERED_FEATURE_ID_KEYS,
   STABLE_FEATURE_ID_KEYS,
@@ -200,6 +200,7 @@ const makeSafeFilename = (value, fallback = 'orthogroup') => {
 const sequenceKindLabel = (sequenceKind) => (sequenceKind === 'aa' ? 'aa' : 'nt');
 const sequenceExtension = (sequenceKind) => (sequenceKindLabel(sequenceKind) === 'aa' ? 'faa' : 'fna');
 
+/** @param {SVGElement | null} [element] */
 const normalizeMatchKind = (value, element = null) => {
   const normalized = normalizeText(value).toLowerCase();
   if (MATCH_KIND_ALIASES.has(normalized)) return normalized;
@@ -617,7 +618,7 @@ const createPairwisePayloadContext = ({
   for (const role of ['query', 'subject']) {
     const endpoint = descriptor?.endpoints?.[role];
     if (!endpoint?.constrained) continue;
-    const renderedIds = splitMetadataValues(descriptor[`${role}FeatureSvgId`]);
+    const renderedIds = splitMetadataValues(descriptor?.[`${role}FeatureSvgId`]);
     if (!endpoint.valid) {
       renderedIds.forEach((renderedId) => rejectedRenderedIds.add(renderedId));
       continue;
@@ -649,10 +650,12 @@ const createPairwisePayloadContext = ({
   };
 
   const groupMemberIndexes = new WeakMap();
+  /** @returns {{ records: { member: any, identity: any }[], byIdentity: Map<any, any> }} */
   const memberIndexForGroup = (group) => {
     if (!group || typeof group !== 'object') return { records: [], byIdentity: new Map() };
     const cached = groupMemberIndexes.get(group);
     if (cached) return cached;
+    /** @type {{ records: { member: any, identity: any }[], byIdentity: Map<any, any> }} */
     const index = { records: [], byIdentity: new Map() };
     for (const member of Array.isArray(group.members) ? group.members : []) {
       const record = { member, identity: cachedIdentity(member, 'standard') };
@@ -1573,7 +1576,7 @@ export const buildMatchPopupPayload = (
       queryFeatureSvgId,
       subjectFeatureSvgId,
       fill: descriptor.fill,
-      sections: summarySection.rows.length > 0 || summarySection.memberRows.length > 0
+      sections: summarySection.rows.length > 0 || (summarySection.memberRows?.length ?? 0) > 0
         ? [summarySection]
         : []
     };

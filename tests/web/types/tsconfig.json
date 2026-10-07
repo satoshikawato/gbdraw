@@ -15,7 +15,8 @@
     "noImplicitThis": true,
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": true,
-    "noUnusedParameters": true
+    "noUnusedParameters": true,
+    "strictNullChecks": true
   },
   "include": ["../../../gbdraw/web/js/**/*.js", "web-globals.d.ts"],
   "exclude": ["../../../gbdraw/web/js/workers/**"]

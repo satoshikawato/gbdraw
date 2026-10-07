@@ -225,7 +225,9 @@ export const resolveFeatureAnchor = ({
     : intent.anchor;
   const direction = profile.strand === '-' ? -1 : 1;
   const coveredLength = parts.reduce((total, part) => total + part.end - part.start, 0);
+  /** @type {number | null} */
   let sourceAnchorCoordinate = null;
+  /** @type {number | null} */
   let sourceOutgoingBoundary = null;
   let baseCoordinate;
   if (placement === 'anchor') {

@@ -113,7 +113,7 @@ test('alignment canvas guide and candidates stay transient and share palette cho
   await expect(dialog.getByRole('radio', { name: /Select .*bp, strand/ }).first().locator('xpath=ancestor::label')).toContainText('1');
 
   const geometry = () => page.evaluate(async () => {
-    const { getFeatureFillElements } = await import('./js/app/feature-dom.js');
+    const { getFeatureFillElements } = await import('./js/services/feature-dom.js');
     const app = window.__GBDRAW_APP__;
     const svg = document.querySelector('.gbdraw-preview-surface svg');
     const draft = app.similarityAlignmentDraft;
@@ -1277,7 +1277,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
     return dialog;
   };
   const geometry = () => page.evaluate(async () => {
-    const { getFeatureFillElements } = await import('./js/app/feature-dom.js');
+    const { getFeatureFillElements } = await import('./js/services/feature-dom.js');
     const { state } = await import('./js/state.js');
     const svg = document.querySelector('.gbdraw-preview-surface svg');
     const plan = state.similarityAlignmentPlan.value;
@@ -1613,7 +1613,7 @@ test('Gallery explicit directions own receipts, Reset scopes, fresh Load and rib
   // Reference-only Custom Align C preserves pending form and anchor-center x.
   const beforeC=await recordState(freshPage);
   const referenceCenter=()=>freshPage.evaluate(async anchor=>{
-    const {getFeatureFillElements}=await import('./js/app/feature-dom.js');
+    const {getFeatureFillElements}=await import('./js/services/feature-dom.js');
     const app=window.__GBDRAW_APP__;
     const feature=app.extractedFeatures.find(item=>item.recordKey===anchor.recordKey && item.biologicalFeatureId===anchor.biologicalFeatureId);
     const svg=document.querySelector('.gbdraw-preview-surface svg');

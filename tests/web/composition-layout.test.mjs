@@ -726,7 +726,7 @@ console.log('composition layout tests passed');
 
 // S01: Result-owned decoration continuity, independent of primary/result order.
 const { projectCompositionRecordIdentity } = await import('../../gbdraw/web/js/services/session-request.js');
-const { normalizeUserFacingError } = await import('../../gbdraw/web/js/services/error-normalization.js');
+const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
 const { captureDecorationContinuity } = await import('../../gbdraw/web/js/app/legend-layout/decoration-continuity.js');
 const continuityCanonical = (keys = ['a'], grouping = 'single') => ({
   renderRequest: { mode: 'linear', grouping, records: keys.map(recordKey => ({

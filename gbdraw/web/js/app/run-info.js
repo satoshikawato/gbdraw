@@ -1,5 +1,5 @@
 // @ts-check
-import { normalizeUserFacingError } from '../services/error-normalization.js';
+import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
   buildCircularTrackSlotSpec,
   parseCircularTrackSlotSpec
@@ -8,7 +8,7 @@ import {
   buildLinearTrackSlotSpec,
   parseLinearTrackSlotSpec
 } from './linear-track-slots.js';
-import { countGenBankRecords } from './genbank-header.js';
+import { countGenBankRecords } from '../services/genbank-header.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import { base64ToBytes } from '../services/byte-utils.js';
 
@@ -24,15 +24,20 @@ class SourceRecipeUnavailable extends Error {}
 
 const normalizePath = (value) => String(value ?? '').trim();
 
+/**
+ * @param {any} value
+ * @returns {value is Record<string, any>}
+ */
 const isPlainObject = (value) => Boolean(
   value && typeof value === 'object' && !Array.isArray(value)
 );
 
 const visibleBasename = (value) => {
-  const name = String(value || '')
+  // `split` always returns at least one element, so `pop` returns a string.
+  const name = /** @type {string} */ (String(value || '')
     .replace(/\\/g, '/')
     .split('/')
-    .pop()
+    .pop())
     .replace(/[\u0000-\u001f\u007f]/g, '')
     .trim();
   return name && name !== '.' && name !== '..' ? name : '';
@@ -47,13 +52,14 @@ const normalizeMetadataEntries = (fileMetadata) => {
   if (!fileMetadata) return [];
   if (fileMetadata instanceof Map) return Array.from(fileMetadata.entries());
   if (Array.isArray(fileMetadata)) {
-    return fileMetadata
+    // `filter(Boolean)` drops the `null` entries, which leaves only [path, entry] pairs.
+    return /** @type {any[][]} */ (fileMetadata
       .map((entry) => {
         if (Array.isArray(entry) && entry.length >= 2) return [entry[0], entry[1]];
         if (entry && typeof entry === 'object') return [entry.path, entry];
         return null;
       })
-      .filter(Boolean);
+      .filter(Boolean));
   }
   if (typeof fileMetadata === 'object') return Object.entries(fileMetadata);
   return [];
@@ -1572,6 +1578,9 @@ const requireExactRecords = async (renderRequest, files) => {
 
 // Export Feature Edits TSV (design Q4 6.4): request featureOverrides rows as the
 // Source recipe writes its --feature_override_table, or why no table carries them.
+/**
+ * @param {Pick<SourceRecipeOptions, 'resources' | 'readResourceRecordCount'> & { renderRequest: Record<string, any>, rows: any }} options
+ */
 export const buildFeatureOverrideTable = async ({
   renderRequest, resources, rows, readResourceRecordCount = null
 }) => {
@@ -1956,7 +1965,7 @@ export const buildRunInfo = ({
   if (losatComparisons) {
     notes.push(LOSAT_DATABASE_SCOPE_NOTE);
   }
-  if (exact?.helperFiles.length > 0) {
+  if (exact && exact.helperFiles.length > 0) {
     notes.push(
       `Exact replay references ${formatHelperFileList(exact.helperFiles)}, which is included in "Download reproducibility files".`
     );
@@ -1969,7 +1978,7 @@ export const buildRunInfo = ({
             : 'The Source recipe uses only the original source files.'
         )
       : 'The Source recipe is unavailable.',
-    exact?.helperFiles.length > 0
+    exact && exact.helperFiles.length > 0
       ? `Exact replay file: ${formatHelperFileList(exact.helperFiles)}.`
       : 'No Exact replay file is available.'
   ].join(' ');

@@ -199,6 +199,7 @@ export const disposePreviewFeatureSearchDomState = (appliedState) => {
   appliedState.activeId = '';
 };
 
+/** @param {FeatureElementIndex | null} [featureIndex] */
 const getFeatureRect = (svg, featureId, featureIndex = null) => {
   const elements = getFeatureElements(svg, featureId, featureIndex);
   let left = Infinity;
@@ -219,6 +220,7 @@ const getFeatureRect = (svg, featureId, featureIndex = null) => {
   return { left, top, right, bottom, width: right - left, height: bottom - top };
 };
 
+/** @param {FeatureElementIndex | null} [featureIndex] */
 export const getFeatureScreenCenter = (svg, featureId, featureIndex = null) => {
   const rect = getFeatureRect(svg, featureId, featureIndex);
   if (!rect) return null;

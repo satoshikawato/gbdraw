@@ -4,15 +4,15 @@ import {
   getFeatureElements,
   getFeatureIdentity
 } from './feature-editor/svg-actions.js';
-import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
+import { buildFeatureSequenceFastas } from '../services/feature-sequence-fasta.js';
 import {
   groupMetadataScopeLabel,
   normalizeGroupMetadataScope
-} from './losat-normalization.js';
+} from '../services/losat-normalization.js';
 import {
   isInternalProteinDisplayId,
   resolveDisplayProteinId
-} from './feature-utils.js';
+} from '../services/feature-utils.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import {
@@ -51,9 +51,11 @@ const indexFeatureIdentities = (entries, identityOf) => {
     for (const field of fields) {
       const status = identity[field];
       if (!status.supplied) continue;
-      const index = indexes.get(field);
+      // `fields` lists every key of `indexes`, so the lookup always finds a map.
+      const index = /** @type {Map<any, any[]>} */ (indexes.get(field));
       if (!index.has(status.value)) index.set(status.value, []);
-      index.get(status.value).push(entry);
+      // The line above stores a list under this value when none exists.
+      /** @type {any[]} */ (index.get(status.value)).push(entry);
     }
   }
   return (reference) => {
@@ -62,7 +64,8 @@ const indexFeatureIdentities = (entries, identityOf) => {
     for (const field of fields) {
       const status = reference[field];
       if (!status.supplied) continue;
-      const matches = indexes.get(field).get(status.value) || [];
+      // `fields` lists every key of `indexes`, so the lookup always finds a map.
+      const matches = /** @type {Map<any, any[]>} */ (indexes.get(field)).get(status.value) || [];
       if (matches.length < candidates.length) candidates = matches;
     }
     return candidates.filter((entry) => identityMatches(reference, identityOf(entry), { includeRendered: true }));

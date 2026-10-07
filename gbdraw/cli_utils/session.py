@@ -42,6 +42,7 @@ from gbdraw.session_io import (
     migrate_persisted_web_state_field_names,
     safe_embedded_filename,
     serialize_file_entry,
+    validate_current_display_drafts,
     validate_current_web_state_field_names,
     write_session_json,
 )
@@ -511,6 +512,7 @@ def render_canonical_session_if_present(
         sidecar_path: Path | None = None
         adjunct: dict[str, Any] | None = None
         web_file_inventory: dict[str, Any] | None = None
+        source_resources: dict[str, Any] | None = None
         if save_session or session_output:
             from gbdraw.api.requests import CircularBatchRequest
 
@@ -538,11 +540,14 @@ def render_canonical_session_if_present(
                 diagram_output_paths=diagram_request_output_paths(request),
                 overwrite=overwrite,
             )
+            source_session = document.to_dict()
+            source_resources = source_session["resources"]
             adjunct, web_file_inventory = _project_session_adjunct_for_current_write(
-                document.to_dict(),
+                source_session,
                 source_version=document.version,
             )
             validate_current_web_state_field_names(adjunct.get("config"))
+            validate_current_display_drafts(adjunct.get("config"))
 
         rendered = _render_request(
             request,
@@ -679,6 +684,7 @@ def render_canonical_session_if_present(
                     title=str(document.to_dict().get("title") or replay_prefix),
                     adjunct=adjunct,
                     web_file_inventory=web_file_inventory,
+                    resources=source_resources,
                 ),
                 overwrite=overwrite,
             )

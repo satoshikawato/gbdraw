@@ -667,20 +667,9 @@ def _validate_settings_only_session(session: Mapping[str, Any]) -> None:
             or not isinstance(config.get("adv"), Mapping) or not isinstance(ui, Mapping)
             or ui.get("mode") not in ("circular", "linear")):
         raise ValidationError("Settings-only Session requires an active Web configuration and mode.")
-    referenced: set[str] = set()
+    from .session_resources import canonical_resource_ids
 
-    def visit(value: Any) -> None:
-        if isinstance(value, Mapping):
-            if "resourceId" in value:
-                referenced.add(value["resourceId"])
-            for child in value.values():
-                visit(child)
-        elif isinstance(value, list):
-            for child in value:
-                visit(child)
-
-    visit(bindings)
-    if set(session["resources"]) - referenced:
+    if set(session["resources"]) - canonical_resource_ids(bindings):
         raise ValidationError("Settings-only Session contains an unbound resource.")
 
 
@@ -1484,6 +1473,62 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
         _validate_legacy_derived_evidence(derived_evidence)
 
 
+_PLACEMENT_LANE_MODES = {
+    "outward": "circular",
+    "inward": "circular",
+    "above": "linear",
+    "below": "linear",
+}
+
+
+def _migrate_session_feature_placements(placements: object) -> object:
+    """Scope the Session 41-44 placement drafts keyed by [recordKey, featureId].
+
+    Such a row reached every request with its record key, so a Main row is kept
+    for both modes and a lane row for the mode of its side. A row whose key does
+    not encode its identity is kept as is, and the draft check rejects it. This
+    is the twin of ``migrateSessionFeaturePlacements`` in the Web
+    ``feature-edit-migration.js``; ``tests/fixtures/feature-placement-migration.json``
+    pins both.
+    """
+
+    if not isinstance(placements, Mapping):
+        return placements
+    migrated: dict[str, Any] = {}
+    for key, row in placements.items():
+        fields = row if isinstance(row, Mapping) else {}
+        target = fields.get("placement")
+        target = target if isinstance(target, Mapping) else {}
+        encoded = json.dumps(
+            [fields.get("recordKey"), fields.get("biologicalFeatureId")],
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        modes: list[str] = []
+        if key == encoded:
+            if target.get("kind") == "main":
+                modes = ["circular", "linear"]
+            elif isinstance(target.get("side"), str) and target["side"] in _PLACEMENT_LANE_MODES:
+                modes = [_PLACEMENT_LANE_MODES[target["side"]]]
+        if not modes:
+            migrated[key] = row
+        for scope in modes:
+            scoped = {"scope": scope, **fields}
+            record_key = scoped.get("recordKey")
+            feature_id = scoped.get("biologicalFeatureId")
+            if (
+                isinstance(record_key, str)
+                and isinstance(feature_id, str)
+                and record_key.strip()
+                and feature_id.strip()
+                and "\0" not in record_key + feature_id
+            ):
+                migrated[_draft_identity_key(scope, record_key, feature_id)] = scoped
+            else:
+                migrated[key] = scoped
+    return migrated
+
+
 def migrate_persisted_web_state_field_names(config: object) -> object:
     """Project released Web config into the current shape without mutation."""
 
@@ -1557,6 +1602,10 @@ def migrate_persisted_web_state_field_names(config: object) -> object:
             migrated_losat = dict(losat)
             migrated_losat["blastp"] = migrated_blastp
             migrated["losat"] = migrated_losat
+    if "featurePlacementOverrides" in config:
+        migrated["featurePlacementOverrides"] = _migrate_session_feature_placements(
+            config["featurePlacementOverrides"]
+        )
     drafts = config.get("recordDisplayDrafts")
     if isinstance(drafts, list):
         migrated["recordDisplayDrafts"] = [
@@ -1614,6 +1663,16 @@ def validate_current_web_state_field_names(
             "Web state field losat.blastp.collinearMaxGeneGap is obsolete; "
             "use losat.blastp.collinearMaxUnitGap."
         )
+
+
+def validate_current_display_drafts(config: object) -> None:
+    """Reject Record display and Feature placement drafts the current writer would refuse.
+
+    The CLI runs this on a projected sidecar config before it renders, so a
+    failing sidecar writes no diagram.
+    """
+
+    _validate_display_placement_drafts({"config": config}, CURRENT_SESSION_VERSION)
 
 
 def normalize_current_session_artifacts(
@@ -2520,6 +2579,18 @@ def _embedded_entry_bytes(entry: Mapping[str, Any]) -> bytes | None:
     return None
 
 
+def _embedded_resource_bytes(entry: Mapping[str, Any]) -> bytes:
+    """The bytes of a resource descriptor, checked against its size and checksum."""
+
+    data = _embedded_entry_bytes(entry)
+    if data is None or len(data) != entry.get("size"):
+        raise ValidationError("Invalid embedded resource bytes or byte size.")
+    checksum = entry.get("checksum")
+    if checksum and hashlib.sha256(data).hexdigest() != str(checksum).lower().removeprefix("sha256:"):
+        raise ValidationError("Embedded resource checksum does not match.")
+    return data
+
+
 def _project_web_file_binding(
     resources: Mapping[str, Any],
     binding: Any,
@@ -2562,101 +2633,20 @@ def _attach_current_web_file_bindings(
     payload: dict[str, Any],
     files: Mapping[str, Any],
 ) -> None:
+    from .session_resources import SessionResourceTable
+
     resources_value = payload.get("resources")
     if not isinstance(resources_value, dict):
         raise ValidationError("Current session resources must be an object.")
     resources = resources_value
-    candidates: dict[int, list[str]] = {}
-    encoded: dict[tuple[int | None, str], str] = {}
-    decoded: dict[int, bytes] = {}
-    identities: dict[int, str] = {}
-    canonical_by_identity: dict[tuple[int, str], str] = {}
-    used_names = {safe_embedded_filename(entry.get("name")) for entry in resources.values()}
-    next_number = 1
-
-    def register(resource_id: str, entry: Mapping[str, Any]) -> None:
-        candidates.setdefault(entry["size"], []).append(resource_id)
-        if entry.get("encoding") == "base64":
-            encoded.setdefault((entry["size"], entry["data"]), resource_id)
-
-    for resource_id, resource in resources.items():
+    for resource_id in resources:
         if not isinstance(resource_id, str) or resource_id != resource_id.strip() or not resource_id:
             raise ValidationError("Canonical resource IDs must be unique non-empty strings.")
-        register(resource_id, resource)
-
-    def read(entry: Mapping[str, Any]) -> bytes:
-        key = id(entry)
-        if key not in decoded:
-            data = _embedded_entry_bytes(entry)
-            if data is None or len(data) != entry.get("size"):
-                raise ValidationError("Invalid embedded resource bytes or byte size.")
-            checksum = entry.get("checksum")
-            if checksum:
-                actual = hashlib.sha256(data).hexdigest()
-                if actual != str(checksum).lower().removeprefix("sha256:"):
-                    raise ValidationError("Embedded resource checksum does not match.")
-                identities[key] = actual
-            decoded[key] = data
-        return decoded[key]
-
-    def identity(entry: Mapping[str, Any]) -> str:
-        data = read(entry)
-        if id(entry) not in identities:
-            identities[id(entry)] = hashlib.sha256(data).hexdigest()
-        return identities[id(entry)]
+    table = SessionResourceTable(resources)
 
     def allocate_file(entry: Mapping[str, Any], preferred_id: str, metadata: Mapping[str, Any]) -> dict[str, Any]:
-        nonlocal next_number
-        size = entry.get("size")
-        existing = resources.get(preferred_id)
-        if entry.get("checksum") and entry is not existing and entry.get("checksum") != (existing or {}).get("checksum"):
-            read(entry)
-        resource_id = (
-            preferred_id if existing is not None and all(
-                entry.get(field) == existing.get(field) for field in ("encoding", "data", "size")
-            ) else encoded.get((size, entry["data"])) if entry.get("encoding") == "base64" else None
-        )
-        if resource_id is None and size in candidates:
-            digest = identity(entry)
-            resource_id = canonical_by_identity.get((size, digest))
-            pending = candidates[size]
-            while pending and resource_id is None:
-                candidate_id = pending.pop()
-                candidate_digest = identity(resources[candidate_id])
-                canonical_by_identity.setdefault((size, candidate_digest), candidate_id)
-                resource_id = canonical_by_identity.get((size, digest))
-        if resource_id is None:
-            # Validation is required for introduced payloads; retain encoded bytes.
-            data = read(entry)
-            safe_name = safe_embedded_filename(entry.get("name"), fallback="resource.dat")
-            if (re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", preferred_id)
-                    and preferred_id not in resources and safe_name == entry.get("name")
-                    and safe_name not in used_names):
-                resource_id, name = preferred_id, safe_name
-            else:
-                while True:
-                    candidate = f"resource-{next_number:04d}"
-                    next_number += 1
-                    name = f"{candidate}-{safe_name}"
-                    if candidate not in resources and name not in used_names:
-                        resource_id = candidate
-                        break
-            resources[resource_id] = {
-                **entry, "kind": str(entry.get("kind") or "web-file"), "name": name,
-                "size": len(data),
-                "type": str(entry.get("type") or "application/octet-stream"),
-                "encoding": "base64", "data": (
-                    entry["data"] if entry.get("encoding") != DEPTH_FILE_ENCODING
-                    else base64.b64encode(data).decode("ascii")
-                ),
-            }
-            decoded[id(resources[resource_id])] = data
-            if id(entry) in identities:
-                identities[id(resources[resource_id])] = identities[id(entry)]
-            used_names.add(name)
-            register(resource_id, resources[resource_id])
         return {
-            "resourceId": resource_id,
+            "resourceId": table.bind(entry, preferred_id=preferred_id),
             "name": str(metadata.get("name", "file")),
             "type": str(metadata.get("type") or ""),
             "lastModified": metadata.get("lastModified", 0),
@@ -2749,6 +2739,7 @@ def _attach_current_web_file_bindings(
         "linearSeqs": sequence_bindings,
         "linearComparisons": comparison_bindings,
     }
+    resources.update(table.descriptors())
     web_files_value = payload.get("webFiles")
     web_files = (
         _json_clone(dict(web_files_value))
@@ -4675,6 +4666,7 @@ __all__ = [
     "session_to_cli_args",
     "validate_session",
     "validate_current_session_artifacts",
+    "validate_current_display_drafts",
     "validate_current_web_state_field_names",
     "write_session_json",
 ]

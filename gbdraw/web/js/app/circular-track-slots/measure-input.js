@@ -3,7 +3,7 @@ import {
   readCircularMeasure,
   writeCircularMeasureValue,
   changeCircularMeasureUnit
-} from './measure-editor.js';
+} from '../../services/circular-track-measure.js';
 
 export const CircularMeasureInput = {
   template: '#circular-measure-input-template',

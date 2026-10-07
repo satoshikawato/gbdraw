@@ -1,7 +1,7 @@
 // @ts-check
 import { getSessionResourceSource } from '../services/file-content-cache.js';
-import { depthFileSlotsFromValue } from './depth-track-state.js';
-import { resolveDisambiguatedRecordSelection } from './record-options.js';
+import { depthFileSlotsFromValue } from '../services/depth-track-state.js';
+import { resolveDisambiguatedRecordSelection } from '../services/record-options.js';
 
 // A composite backing carries `descriptors` and no single `descriptor`.
 const sourceFileIdentity = (file) => (
@@ -50,6 +50,14 @@ export const isPristineLinearSource = (source) => {
   );
 };
 
+/**
+ * @typedef {{ allowed: false, reason: string, sourceIndex?: number }
+ *   | { allowed: true, intent: string, sourceIndex: number, insertionIndex: number,
+ *       sourceUid: any, recordCount: number, removedUids: any[], retainedSequences: any[] }
+ * } LinearSourceRemovalPlan
+ */
+
+/** @returns {LinearSourceRemovalPlan} */
 export const planLinearSourceRemoval = ({ sequences, sourceUid, intent }) => {
   const ordered = Array.from(sequences || []);
   const groups = groupLinearSourceRecords(ordered);

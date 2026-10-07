@@ -1,5 +1,5 @@
 // @ts-check
-import { interpolateColor, resolveColorToHex } from './color-utils.js';
+import { interpolateColor, resolveColorToHex } from '../utils/color-utils.js';
 
 export const CONSERVATION_SLOT_MANAGER = 'circular_conservation';
 
@@ -185,7 +185,7 @@ export const applyComparisonSequenceRecordLabel = ({ series, sourceFiles, file, 
   const entry = descriptor
     ? series.find((candidate) => candidate?.sourceKey === descriptor.sourceKey)
     : null;
-  if (!entry || String(entry.label ?? '').trim() !== descriptor.defaultLabel) return false;
+  if (!entry || !descriptor || String(entry.label ?? '').trim() !== descriptor.defaultLabel) return false;
   entry.label = label;
   return true;
 };

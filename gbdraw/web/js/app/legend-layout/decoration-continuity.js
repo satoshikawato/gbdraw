@@ -8,7 +8,7 @@ import {
   normalizeCanvasPadding
 } from './composition-actions.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
-import { diagnosticError } from '../../services/error-normalization.js';
+import { diagnosticError } from '../../utils/error-normalization.js';
 
 const fail = ({ field = 'decorations', inputOrdinal = 1, diagnosticReason = 'DECORATION_METADATA' } = {}) => {
   throw diagnosticError('DECORATION_CONTINUITY', { field, inputOrdinal, reason: diagnosticReason }, { stage: 'result-admission' });
@@ -67,7 +67,8 @@ const readDecorations = (svg) => {
 export const captureDecorationContinuity = ({ canonical, results = [], catalog, mountedSvg = null,
   selectedResultIndex = 0, parser = globalThis.DOMParser, projectRecordIdentity, canvasPadding = null } = /** @type {DecorationContinuityOptions} */ ({})) => {
   const padding = hasCanvasPadding(canvasPadding) ? normalizeCanvasPadding(canvasPadding) : null;
-  const snapshots = results.map((result, index) => {
+  // filter(Boolean) drops the null that `map` returns for a Result with no decoration offset.
+  const snapshots = /** @type {Array<{ deltas: Record<string, any>, identity: any, index: number }>} */ (results.map((result, index) => {
     let deltas;
     try {
       let svg = index === selectedResultIndex ? mountedSvg : null;
@@ -86,7 +87,7 @@ export const captureDecorationContinuity = ({ canonical, results = [], catalog, 
     }
     if (!Object.values(deltas).some(nonzero)) return null;
     return { deltas, identity: projectRecordIdentity(canonical, catalog?.items?.[index]?.recordKeys), index };
-  }).filter(Boolean);
+  }).filter(Boolean));
   const pad = padding ? (svg) => { applyCanvasPaddingToSvg(svg, padding); } : null;
   if (!snapshots.length) {
     return pad ? (_candidate, admission) => admission.catalog.items.map(() => pad) : null;

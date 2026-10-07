@@ -590,7 +590,7 @@ def _record_source_interval_fields(
 ) -> dict[str, str]:
     """Source coordinates of a match on cropped or reversed records (PD-OI-076).
 
-    Mirrors ``recordSourceInterval`` in ``app/record-source-coordinates.js``,
+    Mirrors ``recordSourceInterval`` in ``services/record-source-coordinates.js``,
     which fills the same fields for Interactive SVGs built without a catalog.
     """
 

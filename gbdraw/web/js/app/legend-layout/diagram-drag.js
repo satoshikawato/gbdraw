@@ -81,8 +81,11 @@ export const createDiagramDragActions = ({
   let activeDragOriginalTransforms = new Map();
   let activeLengthBarOffsetStart = { x: 0, y: 0 };
   let activePlotTitleOffsetStart = { x: 0, y: 0 };
+  /** @type {number | null} */
   let diagramDragFrameId = null;
+  /** @type {{ x: number, y: number } | null} */
   let pendingDiagramPointer = null;
+  /** @type {Promise<any> | null} */
   let diagramDragTxPromise = null;
 
   const isLayoutRepositionModeEnabled = () => Boolean(layoutRepositionMode?.value);
@@ -226,7 +229,8 @@ export const createDiagramDragActions = ({
     }
     const binding = bindCompositionMetadata(svg);
     const nextPlotTitleGroup = binding.title.targets[0] || null;
-    if (!nextPlotTitleGroup) {
+    if (!nextPlotTitleGroup || !binding.metadata.title) {
+      // bindRole fails on a title target without metadata, so the metadata check never differs.
       clearPlotTitleState();
       return;
     }

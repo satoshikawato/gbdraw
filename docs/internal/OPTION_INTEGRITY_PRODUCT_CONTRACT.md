@@ -5,7 +5,7 @@ Status: active Product authority
 ## Authority metadata
 
 - Contract ID: `OIPC`
-- Contract revision: `32`
+- Contract revision: `33`
 - Product Decision Owner: `satoshikawato`
 - Decision date: `2026-08-28`
 - Decision source: explicit Product Decision Owner selection of one (`1`) after
@@ -36,7 +36,8 @@ Status: active Product authority
   `PD-OI-066`, `PD-OI-067`, `PD-OI-068`, `PD-OI-069`, `PD-OI-070`,
   `PD-OI-071`, `PD-OI-072`, `PD-OI-073`, `PD-OI-074`, `PD-OI-075`,
   `PD-OI-076`, `PD-OI-077`, `PD-OI-078`, `PD-OI-079`, `PD-OI-080`,
-  `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, and `PD-OI-085`
+  `PD-OI-081`, `PD-OI-082`, `PD-OI-083`, `PD-OI-084`, `PD-OI-085`, and
+  `PD-OI-086`
 - Revision 3 addition: `PD-OI-018`, accepted by `satoshikawato` on
   `2026-09-13` after confirming the complete record/search outcome, no feature
   retirement, and the runtime/memory cost of complete comparisons. The initial
@@ -314,6 +315,31 @@ Status: active Product authority
     their scope. This change is a static Product Contract co-change: the
     runtime, tests, and documentation that implement it are in the same pull
     request, and the Review is `REQUIRED`.
+- Revision 33 changes: `PD-OI-086` is added
+  (`A / ALL-DIAGRAM-SETTINGS-PER-MODE`), from the Product Decision Owner
+  `satoshikawato`'s reply of `2026-10-07` for OV-80, OV-82, and related
+  findings (settings and edits made in one diagram mode changed or failed the
+  other mode's diagram and Generate).
+  - The question, asked with the full receipt text recorded below: 「上の PD-OI-086 の文面を、このまま Product Contract に記録してよいですか？（Contract だけの PR として先に入れます。Review が必要で、自動 merge はしません）」
+  - The Owner's reply: 「OK、この文面で」
+  - The Owner approved the receipt text as written. The receipt text
+    incorporates the Owner's earlier answers of the same date.
+  - No other record changes. `PD-OI-061`, `PD-OI-062`, `PD-OI-063`, and
+    `PD-OI-084` retain their scope within each mode. `PD-OI-063` names no
+    mode and is read per mode: each mode carries its own Legend order, as
+    `PD-OI-052` already matches decoration deltas by mode. `PD-OI-002`
+    retains its scope within Linear. `PD-OI-044`, `PD-OI-066`, and
+    `PD-OI-070` are cited by the receipt and retain their scope.
+  - Outside this Contract, the receipt retires the scope of GUI remediation
+    S00 decision 2 of `2026-09-29`
+    ([`S00.md`](./gui-remediation-20260928/results/S00.md) section 11.4),
+    which made only `plot_title`, `plot_title_font_size`, and `def_font_size`
+    per mode. The receipt keeps the rule of S00 decisions 1 and 2 for old
+    Session values that were per mode.
+  - Earlier decisions retain their scope. This authority-only amendment
+    contains no runtime; dependent runtime (the OV-80 and OV-82
+    implementation) requires it merged into its base, and the Review is
+    `REQUIRED`.
 - Records remaining `EVIDENCE_REQUIRED`: none
 - Excluded records: none
 
@@ -3945,6 +3971,58 @@ Decision date: 2026-10-04
   "acceptedResidualRisk": "予約したまま Generate しないと、表示中の Result と設定がずれたままになる。既存の pending Generate 通知と popup での予約値表示で補う。",
   "owner": "satoshikawato",
   "decisionDate": "2026-10-04"
+}
+```
+
+### PD-OI-086: Mode-scoped diagram settings and edits
+
+- Concern key: `web.mode.scoped-settings`
+- Scenario revision: `1`
+- Status: `ACCEPTED`
+- Selected outcome: `A / ALL-DIAGRAM-SETTINGS-PER-MODE`
+- Normative outcome: exactly the complete approved `PRODUCT_DECISION` receipt
+  and its nine-field JSON representation below.
+- Decision source: the Owner reply of `2026-10-07` quoted verbatim in the
+  Revision 33 entry above. The Owner approved the receipt text below as
+  written ("OK、この文面で"). The receipt and JSON below reproduce all nine
+  fields without translation or additional terms. This record does not
+  supersede another decision. `PD-OI-061`, `PD-OI-062`, `PD-OI-063`, and
+  `PD-OI-084` retain their scope within each mode, with `PD-OI-063` read per
+  mode, and `PD-OI-002` within Linear. The Revision 33 entry states these
+  readings and the scope of GUI remediation S00 decision 2 that the receipt
+  retires outside this Contract. Dependent runtime requires this authority
+  merged into its base; this amendment supplies no runtime acceptance
+  evidence.
+- Receipt SHA-256 (UTF-8, excluding the final newline):
+  `ee7ef6a59d18e149670340a3b2aac94c76f036e3f72029b74767a3dc30d9dd92`.
+- Acceptance contracts: `OIC-004`, `OIC-027`. These obligations and the
+  complete selected outcome are jointly required; their citation does not
+  claim completed dependent-runtime checks.
+
+```text
+PRODUCT_DECISION
+Concern: web.mode.scoped-settings
+Scenario revision: 1
+Choice: A / ALL-DIAGRAM-SETTINGS-PER-MODE
+Rationale: Circular と Linear で、図の設定と編集をすべて別々に持つ。片方のモードで行った設定や編集が、もう片方のモードの図や Generate を変えたり失敗させたりしないようにする（OV-80、OV-82 ほか）。v0.15.0 の drawing はこの形をそのまま引き継ぐ。
+Must preserve: 次のものは Circular と Linear で別々に持ち、モードを何度切り替えても残る。切り替えは他方のモードの値を消さず、写さない。図の設定（Depth、GC content と GC skew、ラベル、軸と目盛り、フォント、線、トラック、比較の閾値、LOSAT の検索の設定を含むすべての設定）、palette と色、色ルール（「この feature だけ」の色を含む）、qualifier priority、ラベルの表と filter、注釈セット、凡例の編集（色・線・名前・削除・追加・順序）、feature ごとの編集（表示、ラベル、塗り、線、配置）、record の表示、canvas の余白、画面にない設定の上書き。両方のモードで共通のままのものは、入力ファイル（今までどおりモードごと）、LOSAT の結果の cache、LOSAT の実行方法とスレッド数、Auto Reflow・PNG DPI・palette の Instant Preview などのアプリの設定、Session の title。初めて使うモードは既定値で始まり、凡例と feature の編集はない。凡例の編集は表示中の Result のモードの値を変える。Show Depth はそのモードに最初の Depth ファイルが入ると On、最後のファイルがなくなると Off になり、他方のモードは変わらない。Generate、即時の編集、Session の保存と読み込み、export は、そのモードの値だけを使う（PD-OI-066）。PD-OI-061、062、063、084 は各モードの中で今までどおり。PD-OI-002 の LOSATP の上限は Linear の中で今までどおり。Undo/Redo は今までどおり 1 つの履歴で、モードの切り替えも 1 step。Reset Settings は今までどおり両方のモードを既定に戻し、ファイル、Depth の割り当て、Result は残す（PD-OI-070）。Session は両方のモードの値を保存する（Session 46）。以前の Session（27〜44）は Python を起動せずに読み込み（PD-OI-044）、次の規則で両方のモードに分ける。両モード共通だった設定は両方のモードに写す。モードごとだった値（mode profile、片方のモード専用の設定、Circular と Linear で分かれていた設定、モード付きの行）はそのモードに入れ、mode profile にない他方のモードの値は既定値にする（S00 の判断 1・2 と同じ）。Show Depth はそのモードに Depth ファイルがあるときだけ On にする。凡例の編集と、保存された Result に結びついた feature ごとの編集は、その Result のモードだけに入れる。record を選んだ注釈は、その record を選んだモードだけに入れる。保存された値は失わない（OIPC-C05、C06、OIC-004）。CLI と Python API の描画と再現は今までどおり。
+May retire: 図の設定と編集が両方のモードで共有される動作と、S00 の判断 2 の「モードごとにするのは title と font だけ」という範囲。モードの切り替えで設定を入れ替える仕組み（mode profile）と、他方のモードの Show Depth を Off にする動作。あるモードの凡例・feature の編集・色ルール・注釈が、別のモードの Generate に持ち込まれる動作。開発版だけの Session 45 の読み込み。
+Accepted residual risk: 両方のモードで同じ設定や色にしたいときは、両方のモードで設定する（コピーする操作は v0.15.0 の drawing で入る）。以前の Session から両方のモードに写した値（Depth の最小・最大、window など）が、他方のモードのデータに合わないことがある。開発版で保存した Session 45 は読み込めない。変更が大きく、0.14.0 のリリース前の検証の期間が短くなる。
+Owner: satoshikawato
+Decision date: 2026-10-07
+```
+
+```json
+{
+  "concern": "web.mode.scoped-settings",
+  "scenarioRevision": 1,
+  "choice": "A / ALL-DIAGRAM-SETTINGS-PER-MODE",
+  "rationale": "Circular と Linear で、図の設定と編集をすべて別々に持つ。片方のモードで行った設定や編集が、もう片方のモードの図や Generate を変えたり失敗させたりしないようにする（OV-80、OV-82 ほか）。v0.15.0 の drawing はこの形をそのまま引き継ぐ。",
+  "mustPreserve": "次のものは Circular と Linear で別々に持ち、モードを何度切り替えても残る。切り替えは他方のモードの値を消さず、写さない。図の設定（Depth、GC content と GC skew、ラベル、軸と目盛り、フォント、線、トラック、比較の閾値、LOSAT の検索の設定を含むすべての設定）、palette と色、色ルール（「この feature だけ」の色を含む）、qualifier priority、ラベルの表と filter、注釈セット、凡例の編集（色・線・名前・削除・追加・順序）、feature ごとの編集（表示、ラベル、塗り、線、配置）、record の表示、canvas の余白、画面にない設定の上書き。両方のモードで共通のままのものは、入力ファイル（今までどおりモードごと）、LOSAT の結果の cache、LOSAT の実行方法とスレッド数、Auto Reflow・PNG DPI・palette の Instant Preview などのアプリの設定、Session の title。初めて使うモードは既定値で始まり、凡例と feature の編集はない。凡例の編集は表示中の Result のモードの値を変える。Show Depth はそのモードに最初の Depth ファイルが入ると On、最後のファイルがなくなると Off になり、他方のモードは変わらない。Generate、即時の編集、Session の保存と読み込み、export は、そのモードの値だけを使う（PD-OI-066）。PD-OI-061、062、063、084 は各モードの中で今までどおり。PD-OI-002 の LOSATP の上限は Linear の中で今までどおり。Undo/Redo は今までどおり 1 つの履歴で、モードの切り替えも 1 step。Reset Settings は今までどおり両方のモードを既定に戻し、ファイル、Depth の割り当て、Result は残す（PD-OI-070）。Session は両方のモードの値を保存する（Session 46）。以前の Session（27〜44）は Python を起動せずに読み込み（PD-OI-044）、次の規則で両方のモードに分ける。両モード共通だった設定は両方のモードに写す。モードごとだった値（mode profile、片方のモード専用の設定、Circular と Linear で分かれていた設定、モード付きの行）はそのモードに入れ、mode profile にない他方のモードの値は既定値にする（S00 の判断 1・2 と同じ）。Show Depth はそのモードに Depth ファイルがあるときだけ On にする。凡例の編集と、保存された Result に結びついた feature ごとの編集は、その Result のモードだけに入れる。record を選んだ注釈は、その record を選んだモードだけに入れる。保存された値は失わない（OIPC-C05、C06、OIC-004）。CLI と Python API の描画と再現は今までどおり。",
+  "mayRetire": "図の設定と編集が両方のモードで共有される動作と、S00 の判断 2 の「モードごとにするのは title と font だけ」という範囲。モードの切り替えで設定を入れ替える仕組み（mode profile）と、他方のモードの Show Depth を Off にする動作。あるモードの凡例・feature の編集・色ルール・注釈が、別のモードの Generate に持ち込まれる動作。開発版だけの Session 45 の読み込み。",
+  "acceptedResidualRisk": "両方のモードで同じ設定や色にしたいときは、両方のモードで設定する（コピーする操作は v0.15.0 の drawing で入る）。以前の Session から両方のモードに写した値（Depth の最小・最大、window など）が、他方のモードのデータに合わないことがある。開発版で保存した Session 45 は読み込めない。変更が大きく、0.14.0 のリリース前の検証の期間が短くなる。",
+  "owner": "satoshikawato",
+  "decisionDate": "2026-10-07"
 }
 ```
 

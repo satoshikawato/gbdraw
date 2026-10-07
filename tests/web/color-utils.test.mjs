@@ -9,7 +9,7 @@ import {
   resolveCollinearMatchColor,
   resolvePairwiseLegendGradientColorKeys,
   toNativeColorInputValue
-} from '../../gbdraw/web/js/app/color-utils.js';
+} from '../../gbdraw/web/js/utils/color-utils.js';
 
 assert.equal(colorValueMode(null), 'auto');
 assert.equal(colorValueMode(''), 'auto');

@@ -17,7 +17,7 @@ const {
   SPECIFIC_COLOR_FILE_OWNER,
   buildLegendIntents,
   diffLegendIntents
-} = await import(pathToFileURL(join(tempRoot, 'app', 'specific-color-rules.js')));
+} = await import(pathToFileURL(join(tempRoot, 'services', 'specific-color-rules.js')));
 const {
   COMPARISON_LEGEND_SELECTOR,
   PAIRWISE_LEGEND_SELECTOR,

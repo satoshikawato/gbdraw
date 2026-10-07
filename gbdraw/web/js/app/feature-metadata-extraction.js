@@ -1,6 +1,6 @@
 // @ts-check
 import { runFeatureExtraction } from '../services/diagram-generation.js';
-import { diagnosticError } from '../services/error-normalization.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { cloneFileBytesForTransfer } from '../services/file-content-cache.js';
 
@@ -9,7 +9,9 @@ const featureExtractionCache = new WeakMap();
 const featureExtractionFileIds = new WeakMap();
 let nextFeatureExtractionFileId = 1;
 
-const getNow = () => (globalThis.performance?.now ? performance.now() : Date.now());
+// Some hosts have no `performance.now`.
+const getNow = () => (/** @type {{ now?: () => number } | undefined} */ (globalThis.performance)?.now
+  ? performance.now() : Date.now());
 
 const normalizeRecordSelectorText = (value) => {
   const normalized = String(value ?? '').trim();
@@ -45,6 +47,13 @@ export const cloneFeatureExtractionData = (data) => ({
   error: data?.error
 });
 
+/**
+ * @param {{
+ *   regionSpec: unknown, recordSelector: unknown, reverseFlag: unknown, selectedFeatures: unknown,
+ *   featureVisibility: unknown, format?: string, mode?: string, fastaFile?: File | null,
+ *   includeBiologicalFeatures?: boolean
+ * }} options
+ */
 export const buildFeatureExtractionCacheKey = ({
   regionSpec,
   recordSelector,
@@ -86,6 +95,27 @@ export const setCachedFeatureExtraction = (file, key, value) => {
   byKey.set(key, cloneFeatureExtractionData(value));
 };
 
+/**
+ * @typedef {object} FeatureExtractionReadOptions
+ * @property {string} path
+ * @property {File | null | undefined} file
+ * @property {string} [format]
+ * @property {string | null} [fastaPath]
+ * @property {File | null} [fastaFile]
+ * @property {string} [mode]
+ * @property {string | null | undefined} [regionSpec]
+ * @property {string | null | undefined} [recordSelector]
+ * @property {boolean} [reverseFlag]
+ * @property {string[] | null} [selectedFeatures]
+ * @property {boolean} [includeBiologicalFeatures]
+ * @property {string | null} [featureVisibilityTablePath]
+ * @property {string} [featureVisibilityTsv]
+ * @property {{ label: string, ms: number, details: string }[]} [timingEntries]
+ * @property {string} [timingLabel]
+ * @property {(request: Record<string, any>) => Promise<any>} [runFeatureExtractionImpl]
+ */
+
+/** @param {FeatureExtractionReadOptions} options */
 export const readFeatureExtractionData = async ({
   path,
   file,
@@ -266,6 +296,26 @@ const extractionRegionSpec = (regionSpec) => {
   return regionSpec.displayFile || regionSpec.file || null;
 };
 
+/**
+ * @typedef {object} ExtractFeatureMetadataOptions
+ * @property {string} mode
+ * @property {string} cInputType
+ * @property {string} lInputType
+ * @property {File | null} [circularFile]
+ * @property {File | null} [circularFastaFile]
+ * @property {Record<string, any>[]} [linearSeqs]
+ * @property {Array<string | { cli?: string, file?: string, displayFile?: string } | null> | null} [regionSpecs]
+ * @property {string[] | null} [recordSelectors]
+ * @property {boolean[] | null} [reverseFlags]
+ * @property {string | null} [featureVisibilityTablePath]
+ * @property {string} [featureVisibilityTsv]
+ * @property {string[] | null} [selectedFeatures]
+ * @property {(feature: any, inputIndex?: number) => any} [enrichFeature]
+ * @property {typeof readFeatureExtractionData} [readFeatureExtractionDataImpl]
+ * @property {{ label: string, ms: number, details: string }[]} [timingEntries]
+ */
+
+/** @param {ExtractFeatureMetadataOptions} options */
 export const extractFeatureMetadataForPreview = async ({
   mode,
   cInputType,

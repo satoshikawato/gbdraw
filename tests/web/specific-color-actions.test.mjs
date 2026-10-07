@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor/rule-actions.js';
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
 import { createLegendManager } from '../../gbdraw/web/js/app/legend.js';
-import { diffLegendIntents } from '../../gbdraw/web/js/app/specific-color-rules.js';
+import { diffLegendIntents } from '../../gbdraw/web/js/services/specific-color-rules.js';
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 
 const setup = (evaluate = evaluatePythonRules) => {

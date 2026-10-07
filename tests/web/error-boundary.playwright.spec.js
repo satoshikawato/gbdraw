@@ -10,7 +10,7 @@ test('real Python adapters retain causes through one lazy Worker and successful 
   expect((await getDiagramWorkerActivity(page)).constructions).toBe(0);
   const observations = await page.evaluate(async () => {
     const service = await import('/gbdraw/web/js/services/diagram-generation.js');
-    const { normalizeUserFacingError } = await import('/gbdraw/web/js/services/error-normalization.js');
+    const { normalizeUserFacingError } = await import('/gbdraw/web/js/utils/error-normalization.js');
     const pattern = '😀[PRIVATE_PATTERN_SENTINEL';
     const failures = [];
     for (const kind of ['color', 'label']) {

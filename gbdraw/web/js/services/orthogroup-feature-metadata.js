@@ -1,5 +1,5 @@
 // @ts-check
-import { normalizeGroupMetadataScope } from '../app/losat-normalization.js';
+import { normalizeGroupMetadataScope } from './losat-normalization.js';
 import {
   RECORD_INDEX_KEYS,
   RENDERED_FEATURE_ID_KEYS,
@@ -481,6 +481,11 @@ const resolveOrthogroupFeatureMetadata = (
     : null;
 };
 
+/**
+ * @param {OrthogroupFeatureIndex} index
+ * @param {any} feature
+ * @param {number | null} [fallbackRecordIndex]
+ */
 export const enrichFeatureWithOrthogroup = (
   index,
   feature,

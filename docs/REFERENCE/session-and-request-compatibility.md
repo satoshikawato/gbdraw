@@ -247,9 +247,11 @@ options may replace their saved counterparts. Other diagram options are
 rejected because they would combine persisted and new settings ambiguously.
 
 With `--session_output`, canonical CLI replay writes the regenerated Result and
-preserves the editable draft's component bytes, order and File metadata. Resource
-IDs may change when the output table is rebuilt. Explicit Web bindings, including
-null and empty lists, take precedence over historical direct-source lists.
+preserves the editable draft's component bytes, order and File metadata. A
+resource whose bytes are unchanged keeps its ID and file name; a resource whose
+bytes changed is stored under a new ID, and resources that nothing names any
+more are dropped. Explicit Web bindings, including null and empty lists, take
+precedence over historical direct-source lists.
 
 In Python, `render_session()` is the persisted-session entry point.
 `load_session_document()` validates a document, and `materialize_session()`

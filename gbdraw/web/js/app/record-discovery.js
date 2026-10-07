@@ -3,7 +3,7 @@ import {
   DIAGRAM_HELPER_OPERATIONS,
   runDiagramHelperOperation
 } from '../services/diagram-generation.js';
-import { scanGenBankHeader } from './genbank-header.js';
+import { scanGenBankHeader } from '../services/genbank-header.js';
 import {
   bytesToText,
   cloneFileBytesForTransfer,
@@ -82,6 +82,7 @@ const declineToPythonReader = (subject) => {
   throw new Error(`${subject} needs the Python reader.`);
 };
 
+/** @param {ReturnType<typeof scanGenBankHeader>} [header] */
 export const extractGenBankMetadata = (chunk, header = undefined) => {
   const text = String(chunk || '');
   const sourceMatch = text.match(/^ {5}source\s+[\s\S]*?(?=^ {5}[a-z]|\/\/)/mi);
@@ -165,6 +166,7 @@ const parseGenBankRecordText = (text) => {
 // or an entry without an ID is left to the Python reader.
 const fastaEntries = (lines) => {
   const entries = [];
+  /** @type {{ id: string, length: number } | null} */
   let current = null;
   lines.forEach((line) => {
     if (line.startsWith('>')) {

@@ -1,16 +1,16 @@
 // @ts-check
 /**
  * @import { AnnotationRecordCatalog } from './annotations/record-catalog.js'
- * @import { AnnotationSet } from './annotations/state.js'
+ * @import { AnnotationSet } from '../services/annotation-state.js'
  */
-import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets, uniqueAnnotationSetId } from './annotations/state.js';
+import { createAnnotationSet, createDefaultAnnotationStyle, normalizeAnnotationSets, uniqueAnnotationSetId } from '../services/annotation-state.js';
 import { coordinateTarget, featureTarget, featureTargetsFromSelection } from './annotations/target-actions.js';
 import { encodeAnnotationTableWithNotice, parseAnnotationTableWithNotice } from './annotations/table-codec.js';
 import {
   createAnnotationRecordSelector,
   reconcileAnnotationRecordBindings
 } from './annotations/record-selector.js';
-import { getFeatureCaption, getFeatureColorRuleHash } from './feature-utils.js';
+import { getFeatureCaption, getFeatureColorRuleHash } from '../services/feature-utils.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { downloadTextFile } from '../services/text-download.js';
 

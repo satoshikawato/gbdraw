@@ -1,9 +1,9 @@
 // @ts-check
-import { diagnosticError, normalizeUserFacingError } from '../../services/error-normalization.js';
+import { diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
 import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride } from '../feature-visibility.js';
-import { parseLabelOverrideTsv, serializeLabelOverrideRows } from './label-override-table.js';
-import { escapeRegexLiteral } from '../feature-selector.js';
+import { parseLabelOverrideTsv, serializeLabelOverrideRows } from '../../services/label-override-table.js';
+import { escapeRegexLiteral } from '../../services/feature-selector.js';
 import {
   featureIdentityKeyOf,
   normalizeFeatureOverrideLabelText,
@@ -72,7 +72,8 @@ export const requireUniqueEditableLabelBindings = (
   const counts = new Map(Array.from(required.keys(), (key) => [key, 0]));
   Array.from(labelElements || []).forEach((element) => {
     const key = normalizeKeyToken(element?.getAttribute?.(LABEL_FEATURE_ID_ATTRIBUTE));
-    if (counts.has(key)) counts.set(key, counts.get(key) + 1);
+    // `counts.has(key)` was just checked, so `get` returns a number.
+    if (counts.has(key)) counts.set(key, /** @type {number} */ (counts.get(key)) + 1);
   });
   const failing = (predicate) => Array.from(counts).filter(([, count]) => predicate(count))
     .map(([key]) => required.get(key));
@@ -201,7 +202,8 @@ const getElementCenter = (svg, element) => {
   } catch {
     if (element?.tagName?.toLowerCase() === 'text') {
       const anchor = getEmbeddedLabelAnchor(svg, element);
-      if (isFinitePoint(anchor)) return anchor;
+      // isFinitePoint is true only for a non-null point.
+      if (isFinitePoint(anchor)) return /** @type {{ x: number, y: number }} */ (anchor);
     }
     return { x: 0, y: 0 };
   }
@@ -240,6 +242,7 @@ const getPhasedCircularFeatureLine = (svg, textEl) => {
 
 const getCircularFeatureAnchor = (svg, textEl) => {
   const inLabelsGroup = Boolean(textEl.closest('g[id="labels"], g[id^="labels_"]'));
+  /** @type {Element | null} */
   let featureLine = null;
   if (inLabelsGroup) {
     const prev = textEl.previousElementSibling;
@@ -1019,6 +1022,7 @@ export const createFeatureLabelActions = ({
     return confirmLabelOn({ featureId, feature, diagramOptions, blocker, apply });
   };
 
+  /** @type {((choice: string) => void) | null} */
   let answerLabelOnDialog = null;
   const askLabelOn = (reason, feature) => {
     answerLabelOnDialog?.('cancel');

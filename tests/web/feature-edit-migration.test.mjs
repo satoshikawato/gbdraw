@@ -9,10 +9,11 @@ import { gunzipSync } from 'node:zlib';
 import {
   migrateRenderedIdFeatureEdits,
   migrateSessionAnnotationTargets,
-  migrateSessionFeatureEdits
+  migrateSessionFeatureEdits,
+  migrateSessionFeaturePlacements
 } from '../../gbdraw/web/js/services/feature-edit-migration.js';
 import { canonicalFeatureOverrides } from '../../gbdraw/web/js/services/feature-placement.js';
-import { annotationOptionsPayload, normalizeAnnotationSets } from '../../gbdraw/web/js/app/annotations/state.js';
+import { annotationOptionsPayload, normalizeAnnotationSets } from '../../gbdraw/web/js/services/annotation-state.js';
 
 const fixture = (name) => JSON.parse(gunzipSync(readFileSync(new URL(`../fixtures/sessions/${name}`, import.meta.url))));
 // Migrated rows name the mode of the Session's diagram (R2).
@@ -409,4 +410,10 @@ test('R-7: the Session 44 fixture moves only the annotation whose feature is cer
     saved[1].target,
     saved[2].target
   ]);
+});
+
+// The same vector pins the Python reader (tests/test_session_compat.py).
+test('Session 41-44 placement drafts migrate to the vector both readers share', () => {
+  const vector = JSON.parse(readFileSync(new URL('../fixtures/feature-placement-migration.json', import.meta.url), 'utf8'));
+  assert.deepEqual(migrateSessionFeaturePlacements(structuredClone(vector.input)), vector.expected);
 });

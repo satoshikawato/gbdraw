@@ -1391,7 +1391,7 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
         / "workers"
         / "losat-wasi-thread-worker.js",
         build_root / "gbdraw" / "web" / "js" / "app" / "record-discovery.js",
-        build_root / "gbdraw" / "web" / "js" / "app" / "record-options.js",
+        build_root / "gbdraw" / "web" / "js" / "services" / "record-options.js",
         build_root / "gbdraw" / "web" / "js" / "app" / "linear-record-selector.js",
         build_root / "gbdraw" / "web" / "js" / "app" / "right-drawer.js",
         build_root
@@ -1491,7 +1491,7 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
         assert browser_wheels == [browser_wheel_member]
         assert gallery_members == ["gbdraw/web/gallery/palettes/palettes.json"]
         assert "gbdraw/web/js/app/record-discovery.js" in outer_names
-        assert "gbdraw/web/js/app/record-options.js" in outer_names
+        assert "gbdraw/web/js/services/record-options.js" in outer_names
         assert "gbdraw/web/js/app/linear-record-selector.js" in outer_names
         assert "gbdraw/web/js/app/right-drawer.js" in outer_names
         assert "gbdraw/web/js/services/canonical-comparisons.js" in outer_names
