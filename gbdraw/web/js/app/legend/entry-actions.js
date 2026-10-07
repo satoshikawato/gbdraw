@@ -8,7 +8,8 @@ import {
   isLegendOrderEdited,
   mountedLegendRowFeatureIds,
   orderLegendEntries,
-  parseTransformXY
+  parseTransformXY,
+  setsFeatureStroke
 } from './utils.js';
 import { parseCompositionMetadata } from '../legend-layout/composition-actions.js';
 import {
@@ -16,6 +17,8 @@ import {
   legendRowRules,
   SPECIFIC_COLOR_FILE_OWNER
 } from '../../services/specific-color-rules.js';
+import { getFeatureElementIndex, getFeatureFillElements } from '../../services/feature-dom.js';
+import { featureOverrideKey } from '../../services/feature-override-identity.js';
 
 const normalizedColor = (value) => {
   const resolved = String(resolveColorToHex(String(value || '').trim()) || value || '').trim().toLowerCase();
@@ -1297,9 +1300,9 @@ export const createLegendEntryActions = ({
   // removed copy of (after a Session load, or a row removed before the page
   // opened). Python strokes a row by its kind: the rows of drawn features
   // with the feature block stroke, the GC and Depth rows with their track's
-  // stroke. A drawn row of the same kind shows it; else, for a feature row,
-  // the renderer's feature stroke (`originalSvgStroke`). Null keeps the add
-  // path's stroke, the first row's (OV-121).
+  // stroke. A drawn row of the same kind shows it; else, for a feature row, a
+  // block of a feature the row colors shows the block stroke. Null keeps the
+  // add path's stroke, the first row's (OV-121).
   /**
    * @param {SVGSVGElement} svg
    * @param {Element} group
@@ -1317,8 +1320,35 @@ export const createLegendEntryActions = ({
       return key !== caption && !returning.has(key) && drawsFeatures(key) === featureRow;
     });
     if (peer) return rendererRowStroke(peer);
-    const renderer = originalSvgStroke.value;
-    return featureRow && renderer?.color != null ? { color: renderer.color, width: renderer.width } : null;
+    return featureRow ? featureBlockStroke(svg, caption) : null;
+  };
+
+  // Python's feature block stroke, as a block of a feature row `caption`
+  // colors draws it: not an automatic underlay (drawn without a stroke), and
+  // not a feature or row with a stroke edit, unless the edit kept the drawn
+  // original. Null when no such block is drawn.
+  /**
+   * @param {SVGSVGElement} svg
+   * @param {string} caption
+   * @returns {{ color: string | number | null, width: string | number | null } | null}
+   */
+  const featureBlockStroke = (svg, caption) => {
+    const rowEdit = legendStrokeOverrides[caption];
+    if (rowEdit && Object.prototype.hasOwnProperty.call(rowEdit, 'originalStrokeColor')) {
+      return { color: rowEdit.originalStrokeColor, width: rowEdit.originalStrokeWidth ?? null };
+    }
+    if (setsFeatureStroke(rowEdit)) return null;
+    const featureEdits = state.featureStrokeOverrides || {};
+    const ownStrokeIds = (state.extractedFeatures?.value || [])
+      .filter((/** @type {Record<string, any>} */ feature) => setsFeatureStroke(featureEdits[featureOverrideKey(feature)]))
+      .map((/** @type {Record<string, any>} */ feature) => String(feature?.svg_id || '').trim());
+    const featureIndex = getFeatureElementIndex(svg);
+    for (const id of mountedLegendRowFeatureIds(svg, caption, legendEntries.value || [], { ownStrokeIds })) {
+      const block = getFeatureFillElements(svg, id, featureIndex)
+        .find((element) => element.getAttribute('data-gbdraw-auto-feature-underlay') !== 'true');
+      if (block) return { color: block.getAttribute('stroke'), width: block.getAttribute('stroke-width') };
+    }
+    return null;
   };
 
   // OV-154: Restore and Restore all in the Legend editor. A restored row leaves
