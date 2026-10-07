@@ -549,20 +549,27 @@ for (const continuation of ['disabled', 'inactive biological']) {
     if (continuation === 'disabled') await page.evaluate(() => {
       window.__GBDRAW_APP__.adv.circular_track_slots.find(row => row.id === 'gc_content').enabled = false;
     });
+    // E1: each mode keeps its own Result. The Circular Result and its committed
+    // request stay with Circular; Linear, which has no Result, shows none.
+    const circular = await snapshot(page);
     if (continuation === 'inactive biological') await page.getByRole('button', { name: 'Linear', exact: true }).click();
     const before = await snapshot(page);
+    if (continuation === 'inactive biological') {
+      expect(before.request).toBeNull();
+      expect(before.resultHashes).toEqual([]);
+    }
     const saved = await save(page, testInfo, continuation.replaceAll(' ', '-'));
     expect(saved.document.config.adv.circular_track_slots).toEqual(before.config.adv.circular_track_slots);
     await freshLoad(browser, testInfo, saved.path, async fresh => {
       const restored = await snapshot(fresh);
       expect(restored.config.adv.circular_track_slots).toEqual(before.config.adv.circular_track_slots);
-      expect(restored.request).toEqual(await promoteRequest(fresh, before.request));
-      expect(restored.resultHashes).toEqual(before.resultHashes);
+      expect(restored.request).toEqual(await promoteRequest(fresh, circular.request));
+      expect(restored.resultHashes).toEqual(circular.resultHashes);
       if (continuation === 'inactive biological') {
-        await expect(fresh.getByRole('button', { name: 'Linear', exact: true }))
+        // The saved mode has no Result, so the Session opens on the mode that has one.
+        await expect(fresh.getByRole('button', { name: 'Circular', exact: true }))
           .toHaveAttribute('aria-pressed', 'true');
-        expect(restored.config.modeProfiles.activeMode).toBe('linear');
-        await fresh.getByRole('button', { name: 'Circular', exact: true }).click();
+        expect(restored.config.modeProfiles.activeMode).toBe('circular');
       }
       await openPanel(fresh);
       await expect(valueControl(fresh, 'gc_content', 'Width')).toHaveValue('0.12345678901234567');

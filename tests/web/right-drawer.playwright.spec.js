@@ -484,6 +484,13 @@ test('mobile overlays preserve mode, source replacement, and resize behavior', a
   await page.setViewportSize(MOBILE_VIEWPORTS[0]);
   for (const mode of ['linear', 'circular']) {
     await switchMode(page, mode);
+    // E1: each mode shows its own Result. Linear has none here, so its Preview
+    // is empty and has no drawer to open.
+    if (mode === 'linear') {
+      await expect(toggle).toHaveCount(0);
+      await expect(page.locator('.right-drawer')).toHaveCount(0);
+      continue;
+    }
     await expect(toggle).toHaveCount(1);
     await centerPreview(page);
     assertMobileGeometry(await readOverlayGeometry(page), false);
