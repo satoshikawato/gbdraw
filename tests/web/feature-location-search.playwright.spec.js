@@ -54,6 +54,12 @@ test('feature list, popup, hover, and Location search use 1-based INSDC location
     .toContainText(`LOCTEST: ${SPLIT}`);
   expect(await page.evaluate(() => window.__GBDRAW_APP__.clickedFeature.detailRows
     .find((row) => row.key === 'location').value)).toBe(SPLIT);
+  // The CDS has a gene and a locus tag but no protein_id, so Details has no
+  // Protein ID row (GX-08); before, the row showed the locus tag.
+  const details = page.getByRole('dialog', { name: /^Feature details:/ });
+  await details.getByRole('button', { name: 'Details', exact: true }).click();
+  await expect(details).toContainText('Feature type');
+  await expect(details).not.toContainText('Protein ID');
   await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
 
   const point = await featurePoint(page, '.origin-top svg', ids.LOC_0002);
