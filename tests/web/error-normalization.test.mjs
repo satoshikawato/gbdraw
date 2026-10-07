@@ -611,5 +611,5 @@ test('a GenBank slot file without records says what it looks like (UJ-07)', () =
   assert.equal(producerSummary('NO_RECORDS', { reason: 'FASTA_IN_GENBANK' }),
     'No records were found. Choose input containing records. This file looks like FASTA. Use GFF3 + FASTA input, or a GenBank/DDBJ flat file.');
   assert.match(producerSummary('NO_RECORDS', { reason: 'EMPTY_FILE' }), / The file is empty\.$/);
-  assert.match(producerSummary('NO_RECORDS', { reason: 'NOT_GENBANK' }), / The file is not a GenBank\/DDBJ flat file \(it has no LOCUS line\)\.$/);
+  assert.match(producerSummary('NO_RECORDS', { reason: 'NOT_GENBANK' }), / The file is not a GenBank\/DDBJ flat file: it has no record header line\.$/);
 });
