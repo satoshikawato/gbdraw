@@ -1696,13 +1696,6 @@ export const reproducibilityLabel = (level) => {
   return 'Approximate command';
 };
 
-export const isCliInvocationSessionExportable = (invocation) => {
-  if (!invocation || typeof invocation !== 'object') return false;
-  if (invocation.sessionExportable === false) return false;
-  const bindings = Array.isArray(invocation.fileBindings) ? invocation.fileBindings : [];
-  return bindings.every((binding) => String(binding?.slot || '').startsWith('files.'));
-};
-
 const projectInvocation = ({ mode, args, fileMetadata, generatedBy }) => {
   const metadata = normalizeFileMetadata(fileMetadata);
   const helperFiles = [];
