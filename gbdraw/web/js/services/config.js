@@ -102,7 +102,7 @@ import {
   reconcileLinearComparisonPlan,
   resolveLinearComparisonPlan
 } from './linear-comparisons.js';
-import { buildSessionResources as assembleSessionResources } from './session-resources.js';
+import { buildSessionResources } from './session-resources.js';
 import {
   base64ToBytes,
   bytesToBase64,
@@ -3176,10 +3176,6 @@ export const serializeActiveRenderFiles = async (
   };
 };
 
-export const buildSessionResources = (sourceState, committedRequest, drawing) => (
-  assembleSessionResources(sourceState, committedRequest, drawing)
-);
-
 const deserializeCanonicalComparisons = (
   comparisons,
   { adoptCanonicalPayloads = false } = {}
@@ -4309,7 +4305,7 @@ const exportSessionDocument = async (
       ? adoptRuntimeCanonicalSession(promoted)
       : promoted;
   }
-  const canonical = await assembleSessionResources(state, committed, drawing);
+  const canonical = await buildSessionResources(state, committed, drawing);
   await validateSimilarityAlignmentResetReceipt(editorState.alignmentResetReceipt, canonical);
   const legacyRawCandidates = serializableLegacyProteinCandidateEnvelope(
     state.legacyProteinRawCandidates.value
