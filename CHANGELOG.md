@@ -12,6 +12,10 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Color names (CLI and Python API): `seashell` now resolves to `#FFF5EE`, the CSS
+  color, so the CLI draws it as the Web app does. Before, it resolved to `#2E8B57`
+  (seagreen). `rebeccapurple` (`#663399`) is now accepted. The other 146 CSS color
+  names were already correct.
 - Legend colors (web app): Generate no longer fails with "The generated result could
   not be accepted" after a color or stroke is set on a row added in the Legend editor,
   in Linear and Circular. The added row is drawn with its color and stroke after
