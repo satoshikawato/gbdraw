@@ -129,10 +129,16 @@ def _validate_mode_config_overrides(
         if all(path.startswith(f"labels.{other_mode}.") for path in wrong_paths)
         else f"{other_name} settings"
     )
+    # The Web names the first path and the mode that owns it (OV-130).
     raise ValidationError(
         f"{mode_name} config overrides cannot target {target}: "
         + ", ".join(wrong_paths)
-        + "."
+        + ".",
+        diagnostic={
+            "code": "MODE_SETTING",
+            "reason": "CIRCULAR_SETTING" if other_mode == "circular" else "LINEAR_SETTING",
+            "configPath": wrong_paths[0],
+        },
     )
 
 

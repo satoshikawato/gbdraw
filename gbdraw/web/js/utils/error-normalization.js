@@ -52,6 +52,8 @@ const REASONS = Object.freeze({
   ORTHOGROUP_MEMBERSHIP_MODE: 'Choose anchor_core_v1.',
 
   UNKNOWN_CONFIG_PATH: 'Remove unknown configuration overrides or use a supported setting.',
+  CIRCULAR_SETTING: 'It applies only to Circular diagrams. Reset it under Preserved session settings, or switch to Circular.',
+  LINEAR_SETTING: 'It applies only to Linear diagrams. Reset it under Preserved session settings, or switch to Linear.',
   RESOURCE_SIZE: 'Session resource byte sizes must be non-negative safe integers.',
   TRACK_SCHEMA: 'Recreate Custom Track Slots with the current schema.',
   SESSION_FIELDS: 'Remove unsupported top-level Session fields.',
@@ -151,6 +153,10 @@ const DEFINITIONS = Object.freeze({
   TRACK_LAYOUT: ['A circular track does not fit inside.', ['edit-track', 'retry']],
   FEATURE_PLACEMENT: ['A Feature placement uses a lane that the current feature track does not have.', ['edit-track', 'retry']],
   FEATURE_IDENTITY: ['A feature edit does not identify a record of the current inputs. Generate again; if it continues, save a Session for investigation.', ['retry', 'save-session']],
+  // The same request fails the same way until the setting or the mode changes.
+  MODE_SETTING: ['A preserved session setting does not apply to this diagram mode.', ['edit-input']],
+  // The Session's Reset alignment evidence is bound to the records and plan of the latest Align.
+  ALIGNMENT_RESET_EVIDENCE: ['The Reset alignment evidence of the latest Align does not match the current records or alignment plan. Undo the changes made after Align, or select Align… again.', ['edit-input']],
   REGEX_SYNTAX: ['The Python regular expression is invalid.', ['edit-pattern', 'retry']],
   RESOURCE_INVALID: ['Input resource preparation failed. Reselect the input and retry.', ['select-input', 'retry']],
   HELPER_PROTOCOL: ['The helper request is invalid. Retry the operation.', ['retry', 'save-session']],

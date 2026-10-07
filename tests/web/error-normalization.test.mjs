@@ -440,6 +440,27 @@ test('a display start beyond the record and an unparsable GenBank file are input
   }
 });
 
+// OV-130 (R6): a preserved setting of the other diagram mode fails Generate and
+// Save Session. Python names the first setting path and the mode it belongs to,
+// so the summary names both and the two ways out, instead of the unclassified
+// input-validation text. Retry repeats the same request, so it is not offered.
+test('a preserved setting of the other diagram mode names the setting and the ways out (OV-130)', () => {
+  const ways = (mode) => ` It applies only to ${mode} diagrams. Reset it under Preserved session settings, or switch to ${mode}.`;
+  const generate = roundtrip(invoke({ configOverrides: { 'objects.blast_match.curve_tension': 0.3 } }).error);
+  assert.deepEqual([generate.code, generate.operation, generate.stage], ['MODE_SETTING', 'generate', 'request-validation']);
+  assert.deepEqual(generate.context, { reason: 'LINEAR_SETTING', configPath: 'objects.blast_match.curve_tension' });
+  assert.equal(generate.summary, 'A preserved session setting does not apply to this diagram mode.'
+    + ` Setting: objects.blast_match.curve_tension.${ways('Linear')}`);
+  assert.deepEqual(generate.actions, ['edit-input']);
+  // Save Session validates the preserved settings through the helper channel.
+  const save = roundtrip(invoke({ helper: 'validate_web_config_overrides_json', args: ['linear', 'null',
+    JSON.stringify({ 'objects.ticks.tick_width': 4, 'canvas.circular.radius': 1.2 }), '[]', true] }).error);
+  assert.deepEqual([save.code, save.operation, save.stage], ['MODE_SETTING', 'validateConfigOverrides', 'helper']);
+  assert.deepEqual(save.context, { reason: 'CIRCULAR_SETTING', configPath: 'canvas.circular.radius' });
+  assert.equal(save.summary, `A preserved session setting does not apply to this diagram mode. Setting: canvas.circular.radius.${ways('Circular')}`);
+  for (const model of [generate, save]) assert.doesNotMatch(model.summary, /Input validation failed/);
+});
+
 // B11 (R6: an offered action must be one that can work): a live edit rerenders
 // the committed Session with the current editor tables, so repeating the edit
 // sends the same request. The note above the Result comes from the failure's
