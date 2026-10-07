@@ -108,10 +108,10 @@ test('failed Generate retains only valid same-source bindings in Save and fresh 
   expect(resourceHashes(failedSaved)).toEqual(resourceHashes(beforeSaved));
   expect(failedSaved.renderRequest).toEqual(beforeSaved.renderRequest);
   expect(failedSaved.results).toEqual(beforeSaved.results);
-  expect(failedSaved.config.adv.circular_track_slots.find(row => row.id === 'gc_content').width)
-    .toEqual(beforeSaved.config.adv.circular_track_slots.find(row => row.id === 'gc_content').width);
-  expect(failedSaved.config.adv.multi_record_positions).toEqual(failed.positions);
-  expect(failedSaved.config.annotationSets.flatMap(set => set.annotations.map(annotation =>
+  expect(failedSaved.modes.circular.config.adv.circular_track_slots.find(row => row.id === 'gc_content').width)
+    .toEqual(beforeSaved.modes.circular.config.adv.circular_track_slots.find(row => row.id === 'gc_content').width);
+  expect(failedSaved.modes.circular.config.adv.multi_record_positions).toEqual(failed.positions);
+  expect(failedSaved.modes.circular.config.annotationSets.flatMap(set => set.annotations.map(annotation =>
     annotation.metadata?._gbdraw_web_target_record_key))).toEqual(keys);
 
   const freshContext = await browser.newContext({ baseURL, acceptDownloads: true });
@@ -173,7 +173,7 @@ test('canceled post-response Generate keeps valid bindings and old artifact thro
   const canceledFile = info.outputPath('canceled.gbdraw-session.json.gz');
   const saved = await save(page, canceledFile);
   expect(saved.renderRequest).toEqual(await promoteRequest(page, before.request));
-  expect(saved.config.adv.multi_record_positions).toEqual(canceled.positions);
+  expect(saved.modes.circular.config.adv.multi_record_positions).toEqual(canceled.positions);
   expect(await exportSvg(page)).toBe(oldExport);
   const freshContext = await browser.newContext({ baseURL, acceptDownloads: true });
   try {

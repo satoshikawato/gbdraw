@@ -64,7 +64,8 @@ test('V1-V5/V8 individual visibility is reconciled on accepted source replacemen
     expect((await snapshot(page)).featureVisibility).toEqual({});
     const file = testInfo.outputPath('source-B.gbdraw-session.json.gz');
     const bytes = await download(page, 'Save Session', file);
-    expect(JSON.parse(gunzipSync(bytes)).features.featureOverrides).toEqual({});
+    const savedSession = JSON.parse(gunzipSync(bytes));
+    expect(savedSession.modes[savedSession.ui.mode].features.featureOverrides).toEqual({});
     fresh = await load(browser, file);
     expect((await snapshot(fresh)).featureVisibility).toEqual({});
     await upload(fresh, await source(seed, 'mito-return.gb'));

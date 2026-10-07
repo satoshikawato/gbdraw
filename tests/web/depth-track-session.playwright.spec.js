@@ -1704,7 +1704,9 @@ ORIGIN
   });
 });
 
-test('v40 layout preferences and mode profiles survive fresh-page export and import', async ({ page }) => {
+// Each mode's drawing keeps its own layout slot and settings (PR-1); Session 46
+// saves each drawing as its mode slice.
+test('per-mode layout preferences and settings survive fresh-page export and import', async ({ page }) => {
   test.setTimeout(120000);
   const expectedPreferences = {
     circular: {
@@ -1754,9 +1756,13 @@ ORIGIN
       axisStrokeColor: app.adv.axis_stroke_color
     };
   }, mode);
+  // Each drawing's own slot.
   const layoutPreferenceTree = () => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
-    return JSON.parse(JSON.stringify(state.activeDrawing().layoutPreferences));
+    return JSON.parse(JSON.stringify({
+      circular: state.drawings.circular.layoutPreferences.circular,
+      linear: state.drawings.linear.layoutPreferences.linear
+    }));
   });
 
   await openApp(page, { waitForPalette: false });
@@ -1807,9 +1813,11 @@ ORIGIN
       { type: 'application/genbank', lastModified: 22 }
     );
     state.linearSeqs[0].definition = 'Inactive Linear draft';
-    app.adv.linear_track_slots.splice(
+    // The Linear drawing's stack, edited while Circular is shown.
+    const linearAdv = state.drawings.linear.adv;
+    linearAdv.linear_track_slots.splice(
       0,
-      app.adv.linear_track_slots.length,
+      linearAdv.linear_track_slots.length,
       {
         id: 'inactive_spacer',
         renderer: 'spacer',
@@ -1821,8 +1829,8 @@ ORIGIN
         params: {}
       }
     );
-    app.adv.linear_track_slots_enabled = false;
-    app.adv.linear_track_slots_axis_index = 1;
+    linearAdv.linear_track_slots_enabled = false;
+    linearAdv.linear_track_slots_axis_index = 1;
   });
   const downloadPromise = page.waitForEvent('download', { timeout: 60000 });
   await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.saveSessionWithTitle());
@@ -1857,12 +1865,17 @@ ORIGIN
   );
   expect(exportedSession.editorState).toEqual(expect.any(Object));
   expect(exportedSession.editorState.featureCatalog).toBeNull();
-  expect(exportedSession.features).not.toHaveProperty('extractedFeatures');
-  expect(exportedSession.features).not.toHaveProperty('biologicalFeatures');
+  expect(exportedSession).not.toHaveProperty('config');
+  expect(exportedSession).not.toHaveProperty('features');
+  for (const mode of ['circular', 'linear']) {
+    expect(exportedSession.modes[mode].features).not.toHaveProperty('extractedFeatures');
+    expect(exportedSession.modes[mode].features).not.toHaveProperty('biologicalFeatures');
+  }
   expect(exportedSession.orthogroupState).not.toHaveProperty('groups');
-  expect(exportedSession.config.adv.circular_track_slots).toEqual(expect.any(Array));
-  expect(exportedSession.config.adv.linear_track_slots).toEqual(expect.any(Array));
-  expect(exportedSession.config.adv.linear_track_slots).toEqual([
+  const circularConfig = exportedSession.modes.circular.config;
+  const linearConfig = exportedSession.modes.linear.config;
+  expect(circularConfig.adv.circular_track_slots).toEqual(expect.any(Array));
+  expect(linearConfig.adv.linear_track_slots).toEqual([
     expect.objectContaining({
       id: 'inactive_spacer',
       renderer: 'spacer',
@@ -1871,43 +1884,22 @@ ORIGIN
       spacing: '3px'
     })
   ]);
-  expect(exportedSession.config.adv).toHaveProperty('circular_track_slots_enabled');
-  expect(exportedSession.config.adv).toHaveProperty('linear_track_slots_enabled');
-  expect(exportedSession.config.modeProfiles.schema).toBe(1);
-  expect(Object.keys(exportedSession.config.modeProfiles.profiles).sort()).toEqual([
-    'circular',
-    'linear'
-  ]);
-  expect(exportedSession.config.modeProfiles.profiles.circular).toEqual(
-    expect.objectContaining({
-      values: expect.objectContaining({
-        identity: 88,
-        axis_stroke_color: '#123456'
-      }),
-      managed: expect.objectContaining({
-        identity: false,
-        axis_stroke_color: false
-      })
-    })
-  );
-  expect(exportedSession.config.modeProfiles.profiles.linear).toEqual(
-    expect.objectContaining({
-      values: expect.objectContaining({
-        identity: 77,
-        axis_stroke_color: '#654321'
-      }),
-      managed: expect.objectContaining({
-        identity: false,
-        axis_stroke_color: false
-      })
-    })
-  );
-  expect(exportedSession.ui.layoutPreferences).toEqual(expectedPreferences);
+  expect(circularConfig.adv).toHaveProperty('circular_track_slots_enabled');
+  expect(linearConfig.adv.linear_track_slots_enabled).toBe(false);
+  expect(linearConfig.adv.linear_track_slots_axis_index).toBe(1);
+  expect(circularConfig).not.toHaveProperty('modeProfiles');
+  expect([circularConfig.adv.identity, circularConfig.adv.axis_stroke_color]).toEqual([88, '#123456']);
+  expect([linearConfig.adv.identity, linearConfig.adv.axis_stroke_color]).toEqual([77, '#654321']);
+  expect(exportedSession.modes.circular.ui.layoutPreferences).toEqual(expectedPreferences.circular);
+  expect(exportedSession.modes.linear.ui.layoutPreferences).toEqual(expectedPreferences.linear);
+  expect(exportedSession.ui).not.toHaveProperty('layoutPreferences');
   expect(legacyLayoutFields.filter((field) => (
     Object.prototype.hasOwnProperty.call(exportedSession.ui, field)
   ))).toEqual([]);
-  expect(exportedSession.config.form).not.toHaveProperty('legend');
-  expect(exportedSession.config.adv).not.toHaveProperty('plot_title_position');
+  for (const config of [circularConfig, linearConfig]) {
+    expect(config.form).not.toHaveProperty('legend');
+    expect(config.adv).not.toHaveProperty('plot_title_position');
+  }
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page, { waitForPalette: false });
@@ -1930,15 +1922,15 @@ ORIGIN
     axisStrokeColor: '#654321'
   });
   expect(await page.evaluate(async () => {
-    const app = window.__GBDRAW_APP__;
     const { state } = await import('./js/state.js');
+    const linearAdv = state.drawings.linear.adv;
     return {
       linearFileName: state.linearSeqs[0].gb?.name,
       inactiveSlot: JSON.parse(JSON.stringify(
-        app.adv.linear_track_slots.find((slot) => slot.id === 'inactive_spacer')
+        linearAdv.linear_track_slots.find((slot) => slot.id === 'inactive_spacer')
       )),
-      axisIndex: app.adv.linear_track_slots_axis_index,
-      enabled: app.adv.linear_track_slots_enabled
+      axisIndex: linearAdv.linear_track_slots_axis_index,
+      enabled: linearAdv.linear_track_slots_enabled
     };
   })).toEqual({
     linearFileName: 'inactive-linear-layout.gbk',
@@ -1963,13 +1955,14 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     hatch: { pattern: 'diagonal', spacing: 4 },
     label: { color: '#445566', fontSize: 9 }
   };
+  // Each stack is its own mode's drawing's (Session 46 `modes.<mode>`).
   const p3Draft = (session) => ({
-    circularEnabled: session.config.adv.circular_track_slots_enabled,
-    circularAxis: session.config.adv.circular_track_slots_axis_index,
-    circularSlots: session.config.adv.circular_track_slots,
-    linearEnabled: session.config.adv.linear_track_slots_enabled,
-    linearAxis: session.config.adv.linear_track_slots_axis_index,
-    linearSlots: session.config.adv.linear_track_slots
+    circularEnabled: session.modes.circular.config.adv.circular_track_slots_enabled,
+    circularAxis: session.modes.circular.config.adv.circular_track_slots_axis_index,
+    circularSlots: session.modes.circular.config.adv.circular_track_slots,
+    linearEnabled: session.modes.linear.config.adv.linear_track_slots_enabled,
+    linearAxis: session.modes.linear.config.adv.linear_track_slots_axis_index,
+    linearSlots: session.modes.linear.config.adv.linear_track_slots
   });
   const readSessionDownload = async (download) => {
     const filePath = await download.path();
@@ -1986,26 +1979,34 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
       const app = window.__GBDRAW_APP__;
       return (
         app.mode === 'circular' &&
-        app.adv?.circular_track_slots?.some((slot) => slot.id === 'review_overlay') &&
-        app.adv?.linear_track_slots?.some((slot) => slot.id === 'inactive_overlay')
+        app.adv?.circular_track_slots?.some((slot) => slot.id === 'review_overlay')
       );
     }, null, { timeout: 120000 });
+    // The Linear stack is the Linear drawing's (PR-1).
+    await expect.poll(() => page.evaluate(async () => (await import('./js/state.js')).state
+      .drawings.linear.adv.linear_track_slots.some((slot) => slot.id === 'inactive_overlay'))).toBe(true);
   };
-  const browserDraft = () => page.evaluate(() => {
-    const app = window.__GBDRAW_APP__;
+  // Each stack from its own mode's drawing.
+  const browserDraft = () => page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const circularAdv = state.drawings.circular.adv;
+    const linearAdv = state.drawings.linear.adv;
     return JSON.parse(JSON.stringify({
-      circularEnabled: app.adv.circular_track_slots_enabled,
-      circularAxis: app.adv.circular_track_slots_axis_index,
-      circularSlots: app.adv.circular_track_slots,
-      linearEnabled: app.adv.linear_track_slots_enabled,
-      linearAxis: app.adv.linear_track_slots_axis_index,
-      linearSlots: app.adv.linear_track_slots
+      circularEnabled: circularAdv.circular_track_slots_enabled,
+      circularAxis: circularAdv.circular_track_slots_axis_index,
+      circularSlots: circularAdv.circular_track_slots,
+      linearEnabled: linearAdv.linear_track_slots_enabled,
+      linearAxis: linearAdv.linear_track_slots_axis_index,
+      linearSlots: linearAdv.linear_track_slots
     }));
   });
 
   await openApp(page, { waitForPalette: false });
-  await page.evaluate(({ genbankText, nestedStyle }) => {
+  await page.evaluate(async ({ genbankText, nestedStyle }) => {
     const app = window.__GBDRAW_APP__;
+    // The Linear stack belongs to the Linear drawing (PR-1); it uses its own
+    // copy of the review annotation set.
+    const linearDrawing = (await import('./js/state.js')).state.drawings.linear;
     app.setDiagramMode('circular');
     app.cInputType = 'gb';
     app.files.c_gb = new File([genbankText], 'p3-session.gbk', {
@@ -2017,6 +2018,8 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     const annotation = app.addCoordinateAnnotation(annotationSet, { start: 1, end: 20 });
     annotation.label = 'Review';
     annotation.mark = 'line';
+    linearDrawing.annotationSets.splice(0, linearDrawing.annotationSets.length,
+      JSON.parse(JSON.stringify(annotationSet)));
 
     app.adv.circular_track_slots_enabled = true;
     app.adv.circular_track_slots_axis_index = 1;
@@ -2105,11 +2108,11 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
       }
     );
 
-    app.adv.linear_track_slots_enabled = false;
-    app.adv.linear_track_slots_axis_index = 2;
-    app.adv.linear_track_slots.splice(
+    linearDrawing.adv.linear_track_slots_enabled = false;
+    linearDrawing.adv.linear_track_slots_axis_index = 2;
+    linearDrawing.adv.linear_track_slots.splice(
       0,
-      app.adv.linear_track_slots.length,
+      linearDrawing.adv.linear_track_slots.length,
       {
         id: 'inactive_above_space',
         renderer: 'spacer',
@@ -2246,18 +2249,19 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     await window.Vue.nextTick();
     await window.Vue.nextTick();
   });
-  expect(await page.evaluate(() => {
+  expect(await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
+    const linearAdv = (await import('./js/state.js')).state.drawings.linear.adv;
     const circularSpacer = app.adv.circular_track_slots.find(
       (slot) => slot.id === 'disabled_outer_space'
     );
     const circularAnnotation = app.adv.circular_track_slots.find(
       (slot) => slot.id === 'review_overlay'
     );
-    const linearSpacer = app.adv.linear_track_slots.find(
+    const linearSpacer = linearAdv.linear_track_slots.find(
       (slot) => slot.id === 'inactive_above_space'
     );
-    const linearAnnotation = app.adv.linear_track_slots.find(
+    const linearAnnotation = linearAdv.linear_track_slots.find(
       (slot) => slot.id === 'inactive_overlay'
     );
     return {

@@ -74,29 +74,33 @@ const jsonDigest = (value) => createHash('sha256')
   .update(JSON.stringify(stableValue(value)))
   .digest('hex');
 
+// The draft of a Session's committed mode (Session 46 `modes.<mode>`).
+const sessionDraft = (session) => session.modes?.[session.renderRequest?.mode || session.ui?.mode] || {};
+
 const sessionCanonicalEvidence = (session) => {
+  const draft = sessionDraft(session);
   const active = {
-    palette: session.config?.palette,
-    colors: session.config?.colors,
-    rules: (session.config?.rules || []).map((rule) => ({
+    palette: draft.config?.palette,
+    colors: draft.config?.colors,
+    rules: (draft.config?.rules || []).map((rule) => ({
       ...rule,
       fromFile: Boolean(rule.fromFile)
     })),
-    qualifierPriorityRules: session.config?.qualifierPriorityRules,
-    filterMode: session.config?.filterMode,
-    whitelist: session.config?.whitelist,
-    blacklistText: session.config?.blacklistText,
+    qualifierPriorityRules: draft.config?.qualifierPriorityRules,
+    filterMode: draft.config?.filterMode,
+    whitelist: draft.config?.whitelist,
+    blacklistText: draft.config?.blacklistText,
     form: {
-      plot_title: session.config?.form?.plot_title,
-      labels_mode: session.config?.form?.labels_mode,
-      show_scale: session.config?.form?.show_scale
+      plot_title: draft.config?.form?.plot_title,
+      labels_mode: draft.config?.form?.labels_mode,
+      show_scale: draft.config?.form?.show_scale
     },
     adv: {
-      axis_stroke_width: session.config?.adv?.axis_stroke_width,
-      label_font_size: session.config?.adv?.label_font_size,
-      feature_width_circular: session.config?.adv?.feature_width_circular
+      axis_stroke_width: draft.config?.adv?.axis_stroke_width,
+      label_font_size: draft.config?.adv?.label_font_size,
+      feature_width_circular: draft.config?.adv?.feature_width_circular
     },
-    annotationSetIds: (session.config?.annotationSets || []).map(({ id }) => id)
+    annotationSetIds: (draft.config?.annotationSets || []).map(({ id }) => id)
   };
   return {
     renderRequestSha256: jsonDigest(session.renderRequest),
@@ -182,7 +186,7 @@ const loadCurrentSession = async (page, filePath, session) => {
   expect(probe.metrics.activeConfigCanonicalOverwriteCount || 0).toBe(0);
 
   const suppliedDomains = ACTIVE_CONFIG_DOMAINS.filter((domain) => (
-    Object.prototype.hasOwnProperty.call(session.config, domain)
+    Object.prototype.hasOwnProperty.call(sessionDraft(session).config || {}, domain)
   ));
   const restored = probe.details.find(
     (entry) => entry.name === 'currentWriterActiveConfigRestoreCount'
@@ -342,7 +346,8 @@ const prepareLoadedPreviewDirectEditTarget = (page, expected = null) => page.eva
       || ''
     ).trim();
     // The draft key of the feature's per-feature edits (design Q4).
-    const identityKey = (feature) => JSON.stringify([feature.scope, feature.record_key, feature.biological_feature_id]);
+    // A drawing's rows are keyed by the identity pair (PR-1).
+    const identityKey = (feature) => JSON.stringify([feature.record_key, feature.biological_feature_id]);
     const hasFeatureElement = (id) => Boolean(
       svg.querySelector(`[data-gbdraw-feature-id="${CSS.escape(id)}"]`)
       || svg.querySelector(`[data-gbdraw-rendered-feature-id="${CSS.escape(id)}"]`)
@@ -543,13 +548,12 @@ const bindLoadedPreviewDirectEditLabel = (page, expected = null) => page.evaluat
     target.labelFeature = resolved.labelFeature;
     target.labelFeatureId = featureId(resolved.labelFeature);
     target.labelFeatureIdentity = JSON.stringify([
-      resolved.labelFeature.scope, resolved.labelFeature.record_key, resolved.labelFeature.biological_feature_id
+      resolved.labelFeature.record_key, resolved.labelFeature.biological_feature_id
     ]);
     target.labelKey = String(resolved.labelEntry.key || '');
     target.labelVisibilityFeature = resolved.labelVisibilityFeature;
     target.labelVisibilityFeatureId = featureId(resolved.labelVisibilityFeature);
     target.labelVisibilityFeatureIdentity = JSON.stringify([
-      resolved.labelVisibilityFeature.scope,
       resolved.labelVisibilityFeature.record_key,
       resolved.labelVisibilityFeature.biological_feature_id
     ]);
@@ -1733,15 +1737,14 @@ test('loaded current preview supports direct edits before the first Generate', a
   ).toBe(await page.evaluate(() => (
     window.__GBDRAW_APP__.results[window.__GBDRAW_APP__.selectedResultIndex].content
   )));
-  expect(saved.session.config).toMatchObject({
+  const savedDraft = sessionDraft(saved.session);
+  expect(savedDraft.config).toMatchObject({
     form: { plot_title: DIRECT_REGENERATED_TITLE }
   });
-  expect(saved.session.ui).toMatchObject({
-    layoutPreferences: {
-      circular: { single: { plotTitlePosition: 'top' } }
-    }
+  expect(savedDraft.ui).toMatchObject({
+    layoutPreferences: { single: { plotTitlePosition: 'top' } }
   });
-  expect(saved.session.features).toMatchObject({
+  expect(savedDraft.features).toMatchObject({
     featureColorOverrides: {
       [target.featureOverrideKey]: { color: DIRECT_FILL }
     },
@@ -1751,7 +1754,7 @@ test('loaded current preview supports direct edits before the first Generate', a
       [target.labelVisibilityFeatureIdentity]: { labelVisibility: 'off' }
     }
   });
-  expect(saved.session.editorState).toMatchObject({
+  expect(savedDraft.editorState).toMatchObject({
     legend: {
       colorOverrides: { [target.legendCaption]: DIRECT_LEGEND_COLOR },
       strokeOverrides: {
@@ -1996,8 +1999,8 @@ test('divergent draft and direct editor overrides survive repeated Save, Load, a
   );
   expect(savedPreview.active).toEqual(savedDraftIntent.active);
   expect(savedPreview.history).toEqual(savedDraftIntent.history);
-  expect(divergentSave.session.config.palette).toBe('orange');
-  expect(divergentSave.session.config.colors).toMatchObject({
+  expect(sessionDraft(divergentSave.session).config.palette).toBe('orange');
+  expect(sessionDraft(divergentSave.session).config.colors).toMatchObject({
     CDS: '#0b4f6c',
     tRNA: '#f59e0b'
   });
@@ -2235,7 +2238,7 @@ test('bare legacy configuration drives the next canonical request and SVG', asyn
   const generated = await runGenerate(page);
   expect(svgEquivalence(generated.svg, baseline.svg).visual).toBe(false);
   const saved = await saveCurrentSession(page, 'legacy-config-generated');
-  expect(saved.session.config).toMatchObject({
+  expect(sessionDraft(saved.session).config).toMatchObject({
     palette: 'orange',
     colors: { CDS: '#0b4f6c', tRNA: '#f59e0b' },
     filterMode: 'Blacklist',
@@ -2251,10 +2254,10 @@ test('bare legacy configuration drives the next canonical request and SVG', asyn
       feature_width_circular: 22
     }
   });
-  expect(saved.session.config.rules).toEqual([
+  expect(sessionDraft(saved.session).config.rules).toEqual([
     expect.objectContaining({ val: '^ND3$', color: '#be123c' })
   ]);
-  expect(saved.session.config.qualifierPriorityRules).toEqual([
+  expect(sessionDraft(saved.session).config.qualifierPriorityRules).toEqual([
     { feat: 'CDS', order: 'product,gene' }
   ]);
   const colors = saved.session.renderRequest.diagramOptions.colors;

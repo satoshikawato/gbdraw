@@ -89,13 +89,14 @@ test('GUI-unmanaged config survives disclosure, Generate, save/reload, reset, an
   await evaluateWithRetainedPromise(page, async () => window.__GBDRAW_APP__.saveSessionWithTitle());
   const saved = await readSessionDownload(await downloadPromise);
   expect(saved.session.version).toBe(CURRENT_SESSION_VERSION);
-  expect(saved.session.config.unmanagedConfigOverrides).toEqual({
+  const savedDraft = saved.session.modes[saved.session.ui.mode].config;
+  expect(savedDraft.unmanagedConfigOverrides).toEqual({
     [unmanagedPath]: 0.42
   });
   expect(
     saved.session.renderRequest.diagramOptions.configOverrides[unmanagedPath]
   ).toBe(0.42);
-  expect(saved.session.config.form.plot_title).toBe('Preserved overlay journey');
+  expect(savedDraft.form.plot_title).toBe('Preserved overlay journey');
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await waitForAppShell(page);

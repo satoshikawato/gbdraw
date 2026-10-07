@@ -165,7 +165,7 @@ for (const mode of ['circular', 'linear']) {
     expect(session.renderRequest.records[0].display.startCoordinate).toBe(71);
     expect(session.renderRequest.diagramOptions.featurePlacements).toHaveLength(1);
     expect(session.renderRequest.diagramOptions.configOverrides['canvas.feature_overlap_tolerance_bp']).toBe(1);
-    expect(session.config.recordDisplayDrafts.some((draft) => draft.startCoordinate === 91)).toBe(true);
+    expect(session.modes[session.ui.mode].config.recordDisplayDrafts.some((draft) => draft.startCoordinate === 91)).toBe(true);
     expect(session.results[0].content).toBe(savedResult);
     await page.screenshot({ path: testInfo.outputPath('joint-controls.png'), fullPage: true });
     const context = await browser.newContext();
@@ -290,7 +290,7 @@ for (const mode of ['circular', 'linear']) {
     await inactiveDownload.saveAs(inactivePath);
     const inactive = JSON.parse(zlib.gunzipSync(await fs.readFile(inactivePath)));
     expect(inactive.results).toEqual([]);
-    expect(inactive.config.recordDisplayDrafts[0]).toMatchObject({ topologyOverride: false, startCoordinate: 71 });
+    expect(inactive.modes[inactive.ui.mode].config.recordDisplayDrafts[0]).toMatchObject({ topologyOverride: false, startCoordinate: 71 });
     await page.getByRole('button', { name: 'Reset to detected', exact: true }).click();
     await expect(start).toBeEnabled();
     await expect(start).toHaveValue('71');

@@ -913,15 +913,13 @@ test('adjacent Collinear mixed groups remain selectable after current-session sa
   await page.setViewportSize({ width: 1600, height: 1000 });
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
-  // The Python writer has no active Web draft; derive it from this request.
+  // The Python writer has no Web draft: Load takes the request's projection, and
+  // the mode's slice (Session 46) holds only the comparison plan this test sets.
   const session = Buffer.from(await page.evaluate(async (source) => {
-    const { projectCanonicalSessionRequest } = await import('./js/services/session-request.js');
     const document = JSON.parse(source);
-    document.config = projectCanonicalSessionRequest({
-      renderRequest: document.renderRequest, resources: document.resources,
-      webFiles: document.webFiles
-    }).config;
-    document.config.linearComparisonPlan = { mode: 'none', defaultSource: 'losat', edges: [] };
+    document.modes = { [document.renderRequest.mode]: {
+      config: { linearComparisonPlan: { mode: 'none', defaultSource: 'losat', edges: [] } }
+    } };
     return JSON.stringify(document);
   }, typedSession));
   const importSession = async (bytes, name) => evaluateWithRetainedPromise(page, async ({ bytes, name }) => {

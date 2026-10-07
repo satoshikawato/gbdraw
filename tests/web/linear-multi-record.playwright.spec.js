@@ -401,7 +401,7 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
     expect(await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.saveSessionWithTitle())).toMatchObject({ status: 'saved' });
     const savedPath = await (await download).path();
     const saved = JSON.parse(gunzipSync(readFileSync(savedPath)));
-    expect(saved.config.form.keep_definition_left_aligned).toBe(locked);
+    expect(saved.modes.linear.config.form.keep_definition_left_aligned).toBe(locked);
     expect(saved.renderRequest).toEqual(requestBefore);
     await page.reload();
     await waitForAppShell(page);
@@ -419,7 +419,7 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
     ])).toBe(locked);
     for (const malformed of [null, 'false', 0, {}]) {
       const invalid = structuredClone(saved);
-      invalid.config.form.keep_definition_left_aligned = malformed;
+      invalid.modes.linear.config.form.keep_definition_left_aligned = malformed;
       const stable = await measureDefinitionColumns(page);
       const runs = await page.evaluate(() => window.__GBDRAW_DIAGRAM_RUNS__.length);
       const outcome = await evaluateWithRetainedPromise(page, async raw => {
@@ -1515,7 +1515,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   expect(session.webFiles.bindings.linearSeqs[0].region_record_id).toBe('AutomaticA');
   expect(session.renderRequest.records.map((record) => record.cardinality)).toEqual(['exactly_one', 'exactly_one']);
   expect(session.renderRequest.records.map((record) => record.selector)).toEqual([{ kind: 'recordId', value: 'AutomaticA' }, { kind: 'recordId', value: 'AutomaticB' }]);
-  expect(session.config.linearRecordLayout.rows.map((entry) => entry.row)).toEqual([1, 1]);
+  expect(session.modes.linear.config.linearRecordLayout.rows.map((entry) => entry.row)).toEqual([1, 1]);
   expect(new Set(
     session.renderRequest.records.map((record) => record.source.resourceId)
   ).size).toBe(1);

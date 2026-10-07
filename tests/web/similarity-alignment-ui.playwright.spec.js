@@ -55,7 +55,6 @@ const loadAmbiguousSession = async (page, testInfo) => {
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   const session = Buffer.from(await page.evaluate(async (raw) => {
-    const { projectCanonicalSessionRequest } = await import('./js/services/session-request.js');
     const document = JSON.parse(raw);
     document.renderRequest.comparisons = [];
     document.editorState.featureCatalog.items.forEach((item) => {
@@ -63,16 +62,13 @@ const loadAmbiguousSession = async (page, testInfo) => {
         if (group.id === 'og_1') group.orthologEdges = [];
       });
     });
-    document.config = projectCanonicalSessionRequest({
-      renderRequest: document.renderRequest,
-      resources: document.resources,
-      webFiles: document.webFiles
-    }).config;
-    document.config.linearComparisonPlan = {
-      mode: 'adjacent', defaultSource: 'losat', edges: []
-    };
-    document.config.losatProgram = 'blastp';
-    document.config.losat = { blastp: { mode: 'orthogroup' } };
+    // The Python writer has no Web draft: Load takes the request's projection,
+    // and the Linear slice (Session 46) holds the comparison draft of this test.
+    document.modes = { linear: { config: {
+      linearComparisonPlan: { mode: 'adjacent', defaultSource: 'losat', edges: [] },
+      losatProgram: 'blastp',
+      losat: { blastp: { mode: 'orthogroup' } }
+    } } };
     return JSON.stringify(document);
   }, source));
   await importSession(page, session, 'similarity-alignment-inparalog.gbdraw-session.json');
@@ -885,7 +881,6 @@ test('one usable member applies directly through one Worker resolve and one Hist
   await page.goto('/gbdraw/web/index.html', { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => window.__GBDRAW_APP__);
   const session = Buffer.from(await page.evaluate(async (raw) => {
-    const { projectCanonicalSessionRequest } = await import('./js/services/session-request.js');
     const document = JSON.parse(raw);
     document.renderRequest.comparisons = [];
     document.editorState.featureCatalog.items.forEach((item) => {
@@ -899,16 +894,13 @@ test('one usable member applies directly through one Worker resolve and one Hist
       ));
       group.orthologEdges = [];
     });
-    document.config = projectCanonicalSessionRequest({
-      renderRequest: document.renderRequest,
-      resources: document.resources,
-      webFiles: document.webFiles
-    }).config;
-    document.config.linearComparisonPlan = {
-      mode: 'adjacent', defaultSource: 'losat', edges: []
-    };
-    document.config.losatProgram = 'blastp';
-    document.config.losat = { blastp: { mode: 'orthogroup' } };
+    // The Python writer has no Web draft: Load takes the request's projection,
+    // and the Linear slice (Session 46) holds the comparison draft of this test.
+    document.modes = { linear: { config: {
+      linearComparisonPlan: { mode: 'adjacent', defaultSource: 'losat', edges: [] },
+      losatProgram: 'blastp',
+      losat: { blastp: { mode: 'orthogroup' } }
+    } } };
     return JSON.stringify(document);
   }, source));
   await importSession(page, session, 'one-candidate.gbdraw-session.json');

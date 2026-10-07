@@ -351,7 +351,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   expect(saved.version).toBe(CURRENT_SESSION_VERSION);
   expect(saved.renderRequest.schema).toBe(CURRENT_REQUEST_SCHEMA);
   expect(saved.renderRequest.records[0].display.startCoordinate).toBe(expectedStart);
-  expect(saved.config.recordDisplayDrafts[0].anchorIntent).toMatchObject({
+  expect(saved.modes[saved.ui.mode].config.recordDisplayDrafts[0].anchorIntent).toMatchObject({
     schema: 1,
     placement: 'anchor',
     anchor: 'midpoint',

@@ -276,9 +276,9 @@ for (const width of [1440, 390]) {
     const sessionPath = testInfo.outputPath('annotations.gbdraw-session.json.gz');
     await sessionDownload.saveAs(sessionPath);
     const session = JSON.parse(gunzipSync(await readFile(sessionPath)));
-    expect(session.config.annotationSets).toEqual(await page.evaluate(() => JSON.parse(JSON.stringify(window.__GBDRAW_APP__.annotationSets))));
+    expect(session.modes[session.ui.mode].config.annotationSets).toEqual(await page.evaluate(() => JSON.parse(JSON.stringify(window.__GBDRAW_APP__.annotationSets))));
     expect(JSON.stringify(session)).not.toContain('PRIVATE-CELL');
-    for (const name of good.ignored) expect(JSON.stringify(session.config.annotationSets)).not.toContain(name);
+    for (const name of good.ignored) expect(JSON.stringify(session.modes[session.ui.mode].config.annotationSets)).not.toContain(name);
     expect(JSON.stringify(session)).not.toContain('Ignored annotation table columns:');
     const context = await browser.newContext({ baseURL: new URL(page.url()).origin, viewport: { width, height: 960 } });
     try {

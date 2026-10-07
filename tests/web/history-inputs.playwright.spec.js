@@ -122,7 +122,7 @@ for (const inputMethod of ['keyboard', 'pointer']) {
     const savedPath = testInfo.outputPath('restored.gbdraw-session.json.gz');
     await download.saveAs(savedPath);
     const saved = JSON.parse(gunzipSync(readFileSync(savedPath)));
-    expect(saved.config.form.labels_mode).toBe('out');
+    expect(saved.modes[saved.ui.mode].config.form.labels_mode).toBe('out');
     expect(await generate(page)).toBe(originalSvg);
 
     const freshContext = await browser.newContext({ baseURL });

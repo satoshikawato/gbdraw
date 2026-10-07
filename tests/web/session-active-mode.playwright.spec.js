@@ -96,9 +96,10 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
   const first = await save(page, firstFile);
   expect(first.version).toBe(CURRENT_SESSION_VERSION);
   expect(first.ui.mode).toBe('linear');
-  expect(first.config.modeProfiles.activeMode).toBe('linear');
   expect(first.renderRequest.mode).toBe('circular');
-  expect(first.config.adv.scale_font_size).toBe(19);
+  // The Linear drawing is the Linear slice (Session 46); the Circular slice keeps its own.
+  expect(first.modes.linear.config.adv.scale_font_size).toBe(19);
+  expect(first.modes.circular.config.adv.scale_font_size).not.toBe(19);
 
   const context = await browser.newContext({
     baseURL: `http://127.0.0.1:${process.env.GBDRAW_WEB_TEST_PORT || 4173}`,
@@ -125,18 +126,18 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(restored.featurePanelTab).toBe(before.featurePanelTab);
     expect(restored.downloadDpi).toBe(before.downloadDpi);
     expect(restored.history).toEqual([0, 0]);
-    // The Linear draft and its settings profile wait in Linear.
+    // The Linear draft waits in the Linear drawing.
     await fresh.getByRole('button', { name: 'Linear', exact: true }).click();
     const linearDraft = await snapshot(fresh);
     expect(linearDraft.mode).toBe('linear');
     expect(linearDraft.results).toEqual([]);
-    expect(linearDraft.config.modeProfiles).toEqual(before.config.modeProfiles);
+    expect(linearDraft.config).toEqual(before.config);
     expect(linearDraft.config.adv.scale_font_size).toBe(19);
 
     const second = await save(fresh, info.outputPath('linear-draft-resaved.gbdraw-session.json.gz'));
     expect(second.ui.mode).toBe('linear');
-    expect(second.config.modeProfiles).toEqual(first.config.modeProfiles);
-    expect(second.config.adv.scale_font_size).toBe(19);
+    expect(second.modes).toEqual(first.modes);
+    expect(second.modes.linear.config.adv.scale_font_size).toBe(19);
     expect(second.renderRequest).toEqual(first.renderRequest);
     expect(second.results).toEqual(first.results);
     expect(second.resources).toEqual(first.resources);
@@ -191,8 +192,9 @@ test('each mode keeps its own title and fonts while missing Linear layout starts
 
   const file = info.outputPath('per-mode-title.gbdraw-session.json.gz');
   const saved = await save(page, file);
-  expect(saved.config.modeProfiles.profiles.circular.values.plot_title).toBe('Circular title');
-  expect(saved.config.modeProfiles.profiles.linear.values.plot_title).toBe('Linear title');
+  // Each mode's drawing is its slice (Session 46).
+  expect(saved.modes.circular.config.form.plot_title).toBe('Circular title');
+  expect(saved.modes.linear.config.form.plot_title).toBe('Linear title');
   const context = await browser.newContext({
     baseURL: `http://127.0.0.1:${process.env.GBDRAW_WEB_TEST_PORT || 4173}`
   });
@@ -259,10 +261,16 @@ test('matching current, historical, CLI-origin, and settings-only modes keep the
     expect(state.mode).toBe(settings.ui.mode);
     expect(state.request).toBeNull();
     expect(state.results).toEqual([]);
-    expect(state.config.modeProfiles.activeMode).toBe(settings.config.modeProfiles.activeMode);
+    // The shown mode takes the saved flat value and the other mode its saved
+    // profile value, each in its own drawing.
+    const axisColors = await fresh.evaluate(async () => {
+      const { state: live } = await import('./js/state.js');
+      return { circular: live.drawings.circular.adv.axis_stroke_color, linear: live.drawings.linear.adv.axis_stroke_color };
+    });
     for (const mode of ['circular', 'linear']) {
-      expect(state.config.modeProfiles.profiles[mode].values.axis_stroke_color)
-        .toBe(settings.config.modeProfiles.profiles[mode].values.axis_stroke_color);
+      expect(axisColors[mode]).toBe(mode === settings.ui.mode
+        ? settings.config.adv.axis_stroke_color
+        : settings.config.modeProfiles.profiles[mode].values.axis_stroke_color);
     }
     await assertSessionLoadLeftWorkerIdle(fresh);
   } finally {

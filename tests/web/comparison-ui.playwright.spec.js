@@ -23,7 +23,7 @@ const preservedComparisonSession = () => {
     queryRecordIndex: 0,
     subjectRecordIndex: 1
   }));
-  session.config.linearComparisonPlan = {
+  session.modes.linear.config.linearComparisonPlan = {
     mode: 'none',
     defaultSource: 'losat',
     edges: []
@@ -626,7 +626,7 @@ test('preserved imported comparison generates only after explicit inheritance', 
   const savedSession = JSON.parse(
     gunzipSync(readFileSync(await download.path())).toString('utf8')
   );
-  expect(savedSession.config.importedComparisonResolution).toEqual({ action: 'INHERIT' });
+  expect(savedSession.modes.linear.config.importedComparisonResolution).toEqual({ action: 'INHERIT' });
   expect(savedSession.renderRequest.comparisons).toEqual(generated.comparisons);
   expect(savedSession.results[savedSession.ui.selectedResultIndex].content)
     .toBe(generated.result);
@@ -1052,7 +1052,7 @@ test('comparison controls drive appearance and current Session round trips', { t
   const sessionPath = await sessionDownload.path();
   const sessionBuffer = readFileSync(sessionPath);
   const session = JSON.parse(gunzipSync(sessionBuffer).toString('utf8'));
-  expect(session.config.losat.blastp).toMatchObject({
+  expect(session.modes.linear.config.losat.blastp).toMatchObject({
     mode: 'collinear',
     candidateLimit: 23,
     maxHits: 3,
@@ -1065,7 +1065,7 @@ test('comparison controls drive appearance and current Session round trips', { t
     collinearSearchScope: 'all',
     collinearColorMode: 'orientation_identity'
   });
-  expect(session.config.adv).toMatchObject({
+  expect(session.modes.linear.config.adv).toMatchObject({
     pairwise_match_style: 'curve',
     comparison_height: 85
   });

@@ -113,7 +113,7 @@ for (const width of [1440, 390]) {
     await (await pendingSession).saveAs(sessionPath);
     const session = JSON.parse(gunzipSync(await readFile(sessionPath)));
     expect(session.runMetadata.annotationWarnings).toEqual(all.warnings);
-    expect(session.config.annotationSets[0].annotations).toHaveLength(tables.count);
+    expect(session.modes[session.ui.mode].config.annotationSets[0].annotations).toHaveLength(tables.count);
     const context = await browser.newContext({ baseURL: new URL(page.url()).origin, viewport: { width, height: 960 } });
     try {
       const fresh = await context.newPage();

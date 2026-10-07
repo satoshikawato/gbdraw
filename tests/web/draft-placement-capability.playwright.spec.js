@@ -329,7 +329,7 @@ test('an unsupported lane from a loaded Session names the feature on Generate (O
     const { product } = await placeOutward(page);
     const saved = testInfo.outputPath('outward.gbdraw-session.json');
     const session = JSON.parse(gunzipSync(await download(page, 'Save Session', saved)));
-    session.config.form.track_type = 'spreadout';
+    session.modes.circular.config.form.track_type = 'spreadout';
     const edited = testInfo.outputPath('outward-spreadout.gbdraw-session.json');
     await fs.writeFile(edited, JSON.stringify(session));
     await page.context().close();

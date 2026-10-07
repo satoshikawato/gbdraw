@@ -98,7 +98,7 @@ test('Undo Generate restores request A and Result A while preserving draft B thr
     const path = testInfo.outputPath('undo.gbdraw-session.json.gz');
     const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', path)));
     expect.soft(saved.renderRequest).toEqual(a.request);
-    expect(saved.config.form.labels_mode).toBe('none');
+    expect(saved.modes[saved.ui.mode].config.form.labels_mode).toBe('none');
     const fresh = await load(browser, path);
     try {
       const loaded = await inspect(fresh, testInfo, 'fresh-load');
@@ -248,8 +248,8 @@ test('Circular definition settings apply on Generate and keep crop length, GC% a
     await expect(page.getByText('Applies on Generate: plot title and record-label settings.', { exact: true })).toBeVisible();
     const saved = JSON.parse(gunzipSync(await download(page, 'Save Session', testInfo.outputPath('draft.gbdraw-session.json.gz'))));
     expect(hash(saved.results[0].content)).toBe(hash(committed));
-    expect(saved.config.form.species).toBe('Mus musculus');
-    expect(saved.config.adv.def_font_size).toBe(22);
+    expect(saved.modes[saved.ui.mode].config.form.species).toBe('Mus musculus');
+    expect(saved.modes[saved.ui.mode].config.adv.def_font_size).toBe(22);
 
     await generate(page);
     const applied = await svgFacts(page, await resultContent(page));
