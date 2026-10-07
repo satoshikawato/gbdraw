@@ -127,7 +127,7 @@ const strokeFirstCds = (page) => evaluateWithRetainedPromise(page, async ({ stro
 
 // The draft's stroke on `key`, and whether the displayed Result draws it.
 const strokeOf = (page, key) => page.evaluate(async ({ strokeKey, strokeColor, strokeWidth }) => {
-  const { getFeatureElements } = await import('./js/app/feature-dom.js');
+  const { getFeatureElements } = await import('./js/services/feature-dom.js');
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((item) => item.stable_override_key === strokeKey);
   const content = String(app.results[app.selectedResultIndex]?.content || '');
