@@ -115,6 +115,20 @@ const emitHistoryDiagnostic = (event) => {
   }
 };
 
+/**
+ * The artifact a generated-artifact handle names: its fingerprint and compact
+ * signature, which the default handle comparison also reads. A handle without
+ * a fingerprint names only itself.
+ * @param {{ identity?: { fingerprint?: string, compactSignature?: string } }} handle
+ * @returns {unknown}
+ */
+const artifactRetentionKey = (handle) => {
+  const identity = handle?.identity;
+  return identity?.fingerprint
+    ? `${identity.fingerprint}\u0000${identity.compactSignature ?? ''}`
+    : handle;
+};
+
 const checkpointSvgBytes = (checkpoint) => (
   Array.isArray(checkpoint?.results)
     ? checkpoint.results.reduce(
@@ -149,7 +163,8 @@ const checkpointSvgBytes = (checkpoint) => (
  *   identity?: { fingerprint?: string, compactSignature?: string },
  *   [key: string]: any
  * }} HistoryArtifactHandle
- *   A generated-artifact capture; History reads only these fields.
+ *   A generated-artifact capture; History reads only these fields. Handles with the same
+ *   fingerprint and compact signature name one artifact, whose `retainedBytes` count once.
  * @typedef {{ status: string, reason: string }} HistoryBusy
  *   The Session availability that rejects an edit, Undo, or Redo.
  * @typedef {object} HistoryFileRetention
@@ -249,6 +264,11 @@ export const createHistoryManager = ({
   let currentCheckpointSignature = '';
   let currentFileIds = new Set();
   let totalEntryBytes = 0;
+  // OV-112: adjacent artifact replacements name one artifact (entry k's `after`
+  // is entry k+1's `before`), so its bytes count once while any live entry
+  // names it. Keyed by `artifactRetentionKey`.
+  /** @type {Map<unknown, { bytes: number, references: number }>} */
+  const retainedArtifacts = new Map();
   /** @type {HistoryTransaction | null} */
   let activeTransaction = null;
   /** @type {HistoryTransaction | null} */
@@ -406,12 +426,51 @@ export const createHistoryManager = ({
     fileStore.retainOnly(collectRetainedFileIds());
   };
 
+  /**
+   * The handles whose bytes an entry names in addition to its own `byteSize`.
+   * @param {any} entry
+   * @returns {HistoryArtifactHandle[]}
+   */
+  const entryArtifactHandles = (entry) => (
+    entry?.type === 'artifact-replacement' ? [entry.before, entry.after] : []
+  );
+
+  /** @param {HistoryArtifactHandle} handle */
+  const retainArtifactBytes = (handle) => {
+    const key = artifactRetentionKey(handle);
+    const bytes = Number(handle?.retainedBytes) || 0;
+    const retained = retainedArtifacts.get(key);
+    if (!retained) {
+      retainedArtifacts.set(key, { bytes, references: 1 });
+      totalEntryBytes += bytes;
+      return;
+    }
+    retained.references += 1;
+    if (bytes > retained.bytes) {
+      totalEntryBytes += bytes - retained.bytes;
+      retained.bytes = bytes;
+    }
+  };
+
+  /** @param {HistoryArtifactHandle} handle */
+  const releaseArtifactBytes = (handle) => {
+    const key = artifactRetentionKey(handle);
+    const retained = retainedArtifacts.get(key);
+    if (!retained) return;
+    retained.references -= 1;
+    if (retained.references > 0) return;
+    retainedArtifacts.delete(key);
+    totalEntryBytes = Math.max(0, totalEntryBytes - retained.bytes);
+  };
+
   const addEntryBytes = (entry) => {
     totalEntryBytes += Number(entry?.byteSize) || 0;
+    entryArtifactHandles(entry).forEach(retainArtifactBytes);
   };
 
   const removeEntryBytes = (entry) => {
     totalEntryBytes = Math.max(0, totalEntryBytes - (Number(entry?.byteSize) || 0));
+    entryArtifactHandles(entry).forEach(releaseArtifactBytes);
   };
 
   const clearStack = (stack) => {
@@ -877,15 +936,16 @@ export const createHistoryManager = ({
           afterIntentCheckpoint.value
         ]) || '').length * 2
       : 0;
+    const namedBytes = intentCheckpointBytes
+      + (Number(transaction.before.retainedBytes) || 0)
+      + (Number(after.retainedBytes) || 0);
     const entry = {
       type: 'artifact-replacement',
       label: transaction.label || options.label || 'Generate diagram',
       before: transaction.before,
       after,
-      byteSize: Math.max(
-        1,
-        (Number(transaction.before.retainedBytes) || 0) + (Number(after.retainedBytes) || 0)
-      ) + intentCheckpointBytes,
+      // The entry's own bytes; `addEntryBytes` counts `before` and `after` once per artifact.
+      byteSize: intentCheckpointBytes,
       fileIds,
       ...(intentChanged ? {
         intentCheckpoint: {
@@ -901,7 +961,7 @@ export const createHistoryManager = ({
     emitHistoryDiagnostic({
       type: 'size',
       scope: 'artifact-replacement',
-      bytes: entry.byteSize
+      bytes: namedBytes
     });
     pushUndoEntry(entry);
     clearRedo();
@@ -912,7 +972,7 @@ export const createHistoryManager = ({
       scope: 'artifact-replacement',
       label: entry.label,
       created: true,
-      bytes: entry.byteSize
+      bytes: namedBytes
     });
     notifyCheckpointCapture(options, 'after-end');
     return true;
