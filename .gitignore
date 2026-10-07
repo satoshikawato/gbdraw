@@ -51,6 +51,7 @@ venv.bak/
 # --- IDE / Editor ---
 .vscode/
 .idea/
+.claude/settings.local.json
 *.swp
 
 # --- OS Generated ---
@@ -62,7 +63,7 @@ ehthumbs.db
 Thumbs.db
 desktop.ini
 /missing_inputs.json
-/_reproduced/missing_inputs.json
+/_reproduced/
 
 # --- Secrets ---
 *.pem
