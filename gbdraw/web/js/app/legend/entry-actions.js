@@ -69,7 +69,6 @@ export const createLegendEntryActions = ({
 }) => {
   const {
     results,
-    selectedResultIndex,
     svgContainer,
     legendEntries,
     deletedLegendEntries,
@@ -1108,11 +1107,9 @@ export const createLegendEntryActions = ({
     if (added) {
       newLegendCaption.value = '';
       newLegendColor.value = '#808080';
-      const result = results.value[selectedResultIndex.value];
-      setTimeout(() => {
-        if (!state.sessionOperationAvailability?.()
-          && results.value[selectedResultIndex.value] === result) extractLegendEntries();
-      }, 100);
+      // The editor lists the row within the add, so the add's History step
+      // holds it (OV-125).
+      extractLegendEntries();
     }
   };
 

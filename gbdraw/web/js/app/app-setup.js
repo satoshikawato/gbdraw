@@ -5373,8 +5373,13 @@ export const createAppSetup = () => {
     newLegendColor,
     updateLegendEntryColor,
     renameLegendEntry,
-    deleteLegendEntry,
-    addNewLegendEntry,
+    // A Legend that gains or loses a row is one checkpoint step, so Undo and
+    // Redo return the Legend as it was laid out, canvas included (OV-125).
+    deleteLegendEntry: /** @param {number} index */ (index) => history.runUndoableCheckpoint(
+      'Delete legend item',
+      () => deleteLegendEntry(index)
+    ),
+    addNewLegendEntry: () => history.runUndoableCheckpoint('Add legend item', addNewLegendEntry),
     moveLegendEntryUp,
     moveLegendEntryDown,
     sortLegendEntries,
@@ -5384,8 +5389,8 @@ export const createAppSetup = () => {
     getLegendEntryStrokeWidth,
     setLegendEntryStrokeColorValue: setLegendEntryStrokeColorValueWithHistory,
     updateLegendEntryStrokeColor,
-    updateLegendEntryStrokeWidth,
-    resetLegendEntryStroke,
+    updateLegendEntryStrokeWidth: undoableAction('Change legend stroke width', updateLegendEntryStrokeWidth),
+    resetLegendEntryStroke: undoableAction('Reset legend stroke', resetLegendEntryStroke),
     resetAllStrokes,
     resetAllPositions: undoableAction('Reset positions', resetAllPositions),
     resetLayout: undoableAction('Reset layout', resetLayout),
