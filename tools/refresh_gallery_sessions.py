@@ -19,7 +19,7 @@ import sys
 import tempfile
 from collections.abc import Mapping
 from contextlib import contextmanager
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import TYPE_CHECKING, Any
 from xml.etree import ElementTree as ET
 
@@ -1009,15 +1009,106 @@ def _canonicalize_orthogroup_resources(session: dict[str, Any]) -> int:
     return rewritten
 
 
+def _gallery_id(session_path: Path) -> str:
+    """The Gallery id of a Session file: its name without the Session suffix."""
+
+    return session_path.name.split(".gbdraw-session", 1)[0]
+
+
+def _set_output_prefix(session: dict[str, Any], prefix: str) -> int:
+    """Store ``prefix`` in every place a Session keeps its Output Prefix.
+
+    A Generate after Load names its files after this prefix, so the form field
+    and the render request must agree with the Gallery id the card command uses.
+    Returns the number of fields changed.
+    """
+
+    changed = 0
+    for section, key in (("config", "form"), ("renderRequest", "output")):
+        owner = session.get(section)
+        container = owner.get(key) if isinstance(owner, dict) else None
+        if isinstance(container, dict) and container.get("prefix") != prefix:
+            container["prefix"] = prefix
+            changed += 1
+    return changed
+
+
+def _recorded_input_name(arg: str) -> str:
+    """The bare file name of a recorded absolute input path in the repository.
+
+    Gallery Sessions record inputs by file name, as the card commands do. A path
+    inside this checkout, or recorded in another checkout of the repository (a
+    maintainer's machine) that holds the same file here, becomes its file name.
+    Any other absolute path is outside the repository and cannot be published.
+    """
+
+    windows_path = re.match(r"^[A-Za-z]:[\\/]", arg) is not None
+    pure = PureWindowsPath(arg) if windows_path else PurePosixPath(arg)
+    if not pure.is_absolute():
+        return arg
+    if not windows_path:
+        try:
+            Path(os.path.realpath(arg)).relative_to(REPO_ROOT)
+            return pure.name
+        except ValueError:
+            pass
+    checkout_names = {REPO_ROOT.name, "gbdraw"}
+    for index, part in enumerate(pure.parts[:-1]):
+        if part not in checkout_names:
+            continue
+        candidate = REPO_ROOT.joinpath(*pure.parts[index + 1 :])
+        try:
+            Path(os.path.realpath(candidate)).relative_to(REPO_ROOT)
+        except ValueError:
+            continue
+        if candidate.is_file():
+            return pure.name
+    raise ValueError(
+        f"Recorded input path {arg!r} is outside the repository ({REPO_ROOT}); "
+        "Gallery Sessions record inputs of the repository by file name."
+    )
+
+
+def _publishable_recorded_args(
+    args: list[str],
+    bindings: list[SessionFileBinding],
+    *,
+    gallery_id: str,
+    declared_command: bool,
+) -> list[str]:
+    """Return ``args`` with the Gallery id as ``-o`` and inputs by file name.
+
+    The declared command of an example is authoritative for its inputs (they
+    resolve in the example's directory), so only the stored-Session route
+    rewrites input paths.
+    """
+
+    input_indexes = set() if declared_command else {binding.argIndex for binding in bindings}
+    published: list[str] = []
+    for index, arg in enumerate(args):
+        if index > 0 and args[index - 1] in {"-o", "--output"}:
+            published.append(gallery_id)
+        elif arg.startswith("--output="):
+            published.append(f"--output={gallery_id}")
+        elif index in input_indexes:
+            published.append(_recorded_input_name(arg))
+        else:
+            published.append(arg)
+    return published
+
+
 def _canonicalize_recorded_cli_invocation(
     session_path: Path,
     *,
     mode: str,
+    gallery_id: str,
+    declared_command: bool = False,
 ) -> None:
-    """Rewrite retired flags in the recorded ``cliInvocation`` of a staged session.
+    """Make the recorded ``cliInvocation`` of a staged session publishable.
 
     The recorded argv is provenance for Gallery commands. Current sessions do not
-    replay it, so the refresh moves it to the current flag names here.
+    replay it, so the refresh moves it to the current flag names here, names the
+    output after the Gallery id, and records inputs by file name.
     """
 
     payload = session_path.read_bytes()
@@ -1034,7 +1125,12 @@ def _canonicalize_recorded_cli_invocation(
         ],
         mode=mode,
     )
-    invocation["args"] = args
+    invocation["args"] = _publishable_recorded_args(
+        args,
+        bindings,
+        gallery_id=gallery_id,
+        declared_command=declared_command,
+    )
     invocation["fileBindings"] = [dataclasses.asdict(binding) for binding in bindings]
     text = json.dumps(session, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     session_path.write_bytes(
@@ -1126,7 +1222,9 @@ def _refresh_one_session(
     session_path: Path,
     *,
     destination_path: Path | None = None,
+    declared_command: bool = False,
 ) -> None:
+    gallery_id = _gallery_id(session_path)
     session = load_session(session_path)
     mode = session_mode(session)
     if mode not in {"circular", "linear"}:
@@ -1139,7 +1237,11 @@ def _refresh_one_session(
         replayed_path = staging_root / f"replayed-{session_path.name}"
         finalized_path = staging_root / session_path.name
         publication_input_path = session_path
-        if _canonicalize_orthogroup_resources(session):
+        # The Output Prefix is part of the request the publication rebuilds and
+        # `finalize` keeps, so it is set on the input, before `prepare`.
+        if _canonicalize_orthogroup_resources(session) + _set_output_prefix(
+            session, gallery_id
+        ):
             publication_input_path = (
                 staging_root / f"canonicalized-{session_path.name}"
             )
@@ -1152,7 +1254,12 @@ def _refresh_one_session(
             prepared_path,
             env=env,
         )
-        _canonicalize_recorded_cli_invocation(prepared_path, mode=mode)
+        _canonicalize_recorded_cli_invocation(
+            prepared_path,
+            mode=mode,
+            gallery_id=gallery_id,
+            declared_command=declared_command,
+        )
         subprocess.run(
             [
                 sys.executable,
@@ -1164,7 +1271,7 @@ def _refresh_one_session(
                 "-f",
                 "interactive_svg",
                 "-o",
-                session_path.name.split(".gbdraw-session", 1)[0],
+                gallery_id,
                 "--session_output",
                 str(replayed_path),
             ],
@@ -1238,7 +1345,9 @@ def refresh_gallery_sessions(
                         cwd=example.command_cwd,
                     )
                     _refresh_one_session(
-                        declared_path, destination_path=staged_path
+                        declared_path,
+                        destination_path=staged_path,
+                        declared_command=True,
                     )
                     _assert_declared_figure(declared_path, staged_path)
             else:
