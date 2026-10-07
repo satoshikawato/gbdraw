@@ -91,7 +91,11 @@ Depth input has `reference_name`, a 1-based positive `position`, and a
 non-negative `depth`. Files are normally headerless. One header line is
 accepted when the position or depth fields in the first row are nonnumeric.
 Each file is one measured series for the named record; a missing series is not
-equivalent to zero depth.
+equivalent to zero depth. Positions are source coordinates of the named record,
+as in the input file. A crop keeps only the positions inside it, and a reverse
+complement flips them with the record, so the same file draws the same coverage
+for any region or orientation. The automatic Depth maximum comes from the
+positions that are drawn.
 
 ## Manifest tables
 

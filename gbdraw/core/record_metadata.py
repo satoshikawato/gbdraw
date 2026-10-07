@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
-from typing import NamedTuple
+from typing import TYPE_CHECKING, NamedTuple, TypeVar
 
 from Bio.SeqFeature import ExactPosition, SeqFeature
 from Bio.SeqRecord import SeqRecord
+
+if TYPE_CHECKING:
+    import numpy as np
+    from numpy.typing import NDArray
 
 
 _COORD_BASE_KEY = "gbdraw_coord_base"
@@ -12,6 +16,7 @@ _COORD_STEP_KEY = "gbdraw_coord_step"
 _SOURCE_FEATURE_INDEX_ATTR = "_gbdraw_source_feature_index"
 _SOURCE_FEATURE_PARTS_ATTR = "_gbdraw_source_feature_location_parts"
 _SOURCE_FEATURE_ANCHOR_PROFILE_ATTR = "_gbdraw_source_feature_anchor_profile"
+_SourceBase = TypeVar("_SourceBase", int, "NDArray[np.int64]")
 
 
 class _SourceFeatureAnchorProfile(NamedTuple):
@@ -213,6 +218,19 @@ def _read_coord_map(record: object) -> tuple[int, int]:
     if step == 0:
         step = 1
     return base, (1 if step > 0 else -1)
+
+
+def _source_to_local_index(
+    source: _SourceBase, coord_base: int, coord_step: int
+) -> _SourceBase:
+    """Return the 0-based local index of a 1-based source base.
+
+    This inverts the record coordinate map ``source = base + step * local``.
+    A numpy integer array of source bases is mapped elementwise. The result is
+    outside ``0..len(record) - 1`` when the base is outside a cropped record.
+    """
+
+    return (source - coord_base) * coord_step
 
 
 def _write_coord_map(record: SeqRecord, *, base: int, step: int) -> None:

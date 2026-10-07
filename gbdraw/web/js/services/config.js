@@ -4114,13 +4114,12 @@ const applySessionFeatureRecoveryPlan = (plan, { generationId = 'session-feature
  */
 
 /**
- * @param {string | null} [titleOverride]
+ * @param {string | null | undefined} titleOverride
  * @param {ExportSessionDocumentOptions} options
  */
 const exportSessionDocument = async (
   titleOverride = null,
-  // The only caller (exportSession) always passes storedConfig, savedUi, and isCurrent.
-  { linearRecordCatalog = null, recordDisplayRows = null, storedConfig, savedUi, isCurrent } = /** @type {ExportSessionDocumentOptions} */ ({})
+  { linearRecordCatalog = null, recordDisplayRows = null, storedConfig, savedUi, isCurrent }
 ) => {
   const resolvedTitle =
     typeof titleOverride === 'string'

@@ -6,7 +6,7 @@
 // tests/web/contracts/live-generate-parity-allowed.json).
 //
 // Run (one browser, fixed seed, default budget):
-//   GBDRAW_RANDOM_WALK_SEED=20261006 npx playwright test --config=playwright.promotion.config.js --workers=1
+//   GBDRAW_RANDOM_WALK_SEED=20261006 npx playwright test --config=tests/web/playwright/promotion.config.js --workers=1
 // GBDRAW_RANDOM_WALK_SEED (default 20261006) seeds one PRNG per fixture;
 // GBDRAW_RANDOM_WALK_STEPS (default 20) is the number of steps per fixture.
 // A failure names the seed, the fixture, the step index, the steps so far, and

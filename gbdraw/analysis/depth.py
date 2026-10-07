@@ -14,6 +14,7 @@ import pandas as pd
 from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 
+from gbdraw.core.record_metadata import _read_coord_map, _source_to_local_index
 from gbdraw.exceptions import ParseError, ValidationError
 
 DEPTH_COLUMNS = ["reference_name", "position", "depth"]
@@ -215,7 +216,13 @@ def depth_df(
     min_depth: float | None = None,
     max_depth: float | None = None,
 ) -> DataFrame:
-    """Bin depth values for a record into fixed genomic windows."""
+    """Bin depth values for a record into fixed windows of its drawn sequence.
+
+    Table positions are 1-based source coordinates of the named record. The
+    record coordinate map keeps only the positions inside a crop and maps them
+    to local positions, flipped for a reverse complement. Output positions are
+    0-based local window starts.
+    """
 
     if window <= 0:
         raise ValidationError("window must be > 0.")
@@ -229,14 +236,18 @@ def depth_df(
         return pd.DataFrame(columns=["position", "depth", "depth_normalized"])
 
     rows = _select_record_depth_rows(record, normalized_table)
-    rows = rows[(rows["position"] >= 1) & (rows["position"] <= record_len)]
+    coord_base, coord_step = _read_coord_map(record)
+    local_indexes = _source_to_local_index(
+        rows["position"].to_numpy(dtype=np.int64), coord_base, coord_step
+    )
+    inside = (local_indexes >= 0) & (local_indexes < record_len)
+    local_indexes = local_indexes[inside]
 
     coverage = np.zeros(record_len, dtype=np.float64)
-    if not rows.empty:
-        zero_based = rows["position"].to_numpy(dtype=np.int64) - 1
-        depths = rows["depth"].to_numpy(dtype=np.float64)
-        summed_depths = np.bincount(zero_based, weights=depths, minlength=record_len)
-        counts = np.bincount(zero_based, minlength=record_len)
+    if local_indexes.size:
+        depths = rows["depth"].to_numpy(dtype=np.float64)[inside]
+        summed_depths = np.bincount(local_indexes, weights=depths, minlength=record_len)
+        counts = np.bincount(local_indexes, minlength=record_len)
         nonzero = counts > 0
         coverage[nonzero] = summed_depths[nonzero] / counts[nonzero]
 

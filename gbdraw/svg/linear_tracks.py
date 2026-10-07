@@ -124,7 +124,6 @@ def calculate_linear_scalar_area_path_desc(
     *,
     value_column: str = "value_normalized",
     position_column: str = "position",
-    source_positions: bool = False,
     record_transform: RecordDisplayTransform | None = None,
 ) -> str:
     """Return a filled linear area path for normalized scalar values."""
@@ -139,8 +138,8 @@ def calculate_linear_scalar_area_path_desc(
     projected = record_transform is not None and record_transform.start_coordinate is not None
     if projected and record_transform is not None:
         samples = ((p.position, p.value) for segment in project_scalar_samples(
-            scalar_df[position_column], scalar_df[value_column], record_transform,
-            source_positions=source_positions) for p in segment.points)
+            scalar_df[position_column], scalar_df[value_column], record_transform)
+            for p in segment.points)
     for position, value in samples:
         position = float(position) if projected else int(position)
         value = max(0.0, min(1.0, float(value)))
@@ -189,7 +188,6 @@ def calculate_depth_path_desc(
         genome_size_normalization_factor,
         track_height,
         value_column="depth_normalized",
-        source_positions=True,
         record_transform=record_transform,
     )
 

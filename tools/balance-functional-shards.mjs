@@ -27,14 +27,14 @@ const median = (values) => {
 };
 
 // Playwright reports spec files relative to the test directory. The shard file
-// lists them relative to the repository root (the config file's directory), which
-// is also how the CLI file filters in the workflow name them.
+// lists them relative to the repository root (the working directory), which is
+// also how the CLI file filters in the workflow name them.
 const specsOf = (report) => {
   const visit = (suites) => suites.flatMap((suite) => [
     ...(suite.specs || []),
     ...visit(suite.suites || [])
   ]);
-  const root = path.posix.dirname(report.config.configFile.split(path.sep).join('/'));
+  const root = process.cwd().split(path.sep).join('/');
   const testDir = report.config.rootDir.split(path.sep).join('/');
   return visit(report.suites).map((spec) => ({
     ...spec, file: path.posix.relative(root, path.posix.join(testDir, spec.file))
@@ -44,7 +44,7 @@ const specsOf = (report) => {
 const listFunctionalCases = () => {
   const cli = createRequire(import.meta.url).resolve('@playwright/test/cli');
   const result = spawnSync(process.execPath, [
-    cli, 'test', '--config=playwright.functional.config.js', '--list', '--reporter=json'
+    cli, 'test', '--config=tests/web/playwright/functional.config.js', '--list', '--reporter=json'
   ], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
   if (result.status !== 0) throw new Error(result.stderr || result.stdout);
   const casesPerFile = new Map();
