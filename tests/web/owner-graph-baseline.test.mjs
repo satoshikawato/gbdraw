@@ -73,7 +73,6 @@ const PROJECTION_SHAPE_BASELINE = {
 // request; the list ends empty. May only shrink.
 const LAYER_IMPORT_BASELINE = {
   'layer.import-direction.v1|services/config.js->app/circular-track-slots.js': 7,
-  'layer.import-direction.v1|services/config.js->app/depth-track-state.js': 8,
   'layer.import-direction.v1|services/config.js->app/feature-visibility.js': 3,
   'layer.import-direction.v1|services/config.js->app/layout-preferences.js': 4,
   'layer.import-direction.v1|services/config.js->app/legend-layout/composition-actions.js': 3,
@@ -102,15 +101,12 @@ const LAYER_IMPORT_BASELINE = {
   'layer.import-direction.v1|services/session-active-config-contract.js->app/record-display-options.js': 2,
   'layer.import-direction.v1|services/session-authority.js->app/record-display-options.js': 1,
   'layer.import-direction.v1|services/session-request.js->app/circular-track-slots.js': 10,
-  'layer.import-direction.v1|services/session-request.js->app/circular-track-slots/measure-editor.js': 1,
-  'layer.import-direction.v1|services/session-request.js->app/depth-track-state.js': 3,
   'layer.import-direction.v1|services/session-request.js->app/feature-visibility.js': 2,
   'layer.import-direction.v1|services/session-request.js->app/layout-preferences.js': 2,
   'layer.import-direction.v1|services/session-request.js->app/linear-comparisons.js': 1,
   'layer.import-direction.v1|services/session-request.js->app/linear-sources.js': 2,
   'layer.import-direction.v1|services/session-request.js->app/linear-track-slots.js': 5,
   'layer.import-direction.v1|services/session-request.js->app/record-display-options.js': 3,
-  'layer.import-direction.v1|services/session-request.js->app/track-slot-validation.js': 4,
   'layer.import-direction.v1|services/svg-result-ingestion.js->app/legend/utils.js': 4,
   'layer.import-direction.v1|state.js->app/feature-visibility.js': 3,
   'layer.import-direction.v1|state.js->app/layout-preferences.js': 3,

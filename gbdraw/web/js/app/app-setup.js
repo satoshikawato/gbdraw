@@ -212,7 +212,7 @@ import {
   removeDepthTrackColumnAt,
   syncDepthSlotLabels,
   uploadedDepthFileCount
-} from './depth-track-state.js';
+} from '../services/depth-track-state.js';
 
 const { onMounted, onUnmounted, watch, nextTick, computed, ref, reactive } = window.Vue;
 const toRaw = window.Vue.toRaw || ((value) => value);

@@ -107,7 +107,7 @@ const {
   pathToFileURL(join(tempRoot, 'js', 'app', 'circular-track-slots.js'))
 );
 const { validateTrackSlotBindingInvariants } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'app', 'track-slot-validation.js'))
+  pathToFileURL(join(tempRoot, 'js', 'services', 'track-slot-validation.js'))
 );
 const { orderedConservationSources } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'conservation-series.js'))

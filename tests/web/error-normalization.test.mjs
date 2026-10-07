@@ -189,7 +189,7 @@ for (const exceptionType of ['PRIVATE_Error', 'valueerror', 7]) {
 }
 
 const { validateCustomTrackPlan, assertValidCustomTrackPlan, CustomTrackPlanValidationError } =
-  await import('../../gbdraw/web/js/app/track-slot-validation.js');
+  await import('../../gbdraw/web/js/services/track-slot-validation.js');
 const trackPlan = validateCustomTrackPlan({ mode: 'linear', axisIndex: 0, annotationSetIds: [], slots: [
   { id: 'PRIVATE_FEATURES', renderer: 'features', enabled: true, side: 'overlay', params: {} },
   { id: 'PRIVATE_ANNOTATION', renderer: 'annotations', enabled: true, side: 'overlay',

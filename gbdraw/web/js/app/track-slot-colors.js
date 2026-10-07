@@ -1,6 +1,6 @@
 // @ts-check
 import { resolveColorToHex } from '../utils/color-utils.js';
-import { normalizeOptionalText } from './track-slot-display.js';
+import { normalizeOptionalText } from '../services/track-slot-display.js';
 
 /**
  * Where an inherited skew color comes from. The color and palette sources may

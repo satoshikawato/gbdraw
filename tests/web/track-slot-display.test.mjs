@@ -28,9 +28,16 @@ await cp(
   join(tempRoot, 'services', 'current-option-values.js')
 );
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}', 'utf8');
+// The track-slot leaves the slot editors import.
+for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot-validation.js']) {
+  await cp(
+    join(repoRoot, 'gbdraw', 'web', 'js', 'services', leaf),
+    join(tempRoot, 'services', leaf)
+  );
+}
 
 const { findTrackSlotGeometry } = await import(
-  pathToFileURL(join(tempRoot, 'app', 'track-slot-display.js'))
+  pathToFileURL(join(tempRoot, 'services', 'track-slot-display.js'))
 );
 const { createLinearTrackSlotEditor } = await import(
   pathToFileURL(join(tempRoot, 'app', 'linear-track-slots.js'))
