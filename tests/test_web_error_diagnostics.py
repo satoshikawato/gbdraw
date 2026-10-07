@@ -351,3 +351,50 @@ def test_unparsable_genbank_is_unreadable_input_not_a_render_failure(tmp_path: P
     assert payload["code"] == "INPUT_UNREADABLE"
     assert payload["context"] == {}
     assert "PRIVATE" not in json.dumps(payload)
+
+
+def _record(record_id: str, length: int) -> SeqRecord:
+    record = SeqRecord(Seq("A" * length), id=record_id)
+    record.annotations["molecule_type"] = "DNA"
+    return record
+
+
+@pytest.mark.parametrize(
+    ("start", "end", "message", "reason"),
+    [
+        (1000, 2000, r"Region 1000\.\.2000 starts after the end of record TINY\.1 \(60 bp\)", "RECORD_BOUNDS"),
+        (50, 10, r"Region start \(50\) must not exceed the region end \(10\)", "ORDER"),
+    ],
+)
+def test_region_outside_the_record_names_the_record_and_is_a_region_failure(start, end, message, reason):
+    # CI-01: the end was clamped before the order check, so a region wholly
+    # beyond the record read "Start position (1000) must be less than end
+    # position (2000)" and reached the Web as RENDER_FAILED.
+    from gbdraw.crop_genbank import check_start_end_coords
+
+    with pytest.raises(ValidationError, match=message) as caught:
+        check_start_end_coords(_record("TINY.1", 60), start, end)
+    payload = _web(caught.value)
+    assert payload["code"] == "REGION_INVALID"
+    assert payload["context"] == {"field": "region", "reason": reason}
+
+
+def test_linear_record_region_beyond_the_record_keeps_its_region_diagnostic():
+    from gbdraw.api import InMemoryRecordSource, RecordInput
+    from gbdraw.api.record_planning import resolve_record_inputs
+    from gbdraw.io.regions import parse_region_spec
+
+    with pytest.raises(ValidationError, match="TINY.1 \\(60 bp\\)") as caught:
+        resolve_record_inputs(
+            [RecordInput(source=InMemoryRecordSource(_record("TINY.1", 60)), region=parse_region_spec("1000-2000"))],
+            gff_candidate_features=None,
+            gff_keep_all_features=False,
+        )
+    assert _web(caught.value)["code"] == "REGION_INVALID"
+    # A partial overrun is still clamped with a warning.
+    resolved = resolve_record_inputs(
+        [RecordInput(source=InMemoryRecordSource(_record("TINY.1", 60)), region=parse_region_spec("30-2000"))],
+        gff_candidate_features=None,
+        gff_keep_all_features=False,
+    )
+    assert len(resolved.records[0]) == 31

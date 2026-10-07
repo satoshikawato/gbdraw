@@ -572,3 +572,10 @@ test('a forced label that the diagram does not draw names the feature (OV-06)', 
   assert.deepEqual(roundtrip({ code: 'LABEL_NOT_DRAWN', context: { featureType: "5'UTR", featureStart: 1, featureEnd: 20000000 } }).context,
     { featureType: "5'UTR", featureStart: 1, featureEnd: 20000000 });
 });
+
+const producerSummary = (code, context = {}) => normalizeUserFacingError({ code, stage: 'helper', context }).summary;
+
+test('a region wholly beyond the record keeps the region correction (CI-01)', () => {
+  assert.equal(producerSummary('REGION_INVALID', { field: 'region', reason: 'RECORD_BOUNDS' }),
+    'The region is invalid. Field: region. Keep the region within the record length.');
+});
