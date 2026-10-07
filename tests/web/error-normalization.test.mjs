@@ -598,3 +598,10 @@ test('an Upload pair without its BLAST TSV names the missing file (CI-06)', () =
 test('an outfmt 7 Fields line that cannot be read names the line (CI-07d)', () => {
   assert.match(producerSummary('COMPARISON_INPUT', { reason: 'OUTFMT7_FIELDS', row: 2 }), /^The comparison input is invalid\. Line 2\. List all 12 standard/);
 });
+
+test('a GenBank slot file without records says what it looks like (UJ-07)', () => {
+  assert.equal(producerSummary('NO_RECORDS', { reason: 'FASTA_IN_GENBANK' }),
+    'No records were found. Choose input containing records. This file looks like FASTA. Use GFF3 + FASTA input, or a GenBank/DDBJ flat file.');
+  assert.match(producerSummary('NO_RECORDS', { reason: 'EMPTY_FILE' }), / The file is empty\.$/);
+  assert.match(producerSummary('NO_RECORDS', { reason: 'NOT_GENBANK' }), / The file is not a GenBank\/DDBJ flat file \(it has no LOCUS line\)\.$/);
+});

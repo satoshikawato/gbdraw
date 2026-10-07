@@ -228,3 +228,19 @@ def test_undecodable_input_is_unreadable_not_unclassified_validation(helpers, tm
     assert result['error'] == {'code': 'INPUT_UNREADABLE', 'operation': 'listSequenceRecords',
                                'stage': 'helper', 'context': {}}
 
+
+@pytest.mark.parametrize(('content', 'reason'), [
+    (b'', 'EMPTY_FILE'),
+    (b'\n  \r\n', 'EMPTY_FILE'),
+    (b'\n>PRIVATE_ID description\nACGT\n', 'FASTA_IN_GENBANK'),
+    (b'<?xml version="1.0"?>\n<svg PRIVATE/>\n', 'NOT_GENBANK'),
+    (b'PRIVATE plain text\n', 'NOT_GENBANK'),
+])
+def test_a_genbank_slot_file_without_records_says_what_it_looks_like(helpers, tmp_path, content, reason):
+    # UJ-07: every file without a GenBank record read "No records were found".
+    path = tmp_path / 'PRIVATE.gbk'
+    path.write_bytes(content)
+    result = json.loads(helpers['list_sequence_records'](str(path), 'genbank'))
+    assert result['error'] == {'code': 'NO_RECORDS', 'operation': 'listSequenceRecords',
+                               'stage': 'helper', 'context': {'reason': reason}}
+    assert 'PRIVATE' not in json.dumps(result)
