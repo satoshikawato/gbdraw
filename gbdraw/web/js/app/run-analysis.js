@@ -34,7 +34,8 @@ import {
   promoteCanonicalRenderRequestToCurrent,
   readCanonicalResourceRecordCount,
   requestLabelProjection,
-  requestLabelTableTsv
+  requestLabelTableTsv,
+  requireLinearComparisonPlanSnapshot
 } from '../services/session-request.js';
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
 import {
@@ -883,7 +884,8 @@ const applyLosatSequenceTransforms = (record, regionSpec, reverseFlag) => {
     const start = Math.max(0, region.start - 1);
     const end = Math.min(sequence.length, region.end);
     if (start >= end && (region.start !== 1 || region.end !== sequence.length)) {
-      throw new Error(`Start position (${region.start}) must be less than end position (${region.end}).`);
+      // The region starts after the record ends, as crop_genbank.py reports it (GX-09).
+      throw diagnosticError('REGION_INVALID', { field: 'region', reason: 'RECORD_BOUNDS' });
     }
     sequence = sequence.slice(start, end);
     if (region.reverse) sequence = reverseComplementSequence(sequence);
@@ -2334,12 +2336,7 @@ export const createRunAnalysis = ({
       candidateRules = colorCandidate.rules;
       runState.manualSpecificRules = candidateRules;
       if (mode.value === 'linear') {
-        if (!activeComparisonPlanSnapshot || !Array.isArray(activeComparisonPlanSnapshot.edges)) {
-          throw new Error('A resolved Linear comparison plan is required.');
-        }
-        if (activeComparisonPlanSnapshot.error) {
-          throw new Error(activeComparisonPlanSnapshot.error);
-        }
+        requireLinearComparisonPlanSnapshot(activeComparisonPlanSnapshot);
       }
       if (typeof validateAnnotationTargets === 'function' && annotationSets.length > 0) {
         const annotationError = validateAnnotationTargets();

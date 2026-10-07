@@ -334,7 +334,8 @@ def _capture_circular_radial_layout(
     monkeypatch: pytest.MonkeyPatch,
     *,
     track_type: str,
-    circular_track_slots: list[CircularTrackSlot] | None = None,
+    circular_track_slots: list[CircularTrackSlot] | list[str] | None = None,
+    circular_track_axis_index: int | None = None,
     center_reserved_radius: float | None = None,
     input_filename: str = "HmmtDNA.gbk",
 ):
@@ -358,6 +359,8 @@ def _capture_circular_radial_layout(
     kwargs = {}
     if circular_track_slots is not None:
         kwargs["circular_track_slots"] = circular_track_slots
+    if circular_track_axis_index is not None:
+        kwargs["circular_track_axis_index"] = circular_track_axis_index
     if center_reserved_radius is not None:
         kwargs["center_reserved_radius"] = center_reserved_radius
 
@@ -2493,3 +2496,87 @@ def test_cli_center_reserved_radius_forwards_value(
     )
 
     assert captured["center_reserved_radius"] == pytest.approx(48.0)
+
+
+# The Web "Reset to <preset>" stacks as CLI slots: feature lane and axis index.
+_WEB_PRESET_FEATURE_LANES = {"tuckin": ("inside", 0), "middle": ("split", 0), "spreadout": ("outside", 1)}
+
+
+def _web_preset_stack(track_type: str, **radius: str) -> tuple[list[str], int]:
+    lane, axis_index = _WEB_PRESET_FEATURE_LANES[track_type]
+    numeric = {
+        "gc_content": "gc_content:dinucleotide_content@side=inside",
+        "gc_skew": "gc_skew:dinucleotide_skew@side=inside",
+    }
+    return [
+        f"features:features@lane_direction={lane}",
+        "ticks:ticks@side=inside,tick_label_layout=label_in_tick_out",
+        *(f"{spec},r={radius[slot_id]}" if slot_id in radius else spec for slot_id, spec in numeric.items()),
+    ], axis_index
+
+
+def _web_preset_layout(monkeypatch: pytest.MonkeyPatch, track_type: str, **radius: str):
+    slots, axis_index = _web_preset_stack(track_type, **radius)
+    layout = _capture_circular_radial_layout(
+        monkeypatch,
+        track_type=track_type,
+        circular_track_slots=slots,
+        circular_track_axis_index=axis_index,
+    )
+    monkeypatch.undo()
+    return layout
+
+
+@pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
+@pytest.mark.parametrize(("slot_id", "radius"), [("gc_content", 0.6), ("gc_skew", 0.45)])
+def test_pinned_numeric_row_keeps_unpinned_rows_above_it_in_stack_order(
+    monkeypatch: pytest.MonkeyPatch,
+    track_type: str,
+    slot_id: str,
+    radius: float,
+) -> None:
+    # TK-01: the rows above a pinned inside row pack between it and the axis.
+    layout = _web_preset_layout(monkeypatch, track_type, **{slot_id: str(radius)})
+
+    pinned = next(slot for slot in layout.slots if slot.id == slot_id)
+    assert pinned.explicit_anchor
+    assert pinned.anchor_radius_px == pytest.approx(radius * layout.axis.radius_px)
+    inside = [slot for slot in layout.slots if slot.side == "inside"]
+    assert [slot.id for slot in inside][-2:] == ["gc_content", "gc_skew"]
+    assert inside[0].reserved_band_px.outer_px < layout.axis.radius_px
+    for outer_slot, inner_slot in zip(inside, inside[1:]):
+        assert inner_slot.reserved_band_px.outer_px <= outer_slot.reserved_band_px.inner_px + 1e-6
+
+
+def _slot_geometry(layout) -> dict[str, tuple[float, ...]]:
+    return {
+        slot.id: (
+            float(slot.anchor_radius_px),
+            float(slot.resolved_width_px),
+            *(
+                edge
+                for band in (slot.packing_band_px, slot.draw_band_px, slot.reserved_band_px)
+                for edge in ((band.inner_px, band.outer_px) if band is not None else ())
+            ),
+        )
+        for slot in layout.slots
+    }
+
+
+@pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
+@pytest.mark.parametrize("slot_id", ["gc_content", "gc_skew"])
+def test_numeric_row_pinned_at_its_auto_radius_keeps_the_auto_layout(
+    monkeypatch: pytest.MonkeyPatch,
+    track_type: str,
+    slot_id: str,
+) -> None:
+    auto = _web_preset_layout(monkeypatch, track_type)
+    auto_radius = next(slot for slot in auto.slots if slot.id == slot_id).anchor_radius_px
+
+    pinned = _web_preset_layout(monkeypatch, track_type, **{slot_id: f"{auto_radius!r}px"})
+
+    observed = _slot_geometry(pinned)
+    expected = _slot_geometry(auto)
+    assert observed.keys() == expected.keys()
+    for key, geometry in expected.items():
+        assert observed[key] == pytest.approx(geometry, abs=1e-6), key

@@ -2273,14 +2273,20 @@ def add_record_on_circular_canvas(
                     stagnant_passes = 0
                 if stagnant_passes >= 2:
                     fixed_inside_slots = [
-                        slot.id
+                        slot
                         for slot in radial_layout.slots
                         if slot.side == "inside" and (slot.explicit_anchor or slot.explicit_width)
                     ]
-                    slot_context = ", ".join(fixed_inside_slots) or "center/feature interval"
+                    slot_context = ", ".join(slot.id for slot in fixed_inside_slots) or "center/feature interval"
                     raise ValidationError(
                         "radial inner labels cannot fit the fixed circular geometry: "
-                        f"slot={slot_context}, required_additional_px={required_growth:.3f}"
+                        f"slot={slot_context}, required_additional_px={required_growth:.3f}",
+                        # The Track row is the first fixed inside row, to move or unpin.
+                        diagnostic={
+                            "code": "TRACK_LAYOUT",
+                            "reason": "CANNOT_FIT",
+                            **({"slotIndex": int(fixed_inside_slots[0].slot_index)} if fixed_inside_slots else {}),
+                        },
                     )
                 previous_growth = required_growth
 
@@ -2295,10 +2301,13 @@ def add_record_on_circular_canvas(
                             ),
                             None,
                         )
+                        # Outside rows are not frozen: they stay beyond the enlarged
+                        # axis and the feature slot moved outside, in stack order.
                         if (
                             str(slot.renderer) != "features"
                             and resolved_slot is not None
                             and resolved_slot.anchor_radius_px is not None
+                            and resolved_slot.side != "outside"
                         ):
                             frozen_slots.append(
                                 replace(
