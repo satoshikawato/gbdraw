@@ -856,6 +856,46 @@ for (const mode of ['linear', 'circular']) {
   });
 }
 
+// OV-167: after a Session load there is no removed copy of a deleted row, so a
+// restored row takes the stroke Generate draws for a row of its kind, also when
+// the rows left to copy from are GC rows (drawn without a stroke).
+for (const mode of ['linear', 'circular']) {
+  test(`M16 ${mode}: a row restored after a Session load with only GC rows left takes Generate's stroke`, async ({ browser }, testInfo) => {
+    test.setTimeout(900_000);
+    const page = await loadWithGc(browser, mode);
+    let fresh;
+    try {
+      const generated = await rowStroke(page, 'CDS');
+      expect(generated.result.length).toBeGreaterThan(0);
+      await deleteLegendRow(page, 'CDS');
+      await deleteLegendRow(page, 'repeat_region');
+      await settleLive(page);
+      const left = (await legendRowsByCaption(page)).editor;
+      expect(left.length, 'GC rows are left').toBeGreaterThan(0);
+      expect(left.every(caption => /^GC /.test(caption)), `only GC rows are left: ${left}`).toBe(true);
+      const saved = testInfo.outputPath(`ov167-${mode}.gbdraw-session.json.gz`);
+      await download(page, 'Save Session', saved);
+
+      fresh = await load(browser, saved);
+      fresh.setDefaultTimeout(180_000);
+      await fresh.locator('.drawer-toggle').click();
+      await fresh.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
+      await fresh.locator('.right-drawer').getByRole('list', { name: 'Deleted items' })
+        .getByRole('button', { name: 'Restore CDS' }).click();
+      // The first Python helper after a Load starts the diagram Worker.
+      await expect.poll(() => fresh.evaluate(legendIndex, 'CDS'), { timeout: 180_000 }).toBeGreaterThanOrEqual(0);
+      await settleLive(fresh);
+      expect(await rowStroke(fresh, 'CDS'), 'the restored row live').toEqual(generated);
+      await generate(fresh);
+      expect(await rowStroke(fresh, 'CDS'), 'the row after Generate').toEqual(generated);
+      expect(page.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+      if (fresh) await fresh.context().close();
+    }
+  });
+}
+
 // OV-158 (Owner decision 2026-10-07): renaming a feature row in the Legend
 // editor turns it into a rule row, which the live edit appended to the Legend
 // and Generate kept last. The row keeps its place, live and at Generate,
