@@ -75,8 +75,6 @@ const LAYER_IMPORT_BASELINE = {
   'layer.import-direction.v1|services/config.js->app/circular-track-slots.js': 7,
   'layer.import-direction.v1|services/config.js->app/feature-visibility.js': 3,
   'layer.import-direction.v1|services/config.js->app/layout-preferences.js': 4,
-  'layer.import-direction.v1|services/config.js->app/legend-layout/composition-actions.js': 3,
-  'layer.import-direction.v1|services/config.js->app/legend/stroke-actions.js': 1,
   'layer.import-direction.v1|services/config.js->app/linear-comparisons.js': 5,
   'layer.import-direction.v1|services/config.js->app/linear-track-slots.js': 7,
   'layer.import-direction.v1|services/config.js->app/losat-cache.js': 13,

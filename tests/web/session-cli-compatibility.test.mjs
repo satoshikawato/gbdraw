@@ -37,6 +37,8 @@ const { CANONICAL_REQUEST_SCHEMA, buildCanonicalRenderRequest } = await import('
 const { inheritCommittedComparisonIntent } = await import('../../gbdraw/web/js/services/imported-comparison-intent.js');
 const { resolveLinearComparisonPlan } = await import('../../gbdraw/web/js/app/linear-comparisons.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+// The composition root's transform of an older Session's Results (R13 port).
+const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 const { getSessionResourceSource, readFileBytes } = await import('../../gbdraw/web/js/services/file-content-cache.js');
 const root = process.cwd();
 // Exercise the Worker's actual typed helper without starting a browser runtime.
@@ -66,7 +68,7 @@ const fileRecordKeys = request => [...new Set(request.records.map(
 ))];
 const load = bytes => importSession({ target: {
   files: [new File([bytes], 'current.json', { type: 'application/json' })], value: 'selected'
-} });
+} }, { transformLegacyResultSvg });
 const DEFAULT_PLAN = { mode: 'none', defaultSource: 'losat', edges: [] };
 // B15: a read-only CLI comparison (-b) is not a Web draft. The replacement draft
 // is the Web default (No comparison), so Replace with current controls

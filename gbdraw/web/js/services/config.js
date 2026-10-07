@@ -152,13 +152,7 @@ import { convertMainSessionComparisonFrames } from './main-session-comparison-fr
 import { downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
 import { applySpecificRuleProvenance } from './specific-color-rules.js';
-import { applyStrokeOverridesToSvg } from '../app/legend/stroke-actions.js';
 import { normalizeLegacyLegendEntryGroups } from './svg-result-normalization.js';
-import {
-  COMPOSITION_METADATA_ATTRIBUTE,
-  COMPOSITION_SCHEMA_ATTRIBUTE,
-  normalizeLegacyComposition
-} from '../app/legend-layout/composition-actions.js';
 import {
   LOSAT_DERIVED_CACHE_SCHEMA,
   buildValidatedProteinIdentityIndex,
@@ -288,6 +282,26 @@ const { nextTick } = window.Vue;
  * @property {Record<string, any>} [legacyArtifacts]
  * @property {Record<string, any>} [runMetadata]
  * @property {Record<string, any>} [cliInvocation]
+ */
+
+/**
+ * What an older Session's Result needs from the Session: the committed legend
+ * and title sides with the saved user offsets, and the extracted features with
+ * the two saved stroke override maps.
+ * @typedef {object} LegacyResultSvgData
+ * @property {{ legendSide: string, titleSide: string, userDeltas: Record<string, number[] | null> }} composition
+ * @property {{
+ *   features: Record<string, any>[],
+ *   legendStrokeOverrides: Record<string, any>,
+ *   featureStrokeOverrides: Record<string, any>
+ * }} strokes
+ */
+
+/**
+ * The composition root's transform of an older Session's Result (R13 port):
+ * it gives a Result without composition metadata the legacy composition and
+ * projects the saved strokes. Returns whether the SVG changed.
+ * @typedef {(svg: Element, data: LegacyResultSvgData) => boolean} LegacyResultSvgTransform
  */
 export const SESSION_VERSION = 45;
 const CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40;
@@ -4352,6 +4366,11 @@ const exportSessionDocument = async (
   return { status: 'saved', blob: compressed, filename: sessionFilename };
 };
 
+/**
+ * @param {Record<string, any>} [options] The options of `importSession` with
+ * `isCurrent` and `signal`; `transformLegacyResultSvg` is the composition
+ * root's `LegacyResultSvgTransform` port.
+ */
 const importSessionDocument = async (e, options = {}) => {
   const file = e.target.files[0];
   if (!file) return { status: 'skipped' };
@@ -4531,14 +4550,14 @@ const importSessionDocument = async (e, options = {}) => {
           Boolean(canonicalProjection.config?.form?.multi_record_canvas)
         )
       : null;
+    // The composition and stroke owners transform an older Session's Result
+    // through the composition root's port (R13); this module passes data only.
+    /** @type {LegacyResultSvgTransform} */
+    const transformLegacyResultSvg = options.transformLegacyResultSvg;
     const transformRestoredSessionSvg = (svg) => {
       const legendGroupsChanged = normalizeLegacyLegendEntryGroups(svg);
-      let compositionChanged = false;
-      if (
-        svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === null
-        && svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) === null
-      ) {
-        normalizeLegacyComposition(svg, {
+      const legacyResultChanged = transformLegacyResultSvg(svg, {
+        composition: {
           legendSide: committedLayout?.legend || restoredConfig?.form?.legend || 'none',
           titleSide: committedLayout?.plotTitlePosition
             || restoredConfig?.adv?.plot_title_position || 'none',
@@ -4554,16 +4573,14 @@ const importSessionDocument = async (e, options = {}) => {
               ? [ui.plotTitleUserOffset.x, ui.plotTitleUserOffset.y]
               : null
           }
-        });
-        compositionChanged = true;
-      }
-      const strokeCount = applyStrokeOverridesToSvg({
-        svg,
-        features: restoredFeatureState.extractedFeatures || [],
-        legendStrokeOverrides: restoredEditorState?.legend?.strokeOverrides || {},
-        featureStrokeOverrides: restoredEditorState?.featureStrokes?.overrides || {}
+        },
+        strokes: {
+          features: restoredFeatureState.extractedFeatures || [],
+          legendStrokeOverrides: restoredEditorState?.legend?.strokeOverrides || {},
+          featureStrokeOverrides: restoredEditorState?.featureStrokes?.overrides || {}
+        }
       });
-      return legendGroupsChanged || compositionChanged || strokeCount > 0;
+      return legendGroupsChanged || legacyResultChanged;
     };
 
     recordSessionLifecycleEvent('svg-admission-start');
