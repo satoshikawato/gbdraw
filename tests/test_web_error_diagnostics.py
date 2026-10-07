@@ -253,17 +253,16 @@ def _pinned(slot_id: str, renderer: str, radius_px: float, width_px: float = 20.
             "'PRIVATE_SLOT' would overlap or move outside 'gc_content'.",
             {"reason": "CANNOT_FIT", "slotIndex": 1},
         ),
-        # An outside row listed before a pinned outside row still gets an empty
-        # window (outside stack order is not yet resolved like the inside one).
+        # An outside row has no room between the axis and the pinned row above it.
         (
             (
-                CircularTrackSlot(id="PRIVATE_SLOT", renderer="dinucleotide_skew", side="outside"),
                 _pinned("gc_content", "dinucleotide_content", 105.0, 4.0, side="outside"),
+                CircularTrackSlot(id="PRIVATE_SLOT", renderer="dinucleotide_skew", side="outside"),
             ),
             None,
             False,
             "Circular track slot 'PRIVATE_SLOT' cannot be placed outside without overlap.",
-            {"reason": "CANNOT_FIT", "slotIndex": 0, "innerPx": 108, "outerPx": 102},
+            {"reason": "CANNOT_FIT", "slotIndex": 1, "innerPx": 101, "outerPx": 102},
         ),
     ],
 )

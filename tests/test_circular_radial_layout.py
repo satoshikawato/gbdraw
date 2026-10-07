@@ -629,28 +629,58 @@ def test_depth_reserved_band_includes_axis_radial_footprint_without_depth_df() -
     assert hidden_axis_depth.reserved_band_px == hidden_axis_depth.draw_band_px
 
 
-def test_unpinned_inside_rows_pack_on_both_sides_of_a_pinned_row_in_stack_order() -> None:
-    # Inside rows run from the axis inward: rows before a pinned row lie between it and the axis.
+@pytest.mark.parametrize("side", ["inside", "outside"])
+def test_unpinned_rows_pack_on_both_sides_of_a_pinned_row_in_stack_order(side: str) -> None:
+    # Stack order runs from the outermost row to the innermost on both sides of the axis.
+    canvas_config, cfg = _small_radial_canvas()
+    canvas_config.radius = 300.0
+    pinned_radius = 0.5 if side == "inside" else 1.5
+    layout = resolve_circular_radial_layout(
+        total_length=1000,
+        canvas_config=canvas_config,
+        slots=[
+            CircularTrackSlot(id="above", renderer="dinucleotide_content", side=side),
+            CircularTrackSlot(
+                id="pinned",
+                renderer="dinucleotide_skew",
+                side=side,
+                radius=ScalarSpec(pinned_radius, "factor"),
+            ),
+            CircularTrackSlot(id="below", renderer="dinucleotide_content", side=side),
+        ],
+    )
+    by_id = {slot.id: slot.packing_band_px for slot in layout.slots}
+    gap = 0.01 * canvas_config.radius
+
+    assert by_id["pinned"].center_px == pytest.approx(pinned_radius * canvas_config.radius)
+    assert by_id["above"].inner_px >= by_id["pinned"].outer_px + gap - 1e-6
+    assert by_id["below"].outer_px <= by_id["pinned"].inner_px - gap + 1e-6
+    if side == "inside":
+        assert by_id["above"].outer_px <= canvas_config.radius - gap + 1e-6
+    else:
+        assert by_id["below"].inner_px >= canvas_config.radius + gap - 1e-6
+
+
+def test_outside_row_after_a_pinned_feature_row_lies_between_it_and_the_axis() -> None:
+    # The order check skips feature rows, so this order was not enforced before.
     canvas_config, cfg = _small_radial_canvas()
     canvas_config.radius = 300.0
     layout = resolve_circular_radial_layout(
         total_length=1000,
         canvas_config=canvas_config,
         slots=[
-            CircularTrackSlot(id="above", renderer="dinucleotide_content", side="inside"),
             CircularTrackSlot(
-                id="pinned",
-                renderer="dinucleotide_skew",
-                side="inside",
-                radius=ScalarSpec(0.5, "factor"),
+                id="features",
+                renderer="features",
+                side="outside",
+                radius=ScalarSpec(1.4, "factor"),
+                params={"lane_direction": "outside"},
             ),
-            CircularTrackSlot(id="below", renderer="dinucleotide_content", side="inside"),
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", side="outside"),
         ],
+        feature_dict={"a": _Feature(0)},
     )
     by_id = {slot.id: slot.packing_band_px for slot in layout.slots}
-    gap = 0.01 * canvas_config.radius
 
-    assert by_id["pinned"].center_px == pytest.approx(0.5 * canvas_config.radius)
-    assert by_id["above"].inner_px >= by_id["pinned"].outer_px + gap - 1e-6
-    assert by_id["above"].outer_px <= canvas_config.radius - gap + 1e-6
-    assert by_id["below"].outer_px <= by_id["pinned"].inner_px - gap + 1e-6
+    assert by_id["gc_skew"].inner_px >= canvas_config.radius
+    assert by_id["gc_skew"].outer_px < by_id["features"].inner_px
