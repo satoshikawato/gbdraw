@@ -82,6 +82,7 @@
     "tests/web/session-save-lifecycle.playwright.spec.js": 1,
     "tests/web/settings-only-session.playwright.spec.js": 4,
     "tests/web/similarity-alignment-ui.playwright.spec.js": 15,
+    "tests/web/small-ui-placement.playwright.spec.js": 0.94,
     "tests/web/source-legend-reconciliation.playwright.spec.js": 2,
     "tests/web/source-recipe-cli-parity.playwright.spec.js": 2,
     "tests/web/source-visibility-reconciliation.playwright.spec.js": 4,
@@ -196,7 +197,8 @@
       "tests/web/session-operation-consistency.playwright.spec.js",
       "tests/web/session-save-lifecycle.playwright.spec.js",
       "tests/web/settings-only-session.playwright.spec.js",
-      "tests/web/similarity-alignment-ui.playwright.spec.js"
+      "tests/web/similarity-alignment-ui.playwright.spec.js",
+      "tests/web/small-ui-placement.playwright.spec.js"
     ]
   ]
 }

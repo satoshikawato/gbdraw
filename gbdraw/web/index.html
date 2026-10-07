@@ -289,6 +289,8 @@
             min-width: min(300px, calc(100vw - 24px));
         }
         .pairwise-match-popup {
+            /* The footer (h-8) is not part of the popup's room: the inline max-height runs to the viewport bottom. */
+            --app-footer-clearance: 2rem;
             width: min(460px, calc(100vw - 24px));
             min-width: min(280px, calc(100vw - 24px));
             min-height: min(180px, calc(100vh - 24px));
@@ -3878,7 +3880,7 @@
                         <div class="mt-2 space-y-3 pt-2 border-t border-slate-200">
                             <div class="bg-blue-50/60 border border-blue-200 rounded-lg p-3">
                                 <div class="flex items-center justify-between mb-2">
-                                    <h4 class="group-heading" aria-label="PRESET SCHEMES">PRESET SCHEMES <help-tip id="help-colors-preset-schemes" text="Applies both default colors (-d) and specific rules (-t)."></help-tip></h4>
+                                    <h4 class="group-heading" aria-label="PRESET SCHEMES">PRESET SCHEMES <help-tip id="help-colors-preset-schemes" text="Replaces the specific rules (-t) with the preset's rules. The palette is unchanged. Bakta also sets the CDS default color (-d) to #cccccc and the Legend box size and font size to 12."></help-tip></h4>
                                     <span class="text-[9px] font-semibold text-blue-600">Affects -d &amp; -t</span>
                                 </div>
                                 <div class="flex items-center gap-2">
@@ -3892,7 +3894,7 @@
                                         <span v-else>Apply</span>
                                     </button>
                                 </div>
-                                <p class="text-[9px] text-slate-500 mt-2">Preset schemes update the palette and replace existing specific rules.</p>
+                                <p data-preset-scheme-effects class="text-[9px] text-slate-500 mt-2">Preset schemes replace existing specific rules; the palette is unchanged. Bakta also sets the CDS default color to #cccccc and the Legend box size and font size to 12.</p>
                             </div>
 
                             <div>
@@ -3968,6 +3970,7 @@
                                 </datalist>
 
                                 <p role="status" aria-live="polite" aria-atomic="true" class="mb-2 text-[10px] text-slate-600 break-words">{{ specificRuleNotice }}</p>
+                                <p v-if="manualSpecificRules.length > 1" data-specific-rule-order-hint class="mb-2 text-[10px] text-slate-500 break-words">When rules overlap, the first matching row for one qualifier key wins, so Move rule up/down changes the result only between rules with the same qualifier key. Rules with different qualifier keys are tried in the order the keys appear on the feature, whatever the row order.</p>
                                 <div class="space-y-1 mb-3">
                                     <div v-for="(rule, i) in manualSpecificRules" :key="specificRulePatternFieldId(rule)" data-color-rule-row class="bg-white p-1.5 rounded border border-slate-200 text-[10px] space-y-1">
                                         <div class="grid grid-cols-12 gap-1 items-center">
@@ -5962,7 +5965,7 @@
                          role="dialog"
                          aria-label="Pairwise match details"
                          class="fixed z-50 feature-popup pairwise-match-popup custom-scrollbar bg-white rounded-xl shadow-2xl border border-slate-200 p-4"
-                         :style="pairwiseMatchPopupStyle">
+                         :style="[pairwiseMatchPopupStyle, { maxHeight: `calc(${pairwiseMatchPopupStyle.maxHeight} - var(--app-footer-clearance))` }]">
                         <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100 cursor-move">
                             <div class="w-4 h-4 rounded mt-1 border border-slate-200"
                                  :style="{ backgroundColor: clickedPairwiseMatch.fill || '#94a3b8' }"></div>
@@ -7524,11 +7527,15 @@
         </section>
     </Teleport>
     <Teleport to="body">
-        <section v-if="similarityAlignmentResetDialogOpen" role="dialog"
+        <div v-if="similarityAlignmentResetDialogOpen"
+             class="fixed inset-0 z-[55] flex items-center justify-center bg-slate-950/45 p-3"
+             data-similarity-alignment-reset-overlay
+             @keydown.tab="trapDialogFocus">
+        <section role="dialog" aria-modal="true"
                  aria-labelledby="similarity-alignment-reset-title" aria-describedby="alignment-reset-description" data-history-scope="transient"
                  data-similarity-alignment-reset-dialog
                  @keydown.esc.prevent.stop="cancelSimilarityAlignmentReset"
-                 class="fixed right-3 top-3 z-[55] flex max-h-[calc(100dvh-1.5rem)] w-[calc(100vw-1.5rem)] max-w-md flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+                 class="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
             <header class="shrink-0 border-b border-slate-200 p-4">
                 <h2 id="similarity-alignment-reset-title" tabindex="-1" class="font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-600">Reset alignment</h2>
             </header>
@@ -7560,6 +7567,7 @@
                 </div>
             </footer>
         </section>
+        </div>
         <div
             v-if="linearSourceRemovalDialog.open"
             class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4"

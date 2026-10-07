@@ -6,6 +6,7 @@ The Web resolves named colors with the browser's CSS, so the Python map in
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -182,6 +183,19 @@ def test_every_css_name_resolves_to_its_css_hex(name: str, hex_value: str) -> No
 
 def test_color_name_map_holds_exactly_the_css_names() -> None:
     assert set(_COLOR_NAME_MAP) == set(CSS_NAMED_COLORS)
+
+
+def test_annotation_table_codec_accepts_exactly_the_css_names() -> None:
+    # The Web annotation table validator keeps its own list of color names.
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "gbdraw/web/js/app/annotations/table-codec.js"
+    ).read_text(encoding="utf-8")
+    match = re.search(r"const SVG_COLOR_NAMES = new Set\(`(.*?)`", source, re.DOTALL)
+    assert match is not None
+    names = match.group(1).split()
+    assert len(names) == len(set(names))
+    assert set(names) == set(CSS_NAMED_COLORS)
 
 
 @pytest.mark.regression
