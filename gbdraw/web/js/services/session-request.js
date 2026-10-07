@@ -635,11 +635,7 @@ const validateProjectedDepthSources = (depthRows, logicalTrackCount) => {
     const hasSource = depthRows.some((row) => (
       Array.isArray(row) && Boolean(row[trackIndex]?.resourceId)
     ));
-    if (!hasSource) {
-      throw new Error(
-        `Depth series #${trackIndex + 1} (logical track index ${trackIndex}) has no source in any record.`
-      );
-    }
+    if (!hasSource) throw diagnosticError('DEPTH_INVALID', { seriesIndex: trackIndex, reason: 'REQUIRED' });
   }
 };
 
@@ -1491,11 +1487,7 @@ const buildDepthResources = ({ state, filesData, resources, diagramOptions, reco
   );
   diagramOptions.depthTracks = Array.from({ length: logicalTrackCount }, (_, trackIndex) => {
     const sources = rows.map((row) => row[trackIndex] || null);
-    if (!sources.some(Boolean)) {
-      throw new Error(
-        `Depth series #${trackIndex + 1} (logical track index ${trackIndex}) has no source in any record.`
-      );
-    }
+    if (!sources.some(Boolean)) throw diagnosticError('DEPTH_INVALID', { seriesIndex: trackIndex, reason: 'REQUIRED' });
     const sharedSource = sources[0] && sources.every((source) => source === sources[0]);
     const sourceName = `depth-tracks-${trackIndex + 1}-source`;
     const source = sharedSource
@@ -3301,9 +3293,7 @@ const projectCanonicalDepthTracks = ({
       sourceRefs = Array.from({ length: records.length }, () => track.source);
     }
     if (!sourceRefs.some((ref) => ref !== null && ref !== undefined)) {
-      throw new Error(
-        `Depth series #${trackIndex + 1} (logical track index ${trackIndex}) has no source in any record.`
-      );
+      throw diagnosticError('DEPTH_INVALID', { seriesIndex: trackIndex, reason: 'REQUIRED' });
     }
     sourceRefs.forEach((ref, recordIndex) => {
       sourceRows[recordIndex][trackIndex] = ref ?? null;

@@ -33,6 +33,8 @@ test('styles follow the caption: a data change retires only the captions the dat
   const retire = buildLegendStyleRetirement({
     legendColorOverrides,
     legendStrokeOverrides,
+    legendEntries: { value: [] },
+    projectLegendEntries: () => assert.fail('no rename to retire'),
     namedCaptions: () => trackDataLegendCaptions({ annotationSets: sets })
   });
   const result = retire(() => {
@@ -46,11 +48,61 @@ test('styles follow the caption: a data change retires only the captions the dat
 
 test('a change that keeps every caption retires nothing', () => {
   const legendColorOverrides = { Keep: '#111111' };
+  const legendEntries = { value: [{ caption: 'Kept name', originalCaption: 'Keep' }] };
   const retire = buildLegendStyleRetirement({
     legendColorOverrides,
     legendStrokeOverrides: {},
+    legendEntries,
+    projectLegendEntries: () => assert.fail('no rename to retire'),
     namedCaptions: () => new Set(['Keep'])
   });
   retire(() => undefined);
   assert.deepEqual(legendColorOverrides, { Keep: '#111111' });
+  assert.deepEqual(legendEntries.value, [{ caption: 'Kept name', originalCaption: 'Keep' }]);
+});
+
+// OV-87: names follow the caption as styles do. The rename of a row whose caption
+// the data stops naming is retired with the styles stored under the new name.
+test('a data change retires the Legend rename of a caption it stops naming, and the styles of the new name', () => {
+  const named = new Set(['depth', 'Region X']);
+  const legendColorOverrides = { Coverage: '#7b2cbf', 'Region Y': '#111111', CDS: '#222222' };
+  const legendStrokeOverrides = { Coverage: { strokeWidth: 2 } };
+  const entries = [
+    { caption: 'CDS', originalCaption: 'CDS', color: '#222222' },
+    { caption: 'Coverage', originalCaption: 'depth', color: '#7b2cbf' },
+    { caption: 'Region Y', originalCaption: 'Region X', color: '#111111' }
+  ];
+  const legendEntries = { value: entries };
+  let projections = 0;
+  const retire = buildLegendStyleRetirement({
+    legendColorOverrides,
+    legendStrokeOverrides,
+    legendEntries,
+    projectLegendEntries: () => { projections += 1; },
+    namedCaptions: () => new Set(named)
+  });
+  retire(() => named.delete('depth'));
+  assert.deepEqual(legendEntries.value.map(({ originalCaption, caption }) => `${originalCaption}=>${caption}`),
+    ['CDS=>CDS', 'depth=>depth', 'Region X=>Region Y']);
+  assert.equal(legendEntries.value[1].color, '#7b2cbf', 'the entry keeps what the displayed row shows');
+  assert.deepEqual(legendColorOverrides, { 'Region Y': '#111111', CDS: '#222222' });
+  assert.deepEqual(legendStrokeOverrides, {});
+  assert.equal(projections, 1, 'the displayed Result shows the retired rename');
+  assert.equal(entries[1].caption, 'Coverage', 'the History step keeps the entries it captured');
+});
+
+test('a new name that the new data names keeps its styles when the rename is retired', () => {
+  const named = new Set(['depth']);
+  const legendColorOverrides = { Coverage: '#7b2cbf' };
+  const legendEntries = { value: [{ caption: 'Coverage', originalCaption: 'depth' }] };
+  const retire = buildLegendStyleRetirement({
+    legendColorOverrides,
+    legendStrokeOverrides: {},
+    legendEntries,
+    projectLegendEntries: () => {},
+    namedCaptions: () => new Set(named)
+  });
+  retire(() => { named.delete('depth'); named.add('Coverage'); });
+  assert.deepEqual(legendEntries.value, [{ caption: 'depth', originalCaption: 'depth' }]);
+  assert.deepEqual(legendColorOverrides, { Coverage: '#7b2cbf' });
 });

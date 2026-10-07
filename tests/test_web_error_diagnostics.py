@@ -256,6 +256,22 @@ def test_config_leaf_failure_reports_canonical_setting(overrides, reason, path):
     assert payload["context"] == {"reason": reason, "configPath": path}
 
 
+@pytest.mark.parametrize(
+    ("options_type", "overrides", "reason", "path"),
+    [
+        (LinearDiagramOptions, {"objects.ticks.tick_width": 4, "canvas.circular.radius": 1.2}, "CIRCULAR_SETTING", "canvas.circular.radius"),
+        (CircularDiagramOptions, {"objects.blast_match.curve_tension": 0.3}, "LINEAR_SETTING", "objects.blast_match.curve_tension"),
+    ],
+)
+def test_other_mode_config_override_reports_setting_and_owning_mode(options_type, overrides, reason, path):
+    # OV-130: the Web names the first other-mode setting and the mode it belongs to.
+    with pytest.raises(ValidationError, match="cannot target") as caught:
+        options_type(config_overrides=overrides)
+    payload = _web(caught.value)
+    assert payload["code"] == "MODE_SETTING"
+    assert payload["context"] == {"reason": reason, "configPath": path}
+
+
 def test_style_domains_cover_full_configs_but_not_offsets():
     config = load_config_toml("gbdraw.data", "config.toml")
     config["objects"]["legends"]["font_size"]["short"] = -3

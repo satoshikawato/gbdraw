@@ -12,10 +12,31 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Legend names (web app): Generate no longer fails with "The generated result
+  could not be accepted" after a **Depth** row renamed in the Legend is hidden by
+  **Show Depth**, in Linear and Circular. The row is not drawn; as for a renamed GC
+  row that is switched off, it returns under its series caption when Depth is
+  shown again.
+- Legend names (web app): a Legend rename of a row that only track data names
+  (a Depth series, an annotation set legend label) is now retired together with
+  that data, with the color and stroke stored under the new name. Generate no
+  longer fails with "The generated result could not be accepted" after the Depth
+  file or track of a renamed row is removed, or the file is replaced by one with
+  another label. A replacement that keeps the row's caption keeps the rename, and
+  Undo restores the data, the name, and the styles.
+- Depth tracks (web app): a Depth series that no record gives a Depth TSV now
+  fails Generate with "The depth input or settings are invalid. Depth series N.
+  Supply the required value." and the **Depth** actions. The same failure showed
+  "The operation failed without recognized diagnostic information".
 - Feature strokes (web app): a stroke set on one feature in the feature popup is no
   longer lost when Generate draws a Result without that feature, such as a Generate
   in the other mode (Circular or Linear). The stroke stays in the draft and in a
   saved Session, and the next Generate that draws the feature draws it again.
+- Labels (web app): **Load Label TSV** with a table that applies to no label of the
+  displayed Results no longer removes the existing label edits. Before, it cleared the
+  bulk and per-feature label edits, recorded a "Load label edits" Undo step, and
+  reported "Applied to 0 label(s)." It now changes nothing, records no step, and says
+  that no row matched and that the existing label edits were kept.
 - CLI: `gbdraw circular|linear --session <file> --session_output out.json` (and
   `--save_session`) keeps the resource IDs and file names of the Session's unchanged
   inputs. Before, the rewritten Session renamed them to positional IDs such as
