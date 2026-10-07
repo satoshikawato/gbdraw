@@ -115,6 +115,11 @@ One records-table row represents one displayed record. A table uses either
 GenBank rows or GFF3/FASTA rows; it cannot mix the two forms. `record_id`
 selects from a multi-record source. A row-scoped `region` contains coordinates
 only and applies after selection. `reverse_complement` is a row-scoped boolean.
+The two apply in different orders: `region=1000-9000:rc` crops 1000..9000 of
+the record as stored in the file and then reverse-complements the crop, while
+`reverse_complement=1` reverse-complements the whole record first, so a
+`region` in the same row counts its coordinates on the reverse-complemented
+record. `--region` and `--reverse_complement` follow the same order.
 
 `order`, `row`, and `column` are positive integers. Explicit `order` values
 sort before blank values; equal values retain table order. When placement is
@@ -205,7 +210,8 @@ also accept their documented header row.
 | Feature visibility | `record_id`, `feature_type`, `qualifier`, `value`, `action` |
 
 In every table in the list above, a line whose first non-blank character is `#`
-is a comment. A `#` after other text is
+is a comment, and a line of only tabs and spaces is blank; both are skipped, and
+error messages count every line of the file. A `#` after other text is
 part of the cell value, so `foo#bar` and `Gene #1` are read as written.
 
 These tables are not CSV: a `"` is part of the cell value and never quotes a

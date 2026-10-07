@@ -71,7 +71,8 @@ await writeFile(
     'export const formatFeatureLocation = () => "";',
     'export const getFeatureCaption = (feature) => feature?.label || feature?.id || "Feature";',
     'export const normalizeStringArray = (value) => Array.isArray(value) ? value : (value ? [String(value)] : []);',
-    'export const resolveDisplayProteinId = () => "";'
+    'export const resolveDisplayProteinId = () => "";',
+    'export const resolveFeatureProteinId = () => "";'
   ].join('\n'),
   'utf8'
 );

@@ -148,6 +148,47 @@ def test_staged_web_request_renders_and_cleans_worker_workspace(tmp_path) -> Non
     assert all(path.is_file() for path in cache_paths)
 
 
+def test_staged_web_request_rejects_an_overlong_output_prefix_before_rendering(tmp_path) -> None:
+    from gbdraw.web_support.error_adapter import serialize_web_error
+
+    record = SeqRecord(Seq("ATGC" * 25), id="staged-web-record")
+    record.annotations["molecule_type"] = "DNA"
+    document = build_session_document(
+        CircularDiagramRequest(
+            records=(RecordInput(source=InMemoryRecordSource(record)),),
+            output=RenderOutputRequest(output_prefix="staged", formats=("svg",)),
+        )
+    ).to_dict()
+    workspace = tmp_path / "gbdraw-web-render-1"
+    resources_directory = workspace / "resources"
+    resources_directory.mkdir(parents=True)
+    (workspace / ".gbdraw-worker-render-workspace").touch()
+    resource_paths = {}
+    for index, (resource_id, entry) in enumerate(document["resources"].items(), start=1):
+        path = resources_directory / f"{index:04d}.bin"
+        path.write_bytes(base64.b64decode(entry["data"], validate=True))
+        resource_paths[resource_id] = path
+    request = dict(document["renderRequest"])
+    # Longer than a file name may be, so writing the outputs would fail.
+    request["output"] = {**request["output"], "prefix": "x" * 300}
+
+    with pytest.raises(ValidationError) as caught:
+        render_staged_canonical_web_request(
+            request,
+            resource_paths=resource_paths,
+            workspace=workspace,
+        )
+
+    payload = serialize_web_error(
+        caught.value, operation="generate", stage="resource-staging"
+    )
+    assert payload["code"] == "INPUT_INVALID"
+    assert payload["stage"] == "request-validation"
+    assert payload["context"] == {"field": "output_prefix", "reason": "FILENAME_LENGTH"}
+    assert "secondary" not in payload
+    assert not workspace.exists()
+
+
 def test_staged_web_request_preserves_workspace_without_worker_marker(tmp_path) -> None:
     workspace = tmp_path / "gbdraw-web-render-1"
     resources_directory = workspace / "resources"

@@ -662,15 +662,11 @@ export const createAppSetup = () => {
     invalidateLinearComparisonArtifacts({ preserveLosatCacheInfo: true });
   };
 
-  const linearComparisonGlobalAction = computed(() => {
-    if (linearComparisonPlan.mode === LINEAR_COMPARISON_MODES.NONE) return 'none';
-    if (linearComparisonPlan.mode !== LINEAR_COMPARISON_MODES.ADJACENT) return 'selected';
-    return linearComparisonPlan.defaultSource;
-  });
-
   const linearComparisonUi = computed(() => projectLinearComparisonUi({
     plan: linearComparisonPlan,
     resolution: linearComparisonResolution.value,
+    adjacentEdgeKeys: adjacentRowPairs(linearSeqs, effectiveLinearComparisonLayout(), true)
+      .map(([queryUid, subjectUid]) => linearComparisonEdgeKey(queryUid, subjectUid)),
     losatProgram: losatProgram.value,
     blastpMode: losat.blastp?.mode,
     filters: {
@@ -680,6 +676,11 @@ export const createAppSetup = () => {
       alignment_length: adv.alignment_length
     }
   }));
+  // The pressed global action follows the projected intent (UJ-05).
+  const linearComparisonGlobalAction = computed(() => {
+    const { intentKey } = linearComparisonUi.value;
+    return intentKey === 'custom' ? 'selected' : intentKey;
+  });
   const canRunLinearLosat = computed(() => linearSeqs.filter((sequence) => (
     lInputType.value === 'gff'
       ? sequence.gff && sequence.fasta

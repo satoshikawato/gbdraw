@@ -2156,6 +2156,7 @@
                                 <span v-if="linearComparisonUi.intentKey === 'custom'" class="rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-700">Custom</span>
                                 <span v-if="linearComparisonUi.errorBadge" class="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">{{ linearComparisonUi.errorBadge.label }}</span>
                             </div>
+                            <p v-if="linearComparisonUi.emptyPlanNotice" data-linear-comparison-empty-notice class="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] leading-snug text-amber-800">{{ linearComparisonUi.emptyPlanNotice }}</p>
                             <p v-if="!linearComparisonResolution.valid" class="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[10px] text-red-700">
                                 {{ linearComparisonResolution.error }}
                             </p>
@@ -2411,6 +2412,7 @@
                                                 :model-value="pair.draft?.fileActive ? pair.draft.file : null"
                                                 @update:model-value="setLinearComparisonCardFile(pair.edgeKey, $event)"
                                             ></file-uploader>
+                                            <p v-if="linearComparisonGlobalAction === 'upload'" class="text-[9px] leading-snug text-slate-500">Choosing a file here switches the plan to Selected pairs; pairs without a file are then not compared.</p>
                                             <button
                                                 v-if="pair.draft?.fileActive"
                                                 type="button"
@@ -7704,7 +7706,7 @@
     <div class="w-full" data-history-managed role="group" :aria-label="($attrs['data-input-aria-label'] || label) + ' selection'">
         <div class="flex justify-between items-end mb-1">
             <label :class="['input-label mb-0', small ? 'input-label-sm' : '']">{{ label }}</label>
-            <button v-if="hasSelection" @click.stop="clearFile" :disabled="!uploadAvailable" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash" aria-hidden="true"></i> Remove</button>
+            <button v-if="hasSelection" @click.stop="clearFile" :disabled="!uploadAvailable" :aria-label="`Remove ${$attrs['data-input-aria-label'] || label}`" class="text-[10px] text-red-500 hover:text-red-700 flex items-center gap-1"><i class="ph ph-trash" aria-hidden="true"></i> Remove</button>
         </div>
         <div
             class="upload-zone cursor-pointer"

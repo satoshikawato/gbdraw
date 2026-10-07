@@ -42,11 +42,22 @@ class ValidationError(GbdrawError):
 
 
 class ComparisonIdentityError(ValueError, GbdrawError):
-    """Comparison endpoints conflict; remains catchable as ValueError."""
+    """Comparison endpoints conflict; remains catchable as ValueError.
 
-    def __init__(self, message: str, *, reason: str):
+    A conflict the user corrects in the input names it with ``diagnostic``.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: str,
+        diagnostic: Mapping[str, object] | None = None,
+    ):
         super().__init__(message)
         self.reason = reason
+        if diagnostic is not None:
+            self.diagnostic = dict(diagnostic)
 
 
 class ExportError(GbdrawError):

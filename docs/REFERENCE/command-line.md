@@ -199,7 +199,8 @@ With `--session`, only output and format overrides, session-output options, and
 settings.
 
 SVG is the base render. Additional formats are selected with `-f` or
-`--format`. `-o` or `--output` accepts a path-like output prefix. Existing
+`--format`. `-o` or `--output` accepts a path-like output prefix; its last
+component is at most 200 bytes in UTF-8. Existing
 diagram, session, and raw-result targets are rejected unless overwrite is
 explicit. See [Output formats and
 export](output-formats-and-export.md).
