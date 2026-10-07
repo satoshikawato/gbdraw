@@ -124,7 +124,11 @@ review is a local selection, not an applied Result or a generation-setting chang
 **Generate Diagram** recalculates placement and resets zoom. Supported color,
 label, visibility, legend text and order, canvas padding, and record-layout
 edits are carried forward. Generate places legend entries in the edited order
-on its new layout; an entry that appears later follows them. Canvas padding
+on its new layout; an entry that appears later follows them. A legend rename
+of a row that Generate does not draw, such as GC content while it is off or a
+Depth row while **Show Depth** is off, waits with the colors under the new name
+and applies when a later Generate draws the row; removing the row's data
+removes it. Canvas padding
 applies once to every Result, including each Result of a batch. For the same
 diagram, a manually moved legend, plot title, or Linear scale keeps its offset
 from the newly calculated position. The absolute position can change when
