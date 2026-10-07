@@ -102,6 +102,32 @@ test('no object of one drawing is shared with the other drawing', () => {
   assert.ok(MODE_SCOPED_ROWS.length > 100, 'the registry names the per-mode values');
 });
 
+test('every setting shared by both modes before PR-1 is set per drawing', () => {
+  // The registry's form and advanced settings that both modes shared before
+  // PR-1 (every row but a one-mode `own` row): each drawing now holds its own.
+  const rows = MODE_SCOPED_ROWS.filter((row) => row.migrate !== 'own'
+    && (row.domain === 'config.form' || row.domain === 'config.adv'));
+  assert.ok(rows.length > 50, 'the registry names the shared settings');
+  const sentinel = (value) => (typeof value === 'number' ? value + 7
+    : typeof value === 'boolean' ? !value
+      : typeof value === 'string' ? `${value}-circular`
+        : Array.isArray(value) ? [...value, 'circular'] : value === null ? 'circular' : { circular: true });
+  const checked = rows.flatMap((row) => {
+    const container = row.domain === 'config.form' ? 'form' : 'adv';
+    const circular = state.drawings.circular[container];
+    const linear = state.drawings.linear[container];
+    if (!Object.hasOwn(circular, row.path)) return [];
+    const before = JSON.stringify(linear[row.path]);
+    const saved = circular[row.path];
+    circular[row.path] = sentinel(saved);
+    const kept = JSON.stringify(linear[row.path]) === before;
+    circular[row.path] = saved;
+    assert.ok(kept, `${row.domain}.${row.path} reached the Linear drawing`);
+    return [row.path];
+  });
+  assert.ok(checked.length > 50, `checked ${checked.length} shared settings`);
+});
+
 test('each mode request carries its own drawing values', () => {
   MODES.forEach(resetDrawing);
   const linearDefaults = samples('linear', requestOf('linear'));
