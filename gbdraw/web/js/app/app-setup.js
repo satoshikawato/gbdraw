@@ -2,6 +2,8 @@
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { FeatureEditorOptions } from './feature-editor.js' */
 /** @import { ColorActionsRuleActions } from './feature-editor/color-actions.js' */
+/** @import { UserFacingError } from '../services/error-normalization.js' */
+/** @import { AnnotationCatalogSource } from './annotations/record-catalog.js' */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan } from './candidate-render.js';
 import {
@@ -217,6 +219,7 @@ import {
 const { onMounted, onUnmounted, watch, nextTick, computed, ref, reactive } = window.Vue;
 const toRaw = window.Vue.toRaw || ((value) => value);
 
+/** @type {Promise<typeof import('../services/export.js')> | null} */
 let exportServicePromise = null;
 
 const loadExportService = () => {
@@ -454,7 +457,7 @@ export const createAppSetup = () => {
     filteredFeatures,
     featureListState
   } = state;
-  /** @type {ReturnType<typeof createSimilarityAlignmentActions>} */
+  /** @type {ReturnType<typeof createSimilarityAlignmentActions> | null} */
   let similarityAlignmentActions = null;
   // R13 port: the drawer, the preview binder, and the result watchers read the
   // alignment owner through these ports; the root assigns them once the
@@ -476,7 +479,8 @@ export const createAppSetup = () => {
       linearComparisonResolution.value?.hasComparisonIntent !== true
     ) return '';
     return classifyOptionalPositiveNumber(adv.comparison_height).status === 'invalid'
-      ? normalizeUserFacingError(diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' })).summary
+      // A diagnostic error object is truthy, so it always normalizes to a model.
+      ? /** @type {UserFacingError} */ (normalizeUserFacingError(diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' }))).summary
       : '';
   });
 
@@ -1120,6 +1124,7 @@ export const createAppSetup = () => {
     )
   });
   const getCircularRecordDiscoveryState = () => circularDiscoveryForInput(state);
+  /** @param {AnnotationCatalogSource[] | null} [linearSourcesOverride] */
   const getAnnotationRecordCatalog = (linearSourcesOverride = null) => {
     const circularPrimaryFile = cInputType.value === 'gff' ? files.c_gff : files.c_gb;
     const circularPairedFile = cInputType.value === 'gff' ? files.c_fasta : null;
@@ -1199,11 +1204,13 @@ export const createAppSetup = () => {
    *   followRestoredSpecificRules: ReturnType<typeof createFeatureEditor>['followRestoredSpecificRules'],
    *   retainRulesForRestore: RulePreparation['retain']
    * }} */
+  // Each field is null only until the root registers it below (R13); no restore
+  // runs before then, so the declared function types hold at every read.
   const specificRuleRestorePorts = {
-    captureSpecificRulePatternDrafts: null,
-    restoreSpecificRulePatternDrafts: null,
-    followRestoredSpecificRules: null,
-    retainRulesForRestore: null
+    captureSpecificRulePatternDrafts: /** @type {never} */ (null),
+    restoreSpecificRulePatternDrafts: /** @type {never} */ (null),
+    followRestoredSpecificRules: /** @type {never} */ (null),
+    retainRulesForRestore: /** @type {never} */ (null)
   };
   const restoreWithSpecificRuleDrafts = async (restore, ...args) => {
     const drafts = specificRuleRestorePorts.captureSpecificRulePatternDrafts();
@@ -1323,7 +1330,8 @@ export const createAppSetup = () => {
   // R13: a Legend row a specific-color rule draws commits its edit through the
   // rule owner; the root registers the port once the feature editor exists.
   /** @type {{ commitLegendRowRules: ColorActionsRuleActions['commitSpecificRules'] }} */
-  const legendRowRulePorts = { commitLegendRowRules: null };
+  // Null only until the root registers the port below; the Legend cannot commit a row before that.
+  const legendRowRulePorts = { commitLegendRowRules: /** @type {never} */ (null) };
   const legendActions = createLegendManager({
     state,
     commitLegendRowRules: (...args) => legendRowRulePorts.commitLegendRowRules(...args),
@@ -1338,7 +1346,8 @@ export const createAppSetup = () => {
   // R13: the palette watcher reacts through the root's palette and rules
   // projection, registered once the style owner it applies through exists.
   /** @type {{ projectPaletteAndRules: FeatureEditorOptions['projectPaletteAndRules'] }} */
-  const paletteRulePorts = { projectPaletteAndRules: null };
+  // Null only until the root registers the port below; the palette watcher reads it after setup.
+  const paletteRulePorts = { projectPaletteAndRules: /** @type {never} */ (null) };
   const svgActions = createSvgStyles({
     state,
     watch,
@@ -1441,6 +1450,7 @@ export const createAppSetup = () => {
   });
   watch(() => results.value[selectedResultIndex.value], () => similarityAlignmentPorts.refreshCanvas(), { flush: 'post' });
 
+  /** @type {ReturnType<typeof setTimeout> | null} */
   let featureSearchDebounceId = null;
   const featureListScrollRef = ref(null);
   const selectedPairwiseBlockOrthogroupId = ref('');
@@ -1474,6 +1484,7 @@ export const createAppSetup = () => {
     resetFeatureListScroll
   );
 
+  /** @type {(() => void) | null} */
   let disposeHistoryInputs = null;
   setupGlobalUiEvents({
     state,
@@ -1735,7 +1746,8 @@ export const createAppSetup = () => {
     if (mode.value !== 'linear') return;
     const select = document.getElementById(`linear-label-visibility-${key}`);
     if (!select) return;
-    select.closest('details').open = true;
+    // The select is rendered inside the Record Labels <details> of index.html.
+    /** @type {HTMLDetailsElement} */ (select.closest('details')).open = true;
     await nextTick();
     select.scrollIntoView({ block: 'center' });
     select.focus({ preventScroll: true });
@@ -2356,7 +2368,11 @@ export const createAppSetup = () => {
    *   beforeRecordDrag: ReturnType<typeof createSimilarityAlignmentActions>['beforeRecordDrag'],
    *   afterRecordDrag: ReturnType<typeof createSimilarityAlignmentActions>['afterRecordDrag']
    * }} */
-  const recordDragAlignmentPorts = { beforeRecordDrag: null, afterRecordDrag: null };
+  // Null only until the root registers both ports once the alignment owner exists; no drag runs before then.
+  const recordDragAlignmentPorts = {
+    beforeRecordDrag: /** @type {never} */ (null),
+    afterRecordDrag: /** @type {never} */ (null)
+  };
   const legendLayout = createLegendLayout({
     state,
     reflowDualLegendLayout: legendActions.reflowDualLegendLayout,
@@ -2819,6 +2835,14 @@ export const createAppSetup = () => {
   // operations Generate applies. A loaded table (`reflow`) also places the
   // labels, as a visibility edit does. The palette and the rules (`colors`)
   // project through `projectPaletteAndRules`.
+  /**
+   * @param {{
+   *   colors?: boolean, prepareRules?: boolean, visibility?: boolean, rerender?: boolean,
+   *   reflow?: boolean, labels?: boolean,
+   *   legend?: Parameters<typeof reconcileLegendEntries>[0] | null,
+   *   strokes?: Parameters<typeof reconcileStrokeOverrides>[0] | null
+   * }} [options]
+   */
   const projectMountedEditorIntent = async ({
     colors = false,
     prepareRules = colors,
@@ -2974,6 +2998,7 @@ export const createAppSetup = () => {
     // B20: a Result last shown with another Legend order receives the current
     // order, also the default order, which is its own generated order (OV-47).
     const replayDefaultLegendOrder = previous.legendOrder !== current.legendOrder ? resultLegendOrder : null;
+    /** @type {ReturnType<typeof compileDisplayedResultOperations>} */
     let operations = null;
     try {
       operations = compileDisplayedResultOperations(context.resultIndex, { replayDefaultLegendOrder });
@@ -3356,8 +3381,10 @@ export const createAppSetup = () => {
     () => similarityAlignmentActions.draft.value?.rows,
     similarityAlignmentActions.status
   ], similarityAlignmentPorts.refreshCanvas, { flush: 'post' });
+  /** @type {HTMLElement | null} */
   let similarityAlignmentReturnFocus = null;
   const similarityAlignmentPaletteRef = ref(null);
+  /** @type {{ x: number | null, y: number | null }} */
   const similarityAlignmentPalettePosition = reactive({ x: null, y: null });
   const similarityAlignmentCompact = ref(false);
   const syncSimilarityAlignmentCompact = () => {
@@ -3370,6 +3397,7 @@ export const createAppSetup = () => {
       ? 'Finish or cancel alignment review before opening Editor.' : ''
   ));
   similarityAlignmentPorts.reviewBlocksEditor = () => Boolean(similarityAlignmentEditorDisabledReason.value);
+  /** @type {ResizeObserver | null} */
   let similarityAlignmentPreviewObserver = null;
   watch([similarityAlignmentActions.dialogOpen, similarityAlignmentCompact], ([open, compact]) => {
     if (open && compact) {
@@ -3377,6 +3405,7 @@ export const createAppSetup = () => {
       rightDrawerActions.closeRightDrawer();
     }
   }, { flush: 'sync' });
+  /** @type {{ x: number, y: number } | null} */
   let similarityAlignmentPaletteDrag = null;
   const clampSimilarityAlignmentPalette = () => {
     const palette = similarityAlignmentPaletteRef.value;
@@ -4093,6 +4122,7 @@ export const createAppSetup = () => {
       recordSessionLifecycleEvent('session-save-paint-opportunity-completed');
       recordSessionLifecycleEvent('session-save-catalog-preparation-start');
       const committedSession = getCommittedCanonicalSession();
+      /** @type {Awaited<ReturnType<typeof prepareLinearRecordCatalog>>['catalog']} */
       let catalog = null;
       let error = '';
       if (!committedSession) {
@@ -4209,7 +4239,7 @@ export const createAppSetup = () => {
     if (!control || mode.value !== 'circular' || !form.multi_record_canvas) {
       return { status: 'unavailable' };
     }
-    for (let section = control.closest('details'); section; section = section.parentElement?.closest('details')) {
+    for (let section = control.closest('details'); section; section = section.parentElement?.closest('details') ?? null) {
       section.open = true;
     }
     await nextTick();
@@ -4225,7 +4255,7 @@ export const createAppSetup = () => {
     const pane = document.querySelector('.settings-scroll');
     const scrollOwner = pane && getComputedStyle(pane).overflowY !== 'visible'
       ? pane : document.scrollingElement;
-    const anchored = pane?.contains(origin) && origin.getClientRects().length;
+    const anchored = origin && pane?.contains(origin) && origin.getClientRects().length;
     const top = anchored ? origin.getBoundingClientRect().top : null;
     const scrollTop = scrollOwner?.scrollTop;
     await nextTick();
@@ -4235,8 +4265,11 @@ export const createAppSetup = () => {
     if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = true;
     await afterPaint();
     if (scrollOwner && document.activeElement === origin) {
+      // `top` is a number whenever `anchored` is truthy; `scrollTop` was read from
+      // the same non-null `scrollOwner`.
       scrollOwner.scrollTop = anchored && origin.isConnected
-        ? scrollOwner.scrollTop + origin.getBoundingClientRect().top - top : scrollTop;
+        ? scrollOwner.scrollTop + origin.getBoundingClientRect().top - /** @type {number} */ (top)
+        : /** @type {number} */ (scrollTop);
     }
   }, { flush: 'sync' });
 
@@ -4431,6 +4464,7 @@ export const createAppSetup = () => {
       || document.querySelector('[data-linear-file-add]'));
     if (typeof target?.focus === 'function') target.focus();
   };
+  /** @param {EventTarget | null} [returnFocus] */
   const openLinearSourceRemovalDialog = (source, origin, returnFocus = null) => {
     if (!source?.uid) return false;
     linearSourceRemovalDialog.sourceUid = source.uid;
@@ -4470,6 +4504,7 @@ export const createAppSetup = () => {
     if (!source || !linearSourceHasPrimaryInput(source)) return false;
     return openLinearSourceRemovalDialog(source, 'card', returnFocus);
   };
+  /** @param {{ currentTarget?: EventTarget | null } | null} [event] */
   const removeLastLinearSeq = (event = null) => {
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;

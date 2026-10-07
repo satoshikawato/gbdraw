@@ -491,6 +491,7 @@ export const createLegendLayoutActions = () => {
     updatePairwiseLegendPositions(svg);
   };
 
+  /** @param {number | null} [maxWidthOverride] */
   const reflowSingleLegendLayout = (svg, layout, maxWidthOverride = null) => {
     const legendGroup = svg.getElementById('legend');
     if (!legendGroup) return null;

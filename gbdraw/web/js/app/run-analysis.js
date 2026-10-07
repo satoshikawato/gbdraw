@@ -5381,6 +5381,11 @@ export const createRunAnalysis = ({
     }
   };
 
+  /**
+   * @param {{ canonical: Record<string, any>, label?: string,
+   *   captureIntentCheckpoint?: ((...args: any[]) => any) | null, restoreIntentCheckpoint?: ((...args: any[]) => any) | null,
+   *   commitIntent?: (() => any) | null, alignmentResetBefore?: any, alignmentResetReceipt?: any, operation?: string }} options
+   */
   const runCommittedCanonicalCandidate = async ({
     canonical,
     label = 'Rotate record to feature',

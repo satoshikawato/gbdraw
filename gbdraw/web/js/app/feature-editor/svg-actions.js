@@ -515,6 +515,10 @@ export const createFeatureSvgActions = ({
     };
   };
 
+  /**
+   * @param {Record<string, any>} feat
+   * @param {{ clientX: number, clientY: number } | null} [eventLike]
+   */
   const openPreparedFeatureEditor = (feat, eventLike = null) => {
     if (!feat) return null;
     if (!svgContainer.value) return null;
@@ -560,6 +564,10 @@ export const createFeatureSvgActions = ({
   };
 
   // The popup states whether the feature is drawn (resolveFeatureDrawn).
+  /**
+   * @param {Record<string, any>} feat
+   * @param {{ clientX: number, clientY: number } | null} [eventLike]
+   */
   const openFeatureEditorForFeature = (feat, eventLike = null) => reportRuleRunFailure(
     state, 'feature-extraction', () => runWhenPrepared(
       state, () => [prepareDrawnFeatureMatches({ strict: true })], () => openPreparedFeatureEditor(feat, eventLike)
@@ -794,6 +802,7 @@ export const createFeatureSvgActions = ({
     applyVisibilityPreviewChanges([{ featureId: svgId, mode: modeRaw }])
   );
 
+  /** @param {{ root?: Element | null, phase?: string, rootGeneration?: number }} [options] */
   const attachSvgFeatureHandlers = ({
     root = null,
     phase = 'preview-bind',
@@ -1591,6 +1600,7 @@ export const createFeatureSvgActions = ({
     delegatedFeatureHandlers?.clearAlignmentOverlay?.();
   };
 
+  /** @param {{ root?: Element | null, phase?: string, rootGeneration?: number }} [options] */
   const preparePairwiseInteractionAffordances = ({
     root = null,
     phase = 'preview-bind',

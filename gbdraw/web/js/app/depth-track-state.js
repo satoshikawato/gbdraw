@@ -211,6 +211,7 @@ export const padDepthFileSlots = (value, width) => {
   return next;
 };
 
+/** @param {number | null} [width] */
 export const clearDepthTrackSourceAt = (value, trackIndex, width = null) => {
   const idx = Number(trackIndex);
   if (!Number.isInteger(idx) || idx < 0) return depthFileSlotsFromValue(value);
