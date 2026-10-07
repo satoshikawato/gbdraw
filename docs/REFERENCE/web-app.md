@@ -904,8 +904,11 @@ Generate draw the same labels. A label text edit keeps **Default** visibility,
 which follows **Show Labels** and the filters. When the feature has no label in
 the current Result, **Label Not Shown** names the reason (a hidden feature,
 **Underlay**, **Embedded Only**, **Show Labels**, or a label filter), as the popup
-note does, and offers **Show this label**, which sets **On**, or **Keep hidden
-(apply text only)**, which keeps the text for when the label is shown.
+note does, before the text is applied. It offers **Show this label**, which
+applies the text and sets **On**; **Keep hidden (apply text only)**, which keeps
+the text for when the label is shown; and **Cancel** (or Escape), which applies
+nothing and keeps the popup open. Each choice is one History step; **Cancel**
+records none.
 
 **On** takes effect only when the diagram can draw the label, so applying it
 asks first when the diagram cannot:

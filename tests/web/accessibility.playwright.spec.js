@@ -508,3 +508,37 @@ test('choice dialogs and the feature popup move focus in and back, and drawer ta
   } finally { await page.context().close(); }
 });
 
+// UI-02 (Owner Q1, Q2 pattern): Label Not Shown asks before anything is
+// written, so Cancel applies nothing and records no History step; the popup
+// stays open and focus returns to the label text.
+test('Label Not Shown Cancel applies nothing and returns focus to the label text', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
+  const { generate } = require('./helpers/mode-transition.cjs');
+  const page = await load(browser, seeds.circular);
+  try {
+    // Show Labels None draws no label, so a text edit leaves its feature unlabeled.
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.labels_mode = 'none'; });
+    await generate(page);
+    const before = await evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      const feature = app.extractedFeatures.find((item) => item.type === 'CDS' && !app.getEditableLabelByFeatureId(item.svg_id));
+      if (!feature) return null;
+      await app.openFeatureEditorFromList(feature, null);
+      return { overrides: JSON.stringify(app.featureOverrides), undo: window.__GBDRAW_HISTORY__.getUndoCount() };
+    });
+    expect(before, 'a feature without a drawn label').not.toBeNull();
+    const text = page.locator('.feature-popup input[placeholder="Edit label text"]');
+    await text.fill('UNSHOWN_LABEL');
+    await text.press('Enter');
+    const dialog = page.getByRole('dialog', { name: 'Label Not Shown' });
+    await expect(dialog.getByRole('button')).toHaveText([/Show this label/, /Keep hidden/, /Cancel/]);
+    await expect.poll(() => focusState(page)).toMatchObject({ inDialog: true });
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator('.feature-popup')).toBeVisible();
+    await expect(text).toBeFocused();
+    await expect.poll(() => page.evaluate(() => ({ overrides: JSON.stringify(window.__GBDRAW_APP__.featureOverrides),
+      undo: window.__GBDRAW_HISTORY__.getUndoCount() }))).toEqual(before);
+  } finally { await page.context().close(); }
+});

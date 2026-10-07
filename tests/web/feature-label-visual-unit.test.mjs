@@ -197,6 +197,8 @@ test('one action serializes combined text and visual-unit visibility changes onc
   assert.deepEqual(harness.mutations, { commit: 1 });
 });
 
+// Label Not Shown asks before anything is written (Owner Q1, Q2, as On asks):
+// the Apply stays open until the choice, and Cancel writes nothing.
 test('a text edit asks whether to show a label only when the feature has none', async () => {
   const featureId = 'feature:one/[a]';
   const labeled = buildHarness();
@@ -207,19 +209,30 @@ test('a text edit asks whether to show a label only when the feature has none', 
   const harness = buildHarness();
   harness.state.editableLabels.value = [];
   Object.assign(harness.state.clickedFeature.value, { labelText: 'Renamed', labelSourceText: 'Original' });
-  await harness.actions.updateClickedFeatureLabelText();
+  const canceled = harness.actions.updateClickedFeatureLabelText();
   assert.deepEqual({ ...harness.state.hiddenLabelTextDialog }, { show: true, featureId, reason: '' });
-  assert.equal(rowOf(harness.state, featureId).labelText, 'Renamed');
+  assert.equal(rowOf(harness.state, featureId)?.labelText ?? null, null);
+  harness.actions.handleHiddenLabelTextChoice('cancel');
+  await canceled;
+  assert.equal(harness.state.hiddenLabelTextDialog.show, false);
+  assert.equal(rowOf(harness.state, featureId)?.labelText ?? null, null);
+  assert.equal(harness.state.labelReflowForceRequestSeq.value + harness.state.labelReflowRequestSeq.value, 0);
+
+  const kept = harness.actions.updateClickedFeatureLabelText();
+  assert.equal(harness.state.hiddenLabelTextDialog.show, true);
   harness.actions.handleHiddenLabelTextChoice('text_only');
+  await kept;
   assert.deepEqual({ ...harness.state.hiddenLabelTextDialog }, { show: false, featureId: '', reason: '' });
+  assert.equal(rowOf(harness.state, featureId).labelText, 'Renamed');
   // "Keep hidden (apply text only)" keeps Label visibility unset (design Q4 6.2).
   assert.equal(rowOf(harness.state, featureId).labelVisibility, null);
   assert.equal(harness.state.labelReflowForceRequestSeq.value, 0);
 
   harness.state.clickedFeature.value.labelText = 'Renamed again';
-  await harness.actions.updateClickedFeatureLabelText();
+  const shown = harness.actions.updateClickedFeatureLabelText();
   assert.equal(harness.state.hiddenLabelTextDialog.show, true);
   harness.actions.handleHiddenLabelTextChoice('show');
+  await shown;
   assert.equal(harness.state.hiddenLabelTextDialog.show, false);
   assert.equal(rowOf(harness.state, featureId).labelVisibility, 'on');
   assert.equal(harness.state.clickedFeature.value.labelVisibility, 'on');
@@ -275,12 +288,14 @@ for (const [reason, options, sentence] of absenceCases) {
     state.clickedFeature.value.labelText = '';
     assert.equal(actions.clickedFeatureLabelHint.value.startsWith(`${none}${sentence}`), true);
     state.clickedFeature.value.labelText = 'Renamed';
-    await actions.updateClickedFeatureLabelText();
+    const applied = actions.updateClickedFeatureLabelText();
     assert.equal(state.hiddenLabelTextDialog.show, true);
     assert.equal(state.hiddenLabelTextDialog.reason, reason);
     const message = actions.hiddenLabelTextMessage.value;
     assert.equal(message.startsWith(`${none}${sentence || ' '}`), true, message);
     assert.match(message, /The edited text will not appear/);
+    actions.handleHiddenLabelTextChoice('cancel');
+    await applied;
   });
 }
 
@@ -288,8 +303,10 @@ test('every reason the resolver can return has a sentence, and every sentence a 
   const returned = new Set();
   for (const [, options] of absenceCases) {
     const { actions, state } = absenceHarness(options);
-    await actions.updateClickedFeatureLabelText();
+    const applied = actions.updateClickedFeatureLabelText();
     returned.add(state.hiddenLabelTextDialog.reason);
+    actions.handleHiddenLabelTextChoice('cancel');
+    await applied;
   }
   returned.delete('');
   assert.deepEqual([...returned].sort(), Object.keys(LABEL_ABSENCE_REASONS).sort());
@@ -300,7 +317,7 @@ test('every reason the resolver can return has a sentence, and every sentence a 
 for (const [reason, options] of [['underlay', { type: 'repeat_region' }], ['hidden', { rows: { featureVisibility: 'off' } }]]) {
   test(`"Show this label" for the reason "${reason}" asks the Label On question`, async () => {
     const { actions, state, featureId } = absenceHarness(options);
-    await actions.updateClickedFeatureLabelText();
+    const applied = actions.updateClickedFeatureLabelText();
     assert.equal(state.hiddenLabelTextDialog.reason, reason);
     const shown = actions.handleHiddenLabelTextChoice('show');
     await Promise.resolve();
@@ -309,7 +326,9 @@ for (const [reason, options] of [['underlay', { type: 'repeat_region' }], ['hidd
     assert.equal(state.labelOnDialog.reason, reason);
     actions.handleLabelOnChoice('cancel');
     assert.equal(await shown, false);
+    await applied;
     assert.equal(rowOf(state, featureId)?.labelVisibility ?? null, null);
+    assert.equal(rowOf(state, featureId)?.labelText ?? null, null);
   });
 }
 

@@ -6354,6 +6354,11 @@
                                     <span>Keep hidden (apply text only)</span>
                                 </button>
                             </div>
+                            <button @click="handleHiddenLabelTextChoice('cancel')"
+                                    data-history-managed
+                                    class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
+                                Cancel
+                            </button>
                     </choice-dialog>
 
                     <!-- Label Visibility On Dialog: Owner decisions Q1 and Q2 (2026-10-04) -->
