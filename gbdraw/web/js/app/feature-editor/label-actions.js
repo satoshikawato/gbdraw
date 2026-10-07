@@ -1,7 +1,7 @@
 // @ts-check
 import { diagnosticError, normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { DRAWN_SELECTOR_QUALIFIERS, drawnSelectorUnknown, ruleFeaturePayload } from '../rule-matching.js';
-import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride } from '../feature-visibility.js';
+import { featureDrawnContext, featureDrawnInResult, getFeatureVisibilityOverride } from '../../services/feature-visibility.js';
 import { parseLabelOverrideTsv, serializeLabelOverrideRows } from '../../services/label-override-table.js';
 import { escapeRegexLiteral } from '../../services/feature-selector.js';
 import {
@@ -1327,27 +1327,36 @@ export const createFeatureLabelActions = ({
       }
 
       // The import replaces the label intent once; the displayed Result shows
-      // it now and every other Result when it is displayed (B6, R3).
-      clearOverrides();
-      let appliedCount = 0;
+      // it now and every other Result when it is displayed (B6, R3). A table
+      // that applies to no label is declined whole, so the label edits stay
+      // and History records no step (OV-131).
       let skippedNonTrackableCount = 0;
-      labels.forEach((entry, index) => {
+      const applicable = labels.flatMap((entry, index) => {
         const matchedRow = rows[evaluation.winners[index]];
-        if (!matchedRow) return;
+        if (!matchedRow) return [];
         const tracked = Boolean(featureIdentityKeyOf(entry.feature));
         // A global `label` row follows the source text; any other row its
         // feature, as that feature's label edit (design Q4).
         if (matchedRow.isGlobalLabelRule ? !entry.sourceText : !tracked) {
           skippedNonTrackableCount += 1;
-          return;
+          return [];
         }
+        return [{ entry, matchedRow, tracked }];
+      });
+      if (applicable.length === 0) {
+        window.alert(`Loaded ${rows.length} row(s). Not applied: ${skippedNonTrackableCount > 0
+          ? `the ${skippedNonTrackableCount} matched label(s) lacked a feature key`
+          : 'no row matched a label of the diagram'}. The existing label edits were kept.`);
+        return;
+      }
+      clearOverrides();
+      applicable.forEach(({ entry, matchedRow, tracked }) => {
         if (matchedRow.isGlobalLabelRule) {
           labelTextBulkOverrides[entry.sourceText] = String(matchedRow.labelText ?? '');
           if (tracked) updateFeatureOverride(featureOverrides, entry.feature, { labelSourceText: entry.sourceText || null });
         } else {
           applyLabelTextEdit(entry.feature, matchedRow.labelText, entry.sourceText);
         }
-        appliedCount += 1;
       });
 
       closeLabelTextScopeDialog();
@@ -1355,7 +1364,7 @@ export const createFeatureLabelActions = ({
       syncLabelEditor();
       queueLabelReflow();
 
-      let message = `Loaded ${rows.length} row(s). Applied to ${appliedCount} label(s).`;
+      let message = `Loaded ${rows.length} row(s). Applied to ${applicable.length} label(s).`;
       if (skippedNonTrackableCount > 0) {
         message += ` ${skippedNonTrackableCount} match(es) lacked a feature key and were not applied.`;
       }

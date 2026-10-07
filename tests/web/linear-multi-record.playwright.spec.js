@@ -1861,7 +1861,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   const selectedResolution = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     const { buildPairwiseLosatJobSpecs, resolveLinearComparisonPlan } = await import(
-      './js/app/linear-comparisons.js'
+      './js/services/linear-comparisons.js'
     );
     const [first, second, third] = app.linearSeqs;
     const upload = app.linearComparisonPlan.edges.find((edge) => edge.id === 'upload-a-b').file;

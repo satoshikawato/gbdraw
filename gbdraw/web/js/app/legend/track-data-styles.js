@@ -43,29 +43,51 @@ export const trackDataLegendCaptions = ({
 };
 
 /**
- * The one rule for Legend styles of track data: styles follow the caption.
- * Returns the port that runs a data change and then retires the Legend color
- * and stroke of every caption the track data named before the change and no
- * longer names. A caption the new data still names keeps its style. The
- * change and the retirement happen in the History step of the caller, so Undo
- * restores both.
+ * The one rule for Legend edits of track data: styles and names follow the
+ * caption. Returns the port that runs a data change and then, for every
+ * caption the track data named before the change and no longer names, retires
+ * the Legend color and stroke stored under it, and the Legend rename of its
+ * row with the color and stroke stored under the new name (OV-87). A caption
+ * the new data still names keeps its rename and styles; a deleted row stays
+ * deleted. The change and the retirement happen in the History step of the
+ * caller, so Undo restores them together. `projectLegendEntries` shows the
+ * entries with a retired rename on the displayed Result, as Undo and Redo do.
  * @param {{
  *   legendColorOverrides: Record<string, any>,
  *   legendStrokeOverrides: Record<string, any>,
- *   namedCaptions: () => Set<string>
+ *   legendEntries: { value: any[] },
+ *   namedCaptions: () => Set<string>,
+ *   projectLegendEntries: () => void
  * }} options
  * @returns {<T>(change: () => T) => T}
  */
-export const buildLegendStyleRetirement = ({ legendColorOverrides, legendStrokeOverrides, namedCaptions }) => (
+export const buildLegendStyleRetirement = ({
+  legendColorOverrides, legendStrokeOverrides, legendEntries, namedCaptions, projectLegendEntries
+}) => (
   (change) => {
     const before = namedCaptions();
     const result = change();
     const after = namedCaptions();
-    before.forEach((caption) => {
-      if (after.has(caption)) return;
+    /** @param {string} caption */
+    const retireStyles = (caption) => {
       delete legendColorOverrides[caption];
       delete legendStrokeOverrides[caption];
+    };
+    const retired = new Set([...before].filter((caption) => !after.has(caption)));
+    retired.forEach(retireStyles);
+    let renameRetired = false;
+    const entries = (Array.isArray(legendEntries.value) ? legendEntries.value : []).map((entry) => {
+      const original = text(entry?.originalCaption);
+      const caption = text(entry?.caption);
+      if (!retired.has(original) || !caption || caption === original) return entry;
+      if (!after.has(caption)) retireStyles(caption);
+      renameRetired = true;
+      return { ...entry, caption: original };
     });
+    if (renameRetired) {
+      legendEntries.value = entries;
+      projectLegendEntries();
+    }
     return result;
   }
 );

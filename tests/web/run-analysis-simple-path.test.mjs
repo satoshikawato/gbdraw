@@ -172,7 +172,7 @@ const {
 } = await import('../../gbdraw/web/js/app/run-analysis.js');
 const {
   resolveLinearComparisonPlan
-} = await import('../../gbdraw/web/js/app/linear-comparisons.js');
+} = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const {
   applyEditorStateData,
   applyFeatureStateData,

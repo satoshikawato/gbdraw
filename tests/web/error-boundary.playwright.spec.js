@@ -156,6 +156,36 @@ test('an unclassified render failure offers Save Session and no Retry Generate',
   await inspectSafeDetails(page, alert, failed.error);
 });
 
+// OV-130 (R6): a preserved setting of the other diagram mode (OV-106) fails the
+// engine's request decoding. The panel names the setting, the mode it belongs to
+// and the two ways out, instead of the unclassified input-validation text.
+test('a Circular setting in a Linear request names the setting and the ways out', async ({ page }) => {
+  test.setTimeout(180000);
+  await openApp(page);
+  await loadSession(page, 'BGC0000708-BGC0000713');
+  await page.evaluate(() => {
+    const send = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (message, ...args) {
+      if (message.type !== 'run') return send.call(this, message, ...args);
+      Worker.prototype.postMessage = send;
+      const request = structuredClone(message.payload.request);
+      request.diagramOptions.configOverrides = { ...request.diagramOptions.configOverrides, 'objects.ticks.tick_width': 4 };
+      return send.call(this, { ...message, payload: { ...message.payload, request } }, ...args);
+    };
+  });
+  const failed = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+  expect(failed).toMatchObject({ status: 'error', recovery: 'preserved', error: { code: 'MODE_SETTING',
+    operation: 'generate', stage: 'request-validation', actions: ['edit-input'],
+    context: { reason: 'CIRCULAR_SETTING', configPath: 'objects.ticks.tick_width' } } });
+  const alert = page.getByRole('alert', { name: 'Generation Error' });
+  await expect(alert).toContainText('A preserved session setting does not apply to this diagram mode.'
+    + ' Setting: objects.ticks.tick_width. It applies only to Circular diagrams.'
+    + ' Reset it under Preserved session settings, or switch to Circular.');
+  await expect(alert).not.toContainText('Input validation failed');
+  await expect(alert.getByRole('button', { name: 'Retry Generate', exact: true })).toHaveCount(0);
+  await inspectSafeDetails(page, alert, failed.error);
+});
+
 // B10: the engine's display-start range check is a user-fixable input error.
 test('a display start beyond the record is an input error with a working action', async ({ page }) => {
   test.setTimeout(180000);

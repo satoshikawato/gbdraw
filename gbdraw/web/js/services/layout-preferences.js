@@ -1,9 +1,15 @@
 // @ts-check
-import {
-  normalizeCircularPlotTitlePosition,
-  normalizeLinearPlotTitlePosition
-} from './plot-title-position.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
+
+export const normalizeCircularPlotTitlePosition = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['none', 'top', 'bottom'].includes(normalized) ? normalized : 'none';
+};
+
+export const normalizeLinearPlotTitlePosition = (value) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return ['center', 'top', 'bottom'].includes(normalized) ? normalized : 'bottom';
+};
 
 const normalizeLegendPosition = (value, fallback) => {
   const normalized = String(value ?? '').trim().toLowerCase();

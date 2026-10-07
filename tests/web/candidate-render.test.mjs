@@ -372,6 +372,31 @@ test('a Legend style on a Depth series the request left out may miss its row', (
   assert.deepEqual(hidden.legendStrokes.map(({ caption, allowMissing }) => [caption, allowMissing]), [['depth', true]]);
 });
 
+// OV-88: one rule for the row Python is not sent: a Depth row renamed in the
+// Legend is excused like an unrenamed one, its rename and the styles stored
+// under the new name included.
+test('a renamed Depth row the request left out may miss its row, rename and styles alike', () => {
+  const compile = (unrequestedDepthCaptions) => compileDirectEditorMutationPlan({
+    catalogAdmission: admission(),
+    legendEntries: [
+      { caption: 'Coverage', originalCaption: 'depth', color: '#7b2cbf' },
+      { caption: 'Ghost name', originalCaption: 'Ghost', color: '#123456' }
+    ],
+    originalLegendOrder: ['depth', 'Ghost'],
+    legendColorOverrides: { Coverage: '#7b2cbf', 'Ghost name': '#123456' },
+    legendStrokeOverrides: { Coverage: { strokeColor: '#445566', strokeWidth: 2 } },
+    unrequestedDepthCaptions
+  }).operationsByResult[0];
+  const pairs = (operations, key) => operations.map((operation) => [operation[key], operation.allowMissing]);
+  const requested = compile([]);
+  assert.deepEqual(pairs(requested.legendRenames, 'from'), [['depth', false], ['Ghost', false]]);
+  assert.deepEqual(pairs(requested.legendFills, 'caption'), [['depth', false], ['Ghost', false]]);
+  const hidden = compile(['depth']);
+  assert.deepEqual(pairs(hidden.legendRenames, 'from'), [['depth', true], ['Ghost', false]]);
+  assert.deepEqual(pairs(hidden.legendFills, 'caption'), [['depth', true], ['Ghost', false]]);
+  assert.deepEqual(pairs(hidden.legendStrokes, 'caption'), [['depth', true]]);
+});
+
 // OV-123 (R3, PD-OI-066): one rule says which features a Legend row's stroke
 // reaches. The live stroke reads the mounted Result and Generate the Result as
 // it is drawn; both call it.

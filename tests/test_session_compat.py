@@ -58,6 +58,8 @@ from gbdraw.session import (
 from gbdraw.session_io import (
     CURRENT_SESSION_VERSION,
     migrate_persisted_web_state_field_names,
+    migrate_session_annotation_targets,
+    migrate_session_feature_edits,
 )
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 
@@ -1474,3 +1476,197 @@ def test_cli_resave_keeps_the_ids_and_names_of_unchanged_resources(
     assert saved["renderRequest"]["records"][0]["source"] == (
         source["renderRequest"]["records"][0]["source"]
     )
+
+
+_FEATURE_EDIT_VECTORS = json.loads(
+    (Path(__file__).parent / "fixtures" / "feature-edit-migration-vectors.json").read_text(
+        encoding="utf-8"
+    )
+)["cases"]
+_MAIN_FEATURE_EDIT_VECTORS = {
+    case["fixture"]: case for case in _FEATURE_EDIT_VECTORS if "fixture" in case
+}
+
+
+@pytest.mark.parametrize(
+    "case", _FEATURE_EDIT_VECTORS, ids=[case["name"] for case in _FEATURE_EDIT_VECTORS]
+)
+def test_rendered_id_feature_edits_migrate_to_the_vectors_shared_with_the_web_reader(
+    case: dict[str, Any],
+) -> None:
+    # tests/web/feature-edit-migration.test.mjs checks the same vectors against
+    # migrateSessionFeatureEdits.
+    source = json.loads(json.dumps(case["input"]))
+
+    migration = migrate_session_feature_edits(
+        source["features"], mode=source["mode"], catalog=source["catalog"]
+    )
+
+    assert {
+        "features": migration.features,
+        "droppedCount": migration.dropped_count,
+        "narrowedVisibilityCount": migration.narrowed_visibility_count,
+    } == case["expected"]
+    assert source == case["input"]
+
+
+@pytest.mark.parametrize("fixture", sorted(_MAIN_FEATURE_EDIT_VECTORS))
+def test_feature_edit_vectors_hold_the_maps_of_the_sessions_saved_by_main(
+    fixture: str,
+) -> None:
+    case = _MAIN_FEATURE_EDIT_VECTORS[fixture]
+    session = json.loads(gzip.decompress((Path(__file__).parent / "fixtures" / fixture).read_bytes()))
+    assert session["version"] == 44
+    assert case["input"]["features"] == session["features"]
+    assert case["input"]["mode"] == session["renderRequest"]["mode"]
+    # The vector keeps only the catalog fields the readers use: the full saved
+    # catalog gives the same result.
+    migration = migrate_session_feature_edits(
+        session["features"],
+        mode=session["renderRequest"]["mode"],
+        catalog=session["editorState"]["featureCatalog"],
+    )
+    assert migration.features == case["expected"]["features"]
+
+
+# Sessions saved by main (feature-edits.provenance.json) with Feature visibility,
+# Label visibility, and label text edits keyed by rendered feature ID.
+@pytest.mark.parametrize(
+    ("fixture", "main"),
+    [
+        ("sessions/feature-edits-crop-rc.v44.gbdraw-session.json.gz", linear_main),
+        ("sessions/feature-edits-circular-copies.v44.gbdraw-session.json.gz", circular_main),
+    ],
+)
+def test_session_44_rendered_id_feature_edits_survive_the_cli_sidecar(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, fixture: str, main: Any
+) -> None:
+    case = _MAIN_FEATURE_EDIT_VECTORS[fixture]
+    sidecar = tmp_path / "replay.gbdraw-session.json"
+
+    main(
+        [
+            "--session", str(Path(__file__).parent / "fixtures" / fixture),
+            "--output", str(tmp_path / "replay"),
+            "--format", "svg",
+            "--session_output", str(sidecar),
+        ]
+    )
+
+    assert (tmp_path / "replay.svg").is_file()
+    saved = load_session_document(sidecar)
+    assert saved.version == CURRENT_SESSION_VERSION
+    # The edits become identity drafts in the mode of the Session's diagram,
+    # as the Web app moves them on Load.
+    assert saved.to_dict()["features"] == case["expected"]["features"]
+    assert saved.to_dict()["features"]["featureOverrides"]
+    narrowed = case["expected"]["narrowedVisibilityCount"]
+    assert [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == cli_session_module.__name__
+    ] == (
+        [
+            f"WARNING: {narrowed} Feature visibility edit(s) from Session version 44 "
+            "hid every feature with the same hash; in the written Session each "
+            "applies only to the feature that was edited."
+        ]
+        if narrowed
+        else []
+    )
+
+
+_ANNOTATION_TARGET_VECTORS = json.loads(
+    (Path(__file__).parent / "fixtures" / "annotation-target-migration-vectors.json").read_text(
+        encoding="utf-8"
+    )
+)["cases"]
+_MAIN_ANNOTATION_TARGET_VECTOR = next(
+    case for case in _ANNOTATION_TARGET_VECTORS if "fixture" in case
+)
+
+
+@pytest.mark.parametrize(
+    "case", _ANNOTATION_TARGET_VECTORS, ids=[case["name"] for case in _ANNOTATION_TARGET_VECTORS]
+)
+def test_hash_annotation_targets_migrate_to_the_vectors_shared_with_the_web_reader(
+    case: dict[str, Any],
+) -> None:
+    # tests/web/feature-edit-migration.test.mjs checks the same vectors against
+    # migrateSessionAnnotationTargets.
+    source = json.loads(json.dumps(case["input"]))
+
+    migration = migrate_session_annotation_targets(
+        source["annotationSets"],
+        mode=source["mode"],
+        catalog=source["catalog"],
+        records=source["records"],
+    )
+
+    assert {
+        "annotationSets": migration.annotation_sets,
+        "migratedCount": migration.migrated_count,
+    } == case["expected"]
+    assert source == case["input"]
+
+
+def test_annotation_target_vector_holds_the_sets_of_the_session_saved_by_main() -> None:
+    case = _MAIN_ANNOTATION_TARGET_VECTOR
+    session = json.loads(
+        gzip.decompress((Path(__file__).parent / "fixtures" / case["fixture"]).read_bytes())
+    )
+    assert session["version"] == 44
+    assert case["input"]["annotationSets"] == session["config"]["annotationSets"]
+    assert case["input"]["mode"] == session["renderRequest"]["mode"]
+    assert case["input"]["records"] == session["renderRequest"]["records"]
+    # The vector keeps only the catalog fields the readers use: the full saved
+    # catalog gives the same result.
+    migration = migrate_session_annotation_targets(
+        session["config"]["annotationSets"],
+        mode=session["renderRequest"]["mode"],
+        catalog=session["editorState"]["featureCatalog"],
+        records=session["renderRequest"]["records"],
+    )
+    assert migration.annotation_sets == case["expected"]["annotationSets"]
+
+
+# The Session saved by main (selected-feature-annotations.provenance.json) with
+# three hash= annotation targets made from selected features.
+def test_session_44_hash_annotation_targets_move_in_the_cli_sidecar(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    case = _MAIN_ANNOTATION_TARGET_VECTOR
+    fixture = Path(__file__).parent / "fixtures" / case["fixture"]
+    source = json.loads(gzip.decompress(fixture.read_bytes()))
+    sidecar = tmp_path / "replay.gbdraw-session.json"
+    caplog.set_level("INFO", logger=cli_session_module.__name__)
+
+    linear_main(
+        [
+            "--session", str(fixture),
+            "--output", str(tmp_path / "replay"),
+            "--format", "svg",
+            "--session_output", str(sidecar),
+        ]
+    )
+
+    assert (tmp_path / "replay.svg").is_file()
+    saved = load_session_document(sidecar).to_dict()
+    assert saved["version"] == CURRENT_SESSION_VERSION
+    # The draft names the certain feature by its source identity, as the Web
+    # app moves it on Load; the other two targets stay as saved.
+    assert saved["config"]["annotationSets"] == case["expected"]["annotationSets"]
+    # The request is the one that drew the saved figure. As after a Web Load,
+    # it keeps the hash= targets until the next Generate sends the draft.
+    assert (
+        saved["renderRequest"]["diagramOptions"]["annotations"]
+        == source["renderRequest"]["diagramOptions"]["annotations"]
+    )
+    assert [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == cli_session_module.__name__
+    ] == [
+        "INFO: 1 annotation(s) from Session version 44 named a feature by hash=; "
+        "in the written Session each names that feature by its source."
+    ]

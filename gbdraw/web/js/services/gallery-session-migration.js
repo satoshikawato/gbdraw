@@ -16,12 +16,12 @@ import {
   projectCanonicalSessionRequest
 } from './session-request.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
-import { resolveActiveLayoutPreference } from '../app/layout-preferences.js';
+import { resolveActiveLayoutPreference } from './layout-preferences.js';
 import {
   createLinearComparisonEdge,
   normalizeLinearComparisonPlan,
   resolveLinearComparisonPlan
-} from '../app/linear-comparisons.js';
+} from './linear-comparisons.js';
 import { textToBase64, textToBytes } from './file-content-cache.js';
 
 /** @import { GbdrawSession } from './config.js' */
