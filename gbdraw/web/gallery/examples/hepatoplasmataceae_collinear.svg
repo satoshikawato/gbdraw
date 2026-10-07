@@ -612,7 +612,7 @@
   padding: 0 5px;
 }
 .gfs-qualifier {
-  flex: 1 1 100px;
+  flex: 1 1 auto;
 }
 .gfs-qualifier:disabled {
   opacity: 0.48;
@@ -682,9 +682,12 @@
   color: #ffffff;
 }
 .gfs-count {
+  min-width: 0;
   margin-left: auto;
+  overflow: hidden;
   color: #475569;
   font-weight: 700;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .gfs-match-detail {
@@ -760,6 +763,8 @@
   var SEARCH_CONTROLS_COMPACT_HEIGHT = 30;
   var SEARCH_CONTROLS_EXPANDED_WIDTH = 390;
   var SEARCH_CONTROLS_EXPANDED_HEIGHT = 84;
+  // The Qualifier key row of the rich bar: its 24 px input and the 6 px row gap.
+  var SEARCH_CONTROLS_QUALIFIER_ROW_HEIGHT = 30;
   var hoverPopupTimer = null;
   var hoverPopupFrame = null;
   var hoverPopupFeatureId = '';
@@ -2543,6 +2548,49 @@
     );
   }
 
+  // The app popup title (getFeatureCaption in services/feature-utils.js) of a
+  // catalog feature, whose product, gene, locus_tag and note (first 50
+  // characters) the app reads from its qualifiers.
+  // tests/web/feature-search-scope.test.mjs binds the two rules.
+  function featureCaption(feature) {
+    var caption = firstNonInternalDisplayText(
+      feature &amp;&amp; feature.label,
+      feature &amp;&amp; feature.display_label,
+      feature &amp;&amp; feature.displayLabel,
+      feature &amp;&amp; feature.product,
+      qualifierDisplayValue(feature, 'product'),
+      feature &amp;&amp; feature.gene,
+      qualifierDisplayValue(feature, 'gene'),
+      feature &amp;&amp; feature.locus_tag,
+      qualifierDisplayValue(feature, 'locus_tag'),
+      feature &amp;&amp; feature.note,
+      Array.from(qualifierDisplayValue(feature, 'note')).slice(0, 50).join('')
+    );
+    return caption || String(feature &amp;&amp; feature.type) + ' at ' +
+      String(feature &amp;&amp; feature.start) + '..' + String(feature &amp;&amp; feature.end);
+  }
+
+  // The Protein ID of the Details tab: a protein ID only, never the gene or
+  // locus tag that displayProteinId falls back to (resolveFeatureProteinId in
+  // services/feature-utils.js).
+  function featureProteinId(feature, member) {
+    return firstNonInternalDisplayText(
+      feature &amp;&amp; feature.displayProteinId,
+      feature &amp;&amp; feature.display_protein_id,
+      member &amp;&amp; member.displayProteinId,
+      member &amp;&amp; member.display_protein_id,
+      feature &amp;&amp; feature.sourceProteinId,
+      feature &amp;&amp; feature.source_protein_id,
+      member &amp;&amp; member.sourceProteinId,
+      member &amp;&amp; member.source_protein_id,
+      qualifierDisplayValue(feature, 'protein_id'),
+      feature &amp;&amp; feature.proteinId,
+      feature &amp;&amp; feature.protein_id,
+      member &amp;&amp; member.proteinId,
+      member &amp;&amp; member.protein_id
+    );
+  }
+
   function internalProteinId(feature, member) {
     return String(
       feature &amp;&amp; feature.protein_id ||
@@ -3129,12 +3177,10 @@
   function applySearchControlsMode() {
     if (!searchControls) return;
     searchControls.setAttribute(
-      'width',
-      String(searchControlsExpanded ? SEARCH_CONTROLS_EXPANDED_WIDTH : SEARCH_CONTROLS_COMPACT_WIDTH)
-    );
-    searchControls.setAttribute(
       'height',
-      String(searchControlsExpanded ? SEARCH_CONTROLS_EXPANDED_HEIGHT : SEARCH_CONTROLS_COMPACT_HEIGHT)
+      String(searchControlsExpanded
+        ? SEARCH_CONTROLS_EXPANDED_HEIGHT + (popupMode === 'simple' ? 0 : SEARCH_CONTROLS_QUALIFIER_ROW_HEIGHT)
+        : SEARCH_CONTROLS_COMPACT_HEIGHT)
     );
     var root = searchControls.querySelector('.gfs');
     if (root) setClassToken(root, 'is-collapsed', !searchControlsExpanded);
@@ -3164,7 +3210,14 @@
       view.height / fallbackSize.height
     );
     var margin = 12 * unit;
-    var controlWidth = Number(searchControls.getAttribute('width')) || SEARCH_CONTROLS_EXPANDED_WIDTH;
+    // The expanded bar narrows to the visible width less both margins.
+    var controlWidth = searchControlsExpanded
+      ? Math.max(
+        SEARCH_CONTROLS_COMPACT_WIDTH,
+        Math.min(SEARCH_CONTROLS_EXPANDED_WIDTH, visibleView.width / unit - 24)
+      )
+      : SEARCH_CONTROLS_COMPACT_WIDTH;
+    searchControls.setAttribute('width', formatSvgNumber(controlWidth));
     var x = Math.max(
       visibleView.x + margin,
       visibleView.x + visibleView.width - (controlWidth * unit) - margin
@@ -3249,6 +3302,7 @@
     });
     var body = createXhtmlNode('div', { className: 'gfs-body' });
     var firstRow = createXhtmlNode('div', { className: 'gfs-row' });
+    var qualifierRow = createXhtmlNode('div', { className: 'gfs-row' });
     var secondRow = createXhtmlNode('div', { className: 'gfs-row' });
     var queryInput = createXhtmlNode('input', {
       className: 'gfs-input gfs-query',
@@ -3359,9 +3413,7 @@
     firstRow.appendChild(fieldSelect);
     firstRow.appendChild(searchButton);
     firstRow.appendChild(collapseButton);
-    if (popupMode !== 'simple') {
-      secondRow.appendChild(qualifierInput);
-    }
+    qualifierRow.appendChild(qualifierInput);
     secondRow.appendChild(regexLabel);
     secondRow.appendChild(prevButton);
     secondRow.appendChild(nextButton);
@@ -3370,6 +3422,9 @@
     secondRow.appendChild(countText);
     compactRow.appendChild(compactButton);
     body.appendChild(firstRow);
+    if (popupMode !== 'simple') {
+      body.appendChild(qualifierRow);
+    }
     body.appendChild(secondRow);
     body.appendChild(matchDetailText);
     root.appendChild(compactRow);
@@ -3411,13 +3466,16 @@
     regexInput.addEventListener('change', function () {
       setPendingSearchState({ useRegex: regexInput.checked });
     });
-    searchButton.addEventListener('click', function () {
+    function applyPendingSearch() {
       setSearchState({
         query: pendingSearchState.query,
         field: pendingSearchState.field,
         qualifierKey: pendingSearchState.qualifierKey,
         useRegex: pendingSearchState.useRegex
       });
+    }
+    searchButton.addEventListener('click', function () {
+      applyPendingSearch();
       queryInput.focus();
     });
     prevButton.addEventListener('click', function () {
@@ -3442,8 +3500,14 @@
           setSearchControlsExpanded(false);
         }
         event.preventDefault();
-      } else if (event.key === 'Enter' &amp;&amp; searchState.matches.length) {
-        openActiveMatchPopup();
+      } else if (event.key === 'Enter' &amp;&amp; !(event.target &amp;&amp; event.target.closest &amp;&amp; event.target.closest('button'))) {
+        // Enter searches; with the search applied, Enter opens the active match.
+        // A focused button keeps its own Enter.
+        if (searchState.matches.length) {
+          openActiveMatchPopup();
+        } else {
+          applyPendingSearch();
+        }
         event.preventDefault();
       }
     });
@@ -4494,7 +4558,7 @@
     var member = getFeatureOrthogroupMember(feature, group);
     var memberCount = Number(feature &amp;&amp; feature.orthogroup_member_count);
     var recordCoverage = Number(feature &amp;&amp; feature.orthogroup_record_coverage);
-    var proteinId = displayProteinId(feature, member);
+    var proteinId = featureProteinId(feature, member);
     var rows = [
       ['Similarity group ID', feature &amp;&amp; feature.orthogroup_id || ''],
       ['Similarity group name', group &amp;&amp; (group.display_name || group.name) || ''],
@@ -4876,16 +4940,7 @@
   }
 
   function renderSimplePopup(feature) {
-    var title = firstNonInternalDisplayText(
-      feature.display_label,
-      feature.label,
-      displayProteinId(feature, null, ''),
-      feature.locus_tag,
-      feature.gene,
-      feature.type,
-      feature.svg_id,
-      'Feature'
-    );
+    var title = featureCaption(feature);
     return '&lt;div class="gfi gfi--simple"&gt;' +
       '&lt;div class="gfi-header" data-drag-handle="true"&gt;' +
       '&lt;div&gt;&lt;div class="gfi-title"&gt;' + escapeHtml(title) + '&lt;/div&gt;' +
@@ -4914,16 +4969,7 @@
     function tabButton(id, label) {
       return '&lt;button type="button" class="gfi-tab' + (tab === id ? ' is-active' : '') + '" data-tab="' + id + '"&gt;' + label + '&lt;/button&gt;';
     }
-    var title = firstNonInternalDisplayText(
-      feature.display_label,
-      feature.label,
-      displayProteinId(feature, null, ''),
-      feature.locus_tag,
-      feature.gene,
-      feature.type,
-      feature.svg_id,
-      'Feature'
-    );
+    var title = featureCaption(feature);
     return '&lt;div class="gfi"&gt;' +
       '&lt;div class="gfi-header" data-drag-handle="true"&gt;' +
       '&lt;div&gt;&lt;div class="gfi-title"&gt;' + escapeHtml(title) + '&lt;/div&gt;' +
@@ -5252,8 +5298,8 @@
       role: role,
       displayRole: displayRole,
       recordId: recordId,
-      start: start,
-      end: end,
+      start: coordStart,
+      end: coordEnd,
       orientation: strand,
       length: high - low + 1,
       available: true,
