@@ -186,7 +186,7 @@ for (const mode of ['circular', 'linear']) {
     expect(audit.count).toBeGreaterThan(40);
     expect(audit.problems, 'buttons without a stable author-provided name').toEqual([]);
     const move = mode === 'circular' ? 'Move outside Axis' : 'Move above Axis';
-    await expect(page.getByRole('button', { name: move, exact: true }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: new RegExp(`^${mode} track slot \\S+ ${move}$`, 'i') }).first()).toBeVisible();
     expect(await auditStateNames(page), 'button names that change with state').toEqual([]);
   });
 
@@ -256,7 +256,7 @@ test('help tips open from the keyboard and on hover, and Escape closes them', as
   // referenced description.
   await expect(section.getByText('Window', { exact: true })).toHaveCount(1);
   await expect(input).toHaveAccessibleDescription(/Window size for GC content\/skew/);
-  await expect(button).toHaveAccessibleName('Help');
+  await expect(button).toHaveAccessibleName('Help: Window');
   await expect(button).toHaveAccessibleDescription(/Window size for GC content\/skew/);
   await input.focus();
   await page.keyboard.press('Shift+Tab');
