@@ -1225,8 +1225,6 @@ export const executeCanonicalRenderCandidate = async ({
  *   services/config.js owns the active-mode input check shared with Save.
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
- * @property {(() => readonly string[]) | null} [readOtherModeLegendInventory]
- *   E1: the Legend inventory of the other mode's Result (the composition root's artifact slot).
  * @property {typeof prepareCandidateRenderCommit} [prepareCandidateCommit] Test seam.
  */
 
@@ -1263,7 +1261,6 @@ export const createRunAnalysis = ({
   // R13: the label owner's ports (app/feature-editor/label-actions.js).
   closeLabelTextScopeDialog,
   clearLabelBuildNotices,
-  readOtherModeLegendInventory = null,
   prepareCandidateCommit = prepareCandidateRenderCommit
 }) => {
   const {
@@ -1346,15 +1343,6 @@ export const createRunAnalysis = ({
           depthTracks: drawing.adv.depth_tracks,
           slots: canonical.renderRequest.mode === 'linear' ? drawing.adv.linear_track_slots : drawing.adv.circular_track_slots
         })
-  );
-  // E1 (OV-80): Legend edits stay shared between the modes until per-drawing
-  // Legend edits. A mode without a Result of its own shows the rows of the other
-  // mode's Result, and its first Generate carries their edits; a row that only
-  // the other mode's Result draws may be absent from this Result.
-  const otherModeLegendCaptions = () => (
-    results.value.length === 0 && typeof readOtherModeLegendInventory === 'function'
-      ? [...readOtherModeLegendInventory()]
-      : []
   );
   // A target-record transform and a label reflow draw the committed Results
   // again, with the settings and edits of the committed request's mode.
@@ -2152,7 +2140,8 @@ export const createRunAnalysis = ({
       || Object.keys(drawing.featurePlacementOverrides || {}).length > 0
       || Object.keys(drawing.featureStrokeOverrides).length > 0
       || Object.keys(drawing.legendColorOverrides).length > 0 || Object.keys(drawing.legendStrokeOverrides).length > 0
-      || drawing.legendEntries.value.some(entry => entry.originalCaption && entry.originalCaption !== entry.caption);
+      || drawing.legendEntries.value.some(entry => entry.originalCaption && entry.originalCaption !== entry.caption)
+      || drawing.dormantLegendEntries.value.length > 0;
     // The committed records whose source this Generate replaces or drops. The
     // metadata of a Session without a feature catalog has no record keys.
     const replacedFeatures = hasSourceBoundEditorIntent
@@ -4677,10 +4666,10 @@ export const createRunAnalysis = ({
           featureOverrides: drawing.featureOverrides,
           legendEntries: drawing.legendEntries.value,
           deletedLegendEntries: drawing.deletedLegendEntries.value,
+          dormantLegendEntries: drawing.dormantLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
           addedLegendCaptions: drawing.addedLegendCaptions.value,
           unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical),
-          otherModeLegendCaptions: otherModeLegendCaptions(),
           legendColorOverrides: drawing.legendColorOverrides,
           legendStrokeOverrides: drawing.legendStrokeOverrides,
           manualSpecificRules: candidateRules
@@ -4951,6 +4940,9 @@ export const createRunAnalysis = ({
         currentRecords: canonical.renderRequest.records || [],
         biologicalFeatures: candidateBiologicalFeatures
       }) : 0;
+      // OV-120: a source replacement also retires the renames of the Legend
+      // rows the new Result does not draw (as the OV-84 strokes).
+      if (sourceReplaced) drawing.dormantLegendEntries.value = [];
       if (typeof setGeneratedArtifactIdentity === 'function') {
         setGeneratedArtifactIdentity(generationResponse.artifactIdentity, {
           results: candidateCommit.results
@@ -5236,6 +5228,7 @@ export const createRunAnalysis = ({
           featureOverrides: drawing.featureOverrides,
           legendEntries: drawing.legendEntries.value,
           deletedLegendEntries: drawing.deletedLegendEntries.value,
+          dormantLegendEntries: drawing.dormantLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
           addedLegendCaptions: drawing.addedLegendCaptions.value,
           unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical),
@@ -5586,6 +5579,7 @@ export const createRunAnalysis = ({
           featureOverrides: drawing.featureOverrides,
           legendEntries: drawing.legendEntries.value,
           deletedLegendEntries: drawing.deletedLegendEntries.value,
+          dormantLegendEntries: drawing.dormantLegendEntries.value,
           originalLegendOrder: originalLegendOrder.value,
           addedLegendCaptions: drawing.addedLegendCaptions.value,
           unrequestedDepthCaptions: unrequestedDepthCaptions(drawing, canonical),

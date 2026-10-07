@@ -127,7 +127,8 @@ write-up of a release.
   a switch to the other mode (OV-105); an unmanaged config override of one mode failing the
   other mode's Generate and Save (OV-106); and the Depth panels writing the
   Depth series when they draw (OV-109). A source replacement now also removes
-  the strokes of features the new source does not have (OV-84).
+  the strokes of features the new source does not have (OV-84) and the Legend
+  renames of rows the new Result does not draw.
 - Sessions: **Save Session** writes the settings and the Result of each mode.
   Session 46 keeps each mode's settings and edits in `modes.circular` and
   `modes.linear` and gains an optional `otherModeResult` field for the Result

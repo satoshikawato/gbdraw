@@ -993,11 +993,13 @@ export const createLegendEntryActions = ({
    * Read the Legend of a mounted Result: its entries in visual order and the
    * captions the renderer generated (not the editor's direct entries). The one
    * reader of a mounted Legend; `previousEntries` keep stroke, feature ids,
-   * and the generated caption of a renamed entry.
+   * and the generated caption of a renamed entry; a renamed row an earlier
+   * Generate hid (`dormantEntries`, OV-120) keeps its generated caption too.
    * @param {SVGSVGElement} svg
    * @param {Record<string, any>[]} previousEntries
+   * @param {Record<string, any>[]} [dormantEntries]
    */
-  const readMountedLegend = (svg, previousEntries) => {
+  const readMountedLegend = (svg, previousEntries, dormantEntries = []) => {
     const targetGroup = getVisibleFeatureLegendGroup(svg);
     if (!targetGroup) return null;
 
@@ -1035,7 +1037,7 @@ export const createLegendEntryActions = ({
       const existingEntry = previousEntries.find((entry) => (
         entry.caption === caption
         && normalizedColor(entry.color) === normalizedColor(color)
-      ));
+      )) || dormantEntries.find((entry) => entry.caption === caption);
       const showStroke = existingEntry?.showStroke || false;
       const existingFeatureIds = existingEntry?.featureIds || [];
       const originalCaption = existingEntry?.originalCaption || caption;
@@ -1089,6 +1091,29 @@ export const createLegendEntryActions = ({
     .map(entry => entry.originalCaption)
     .filter(caption => generatedCaptions.has(caption));
 
+  /**
+   * The renamed rows a draw leaves out (OV-120): each keeps its generated
+   * caption and its rename, unless the row is deleted.
+   * @param {DrawingState} drawing
+   * @param {{ previous: Record<string, any>[], drawn: Record<string, any>[] }} rows
+   * @returns {Record<string, any>[]}
+   */
+  const dormantAfterDraw = (drawing, { previous, drawn }) => {
+    const drawnOriginals = new Set(drawn.map((entry) => String(entry?.originalCaption || entry?.caption || '').trim()));
+    const deleted = new Set(drawing.deletedLegendEntries.value
+      .map((entry) => String(entry?.originalCaption || entry?.caption || '').trim()));
+    /** @type {Set<string>} */
+    const seen = new Set();
+    return previous.flatMap((entry) => {
+      const caption = String(entry?.caption || '').trim();
+      const originalCaption = String(entry?.originalCaption || '').trim();
+      if (!caption || !originalCaption || caption === originalCaption || drawnOriginals.has(originalCaption)
+        || deleted.has(originalCaption) || seen.has(originalCaption)) return [];
+      seen.add(originalCaption);
+      return [{ caption, originalCaption, color: entry.color, showStroke: Boolean(entry.showStroke), featureIds: [] }];
+    });
+  };
+
   /** @param {string[]} liveResultIdentities */
   const pruneResultInventories = (liveResultIdentities) => {
     const live = new Set(liveResultIdentities);
@@ -1115,7 +1140,7 @@ export const createLegendEntryActions = ({
     pruneResultInventories(liveResultIdentities);
     const stored = inventoryByResult.get(identity);
     if (!identity || stored) return stored || [];
-    const mounted = readMountedLegend(svg, drawing.legendEntries.value || []);
+    const mounted = readMountedLegend(svg, drawing.legendEntries.value || [], drawing.dormantLegendEntries.value || []);
     const inventory = mounted
       ? drawnInventory(drawing, {
         inventory: originalLegendOrder.value,
@@ -1165,7 +1190,9 @@ export const createLegendEntryActions = ({
       return;
     }
 
-    const mounted = readMountedLegend(svg, drawing.legendEntries.value || []);
+    const previousEntries = drawing.legendEntries.value || [];
+    const previousDormant = drawing.dormantLegendEntries.value || [];
+    const mounted = readMountedLegend(svg, previousEntries, previousDormant);
     if (!mounted) {
       drawing.legendEntries.value = [];
       return;
@@ -1176,6 +1203,14 @@ export const createLegendEntryActions = ({
     // the displayed Result replays an edited order (D-08).
     const orderEdited = isLegendOrderEdited(drawing.legendEntries.value, originalLegendOrder.value);
     drawing.legendEntries.value = visuallySortedEntries;
+    // OV-120: a draw keeps the rename of each row it does not draw; the rename
+    // applies again when a later Generate draws the row.
+    if (replaceGeneratedInventory) {
+      drawing.dormantLegendEntries.value = dormantAfterDraw(drawing, {
+        previous: [...previousEntries, ...previousDormant],
+        drawn: visuallySortedEntries
+      });
+    }
 
     const identity = readActiveResultIdentity?.() || '';
     if (replaceGeneratedInventory || originalLegendOrder.value.length === 0) {

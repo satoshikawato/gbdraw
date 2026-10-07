@@ -31,7 +31,11 @@ threads per job, parallel workers), `ui.richFeaturePopup`, and `cliOptions`
 (the options of the CLI command that wrote the Session, unchanged). Per-feature
 edit rows, Feature placement rows, record display rows, and `featureIdentity`
 annotation targets no longer name a mode (`scope`): the slice is the mode, and a
-row is keyed by `recordKey` and `biologicalFeatureId`. A Session 46 that holds
+row is keyed by `recordKey` and `biologicalFeatureId`. A slice's
+`editorState.legend.entries` lists the Legend rows of the mode's Result, then
+the renamed rows its last Generate did not draw (for example with GC content off
+or Show Depth off), each marked `"dormant": true`; the rename and the styles
+under the new name apply again when a Generate draws the row. A Session 46 that holds
 the top-level `config` or `features`, a former `editorState` or `ui` draft
 field, or a field outside these slices is rejected
 (`INPUT_INVALID {field: schema, reason: FIELDS}`). A settings-only Session keeps

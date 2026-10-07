@@ -1595,6 +1595,7 @@ export const createAppSetup = () => {
       legendColorOverrides: drawing.legendColorOverrides,
       legendStrokeOverrides: drawing.legendStrokeOverrides,
       legendEntries: drawing.legendEntries,
+      dormantLegendEntries: drawing.dormantLegendEntries,
       projectLegendEntries: () => { void projectMountedEditorIntent({ legend: {} }); },
       namedCaptions: () => trackDataLegendCaptions({
         annotationSets: drawing.annotationSets,
@@ -2683,8 +2684,6 @@ export const createAppSetup = () => {
     assertActiveModeInputs,
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
-    // E1 (OV-80): the Legend inventory of the other mode's Result.
-    readOtherModeLegendInventory: () => artifactSlots[mode.value === 'linear' ? 'circular' : 'linear']?.legendInventory || [],
     canonicalSessionVersion: SESSION_VERSION,
     adoptCanonicalRenderArtifacts,
     getCommittedCanonicalSession,
@@ -3187,6 +3186,7 @@ export const createAppSetup = () => {
       featureOverrides: drawing.featureOverrides,
       legendEntries: drawing.legendEntries.value,
       deletedLegendEntries: drawing.deletedLegendEntries.value,
+      dormantLegendEntries: drawing.dormantLegendEntries.value,
       originalLegendOrder: originalLegendOrder.value,
       addedLegendCaptions: drawing.addedLegendCaptions.value,
       legendColorOverrides: drawing.legendColorOverrides,

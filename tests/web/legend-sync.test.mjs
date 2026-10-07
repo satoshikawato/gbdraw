@@ -91,7 +91,8 @@ const sessionLegendSyncSource = appSetupSource.match(
 assert.match(sessionLegendSyncSource, /extractLegendEntries\(\{\s*replaceGeneratedInventory: !selecting && \(!context\.bindingOptions\.isIncrementalEdit/);
 assert.doesNotMatch(sessionLegendSyncSource, /initPyodide|addLegendEntry|removeLegendEntry/);
 assert.doesNotMatch(appSetupSource, /restoreLoadedSessionLegendEntries/);
-assert.match(configSource, /entries: normalizeSessionLegendEntries\(legend\.entries\)/);
+assert.match(configSource, /const entries = normalizeSessionLegendEntries\(legend\.entries\)/);
+assert.match(configSource, /entries: entries\.filter\(\(entry\) => entry\.dormant !== true\)/);
 assert.match(configSource, /deletedEntries: normalizeSessionLegendEntries\(legend\.deletedEntries\)/);
 
 const rules = [
@@ -209,6 +210,7 @@ const mockLegendEntry = (caption, color, x) => {
       { caption: 'Beta', color: '#445566' }
     ]),
     deletedLegendEntries: ref([]),
+    dormantLegendEntries: ref([]),
     originalLegendOrder: ref(['Alpha', 'Beta']),
     originalLegendColors: ref({ Alpha: '#112233', Beta: '#445566' }),
     newLegendCaption: ref(''),
@@ -439,6 +441,7 @@ const mockLegendEntry = (caption, color, x) => {
     adv: {},
     legendEntries: ref([]),
     deletedLegendEntries: ref([]),
+    dormantLegendEntries: ref([]),
     originalLegendOrder: ref([]),
     originalLegendColors: ref({}),
     newLegendCaption: ref(''),
@@ -518,6 +521,7 @@ const mockLegendEntry = (caption, color, x) => {
     adv: {},
     legendEntries: ref([]),
     deletedLegendEntries: ref([]),
+    dormantLegendEntries: ref([]),
     originalLegendOrder: ref(['Alpha', 'Beta']),
     originalLegendColors: ref({}),
     newLegendCaption: ref(''),
@@ -615,6 +619,7 @@ const mockLegendEntry = (caption, color, x) => {
     adv: {},
     legendEntries: ref([]),
     deletedLegendEntries: ref([]),
+    dormantLegendEntries: ref([]),
     originalLegendOrder: ref([]),
     originalLegendColors: ref({}),
     newLegendCaption: ref(''),

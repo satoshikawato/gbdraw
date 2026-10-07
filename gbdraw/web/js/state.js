@@ -861,6 +861,9 @@ const createDrawingState = (drawingMode) => {
     canonicalLabelOverrideRows: ref([]),
     legendEntries: ref([]), // [{caption, originalCaption, color, yPos, showStroke, featureIds}]
     deletedLegendEntries: ref([]),
+    // OV-120: renamed rows the last Generate did not draw (GC off, Show Depth
+    // off); their renames apply again when a Generate draws the row.
+    dormantLegendEntries: ref([]),
     legendColorOverrides: reactive({}), // { caption: color }
     // { caption: { strokeColor, strokeWidth, originalStrokeColor, originalStrokeWidth } }
     legendStrokeOverrides: reactive({}),

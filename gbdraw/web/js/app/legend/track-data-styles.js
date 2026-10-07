@@ -52,17 +52,20 @@ export const trackDataLegendCaptions = ({
  * deleted. The change and the retirement happen in the History step of the
  * caller, so Undo restores them together. `projectLegendEntries` shows the
  * entries with a retired rename on the displayed Result, as Undo and Redo do.
+ * The renamed rows a Generate hid (OV-120) follow the same rule: a row whose
+ * data is removed leaves `dormantLegendEntries` with its styles.
  * @param {{
  *   legendColorOverrides: Record<string, any>,
  *   legendStrokeOverrides: Record<string, any>,
  *   legendEntries: { value: any[] },
+ *   dormantLegendEntries?: { value: any[] },
  *   namedCaptions: () => Set<string>,
  *   projectLegendEntries: () => void
  * }} options
  * @returns {<T>(change: () => T) => T}
  */
 export const buildLegendStyleRetirement = ({
-  legendColorOverrides, legendStrokeOverrides, legendEntries, namedCaptions, projectLegendEntries
+  legendColorOverrides, legendStrokeOverrides, legendEntries, dormantLegendEntries, namedCaptions, projectLegendEntries
 }) => (
   (change) => {
     const before = namedCaptions();
@@ -84,6 +87,16 @@ export const buildLegendStyleRetirement = ({
       renameRetired = true;
       return { ...entry, caption: original };
     });
+    if (dormantLegendEntries && Array.isArray(dormantLegendEntries.value)) {
+      const dormant = dormantLegendEntries.value.filter((entry) => {
+        const original = text(entry?.originalCaption);
+        if (!retired.has(original)) return true;
+        const caption = text(entry?.caption);
+        if (caption && !after.has(caption)) retireStyles(caption);
+        return false;
+      });
+      if (dormant.length !== dormantLegendEntries.value.length) dormantLegendEntries.value = dormant;
+    }
     if (renameRetired) {
       legendEntries.value = entries;
       projectLegendEntries();

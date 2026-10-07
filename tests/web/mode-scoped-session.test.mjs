@@ -59,6 +59,9 @@ test('Session 46 saves each drawing as its mode slice and loads it back into tha
   state.drawings.linear.adv.label_font_size = 7;
   state.drawings.linear.adv.depth_min = 3;
   state.drawings.linear.form.plot_title = 'Linear only';
+  // OV-120: a renamed row the last Linear Generate did not draw.
+  const waiting = { caption: 'Coverage', originalCaption: 'depth', color: '#7b2cbf', showStroke: false, featureIds: [] };
+  state.drawings.linear.dormantLegendEntries.value = [waiting];
   const saved = await save('two drawings');
 
   assert.equal(saved.version, 46);
@@ -77,6 +80,9 @@ test('Session 46 saves each drawing as its mode slice and loads it back into tha
   assert.equal(saved.modes.linear.config.adv.depth_min, 3);
   assert.equal(saved.modes.linear.config.form.plot_title, 'Linear only');
   assert.equal(saved.modes.linear.config.form.separate_strands, createDefaultForm().separate_strands);
+  // The waiting row follows the shown rows of its slice, marked `dormant`.
+  assert.deepEqual(saved.modes.linear.editorState.legend.entries, [{ ...waiting, dormant: true }]);
+  assert.deepEqual(saved.modes.circular.editorState.legend.entries, []);
   assert.equal(typeof saved.ui.losatExecution, 'object');
   assert.equal(typeof saved.ui.richFeaturePopup, 'boolean');
 
@@ -98,6 +104,9 @@ test('Session 46 saves each drawing as its mode slice and loads it back into tha
   assert.equal(state.drawings.linear.adv.depth_min, 3);
   assert.equal(state.drawings.linear.form.plot_title, 'Linear only');
   assert.notEqual(state.drawings.circular.form.plot_title, 'Linear only');
+  assert.deepEqual(state.drawings.linear.dormantLegendEntries.value, [waiting]);
+  assert.deepEqual(state.drawings.linear.legendEntries.value, []);
+  assert.deepEqual(state.drawings.circular.dormantLegendEntries.value, []);
 
   // A slice may omit any field, and the slice of a mode not shown may be
   // absent: Load fills them with that mode's defaults. (A settings-only
@@ -106,6 +115,7 @@ test('Session 46 saves each drawing as its mode slice and loads it back into tha
   delete partial.modes.circular.config.adv.label_font_size;
   delete partial.modes.linear;
   resetDrawings();
+  state.drawings.linear.dormantLegendEntries.value = [];
   state.drawings.circular.adv.label_font_size = 99;
   state.drawings.linear.adv.depth_min = 9;
   const loadedPartial = await load(partial);

@@ -44,6 +44,7 @@ const buildEditorIntentData = (editorState = {}) => ({
     entries: cloneJsonData(editorState?.legend?.entries) || [],
     ...(editorState?.legend?.entryOwners ? { entryOwners: cloneJsonData(editorState.legend.entryOwners) } : {}),
     deletedEntries: cloneJsonData(editorState?.legend?.deletedEntries) || [],
+    dormantEntries: cloneJsonData(editorState?.legend?.dormantEntries) || [],
     colorOverrides: clonePlainObject(editorState?.legend?.colorOverrides),
     strokeOverrides: clonePlainObject(editorState?.legend?.strokeOverrides),
     addedCaptions: cloneJsonData(editorState?.legend?.addedCaptions) || []
@@ -104,6 +105,7 @@ const applyEditorIntentData = (drawing, editorState = {}) => {
   const legend = editorState.legend || {};
   replaceRefArray(drawing.legendEntries, legend.entries);
   replaceRefArray(drawing.deletedLegendEntries, legend.deletedEntries);
+  replaceRefArray(drawing.dormantLegendEntries, legend.dormantEntries);
   replacePlainObject(drawing.legendColorOverrides, clonePlainObject(legend.colorOverrides));
   replacePlainObject(drawing.legendStrokeOverrides, clonePlainObject(legend.strokeOverrides));
   if (drawing.addedLegendCaptions?.value !== undefined) {
@@ -1186,6 +1188,9 @@ export const createHistorySnapshotService = ({
         deletedEntries: cloneJsonData(
           getGeneratedArtifactRef(drawing.deletedLegendEntries, [])
         ) || [],
+        dormantEntries: cloneJsonData(
+          getGeneratedArtifactRef(drawing.dormantLegendEntries, [])
+        ) || [],
         originalOrder: cloneJsonData(
           getGeneratedArtifactRef(state.originalLegendOrder, [])
         ) || [],
@@ -1535,6 +1540,7 @@ export const createHistorySnapshotService = ({
           entries: getRef(drawing.legendEntries, []),
           ...(shown && captures.legend ? { entryOwners: captures.legend() } : {}),
           deletedEntries: getRef(drawing.deletedLegendEntries, []),
+          dormantEntries: getRef(drawing.dormantLegendEntries, []),
           colorOverrides: drawing.legendColorOverrides,
           strokeOverrides: drawing.legendStrokeOverrides,
           addedCaptions: Array.from(getRef(drawing.addedLegendCaptions, new Set()) || [])

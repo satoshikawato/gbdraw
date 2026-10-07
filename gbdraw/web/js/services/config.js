@@ -1143,6 +1143,7 @@ const defaultEditorStateData = () => ({
   legend: {
     entries: [],
     deletedEntries: [],
+    dormantEntries: [],
     originalOrder: [],
     originalColors: {},
     colorOverrides: {},
@@ -1172,6 +1173,7 @@ export const buildEditorStateData = (drawing) => ({
   legend: {
     entries: cloneJsonArray(drawing.legendEntries.value),
     deletedEntries: cloneJsonArray(drawing.deletedLegendEntries.value),
+    dormantEntries: cloneJsonArray(drawing.dormantLegendEntries.value),
     originalOrder: cloneJsonArray(state.originalLegendOrder.value),
     originalColors: cloneStringMap(state.originalLegendColors.value),
     colorOverrides: cloneJsonObject(drawing.legendColorOverrides),
@@ -1201,11 +1203,19 @@ const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined
   const legend = isPlainObject(source.legend) ? source.legend : {};
   const featureStrokes = isPlainObject(source.featureStrokes) ? source.featureStrokes : {};
   const originalSvgStroke = isPlainObject(source.originalSvgStroke) ? source.originalSvgStroke : {};
+  // A Session 46 slice lists the renamed rows its Result does not draw
+  // (OV-120) after the shown rows, marked `dormant`.
+  const entries = normalizeSessionLegendEntries(legend.entries);
+  const dormantEntries = [
+    ...normalizeSessionLegendEntries(legend.dormantEntries),
+    ...entries.filter((entry) => entry.dormant === true)
+  ].map(({ dormant: _dormant, ...entry }) => entry);
 
   return {
     legend: {
-      entries: normalizeSessionLegendEntries(legend.entries),
+      entries: entries.filter((entry) => entry.dormant !== true),
       deletedEntries: normalizeSessionLegendEntries(legend.deletedEntries),
+      dormantEntries,
       originalOrder: normalizeStringArray(legend.originalOrder),
       originalColors: normalizeLegendColorOverrides(legend.originalColors),
       colorOverrides: normalizeLegendColorOverrides(legend.colorOverrides),
@@ -1329,6 +1339,7 @@ const applyEditorArtifactData = (normalized) => {
 const applyDrawingEditorData = (drawing, normalized) => {
   drawing.legendEntries.value = normalized.legend.entries;
   drawing.deletedLegendEntries.value = normalized.legend.deletedEntries;
+  drawing.dormantLegendEntries.value = normalized.legend.dormantEntries;
   replacePlainObject(drawing.legendColorOverrides, normalized.legend.colorOverrides);
   replacePlainObject(drawing.legendStrokeOverrides, normalized.legend.strokeOverrides);
   drawing.addedLegendCaptions.value = new Set(normalized.legend.addedCaptions);
@@ -1358,7 +1369,7 @@ export const buildModeSliceData = (drawing, mode, { selectedFeatureRecordIdx = 0
     },
     editorState: {
       legend: {
-        entries: legend.entries,
+        entries: [...legend.entries, ...legend.dormantEntries.map((entry) => ({ ...entry, dormant: true }))],
         deletedEntries: legend.deletedEntries,
         colorOverrides: legend.colorOverrides,
         strokeOverrides: legend.strokeOverrides,
@@ -4191,6 +4202,7 @@ const resetSessionBaseline = () => {
     drawing.canonicalLabelOverrideRows.value = [];
     clearObject(drawing.labelTextBulkOverrides);
     drawing.legendEntries.value = [];
+    drawing.dormantLegendEntries.value = [];
   });
   state.generatedMode.value = 'circular';
   state.generatedLegendPosition.value = 'left';
