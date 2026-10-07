@@ -627,3 +627,30 @@ def test_depth_reserved_band_includes_axis_radial_footprint_without_depth_df() -
     )
     hidden_axis_depth = hidden_axis_layout.tracks[0]
     assert hidden_axis_depth.reserved_band_px == hidden_axis_depth.draw_band_px
+
+
+def test_unpinned_inside_rows_pack_on_both_sides_of_a_pinned_row_in_stack_order() -> None:
+    # Inside rows run from the axis inward: rows before a pinned row lie between it and the axis.
+    canvas_config, cfg = _small_radial_canvas()
+    canvas_config.radius = 300.0
+    layout = resolve_circular_radial_layout(
+        total_length=1000,
+        canvas_config=canvas_config,
+        slots=[
+            CircularTrackSlot(id="above", renderer="dinucleotide_content", side="inside"),
+            CircularTrackSlot(
+                id="pinned",
+                renderer="dinucleotide_skew",
+                side="inside",
+                radius=ScalarSpec(0.5, "factor"),
+            ),
+            CircularTrackSlot(id="below", renderer="dinucleotide_content", side="inside"),
+        ],
+    )
+    by_id = {slot.id: slot.packing_band_px for slot in layout.slots}
+    gap = 0.01 * canvas_config.radius
+
+    assert by_id["pinned"].center_px == pytest.approx(0.5 * canvas_config.radius)
+    assert by_id["above"].inner_px >= by_id["pinned"].outer_px + gap - 1e-6
+    assert by_id["above"].outer_px <= canvas_config.radius - gap + 1e-6
+    assert by_id["below"].outer_px <= by_id["pinned"].inner_px - gap + 1e-6

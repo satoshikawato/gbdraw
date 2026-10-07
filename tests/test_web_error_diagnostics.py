@@ -201,6 +201,91 @@ def test_track_fit_failure_reports_row_and_band_without_slot_id(
     assert _web(ValidationError(message))["context"] == {"exceptionType": "ValidationError"}
 
 
+def _pinned(slot_id: str, renderer: str, radius_px: float, width_px: float = 20.0, **fields) -> CircularTrackSlot:
+    return CircularTrackSlot(
+        id=slot_id,
+        renderer=renderer,
+        radius=ScalarSpec(radius_px, "px"),
+        width=ScalarSpec(width_px, "px"),
+        **fields,
+    )
+
+
+@pytest.mark.parametrize(
+    ("slots", "definition_px", "explicit_radius", "message", "context"),
+    [
+        # Two pinned rows overlap: the later row is named.
+        (
+            (
+                _pinned("gc_content", "dinucleotide_content", 50.0),
+                _pinned("PRIVATE_SLOT", "dinucleotide_skew", 55.0),
+            ),
+            None,
+            False,
+            "Pinned circular track slot 'PRIVATE_SLOT' overlaps reserved circular slot 'gc_content'.",
+            {"reason": "CANNOT_FIT", "slotIndex": 1},
+        ),
+        # A pinned row overlaps the center definition text ...
+        (
+            (_pinned("PRIVATE_SLOT", "dinucleotide_skew", 35.0),),
+            40.0,
+            False,
+            "Pinned circular track slot 'PRIVATE_SLOT' overlaps reserved circular slot 'definition'.",
+            {"reason": "DEFINITION_RESERVED", "slotIndex": 0},
+        ),
+        # ... or an explicit center_reserved_radius.
+        (
+            (_pinned("PRIVATE_SLOT", "dinucleotide_skew", 35.0),),
+            40.0,
+            True,
+            "Pinned circular track slot 'PRIVATE_SLOT' overlaps reserved circular slot 'definition'.",
+            {"reason": "CENTER_RESERVED", "slotIndex": 0},
+        ),
+        # The row after a pinned row asks for a wider gap than the pinned row leaves.
+        (
+            (
+                _pinned("gc_content", "dinucleotide_content", 60.0, 10.0),
+                CircularTrackSlot(id="PRIVATE_SLOT", renderer="dinucleotide_skew", outer_gap_px=20.0),
+            ),
+            None,
+            False,
+            "Circular track slot order cannot be honored with the supplied pinned geometry: "
+            "'PRIVATE_SLOT' would overlap or move outside 'gc_content'.",
+            {"reason": "CANNOT_FIT", "slotIndex": 1},
+        ),
+        # An outside row listed before a pinned outside row still gets an empty
+        # window (outside stack order is not yet resolved like the inside one).
+        (
+            (
+                CircularTrackSlot(id="PRIVATE_SLOT", renderer="dinucleotide_skew", side="outside"),
+                _pinned("gc_content", "dinucleotide_content", 105.0, 4.0, side="outside"),
+            ),
+            None,
+            False,
+            "Circular track slot 'PRIVATE_SLOT' cannot be placed outside without overlap.",
+            {"reason": "CANNOT_FIT", "slotIndex": 0, "innerPx": 108, "outerPx": 102},
+        ),
+    ],
+)
+def test_radial_layout_conflicts_report_track_row_without_slot_id(
+    slots, definition_px, explicit_radius, message, context
+):
+    # TK-02: every radial-layout conflict is a TRACK_LAYOUT failure, not a render failure.
+    with pytest.raises(ValidationError) as caught:
+        resolve_circular_radial_layout(
+            total_length=1000,
+            canvas_config=_small_radial_canvas(),
+            slots=list(slots),
+            definition_reserved_radius_px=definition_px,
+            center_reserved_radius_explicit=explicit_radius,
+        )
+    assert str(caught.value) == message
+    payload = _web(caught.value)
+    assert payload["code"] == "TRACK_LAYOUT"
+    assert payload["context"] == context
+    assert "PRIVATE" not in json.dumps(payload)
+
+
 @pytest.mark.parametrize("surface", ["logical", "record-major"])
 @pytest.mark.parametrize(
     ("content", "code", "context"),

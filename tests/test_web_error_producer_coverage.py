@@ -79,7 +79,6 @@ UNPROVEN_BASELINE: dict[str, tuple[int, str]] = {
     "gbdraw/config/models/render_profiles.py": (1, _CONFIG),
     "gbdraw/config/modify.py": (11, _CONFIG),
     "gbdraw/diagrams/circular/assemble.py": (1, _LAYOUT),
-    "gbdraw/diagrams/circular/radial_layout.py": (4, _LAYOUT),
     "gbdraw/diagrams/linear/assemble.py": (5, _LAYOUT),
     "gbdraw/diagrams/linear/orthogroup_alignment.py": (5, _COMPARISON),
     "gbdraw/features/factory.py": (1, _FEATURES),
