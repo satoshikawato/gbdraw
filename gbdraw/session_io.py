@@ -2539,7 +2539,7 @@ def split_draft_into_modes(
     }
     # App-level settings leave the draft: LOSAT execution, the rich feature
     # popup (a missing value reads true), and Instant Preview.
-    app_ui = {"losatExecution": execution} if execution else {}
+    app_ui: dict[str, Any] = {"losatExecution": execution} if execution else {}
     if "rich_feature_popup" in adv:
         app_ui["richFeaturePopup"] = _json_clone(adv["rich_feature_popup"])
     preview = config.get("paletteInstantPreviewEnabled")
