@@ -94,7 +94,8 @@ Load reports how many edits the next Generate draws differently for this.
 Each moved edit takes the mode of the Session's diagram. A Feature placement
 draft of a Session 41–44 reached every request with its record key: a lane
 placement takes the mode of its side, and a Main placement is kept for both
-modes.
+modes. The CLI applies the same mapping when it replays such a Session with
+`--session_output` or `--save_session`.
 
 ## Unreleased: request schema 9 and feature identity overrides
 

@@ -12,6 +12,13 @@ write-up of a release.
 
 ## [Unreleased]
 
+- CLI: `gbdraw circular|linear --session <Session 41-44> --session_output out.json`
+  (and `--save_session`) no longer fails with "Feature placement drafts require a
+  circular or linear scope." for a Session whose Feature placement drafts were saved by
+  the Web app. The diagram was written but the Session was not. The replay now gives
+  each draft a mode as the Web app does on Load: a lane placement the mode of its side,
+  a Main placement both modes. A Session whose drafts cannot be written now fails before
+  any diagram is rendered.
 - Legend colors (web app): a Legend color or stroke on a row that only track data
   names (an annotation set legend label, a Depth series) is retired together with
   that data, so Generate no longer fails with "The generated result could not be
