@@ -322,6 +322,11 @@ export const mergeProteinIdentityManifests = (manifests, { invalidInputMessage =
   return merged;
 };
 
+/**
+ * @param {any} entry The cache entry to check.
+ * @param {any} manifest The protein identity manifest it must reference.
+ * @param {{ identityIndex?: object | null }} [options] An index from `buildValidatedProteinIdentityIndex` for `manifest`.
+ */
 export const validateProteinRawEntryReferences = (
   entry,
   manifest,
@@ -516,6 +521,11 @@ const isStrictEmptyDerivedResult = (entry) => {
   return true;
 };
 
+/**
+ * @param {any} entry The cache entry to check.
+ * @param {any} manifest The protein identity manifest it must reference.
+ * @param {{ identityIndex?: object | null }} [options] An index from `buildValidatedProteinIdentityIndex` for `manifest`.
+ */
 export const validateDerivedProteinReferences = (
   entry,
   manifest,
