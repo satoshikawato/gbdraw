@@ -137,7 +137,7 @@ Materialized paths expire when the materialization context closes. `session_to_r
 Session conversion rejects values from the wrong mode. For example, a Circular
 request containing Linear track values raises `SessionConversionError`.
 
-A Session 45 saved by the Web app can hold a Result set of each mode, the second
+A Session 46 saved by the Web app can hold a Result set of each mode, the second
 in `otherModeResult`. `SessionDocument.drawings` names the sets by mode
 (`("circular", "linear")`, the top-level set first), and
 `SessionDocument.drawing("linear")` returns the document with that set at the

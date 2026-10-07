@@ -8,37 +8,70 @@ session files, canonical render requests, and saved LOSAT results. The concise
 documents current support. Tutorials and the FAQ describe what a user should
 do; release notes record when a format changed.
 
-## Unreleased: Session 45 keeps a Result for each diagram mode
+## Unreleased: Session 46 keeps the settings and the Result of each diagram mode
 
-Session version 45 gains one optional top-level field, `otherModeResult`. The
-Web app keeps a Result for Circular and one for Linear: a Generate replaces
-only its own mode's Result, and switching modes shows that mode's Result with
-its moves and edits, or the empty Preview. **Save Session** writes every Result.
-In a Session the Web app writes, the top-level `renderRequest`, `results`,
-`editorState.featureCatalog`, `runMetadata`, and `cliInvocation` hold the shown
-mode's set when it has a Result, otherwise the other mode's set;
+In the Web app, Circular and Linear each keep their own settings, edits, and
+Result. A setting or an edit made in one mode, and a Generate, stay in that
+mode; **Reset Settings** resets both modes, and one Undo restores both.
+Switching modes changes no setting and shows that mode's Result with its moves
+and edits, or the empty Preview.
+
+**Drafts.** Session version 46 keeps each mode's draft in `modes.circular` and
+`modes.linear`. A slice holds the mode's `config` (the former `config` without
+`modeProfiles`, `cliOptions`, `paletteInstantPreviewEnabled`,
+`adv.rich_feature_popup`, and the LOSAT execution settings), its `features`
+edits, its Legend and stroke edits (`editorState.legend` and
+`editorState.featureStrokes`), and its `ui` values: the mode's layout slot
+(`layoutPreferences`), Canvas padding, the pending palette, the Linear
+typography link, and the Features-list record. A slice holds only these
+fields, and may omit any of them: Load reads an omitted value as that mode's
+default, after the committed request of that mode's Result. App-level settings
+moved to the top level: `ui.losatExecution` (LOSAT run mode, thread budget,
+threads per job, parallel workers), `ui.richFeaturePopup`, and `cliOptions`
+(the options of the CLI command that wrote the Session, unchanged). Per-feature
+edit rows, Feature placement rows, record display rows, and `featureIdentity`
+annotation targets no longer name a mode (`scope`): the slice is the mode, and a
+row is keyed by `recordKey` and `biologicalFeatureId`. A Session 46 that holds
+the top-level `config` or `features`, a former `editorState` or `ui` draft
+field, or a field outside these slices is rejected
+(`INPUT_INVALID {field: schema, reason: FIELDS}`). A settings-only Session keeps
+the slice of its shown mode. The CLI and the Python API write no `modes`; a CLI
+re-save keeps the Session's `modes` and `cliOptions`.
+
+**Results.** The optional top-level `otherModeResult` holds the other mode's
+Result set. In a Session the Web app writes, the top-level `renderRequest`,
+`results`, `editorState.featureCatalog`, `runMetadata`, and `cliInvocation` hold
+the shown mode's set when it has a Result, otherwise the other mode's set;
 `otherModeResult` holds the remaining set only when it has a Result. Its fields
-mirror the top-level ones:
-`renderRequest` (the other mode, the same request schema), `results` (at least
-one), `editorState` (`featureCatalog`, `alignmentResetReceipt`, and the
-Result's generated Legend order, colors, and stroke defaults), `ui` (the
-selected Result and the generated legend, title, and palette), `runMetadata`,
-and `cliInvocation`. Its request names resources in the one top-level
-`resources` table. A settings-only Session (`renderRequest: null`) cannot hold
-the field, and Sessions before 45 are read as before.
+mirror the top-level ones: `renderRequest` (the other mode, the same request
+schema), `results` (at least one), `editorState` (`featureCatalog`,
+`alignmentResetReceipt`, and the Result's generated Legend order, colors, and
+stroke defaults), `ui` (the selected Result and the generated legend, title,
+and palette), `runMetadata`, and `cliInvocation`. Its request names resources
+in the one top-level `resources` table. A settings-only Session
+(`renderRequest: null`) cannot hold the field. **Load Session** shows the saved
+mode (`ui.mode`) when that mode has a Result, otherwise the mode that has one;
+the other mode's Result waits for the mode button. A Gallery Session shows one
+mode, holds that mode's slice only, and has no `otherModeResult`.
 
-**Load Session** shows the saved mode (`ui.mode`) when that mode has a Result,
-otherwise the mode that has one; the other mode's Result waits for the mode
-button. The settings, Legend edits, and caches stay shared between the modes,
-as before. A Gallery Session shows one mode and has no `otherModeResult`.
+**Older Sessions.** Loading a Session 27–44 splits its one draft into the two
+slices: a shared setting goes to both modes, a setting of one mode to that
+mode, and the Legend edits and per-feature edits to the mode of the saved
+Result. The draft of the mode that was not shown when the Session was saved
+(`config.modeProfiles`) gives that mode its title, font sizes, and comparison
+thresholds; a Depth or Show Depth value goes to a mode only as far as that
+mode's Depth files reach, and an annotation bound to one mode's record goes to
+that mode. Session 45 was a development-only format and is rejected; load its
+source files instead.
 
 On the command line, `gbdraw circular --session` and `gbdraw linear --session`
 render the set of their own mode, at the top level or in `otherModeResult`. A
-re-save with `--save_session` or `--session_output` always writes the
-subcommand's set at the top level and the other set in `otherModeResult`. It
-keeps `ui.mode`, so the Web app still opens on the saved mode. The re-save
-replaces the subcommand's set with the new render and keeps the other set. It
-also changes these parts that both sets share:
+re-save with `--save_session` or `--session_output` writes Session 46: the
+subcommand's set at the top level, the other set in `otherModeResult`, and an
+older Session's draft split into `modes` as the Web app splits it. It keeps
+`ui.mode`, so the Web app still opens on the saved mode. The re-save replaces
+the subcommand's set with the new render and keeps the other set. It also
+changes these parts that both sets share:
 
 - `losatCache` holds the entries that the render returns, and
   `losatDerivedCache` is emptied.
@@ -49,7 +82,7 @@ also changes these parts that both sets share:
 
 ## Unreleased: Web Load of 0.13.0 Sessions
 
-Session version 45 is unchanged. Sessions 27–30, written by gbdraw 0.13.0 and
+Session version 46 is unchanged. Sessions 27–30, written by gbdraw 0.13.0 and
 earlier, have no canonical `renderRequest`. The Web app loads such a Session
 from its saved settings, with its saved preview; the CLI replays it, and the
 typed-session bridge does not convert it. The Web writers of Sessions 27–33
@@ -65,7 +98,7 @@ current Custom Track Slots use `radius`, `width`, `inner_gap_px`,
 
 ## Unreleased: Web Load of Session 31–39 table rows
 
-Session version 45 is unchanged. The Web writers of Sessions 31–39 stored the
+Session version 46 is unchanged. The Web writers of Sessions 31–39 stored the
 Default colors, Label whitelist, and Qualifier priority tables without
 normalizing their cell values, so a value typed with a tab became extra cells
 and a value with a line break became a short row. Since the Web table readers
@@ -80,23 +113,23 @@ table file imports and CLI replay (`--session`) still reject such a row. When
 another table of a Session fails to load, the message names the table, for
 example `Session table: Specific colors.`
 
-## Unreleased: Session 45 and Web feature edits by source identity
+## Unreleased: Session 46 and Web feature edits by source identity
 
-Session version 45 stores the Web app's Feature visibility, Label visibility,
-and label text edits in `features.featureOverrides`: one row per
-original-source feature in one mode, named by `scope` (`circular` or
-`linear`), `recordKey`, and `biologicalFeatureId`, with the same fields as
-request `diagramOptions.featureOverrides` and the label's original text
-(`labelSourceText`). Feature placement drafts (`config.featurePlacementOverrides`)
-name their mode the same way. Both modes can use the same record key, so a
-request carries only the rows of its own mode. The four rendered-ID maps
-(`featureVisibilityOverrides`, `labelTextFeatureOverrides`,
-`labelTextFeatureOverrideSources`, `labelVisibilityOverrides`) are rejected in
-Session 45. The Web app now sends these rows in the request, loads a request
-whose `featureOverrides` array is not empty, and draws them in the live preview
-by identity. An annotation made from selected features is saved with a
-`featureIdentity` target that names its mode the same way (`scope`); the
-request target has no `scope`. Loading a Session 40–44 moves an annotation
+Session version 46 stores the Web app's Feature visibility, Label visibility,
+and label text edits in each mode's `features.featureOverrides`: one row per
+original-source feature, keyed and named by `recordKey` and
+`biologicalFeatureId`, with the same fields as request
+`diagramOptions.featureOverrides` and the label's original text
+(`labelSourceText`). Feature placement drafts (`config.featurePlacementOverrides`
+of the slice) are keyed the same way. Both modes can use the same record key;
+each mode's slice holds its own rows, so a request carries only the rows of its
+own mode. The four rendered-ID maps (`featureVisibilityOverrides`,
+`labelTextFeatureOverrides`, `labelTextFeatureOverrideSources`,
+`labelVisibilityOverrides`) are rejected in Session 46. The Web app sends these
+rows in the request, loads a request whose `featureOverrides` array is not
+empty, and draws them in the live preview by identity. An annotation made from
+selected features is saved with a `featureIdentity` target in the slice of the
+mode it was made in. Loading a Session 40–44 moves an annotation
 target with one `hash=` feature selector, as a selection made it, to a
 `featureIdentity` target in the mode of the Session's diagram only when the
 figure cannot change: the record the target binds is drawn without a crop,
@@ -133,15 +166,15 @@ and keeps the current Session, so no edit is dropped. An older
 Feature visibility edit hid every feature with the same hash, such as each copy
 of a duplicated record; it now applies only to the feature that was edited, and
 Load reports how many edits the next Generate draws differently for this.
-Each moved edit takes the mode of the Session's diagram. The CLI moves the
+Each moved edit goes to the slice of the Session's diagram's mode. The CLI moves the
 edits of a Session 40–44 through its saved catalog in the same way when it
 replays the Session with `--session_output` or `--save_session`, and logs these
 counts. It does not read the sources of an older Session again, so it drops
 that Session's edits; the replayed request's tables keep their effect on the
 diagram. A Feature placement
 draft of a Session 41–44 reached every request with its record key: a lane
-placement takes the mode of its side, and a Main placement is kept for both
-modes. The CLI applies the same mapping when it replays such a Session with
+placement goes to the slice of its side's mode, and a Main placement to both
+slices. The CLI applies the same mapping when it replays such a Session with
 `--session_output` or `--save_session`.
 
 ## Unreleased: request schema 9 and feature identity overrides
@@ -331,16 +364,17 @@ Current writers emit one session and request format:
 
 | Format | Current writer | Accepted by current readers |
 |---|---:|---|
-| gbdraw session | 44 | 27–33, 39–42, and 44 |
+| gbdraw session | 46 | 27–33, 39–42, 44, and 46 |
 | Canonical `renderRequest` | 9 | 1, 2, 5, 6, 7, 8, and 9 |
-| Web file bindings | 2 | 1; 2 in sessions 41–42 and 44 |
+| Web file bindings | 2 | 1; 2 in sessions 41–42, 44, and 46 |
 
 Previously written Session 44 documents with request schema 7 or 8 and feature
 catalog schema 4 remain readable. Current saves write request schema 9;
 the saved preview is retained until the next Generate.
 
-Session versions 34–38 and canonical request schemas 3–4 were development-only
-formats. They were never released on the supported history and are rejected.
+Session versions 34–38 and 45 and canonical request schemas 3–4 were
+development-only formats. They were never released on the supported history and
+are rejected.
 
 The public typed-session bridge can convert full session versions 31–33, 39–42, and 44 to
 a typed request. Versions 27–30 do not contain a canonical `renderRequest`, so
