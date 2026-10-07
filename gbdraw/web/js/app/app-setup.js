@@ -4,11 +4,12 @@
 /** @import { ColorActionsRuleActions } from './feature-editor/color-actions.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { AnnotationCatalogSource } from './annotations/record-catalog.js' */
+/** @import { LegacyResultSvgTransform } from '../services/config.js' */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan } from './candidate-render.js';
 import {
   countUnresolvedFeatureEdits, removeUnresolvedFeatureEdits, requestFeatureVisibilityRules
-} from './feature-visibility.js';
+} from '../services/feature-visibility.js';
 import { isLegendOrderEdited } from './legend/utils.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
@@ -97,8 +98,10 @@ import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import {
   COMPOSITION_METADATA_ATTRIBUTE,
-  COMPOSITION_SCHEMA_ATTRIBUTE
+  COMPOSITION_SCHEMA_ATTRIBUTE,
+  normalizeLegacyComposition
 } from './legend-layout/composition-actions.js';
+import { applyStrokeOverridesToSvg } from './legend/stroke-actions.js';
 import { createResultsManager } from './results.js';
 import { setupWatchers } from './watchers.js';
 import { setupHistoryInputs } from './history-inputs.js';
@@ -159,7 +162,7 @@ import {
   normalizeLinearComparisonPlan,
   plainTextLinearRecordLabel,
   reconcileLinearComparisonPlan
-} from './linear-comparisons.js';
+} from '../services/linear-comparisons.js';
 import {
   projectLinearComparisonLosatModeSelection,
   projectLinearComparisonLosatpModeSelection,
@@ -274,6 +277,23 @@ export const createSessionImportRollbackState = ({
     }
   }
 });
+
+// The transform services/config.js applies to each Result of an older Session
+// before it commits (R13 port): a Result without composition metadata gets the
+// legacy composition, and the saved strokes are projected into it.
+/** @type {LegacyResultSvgTransform} */
+export const transformLegacyResultSvg = (svg, { composition, strokes }) => {
+  let compositionChanged = false;
+  if (
+    svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === null
+    && svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) === null
+  ) {
+    normalizeLegacyComposition(svg, composition);
+    compositionChanged = true;
+  }
+  const strokeCount = applyStrokeOverridesToSvg({ svg, ...strokes });
+  return compositionChanged || strokeCount > 0;
+};
 
 export const createAppSetup = () => {
   setUnmanagedConfigOverrideValidator((payload) => runDiagramHelperOperation(
@@ -2685,6 +2705,7 @@ export const createAppSetup = () => {
   let nextSessionPreviewToken = 1;
   const importSession = (event) => importSessionFromFile(event, {
     availability: sessionSaveLoadAvailability,
+    transformLegacyResultSvg,
     beforeImport: async () => {
       await nextTick();
       await afterPaint();

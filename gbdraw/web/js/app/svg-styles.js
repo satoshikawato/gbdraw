@@ -1,5 +1,6 @@
 // @ts-check
-import { ruleMatchDeclined, ruleMatchesReady, ruleMatchesFeature, firstMatchingRule } from './rule-matching.js';
+import { ruleMatchDeclined, ruleMatchesReady, firstMatchingRule } from './rule-matching.js';
+import { ruleMatchesFeature } from '../services/rule-matchers.js';
 import {
   estimateColorFactor,
   interpolateColor,

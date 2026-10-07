@@ -10,7 +10,7 @@ import {
   createDefaultPriorityRule,
   createDefaultSpecificRule
 } from '../state.js';
-import { createDefaultLayoutPreferences } from '../app/layout-preferences.js';
+import { createDefaultLayoutPreferences } from './layout-preferences.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 

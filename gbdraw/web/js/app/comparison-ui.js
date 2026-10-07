@@ -1,10 +1,10 @@
 // @ts-check
-/** @import { LinearComparisonResolution } from './linear-comparisons.js' */
+/** @import { LinearComparisonResolution } from '../services/linear-comparisons.js' */
 import {
   LINEAR_COMPARISON_MODES,
   LINEAR_COMPARISON_SOURCES,
   normalizeLinearComparisonPlan
-} from './linear-comparisons.js';
+} from '../services/linear-comparisons.js';
 import { comparisonStateForMode } from '../mode-profiles.js';
 
 const LINEAR_COMPARISON_INTENT_KEYS = Object.freeze({

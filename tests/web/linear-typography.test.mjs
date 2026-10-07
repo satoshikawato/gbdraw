@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
 
-import {
-  createLinearTypographyController,
-  reconcileImportedLinearTypographyLink
-} from '../../gbdraw/web/js/app/linear-typography.js';
+import { createLinearTypographyController } from '../../gbdraw/web/js/app/linear-typography.js';
+import { reconcileImportedLinearTypographyLink } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 import { createAutoValueDisplay } from '../../gbdraw/web/js/app/auto-value-display.js';
 
 const autoValues = createAutoValueDisplay({

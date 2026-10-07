@@ -11,7 +11,7 @@ import {
   setFeatureVisibilityOverride,
   splitLegacyVisibilityRules,
   upsertEditorQualifierFeatureVisibilityRule
-} from '../../gbdraw/web/js/app/feature-visibility.js';
+} from '../../gbdraw/web/js/services/feature-visibility.js';
 
 assert.deepEqual(
   parseFeatureVisibilityRules('*\tCDS\tgene\t^geneA$\toff\n').rules.map((rule) => ({

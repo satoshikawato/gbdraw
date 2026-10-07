@@ -5,19 +5,19 @@ import {
   featureDrawnContext,
   listFeatureRows,
   normalizeFeatureVisibilityRule
-} from './app/feature-visibility.js';
+} from './services/feature-visibility.js';
 import { resultCatalogFeatures } from './services/feature-catalog.js';
-import { normalizeCircularPlotTitlePosition } from './app/plot-title-position.js';
 import {
   createDefaultLayoutPreferences,
+  normalizeCircularPlotTitlePosition,
   resolveActiveLayoutPreference,
   updateActiveLayoutPreference
-} from './app/layout-preferences.js';
-import { createSequenceSourceRegistry } from './app/match-sequences.js';
+} from './services/layout-preferences.js';
+import { createSequenceSourceRegistry } from './services/match-sequences.js';
 import {
   createDefaultLinearComparisonPlan,
   resolveLinearComparisonPlan
-} from './app/linear-comparisons.js';
+} from './services/linear-comparisons.js';
 import { createModeProfileStateManager } from './mode-profiles.js';
 import { WEB_UX_PROFILE } from './web-ux-profile.js';
 import { createDefaultFeatureRenderings } from './utils/feature-rendering.js';

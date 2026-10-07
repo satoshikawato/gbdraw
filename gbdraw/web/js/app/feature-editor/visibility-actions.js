@@ -15,7 +15,7 @@ import {
   serializeFeatureVisibilityRules,
   setFeatureVisibilityOverride,
   upsertEditorQualifierFeatureVisibilityRule,
-} from '../feature-visibility.js';
+} from '../../services/feature-visibility.js';
 import { isInternalProteinDisplayId } from '../../services/feature-utils.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';

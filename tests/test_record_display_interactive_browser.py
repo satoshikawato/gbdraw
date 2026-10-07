@@ -70,7 +70,7 @@ def interactive_fixture(mode, reverse, start=41, manual=False):
 MOUNT_PREVIEW_SCRIPT = """async ({source, catalog, mode}) => {
   const {createFeatureSvgActions} = await import('/gbdraw/web/js/app/feature-editor/svg-actions.js');
   const {admitFeatureCatalog} = await import('/gbdraw/web/js/services/feature-catalog.js');
-  const {createSequenceSourceRegistry} = await import('/gbdraw/web/js/app/match-sequences.js');
+  const {createSequenceSourceRegistry} = await import('/gbdraw/web/js/services/match-sequences.js');
   const {copyTextToClipboard} = await import('/gbdraw/web/js/utils/clipboard.js');
   const {downloadTextFile} = await import('/gbdraw/web/js/services/text-download.js');
   const ref = value => ({value});

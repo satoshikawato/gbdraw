@@ -1,9 +1,9 @@
 // @ts-check
 import { validateSimilarityAlignmentResetReceipt } from './session-active-config-contract.js';
-import { normalizeFeatureVisibilityRule } from '../app/feature-visibility.js';
+import { normalizeFeatureVisibilityRule } from './feature-visibility.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { cloneJsonData } from './json-clone.js';
-import { replaceLayoutPreferences } from '../app/layout-preferences.js';
+import { replaceLayoutPreferences } from './layout-preferences.js';
 import {
   isResourceBackedCanonicalComparison,
   mapResourceBackedCanonicalComparison

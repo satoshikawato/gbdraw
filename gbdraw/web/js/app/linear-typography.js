@@ -6,27 +6,6 @@ const optionalNumberInputValue = (value) => {
   return Number.isNaN(numeric) ? text : numeric;
 };
 
-const linearTypographyValuesMatch = (adv = {}) => (
-  Object.is(adv.scale_font_size, adv.ruler_label_font_size)
-);
-
-/**
- * @param {{
- *   adv: Record<string, any>,
- *   linked: any,
- *   ui?: { linearTypographyLinked?: boolean }
- * }} options
- */
-export const reconcileImportedLinearTypographyLink = ({ adv, linked, ui = {} }) => {
-  if (!linked || typeof linked !== 'object' || !('value' in linked)) return false;
-  // Omission takes the fresh linked default; unequal values still open unlinked.
-  linked.value = (
-    (ui.linearTypographyLinked ?? true) === true
-    && linearTypographyValuesMatch(adv)
-  );
-  return linked.value;
-};
-
 /**
  * @typedef {Object} LinearTypographyControllerOptions
  * @property {Record<string, any>} adv Advanced-options state owned by `state.js`.

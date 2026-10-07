@@ -49,13 +49,13 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
     )
     match_sequences_path = tmp_path / "match-sequences.mjs"
     match_sequences_path.write_text(
-        (WEB_ROOT / "js" / "app" / "match-sequences.js")
+        (WEB_ROOT / "js" / "services" / "match-sequences.js")
         .read_text(encoding="utf-8")
-        .replace("../services/record-source-coordinates.js", "./record-source-coordinates.mjs")
-        .replace("../services/feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
-        .replace("../services/conservation-series.js", "./conservation-series.mjs")
-        .replace("../services/genbank-header.js", "./genbank-header.mjs")
-        .replace("../services/file-content-cache.js", "./file-content-cache.mjs"),
+        .replace("./record-source-coordinates.js", "./record-source-coordinates.mjs")
+        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
+        .replace("./conservation-series.js", "./conservation-series.mjs")
+        .replace("./genbank-header.js", "./genbank-header.mjs")
+        .replace("./file-content-cache.js", "./file-content-cache.mjs"),
         encoding="utf-8",
     )
     (tmp_path / "genbank-header.mjs").write_text(
@@ -83,7 +83,7 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
         .replace("../services/record-source-coordinates.js", "./record-source-coordinates.mjs")
         .replace("../services/feature-utils.js", "./feature-utils.mjs")
         .replace("../services/feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
-        .replace("./match-sequences.js", "./match-sequences.mjs")
+        .replace("../services/match-sequences.js", "./match-sequences.mjs")
         .replace("../services/losat-normalization.js", "./losat-normalization.mjs")
         .replace("../services/feature-identity.js", "./feature-identity.mjs")
         + "\nexport { buildFallbackOrthogroupWithContext, createPairwisePayloadContext, featureOrthogroupIdStatus, getOrthogroupById, integerAttr };\n",
