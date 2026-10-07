@@ -40,6 +40,9 @@ write-up of a release.
   diagrams do not move. Hebrew text in Liberation Sans (the default font, also used
   for `Arial`, `Helvetica`, and `sans-serif`) is now kerned, so its labels and Legend
   rows can shift by up to about 1 px per kerned letter pair at 14 pt.
+- Text measurement: repeated spaces, tabs, and line breaks in labels and captions, and
+  characters the bundled fonts lack (for example Japanese), are now measured as Chromium
+  draws them: collapsed into one space, and one em wide instead of nothing.
 - SVG output: the Legend part (`legendReflow`) of the `data-gbdraw-composition`
   metadata also records the font file, font size, DPI, and wrap width the Legend was
   laid out with, and the diagram bounds it was placed against, so that the web app
