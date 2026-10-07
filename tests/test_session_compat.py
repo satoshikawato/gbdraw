@@ -33,6 +33,7 @@ from gbdraw.api.requests import (
     CircularBatchOutputPolicy,
     CircularBatchRequest,
     CircularDiagramRequest,
+    GenBankInputSource,
     InMemoryRecordSource,
     LinearDiagramRequest,
     RecordInput,
@@ -1392,3 +1393,84 @@ def test_session_44_placement_drafts_survive_the_cli_sidecar(
         lane,
         main_row,
     ]
+
+
+def _rename_resource(session: dict[str, Any], old: str, new: str) -> None:
+    """Give one resource another ID, as a Web or multi-drawing writer may."""
+
+    def rename(value: Any) -> Any:
+        if isinstance(value, list):
+            return [rename(item) for item in value]
+        if isinstance(value, dict):
+            return {
+                key: new if key.endswith("esourceId") and item == old else rename(item)
+                for key, item in value.items()
+            }
+        return value
+
+    session["renderRequest"] = rename(session["renderRequest"])
+    session["resources"] = {
+        new if resource_id == old else resource_id: entry
+        for resource_id, entry in session["resources"].items()
+    }
+
+
+def _python_session_with_renamed_ids(tmp_path: Path) -> dict[str, Any]:
+    request = CircularDiagramRequest(
+        records=(
+            RecordInput(
+                source=GenBankInputSource(
+                    Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"
+                )
+            ),
+        ),
+        output=RenderOutputRequest(output_prefix="stored"),
+    )
+    session = build_session_document(request).to_dict()
+    _rename_resource(session, "record-1-genbank", "genbank-1")
+    return session
+
+
+def _gallery_session(_tmp_path: Path) -> dict[str, Any]:
+    # Written by the Web: its table resources keep their uploaded file names.
+    path = (
+        Path(__file__).parents[1]
+        / "gbdraw"
+        / "web"
+        / "gallery"
+        / "sessions"
+        / "tobacco-chloroplast.gbdraw-session.json"
+    )
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize(
+    "make_session",
+    [_python_session_with_renamed_ids, _gallery_session],
+    ids=["renamed-ids", "web-names"],
+)
+def test_cli_resave_keeps_the_ids_and_names_of_unchanged_resources(
+    tmp_path: Path, make_session: Any
+) -> None:
+    source = make_session(tmp_path)
+    assert source["renderRequest"]["mode"] == "circular"
+    source_path = tmp_path / "source.gbdraw-session.json"
+    source_path.write_text(json.dumps(source), encoding="utf-8")
+    sidecar = tmp_path / "resaved.gbdraw-session.json"
+
+    circular_main(
+        [
+            "--session", str(source_path),
+            "--output", str(tmp_path / "replay"),
+            "--format", "svg",
+            "--session_output", str(sidecar),
+        ]
+    )
+
+    saved = load_session_document(sidecar).to_dict()
+    # Every input's bytes are unchanged, so every resource keeps its ID,
+    # file name and metadata, and the request names the same resources.
+    assert saved["resources"] == source["resources"]
+    assert saved["renderRequest"]["records"][0]["source"] == (
+        source["renderRequest"]["records"][0]["source"]
+    )
