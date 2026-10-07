@@ -13,6 +13,7 @@ import {
   normalizeLegacyComposition,
   parseCompositionMetadata,
   planComposition,
+  replanCompositionMetadata,
   resetCompositionUserDeltas
 } from '../../gbdraw/web/js/app/legend-layout/composition-actions.js';
 import {
@@ -545,6 +546,30 @@ const editLegendSide = (svg) => applyCompositionEdit(svg, {
     parseCompositionMetadata(withLegendReflow({ ...full, fontFile: null }).svg).legendReflow.fontFile,
     null
   );
+}
+
+// A replan docks against the primary box Python recorded (Z1), while it is
+// still the primary's box: rebuilt from x and width, a max edge can differ
+// by one ulp. A recorded box the primary no longer has is not used.
+{
+  const replan = (primaryLocalBounds) => replanCompositionMetadata(
+    parseCompositionMetadata(withLegendReflow({ ...legendReflow, ...pythonLayoutInputs, primaryLocalBounds }).svg),
+    { titleSide: 'none' }
+  );
+  const request = {
+    legendBounds: { x: -2, y: -5, width: 30, height: 20 },
+    legendSide: 'right',
+    spacing: compositionSpacing,
+    overlayPolicy
+  };
+  // The fixture's primary: final bounds (16, 56, 100, 80) less its automatic
+  // translation (6, 36).
+  const derived = planComposition({ ...request, primaryBounds: { x: 10, y: 20, width: 100, height: 80 } });
+  const exact = { minX: 10, minY: 20, maxX: 110.00000000000001, maxY: 100.00000000000001 };
+  const recorded = planComposition({ ...request, primaryBox: exact });
+  assert.notDeepEqual(recorded, derived, 'the ulp reaches the plan');
+  assert.deepEqual(replan(exact), recorded);
+  assert.deepEqual(replan({ minX: 10, minY: 20, maxX: 111, maxY: 100 }), derived);
 }
 
 for (const field of Object.keys(pythonLayoutInputs)) {

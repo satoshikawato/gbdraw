@@ -206,6 +206,69 @@ for (const mode of ['linear', 'circular']) {
   });
 }
 
+// Z1: a Result records the inputs Python laid its Legend out with
+// (`legendReflow`), and the layout owner reads them. A Circular Legend on top
+// wraps its rows at the width Python passed (the diagram's content width), so
+// the layout owner on the unedited Result Python drew gives Python's rows,
+// line breaks included.
+test('a wrapped Circular Legend on top is laid out as Python drew it (Z1 inputs)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openWithGenBank(page, FIXTURE, () => {
+    const app = window.__GBDRAW_APP__;
+    app.form.legend = 'top';
+    app.autoLabelReflowEnabled = false;
+  });
+  await generate(page);
+  const rules = [
+    ['locus_tag', 'FL1', '#e63946', 'Alpha protein coding sequence, long caption'],
+    ['locus_tag', 'FL2', '#2a9d8f', 'Beta protein coding sequence, long caption'],
+    ['product', 'dup alpha', '#f4a261', 'Duplicated alpha coding sequence caption'],
+    ['product', 'dup beta', '#264653', 'Duplicated beta coding sequence caption']
+  ];
+  for (const [qual, val, color, cap] of rules) {
+    await evaluateWithRetainedPromise(page, async (rule) => {
+      const app = window.__GBDRAW_APP__;
+      Object.assign(app.newSpecRule, { feat: 'CDS', ...rule });
+      await app.addSpecificRule();
+    }, { qual, val, color, cap });
+    await settleLive(page);
+  }
+  await generate(page);
+  const report = await evaluateWithRetainedPromise(page, async () => {
+    const { state: s } = await import('./js/state.js');
+    const { createLegendLayoutActions } = await import('./js/app/legend/layout-actions.js');
+    const actions = createLegendLayoutActions();
+    await actions.prepareLegendLayout();
+    const content = s.results.value[s.selectedResultIndex.value].content;
+    const parse = () => new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
+    const numbers = (value) => (String(value || '').match(/[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g) || []).map(Number);
+    const rows = (svg) => Array.from(svg.getElementById('legend').querySelectorAll('g[data-legend-key]')).map((entry) => [
+      entry.getAttribute('data-legend-key'),
+      numbers(entry.querySelector('text')?.getAttribute('transform')),
+      Array.from(entry.querySelectorAll('path')).flatMap((path) => numbers(path.getAttribute('transform')))
+    ]);
+    const drawn = parse();
+    const laidOut = parse();
+    const box = actions.layOutLegend(laidOut);
+    const metadata = JSON.parse(drawn.getAttribute('data-gbdraw-composition'));
+    return {
+      side: metadata.legendSide,
+      recorded: Object.keys(metadata.legendReflow).sort(),
+      bounds: box && [box.minX, box.minY, box.maxX - box.minX, box.maxY - box.minY],
+      python: metadata.legend.localBounds,
+      drawn: rows(drawn),
+      laidOut: rows(laidOut)
+    };
+  });
+  expect(report.side).toBe('top');
+  expect(report.recorded).toEqual(expect.arrayContaining(['dpi', 'fontFile', 'fontSize', 'primaryLocalBounds', 'wrapWidth']));
+  expect(report.drawn.map(([key]) => key)).toEqual(expect.arrayContaining(rules.map((rule) => rule[3])));
+  expect(new Set(report.drawn.map(([, caption]) => caption[1])).size, 'the Legend wraps').toBeGreaterThan(1);
+  expect(report.laidOut).toEqual(report.drawn);
+  const { x, y, width, height } = report.python;
+  expect(report.bounds, 'the recorded Legend bounds').toEqual([x, y, width, height]);
+});
+
 // OV-156: in Linear, a row without features renamed in the Legend editor keeps
 // its place in the Legend, live and at Generate, also when it is not the last
 // row. HmmtDNA with GC content and GC skew; `GC skew (+)` is renamed (the M9

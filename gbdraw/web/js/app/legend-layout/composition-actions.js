@@ -398,16 +398,19 @@ const toPayloadBounds = (box) => ({
 
 /**
  * Replan the composition. A `legendBox` (min/max, as the Legend layout port
- * returns it) takes precedence over `legendBounds`, so the planner reads the
- * Legend's bounds exactly as Python holds them.
+ * returns it) takes precedence over `legendBounds`, and a `primaryBox` over
+ * `primaryBounds`, so the planner reads those bounds exactly as Python holds
+ * them.
  * @param {{
  *   primaryBounds: any, legendBounds?: any, titleBounds?: any,
  *   legendBox?: import('../../services/legend-layout.js').LayoutBox | null,
+ *   primaryBox?: import('../../services/legend-layout.js').LayoutBox | null,
  *   legendSide?: string, titleSide?: string, spacing: any, overlayPolicy: any, overlayObstacles?: any[]
  * }} request
  */
 export const planComposition = ({
   primaryBounds,
+  primaryBox = null,
   legendBounds = null,
   titleBounds = null,
   legendBox = null,
@@ -419,7 +422,8 @@ export const planComposition = ({
 }) => {
   if (!LEGEND_SIDES.has(legendSide)) fail(`Unknown legend side ${JSON.stringify(legendSide)}.`);
   if (!TITLE_SIDES.has(titleSide)) fail(`Unknown title side ${JSON.stringify(titleSide)}.`);
-  const primary = validateBounds(primaryBounds, 'primaryBounds', { positive: true });
+  if (primaryBox) validateBounds(toPayloadBounds(primaryBox), 'primaryBox', { positive: true });
+  const primary = primaryBox || toBox(validateBounds(primaryBounds, 'primaryBounds', { positive: true }));
   const resolvedSpacing = validateSpacing(spacing);
   const resolvedOverlayPolicy = validateOverlayPolicy(overlayPolicy);
   const obstacles = overlayObstacles.map((bounds, index) => validateBounds(bounds, `overlayObstacles[${index}]`));
@@ -433,7 +437,7 @@ export const planComposition = ({
   }
   const title = titleBounds && titleSide !== 'none' ? validateBounds(titleBounds, 'titleBounds') : null;
   const plan = planLegendComposition({
-    primary: toBox(primary),
+    primary,
     legend,
     title: title ? toBox(title) : null,
     legendSide,
@@ -462,6 +466,19 @@ const localPrimaryBounds = (metadata) => translated(
   -metadata.primary.automaticTranslation[1]
 );
 
+// The primary box Python planned with (`legendReflow.primaryLocalBounds`,
+// recorded since Z1) while it is still the primary's box: rebuilt from x and
+// width, a max edge can differ from Python's by one ulp. Null for a Result
+// written before Python recorded it, or whose primary has changed since.
+/** @returns {import('../../services/legend-layout.js').LayoutBox | null} */
+const recordedPrimaryBox = (metadata) => {
+  const recorded = metadata.legendReflow?.primaryLocalBounds;
+  if (!recorded) return null;
+  const derived = toBox(localPrimaryBounds(metadata));
+  const keys = /** @type {const} */ (['minX', 'minY', 'maxX', 'maxY']);
+  return keys.every((key) => Math.abs(recorded[key] - derived[key]) <= 1e-6) ? recorded : null;
+};
+
 export const replanCompositionMetadata = (
   metadata,
   {
@@ -480,6 +497,7 @@ export const replanCompositionMetadata = (
   ));
   return planComposition({
     primaryBounds: localPrimaryBounds(metadata),
+    primaryBox: recordedPrimaryBox(metadata),
     legendBounds: legendLocalBounds,
     legendBox: legendLocalBox,
     titleBounds: titleLocalBounds,
