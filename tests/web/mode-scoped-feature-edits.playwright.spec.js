@@ -5,8 +5,11 @@
 // Circular apply only to Circular requests; the Linear Generate draws the
 // feature with neither, and the edits wait in the draft for Circular.
 const { test, expect } = require('@playwright/test');
+const { readFileSync } = require('node:fs');
+const { basename } = require('node:path');
 const { generateAndWaitForResult, evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { openFresh, loadSessionFile, settle } = require('./helpers/audit-browser.cjs');
+const { download } = require('./helpers/mode-transition.cjs');
 
 const LINEAR_SESSION = 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json';
 const LAMBDA = 'tests/test_inputs/NC_001416.gb';
@@ -90,3 +93,125 @@ test('a Circular Main placement and Feature visibility edit stay out of Linear r
   const circular = await committed(page, target.id);
   expect(circular).toMatchObject({ mode: 'circular', recordKeys: ['record-1'], ...circularRows, drawn: 0 });
 });
+
+// OV-84 (R2, OIPC-C06): a per-feature stroke is keyed `recordKey\0featureId`,
+// without the mode. A Generate that does not draw the feature, such as one in
+// the other mode, keeps the stroke in the draft and in a saved Session, and the
+// next Generate of the stroke's mode draws it again.
+const STROKE_FIXTURE = 'tests/fixtures/forced_label_underlay.gb';
+const STROKE = { strokeColor: '#ff0000', strokeWidth: 3 };
+
+const loadStrokeInput = async (page, mode, path = STROKE_FIXTURE) => {
+  if (mode === 'circular') {
+    await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(path);
+    await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length)).toBeGreaterThan(0);
+  } else {
+    await page.evaluate(async ({ text, name }) => {
+      window.__GBDRAW_APP__.setLinearSeqPrimaryFile(0, 'gb', new File([text], name, { type: 'text/plain', lastModified: 1000 }));
+      await window.Vue.nextTick();
+    }, { text: readFileSync(path, 'utf8'), name: basename(path) });
+  }
+  await settle(page);
+};
+
+// Sets the stroke of the first CDS from its popup ("This feature only").
+const strokeFirstCds = (page) => evaluateWithRetainedPromise(page, async ({ strokeColor, strokeWidth }) => {
+  const app = window.__GBDRAW_APP__;
+  const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
+  await app.openFeatureEditorFromList(feature, null);
+  await window.Vue.nextTick();
+  if (await app.updateClickedFeatureStroke(strokeColor, strokeWidth) !== true) throw new Error('stroke not applied');
+  app.clickedFeature = null;
+  return feature.stable_override_key;
+}, STROKE);
+
+// The draft's stroke on `key`, and whether the displayed Result draws it.
+const strokeOf = (page, key) => page.evaluate(async ({ strokeKey, strokeColor, strokeWidth }) => {
+  const { getFeatureElements } = await import('./js/services/feature-dom.js');
+  const app = window.__GBDRAW_APP__;
+  const feature = app.extractedFeatures.find((item) => item.stable_override_key === strokeKey);
+  const content = String(app.results[app.selectedResultIndex]?.content || '');
+  const svg = new DOMParser().parseFromString(content, 'image/svg+xml').documentElement;
+  const elements = feature ? getFeatureElements(svg, feature.svg_id) : [];
+  const override = app.featureStrokeOverrides[strokeKey];
+  return {
+    override: override ? { strokeColor: override.strokeColor, strokeWidth: override.strokeWidth } : null,
+    drawn: elements.length > 0 && elements.every((element) => element.getAttribute('stroke') === strokeColor
+      && element.getAttribute('stroke-width') === String(strokeWidth))
+  };
+}, { strokeKey: key, ...STROKE });
+
+// Saves the Session and loads it into a fresh page; returns the loaded strokes.
+const strokesAfterSessionRoundTrip = async (page, browser, testInfo, keys, name) => {
+  const saved = testInfo.outputPath(`${name}.gbdraw-session.json`);
+  await download(page, 'Save Session', saved);
+  const context = await browser.newContext({ baseURL: new URL(page.url()).origin });
+  try {
+    const fresh = await context.newPage();
+    await openFresh(fresh);
+    await fresh.locator('input[accept^=".json,"]').setInputFiles(saved);
+    await fresh.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending
+      && window.__GBDRAW_APP__.results.length > 0, null, { timeout: 180_000 });
+    await settle(fresh);
+    return Object.fromEntries(await Promise.all(keys.map(async (key) => [key, (await strokeOf(fresh, key)).override])));
+  } finally {
+    await context.close();
+  }
+};
+
+for (const [mode, otherMode] of [['circular', 'linear'], ['linear', 'circular']]) {
+  test(`a ${mode} feature stroke survives a ${otherMode} Generate and a Session saved after it (OV-84)`,
+    async ({ page, browser }, testInfo) => {
+      test.setTimeout(360_000);
+      await openFresh(page);
+      if (mode === 'linear') await switchMode(page, 'linear');
+      await loadStrokeInput(page, mode);
+      await generateAndWaitForResult(page);
+      const key = await strokeFirstCds(page);
+      await settle(page);
+      expect(await strokeOf(page, key)).toEqual({ override: STROKE, drawn: true });
+
+      await switchMode(page, otherMode);
+      await loadStrokeInput(page, otherMode);
+      await generateAndWaitForResult(page);
+      // The other mode draws the same file under its own record key.
+      expect(await page.evaluate((strokeKey) => window.__GBDRAW_APP__.extractedFeatures
+        .some((item) => item.stable_override_key === strokeKey), key)).toBe(false);
+      expect(await strokeOf(page, key)).toEqual({ override: STROKE, drawn: false });
+      // A stroke of each mode: the Session keeps both.
+      const otherKey = await strokeFirstCds(page);
+      await settle(page);
+      expect(otherKey).not.toBe(key);
+      expect(await strokesAfterSessionRoundTrip(page, browser, testInfo, [key, otherKey], `${mode}-stroke`))
+        .toEqual({ [key]: STROKE, [otherKey]: STROKE });
+
+      await switchMode(page, mode);
+      await generateAndWaitForResult(page);
+      expect(await strokeOf(page, key)).toEqual({ override: STROKE, drawn: true });
+      expect(await strokeOf(page, otherKey)).toEqual({ override: STROKE, drawn: false });
+    });
+}
+
+// A stroke whose feature the replacing file does not have draws nothing and
+// does not fail Generate or Save Session; it waits in the draft and draws again
+// when a file with that feature returns.
+test('a feature stroke on a replaced Circular file stays dormant without failing Generate or Save Session (OV-84)',
+  async ({ page, browser }, testInfo) => {
+    test.setTimeout(360_000);
+    await openFresh(page);
+    await loadStrokeInput(page, 'circular');
+    await generateAndWaitForResult(page);
+    const key = await strokeFirstCds(page);
+    await settle(page);
+
+    await loadStrokeInput(page, 'circular', LAMBDA);
+    await generateAndWaitForResult(page);
+    expect(await strokeOf(page, key)).toEqual({ override: STROKE, drawn: false });
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.results[0].content.includes('stroke="#ff0000"'))).toBe(false);
+    expect(await strokesAfterSessionRoundTrip(page, browser, testInfo, [key], 'replaced-stroke'))
+      .toEqual({ [key]: STROKE });
+
+    await loadStrokeInput(page, 'circular');
+    await generateAndWaitForResult(page);
+    expect(await strokeOf(page, key)).toEqual({ override: STROKE, drawn: true });
+  });

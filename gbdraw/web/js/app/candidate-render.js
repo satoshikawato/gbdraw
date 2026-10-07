@@ -173,7 +173,6 @@ const compilePlanBundle = ({
   }
   const operationsByResult = catalogAdmission.resultNames.map(() => emptyOperations());
   const normalizedFeatureColorOverrides = {};
-  const normalizedFeatureStrokeOverrides = {};
 
   Object.entries(featureColorOverrides || {}).forEach(([key, rawOverride]) => {
     const color = normalizePaint(
@@ -210,11 +209,6 @@ const compilePlanBundle = ({
         strokeWidth
       });
     });
-    normalizedFeatureStrokeOverrides[key] = {
-      ...cloneJsonValue(rawOverride, {}),
-      ...(strokeColor ? { strokeColor } : {}),
-      ...(strokeWidth !== null ? { strokeWidth } : {})
-    };
   });
 
   const hiddenRenderedIds = new Set();
@@ -384,8 +378,7 @@ const compilePlanBundle = ({
     : 'EMPTY';
   return {
     plan: Object.freeze({ kind, operationsByResult: frozenOperations }),
-    normalizedFeatureColorOverrides,
-    normalizedFeatureStrokeOverrides
+    normalizedFeatureColorOverrides
   };
 };
 
@@ -417,7 +410,6 @@ export const prepareCandidateRenderCommit = ({
     }),
     featureState: catalogAdmission.featureState,
     featureColorOverrides: bundle.normalizedFeatureColorOverrides,
-    featureStrokeOverrides: bundle.normalizedFeatureStrokeOverrides,
     mutationPlan: bundle.plan
   };
 };
