@@ -16,6 +16,11 @@ write-up of a release.
   longer lost when Generate draws a Result without that feature, such as a Generate
   in the other mode (Circular or Linear). The stroke stays in the draft and in a
   saved Session, and the next Generate that draws the feature draws it again.
+- Labels (web app): **Load Label TSV** with a table that applies to no label of the
+  displayed Results no longer removes the existing label edits. Before, it cleared the
+  bulk and per-feature label edits, recorded a "Load label edits" Undo step, and
+  reported "Applied to 0 label(s)." It now changes nothing, records no step, and says
+  that no row matched and that the existing label edits were kept.
 - CLI: `gbdraw circular|linear --session <file> --session_output out.json` (and
   `--save_session`) keeps the resource IDs and file names of the Session's unchanged
   inputs. Before, the rewritten Session renamed them to positional IDs such as

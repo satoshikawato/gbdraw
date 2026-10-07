@@ -316,6 +316,32 @@ test('a delayed label TSV cannot replace the labels from a newer upload', async 
   expect(new Set(outcome)).toEqual(new Set(['NEWER']));
 });
 
+// OV-131: a label TSV replaces the label edits only when it applies to a label.
+// One that matches no label keeps them, records no Undo step, and says so.
+test('a label TSV that matches no label keeps the label edits and records no Undo step', async ({ page }) => {
+  test.setTimeout(180000);
+  await session(page);
+  const alerts = [];
+  page.on('dialog', (dialog) => alerts.push(dialog.message()));
+  const importTsv = (tsv) => evaluateWithRetainedPromise(page, async (text) => {
+    const app = window.__GBDRAW_APP__;
+    await app.loadLabelOverrideTable({ target: { files: [new File([text], 'labels.tsv')], value: 'labels.tsv' } });
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const history = window.__GBDRAW_HISTORY__;
+    return { bulk: { ...app.labelTextBulkOverrides }, undoCount: history.getUndoCount(), undoLabel: history.undoLabel() };
+  }, tsv);
+  const edited = await importTsv('*\t*\tlabel\t^tRNA-Phe$\tMyLabel\n');
+  expect(edited).toMatchObject({ bulk: { 'tRNA-Phe': 'MyLabel' }, undoLabel: 'Load label edits' });
+  expect(await importTsv('*\t*\tproduct\t^no such product$\tZZ\n')).toEqual(edited);
+  const replaced = await importTsv('*\t*\tlabel\t^tRNA-Val$\tOther\n');
+  expect(replaced).toEqual({ bulk: { 'tRNA-Val': 'Other' }, undoCount: edited.undoCount + 1, undoLabel: 'Load label edits' });
+  expect(alerts).toEqual([
+    'Loaded 1 row(s). Applied to 1 label(s).',
+    'Loaded 1 row(s). Not applied: no row matched a label of the diagram. The existing label edits were kept.',
+    'Loaded 1 row(s). Applied to 1 label(s).'
+  ]);
+});
+
 test('invalid annotation coordinates preserve the draft and the last successful diagram', async ({ page }) => {
   test.setTimeout(180000);
   await session(page);
