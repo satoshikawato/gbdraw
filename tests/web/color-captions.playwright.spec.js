@@ -18,7 +18,7 @@ const inspectNow = page => page.evaluate(async () => {
   const root=s.svgContainer.value.querySelector('svg');
   const result=new DOMParser().parseFromString(s.results.value[s.selectedResultIndex.value].content,'image/svg+xml').documentElement;
   const entries=svg=>[...(getVisibleFeatureLegendGroup(svg)?.querySelectorAll('g[data-legend-key]')||[])].map(e=>({caption:e.getAttribute('data-legend-key'),color:e.querySelector('path[fill]')?.getAttribute('fill')}));
-  return {rules:JSON.parse(JSON.stringify(s.manualSpecificRules.map(rule=>({...rule,fromFile:Boolean(rule.fromFile)})))), mounted:entries(root), result:entries(result),
+  return {rules:JSON.parse(JSON.stringify(s.activeDrawing().manualSpecificRules.map(rule=>({...rule,fromFile:Boolean(rule.fromFile)})))), mounted:entries(root), result:entries(result),
     dual:getAllFeatureLegendGroups(root).map(group=>[...group.querySelectorAll('g[data-legend-key]')].map(e=>e.getAttribute('data-legend-key'))),
     dualStyles:getAllFeatureLegendGroups(root).map(group=>[...group.querySelectorAll('g[data-legend-key]')].map(e=>({caption:e.getAttribute('data-legend-key'),color:e.querySelector('path[fill]')?.getAttribute('fill')}))),
     svg:s.results.value[s.selectedResultIndex.value].content, fileName:s.files.t_color?.name,

@@ -78,11 +78,11 @@ for (const example of commonExamples) {
           recordCount: state.mode.value === 'linear'
             ? state.linearSeqs.length
             : state.circularRecordList.value.length,
-          slotIds: state.adv.circular_track_slots.map(({ id }) => id),
-          annotationSetIds: state.annotationSets.map(({ id: setId }) => setId),
-          legend: state.form.legend,
-          arrowShaftWidthRatio: state.adv.arrow_shaft_width_ratio,
-          ruleCaptions: state.manualSpecificRules.map(({ cap }) => cap).filter(Boolean)
+          slotIds: state.activeDrawing().adv.circular_track_slots.map(({ id }) => id),
+          annotationSetIds: state.activeDrawing().annotationSets.map(({ id: setId }) => setId),
+          legend: state.activeDrawing().form.legend,
+          arrowShaftWidthRatio: state.activeDrawing().adv.arrow_shaft_width_ratio,
+          ruleCaptions: state.activeDrawing().manualSpecificRules.map(({ cap }) => cap).filter(Boolean)
         };
       }, example);
       expect(loaded.status).toBe('ok');

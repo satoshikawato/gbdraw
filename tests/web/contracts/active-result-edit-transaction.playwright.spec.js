@@ -147,7 +147,7 @@ test.describe('active Result Feature fill transaction', () => {
         targetRules: plain(app.manualSpecificRules.filter((rule) => (
           rule.feat === caption && String(rule.cap || '') === caption
         ))),
-        legendOverride: String(state.legendColorOverrides[caption] || '').toLowerCase(),
+        legendOverride: String(state.activeDrawing().legendColorOverrides[caption] || '').toLowerCase(),
         legendEntryColor: String(
           app.legendEntries.find((entry) => entry.caption === caption)?.color || ''
         ).toLowerCase()

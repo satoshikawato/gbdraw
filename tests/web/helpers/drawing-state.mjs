@@ -1,10 +1,10 @@
 // The drawing context of the Web state (gbdraw/web/js/state.js): every `state`
-// key in exactly one class. A drawing holds one diagram mode's settings, its
-// editor edits, and the values derived from them, under their `state` names and
-// kinds; services read them from the drawing they are given
-// (tests/web/drawing-context.test.mjs). Every other key is a generated
-// artifact, a project input or cache, an app setting or catalog, or transient.
-// Both modes share one drawing until the per-mode settings change.
+// key and drawing member in exactly one class. A drawing holds one diagram
+// mode's settings, its editor edits, and the values derived from them; only
+// the drawing holds them (tests/web/drawing-context.test.mjs). Every `state`
+// key is a generated artifact, a project input or cache, an app setting or
+// catalog, transient, or the drawing store. Both modes share one drawing until
+// the per-mode settings change.
 
 export const DRAWING_DRAFT_KEYS = Object.freeze([
   'form', 'adv', 'losat', 'losatProgram', 'circularConservation', 'linearComparisonPlan',

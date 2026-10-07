@@ -196,11 +196,11 @@ webState.mode.value = 'linear';
 webState.lInputType.value = cliEditorProjection.inputType;
 applyConfigData(webState.activeDrawing(), promotedSyntheticCli.config);
 const cliNextComparisonSnapshot = resolveLinearComparisonPlan({
-  plan: webState.linearComparisonPlan,
+  plan: webState.activeDrawing().linearComparisonPlan,
   sequences: cliEditorProjection.files.linearSeqs,
-  layout: webState.linearRecordLayoutEnabled.value ? webState.linearRecordRows : [],
-  losatProgram: webState.losatProgram.value,
-  blastpMode: webState.losat.blastp.mode
+  layout: webState.activeDrawing().linearRecordLayoutEnabled.value ? webState.activeDrawing().linearRecordRows : [],
+  losatProgram: webState.activeDrawing().losatProgram.value,
+  blastpMode: webState.activeDrawing().losat.blastp.mode
 });
 const cliNextWebRequest = buildCanonicalRenderRequest({
   state: webState,
@@ -208,7 +208,7 @@ const cliNextWebRequest = buildCanonicalRenderRequest({
   filesData: cliEditorProjection.files,
   comparisonPlanSnapshot: cliNextComparisonSnapshot
 });
-assert.equal(webState.linearComparisonPlan.mode, 'none');
+assert.equal(webState.activeDrawing().linearComparisonPlan.mode, 'none');
 assert.deepEqual(
   promotedSyntheticCli.renderRequest.comparisons,
   committedCliComparisons,

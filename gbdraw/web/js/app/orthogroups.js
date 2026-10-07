@@ -303,9 +303,7 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
  * reactive objects.
  * @typedef {object} OrthogroupEditorState
  * @property {{ value: Record<string, any>[] }} orthogroups
- * @property {Record<string, string>} orthogroupNameOverrides
- * @property {Record<string, string>} orthogroupDescriptionOverrides
- * @property {Record<string, { name?: string, description?: string }>} orthogroupDormantOverrides
+ * @property {() => OrthogroupEditorDrawing} activeDrawing
  * @property {{ value: string }} selectedOrthogroupId
  * @property {{ value: string }} orthogroupSearch
  * @property {{ value: string }} orthogroupSortMode
@@ -320,14 +318,19 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
  */
 
 /**
+ * The group names of a drawing (`DrawingState` of state.js); reactive objects.
+ * @typedef {object} OrthogroupEditorDrawing
+ * @property {Record<string, string>} orthogroupNameOverrides
+ * @property {Record<string, string>} orthogroupDescriptionOverrides
+ * @property {Record<string, { name?: string, description?: string }>} orthogroupDormantOverrides
+ */
+
+/**
  * @param {{ state: OrthogroupEditorState }} options
  */
 export const createOrthogroupEditor = ({ state }) => {
   const {
     orthogroups,
-    orthogroupNameOverrides,
-    orthogroupDescriptionOverrides,
-    orthogroupDormantOverrides,
     selectedOrthogroupId,
     orthogroupSearch,
     orthogroupSortMode,
@@ -448,17 +451,19 @@ export const createOrthogroupEditor = ({ state }) => {
   };
 
   const resolveOrthogroupName = (groupOrId) => {
+    const drawing = state.activeDrawing();
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const id = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     if (!id) return '';
-    return normalizeText(orthogroupNameOverrides[id]) || normalizeText(group?.name) || id;
+    return normalizeText(drawing.orthogroupNameOverrides[id]) || normalizeText(group?.name) || id;
   };
 
   const resolveOrthogroupDescription = (groupOrId) => {
+    const drawing = state.activeDrawing();
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const id = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     if (!id) return '';
-    return normalizeText(orthogroupDescriptionOverrides[id]) || normalizeText(group?.description);
+    return normalizeText(drawing.orthogroupDescriptionOverrides[id]) || normalizeText(group?.description);
   };
 
   const orthogroupScope = (groupOrId) => {
@@ -469,14 +474,15 @@ export const createOrthogroupEditor = ({ state }) => {
   const orthogroupScopeLabel = (groupOrId) => groupMetadataScopeLabel(orthogroupScope(groupOrId));
 
   const isOrthogroupRenamed = (groupOrId) => {
+    const drawing = state.activeDrawing();
     const id = typeof groupOrId === 'string'
       ? normalizeText(groupOrId)
       : orthogroupIdValue(groupOrId);
     return Boolean(
       id &&
       (
-        Object.prototype.hasOwnProperty.call(orthogroupNameOverrides, id) ||
-        Object.prototype.hasOwnProperty.call(orthogroupDescriptionOverrides, id)
+        Object.prototype.hasOwnProperty.call(drawing.orthogroupNameOverrides, id) ||
+        Object.prototype.hasOwnProperty.call(drawing.orthogroupDescriptionOverrides, id)
       )
     );
   };
@@ -531,8 +537,9 @@ export const createOrthogroupEditor = ({ state }) => {
   });
 
   const orthogroupRows = computed(() => {
+    const drawing = state.activeDrawing();
     // Renamed markers depend on description override keys, not their text.
-    Reflect.ownKeys(orthogroupDescriptionOverrides);
+    Reflect.ownKeys(drawing.orthogroupDescriptionOverrides);
     return filteredOrthogroups.value.map((group) => ({
       group, id: group.id,
       name: resolveOrthogroupName(group),
@@ -735,6 +742,7 @@ export const createOrthogroupEditor = ({ state }) => {
   };
 
   const setOrthogroupNameOverride = (orthogroupId, value) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
@@ -744,13 +752,14 @@ export const createOrthogroupEditor = ({ state }) => {
     const normalized = normalizeText(value);
     const base = normalizeText(group?.name);
     if (!normalized || normalized === base) {
-      delete orthogroupNameOverrides[id];
+      delete drawing.orthogroupNameOverrides[id];
       return;
     }
-    orthogroupNameOverrides[id] = normalized;
+    drawing.orthogroupNameOverrides[id] = normalized;
   };
 
   const setOrthogroupDescriptionOverride = (orthogroupId, value) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
@@ -760,28 +769,30 @@ export const createOrthogroupEditor = ({ state }) => {
     const normalized = normalizeText(value);
     const base = normalizeText(group?.description);
     if (!normalized || normalized === base) {
-      delete orthogroupDescriptionOverrides[id];
+      delete drawing.orthogroupDescriptionOverrides[id];
       return;
     }
-    orthogroupDescriptionOverrides[id] = normalized;
+    drawing.orthogroupDescriptionOverrides[id] = normalized;
   };
 
   const resetOrthogroupRename = (orthogroupId = selectedOrthogroupId.value) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
     if (!id) return;
-    delete orthogroupNameOverrides[id];
-    delete orthogroupDescriptionOverrides[id];
+    delete drawing.orthogroupNameOverrides[id];
+    delete drawing.orthogroupDescriptionOverrides[id];
   };
 
   // Dormant names are listed and cleared here (D-21).
-  const orthogroupDormantNames = computed(() => Object.values(orthogroupDormantOverrides || {})
+  const orthogroupDormantNames = computed(() => Object.values(state.activeDrawing().orthogroupDormantOverrides || {})
     .map((entry) => normalizeText(entry?.name) || normalizeText(entry?.description)).filter(Boolean));
   const clearOrthogroupDormantOverrides = () => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    Object.keys(orthogroupDormantOverrides || {}).forEach((key) => delete orthogroupDormantOverrides[key]);
+    Object.keys(drawing.orthogroupDormantOverrides || {}).forEach((key) => delete drawing.orthogroupDormantOverrides[key]);
   };
 
   const clearOrthogroupHighlight = () => {

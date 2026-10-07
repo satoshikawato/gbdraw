@@ -25,10 +25,12 @@ const nextAnnotationId = (annotations, prefix) => {
  * The Web state the editor reads; the four feature and result members are refs
  * or plain lists, read only as the Results hold them.
  * @typedef {{
- *   annotationSets: AnnotationSet[], adv: { circular_track_slots?: any[], linear_track_slots?: any[] },
  *   extractedFeatures: any, biologicalFeatures: any, selectedFeatures: any, results: any,
- *   sessionOperationAvailability?: () => any
+ *   activeDrawing: () => AnnotationEditorDrawing, sessionOperationAvailability?: () => any
  * }} AnnotationEditorState `sessionOperationAvailability` returns a busy outcome while a Session operation runs.
+ * @typedef {{
+ *   annotationSets: AnnotationSet[], adv: { circular_track_slots?: any[], linear_track_slots?: any[] }
+ * }} AnnotationEditorDrawing The members of a drawing (`DrawingState` of state.js) the editor reads.
  * @typedef {object} AnnotationEditorOptions
  * @property {AnnotationEditorState} state
  * @property {() => AnnotationRecordCatalog | null | undefined} getRecordCatalog
@@ -70,30 +72,33 @@ export const createAnnotationEditor = ({
     const recordIndex = Number(feature?.record_idx);
     return hash && Number.isSafeInteger(recordIndex) && recordIndex >= 0 ? { recordIndex, hash } : null;
   };
-  const reconcileRecords = (sets = state.annotationSets) => {
+  const reconcileRecords = (sets = state.activeDrawing().annotationSets) => {
     reconcileAnnotationRecordBindings(sets, getRecordCatalog?.());
     return sets;
   };
   const replaceSets = (sets) => {
+    const drawing = state.activeDrawing();
     const candidate = reconcileRecords(normalizeAnnotationSets(sets));
     retireLegendStylesOfUnnamedCaptions(() => {
-      state.annotationSets.splice(0, state.annotationSets.length, ...candidate);
+      drawing.annotationSets.splice(0, drawing.annotationSets.length, ...candidate);
     });
   };
   const addAnnotationSet = (base = 'annotations') => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const set = createAnnotationSet({ id: uniqueAnnotationSetId(state.annotationSets, base) });
-    state.annotationSets.push(set);
+    const set = createAnnotationSet({ id: uniqueAnnotationSetId(drawing.annotationSets, base) });
+    drawing.annotationSets.push(set);
     return set;
   };
   const renameAnnotationSet = (set, id) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const oldId = String(set?.id || '');
-    const nextId = uniqueAnnotationSetId(state.annotationSets.filter((item) => item !== set), id);
+    const nextId = uniqueAnnotationSetId(drawing.annotationSets.filter((item) => item !== set), id);
     set.id = nextId;
-    [state.adv.circular_track_slots, state.adv.linear_track_slots].forEach((slots) => (
+    [drawing.adv.circular_track_slots, drawing.adv.linear_track_slots].forEach((slots) => (
       (Array.isArray(slots) ? slots : []).forEach((slot) => {
         if (slot?.renderer === 'annotations' && slot?.params?.set_id === oldId) slot.params.set_id = nextId;
       })
@@ -109,18 +114,20 @@ export const createAnnotationEditor = ({
     retireLegendStylesOfUnnamedCaptions(() => { set.legendLabel = String(value ?? '').trim(); });
   };
   const duplicateAnnotationSet = (set) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const copy = createAnnotationSet(JSON.parse(JSON.stringify(set)));
-    copy.id = uniqueAnnotationSetId(state.annotationSets, `${set.id}_copy`);
-    state.annotationSets.push(copy);
+    copy.id = uniqueAnnotationSetId(drawing.annotationSets, `${set.id}_copy`);
+    drawing.annotationSets.push(copy);
     return copy;
   };
   const removeAnnotationSet = (set) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    const index = state.annotationSets.indexOf(set);
-    if (index >= 0) retireLegendStylesOfUnnamedCaptions(() => state.annotationSets.splice(index, 1));
+    const index = drawing.annotationSets.indexOf(set);
+    if (index >= 0) retireLegendStylesOfUnnamedCaptions(() => drawing.annotationSets.splice(index, 1));
   };
   const addCoordinateAnnotation = (set, options = {}) => {
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -186,11 +193,12 @@ export const createAnnotationEditor = ({
     onImportNotice?.(notice);
   };
   let importSequence = 0;
-  const canDownloadAnnotationTable = () => state.annotationSets.some((set) => set.annotations.length > 0);
+  const canDownloadAnnotationTable = () => state.activeDrawing().annotationSets.some((set) => set.annotations.length > 0);
   const downloadAnnotationTable = () => {
+    const drawing = state.activeDrawing();
     if (!canDownloadAnnotationTable()) return;
     const { text, placedFeatureIdentityCount: placed, skippedFeatureIdentityCount: skipped } = (
-      encodeAnnotationTableWithNotice(state.annotationSets, { drawnPlacement })
+      encodeAnnotationTableWithNotice(drawing.annotationSets, { drawnPlacement })
     );
     downloadTextFile('annotations.tsv', text);
     const notice = [
@@ -200,6 +208,7 @@ export const createAnnotationEditor = ({
     if (notice) window.alert(notice);
   };
   const importAnnotationTableFile = async (event) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const input = event?.target;
@@ -207,15 +216,15 @@ export const createAnnotationEditor = ({
     if (!file) return;
     const sequence = ++importSequence;
     onImportNotice?.('');
-    const setsBeforeRead = [...state.annotationSets];
-    const draftBeforeRead = JSON.stringify(state.annotationSets);
+    const setsBeforeRead = [...drawing.annotationSets];
+    const draftBeforeRead = JSON.stringify(drawing.annotationSets);
     const resultsBeforeRead = [...(state.results?.value ?? state.results ?? [])];
     const isCurrent = () => {
       const currentResults = state.results?.value ?? state.results ?? [];
       return sequence === importSequence && input.files?.[0] === file
-      && setsBeforeRead.length === state.annotationSets.length
-      && setsBeforeRead.every((set, index) => set === state.annotationSets[index])
-      && draftBeforeRead === JSON.stringify(state.annotationSets)
+      && setsBeforeRead.length === drawing.annotationSets.length
+      && setsBeforeRead.every((set, index) => set === drawing.annotationSets[index])
+      && draftBeforeRead === JSON.stringify(drawing.annotationSets)
       && resultsBeforeRead.length === currentResults.length
       && resultsBeforeRead.every((result, index) => result === currentResults[index]);
     };

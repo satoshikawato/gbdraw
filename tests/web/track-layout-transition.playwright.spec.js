@@ -18,13 +18,13 @@ const placeLane = (page, side) => page.evaluate(async (lane) => {
 const layoutState = (page, key) => page.evaluate(async (overrideKey) => {
   const { state } = await import('./js/state.js');
   const lane = (mode) => {
-    const slot = state.adv[`${mode}_track_slots`].find((entry) => entry.renderer === 'features');
+    const slot = state.activeDrawing().adv[`${mode}_track_slots`].find((entry) => entry.renderer === 'features');
     return slot ? { enabled: slot.enabled !== false, side: slot.side, lane: slot.params?.lane_direction ?? null } : null;
   };
-  return { trackType: state.form.track_type, separate: state.form.separate_strands,
-    circularStack: state.adv.circular_track_slots_enabled, circular: lane('circular'),
-    linearStack: state.adv.linear_track_slots_enabled, linear: lane('linear'),
-    row: state.featurePlacementOverrides[overrideKey]?.placement?.side || null,
+  return { trackType: state.activeDrawing().form.track_type, separate: state.activeDrawing().form.separate_strands,
+    circularStack: state.activeDrawing().adv.circular_track_slots_enabled, circular: lane('circular'),
+    linearStack: state.activeDrawing().adv.linear_track_slots_enabled, linear: lane('linear'),
+    row: state.activeDrawing().featurePlacementOverrides[overrideKey]?.placement?.side || null,
     undo: window.__GBDRAW_HISTORY__.getUndoCount() };
 }, key);
 const dialog = (page) => page.getByRole('dialog', { name: 'Reset Feature placements?', exact: true });

@@ -24,7 +24,7 @@ const committed = (page, id) => page.evaluate(async (featureId) => {
     featurePlacements: request.diagramOptions.featurePlacements,
     featureOverrides: request.diagramOptions.featureOverrides,
     drawn: state.extractedFeatures.value.filter((feature) => feature.biological_feature_id === featureId).length,
-    drafts: [Object.keys(state.featurePlacementOverrides), Object.keys(state.featureOverrides)]
+    drafts: [Object.keys(state.activeDrawing().featurePlacementOverrides), Object.keys(state.activeDrawing().featureOverrides)]
   };
 }, id);
 
@@ -81,7 +81,7 @@ test('a Circular Main placement and Feature visibility edit stay out of Linear r
     return [
       feature.scope,
       app.featurePlacementActions.valueFor(feature),
-      getFeatureVisibilityOverride(state.featureOverrides, feature),
+      getFeatureVisibilityOverride(state.activeDrawing().featureOverrides, feature),
       app.featureListState(feature).drawn
     ];
   }, target.id)).toEqual(['linear', 'auto', 'default', true]);

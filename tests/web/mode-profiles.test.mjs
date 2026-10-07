@@ -323,21 +323,21 @@ assert.equal(
   'adjacent',
   'fresh Collinear LOSATP must search adjacent record pairs by default'
 );
-assert.equal(Object.keys(state.form).includes('legend'), false);
-assert.equal(Object.keys(state.adv).includes('plot_title_position'), false);
-assert.equal(state.form.multi_record_canvas, true);
-assert.equal(state.linearRecordLayoutEnabled.value, true);
-state.form.multi_record_canvas = false;
-state.form.legend = 'right';
-state.adv.plot_title_position = 'top';
-assert.deepEqual(state.layoutPreferences.circular.single, {
+assert.equal(Object.keys(state.activeDrawing().form).includes('legend'), false);
+assert.equal(Object.keys(state.activeDrawing().adv).includes('plot_title_position'), false);
+assert.equal(state.activeDrawing().form.multi_record_canvas, true);
+assert.equal(state.activeDrawing().linearRecordLayoutEnabled.value, true);
+state.activeDrawing().form.multi_record_canvas = false;
+state.activeDrawing().form.legend = 'right';
+state.activeDrawing().adv.plot_title_position = 'top';
+assert.deepEqual(state.activeDrawing().layoutPreferences.circular.single, {
   legend: 'right',
   plotTitlePosition: 'top'
 });
 state.mode.value = 'linear';
-state.form.legend = 'left';
-state.adv.plot_title_position = 'center';
-assert.deepEqual(state.layoutPreferences.linear, {
+state.activeDrawing().form.legend = 'left';
+state.activeDrawing().adv.plot_title_position = 'center';
+assert.deepEqual(state.activeDrawing().layoutPreferences.linear, {
   legend: 'left',
   plotTitlePosition: 'center'
 });
@@ -391,21 +391,21 @@ assert.deepEqual(
     pathToFileURL(join(tempDir, 'js', 'services', 'reset.js'))
   );
   state.mode.value = 'circular';
-  Object.assign(state.adv, createDefaultAdv('circular'));
-  state.modeProfileStateManager.reset('circular', state.adv);
-  state.adv.identity = 88;
-  state.modeProfileStateManager.transition(state.adv, 'circular', 'linear');
+  Object.assign(state.activeDrawing().adv, createDefaultAdv('circular'));
+  state.activeDrawing().modeProfileStateManager.reset('circular', state.activeDrawing().adv);
+  state.activeDrawing().adv.identity = 88;
+  state.activeDrawing().modeProfileStateManager.transition(state.activeDrawing().adv, 'circular', 'linear');
   state.mode.value = 'linear';
-  state.adv.identity = 77;
-  state.form.show_scale = false;
-  state.linearTypographyLinked.value = false;
-  state.adv.scale_font_size = 18;
-  state.adv.ruler_label_font_size = 11;
-  state.adv.circular_track_slots_enabled = true;
-  state.adv.circular_track_slots_axis_index = 1;
-  state.adv.circular_track_slots.splice(
+  state.activeDrawing().adv.identity = 77;
+  state.activeDrawing().form.show_scale = false;
+  state.activeDrawing().linearTypographyLinked.value = false;
+  state.activeDrawing().adv.scale_font_size = 18;
+  state.activeDrawing().adv.ruler_label_font_size = 11;
+  state.activeDrawing().adv.circular_track_slots_enabled = true;
+  state.activeDrawing().adv.circular_track_slots_axis_index = 1;
+  state.activeDrawing().adv.circular_track_slots.splice(
     0,
-    state.adv.circular_track_slots.length,
+    state.activeDrawing().adv.circular_track_slots.length,
     {
       id: 'custom_annotation',
       renderer: 'annotations',
@@ -420,11 +420,11 @@ assert.deepEqual(
       }
     }
   );
-  state.adv.linear_track_slots_enabled = true;
-  state.adv.linear_track_slots_axis_index = 1;
-  state.adv.linear_track_slots.splice(
+  state.activeDrawing().adv.linear_track_slots_enabled = true;
+  state.activeDrawing().adv.linear_track_slots_axis_index = 1;
+  state.activeDrawing().adv.linear_track_slots.splice(
     0,
-    state.adv.linear_track_slots.length,
+    state.activeDrawing().adv.linear_track_slots.length,
     {
       id: 'custom_spacer',
       renderer: 'spacer',
@@ -438,11 +438,11 @@ assert.deepEqual(
   const retainedFile = { name: 'retained.gb' };
   state.files.c_gb = retainedFile;
   const retainedComparisonFile = { name: 'retained-comparison.tsv' };
-  state.linearComparisonPlan.mode = 'selected';
-  state.linearComparisonPlan.defaultSource = 'upload';
-  state.linearComparisonPlan.edges.splice(
+  state.activeDrawing().linearComparisonPlan.mode = 'selected';
+  state.activeDrawing().linearComparisonPlan.defaultSource = 'upload';
+  state.activeDrawing().linearComparisonPlan.edges.splice(
     0,
-    state.linearComparisonPlan.edges.length,
+    state.activeDrawing().linearComparisonPlan.edges.length,
     {
       id: 'generated-only',
       queryUid: 'a',
@@ -477,15 +477,15 @@ assert.deepEqual(
       losatFilename: 'custom-subject.fna'
     }
   );
-  state.losat.blastp.collinearSearchScope = 'adjacent';
-  state.unmanagedConfigOverrides['objects.gc_content.percent_background_opacity'] = 0.42;
+  state.activeDrawing().losat.blastp.collinearSearchScope = 'adjacent';
+  state.activeDrawing().unmanagedConfigOverrides['objects.gc_content.percent_background_opacity'] = 0.42;
 
   resetSettings(state);
-  assert.equal(state.form.multi_record_canvas, true);
-  assert.equal(state.linearRecordLayoutEnabled.value, true);
+  assert.equal(state.activeDrawing().form.multi_record_canvas, true);
+  assert.equal(state.activeDrawing().linearRecordLayoutEnabled.value, true);
 
   const resetAdvDefaults = createDefaultAdv('linear');
-  const resetProfiles = state.modeProfileStateManager.exportState();
+  const resetProfiles = state.activeDrawing().modeProfileStateManager.exportState();
   assert.deepEqual(
     resetProfiles.profiles.circular.values,
     { ...managedAdvStateForMode('circular'), plot_title: '' }
@@ -496,51 +496,51 @@ assert.deepEqual(
   );
   assert.ok(Object.values(resetProfiles.profiles.circular.managed).every(Boolean));
   assert.ok(Object.values(resetProfiles.profiles.linear.managed).every(Boolean));
-  assert.equal(state.adv.circular_track_slots_enabled, false);
-  assert.equal(state.adv.linear_track_slots_enabled, false);
-  assert.equal(state.form.show_scale, true);
-  assert.equal(state.linearTypographyLinked.value, true);
-  assert.equal(state.adv.scale_font_size, null);
-  assert.equal(state.adv.ruler_label_font_size, null);
-  assert.deepEqual(state.unmanagedConfigOverrides, {});
+  assert.equal(state.activeDrawing().adv.circular_track_slots_enabled, false);
+  assert.equal(state.activeDrawing().adv.linear_track_slots_enabled, false);
+  assert.equal(state.activeDrawing().form.show_scale, true);
+  assert.equal(state.activeDrawing().linearTypographyLinked.value, true);
+  assert.equal(state.activeDrawing().adv.scale_font_size, null);
+  assert.equal(state.activeDrawing().adv.ruler_label_font_size, null);
+  assert.deepEqual(state.activeDrawing().unmanagedConfigOverrides, {});
   assert.equal(
-    state.losat.blastp.collinearSearchScope,
+    state.activeDrawing().losat.blastp.collinearSearchScope,
     'adjacent',
     'Reset must restore the fresh adjacent Collinear default'
   );
   assert.deepEqual(
-    state.adv.circular_track_slots,
+    state.activeDrawing().adv.circular_track_slots,
     resetAdvDefaults.circular_track_slots
   );
   assert.deepEqual(
-    state.adv.linear_track_slots,
+    state.activeDrawing().adv.linear_track_slots,
     resetAdvDefaults.linear_track_slots
   );
   assert.equal(
-    state.adv.circular_track_slots_axis_index,
+    state.activeDrawing().adv.circular_track_slots_axis_index,
     resetAdvDefaults.circular_track_slots_axis_index
   );
   assert.equal(
-    state.adv.linear_track_slots_axis_index,
+    state.activeDrawing().adv.linear_track_slots_axis_index,
     resetAdvDefaults.linear_track_slots_axis_index
   );
   assert.equal(state.files.c_gb, retainedFile);
-  assert.equal(state.linearComparisonPlan.mode, 'none');
-  assert.equal(state.linearComparisonPlan.defaultSource, 'losat');
+  assert.equal(state.activeDrawing().linearComparisonPlan.mode, 'none');
+  assert.equal(state.activeDrawing().linearComparisonPlan.defaultSource, 'losat');
   assert.deepEqual(
-    state.linearComparisonPlan.edges.map((edge) => edge.id),
+    state.activeDrawing().linearComparisonPlan.edges.map((edge) => edge.id),
     ['retained-file', 'retained-name']
   );
-  assert.equal(state.linearComparisonPlan.edges[0].file, retainedComparisonFile);
-  assert.equal(state.linearComparisonPlan.edges[0].source, 'upload');
-  assert.equal(state.linearComparisonPlan.edges[0].included, false);
-  assert.equal(state.linearComparisonPlan.edges[0].fileActive, false);
-  assert.equal(state.linearComparisonPlan.edges[0].losatFilenameActive, false);
-  assert.equal(state.linearComparisonPlan.edges[1].losatFilename, 'custom-subject.fna');
-  assert.equal(state.linearComparisonPlan.edges[1].source, 'losat');
-  assert.equal(state.linearComparisonPlan.edges[1].included, false);
-  assert.equal(state.linearComparisonPlan.edges[1].fileActive, false);
-  assert.equal(state.linearComparisonPlan.edges[1].losatFilenameActive, false);
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[0].file, retainedComparisonFile);
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[0].source, 'upload');
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[0].included, false);
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[0].fileActive, false);
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[0].losatFilenameActive, false);
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[1].losatFilename, 'custom-subject.fna');
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[1].source, 'losat');
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[1].included, false);
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[1].fileActive, false);
+  assert.equal(state.activeDrawing().linearComparisonPlan.edges[1].losatFilenameActive, false);
 }
 
 {
@@ -548,15 +548,15 @@ assert.deepEqual(
     pathToFileURL(join(tempDir, 'js', 'services', 'config.js'))
   );
   state.mode.value = 'circular';
-  Object.assign(state.adv, createDefaultAdv('circular'));
-  state.modeProfileStateManager.reset('circular', state.adv);
-  state.adv.identity = 88;
-  state.modeProfileStateManager.transition(state.adv, 'circular', 'linear');
+  Object.assign(state.activeDrawing().adv, createDefaultAdv('circular'));
+  state.activeDrawing().modeProfileStateManager.reset('circular', state.activeDrawing().adv);
+  state.activeDrawing().adv.identity = 88;
+  state.activeDrawing().modeProfileStateManager.transition(state.activeDrawing().adv, 'circular', 'linear');
   state.mode.value = 'linear';
-  state.adv.identity = 77;
-  state.form.show_scale = false;
-  state.losat.blastp.collinearSearchScope = 'adjacent';
-  state.unmanagedConfigOverrides['objects.blast_match.curve_tension'] = 0.25;
+  state.activeDrawing().adv.identity = 77;
+  state.activeDrawing().form.show_scale = false;
+  state.activeDrawing().losat.blastp.collinearSearchScope = 'adjacent';
+  state.activeDrawing().unmanagedConfigOverrides['objects.blast_match.curve_tension'] = 0.25;
   const savedConfig = structuredClone(buildConfigData(state.activeDrawing()));
 
   assert.equal(savedConfig.form.show_scale, false);
@@ -569,23 +569,23 @@ assert.deepEqual(
     'objects.blast_match.curve_tension': 0.25
   });
 
-  Object.assign(state.adv, createDefaultAdv('linear'));
-  state.modeProfileStateManager.reset('linear', state.adv);
-  state.form.show_scale = true;
-  state.unmanagedConfigOverrides.stale = true;
+  Object.assign(state.activeDrawing().adv, createDefaultAdv('linear'));
+  state.activeDrawing().modeProfileStateManager.reset('linear', state.activeDrawing().adv);
+  state.activeDrawing().form.show_scale = true;
+  state.activeDrawing().unmanagedConfigOverrides.stale = true;
   applyConfigData(state.activeDrawing(), savedConfig);
-  assert.equal(state.form.show_scale, false);
-  assert.equal(state.adv.identity, 77);
-  assert.deepEqual(state.unmanagedConfigOverrides, {
+  assert.equal(state.activeDrawing().form.show_scale, false);
+  assert.equal(state.activeDrawing().adv.identity, 77);
+  assert.deepEqual(state.activeDrawing().unmanagedConfigOverrides, {
     'objects.blast_match.curve_tension': 0.25
   });
   assert.equal(
-    state.losat.blastp.collinearSearchScope,
+    state.activeDrawing().losat.blastp.collinearSearchScope,
     'adjacent',
     'an explicit saved-session adjacent scope must survive current-reader loading'
   );
-  state.modeProfileStateManager.transition(state.adv, 'linear', 'circular');
-  assert.equal(state.adv.identity, 88);
+  state.activeDrawing().modeProfileStateManager.transition(state.activeDrawing().adv, 'linear', 'circular');
+  assert.equal(state.activeDrawing().adv.identity, 88);
 
   // Arrange in rows: omission takes the fresh default; explicit false is kept.
   for (const [layout, expected] of [[undefined, true], [{ rows: [] }, true], [{ enabled: false, rows: [] }, false]]) {
@@ -593,38 +593,38 @@ assert.deepEqual(
     if (layout === undefined) delete layoutConfig.linearRecordLayout;
     else layoutConfig.linearRecordLayout = layout;
     applyConfigData(state.activeDrawing(), layoutConfig);
-    assert.equal(state.linearRecordLayoutEnabled.value, expected, JSON.stringify(layout));
+    assert.equal(state.activeDrawing().linearRecordLayoutEnabled.value, expected, JSON.stringify(layout));
   }
 
   const cliProjectedNumericConfig = structuredClone(savedConfig);
   cliProjectedNumericConfig.adv.arrow_head_length_ratio = '1.25';
   cliProjectedNumericConfig.adv.arrow_shaft_width_ratio = '0.25';
   applyConfigData(state.activeDrawing(), cliProjectedNumericConfig);
-  assert.equal(state.adv.arrow_head_length_ratio, 1.25);
-  assert.equal(state.adv.arrow_shaft_width_ratio, 0.25);
+  assert.equal(state.activeDrawing().adv.arrow_head_length_ratio, 1.25);
+  assert.equal(state.activeDrawing().adv.arrow_shaft_width_ratio, 0.25);
 
   const cliProjectedAutoConfig = structuredClone(savedConfig);
   cliProjectedAutoConfig.adv.arrow_head_length_ratio = 'auto';
   cliProjectedAutoConfig.adv.arrow_shaft_width_ratio = '1';
   applyConfigData(state.activeDrawing(), cliProjectedAutoConfig);
-  assert.equal(state.adv.arrow_head_length_ratio, null);
-  assert.equal(state.adv.arrow_shaft_width_ratio, 1.0);
+  assert.equal(state.activeDrawing().adv.arrow_head_length_ratio, null);
+  assert.equal(state.activeDrawing().adv.arrow_shaft_width_ratio, 1.0);
 
   const version39Config = structuredClone(savedConfig);
   delete version39Config.modeProfiles;
   state.mode.value = 'linear';
-  Object.assign(state.adv, createDefaultAdv('linear'));
-  state.modeProfileStateManager.reset('linear', state.adv);
+  Object.assign(state.activeDrawing().adv, createDefaultAdv('linear'));
+  state.activeDrawing().modeProfileStateManager.reset('linear', state.activeDrawing().adv);
   applyConfigData(state.activeDrawing(), version39Config);
-  const migratedProfiles = state.modeProfileStateManager.exportState();
+  const migratedProfiles = state.activeDrawing().modeProfileStateManager.exportState();
   assert.equal(migratedProfiles.profiles.linear.values.identity, 77);
   assert.equal(migratedProfiles.profiles.linear.managed.identity, false);
   assert.deepEqual(
     migratedProfiles.profiles.circular.values,
     { ...managedAdvStateForMode('circular'), plot_title: '' }
   );
-  Object.keys(state.unmanagedConfigOverrides).forEach((path) => {
-    delete state.unmanagedConfigOverrides[path];
+  Object.keys(state.activeDrawing().unmanagedConfigOverrides).forEach((path) => {
+    delete state.activeDrawing().unmanagedConfigOverrides[path];
   });
 
 }
@@ -655,17 +655,17 @@ const genbank = {
 
 for (const modeName of ['circular', 'linear']) {
   state.mode.value = modeName;
-  Object.assign(state.form, createDefaultForm());
-  Object.assign(state.adv, createDefaultAdv(modeName));
-  state.modeProfileStateManager.reset(modeName, state.adv);
+  Object.assign(state.activeDrawing().form, createDefaultForm());
+  Object.assign(state.activeDrawing().adv, createDefaultAdv(modeName));
+  state.activeDrawing().modeProfileStateManager.reset(modeName, state.activeDrawing().adv);
   state.cInputType.value = 'gb';
   state.lInputType.value = 'gb';
   state.circularRecordList.value = [];
-  state.linearRecordLayoutEnabled.value = false;
+  state.activeDrawing().linearRecordLayoutEnabled.value = false;
   if (modeName === 'linear') {
-    state.linearComparisonPlan.mode = 'adjacent';
-    state.linearComparisonPlan.defaultSource = 'losat';
-    state.linearComparisonPlan.edges.splice(0);
+    state.activeDrawing().linearComparisonPlan.mode = 'adjacent';
+    state.activeDrawing().linearComparisonPlan.defaultSource = 'losat';
+    state.activeDrawing().linearComparisonPlan.edges.splice(0);
   }
 
   const filesData = modeName === 'circular'
@@ -683,11 +683,11 @@ for (const modeName of ['circular', 'linear']) {
       };
   const comparisonPlanSnapshot = modeName === 'linear'
     ? resolveLinearComparisonPlan({
-        plan: state.linearComparisonPlan,
+        plan: state.activeDrawing().linearComparisonPlan,
         sequences: filesData.linearSeqs,
         layout: [],
-        losatProgram: state.losatProgram.value,
-        blastpMode: state.losat.blastp.mode
+        losatProgram: state.activeDrawing().losatProgram.value,
+        blastpMode: state.activeDrawing().losat.blastp.mode
       })
     : null;
   const canonical = buildCanonicalRenderRequest({
@@ -727,14 +727,14 @@ for (const modeName of ['circular', 'linear']) {
 }
 
 state.mode.value = 'linear';
-Object.assign(state.form, createDefaultForm());
-Object.assign(state.adv, createDefaultAdv('linear'));
-Object.assign(state.losat, createDefaultLosat());
-state.losatProgram.value = 'blastp';
-state.losat.blastp.mode = 'collinear';
-state.linearComparisonPlan.mode = 'adjacent';
-state.linearComparisonPlan.defaultSource = 'losat';
-state.linearComparisonPlan.edges.splice(0);
+Object.assign(state.activeDrawing().form, createDefaultForm());
+Object.assign(state.activeDrawing().adv, createDefaultAdv('linear'));
+Object.assign(state.activeDrawing().losat, createDefaultLosat());
+state.activeDrawing().losatProgram.value = 'blastp';
+state.activeDrawing().losat.blastp.mode = 'collinear';
+state.activeDrawing().linearComparisonPlan.mode = 'adjacent';
+state.activeDrawing().linearComparisonPlan.defaultSource = 'losat';
+state.activeDrawing().linearComparisonPlan.edges.splice(0);
 const defaultCollinearRecords = ['record-1', 'record-2', 'record-3'].map((uid) => ({
   uid,
   gb: genbank,
@@ -744,11 +744,11 @@ const defaultCollinearRecords = ['record-1', 'record-2', 'record-3'].map((uid) =
   region_reverse: false
 }));
 const defaultCollinearSnapshot = resolveLinearComparisonPlan({
-  plan: state.linearComparisonPlan,
+  plan: state.activeDrawing().linearComparisonPlan,
   sequences: defaultCollinearRecords,
   layout: [],
-  losatProgram: state.losatProgram.value,
-  blastpMode: state.losat.blastp.mode
+  losatProgram: state.activeDrawing().losatProgram.value,
+  blastpMode: state.activeDrawing().losat.blastp.mode
 });
 const defaultCollinearRequest = buildCanonicalRenderRequest({
   state,

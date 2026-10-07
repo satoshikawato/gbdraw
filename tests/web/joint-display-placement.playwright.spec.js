@@ -313,13 +313,13 @@ for (const mode of ['circular', 'linear']) {
     await expect(page.getByRole('button', { name: 'Use selected feature midpoint', exact: true })).toBeDisabled();
     const bulk = page.getByRole('combobox', { name: 'Selected feature placements', exact: true });
     await bulk.selectOption(mode === 'circular' ? 'outward' : 'above');
-    await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides).length)).toBe(2);
+    await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.activeDrawing().featurePlacementOverrides).length)).toBe(2);
     await bulk.selectOption('auto');
-    await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides).length)).toBe(0);
+    await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.activeDrawing().featurePlacementOverrides).length)).toBe(0);
     await page.getByRole('button', { name: /^Undo/ }).first().click();
-    await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides).length)).toBe(2);
+    await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.activeDrawing().featurePlacementOverrides).length)).toBe(2);
     await page.getByRole('button', { name: /^Redo/ }).first().click();
-    await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides).length)).toBe(0);
+    await expect.poll(() => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.activeDrawing().featurePlacementOverrides).length)).toBe(0);
     await generateFromControl(page);
     expect(await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.map((f) => ({ stableId: f.stable_feature_id, parts: f.location_parts, strand: f.strand })))).toEqual(features.map(({ id, ...biological }) => biological));
     for (const id of await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.map((f) => f.svg_id))) {
@@ -355,7 +355,7 @@ test('paired GFF/FASTA replacement keeps placements; Generate applies survivors 
   await page.getByRole('button', { name: 'Close feature popup', exact: true }).click();
   await page.locator('.drawer-toggle').click();
   await generateFromControl(page);
-  const placements = () => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides).length);
+  const placements = () => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.activeDrawing().featurePlacementOverrides).length);
   const before = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
   await upload.setInputFiles({ name: 'same.fa', mimeType: 'text/plain', buffer: Buffer.from(fasta.replace('ACGT', 'TCGT')) });
   await expect(start).toHaveValue('');

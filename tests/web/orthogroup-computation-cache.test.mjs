@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const context = vm.createContext({ console });
 vm.runInContext(readFileSync(new URL('../../gbdraw/web/vendor/vue/vue.global.js', import.meta.url), 'utf8'), context);
@@ -25,7 +26,7 @@ test('group lookup reuses valid identities and invalidates on ID edits, new alia
     clickedFeature: ref(null), showRightDrawer: ref(false), rightDrawerTab: ref('features'),
     svgContainer: ref(null), linearSeqs: reactive([]), extractedFeatures: ref([]), biologicalFeatures: ref([])
   };
-  const editor = createOrthogroupEditor({ state });
+  const editor = createOrthogroupEditor({ state: withDrawings(state) });
   const group = state.orthogroups.value[0];
   assert.equal(editor.getOrthogroupById('one'), group);
   const rows = editor.orthogroupRows.value;

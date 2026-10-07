@@ -71,12 +71,12 @@ export const createFeatureEditTableActions = ({
   readFeatureOverrideTable,
   projectFeatureEdits
 }) => {
-  const { featureOverrides } = state;
 
   const downloadFeatureEditTable = async () => {
+    const drawing = state.activeDrawing();
     const committed = getCommittedSession();
     const records = committed?.renderRequest?.records || [];
-    const rows = committed && records.length ? requestFeatureOverrides(featureOverrides, committed.renderRequest.mode, records) : [];
+    const rows = committed && records.length ? requestFeatureOverrides(drawing.featureOverrides, committed.renderRequest.mode, records) : [];
     if (!committed || rows.length === 0) {
       window.alert('No feature edits to export.');
       return false;
@@ -89,7 +89,7 @@ export const createFeatureEditTableActions = ({
       return false;
     }
     downloadTextFile('gbdraw_feature_override_table.tsv', text, 'text/tab-separated-values');
-    const elsewhere = Object.values(featureOverrides).filter(hasEdit).length - rows.length;
+    const elsewhere = Object.values(drawing.featureOverrides).filter(hasEdit).length - rows.length;
     if (elsewhere > 0) {
       window.alert(`Exported ${rows.length} feature edit(s). ${elsewhere} feature edit(s) of records `
         + 'outside the current diagram were not exported.');
@@ -106,6 +106,7 @@ export const createFeatureEditTableActions = ({
   };
 
   const loadFeatureEditTable = async (event) => {
+    const drawing = state.activeDrawing();
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const input = event?.target;
@@ -127,7 +128,7 @@ export const createFeatureEditTableActions = ({
       // A Generate that finished meanwhile names other records.
       if (getCommittedSession() !== committed || state.sessionOperationAvailability?.()) return false;
       const { rows, unmatchedRows } = admitFeatureOverrideTable(response?.result, records);
-      replaceFeatureEdits(featureOverrides, rows, committed.renderRequest.mode, records);
+      replaceFeatureEdits(drawing.featureOverrides, rows, committed.renderRequest.mode, records);
       await projectFeatureEdits();
       if (state.errorLog?.value === failure.value?.error) state.errorLog.value = null;
       failure.value = null;

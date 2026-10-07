@@ -466,7 +466,7 @@ test('Linear Lock Definition Column measures single, shared, and mixed rows afte
     Object.assign(app.adv, { linear_show_replicon: true, linear_accession_visibility: 'hide', linear_length_visibility: 'hide' });
     await app.setLinearRecordLayoutEnabled(true);
     const { state } = await import('/gbdraw/web/js/state.js');
-    state.unmanagedConfigOverrides['canvas.linear.definition_gap'] = 37;
+    state.activeDrawing().unmanagedConfigOverrides['canvas.linear.definition_gap'] = 37;
     state.linearRecordTranslations.value = app.linearSeqs.map((seq, index) => ({
       recordKey: seq.uid, x: [-85, 40, -35, 75][index], y: 0
     }));

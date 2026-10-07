@@ -215,7 +215,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(before.svg);
   expect(await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    return state.recordDisplayDrafts.length;
+    return state.activeDrawing().recordDisplayDrafts.length;
   })).toBe(0);
   expect(await page.evaluate(async () => (
     (await import('/gbdraw/web/js/services/config.js')).getCommittedCanonicalRenderRequest()
@@ -228,7 +228,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(transformedSvg);
   expect(await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    return state.recordDisplayDrafts[0];
+    return state.activeDrawing().recordDisplayDrafts[0];
   })).toMatchObject({
     startCoordinate: expectedStart,
     anchorIntent: {
@@ -314,7 +314,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
     return {
       svg: window.__GBDRAW_APP__.svgContent,
       history: window.__GBDRAW_HISTORY__.getUndoCount(),
-      drafts: JSON.stringify(state.recordDisplayDrafts)
+      drafts: JSON.stringify(state.activeDrawing().recordDisplayDrafts)
     };
   });
   await staleActions.getByRole('button', { name: 'Apply and regenerate' }).click();
@@ -330,7 +330,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
     return {
       svg: window.__GBDRAW_APP__.svgContent,
       history: window.__GBDRAW_HISTORY__.getUndoCount(),
-      drafts: JSON.stringify(state.recordDisplayDrafts)
+      drafts: JSON.stringify(state.activeDrawing().recordDisplayDrafts)
     };
   })).toEqual(staleBefore);
   await page.evaluate(async () => {
@@ -366,7 +366,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   expect(await page.evaluate(() => window.__GBDRAW_APP__.svgContent)).toBe(transformedSvg);
   expect(await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    return state.recordDisplayDrafts[0];
+    return state.activeDrawing().recordDisplayDrafts[0];
   })).toMatchObject({
     startCoordinate: expectedStart,
     anchorIntent: {
@@ -499,7 +499,7 @@ test('Apply on Generate stages rotations that one Generate applies together', as
       runs: window.__GBDRAW_DIAGRAM_RUNS__.length,
       svg: window.__GBDRAW_APP__.svgContent,
       history: window.__GBDRAW_HISTORY__.getUndoCount(),
-      drafts: Object.fromEntries(state.recordDisplayDrafts
+      drafts: Object.fromEntries(state.activeDrawing().recordDisplayDrafts
         .map(({ recordId, startCoordinate }) => [recordId, startCoordinate]))
     };
   });
@@ -654,7 +654,7 @@ test('both modes record rotation resolves the same circular source anchor', asyn
       const { state } = await import('/gbdraw/web/js/state.js');
       const request = window.__GBDRAW_DIAGRAM_RUNS__.at(-1);
       const record = request.records.find((entry) => entry.recordKey === recordKey);
-      const draft = state.recordDisplayDrafts.find((entry) => (
+      const draft = state.activeDrawing().recordDisplayDrafts.find((entry) => (
         entry.anchorIntent?.recordKey === recordKey
       ));
       return {
@@ -1661,7 +1661,7 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
     state.selectedResultIndex.value = 0;
     state.svgContainer.value = container;
     state.featureCatalog.value = catalog;
-    state.featureOverrides[JSON.stringify([state.generatedMode.value, 'record-a', 'biological-a'])] = {
+    state.activeDrawing().featureOverrides[JSON.stringify([state.generatedMode.value, 'record-a', 'biological-a'])] = {
       scope: state.generatedMode.value,
       recordKey: 'record-a',
       biologicalFeatureId: 'biological-a',
@@ -1670,8 +1670,8 @@ test('Download Interactive SVG forwards live editor overrides without mutating t
       labelText: 'Live feature label',
       labelSourceText: null
     };
-    state.orthogroupNameOverrides['group-a'] = 'Live group name';
-    state.orthogroupDescriptionOverrides['group-a'] = 'Live description';
+    state.activeDrawing().orthogroupNameOverrides['group-a'] = 'Live group name';
+    state.activeDrawing().orthogroupDescriptionOverrides['group-a'] = 'Live description';
 
     let downloadedBlob = null;
     const originalCreateObjectURL = URL.createObjectURL;

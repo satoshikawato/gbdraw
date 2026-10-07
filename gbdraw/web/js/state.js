@@ -745,7 +745,7 @@ const featureList = computed(() => {
   const catalogFeatures = resultCatalogFeatures(state);
   if (catalogFeatures) {
     const metadata = getCommittedSvgResultMetadata(toRaw(results.value[selectedResultIndex.value]));
-    return listFeatureRows(catalogFeatures, featureDrawnContext(state, {
+    return listFeatureRows(catalogFeatures, featureDrawnContext(activeDrawing(), {
       diagramOptions: { selectedFeaturesSet: metadata?.selectedFeatureTypes }
     }));
   }
@@ -879,10 +879,11 @@ export const sessionOperationAvailability = (
 };
 
 // The drawing of a diagram mode: its settings, its editor edits, and the
-// values derived from them, under their `state` names and kinds (a ref stays a
-// ref). A service reads them from the drawing it is given, never from `state`;
-// an owner passes `state.activeDrawing()`. Both modes still share one drawing,
-// so the members are the objects above.
+// values derived from them, under their former `state` names and kinds (a ref
+// stays a ref). Only the drawing holds them: a service reads them from the
+// drawing it is given, and an owner resolves `state.activeDrawing()` or the
+// drawing of the mode its action is about. Both modes still share one
+// drawing, so the members are the objects above.
 const sharedDrawing = Object.freeze({
   // Settings
   form,
@@ -956,8 +957,6 @@ export const state = {
   semanticFileWatchersSuppressed,
   sessionResourceDiscoveryDeferred,
   sessionImportRollbackInProgress,
-  importedComparisonIntent,
-  unmanagedConfigOverrides,
   results,
   selectedResultIndex,
   failedGeneratePreservedResult,
@@ -982,32 +981,12 @@ export const state = {
   mode,
   drawings,
   activeDrawing,
-  layoutPreferences,
-  activeLayoutPreferences,
   suppressCircularMultiRecordDefaults,
   cInputType,
   lInputType,
-  losatProgram,
   files,
-  circularConservation,
-  annotationSets,
-  recordDisplayDrafts,
-  featurePlacementOverrides,
   selectedAnnotation,
   linearSeqs,
-  linearRecordLayoutEnabled,
-  linearRecordGap,
-  linearRecordRows,
-  linearComparisonPlan,
-  linearComparisonResolution,
-  hasLinearComparisonIntent,
-  hasActiveLinearLosatIntent,
-  hasActiveLinearUploadIntent,
-  form,
-  adv,
-  linearTypographyLinked,
-  modeProfileStateManager,
-  losat,
   losatCacheInfo,
   losatThreadingStatus,
   losatCache,
@@ -1023,9 +1002,6 @@ export const state = {
   similarityAlignmentResetReceipt,
   linearRecordTranslations,
   legacySimilarityAlignment,
-  orthogroupNameOverrides,
-  orthogroupDescriptionOverrides,
-  orthogroupDormantOverrides,
   selectedOrthogroupId,
   orthogroupSearch,
   orthogroupSortMode,
@@ -1036,18 +1012,9 @@ export const state = {
   circularRecordDiscovery,
   paletteDefinitions,
   paletteNames,
-  selectedPalette,
-  currentColors,
   paletteInstantPreviewEnabled,
   appliedPaletteName,
   appliedPaletteColors,
-  pendingPaletteName,
-  pendingPaletteColors,
-  hasPendingPaletteDraft,
-  filterMode,
-  manualBlacklist,
-  manualWhitelist,
-  manualSpecificRules,
   newSpecRule,
   specificRulePresets,
   specificRuleQualifierSuggestions,
@@ -1093,15 +1060,8 @@ export const state = {
   featureRecordPickerVisible,
   featureListTopSpacerPx,
   featureListBottomSpacerPx,
-  featureColorOverrides,
-  featureVisibilityManualRules,
-  featureVisibilityRules,
-  featureOverrides,
-  featureStrokeOverrides,
   labelSearch,
   editableLabels,
-  canonicalLabelOverrideRows,
-  labelTextBulkOverrides,
   autoLabelReflowEnabled,
   labelReflowProcessing,
   labelReflowRequestSeq,
@@ -1131,14 +1091,10 @@ export const state = {
   labelOnDialog,
   sidebarWidth,
   isResizing,
-  legendEntries,
-  deletedLegendEntries,
   originalLegendOrder,
   originalLegendColors,
   newLegendCaption,
   newLegendColor,
-  legendStrokeOverrides,
-  legendColorOverrides,
   originalSvgStroke,
   legendDragging,
   legendDragStart,
@@ -1159,7 +1115,6 @@ export const state = {
   plotTitleDragStart,
   plotTitleAutoTransform,
   plotTitleUserOffset,
-  canvasPadding,
   showCanvasControls,
   generatedLegendPosition,
   generatedMode,
@@ -1173,11 +1128,8 @@ export const state = {
   defaultColorKeys,
   newColorFeat,
   newColorVal,
-  manualPriorityRules,
   newPriorityRule,
   newFeatureToAdd,
-  addedLegendCaptions,
-  fileLegendCaptions,
   featureList,
   featureListState,
   filteredFeatures,

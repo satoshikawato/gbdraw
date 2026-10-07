@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-orthogroup-stable-identity-'));
@@ -1355,7 +1356,7 @@ const state = {
   ])
 };
 
-const editor = createOrthogroupEditor({ state, runAnalysis: null });
+const editor = createOrthogroupEditor({ state: withDrawings(state), runAnalysis: null });
 const aliasedEditorGroup = {
   orthogroupId: 'og_editor_alias',
   orthogroup_id: 'og_editor_alias',
@@ -1900,7 +1901,7 @@ console.log('orthogroup stable identity tests passed');
   });
   const lazyState = { ...state,
     biologicalFeatures: ref([...originalBiologicalFeatures, unrelated]) };
-  const lazyEditor = createOrthogroupEditor({ state: lazyState });
+  const lazyEditor = createOrthogroupEditor({ state: withDrawings(lazyState) });
   const member = lazyEditor.getEnrichedOrthogroupMembers({ id: 'selected-only',
     members: [{ recordKey: 'record-key-c', biologicalFeatureId: 'biological-c' }] })[0];
   assert.equal(member.nucleotideSequence, 'GGGG');

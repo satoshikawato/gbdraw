@@ -3,6 +3,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 globalThis.window = {
   Vue: {
@@ -73,7 +74,7 @@ const state = {
   losatProgram: { value: 'blastp' }
 };
 
-const settings = createLosatSettings({ state });
+const settings = createLosatSettings({ state: withDrawings(state) });
 
 assert.equal(state.losat.threadsPerJob, '32');
 assert.equal(settings.losatEffectiveThreadsPerJob.value, 4);
@@ -94,7 +95,7 @@ const loadingOrderState = {
   losatProgram: { value: 'blastn' }
 };
 
-createLosatSettings({ state: loadingOrderState });
+createLosatSettings({ state: withDrawings(loadingOrderState) });
 assert.equal(loadingOrderState.losat.threadsPerJob, '32');
 
 const noneState = {
@@ -108,7 +109,7 @@ const noneState = {
   },
   losatProgram: { value: 'blastn' }
 };
-const noneSettings = createLosatSettings({ state: noneState });
+const noneSettings = createLosatSettings({ state: withDrawings(noneState) });
 assert.equal(noneSettings.losatEstimatedJobCount.value, 0);
 assert.equal(noneSettings.losatMaxPairWorkers.value, 0);
 assert.equal(noneSettings.losatAutoPairWorkers.value, 0);
@@ -132,7 +133,7 @@ const mixedState = {
   },
   losatProgram: { value: 'blastn' }
 };
-const mixedSettings = createLosatSettings({ state: mixedState });
+const mixedSettings = createLosatSettings({ state: withDrawings(mixedState) });
 assert.equal(mixedSettings.losatEstimatedJobCount.value, 2);
 mixedState.losatProgram.value = 'blastp';
 assert.equal(mixedSettings.losatEstimatedJobCount.value, 2);
@@ -148,7 +149,7 @@ const expansionState = {
   },
   losatProgram: { value: 'blastp' }
 };
-const expansionSettings = createLosatSettings({ state: expansionState });
+const expansionSettings = createLosatSettings({ state: withDrawings(expansionState) });
 assert.equal(
   expansionSettings.losatEstimatedJobCount.value,
   25,
@@ -199,7 +200,7 @@ expansionState.linearComparisonResolution = { value: {
   })))
 } };
 // The computed owner retains its original resolution ref.
-const batchedSettings = createLosatSettings({ state: expansionState });
+const batchedSettings = createLosatSettings({ state: withDrawings(expansionState) });
 assert.equal(batchedSettings.losatEstimatedJobCount.value, 1);
 
 // Four source jobs must use the selected total, rather than stay at two threads per job.
@@ -213,7 +214,7 @@ const budgetState = {
     blastp: { mode: 'orthogroup', collinearSearchScope: 'all' } },
   losatProgram: { value: 'blastp' }
 };
-const budgetSettings = createLosatSettings({ state: budgetState });
+const budgetSettings = createLosatSettings({ state: withDrawings(budgetState) });
 for (const [budget, runs, threads] of [['32', 4, 8], ['16', 4, 4], ['2', 2, 1], ['safe', 4, 8], ['available', 4, 16]]) {
   budgetState.losat.totalThreadBudget = budget;
   assert.equal(budgetSettings.losatAutoPairWorkers.value, runs);

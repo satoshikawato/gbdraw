@@ -36,5 +36,5 @@ test('every clickedFeature payload writer sets location with the shared formatte
       if (match[1].trim() !== 'null') writers.push(`${path}: ${match[1].trim()}`);
     }
   }
-  assert.deepEqual(writers, ['app/feature-editor/svg-actions.js: buildClickedFeaturePayload(target, featureElement, renderedSvgId)']);
+  assert.deepEqual(writers, ['app/feature-editor/svg-actions.js: buildClickedFeaturePayload(drawing, target, featureElement, renderedSvgId)']);
 });

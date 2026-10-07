@@ -74,42 +74,42 @@ const compactActiveIntentSnapshot = () => ({
       : state.lInputType.value
   },
   palette: {
-    selected: state.selectedPalette.value,
+    selected: state.activeDrawing().selectedPalette.value,
     currentColors: {
-      CDS: state.currentColors.value.CDS,
-      tRNA: state.currentColors.value.tRNA
+      CDS: state.activeDrawing().currentColors.value.CDS,
+      tRNA: state.activeDrawing().currentColors.value.tRNA
     },
     appliedName: state.appliedPaletteName.value,
     appliedColors: {
       CDS: state.appliedPaletteColors.value.CDS,
       tRNA: state.appliedPaletteColors.value.tRNA
     },
-    pendingName: state.pendingPaletteName.value,
+    pendingName: state.activeDrawing().pendingPaletteName.value,
     pendingColors: {
-      CDS: state.pendingPaletteColors.value.CDS,
-      tRNA: state.pendingPaletteColors.value.tRNA
+      CDS: state.activeDrawing().pendingPaletteColors.value.CDS,
+      tRNA: state.activeDrawing().pendingPaletteColors.value.tRNA
     },
     instantPreview: state.paletteInstantPreviewEnabled.value
   },
-  specificRules: structuredClone(state.manualSpecificRules),
-  qualifierPriorityRules: structuredClone(state.manualPriorityRules),
+  specificRules: structuredClone(state.activeDrawing().manualSpecificRules),
+  qualifierPriorityRules: structuredClone(state.activeDrawing().manualPriorityRules),
   filters: {
-    mode: state.filterMode.value,
-    whitelist: structuredClone(state.manualWhitelist),
-    blacklistText: state.manualBlacklist.value
+    mode: state.activeDrawing().filterMode.value,
+    whitelist: structuredClone(state.activeDrawing().manualWhitelist),
+    blacklistText: state.activeDrawing().manualBlacklist.value
   },
   form: {
-    plot_title: state.form.plot_title,
-    labels_mode: state.form.labels_mode,
-    show_scale: state.form.show_scale,
-    legend: state.form.legend
+    plot_title: state.activeDrawing().form.plot_title,
+    labels_mode: state.activeDrawing().form.labels_mode,
+    show_scale: state.activeDrawing().form.show_scale,
+    legend: state.activeDrawing().form.legend
   },
   adv: {
-    axis_stroke_width: state.adv.axis_stroke_width,
-    label_font_size: state.adv.label_font_size,
-    feature_width_circular: state.adv.feature_width_circular
+    axis_stroke_width: state.activeDrawing().adv.axis_stroke_width,
+    label_font_size: state.activeDrawing().adv.label_font_size,
+    feature_width_circular: state.activeDrawing().adv.feature_width_circular
   },
-  annotationSets: state.annotationSets.map((set) => ({
+  annotationSets: state.activeDrawing().annotationSets.map((set) => ({
     id: set.id,
     annotations: set.annotations.map((annotation) => ({
       id: annotation.id,
@@ -117,30 +117,30 @@ const compactActiveIntentSnapshot = () => ({
     }))
   })),
   trackSlots: {
-    enabled: state.adv.circular_track_slots_enabled,
-    axisIndex: state.adv.circular_track_slots_axis_index,
-    slots: state.adv.circular_track_slots.map((slot) => ({
+    enabled: state.activeDrawing().adv.circular_track_slots_enabled,
+    axisIndex: state.activeDrawing().adv.circular_track_slots_axis_index,
+    slots: state.activeDrawing().adv.circular_track_slots.map((slot) => ({
       id: slot.id,
       renderer: slot.renderer,
       enabled: slot.enabled
     }))
   },
   layout: {
-    preferences: structuredClone(state.layoutPreferences),
+    preferences: structuredClone(state.activeDrawing().layoutPreferences),
     linearRecordLayout: {
-      enabled: state.linearRecordLayoutEnabled.value,
-      recordGap: state.linearRecordGap.value,
-      rows: state.linearRecordLayoutEnabled.value
-        ? structuredClone(state.linearRecordRows)
+      enabled: state.activeDrawing().linearRecordLayoutEnabled.value,
+      recordGap: state.activeDrawing().linearRecordGap.value,
+      rows: state.activeDrawing().linearRecordLayoutEnabled.value
+        ? structuredClone(state.activeDrawing().linearRecordRows)
         : []
     }
   },
   editorOverrides: {
-    fills: structuredClone(state.featureColorOverrides),
-    strokes: structuredClone(state.featureStrokeOverrides),
-    featureOverrides: structuredClone(state.featureOverrides),
-    legendColors: structuredClone(state.legendColorOverrides),
-    legendStrokes: structuredClone(state.legendStrokeOverrides)
+    fills: structuredClone(state.activeDrawing().featureColorOverrides),
+    strokes: structuredClone(state.activeDrawing().featureStrokeOverrides),
+    featureOverrides: structuredClone(state.activeDrawing().featureOverrides),
+    legendColors: structuredClone(state.activeDrawing().legendColorOverrides),
+    legendStrokes: structuredClone(state.activeDrawing().legendStrokeOverrides)
   }
 });
 
@@ -274,14 +274,14 @@ assert.throws(
   }),
   /importedComparisonResolution\.action is invalid/
 );
-Object.assign(state.importedComparisonIntent, {
+Object.assign(state.activeDrawing().importedComparisonIntent, {
   disposition: 'PRESERVED_READ_ONLY',
   action: 'INHERIT',
   message: 'Preserved for the current Session.',
   hasCommittedComparison: true
 });
 assert.deepEqual(buildConfigData(state.activeDrawing()).importedComparisonResolution, { action: 'INHERIT' });
-Object.assign(state.importedComparisonIntent, {
+Object.assign(state.activeDrawing().importedComparisonIntent, {
   disposition: 'EDITABLE',
   action: null,
   message: '',
@@ -459,55 +459,55 @@ const imported = await importSession(importEvent);
 
 assert.equal(imported.status, 'ok', imported.error?.message);
 assert.equal(imported.comparisonDisposition, 'EDITABLE');
-assert.deepEqual(state.importedComparisonIntent, {
+assert.deepEqual(state.activeDrawing().importedComparisonIntent, {
   disposition: 'EDITABLE',
   action: null,
   message: 'The saved comparison is represented by the current controls.',
   hasCommittedComparison: true
 });
-assert.equal(state.linearComparisonPlan.mode, 'none');
-assert.deepEqual(state.linearComparisonPlan.edges, []);
+assert.equal(state.activeDrawing().linearComparisonPlan.mode, 'none');
+assert.deepEqual(state.activeDrawing().linearComparisonPlan.edges, []);
 assert.deepEqual({
-  losatProgram: state.losatProgram.value,
+  losatProgram: state.activeDrawing().losatProgram.value,
   adv: {
-    comparison_height: state.adv.comparison_height,
-    min_bitscore: state.adv.min_bitscore,
-    evalue: state.adv.evalue,
-    identity: state.adv.identity,
-    alignment_length: state.adv.alignment_length,
-    pairwise_match_style: state.adv.pairwise_match_style
+    comparison_height: state.activeDrawing().adv.comparison_height,
+    min_bitscore: state.activeDrawing().adv.min_bitscore,
+    evalue: state.activeDrawing().adv.evalue,
+    identity: state.activeDrawing().adv.identity,
+    alignment_length: state.activeDrawing().adv.alignment_length,
+    pairwise_match_style: state.activeDrawing().adv.pairwise_match_style
   },
   blastp: {
-    mode: state.losat.blastp.mode,
-    maxHits: state.losat.blastp.maxHits,
-    candidateLimit: state.losat.blastp.candidateLimit,
-    orthogroupMemberMaxHits: state.losat.blastp.orthogroupMemberMaxHits,
-    collinearMinAnchors: state.losat.blastp.collinearMinAnchors,
-    collinearMaxUnitGap: state.losat.blastp.collinearMaxUnitGap,
-    collinearUnitMode: state.losat.blastp.collinearUnitMode,
-    collinearAnchorMode: state.losat.blastp.collinearAnchorMode,
-    collinearMergeOrientation: state.losat.blastp.collinearMergeOrientation,
-    collinearSearchScope: state.losat.blastp.collinearSearchScope,
-    collinearColorMode: state.losat.blastp.collinearColorMode
+    mode: state.activeDrawing().losat.blastp.mode,
+    maxHits: state.activeDrawing().losat.blastp.maxHits,
+    candidateLimit: state.activeDrawing().losat.blastp.candidateLimit,
+    orthogroupMemberMaxHits: state.activeDrawing().losat.blastp.orthogroupMemberMaxHits,
+    collinearMinAnchors: state.activeDrawing().losat.blastp.collinearMinAnchors,
+    collinearMaxUnitGap: state.activeDrawing().losat.blastp.collinearMaxUnitGap,
+    collinearUnitMode: state.activeDrawing().losat.blastp.collinearUnitMode,
+    collinearAnchorMode: state.activeDrawing().losat.blastp.collinearAnchorMode,
+    collinearMergeOrientation: state.activeDrawing().losat.blastp.collinearMergeOrientation,
+    collinearSearchScope: state.activeDrawing().losat.blastp.collinearSearchScope,
+    collinearColorMode: state.activeDrawing().losat.blastp.collinearColorMode
   }
 }, dormantComparisonDraft);
 assert.deepEqual(
   JSON.parse(JSON.stringify(buildConfigData(state.activeDrawing()).losat.blastp)),
-  JSON.parse(JSON.stringify(state.losat.blastp)),
+  JSON.parse(JSON.stringify(state.activeDrawing().losat.blastp)),
   'the current Session writer must retain every editable LOSATP value'
 );
 assert.equal(
-  state.form.legend,
+  state.activeDrawing().form.legend,
   'bottom',
   'the active editor preference must override the last generated request position'
 );
-assert.equal(state.adv.plot_title_position, 'bottom');
+assert.equal(state.activeDrawing().adv.plot_title_position, 'bottom');
 assert.equal(state.generatedLegendPosition.value, 'right');
 assert.equal(state.appliedPaletteName.value, 'orchid');
 assert.equal(state.appliedPaletteColors.value.CDS, '#123456');
-assert.equal(state.pendingPaletteName.value, 'mint');
-assert.equal(state.pendingPaletteColors.value.CDS, '#abcdef');
-assert.deepEqual(state.layoutPreferences.linear, {
+assert.equal(state.activeDrawing().pendingPaletteName.value, 'mint');
+assert.equal(state.activeDrawing().pendingPaletteColors.value.CDS, '#abcdef');
+assert.deepEqual(state.activeDrawing().layoutPreferences.linear, {
   legend: 'bottom',
   plotTitlePosition: 'bottom'
 });
@@ -558,7 +558,7 @@ assert.equal(
   decisionRequiredImport.error?.message
 );
 assert.equal(decisionRequiredImport.comparisonDisposition, 'DECISION_REQUIRED');
-assert.deepEqual(state.importedComparisonIntent, {
+assert.deepEqual(state.activeDrawing().importedComparisonIntent, {
   disposition: 'DECISION_REQUIRED',
   action: null,
   message: 'The saved comparison is missing a required resource.',
@@ -589,7 +589,7 @@ for (const savedPlan of [{
   savedPlanSession.config.linearComparisonPlan = structuredClone(savedPlan);
   const savedPlanImport = await importPayload(savedPlanSession);
   assert.equal(savedPlanImport.status, 'ok');
-  assert.deepEqual(state.linearComparisonPlan, {
+  assert.deepEqual(state.activeDrawing().linearComparisonPlan, {
     ...savedPlan,
     edges: savedPlan.edges.map((edge) => ({ ...edge, file: null }))
   });
@@ -603,9 +603,9 @@ const absentLayoutSession = withoutStoredLayoutPreferences();
 absentLayoutSession.ui.generatedLegendPosition = 'right';
 const absentLayoutImport = await importPayload(absentLayoutSession);
 assert.equal(absentLayoutImport.status, 'ok');
-assert.equal(state.form.legend, 'right');
+assert.equal(state.activeDrawing().form.legend, 'right');
 assert.equal(state.generatedLegendPosition.value, 'right');
-assert.equal(state.layoutPreferences.linear.legend, 'right');
+assert.equal(state.activeDrawing().layoutPreferences.linear.legend, 'right');
 
 const legacyLayoutSession = withoutStoredLayoutPreferences();
 legacyLayoutSession.ui.legend = 'bottom';
@@ -613,9 +613,9 @@ legacyLayoutSession.ui.linearPlotTitlePosition = 'bottom';
 legacyLayoutSession.ui.generatedLegendPosition = 'right';
 const legacyLayoutImport = await importPayload(legacyLayoutSession);
 assert.equal(legacyLayoutImport.status, 'ok');
-assert.equal(state.form.legend, 'bottom');
+assert.equal(state.activeDrawing().form.legend, 'bottom');
 assert.equal(state.generatedLegendPosition.value, 'right');
-assert.equal(state.layoutPreferences.linear.legend, 'bottom');
+assert.equal(state.activeDrawing().layoutPreferences.linear.legend, 'bottom');
 
 const partialLayoutSession = withoutStoredLayoutPreferences();
 partialLayoutSession.ui.layoutPreferences = {
@@ -624,10 +624,10 @@ partialLayoutSession.ui.layoutPreferences = {
 partialLayoutSession.ui.generatedLegendPosition = 'right';
 const partialLayoutImport = await importPayload(partialLayoutSession);
 assert.equal(partialLayoutImport.status, 'ok');
-assert.equal(state.form.legend, 'top');
-assert.equal(state.adv.plot_title_position, 'bottom');
+assert.equal(state.activeDrawing().form.legend, 'top');
+assert.equal(state.activeDrawing().adv.plot_title_position, 'bottom');
 assert.equal(state.generatedLegendPosition.value, 'right');
-assert.deepEqual(state.layoutPreferences, {
+assert.deepEqual(state.activeDrawing().layoutPreferences, {
   circular: {
     single: { legend: 'left', plotTitlePosition: 'none' },
     multi: { legend: null, plotTitlePosition: null }
@@ -955,22 +955,22 @@ const legacyActiveIntent = {
 alerts.length = 0;
 const legacyActiveIntentImport = await importPayload(legacyActiveIntent);
 assert.equal(legacyActiveIntentImport.status, 'legacy');
-assert.equal(state.selectedPalette.value, 'orange');
-assert.equal(state.currentColors.value.CDS, '#0b4f6c');
-assert.equal(state.currentColors.value.tRNA, '#f59e0b');
+assert.equal(state.activeDrawing().selectedPalette.value, 'orange');
+assert.equal(state.activeDrawing().currentColors.value.CDS, '#0b4f6c');
+assert.equal(state.activeDrawing().currentColors.value.tRNA, '#f59e0b');
 assert.equal(state.appliedPaletteName.value, 'orange');
 assert.equal(state.appliedPaletteColors.value.CDS, '#0b4f6c');
-assert.equal(state.pendingPaletteName.value, '');
-assert.deepEqual(state.manualSpecificRules, legacyActiveIntent.rules);
-assert.deepEqual(state.manualPriorityRules, legacyActiveIntent.qualifierPriorityRules);
-assert.equal(state.filterMode.value, 'Blacklist');
-assert.deepEqual(state.manualWhitelist, legacyActiveIntent.whitelist);
-assert.equal(state.manualBlacklist.value, 'legacy-hidden');
-assert.equal(state.form.plot_title, 'Legacy JSON next Generate');
-assert.equal(state.form.show_scale, false);
-assert.equal(state.adv.axis_stroke_width, 9);
-assert.equal(state.adv.label_font_size, 29);
-assert.equal(state.adv.feature_width_circular, 23);
+assert.equal(state.activeDrawing().pendingPaletteName.value, '');
+assert.deepEqual(state.activeDrawing().manualSpecificRules, legacyActiveIntent.rules);
+assert.deepEqual(state.activeDrawing().manualPriorityRules, legacyActiveIntent.qualifierPriorityRules);
+assert.equal(state.activeDrawing().filterMode.value, 'Blacklist');
+assert.deepEqual(state.activeDrawing().manualWhitelist, legacyActiveIntent.whitelist);
+assert.equal(state.activeDrawing().manualBlacklist.value, 'legacy-hidden');
+assert.equal(state.activeDrawing().form.plot_title, 'Legacy JSON next Generate');
+assert.equal(state.activeDrawing().form.show_scale, false);
+assert.equal(state.activeDrawing().adv.axis_stroke_width, 9);
+assert.equal(state.activeDrawing().adv.label_font_size, 29);
+assert.equal(state.activeDrawing().adv.feature_width_circular, 23);
 const legacyActiveFiles = await serializeActiveRenderFiles(state.mode.value, state, state.activeDrawing());
 const legacyGeneratedCanonical = buildCanonicalRenderRequest({
   state,
@@ -1006,17 +1006,17 @@ assert.deepEqual(alerts, [
 
 const modeBeforeRollbackSetup = state.mode.value;
 state.mode.value = 'circular';
-state.modeProfileStateManager.transition(
-  state.adv,
+state.activeDrawing().modeProfileStateManager.transition(
+  state.activeDrawing().adv,
   modeBeforeRollbackSetup,
   state.mode.value
 );
-state.form.multi_record_canvas = false;
-state.form.legend = 'left';
-state.adv.plot_title_position = 'none';
+state.activeDrawing().form.multi_record_canvas = false;
+state.activeDrawing().form.legend = 'left';
+state.activeDrawing().adv.plot_title_position = 'none';
 state.generatedLegendPosition.value = 'left';
 state.sessionTitle.value = 'keep-after-normalization-error';
-Object.assign(state.canvasPadding, { top: 7, right: 8, bottom: 9, left: 10 });
+Object.assign(state.activeDrawing().canvasPadding, { top: 7, right: 8, bottom: 9, left: 10 });
 Object.assign(state.canvasPan, { x: 27, y: 28 });
 state.zoom.value = 1.25;
 state.skipCaptureBaseConfig.value = false;
@@ -1040,7 +1040,7 @@ state.newColorVal.value = '#123456';
 state.newFeatureToAdd.value = 'misc_feature';
 state.newLegendCaption.value = 'Keep legend caption';
 state.newLegendColor.value = '#654321';
-state.fileLegendCaptions.value = new Set(['Keep file legend']);
+state.activeDrawing().fileLegendCaptions.value = new Set(['Keep file legend']);
 state.featureSearch.value = 'keep feature search';
 state.labelSearch.value = 'keep label search';
 state.selectedFeatureIds.value = new Set(['keep-feature-a', 'keep-feature-b']);
@@ -1149,8 +1149,8 @@ const rollbackState = () => ({
   results: jsonClone(state.results.value),
   mode: state.mode.value,
   title: state.sessionTitle.value,
-  legend: state.form.legend,
-  plotTitlePosition: state.adv.plot_title_position,
+  legend: state.activeDrawing().form.legend,
+  plotTitlePosition: state.activeDrawing().adv.plot_title_position,
   generatedLegendPosition: state.generatedLegendPosition.value,
   semanticFileWatchersSuppressed: state.semanticFileWatchersSuppressed.value,
   sessionImportRollbackInProgress: state.sessionImportRollbackInProgress.value,
@@ -1172,7 +1172,7 @@ const rollbackState = () => ({
   newFeatureToAdd: state.newFeatureToAdd.value,
   newLegendCaption: state.newLegendCaption.value,
   newLegendColor: state.newLegendColor.value,
-  fileLegendCaptions: [...state.fileLegendCaptions.value],
+  fileLegendCaptions: [...state.activeDrawing().fileLegendCaptions.value],
   featureSearch: state.featureSearch.value,
   labelSearch: state.labelSearch.value,
   selectedFeatureIds: [...state.selectedFeatureIds.value],
@@ -1248,12 +1248,12 @@ assert.deepEqual(
 // F-1 (R11): the rollback installs the captured state as it was, so unset
 // slot sides, lane directions, and axis indexes stay unset and the Result's
 // named stroke color stays named.
-state.adv.circular_track_slots.forEach((slot) => {
+state.activeDrawing().adv.circular_track_slots.forEach((slot) => {
   slot.side = null;
   delete slot.params.lane_direction;
 });
-state.adv.circular_track_slots_axis_index = null;
-state.adv.linear_track_slots_axis_index = null;
+state.activeDrawing().adv.circular_track_slots_axis_index = null;
+state.activeDrawing().adv.linear_track_slots_axis_index = null;
 state.originalSvgStroke.value = { color: 'gray', width: 1 };
 const stateBeforeFailedImport = rollbackState();
 

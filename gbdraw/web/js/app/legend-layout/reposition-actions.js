@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { DrawingState } from '../../state.js' */
 import {
   applyCompositionEdit,
   bindCompositionMetadata,
@@ -49,8 +50,7 @@ export const createLegendRepositionActions = ({
     legendInitialTransform,
     legendCurrentOffset,
     plotTitleAutoTransform,
-    plotTitleUserOffset,
-    canvasPadding
+    plotTitleUserOffset
   } = state;
   const syncStateFromComposition = (svg, binding = bindCompositionMetadata(svg)) => {
     const { metadata } = binding;
@@ -96,7 +96,8 @@ export const createLegendRepositionActions = ({
     }
   };
 
-  const repositionForLegendChange = (newPosition, _oldPosition, _options = {}) => {
+  /** @param {DrawingState} drawing */
+  const repositionForLegendChange = (drawing, newPosition, _oldPosition, _options = {}) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!svgContainer.value || !svgContent.value) return false;
@@ -126,19 +127,20 @@ export const createLegendRepositionActions = ({
       }
     }
 
-    const nextBinding = applyCompositionEdit(svg, { legendSide: newPosition, canvasPadding });
+    const nextBinding = applyCompositionEdit(svg, { legendSide: newPosition, canvasPadding: drawing.canvasPadding });
     syncStateFromComposition(svg, nextBinding);
     commitActiveResultEdit?.('legend-position');
     return true;
   };
 
   const refreshLegendGeometry = () => {
+    const drawing = state.activeDrawing();
     if (!svgContainer.value || !svgContent.value) return false;
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return false;
     const binding = bindCompositionMetadata(svg);
     if (!binding.legend.metadata || binding.metadata.legendSide === 'none') return false;
-    return repositionForLegendChange(binding.metadata.legendSide, binding.metadata.legendSide, {
+    return repositionForLegendChange(drawing, binding.metadata.legendSide, binding.metadata.legendSide, {
       preserveManualOffsets: true
     });
   };

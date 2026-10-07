@@ -91,6 +91,8 @@ MOUNT_PREVIEW_SCRIPT = """async ({source, catalog, mode}) => {
     selectedAnnotation: ref(null), featurePopupSize: {}, featureSelectionDrag: {active: false},
     skipCaptureBaseConfig: ref(false), adv: {rich_feature_popup: true},
   };
+  // The fixture is its own drawing (state.js: `state.drawings`, `state.activeDrawing()`).
+  Object.defineProperties(state, {drawings: {value: {circular: state, linear: state}}, activeDrawing: {value: () => state}});
   window.fixtureState = state;
   window.fixtureActions = createFeatureSvgActions({state, getFeatureColor: () => '#123456', getEffectiveLegendCaption: () => ''});
   window.fixtureActions.attachSvgFeatureHandlers();

@@ -184,11 +184,11 @@ test('real History, failed Session rollback, fresh Save/Load, Export and Generat
   await page.evaluate(async () => {
     const { state } = await import('/gbdraw/web/js/state.js');
     // The first palette write of the reset throws once, then the ref behaves normally again.
-    const accessor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(state.selectedPalette), 'value');
-    Object.defineProperty(state.selectedPalette, 'value', {
+    const accessor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(state.activeDrawing().selectedPalette), 'value');
+    Object.defineProperty(state.activeDrawing().selectedPalette, 'value', {
       configurable: true,
       get() { return accessor.get.call(this); },
-      set() { delete state.selectedPalette.value; throw new Error('PRIVATE_COMMIT_SENTINEL'); }
+      set() { delete state.activeDrawing().selectedPalette.value; throw new Error('PRIVATE_COMMIT_SENTINEL'); }
     });
   });
   await load(page, fixture('circular'));

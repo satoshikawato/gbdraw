@@ -752,7 +752,7 @@ const labelOnFacts = (page) => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
   // Per-feature edits by the rendered ID of the feature in view.
   const edits = (field) => Object.fromEntries(state.extractedFeatures.value.flatMap((feature) => {
-    const value = state.featureOverrides[JSON.stringify([feature.scope, feature.record_key, feature.biological_feature_id])]?.[field];
+    const value = state.activeDrawing().featureOverrides[JSON.stringify([feature.scope, feature.record_key, feature.biological_feature_id])]?.[field];
     return value === null || value === undefined ? [] : [[feature.svg_id, value]];
   }));
   return {
@@ -881,7 +881,7 @@ const addVisibilityRule = (page, fields) => evaluateWithRetainedPromise(page, as
 // The per-feature edits of one source feature, read by its identity.
 const identityEdits = (page, identity) => page.evaluate(async (key) => {
   const { state } = await import('./js/state.js');
-  const row = state.featureOverrides[key] || {};
+  const row = state.activeDrawing().featureOverrides[key] || {};
   return { featureVisibility: row.featureVisibility ?? null, labelVisibility: row.labelVisibility ?? null };
 }, identity);
 

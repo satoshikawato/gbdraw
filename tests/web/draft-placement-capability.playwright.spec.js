@@ -170,7 +170,7 @@ const placementState = (page, key) => page.evaluate(async (overrideKey) => {
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
-  return { row: state.featurePlacementOverrides[overrideKey]?.placement?.side || null,
+  return { row: state.activeDrawing().featurePlacementOverrides[overrideKey]?.placement?.side || null,
     committed: getCommittedCanonicalRenderRequest().diagramOptions.featurePlacements.map((row) => row.placement.side || 'main'),
     pending: app.recordDisplayControls.hasPendingChanges.value,
     popup: feature ? app.featurePlacementActions.valueFor(feature) : null };
@@ -226,8 +226,8 @@ test('a Circular lane placement waits in Circular while Linear generates (OV-08)
 const placementDialog = (page) => page.getByRole('dialog', { name: 'Reset Feature placements?', exact: true });
 const layoutState = (page, key) => page.evaluate(async (overrideKey) => {
   const { state } = await import('./js/state.js');
-  return { trackType: state.form.track_type, separate: state.form.separate_strands,
-    row: state.featurePlacementOverrides[overrideKey]?.placement?.side || null,
+  return { trackType: state.activeDrawing().form.track_type, separate: state.activeDrawing().form.separate_strands,
+    row: state.activeDrawing().featurePlacementOverrides[overrideKey]?.placement?.side || null,
     undo: window.__GBDRAW_HISTORY__.getUndoCount() };
 }, key);
 const committedPlacements = (page) => page.evaluate(async () => {

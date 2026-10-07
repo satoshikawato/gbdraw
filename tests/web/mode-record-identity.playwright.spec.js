@@ -47,7 +47,7 @@ const snapshot = page => page.evaluate(async () => {
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
   const feature = state.extractedFeatures.value.find(f => f.biological_feature_id === 'fb8ff22d9');
   return { mode: state.mode.value, records: state.circularRecordList.value,
-    placements: state.featurePlacementOverrides,
+    placements: state.activeDrawing().featurePlacementOverrides,
     feature: feature && { recordKey: feature.record_key, biologicalFeatureId: feature.biological_feature_id },
     featureCount: state.extractedFeatures.value.length,
     committedPlacements: getCommittedCanonicalRenderRequest()?.diagramOptions.featurePlacements || [],
@@ -161,7 +161,7 @@ for (const committed of [false, true]) {
 // record key (not the Session's `record-1`), so the old row reaches no request
 // and is removed; an unrelated file loaded after removal does not take it
 // either.
-const placementKeys = page => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.featurePlacementOverrides));
+const placementKeys = page => page.evaluate(async () => Object.keys((await import('./js/state.js')).state.activeDrawing().featurePlacementOverrides));
 for (const operation of ['replacement', 'removal']) {
   test(`Circular source ${operation} after mode inactivity unbinds the old identity and Generate drops its placement`, async ({ browser }) => {
     test.setTimeout(180000);

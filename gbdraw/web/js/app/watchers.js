@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { DrawingState } from '../state.js' */
 /** @import { MountedResultContext, MountedResultContextOptions } from './preview-runtime.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
@@ -95,22 +96,18 @@ export const setupWatchers = ({
   preparePaletteDefinitions = null
 }) => {
   const {
-    manualSpecificRules,
     layoutRepositionMode,
     results,
     svgContent,
     selectedResultIndex,
-    form,
     shouldDeferCircularPreviewUpdates,
     mode,
     cInputType,
     lInputType,
-    canvasPadding,
     skipCaptureBaseConfig,
     skipExtractOnSvgChange,
     trustedArtifactRestoreInProgress,
     svgContainer,
-    layoutPreferences,
     suppressCircularMultiRecordDefaults,
     selectedFeatureRecordIdx,
     featurePanelTab,
@@ -118,22 +115,15 @@ export const setupWatchers = ({
     selectedOrthogroupAlignmentFeature,
     selectedOrthogroupId,
     orthogroupSearch,
-    labelTextBulkOverrides,
-    canonicalLabelOverrideRows,
     isFeatureDrawerMounted,
     clickedPairwiseMatch,
     clickedLabel,
     hiddenLabelTextDialog,
     files,
-    currentColors,
     paletteInstantPreviewEnabled,
-    pendingPaletteName,
     semanticFileWatchersSuppressed,
     sessionResourceDiscoveryDeferred,
     sessionImportRollbackInProgress,
-    manualPriorityRules,
-    manualWhitelist,
-    manualBlacklist,
     linearSeqs,
     linearReorderNotice,
     autoLabelReflowEnabled,
@@ -161,20 +151,22 @@ export const setupWatchers = ({
 
   const hasStoredLayoutValue = (value) => typeof value === 'string' && value.trim() !== '';
 
-  const hasStoredCircularMultiRecordLayout = () =>
-    hasStoredLayoutValue(layoutPreferences.circular.multi.legend) ||
-    hasStoredLayoutValue(layoutPreferences.circular.multi.plotTitlePosition);
+  /** @param {DrawingState} drawing */
+  const hasStoredCircularMultiRecordLayout = (drawing) =>
+    hasStoredLayoutValue(drawing.layoutPreferences.circular.multi.legend) ||
+    hasStoredLayoutValue(drawing.layoutPreferences.circular.multi.plotTitlePosition);
 
-  const applyCircularMultiRecordSmartDefaults = () => {
-    const singleLayout = resolveCircularLayoutPreference(layoutPreferences, false);
-    layoutPreferences.circular.multi.legend =
+  /** @param {DrawingState} drawing */
+  const applyCircularMultiRecordSmartDefaults = (drawing) => {
+    const singleLayout = resolveCircularLayoutPreference(drawing.layoutPreferences, false);
+    drawing.layoutPreferences.circular.multi.legend =
       singleLayout.legend === 'left' ? 'bottom' : singleLayout.legend;
-    layoutPreferences.circular.multi.plotTitlePosition =
+    drawing.layoutPreferences.circular.multi.plotTitlePosition =
       singleLayout.plotTitlePosition === 'none' ? 'bottom' : singleLayout.plotTitlePosition;
   };
 
   watch(
-    currentColors,
+    () => state.activeDrawing().currentColors.value,
     () => {
       syncPaletteDraftState();
     },
@@ -184,14 +176,15 @@ export const setupWatchers = ({
   watch(
     () => paletteInstantPreviewEnabled.value,
     (enabled) => {
+      const drawing = state.activeDrawing();
       if (!enabled) return;
-      if (String(pendingPaletteName.value || '').trim() === '') return;
+      if (String(drawing.pendingPaletteName.value || '').trim() === '') return;
       applyPaletteDraftToPreview();
     }
   );
 
   watch(
-    canvasPadding,
+    () => state.activeDrawing().canvasPadding,
     () => {
       if (semanticFileWatchersSuppressed.value || state.sessionOperationAvailability?.()) return;
       applyCanvasPadding();
@@ -210,21 +203,22 @@ export const setupWatchers = ({
   );
 
   watch(
-    () => form.multi_record_canvas,
+    () => state.activeDrawing().form.multi_record_canvas,
     (enabled, previousEnabled) => {
+      const drawing = state.activeDrawing();
       if (mode.value !== 'circular') return;
       if (enabled === previousEnabled) return;
 
-      if (enabled && !hasStoredCircularMultiRecordLayout()) {
+      if (enabled && !hasStoredCircularMultiRecordLayout(drawing)) {
         if (suppressCircularMultiRecordDefaults.value) {
-          layoutPreferences.circular.multi.legend = normalizeLegendPosition(
-            form.legend,
+          drawing.layoutPreferences.circular.multi.legend = normalizeLegendPosition(
+            drawing.form.legend,
             'left'
           );
-          layoutPreferences.circular.multi.plotTitlePosition =
-            normalizeCircularPlotTitlePosition(state.adv.plot_title_position);
+          drawing.layoutPreferences.circular.multi.plotTitlePosition =
+            normalizeCircularPlotTitlePosition(drawing.adv.plot_title_position);
         } else {
-          applyCircularMultiRecordSmartDefaults();
+          applyCircularMultiRecordSmartDefaults(drawing);
         }
       }
 
@@ -287,10 +281,11 @@ export const setupWatchers = ({
   // edit replaces it with the rows the editor builds. Per-feature label edits
   // are identity rows, which apply before the table (design Q4).
   watch(
-    labelTextBulkOverrides,
+    () => state.activeDrawing().labelTextBulkOverrides,
     () => {
+      const drawing = state.activeDrawing();
       if (semanticFileWatchersSuppressed.value) return;
-      canonicalLabelOverrideRows.value = [];
+      drawing.canonicalLabelOverrideRows.value = [];
     },
     { deep: true }
   );
@@ -406,10 +401,11 @@ export const setupWatchers = ({
   const waitForAuxiliaryFileImport = (file) => pendingFileImports.get(file);
 
   watchFileImport('d_color', (text) => {
+    const drawing = state.activeDrawing();
     try {
       const { colors, count } = parseColorTable(text);
       Object.entries(colors).forEach(([key, color]) => {
-        currentColors.value[key] = color;
+        drawing.currentColors.value[key] = color;
       });
       console.log(`Loaded ${count} colors from file.`);
     } catch (e) {
@@ -419,8 +415,9 @@ export const setupWatchers = ({
   });
 
   watchFileImport('t_color', async (text, isCurrent) => {
+    const drawing = state.activeDrawing();
     try {
-      const prepared = prepareSpecificColorImport(text, manualSpecificRules);
+      const prepared = prepareSpecificColorImport(text, drawing.manualSpecificRules);
       if (!await featureActions.commitSpecificRules(prepared.nextRules, 'Import specific color rules', { isCurrent })) return false;
       console.log(`Loaded ${prepared.importedCount} rules from file.`);
     } catch (e) {
@@ -430,14 +427,15 @@ export const setupWatchers = ({
   });
 
   watchFileImport('qualifier_priority', (text) => {
+    const drawing = state.activeDrawing();
     try {
       const { rules, count } = parsePriorityRules(text);
       rules.forEach((rule) => {
-        const idx = manualPriorityRules.findIndex((r) => r.feat === rule.feat);
+        const idx = drawing.manualPriorityRules.findIndex((r) => r.feat === rule.feat);
         if (idx >= 0) {
-          manualPriorityRules[idx].order = rule.order;
+          drawing.manualPriorityRules[idx].order = rule.order;
         } else {
-          manualPriorityRules.push({ feat: rule.feat, order: rule.order });
+          drawing.manualPriorityRules.push({ feat: rule.feat, order: rule.order });
         }
       });
       console.log(`Loaded ${count} priority rules.`);
@@ -448,9 +446,10 @@ export const setupWatchers = ({
   });
 
   watchFileImport('whitelist', (text) => {
+    const drawing = state.activeDrawing();
     try {
       const { rules, count } = parseWhitelistRules(text);
-      rules.forEach((rule) => manualWhitelist.push(rule));
+      rules.forEach((rule) => drawing.manualWhitelist.push(rule));
       console.log(`Loaded ${count} whitelist rules.`);
     } catch (e) {
       errorLog.value = normalizeUserFacingError(e, { stage: 'request-validation' });
@@ -459,12 +458,13 @@ export const setupWatchers = ({
   });
 
   watchFileImport('blacklist', (text) => {
+    const drawing = state.activeDrawing();
     try {
       const { words, count } = parseBlacklistWords(text);
       if (words.length > 0) {
-        const existing = manualBlacklist.value ? manualBlacklist.value.trim() : '';
+        const existing = drawing.manualBlacklist.value ? drawing.manualBlacklist.value.trim() : '';
         const separator = existing && !existing.endsWith(',') ? ', ' : '';
-        manualBlacklist.value = existing + separator + words.join(', ');
+        drawing.manualBlacklist.value = existing + separator + words.join(', ');
         console.log(`Loaded ${count} blacklist words.`);
       }
     } catch (e) {

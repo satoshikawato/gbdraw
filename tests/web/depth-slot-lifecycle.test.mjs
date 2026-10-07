@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-depth-slot-lifecycle-'));
@@ -82,7 +83,7 @@ const MODES = {
         annotationSets: [],
         circularRecordList: { value: [] }
       };
-      const editor = createCircularTrackSlotEditor({ state });
+      const editor = createCircularTrackSlotEditor({ state: withDrawings(state) });
       editor.normalizeCircularTrackSlots();
       return {
         state,
@@ -114,7 +115,7 @@ const MODES = {
         linearSeqs: [{ depth: sourceRow(sourced, width) }],
         annotationSets: []
       };
-      const editor = createLinearTrackSlotEditor({ state });
+      const editor = createLinearTrackSlotEditor({ state: withDrawings(state) });
       editor.normalizeLinearTrackSlots();
       return {
         state,

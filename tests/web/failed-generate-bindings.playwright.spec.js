@@ -36,9 +36,9 @@ const snapshot = page => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
   return {
-    width: JSON.parse(JSON.stringify(state.adv.circular_track_slots.find(row => row.id === 'gc_content').width)),
-    positions: JSON.parse(JSON.stringify(state.adv.multi_record_positions)),
-    annotations: state.annotationSets.flatMap(set => set.annotations.map(annotation => ({
+    width: JSON.parse(JSON.stringify(state.activeDrawing().adv.circular_track_slots.find(row => row.id === 'gc_content').width)),
+    positions: JSON.parse(JSON.stringify(state.activeDrawing().adv.multi_record_positions)),
+    annotations: state.activeDrawing().annotationSets.flatMap(set => set.annotations.map(annotation => ({
       id: annotation.id,
       record: JSON.parse(JSON.stringify(annotation.target?.record)),
       key: annotation.metadata?._gbdraw_web_target_record_key || null

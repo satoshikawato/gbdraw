@@ -28,19 +28,19 @@ const inspect = page => page.evaluate(async () => {
   const result = s.results.value[s.selectedResultIndex.value].content;
   const svg = new DOMParser().parseFromString(result, 'image/svg+xml').documentElement;
   return JSON.parse(JSON.stringify({
-    entries: s.legendEntries.value.map(e => e.caption).sort(), original: s.originalLegendOrder.value,
-    entryState: s.legendEntries.value, originalColors: s.originalLegendColors.value,
-    manualRules: s.manualSpecificRules, strokes: s.legendStrokeOverrides,
+    entries: s.activeDrawing().legendEntries.value.map(e => e.caption).sort(), original: s.originalLegendOrder.value,
+    entryState: s.activeDrawing().legendEntries.value, originalColors: s.originalLegendColors.value,
+    manualRules: s.activeDrawing().manualSpecificRules, strokes: s.activeDrawing().legendStrokeOverrides,
     selectedResult: s.selectedResultIndex.value,
     resultsDigest: await digest(s.results.value),
     mountedDigest: await digest(s.svgContainer.value.querySelector('svg').outerHTML),
     requestDigest: await digest(getCommittedCanonicalRenderRequest()),
     result: captions(svg), mounted: captions(s.svgContainer.value.querySelector('svg')),
-    side: s.form.legend, fontSize: s.adv.legend_font_size, preferences: s.layoutPreferences.legend,
-    layoutPreferences: s.layoutPreferences,
-    palette: s.selectedPalette.value, colors: s.currentColors.value,
+    side: s.activeDrawing().form.legend, fontSize: s.activeDrawing().adv.legend_font_size, preferences: s.activeDrawing().layoutPreferences.legend,
+    layoutPreferences: s.activeDrawing().layoutPreferences,
+    palette: s.activeDrawing().selectedPalette.value, colors: s.activeDrawing().currentColors.value,
     featureIds: s.extractedFeatures.value.map(f => f.stable_feature_id),
-    overrides: s.legendColorOverrides, deleted: s.deletedLegendEntries.value
+    overrides: s.activeDrawing().legendColorOverrides, deleted: s.activeDrawing().deletedLegendEntries.value
   }));
 });
 const expectEntries = async (page, expected) => {

@@ -14,10 +14,10 @@ const inspect = (page, mode) => page.evaluate(async mode => {
   return {
     svg, request: getCommittedCanonicalRenderRequest(),
     warnings: JSON.parse(JSON.stringify(s.annotationWarnings.value)),
-    annotations: JSON.parse(JSON.stringify(s.annotationSets)),
+    annotations: JSON.parse(JSON.stringify(s.activeDrawing().annotationSets)),
     geometry: JSON.parse(JSON.stringify(s.trackSlotResolvedGeometry.value)),
-    slots: JSON.parse(JSON.stringify(s.adv[`${mode}_track_slots`])),
-    rules: JSON.parse(JSON.stringify(s.manualSpecificRules.map(rule => ({ ...rule, fromFile: Boolean(rule.fromFile) })))),
+    slots: JSON.parse(JSON.stringify(s.activeDrawing().adv[`${mode}_track_slots`])),
+    rules: JSON.parse(JSON.stringify(s.activeDrawing().manualSpecificRules.map(rule => ({ ...rule, fromFile: Boolean(rule.fromFile) })))),
     legends: getAllFeatureLegendGroups(root).map(group => [...group.querySelectorAll('g[data-legend-key]')].map(entry => ({
       caption: entry.getAttribute('data-legend-key'), color: entry.querySelector('path[fill]')?.getAttribute('fill')
     }))),

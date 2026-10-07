@@ -139,7 +139,7 @@ for (const mode of MODES) {
         { id: 'gap', renderer: 'spacer', enabled: true, side: 'below', height: '12px', params: {} });
       const windows = [];
       // The port applies every edit and records the inputs around it.
-      const editor = EDITORS[mode]({ state, changeTrackLayout: (apply) => {
+      const editor = EDITORS[mode]({ state: withDrawings(state), changeTrackLayout: (apply) => {
         const entry = project(state);
         try { return apply(); } finally { windows.push([entry, project(state)]); }
       } });

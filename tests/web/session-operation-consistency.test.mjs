@@ -248,7 +248,7 @@ test('late annotation reads return busy without replacing the existing rows', as
   const read = gate();
   const sets = [];
   const owner = createAnnotationEditor({
-    state: { annotationSets: sets, adv: {}, sessionOperationAvailability },
+    state: withDrawings({ annotationSets: sets, adv: {}, sessionOperationAvailability }),
     getRecordCatalog: () => ({ status: 'ready', records: [] })
   });
   const file = { name: 'annotations.tsv', text: () => read.promise };

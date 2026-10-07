@@ -752,7 +752,7 @@ test('a Legend style no feature can produce still fails the Generate', async ({ 
     const { state } = await import('/gbdraw/web/js/state.js');
     state.originalLegendOrder.value = [...state.originalLegendOrder.value, 'Ghost'];
     app.legendEntries.push({ caption: 'Ghost', originalCaption: 'Ghost', color: '#123456', yPos: 400 });
-    state.legendColorOverrides.Ghost = '#123456';
+    state.activeDrawing().legendColorOverrides.Ghost = '#123456';
   });
   const outcome = await generateAndWaitForResult(page, { expectedStatus: 'error' });
   expect(outcome.errorSummary).toContain('could not be accepted');
@@ -1053,7 +1053,7 @@ for (const { name, from, linearFile = SINGLE_FIXTURE, row, prepare = null, befor
     expect((await semanticSnapshot(page)).legend.map(({ caption }) => caption), `${other} draws no ${row} row`).not.toContain(row);
     expect(await page.evaluate(async (caption) => {
       const { state } = await import('/gbdraw/web/js/state.js');
-      return state.legendColorOverrides[caption];
+      return state.activeDrawing().legendColorOverrides[caption];
     }, row), 'the color stays stored').toBe('#7b2cbf');
     await switchMode(page, from);
     if (beforeReturn) {
@@ -1148,8 +1148,8 @@ const inHistoryStep = (page, label, body, arg) => page.evaluate(
 const legendStyleOf = (page, caption) => page.evaluate(async (target) => {
   const { state } = await import('/gbdraw/web/js/state.js');
   return {
-    color: state.legendColorOverrides[target] ?? null,
-    stroke: state.legendStrokeOverrides[target] ?? null
+    color: state.activeDrawing().legendColorOverrides[target] ?? null,
+    stroke: state.activeDrawing().legendStrokeOverrides[target] ?? null
   };
 }, caption);
 

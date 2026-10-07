@@ -49,10 +49,16 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
  * `{ value }` because Vue comes from `window.Vue`, which is `any`.
  * @typedef {object} LosatSettingsState
  * @property {Record<string, any>[]} linearSeqs
+ * @property {() => LosatSettingsDrawing} activeDrawing
+ * @property {{ value?: { state?: string } }} [losatThreadingStatus]
+ */
+
+/**
+ * The members of a drawing (`DrawingState` of state.js) this module reads.
+ * @typedef {object} LosatSettingsDrawing
  * @property {{ value: any }} linearComparisonResolution
  * @property {LosatSettingsValues} losat
  * @property {{ value: string }} losatProgram
- * @property {{ value?: { state?: string } }} [losatThreadingStatus]
  */
 
 /**
@@ -60,38 +66,40 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
  */
 export const createLosatSettings = ({ state }) => {
   const {
-    linearSeqs,
-    linearComparisonResolution,
-    losat,
-    losatProgram
+    linearSeqs
   } = state;
 
   // `state.js` always provides the computed plan.
-  const readResolution = () => linearComparisonResolution.value || {};
+  /** @param {LosatSettingsDrawing} drawing */
+  const readResolution = (drawing) => drawing.linearComparisonResolution.value || {};
 
   const losatHardwareThreads = ref(getLosatHardwareThreads());
   onMounted(() => {
     losatHardwareThreads.value = getLosatHardwareThreads();
   });
 
-  const losatThreadsPerJobFixed = computed(() => losatProgram.value !== 'blastp' || losat.executionMode === 'serial');
+  const losatThreadsPerJobFixed = computed(() => {
+    const drawing = state.activeDrawing();
+    return drawing.losatProgram.value !== 'blastp' || drawing.losat.executionMode === 'serial';
+  });
 
   // Generate plans its jobs with the same two functions (N-10). Only the
   // translation tables vary per record, so they are the only arguments that
   // can split a source batch.
   const losatEstimatedJobCount = computed(() => {
-    const resolution = readResolution();
+    const drawing = state.activeDrawing();
+    const resolution = readResolution(drawing);
     if (resolution.valid === false || !resolution.hasLosatIntent) return 0;
-    const program = losatProgram.value;
+    const program = drawing.losatProgram.value;
     try {
       const specs = buildLosatJobSpecs({
         resolution,
         recordCount: linearSeqs.length,
         recordUids: linearSeqs.map((sequence) => sequence?.uid),
         program,
-        blastpMode: String(losat.blastp?.mode || 'orthogroup'),
-        collinearInferOrthogroups: losat.blastp?.collinearInferOrthogroups !== false,
-        collinearSearchScope: normalizeCollinearSearchScope(losat.blastp?.collinearSearchScope)
+        blastpMode: String(drawing.losat.blastp?.mode || 'orthogroup'),
+        collinearInferOrthogroups: drawing.losat.blastp?.collinearInferOrthogroups !== false,
+        collinearSearchScope: normalizeCollinearSearchScope(drawing.losat.blastp?.collinearSearchScope)
       });
       return planLosatSourceJobs({
         sequences: linearSeqs,
@@ -105,13 +113,16 @@ export const createLosatSettings = ({ state }) => {
     }
   });
 
-  const losatThreadPlan = computed(() => resolveLosatThreadPlan({
-    hardwareThreads: losatHardwareThreads.value,
-    jobCount: losatEstimatedJobCount.value,
-    totalThreadBudget: losat.totalThreadBudget,
-    threadsPerJob: losatThreadsPerJobFixed.value ? 1 : losat.threadsPerJob,
-    parallelWorkers: losat.parallelWorkers
-  }));
+  const losatThreadPlan = computed(() => {
+    const drawing = state.activeDrawing();
+    return resolveLosatThreadPlan({
+      hardwareThreads: losatHardwareThreads.value,
+      jobCount: losatEstimatedJobCount.value,
+      totalThreadBudget: drawing.losat.totalThreadBudget,
+      threadsPerJob: losatThreadsPerJobFixed.value ? 1 : drawing.losat.threadsPerJob,
+      parallelWorkers: drawing.losat.parallelWorkers
+    });
+  });
   const losatSafeThreadBudget = computed(() =>
     resolveLosatThreadPlan({ hardwareThreads: losatHardwareThreads.value }).totalBudget
   );
@@ -122,13 +133,14 @@ export const createLosatSettings = ({ state }) => {
   const losatEffectiveThreadsPerJob = computed(() => losatThreadPlan.value.threadsPerJob);
 
   const losatThreadOptions = computed(() => {
+    const drawing = state.activeDrawing();
     if (losatThreadsPerJobFixed.value) {
-      return appendRequestedIntegerOption([{ value: '1', label: 'Fixed (1)' }], losat.threadsPerJob, 1);
+      return appendRequestedIntegerOption([{ value: '1', label: 'Fixed (1)' }], drawing.losat.threadsPerJob, 1);
     }
     const maxThreads = Math.max(1, losatTotalThreadBudget.value);
     return appendRequestedIntegerOption(
       createPositiveIntegerOptions(maxThreads),
-      losat.threadsPerJob,
+      drawing.losat.threadsPerJob,
       losatEffectiveThreadsPerJob.value
     );
   });
@@ -139,12 +151,13 @@ export const createLosatSettings = ({ state }) => {
     createPositiveIntegerOptions(losatMaxPairWorkers.value).map((option) => ({
       ...option, label: `${option.value} ${option.value === '1' ? 'run' : 'runs'}`
     })),
-    losat.parallelWorkers,
+    state.activeDrawing().losat.parallelWorkers,
     losatThreadPlan.value.pairWorkers
   ));
 
   const losatEffectiveExecutionMode = computed(() => {
-    const raw = String(losat.executionMode || 'auto').trim().toLowerCase();
+    const drawing = state.activeDrawing();
+    const raw = String(drawing.losat.executionMode || 'auto').trim().toLowerCase();
     if (raw === 'serial') return 'serial';
     if (raw === 'threaded') return 'threaded';
     const threadingState = String(state?.losatThreadingStatus?.value?.state || '').trim().toLowerCase();
@@ -163,21 +176,23 @@ export const createLosatSettings = ({ state }) => {
     'By default, LOSAT can use up to half the number of cores available.'
   );
 
-  const hasValidLosatIntent = () => {
-    const resolution = readResolution();
+  /** @param {LosatSettingsDrawing} drawing */
+  const hasValidLosatIntent = (drawing) => {
+    const resolution = readResolution(drawing);
     return resolution.valid === true && resolution.hasLosatIntent === true;
   };
 
   watch(
     losatTotalThreadBudgetOptions,
     (options) => {
-      if (!hasValidLosatIntent()) return;
-      const raw = String(losat.totalThreadBudget || 'safe').trim().toLowerCase();
+      const drawing = state.activeDrawing();
+      if (!hasValidLosatIntent(drawing)) return;
+      const raw = String(drawing.losat.totalThreadBudget || 'safe').trim().toLowerCase();
       if (['safe', 'available'].includes(raw)) return;
       const values = options.map((option) => option.value);
       if (values.includes(raw)) return;
       const parsed = parsePositiveInteger(raw);
-      losat.totalThreadBudget = parsed !== null && parsed >= losatHardwareThreads.value
+      drawing.losat.totalThreadBudget = parsed !== null && parsed >= losatHardwareThreads.value
         ? 'available'
         : 'safe';
     },

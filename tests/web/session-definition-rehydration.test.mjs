@@ -65,11 +65,11 @@ const importedMaliciousLegend = await importSession({
 });
 assert.equal(importedMaliciousLegend.status, 'ok');
 assert.equal(
-  state.legendEntries.value.some((entry) => entry.caption === 'unsafe-current'),
+  state.activeDrawing().legendEntries.value.some((entry) => entry.caption === 'unsafe-current'),
   false
 );
 assert.equal(
-  state.deletedLegendEntries.value.some((entry) => entry.caption === 'unsafe-deleted'),
+  state.activeDrawing().deletedLegendEntries.value.some((entry) => entry.caption === 'unsafe-deleted'),
   false
 );
 

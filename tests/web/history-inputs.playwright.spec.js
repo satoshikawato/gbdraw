@@ -524,7 +524,7 @@ test('a GenBank or DDBJ ring added through Add Seq keeps its record label throug
     const { state } = await import('/gbdraw/web/js/state.js');
     const file = new File([text], 'ring-typed.gbk', { type: 'text/plain', lastModified: 0 });
     window.__GBDRAW_APP__.addCircularConservationComparisonFile({ target: { files: [file], value: '' } });
-    state.circularConservation.series[state.circularConservation.series.length - 1].label = 'Typed ring';
+    state.activeDrawing().circularConservation.series[state.activeDrawing().circularConservation.series.length - 1].label = 'Typed ring';
   }, ringFlatFile({ definition: 'synthetic ring typed.' }));
   await expectState(typed, 3, 0, 'typed ring added');
   await expectHistory(page, baseline + 3, 0, 'Change uploaded file');

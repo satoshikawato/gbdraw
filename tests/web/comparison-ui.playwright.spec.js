@@ -491,7 +491,7 @@ test('imported comparison resolutions are explicit and create one History entry 
 
   const setIntent = (disposition, message) => page.evaluate(async ({ next, explanation }) => {
     const { state } = await import('/gbdraw/web/js/state.js');
-    Object.assign(state.importedComparisonIntent, {
+    Object.assign(state.activeDrawing().importedComparisonIntent, {
       disposition: next,
       action: null,
       message: explanation,

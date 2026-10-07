@@ -1730,7 +1730,7 @@ ORIGIN
       await window.Vue.nextTick();
       await window.Vue.nextTick();
       return {
-        active: JSON.parse(JSON.stringify(state.activeLayoutPreferences.value)),
+        active: JSON.parse(JSON.stringify(state.activeDrawing().activeLayoutPreferences.value)),
         formLegend: app.form.legend,
         plotTitlePosition: app.adv.plot_title_position
       };
@@ -1756,7 +1756,7 @@ ORIGIN
   }, mode);
   const layoutPreferenceTree = () => page.evaluate(async () => {
     const { state } = await import('./js/state.js');
-    return JSON.parse(JSON.stringify(state.layoutPreferences));
+    return JSON.parse(JSON.stringify(state.activeDrawing().layoutPreferences));
   });
 
   await openApp(page, { waitForPalette: false });
@@ -2490,12 +2490,12 @@ ORIGIN
     app.form.legend = 'left';
     app.adv.comparison_height = 37;
     // The first palette write of the reset throws once, then the ref behaves normally again.
-    const accessor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(state.selectedPalette), 'value');
-    Object.defineProperty(state.selectedPalette, 'value', {
+    const accessor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(state.activeDrawing().selectedPalette), 'value');
+    Object.defineProperty(state.activeDrawing().selectedPalette, 'value', {
       configurable: true,
       get() { return accessor.get.call(this); },
       set() {
-        delete state.selectedPalette.value;
+        delete state.activeDrawing().selectedPalette.value;
         throw new Error('Injected session commit failure');
       }
     });

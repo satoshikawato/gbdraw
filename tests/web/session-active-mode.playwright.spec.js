@@ -78,7 +78,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     await window.__GBDRAW_HISTORY__.runUndoable('Pending Linear scale size', () => {
-      state.adv.scale_font_size = 19;
+      state.activeDrawing().adv.scale_font_size = 19;
     });
     state.featurePanelTab.value = 'labels';
   });
@@ -172,9 +172,9 @@ test('each mode keeps its own title and fonts while missing Linear layout starts
     const { state } = await import('./js/state.js');
     const size = value => (value === null || value === undefined || value === '' ? null : Number(value));
     return {
-      title: state.form.plot_title, titleFont: size(state.adv.plot_title_font_size),
-      definitionFont: size(state.adv.def_font_size),
-      rows: state.linearRecordLayoutEnabled.value, replicon: state.adv.linear_show_replicon
+      title: state.activeDrawing().form.plot_title, titleFont: size(state.activeDrawing().adv.plot_title_font_size),
+      definitionFont: size(state.activeDrawing().adv.def_font_size),
+      rows: state.activeDrawing().linearRecordLayoutEnabled.value, replicon: state.activeDrawing().adv.linear_show_replicon
     };
   });
   const circular = await draft(page);

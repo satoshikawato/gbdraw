@@ -100,7 +100,7 @@ const draftRows = (page) => page.evaluate(async () => {
   const { getCommittedCanonicalRenderRequest } = await import('/gbdraw/web/js/services/config.js');
   const { state } = await import('/gbdraw/web/js/state.js');
   const keys = getCommittedCanonicalRenderRequest().records.map((record) => record.recordKey);
-  return Object.values(state.featureOverrides).map((row) => [keys.indexOf(row.recordKey) + 1,
+  return Object.values(state.activeDrawing().featureOverrides).map((row) => [keys.indexOf(row.recordKey) + 1,
     row.biologicalFeatureId, row.featureVisibility, row.labelVisibility, row.labelText]).sort();
 });
 

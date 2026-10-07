@@ -35,8 +35,8 @@ test('source-free Save emits no render metadata and preserves valid raw scalar d
   assert.deepEqual(buildConfigData(state.activeDrawing()), freshConfig);
   assert.equal(adoptCurrentSessionDocument(fresh, SESSION_VERSION).canonical, null);
 
-  state.adv.circular_track_slots_enabled = true;
-  state.adv.circular_track_slots.splice(0, state.adv.circular_track_slots.length, {
+  state.activeDrawing().adv.circular_track_slots_enabled = true;
+  state.activeDrawing().adv.circular_track_slots.splice(0, state.activeDrawing().adv.circular_track_slots.length, {
     id: 'features', renderer: 'features', enabled: true, side: 'inside',
     width: { value: '1.', unit: 'px' }, radius: { value: '1e-3', unit: 'factor' },
     inner_gap_px: null, outer_gap_px: null, z: 0, params: { lane_direction: 'inside' }
@@ -53,9 +53,9 @@ test('source-free Save emits no render metadata and preserves valid raw scalar d
   const forbiddenMetadata = structuredClone(saved);
   forbiddenMetadata.runMetadata = { annotationWarnings: [] };
   assert.throws(() => adoptCurrentSessionDocument(forbiddenMetadata, SESSION_VERSION), /committed render artifacts/);
-  state.adv.circular_track_slots[0].width = { value: '1e', unit: 'px' };
+  state.activeDrawing().adv.circular_track_slots[0].width = { value: '1e', unit: 'px' };
   await assert.rejects(exportSession('unfinished settings'), /width|positive|scalar/i);
-  assert.deepEqual(state.adv.circular_track_slots[0].width, { value: '1e', unit: 'px' });
+  assert.deepEqual(state.activeDrawing().adv.circular_track_slots[0].width, { value: '1e', unit: 'px' });
 });
 
 const { writeCircularMeasureValue, changeCircularMeasureUnit } = await import(
@@ -76,7 +76,7 @@ test('current gzip writer/admission keeps S00 valid scalars and codec drafts, in
   );
   for (const [mode, enabled] of [['circular', true], ['circular', false], ['linear', false]]) {
     state.mode.value = mode;
-    const slot = state.adv.circular_track_slots[0];
+    const slot = state.activeDrawing().adv.circular_track_slots[0];
     slot.enabled = enabled;
     for (const [index, [scalar, expected]] of cases.entries()) {
       slot.width = structuredClone(scalar);
@@ -101,7 +101,7 @@ test('current gzip writer/admission keeps S00 valid scalars and codec drafts, in
 
 test('writer and current admission reject invalid scalar drafts without altering them', async () => {
   state.mode.value = 'circular';
-  const slot = state.adv.circular_track_slots[0];
+  const slot = state.activeDrawing().adv.circular_track_slots[0];
   slot.enabled = true;
   slot.width = writeCircularMeasureValue('1.', 'px');
   slot.radius = null;

@@ -105,7 +105,7 @@ for (const composite of [false, true]) {
           source: { name: state.files.c_gb.name, size: state.files.c_gb.size,
             components: binding?.descriptors?.map((part) => part.resourceId) || [] },
           form: config.buildConfigData(state.activeDrawing()).form, geometry: state.trackSlotResolvedGeometry.value,
-          catalog: state.featureCatalog.value, placements: state.featurePlacementOverrides };
+          catalog: state.featureCatalog.value, placements: state.activeDrawing().featurePlacementOverrides };
       });
       await fs.writeFile(testInfo.outputPath(`${stage}.json`), JSON.stringify({ selected, enabled, ...state }, null, 2));
       return { ...state, recordOrder: selected.map((feature) => [feature.record_key, feature.record_id]) };

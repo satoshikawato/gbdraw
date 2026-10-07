@@ -83,7 +83,7 @@ const label = async (page, text) => {
   // Apply records the text and, for a feature the Result leaves unlabeled,
   // opens Label Not Shown in the same step.
   await expect.poll(async () => Object.values(await page.evaluate(async () =>
-    (await import('./js/state.js')).state.featureOverrides)).map((row) => row.labelText)).toContain(text);
+    (await import('./js/state.js')).state.activeDrawing().featureOverrides)).map((row) => row.labelText)).toContain(text);
   await page.evaluate(() => window.Vue.nextTick());
   if (await page.getByRole('heading', { name: 'Label Not Shown', exact: true }).isVisible()) {
     await page.getByRole('button', { name: /Show this label/ }).click();

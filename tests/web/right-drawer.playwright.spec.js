@@ -1314,13 +1314,13 @@ test('similarity-group rows update every displayed field and retain current clic
   await expect(row('s05_row_1')).toContainText('2 records');
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
-    state.orthogroupNameOverrides.s05_row_1 = 'Renamed group';
+    state.activeDrawing().orthogroupNameOverrides.s05_row_1 = 'Renamed group';
   });
   await expect(row('s05_row_1')).toContainText('Renamed group');
   await expect(row('s05_row_1')).toContainText('Edited');
   await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
-    delete state.orthogroupNameOverrides.s05_row_1;
+    delete state.activeDrawing().orthogroupNameOverrides.s05_row_1;
     state.orthogroups.value[0].member_count = 0;
     state.orthogroups.value[0].members.push({});
   });

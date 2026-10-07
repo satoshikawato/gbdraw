@@ -14,10 +14,10 @@ const visibleRuleColor = (page, color = '#ff0000') => page.evaluate(color => {
 const edit = (page, label, action) => page.evaluate(async ({ label, action }) => {
   const { state } = await import('./js/state.js');
   await window.__GBDRAW_HISTORY__.runUndoable(label, () => {
-    if (action === 'scale') state.adv.scale_interval = 12345;
-    if (action === 'scaleAgain') state.adv.scale_interval = 23456;
-    if (action === 'color') state.manualSpecificRules[0].color = '#ff0000';
-    if (action === 'predicate') state.manualSpecificRules[0].val = 'psaA_NO_MATCH';
+    if (action === 'scale') state.activeDrawing().adv.scale_interval = 12345;
+    if (action === 'scaleAgain') state.activeDrawing().adv.scale_interval = 23456;
+    if (action === 'color') state.activeDrawing().manualSpecificRules[0].color = '#ff0000';
+    if (action === 'predicate') state.activeDrawing().manualSpecificRules[0].val = 'psaA_NO_MATCH';
   });
 }, { label, action });
 

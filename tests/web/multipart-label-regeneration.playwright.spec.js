@@ -62,9 +62,9 @@ for (const [name, gene, action] of cases) {
     }, gene);
     const overrides = () => page.evaluate(async () => {
       const { state } = await import('./js/state.js');
-      const labels = Object.fromEntries(Object.entries(state.featureOverrides)
+      const labels = Object.fromEntries(Object.entries(state.activeDrawing().featureOverrides)
         .filter(([, row]) => row.labelText !== null).map(([key, row]) => [key, row.labelText]));
-      return JSON.parse(JSON.stringify({ labels, placements: state.featurePlacementOverrides }));
+      return JSON.parse(JSON.stringify({ labels, placements: state.activeDrawing().featurePlacementOverrides }));
     });
     const semantic = (content) => page.evaluate((content) => {
       const svg = new DOMParser().parseFromString(content, 'image/svg+xml');

@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { createLinearTypographyController } from '../../gbdraw/web/js/app/linear-typography.js';
 import { reconcileImportedLinearTypographyLink } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 import { createAutoValueDisplay } from '../../gbdraw/web/js/app/auto-value-display.js';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
-const autoValues = createAutoValueDisplay({
+const autoValues = createAutoValueDisplay(withDrawings({
   mode: { value: 'linear' },
   form: { scale_style: 'ruler' },
   adv: {}
-});
+}));
 assert.equal(autoValues.autoValueText('scaleFontSize'), '24/16 px (s/l auto)');
 assert.equal(autoValues.autoValueText('rulerLabelFontSize'), '20/12 px (s/l auto)');
 
