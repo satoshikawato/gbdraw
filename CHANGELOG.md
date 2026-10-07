@@ -12,6 +12,14 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Legend editor (web app): every Legend edit (adding, removing, renaming, or moving a
+  row, Sort, a side change, Undo and Redo) lays the Legend out as Python does, with the
+  same text measurement and the font, size, and wrap width the diagram was drawn with,
+  so the Legend and the canvas you see equal those of the next Generate, in Linear and
+  Circular. Before, the web app used its own layout: rows could overlap after an edit
+  (for example an added row and a renamed row in Circular), Generate could move rows
+  and change the canvas size, and in Linear a renamed row that was not the last one
+  moved at Generate.
 - Legend editor (web app): Reset Stroke, Reset all strokes, and the **Auto** stroke
   color give each feature the stroke Generate draws when the diagram has an automatic
   underlay (for example `repeat_region` in Circular), and Reset all strokes returns
