@@ -5,9 +5,10 @@ read by this file and by a node test against ``splitDraftIntoModes``. A case
 holds a ``fixture`` (a Session 27-44 in the repository) or an ``input`` (an
 inline Session 27-44, or a flat draft after the OV-102, OV-114 and OV-132
 normalizers), the split ``context``, and JSON pointers into the Session 46
-result: ``expect`` (pointer -> value) and ``expectAbsent``. A case may also
-hold ``expectedModes``, the JavaScript split's two slices, which the Python
-slices must equal.
+result: ``expect`` (pointer -> value) and ``expectAbsent``. A fixture case may
+``omit`` top-level fields of the fixture. A case may also hold
+``expectedModes``, the JavaScript split's two slices, which the Python slices
+must equal.
 
 The split writes only migrated values; a value missing from a slice is that
 mode's default. The expected values assume complete slices, so a missing
@@ -108,6 +109,10 @@ def _read_fixture(path: str) -> dict[str, Any]:
 def _split_case(case: dict[str, Any]) -> dict[str, Any]:
     context = case["context"]
     source = _read_fixture(case["fixture"]) if "fixture" in case else json.loads(json.dumps(case["input"]))
+    # A case may remove top-level fields of its fixture (a config-less Session).
+    for pointer in case.get("omit", []):
+        assert pointer.count("/") == 1, pointer
+        source.pop(pointer[1:])
     if source.get("format") == "gbdraw-session":
         # A whole Session: the CLI's own context and migrations, then the split.
         session = expand_session_feature_catalog(source)
