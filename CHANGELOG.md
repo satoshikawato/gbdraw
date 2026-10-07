@@ -12,6 +12,10 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Feature strokes (web app): a stroke set on one feature in the feature popup is no
+  longer lost when Generate draws a Result without that feature, such as a Generate
+  in the other mode (Circular or Linear). The stroke stays in the draft and in a
+  saved Session, and the next Generate that draws the feature draws it again.
 - CLI: `gbdraw circular|linear --session <file> --session_output out.json` (and
   `--save_session`) keeps the resource IDs and file names of the Session's unchanged
   inputs. Before, the rewritten Session renamed them to positional IDs such as

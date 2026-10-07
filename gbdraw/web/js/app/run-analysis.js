@@ -4890,11 +4890,9 @@ export const createRunAnalysis = ({
         featureColorOverrides,
         cloneJsonValue(candidateCommit.featureColorOverrides, {})
       );
-      Object.keys(featureStrokeOverrides).forEach((key) => delete featureStrokeOverrides[key]);
-      Object.assign(
-        featureStrokeOverrides,
-        cloneJsonValue(candidateCommit.featureStrokeOverrides, {})
-      );
+      // Feature strokes stay in the draft when this Result does not draw their
+      // feature (the other mode's, or one this request leaves out); the next
+      // Generate that draws the feature draws them again (R2, OIPC-C06, OV-84).
       setFeatureEditorStatus({
         status: candidateExtractedFeatures.length ? 'summary-ready' : 'idle',
         generationId: featureExtractionRequestId,
