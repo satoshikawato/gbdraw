@@ -224,9 +224,10 @@ const identitiesWithHash = (index, hash) => {
   return index.byHash.get(hash) || new Set();
 };
 
-const FEATURE_VISIBILITY_MODES = Object.freeze({
-  on: 'on', off: 'off', exclude_matching: 'exclude_matching', suppress: 'exclude_matching'
-});
+// Maps, so a saved value such as `constructor` names no mode (OV-134).
+const FEATURE_VISIBILITY_MODES = new Map([
+  ['on', 'on'], ['off', 'off'], ['exclude_matching', 'exclude_matching'], ['suppress', 'exclude_matching']
+]);
 
 /**
  * @param {unknown} features
@@ -291,7 +292,7 @@ export const migrateRenderedIdFeatureEdits = ({ features, mode, catalog = null, 
     });
   };
   migrateMap('featureVisibilityOverrides', (row, value) => {
-    const mode = FEATURE_VISIBILITY_MODES[text(value).toLowerCase()];
+    const mode = FEATURE_VISIBILITY_MODES.get(text(value).toLowerCase());
     if (!mode) return false;
     row.featureVisibility ??= mode;
     return true;
@@ -437,7 +438,7 @@ export const migrateSessionAnnotationTargets = ({ annotationSets, mode, catalog 
   return { annotationSets: migratedCount > 0 ? migratedSets : annotationSets, migratedCount };
 };
 
-const LANE_MODES = Object.freeze({ outward: 'circular', inward: 'circular', above: 'linear', below: 'linear' });
+const LANE_MODES = new Map([['outward', 'circular'], ['inward', 'circular'], ['above', 'linear'], ['below', 'linear']]);
 
 /**
  * The Session 45 Feature placement drafts of a Session 41-44 draft keyed by
@@ -450,17 +451,18 @@ const LANE_MODES = Object.freeze({ outward: 'circular', inward: 'circular', abov
  */
 export const migrateSessionFeaturePlacements = (placements) => {
   if (!isObject(placements)) return placements;
-  /** @type {Record<string, any>} */
-  const migrated = {};
+  // Entries, so a saved key such as `__proto__` stays a row of the draft.
+  /** @type {Array<[string, any]>} */
+  const migrated = [];
   Object.entries(placements).forEach(([key, row]) => {
     const target = row?.placement;
     const modes = key === JSON.stringify([row?.recordKey, row?.biologicalFeatureId])
-      ? target?.kind === 'main' ? ['circular', 'linear'] : [LANE_MODES[target?.side]].filter(Boolean) : [];
-    if (modes.length === 0) migrated[key] = row;
+      ? target?.kind === 'main' ? ['circular', 'linear'] : [LANE_MODES.get(target?.side)].filter(Boolean) : [];
+    if (modes.length === 0) migrated.push([key, row]);
     modes.forEach((scope) => {
       const scoped = { scope, ...row };
-      migrated[featureIdentityKeyOf(scoped) || key] = scoped;
+      migrated.push([featureIdentityKeyOf(scoped) || key, scoped]);
     });
   });
-  return migrated;
+  return Object.fromEntries(migrated);
 };
