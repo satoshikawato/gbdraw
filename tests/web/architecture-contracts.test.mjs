@@ -386,7 +386,6 @@ test('Worker construction and the diagram-generation client have explicit owners
     [
       'app/app-setup.js',
       'app/feature-metadata-extraction.js',
-      'app/legend/entry-actions.js',
       'app/record-discovery.js',
       'app/run-analysis.js'
     ].map(atCurrentPath),

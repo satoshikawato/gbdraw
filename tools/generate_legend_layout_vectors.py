@@ -285,6 +285,15 @@ def build_inputs() -> dict[str, Any]:
                     "text": caption, "fontFamily": family, "fontFile": _font_file(family),
                     "fontSize": size, "dpi": DPI,
                 })
+    # A Result laid out at another dpi (`legendReflow.dpi`) measures its rows,
+    # an added row too, at that dpi.
+    for dpi in (72, 150):
+        for caption in ("Added legend entry", "GC skew (+)", "To Ty Ye"):
+            family = MEASUREMENT_FAMILIES[0]
+            measurement.append({
+                "text": caption, "fontFamily": family, "fontFile": _font_file(family),
+                "fontSize": 20.0, "dpi": dpi,
+            })
     return {"overlayPolicy": OVERLAY_POLICY, "measurement": measurement, "layout": layout}
 
 

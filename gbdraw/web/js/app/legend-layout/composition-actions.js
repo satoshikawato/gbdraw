@@ -343,10 +343,21 @@ const toPayloadBounds = (box) => ({
   x: box.minX, y: box.minY, width: box.maxX - box.minX, height: box.maxY - box.minY
 });
 
+/**
+ * Replan the composition. A `legendBox` (min/max, as the Legend layout port
+ * returns it) takes precedence over `legendBounds`, so the planner reads the
+ * Legend's bounds exactly as Python holds them.
+ * @param {{
+ *   primaryBounds: any, legendBounds?: any, titleBounds?: any,
+ *   legendBox?: import('../../services/legend-layout.js').LayoutBox | null,
+ *   legendSide?: string, titleSide?: string, spacing: any, overlayPolicy: any, overlayObstacles?: any[]
+ * }} request
+ */
 export const planComposition = ({
   primaryBounds,
   legendBounds = null,
   titleBounds = null,
+  legendBox = null,
   legendSide = 'none',
   titleSide = 'none',
   spacing,
@@ -359,11 +370,18 @@ export const planComposition = ({
   const resolvedSpacing = validateSpacing(spacing);
   const resolvedOverlayPolicy = validateOverlayPolicy(overlayPolicy);
   const obstacles = overlayObstacles.map((bounds, index) => validateBounds(bounds, `overlayObstacles[${index}]`));
-  const legend = legendBounds && legendSide !== 'none' ? validateBounds(legendBounds, 'legendBounds') : null;
+  /** @type {import('../../services/legend-layout.js').LayoutBox | null} */
+  let legend = null;
+  if (legendSide !== 'none' && legendBox) {
+    validateBounds(toPayloadBounds(legendBox), 'legendBox');
+    legend = legendBox;
+  } else if (legendSide !== 'none' && legendBounds) {
+    legend = toBox(validateBounds(legendBounds, 'legendBounds'));
+  }
   const title = titleBounds && titleSide !== 'none' ? validateBounds(titleBounds, 'titleBounds') : null;
   const plan = planLegendComposition({
     primary: toBox(primary),
-    legend: legend ? toBox(legend) : null,
+    legend,
     title: title ? toBox(title) : null,
     legendSide,
     titleSide,
@@ -397,6 +415,7 @@ export const replanCompositionMetadata = (
     legendSide = metadata.legendSide,
     titleSide = metadata.titleSide,
     legendLocalBounds = metadata.legend?.localBounds || null,
+    legendLocalBox = null,
     titleLocalBounds = metadata.title?.localBounds || null
   } = {}
 ) => {
@@ -409,6 +428,7 @@ export const replanCompositionMetadata = (
   return planComposition({
     primaryBounds: localPrimaryBounds(metadata),
     legendBounds: legendLocalBounds,
+    legendBox: legendLocalBox,
     titleBounds: titleLocalBounds,
     legendSide,
     titleSide,
@@ -613,16 +633,21 @@ export const applyCompositionEdit = (svg, options = {}) => {
   const titleSide = options.titleSide ?? metadata.titleSide;
   const legendTarget = binding.legend.targets[0] || null;
   const titleTarget = binding.title.targets[0] || null;
-  const legendLocalBounds = options.legendLocalBounds ?? (
-    legendTarget && legendSide !== 'none'
-      ? measureCompositionTargetLocalBounds(legendTarget)
-      : metadata.legend?.localBounds || null
+  // The Legend and title bounds are Python's (the metadata), or the Legend
+  // layout port's after a Legend edit (`legendLocalBox`), never the browser's
+  // text extents, so a composition edit docks them where Python would. Only a
+  // legacy Session's normalized metadata is measured on the mounted SVG.
+  /** @param {Element | null} target @param {string} side @param {any} recorded */
+  const localBoundsOf = (target, side, recorded) => (
+    metadata.legacyNormalized && target && side !== 'none'
+      ? measureCompositionTargetLocalBounds(target)
+      : recorded || null
   );
-  const titleLocalBounds = options.titleLocalBounds ?? (
-    titleTarget && titleSide !== 'none'
-      ? measureCompositionTargetLocalBounds(titleTarget)
-      : metadata.title?.localBounds || null
-  );
+  const legendLocalBox = options.legendLocalBox ?? null;
+  const legendLocalBounds = options.legendLocalBounds
+    ?? (legendLocalBox ? toPayloadBounds(legendLocalBox) : localBoundsOf(legendTarget, legendSide, metadata.legend?.localBounds));
+  const titleLocalBounds = options.titleLocalBounds
+    ?? localBoundsOf(titleTarget, titleSide, metadata.title?.localBounds);
   // Legacy sessions are admitted while detached, where browser geometry APIs
   // return empty boxes. Their renderer-authored canvas geometry is sufficient
   // for a safe, layout-neutral import. The first explicit layout edit happens
@@ -643,6 +668,7 @@ export const applyCompositionEdit = (svg, options = {}) => {
     legendSide,
     titleSide,
     legendLocalBounds,
+    legendLocalBox,
     titleLocalBounds
   });
   const primaryPlacement = plan.placements.primary;

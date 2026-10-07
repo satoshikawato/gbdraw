@@ -1358,8 +1358,7 @@ export const createAppSetup = () => {
     beginHistoryTransaction: history.begin,
     commitHistoryTransaction: history.commit,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
-    readActiveResultIdentity: () => previewRuntime.getActiveRuntime()?.resultIdentity,
-    getCommittedRequest: getCommittedCanonicalRenderRequest
+    readActiveResultIdentity: () => previewRuntime.getActiveRuntime()?.resultIdentity
   });
   // History captures register once their owner exists (R13).
   historySnapshots.registerCapture('legend', legendActions.captureLegendEntryOwners);
@@ -1408,7 +1407,6 @@ export const createAppSetup = () => {
     isPatternEditAvailable: () => !sessionImportPending.value,
     nextTick,
     prepareFileLegendEntries: /** @type {any} */ (legendActions.prepareFileLegendEntries),
-    compactLegendEntries: legendActions.compactLegendEntries,
     extractLegendEntries: legendActions.extractLegendEntries,
     onLegendGeometryChanged: legendActions.onLegendGeometryChanged,
     featureSelection,
@@ -2398,8 +2396,7 @@ export const createAppSetup = () => {
   };
   const legendLayout = createLegendLayout({
     state,
-    reflowDualLegendLayout: legendActions.reflowDualLegendLayout,
-    reflowSingleLegendLayout: legendActions.reflowSingleLegendLayout,
+    layOutLegend: legendActions.layOutLegend,
     beginHistoryTransaction: history.begin,
     commitHistoryTransaction: history.commit,
     previewRuntime,
@@ -2426,6 +2423,14 @@ export const createAppSetup = () => {
   );
   previewRuntime.configureMountedResultBinder({
     async adoptLegend(context) {
+      // The Legend layout port (zero shift) reads the bundled-font metrics;
+      // they load with the first Result that has a Legend, so the Legend
+      // edits, which lay the Legend out synchronously, find them loaded.
+      if (context.root.getElementById?.('legend')) {
+        await legendActions.prepareLegendLayout().catch((error) => {
+          console.error('The Legend layout could not load its font metrics.', normalizeUserFacingError(error));
+        });
+      }
       // OV-47: each Result has its own default Legend order. A Result being
       // displayed is read before its editor intent is projected; it then shows
       // its own inventory, so a Generate or rerender made while another Result
@@ -2446,10 +2451,14 @@ export const createAppSetup = () => {
         legendActions.adoptResultInventory(context.resultIdentity, { restored: true });
         return;
       }
-      // OV-122, OV-124: a generated or newly displayed Result shows the rows
-      // added and deleted in the Legend editor with the live layout before its
-      // entries are read.
-      if (!context.bindingOptions.isIncrementalEdit && shouldBindComposition(context)) {
+      // A Result that Generate, a rerender, or a record transform drew, or a
+      // batch Result being displayed, shows the Legend edits laid out as
+      // Python lays the edited rows out, before its entries are read (zero
+      // shift; OV-122, OV-124, OV-126). A loaded Session shows its saved bytes.
+      if (
+        context.phase !== 'session-load' && context.phase !== 'passive-preview'
+        && context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
+      ) {
         legendActions.layOutMountedLegendEdits(context.root);
       }
       if (context.bindingOptions.skipLegendExtraction) return;
@@ -3053,7 +3062,7 @@ export const createAppSetup = () => {
       await projectMountedEditorIntent({ colors, visibility });
       const legendChanged = legendActions.prepareDisplayedResultLegend(context.root, legend);
       previewRuntime.applyEditorOperations(hasOperations ? operations : null, {
-        afterApply: (root) => { if (legendChanged) legendActions.compactLegendEntries(root); }
+        afterApply: () => { if (legendChanged) legendActions.onLegendGeometryChanged(); }
       });
       projectedEditorStateByResult.set(identity, current);
     } catch (error) {

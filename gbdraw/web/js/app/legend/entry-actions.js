@@ -1,5 +1,4 @@
 // @ts-check
-import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { resolveColorToHex, toNativeColorInputValue } from '../../utils/color-utils.js';
 import {
   defaultLegendCaptionOrder,
@@ -15,10 +14,6 @@ import {
   diffLegendIntents,
   SPECIFIC_COLOR_FILE_OWNER
 } from '../../services/specific-color-rules.js';
-import {
-  DIAGRAM_HELPER_OPERATIONS,
-  runDiagramHelperOperation
-} from '../../services/diagram-generation.js';
 
 const normalizedColor = (value) => {
   const resolved = String(resolveColorToHex(String(value || '').trim()) || value || '').trim().toLowerCase();
@@ -60,29 +55,17 @@ const setLegendEntryColor = (entryGroup, color) => {
 /**
  * @typedef {object} LegendEntryActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(svg: SVGSVGElement) => void} updatePairwiseLegendPositions
- *   The Legend layout owner's reflow of a pairwise (comparison) Legend.
- * @property {(svg: SVGSVGElement) => void} reflowDualLegendLayout
- *   The Legend layout owner's reflow of a diagram with a horizontal and a vertical Legend.
- * @property {(svg: SVGSVGElement) => void} compactLegendEntries
- *   The Legend layout owner's removal of gaps between the entries.
  * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
  * @property {(() => string | undefined) | null} [readActiveResultIdentity]
  *   The preview owner's runtime identity of the mounted Result.
- * @property {() => ({ diagramOptions?: Record<string, any> } | null)} [getCommittedRequest]
- *   The committed canonical request (Python owns the option fields, R7).
  */
 
 /** @param {LegendEntryActionsOptions} options */
 export const createLegendEntryActions = ({
   state,
-  updatePairwiseLegendPositions,
-  reflowDualLegendLayout,
-  compactLegendEntries,
   commitActiveResultEdit = null,
-  readActiveResultIdentity = null,
-  getCommittedRequest = () => null
+  readActiveResultIdentity = null
 }) => {
   const {
     results,
@@ -247,9 +230,7 @@ export const createLegendEntryActions = ({
 
     const svg = options.svg || svgContainer.value.querySelector('svg');
     if (!svg) return false;
-    const composition = parseCompositionMetadata(svg);
-    const reflowMetrics = composition.legendReflow;
-    if (!reflowMetrics) {
+    if (!parseCompositionMetadata(svg).legendReflow) {
       throw new Error('This diagram has no legend reflow metadata. Regenerate it before editing the legend.');
     }
 
@@ -307,188 +288,45 @@ export const createLegendEntryActions = ({
 
     caption = finalCaption;
 
-    const {
-      colorRectSize: rectSize,
-      lineHeight: lineMargin,
-      textXOffset: xMargin
-    } = reflowMetrics;
-
-    let fontSize = 14;
-    let fontFamily = 'Arial';
-    const firstText = targetGroup.querySelector('text');
-    if (firstText) {
-      const fs = firstText.getAttribute('font-size');
-      if (fs) fontSize = parseFloat(fs);
-      const ff = firstText.getAttribute('font-family');
-      if (ff) fontFamily = ff;
-    }
-
+    // The row is a copy of the Legend's first row as the renderer drew it, as
+    // Generate copies it (services/svg-result-ingestion.js, OV-86, OV-121),
+    // appended last; the layout owner then places every row as Python lays
+    // out these rows (zero shift).
     const templateStroke = templateRowStroke(targetGroup);
-    const strokeColor = String(templateStroke.color || '').trim() || 'none';
-    const templateWidth = Number.parseFloat(String(templateStroke.width ?? ''));
-    const strokeWidth = Number.isFinite(templateWidth) ? templateWidth : 0.5;
-
-    try {
-      const parser = new DOMParser();
-
-      // Python lays the legend out at the DPI its config resolves to, so the
-      // measurement uses the committed request the displayed Result came from.
-      const committedOptions = getCommittedRequest()?.diagramOptions || {};
-      const widthResponse = await runDiagramHelperOperation(
-        DIAGRAM_HELPER_OPERATIONS.MEASURE_LEGEND_TEXT,
-        {
-          caption,
-          fontFamily,
-          fontSize,
-          config: committedOptions.config ?? null,
-          configOverrides: committedOptions.configOverrides ?? {}
-        }
-      );
-      if (widthResponse.result?.error) throw widthResponse.result.error;
-      const measuredWidth = Number(widthResponse.result?.width);
-      if (!Number.isFinite(measuredWidth) || measuredWidth < 0) {
-        throw new Error('Python returned an invalid legend text width.');
+    /** @type {Element[]} */
+    const added = [];
+    for (const group of allTargetGroups) {
+      const template = directLegendEntryGroups(group)[0];
+      const entryGroup = /** @type {Element | null} */ (template?.cloneNode?.(true) || null);
+      const swatch = getLegendEntrySwatch(entryGroup);
+      if (!entryGroup || !swatch) {
+        added.forEach((entry) => entry.remove());
+        console.error('Failed to add legend entry: the Legend has no row to copy.');
+        if (options.throwOnError) throw new Error('The Legend has no row to copy for a new entry.');
+        return false;
       }
-      const entryWidth = rectSize + xMargin + measuredWidth + xMargin;
-      const canvasWidth = composition.primary.finalBounds.width;
-
-      for (const group of allTargetGroups) {
-        const parentId = group.parentElement?.id || '';
-        const isHorizontalGroup = parentId === 'legend_horizontal';
-
-        let newX = 0,
-          newY = 0;
-
-        if (isHorizontalGroup) {
-          const featureLegendMaxWidth = canvasWidth;
-
-          let maxY = rectSize / 2;
-          let maxXOnMaxY = 0;
-          let lastEntryRightEdge = 0;
-
-          const groupTextElements = group.querySelectorAll('text');
-          groupTextElements.forEach((el) => {
-            const pos = parseTransformXY(el.getAttribute('transform'));
-            if (pos.y > maxY) {
-              maxY = pos.y;
-              maxXOnMaxY = pos.x;
-              const textBBox = el.getBBox();
-              lastEntryRightEdge = pos.x + textBBox.width + xMargin;
-            } else if (Math.abs(pos.y - maxY) < 1) {
-              if (pos.x > maxXOnMaxY) {
-                maxXOnMaxY = pos.x;
-                const textBBox = el.getBBox();
-                lastEntryRightEdge = pos.x + textBBox.width + xMargin;
-              }
-            }
-          });
-
-          if (groupTextElements.length === 0) {
-            const colorRects = group.querySelectorAll('path');
-            colorRects.forEach((el) => {
-              const fill = el.getAttribute('fill');
-              if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-                const pos = parseTransformXY(el.getAttribute('transform'));
-                if (pos.y > maxY) {
-                  maxY = pos.y;
-                  maxXOnMaxY = pos.x;
-                  lastEntryRightEdge = pos.x + rectSize + xMargin;
-                } else if (Math.abs(pos.y - maxY) < 1) {
-                  if (pos.x > maxXOnMaxY) {
-                    maxXOnMaxY = pos.x + rectSize;
-                    lastEntryRightEdge = pos.x + rectSize + xMargin;
-                  }
-                }
-              }
-            });
-          }
-
-          let nextX = groupTextElements.length > 0 ? lastEntryRightEdge : 0;
-
-          if (nextX + entryWidth > featureLegendMaxWidth && nextX > 0) {
-            newX = 0;
-            newY = maxY + lineMargin;
-          } else {
-            newX = nextX;
-            newY = maxY;
-          }
-        } else {
-          let groupMaxY = -lineMargin;
-          const groupTextElements = group.querySelectorAll('text');
-          groupTextElements.forEach((el) => {
-            const pos = parseTransformXY(el.getAttribute('transform'));
-            if (pos.y > groupMaxY) groupMaxY = pos.y;
-          });
-
-          if (groupTextElements.length === 0) {
-            const colorRects = group.querySelectorAll('path');
-            colorRects.forEach((el) => {
-              const fill = el.getAttribute('fill');
-              if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-                const pos = parseTransformXY(el.getAttribute('transform'));
-                if (pos.y > groupMaxY) groupMaxY = pos.y;
-              }
-            });
-          }
-
-          newX = 0;
-          newY = groupMaxY + lineMargin;
-        }
-
-        const entryResponse = await runDiagramHelperOperation(
-          DIAGRAM_HELPER_OPERATIONS.GENERATE_LEGEND_ENTRY_SVG,
-          {
-            caption,
-            color,
-            yOffset: newY,
-            rectSize,
-            fontSize,
-            fontFamily,
-            xOffset: newX,
-            strokeColor,
-            strokeWidth
-          }
-        );
-        const result = entryResponse.result;
-        if (result?.error) throw result.error;
-
-        const entryGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        entryGroup.setAttribute('data-legend-key', caption);
-        if (owner) entryGroup.setAttribute('data-legend-owner', owner);
-
-        const rectDoc = parser.parseFromString(
-          `<svg xmlns="http://www.w3.org/2000/svg">${result.rect}</svg>`,
-          'image/svg+xml'
-        );
-        const rectEl = rectDoc.querySelector('path');
-        if (rectEl) {
-          entryGroup.appendChild(document.importNode(rectEl, true));
-        }
-
-        const textDoc = parser.parseFromString(
-          `<svg xmlns="http://www.w3.org/2000/svg">${result.text}</svg>`,
-          'image/svg+xml'
-        );
-        const textEl = textDoc.querySelector('text');
-        if (textEl) {
-          entryGroup.appendChild(document.importNode(textEl, true));
-        }
-
-        group.appendChild(entryGroup);
-      }
-
-      if (shouldReflow) layOutAddedRows(svg);
-
-      if (shouldCommit) {
-        persistLegendReconciliation();
-      }
-
-      return caption;
-    } catch (e) {
-      console.error('Failed to add legend entry:', normalizeUserFacingError(e));
-      if (options.throwOnError) throw e;
-      return false;
+      entryGroup.removeAttribute('transform');
+      entryGroup.setAttribute('data-legend-key', caption);
+      if (owner) entryGroup.setAttribute('data-legend-owner', owner);
+      else entryGroup.removeAttribute('data-legend-owner');
+      const label = entryGroup.querySelector('text');
+      if (label) label.textContent = caption;
+      swatch.setAttribute('fill', color);
+      if (templateStroke.color === null) swatch.removeAttribute('stroke');
+      else swatch.setAttribute('stroke', String(templateStroke.color));
+      if (templateStroke.width === null) swatch.removeAttribute('stroke-width');
+      else swatch.setAttribute('stroke-width', String(templateStroke.width));
+      group.appendChild(entryGroup);
+      added.push(entryGroup);
     }
+
+    if (shouldReflow) onLegendGeometryChanged();
+
+    if (shouldCommit) {
+      persistLegendReconciliation();
+    }
+
+    return caption;
   };
 
   const updateLegendEntryColorByCaption = (caption, color, { commit = true } = {}) => {
@@ -567,7 +405,8 @@ export const createLegendEntryActions = ({
     });
 
     if (removed) {
-      compactLegendEntries(svg);
+      // The layout owner lays the remaining rows out as Python would (zero
+      // shift; OV-124) and docks the Legend.
       onLegendGeometryChanged();
 
       if (commit) persistLegendReconciliation();
@@ -592,53 +431,44 @@ export const createLegendEntryActions = ({
   // takes the caption order through `orderLegendEntries`. History restore, the
   // B19 projection, and live Sort and Move (the port app/legend.js gives
   // sort-actions) share it. Null when no Legend is mounted.
-  const orderMountedLegend = (captionOrder, { keepFollowed = false } = {}) => {
+  // `layOut: false` leaves the layout to a caller that lays the Legend out
+  // once after more changes.
+  const orderMountedLegend = (captionOrder, { keepFollowed = false, layOut = true } = {}) => {
     const targetGroups = getAllFeatureLegendGroups(svgContainer.value?.querySelector?.('svg'));
     if (targetGroups.length === 0) return null;
-    return targetGroups.reduce((changed, targetGroup) => (
-      orderLegendEntries(targetGroup, captionOrder, { keepFollowed }) || changed
+    const changed = targetGroups.reduce((moved, targetGroup) => (
+      orderLegendEntries(targetGroup, captionOrder, { keepFollowed }) || moved
     ), false);
+    // The rows in their new order take the places Python gives that order
+    // (zero shift), not the slots of the old order.
+    if (changed && layOut) onLegendGeometryChanged();
+    return changed;
   };
 
   const legendCaption = (entry) => String(entry?.caption || '').trim();
   const generatedCaption = (entry) => String(entry?.originalCaption || entry?.caption || '').trim();
 
-  const relayoutLegend = (svg) => {
-    const legendGroup = svg.getElementById('legend');
-    const hasDualLegends = Boolean(
-      legendGroup?.querySelector('#legend_horizontal') && legendGroup?.querySelector('#legend_vertical')
-    );
-    if (hasDualLegends) reflowDualLegendLayout(svg);
-    else updatePairwiseLegendPositions(svg);
-  };
-
-  // The layout of a Legend with a row added here: every row reflowed, then the
-  // Legend docked again by the layout owner.
+  // Whether the Legend editor changed the rows Python drew: an added row, a
+  // deleted row, a renamed row, or another order.
   /** @param {SVGSVGElement} svg */
-  const layOutAddedRows = (svg) => {
-    relayoutLegend(svg);
-    onLegendGeometryChanged();
-  };
+  const hasLegendRowEdits = (svg) => (
+    deletedLegendEntries.value.length > 0
+    || getAllFeatureLegendGroups(svg).some((group) => group.querySelector('g[data-legend-owner="direct-editor"]'))
+    || (legendEntries.value || []).some((entry) => entry?.originalCaption && entry.caption !== entry.originalCaption)
+    || isLegendOrderEdited(legendEntries.value || [], originalLegendOrder.value || [])
+  );
 
-  // Python lays out only the rows it draws. Generate and the display of a batch
-  // Result add the rows added here (services/svg-result-ingestion.js) at anchors
-  // read from the live layout, whose frame Python's layout does not share, and
-  // remove the rows deleted here without closing their gap. A mounted Result
-  // whose Legend the editor changed so receives the layout of the live add
-  // (OV-122) or, after a deletion, of the live delete (OV-124, PD-OI-066).
-  // Returns whether the Legend was laid out again.
+  // Python lays out only the rows it draws. Generate, a rerender, and the
+  // display of a batch Result apply the rows the editor added, deleted,
+  // renamed, and ordered (services/svg-result-ingestion.js), so a mounted
+  // Result with such edits is laid out by the layout owner as Python lays the
+  // edited rows out, as the live edit was (zero shift; OV-122, OV-124,
+  // OV-126, OV-127, PD-OI-066). Returns whether it was laid out again.
   /** @param {SVGSVGElement} svg */
   const layOutMountedLegendEdits = (svg) => {
-    const groups = getAllFeatureLegendGroups(svg);
-    if (groups.length === 0) return false;
-    if (deletedLegendEntries.value.length > 0) {
-      compactLegendEntries(svg);
-      onLegendGeometryChanged();
-      return true;
-    }
-    const added = groups.some((group) => group.querySelector('g[data-legend-owner="direct-editor"]'));
-    if (added) layOutAddedRows(svg);
-    return added;
+    if (getAllFeatureLegendGroups(svg).length === 0 || !hasLegendRowEdits(svg)) return false;
+    onLegendGeometryChanged();
+    return true;
   };
 
   // Whether a captured Legend list lists exactly the entries the mounted
@@ -657,7 +487,7 @@ export const createLegendEntryActions = ({
   // copied here and an entry only this Result draws is never removed; a
   // returning entry comes from this Result's retired entries or is a direct
   // addition. The Legend panel then lists this Result.
-  const projectLegendChange = (svg, targetGroups, restored, from, entryOwners) => {
+  const projectLegendChange = (targetGroups, restored, from, entryOwners) => {
     const captionMap = (list, key) => new Map(list.filter(legendCaption).map((entry) => [key(entry), entry]));
     const before = captionMap(from, legendCaption);
     const beforeByGenerated = captionMap(from, generatedCaption);
@@ -722,7 +552,6 @@ export const createLegendEntryActions = ({
         if (group && color && setLegendEntryColor(group, String(color))) changed = true;
       });
     });
-    if (removedEntry || returnedEntry) compactLegendEntries(svg);
     // A Result already in the order keeps its own entries' places (B18); a
     // returned entry takes its place in the order, and own entries follow. A
     // step that leaves the default order of the Result it was made on gives
@@ -739,11 +568,11 @@ export const createLegendEntryActions = ({
     const order = ownInventory?.length && restoresDefault
       ? defaultLegendCaptionOrder(restored, ownInventory)
       : [...after.keys()];
-    if ((orderChanged || returnedEntry) && orderMountedLegend(order, { keepFollowed: !returnedEntry })) {
+    if ((orderChanged || returnedEntry) && orderMountedLegend(order, { keepFollowed: !returnedEntry, layOut: false })) {
       changed = true;
     }
-    if (changed) {
-      relayoutLegend(svg);
+    if (changed || removedEntry || returnedEntry) {
+      onLegendGeometryChanged();
       persistLegendReconciliation();
     }
     extractLegendEntries();
@@ -762,7 +591,7 @@ export const createLegendEntryActions = ({
     const targetGroups = getAllFeatureLegendGroups(svg);
     if (targetGroups.length === 0) return false;
     if (results.value.length > 1 && Array.isArray(from) && !describesMountedLegend(svg, from)) {
-      return projectLegendChange(svg, targetGroups, legendEntries.value || [], from, entryOwners);
+      return projectLegendChange(targetGroups, legendEntries.value || [], from, entryOwners);
     }
 
     const desiredEntries = [];
@@ -860,12 +689,12 @@ export const createLegendEntryActions = ({
     });
     // The entries take the restored order in the Legend's slots, as live Sort
     // and Move place them.
-    if (orderMountedLegend(desiredEntries.map((entry) => entry.caption))) changed = true;
+    if (orderMountedLegend(desiredEntries.map((entry) => entry.caption), { layOut: false })) changed = true;
 
     if (entryColorStateChanged) legendEntries.value = desiredEntries;
     if (!changed) return entryColorStateChanged;
     restoredCaptions.forEach((caption) => retiredEntryTemplates.delete(caption));
-    relayoutLegend(svg);
+    onLegendGeometryChanged();
     persistLegendReconciliation();
     return true;
   };
@@ -882,7 +711,6 @@ export const createLegendEntryActions = ({
       return { diff: { add: [], update: [], remove: [], unchanged: [] }, isCurrent: () => true, apply: () => {} };
     }
 
-    let measurementHost;
     const provenance = new Map();
     for (const entry of previousFileIntents) {
       const caption = String(entry?.caption || '').trim();
@@ -890,101 +718,89 @@ export const createLegendEntryActions = ({
       provenance.get(caption).add(normalizedColor(entry?.color));
     }
 
-    try {
-      const desiredByCaption = new Map(intents.map((intent) => [intent.caption, normalizedColor(intent.color)]));
-      targetGroups.forEach((group) => {
-        Array.from(group.querySelectorAll('g[data-legend-key]')).forEach((entry) => {
-          const caption = entry.getAttribute('data-legend-key') || '';
-          if (
-            !entry.hasAttribute('data-legend-owner') &&
-            provenance.get(caption)?.has(legendEntryColor(entry))
-          ) {
-            entry.setAttribute('data-legend-owner', SPECIFIC_COLOR_FILE_OWNER);
-          }
-        });
+    const desiredByCaption = new Map(intents.map((intent) => [intent.caption, normalizedColor(intent.color)]));
+    targetGroups.forEach((group) => {
+      Array.from(group.querySelectorAll('g[data-legend-key]')).forEach((entry) => {
+        const caption = entry.getAttribute('data-legend-key') || '';
+        if (
+          !entry.hasAttribute('data-legend-owner') &&
+          provenance.get(caption)?.has(legendEntryColor(entry))
+        ) {
+          entry.setAttribute('data-legend-owner', SPECIFIC_COLOR_FILE_OWNER);
+        }
       });
+    });
 
-      const primaryEntries = Array.from(targetGroups[0].querySelectorAll('g[data-legend-key]'));
-      const ownedEntries = primaryEntries
-        .filter((entry) => entry.getAttribute('data-legend-owner') === SPECIFIC_COLOR_FILE_OWNER)
-        .map((entry) => ({
-          caption: entry.getAttribute('data-legend-key') || '',
-          color: legendEntryColor(entry)
-        }));
-      const reusableEntries = primaryEntries
-        .filter((entry) => entry.getAttribute('data-legend-owner') !== SPECIFIC_COLOR_FILE_OWNER)
-        .map((entry) => ({
-          caption: entry.getAttribute('data-legend-key') || '',
-          color: legendEntryColor(entry)
-        }))
-        .filter((entry) => desiredByCaption.get(entry.caption) === entry.color);
+    const primaryEntries = Array.from(targetGroups[0].querySelectorAll('g[data-legend-key]'));
+    const ownedEntries = primaryEntries
+      .filter((entry) => entry.getAttribute('data-legend-owner') === SPECIFIC_COLOR_FILE_OWNER)
+      .map((entry) => ({
+        caption: entry.getAttribute('data-legend-key') || '',
+        color: legendEntryColor(entry)
+      }));
+    const reusableEntries = primaryEntries
+      .filter((entry) => entry.getAttribute('data-legend-owner') !== SPECIFIC_COLOR_FILE_OWNER)
+      .map((entry) => ({
+        caption: entry.getAttribute('data-legend-key') || '',
+        color: legendEntryColor(entry)
+      }))
+      .filter((entry) => desiredByCaption.get(entry.caption) === entry.color);
 
-      for (const intent of intents) {
-        for (const group of targetGroups) {
-          const existing = findLegendEntryGroup(group, intent.caption);
-          if (!existing || existing.getAttribute('data-legend-owner') === SPECIFIC_COLOR_FILE_OWNER) continue;
-          if (legendEntryColor(existing) !== normalizedColor(intent.color)) {
-            throw new Error(`Legend entry "${intent.caption}" already exists with a different color.`);
-          }
+    for (const intent of intents) {
+      for (const group of targetGroups) {
+        const existing = findLegendEntryGroup(group, intent.caption);
+        if (!existing || existing.getAttribute('data-legend-owner') === SPECIFIC_COLOR_FILE_OWNER) continue;
+        if (legendEntryColor(existing) !== normalizedColor(intent.color)) {
+          throw new Error(`Legend entry "${intent.caption}" already exists with a different color.`);
         }
       }
-
-      const diff = diffLegendIntents([...ownedEntries, ...reusableEntries], intents);
-      for (const entry of diff.remove) {
-        targetGroups.forEach((group) => {
-          const target = findLegendEntryGroup(group, entry.caption);
-          if (target?.getAttribute('data-legend-owner') === SPECIFIC_COLOR_FILE_OWNER) target.remove();
-        });
-      }
-      for (const entry of diff.update) {
-        targetGroups.forEach((group) => {
-          const target = findLegendEntryGroup(group, entry.caption);
-          if (target?.getAttribute('data-legend-owner') !== SPECIFIC_COLOR_FILE_OWNER) return;
-          const path = Array.from(target.querySelectorAll('path')).find((candidate) => {
-            const fill = candidate.getAttribute('fill');
-            return fill && fill !== 'none' && !fill.startsWith('url(');
-          });
-          if (path) path.setAttribute('fill', entry.color);
-        });
-      }
-      for (const entry of diff.add) {
-        await addLegendEntry(entry.caption, entry.color, {
-          svg,
-          owner: SPECIFIC_COLOR_FILE_OWNER,
-          conflictPolicy: 'error',
-          commit: false,
-          reflow: false,
-          throwOnError: true
-        });
-      }
-
-      const legendGroup = svg.getElementById('legend');
-      const hasDualLegends =
-        !!legendGroup?.querySelector('#legend_horizontal') && !!legendGroup?.querySelector('#legend_vertical');
-      if (!isCurrent() || svgContainer.value.querySelector('svg') !== mountedSvg) return false;
-      // Measure a disposable, hidden SVG before admitting any current state.
-      measurementHost = document.createElement('div');
-      measurementHost.style.cssText = 'position:fixed;left:-100000px;top:0;visibility:hidden;pointer-events:none';
-      measurementHost.appendChild(svg);
-      document.body.appendChild(measurementHost);
-      if (hasDualLegends) reflowDualLegendLayout(svg);
-      else updatePairwiseLegendPositions(svg);
-      return {
-        diff,
-        isCurrent: () => svgContainer.value.querySelector('svg') === mountedSvg,
-        // Mounted geometry and the Result commit synchronously inside History.
-        apply: () => {
-          const mountedLegend = mountedSvg.getElementById('legend');
-          const candidateLegend = svg.getElementById('legend');
-          if (mountedLegend && candidateLegend) mountedLegend.replaceWith(candidateLegend);
-          onLegendGeometryChanged();
-          commitActiveResultEdit?.('legend-file-sync');
-          extractLegendEntries();
-        }
-      };
-    } finally {
-      measurementHost?.remove();
     }
+
+    const diff = diffLegendIntents([...ownedEntries, ...reusableEntries], intents);
+    for (const entry of diff.remove) {
+      targetGroups.forEach((group) => {
+        const target = findLegendEntryGroup(group, entry.caption);
+        if (target?.getAttribute('data-legend-owner') === SPECIFIC_COLOR_FILE_OWNER) target.remove();
+      });
+    }
+    for (const entry of diff.update) {
+      targetGroups.forEach((group) => {
+        const target = findLegendEntryGroup(group, entry.caption);
+        if (target?.getAttribute('data-legend-owner') !== SPECIFIC_COLOR_FILE_OWNER) return;
+        const path = Array.from(target.querySelectorAll('path')).find((candidate) => {
+          const fill = candidate.getAttribute('fill');
+          return fill && fill !== 'none' && !fill.startsWith('url(');
+        });
+        if (path) path.setAttribute('fill', entry.color);
+      });
+    }
+    for (const entry of diff.add) {
+      await addLegendEntry(entry.caption, entry.color, {
+        svg,
+        owner: SPECIFIC_COLOR_FILE_OWNER,
+        conflictPolicy: 'error',
+        commit: false,
+        reflow: false,
+        throwOnError: true
+      });
+    }
+
+    if (!isCurrent() || svgContainer.value.querySelector('svg') !== mountedSvg) return false;
+    // The copy's rows are laid out once they are mounted: `apply` hands the
+    // Legend to the layout owner (zero shift).
+    return {
+      diff,
+      isCurrent: () => svgContainer.value.querySelector('svg') === mountedSvg,
+      // Mounted geometry and the Result commit synchronously inside History.
+      apply: () => {
+        const mountedLegend = mountedSvg.getElementById('legend');
+        const candidateLegend = svg.getElementById('legend');
+        if (mountedLegend && candidateLegend) mountedLegend.replaceWith(candidateLegend);
+        onLegendGeometryChanged();
+        commitActiveResultEdit?.('legend-file-sync');
+        extractLegendEntries();
+      }
+    };
   };
 
   /**
@@ -1275,14 +1091,6 @@ export const createLegendEntryActions = ({
     }
 
     entry.caption = caption;
-    const legendGroup = svg.getElementById('legend');
-    const hasDualLegends =
-      !!legendGroup?.querySelector('#legend_horizontal') && !!legendGroup?.querySelector('#legend_vertical');
-    if (hasDualLegends) {
-      reflowDualLegendLayout(svg);
-    } else {
-      updatePairwiseLegendPositions(svg);
-    }
     onLegendGeometryChanged();
 
     persistLegendReconciliation();

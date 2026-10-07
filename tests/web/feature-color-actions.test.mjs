@@ -149,7 +149,6 @@ const actions = createFeatureColorActions({
     addedLegendCaptions: ref(new Set())
   },
   nextTick: async () => {},
-  compactLegendEntries: () => {},
   onLegendGeometryChanged: () => {
     legendGeometryChangedCount += 1;
   },
@@ -825,7 +824,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
         addedLegendCaptions: ref(new Set())
       },
       nextTick: async () => {},
-      compactLegendEntries: () => {}, onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
+      onLegendGeometryChanged: () => {}, extractLegendEntries: () => {},
       ruleActions: {
         runWithRuleMatches: runWithRuleMatchesOf(createRulePreparation({ state: renameState, evaluate: evaluatePythonRules }), renameState),
         commitSpecificRules: async (nextRules) => { committed.push(nextRules.map((rule) => ({ ...rule }))); return true; },

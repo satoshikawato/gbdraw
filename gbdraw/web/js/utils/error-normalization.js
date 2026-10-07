@@ -1,6 +1,6 @@
 // @ts-check
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'readPdfFont', 'buildProteinLosatCacheKeys', 'convertMainSessionComparisonFrame',
-  'convertLosatpPairsToGenomicPayload', 'extractCdsProteinFasta', 'extractFirstFasta', 'generateLegendEntrySvg',
+  'convertLosatpPairsToGenomicPayload', 'extractCdsProteinFasta', 'extractFirstFasta',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'measureLegendText',
   'promoteLegacyLosatpCache', 'readComparisonSequence', 'readFeatureOverrideTable', 'resolveLegacyProteinReferences',
   'resolveSimilarityAlignment', 'validateConfigOverrides', 'session-save']);

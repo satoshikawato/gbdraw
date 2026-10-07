@@ -1,697 +1,230 @@
 // @ts-check
+/** @import { LayoutBox, LegendFontMetrics, LegendLayoutRow, LegendEntryLayout } from '../../services/legend-layout.js' */
 import {
-  getAllFeatureLegendGroups,
-  getComparisonLegendGroup,
-  getLegendChildById,
-  isInsideComparisonLegend,
-  parseTransformXY
-} from './utils.js';
+  buildCircularLegendLayout,
+  buildLinearLegendLayout,
+  circularLegendLocalBounds,
+  linearLegendLocalBounds,
+  loadLegendFontMetrics,
+  resolveBundledFontFace
+} from '../../services/legend-layout.js';
+import { getComparisonLegendGroup, getLegendEntrySwatch } from './utils.js';
 import { parseCompositionMetadata } from '../legend-layout/composition-actions.js';
 
+// The dpi Python lays the Legend out at unless the Result says otherwise
+// (gbdraw/data/config.toml `canvas.dpi`); Results written before Python
+// recorded its Legend layout inputs (`legendReflow.dpi`) were laid out at it.
+const DEFAULT_LEGEND_DPI = 96;
+
 /**
- * A Legend text with its matched swatch, and the position that a reflow
- * assigns it.
- * @typedef {object} LegendLayoutEntry
- * @property {SVGGraphicsElement} text
- * @property {SVGGraphicsElement | null} rect
- * @property {number} x
- * @property {number} y
- * @property {number} [newX]
- * @property {number} [newY]
- * @property {number} [textWidth]
+ * The Legend layout inputs Python records in the composition metadata
+ * (`legendReflow`), when the Result has them.
+ * @typedef {object} RecordedLegendInputs
+ * @property {number} colorRectSize
+ * @property {string | null} [fontFile]
+ * @property {number} [fontSize]
+ * @property {number} [dpi]
+ * @property {number} [wrapWidth]
  */
 
+/** @param {Element | null | undefined} parent */
+const entryGroupsOf = (parent) => Array.from(parent?.children || []).filter(
+  (child) => child.localName === 'g' && child.hasAttribute('data-legend-key')
+);
+
+/** @param {Element} element @param {string} id */
+const childById = (element, id) => element.querySelector(`#${CSS.escape(id)}`);
+
+/**
+ * @param {Element | null} element
+ * @param {number} x
+ * @param {number} y
+ */
+const setTranslate = (element, x, y) => {
+  element?.setAttribute('transform', `translate(${x}, ${y})`);
+};
+
+/**
+ * The solid rows of one feature Legend group, in document order (the
+ * Legend's order), as Python's legend table holds them.
+ * @param {Element} group
+ * @returns {{ rows: LegendLayoutRow[], entries: Element[], label: Element | null }}
+ */
+const readSolidRows = (group) => {
+  const entries = entryGroupsOf(group);
+  const rows = entries.map((entry) => {
+    const swatch = getLegendEntrySwatch(entry);
+    return /** @type {LegendLayoutRow} */ ({
+      key: String(entry.getAttribute('data-legend-key') || ''),
+      type: 'solid',
+      stroke: swatch?.getAttribute('stroke') || 'none',
+      strokeWidth: Number(swatch?.getAttribute('stroke-width') || 0)
+    });
+  });
+  const label = entries.map((entry) => entry.querySelector('text')).find(Boolean) || null;
+  return { rows, entries, label };
+};
+
+/**
+ * The gradient rows of a comparison or conservation Legend: their keys, bar
+ * strokes, and the lowest identity its scale shows.
+ * @param {Element | null} group
+ * @returns {LegendLayoutRow[]}
+ */
+const readGradientRows = (group) => {
+  if (!group) return [];
+  const labels = Array.from(group.querySelectorAll('text'))
+    .map((text) => String(text.textContent || '').trim());
+  const minLabel = labels.find((label) => /^-?\d+(?:\.\d+)?%$/.test(label) && label !== '100%');
+  const minValue = minLabel ? Number(minLabel.slice(0, -1)) : 0;
+  return entryGroupsOf(group).map((entry) => {
+    const bar = Array.from(entry.querySelectorAll('path'))
+      .find((path) => String(path.getAttribute('fill') || '').startsWith('url(')) || entry.querySelector('path');
+    return /** @type {LegendLayoutRow} */ ({
+      key: String(entry.getAttribute('data-legend-key') || ''),
+      type: 'gradient',
+      stroke: bar?.getAttribute('stroke') || 'none',
+      strokeWidth: Number(bar?.getAttribute('stroke-width') || 0),
+      minValue
+    });
+  });
+};
+
+/**
+ * Write one solid entry's positions as Python's Legend writers do: the swatch
+ * and the caption each carry a translate; the entry group carries none.
+ * @param {Element} entry
+ * @param {LegendEntryLayout} layout
+ */
+const placeEntry = (entry, layout) => {
+  entry.removeAttribute('transform');
+  setTranslate(getLegendEntrySwatch(entry) || entry.querySelector('path'), layout.rectX, layout.rectY);
+  setTranslate(entry.querySelector('text'), layout.textX, layout.textY);
+};
+
+/**
+ * @param {Element[]} entries
+ * @param {LegendEntryLayout[]} layouts
+ */
+const placeEntries = (entries, layouts) => {
+  const byKey = new Map(layouts.map((layout) => [layout.key, layout]));
+  entries.forEach((entry) => {
+    const layout = byKey.get(String(entry.getAttribute('data-legend-key') || ''));
+    if (layout) placeEntry(entry, layout);
+  });
+};
+
+// Python's Legend, laid out in the Web (zero shift): the rows the Legend holds
+// now, in their document order, measured and placed by the port of Python's
+// layout (services/legend-layout.js) with the inputs Python recorded for the
+// Result. An unedited Legend keeps every position; an edited one gets the
+// positions Python gives the same rows. The layout owner
+// (app/legend-layout/reposition-actions.js) docks it with the bounds returned.
 export const createLegendLayoutActions = () => {
-  const getHorizontalWrapWidth = (svg) => {
-    if (!svg) return null;
-    return parseCompositionMetadata(svg).primary.finalBounds.width;
+  /** @type {LegendFontMetrics | null} */
+  let fontMetrics = null;
+
+  /**
+   * Load the bundled-font metrics the layout reads, once. The mount binder
+   * awaits it for a Result with a Legend, so the Legend edits that follow,
+   * which are synchronous, find them loaded.
+   * @returns {Promise<LegendFontMetrics>}
+   */
+  const prepareLegendLayout = async () => {
+    fontMetrics = await loadLegendFontMetrics();
+    return fontMetrics;
   };
 
-  const getLegendReflowMetrics = (svg) => {
-    const metrics = parseCompositionMetadata(svg).legendReflow;
-    if (!metrics) {
+  /**
+   * Lay out the Legend of `svg` for `side` (default: its composition side) as
+   * Python does, and return its local bounds for the composition. Null when
+   * there is nothing to lay out (no Legend, a side of `none`, no rows, an
+   * unknown structure) or the font metrics are not loaded yet.
+   * @param {Element | null | undefined} svg
+   * @param {{ side?: string }} [options]
+   * @returns {LayoutBox | null}
+   */
+  const layOutLegend = (svg, { side } = {}) => {
+    const legendGroup = /** @type {SVGSVGElement | null | undefined} */ (svg)?.getElementById?.('legend');
+    if (!svg || !legendGroup) return null;
+    if (!fontMetrics) {
+      void prepareLegendLayout().catch(() => {});
+      return null;
+    }
+    const metrics = fontMetrics;
+    const metadata = parseCompositionMetadata(svg);
+    const recorded = /** @type {RecordedLegendInputs | null} */ (metadata.legendReflow);
+    if (!recorded) {
       throw new Error('This diagram has no legend reflow metadata. Regenerate it before editing the legend.');
     }
-    return metrics;
-  };
+    const legendSide = side || metadata.legendSide;
+    if (!legendSide || legendSide === 'none') return null;
+    const horizontal = childById(legendGroup, 'legend_horizontal');
+    const vertical = childById(legendGroup, 'legend_vertical');
+    const linear = Boolean(horizontal && vertical);
 
-  const centerHorizontalRows = (entries, textXOffset, availableWidth) => {
-    if (!Number.isFinite(availableWidth) || availableWidth <= 0 || !Array.isArray(entries) || entries.length === 0) {
-      return;
-    }
+    const featureGroup = linear
+      ? childById(/** @type {Element} */ (horizontal), 'feature_legend_h')
+      : (childById(legendGroup, 'feature_legend') || legendGroup);
+    if (!featureGroup) return null;
+    const solid = readSolidRows(featureGroup);
+    const gradientGroup = linear
+      ? getComparisonLegendGroup(horizontal)
+      : childById(legendGroup, 'conservation_identity_legend');
+    const rows = [...solid.rows, ...readGradientRows(gradientGroup)];
+    if (rows.length === 0) return null;
 
-    const rows = new Map();
-    entries.forEach((entry) => {
-      if (entry.newX === undefined || entry.newY === undefined) return;
-      const rowKey = Number(entry.newY).toFixed(3);
-      if (!rows.has(rowKey)) rows.set(rowKey, []);
-      rows.get(rowKey).push(entry);
-    });
-
-    rows.forEach((rowEntries) => {
-      let rowLeft = Infinity;
-      let rowRight = -Infinity;
-
-      rowEntries.forEach((entry) => {
-        const measuredWidth =
-          entry.textWidth !== undefined && Number.isFinite(entry.textWidth)
-            ? entry.textWidth
-            : entry.text.getBBox().width;
-        const left = Number(entry.newX) - textXOffset;
-        const right = Number(entry.newX) + measuredWidth + textXOffset;
-        rowLeft = Math.min(rowLeft, left);
-        rowRight = Math.max(rowRight, right);
-      });
-
-      if (!Number.isFinite(rowLeft) || !Number.isFinite(rowRight) || rowRight <= rowLeft) return;
-
-      const rowWidth = rowRight - rowLeft;
-      const targetLeft = Math.max(0, (availableWidth - rowWidth) * 0.5);
-      const shiftX = targetLeft - rowLeft;
-      if (Math.abs(shiftX) < 1e-6) return;
-
-      rowEntries.forEach((entry) => {
-        const shiftedX = Number(entry.newX) + shiftX;
-        const y = Number(entry.newY);
-        entry.newX = shiftedX;
-        entry.text.setAttribute('transform', `translate(${shiftedX}, ${y})`);
-        if (entry.rect) {
-          entry.rect.setAttribute('transform', `translate(${shiftedX - textXOffset}, ${y})`);
-        }
-      });
-    });
-  };
-
-  const getSingleComparisonLegendParts = (pairwiseLegend) => {
-    const texts = Array.from(pairwiseLegend?.querySelectorAll?.('text') || []);
-    const titleTexts = texts.filter((text) => {
-      const label = String(text.textContent || '').trim();
-      return label && !/^\d+(?:\.\d+)?%$/.test(label);
-    });
-    const barPaths = Array.from(pairwiseLegend?.querySelectorAll?.('path') || []).filter((path) =>
-      String(path.getAttribute('fill') || '').startsWith('url(')
-    );
-    if (titleTexts.length !== 1 || barPaths.length !== 1) return null;
-
-    const title = titleTexts[0];
-    const bar = barPaths[0];
-    const d = bar.getAttribute('d') || '';
-    const widthMatch = d.match(/L\s*([+-]?\d+(?:\.\d+)?),/);
-    const parsedBarWidth = widthMatch ? parseFloat(widthMatch[1]) : NaN;
-    const barWidth = Number.isFinite(parsedBarWidth) && parsedBarWidth > 0 ? parsedBarWidth : bar.getBBox().width;
-    const titleWidth = title.getBBox().width;
-    const percentLabels = texts.filter((text) => /^\d+(?:\.\d+)?%$/.test(String(text.textContent || '').trim()));
-    return { title, titleWidth, bar, barWidth, percentLabels };
-  };
-
-  const getComparisonLegendAlignmentWidth = (pairwiseLegend, fallbackWidth = 0) => {
-    const parts = getSingleComparisonLegendParts(pairwiseLegend);
-    if (parts) {
-      return parts.barWidth;
-    }
-
-    return fallbackWidth;
-  };
-
-  const centerSingleComparisonLegendParts = (pairwiseLegend) => {
-    const parts = getSingleComparisonLegendParts(pairwiseLegend);
-    if (!parts) return;
-
-    const { title, bar, barWidth, percentLabels } = parts;
-    const barX = 0;
-    const titleX = barWidth / 2;
-    const titlePos = parseTransformXY(title.getAttribute('transform'));
-    const barPos = parseTransformXY(bar.getAttribute('transform'));
-
-    title.setAttribute('text-anchor', 'middle');
-    title.setAttribute('transform', `translate(${titleX}, ${titlePos.y})`);
-    bar.setAttribute('transform', `translate(${barX}, ${barPos.y})`);
-
-    percentLabels.forEach((label) => {
-      const labelPos = parseTransformXY(label.getAttribute('transform'));
-      const text = String(label.textContent || '').trim();
-      const x = text === '100%' ? barX + barWidth : barX;
-      label.setAttribute('transform', `translate(${x}, ${labelPos.y})`);
-    });
-  };
-
-  const updatePairwiseLegendPositions = (svg) => {
-    const legendGroup = svg.getElementById('legend');
-    if (!legendGroup) return;
-
-    const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
-    const verticalLegend = legendGroup.querySelector('#legend_vertical');
-    const hasDualLegends = !!(horizontalLegend && verticalLegend);
-
-    if (!hasDualLegends) {
-      const legendSide = parseCompositionMetadata(svg).legendSide;
-      const layout = legendSide === 'top' || legendSide === 'bottom' ? 'horizontal' : 'vertical';
-      const maxWidth = layout === 'horizontal' ? getHorizontalWrapWidth(svg) : null;
-      reflowSingleLegendLayout(svg, layout, maxWidth);
-      return;
-    }
-
-    const { lineHeight: lineMargin } = getLegendReflowMetrics(svg);
-
-    if (verticalLegend) {
-      const vFeatureLegend = verticalLegend.querySelector('#feature_legend_v');
-      const vPairwiseLegend = getLegendChildById(verticalLegend, 'pairwise_legend');
-
-      if (vFeatureLegend && vPairwiseLegend) {
-        centerSingleComparisonLegendParts(vPairwiseLegend);
-
-        let maxFeatureY = 0;
-        const featureTexts = vFeatureLegend.querySelectorAll('text');
-        featureTexts.forEach((el) => {
-          const pos = parseTransformXY(el.getAttribute('transform'));
-          if (pos.y > maxFeatureY) maxFeatureY = pos.y;
-        });
-
-        const newPairwiseY = maxFeatureY + lineMargin + lineMargin / 2;
-
-        vPairwiseLegend.setAttribute('transform', `translate(0, ${newPairwiseY})`);
-        console.log(`Repositioned vertical pairwise legend to y=${newPairwiseY}`);
-      }
-    }
-
-    if (horizontalLegend) {
-      const hFeatureLegend = horizontalLegend.querySelector('#feature_legend_h');
-      const hPairwiseLegend = getLegendChildById(horizontalLegend, 'pairwise_legend');
-
-      if (hFeatureLegend && hPairwiseLegend) {
-        centerSingleComparisonLegendParts(hPairwiseLegend);
-
-        let minFeatureY = Infinity,
-          maxFeatureY = -Infinity;
-        const featureTexts = hFeatureLegend.querySelectorAll('text');
-        featureTexts.forEach((el) => {
-          const pos = parseTransformXY(el.getAttribute('transform'));
-          if (pos.y < minFeatureY) minFeatureY = pos.y;
-          if (pos.y > maxFeatureY) maxFeatureY = pos.y;
-        });
-
-        if (minFeatureY !== Infinity && maxFeatureY !== -Infinity) {
-          const featureHeight = maxFeatureY - minFeatureY + lineMargin;
-
-          const pairwiseBBox = hPairwiseLegend.getBBox();
-          const pairwiseHeight = pairwiseBBox.height;
-
-          const currentTransform = hPairwiseLegend.getAttribute('transform');
-          let pairwiseX = 0,
-            currentPairwiseY = 0;
-          if (currentTransform) {
-            const match = currentTransform.match(/translate\(\s*([\d.-]+)\s*,\s*([\d.-]+)\s*\)/);
-            if (match) {
-              pairwiseX = parseFloat(match[1]);
-              currentPairwiseY = parseFloat(match[2]);
-            }
-          }
-
-          let newPairwiseY = currentPairwiseY;
-          if (featureHeight > pairwiseHeight) {
-            newPairwiseY = (featureHeight - pairwiseHeight) / 2;
-          }
-
-          hPairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${newPairwiseY})`);
-          console.log(`Repositioned horizontal pairwise legend to y=${newPairwiseY}`);
-        }
-      }
-    }
-
-  };
-
-  const reflowDualLegendLayout = (svg) => {
-    const legendGroup = svg.getElementById('legend');
-    if (!legendGroup) return;
-
-    const horizontalLegend = legendGroup.querySelector('#legend_horizontal');
-    const verticalLegend = legendGroup.querySelector('#legend_vertical');
-    if (!horizontalLegend || !verticalLegend) return;
-
-    const horizontalWidth = getHorizontalWrapWidth(svg);
-    const reflowMetrics = getLegendReflowMetrics(svg);
-
-    const layoutLegendGroup = (legend, layout, maxWidth) => {
-      const featureGroup =
-        layout === 'horizontal'
-          ? legend.querySelector('#feature_legend_h')
-          : legend.querySelector('#feature_legend_v');
-      if (!featureGroup) return;
-
-      const pairwiseLegend = getLegendChildById(legend, 'pairwise_legend');
-
-      featureGroup.setAttribute('transform', 'translate(0, 0)');
-      if (pairwiseLegend) {
-        pairwiseLegend.setAttribute('transform', 'translate(0, 0)');
-        centerSingleComparisonLegendParts(pairwiseLegend);
-      }
-
-      const {
-        colorRectSize: rectSize,
-        lineHeight,
-        textXOffset
-      } = reflowMetrics;
-
-      const texts = Array.from(featureGroup.querySelectorAll('text'));
-      const rects = Array.from(featureGroup.querySelectorAll('path')).filter((r) => {
-        const fill = r.getAttribute('fill');
-        return fill && fill !== 'none' && !fill.startsWith('url(');
-      });
-
-      /** @type {LegendLayoutEntry[]} */
-      const entries = texts.map((t) => {
-        const pos = parseTransformXY(t.getAttribute('transform'));
-        const expectedRectX = pos.x - textXOffset;
-        let matchedRect = null;
-        let bestDistance = Infinity;
-        for (const r of rects) {
-          const rectPos = parseTransformXY(r.getAttribute('transform'));
-          if (Math.abs(rectPos.y - pos.y) < 1) {
-            const distance = Math.abs(rectPos.x - expectedRectX);
-            if (distance < textXOffset && distance < bestDistance) {
-              bestDistance = distance;
-              matchedRect = r;
-            }
-          }
-        }
-        return { text: t, rect: matchedRect, x: pos.x, y: pos.y };
-      });
-
-      if (layout === 'horizontal') {
-        entries.sort((a, b) => {
-          if (Math.abs(a.y - b.y) < 1) return a.x - b.x;
-          return a.y - b.y;
-        });
-
-        let cursorX = 0;
-        let newY = rectSize / 2;
-        let wrapWidth = Math.max(maxWidth, rectSize + textXOffset * 2);
-        if (pairwiseLegend) {
-          const pairwiseBBox = pairwiseLegend.getBBox();
-          const pairwiseWidth = pairwiseBBox.width || 0;
-          if (pairwiseWidth > 0) {
-            wrapWidth = Math.max(
-              wrapWidth - pairwiseWidth - textXOffset,
-              rectSize + textXOffset * 2
-            );
-          }
-        }
-
-        entries.forEach((entry) => {
-          const textBBox = entry.text.getBBox();
-          const entryWidth = rectSize + textXOffset + textBBox.width + textXOffset;
-
-          if (cursorX + entryWidth > wrapWidth && cursorX > 0) {
-            cursorX = 0;
-            newY += lineHeight;
-          }
-          const newX = cursorX + textXOffset;
-
-          entry.text.setAttribute('transform', `translate(${newX}, ${newY})`);
-          if (entry.rect) {
-            entry.rect.setAttribute('transform', `translate(${newX - textXOffset}, ${newY})`);
-          }
-          entry.newX = newX;
-          entry.newY = newY;
-          entry.textWidth = textBBox.width;
-
-          cursorX += entryWidth;
-        });
-        centerHorizontalRows(entries, textXOffset, wrapWidth);
-      } else {
-        entries.sort((a, b) => a.y - b.y);
-
-        let newY = rectSize / 2;
-        entries.forEach((entry) => {
-          entry.text.setAttribute('transform', `translate(${textXOffset}, ${newY})`);
-          if (entry.rect) {
-            entry.rect.setAttribute('transform', `translate(0, ${newY})`);
-          }
-          newY += lineHeight;
-        });
-      }
-
-      const featureBBox = featureGroup.getBBox();
-      const featureWidth = featureBBox.width || 0;
-      let featureHeight = featureBBox.height || 0;
-      if (featureHeight === 0) {
-        featureHeight = layout === 'horizontal' ? lineHeight : rectSize / 2;
-      }
-
-      if (pairwiseLegend) {
-        const pairwiseBBox = pairwiseLegend.getBBox();
-        const pairwiseWidth = pairwiseBBox.width || 0;
-        const pairwiseHeight = pairwiseBBox.height || 0;
-        const pairwiseAlignmentWidth = getComparisonLegendAlignmentWidth(pairwiseLegend, pairwiseWidth);
-
-        if (layout === 'horizontal') {
-          const featureYOffset = pairwiseHeight > featureHeight ? (pairwiseHeight - featureHeight) / 2 : 0;
-          const pairwiseYOffset = featureHeight > pairwiseHeight ? (featureHeight - pairwiseHeight) / 2 : 0;
-          if (featureYOffset > 0) {
-            featureGroup.setAttribute('transform', `translate(0, ${featureYOffset})`);
-          }
-          const pairwiseX = featureBBox.x + featureWidth + textXOffset;
-          pairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${pairwiseYOffset})`);
-        } else {
-          const featureXOffset =
-            pairwiseAlignmentWidth > featureWidth ? (pairwiseAlignmentWidth - featureWidth) / 2 : 0;
-          featureGroup.setAttribute('transform', `translate(${featureXOffset}, 0)`);
-          const pairwiseY = featureHeight + lineHeight / 2;
-          pairwiseLegend.setAttribute('transform', `translate(0, ${pairwiseY})`);
-        }
-      }
+    const sampleLabel = solid.label || gradientGroup?.querySelector('text') || null;
+    const options = {
+      side: legendSide,
+      // Before Python recorded its inputs, the wrap width is the primary
+      // item's width: what Linear passes; Circular passed its content width.
+      wrapWidth: recorded.wrapWidth ?? metadata.primary.finalBounds.width,
+      fontFile: recorded.fontFile || resolveBundledFontFace(metrics, sampleLabel?.getAttribute('font-family') || ''),
+      fontSize: recorded.fontSize ?? Number(sampleLabel?.getAttribute('font-size')),
+      dpi: recorded.dpi ?? DEFAULT_LEGEND_DPI,
+      colorRectSize: recorded.colorRectSize
     };
+    if (!Number.isFinite(options.fontSize) || options.fontSize <= 0) return null;
 
-    const horizontalDisplay = horizontalLegend.getAttribute('display');
-    const verticalDisplay = verticalLegend.getAttribute('display');
-    horizontalLegend.removeAttribute('display');
-    verticalLegend.removeAttribute('display');
-
-    layoutLegendGroup(horizontalLegend, 'horizontal', horizontalWidth);
-    layoutLegendGroup(verticalLegend, 'vertical', horizontalWidth);
-
-    if (horizontalDisplay !== null) {
-      horizontalLegend.setAttribute('display', horizontalDisplay);
-    } else {
-      horizontalLegend.removeAttribute('display');
+    if (linear) {
+      const layout = buildLinearLegendLayout(rows, options, metrics);
+      /** @type {Array<['horizontal' | 'vertical', Element, string]>} */
+      const orientations = [
+        ['horizontal', /** @type {Element} */ (horizontal), 'h'],
+        ['vertical', /** @type {Element} */ (vertical), 'v']
+      ];
+      orientations.forEach(([name, group, suffix]) => {
+        const orientation = layout[name];
+        const featureLegend = childById(group, `feature_legend_${suffix}`);
+        if (featureLegend) {
+          if (orientation.featureX || orientation.featureY) {
+            setTranslate(featureLegend, orientation.featureX, orientation.featureY);
+          } else {
+            featureLegend.removeAttribute('transform');
+          }
+          placeEntries(entryGroupsOf(featureLegend), orientation.feature.entries);
+        }
+        const comparison = getComparisonLegendGroup(group);
+        if (comparison && orientation.gradient) {
+          comparison.setAttribute('transform', suffix === 'h'
+            ? `translate(${orientation.gradientX}, 0)${orientation.gradientY ? ` translate(0, ${orientation.gradientY})` : ''}`
+            : `translate(0, ${orientation.gradientY})`);
+        }
+      });
+      return linearLegendLocalBounds(layout, options.colorRectSize);
     }
 
-    if (verticalDisplay !== null) {
-      verticalLegend.setAttribute('display', verticalDisplay);
-    } else {
-      verticalLegend.removeAttribute('display');
-    }
-
+    const layout = buildCircularLegendLayout(rows, options, metrics);
+    placeEntries(solid.entries, layout.entries);
+    const rect = options.colorRectSize;
+    const outline = Array.from(legendGroup.children)
+      .find((child) => child.localName === 'path' && child.getAttribute('fill') === 'none');
+    outline?.setAttribute('d', `M 0,${-0.5 * rect} L ${layout.width},${-0.5 * rect} `
+      + `L ${layout.width},${layout.height - 0.5 * rect} L 0,${layout.height - 0.5 * rect} z`);
+    if (gradientGroup && layout.gradient) setTranslate(gradientGroup, layout.gradientX, layout.gradientY);
+    return circularLegendLocalBounds(layout, rect);
   };
 
-  const compactLegendEntries = (svg) => {
-    const legendGroup = svg.getElementById('legend');
-    const hasDualLegends =
-      !!legendGroup?.querySelector('#legend_horizontal') && !!legendGroup?.querySelector('#legend_vertical');
-    if (hasDualLegends) {
-      reflowDualLegendLayout(svg);
-      return;
-    }
-
-    const targetGroups = getAllFeatureLegendGroups(svg);
-    if (targetGroups.length === 0) return;
-
-    for (const targetGroup of targetGroups) {
-      const comparisonLegend = getComparisonLegendGroup(targetGroup);
-      const {
-        colorRectSize: rectSize,
-        lineHeight,
-        textXOffset
-      } = getLegendReflowMetrics(svg);
-
-      const texts = Array.from(targetGroup.querySelectorAll('text')).filter((el) => {
-        if (!comparisonLegend) return true;
-        return !comparisonLegend.contains(el);
-      });
-      if (texts.length === 0) continue;
-
-      const allRects = Array.from(targetGroup.querySelectorAll('path')).filter((r) => {
-        const fill = r.getAttribute('fill');
-        if (comparisonLegend && comparisonLegend.contains(r)) return false;
-        return fill && fill !== 'none' && !fill.startsWith('url(');
-      });
-
-      /** @type {LegendLayoutEntry[]} */
-      const entries = texts.map((t) => {
-        const pos = parseTransformXY(t.getAttribute('transform'));
-        const expectedRectX = pos.x - textXOffset;
-        let matchedRect = null;
-        let bestDistance = Infinity;
-        for (const r of allRects) {
-          const rectPos = parseTransformXY(r.getAttribute('transform'));
-          if (Math.abs(rectPos.y - pos.y) < 1) {
-            const distance = Math.abs(rectPos.x - expectedRectX);
-            if (distance < textXOffset && distance < bestDistance) {
-              bestDistance = distance;
-              matchedRect = r;
-            }
-          }
-        }
-        return { text: t, rect: matchedRect, x: pos.x, y: pos.y };
-      });
-
-      const uniqueYs = [...new Set(entries.map((e) => Math.round(e.y)))];
-      const isHorizontal = uniqueYs.length < entries.length;
-
-      if (isHorizontal) {
-        entries.sort((a, b) => {
-          if (Math.abs(a.y - b.y) < 1) return a.x - b.x;
-          return a.y - b.y;
-        });
-
-        const maxWidth = getHorizontalWrapWidth(svg);
-
-        let cursorX = 0;
-        let newY = rectSize / 2;
-
-        entries.forEach((entry) => {
-          const textBBox = entry.text.getBBox();
-          const entryWidth = rectSize + textXOffset + textBBox.width + textXOffset;
-
-          if (cursorX + entryWidth > maxWidth && cursorX > 0) {
-            cursorX = 0;
-            newY += lineHeight;
-          }
-          const newX = cursorX + textXOffset;
-
-          entry.text.setAttribute('transform', `translate(${newX}, ${newY})`);
-          entry.newX = newX;
-          entry.newY = newY;
-          entry.textWidth = textBBox.width;
-
-          if (entry.rect) {
-            const expectedRectX = newX - textXOffset;
-            entry.rect.setAttribute('transform', `translate(${expectedRectX}, ${newY})`);
-          }
-
-          cursorX += entryWidth;
-        });
-        centerHorizontalRows(entries, textXOffset, maxWidth);
-      } else {
-        entries.sort((a, b) => a.y - b.y);
-
-        let newY = rectSize / 2;
-        entries.forEach((entry) => {
-          entry.text.setAttribute('transform', `translate(${textXOffset}, ${newY})`);
-
-          if (entry.rect) {
-            entry.rect.setAttribute('transform', `translate(0, ${newY})`);
-          }
-
-          newY += lineHeight;
-        });
-      }
-    }
-
-    updatePairwiseLegendPositions(svg);
-  };
-
-  /** @param {number | null} [maxWidthOverride] */
-  const reflowSingleLegendLayout = (svg, layout, maxWidthOverride = null) => {
-    const legendGroup = svg.getElementById('legend');
-    if (!legendGroup) return null;
-
-    const featureLegendGroup = legendGroup.querySelector('#feature_legend') || legendGroup;
-    const isRootLegendGroup = featureLegendGroup === legendGroup;
-    const pairwiseLegend = getComparisonLegendGroup(legendGroup);
-
-    const textElements = Array.from(featureLegendGroup.querySelectorAll('text')).filter((el) => {
-      return !isInsideComparisonLegend(el);
-    });
-    if (textElements.length === 0) return null;
-
-    const {
-      colorRectSize: rectSize,
-      lineHeight,
-      textXOffset
-    } = getLegendReflowMetrics(svg);
-    const colorRects = Array.from(featureLegendGroup.querySelectorAll('path')).filter((r) => {
-      const fill = r.getAttribute('fill');
-      if (!fill || fill === 'none' || fill.startsWith('url(')) return false;
-      if (isInsideComparisonLegend(r)) return false;
-      return true;
-    });
-    if (!isRootLegendGroup) {
-      featureLegendGroup.setAttribute('transform', 'translate(0, 0)');
-    }
-    if (pairwiseLegend) {
-      pairwiseLegend.setAttribute('transform', 'translate(0, 0)');
-      centerSingleComparisonLegendParts(pairwiseLegend);
-    }
-
-    const featureOffset = { x: 0, y: 0 };
-    const pairwiseBBox = pairwiseLegend ? pairwiseLegend.getBBox() : null;
-    const pairwiseContentOffsetY = pairwiseBBox ? pairwiseBBox.y : 0;
-    const pairwiseWidth = pairwiseBBox ? pairwiseBBox.width : 0;
-
-    /** @type {LegendLayoutEntry[]} */
-    const entries = textElements.map((t) => {
-      const pos = parseTransformXY(t.getAttribute('transform'));
-      return { text: t, rect: null, x: pos.x, y: pos.y };
-    });
-    entries.forEach((entry) => {
-      const expectedRectX = entry.x - textXOffset;
-      let matchedRect = null;
-      let bestDistance = Infinity;
-      for (const r of colorRects) {
-        const rectPos = parseTransformXY(r.getAttribute('transform'));
-        if (Math.abs(rectPos.y - entry.y) < 1) {
-          const distance = Math.abs(rectPos.x - expectedRectX);
-          if (distance < textXOffset && distance < bestDistance) {
-            bestDistance = distance;
-            matchedRect = r;
-          }
-        }
-      }
-      entry.rect = matchedRect;
-    });
-
-    const computeFeatureBounds = () => {
-      let minX = Infinity,
-        minY = Infinity,
-        maxX = -Infinity,
-        maxY = -Infinity;
-      entries.forEach((entry) => {
-        if (entry.newX === undefined || entry.newY === undefined) return;
-        const textWidth = entry.textWidth || 0;
-        const rectX = entry.newX - textXOffset;
-        const rectY = entry.newY - rectSize / 2;
-        const entryRight = entry.newX + textWidth + textXOffset;
-        const entryBottom = entry.newY + rectSize / 2;
-        minX = Math.min(minX, rectX);
-        minY = Math.min(minY, rectY);
-        maxX = Math.max(maxX, entryRight);
-        maxY = Math.max(maxY, entryBottom);
-      });
-      if (minX === Infinity) return null;
-      return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
-    };
-
-    if (layout === 'horizontal') {
-      const maxWidth = Number(maxWidthOverride);
-      if (!Number.isFinite(maxWidth) || maxWidth <= 0) {
-        throw new Error('Horizontal legend reflow requires a positive metadata-owned wrap width.');
-      }
-
-      const availableWidth = Math.max(maxWidth, rectSize + textXOffset * 2);
-      const reservedOffset = Math.max(isRootLegendGroup ? 0 : featureOffset.x, 0);
-      let maxFeatureWidth = availableWidth - reservedOffset;
-      if (pairwiseLegend && pairwiseWidth > 0) {
-        maxFeatureWidth = availableWidth - reservedOffset - pairwiseWidth - textXOffset;
-        if (maxFeatureWidth < rectSize + textXOffset * 2) {
-          maxFeatureWidth = availableWidth - reservedOffset;
-        }
-      }
-
-      entries.sort((a, b) => {
-        if (Math.abs(a.y - b.y) < 1) return a.x - b.x;
-        return a.y - b.y;
-      });
-
-      let cursorX = 0;
-      let newY = rectSize / 2;
-
-      entries.forEach((entry) => {
-        const textBBox = entry.text.getBBox();
-        const entryWidth = rectSize + textXOffset + textBBox.width + textXOffset;
-
-        if (cursorX + entryWidth > maxFeatureWidth && cursorX > 0) {
-          cursorX = 0;
-          newY += lineHeight;
-        }
-        const newX = cursorX + textXOffset;
-
-        entry.text.setAttribute('transform', `translate(${newX}, ${newY})`);
-        if (entry.rect) {
-          entry.rect.setAttribute('transform', `translate(${newX - textXOffset}, ${newY})`);
-        }
-        entry.newX = newX;
-        entry.newY = newY;
-        entry.textWidth = textBBox.width;
-
-        cursorX += entryWidth;
-      });
-      centerHorizontalRows(entries, textXOffset, maxFeatureWidth);
-    } else {
-      entries.sort((a, b) => a.y - b.y);
-      let newY = rectSize / 2;
-      entries.forEach((entry) => {
-        const textBBox = entry.text.getBBox();
-        entry.text.setAttribute('transform', `translate(${textXOffset}, ${newY})`);
-        if (entry.rect) {
-          entry.rect.setAttribute('transform', `translate(0, ${newY})`);
-        }
-        entry.newX = textXOffset;
-        entry.newY = newY;
-        entry.textWidth = textBBox.width;
-        newY += lineHeight;
-      });
-    }
-
-    if (pairwiseLegend) {
-      const featureBounds = computeFeatureBounds();
-      const fallbackBBox = featureLegendGroup.getBBox();
-      const featureBBox = featureBounds || fallbackBBox;
-
-      const featureX = featureOffset.x + (featureBounds ? featureBounds.x : fallbackBBox.x);
-      const featureY = featureOffset.y + (featureBounds ? featureBounds.y : fallbackBBox.y);
-      const featureWidth = featureBBox.width;
-      const featureHeight = featureBBox.height;
-      const effectivePairwiseBBox = pairwiseBBox || pairwiseLegend.getBBox();
-      const pairwiseAlignmentWidth = getComparisonLegendAlignmentWidth(pairwiseLegend, effectivePairwiseBBox.width);
-
-      let pairwiseX = featureX;
-      let pairwiseY = featureY;
-      let featureShiftX = 0;
-      let featureShiftY = 0;
-
-      if (layout === 'horizontal') {
-        const heightDiff = effectivePairwiseBBox.height - featureHeight;
-        if (heightDiff > 0) {
-          featureShiftY = heightDiff / 2;
-        } else if (heightDiff < 0) {
-          pairwiseY += (-heightDiff) / 2;
-        }
-        pairwiseX = featureX + featureWidth + textXOffset;
-      } else {
-        const widthDiff = pairwiseAlignmentWidth - featureWidth;
-        if (widthDiff > 0) {
-          featureShiftX = widthDiff / 2;
-        }
-        pairwiseY = featureY + featureHeight + lineHeight / 2;
-      }
-
-      if (!isRootLegendGroup) {
-        featureLegendGroup.setAttribute('transform', `translate(${featureShiftX}, ${featureShiftY})`);
-      } else if (featureShiftX !== 0 || featureShiftY !== 0) {
-        entries.forEach((entry) => {
-          const shiftedX = Number(entry.newX) + featureShiftX;
-          const shiftedY = Number(entry.newY) + featureShiftY;
-          entry.newX = shiftedX;
-          entry.newY = shiftedY;
-          entry.text.setAttribute('transform', `translate(${shiftedX}, ${shiftedY})`);
-          if (entry.rect) {
-            entry.rect.setAttribute('transform', `translate(${shiftedX - textXOffset}, ${shiftedY})`);
-          }
-        });
-      }
-      const adjustedPairwiseY = pairwiseY - pairwiseContentOffsetY;
-      pairwiseLegend.setAttribute('transform', `translate(${pairwiseX}, ${adjustedPairwiseY})`);
-    }
-
-    const bbox = legendGroup.getBBox();
-    return { legendWidth: bbox.width, legendHeight: bbox.height };
-  };
-
-  return {
-    compactLegendEntries,
-    reflowDualLegendLayout,
-    reflowSingleLegendLayout,
-    updatePairwiseLegendPositions
-  };
+  return { layOutLegend, prepareLegendLayout };
 };

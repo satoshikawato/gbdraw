@@ -598,11 +598,10 @@ const applyLegendOperations = (index, operations, { displayed = false, mayBeAbse
       if (strokeWidth !== null) setAttributeIfDifferent(swatch, 'stroke-width', strokeWidth);
     });
   });
-  operations.legendRenames.forEach(({ from, to, xPos, yPos, allowMissing }) => {
-    requireLegendEntries(index, from, { allowMissing }, mayBeAbsent).forEach((entry) => {
-      updateLegendCaption(entry, to);
-      moveLegendEntryToAnchor(entry, xPos, yPos);
-    });
+  // A rename keeps the row in place; the Legend layout then places every row
+  // in the Legend's order, as Python does (OV-156).
+  operations.legendRenames.forEach(({ from, to, allowMissing }) => {
+    requireLegendEntries(index, from, { allowMissing }, mayBeAbsent).forEach((entry) => updateLegendCaption(entry, to));
   });
   operations.legendDeletes.forEach(({ caption, allowMissing }) => {
     requireLegendEntries(index, caption, { allowMissing }).forEach((entry) => entry.remove());

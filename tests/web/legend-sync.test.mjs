@@ -219,14 +219,13 @@ const mockLegendEntry = (caption, color, x) => {
   };
   const actions = createLegendEntryActions({
     state,
-    compactLegendEntries: () => {},
-    reflowDualLegendLayout: () => { layoutRefreshes += 1; },
-    updatePairwiseLegendPositions: () => { layoutRefreshes += 1; },
     commitActiveResultEdit: () => {
       dirtyMarks += 1;
       return true;
     }
   });
+  // The layout owner lays the Legend out after a restore (zero shift).
+  actions.setLegendGeometryChangedHandler(() => { layoutRefreshes += 1; });
 
   assert.equal(actions.reconcileLegendEntries(), false);
   assert.equal(dirtyMarks, 0);
@@ -449,9 +448,6 @@ const mockLegendEntry = (caption, color, x) => {
   };
   const actions = createLegendEntryActions({
     state,
-    compactLegendEntries: () => {},
-    reflowDualLegendLayout: () => {},
-    updatePairwiseLegendPositions: () => {},
     commitActiveResultEdit: () => true
   });
   const generate = (...rendered) => {
@@ -529,9 +525,6 @@ const mockLegendEntry = (caption, color, x) => {
   let commits = 0;
   const actions = createLegendEntryActions({
     state,
-    compactLegendEntries: () => {},
-    reflowDualLegendLayout: () => {},
-    updatePairwiseLegendPositions: () => {},
     commitActiveResultEdit: () => { commits += 1; return true; },
     readActiveResultIdentity: () => 'result-1'
   });
@@ -627,9 +620,6 @@ const mockLegendEntry = (caption, color, x) => {
   const live = ['result-1', 'result-2'];
   const actions = createLegendEntryActions({
     state,
-    compactLegendEntries: () => {},
-    reflowDualLegendLayout: () => {},
-    updatePairwiseLegendPositions: () => {},
     commitActiveResultEdit: () => true,
     readActiveResultIdentity: () => identity
   });

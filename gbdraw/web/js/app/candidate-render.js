@@ -290,8 +290,9 @@ const compilePlanBundle = ({
 
   // D-08 (PD-OI-063): an edited Legend order is replayed over the renderer's
   // slots. The renderer places generated entries in their generated order and
-  // direct additions after them; only a different order emits an operation,
-  // and a renamed entry then takes its slot from that order. A displayed batch
+  // direct additions after them; only a different order emits an operation.
+  // A renamed entry keeps its row, and the Legend layout places it (OV-156,
+  // zero shift), so a rename carries no position. A displayed batch
   // Result that may still show an earlier edited order also receives its own
   // default order, the generated order of that Result (D-07, B20, OV-47).
   const legendOrderChanged = isLegendOrderEdited(currentEntries, [...originalCaptions]);
@@ -316,9 +317,7 @@ const compilePlanBundle = ({
       addToResults(operationsByResult, allResultIndexes, 'legendRenames', {
         from: entry.originalCaption,
         to: entry.caption,
-        allowMissing: sourceReplaced || manualCaptions.has(entry.caption) || unrequestedDepth.has(entry.originalCaption),
-        xPos: legendOrderChanged ? null : entry.xPos,
-        yPos: legendOrderChanged ? null : entry.yPos
+        allowMissing: sourceReplaced || manualCaptions.has(entry.caption) || unrequestedDepth.has(entry.originalCaption)
       });
     }
     if (

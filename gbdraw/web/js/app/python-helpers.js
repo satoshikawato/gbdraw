@@ -1672,22 +1672,6 @@ def measure_legend_text_json(caption, font_family="Arial", font_size=14, config_
     except Exception as error:
         return json.dumps({'error': serialize_web_error(error, operation='measureLegendText', stage="helper")})
 
-def generate_legend_entry_svg(caption, color, y_offset, rect_size=14, font_size=14, font_family="Arial", x_offset=0, stroke_color="black", stroke_width=0.5):
-    """Generate SVG elements for a single legend entry"""
-    from xml.sax.saxutils import escape as xml_escape
-
-    # Create color rectangle path with proper stroke (matching original legend entries)
-    half = rect_size / 2
-    rect_d = f"M 0,{-half} L {rect_size},{-half} L {rect_size},{half} L 0,{half} z"
-    rect_svg = f'<path d="{rect_d}" fill="{color}" stroke="{stroke_color}" stroke-width="{stroke_width}" transform="translate({x_offset}, {y_offset})"/>'
-
-    # Create text element
-    x_margin = (22 / 14) * rect_size
-    safe_caption = xml_escape(str(caption))
-    text_svg = f'<text font-size="{font_size}" font-family="{font_family}" dominant-baseline="central" text-anchor="start" transform="translate({x_offset + x_margin}, {y_offset})">{safe_caption}</text>'
-
-    return json.dumps({"rect": rect_svg, "text": text_svg})
-
 def extract_features_from_genbank(gb_path, region_spec=None, record_selector=None, reverse_flag=None, selected_features=None, feature_visibility_table_path=None, include_biological_features=False):
     """Extract feature info from GenBank file for UI display."""
     return extract_features_from_genbank_json(
@@ -1732,7 +1716,6 @@ _WEB_JSON_HELPERS = {
     "read_comparison_sequence_json": (read_comparison_sequence_json, "readComparisonSequence"),
     "read_feature_override_table_json": (read_feature_override_table_json, "readFeatureOverrideTable"),
     "measure_legend_text_json": (measure_legend_text_json, "measureLegendText"),
-    "generate_legend_entry_svg": (generate_legend_entry_svg, "generateLegendEntrySvg"),
     "extract_features_from_genbank": (extract_features_from_genbank, "feature-extraction"),
     "extract_features_from_gff_fasta": (extract_features_from_gff_fasta, "feature-extraction"),
 }

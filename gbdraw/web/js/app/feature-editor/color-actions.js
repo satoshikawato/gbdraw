@@ -33,7 +33,6 @@ import {
 /**
  * @typedef {object} FeatureColorActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(svg: SVGSVGElement) => void} compactLegendEntries The Legend layout owner's removal of gaps between the entries.
  * @property {(options?: { replaceGeneratedInventory?: boolean }) => any} extractLegendEntries
  *   The Legend owner's reading of the mounted Legend rows.
  * @property {() => void} onLegendGeometryChanged The Legend owner's reaction to a change of Legend geometry.
@@ -47,7 +46,6 @@ import {
 /** @param {FeatureColorActionsOptions} options */
 export const createFeatureColorActions = ({
   state,
-  compactLegendEntries,
   extractLegendEntries,
   onLegendGeometryChanged,
   ruleActions,
@@ -716,7 +714,8 @@ export const createFeatureColorActions = ({
       }
     }
 
-    compactLegendEntries(svg);
+    // The layout owner lays the Legend out as Python would with the renamed
+    // row (zero shift; OV-127) and docks it.
     onLegendGeometryChanged();
     persistCurrentSvg(svg);
     return true;

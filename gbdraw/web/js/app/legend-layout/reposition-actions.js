@@ -24,10 +24,9 @@ const setLegendVariant = (legendGroup, side) => {
 /**
  * @typedef {object} LegendRepositionActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(svg: SVGSVGElement) => void} reflowDualLegendLayout
- *   The Legend layout owner's reflow of a diagram with a horizontal and a vertical Legend.
- * @property {(svg: SVGSVGElement, layout: string, maxWidthOverride?: number | null) => void} reflowSingleLegendLayout
- *   The Legend layout owner's reflow of a diagram with one Legend.
+ * @property {(svg: SVGSVGElement, options?: { side?: string }) => import('../../services/legend-layout.js').LayoutBox | null} layOutLegend
+ *   The Legend manager's layout of the Legend for a side as Python lays it out;
+ *   returns its local bounds, or null when it laid nothing out.
  * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
  */
@@ -35,8 +34,7 @@ const setLegendVariant = (legendGroup, side) => {
 /** @param {LegendRepositionActionsOptions} options */
 export const createLegendRepositionActions = ({
   state,
-  reflowDualLegendLayout,
-  reflowSingleLegendLayout,
+  layOutLegend,
   commitActiveResultEdit = null
 }) => {
   const {
@@ -109,24 +107,17 @@ export const createLegendRepositionActions = ({
     // Result stays unchanged and the next Generate applies the side (GE-07).
     if (!legendGroup && newPosition !== 'none') return false;
 
+    // The Legend is laid out for the side as Python lays it out (zero shift),
+    // and docked with the bounds that layout gives.
+    /** @type {import('../../services/legend-layout.js').LayoutBox | null} */
+    let legendLocalBox = null;
     if (legendGroup && newPosition !== 'none') {
       legendGroup.removeAttribute('display');
-      const hasDualLegend = setLegendVariant(legendGroup, newPosition);
-      if (hasDualLegend) {
-        reflowDualLegendLayout(svg);
-      } else {
-        const widthHint = isHorizontalSide(newPosition)
-          ? binding.metadata.primary.finalBounds.width
-          : null;
-        reflowSingleLegendLayout(
-          svg,
-          isHorizontalSide(newPosition) ? 'horizontal' : 'vertical',
-          widthHint
-        );
-      }
+      setLegendVariant(legendGroup, newPosition);
+      legendLocalBox = layOutLegend(svg, { side: newPosition });
     }
 
-    const nextBinding = applyCompositionEdit(svg, { legendSide: newPosition, canvasPadding });
+    const nextBinding = applyCompositionEdit(svg, { legendSide: newPosition, canvasPadding, legendLocalBox });
     syncStateFromComposition(svg, nextBinding);
     commitActiveResultEdit?.('legend-position');
     return true;

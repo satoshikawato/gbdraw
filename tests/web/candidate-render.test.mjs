@@ -181,7 +181,8 @@ test('decoration transforms mutate only their matched batch output; zero keeps E
 
 test('an edited Legend order compiles to one order operation; the default order compiles none (D-08)', async () => {
   const cds = { caption: 'CDS', originalCaption: 'CDS', color: '#111111', xPos: 22, yPos: 7 };
-  const gc = { caption: 'GC percent', originalCaption: 'GC content', color: '#222222', xPos: 22, yPos: 31 };
+  // The live Legend may draw the renamed row elsewhere (a longer caption wraps).
+  const gc = { caption: 'GC percent', originalCaption: 'GC content', color: '#222222', xPos: 140, yPos: 7 };
   const manual = { caption: 'Manual', originalCaption: 'Manual', color: '#333333', xPos: 22, yPos: 55 };
   const compile = (legendEntries) => compileDirectEditorMutationPlan({
     catalogAdmission: admission(),
@@ -191,14 +192,13 @@ test('an edited Legend order compiles to one order operation; the default order 
 
   const defaultOrder = compile([cds, gc, manual]);
   assert.equal(defaultOrder.legendOrder.length, 0);
-  assert.deepEqual(defaultOrder.legendRenames.map(({ from, to, xPos, yPos }) => ({ from, to, xPos, yPos })), [
-    { from: 'GC content', to: 'GC percent', xPos: 22, yPos: 31 }
-  ]);
+  // A rename carries no position: the row keeps its place and the Legend
+  // layout places it (OV-156).
+  assert.deepEqual(defaultOrder.legendRenames, [{ from: 'GC content', to: 'GC percent', allowMissing: false }]);
 
   const reordered = compile([gc, manual, cds]);
   assert.deepEqual(reordered.legendOrder.map(({ captions }) => [...captions]), [['GC percent', 'Manual', 'CDS']]);
-  // The order owns the slots, so a renamed entry does not replay its old anchor.
-  assert.deepEqual(reordered.legendRenames.map(({ xPos, yPos }) => [xPos, yPos]), [[null, null]]);
+  assert.deepEqual(reordered.legendRenames, [{ from: 'GC content', to: 'GC percent', allowMissing: false }]);
 
   const { installFakeSvgDom } = await import('./fake-svg-dom.mjs');
   const { applyEditorOperationsToMountedSvg } = await import('../../gbdraw/web/js/services/svg-result-ingestion.js');
@@ -215,6 +215,20 @@ test('an edited Legend order compiles to one order operation; the default order 
   assert.deepEqual(placed, [
     ['GC percent', 'translate(22, 7)'],
     ['CDS', 'translate(22, 31)'],
+    ['Other', 'translate(22, 55)']
+  ]);
+
+  // OV-156: renaming a row that is not last, in the default order, keeps the
+  // row in its place, even when the live Legend drew it elsewhere.
+  const renamedInPlace = new DOMParser().parseFromString(
+    `<svg viewBox="0 0 100 100"><g id="legend"><g id="feature_legend">${entry('CDS', 7)}${entry('GC content', 31)}${entry('Other', 55)}</g></g></svg>`
+  ).documentElement;
+  applyEditorOperationsToMountedSvg(renamedInPlace, { ...defaultOrder, legendAdds: [] });
+  assert.deepEqual(renamedInPlace.querySelectorAll('g[data-legend-key]').map((group) => [
+    group.getAttribute('data-legend-key'), group.querySelector('text').getAttribute('transform')
+  ]), [
+    ['CDS', 'translate(22, 7)'],
+    ['GC percent', 'translate(22, 31)'],
     ['Other', 'translate(22, 55)']
   ]);
 });
