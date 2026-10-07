@@ -36,7 +36,7 @@ const UNCLASSIFIED_THROW_BASELINE = {
   'services/file-imports.js': 0,
   'services/session-file.js': 6,
   'services/session-import-client.js': 0,
-  'services/session-request.js': 91,
+  'services/session-request.js': 89,
   'services/svg-result-ingestion.js': 22,
   'services/track-slot-validation.js': 31,
   'utils/feature-rendering.js': 3,

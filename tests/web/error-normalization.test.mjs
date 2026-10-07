@@ -589,3 +589,8 @@ test('a BLAST table error names its locator and correction, not the sequence-fil
   assert.equal(producerSummary('COMPARISON_INPUT'),
     'The comparison input is invalid. Supply a comparison sequence file (FASTA, GenBank, or DDBJ) or BLAST outfmt 6/7 as required.');
 });
+
+test('an Upload pair without its BLAST TSV names the missing file (CI-06)', () => {
+  assert.match(producerSummary('COMPARISON_INPUT', { reason: 'BLAST_TSV_REQUIRED' }), /Choose a BLAST TSV for this pair/);
+  assert.match(producerSummary('COMPARISON_INPUT', { reason: 'PAIR_TOPOLOGY' }), /adjacent rows/);
+});

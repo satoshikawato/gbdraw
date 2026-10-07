@@ -1879,19 +1879,19 @@ const generatedProteinSettings = (state, baseline = {}) => {
   };
 };
 
-const comparisonPlanErrorMessage = (snapshot) => {
-  const direct = String(snapshot?.error || '').trim();
-  if (direct) return direct;
-  const issue = Array.isArray(snapshot?.errors) ? snapshot.errors[0] : null;
-  return String(issue?.message || issue || '').trim();
-};
+// The correction of a resolver issue the comparison panel reports (CI-06).
+const PLAN_ISSUE_REASONS = Object.freeze({
+  'missing-upload': 'BLAST_TSV_REQUIRED', 'selected-losat-requires-pairwise': 'LOSAT_PLAN'
+});
 
 const requireLinearComparisonPlanSnapshot = (snapshot) => {
   if (!snapshot || !Array.isArray(snapshot.edges)) {
     throw new Error('A resolved Linear comparison plan is required.');
   }
-  const error = comparisonPlanErrorMessage(snapshot);
-  if (error) throw new Error(error);
+  const issue = Array.isArray(snapshot.errors) ? snapshot.errors[0] : null;
+  if (issue || String(snapshot.error || '').trim()) {
+    throw diagnosticError('COMPARISON_INPUT', { reason: PLAN_ISSUE_REASONS[issue?.code] || 'PAIR_TOPOLOGY' });
+  }
   return snapshot;
 };
 
@@ -2152,7 +2152,7 @@ const buildComparisons = ({
     if (edge.source === 'upload') {
       const file = uploadFilesByEdgeId.get(String(edge.id || ''));
       if (!file) {
-        throw new Error(`The uploaded comparison '${edge.edgeKey}' has no active BLAST TSV file.`);
+        throw diagnosticError('COMPARISON_INPUT', { reason: 'BLAST_TSV_REQUIRED' });
       }
       const resourceId = `comparison-nucleotide-${edge.ordinal + 1}`;
       comparisons.push({
