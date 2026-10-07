@@ -25,6 +25,11 @@ await writeFile(
   'utf8'
 );
 await writeFile(
+  join(tempDir, 'utils', 'named-colors.js'),
+  await readFile('gbdraw/web/js/utils/named-colors.js', 'utf8'),
+  'utf8'
+);
+await writeFile(
   join(tempDir, 'services', 'genbank-header.js'),
   await readFile('gbdraw/web/js/services/genbank-header.js', 'utf8'),
   'utf8'

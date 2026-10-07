@@ -149,3 +149,39 @@ test('Session 45 and a Session 46 with a retired field or a non-registry slice f
   thirdMode.modes.radial = {};
   await rejected(thirdMode, 'modes.radial');
 });
+
+// OV-160: a named CSS color in a Legend color or a stroke override (also the
+// stroke an SVG had before the edit) loads as its CSS hex value, the value the
+// Python split writes; an unknown name loads as no color, as before.
+test('named Legend and stroke colors load as their CSS hex values (OV-160)', async () => {
+  resetDrawings();
+  state.mode.value = 'circular';
+  const saved = await save('named colors');
+  const named = structuredClone(saved);
+  const legend = named.modes.circular.editorState.legend;
+  legend.colorOverrides = { CDS: 'SeaShell' };
+  legend.strokeOverrides = {
+    CDS: { strokeColor: 'navy', strokeWidth: 2, originalStrokeColor: 'gray', originalStrokeWidth: 1 }
+  };
+  named.modes.circular.editorState.featureStrokes = {
+    overrides: { feature_1: { strokeColor: 'rebeccapurple', strokeWidth: 3, originalStrokeColor: 'darkgrey' } }
+  };
+  named.editorState.originalSvgStroke = { color: 'gray', width: 1 };
+  const loaded = await load(named);
+  assert.equal(loaded.status, 'ok', JSON.stringify(loaded.error));
+  const drawing = state.drawings.circular;
+  assert.deepEqual({ ...drawing.legendColorOverrides }, { CDS: '#fff5ee' });
+  assert.deepEqual({ ...drawing.legendStrokeOverrides.CDS },
+    { strokeColor: '#000080', strokeWidth: 2, originalStrokeColor: '#808080', originalStrokeWidth: 1 });
+  assert.deepEqual({ ...drawing.featureStrokeOverrides.feature_1 },
+    { strokeColor: '#663399', strokeWidth: 3, originalStrokeColor: '#a9a9a9' });
+  assert.equal(state.originalSvgStroke.value.color, '#808080');
+
+  const unknown = structuredClone(saved);
+  unknown.modes.circular.editorState.legend.strokeOverrides = {
+    CDS: { strokeColor: 'notacolor', strokeWidth: 2, originalStrokeColor: 'notacolor' }
+  };
+  const loadedUnknown = await load(unknown);
+  assert.equal(loadedUnknown.status, 'ok', JSON.stringify(loadedUnknown.error));
+  assert.deepEqual({ ...state.drawings.circular.legendStrokeOverrides.CDS }, { strokeWidth: 2, originalStrokeColor: null });
+});

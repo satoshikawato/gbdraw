@@ -16,6 +16,11 @@ write-up of a release.
   color, so the CLI draws it as the Web app does. Before, it resolved to `#2E8B57`
   (seagreen). `rebeccapurple` (`#663399`) is now accepted. The other 146 CSS color
   names were already correct.
+- Color names (web app): the web app resolves a color name with the same CSS table
+  as Python, also where the browser offers no canvas, so a named Legend color or
+  stroke in a Session (for example `gray`, the stroke an SVG had before an edit)
+  loads as its hex value instead of being dropped (OV-160). An unknown name is
+  still dropped.
 - Sessions (CLI and Python API): a Session that a CLI run wrote with `--session_output` or
   `--save_session` no longer replays an empty label text as the label "nan". A label
   override row with an empty label text hides the label when the written Session is

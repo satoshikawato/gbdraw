@@ -1,4 +1,5 @@
 // @ts-check
+import { namedColorHex } from './named-colors.js';
 export const hexToRgb = (hex) => {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   return result
@@ -124,12 +125,15 @@ const resolveBrowserNamedColor = (value) => {
   return rgb ? rgbToHex(Number(rgb[1]), Number(rgb[2]), Number(rgb[3])).toUpperCase() : null;
 };
 
+// A CSS color name resolves through the table Python shares (OV-160), so
+// Load, the Session split and Python agree also without a browser canvas; the
+// canvas still resolves the other names a browser knows.
 export const resolveColorToHex = (colorValue) => {
   if (!colorValue || typeof colorValue !== 'string') return colorValue;
   const trimmed = colorValue.trim();
   if (!trimmed) return trimmed;
   if (trimmed.startsWith('#')) return trimmed;
-  return resolveBrowserNamedColor(trimmed) || trimmed;
+  return namedColorHex(trimmed) || resolveBrowserNamedColor(trimmed) || trimmed;
 };
 
 // Specific-color table domain, shared with Python's read_color_table:
