@@ -76,10 +76,12 @@ and the file defaults); the crop, reverse complement, **Definition**, and
 **Subtitle** of the replaced File's row do not carry over. Replacing a single-record
 File with another single-record File keeps them.
 
-Each Linear File card starts with its **Depth TSV** disclosure open. Its summary
-reports the File's record count, logical series count, and whether any series
-has mixed per-record assignments. Collapse it to shorten the sidebar; the open
-state is not saved. Use **Add Depth TSV series** there to add one logical series
+Each Linear File card starts with its **Depth TSV** disclosure closed. Its
+summary line reports how many Depth tracks the File has attached, for example
+"No depth track attached". Click the summary, or focus it and press Enter or
+Space, to open the disclosure; the open state is not saved. Inside, each logical
+series reports whether its file is attached to all, some, or none of the File's
+records. Use **Add Depth TSV series** there to add one logical series
 for every record while preserving existing assignments. A new series has no file,
 so it adds no track row; see [Custom Track Slots](#custom-track-slots).
 
