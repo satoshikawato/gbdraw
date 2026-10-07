@@ -2822,8 +2822,9 @@ def _legend_color_overrides(source: object) -> dict[str, str]:
 
 
 def _with_normalized_editor_colors(draft: Mapping[str, Any]) -> Mapping[str, Any]:
-    """The draft with the Legend and feature stroke and color edits as Web Load
-    reads them (``normalizeEditorStateData``); absent fields stay absent."""
+    """The draft with the Legend and feature stroke and color edits and the
+    original SVG stroke as Web Load reads them (``normalizeEditorStateData``);
+    absent fields stay absent."""
 
     editor = draft.get("editorState")
     if not isinstance(editor, Mapping):
@@ -2840,6 +2841,14 @@ def _with_normalized_editor_colors(draft: Mapping[str, Any]) -> Mapping[str, Any
     strokes = editor.get("featureStrokes")
     if isinstance(strokes, Mapping) and "overrides" in strokes:
         changed["featureStrokes"] = {**strokes, "overrides": _stroke_override_map(strokes["overrides"])}
+    svg_stroke = editor.get("originalSvgStroke")
+    if isinstance(svg_stroke, Mapping):
+        changed_stroke = dict(svg_stroke)
+        if "color" in svg_stroke:
+            changed_stroke["color"] = _optional_hex_color(svg_stroke["color"])
+        if "width" in svg_stroke:
+            changed_stroke["width"] = _stroke_width(svg_stroke["width"])
+        changed["originalSvgStroke"] = changed_stroke
     return {**draft, "editorState": changed}
 
 
