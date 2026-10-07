@@ -752,7 +752,7 @@ const labelOnFacts = (page) => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
   // Per-feature edits by the rendered ID of the feature in view.
   const edits = (field) => Object.fromEntries(state.extractedFeatures.value.flatMap((feature) => {
-    const value = state.activeDrawing().featureOverrides[JSON.stringify([feature.scope, feature.record_key, feature.biological_feature_id])]?.[field];
+    const value = state.activeDrawing().featureOverrides[JSON.stringify([feature.record_key, feature.biological_feature_id])]?.[field];
     return value === null || value === undefined ? [] : [[feature.svg_id, value]];
   }));
   return {

@@ -60,7 +60,7 @@ test('a Circular Main placement and Feature visibility edit stay out of Linear r
   });
   await settle(page);
   expect(target.recordKey).toBe('record-1');
-  const key = JSON.stringify(['circular', target.recordKey, target.id]);
+  const key = JSON.stringify([target.recordKey, target.id]);
   const circularRows = {
     featurePlacements: [{ recordKey: target.recordKey, biologicalFeatureId: target.id, placement: { kind: 'main' } }],
     featureOverrides: [{ recordKey: target.recordKey, biologicalFeatureId: target.id,
@@ -86,8 +86,14 @@ test('a Circular Main placement and Feature visibility edit stay out of Linear r
       app.featureListState(feature).drawn
     ];
   }, target.id)).toEqual(['linear', 'auto', 'default', true]);
-  // A mode change and the Linear Generate keep the Circular rows (R2).
-  expect(linear.drafts).toEqual([[key], [key]]);
+  // A mode change and the Linear Generate keep the Circular rows in the
+  // Circular drawing (R2, PD-OI-086); the Linear drawing has none.
+  expect(linear.drafts).toEqual([[], []]);
+  expect(await page.evaluate(async () => {
+    const { state } = await import('./js/state.js');
+    const drawing = state.drawings.circular;
+    return [Object.keys(drawing.featurePlacementOverrides), Object.keys(drawing.featureOverrides)];
+  })).toEqual([[key], [key]]);
 
   await switchMode(page, 'circular');
   await generateAndWaitForResult(page);

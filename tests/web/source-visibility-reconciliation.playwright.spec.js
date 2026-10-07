@@ -31,7 +31,7 @@ const hide = async page => {
 // The draft key of the feature drawn with this rendered ID (design Q4).
 const identityOf = (page, svgId) => page.evaluate((id) => {
   const feature = window.__GBDRAW_APP__.extractedFeatures.find((item) => item.svg_id === id);
-  return JSON.stringify([feature.scope, feature.record_key, feature.biological_feature_id]);
+  return JSON.stringify([feature.record_key, feature.biological_feature_id]);
 }, svgId);
 const history = async (page, action) => {
   await page.getByRole('button', { name: action, exact: true }).click();

@@ -13,7 +13,7 @@ const placeLane = (page, side) => page.evaluate(async (lane) => {
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
   await app.featurePlacementActions.setPlacement([feature], lane);
-  return JSON.stringify([feature.scope, feature.record_key, feature.biological_feature_id]);
+  return JSON.stringify([feature.record_key, feature.biological_feature_id]);
 }, side);
 const layoutState = (page, key) => page.evaluate(async (overrideKey) => {
   const { state } = await import('./js/state.js');

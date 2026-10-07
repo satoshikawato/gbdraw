@@ -1258,7 +1258,7 @@ const applyDivergentDraft = async (page) => evaluateWithRetainedPromise(page, as
   app.clickedFeature.labelVisibility = 'off';
   await app.updateClickedFeatureLabelText();
   const labelVisibilityApplied = state.activeDrawing().featureOverrides[
-    JSON.stringify([labelFeature.scope, labelFeature.record_key, labelFeature.biological_feature_id])
+    JSON.stringify([labelFeature.record_key, labelFeature.biological_feature_id])
   ]?.labelVisibility === 'off';
   const visibilityApplied = await app.setFeatureVisibility(
     feature,
@@ -1283,9 +1283,9 @@ const applyDivergentDraft = async (page) => evaluateWithRetainedPromise(page, as
   ));
   return {
     featureId,
-    featureIdentity: JSON.stringify([feature.scope, feature.record_key, feature.biological_feature_id]),
+    featureIdentity: JSON.stringify([feature.record_key, feature.biological_feature_id]),
     labelFeatureId,
-    labelFeatureIdentity: JSON.stringify([labelFeature.scope, labelFeature.record_key, labelFeature.biological_feature_id]),
+    labelFeatureIdentity: JSON.stringify([labelFeature.record_key, labelFeature.biological_feature_id]),
     fillOverrideKey,
     strokeOverrideKey,
     fillApplied,
@@ -1663,7 +1663,7 @@ test('loaded current preview supports direct edits before the first Generate', a
     app.clickedFeature.labelVisibility = 'off';
     await app.updateClickedFeatureLabelText();
     const edit = (drawn, field) => app.featureOverrides[
-      JSON.stringify([drawn?.scope, drawn?.record_key, drawn?.biological_feature_id])
+      JSON.stringify([drawn?.record_key, drawn?.biological_feature_id])
     ]?.[field];
     return {
       requested,

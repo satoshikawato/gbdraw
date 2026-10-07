@@ -162,7 +162,7 @@ const placeLane = (page, side) => page.evaluate(async (lane) => {
   const app = window.__GBDRAW_APP__;
   const feature = app.extractedFeatures.find((item) => item.type === 'CDS');
   await app.featurePlacementActions.setPlacement([feature], lane);
-  return { key: JSON.stringify([feature.scope, feature.record_key, feature.biological_feature_id]), product: feature.product };
+  return { key: JSON.stringify([feature.record_key, feature.biological_feature_id]), product: feature.product };
 }, side);
 const placeOutward = (page) => placeLane(page, 'outward');
 const placementState = (page, key) => page.evaluate(async (overrideKey) => {
