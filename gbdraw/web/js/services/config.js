@@ -2076,6 +2076,14 @@ const preflightSessionImport = async (sessionData) => {
     restoredConfig = canonicalProjection && !settingsOnly
       ? overlayModeSliceConfig(canonicalProjection.config, runtimeStoredConfig)
       : null;
+    if (restoredConfig) {
+      // As for Sessions 40-44: the stored draft owns the active controls and the
+      // projection fills only what it omits.
+      const restoredDomains = CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS
+        .filter((domain) => isPlainObject(runtimeStoredConfig) && Object.hasOwn(runtimeStoredConfig, domain));
+      recordStructuralMetric('currentWriterActiveConfigRestoreCount', 1, { domains: restoredDomains });
+      recordStructuralMetric('activeConfigCanonicalOverwriteCount', 0, { domains: restoredDomains });
+    }
     recordSessionLifecycleEvent('current-draft-validation-end');
   }
   if (!canonicalProjection && restoredConfig) {
@@ -5393,10 +5401,13 @@ const importSessionDocument = async (e, options = {}) => {
       modeConfigs.circular.form
     );
     // Each drawing over its mode's defaults (resetSessionBaseline); the shown
-    // drawing's Canvas padding follows once its Result is mounted.
+    // drawing's Canvas padding follows once its Result is mounted. A Session 46
+    // slice without its mode's request projection is stored settings: its track
+    // stacks install as saved, unset axis indexes included (R11).
     for (const mode of SLICE_MODES) {
+      const storedSlice = modeScopedSession && !(mode === committedDraftMode && committedSliceProjected);
       applyModeSliceData(state.drawings[mode], mode, { ...modeSlices[mode], config: modeConfigs[mode] }, {
-        resolveTrackPlacements: !settingsOnly,
+        resolveTrackPlacements: !settingsOnly && !storedSlice,
         applyCanvasPadding: mode !== displayMode
       });
     }
