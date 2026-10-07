@@ -32,7 +32,23 @@ LEGACY_OUTPUT_SHA = "fe022818a9b6a08b52a84fd18293ae318a31b140eb0d2c1c84e847dc5cc
 PRE_COMPLETE_BINDING_OUTPUT_SHA = (
     "68cb2b7670d84f1010a2a05c55e97574de1eef633354a6e7e8086cc6db2b781d"
 )
-OUTPUT_SHA = "c41f5c281e4a913f4820db59bf546077a1fc1b5b8f5260f6deea888b2adb1d84"
+PRE_LEGEND_LAYOUT_INPUTS_OUTPUT_SHA = (
+    "c41f5c281e4a913f4820db59bf546077a1fc1b5b8f5260f6deea888b2adb1d84"
+)
+OUTPUT_SHA = "76e2e0a1250b90d63fcd55ef3a96119c8ab3fafc5c890594033fa27aa94379d0"
+
+
+def _without_legend_layout_inputs(svg: bytes) -> bytes:
+    """Drop the Legend layout inputs that legendReflow carries since K+Z1."""
+    svg = re.sub(
+        rb',&quot;dpi&quot;:\d+,&quot;fontFile&quot;:(?:null|&quot;[^&]*&quot;)'
+        rb',&quot;fontSize&quot;:[^,]+',
+        b"",
+        svg,
+        count=1,
+    )
+    svg = re.sub(rb',&quot;primaryLocalBounds&quot;:\{[^}]*\}', b"", svg, count=1)
+    return re.sub(rb',&quot;wrapWidth&quot;:[^,}]+', b"", svg, count=1)
 
 
 def test_downloaded_exact_replay_after_original_history(tmp_path: Path) -> None:
@@ -178,10 +194,15 @@ def test_downloaded_exact_replay_after_original_history(tmp_path: Path) -> None:
         output = work / "out.svg"
         assert output.stat().st_size > 0
         assert hashlib.sha256(output.read_bytes()).hexdigest() == OUTPUT_SHA
+        # The older oracles predate the Legend layout inputs in legendReflow.
+        without_legend_layout_inputs = _without_legend_layout_inputs(output.read_bytes())
+        assert hashlib.sha256(without_legend_layout_inputs).hexdigest() == (
+            PRE_LEGEND_LAYOUT_INPUTS_OUTPUT_SHA
+        )
         without_complete_bindings = re.sub(
             rb'(<line\b[^>]*?) data-label-feature-id="[^"]+"',
             rb"\1",
-            output.read_bytes(),
+            without_legend_layout_inputs,
         )
         without_complete_bindings = without_complete_bindings.replace(
             b' data-gbdraw-label-binding-schema="1"', b""

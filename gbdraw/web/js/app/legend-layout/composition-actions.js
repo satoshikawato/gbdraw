@@ -44,6 +44,13 @@ const LEGACY_COMPOSITION_SPACING_V0 = Object.freeze({
   stackGapPx: 20,
   titleGapPx: 20
 });
+const LEGEND_LAYOUT_INPUT_FIELDS = Object.freeze([
+  'dpi',
+  'fontFile',
+  'fontSize',
+  'primaryLocalBounds',
+  'wrapWidth'
+]);
 const LEGACY_LEGEND_LINE_HEIGHT_RATIO_V0 = 24 / 14;
 const LEGACY_LEGEND_TEXT_OFFSET_RATIO_V0 = 22 / 14;
 const LEGACY_OVERLAY_POLICY_V0 = Object.freeze({
@@ -104,6 +111,25 @@ const validateBounds = (value, path, { positive = false } = {}) => {
   };
   if (positive && (bounds.width <= 0 || bounds.height <= 0)) {
     fail(`${path} must have positive width and height.`);
+  }
+  return bounds;
+};
+
+/**
+ * Python's Aabb field for field (min/max form, not x/width).
+ * @param {any} value
+ * @param {string} path
+ */
+const validateCornerBounds = (value, path) => {
+  if (!isPlainObject(value)) fail(`${path} must be an object.`);
+  const bounds = {
+    minX: finiteNumber(value.minX, `${path}.minX`),
+    minY: finiteNumber(value.minY, `${path}.minY`),
+    maxX: finiteNumber(value.maxX, `${path}.maxX`),
+    maxY: finiteNumber(value.maxY, `${path}.maxY`)
+  };
+  if (bounds.maxX < bounds.minX || bounds.maxY < bounds.minY) {
+    fail(`${path} must not be inverted.`);
   }
   return bounds;
 };
@@ -223,7 +249,7 @@ const validateLegendReflow = (value, { required }) => {
   }
   if (!required) fail('composition.legendReflow requires a legend target.');
   if (!isPlainObject(value)) fail('composition.legendReflow must be an object.');
-  return {
+  const reflow = {
     colorRectSize: positiveNumber(
       value.colorRectSize,
       'composition.legendReflow.colorRectSize'
@@ -233,6 +259,33 @@ const validateLegendReflow = (value, { required }) => {
       value.textXOffset,
       'composition.legendReflow.textXOffset'
     )
+  };
+  // The inputs Python laid the Legend out with. SVGs written before Python
+  // emitted them carry none; parsing keeps them so a composition edit writes
+  // them back unchanged.
+  const present = LEGEND_LAYOUT_INPUT_FIELDS.filter((field) => (
+    Object.prototype.hasOwnProperty.call(value, field)
+  ));
+  if (present.length === 0) return reflow;
+  if (present.length !== LEGEND_LAYOUT_INPUT_FIELDS.length) {
+    fail('composition.legendReflow has an incomplete set of Python layout inputs.');
+  }
+  if (!Number.isInteger(value.dpi) || value.dpi <= 0) {
+    fail('composition.legendReflow.dpi must be a positive integer.');
+  }
+  if (value.fontFile !== null && (typeof value.fontFile !== 'string' || !value.fontFile.trim())) {
+    fail('composition.legendReflow.fontFile must be a non-empty string or null.');
+  }
+  return {
+    ...reflow,
+    dpi: value.dpi,
+    fontFile: value.fontFile,
+    fontSize: positiveNumber(value.fontSize, 'composition.legendReflow.fontSize'),
+    primaryLocalBounds: validateCornerBounds(
+      value.primaryLocalBounds,
+      'composition.legendReflow.primaryLocalBounds'
+    ),
+    wrapWidth: nonNegativeNumber(value.wrapWidth, 'composition.legendReflow.wrapWidth')
   };
 };
 

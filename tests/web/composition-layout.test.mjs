@@ -501,6 +501,86 @@ assert.deepEqual(minimumExtentGrowth.placements.primary.finalBounds, {
   );
 }
 
+// The Legend layout inputs Python writes into legendReflow: absent from SVGs
+// written before them, all or none, and kept unchanged by a composition edit.
+const pythonLayoutInputs = {
+  dpi: 96,
+  fontFile: 'LiberationSans-Regular',
+  fontSize: 14,
+  primaryLocalBounds: { minX: 10.1, minY: 20, maxX: 110.30000000000001, maxY: 100 },
+  wrapWidth: 100.20000000000002
+};
+/** @param {Record<string, unknown>} reflow */
+const withLegendReflow = (reflow) => {
+  const fixture = schemaOneSvg();
+  const metadata = JSON.parse(fixture.svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE));
+  metadata.legendReflow = reflow;
+  fixture.svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(metadata));
+  return fixture;
+};
+/** @param {FakeElement} svg */
+const editLegendSide = (svg) => applyCompositionEdit(svg, {
+  legendSide: 'bottom',
+  legendLocalBounds: { x: -2, y: -5, width: 80, height: 25 },
+  titleLocalBounds: { x: -5, y: -10, width: 60, height: 20 }
+});
+
+{
+  const { svg } = schemaOneSvg();
+  assert.deepEqual(parseCompositionMetadata(svg).legendReflow, legendReflow);
+  editLegendSide(svg);
+  assert.deepEqual(
+    JSON.parse(svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE)).legendReflow,
+    legendReflow
+  );
+}
+
+{
+  const full = { ...legendReflow, ...pythonLayoutInputs };
+  const { svg } = withLegendReflow(full);
+  assert.deepEqual(parseCompositionMetadata(svg).legendReflow, full);
+  editLegendSide(svg);
+  assert.deepEqual(JSON.parse(svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE)).legendReflow, full);
+  assert.equal(
+    parseCompositionMetadata(withLegendReflow({ ...full, fontFile: null }).svg).legendReflow.fontFile,
+    null
+  );
+}
+
+for (const field of Object.keys(pythonLayoutInputs)) {
+  /** @type {Record<string, unknown>} */
+  const partial = { ...legendReflow, ...pythonLayoutInputs };
+  delete partial[field];
+  assert.throws(
+    () => parseCompositionMetadata(withLegendReflow(partial).svg),
+    /incomplete set of Python layout inputs/,
+    `legendReflow without ${field} was accepted`
+  );
+}
+
+for (const [field, invalid, message] of [
+  ['dpi', 96.5, /dpi must be a positive integer/],
+  ['dpi', 0, /dpi must be a positive integer/],
+  ['dpi', '96', /dpi must be a positive integer/],
+  ['dpi', true, /dpi must be a positive integer/],
+  ['fontFile', '', /fontFile must be a non-empty string or null/],
+  ['fontFile', 3, /fontFile must be a non-empty string or null/],
+  ['fontSize', 0, /legendReflow\.fontSize must be positive/],
+  ['fontSize', '14', /legendReflow\.fontSize must be a finite number/],
+  ['wrapWidth', -1, /legendReflow\.wrapWidth must be non-negative/],
+  ['wrapWidth', null, /legendReflow\.wrapWidth must be a finite number/],
+  ['primaryLocalBounds', null, /primaryLocalBounds must be an object/],
+  ['primaryLocalBounds', { minX: 0, minY: 0, maxX: 1 }, /primaryLocalBounds\.maxY must be a finite number/],
+  ['primaryLocalBounds', { minX: 5, minY: 0, maxX: 1, maxY: 1 }, /primaryLocalBounds must not be inverted/]
+]) {
+  const reflow = { ...legendReflow, ...pythonLayoutInputs, [String(field)]: invalid };
+  assert.throws(
+    () => parseCompositionMetadata(withLegendReflow(reflow).svg),
+    message,
+    `legendReflow.${field} accepted ${JSON.stringify(invalid)}`
+  );
+}
+
 {
   const numericFields = [];
   for (const [role, boundsKey] of [

@@ -58,8 +58,12 @@ def _plot(
                 local_bounds=legend_bounds or Aabb(0.0, 0.0, 0.0, 0.0),
                 reflow_metrics={
                     "colorRectSize": 24.0,
+                    "dpi": 96,
+                    "fontFile": "LiberationSans-Regular",
+                    "fontSize": 16.0,
                     "lineHeight": 24.0 * (24.0 / 14.0),
                     "textXOffset": 24.0 * (22.0 / 14.0),
+                    "wrapWidth": 400.0,
                 },
             ),
             legend_table={},

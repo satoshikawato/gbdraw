@@ -616,6 +616,26 @@ def calculate_bbox_dimensions(
     return len(str(text)) * f_size * 0.6, f_size
 
 
+def measurement_font_file(
+    font_family: str,
+    font_weight: str | int | float | None = "normal",
+    font_style: str | None = "normal",
+) -> Optional[str]:
+    """Return the file stem of the font ``calculate_bbox_dimensions`` measures with.
+
+    For example ``"LiberationSans-Regular"``; None when no bundled font exists
+    and the measurement falls back to its approximation.
+    """
+    target_font_path = _resolve_font_path(
+        font_family,
+        font_weight=font_weight,
+        font_style=font_style,
+    )
+    if not target_font_path:
+        return None
+    return os.path.splitext(os.path.basename(target_font_path))[0]
+
+
 @functools.lru_cache(maxsize=4096)
 def calculate_svg_bbox_dimensions(
     text,
@@ -811,6 +831,7 @@ __all__ = [
     "font_pair_kerning_table",
     "get_font_vertical_metrics",
     "get_text_bbox_size_pixels",
+    "measurement_font_file",
     "parse_mixed_content_text",
 ]
 
