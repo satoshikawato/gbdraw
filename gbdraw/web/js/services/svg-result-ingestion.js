@@ -6,7 +6,7 @@ import {
   getLegendEntrySwatch as legendSwatch,
   moveLegendEntryToAnchor,
   orderLegendEntries
-} from '../app/legend/utils.js';
+} from './legend-svg.js';
 import { isCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
 import { diagnosticError } from '../utils/error-normalization.js';
 import { sanitizeSvgContent } from './svg-sanitization.js';

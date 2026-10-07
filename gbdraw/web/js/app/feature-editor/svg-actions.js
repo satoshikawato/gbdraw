@@ -17,7 +17,7 @@ import { buildFeatureSequenceFastas } from '../../services/feature-sequence-fast
 import { getFeatureOverride } from '../../services/feature-override-identity.js';
 import { featureIdentityKeyOf, featureOverrideValue } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
-import { COMPARISON_LEGEND_SELECTOR } from '../legend/utils.js';
+import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import {
   featureIdentity,

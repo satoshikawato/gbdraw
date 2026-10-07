@@ -4,7 +4,7 @@ import { ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { resolveColorToHex } from '../../utils/color-utils.js';
 import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } from '../../services/feature-utils.js';
 import { exactRegexValue } from '../../services/feature-selector.js';
-import { getAllFeatureLegendGroups, mountedLegendRowFeatureIds, setsFeatureStroke } from '../legend/utils.js';
+import { getAllFeatureLegendGroups, mountedLegendRowFeatureIds, setsFeatureStroke } from '../../services/legend-svg.js';
 import {
   featureOverrideKey,
   getFeatureOverride

@@ -1,8 +1,8 @@
 // @ts-check
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { plainTextLinearRecordLabel } from '../services/linear-comparisons.js';
-import { resolveLinearRecordEffectiveDefinition } from './linear-sources.js';
-import { canonicalRecordReverseComplement } from './record-display-options.js';
+import { resolveLinearRecordEffectiveDefinition } from '../services/linear-sources.js';
+import { canonicalRecordReverseComplement } from '../services/record-display-model.js';
 import { validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import {
   featureIdentity,

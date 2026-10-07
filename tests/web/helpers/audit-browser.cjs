@@ -107,7 +107,7 @@ const featurePresentation = (page, locusTags) => page.evaluate((tags) => {
 }, locusTags);
 
 const legendCaptions = (page, { source = 'mounted' } = {}) => page.evaluate(async (from) => {
-  const { getVisibleFeatureLegendGroup } = await import('/gbdraw/web/js/app/legend/utils.js');
+  const { getVisibleFeatureLegendGroup } = await import('/gbdraw/web/js/services/legend-svg.js');
   const app = window.__GBDRAW_APP__;
   const root = from === 'mounted'
     ? app.svgContainer.querySelector('svg')

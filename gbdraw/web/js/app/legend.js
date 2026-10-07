@@ -8,7 +8,7 @@ import {
   getAllFeatureLegendGroups,
   getVisibleFeatureLegendGroup,
   isCurrentLegendHorizontal
-} from './legend/utils.js';
+} from '../services/legend-svg.js';
 import { legendRowRules } from '../services/specific-color-rules.js';
 
 /**

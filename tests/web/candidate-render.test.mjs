@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { compileDirectEditorMutationPlan } from '../../gbdraw/web/js/app/candidate-render.js';
-import { legendRowFeatureIds } from '../../gbdraw/web/js/app/legend/utils.js';
+import { legendRowFeatureIds } from '../../gbdraw/web/js/services/legend-svg.js';
 import { biologicalFeatureKey } from '../../gbdraw/web/js/services/feature-catalog.js';
 
 const stableKey = biologicalFeatureKey('record-a', 'feature-a');

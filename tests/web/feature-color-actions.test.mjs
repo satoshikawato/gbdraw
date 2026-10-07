@@ -22,7 +22,7 @@ const { buildLegendIntents, legendRowRules } = await import(pathToFileURL(join(t
 assert.doesNotMatch(colorActionsSource, /serializeCleanSvg|results\.value\[[^\]]+\]\s*=/);
 
 const ref = (value) => ({ value });
-// The mounted SVG as `getAllFeatureLegendGroups` (app/legend/utils.js) reads it:
+// The mounted SVG as `getAllFeatureLegendGroups` (services/legend-svg.js) reads it:
 // `#legend` holding one `#feature_legend` group, or no legend.
 const legendSvg = (featureLegend = null) => ({
   getElementById: (id) => (id === 'legend' && featureLegend

@@ -8,7 +8,7 @@ import {
   formatInferredOrganismStrain,
   extractGenBankMetadata,
   parseSequenceRecordText
-} from '../../gbdraw/web/js/app/record-discovery.js';
+} from '../../gbdraw/web/js/services/record-discovery.js';
 
 // gbdraw/core/record_metadata.py owns this inference for the Worker and the
 // renderer; record-discovery.js reimplements it for the no-Worker upload path.

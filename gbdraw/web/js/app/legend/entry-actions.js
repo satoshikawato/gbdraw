@@ -10,7 +10,7 @@ import {
   orderLegendEntries,
   parseTransformXY,
   setsFeatureStroke
-} from './utils.js';
+} from '../../services/legend-svg.js';
 import { parseCompositionMetadata } from '../legend-layout/composition-actions.js';
 import {
   diffLegendIntents,

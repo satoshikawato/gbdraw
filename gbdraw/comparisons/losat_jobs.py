@@ -6,7 +6,7 @@ which raw-cache key.
 
 This is the Python owner of the rules that the Web keeps in
 ``planLosatSourceJobs``, ``prepareLosatSourceBatches`` and
-``splitLosatSourceResult`` (``gbdraw/web/js/app/linear-sources.js``), the
+``splitLosatSourceResult`` (``gbdraw/web/js/services/linear-sources.js``), the
 LOSATP record-pair searches of ``buildLosatJobSpecs``
 (``gbdraw/web/js/services/linear-comparisons.js``), the nucleotide FASTA text of
 ``extractLosatFastaFast`` and the nucleotide raw key of

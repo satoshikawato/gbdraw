@@ -2,15 +2,15 @@
 import {
   DIAGRAM_HELPER_OPERATIONS,
   runDiagramHelperOperation
-} from '../services/diagram-generation.js';
-import { scanGenBankHeader } from '../services/genbank-header.js';
+} from './diagram-generation.js';
+import { scanGenBankHeader } from './genbank-header.js';
 import {
   bytesToText,
   cloneFileBytesForTransfer,
   getSessionResourceSource,
   readFileBytes,
   readFileText
-} from '../services/file-content-cache.js';
+} from './file-content-cache.js';
 
 // A discovery error the reader reported for the source bytes is final for that
 // exact source instance: reading the same files again returns it again, so a

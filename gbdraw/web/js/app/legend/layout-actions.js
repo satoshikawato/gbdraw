@@ -8,7 +8,7 @@ import {
   loadLegendFontMetrics,
   resolveBundledFontFace
 } from '../../services/legend-layout.js';
-import { getComparisonLegendGroup, getLegendEntrySwatch } from './utils.js';
+import { getComparisonLegendGroup, getLegendEntrySwatch } from '../../services/legend-svg.js';
 import { parseCompositionMetadata } from '../legend-layout/composition-actions.js';
 
 // The dpi Python lays the Legend out at unless the Result says otherwise

@@ -20,7 +20,7 @@ import {
   prependTranslate,
   readLeadingTranslate,
   replaceLeadingTranslate
-} from '../../gbdraw/web/js/app/legend-layout/transform-utils.js';
+} from '../../gbdraw/web/js/services/svg-transform.js';
 
 class FakeElement {
   constructor({ tagName = 'g', id = '', attributes = {}, bbox = { x: 0, y: 0, width: 1, height: 1 } } = {}) {

@@ -3,7 +3,7 @@ import {
   prependTranslate,
   readLeadingTranslate,
   replaceLeadingTranslate
-} from './transform-utils.js';
+} from '../../services/svg-transform.js';
 import { planLegendComposition } from '../../services/legend-layout.js';
 
 export const COMPOSITION_SCHEMA_VERSION = 1;

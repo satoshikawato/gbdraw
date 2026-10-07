@@ -4,7 +4,7 @@ import test from 'node:test';
 
 import { createFeatureRecordRotationAction } from '../../gbdraw/web/js/app/record-display/feature-record-rotation.js';
 import { projectCommittedRecordTransform } from '../../gbdraw/web/js/services/session-request.js';
-import { validateAnchorIntent } from '../../gbdraw/web/js/app/record-display-options.js';
+import { validateAnchorIntent } from '../../gbdraw/web/js/services/record-display-model.js';
 
 const committed = JSON.parse(await readFile(
   'docs/images/h-cli-12/cli_session.json',

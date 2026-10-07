@@ -2,7 +2,7 @@
 /** @import { FeatureCatalogAdmission } from '../services/feature-catalog.js' */
 /** @import { SvgAdmissionRuntime, SvgResultTransform } from '../services/svg-result-ingestion.js' */
 import { resolveColorToHex } from '../utils/color-utils.js';
-import { defaultLegendCaptionOrder, isLegendOrderEdited, legendRowFeatureIds } from './legend/utils.js';
+import { defaultLegendCaptionOrder, isLegendOrderEdited, legendRowFeatureIds } from '../services/legend-svg.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
 import {

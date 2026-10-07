@@ -79,7 +79,7 @@ import {
 import {
   buildSessionFeatureRecoveryPlan,
   extractSessionSourceFeatures
-} from '../app/session-feature-metadata.js';
+} from './session-feature-recovery.js';
 import {
   analyzeCatalogSequenceSourceCoverage,
   buildRestoredMatchSequenceSources,
@@ -131,7 +131,7 @@ import {
   validateFeatureCatalog,
   validateFeatureCatalogForImport
 } from './feature-catalog.js';
-import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
+import { migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
 import {
   buildOrthogroupFeatureIndex,
   enrichFeaturesWithOrthogroups,
@@ -169,7 +169,7 @@ import {
   validateDerivedProteinReferences,
   validateProteinRawEntryReferences,
   validateProteinIdentityManifest
-} from '../app/losat-cache.js';
+} from './losat-cache.js';
 import {
   arrowHeadLengthRatioForState,
   defaultFeatureRendering,

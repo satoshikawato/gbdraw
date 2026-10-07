@@ -1,8 +1,8 @@
 // @ts-check
-import { runFeatureExtraction } from '../services/diagram-generation.js';
+import { runFeatureExtraction } from './diagram-generation.js';
 import { diagnosticError } from '../utils/error-normalization.js';
-import { cloneJsonValue } from '../services/json-clone.js';
-import { cloneFileBytesForTransfer } from '../services/file-content-cache.js';
+import { cloneJsonValue } from './json-clone.js';
+import { cloneFileBytesForTransfer } from './file-content-cache.js';
 
 const FEATURE_EXTRACTION_CACHE_LIMIT = 16;
 const featureExtractionCache = new WeakMap();

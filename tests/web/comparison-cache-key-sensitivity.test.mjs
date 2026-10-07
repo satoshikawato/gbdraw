@@ -12,7 +12,7 @@ import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 
 import { buildLosatDerivedPayloadCachePayload } from '../../gbdraw/web/js/app/run-analysis.js';
-import { prepareLosatSourceBatches } from '../../gbdraw/web/js/app/linear-sources.js';
+import { prepareLosatSourceBatches } from '../../gbdraw/web/js/services/linear-sources.js';
 
 const keyOf = (identity) => createHash('sha256').update(JSON.stringify(identity)).digest('hex');
 

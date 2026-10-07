@@ -19,7 +19,7 @@ const upload = async (page, name, linear = true) => {
 const inspect = page => page.evaluate(async () => {
   const { state: s } = await import('./js/state.js');
   const { getCommittedCanonicalRenderRequest } = await import('./js/services/config.js');
-  const { getVisibleFeatureLegendGroup } = await import('./js/app/legend/utils.js');
+  const { getVisibleFeatureLegendGroup } = await import('./js/services/legend-svg.js');
   const digest = async value => [...new Uint8Array(await crypto.subtle.digest('SHA-256',
     new TextEncoder().encode(typeof value === 'string' ? value : JSON.stringify(value))))]
     .map(byte => byte.toString(16).padStart(2, '0')).join('');
@@ -61,7 +61,7 @@ const reveal = async locator => {
 // The swatch of row `caption` in each Legend group of the selected Result and of the mounted SVG.
 const rowStyle = (page, caption) => page.evaluate(async target => {
   const { state: s } = await import('./js/state.js');
-  const { getAllFeatureLegendGroups, getLegendEntrySwatch } = await import('./js/app/legend/utils.js');
+  const { getAllFeatureLegendGroups, getLegendEntrySwatch } = await import('./js/services/legend-svg.js');
   const styles = svg => getAllFeatureLegendGroups(svg).map(group => {
     const swatch = getLegendEntrySwatch(group.querySelector(`g[data-legend-key="${CSS.escape(target)}"]`));
     return swatch && [swatch.getAttribute('fill'), swatch.getAttribute('stroke'), swatch.getAttribute('stroke-width')];
@@ -173,7 +173,7 @@ const addLegendRow = async (page, caption, color) => {
 // Legend group of the selected Result and of the mounted SVG.
 const rowStroke = (page, caption) => page.evaluate(async target => {
   const { state: s } = await import('./js/state.js');
-  const { getAllFeatureLegendGroups, getLegendEntrySwatch } = await import('./js/app/legend/utils.js');
+  const { getAllFeatureLegendGroups, getLegendEntrySwatch } = await import('./js/services/legend-svg.js');
   const paint = document.createElement('canvas').getContext('2d');
   const color = value => { paint.fillStyle = '#010203'; paint.fillStyle = String(value); return String(paint.fillStyle); };
   const strokes = svg => getAllFeatureLegendGroups(svg).map(group => {
@@ -362,7 +362,7 @@ const legendView = async page => ({
   ...await legendCaptionBoxes(page),
   ...await page.evaluate(async () => {
     const { state: s } = await import('./js/state.js');
-    const { getAllFeatureLegendGroups, getLegendEntrySwatch } = await import('./js/app/legend/utils.js');
+    const { getAllFeatureLegendGroups, getLegendEntrySwatch } = await import('./js/services/legend-svg.js');
     const svg = s.svgContainer.value.querySelector('svg');
     const paint = document.createElement('canvas').getContext('2d');
     const stroke = element => {
@@ -902,7 +902,7 @@ for (const mode of ['linear', 'circular']) {
 // stroke of a feature is the block stroke, and an underlay keeps none.
 const drawnStrokes = page => page.evaluate(async () => {
   const { state: s } = await import('./js/state.js');
-  const { getAllFeatureLegendGroups, getLegendEntrySwatch } = await import('./js/app/legend/utils.js');
+  const { getAllFeatureLegendGroups, getLegendEntrySwatch } = await import('./js/services/legend-svg.js');
   const paint = document.createElement('canvas').getContext('2d');
   const color = value => { paint.fillStyle = '#010203'; paint.fillStyle = String(value); return String(paint.fillStyle); };
   const stroke = element => [color(element.getAttribute('stroke')), Number(element.getAttribute('stroke-width'))];

@@ -5,7 +5,7 @@ import {
   getFeatureElements,
   getFeatureIdentity
 } from '../feature-editor/svg-actions.js';
-import { getAllFeatureLegendGroups, mountedLegendRowFeatureIds, setsFeatureStroke } from './utils.js';
+import { getAllFeatureLegendGroups, mountedLegendRowFeatureIds, setsFeatureStroke } from '../../services/legend-svg.js';
 import {
   featureOverrideKey,
   migrateLegacyFeatureOverrides

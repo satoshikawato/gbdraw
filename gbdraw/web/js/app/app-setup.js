@@ -12,7 +12,7 @@ import { compileDirectEditorMutationPlan } from './candidate-render.js';
 import {
   countUnresolvedFeatureEdits, removeUnresolvedFeatureEdits, requestFeatureVisibilityRules
 } from '../services/feature-visibility.js';
-import { isLegendOrderEdited } from './legend/utils.js';
+import { isLegendOrderEdited } from '../services/legend-svg.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
 import { createRecordDisplayControls } from './record-display-options.js';
@@ -70,7 +70,7 @@ import {
   setLinearSourceDefaultSubtitle,
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
-} from './linear-sources.js';
+} from '../services/linear-sources.js';
 import { captureSvgExport, serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { downloadTextFile } from '../services/text-download.js';
@@ -175,7 +175,7 @@ import {
   discoverComparisonSequenceRecordLabel,
   discoverGffFastaRecords,
   discoverSequenceRecords
-} from './record-discovery.js';
+} from '../services/record-discovery.js';
 import {
   applyComparisonSequenceRecordLabel,
   conservationSourceDescriptors,

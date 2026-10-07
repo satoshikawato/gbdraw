@@ -15,7 +15,7 @@ import { downloadTextFile } from '../../services/text-download.js';
 import { defaultFeatureRendering } from '../../utils/feature-rendering.js';
 import { readFileText } from '../../services/file-content-cache.js';
 import { normalizeTsvCell } from '../../utils/tsv-cell.js';
-import { COMPARISON_LEGEND_SELECTOR } from '../legend/utils.js';
+import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
 
 export const EXCLUDED_GROUP_SELECTOR = [
   '#legend',

@@ -25,7 +25,7 @@ const {
   getLegendChildById,
   parseTransformXY
 } = await import(
-  pathToFileURL(join(tempRoot, 'app', 'legend', 'utils.js'))
+  pathToFileURL(join(tempRoot, 'services', 'legend-svg.js'))
 );
 const { createLegendEntryActions } = await import(
   pathToFileURL(join(tempRoot, 'app', 'legend', 'entry-actions.js'))
