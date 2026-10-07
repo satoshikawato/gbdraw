@@ -130,7 +130,6 @@ export const setupWatchers = ({
     labelTextBulkOverrides,
     canonicalLabelOverrideRows,
     isFeatureDrawerMounted,
-    clickedFeature,
     clickedPairwiseMatch,
     clickedLabel,
     hiddenLabelTextDialog,

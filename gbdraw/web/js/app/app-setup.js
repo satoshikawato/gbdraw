@@ -299,14 +299,12 @@ export const createAppSetup = () => {
     featureIdentityNotices,
     featureEditRemovalCount,
     comparisonWarnings,
-    pairwiseMatchFactors,
     matchSequenceRegistry,
     svgContent,
     svgResultIdentity,
     zoom,
     layoutRepositionMode,
     isPanning,
-    panStart,
     canvasPan,
     canvasContainerRef,
     mode,
@@ -344,7 +342,6 @@ export const createAppSetup = () => {
     rightDrawerTab,
     linearReorderNotice,
     circularRecordList,
-    circularRecordDiscovery,
     paletteDefinitions,
     paletteNames,
     selectedPalette,
@@ -412,7 +409,6 @@ export const createAppSetup = () => {
     featureVisibilityRules,
     featureOverrides,
     featureStrokeOverrides,
-    resultGenerationKey,
     svgContainer,
     clickedFeature,
     clickedFeaturePos,
@@ -436,32 +432,16 @@ export const createAppSetup = () => {
     hiddenLabelTextDialog,
     labelOnDialog,
     sidebarWidth,
-    isResizing,
     legendEntries,
     deletedLegendEntries,
     originalLegendOrder,
-    originalLegendColors,
     newLegendCaption,
     newLegendColor,
     legendStrokeOverrides,
     legendColorOverrides,
-    originalSvgStroke,
-    legendDragging,
-    legendDragStart,
-    legendOriginalTransform,
-    legendInitialTransform,
-    legendCurrentOffset,
-    diagramDragging,
-    diagramDragStart,
-    diagramOffset,
-    diagramElementIds,
-    diagramElementOriginalTransforms,
-    diagramElements,
     canvasPadding,
     showCanvasControls,
-    generatedLegendPosition,
     skipCaptureBaseConfig,
-    skipExtractOnSvgChange,
     featureKeys,
     defaultColorKeys,
     newColorFeat,
@@ -470,7 +450,6 @@ export const createAppSetup = () => {
     newPriorityRule,
     newFeatureToAdd,
     addedLegendCaptions,
-    fileLegendCaptions,
     filteredFeatures,
     featureListState
   } = state;
@@ -3120,7 +3099,7 @@ export const createAppSetup = () => {
   const runInfoHasCliHelperFiles = computed(() =>
     Array.isArray(lastRunInfo.value?.helperFiles) && lastRunInfo.value.helperFiles.length > 0
   );
-  const copyRunInfoCommand = async (commandValue, status, description) => {
+  const copyRunInfoCommand = async (commandValue, status) => {
     const command = String(commandValue || '');
     if (!command) return;
     try {
@@ -3139,13 +3118,11 @@ export const createAppSetup = () => {
   };
   const copyRunCommand = () => copyRunInfoCommand(
     lastRunInfo.value?.sourceRecipe?.command || lastRunInfo.value?.command,
-    runInfoCopyStatus,
-    'source recipe'
+    runInfoCopyStatus
   );
   const copyExactReplayCommand = () => copyRunInfoCommand(
     lastRunInfo.value?.exactReplay?.command || lastRunInfo.value?.sessionCommand,
-    exactReplayCopyStatus,
-    'exact replay command'
+    exactReplayCopyStatus
   );
 
   const catalogIssueError = (catalog) => {
@@ -3202,7 +3179,7 @@ export const createAppSetup = () => {
         };
   }
 
-  const runAnalysis = (options = null) => {
+  const runAnalysis = () => {
     const patternDrafts = featureActions.captureSpecificRulePatternDrafts();
     return runGeneratedDiagramAnalysis(null, null, null, {
       prepareGenerate: async () => {

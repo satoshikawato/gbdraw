@@ -70,9 +70,6 @@ import {
   customTrackPlanIssues,
   validateCustomTrackPlan
 } from './track-slot-validation.js';
-import {
-  normalizeCollinearSearchScope
-} from './losat-normalization.js';
 import { buildRunInfo, buildSourceRecipe, summarizeLosatRuntimes } from './run-info.js';
 import {
   buildLosatJobSpecs,
@@ -1249,14 +1246,11 @@ export const createRunAnalysis = ({
     generationFailureRecovery,
     resultGenerationKey,
     resultPanelTab,
-    lastRunInfo,
     pairwiseMatchFactors,
-    trackSlotResolvedGeometry,
     errorLog,
     semanticFileWatchersSuppressed,
     sessionImportRollbackInProgress,
     zoom,
-    canvasPan,
     skipCaptureBaseConfig,
     matchSequenceRegistry,
     featureColorOverrides,
@@ -1270,8 +1264,6 @@ export const createRunAnalysis = ({
     paletteDefinitions,
     appliedPaletteName,
     appliedPaletteColors,
-    pendingPaletteName,
-    pendingPaletteColors,
     filterMode,
     manualSpecificRules,
     manualWhitelist,
@@ -1307,10 +1299,6 @@ export const createRunAnalysis = ({
     linearComparisonPlan,
     linearComparisonResolution,
     importedComparisonIntent,
-    generatedLegendPosition,
-    generatedMode,
-    generatedMultiRecordCanvas,
-    generatedCircularPlotTitlePosition,
     shouldDeferCircularPreviewUpdates,
     extractedFeatures,
     biologicalFeatures,
@@ -1319,11 +1307,7 @@ export const createRunAnalysis = ({
     featureEditorStatus,
     featureExtractionPending,
     featureExtractionError,
-    featureRecordIds,
     selectedFeatureRecordIdx,
-    editableLabels,
-    canonicalLabelOverrideRows,
-    labelTextBulkOverrides,
     labelReflowProcessing,
     labelReflowLastError,
     legendEntries,

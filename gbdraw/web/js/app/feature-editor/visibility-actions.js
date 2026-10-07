@@ -16,10 +16,7 @@ import {
   setFeatureVisibilityOverride,
   upsertEditorQualifierFeatureVisibilityRule,
 } from '../feature-visibility.js';
-import {
-  isInternalProteinDisplayId,
-  resolveDisplayProteinId
-} from '../feature-utils.js';
+import { isInternalProteinDisplayId } from '../feature-utils.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import { normalizeUserFacingError } from '../../services/error-normalization.js';
 import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-identity.js';
