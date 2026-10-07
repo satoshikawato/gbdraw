@@ -231,6 +231,7 @@ const { nextTick } = window.Vue;
 /** @import { FeatureCatalog } from './feature-catalog.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
 /** @import { FeatureOverrideDraft } from './feature-placement.js' */
+/** @import { DrawingState } from '../state.js' */
 
 /**
  * The editor state of a Session: the Python-owned legend and stroke rows (R7)
@@ -429,10 +430,11 @@ const cloneQualifierPriorityRules = (rules) => {
   return cloned;
 };
 
-const replaceQualifierPriorityRules = (rules) => {
-  state.manualPriorityRules.splice(
+/** @param {DrawingState} drawing */
+const replaceQualifierPriorityRules = (drawing, rules) => {
+  drawing.manualPriorityRules.splice(
     0,
-    state.manualPriorityRules.length,
+    drawing.manualPriorityRules.length,
     ...cloneQualifierPriorityRules(rules)
   );
 };
@@ -1049,35 +1051,36 @@ const serializeLinearComparisonPlan = (plan) => {
   };
 };
 
-export const buildConfigData = () => ({
-  form: state.form,
+/** @param {DrawingState} drawing */
+export const buildConfigData = (drawing) => ({
+  form: drawing.form,
   adv: {
-    ...state.adv,
+    ...drawing.adv,
     feature_shapes: {
       repeat_region: defaultFeatureRendering('repeat_region'),
-      ...normalizeFeatureRenderingMap(state.adv.feature_shapes || {})
+      ...normalizeFeatureRenderingMap(drawing.adv.feature_shapes || {})
     }
   },
-  losat: cloneJsonData(state.losat || {}),
+  losat: cloneJsonData(drawing.losat || {}),
   cliOptions: preservedCliOptions ? cloneJsonData(preservedCliOptions) : undefined,
-  colors: state.currentColors.value,
-  palette: state.selectedPalette.value,
+  colors: drawing.currentColors.value,
+  palette: drawing.selectedPalette.value,
   paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
-  rules: state.manualSpecificRules,
-  qualifierPriorityRules: cloneQualifierPriorityRules(state.manualPriorityRules),
-  filterMode: state.filterMode.value,
-  whitelist: state.manualWhitelist,
-  blacklistText: state.manualBlacklist.value,
-  losatProgram: state.losatProgram.value,
-  circularConservation: state.circularConservation,
-  annotationSets: normalizeAnnotationSets(state.annotationSets),
-  recordDisplayDrafts: cloneJsonData(state.recordDisplayDrafts),
-  featurePlacementOverrides: cloneJsonData(state.featurePlacementOverrides),
-  modeProfiles: state.modeProfileStateManager?.exportState?.(),
+  rules: drawing.manualSpecificRules,
+  qualifierPriorityRules: cloneQualifierPriorityRules(drawing.manualPriorityRules),
+  filterMode: drawing.filterMode.value,
+  whitelist: drawing.manualWhitelist,
+  blacklistText: drawing.manualBlacklist.value,
+  losatProgram: drawing.losatProgram.value,
+  circularConservation: drawing.circularConservation,
+  annotationSets: normalizeAnnotationSets(drawing.annotationSets),
+  recordDisplayDrafts: cloneJsonData(drawing.recordDisplayDrafts),
+  featurePlacementOverrides: cloneJsonData(drawing.featurePlacementOverrides),
+  modeProfiles: drawing.modeProfileStateManager?.exportState?.(),
   linearRecordLayout: {
-    enabled: Boolean(state.linearRecordLayoutEnabled.value),
-    recordGap: Number(state.linearRecordGap.value) || 0,
-    rows: (state.linearRecordRows || []).map((entry) => ({
+    enabled: Boolean(drawing.linearRecordLayoutEnabled.value),
+    recordGap: Number(drawing.linearRecordGap.value) || 0,
+    rows: (drawing.linearRecordRows || []).map((entry) => ({
       uid: String(entry?.uid || ''),
       row: Number(entry?.row) || 1,
       ...(entry?.canonicalCardinality === 'exactly_one'
@@ -1088,15 +1091,15 @@ export const buildConfigData = () => ({
         : {})
     }))
   },
-  linearComparisonPlan: serializeLinearComparisonPlan(state.linearComparisonPlan),
+  linearComparisonPlan: serializeLinearComparisonPlan(drawing.linearComparisonPlan),
   importedComparisonResolution: serializeImportedComparisonResolution(
-    state.importedComparisonIntent
+    drawing.importedComparisonIntent
   ),
-  unmanagedConfigOverrides: cloneJsonData(state.unmanagedConfigOverrides || {}),
+  unmanagedConfigOverrides: cloneJsonData(drawing.unmanagedConfigOverrides || {}),
   webEdits: {
-    orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
-    orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides),
-    orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(state.orthogroupDormantOverrides)
+    orthogroupNameOverrides: cloneStringMap(drawing.orthogroupNameOverrides),
+    orthogroupDescriptionOverrides: cloneStringMap(drawing.orthogroupDescriptionOverrides),
+    orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(drawing.orthogroupDormantOverrides)
   }
 });
 
@@ -1128,20 +1131,21 @@ const admittedFeatureCatalog = (catalog) => {
   return isAdoptedFeatureCatalog(rawCatalog) ? rawCatalog : null;
 };
 
-export const buildEditorStateData = () => ({
+/** @param {DrawingState} drawing */
+export const buildEditorStateData = (drawing) => ({
   legend: {
-    entries: cloneJsonArray(state.legendEntries.value),
-    deletedEntries: cloneJsonArray(state.deletedLegendEntries.value),
+    entries: cloneJsonArray(drawing.legendEntries.value),
+    deletedEntries: cloneJsonArray(drawing.deletedLegendEntries.value),
     originalOrder: cloneJsonArray(state.originalLegendOrder.value),
     originalColors: cloneStringMap(state.originalLegendColors.value),
-    colorOverrides: cloneJsonObject(state.legendColorOverrides),
-    strokeOverrides: cloneJsonObject(state.legendStrokeOverrides),
-    addedCaptions: Array.from(state.addedLegendCaptions.value || [])
+    colorOverrides: cloneJsonObject(drawing.legendColorOverrides),
+    strokeOverrides: cloneJsonObject(drawing.legendStrokeOverrides),
+    addedCaptions: Array.from(drawing.addedLegendCaptions.value || [])
       .map((caption) => String(caption || '').trim())
       .filter(Boolean)
   },
   featureStrokes: {
-    overrides: cloneJsonObject(state.featureStrokeOverrides)
+    overrides: cloneJsonObject(drawing.featureStrokeOverrides)
   },
   originalSvgStroke: {
     color: state.originalSvgStroke.value?.color ?? null,
@@ -1252,7 +1256,9 @@ const validateUnmanagedConfigOverrides = async ({
   return cloneJsonData(result.result.overrides);
 };
 
+/** @param {DrawingState} drawing */
 export const applyEditorStateData = (
+  drawing,
   editorState = {},
   { normalized: alreadyNormalized = false } = {}
 ) => {
@@ -1263,14 +1269,14 @@ export const applyEditorStateData = (
   if (state.similarityAlignmentResetReceipt) {
     state.similarityAlignmentResetReceipt.value = normalized.alignmentResetReceipt ?? null;
   }
-  state.legendEntries.value = normalized.legend.entries;
-  state.deletedLegendEntries.value = normalized.legend.deletedEntries;
+  drawing.legendEntries.value = normalized.legend.entries;
+  drawing.deletedLegendEntries.value = normalized.legend.deletedEntries;
   state.originalLegendOrder.value = normalized.legend.originalOrder;
   state.originalLegendColors.value = normalized.legend.originalColors;
-  replacePlainObject(state.legendColorOverrides, normalized.legend.colorOverrides);
-  replacePlainObject(state.legendStrokeOverrides, normalized.legend.strokeOverrides);
-  state.addedLegendCaptions.value = new Set(normalized.legend.addedCaptions);
-  replacePlainObject(state.featureStrokeOverrides, normalized.featureStrokes.overrides);
+  replacePlainObject(drawing.legendColorOverrides, normalized.legend.colorOverrides);
+  replacePlainObject(drawing.legendStrokeOverrides, normalized.legend.strokeOverrides);
+  drawing.addedLegendCaptions.value = new Set(normalized.legend.addedCaptions);
+  replacePlainObject(drawing.featureStrokeOverrides, normalized.featureStrokes.overrides);
   state.originalSvgStroke.value = normalized.originalSvgStroke;
   if (state.featureCatalog) {
     state.featureCatalog.value = admittedFeatureCatalog(normalized.featureCatalog);
@@ -1492,7 +1498,8 @@ const isLegacyConfigPayload = (data) =>
   !Object.prototype.hasOwnProperty.call(data, 'format') &&
   Object.keys(data).some((key) => LEGACY_CONFIG_KEYS.has(key));
 
-const applyLegacyConfigPayload = (data) => {
+/** @param {DrawingState} drawing */
+const applyLegacyConfigPayload = (drawing, data) => {
   const circularSlotSchema = data?.adv?.circular_track_slots_schema_version;
   const migratedOptions = circularSlotSchema === CIRCULAR_TRACK_SLOT_SCHEMA_VERSION
     ? data
@@ -1505,16 +1512,17 @@ const applyLegacyConfigPayload = (data) => {
   );
   validateImportedCircularTrackSlots(migrated);
   validateImportedLinearTrackSlots(migrated);
-  state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(migrated.form);
-  applyConfigData(migrated);
-  restorePaletteStateAfterConfigImport();
+  state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(drawing, migrated.form);
+  applyConfigData(drawing, migrated);
+  restorePaletteStateAfterConfigImport(drawing);
 };
 
-const shouldSuppressCircularMultiRecordDefaults = (incomingForm) => {
+/** @param {DrawingState} drawing */
+const shouldSuppressCircularMultiRecordDefaults = (drawing, incomingForm) => {
   if (state.mode.value !== 'circular') return false;
   if (!incomingForm || typeof incomingForm !== 'object' || Array.isArray(incomingForm)) return false;
   if (!Object.prototype.hasOwnProperty.call(incomingForm, 'multi_record_canvas')) return false;
-  return state.form.multi_record_canvas === false && incomingForm.multi_record_canvas === true;
+  return drawing.form.multi_record_canvas === false && incomingForm.multi_record_canvas === true;
 };
 
 const overlayCanonicalObject = (stored, canonical) => {
@@ -1967,14 +1975,15 @@ const hasStoredLayoutPreferences = (ui) => (
 // canonical Session takes the layout preferences projected from its committed
 // request. Legacy fields migrate with the committed values (canonical) or the
 // active values (other payloads) as their fallback.
-const restoreLayoutPreferences = (ui = {}, { projected = null } = {}) => {
+/** @param {DrawingState} drawing */
+const restoreLayoutPreferences = (drawing, ui = {}, { projected = null } = {}) => {
   if (projected && !hasStoredLayoutPreferences(ui)) {
-    replaceLayoutPreferences(state.layoutPreferences, normalizeLayoutPreferences(projected));
+    replaceLayoutPreferences(drawing.layoutPreferences, normalizeLayoutPreferences(projected));
     return;
   }
   const active = projected
-    ? resolveActiveLayoutPreference(projected, state.mode.value, Boolean(state.form.multi_record_canvas))
-    : { legend: state.form.legend, plotTitlePosition: state.adv.plot_title_position };
+    ? resolveActiveLayoutPreference(projected, state.mode.value, Boolean(drawing.form.multi_record_canvas))
+    : { legend: drawing.form.legend, plotTitlePosition: drawing.adv.plot_title_position };
   const migrationUi = (
     !isPlainObject(ui.layoutPreferences) &&
     state.mode.value === 'linear' &&
@@ -1984,10 +1993,10 @@ const restoreLayoutPreferences = (ui = {}, { projected = null } = {}) => {
     ? { ...ui, linearLegendPosition: ui.legend }
     : ui;
   replaceLayoutPreferences(
-    state.layoutPreferences,
+    drawing.layoutPreferences,
     migrateLegacyLayoutPreferences(migrationUi, {
       mode: state.mode.value,
-      multiRecord: Boolean(state.form.multi_record_canvas),
+      multiRecord: Boolean(drawing.form.multi_record_canvas),
       activeLegend: active.legend,
       activePlotTitlePosition: active.plotTitlePosition
     })
@@ -1998,7 +2007,8 @@ const restoreLayoutPreferences = (ui = {}, { projected = null } = {}) => {
 // rollback, a settings-only Session) pass `resolveTrackPlacements: false`: the
 // track stacks are installed as given, so unset slot sides, lane directions,
 // and axis indexes stay unset (R11).
-export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) => {
+/** @param {DrawingState} drawing */
+export const applyConfigData = (drawing, data, { resolveTrackPlacements = true } = {}) => {
   requireCurrentWebStateFieldNames(data);
   if (isPlainObject(data.form) && Object.prototype.hasOwnProperty.call(data.form, 'linear_track_layout')) {
     requireCurrentLinearTrackLayout(data.form.linear_track_layout);
@@ -2009,42 +2019,42 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
   if (isPlainObject(data.adv) && Object.prototype.hasOwnProperty.call(data.adv, 'multi_record_size_mode')) {
     requireCurrentCircularMultiRecordSizeMode(data.adv.multi_record_size_mode);
   }
-  if (data.form) safeDeepMerge(state.form, data.form);
+  if (data.form) safeDeepMerge(drawing.form, data.form);
   if (data.adv) {
-    safeDeepMerge(state.adv, data.adv);
+    safeDeepMerge(drawing.adv, data.adv);
     ['scale_font_size', 'ruler_label_font_size'].forEach((field) => {
       if (Object.prototype.hasOwnProperty.call(data.adv, field)) {
-        state.adv[field] = cloneJsonData(data.adv[field]);
+        drawing.adv[field] = cloneJsonData(data.adv[field]);
       }
     });
   }
   replacePlainObject(
-    state.unmanagedConfigOverrides,
+    drawing.unmanagedConfigOverrides,
     isPlainObject(data.unmanagedConfigOverrides)
       ? cloneJsonData(data.unmanagedConfigOverrides)
       : {}
   );
-  state.recordDisplayDrafts.splice(0, state.recordDisplayDrafts.length, ...cloneJsonData(data.recordDisplayDrafts || []));
-  replacePlainObject(state.featurePlacementOverrides, cloneJsonData(data.featurePlacementOverrides || {}));
-  state.annotationSets.splice(
+  drawing.recordDisplayDrafts.splice(0, drawing.recordDisplayDrafts.length, ...cloneJsonData(data.recordDisplayDrafts || []));
+  replacePlainObject(drawing.featurePlacementOverrides, cloneJsonData(data.featurePlacementOverrides || {}));
+  drawing.annotationSets.splice(
     0,
-    state.annotationSets.length,
+    drawing.annotationSets.length,
     ...normalizeAnnotationSets(data.annotationSets)
   );
   const linearLayout = data.linearRecordLayout && typeof data.linearRecordLayout === 'object'
     ? data.linearRecordLayout
     : null;
   // Omission takes the fresh default in every Session version.
-  state.linearRecordLayoutEnabled.value = typeof linearLayout?.enabled === 'boolean'
+  drawing.linearRecordLayoutEnabled.value = typeof linearLayout?.enabled === 'boolean'
     ? linearLayout.enabled
     : WEB_UX_PROFILE.linear.arrangeInRowsByDefault;
   const linearRecordGap = Number(linearLayout?.recordGap);
-  state.linearRecordGap.value = Number.isFinite(linearRecordGap) && linearRecordGap >= 0
+  drawing.linearRecordGap.value = Number.isFinite(linearRecordGap) && linearRecordGap >= 0
     ? linearRecordGap
     : 24;
-  state.linearRecordRows.splice(
+  drawing.linearRecordRows.splice(
     0,
-    state.linearRecordRows.length,
+    drawing.linearRecordRows.length,
     ...(Array.isArray(linearLayout?.rows) ? linearLayout.rows : [])
       .map((entry) => ({
         uid: String(entry?.uid || ''), row: Number(entry?.row),
@@ -2070,71 +2080,71 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
       : null;
   }
   replaceLinearComparisonPlan(
-    state.linearComparisonPlan,
+    drawing.linearComparisonPlan,
     data.linearComparisonPlan || createDefaultLinearComparisonPlan()
   );
-  state.importedComparisonIntent.action = Object.values(IMPORTED_COMPARISON_ACTIONS)
+  drawing.importedComparisonIntent.action = Object.values(IMPORTED_COMPARISON_ACTIONS)
     .includes(data.importedComparisonResolution?.action)
     ? data.importedComparisonResolution.action
     : null;
-  state.adv.rich_feature_popup = data?.adv?.rich_feature_popup !== false;
-  state.adv.label_placement = requireCurrentLinearLabelPlacement(
-    state.adv.label_placement
+  drawing.adv.rich_feature_popup = data?.adv?.rich_feature_popup !== false;
+  drawing.adv.label_placement = requireCurrentLinearLabelPlacement(
+    drawing.adv.label_placement
   );
-  state.adv.label_rendering = normalizeLabelRendering(state.adv.label_rendering);
-  state.adv.circular_label_placement =
-    String(state.adv.circular_label_placement || '').trim().toLowerCase() === 'radial'
+  drawing.adv.label_rendering = normalizeLabelRendering(drawing.adv.label_rendering);
+  drawing.adv.circular_label_placement =
+    String(drawing.adv.circular_label_placement || '').trim().toLowerCase() === 'radial'
       ? 'radial'
       : 'horizontal';
-  if (state.adv.label_placement === 'above_feature') {
-    state.adv.label_rendering = 'auto';
+  if (drawing.adv.label_placement === 'above_feature') {
+    drawing.adv.label_rendering = 'auto';
   }
-  state.adv.circular_label_spacing = normalizePositiveNumberOrNull(state.adv.circular_label_spacing);
-  state.adv.linear_label_spacing = normalizePositiveNumberOrNull(state.adv.linear_label_spacing);
-  const rawTrackAxisGap = state.adv.track_axis_gap;
+  drawing.adv.circular_label_spacing = normalizePositiveNumberOrNull(drawing.adv.circular_label_spacing);
+  drawing.adv.linear_label_spacing = normalizePositiveNumberOrNull(drawing.adv.linear_label_spacing);
+  const rawTrackAxisGap = drawing.adv.track_axis_gap;
   if (
     rawTrackAxisGap === null ||
     rawTrackAxisGap === undefined ||
     rawTrackAxisGap === '' ||
     String(rawTrackAxisGap).trim().toLowerCase() === 'auto'
   ) {
-    state.adv.track_axis_gap = null;
+    drawing.adv.track_axis_gap = null;
   } else {
     const numericTrackAxisGap = Number(rawTrackAxisGap);
-    state.adv.track_axis_gap = Number.isFinite(numericTrackAxisGap) && numericTrackAxisGap >= 0
+    drawing.adv.track_axis_gap = Number.isFinite(numericTrackAxisGap) && numericTrackAxisGap >= 0
       ? numericTrackAxisGap
       : null;
   }
-  state.form.linear_track_layout = requireCurrentLinearTrackLayout(
-    state.form.linear_track_layout
+  drawing.form.linear_track_layout = requireCurrentLinearTrackLayout(
+    drawing.form.linear_track_layout
   );
-  state.form.plot_title = String(state.form.plot_title || '');
+  drawing.form.plot_title = String(drawing.form.plot_title || '');
   // `form.legend` and `adv.plot_title_position` are accessors over
   // `layoutPreferences` (state.js) whose setters normalize a merged value.
   // Writing the resolved value back would only pin an unset Circular
   // multi-record preference, so neither is rewritten here.
-  state.adv.feature_shapes = normalizeFeatureRenderingMap(state.adv.feature_shapes);
-  Object.assign(state.adv, normalizedPersistedArrowGeometryState(data.adv));
-  state.adv.multi_record_size_mode = requireCurrentCircularMultiRecordSizeMode(
-    state.adv.multi_record_size_mode
+  drawing.adv.feature_shapes = normalizeFeatureRenderingMap(drawing.adv.feature_shapes);
+  Object.assign(drawing.adv, normalizedPersistedArrowGeometryState(data.adv));
+  drawing.adv.multi_record_size_mode = requireCurrentCircularMultiRecordSizeMode(
+    drawing.adv.multi_record_size_mode
   );
-  const numericMinRadiusRatio = Number(state.adv.multi_record_min_radius_ratio);
-  state.adv.multi_record_min_radius_ratio =
+  const numericMinRadiusRatio = Number(drawing.adv.multi_record_min_radius_ratio);
+  drawing.adv.multi_record_min_radius_ratio =
     Number.isFinite(numericMinRadiusRatio) && numericMinRadiusRatio > 0 && numericMinRadiusRatio <= 1
       ? numericMinRadiusRatio
       : 0.55;
-  const numericColumnGapRatio = Number(state.adv.multi_record_column_gap_ratio);
-  state.adv.multi_record_column_gap_ratio =
+  const numericColumnGapRatio = Number(drawing.adv.multi_record_column_gap_ratio);
+  drawing.adv.multi_record_column_gap_ratio =
     Number.isFinite(numericColumnGapRatio) && numericColumnGapRatio >= 0
       ? numericColumnGapRatio
       : 0.10;
-  const numericRowGapRatio = Number(state.adv.multi_record_row_gap_ratio);
-  state.adv.multi_record_row_gap_ratio =
+  const numericRowGapRatio = Number(drawing.adv.multi_record_row_gap_ratio);
+  drawing.adv.multi_record_row_gap_ratio =
     Number.isFinite(numericRowGapRatio) && numericRowGapRatio >= 0
       ? numericRowGapRatio
       : 0.05;
-  const rawMultiRecordPositions = Array.isArray(state.adv.multi_record_positions)
-    ? state.adv.multi_record_positions
+  const rawMultiRecordPositions = Array.isArray(drawing.adv.multi_record_positions)
+    ? drawing.adv.multi_record_positions
     : [];
   const dedupedMultiRecordPositions = [];
   const seenMultiRecordSelectors = new Set();
@@ -2147,87 +2157,87 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
     seenMultiRecordSelectors.add(selector);
     dedupedMultiRecordPositions.push({ selector, row: normalizedRow });
   });
-  state.adv.multi_record_positions = dedupedMultiRecordPositions
+  drawing.adv.multi_record_positions = dedupedMultiRecordPositions
     .map((entry, index) => ({ ...entry, __index: index }))
     .sort((left, right) => {
       if (left.row !== right.row) return left.row - right.row;
       return left.__index - right.__index;
     })
     .map(({ __index, ...entry }) => entry);
-  const rawPlotTitleFontSize = state.adv.plot_title_font_size;
+  const rawPlotTitleFontSize = drawing.adv.plot_title_font_size;
   if (
     rawPlotTitleFontSize === null ||
     rawPlotTitleFontSize === undefined ||
     rawPlotTitleFontSize === ''
   ) {
-    state.adv.plot_title_font_size = null;
+    drawing.adv.plot_title_font_size = null;
   } else {
     const numericPlotTitleFontSize = Number(rawPlotTitleFontSize);
-    state.adv.plot_title_font_size =
+    drawing.adv.plot_title_font_size =
       Number.isFinite(numericPlotTitleFontSize) && numericPlotTitleFontSize > 0
         ? numericPlotTitleFontSize
         : null;
   }
-  state.adv.keep_full_definition_with_plot_title =
-    state.adv.keep_full_definition_with_plot_title === true;
-  state.adv.depth_color = resolveColorToHex(String(state.adv.depth_color || '#4A90E2'));
-  state.adv.depth_normalize = state.adv.depth_normalize === true;
-  state.adv.depth_show_axis = state.adv.depth_show_axis !== false;
-  state.adv.depth_show_ticks = state.adv.depth_show_ticks !== false;
-  state.adv.depth_share_axis = state.adv.depth_share_axis === true;
-  state.adv.depth_height = normalizePositiveNumberOrNull(state.adv.depth_height);
-  state.adv.depth_width_circular = normalizePositiveNumberOrNull(state.adv.depth_width_circular);
-  state.adv.circular_track_slots_schema_version = CIRCULAR_TRACK_SLOT_SCHEMA_VERSION;
-  state.adv.circular_track_slots_enabled = state.adv.circular_track_slots_enabled === true;
+  drawing.adv.keep_full_definition_with_plot_title =
+    drawing.adv.keep_full_definition_with_plot_title === true;
+  drawing.adv.depth_color = resolveColorToHex(String(drawing.adv.depth_color || '#4A90E2'));
+  drawing.adv.depth_normalize = drawing.adv.depth_normalize === true;
+  drawing.adv.depth_show_axis = drawing.adv.depth_show_axis !== false;
+  drawing.adv.depth_show_ticks = drawing.adv.depth_show_ticks !== false;
+  drawing.adv.depth_share_axis = drawing.adv.depth_share_axis === true;
+  drawing.adv.depth_height = normalizePositiveNumberOrNull(drawing.adv.depth_height);
+  drawing.adv.depth_width_circular = normalizePositiveNumberOrNull(drawing.adv.depth_width_circular);
+  drawing.adv.circular_track_slots_schema_version = CIRCULAR_TRACK_SLOT_SCHEMA_VERSION;
+  drawing.adv.circular_track_slots_enabled = drawing.adv.circular_track_slots_enabled === true;
   if (resolveTrackPlacements) {
     {
       const normalizedSlots = normalizeCircularTrackSlots(
-        state.adv.circular_track_slots,
-        state.adv.nt,
-        state.form.track_type
+        drawing.adv.circular_track_slots,
+        drawing.adv.nt,
+        drawing.form.track_type
       );
       const importedAxis = clampCircularTrackAxisIndex(
-        state.adv.circular_track_slots_axis_index,
+        drawing.adv.circular_track_slots_axis_index,
         normalizedSlots.length
       );
-      state.adv.circular_track_slots_axis_index = importedAxis === null
-        ? inferLegacyAxisIndexFromFeature(normalizedSlots, state.form.track_type)
+      drawing.adv.circular_track_slots_axis_index = importedAxis === null
+        ? inferLegacyAxisIndexFromFeature(normalizedSlots, drawing.form.track_type)
         : importedAxis;
     }
-    state.adv.circular_track_slots.splice(
+    drawing.adv.circular_track_slots.splice(
       0,
-      state.adv.circular_track_slots.length,
+      drawing.adv.circular_track_slots.length,
       ...applyCircularTrackOrderPlacements(
-        state.adv.circular_track_slots,
-        state.adv.nt,
-        state.form.track_type,
-        state.adv.circular_track_slots_axis_index
+        drawing.adv.circular_track_slots,
+        drawing.adv.nt,
+        drawing.form.track_type,
+        drawing.adv.circular_track_slots_axis_index
       )
     );
-    state.adv.linear_track_slots_schema_version = LINEAR_TRACK_SLOT_SCHEMA_VERSION;
-    state.adv.linear_track_slots_enabled = state.adv.linear_track_slots_enabled === true;
+    drawing.adv.linear_track_slots_schema_version = LINEAR_TRACK_SLOT_SCHEMA_VERSION;
+    drawing.adv.linear_track_slots_enabled = drawing.adv.linear_track_slots_enabled === true;
     {
       const normalizedLinearSlots = normalizeLinearTrackSlots(
-        state.adv.linear_track_slots,
-        state.adv.nt,
-        state.form.linear_track_layout
+        drawing.adv.linear_track_slots,
+        drawing.adv.nt,
+        drawing.form.linear_track_layout
       );
-      state.adv.linear_track_slots_axis_index = clampLinearTrackAxisIndex(
-        state.adv.linear_track_slots_axis_index,
+      drawing.adv.linear_track_slots_axis_index = clampLinearTrackAxisIndex(
+        drawing.adv.linear_track_slots_axis_index,
         normalizedLinearSlots.length
       );
-      state.adv.linear_track_slots_axis_index = resolveLinearTrackAxisIndex(
+      drawing.adv.linear_track_slots_axis_index = resolveLinearTrackAxisIndex(
         normalizedLinearSlots,
-        state.adv.linear_track_slots_axis_index
+        drawing.adv.linear_track_slots_axis_index
       );
-      state.adv.linear_track_slots.splice(
+      drawing.adv.linear_track_slots.splice(
         0,
-        state.adv.linear_track_slots.length,
+        drawing.adv.linear_track_slots.length,
         ...applyLinearTrackOrderPlacements(
           normalizedLinearSlots,
-          state.adv.linear_track_slots_axis_index,
-          state.adv.nt,
-          state.form.linear_track_layout
+          drawing.adv.linear_track_slots_axis_index,
+          drawing.adv.nt,
+          drawing.form.linear_track_layout
         )
       );
     }
@@ -2235,29 +2245,29 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
     // The merge installs the caller's slot objects; copy them so a later edit
     // never writes into a History entry or another caller-owned snapshot.
     ['circular_track_slots', 'linear_track_slots'].forEach((key) => {
-      state.adv[key].splice(0, state.adv[key].length, ...cloneJsonData(state.adv[key]));
+      drawing.adv[key].splice(0, drawing.adv[key].length, ...cloneJsonData(drawing.adv[key]));
     });
   }
-  state.adv.depth_window_size = normalizePositiveNumberOrNull(state.adv.depth_window_size);
-  state.adv.depth_step_size = normalizePositiveNumberOrNull(state.adv.depth_step_size);
-  state.adv.depth_large_tick_interval = normalizePositiveNumberOrNull(
-    state.adv.depth_large_tick_interval
+  drawing.adv.depth_window_size = normalizePositiveNumberOrNull(drawing.adv.depth_window_size);
+  drawing.adv.depth_step_size = normalizePositiveNumberOrNull(drawing.adv.depth_step_size);
+  drawing.adv.depth_large_tick_interval = normalizePositiveNumberOrNull(
+    drawing.adv.depth_large_tick_interval
   );
-  state.adv.depth_small_tick_interval = normalizePositiveNumberOrNull(state.adv.depth_small_tick_interval);
-  state.adv.depth_tick_font_size = normalizePositiveNumberOrNull(state.adv.depth_tick_font_size);
-  state.adv.depth_tracks.splice(
+  drawing.adv.depth_small_tick_interval = normalizePositiveNumberOrNull(drawing.adv.depth_small_tick_interval);
+  drawing.adv.depth_tick_font_size = normalizePositiveNumberOrNull(drawing.adv.depth_tick_font_size);
+  drawing.adv.depth_tracks.splice(
     0,
-    state.adv.depth_tracks.length,
-    ...normalizeDepthTracks(state.adv.depth_tracks, state.adv)
+    drawing.adv.depth_tracks.length,
+    ...normalizeDepthTracks(drawing.adv.depth_tracks, drawing.adv)
   );
-  state.adv.gc_content_mode = String(state.adv.gc_content_mode || '').trim().toLowerCase() === 'percent'
+  drawing.adv.gc_content_mode = String(drawing.adv.gc_content_mode || '').trim().toLowerCase() === 'percent'
     ? 'percent'
     : 'deviation';
-  state.adv.gc_content_show_axis = state.adv.gc_content_show_axis !== false;
-  state.adv.gc_content_show_ticks = state.adv.gc_content_show_ticks !== false;
-  state.adv.gc_content_tick_interval = normalizePositiveNumberOrNull(state.adv.gc_content_tick_interval);
-  state.adv.gc_content_small_tick_interval = normalizePositiveNumberOrNull(state.adv.gc_content_small_tick_interval);
-  state.adv.gc_content_tick_font_size = normalizePositiveNumberOrNull(state.adv.gc_content_tick_font_size);
+  drawing.adv.gc_content_show_axis = drawing.adv.gc_content_show_axis !== false;
+  drawing.adv.gc_content_show_ticks = drawing.adv.gc_content_show_ticks !== false;
+  drawing.adv.gc_content_tick_interval = normalizePositiveNumberOrNull(drawing.adv.gc_content_tick_interval);
+  drawing.adv.gc_content_small_tick_interval = normalizePositiveNumberOrNull(drawing.adv.gc_content_small_tick_interval);
+  drawing.adv.gc_content_tick_font_size = normalizePositiveNumberOrNull(drawing.adv.gc_content_tick_font_size);
   const normalizeNonNegativeNumberOrNull = (value) => {
     if (
       value === null ||
@@ -2270,137 +2280,137 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
     const numeric = Number(value);
     return Number.isFinite(numeric) && numeric >= 0 ? numeric : null;
   };
-  state.adv.center_reserved_radius = normalizeNonNegativeNumberOrNull(state.adv.center_reserved_radius);
-  state.adv.depth_min = normalizeNonNegativeNumberOrNull(state.adv.depth_min);
-  state.adv.depth_max = normalizeNonNegativeNumberOrNull(state.adv.depth_max);
+  drawing.adv.center_reserved_radius = normalizeNonNegativeNumberOrNull(drawing.adv.center_reserved_radius);
+  drawing.adv.depth_min = normalizeNonNegativeNumberOrNull(drawing.adv.depth_min);
+  drawing.adv.depth_max = normalizeNonNegativeNumberOrNull(drawing.adv.depth_max);
   if (
-    state.adv.depth_min !== null &&
-    state.adv.depth_max !== null &&
-    state.adv.depth_min > state.adv.depth_max
+    drawing.adv.depth_min !== null &&
+    drawing.adv.depth_max !== null &&
+    drawing.adv.depth_min > drawing.adv.depth_max
   ) {
-    state.adv.depth_max = null;
+    drawing.adv.depth_max = null;
   }
   const normalizeFiniteNumberOrFallback = (value, fallback) => {
     if (value === null || value === undefined || value === '') return fallback;
     const numeric = Number(value);
     return Number.isFinite(numeric) ? numeric : fallback;
   };
-  state.adv.gc_content_min_percent = normalizeFiniteNumberOrFallback(state.adv.gc_content_min_percent, 0);
-  state.adv.gc_content_max_percent = normalizeFiniteNumberOrFallback(state.adv.gc_content_max_percent, 100);
-  if (state.adv.gc_content_min_percent > state.adv.gc_content_max_percent) {
-    state.adv.gc_content_max_percent = state.adv.gc_content_min_percent;
+  drawing.adv.gc_content_min_percent = normalizeFiniteNumberOrFallback(drawing.adv.gc_content_min_percent, 0);
+  drawing.adv.gc_content_max_percent = normalizeFiniteNumberOrFallback(drawing.adv.gc_content_max_percent, 100);
+  if (drawing.adv.gc_content_min_percent > drawing.adv.gc_content_max_percent) {
+    drawing.adv.gc_content_max_percent = drawing.adv.gc_content_min_percent;
   }
-  state.adv.linear_show_replicon = state.adv.linear_show_replicon === true;
-  state.adv.linear_accession_visibility = requireLinearLabelVisibilityMode(
-    state.adv.linear_accession_visibility,
+  drawing.adv.linear_show_replicon = drawing.adv.linear_show_replicon === true;
+  drawing.adv.linear_accession_visibility = requireLinearLabelVisibilityMode(
+    drawing.adv.linear_accession_visibility,
     'Linear Accession visibility'
   );
-  state.adv.linear_length_visibility = requireLinearLabelVisibilityMode(
-    state.adv.linear_length_visibility,
+  drawing.adv.linear_length_visibility = requireLinearLabelVisibilityMode(
+    drawing.adv.linear_length_visibility,
     'Linear Length / Coordinates visibility'
   );
-  state.adv.linear_definition_line_styles = normalizeDefinitionLineStyleState(
-    state.adv.linear_definition_line_styles
+  drawing.adv.linear_definition_line_styles = normalizeDefinitionLineStyleState(
+    drawing.adv.linear_definition_line_styles
   );
-  state.adv.pairwise_match_style = normalizeCurrentPairwiseMatchStyle(
-    state.adv.pairwise_match_style,
+  drawing.adv.pairwise_match_style = normalizeCurrentPairwiseMatchStyle(
+    drawing.adv.pairwise_match_style,
     'ribbon'
   );
   if (data.losat) {
-    safeDeepMerge(state.losat, data.losat);
+    safeDeepMerge(drawing.losat, data.losat);
     const rawParallelWorkers = String(data.losat.parallelWorkers ?? '').trim().toLowerCase();
     const parsedParallelWorkers = Number(rawParallelWorkers);
-    state.losat.parallelWorkers = Number.isInteger(parsedParallelWorkers) && parsedParallelWorkers >= 1
+    drawing.losat.parallelWorkers = Number.isInteger(parsedParallelWorkers) && parsedParallelWorkers >= 1
       ? rawParallelWorkers
       : undefined;
     const rawExecutionMode = String(data.losat.executionMode ?? '').trim().toLowerCase();
-    state.losat.executionMode = ['auto', 'serial', 'threaded'].includes(rawExecutionMode)
+    drawing.losat.executionMode = ['auto', 'serial', 'threaded'].includes(rawExecutionMode)
       ? rawExecutionMode
       : 'auto';
     const rawThreadsPerJob = String(data.losat.threadsPerJob ?? 'auto').trim().toLowerCase();
     const parsedThreadsPerJob = Number(rawThreadsPerJob);
-    state.losat.threadsPerJob = rawThreadsPerJob === 'auto' ||
+    drawing.losat.threadsPerJob = rawThreadsPerJob === 'auto' ||
       (Number.isInteger(parsedThreadsPerJob) && parsedThreadsPerJob >= 1)
       ? rawThreadsPerJob
       : 'auto';
     const rawTotalThreadBudget = String(data.losat.totalThreadBudget ?? 'safe').trim().toLowerCase();
     const parsedTotalThreadBudget = Number(rawTotalThreadBudget);
-    state.losat.totalThreadBudget = ['safe', 'auto', 'available'].includes(rawTotalThreadBudget) ||
+    drawing.losat.totalThreadBudget = ['safe', 'auto', 'available'].includes(rawTotalThreadBudget) ||
       (Number.isInteger(parsedTotalThreadBudget) && parsedTotalThreadBudget >= 1)
       ? (rawTotalThreadBudget === 'auto' ? 'safe' : rawTotalThreadBudget)
       : 'safe';
-    state.losat.blastp.mode = normalizeBlastpMode(state.losat.blastp?.mode);
-    state.losat.blastp.collinearInferOrthogroups = data.losat.blastp?.collinearInferOrthogroups ?? (state.losat.blastp.mode === 'collinear');
-    state.losat.blastp.hitLimitsByMode = {
+    drawing.losat.blastp.mode = normalizeBlastpMode(drawing.losat.blastp?.mode);
+    drawing.losat.blastp.collinearInferOrthogroups = data.losat.blastp?.collinearInferOrthogroups ?? (drawing.losat.blastp.mode === 'collinear');
+    drawing.losat.blastp.hitLimitsByMode = {
       ...createDefaultLosatpHitLimits(), ...cloneJsonData(data.losat.blastp?.hitLimitsByMode || {})
     };
-    state.losat.blastp.maxHits = normalizePositiveInteger(state.losat.blastp?.maxHits, 5);
-    state.losat.blastp.candidateLimit = normalizePositiveInteger(
-      state.losat.blastp?.candidateLimit,
+    drawing.losat.blastp.maxHits = normalizePositiveInteger(drawing.losat.blastp?.maxHits, 5);
+    drawing.losat.blastp.candidateLimit = normalizePositiveInteger(
+      drawing.losat.blastp?.candidateLimit,
       null
     );
     if (
-      state.losat.blastp.orthogroupMemberMaxHits === undefined &&
-      state.losat.blastp.orthogroupMaxHits !== null &&
-      state.losat.blastp.orthogroupMaxHits !== undefined
+      drawing.losat.blastp.orthogroupMemberMaxHits === undefined &&
+      drawing.losat.blastp.orthogroupMaxHits !== null &&
+      drawing.losat.blastp.orthogroupMaxHits !== undefined
     ) {
-      state.losat.blastp.orthogroupMemberMaxHits = state.losat.blastp.orthogroupMaxHits;
+      drawing.losat.blastp.orthogroupMemberMaxHits = drawing.losat.blastp.orthogroupMaxHits;
     }
-    state.losat.blastp.orthogroupMembershipMode = normalizeOrthogroupMembershipMode(state.losat.blastp?.orthogroupMembershipMode);
-    state.losat.blastp.orthogroupMemberMaxHits = normalizePositiveInteger(state.losat.blastp?.orthogroupMemberMaxHits, null);
-    state.losat.blastp.collinearMinAnchors = normalizePositiveInteger(state.losat.blastp?.collinearMinAnchors, 1);
+    drawing.losat.blastp.orthogroupMembershipMode = normalizeOrthogroupMembershipMode(drawing.losat.blastp?.orthogroupMembershipMode);
+    drawing.losat.blastp.orthogroupMemberMaxHits = normalizePositiveInteger(drawing.losat.blastp?.orthogroupMemberMaxHits, null);
+    drawing.losat.blastp.collinearMinAnchors = normalizePositiveInteger(drawing.losat.blastp?.collinearMinAnchors, 1);
     {
-      const maxGap = Number(state.losat.blastp?.collinearMaxUnitGap);
-      state.losat.blastp.collinearMaxUnitGap = Number.isInteger(maxGap) && maxGap >= 0 ? maxGap : 0;
-      const diagonalDrift = Number(state.losat.blastp?.collinearMaxDiagonalDrift);
-      state.losat.blastp.collinearMaxDiagonalDrift = Number.isInteger(diagonalDrift) && diagonalDrift >= 0 ? diagonalDrift : 0;
-      const mergeConflicts = Number(state.losat.blastp?.collinearMaxConflictsInMergeGap);
-      state.losat.blastp.collinearMaxConflictsInMergeGap = Number.isInteger(mergeConflicts) && mergeConflicts >= 0 ? mergeConflicts : 1;
-      const paralogLinks = Number(state.losat.blastp?.collinearMaxParalogLinksPerOrthogroup);
-      state.losat.blastp.collinearMaxParalogLinksPerOrthogroup = Number.isInteger(paralogLinks) && paralogLinks > 0 ? paralogLinks : 2;
-      state.losat.blastp.collinearColorMode = normalizeCollinearColorMode(state.losat.blastp?.collinearColorMode);
-      const unitMode = String(state.losat.blastp?.collinearUnitMode || '').trim().toLowerCase();
-      state.losat.blastp.collinearUnitMode = ['auto', 'cds', 'locus'].includes(unitMode) ? unitMode : 'auto';
-      state.losat.blastp.collinearAnchorMode = normalizeCollinearAnchorMode(state.losat.blastp?.collinearAnchorMode);
+      const maxGap = Number(drawing.losat.blastp?.collinearMaxUnitGap);
+      drawing.losat.blastp.collinearMaxUnitGap = Number.isInteger(maxGap) && maxGap >= 0 ? maxGap : 0;
+      const diagonalDrift = Number(drawing.losat.blastp?.collinearMaxDiagonalDrift);
+      drawing.losat.blastp.collinearMaxDiagonalDrift = Number.isInteger(diagonalDrift) && diagonalDrift >= 0 ? diagonalDrift : 0;
+      const mergeConflicts = Number(drawing.losat.blastp?.collinearMaxConflictsInMergeGap);
+      drawing.losat.blastp.collinearMaxConflictsInMergeGap = Number.isInteger(mergeConflicts) && mergeConflicts >= 0 ? mergeConflicts : 1;
+      const paralogLinks = Number(drawing.losat.blastp?.collinearMaxParalogLinksPerOrthogroup);
+      drawing.losat.blastp.collinearMaxParalogLinksPerOrthogroup = Number.isInteger(paralogLinks) && paralogLinks > 0 ? paralogLinks : 2;
+      drawing.losat.blastp.collinearColorMode = normalizeCollinearColorMode(drawing.losat.blastp?.collinearColorMode);
+      const unitMode = String(drawing.losat.blastp?.collinearUnitMode || '').trim().toLowerCase();
+      drawing.losat.blastp.collinearUnitMode = ['auto', 'cds', 'locus'].includes(unitMode) ? unitMode : 'auto';
+      drawing.losat.blastp.collinearAnchorMode = normalizeCollinearAnchorMode(drawing.losat.blastp?.collinearAnchorMode);
       const mergeOrientation = String(
-        state.losat.blastp?.collinearMergeOrientation || ''
+        drawing.losat.blastp?.collinearMergeOrientation || ''
       ).trim().toLowerCase();
-      state.losat.blastp.collinearMergeOrientation = [
+      drawing.losat.blastp.collinearMergeOrientation = [
         'strand',
         'order',
         'either'
       ].includes(mergeOrientation) ? mergeOrientation : 'either';
-      state.losat.blastp.collinearSearchScope = normalizeCollinearSearchScope(state.losat.blastp?.collinearSearchScope);
+      drawing.losat.blastp.collinearSearchScope = normalizeCollinearSearchScope(drawing.losat.blastp?.collinearSearchScope);
     }
-    delete state.losat.blastp.collinearBlockMergeGap;
-    delete state.losat.blastp.collinearSingletonMergeGap;
-    delete state.losat.blastp.orthogroupHitPolicy;
-    delete state.losat.blastp.orthogroupMaxHits;
+    delete drawing.losat.blastp.collinearBlockMergeGap;
+    delete drawing.losat.blastp.collinearSingletonMergeGap;
+    delete drawing.losat.blastp.orthogroupHitPolicy;
+    delete drawing.losat.blastp.orthogroupMaxHits;
   }
   if (typeof data.paletteInstantPreviewEnabled === 'boolean') {
     state.paletteInstantPreviewEnabled.value = data.paletteInstantPreviewEnabled;
   }
   const importedPalette = String(data.palette || '').trim();
-  if (importedPalette) state.selectedPalette.value = importedPalette;
+  if (importedPalette) drawing.selectedPalette.value = importedPalette;
   if (hasColorEntries(data.colors)) {
     if (data.colorsAreOverrides) {
-      const paletteColors = paletteColorsFromDefinitions(state.selectedPalette.value) || {};
-      state.currentColors.value = normalizePaletteColors({
+      const paletteColors = paletteColorsFromDefinitions(drawing.selectedPalette.value) || {};
+      drawing.currentColors.value = normalizePaletteColors({
         ...paletteColors,
         ...normalizeColorMap(data.colors)
       });
     } else {
-      state.currentColors.value = normalizePaletteColors(normalizeColorMap(data.colors));
+      drawing.currentColors.value = normalizePaletteColors(normalizeColorMap(data.colors));
     }
   } else {
-    const paletteColors = paletteColorsFromDefinitions(state.selectedPalette.value);
-    if (paletteColors) state.currentColors.value = paletteColors;
+    const paletteColors = paletteColorsFromDefinitions(drawing.selectedPalette.value);
+    if (paletteColors) drawing.currentColors.value = paletteColors;
   }
 
   if (data.rules && Array.isArray(data.rules)) {
-    state.manualSpecificRules.length = 0;
+    drawing.manualSpecificRules.length = 0;
     data.rules.forEach((r) => {
-      state.manualSpecificRules.push({
+      drawing.manualSpecificRules.push({
         feat: String(r.feat || ''),
         qual: String(r.qual || ''),
         val: String(r.val || ''),
@@ -2409,72 +2419,73 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
         fromFile: !!r.fromFile
       });
     });
-    state.fileLegendCaptions.value = new Set(
-      state.manualSpecificRules
+    drawing.fileLegendCaptions.value = new Set(
+      drawing.manualSpecificRules
         .filter((rule) => rule.fromFile && rule.cap)
         .map((rule) => rule.cap)
     );
   }
   if (Object.prototype.hasOwnProperty.call(data, 'qualifierPriorityRules')) {
-    replaceQualifierPriorityRules(data.qualifierPriorityRules);
+    replaceQualifierPriorityRules(drawing, data.qualifierPriorityRules);
   } else if (Object.prototype.hasOwnProperty.call(data, 'priorityRules')) {
-    replaceQualifierPriorityRules(data.priorityRules);
+    replaceQualifierPriorityRules(drawing, data.priorityRules);
   }
-  if (data.filterMode) state.filterMode.value = data.filterMode;
+  if (data.filterMode) drawing.filterMode.value = data.filterMode;
   if (data.whitelist && Array.isArray(data.whitelist)) {
-    state.manualWhitelist.length = 0;
+    drawing.manualWhitelist.length = 0;
     data.whitelist.forEach((w) => {
-      state.manualWhitelist.push({
+      drawing.manualWhitelist.push({
         feat: String(w.feat || ''),
         qual: String(w.qual || ''),
         key: String(w.key || '')
       });
     });
   }
-  if (data.blacklistText !== undefined) state.manualBlacklist.value = String(data.blacklistText || '');
+  if (data.blacklistText !== undefined) drawing.manualBlacklist.value = String(data.blacklistText || '');
   if (data.losatProgram) {
     const program = String(data.losatProgram);
-    state.losatProgram.value = ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn';
+    drawing.losatProgram.value = ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn';
   }
   if (data.circularConservation) {
-    safeDeepMerge(state.circularConservation, data.circularConservation);
+    safeDeepMerge(drawing.circularConservation, data.circularConservation);
   }
-  state.circularConservation.enabled = state.circularConservation.enabled === true;
-  state.circularConservation.source = normalizeCircularConservationSource(state.circularConservation.source);
-  state.circularConservation.losat_program = normalizeCircularConservationLosatProgram(
-    state.circularConservation.losat_program
+  drawing.circularConservation.enabled = drawing.circularConservation.enabled === true;
+  drawing.circularConservation.source = normalizeCircularConservationSource(drawing.circularConservation.source);
+  drawing.circularConservation.losat_program = normalizeCircularConservationLosatProgram(
+    drawing.circularConservation.losat_program
   );
-  state.circularConservation.subject_gencode = normalizePositiveInteger(state.circularConservation.subject_gencode, 1);
-  state.circularConservation.reference = normalizeCircularConservationReference(state.circularConservation.reference);
-  state.circularConservation.labels = String(state.circularConservation.labels || '');
-  state.circularConservation.series.splice(
+  drawing.circularConservation.subject_gencode = normalizePositiveInteger(drawing.circularConservation.subject_gencode, 1);
+  drawing.circularConservation.reference = normalizeCircularConservationReference(drawing.circularConservation.reference);
+  drawing.circularConservation.labels = String(drawing.circularConservation.labels || '');
+  drawing.circularConservation.series.splice(
     0,
-    state.circularConservation.series.length,
-    ...normalizeCircularConservationSeries(state.circularConservation.series)
+    drawing.circularConservation.series.length,
+    ...normalizeCircularConservationSeries(drawing.circularConservation.series)
   );
-  state.circularConservation.ring_width = normalizePositiveNumberOrNull(state.circularConservation.ring_width);
-  state.circularConservation.ring_gap = normalizePositiveNumberOrNull(state.circularConservation.ring_gap);
+  drawing.circularConservation.ring_width = normalizePositiveNumberOrNull(drawing.circularConservation.ring_width);
+  drawing.circularConservation.ring_gap = normalizePositiveNumberOrNull(drawing.circularConservation.ring_gap);
   preservedCliOptions = isPlainObject(data.cliOptions) ? cloneJsonData(data.cliOptions) : null;
   const webEdits = data.webEdits && typeof data.webEdits === 'object' ? data.webEdits : {};
   if (Object.prototype.hasOwnProperty.call(webEdits, 'orthogroupNameOverrides')) {
-    replaceStringMap(state.orthogroupNameOverrides, webEdits.orthogroupNameOverrides);
+    replaceStringMap(drawing.orthogroupNameOverrides, webEdits.orthogroupNameOverrides);
   }
   if (Object.prototype.hasOwnProperty.call(webEdits, 'orthogroupDescriptionOverrides')) {
-    replaceStringMap(state.orthogroupDescriptionOverrides, webEdits.orthogroupDescriptionOverrides);
+    replaceStringMap(drawing.orthogroupDescriptionOverrides, webEdits.orthogroupDescriptionOverrides);
   }
   // Absent in older Sessions: no dormant names (D-21).
-  clearObject(state.orthogroupDormantOverrides);
-  Object.assign(state.orthogroupDormantOverrides, normalizeOrthogroupDormantOverrides(webEdits.orthogroupDormantOverrides));
-  state.modeProfileStateManager?.importState?.(
+  clearObject(drawing.orthogroupDormantOverrides);
+  Object.assign(drawing.orthogroupDormantOverrides, normalizeOrthogroupDormantOverrides(webEdits.orthogroupDormantOverrides));
+  drawing.modeProfileStateManager?.importState?.(
     data.modeProfiles ?? null,
     state.mode.value,
-    state.adv
+    drawing.adv
   );
 };
 
-const restorePaletteStateAfterConfigImport = () => {
-  const draftPaletteName = String(state.selectedPalette.value || state.appliedPaletteName.value || 'default');
-  const draftColors = normalizePaletteColors(cloneColors(state.currentColors.value));
+/** @param {DrawingState} drawing */
+const restorePaletteStateAfterConfigImport = (drawing) => {
+  const draftPaletteName = String(drawing.selectedPalette.value || state.appliedPaletteName.value || 'default');
+  const draftColors = normalizePaletteColors(cloneColors(drawing.currentColors.value));
   const hasPreviewResults = Array.isArray(state.results.value) && state.results.value.length > 0;
 
   if (
@@ -2484,18 +2495,19 @@ const restorePaletteStateAfterConfigImport = () => {
   ) {
     state.appliedPaletteName.value = draftPaletteName;
     state.appliedPaletteColors.value = draftColors;
-    state.pendingPaletteName.value = '';
-    state.pendingPaletteColors.value = {};
+    drawing.pendingPaletteName.value = '';
+    drawing.pendingPaletteColors.value = {};
     return;
   }
 
-  state.pendingPaletteName.value = draftPaletteName;
-  state.pendingPaletteColors.value = draftColors;
+  drawing.pendingPaletteName.value = draftPaletteName;
+  drawing.pendingPaletteColors.value = draftColors;
 };
 
-const restorePaletteStateFromSession = (ui = {}) => {
-  const draftPaletteName = String(state.selectedPalette.value || state.appliedPaletteName.value || 'default');
-  const draftColors = normalizePaletteColors(cloneColors(state.currentColors.value));
+/** @param {DrawingState} drawing */
+const restorePaletteStateFromSession = (drawing, ui = {}) => {
+  const draftPaletteName = String(drawing.selectedPalette.value || state.appliedPaletteName.value || 'default');
+  const draftColors = normalizePaletteColors(cloneColors(drawing.currentColors.value));
   const savedAppliedPaletteName = String(ui.appliedPaletteName || draftPaletteName || 'default');
   const savedAppliedPaletteColors =
     ui.appliedPaletteColors && typeof ui.appliedPaletteColors === 'object'
@@ -2521,11 +2533,11 @@ const restorePaletteStateFromSession = (ui = {}) => {
   state.appliedPaletteColors.value = normalizePaletteColors(cloneColors(savedAppliedPaletteColors));
 
   if (!state.paletteInstantPreviewEnabled.value && savedPendingPaletteName) {
-    state.pendingPaletteName.value = savedPendingPaletteName;
-    state.pendingPaletteColors.value = normalizePaletteColors(cloneColors(savedPendingPaletteColors));
+    drawing.pendingPaletteName.value = savedPendingPaletteName;
+    drawing.pendingPaletteColors.value = normalizePaletteColors(cloneColors(savedPendingPaletteColors));
   } else {
-    state.pendingPaletteName.value = '';
-    state.pendingPaletteColors.value = {};
+    drawing.pendingPaletteName.value = '';
+    drawing.pendingPaletteColors.value = {};
   }
 };
 
@@ -2653,7 +2665,8 @@ const losatCacheInfoIdentity = (entry) => {
   return identity;
 };
 
-const restoredLosatCacheInfoIdentity = (entry) => {
+/** @param {DrawingState} drawing */
+const restoredLosatCacheInfoIdentity = (drawing, entry) => {
   const identity = losatCacheInfoIdentity(entry);
   if (state.mode.value !== 'linear') return identity;
 
@@ -2678,7 +2691,7 @@ const restoredLosatCacheInfoIdentity = (entry) => {
 
   const edgeKey = linearComparisonEdgeKey(queryUid, subjectUid);
   if (identity.edgeKey && identity.edgeKey !== edgeKey) return {};
-  const resolved = state.linearComparisonResolution.value.edges.find(
+  const resolved = drawing.linearComparisonResolution.value.edges.find(
     (edge) => edge.edgeKey === edgeKey
   );
   return {
@@ -2781,7 +2794,9 @@ const serializeLosatCache = () => {
   }
 };
 
+/** @param {DrawingState} drawing */
 const applyLosatCache = (
+  drawing,
   entries,
   legacyEnvelope = null,
   { adoptCurrent = false, validatedManifest = null } = {}
@@ -2827,7 +2842,7 @@ const applyLosatCache = (
         key: entry.key,
         filename: entry.filename || `losat_pair_${idx + 1}.tsv`,
         display: true,
-        ...restoredLosatCacheInfoIdentity(entry)
+        ...restoredLosatCacheInfoIdentity(drawing, entry)
       });
     });
   }
@@ -2912,11 +2927,12 @@ const applyProteinIdentityManifest = (manifest, { adoptCurrent = false } = {}) =
 };
 
 /**
+ * @param {DrawingState} drawing
  * @param {Record<string, any>} [orthogroupState]
  * @param {{ legacyRecords?: any, catalogFeatureState?: Record<string, any> | null }} [options]
  */
 export const applyOrthogroupStateData = (
-  orthogroupState = {}, { legacyRecords = null, catalogFeatureState = null } = {}
+  drawing, orthogroupState = {}, { legacyRecords = null, catalogFeatureState = null } = {}
 ) => {
   const storedGroups = Array.isArray(orthogroupState.groups) ? orthogroupState.groups : [];
   const groups = legacyRecords
@@ -2948,17 +2964,17 @@ export const applyOrthogroupStateData = (
   state.selectedOrthogroupId.value = selectedId && groupIdSet.has(selectedId) ? selectedId : (groupIds[0] || '');
   state.selectedOrthogroupAlignmentFeature.value = String(orthogroupState.selectedOrthogroupAlignmentFeature || '').trim();
 
-  replaceStringMap(state.orthogroupNameOverrides, orthogroupState.orthogroupNameOverrides);
-  replaceStringMap(state.orthogroupDescriptionOverrides, orthogroupState.orthogroupDescriptionOverrides);
-  Object.keys(state.orthogroupNameOverrides).forEach((id) => {
-    if (!groupIdSet.has(id)) delete state.orthogroupNameOverrides[id];
+  replaceStringMap(drawing.orthogroupNameOverrides, orthogroupState.orthogroupNameOverrides);
+  replaceStringMap(drawing.orthogroupDescriptionOverrides, orthogroupState.orthogroupDescriptionOverrides);
+  Object.keys(drawing.orthogroupNameOverrides).forEach((id) => {
+    if (!groupIdSet.has(id)) delete drawing.orthogroupNameOverrides[id];
   });
-  Object.keys(state.orthogroupDescriptionOverrides).forEach((id) => {
-    if (!groupIdSet.has(id)) delete state.orthogroupDescriptionOverrides[id];
+  Object.keys(drawing.orthogroupDescriptionOverrides).forEach((id) => {
+    if (!groupIdSet.has(id)) delete drawing.orthogroupDescriptionOverrides[id];
   });
   if (Object.hasOwn(orthogroupState, 'orthogroupDormantOverrides')) {
-    clearObject(state.orthogroupDormantOverrides);
-    Object.assign(state.orthogroupDormantOverrides,
+    clearObject(drawing.orthogroupDormantOverrides);
+    Object.assign(drawing.orthogroupDormantOverrides,
       normalizeOrthogroupDormantOverrides(orthogroupState.orthogroupDormantOverrides));
   }
 };
@@ -3160,8 +3176,8 @@ export const serializeActiveRenderFiles = async (
   };
 };
 
-export const buildSessionResources = (sourceState, committedRequest) => (
-  assembleSessionResources(sourceState, committedRequest)
+export const buildSessionResources = (sourceState, committedRequest, drawing) => (
+  assembleSessionResources(sourceState, committedRequest, drawing)
 );
 
 const deserializeCanonicalComparisons = (
@@ -3199,6 +3215,8 @@ export const adoptCanonicalRenderArtifacts = (
     : cloneCanonicalSession(ownedCanonical);
   /** @type {ReturnType<typeof deserializeCanonicalComparisons> | null} */
   let nextLinearComparisons = null;
+  // The Circular conservation settings belong to the Circular drawing.
+  const drawing = state.drawings.circular;
   /** @type {{
    *   blasts: any[], fastas: any[], sequenceSources: any[],
    *   projectedConservation: Record<string, any> | undefined, series: Record<string, any>[]
@@ -3211,8 +3229,8 @@ export const adoptCanonicalRenderArtifacts = (
     );
   } else if (projection.files.c_conservation_blasts_source === 'losat-cache') {
     const projectedConservation = projection.config.circularConservation;
-    const currentSeries = Array.isArray(state.circularConservation.series)
-      ? state.circularConservation.series.map((entry) => cloneJsonData(entry))
+    const currentSeries = Array.isArray(drawing.circularConservation.series)
+      ? drawing.circularConservation.series.map((entry) => cloneJsonData(entry))
       : [];
     const nextSeries = Array.isArray(projectedConservation?.series)
       ? projectedConservation.series.map((entry, index) => ({
@@ -3250,16 +3268,16 @@ export const adoptCanonicalRenderArtifacts = (
     state.files.c_conservation_fastas = nextCircularState.fastas;
     state.files.c_conservation_sequence_sources = nextCircularState.sequenceSources;
     if (nextCircularState.projectedConservation) {
-      state.circularConservation.enabled = true;
-      state.circularConservation.source = 'losat';
-      state.circularConservation.reference = nextCircularState.projectedConservation.reference;
-      state.circularConservation.labels = nextCircularState.series
+      drawing.circularConservation.enabled = true;
+      drawing.circularConservation.source = 'losat';
+      drawing.circularConservation.reference = nextCircularState.projectedConservation.reference;
+      drawing.circularConservation.labels = nextCircularState.series
         .map((entry) => entry.label).join(',');
-      state.circularConservation.ring_width = nextCircularState.projectedConservation.ring_width;
-      state.circularConservation.ring_gap = nextCircularState.projectedConservation.ring_gap;
-      state.circularConservation.series.splice(
+      drawing.circularConservation.ring_width = nextCircularState.projectedConservation.ring_width;
+      drawing.circularConservation.ring_gap = nextCircularState.projectedConservation.ring_gap;
+      drawing.circularConservation.series.splice(
         0,
-        state.circularConservation.series.length,
+        drawing.circularConservation.series.length,
         ...nextCircularState.series
       );
     }
@@ -3287,10 +3305,17 @@ export const canonicalRenderArtifactOwner = Object.freeze({
 });
 
 /**
+ * `targetDrawing` holds the Linear record layout and comparison plan that the
+ * Files reconcile: a drawing, or the Load candidate.
  * @param {Record<string, any> | null} filesData
- * @param {{ adoptCanonicalPayloads?: boolean, resolveRecordInputs?: boolean, targetState?: Record<string, any> }} [options]
+ * @param {{
+ *   adoptCanonicalPayloads?: boolean, resolveRecordInputs?: boolean, targetState?: Record<string, any>,
+ *   targetDrawing: Pick<DrawingState, 'linearRecordRows' | 'linearComparisonPlan'>
+ * }} options
  */
-const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordInputs = true, targetState = state } = {}) => {
+const applyFiles = (filesData, {
+  adoptCanonicalPayloads = false, resolveRecordInputs = true, targetState = state, targetDrawing
+}) => {
   targetState.matchSequenceRegistry?.reset?.();
   targetState.circularRecordList.value = [];
   Object.assign(targetState.circularRecordDiscovery, {
@@ -3319,10 +3344,10 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordIn
 
   if (!filesData) {
     targetState.linearSeqs.splice(0, targetState.linearSeqs.length, ...normalizeLinearSeqList([]));
-    targetState.linearRecordRows.splice(0);
+    targetDrawing.linearRecordRows.splice(0);
     replaceLinearComparisonPlan(
-      targetState.linearComparisonPlan,
-      reconcileLinearComparisonPlan(targetState.linearComparisonPlan, targetState.linearSeqs)
+      targetDrawing.linearComparisonPlan,
+      reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, targetState.linearSeqs)
     );
     return { collapsedLinearSeqs: false };
   }
@@ -3409,10 +3434,10 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordIn
     const collapsedLinearSeqs = collapsed.length !== normalized.length;
     targetState.linearSeqs.splice(0, targetState.linearSeqs.length, ...collapsed);
     if (resolveRecordInputs) {
-      const rowByUid = new Map(targetState.linearRecordRows.map((entry) => [String(entry?.uid || ''), entry]));
-      targetState.linearRecordRows.splice(
+      const rowByUid = new Map(targetDrawing.linearRecordRows.map((entry) => [String(entry?.uid || ''), entry]));
+      targetDrawing.linearRecordRows.splice(
         0,
-        targetState.linearRecordRows.length,
+        targetDrawing.linearRecordRows.length,
         ...targetState.linearSeqs.map((seq, index) => {
           const saved = rowByUid.get(seq.uid);
           const row = Number.isInteger(Number(saved?.row)) && Number(saved.row) > 0
@@ -3437,12 +3462,12 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordIn
         ]))
         .filter(([id]) => id)
     );
-    const planWithFiles = normalizeLinearComparisonPlan(targetState.linearComparisonPlan);
+    const planWithFiles = normalizeLinearComparisonPlan(targetDrawing.linearComparisonPlan);
     planWithFiles.edges.forEach((edge) => {
       edge.file = comparisonFiles.get(edge.id) || null;
     });
     replaceLinearComparisonPlan(
-      targetState.linearComparisonPlan,
+      targetDrawing.linearComparisonPlan,
       reconcileLinearComparisonPlan(planWithFiles, targetState.linearSeqs)
     );
     return { collapsedLinearSeqs };
@@ -3450,21 +3475,22 @@ const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordIn
 
   targetState.linearSeqs.splice(0, targetState.linearSeqs.length, ...normalizeLinearSeqList([]));
   replaceLinearComparisonPlan(
-    targetState.linearComparisonPlan,
-    reconcileLinearComparisonPlan(targetState.linearComparisonPlan, targetState.linearSeqs)
+    targetDrawing.linearComparisonPlan,
+    reconcileLinearComparisonPlan(targetDrawing.linearComparisonPlan, targetState.linearSeqs)
   );
   return { collapsedLinearSeqs: false };
 };
 
-const reconcileDepthTrackStateAfterSessionFiles = () => {
+/** @param {DrawingState} drawing */
+const reconcileDepthTrackStateAfterSessionFiles = (drawing) => {
   const circularDepthFiles = representativeDepthFiles(state.files.c_depth);
   const circularDepthCount = circularDepthFiles.some(Boolean) ? circularDepthFiles.length : 0;
   const linearRows = state.linearSeqs.map((seq) => depthFileSlotsFromValue(seq.depth));
   const linearDepthCount = state.mode.value === 'linear'
     ? depthTrackSessionWidth({
         rows: linearRows,
-        depthTracks: state.adv.depth_tracks,
-        slots: state.adv.linear_track_slots
+        depthTracks: drawing.adv.depth_tracks,
+        slots: drawing.adv.linear_track_slots
       })
     : depthTrackMatrixWidth(linearRows);
   if (state.mode.value === 'linear' && linearDepthCount > 0) {
@@ -3474,78 +3500,79 @@ const reconcileDepthTrackStateAfterSessionFiles = () => {
   }
 
   const defaults = {
-    depthColor: state.adv.depth_color,
-    depthHeight: state.adv.depth_height,
-    largeTickInterval: state.adv.depth_large_tick_interval,
-    smallTickInterval: state.adv.depth_small_tick_interval,
-    tickFontSize: state.adv.depth_tick_font_size
+    depthColor: drawing.adv.depth_color,
+    depthHeight: drawing.adv.depth_height,
+    largeTickInterval: drawing.adv.depth_large_tick_interval,
+    smallTickInterval: drawing.adv.depth_small_tick_interval,
+    tickFontSize: drawing.adv.depth_tick_font_size
   };
   let normalizedTracks;
   if (state.mode.value === 'linear') {
-    normalizedTracks = normalizeDepthTracks(state.adv.depth_tracks, state.adv);
+    normalizedTracks = normalizeDepthTracks(drawing.adv.depth_tracks, drawing.adv);
     while (normalizedTracks.length < Math.max(1, linearDepthCount)) {
-      normalizedTracks.push(normalizeDepthTrackConfig(null, normalizedTracks.length, state.adv));
+      normalizedTracks.push(normalizeDepthTrackConfig(null, normalizedTracks.length, drawing.adv));
     }
   } else {
     normalizedTracks = reconcileDepthTracksToFiles(/** @type {Record<string, any>} */ ({
       files: circularDepthFiles,
-      depthTracks: state.adv.depth_tracks,
+      depthTracks: drawing.adv.depth_tracks,
       targetCount: Math.max(1, circularDepthCount),
       defaults
     }));
   }
-  state.adv.depth_tracks.splice(0, state.adv.depth_tracks.length, ...normalizedTracks);
+  drawing.adv.depth_tracks.splice(0, drawing.adv.depth_tracks.length, ...normalizedTracks);
 
-  state.adv.circular_track_slots.splice(
+  drawing.adv.circular_track_slots.splice(
     0,
-    state.adv.circular_track_slots.length,
+    drawing.adv.circular_track_slots.length,
     ...dropInvalidManagedDepthSlots(/** @type {Record<string, any>} */ ({
-      slots: state.adv.circular_track_slots,
+      slots: drawing.adv.circular_track_slots,
       activeCount: circularDepthCount
     }))
   );
   syncDepthSlotLabels(/** @type {Record<string, any>} */ ({
-    slots: state.adv.circular_track_slots,
-    depthTracks: state.adv.depth_tracks,
+    slots: drawing.adv.circular_track_slots,
+    depthTracks: drawing.adv.depth_tracks,
     activeCount: circularDepthCount
   }));
-  state.adv.circular_track_slots.splice(
+  drawing.adv.circular_track_slots.splice(
     0,
-    state.adv.circular_track_slots.length,
+    drawing.adv.circular_track_slots.length,
     ...applyCircularTrackOrderPlacements(
-      state.adv.circular_track_slots,
-      state.adv.nt,
-      state.form.track_type,
-      state.adv.circular_track_slots_axis_index
+      drawing.adv.circular_track_slots,
+      drawing.adv.nt,
+      drawing.form.track_type,
+      drawing.adv.circular_track_slots_axis_index
     )
   );
 
-  state.adv.linear_track_slots.splice(
+  drawing.adv.linear_track_slots.splice(
     0,
-    state.adv.linear_track_slots.length,
+    drawing.adv.linear_track_slots.length,
     ...dropInvalidManagedDepthSlots(/** @type {Record<string, any>} */ ({
-      slots: state.adv.linear_track_slots,
+      slots: drawing.adv.linear_track_slots,
       activeCount: linearDepthCount
     }))
   );
   syncDepthSlotLabels(/** @type {Record<string, any>} */ ({
-    slots: state.adv.linear_track_slots,
-    depthTracks: state.adv.depth_tracks,
+    slots: drawing.adv.linear_track_slots,
+    depthTracks: drawing.adv.depth_tracks,
     activeCount: linearDepthCount
   }));
-  state.adv.linear_track_slots.splice(
+  drawing.adv.linear_track_slots.splice(
     0,
-    state.adv.linear_track_slots.length,
+    drawing.adv.linear_track_slots.length,
     ...applyLinearTrackOrderPlacements(
-      state.adv.linear_track_slots,
-      state.adv.linear_track_slots_axis_index,
-      state.adv.nt,
-      state.form.linear_track_layout
+      drawing.adv.linear_track_slots,
+      drawing.adv.linear_track_slots_axis_index,
+      drawing.adv.nt,
+      drawing.form.linear_track_layout
     )
   );
 };
 
-const cloneLiveFileState = () => ({
+/** @param {DrawingState} drawing */
+const cloneLiveFileState = (drawing) => ({
   files: {
     ...state.files,
     c_conservation_blasts: Array.isArray(state.files.c_conservation_blasts)
@@ -3573,15 +3600,16 @@ const cloneLiveFileState = () => ({
     ...seq,
     depth: Array.isArray(seq.depth) ? [...seq.depth] : seq.depth
   })),
-  linearRecordRows: state.linearRecordRows.map((entry) => ({ ...entry })),
+  linearRecordRows: drawing.linearRecordRows.map((entry) => ({ ...entry })),
   linearComparisonPlan: {
-    mode: state.linearComparisonPlan.mode,
-    defaultSource: state.linearComparisonPlan.defaultSource,
-    edges: state.linearComparisonPlan.edges.map((edge) => ({ ...edge }))
+    mode: drawing.linearComparisonPlan.mode,
+    defaultSource: drawing.linearComparisonPlan.defaultSource,
+    edges: drawing.linearComparisonPlan.edges.map((edge) => ({ ...edge }))
   }
 });
 
-const restoreLiveFileState = (snapshot) => {
+/** @param {DrawingState} drawing */
+const restoreLiveFileState = (drawing, snapshot) => {
   state.matchSequenceRegistry?.reset?.();
   Object.keys(state.files).forEach((key) => {
     state.files[key] = snapshot.files[key] ?? null;
@@ -3589,11 +3617,12 @@ const restoreLiveFileState = (snapshot) => {
   state.circularRecordList.value = cloneJsonData(snapshot.circularRecordList);
   Object.assign(state.circularRecordDiscovery, snapshot.circularRecordDiscovery);
   state.linearSeqs.splice(0, state.linearSeqs.length, ...snapshot.linearSeqs);
-  state.linearRecordRows.splice(0, state.linearRecordRows.length, ...snapshot.linearRecordRows);
-  replaceLinearComparisonPlan(state.linearComparisonPlan, snapshot.linearComparisonPlan);
+  drawing.linearRecordRows.splice(0, drawing.linearRecordRows.length, ...snapshot.linearRecordRows);
+  replaceLinearComparisonPlan(drawing.linearComparisonPlan, snapshot.linearComparisonPlan);
 };
 
-const captureSessionImportTransientState = () => ({
+/** @param {DrawingState} drawing */
+const captureSessionImportTransientState = (drawing) => ({
   semanticFileWatchersSuppressed: Boolean(
     state.semanticFileWatchersSuppressed.value
   ),
@@ -3616,7 +3645,7 @@ const captureSessionImportTransientState = () => ({
   newFeatureToAdd: state.newFeatureToAdd.value,
   newLegendCaption: state.newLegendCaption.value,
   newLegendColor: state.newLegendColor.value,
-  fileLegendCaptions: Array.from(state.fileLegendCaptions.value || []),
+  fileLegendCaptions: Array.from(drawing.fileLegendCaptions.value || []),
   featureSearch: state.featureSearch.value,
   labelSearch: state.labelSearch.value,
   selectedFeatureIds: Array.from(state.selectedFeatureIds.value || []),
@@ -3656,7 +3685,8 @@ const captureSessionImportTransientState = () => ({
   plotTitleAutoTransform: cloneJsonData(state.plotTitleAutoTransform.value)
 });
 
-const restoreSessionImportTransientState = (snapshot) => {
+/** @param {DrawingState} drawing */
+const restoreSessionImportTransientState = (drawing, snapshot) => {
   state.suppressCircularMultiRecordDefaults.value =
     snapshot.suppressCircularMultiRecordDefaults;
   state.linearReorderNotice.value = snapshot.linearReorderNotice;
@@ -3674,7 +3704,7 @@ const restoreSessionImportTransientState = (snapshot) => {
   state.newFeatureToAdd.value = snapshot.newFeatureToAdd;
   state.newLegendCaption.value = snapshot.newLegendCaption;
   state.newLegendColor.value = snapshot.newLegendColor;
-  state.fileLegendCaptions.value = new Set(snapshot.fileLegendCaptions);
+  drawing.fileLegendCaptions.value = new Set(snapshot.fileLegendCaptions);
   state.featureSearch.value = snapshot.featureSearch;
   state.labelSearch.value = snapshot.labelSearch;
   state.selectedFeatureIds.value = new Set(snapshot.selectedFeatureIds);
@@ -3718,14 +3748,16 @@ const restoreSessionImportTransientState = (snapshot) => {
   state.skipCaptureBaseConfig.value = snapshot.skipCaptureBaseConfig;
 };
 
-const captureSessionImportSnapshot = () => ({
-  config: cloneJsonData(buildConfigData()),
-  ui: cloneJsonData(buildUiStateData()),
-  files: cloneLiveFileState(),
+/** @param {DrawingState} drawing */
+const captureSessionImportSnapshot = (drawing) => ({
+  drawing,
+  config: cloneJsonData(buildConfigData(drawing)),
+  ui: cloneJsonData(buildUiStateData(drawing)),
+  files: cloneLiveFileState(drawing),
   results: state.results.value,
-  features: buildFeatureStateData(),
-  editorState: buildEditorStateData(),
-  orthogroupState: buildOrthogroupStateData(),
+  features: buildFeatureStateData(drawing),
+  editorState: buildEditorStateData(drawing),
+  orthogroupState: buildOrthogroupStateData(drawing),
   collinearGroups: state.collinearGroups.value,
   runState: buildRunStateData(),
   losatCache: state.losatCache.value,
@@ -3742,21 +3774,23 @@ const captureSessionImportSnapshot = () => ({
     ? committedCanonicalSession
     : cloneCanonicalSession(committedCanonicalSession),
   activeSessionResourceTable,
-  importedComparisonIntent: cloneJsonData(state.importedComparisonIntent),
+  importedComparisonIntent: cloneJsonData(drawing.importedComparisonIntent),
   errorLog: state.errorLog.value,
   resultPanelTab: state.resultPanelTab.value,
-  transients: captureSessionImportTransientState()
+  transients: captureSessionImportTransientState(drawing)
 });
 
+/** @param {ReturnType<typeof captureSessionImportSnapshot>} snapshot */
 const restoreSessionImportSnapshot = async (snapshot) => {
+  const { drawing } = snapshot;
   state.sessionImportRollbackInProgress.value = true;
   try {
     state.semanticFileWatchersSuppressed.value = true;
-    resetSessionBaseline();
+    resetSessionBaseline(drawing);
     state.mode.value = snapshot.ui.mode === 'linear' ? 'linear' : 'circular';
-    applyConfigData(snapshot.config, { resolveTrackPlacements: false });
-    applyUiStateData(snapshot.ui);
-    restoreLiveFileState(snapshot.files);
+    applyConfigData(drawing, snapshot.config, { resolveTrackPlacements: false });
+    applyUiStateData(drawing, snapshot.ui);
+    restoreLiveFileState(drawing, snapshot.files);
     state.losatCache.value = snapshot.losatCache;
     state.losatDerivedCache.value = snapshot.losatDerivedCache;
     adoptedProteinIdentityManifest = snapshot.adoptedProteinIdentityManifest;
@@ -3771,22 +3805,22 @@ const restoreSessionImportSnapshot = async (snapshot) => {
       : cloneCanonicalSession(snapshot.committedCanonicalSession);
     activeSessionResourceTable = snapshot.activeSessionResourceTable;
     Object.assign(
-      state.importedComparisonIntent,
+      drawing.importedComparisonIntent,
       createImportedComparisonIntentState(),
       cloneJsonData(snapshot.importedComparisonIntent)
     );
     state.skipCaptureBaseConfig.value = true;
     applyResultsData(snapshot.results, snapshot.ui);
-    applyFeatureStateData(snapshot.features);
-    applyOrthogroupStateData(snapshot.orthogroupState);
+    applyFeatureStateData(drawing, snapshot.features);
+    applyOrthogroupStateData(drawing, snapshot.orthogroupState);
     state.collinearGroups.value = snapshot.collinearGroups;
-    applyEditorStateData(snapshot.editorState, { normalized: true });
+    applyEditorStateData(drawing, snapshot.editorState, { normalized: true });
     applyRunStateData(snapshot.runState);
     state.errorLog.value = snapshot.errorLog;
     state.resultPanelTab.value = snapshot.resultPanelTab;
     await nextTick();
     recordSessionLifecycleEvent('session-rollback-source-restored');
-    restoreSessionImportTransientState(snapshot.transients);
+    restoreSessionImportTransientState(drawing, snapshot.transients);
     recordSessionLifecycleEvent('session-rollback-transients-reconciled');
     await nextTick();
   } finally {
@@ -3800,13 +3834,14 @@ const clearObject = (target) => {
   });
 };
 
-const resetSessionBaseline = () => {
+/** @param {DrawingState} drawing */
+const resetSessionBaseline = (drawing) => {
   activePreviewRuntime?.clearActiveRuntime?.();
   preservedCliOptions = null;
   committedCanonicalSession = null;
   activeSessionResourceTable = null;
   Object.assign(
-    state.importedComparisonIntent,
+    drawing.importedComparisonIntent,
     createImportedComparisonIntentState()
   );
   adoptedProteinIdentityManifest = null;
@@ -3829,7 +3864,7 @@ const resetSessionBaseline = () => {
   state.featureIdentityNotices.value = [];
   state.featureEditRemovalCount.value = 0;
   state.comparisonWarnings.value = [];
-  applyFiles(null);
+  applyFiles(null, { targetDrawing: drawing });
   state.losatCache.value = new Map();
   state.losatDerivedCache.value = new Map();
   state.proteinIdentityManifest.value = emptyProteinIdentityManifest();
@@ -3841,30 +3876,31 @@ const resetSessionBaseline = () => {
   state.featureOrthogroupIndex.value = new Map();
   state.selectedOrthogroupId.value = '';
   state.selectedOrthogroupAlignmentFeature.value = '';
-  clearObject(state.orthogroupNameOverrides);
-  clearObject(state.orthogroupDescriptionOverrides);
-  clearObject(state.orthogroupDormantOverrides);
+  clearObject(drawing.orthogroupNameOverrides);
+  clearObject(drawing.orthogroupDescriptionOverrides);
+  clearObject(drawing.orthogroupDormantOverrides);
   state.extractedFeatures.value = [];
   if (state.biologicalFeatures) state.biologicalFeatures.value = [];
   state.featureRecordIds.value = [];
   state.selectedFeatureRecordIdx.value = 0;
-  clearObject(state.featureColorOverrides);
-  state.featureVisibilityManualRules.splice(0);
-  clearObject(state.featureOverrides);
-  clearObject(state.featureStrokeOverrides);
-  state.canonicalLabelOverrideRows.value = [];
-  clearObject(state.labelTextBulkOverrides);
+  clearObject(drawing.featureColorOverrides);
+  drawing.featureVisibilityManualRules.splice(0);
+  clearObject(drawing.featureOverrides);
+  clearObject(drawing.featureStrokeOverrides);
+  drawing.canonicalLabelOverrideRows.value = [];
+  clearObject(drawing.labelTextBulkOverrides);
   state.generatedMode.value = 'circular';
   state.generatedLegendPosition.value = 'left';
   state.generatedMultiRecordCanvas.value = false;
   state.generatedCircularPlotTitlePosition.value = 'none';
 };
 
-export const buildUiStateData = ({ includePreviewNavigation = true } = {}) => {
+/** @param {DrawingState} drawing */
+export const buildUiStateData = (drawing, { includePreviewNavigation = true } = {}) => {
   const ui = {
     title: String(state.sessionTitle.value || ''),
     mode: state.mode.value,
-    canvasPadding: { ...state.canvasPadding },
+    canvasPadding: { ...drawing.canvasPadding },
     selectedResultIndex: state.selectedResultIndex.value,
     generatedLegendPosition: state.generatedLegendPosition.value,
     generatedMode: state.generatedMode.value,
@@ -3872,19 +3908,19 @@ export const buildUiStateData = ({ includePreviewNavigation = true } = {}) => {
     generatedCircularPlotTitlePosition: normalizeCircularPlotTitlePosition(
       state.generatedCircularPlotTitlePosition.value
     ),
-    layoutPreferences: cloneJsonData(state.layoutPreferences),
+    layoutPreferences: cloneJsonData(drawing.layoutPreferences),
     featurePanelTab: state.featurePanelTab.value,
     cInputType: state.cInputType.value,
     lInputType: state.lInputType.value,
-    losatProgram: state.losatProgram.value,
+    losatProgram: drawing.losatProgram.value,
     downloadDpi: state.downloadDpi.value,
     autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
-    linearTypographyLinked: Boolean(state.linearTypographyLinked.value),
+    linearTypographyLinked: Boolean(drawing.linearTypographyLinked.value),
     paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
     appliedPaletteName: state.appliedPaletteName.value,
     appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
-    pendingPaletteName: state.pendingPaletteName.value,
-    pendingPaletteColors: cloneColors(state.pendingPaletteColors.value),
+    pendingPaletteName: drawing.pendingPaletteName.value,
+    pendingPaletteColors: cloneColors(drawing.pendingPaletteColors.value),
     legendCurrentOffset: { ...state.legendCurrentOffset },
     diagramOffset: { ...state.diagramOffset },
     lengthBarUserOffset: { ...state.lengthBarUserOffset },
@@ -3899,20 +3935,21 @@ export const buildUiStateData = ({ includePreviewNavigation = true } = {}) => {
   return ui;
 };
 
-export const applyUiStateData = (ui = {}, { restorePreviewNavigation = true } = {}) => {
+/** @param {DrawingState} drawing */
+export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = true } = {}) => {
   if (typeof ui.title === 'string') state.sessionTitle.value = ui.title;
   if (ui.mode) state.mode.value = ui.mode === 'linear' ? 'linear' : 'circular';
   if (ui.cInputType) state.cInputType.value = ui.cInputType;
   if (ui.lInputType) state.lInputType.value = ui.lInputType;
   if (ui.losatProgram) {
     const program = String(ui.losatProgram);
-    state.losatProgram.value = ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn';
+    drawing.losatProgram.value = ['blastn', 'tblastx', 'blastp'].includes(program) ? program : 'blastn';
   }
   if (ui.downloadDpi) state.downloadDpi.value = ui.downloadDpi;
   state.autoLabelReflowEnabled.value = Boolean(ui.autoLabelReflow);
   reconcileImportedLinearTypographyLink({
-    adv: state.adv,
-    linked: state.linearTypographyLinked,
+    adv: drawing.adv,
+    linked: drawing.linearTypographyLinked,
     ui
   });
   state.paletteInstantPreviewEnabled.value = Boolean(ui.paletteInstantPreviewEnabled);
@@ -3936,8 +3973,8 @@ export const applyUiStateData = (ui = {}, { restorePreviewNavigation = true } = 
       : normalizeCircularPlotTitlePosition(ui.circularPlotTitlePosition);
   }
 
-  restorePaletteStateFromSession(ui);
-  restoreLayoutPreferences(ui);
+  restorePaletteStateFromSession(drawing, ui);
+  restoreLayoutPreferences(drawing, ui);
 
   if (ui.legendCurrentOffset) {
     state.legendCurrentOffset.x = Number(ui.legendCurrentOffset.x) || 0;
@@ -3957,10 +3994,10 @@ export const applyUiStateData = (ui = {}, { restorePreviewNavigation = true } = 
   }
 
   if (ui.canvasPadding) {
-    state.canvasPadding.top = Number(ui.canvasPadding.top) || 0;
-    state.canvasPadding.right = Number(ui.canvasPadding.right) || 0;
-    state.canvasPadding.bottom = Number(ui.canvasPadding.bottom) || 0;
-    state.canvasPadding.left = Number(ui.canvasPadding.left) || 0;
+    drawing.canvasPadding.top = Number(ui.canvasPadding.top) || 0;
+    drawing.canvasPadding.right = Number(ui.canvasPadding.right) || 0;
+    drawing.canvasPadding.bottom = Number(ui.canvasPadding.bottom) || 0;
+    drawing.canvasPadding.left = Number(ui.canvasPadding.left) || 0;
   }
   if (restorePreviewNavigation) {
     if (ui.canvasPan) {
@@ -4009,19 +4046,21 @@ export const applyResultsData = (resultsData = [], ui = {}) => {
   }
 };
 
-export const buildFeatureStateData = () => ({
+/** @param {DrawingState} drawing */
+export const buildFeatureStateData = (drawing) => ({
   extractedFeatures: sanitizeExtractedFeaturesForSession(state.extractedFeatures.value),
   biologicalFeatures: sanitizeExtractedFeaturesForSession(state.biologicalFeatures?.value),
   featureRecordIds: cloneJsonData(state.featureRecordIds.value),
   selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
-  featureColorOverrides: cloneJsonData(state.featureColorOverrides),
-  featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(state.featureVisibilityManualRules),
-  featureOverrides: featureOverridesForState(state.featureOverrides),
-  labelOverrideRows: cloneJsonData(state.canonicalLabelOverrideRows.value),
-  labelTextBulkOverrides: cloneJsonData(state.labelTextBulkOverrides)
+  featureColorOverrides: cloneJsonData(drawing.featureColorOverrides),
+  featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(drawing.featureVisibilityManualRules),
+  featureOverrides: featureOverridesForState(drawing.featureOverrides),
+  labelOverrideRows: cloneJsonData(drawing.canonicalLabelOverrideRows.value),
+  labelTextBulkOverrides: cloneJsonData(drawing.labelTextBulkOverrides)
 });
 
-export const applyFeatureStateData = (features = {}) => {
+/** @param {DrawingState} drawing */
+export const applyFeatureStateData = (drawing, features = {}) => {
   state.extractedFeatures.value = Array.isArray(features.extractedFeatures)
     ? features.extractedFeatures
     : [];
@@ -4036,25 +4075,26 @@ export const applyFeatureStateData = (features = {}) => {
   state.selectedFeatureRecordIdx.value = Number.isInteger(features.selectedFeatureRecordIdx)
     ? features.selectedFeatureRecordIdx
     : 0;
-  replacePlainObject(state.featureColorOverrides, cloneJsonObject(features.featureColorOverrides));
-  state.featureVisibilityManualRules.splice(
+  replacePlainObject(drawing.featureColorOverrides, cloneJsonObject(features.featureColorOverrides));
+  drawing.featureVisibilityManualRules.splice(
     0,
-    state.featureVisibilityManualRules.length,
+    drawing.featureVisibilityManualRules.length,
     ...normalizeFeatureVisibilityRulesForSession(features.featureVisibilityManualRules || [])
   );
-  replacePlainObject(state.featureOverrides, featureOverridesForState(features.featureOverrides));
-  state.canonicalLabelOverrideRows.value = Array.isArray(features.labelOverrideRows)
+  replacePlainObject(drawing.featureOverrides, featureOverridesForState(features.featureOverrides));
+  drawing.canonicalLabelOverrideRows.value = Array.isArray(features.labelOverrideRows)
     ? cloneJsonData(features.labelOverrideRows)
     : [];
-  replacePlainObject(state.labelTextBulkOverrides, cloneStringMap(features.labelTextBulkOverrides));
+  replacePlainObject(drawing.labelTextBulkOverrides, cloneStringMap(features.labelTextBulkOverrides));
 };
 
-export const buildOrthogroupStateData = () => ({
+/** @param {DrawingState} drawing */
+export const buildOrthogroupStateData = (drawing) => ({
   groups: Array.isArray(state.orthogroups.value) ? cloneJsonData(state.orthogroups.value) : [],
   selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
-  orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
-  orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides),
-  orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(state.orthogroupDormantOverrides)
+  orthogroupNameOverrides: cloneStringMap(drawing.orthogroupNameOverrides),
+  orthogroupDescriptionOverrides: cloneStringMap(drawing.orthogroupDescriptionOverrides),
+  orthogroupDormantOverrides: normalizeOrthogroupDormantOverrides(drawing.orthogroupDormantOverrides)
 });
 
 export const buildRunStateData = () => ({
@@ -4094,12 +4134,13 @@ const synchronizeRestoredFeatureSummaryStatus = ({ generationId = 'session-load'
   return true;
 };
 
-const applySessionFeatureRecoveryPlan = (plan, { generationId = 'session-feature-recovery' } = {}) => {
+/** @param {DrawingState} drawing */
+const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'session-feature-recovery' } = {}) => {
   state.featureExtractionPending.value = false;
 
   if (plan?.status === 'recovered' || plan?.status === 'aligned') {
-    if (plan.recoveredFeatureState) applyFeatureStateData(plan.recoveredFeatureState);
-    if (plan.migratedEditorState) applyEditorStateData(plan.migratedEditorState);
+    if (plan.recoveredFeatureState) applyFeatureStateData(drawing, plan.recoveredFeatureState);
+    if (plan.migratedEditorState) applyEditorStateData(drawing, plan.migratedEditorState);
     state.featureExtractionError.value = null;
     setFeatureEditorStatusData({
       status: 'summary-ready',
@@ -4129,6 +4170,7 @@ const applySessionFeatureRecoveryPlan = (plan, { generationId = 'session-feature
 
 /**
  * @typedef {{
+ *   drawing: DrawingState,
  *   linearRecordCatalog?: any,
  *   recordDisplayRows?: any,
  *   storedConfig: ActiveWebConfig,
@@ -4143,7 +4185,7 @@ const applySessionFeatureRecoveryPlan = (plan, { generationId = 'session-feature
  */
 const exportSessionDocument = async (
   titleOverride = null,
-  { linearRecordCatalog = null, recordDisplayRows = null, storedConfig, savedUi, isCurrent }
+  { drawing, linearRecordCatalog = null, recordDisplayRows = null, storedConfig, savedUi, isCurrent }
 ) => {
   const resolvedTitle =
     typeof titleOverride === 'string'
@@ -4164,7 +4206,7 @@ const exportSessionDocument = async (
 
   recordSessionLifecycleEvent('session-save-projection-start');
   const logicalResults = serializeResults();
-  const editorState = buildEditorStateData();
+  const editorState = buildEditorStateData(drawing);
   if (logicalResults.length > 0) {
     if (!editorState.featureCatalog) throw sessionSaveRequiresGenerate();
     try {
@@ -4226,13 +4268,13 @@ const exportSessionDocument = async (
   if (!committed && !settingsOnly) {
     const comparisonPlanSnapshot = state.mode.value === 'linear'
       ? resolveLinearComparisonPlan({
-          plan: state.linearComparisonPlan,
+          plan: drawing.linearComparisonPlan,
           sequences: normalizeLinearSeqList(state.linearSeqs),
-          layout: state.linearRecordLayoutEnabled?.value
-            ? state.linearRecordRows
+          layout: drawing.linearRecordLayoutEnabled?.value
+            ? drawing.linearRecordRows
             : [],
-          losatProgram: state.losatProgram?.value,
-          blastpMode: state.losat?.blastp?.mode
+          losatProgram: drawing.losatProgram?.value,
+          blastpMode: drawing.losat?.blastp?.mode
         })
       : null;
     const activeFiles = await serializeActiveRenderFiles(
@@ -4267,7 +4309,7 @@ const exportSessionDocument = async (
       ? adoptRuntimeCanonicalSession(promoted)
       : promoted;
   }
-  const canonical = await assembleSessionResources(state, committed);
+  const canonical = await assembleSessionResources(state, committed, drawing);
   await validateSimilarityAlignmentResetReceipt(editorState.alignmentResetReceipt, canonical);
   const legacyRawCandidates = serializableLegacyProteinCandidateEnvelope(
     state.legacyProteinRawCandidates.value
@@ -4304,17 +4346,17 @@ const exportSessionDocument = async (
     } } : {}),
     features: {
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
-      featureColorOverrides: cloneJsonData(state.featureColorOverrides),
-      featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(state.featureVisibilityManualRules),
-      featureOverrides: featureOverridesForState(state.featureOverrides),
-      labelOverrideRows: cloneJsonData(state.canonicalLabelOverrideRows.value),
-      labelTextBulkOverrides: cloneJsonData(state.labelTextBulkOverrides)
+      featureColorOverrides: cloneJsonData(drawing.featureColorOverrides),
+      featureVisibilityManualRules: normalizeFeatureVisibilityRulesForSession(drawing.featureVisibilityManualRules),
+      featureOverrides: featureOverridesForState(drawing.featureOverrides),
+      labelOverrideRows: cloneJsonData(drawing.canonicalLabelOverrideRows.value),
+      labelTextBulkOverrides: cloneJsonData(drawing.labelTextBulkOverrides)
     },
     editorState,
     orthogroupState: {
       selectedOrthogroupId: String(state.selectedOrthogroupId.value || ''),
-      orthogroupNameOverrides: cloneStringMap(state.orthogroupNameOverrides),
-      orthogroupDescriptionOverrides: cloneStringMap(state.orthogroupDescriptionOverrides)
+      orthogroupNameOverrides: cloneStringMap(drawing.orthogroupNameOverrides),
+      orthogroupDescriptionOverrides: cloneStringMap(drawing.orthogroupDescriptionOverrides)
     },
     losatCache: {
       entries: losatEntries
@@ -4393,7 +4435,8 @@ const importSessionDocument = async (e, options = {}) => {
     let data = candidate.data;
     await assertSafeObjectKeysForImport(data, 'Session');
     if (isLegacyConfigPayload(data)) {
-      applyLegacyConfigPayload(data);
+      // A legacy configuration names no mode: it is the shown mode's settings.
+      applyLegacyConfigPayload(state.drawings[state.mode.value === 'linear' ? 'linear' : 'circular'], data);
       alert('Legacy configuration loaded. Save as a session to use the current format.');
       return { status: 'legacy' };
     }
@@ -4438,6 +4481,8 @@ const importSessionDocument = async (e, options = {}) => {
         }
       : (data.ui || {});
     const candidateMode = ui.mode === 'linear' ? 'linear' : 'circular';
+    // Session 45 holds one mode's settings: the drawing of the mode it opens in.
+    const drawing = state.drawings[candidateMode];
     const candidateInputType = (candidateMode === 'linear'
       ? ui.lInputType : ui.cInputType) || canonicalProjection?.inputType || 'gb';
     const candidateFiles = {
@@ -4450,7 +4495,10 @@ const importSessionDocument = async (e, options = {}) => {
     recordSessionLifecycleEvent('session-candidate-files-start');
     const { collapsedLinearSeqs } = applyFiles(
       canonicalSession ? projectionResult.restoredFiles : data.files,
-      { adoptCanonicalPayloads: currentSchemaSession, resolveRecordInputs: !settingsOnly, targetState: candidateFiles }
+      {
+        adoptCanonicalPayloads: currentSchemaSession, resolveRecordInputs: !settingsOnly,
+        targetState: candidateFiles, targetDrawing: candidateFiles
+      }
     );
     recordSessionLifecycleEvent('session-candidate-files-end');
     const importedResults = canonicalSession
@@ -4685,13 +4733,13 @@ const importSessionDocument = async (e, options = {}) => {
     // after SVG sanitation, before the one atomic live-state transaction.
     await new Promise((resolve) => setTimeout(resolve, 0));
     if (!options.isCurrent()) return { status: 'canceled' };
-    rollbackSnapshot = captureSessionImportSnapshot();
+    rollbackSnapshot = captureSessionImportSnapshot(drawing);
     if (typeof rollbackStateExtension?.capture === 'function') {
       rollbackExtensionSnapshot = rollbackStateExtension.capture();
     }
     commitStarted = true;
     state.semanticFileWatchersSuppressed.value = true;
-    resetSessionBaseline();
+    resetSessionBaseline(drawing);
     state.sessionResourceDiscoveryDeferred.value = currentSchemaSession;
     if (currentSchemaSession) {
       committedCanonicalSession = adoptedCanonicalSession;
@@ -4733,9 +4781,10 @@ const importSessionDocument = async (e, options = {}) => {
 
     if (restoredConfig) {
       state.suppressCircularMultiRecordDefaults.value = shouldSuppressCircularMultiRecordDefaults(
+        drawing,
         restoredConfig.form
       );
-      applyConfigData(restoredConfig, { resolveTrackPlacements: !settingsOnly });
+      applyConfigData(drawing, restoredConfig, { resolveTrackPlacements: !settingsOnly });
     }
     const canonicalLinearLayout = canonicalProjection?.config?.linearRecordLayout;
     if (canonicalLinearLayout && state.linearRecordTranslations) {
@@ -4756,16 +4805,16 @@ const importSessionDocument = async (e, options = {}) => {
         : null;
     }
     reconcileImportedLinearTypographyLink({
-      adv: state.adv,
-      linked: state.linearTypographyLinked,
+      adv: drawing.adv,
+      linked: drawing.linearTypographyLinked,
       ui
     });
-    restorePaletteStateFromSession(ui);
-    restoreLayoutPreferences(ui, {
+    restorePaletteStateFromSession(drawing, ui);
+    restoreLayoutPreferences(drawing, ui, {
       projected: canonicalSession ? canonicalProjection?.layoutPreferences : null
     });
 
-    restoreLiveFileState({
+    restoreLiveFileState(drawing, {
       files: candidateFiles.files,
       linearSeqs: candidateFiles.linearSeqs,
       circularRecordList: candidateFiles.circularRecordList.value,
@@ -4774,13 +4823,14 @@ const importSessionDocument = async (e, options = {}) => {
       linearComparisonPlan: candidateFiles.linearComparisonPlan
     });
     restoreImportedComparisonIntent(
-      state.importedComparisonIntent,
+      drawing.importedComparisonIntent,
       comparisonClassification,
       restoredConfig?.importedComparisonResolution
     );
-    if (!settingsOnly) reconcileDepthTrackStateAfterSessionFiles();
+    if (!settingsOnly) reconcileDepthTrackStateAfterSessionFiles(drawing);
     if (canonicalSession) {
       applyLosatCache(
+        drawing,
         projectionResult.artifactState.losatCache?.entries,
         projectionResult.artifactState.legacyArtifacts?.proteinRawCandidates,
         {
@@ -4799,6 +4849,7 @@ const importSessionDocument = async (e, options = {}) => {
       );
     } else {
       applyLosatCache(
+        drawing,
         data.losatCache?.entries,
         data.legacyArtifacts?.proteinRawCandidates
       );
@@ -4814,7 +4865,7 @@ const importSessionDocument = async (e, options = {}) => {
 
     state.skipCaptureBaseConfig.value = false;
 
-    applyFeatureStateData(features);
+    applyFeatureStateData(drawing, features);
     if (currentSchemaSession && currentCatalogFeatureState) {
       state.collinearGroups.value = currentCatalogFeatureState.collinearGroups;
       synchronizeRestoredFeatureSummaryStatus({ generationId: 'session-load' });
@@ -4825,6 +4876,7 @@ const importSessionDocument = async (e, options = {}) => {
     ]);
 
     applyOrthogroupStateData(
+      drawing,
       canonicalSession
         ? {
             ...projectionResult.artifactState.orthogroupState,
@@ -4852,9 +4904,9 @@ const importSessionDocument = async (e, options = {}) => {
         catalogFeatureState: currentCatalogFeatureState
       }
     );
-    applyEditorStateData(restoredEditorState, { normalized: currentSchemaSession });
+    applyEditorStateData(drawing, restoredEditorState, { normalized: currentSchemaSession });
     if (legacyFeatureRecoveryPlan) {
-      applySessionFeatureRecoveryPlan(legacyFeatureRecoveryPlan, { generationId: 'session-load' });
+      applySessionFeatureRecoveryPlan(drawing, legacyFeatureRecoveryPlan, { generationId: 'session-load' });
     }
 
     const desiredResultIndex = (
@@ -4900,10 +4952,10 @@ const importSessionDocument = async (e, options = {}) => {
     }
 
     if (ui.canvasPadding) {
-      state.canvasPadding.top = ui.canvasPadding.top || 0;
-      state.canvasPadding.right = ui.canvasPadding.right || 0;
-      state.canvasPadding.bottom = ui.canvasPadding.bottom || 0;
-      state.canvasPadding.left = ui.canvasPadding.left || 0;
+      drawing.canvasPadding.top = ui.canvasPadding.top || 0;
+      drawing.canvasPadding.right = ui.canvasPadding.right || 0;
+      drawing.canvasPadding.bottom = ui.canvasPadding.bottom || 0;
+      drawing.canvasPadding.left = ui.canvasPadding.left || 0;
     }
     if (ui.canvasPan) {
       state.canvasPan.x = ui.canvasPan.x || 0;
@@ -4938,7 +4990,7 @@ const importSessionDocument = async (e, options = {}) => {
       data,
       decompressedCharacters: candidate.characters,
       degradedRecovery: Boolean(currentRecoveryError),
-      comparisonDisposition: state.importedComparisonIntent.disposition
+      comparisonDisposition: drawing.importedComparisonIntent.disposition
     };
   } catch (err) {
     if (err?.name === 'AbortError' && !commitStarted) return { status: 'canceled' };
@@ -5019,7 +5071,9 @@ export const exportSession = (titleOverride = null, options = {}) => {
     recordSessionLifecycleEvent('session-save-pending-published');
     // Only mutable draft configuration/navigation is copied. Adopted biological
     // payloads, resources, catalogs, caches and Results retain their existing owner.
-    const activeConfig = buildConfigData();
+    // Session 45 holds one mode's settings: the drawing of the mode it records (`ui.mode`).
+    const drawing = state.drawings[state.mode.value === 'linear' ? 'linear' : 'circular'];
+    const activeConfig = buildConfigData(drawing);
     validateCurrentWriterActiveConfig({ mode: state.mode.value, storedConfig: activeConfig });
     if (!committedCanonicalSession
       && hasBiologicalSessionInputs({ ...state.files, linearSeqs: state.linearSeqs })) {
@@ -5030,30 +5084,30 @@ export const exportSession = (titleOverride = null, options = {}) => {
       mode: state.mode.value,
       zoom: state.zoom.value,
       canvasPan: { x: state.canvasPan.x, y: state.canvasPan.y },
-      canvasPadding: { ...state.canvasPadding },
+      canvasPadding: { ...drawing.canvasPadding },
       selectedResultIndex: state.selectedResultIndex.value,
       generatedLegendPosition: state.generatedLegendPosition.value,
       generatedMultiRecordCanvas: Boolean(state.generatedMultiRecordCanvas.value),
       generatedCircularPlotTitlePosition: normalizeCircularPlotTitlePosition(
         state.generatedCircularPlotTitlePosition.value
       ),
-      layoutPreferences: cloneJsonData(state.layoutPreferences),
+      layoutPreferences: cloneJsonData(drawing.layoutPreferences),
       featurePanelTab: state.featurePanelTab.value,
       cInputType: state.cInputType.value,
       lInputType: state.lInputType.value,
       downloadDpi: state.downloadDpi.value,
       autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
-      linearTypographyLinked: Boolean(state.linearTypographyLinked.value),
+      linearTypographyLinked: Boolean(drawing.linearTypographyLinked.value),
       paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
       appliedPaletteName: state.appliedPaletteName.value,
       appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
-      pendingPaletteName: state.pendingPaletteName.value,
-      pendingPaletteColors: cloneColors(state.pendingPaletteColors.value)
+      pendingPaletteName: drawing.pendingPaletteName.value,
+      pendingPaletteColors: cloneColors(drawing.pendingPaletteColors.value)
     };
     const prepared = await options.beforeExport?.();
     if (!isCurrent()) return { status: 'canceled' };
     return exportSessionDocument(title, {
-      ...options, ...prepared, storedConfig, savedUi, isCurrent
+      ...options, ...prepared, drawing, storedConfig, savedUi, isCurrent
     });
   }).catch((error) => {
     recordSessionLifecycleEvent('session-save-error');

@@ -38,14 +38,14 @@ const noDerivedStatus = async (page, edit = null) => {
 const committedScaleInterval = async page => (await noDerivedStatus(page))
   .committed?.diagramOptions?.configOverrides?.['objects.scale.interval'] ?? null;
 const draftAdv = (page, field) => page.evaluate(async field =>
-  (await import('./js/services/config.js')).buildConfigData().adv[field], field);
+  (await import('./js/services/config.js')).buildConfigData((await import('./js/state.js')).state.activeDrawing()).adv[field], field);
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 const inspect = async (page, testInfo, name) => {
   const exported = await download(page, 'SVG', testInfo.outputPath(`${name}.svg`));
   const current = await snapshot(page);
   const editable = await page.evaluate(async () =>
-    (await import('./js/services/config.js')).buildConfigData());
+    (await import('./js/services/config.js')).buildConfigData((await import('./js/state.js')).state.activeDrawing()));
   const mounted = await page.evaluate(async () => {
     const { state } = await import('./js/state.js');
     const { serializeCleanSvg } = await import('./js/services/svg-serialization.js');
@@ -524,7 +524,7 @@ for (const mode of ['linear', 'circular']) {
         const { state } = await import('./js/state.js');
         const prior = config.canonicalRenderArtifactOwner.capture();
         const catalog = window.Vue.toRaw(state.featureCatalog.value);
-        const draft = config.buildConfigData();
+        const draft = config.buildConfigData(state.activeDrawing());
         const counts = [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()];
         const file = new File([await (await fetch('/gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json')).arrayBuffer()], 'replacement.json');
         const result = await config.importSession({ target: { files: [file], value: 'selected' } }, {
@@ -535,7 +535,7 @@ for (const mode of ['linear', 'circular']) {
           status: result.status, error: { code: result.error?.code, stage: result.error?.stage },
           sameRequest: current.committedCanonicalSession === prior.committedCanonicalSession,
           sameResources: current.activeSessionResourceTable === prior.activeSessionResourceTable,
-          sameDraft: JSON.stringify(config.buildConfigData()) === JSON.stringify(draft),
+          sameDraft: JSON.stringify(config.buildConfigData(state.activeDrawing())) === JSON.stringify(draft),
           // N-19: the rollback restores the admitted catalog by reference.
           sameCatalog: Boolean(catalog) && window.Vue.toRaw(state.featureCatalog.value) === catalog,
           sameHistory: JSON.stringify(counts) === JSON.stringify([

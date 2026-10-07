@@ -68,7 +68,7 @@ const snapshot = page => page.evaluate(async () => {
   const digest = async text => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))))
     .map(value => value.toString(16).padStart(2, '0')).join('');
   return {
-    config: config.buildConfigData(),
+    config: config.buildConfigData(state.activeDrawing()),
     request: config.getCommittedCanonicalRenderRequest(),
     resultHashes: await Promise.all(state.results.value.map(result => digest(result.content))),
     history: [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()]

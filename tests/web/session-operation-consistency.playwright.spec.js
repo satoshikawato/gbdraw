@@ -28,7 +28,7 @@ const capture = page => page.evaluate(async () => {
     results: state.results.value, file: state.files.c_gb,
     cache: state.losatCache.value, evidence: state.proteinIdentityManifest.value,
     undo: history.getUndoCount(), redo: history.getRedoCount(),
-    config: JSON.stringify(config.buildConfigData())
+    config: JSON.stringify(config.buildConfigData(state.activeDrawing()))
   };
 });
 const intact = page => page.evaluate(async () => {
@@ -45,7 +45,7 @@ const intact = page => page.evaluate(async () => {
     cache: before.cache === state.losatCache.value,
     evidence: before.evidence === state.proteinIdentityManifest.value,
     history: before.undo === history.getUndoCount() && before.redo === history.getRedoCount(),
-    config: before.config === JSON.stringify(config.buildConfigData())
+    config: before.config === JSON.stringify(config.buildConfigData(state.activeDrawing()))
   };
 });
 const expectIntact = async page => {

@@ -209,7 +209,7 @@ const WRITES = [
   /\badv\.(?:circular|linear)_track_slots(?:\[[^\]]*\])?\.(?:splice|push|pop|shift|unshift|sort|reverse|fill|copyWithin)\(/g,
   /\badv\.(?:circular|linear)_track_slots\[[^\]]+\]\s*=(?!=)/g,
   /\b(?:form|adv)\[[^\]]+\]\s*=(?!=)/g,
-  /(?:replaceReactiveObject|replacePlainObject|safeDeepMerge|Object\.assign)\(\s*(?:state\.)?(?:form|adv)\b/g
+  /(?:replaceReactiveObject|replacePlainObject|safeDeepMerge|Object\.assign)\(\s*(?:(?:state|drawing)\.)?(?:form|adv)\b/g
 ];
 const DECLARATION = /^\s*(?:export\s+)?(?:const|let|function|async\s+function)\s+([A-Za-z_$][\w$]*)/;
 // The nearest declaration that encloses a line, by indentation.

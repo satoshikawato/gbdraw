@@ -421,12 +421,13 @@ test('uploader, comparison commands, and native summaries work from the keyboard
       buildRunStateData,
       buildUiStateData
     } = await import('./js/services/config.js');
+    const drawing = (await import('./js/state.js')).state.activeDrawing();
     const serialized = JSON.parse(JSON.stringify({
-      config: buildConfigData(),
-      ui: buildUiStateData(),
-      features: buildFeatureStateData(),
-      editorState: buildEditorStateData(),
-      orthogroupState: buildOrthogroupStateData(),
+      config: buildConfigData(drawing),
+      ui: buildUiStateData(drawing),
+      features: buildFeatureStateData(drawing),
+      editorState: buildEditorStateData(drawing),
+      orthogroupState: buildOrthogroupStateData(drawing),
       runState: buildRunStateData()
     }));
     const transientKeys = [];

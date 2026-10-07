@@ -478,21 +478,22 @@ const generateAndWaitForResult = async (
 const snapshotUserOwnedState = (page) => page.evaluate(async () => {
   const { state } = await import('/gbdraw/web/js/state.js');
   const config = await import('/gbdraw/web/js/services/config.js');
-  const editor = config.buildEditorStateData();
+  const drawing = state.activeDrawing();
+  const editor = config.buildEditorStateData(drawing);
   delete editor.featureCatalog;
-  const features = config.buildFeatureStateData();
+  const features = config.buildFeatureStateData(drawing);
   for (const key of ['extractedFeatures', 'biologicalFeatures']) {
     delete features[key];
   }
-  const orthogroups = config.buildOrthogroupStateData();
+  const orthogroups = config.buildOrthogroupStateData(drawing);
   orthogroups.groupCount = orthogroups.groups.length;
   delete orthogroups.groups;
   const history = window.__GBDRAW_HISTORY__;
   return JSON.parse(JSON.stringify({
     state: {
       mode: state.mode.value,
-      config: config.buildConfigData(),
-      ui: config.buildUiStateData({ includePreviewNavigation: false }),
+      config: config.buildConfigData(drawing),
+      ui: config.buildUiStateData(drawing, { includePreviewNavigation: false }),
       editor,
       features,
       orthogroups

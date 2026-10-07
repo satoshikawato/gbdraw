@@ -3,6 +3,7 @@ import { cp, mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { withDrawings } from './helpers/drawing-state.mjs';
 
 const repoRoot = process.cwd();
 const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'services');
@@ -1003,7 +1004,7 @@ const createLayoutPreferences = () => ({
     skipExtractOnSvgChange: ref(false)
   };
   const snapshots = createHistorySnapshotService({
-    state,
+    state: withDrawings(state),
     fileStore,
     nextTick: async () => {},
     buildConfigData: () => ({
@@ -1016,7 +1017,7 @@ const createLayoutPreferences = () => ({
         edges: state.linearComparisonPlan.edges.map(({ file: _file, ...edge }) => edge)
       }
     }),
-    applyConfigData: (config) => {
+    applyConfigData: (_drawing, config) => {
       state.form = { ...config.form };
       state.adv = { ...config.adv };
       modeProfiles = structuredClone(config.modeProfiles);
@@ -1274,7 +1275,7 @@ const createLayoutPreferences = () => ({
     skipExtractOnSvgChange: ref(false)
   };
   const snapshots = createHistorySnapshotService({
-    state,
+    state: withDrawings(state),
     fileStore,
     nextTick: async () => {
       if (!pendingModeReset) return;
@@ -1284,7 +1285,7 @@ const createLayoutPreferences = () => ({
       state.orthogroups.value = [];
       state.selectedOrthogroupId.value = '';
     },
-    applyConfigData: (config) => {
+    applyConfigData: (_drawing, config) => {
       state.form = { ...state.form, ...config.form };
       state.adv = { ...state.adv, ...config.adv };
     }
@@ -1453,7 +1454,7 @@ const createLayoutPreferences = () => ({
   state.deletedLegendEntries = Object.create({ value: [] });
   const entryOwners = [{ target: 'feature_legend', entries: [{ caption: 'tRNA', owner: '' }] }];
   const snapshots = createHistorySnapshotService({
-    state,
+    state: withDrawings(state),
     fileStore,
     buildConfigData: () => ({ form: state.form, adv: state.adv }),
     buildFeatureStateData: () => {
@@ -1629,7 +1630,7 @@ const createLayoutPreferences = () => ({
   };
   let setting = 'loaded';
   let artifactBuilds = 0;
-  const snapshots = createHistorySnapshotService({ state, fileStore });
+  const snapshots = createHistorySnapshotService({ state: withDrawings(state), fileStore });
   const history = createHistoryManager({
     fileStore,
     collectCurrentFileIds: snapshots.collectCurrentFileIds,
@@ -1683,7 +1684,7 @@ const createLayoutPreferences = () => ({
     semanticFileWatchersSuppressed: ref(false)
   };
   const snapshots = createHistorySnapshotService({
-    state,
+    state: withDrawings(state),
     fileStore,
     buildUiStateData: () => ({}),
     applyUiStateData: () => {},
@@ -1869,7 +1870,7 @@ const createLayoutPreferences = () => ({
   const authorityOwnersA = captureAuthorityOwners();
   let resultAdmissionCalls = 0;
   const snapshots = createHistorySnapshotService({
-    state,
+    state: withDrawings(state),
     fileStore,
     nextTick: async () => {},
     buildUiStateData: () => ({
@@ -1884,7 +1885,7 @@ const createLayoutPreferences = () => ({
       pendingPaletteName: state.pendingPaletteName.value,
       pendingPaletteColors: { ...state.pendingPaletteColors.value }
     }),
-    applyUiStateData: (ui) => {
+    applyUiStateData: (_drawing, ui) => {
       state.mode.value = ui.mode;
       state.selectedResultIndex.value = ui.selectedResultIndex;
     },
@@ -1895,14 +1896,14 @@ const createLayoutPreferences = () => ({
       resultAdmissionCalls += 1;
       throw new Error('Trusted artifact restore must not use Result admission.');
     },
-    applyFeatureStateData: (features) => {
+    applyFeatureStateData: (_drawing, features) => {
       state.extractedFeatures.value = features.extractedFeatures;
       state.biologicalFeatures.value = features.biologicalFeatures;
       state.featureRecordIds.value = features.featureRecordIds;
       state.selectedFeatureRecordIdx.value = features.selectedFeatureRecordIdx;
       Object.assign(state.featureColorOverrides, features.featureColorOverrides);
     },
-    applyEditorStateData: (editorState, options) => {
+    applyEditorStateData: (_drawing, editorState, options) => {
       assert.equal(options.normalized, true);
       state.legendEntries.value = editorState.legend.entries;
       state.featureCatalog.value = editorState.featureCatalog;
@@ -2352,7 +2353,7 @@ console.log('history tests passed');
 for (const previousSuppressed of [false, true]) {
   const state = { semanticFileWatchersSuppressed: ref(previousSuppressed) };
   const snapshots = createHistorySnapshotService({
-    state,
+    state: withDrawings(state),
     fileStore: createHistoryFileStore(),
     nextTick: async () => {
       assert.equal(state.semanticFileWatchersSuppressed.value, true);

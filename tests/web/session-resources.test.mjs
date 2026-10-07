@@ -5,6 +5,7 @@ import { cp, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { drawingOf } from './helpers/drawing-state.mjs';
 
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
@@ -189,7 +190,7 @@ const state = {
   }
 };
 
-const built = await buildSessionResources(state, committed);
+const built = await buildSessionResources(state, committed, drawingOf(state));
 const bindings = built.webFiles.bindings;
 assert.equal(bindings.schema, 2);
 assert.equal(activeReads, 1, 'one File object used in several roles is read once');
@@ -333,7 +334,8 @@ dormantCommitted.renderRequest.mode = 'linear';
 dormantCommitted.renderRequest.comparisons = [];
 const dormantSaved = await buildSessionResources(
   dormantSaveState,
-  dormantCommitted
+  dormantCommitted,
+  drawingOf(dormantSaveState)
 );
 assert.equal(
   dormantComparisonReads,
@@ -385,7 +387,7 @@ for (const adopted of [false, true]) {
   });
   const state = { files: { c_gb: file, c_fasta: makeFile('A\n', 'independent.fa') } };
   const canonical = adopted ? authority.adoptRuntimeCanonicalSession(committed) : committed;
-  const first = await buildSessionResources(state, canonical);
+  const first = await buildSessionResources(state, canonical, drawingOf(state));
   const binding = first.webFiles.bindings.c_gb;
   assert.equal(binding.kind, 'composite');
   assert.equal(binding.name, '');
@@ -405,7 +407,7 @@ for (const adopted of [false, true]) {
   const second = await buildSessionResources({ files: { c_gb: loaded } }, authority.adoptRuntimeCanonicalSession(first));
   assert.deepEqual(second.webFiles.bindings.c_gb, binding);
   state.files.c_gb = makeFile('native replacement\n', 'replacement.gb');
-  const replaced = await buildSessionResources(state, canonical);
+  const replaced = await buildSessionResources(state, canonical, drawingOf(state));
   assert.equal(replaced.webFiles.bindings.c_gb.kind, undefined);
   assert.equal(replaced.webFiles.bindings.c_gb.components, undefined);
   assert.equal(replaced.resources[replaced.webFiles.bindings.c_gb.resourceId].data, base64('native replacement\n'));

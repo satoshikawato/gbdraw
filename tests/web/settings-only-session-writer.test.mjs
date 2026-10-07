@@ -27,12 +27,12 @@ const savedDocument = async title => {
 };
 
 test('source-free Save emits no render metadata and preserves valid raw scalar drafts', async () => {
-  const freshConfig = buildConfigData();
+  const freshConfig = buildConfigData(state.activeDrawing());
   const fresh = await savedDocument('fresh settings');
   assert.equal(fresh.renderRequest, null);
   assert.equal(fresh.runMetadata, undefined);
   assert.deepEqual(fresh.config, JSON.parse(JSON.stringify(freshConfig)));
-  assert.deepEqual(buildConfigData(), freshConfig);
+  assert.deepEqual(buildConfigData(state.activeDrawing()), freshConfig);
   assert.equal(adoptCurrentSessionDocument(fresh, SESSION_VERSION).canonical, null);
 
   state.adv.circular_track_slots_enabled = true;
@@ -41,10 +41,10 @@ test('source-free Save emits no render metadata and preserves valid raw scalar d
     width: { value: '1.', unit: 'px' }, radius: { value: '1e-3', unit: 'factor' },
     inner_gap_px: null, outer_gap_px: null, z: 0, params: { lane_direction: 'inside' }
   });
-  const before = buildConfigData();
+  const before = buildConfigData(state.activeDrawing());
   const saved = await savedDocument('typed text settings');
   assert.deepEqual(saved.config, JSON.parse(JSON.stringify(before)));
-  assert.deepEqual(buildConfigData(), before);
+  assert.deepEqual(buildConfigData(state.activeDrawing()), before);
   assert.deepEqual(saved.results, []);
   assert.equal(saved.editorState.featureCatalog, null);
   assert.equal(saved.runMetadata, undefined);
@@ -81,13 +81,13 @@ test('current gzip writer/admission keeps S00 valid scalars and codec drafts, in
     for (const [index, [scalar, expected]] of cases.entries()) {
       slot.width = structuredClone(scalar);
       slot.radius = structuredClone(scalar);
-      const before = buildConfigData();
+      const before = buildConfigData(state.activeDrawing());
       const saved = await savedDocument(`scalar settings ${mode} ${enabled} ${index}`);
       const adopted = adoptCurrentSessionDocument(saved, SESSION_VERSION);
       assert.equal(adopted.canonical, null);
       const restored = projectSettingsOnlySession(adopted.document);
       assert.deepEqual(restored.config, JSON.parse(JSON.stringify(before)));
-      assert.deepEqual(buildConfigData(), before);
+      assert.deepEqual(buildConfigData(state.activeDrawing()), before);
       const restoredSlot = restored.config.adv.circular_track_slots[0];
       assert.deepEqual(restoredSlot.width, scalar);
       assert.deepEqual(restoredSlot.radius, scalar);
@@ -113,9 +113,9 @@ test('writer and current admission reject invalid scalar drafts without altering
     { value: Infinity, unit: 'px' }, Infinity, NaN
   ]) {
     slot.width = scalar;
-    const before = buildConfigData();
+    const before = buildConfigData(state.activeDrawing());
     await assert.rejects(exportSession('invalid scalar settings'), /width|positive|scalar/i);
-    assert.deepEqual(buildConfigData(), before);
+    assert.deepEqual(buildConfigData(state.activeDrawing()), before);
     const invalid = structuredClone(valid);
     invalid.config.adv.circular_track_slots[0].width = scalar;
     const invalidBefore = structuredClone(invalid);

@@ -51,7 +51,7 @@ def checkpoint(page, name, output):
       return {
         result: s.results.value[s.selectedResultIndex.value]?.content || '',
         mounted: root ? serializeCleanSvg(root) : '',
-        request: getCommittedCanonicalRenderRequest(), draft: await buildConfigData(),
+        request: getCommittedCanonicalRenderRequest(), draft: await buildConfigData(s.activeDrawing()),
         identity: s.extractedFeatures.value.map(f => ({id:f.id, biologicalFeatureId:f.biologicalFeatureId,
           record:f.record_id, start:f.start, end:f.end, strand:f.strand})),
         history: [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()],

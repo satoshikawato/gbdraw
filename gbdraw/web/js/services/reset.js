@@ -10,6 +10,7 @@ import {
   createDefaultPriorityRule,
   createDefaultSpecificRule
 } from '../state.js';
+/** @import { DrawingState } from '../state.js' */
 import { createDefaultLayoutPreferences } from './layout-preferences.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
@@ -49,59 +50,75 @@ const defaultPaletteColors = (state) => {
   return normalizePaletteColors(clonePlain(colors));
 };
 
-const resetPaletteState = (state) => {
+/**
+ * @param {Record<string, any>} state
+ * @param {DrawingState} drawing
+ */
+const resetPaletteState = (state, drawing) => {
   const defaults = createDefaultPaletteDraftState();
   const colors = defaultPaletteColors(state);
 
-  state.selectedPalette.value = defaults.selectedPalette;
+  drawing.selectedPalette.value = defaults.selectedPalette;
   state.paletteInstantPreviewEnabled.value = defaults.paletteInstantPreviewEnabled;
-  state.currentColors.value = colors;
+  drawing.currentColors.value = colors;
   state.appliedPaletteName.value = defaults.appliedPaletteName;
   state.appliedPaletteColors.value = { ...colors };
-  state.pendingPaletteName.value = defaults.pendingPaletteName;
-  state.pendingPaletteColors.value = defaults.pendingPaletteColors;
+  drawing.pendingPaletteName.value = defaults.pendingPaletteName;
+  drawing.pendingPaletteColors.value = defaults.pendingPaletteColors;
 };
 
-const resetLayoutPreferenceState = (state) => {
+/**
+ * @param {Record<string, any>} state
+ * @param {DrawingState} drawing
+ */
+const resetLayoutPreferenceState = (state, drawing) => {
   const defaults = createDefaultLayoutPreferences();
-  Object.assign(state.layoutPreferences.circular.single, defaults.circular.single);
-  Object.assign(state.layoutPreferences.circular.multi, defaults.circular.multi);
-  Object.assign(state.layoutPreferences.linear, defaults.linear);
+  Object.assign(drawing.layoutPreferences.circular.single, defaults.circular.single);
+  Object.assign(drawing.layoutPreferences.circular.multi, defaults.circular.multi);
+  Object.assign(drawing.layoutPreferences.linear, defaults.linear);
   state.suppressCircularMultiRecordDefaults.value = false;
 };
 
-const resetRuleDraftState = (state) => {
+/**
+ * @param {Record<string, any>} state
+ * @param {DrawingState} drawing
+ */
+const resetRuleDraftState = (state, drawing) => {
   const labelDefaults = createDefaultLabelFilterState();
   const editorDefaults = createDefaultEditorDraftState();
-  state.filterMode.value = labelDefaults.filterMode;
-  state.manualBlacklist.value = labelDefaults.manualBlacklist;
-  replaceReactiveArray(state.manualWhitelist, labelDefaults.manualWhitelist);
-  replaceReactiveArray(state.manualSpecificRules);
+  drawing.filterMode.value = labelDefaults.filterMode;
+  drawing.manualBlacklist.value = labelDefaults.manualBlacklist;
+  replaceReactiveArray(drawing.manualWhitelist, labelDefaults.manualWhitelist);
+  replaceReactiveArray(drawing.manualSpecificRules);
   replaceReactiveObject(state.newSpecRule, createDefaultSpecificRule());
   state.selectedSpecificPreset.value = editorDefaults.selectedSpecificPreset;
   state.specificRulePresetLoading.value = editorDefaults.specificRulePresetLoading;
-  replaceReactiveArray(state.manualPriorityRules);
+  replaceReactiveArray(drawing.manualPriorityRules);
   replaceReactiveObject(state.newPriorityRule, createDefaultPriorityRule());
   state.newColorFeat.value = editorDefaults.newColorFeat;
   state.newColorVal.value = editorDefaults.newColorVal;
   state.newFeatureToAdd.value = editorDefaults.newFeatureToAdd;
 };
 
-const resetEditorDraftState = (state) => {
+/**
+ * @param {Record<string, any>} state
+ * @param {DrawingState} drawing
+ */
+const resetEditorDraftState = (state, drawing) => {
   const editorDefaults = createDefaultEditorDraftState();
-  clearReactiveObject(state.featureColorOverrides);
-  replaceReactiveArray(state.featureVisibilityManualRules);
-  clearReactiveObject(state.featureOverrides);
-  clearReactiveObject(state.featureStrokeOverrides);
-  clearReactiveObject(state.legendColorOverrides);
-  clearReactiveObject(state.legendStrokeOverrides);
-  state.deletedLegendEntries.value = [];
+  clearReactiveObject(drawing.featureColorOverrides);
+  replaceReactiveArray(drawing.featureVisibilityManualRules);
+  clearReactiveObject(drawing.featureOverrides);
+  clearReactiveObject(drawing.featureStrokeOverrides);
+  clearReactiveObject(drawing.legendColorOverrides);
+  clearReactiveObject(drawing.legendStrokeOverrides);
+  drawing.deletedLegendEntries.value = [];
   state.newLegendCaption.value = editorDefaults.newLegendCaption;
   state.newLegendColor.value = editorDefaults.newLegendColor;
-  state.addedLegendCaptions.value = new Set();
-  state.fileLegendCaptions.value = new Set();
+  drawing.addedLegendCaptions.value = new Set();
+  drawing.fileLegendCaptions.value = new Set();
 
-  clearReactiveObject(state.labelTextBulkOverrides);
+  clearReactiveObject(drawing.labelTextBulkOverrides);
   state.autoLabelReflowEnabled.value = false;
   state.labelReflowLastError.value = null;
 
@@ -113,12 +130,13 @@ const resetEditorDraftState = (state) => {
   state.clickedLabel.value = null;
 
   state.selectedOrthogroupAlignmentFeature.value = '';
-  clearReactiveObject(state.orthogroupNameOverrides);
-  clearReactiveObject(state.orthogroupDescriptionOverrides);
+  clearReactiveObject(drawing.orthogroupNameOverrides);
+  clearReactiveObject(drawing.orthogroupDescriptionOverrides);
 };
 
-const resetLinearComparisonPlan = (state) => {
-  const plan = state.linearComparisonPlan;
+/** @param {DrawingState} drawing */
+const resetLinearComparisonPlan = (drawing) => {
+  const plan = drawing.linearComparisonPlan;
   if (!plan || typeof plan !== 'object') return;
   const retainedEdges = (Array.isArray(plan.edges) ? plan.edges : [])
     .filter((edge) => Boolean(edge?.file) || String(edge?.losatFilename || '').trim())
@@ -134,26 +152,32 @@ const resetLinearComparisonPlan = (state) => {
   plan.edges.splice(0, plan.edges.length, ...retainedEdges);
 };
 
+// Reset Settings returns every drawing to its defaults, each once.
+/** @param {Record<string, any>} state */
 export const resetSettings = (state) => {
-  replaceReactiveObject(state.form, createDefaultForm());
-  state.linearRecordLayoutEnabled.value = WEB_UX_PROFILE.linear.arrangeInRowsByDefault;
-  replaceReactiveObject(state.adv, createDefaultAdv(state.mode.value));
-  state.linearTypographyLinked.value = true;
-  state.modeProfileStateManager?.reset?.(state.mode.value, state.adv);
-  replaceReactiveObject(state.losat, createDefaultLosat());
-  replaceReactiveObject(state.circularConservation, createDefaultCircularConservation());
-  clearReactiveObject(state.unmanagedConfigOverrides);
-  replaceReactiveArray(state.annotationSets);
-  replaceReactiveArray(state.recordDisplayDrafts);
-  Object.keys(state.featurePlacementOverrides).forEach((key) => delete state.featurePlacementOverrides[key]);
-  state.selectedAnnotation.value = null;
-  resetLinearComparisonPlan(state);
-  state.losatProgram.value = 'blastn';
+  /** @type {Set<DrawingState>} */
+  const drawings = new Set(Object.values(state.drawings));
+  drawings.forEach((drawing) => {
+    replaceReactiveObject(drawing.form, createDefaultForm());
+    drawing.linearRecordLayoutEnabled.value = WEB_UX_PROFILE.linear.arrangeInRowsByDefault;
+    replaceReactiveObject(drawing.adv, createDefaultAdv(state.mode.value));
+    drawing.linearTypographyLinked.value = true;
+    drawing.modeProfileStateManager?.reset?.(state.mode.value, drawing.adv);
+    replaceReactiveObject(drawing.losat, createDefaultLosat());
+    replaceReactiveObject(drawing.circularConservation, createDefaultCircularConservation());
+    clearReactiveObject(drawing.unmanagedConfigOverrides);
+    replaceReactiveArray(drawing.annotationSets);
+    replaceReactiveArray(drawing.recordDisplayDrafts);
+    Object.keys(drawing.featurePlacementOverrides).forEach((key) => delete drawing.featurePlacementOverrides[key]);
+    state.selectedAnnotation.value = null;
+    resetLinearComparisonPlan(drawing);
+    drawing.losatProgram.value = 'blastn';
 
-  resetLayoutPreferenceState(state);
-  resetPaletteState(state);
-  resetRuleDraftState(state);
-  resetEditorDraftState(state);
+    resetLayoutPreferenceState(state, drawing);
+    resetPaletteState(state, drawing);
+    resetRuleDraftState(state, drawing);
+    resetEditorDraftState(state, drawing);
+  });
 };
 
 export const resetLayoutState = (state) => {
