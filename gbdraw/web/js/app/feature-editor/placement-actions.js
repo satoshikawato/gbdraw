@@ -8,7 +8,7 @@ import {
 } from '../../services/feature-placement.js';
 import { resolveCircularTrackFeaturePlacement } from '../circular-track-slots.js';
 import { createDefaultLinearTrackSlots, effectiveLinearSlotPlacement } from '../linear-track-slots.js';
-import { validateCustomTrackPlan } from '../track-slot-validation.js';
+import { validateCustomTrackPlan } from '../../services/track-slot-validation.js';
 
 const SIDES = { circular: ['outward', 'inward'], linear: ['above', 'below'] };
 

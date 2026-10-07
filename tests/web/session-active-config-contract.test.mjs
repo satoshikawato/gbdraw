@@ -12,9 +12,9 @@ const {
   validateCurrentWriterActiveConfig,
   validateImportedCircularTrackSlots
 } = await import('../../gbdraw/web/js/services/session-active-config-contract.js');
-const { normalizeUserFacingError } = await import('../../gbdraw/web/js/services/error-normalization.js');
+const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
 const { normalizeCurrentPairwiseMatchStyle } = await import(
-  '../../gbdraw/web/js/app/current-option-values.js'
+  '../../gbdraw/web/js/services/current-option-values.js'
 );
 
 const storedConfig = {

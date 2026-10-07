@@ -1,5 +1,5 @@
 // @ts-check
-import { parseOptionalCircularScalar } from '../track-slot-validation.js';
+import { parseOptionalCircularScalar } from './track-slot-validation.js';
 
 const isTypedMeasure = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 

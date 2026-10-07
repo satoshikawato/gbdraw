@@ -2,7 +2,7 @@
 // `featureOverrides`, design Q4 3.2, 6.1); the label table carries rules only.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { buildBulkLabelProjection } from '../../gbdraw/web/js/app/feature-editor/label-override-table.js';
+import { buildBulkLabelProjection } from '../../gbdraw/web/js/services/label-override-table.js';
 import {
   canonicalFeatureOverrides,
   requestFeatureOverrides,

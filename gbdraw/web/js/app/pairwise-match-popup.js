@@ -3,14 +3,14 @@ import {
   formatFeatureLocation,
   isInternalProteinDisplayId,
   resolveDisplayProteinId
-} from './feature-utils.js';
-import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
+} from '../services/feature-utils.js';
+import { buildFeatureSequenceFastas } from '../services/feature-sequence-fasta.js';
 import { buildMatchSequenceBundle } from './match-sequences.js';
-import { readRecordSourceSpan, recordSourceInterval } from './record-source-coordinates.js';
+import { readRecordSourceSpan, recordSourceInterval } from '../services/record-source-coordinates.js';
 import {
   groupMetadataScopeLabel,
   normalizeGroupMetadataScope
-} from './losat-normalization.js';
+} from '../services/losat-normalization.js';
 import {
   RENDERED_FEATURE_ID_KEYS,
   STABLE_FEATURE_ID_KEYS,

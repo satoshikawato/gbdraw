@@ -1,7 +1,7 @@
 // @ts-check
 import { createBoundedJsonReceiver } from './bounded-json-transport.js';
 import { buildPyodideAssetManifest } from './pyodide-assets.js';
-import { normalizeUserFacingError } from './error-normalization.js';
+import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { validateWebRuntimeCapabilities, DiagramRuntimeCompatibilityError } from './runtime-capabilities.js';
 import {
   DIAGRAM_HELPER_OPERATION_NAMES,

@@ -4,7 +4,7 @@ import {
   isInternalProteinDisplayId,
   resolveDisplayProteinId,
   resolveInternalProteinId
-} from '../feature-utils.js';
+} from '../../services/feature-utils.js';
 import { resolveUniqueOrthogroupMemberForFeature } from '../../services/feature-identity.js';
 
 const RICH_FEATURE_SEARCH_FIELD_IDS = Object.freeze([

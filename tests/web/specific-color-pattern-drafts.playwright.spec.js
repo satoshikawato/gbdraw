@@ -182,8 +182,14 @@ test('real History, failed Session rollback, fresh Save/Load, Export and Generat
   expect(await snapshot(page)).toEqual(stable);
   // Fail after reset/commit began: actual Session owner must restore source first.
   await page.evaluate(async () => {
-    const { state } = await import('/gbdraw/web/js/state.js'); const original = state.normalizePaletteColors;
-    state.normalizePaletteColors = (...args) => { state.normalizePaletteColors = original; throw new Error('PRIVATE_COMMIT_SENTINEL'); };
+    const { state } = await import('/gbdraw/web/js/state.js');
+    // The first palette write of the reset throws once, then the ref behaves normally again.
+    const accessor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(state.selectedPalette), 'value');
+    Object.defineProperty(state.selectedPalette, 'value', {
+      configurable: true,
+      get() { return accessor.get.call(this); },
+      set() { delete state.selectedPalette.value; throw new Error('PRIVATE_COMMIT_SENTINEL'); }
+    });
   });
   await load(page, fixture('circular'));
   await expect(page.getByLabel('Color rule 1 pattern', { exact: true })).toHaveValue('[PRIVATE_DRAFT_SENTINEL');

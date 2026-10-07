@@ -12,14 +12,14 @@ const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-pairwise-payload-'));
 
 const modulePaths = [
   'gbdraw/web/js/app/pairwise-match-popup.js',
-  'gbdraw/web/js/app/feature-utils.js',
-  'gbdraw/web/js/app/feature-sequence-fasta.js',
+  'gbdraw/web/js/services/feature-utils.js',
+  'gbdraw/web/js/services/feature-sequence-fasta.js',
   'gbdraw/web/js/app/match-sequences.js',
-  'gbdraw/web/js/app/record-source-coordinates.js',
-  'gbdraw/web/js/app/genbank-header.js',
-  'gbdraw/web/js/app/conservation-series.js',
-  'gbdraw/web/js/app/color-utils.js',
-  'gbdraw/web/js/app/losat-normalization.js',
+  'gbdraw/web/js/services/record-source-coordinates.js',
+  'gbdraw/web/js/services/genbank-header.js',
+  'gbdraw/web/js/services/conservation-series.js',
+  'gbdraw/web/js/utils/color-utils.js',
+  'gbdraw/web/js/services/losat-normalization.js',
   'gbdraw/web/js/services/file-content-cache.js',
   'gbdraw/web/js/services/feature-catalog.js',
   'gbdraw/web/js/services/feature-identity.js',
@@ -45,8 +45,8 @@ const instrumentedPopupPath = join(
 const popupSource = await readFile(popupPath, 'utf8');
 const instrumentedPopupSource = popupSource
   .replace(
-    "import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';",
-    "import { buildFeatureSequenceFastas as buildFeatureSequenceFastasBase } from './feature-sequence-fasta.js';"
+    "import { buildFeatureSequenceFastas } from '../services/feature-sequence-fasta.js';",
+    "import { buildFeatureSequenceFastas as buildFeatureSequenceFastasBase } from '../services/feature-sequence-fasta.js';"
   )
   .replace(
     "import { buildMatchSequenceBundle } from './match-sequences.js';",

@@ -1,6 +1,6 @@
 // @ts-check
-import { normalizeUserFacingError } from '../../services/error-normalization.js';
-import { resolveColorToHex, toNativeColorInputValue } from '../color-utils.js';
+import { normalizeUserFacingError } from '../../utils/error-normalization.js';
+import { resolveColorToHex, toNativeColorInputValue } from '../../utils/color-utils.js';
 import {
   defaultLegendCaptionOrder,
   getAllFeatureLegendGroups,
@@ -13,7 +13,7 @@ import { parseCompositionMetadata } from '../legend-layout/composition-actions.j
 import {
   diffLegendIntents,
   SPECIFIC_COLOR_FILE_OWNER
-} from '../specific-color-rules.js';
+} from '../../services/specific-color-rules.js';
 import {
   DIAGRAM_HELPER_OPERATIONS,
   runDiagramHelperOperation

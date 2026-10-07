@@ -1,5 +1,5 @@
 import { readSessionText } from '../services/session-file.js';
-import { normalizeUserFacingError } from '../services/error-normalization.js';
+import { normalizeUserFacingError } from '../utils/error-normalization.js';
 
 import { sendBoundedJson } from '../services/bounded-json-transport.js';
 

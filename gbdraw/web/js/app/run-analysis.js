@@ -46,7 +46,7 @@ import {
 import {
   normalizeFileList,
   orderedConservationSources
-} from './conservation-series.js';
+} from '../services/conservation-series.js';
 import {
   applyLinearTrackOrderPlacements,
   clampLinearTrackAxisIndex,
@@ -64,13 +64,13 @@ import {
   depthSeriesLegendCaptions,
   representativeDepthFiles,
   syncDepthSlotLabels
-} from './depth-track-state.js';
+} from '../services/depth-track-state.js';
 import { encodeAnnotationTable } from './annotations/table-codec.js';
 import {
   CustomTrackPlanValidationError,
   customTrackPlanIssues,
   validateCustomTrackPlan
-} from './track-slot-validation.js';
+} from '../services/track-slot-validation.js';
 import { buildRunInfo, buildSourceRecipe, summarizeLosatRuntimes } from './run-info.js';
 import {
   buildLosatJobSpecs,
@@ -79,12 +79,12 @@ import {
 import {
   buildDefaultColorOverrideTsv,
   normalizePaletteColors
-} from './color-utils.js';
+} from '../utils/color-utils.js';
 import {
   serializeLabelWhitelistRules,
   serializeQualifierPriorityRules,
   serializeSpecificRules
-} from './file-imports.js';
+} from '../services/file-imports.js';
 import { rebindRuleColorOverrides } from './rule-matching.js';
 import {
   pruneUnmatchedFeatureOverrides,
@@ -92,8 +92,8 @@ import {
 } from './feature-visibility.js';
 import {
   normalizeDefinitionLineStyleState
-} from './definition-line-style-state.js';
-import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
+} from '../services/definition-line-style-state.js';
+import { requireLinearLabelVisibilityMode } from '../services/linear-label-visibility.js';
 import { createZipBlob } from '../utils/zip.js';
 import { classifyOptionalPositiveNumber } from '../utils/optional-positive-number.js';
 import { cloneJsonData, cloneJsonValue } from '../services/json-clone.js';
@@ -124,14 +124,14 @@ import {
   requireCurrentProteinBlastpCandidateLimit,
   requireCurrentProteinBlastpMaxHits,
   requireCurrentProteinBlastpMode
-} from './current-option-values.js';
+} from '../services/current-option-values.js';
 import {
   circularDiscoveryForInput,
   discoverGffFastaRecords,
   discoverSequenceRecords,
   discoveryErrorIsFinal
 } from './record-discovery.js';
-import { genbankHeaderIds } from './genbank-header.js';
+import { genbankHeaderIds } from '../services/genbank-header.js';
 import {
   LOSAT_DERIVED_CACHE_SCHEMA,
   NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
@@ -152,7 +152,7 @@ import {
   webLosatRuntimeRecord
 } from './losat-cache.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
-import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../services/error-normalization.js';
+import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
   cloneFileBytesForTransfer,
   readFileBytes,

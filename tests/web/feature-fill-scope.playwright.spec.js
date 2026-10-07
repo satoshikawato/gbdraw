@@ -104,7 +104,7 @@ test('inherited Feature fill uses the existing scope dialog with atomic Undo and
   const target = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     const svg = document.querySelector('.origin-top svg');
-    const { formatFeatureLocation } = await import('/gbdraw/web/js/app/feature-utils.js');
+    const { formatFeatureLocation } = await import('/gbdraw/web/js/services/feature-utils.js');
     for (const feature of app.visibleFeatureRows) {
       const featureId = String(feature?.svg_id || '').trim();
       if (!featureId || app.getFeatureColorValue(feature) !== null) continue;
@@ -227,7 +227,7 @@ test('Feature stroke width steppers defer scope selection and stroke changes kee
     const { getFeatureElements } = await import(
       '/gbdraw/web/js/app/feature-editor/svg-actions.js'
     );
-    const { formatFeatureLocation } = await import('/gbdraw/web/js/app/feature-utils.js');
+    const { formatFeatureLocation } = await import('/gbdraw/web/js/services/feature-utils.js');
     for (const feature of app.visibleFeatureRows) {
       const featureId = String(feature?.svg_id || '').trim();
       if (!featureId || getFeatureElements(svg, featureId).length === 0) continue;

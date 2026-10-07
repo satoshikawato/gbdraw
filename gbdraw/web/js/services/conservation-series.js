@@ -1,5 +1,5 @@
 // @ts-check
-import { interpolateColor, resolveColorToHex } from './color-utils.js';
+import { interpolateColor, resolveColorToHex } from '../utils/color-utils.js';
 
 export const CONSERVATION_SLOT_MANAGER = 'circular_conservation';
 

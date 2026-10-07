@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { FeatureCatalog, FeatureCatalogItem, FeatureCatalogRow } from './feature-catalog.js' */
-import { normalizeStringArray } from '../app/feature-utils.js';
-import { readRecordSourceSpan, recordSourceInterval } from '../app/record-source-coordinates.js';
+import { normalizeStringArray } from './feature-utils.js';
+import { readRecordSourceSpan, recordSourceInterval } from './record-source-coordinates.js';
 import { FEATURE_CATALOG_SCHEMA } from './feature-catalog.js';
 import { STANDALONE_INTERACTIVE_SCRIPT, STANDALONE_INTERACTIVE_STYLE } from './standalone-interactivity-assets.js';
 import { ensureSvgDefs } from './svg-serialization.js';

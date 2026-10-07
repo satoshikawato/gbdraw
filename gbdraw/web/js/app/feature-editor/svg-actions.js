@@ -1,5 +1,5 @@
 // @ts-check
-import { resolveColorToHex } from '../color-utils.js';
+import { resolveColorToHex } from '../../utils/color-utils.js';
 import { reportRuleRunFailure, runWhenPrepared } from '../rule-matching.js';
 import {
   formatFeatureLength,
@@ -7,13 +7,13 @@ import {
   getFeatureCaption,
   normalizeStringArray,
   resolveDisplayProteinId
-} from '../feature-utils.js';
+} from '../../services/feature-utils.js';
 import {
   PAIRWISE_MATCH_SELECTOR,
   buildPairwiseMatchHoverSummary,
   buildMatchPopupPayload
 } from '../pairwise-match-popup.js';
-import { buildFeatureSequenceFastas } from '../feature-sequence-fasta.js';
+import { buildFeatureSequenceFastas } from '../../services/feature-sequence-fasta.js';
 import { getFeatureOverride } from '../../services/feature-override-identity.js';
 import { featureIdentityKeyOf, featureOverrideValue } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
@@ -34,7 +34,7 @@ import {
   getFeatureFillElements,
   getFeatureIdentity,
   normalizeFeatureIdentity
-} from '../feature-dom.js';
+} from '../../services/feature-dom.js';
 
 export {
   FEATURE_ID_ATTRIBUTE,

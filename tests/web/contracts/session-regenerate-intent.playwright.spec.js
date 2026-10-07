@@ -862,7 +862,7 @@ const expectDirectEditFlushed = (before, after) => {
 
 const capturePageEvidence = (page, savedSvg = null) => page.evaluate(async (savedSvg) => {
   const { state } = await import('/gbdraw/web/js/state.js');
-  const { resolveColorToHex } = await import('/gbdraw/web/js/app/color-utils.js');
+  const { resolveColorToHex } = await import('/gbdraw/web/js/utils/color-utils.js');
   const { serializeCleanSvg } = await import('/gbdraw/web/js/services/svg-serialization.js');
   const app = window.__GBDRAW_APP__;
   const history = window.__GBDRAW_HISTORY__;
@@ -1159,13 +1159,14 @@ const expectSvgEquivalent = (left, right, label) => {
 
 const applyDivergentDraft = async (page) => evaluateWithRetainedPromise(page, async () => {
   const { state } = await import('/gbdraw/web/js/state.js');
-  const { createAnnotationSet } = await import('/gbdraw/web/js/app/annotations/state.js');
+  const { normalizePaletteColors } = await import('/gbdraw/web/js/utils/color-utils.js');
+  const { createAnnotationSet } = await import('/gbdraw/web/js/services/annotation-state.js');
   const app = window.__GBDRAW_APP__;
   const history = window.__GBDRAW_HISTORY__;
   state.autoLabelReflowEnabled.value = false;
 
   const orange = state.paletteDefinitions.value.orange || state.currentColors.value;
-  const draftColors = state.normalizePaletteColors({
+  const draftColors = normalizePaletteColors({
     ...orange,
     CDS: '#0b4f6c',
     tRNA: '#f59e0b'

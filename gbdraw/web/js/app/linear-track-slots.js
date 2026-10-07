@@ -5,18 +5,18 @@ import {
   depthTrackMatrixWidth,
   parseDepthTrackIndexIdentity,
   reconcileManagedDepthSlots
-} from './depth-track-state.js';
-import { resolveColorToHex } from './color-utils.js';
+} from '../services/depth-track-state.js';
+import { resolveColorToHex } from '../utils/color-utils.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
 import {
   findTrackSlotGeometry,
   formatPxAuto,
   isManualSlotValue,
   normalizeOptionalText
-} from './track-slot-display.js';
+} from '../services/track-slot-display.js';
 import { featureSlotEdits } from './track-slot-edits.js';
-import { requireCurrentLinearTrackLayout } from './current-option-values.js';
-import { parseOptionalPixel, validateCustomTrackPlan } from './track-slot-validation.js';
+import { requireCurrentLinearTrackLayout } from '../services/current-option-values.js';
+import { parseOptionalPixel, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 import { visibleFeatureUnderlaysForState } from '../utils/feature-rendering.js';
 
 const SUPPORTED_RENDERERS = [

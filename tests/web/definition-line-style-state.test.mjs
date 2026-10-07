@@ -8,7 +8,7 @@ const repoRoot = process.cwd();
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-definition-line-style-state-'));
 await cp(join(repoRoot, 'gbdraw', 'web', 'js'), join(tempDir, 'js'), { recursive: true });
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}', 'utf8');
-const modulePath = join(tempDir, 'js', 'app', 'definition-line-style-state.js');
+const modulePath = join(tempDir, 'js', 'services', 'definition-line-style-state.js');
 
 const {
   createDefaultLinearDefinitionLineStyles,

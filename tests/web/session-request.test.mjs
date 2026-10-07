@@ -30,7 +30,7 @@ const { migrateLegacyOrthogroupMembers } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'legacy-similarity-alignment.js'))
 );
 const { linearRecordLayoutHasSharedRow, reconcileLinearRecordLayout } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'app', 'linear-record-layout.js'))
+  pathToFileURL(join(tempRoot, 'js', 'services', 'linear-record-layout.js'))
 );
 const {
   createDefaultLinearComparisonPlan,
@@ -107,10 +107,10 @@ const {
   pathToFileURL(join(tempRoot, 'js', 'app', 'circular-track-slots.js'))
 );
 const { validateTrackSlotBindingInvariants } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'app', 'track-slot-validation.js'))
+  pathToFileURL(join(tempRoot, 'js', 'services', 'track-slot-validation.js'))
 );
 const { orderedConservationSources } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'app', 'conservation-series.js'))
+  pathToFileURL(join(tempRoot, 'js', 'services', 'conservation-series.js'))
 );
 
 assert.equal(linearTrackAxisIndexForEnabledSlots([
@@ -5458,7 +5458,7 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
     pathToFileURL(join(tempRoot, 'js', 'services', 'session-request.js'))
   );
   const { normalizeUserFacingError } = await import(
-    pathToFileURL(join(tempRoot, 'js', 'services', 'error-normalization.js'))
+    pathToFileURL(join(tempRoot, 'js', 'utils', 'error-normalization.js'))
   );
   const session = JSON.parse(gunzipSync(await readFile(join(
     repoRoot, 'tests', 'fixtures', 'sessions', 'whitelist-tab-keyword.v39.gbdraw-session.json.gz'

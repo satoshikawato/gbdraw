@@ -2,7 +2,7 @@
 /** @import { RulePreparation } from './rule-matching.js' */
 /** @import { FeatureEditorOptions } from './feature-editor.js' */
 /** @import { ColorActionsRuleActions } from './feature-editor/color-actions.js' */
-/** @import { UserFacingError } from '../services/error-normalization.js' */
+/** @import { UserFacingError } from '../utils/error-normalization.js' */
 /** @import { AnnotationCatalogSource } from './annotations/record-catalog.js' */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan } from './candidate-render.js';
@@ -82,7 +82,7 @@ import {
   recordStructuralMetric
 } from '../services/runtime-test-hooks.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
-import { colorValueMode, toNativeColorInputValue } from './color-utils.js';
+import { colorValueMode, toNativeColorInputValue } from '../utils/color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
 import { PAIRWISE_MATCH_SELECTOR } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
@@ -92,7 +92,7 @@ import { createLegendManager } from './legend.js';
 import { createPaletteLoader } from './palettes.js';
 import { afterPaint, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions } from './similarity-alignment.js';
-import { diagnosticError, normalizeUserFacingError } from '../services/error-normalization.js';
+import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import {
@@ -134,7 +134,7 @@ import {
   formatRecordLength,
   resolveCircularRequestRecordSet,
   resolveDisambiguatedRecordSelection
-} from './record-options.js';
+} from '../services/record-options.js';
 import {
   linearRecordLayoutHasSharedRow,
   linearRecordPositionTokens,
@@ -142,12 +142,12 @@ import {
   planLinearSourceRowMove,
   reconcileLinearRecordLayout,
   setLinearRecordRow as updateLinearRecordRow
-} from './linear-record-layout.js';
+} from '../services/linear-record-layout.js';
 import {
   describeLinearLabelVisibility,
   requireLinearLabelVisibilityMode,
   resolveLinearLabelVisibility
-} from './linear-label-visibility.js';
+} from '../services/linear-label-visibility.js';
 import {
   LINEAR_COMPARISON_MODES,
   LINEAR_COMPARISON_SOURCES,
@@ -181,7 +181,7 @@ import {
   orderedOptionalConservationFiles,
   parseConservationLabelText,
   reconcileConservationSeries
-} from './conservation-series.js';
+} from '../services/conservation-series.js';
 import {
   getDepthTrackFallbackLabel,
   getDepthTrackLabelFromFile,
@@ -214,7 +214,7 @@ import {
   removeDepthTrackColumnAt,
   syncDepthSlotLabels,
   uploadedDepthFileCount
-} from './depth-track-state.js';
+} from '../services/depth-track-state.js';
 
 const { onMounted, onUnmounted, watch, nextTick, computed, ref, reactive } = window.Vue;
 const toRaw = window.Vue.toRaw || ((value) => value);

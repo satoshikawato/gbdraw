@@ -48,7 +48,7 @@ protein_blastp_mode protein_blastp_candidate_limit collinear_search_scope collin
 """.split())
 
 # Producer ``diagnostic=`` vocabulary: bounded identifiers that the Web wording
-# owner (services/error-normalization.js) defines, never document values.
+# owner (utils/error-normalization.js) defines, never document values.
 # tests/test_web_error_producer_coverage.py keeps it aligned with producers.
 DIAGNOSTIC_CODES = frozenset("INPUT_INVALID INPUT_UNREADABLE DEPTH_INVALID TABLE_INVALID COMPARISON_INPUT TRACK_LAYOUT LOSAT_RUNTIME FEATURE_PLACEMENT FEATURE_IDENTITY".split())
 DIAGNOSTIC_REASONS = frozenset("""BOOLEAN INTEGER FINITE POSITIVE NONNEGATIVE POSITIVE_INTEGER REQUIRED FIELDS POSITIVE_UNIT_INTERVAL

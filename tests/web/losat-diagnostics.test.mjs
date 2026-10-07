@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { normalizeUserFacingError } from '../../gbdraw/web/js/services/error-normalization.js';
+import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 
 const ownerUrl = new URL('../../gbdraw/web/js/services/losat.js', import.meta.url);
 const ownerSource = (await readFile(ownerUrl, 'utf8'))

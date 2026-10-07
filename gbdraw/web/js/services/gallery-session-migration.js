@@ -9,13 +9,13 @@ import {
   migratePersistedLinearLabelPlacement,
   migratePersistedLinearTrackLayout,
   migratePersistedWebStateFieldNames
-} from '../app/current-option-values.js';
+} from './current-option-values.js';
 import {
   buildCanonicalRenderRequest,
   buildCanonicalRequestState,
   projectCanonicalSessionRequest
 } from './session-request.js';
-import { migrateLegacyLinearLabelVisibility } from '../app/linear-label-visibility.js';
+import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { resolveActiveLayoutPreference } from '../app/layout-preferences.js';
 import {
   createLinearComparisonEdge,

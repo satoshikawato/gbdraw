@@ -3,7 +3,7 @@ import {
   buildLinearRegionExtractionContext,
   extractFeatureMetadataForPreview
 } from './feature-metadata-extraction.js';
-import { normalizeUserFacingError, retryCanSucceed } from '../services/error-normalization.js';
+import { normalizeUserFacingError, retryCanSucceed } from '../utils/error-normalization.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { enrichFeatureWithOrthogroup } from '../services/orthogroup-feature-metadata.js';
 import {

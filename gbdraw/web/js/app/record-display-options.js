@@ -1,6 +1,6 @@
 // @ts-check
 // Source-bound editable rotation intent. The request service owns serialization.
-import { resolveDisambiguatedRecordSelection } from './record-options.js';
+import { resolveDisambiguatedRecordSelection } from '../services/record-options.js';
 import { resolveFeatureAnchor } from './record-display/feature-anchor.js';
 import { matchesSessionResourceDescriptor } from '../services/session-resource-backing.js';
 import { cloneJsonData } from '../services/json-clone.js';

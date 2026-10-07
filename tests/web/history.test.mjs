@@ -24,6 +24,8 @@ for (const filename of [
   'history-files.js',
   'history-snapshot.js',
   'json-clone.js',
+  'feature-selector.js',
+  'feature-utils.js',
   'runtime-test-hooks.js',
   'svg-serialization.js'
 ]) {
@@ -34,9 +36,7 @@ for (const filename of [
   );
 }
 for (const filename of [
-  'feature-selector.js',
   'feature-visibility.js',
-  'feature-utils.js',
   'layout-preferences.js',
   'plot-title-position.js'
 ]) {

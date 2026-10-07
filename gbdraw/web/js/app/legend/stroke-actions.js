@@ -1,5 +1,5 @@
 // @ts-check
-import { getFeatureCaption } from '../feature-utils.js';
+import { getFeatureCaption } from '../../services/feature-utils.js';
 import {
   FEATURE_SELECTOR,
   getFeatureElementIndex,

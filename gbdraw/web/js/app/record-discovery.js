@@ -3,7 +3,7 @@ import {
   DIAGRAM_HELPER_OPERATIONS,
   runDiagramHelperOperation
 } from '../services/diagram-generation.js';
-import { scanGenBankHeader } from './genbank-header.js';
+import { scanGenBankHeader } from '../services/genbank-header.js';
 import {
   bytesToText,
   cloneFileBytesForTransfer,

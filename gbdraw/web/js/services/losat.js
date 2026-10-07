@@ -1,5 +1,5 @@
 // @ts-check
-import { diagnosticError, normalizeUserFacingError } from './error-normalization.js';
+import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { LOSAT_THREADED_WASM_URL, WASI_SHIM_URL } from '../config.js';
 import { resolveLosatThreadPlan } from './losat-thread-plan.js';
 import {

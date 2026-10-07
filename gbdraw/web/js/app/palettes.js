@@ -1,5 +1,9 @@
 // @ts-check
-import { COMPARISON_COLOR_KEYS } from './color-utils.js';
+import {
+  COMPARISON_COLOR_KEYS,
+  normalizePaletteColors,
+  normalizePaletteDefinitions
+} from '../utils/color-utils.js';
 
 /**
  * The palette fields of the Web state (`state.js`) the loader reads and writes.
@@ -13,8 +17,6 @@ import { COMPARISON_COLOR_KEYS } from './color-utils.js';
  * @property {{ value: Record<string, string> }} appliedPaletteColors
  * @property {{ value: string }} pendingPaletteName
  * @property {{ value: Record<string, string> }} pendingPaletteColors
- * @property {(colors: any) => Record<string, string>} normalizePaletteColors
- * @property {(palettes: any) => Record<string, any>} normalizePaletteDefinitions
  */
 
 /**
@@ -32,9 +34,7 @@ export const createPaletteLoader = ({ state }) => {
     appliedPaletteName,
     appliedPaletteColors,
     pendingPaletteName,
-    pendingPaletteColors,
-    normalizePaletteColors,
-    normalizePaletteDefinitions
+    pendingPaletteColors
   } = state;
 
   const hasColorEntries = (colors) => (

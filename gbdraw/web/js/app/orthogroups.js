@@ -4,15 +4,15 @@ import {
   getFeatureElements,
   getFeatureIdentity
 } from './feature-editor/svg-actions.js';
-import { buildFeatureSequenceFastas } from './feature-sequence-fasta.js';
+import { buildFeatureSequenceFastas } from '../services/feature-sequence-fasta.js';
 import {
   groupMetadataScopeLabel,
   normalizeGroupMetadataScope
-} from './losat-normalization.js';
+} from '../services/losat-normalization.js';
 import {
   isInternalProteinDisplayId,
   resolveDisplayProteinId
-} from './feature-utils.js';
+} from '../services/feature-utils.js';
 import { downloadTextFile } from '../services/text-download.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import {

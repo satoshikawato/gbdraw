@@ -8,7 +8,7 @@ import {
   normalizeCanvasPadding
 } from './composition-actions.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
-import { diagnosticError } from '../../services/error-normalization.js';
+import { diagnosticError } from '../../utils/error-normalization.js';
 
 const fail = ({ field = 'decorations', inputOrdinal = 1, diagnosticReason = 'DECORATION_METADATA' } = {}) => {
   throw diagnosticError('DECORATION_CONTINUITY', { field, inputOrdinal, reason: diagnosticReason }, { stage: 'result-admission' });

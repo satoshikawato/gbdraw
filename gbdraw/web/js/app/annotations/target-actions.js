@@ -1,10 +1,9 @@
 // @ts-check
-import { isUnspecifiedRecordSelectorValue } from '../record-options.js';
+import { isUnspecifiedRecordSelectorValue } from '../../services/record-options.js';
 import { featureIdentityKeyOf } from '../../services/feature-placement.js';
 
 /**
- * A record named by a target: a 0-based position or a record ID.
- * @typedef {{ kind: 'recordId', value: string } | { kind: 'recordIndex', index: number }} AnnotationRecordSelector
+ * @import { AnnotationRecordSelector } from '../../services/annotation-state.js'
  */
 
 const cleanNullable = (value) => {
