@@ -257,15 +257,18 @@ test('Linear File removal choices are atomic, undoable, and preserve one slot', 
 });
 
 // R11 input matrix (SE-02, SE-03, SE-04): control type x input means x focus
-// state. Every changed control adds exactly one step, and Undo is LIFO.
-const controlState = (page) => page.evaluate(() => {
+// state. Every changed control adds exactly one step, and Undo is LIFO. The
+// text and label controls are edited in Circular, so their values are read from
+// the Circular drawing also while Linear is shown (PD-OI-086).
+const controlState = (page) => page.evaluate(async () => {
   const app = window.__GBDRAW_APP__;
+  const { state } = await import('./js/state.js');
   return {
     rich: app.richFeaturePopup,
     input: app.cInputType,
-    prefix: app.form.prefix,
+    prefix: state.drawings.circular.form.prefix,
     mode: app.mode,
-    labels: app.form.labels_mode
+    labels: state.drawings.circular.form.labels_mode
   };
 });
 const historyCounts = (page) => page.evaluate(() => [

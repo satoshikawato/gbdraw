@@ -136,7 +136,12 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
 
     const second = await save(fresh, info.outputPath('linear-draft-resaved.gbdraw-session.json.gz'));
     expect(second.ui.mode).toBe('linear');
-    expect(second.modes).toEqual(first.modes);
+    // Load opens the Linear typography unlinked, as the draft's scale and ruler
+    // label sizes differ (the step above set only the scale size).
+    expect(first.modes.linear.ui.linearTypographyLinked).toBe(true);
+    expect(second.modes.linear.ui.linearTypographyLinked).toBe(false);
+    const linked = { ...second.modes.linear, ui: { ...second.modes.linear.ui, linearTypographyLinked: true } };
+    expect({ ...second.modes, linear: linked }).toEqual(first.modes);
     expect(second.modes.linear.config.adv.scale_font_size).toBe(19);
     expect(second.renderRequest).toEqual(first.renderRequest);
     expect(second.results).toEqual(first.results);
