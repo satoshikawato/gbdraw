@@ -95,7 +95,6 @@ const REASONS = Object.freeze({
   POSITIVE: 'Use a finite value greater than zero.', POSITIVE_OR_AUTO: 'Use Auto or a finite value greater than zero.',
   NONNEGATIVE_INTEGER: 'Use an integer of zero or greater.', PERCENT: 'Use a finite value between 0 and 100.',
   ARRAY: 'Use a list.', OBJECT: 'Use an object.', FIELDS: 'Check the required fields.', REQUIRED: 'Supply the required value.',
-  STRICT_ORDER: 'The start must be less than the end.',
   ORDER: 'The start or minimum must not exceed the end or maximum.', RECORD_BOUNDS: 'Keep the region within the record length.',
   STRAND: 'Use -1, 1, or no strand.', DISPLAY_START_BOUNDS: 'Use a display start between 1 and the record length.', CROP_START_CONFLICT: 'Choose a crop or an explicit display start.',
   REFERENCE_REQUIRED: 'Supply the depth reference column.', REFERENCE_MISMATCH: 'Match depth references to the selected record.',
@@ -379,8 +378,6 @@ const nativeValidation = (message) => {
   const scalar = /^Circular track slot '[\s\S]*' (radius|width) must be a positive finite px or factor scalar\.$/.exec(message);
   if (scalar) return { code: 'TRACK_INVALID', stage: 'request-validation', context: { field: scalar[1], reason: 'POSITIVE_SCALAR' } };
   if (/^Circular track slot '[\s\S]*' uses obsolete field '(?:spacing|strict|compress|reserve)'\. Use inner_gap_px and outer_gap_px for physical gaps\.$/.test(message)) return { code: 'TRACK_INVALID', stage: 'request-validation', context: { reason: 'CIRCULAR_GAPS' } };
-  const order = /^Start position \([0-9]+\) must be less than end position \([0-9]+\)\.$/.test(message);
-  if (order) return { code: 'REGION_INVALID', stage: 'request-validation', context: { reason: 'STRICT_ORDER' } };
   const selector = /^Record selector #[0-9]+ is out of range \(loaded ([0-9]+) record\(s\)\)\.$/.exec(message);
   if (selector) return { code: 'RECORD_SELECTION', stage: 'request-validation', context: { reason: 'OUT_OF_RANGE', recordCount: Number(selector[1]) } };
   for (const [template, reason] of /** @type {[RegExp, string][]} */ ([
