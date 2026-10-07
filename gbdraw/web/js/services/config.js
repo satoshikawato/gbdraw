@@ -88,6 +88,7 @@ import {
 import {
   CANONICAL_REQUEST_SCHEMA,
   buildCanonicalRenderRequest,
+  canonicalLinearRecordLayout,
   legacyTableRowsNotice,
   managedConfigOverridePathsForMode,
   promoteCanonicalRenderRequestToCurrent,
@@ -102,7 +103,8 @@ import {
   reconcileLinearComparisonPlan,
   resolveLinearComparisonPlan
 } from './linear-comparisons.js';
-import { buildSessionResources } from './session-resources.js';
+import { buildSessionResources as assembleSessionResources } from './session-resources.js';
+import { ARTIFACT_SLOT_KEYS, createArtifactSlot } from './artifact-slot.js';
 import {
   base64ToBytes,
   bytesToBase64,
@@ -230,6 +232,7 @@ const { nextTick } = window.Vue;
 /** @import { CanonicalRenderEnvelope, CanonicalRenderRequest } from './session-request.js' */
 /** @import { FeatureCatalog } from './feature-catalog.js' */
 /** @import { SessionResourceSource } from './session-resources.js' */
+/** @import { ArtifactSlot } from './artifact-slot.js' */
 /** @import { FeatureOverrideDraft } from './feature-placement.js' */
 /** @import { DrawingState } from '../state.js' */
 
@@ -257,12 +260,27 @@ const { nextTick } = window.Vue;
  */
 
 /**
+ * The other diagram mode's Result set (E1, Session 45): written only when both
+ * modes keep a Result. Its fields mirror the top-level fields of one committed
+ * set; its request's resources are in the top-level `resources` table.
+ * @typedef {object} SessionOtherModeResult
+ * @property {CanonicalRenderRequest} renderRequest Its mode differs from the top-level request's.
+ * @property {Record<string, any>[]} results At least one.
+ * @property {{ featureCatalog: FeatureCatalog, alignmentResetReceipt: Record<string, any> | null,
+ *   legend: { originalOrder: string[], originalColors: Record<string, string> },
+ *   originalSvgStroke: { color: string | null, width: number | null } }} editorState
+ * @property {Record<string, any>} ui The selected Result and the generated layout and palette.
+ * @property {Record<string, any>} runMetadata
+ * @property {Record<string, any>} [cliInvocation]
+ */
+
+/**
  * A gbdraw Session in the current writer format (`SESSION_VERSION`; the
  * writer format only, readers take unvalidated data, R14). The render fields
  * stay in `CanonicalRenderRequest` and `ActiveWebConfig`; the top-level fields
  * equal `CURRENT_SESSION_TOP_LEVEL_FIELDS` in `gbdraw/session_io.py` (a pytest
- * checks this list). `title`, `runMetadata`, `legacyArtifacts`, and
- * `cliInvocation` are written only when they exist.
+ * checks this list). `title`, `runMetadata`, `legacyArtifacts`,
+ * `otherModeResult`, and `cliInvocation` are written only when they exist.
  * @typedef {object} GbdrawSession
  * @property {string} format `gbdraw-session`.
  * @property {number} version
@@ -282,6 +300,7 @@ const { nextTick } = window.Vue;
  * @property {Record<string, any>} proteinIdentityManifest
  * @property {Record<string, any>} [legacyArtifacts]
  * @property {Record<string, any>} [runMetadata]
+ * @property {SessionOtherModeResult} [otherModeResult]
  * @property {Record<string, any>} [cliInvocation]
  */
 
@@ -314,8 +333,11 @@ const CURRENT_ARTIFACT_SESSION_MIN_VERSION = 39;
 const LOSAT_DERIVED_CACHE_LIMIT = 16;
 // D-25 (PD-OI-079): a Result without current feature metadata (a legacy
 // Session) is saved only after one Generate; the error offers that Generate.
-const sessionSaveRequiresGenerate = () => diagnosticError(
-  'SESSION_SAVE_REQUIRES_GENERATE', {}, /** @type {Record<string, any>} */ ({
+// E1: `diagramMode` names the mode whose Result it is when that mode is not
+// shown; the error's Generate action then runs in that mode.
+/** @param {Record<string, any>} [context] */
+const sessionSaveRequiresGenerate = (context = {}) => diagnosticError(
+  'SESSION_SAVE_REQUIRES_GENERATE', context, /** @type {Record<string, any>} */ ({
     operation: 'session-save', stage: 'result-admission'
   })
 );
@@ -1704,6 +1726,8 @@ const preflightSessionImport = async (sessionData) => {
   let currentResourceTable = null;
   /** @type {Awaited<ReturnType<typeof validateCurrentWriterFeatureCatalog>> | null} */
   let validatedFeatureCatalog = null;
+  /** @type {Awaited<ReturnType<typeof validateCurrentWriterFeatureCatalog>> | null} */
+  let otherModeCatalog = null;
   /** @type {ReturnType<typeof normalizeEditorStateData> | null} */
   let normalizedEditorState = null;
   let normalizedData;
@@ -1717,6 +1741,10 @@ const preflightSessionImport = async (sessionData) => {
     validatedFeatureCatalog = await validateCurrentWriterFeatureCatalog(rawData, {
       adopt: true
     });
+    // E1: the other mode's set is validated with its own mode.
+    if (isPlainObject(rawData.otherModeResult)) {
+      otherModeCatalog = await validateCurrentWriterFeatureCatalog(rawData.otherModeResult, { adopt: true });
+    }
     recordSessionLifecycleEvent('feature-catalog-validation-end');
     recordSessionLifecycleEvent('editor-state-normalization-start');
     normalizedEditorState = normalizeEditorStateData(rawData.editorState, {
@@ -1950,9 +1978,139 @@ const preflightSessionImport = async (sessionData) => {
     projectionResult,
     adoptedCanonicalSession: adoptedSession?.canonical || null,
     currentResourceTable,
+    otherModeCatalog,
     comparisonClassification,
     unmanagedConfigValidation
   };
+};
+
+// E1: the match-sequence sources one saved Result set (the top-level set or
+// `otherModeResult`) needs beyond its catalog's: when the catalog does not
+// cover the set's request, or a Session older than 40 has none, the sources
+// are read again from the restored files in the set's own mode.
+/**
+ * @param {{ mode: 'circular' | 'linear', catalog: FeatureCatalog | null, renderRequest: Record<string, any> | undefined,
+ *   olderSession: boolean, settingsOnly: boolean, cInputType: string, lInputType: string,
+ *   files: Record<string, any>, linearSeqs: Record<string, any>[], circularConservation: Record<string, any> }} set
+ * @returns {Promise<{ restored: Record<string, any>[], error: unknown }>}
+ */
+const restoreLoadedSetSequenceSources = async ({
+  mode, catalog, renderRequest, olderSession, settingsOnly, cInputType, lInputType, files, linearSeqs,
+  circularConservation
+}) => {
+  const coverage = catalog
+    ? analyzeCatalogSequenceSourceCoverage({
+        mode,
+        catalogFeatureState: catalog,
+        renderRequest,
+        comparisonSourceAvailability: mode === 'circular'
+          ? resolveCircularComparisonSequenceAvailability({ files, circularConservation })
+          : undefined
+      })
+    : null;
+  if (settingsOnly || (!olderSession && coverage?.complete)) return { restored: [], error: null };
+  recordStructuralMetric('sourceRecoveryCount');
+  try {
+    return {
+      restored: await buildRestoredMatchSequenceSources({
+        mode, cInputType, lInputType, files, linearSeqs, circularConservation
+      }),
+      error: null
+    };
+  } catch (sequenceError) {
+    console.warn('Session match sequence preparation failed.', normalizeUserFacingError(sequenceError));
+    return { restored: [], error: sequenceError };
+  }
+};
+
+// E1: the Results of one saved Result set of a current Session (the top-level
+// set or `otherModeResult`), admitted with that set's catalog in its mode.
+/**
+ * @param {Record<string, any>[]} logicalResults
+ * @param {{ featureCatalog: FeatureCatalog, mode: 'circular' | 'linear', selectedFeatureTypes: readonly string[] | null | undefined }} set
+ */
+const admitLoadedSetResults = (logicalResults, { featureCatalog, mode, selectedFeatureTypes }) => (
+  admitCurrentSessionResults(
+    createCurrentSessionResultSource(
+      logicalResults,
+      admitFeatureCatalog(featureCatalog, logicalResults, { adopt: true, mode })
+    ),
+    { mutationPlan: createEmptySvgMutationPlan(logicalResults.length), selectedFeatureTypes }
+  )
+);
+
+// E1: one saved Result set of a current Session (the top-level set or
+// `otherModeResult`) as the artifact slot of its mode, built off-line during
+// Load: its Results admitted with its catalog (or the Results Load already
+// admitted), its request adopted as that mode's committed Session over the
+// shared resource table, and its match-sequence sources.
+/**
+ * @param {{ renderRequest: Record<string, any>, results: Record<string, any>[], editorState?: unknown,
+ *   ui?: unknown, runMetadata?: unknown }} set
+ * @param {{ featureCatalog: FeatureCatalog, admittedResults?: Record<string, any>[] | null,
+ *   restoredSequenceSources: Record<string, any>[], resources: Record<string, any>, resourceTable: any,
+ *   webFiles: any, retainedBytes: number }} options
+ */
+const buildLoadedArtifactSlot = (set, {
+  featureCatalog, admittedResults = null, restoredSequenceSources, resources, resourceTable, webFiles, retainedBytes
+}) => {
+  const mode = set.renderRequest.mode === 'linear' ? 'linear' : 'circular';
+  const results = admittedResults || admitLoadedSetResults(normalizeLogicalResults(set.results.map(
+    (/** @type {Record<string, any>} */ result, /** @type {number} */ index) => ({
+      name: result?.name || `Result ${index + 1}`,
+      content: result?.content || ''
+    })
+  )), { featureCatalog, mode, selectedFeatureTypes: set.renderRequest.diagramOptions?.selectedFeaturesSet });
+  const features = featureStateFromCatalog(featureCatalog, { mode });
+  const editorState = normalizeEditorStateData(
+    isPlainObject(set.editorState) ? /** @type {Record<string, any>} */ (set.editorState) : {},
+    { featureCatalog }
+  );
+  const ui = isPlainObject(set.ui) ? /** @type {Record<string, any>} */ (set.ui) : {};
+  const runMetadata = isPlainObject(set.runMetadata) ? /** @type {Record<string, any>} */ (set.runMetadata) : {};
+  return createArtifactSlot({
+    mode,
+    values: {
+      results,
+      selectedResultIndex: Number.isInteger(ui.selectedResultIndex) && ui.selectedResultIndex >= 0
+        ? Math.min(ui.selectedResultIndex, Math.max(0, results.length - 1)) : 0,
+      featureCatalog,
+      extractedFeatures: features.extractedFeatures || [],
+      biologicalFeatures: features.biologicalFeatures || [],
+      featureRecordIds: features.featureRecordIds || [],
+      orthogroups: features.orthogroups || [],
+      featureOrthogroupIndex: features.featureOrthogroupIndex || new Map(),
+      collinearGroups: features.collinearGroups || [],
+      trackSlotResolvedGeometry: cloneJsonData(runMetadata.trackSlotGeometry ?? null),
+      annotationWarnings: cloneJsonData(runMetadata.annotationWarnings || []),
+      featureIdentityNotices: cloneJsonData(runMetadata.featureIdentityNotices || []),
+      comparisonWarnings: cloneJsonData(runMetadata.comparisonWarnings || []),
+      generatedLegendPosition: normalizeLegendPosition(
+        ui.generatedLegendPosition, mode === 'linear' ? 'bottom' : 'left'
+      ),
+      generatedMode: mode,
+      generatedMultiRecordCanvas: Boolean(ui.generatedMultiRecordCanvas),
+      generatedCircularPlotTitlePosition: hasStoredLayoutValue(ui.generatedCircularPlotTitlePosition)
+        ? normalizeCircularPlotTitlePosition(ui.generatedCircularPlotTitlePosition)
+        : normalizeCircularPlotTitlePosition(ui.circularPlotTitlePosition),
+      appliedPaletteName: String(ui.appliedPaletteName || 'default'),
+      appliedPaletteColors: cloneColors(ui.appliedPaletteColors),
+      similarityAlignmentResetReceipt: editorState.alignmentResetReceipt ?? null,
+      originalLegendColors: editorState.legend.originalColors,
+      originalSvgStroke: editorState.originalSvgStroke
+    },
+    legendInventory: editorState.legend.originalOrder,
+    matchSequenceOwner: state.matchSequenceRegistry?.buildSourceOwner?.([
+      ...(features.sequenceSources || []), ...restoredSequenceSources
+    ]) || null,
+    runtimeState: { canonical: {
+      committedCanonicalSession: adoptRuntimeCanonicalSession({
+        renderRequest: set.renderRequest, resources, webFiles: isPlainObject(webFiles) ? webFiles : {}
+      }),
+      activeSessionResourceTable: resourceTable
+    } },
+    retainedBytes
+  });
 };
 
 const LEGACY_LAYOUT_PREFERENCE_FIELDS = Object.freeze([
@@ -3295,11 +3453,14 @@ export const readCommittedResourceRecordCount = (resourceId, kind) => (
   readCanonicalResourceRecordCount(committedCanonicalSession?.resources, resourceId, kind)
 );
 
+// `restore(null)` installs an artifact without a committed Session (E1: an
+// empty mode slot).
 export const canonicalRenderArtifactOwner = Object.freeze({
   capture: () => Object.freeze({ committedCanonicalSession, activeSessionResourceTable }),
+  /** @param {{ committedCanonicalSession: any, activeSessionResourceTable: any } | null} snapshot */
   restore: (snapshot) => {
-    committedCanonicalSession = snapshot.committedCanonicalSession;
-    activeSessionResourceTable = snapshot.activeSessionResourceTable;
+    committedCanonicalSession = snapshot?.committedCanonicalSession ?? null;
+    activeSessionResourceTable = snapshot?.activeSessionResourceTable ?? null;
   }
 });
 
@@ -3934,10 +4095,11 @@ export const buildUiStateData = (drawing, { includePreviewNavigation = true } = 
   return ui;
 };
 
+// `mode` is not restored here: History restores run the mode transition
+// first, and Session rollback sets it with the restored document.
 /** @param {DrawingState} drawing */
 export const applyUiStateData = (drawing, ui = {}, { restorePreviewNavigation = true } = {}) => {
   if (typeof ui.title === 'string') state.sessionTitle.value = ui.title;
-  if (ui.mode) state.mode.value = ui.mode === 'linear' ? 'linear' : 'circular';
   if (ui.cInputType) state.cInputType.value = ui.cInputType;
   if (ui.lInputType) state.lInputType.value = ui.lInputType;
   if (ui.losatProgram) {
@@ -4167,6 +4329,197 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
   synchronizeRestoredFeatureSummaryStatus({ generationId });
 };
 
+// E1: one mode's generated artifact as Save reads it: the installed artifact
+// of the displayed mode, or the other mode's slot, which the composition root
+// keeps while that mode is not shown.
+/**
+ * @typedef {Readonly<Record<string, any>> & {
+ *   mode: 'circular' | 'linear',
+ *   committedCanonicalSession: any,
+ *   activeSessionResourceTable: any
+ * }} SessionArtifactView
+ */
+/** @returns {SessionArtifactView} */
+const displayedArtifactView = () => Object.freeze({
+  ...Object.fromEntries(ARTIFACT_SLOT_KEYS.map((key) => [key, state[key].value])),
+  originalLegendOrder: state.originalLegendOrder.value,
+  mode: state.generatedMode.value === 'linear' ? 'linear' : 'circular',
+  committedCanonicalSession,
+  activeSessionResourceTable
+});
+/**
+ * @param {Readonly<ArtifactSlot>} slot
+ * @returns {SessionArtifactView}
+ */
+const stashedArtifactView = (slot) => Object.freeze({
+  ...slot.values,
+  originalLegendOrder: slot.legendInventory,
+  mode: slot.mode,
+  committedCanonicalSession: slot.runtimeState?.canonical?.committedCanonicalSession ?? null,
+  activeSessionResourceTable: slot.runtimeState?.canonical?.activeSessionResourceTable ?? null
+});
+/** @param {SessionArtifactView | null} view */
+const artifactHasResult = (view) => Array.isArray(view?.results) && view.results.length > 0;
+// Save writes every Result (Owner, 2026-10-07). The top level holds the shown
+// mode's set when it has a Result, otherwise the other mode's set;
+// `otherModeResult` holds the remaining set only when it has a Result.
+/** @param {Readonly<ArtifactSlot> | null} otherSlot */
+const chooseSessionArtifacts = (otherSlot) => {
+  const displayed = displayedArtifactView();
+  const other = otherSlot && otherSlot.mode !== displayed.mode ? stashedArtifactView(otherSlot) : null;
+  if (!other || !artifactHasResult(other)) return { artifact: displayed, otherArtifact: null };
+  if (!artifactHasResult(displayed)) return { artifact: other, otherArtifact: null };
+  return { artifact: displayed, otherArtifact: other };
+};
+// Live edits are committed into a Result's content at once, so its content is
+// what Save writes, also for the displayed Result.
+/** @param {SessionArtifactView} view */
+const serializeArtifactResults = (view) => normalizeLogicalResults(view.results.map(
+  (/** @type {Record<string, any>} */ res, /** @type {number} */ idx) => ({
+    name: res.name || `Result ${idx + 1}`,
+    content: res.content
+  })
+));
+// The shared Legend and stroke edits, and the artifact's own catalog,
+// generated Legend inventory and colors, stroke defaults and alignment
+// Reset receipt.
+/**
+ * @param {SessionArtifactView} view
+ * @param {DrawingState} drawing
+ */
+const buildArtifactEditorState = (view, drawing) => {
+  const shared = buildEditorStateData(drawing);
+  return {
+    ...shared,
+    legend: {
+      ...shared.legend,
+      originalOrder: cloneJsonArray(view.originalLegendOrder),
+      originalColors: cloneStringMap(view.originalLegendColors)
+    },
+    originalSvgStroke: {
+      color: view.originalSvgStroke?.color ?? null,
+      width: view.originalSvgStroke?.width ?? null
+    },
+    alignmentResetReceipt: cloneJsonValue(view.similarityAlignmentResetReceipt, null),
+    featureCatalog: admittedFeatureCatalog(view.featureCatalog)
+  };
+};
+// D-25 (PD-OI-079): Results need their admitted catalog; a Result without one
+// (a legacy Session) is saved after a Generate in its mode. The error names that
+// mode when it is not the one shown, and its Generate action runs there.
+/**
+ * @param {Record<string, any>} editorState
+ * @param {Record<string, any>[]} logicalResults
+ * @param {'circular' | 'linear'} mode
+ */
+const admitSavedFeatureCatalog = (editorState, logicalResults, mode) => {
+  if (logicalResults.length === 0) {
+    editorState.featureCatalog = null;
+    return;
+  }
+  const requiresGenerate = () => sessionSaveRequiresGenerate(
+    mode === state.mode.value ? {} : { diagramMode: mode }
+  );
+  if (!editorState.featureCatalog) throw requiresGenerate();
+  try {
+    editorState.featureCatalog = validateFeatureCatalog(
+      editorState.featureCatalog,
+      logicalResults,
+      { adopt: true, mode }
+    );
+  } catch (error) {
+    console.warn('Session feature catalog validation failed.', normalizeUserFacingError(error));
+    throw requiresGenerate();
+  }
+};
+/**
+ * @param {Record<string, any> | null} committed
+ * @param {SessionArtifactView} view
+ * @param {FeatureCatalog | null} featureCatalog
+ */
+const promoteSavedCanonicalSession = (committed, view, featureCatalog) => {
+  if (!committed || committed.renderRequest.schema >= CANONICAL_REQUEST_SCHEMA) return committed;
+  const promoted = {
+    ...committed,
+    renderRequest: promoteCanonicalRenderRequestToCurrent(committed.renderRequest, {
+      featureCatalog,
+      legacyOrthogroupState: { groups: cloneJsonData(view.orthogroups || []) }
+    })
+  };
+  return isAdoptedCanonicalSession(committed) ? adoptRuntimeCanonicalSession(promoted) : promoted;
+};
+/** @param {SessionArtifactView} view */
+const artifactRunMetadata = (view) => ({
+  ...(view.trackSlotResolvedGeometry
+    ? { trackSlotGeometry: cloneJsonData(view.trackSlotResolvedGeometry) } : {}),
+  annotationWarnings: cloneJsonData(view.annotationWarnings),
+  ...(view.featureIdentityNotices?.length
+    ? { featureIdentityNotices: cloneJsonData(view.featureIdentityNotices) } : {}),
+  ...(view.comparisonWarnings?.length
+    ? { comparisonWarnings: cloneJsonData(view.comparisonWarnings) } : {})
+});
+/** @param {SessionArtifactView} view */
+const artifactCliInvocation = (view) => {
+  const invocation = view.lastRunInfo?.invocation;
+  return isCliInvocationSessionExportable(invocation) ? cloneJsonData(invocation) : undefined;
+};
+// The generated layout and palette of an artifact's Results (`ui` fields).
+/** @param {SessionArtifactView} view */
+const artifactUiState = (view) => ({
+  selectedResultIndex: view.selectedResultIndex,
+  generatedLegendPosition: view.generatedLegendPosition,
+  generatedMultiRecordCanvas: Boolean(view.generatedMultiRecordCanvas),
+  generatedCircularPlotTitlePosition: normalizeCircularPlotTitlePosition(
+    view.generatedCircularPlotTitlePosition
+  ),
+  appliedPaletteName: view.appliedPaletteName,
+  appliedPaletteColors: cloneColors(view.appliedPaletteColors)
+});
+// The other mode's set: its Results, admitted catalog and committed request
+// are written as one unit beside the top-level set (PD-OI-045).
+/**
+ * @param {SessionArtifactView} view
+ * @param {DrawingState} drawing
+ */
+const prepareOtherModeArtifact = (view, drawing) => {
+  const results = serializeArtifactResults(view);
+  const editorState = buildArtifactEditorState(view, drawing);
+  admitSavedFeatureCatalog(editorState, results, view.mode);
+  if (!view.committedCanonicalSession) throw sessionSaveRequiresGenerate({ diagramMode: view.mode });
+  const committed = promoteSavedCanonicalSession(
+    isAdoptedCanonicalSession(view.committedCanonicalSession)
+      ? view.committedCanonicalSession
+      : cloneCanonicalSession(view.committedCanonicalSession),
+    view,
+    editorState.featureCatalog
+  );
+  return { view, results, editorState, committed };
+};
+/**
+ * @param {ReturnType<typeof prepareOtherModeArtifact>} other
+ * @param {CanonicalRenderRequest} renderRequest Its resource references name the Session's table.
+ * @returns {SessionOtherModeResult}
+ */
+const buildOtherModeResult = (other, renderRequest) => {
+  const cliInvocation = artifactCliInvocation(other.view);
+  return {
+    renderRequest,
+    results: other.results,
+    editorState: {
+      featureCatalog: other.editorState.featureCatalog,
+      alignmentResetReceipt: other.editorState.alignmentResetReceipt ?? null,
+      legend: {
+        originalOrder: other.editorState.legend.originalOrder,
+        originalColors: other.editorState.legend.originalColors
+      },
+      originalSvgStroke: other.editorState.originalSvgStroke
+    },
+    ui: artifactUiState(other.view),
+    runMetadata: artifactRunMetadata(other.view),
+    ...(cliInvocation ? { cliInvocation } : {})
+  };
+};
+
 /**
  * @typedef {{
  *   drawing: DrawingState,
@@ -4174,7 +4527,9 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
  *   recordDisplayRows?: any,
  *   storedConfig: ActiveWebConfig,
  *   savedUi: Record<string, any>,
- *   isCurrent: () => boolean
+ *   isCurrent: () => boolean,
+ *   artifact: SessionArtifactView,
+ *   otherArtifact: SessionArtifactView | null
  * }} ExportSessionDocumentOptions
  */
 
@@ -4184,7 +4539,9 @@ const applySessionFeatureRecoveryPlan = (drawing, plan, { generationId = 'sessio
  */
 const exportSessionDocument = async (
   titleOverride = null,
-  { drawing, linearRecordCatalog = null, recordDisplayRows = null, storedConfig, savedUi, isCurrent }
+  {
+    drawing, linearRecordCatalog = null, recordDisplayRows = null, storedConfig, savedUi, isCurrent, artifact, otherArtifact
+  }
 ) => {
   const resolvedTitle =
     typeof titleOverride === 'string'
@@ -4204,33 +4561,17 @@ const exportSessionDocument = async (
   }
 
   recordSessionLifecycleEvent('session-save-projection-start');
-  const logicalResults = serializeResults();
-  const editorState = buildEditorStateData(drawing);
-  if (logicalResults.length > 0) {
-    if (!editorState.featureCatalog) throw sessionSaveRequiresGenerate();
-    try {
-      editorState.featureCatalog = validateFeatureCatalog(
-        editorState.featureCatalog,
-        logicalResults,
-        { adopt: true, mode: state.generatedMode.value }
-      );
-    } catch (error) {
-      console.warn('Session feature catalog validation failed.', normalizeUserFacingError(error));
-      throw sessionSaveRequiresGenerate();
-    }
-  } else {
-    editorState.featureCatalog = null;
-  }
+  const logicalResults = serializeArtifactResults(artifact);
+  const editorState = buildArtifactEditorState(artifact, drawing);
+  admitSavedFeatureCatalog(editorState, logicalResults, artifact.mode);
+  const other = otherArtifact ? prepareOtherModeArtifact(otherArtifact, drawing) : null;
 
   const {
     entries: losatEntries,
     validatedManifest,
     manifestValidated
   } = serializeLosatCache();
-  const lastRunInvocation = state.lastRunInfo.value?.invocation;
-  const exportableCliInvocation = isCliInvocationSessionExportable(lastRunInvocation)
-    ? cloneJsonData(lastRunInvocation)
-    : undefined;
+  const exportableCliInvocation = artifactCliInvocation(artifact);
   Object.assign(
     storedConfig.adv,
     normalizedArrowGeometryState(storedConfig.adv)
@@ -4240,10 +4581,10 @@ const exportSessionDocument = async (
     configOverrides: storedConfig.unmanagedConfigOverrides,
     requireUnmanagedOnly: true
   });
-  let committed = isAdoptedCanonicalSession(committedCanonicalSession)
-    ? committedCanonicalSession
-    : cloneCanonicalSession(committedCanonicalSession);
-  const settingsOnly = !committedCanonicalSession && logicalResults.length === 0
+  let committed = isAdoptedCanonicalSession(artifact.committedCanonicalSession)
+    ? artifact.committedCanonicalSession
+    : cloneCanonicalSession(artifact.committedCanonicalSession);
+  const settingsOnly = !artifact.committedCanonicalSession && logicalResults.length === 0
     && !hasBiologicalSessionInputs({ ...state.files, linearSeqs: state.linearSeqs });
   if (settingsOnly) validateCurrentWriterActiveConfig({ mode: state.mode.value, storedConfig });
   if (committed) {
@@ -4251,7 +4592,7 @@ const exportSessionDocument = async (
       const adoptedCommitted = isAdoptedCanonicalSession(committed);
       const projected = projectCanonicalSessionRequest({
         ...committed,
-        sessionResourceTable: adoptedCommitted ? activeSessionResourceTable : null,
+        sessionResourceTable: adoptedCommitted ? artifact.activeSessionResourceTable : null,
         deferResourceContent: adoptedCommitted,
         adoptCanonicalPayloads: adoptedCommitted
       });
@@ -4291,25 +4632,14 @@ const exportSessionDocument = async (
       comparisonPlanSnapshot
     });
   }
-  if (committed && committed.renderRequest.schema < CANONICAL_REQUEST_SCHEMA) {
-    const promoted = {
-      ...committed,
-      renderRequest: promoteCanonicalRenderRequestToCurrent(
-        committed.renderRequest,
-        {
-          featureCatalog: editorState.featureCatalog,
-          legacyOrthogroupState: {
-            groups: cloneJsonData(state.orthogroups.value || [])
-          }
-        }
-      )
-    };
-    committed = isAdoptedCanonicalSession(committed)
-      ? adoptRuntimeCanonicalSession(promoted)
-      : promoted;
-  }
-  const canonical = await buildSessionResources(state, committed, drawing);
+  committed = promoteSavedCanonicalSession(committed, artifact, editorState.featureCatalog);
+  const canonical = await assembleSessionResources(state, committed, drawing, other?.committed ?? null);
   await validateSimilarityAlignmentResetReceipt(editorState.alignmentResetReceipt, canonical);
+  if (other) {
+    await validateSimilarityAlignmentResetReceipt(other.editorState.alignmentResetReceipt, {
+      renderRequest: canonical.otherRenderRequest, resources: canonical.resources
+    });
+  }
   const legacyRawCandidates = serializableLegacyProteinCandidateEnvelope(
     state.legacyProteinRawCandidates.value
   );
@@ -4334,15 +4664,8 @@ const exportSessionDocument = async (
     resources: canonical.resources,
     webFiles: canonical.webFiles,
     results: logicalResults,
-    ...(!settingsOnly ? { runMetadata: {
-      ...(state.trackSlotResolvedGeometry.value
-        ? { trackSlotGeometry: cloneJsonData(state.trackSlotResolvedGeometry.value) } : {}),
-      annotationWarnings: cloneJsonData(state.annotationWarnings.value),
-      ...(state.featureIdentityNotices.value.length
-        ? { featureIdentityNotices: cloneJsonData(state.featureIdentityNotices.value) } : {}),
-      ...(state.comparisonWarnings.value.length
-        ? { comparisonWarnings: cloneJsonData(state.comparisonWarnings.value) } : {})
-    } } : {}),
+    ...(!settingsOnly ? { runMetadata: artifactRunMetadata(artifact) } : {}),
+    ...(other ? { otherModeResult: buildOtherModeResult(other, canonical.otherRenderRequest) } : {}),
     features: {
       selectedFeatureRecordIdx: state.selectedFeatureRecordIdx.value,
       featureColorOverrides: cloneJsonData(drawing.featureColorOverrides),
@@ -4446,6 +4769,12 @@ const importSessionDocument = async (e, options = {}) => {
       data.editorState?.alignmentResetReceipt,
       { renderRequest: data.renderRequest, resources: data.resources }
     );
+    if (isPlainObject(data.otherModeResult)) {
+      await validateSimilarityAlignmentResetReceipt(
+        data.otherModeResult.editorState?.alignmentResetReceipt,
+        { renderRequest: data.otherModeResult.renderRequest, resources: data.resources }
+      );
+    }
     recordSessionLifecycleEvent('current-session-preflight-end');
     data = preflight.data;
     const {
@@ -4455,6 +4784,7 @@ const importSessionDocument = async (e, options = {}) => {
       projectionResult,
       adoptedCanonicalSession,
       currentResourceTable,
+      otherModeCatalog,
       comparisonClassification,
       unmanagedConfigValidation
     } = preflight;
@@ -4549,43 +4879,22 @@ const importSessionDocument = async (e, options = {}) => {
       ? (currentCatalogFeatureState?.sequenceSources || [])
       : [];
     recordSessionLifecycleEvent('session-candidate-sequences-start');
-    const comparisonSourceAvailability = committedMode === 'circular'
-      ? resolveCircularComparisonSequenceAvailability({
-          files: candidateFiles.files,
-          circularConservation: restoredConfig?.circularConservation || {}
-        })
-      : undefined;
-    const catalogSequenceSourceCoverage = (
-      currentSchemaSession
-      && validatedSessionCatalog
-    )
-      ? analyzeCatalogSequenceSourceCoverage({
-          mode: committedMode,
-          catalogFeatureState: validatedSessionCatalog,
-          renderRequest: data.renderRequest,
-          comparisonSourceAvailability
-        })
-      : null;
-    const missingCatalogSequenceSources = sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION
-      || !catalogSequenceSourceCoverage?.complete;
-    let restoredFileSequenceSources = [];
-    let currentRecoveryError = null;
-    if (missingCatalogSequenceSources && !settingsOnly) {
-      recordStructuralMetric('sourceRecoveryCount');
-      try {
-        restoredFileSequenceSources = await buildRestoredMatchSequenceSources({
-          mode: candidateMode,
-          cInputType: candidateFiles.cInputType.value,
-          lInputType: candidateInputType,
-          files: candidateFiles.files,
-          linearSeqs: candidateFiles.linearSeqs,
-          circularConservation: restoredConfig?.circularConservation || {}
-        });
-      } catch (sequenceError) {
-        currentRecoveryError = sequenceError;
-        console.warn('Session match sequence preparation failed.', normalizeUserFacingError(sequenceError));
-      }
-    }
+    // E1: each Result set reads its sources in its own mode.
+    const setSequenceSourceOptions = {
+      olderSession: sourceSessionVersion < CURRENT_AUTHORITY_SESSION_MIN_VERSION,
+      settingsOnly,
+      cInputType: candidateFiles.cInputType.value,
+      lInputType: candidateMode === 'linear' ? candidateInputType : (ui.lInputType || 'gb'),
+      files: candidateFiles.files,
+      linearSeqs: candidateFiles.linearSeqs,
+      circularConservation: restoredConfig?.circularConservation || {}
+    };
+    const { restored: restoredFileSequenceSources, error: currentRecoveryError } = await restoreLoadedSetSequenceSources({
+      ...setSequenceSourceOptions,
+      mode: committedMode === 'linear' || (!committedMode && candidateMode === 'linear') ? 'linear' : 'circular',
+      catalog: currentSchemaSession ? validatedSessionCatalog : null,
+      renderRequest: data.renderRequest
+    });
 
     recordSessionLifecycleEvent('session-candidate-sequences-end');
     const restoredFeatureState = currentCatalogFeatureState || features || {};
@@ -4638,22 +4947,58 @@ const importSessionDocument = async (e, options = {}) => {
       ? adoptedCanonicalSession?.renderRequest?.diagramOptions?.selectedFeaturesSet
       : null;
     const committedImportedResults = currentSchemaSession && validatedSessionCatalog
-      ? (() => {
-          const catalogAdmission = admitFeatureCatalog(
-            validatedSessionCatalog,
-            logicalImportedResults,
-            { adopt: true, mode: committedMode }
-          );
-          return admitCurrentSessionResults(
-            createCurrentSessionResultSource(logicalImportedResults, catalogAdmission),
-            { mutationPlan: createEmptySvgMutationPlan(logicalImportedResults.length), selectedFeatureTypes }
-          );
-        })()
+      ? admitLoadedSetResults(logicalImportedResults, {
+          featureCatalog: validatedSessionCatalog, mode: committedMode, selectedFeatureTypes
+        })
       : admitLegacyImportedResults(
           createLegacyImportResultSource(logicalImportedResults),
           { transformSvg: transformRestoredSessionSvg, selectedFeatureTypes }
         );
     recordSessionLifecycleEvent('svg-admission-end');
+    // E1: a Session with a Result set of each mode builds both sets' artifact
+    // slots with one function. It opens on its shown mode when that mode has a
+    // Result, otherwise on the mode that has one; the opening slot is installed
+    // last, before the preview mounts, and the other slot waits in its mode.
+    const otherModeCatalogAdmitted = currentSchemaSession ? otherModeCatalog : null;
+    const otherModeResult = otherModeCatalogAdmitted ? data.otherModeResult : null;
+    const otherSetMode = otherModeResult?.renderRequest?.mode === 'linear' ? 'linear' : 'circular';
+    const resultModes = new Set([
+      ...(committedImportedResults.length > 0 && committedMode ? [committedMode] : []),
+      ...(otherModeResult ? [otherSetMode] : [])
+    ]);
+    const displayMode = resultModes.size === 0 || resultModes.has(candidateMode)
+      ? candidateMode
+      : [...resultModes][0];
+    // Each set's History byte estimate: its share of the decompressed file,
+    // split by the size of its Results (a serialization of the other set only
+    // to size it costs about 20 ms for a Vibrio-size set).
+    /** @param {unknown} setResults */
+    const resultCharacters = (setResults) => (Array.isArray(setResults) ? setResults : [])
+      .reduce((sum, result) => sum + String(result?.content || '').length, 0);
+    const otherResultCharacters = otherModeResult ? resultCharacters(otherModeResult.results) : 0;
+    const otherSetCharacters = otherModeResult ? Math.round(candidate.characters * otherResultCharacters
+      / Math.max(1, otherResultCharacters + resultCharacters(data.results))) : 0;
+    const topSetCharacters = Math.max(0, candidate.characters - otherSetCharacters);
+    const slotOptions = { resources: data.resources, resourceTable: currentResourceTable, webFiles: data.webFiles };
+    const otherArtifactSlot = otherModeResult && otherModeCatalogAdmitted
+      ? buildLoadedArtifactSlot(otherModeResult, {
+          ...slotOptions,
+          featureCatalog: otherModeCatalogAdmitted,
+          restoredSequenceSources: (await restoreLoadedSetSequenceSources({
+            ...setSequenceSourceOptions,
+            mode: otherSetMode,
+            catalog: otherModeCatalogAdmitted,
+            renderRequest: otherModeResult.renderRequest
+          })).restored,
+          retainedBytes: otherSetCharacters * 2
+        })
+      : null;
+    const opensOtherSet = Boolean(otherArtifactSlot) && displayMode === otherSetMode;
+    // The Linear set's committed request owns the Linear draft's alignment plan
+    // and record translations, wherever the set sits; both are admitted as the
+    // request projection admits the top-level set's.
+    const linearSetLayout = otherModeResult && otherSetMode === 'linear'
+      ? canonicalLinearRecordLayout(otherModeResult.renderRequest) : null;
 
     /** @type {Record<string, any> | null} */
     let legacyFeatureRecoveryPlan = null;
@@ -4785,7 +5130,13 @@ const importSessionDocument = async (e, options = {}) => {
       );
       applyConfigData(drawing, restoredConfig, { resolveTrackPlacements: !settingsOnly });
     }
-    const canonicalLinearLayout = canonicalProjection?.config?.linearRecordLayout;
+    // The saved settings profiles belong to the saved mode; the shown mode
+    // takes its own profile (E1).
+    if (displayMode !== state.mode.value) {
+      drawing.modeProfileStateManager?.transition?.(drawing.adv, state.mode.value, displayMode);
+      state.mode.value = displayMode;
+    }
+    const canonicalLinearLayout = linearSetLayout || canonicalProjection?.config?.linearRecordLayout;
     if (canonicalLinearLayout && state.linearRecordTranslations) {
       state.linearRecordTranslations.value = cloneJsonData(
         canonicalLinearLayout.recordTranslations || []
@@ -4908,7 +5259,7 @@ const importSessionDocument = async (e, options = {}) => {
       applySessionFeatureRecoveryPlan(drawing, legacyFeatureRecoveryPlan, { generationId: 'session-load' });
     }
 
-    const desiredResultIndex = (
+    let desiredResultIndex = (
       Number.isInteger(ui.selectedResultIndex) && ui.selectedResultIndex >= 0
     )
       ? Math.min(ui.selectedResultIndex, Math.max(0, committedImportedResults.length - 1))
@@ -4930,12 +5281,38 @@ const importSessionDocument = async (e, options = {}) => {
     state.trackSlotResolvedGeometry.value = cloneJsonData(
       projectionResult?.artifactState?.runMetadata?.trackSlotGeometry ?? null
     );
+    {
+      // The top-level set, built like the other set, waits in its mode when the
+      // Session opens on the other set's mode. The stash starts again with the
+      // loaded Session.
+      const topArtifactSlot = opensOtherSet && validatedSessionCatalog
+        ? buildLoadedArtifactSlot({
+            renderRequest: data.renderRequest,
+            results: data.results,
+            editorState: data.editorState,
+            ui,
+            runMetadata: projectionResult?.artifactState?.runMetadata
+          }, {
+            ...slotOptions,
+            featureCatalog: validatedSessionCatalog,
+            admittedResults: committedImportedResults,
+            restoredSequenceSources: restoredFileSequenceSources,
+            retainedBytes: topSetCharacters * 2
+          })
+        : null;
+      /** @type {{ installLoadedArtifactSlots?: (slots: Record<string, any>) => void }} */ (options)
+        .installLoadedArtifactSlots?.(opensOtherSet
+        ? { opening: otherArtifactSlot, stashed: topArtifactSlot }
+        : { opening: null, stashed: otherArtifactSlot });
+      if (opensOtherSet) desiredResultIndex = Number(state.selectedResultIndex.value) || 0;
+    }
     const previewReadiness = typeof options?.beforePreviewMount === 'function'
       ? options.beforePreviewMount({
           results: state.results.value,
           resultIndex: desiredResultIndex,
           data,
-          ui
+          ui,
+          opensOtherSet
         })
       : null;
     recordSessionLifecycleEvent('firstCommittedPreview', {
@@ -4976,7 +5353,11 @@ const importSessionDocument = async (e, options = {}) => {
       degradedRecovery: Boolean(currentRecoveryError)
     });
     if (!options.isCurrent()) throw new Error('Session loading was canceled.');
-    await options.afterImport?.({ status: 'ok', decompressedCharacters: candidate.characters, isCurrent: options.isCurrent });
+    await options.afterImport?.({
+      status: 'ok',
+      decompressedCharacters: opensOtherSet ? otherSetCharacters : topSetCharacters,
+      isCurrent: options.isCurrent
+    });
     if (!options.isCurrent()) throw new Error('Session loading was canceled.');
     alert(['Session loaded successfully!',
       droppedFeatureEditCount > 0 ? FEATURE_EDIT_MIGRATION_WARNING(droppedFeatureEditCount) : '',
@@ -5047,7 +5428,10 @@ export const disposeSessionOperations = () => {
 // `options.availability` is the Save and Load availability the composition
 // root composes from `sessionOperationAvailability` and the edits still
 // applying (R13); `options.recordDisplayRows` are the draft record display
-// rows a Save without a committed request projects.
+// rows a Save without a committed request projects;
+// `options.readOtherModeArtifact` returns the other mode's artifact slot that
+// the root keeps (E1), and `options.beforeExport` learns whether Save projects
+// the draft request.
 export const exportSession = (titleOverride = null, options = {}) => {
   if (sessionSaveInFlight) {
     recordSessionLifecycleEvent('session-save-joined');
@@ -5074,22 +5458,24 @@ export const exportSession = (titleOverride = null, options = {}) => {
     const drawing = state.drawings[state.mode.value === 'linear' ? 'linear' : 'circular'];
     const activeConfig = buildConfigData(drawing);
     validateCurrentWriterActiveConfig({ mode: state.mode.value, storedConfig: activeConfig });
-    if (!committedCanonicalSession
+    const { artifact, otherArtifact } = chooseSessionArtifacts(
+      /** @type {{ readOtherModeArtifact?: () => Readonly<ArtifactSlot> | null }} */ (options).readOtherModeArtifact?.() ?? null
+    );
+    if (!artifact.committedCanonicalSession
       && hasBiologicalSessionInputs({ ...state.files, linearSeqs: state.linearSeqs })) {
       assertActiveModeInputs();
     }
     const storedConfig = cloneJsonData(activeConfig);
+    const artifactUi = artifactUiState(artifact);
     const savedUi = {
       mode: state.mode.value,
       zoom: state.zoom.value,
       canvasPan: { x: state.canvasPan.x, y: state.canvasPan.y },
       canvasPadding: { ...drawing.canvasPadding },
-      selectedResultIndex: state.selectedResultIndex.value,
-      generatedLegendPosition: state.generatedLegendPosition.value,
-      generatedMultiRecordCanvas: Boolean(state.generatedMultiRecordCanvas.value),
-      generatedCircularPlotTitlePosition: normalizeCircularPlotTitlePosition(
-        state.generatedCircularPlotTitlePosition.value
-      ),
+      selectedResultIndex: artifactUi.selectedResultIndex,
+      generatedLegendPosition: artifactUi.generatedLegendPosition,
+      generatedMultiRecordCanvas: artifactUi.generatedMultiRecordCanvas,
+      generatedCircularPlotTitlePosition: artifactUi.generatedCircularPlotTitlePosition,
       layoutPreferences: cloneJsonData(drawing.layoutPreferences),
       featurePanelTab: state.featurePanelTab.value,
       cInputType: state.cInputType.value,
@@ -5098,15 +5484,15 @@ export const exportSession = (titleOverride = null, options = {}) => {
       autoLabelReflow: Boolean(state.autoLabelReflowEnabled.value),
       linearTypographyLinked: Boolean(drawing.linearTypographyLinked.value),
       paletteInstantPreviewEnabled: Boolean(state.paletteInstantPreviewEnabled.value),
-      appliedPaletteName: state.appliedPaletteName.value,
-      appliedPaletteColors: cloneColors(state.appliedPaletteColors.value),
+      appliedPaletteName: artifactUi.appliedPaletteName,
+      appliedPaletteColors: artifactUi.appliedPaletteColors,
       pendingPaletteName: drawing.pendingPaletteName.value,
       pendingPaletteColors: cloneColors(drawing.pendingPaletteColors.value)
     };
-    const prepared = await options.beforeExport?.();
+    const prepared = await options.beforeExport?.({ draftRequest: !artifact.committedCanonicalSession });
     if (!isCurrent()) return { status: 'canceled' };
     return exportSessionDocument(title, {
-      ...options, ...prepared, drawing, storedConfig, savedUi, isCurrent
+      ...options, ...prepared, drawing, storedConfig, savedUi, isCurrent, artifact, otherArtifact
     });
   }).catch((error) => {
     recordSessionLifecycleEvent('session-save-error');

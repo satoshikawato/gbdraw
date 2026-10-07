@@ -211,6 +211,45 @@ assert.equal(legacyConnector.getAttribute('display'), 'none');
 assert.equal(runtime.getActiveRuntime().resultIndex, 1);
 assert.equal(state.results.value[1].content, '<svg data-count="4" data-elements="2"></svg>');
 
+// E1: a Session Load releases the displayed Result; a Load that fails and
+// rolls back selects the same Result again, under the same root, which edits
+// commit into as before (REVIEW-2 R).
+{
+  const kept = state.results.value;
+  runtime.clearActiveRuntime();
+  // The Load empties the Results, fails, and its rollback resets again.
+  state.results.value = [];
+  runtime.clearActiveRuntime();
+  state.results.value = [...kept];
+  const writes = resultReplacementCount;
+  assert.equal(runtime.applyFeatureVisibilityChanges([{ featureId: 'feature-c', mode: 'on' }]), true);
+  assert.equal(runtime.getActiveRuntime().svg, legacySvg);
+  assert.equal(resultReplacementCount, writes + 1);
+}
+
+// E1: a mode switch releases the displayed Result and installs the other
+// mode's Results before the next render replaces the released root. An edit
+// made in between (a Show Depth repair) leaves the arriving Result alone.
+{
+  runtime.clearActiveRuntime();
+  const arriving = [{ name: 'arriving.svg', content: '<svg id="arriving"></svg>' }];
+  state.results.value = arriving;
+  state.selectedResultIndex.value = 0;
+  const writes = resultReplacementCount;
+  assert.equal(runtime.applyFeatureVisibilityChanges([{ featureId: 'feature-c', mode: 'on' }]), false);
+  assert.equal(runtime.commitActiveResultEdit('track-visibility'), false);
+  assert.equal(resultReplacementCount, writes);
+  assert.equal(state.results.value[0].content, '<svg id="arriving"></svg>');
+  assert.equal(runtime.getActiveRuntime(), null);
+  // The render mounts the arriving Result's own root, which edits commit into.
+  const arrivingBlock = new FakeFeatureElement('feature-d__part1', { featureId: 'feature-d', fill: '#333333' });
+  const arrivingSvg = makeSvg([arrivingBlock]);
+  state.svgContainer.value = { querySelector: (selector) => (selector === 'svg' ? arrivingSvg : null) };
+  assert.equal(runtime.applyFeatureVisibilityChanges([{ featureId: 'feature-d', mode: 'off' }]), true);
+  assert.equal(runtime.getActiveRuntime().svg, arrivingSvg);
+  assert.equal(state.results.value[0].content, '<svg data-count="6" data-elements="1"></svg>');
+}
+
 const structuralMetrics = [];
 const lifecycleEvents = [];
 globalThis.__GBDRAW_TEST_HOOKS__ = {

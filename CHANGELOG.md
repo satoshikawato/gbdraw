@@ -151,6 +151,30 @@ write-up of a release.
   `gbdraw circular|linear --session` failed with "has unknown field(s): checksum",
   also for such a Session after the web app saved it again. A resource whose bytes
   do not match its `checksum` is rejected when the Session is loaded.
+- Diagram modes (web app): Circular and Linear each keep their own Result. A
+  Generate replaces only the Result of its own mode, so a Linear Generate no
+  longer replaces the Circular Result, and switching back shows the Circular
+  Result with its moved Legend, title, and live edits. A mode without a Result
+  shows "No Circular Result yet" or "No Linear Result yet". A moved Legend or
+  title on one mode's Result no longer makes the other mode's Generate fail.
+  The mode buttons wait while Generate, a label update, or an Undo or Redo
+  runs, and an Undo or Redo of a switch waits for Generate or a label update.
+  Settings, Legend edits, and the palette are still
+  shared between the modes: a mode's Result shown again shows the Legend
+  renames, added rows, deletions, and row order made in the other mode, as
+  its next Generate draws them, for the rows it draws. A rename of a feature
+  row redraws that Result once it is shown.
+- Sessions: **Save Session** writes the Result of each mode. Session 45 gains an
+  optional `otherModeResult` field for the Result set of the mode that is not at
+  the top level; its request uses the same resource table. **Load Session**
+  shows the saved mode when it has a Result, otherwise the mode that has one.
+  A Result from a Session saved by an older gbdraw that waits in the other mode
+  still needs one Generate before **Save Session**: the message names its mode,
+  and its **Generate** button switches to that mode and generates there.
+  `gbdraw circular --session` and `gbdraw linear --session` render the Result
+  set of their own mode; a re-save with `--save_session` or `--session_output`
+  puts that set at the top level, keeps the other mode's set in
+  `otherModeResult`, and keeps the saved `ui.mode`.
 - CLI: `gbdraw circular|linear --session <file> --session_output out.json` (and
   `--save_session`) keeps the resource IDs and file names of the Session's unchanged
   inputs. Before, the rewritten Session renamed them to positional IDs such as

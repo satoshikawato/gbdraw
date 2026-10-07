@@ -452,3 +452,49 @@ test('a stroke on a generated Legend row reaches the features each Result draws 
     [{ caption: 'CDS', allowMissing: false, renderedIds: ['f0002', 'f0005'] }]
   ]);
 });
+
+// OV-80 (E1): Legend edits are shared by both modes until per-drawing Legend
+// edits. A mode without a Result of its own shows the other mode's Legend rows,
+// and its first Generate carries their edits; a row only the other mode's
+// Result drew may be absent from this Result. A row no Result drew (Ghost)
+// stays required.
+test('a Legend style on a row only the other mode drew may miss its row', () => {
+  const compile = (otherModeLegendCaptions) => compileDirectEditorMutationPlan({
+    catalogAdmission: admission(),
+    legendEntries: [
+      { caption: 'depth', originalCaption: 'depth', color: '#7b2cbf' },
+      { caption: 'Ghost', originalCaption: 'Ghost', color: '#123456' }
+    ],
+    originalLegendOrder: ['depth', 'Ghost'],
+    legendColorOverrides: { depth: '#7b2cbf', Ghost: '#123456' },
+    legendStrokeOverrides: { depth: { strokeColor: '#445566', strokeWidth: 2 } },
+    otherModeLegendCaptions
+  }).operationsByResult[0];
+  const sameMode = compile([]);
+  assert.deepEqual(sameMode.legendFills.map(({ caption, allowMissing }) => [caption, allowMissing]), [
+    ['depth', false], ['Ghost', false]
+  ]);
+  const otherMode = compile(['depth']);
+  assert.deepEqual(otherMode.legendFills.map(({ caption, allowMissing }) => [caption, allowMissing]), [
+    ['depth', true], ['Ghost', false]
+  ]);
+  assert.deepEqual(otherMode.legendStrokes.map(({ caption, allowMissing }) => [caption, allowMissing]), [['depth', true]]);
+});
+
+// A rename of a row only the other mode drew applies where this Result draws
+// the row and is absent, not invalid, elsewhere; a style on the renamed row
+// reaches its generated row the same way.
+test('a Legend rename of an other-mode row applies where the row is drawn', () => {
+  const compile = (otherModeLegendCaptions) => compileDirectEditorMutationPlan({
+    catalogAdmission: admission(),
+    legendEntries: [{ caption: 'Coverage', originalCaption: 'depth', color: '#7b2cbf' }],
+    originalLegendOrder: ['depth'],
+    legendColorOverrides: { Coverage: '#7b2cbf' },
+    otherModeLegendCaptions
+  }).operationsByResult[0];
+  const otherMode = compile(['depth']);
+  assert.deepEqual(otherMode.legendFills, [{ caption: 'depth', color: '#7b2cbf', allowMissing: true }]);
+  assert.deepEqual(otherMode.legendRenames.map(({ from, to, allowMissing }) => [from, to, allowMissing]),
+    [['depth', 'Coverage', true]]);
+  assert.equal(compile([]).legendRenames[0].allowMissing, false);
+});

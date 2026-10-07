@@ -1224,6 +1224,8 @@ export const executeCanonicalRenderCandidate = async ({
  *   services/config.js owns the active-mode input check shared with Save.
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
+ * @property {(() => readonly string[]) | null} [readOtherModeLegendInventory]
+ *   E1: the Legend inventory of the other mode's Result (the composition root's artifact slot).
  * @property {typeof prepareCandidateRenderCommit} [prepareCandidateCommit] Test seam.
  */
 
@@ -1260,6 +1262,7 @@ export const createRunAnalysis = ({
   // R13: the label owner's ports (app/feature-editor/label-actions.js).
   closeLabelTextScopeDialog,
   clearLabelBuildNotices,
+  readOtherModeLegendInventory = null,
   prepareCandidateCommit = prepareCandidateRenderCommit
 }) => {
   const {
@@ -1370,6 +1373,15 @@ export const createRunAnalysis = ({
           depthTracks: adv.depth_tracks,
           slots: canonical.renderRequest.mode === 'linear' ? adv.linear_track_slots : adv.circular_track_slots
         })
+  );
+  // E1 (OV-80): Legend edits stay shared between the modes until per-drawing
+  // Legend edits. A mode without a Result of its own shows the rows of the other
+  // mode's Result, and its first Generate carries their edits; a row that only
+  // the other mode's Result draws may be absent from this Result.
+  const otherModeLegendCaptions = () => (
+    results.value.length === 0 && typeof readOtherModeLegendInventory === 'function'
+      ? [...readOtherModeLegendInventory()]
+      : []
   );
   let pendingReflowRequestId = 0;
   let activeReflowRequestId = 0;
@@ -4678,6 +4690,7 @@ export const createRunAnalysis = ({
           originalLegendOrder: originalLegendOrder.value,
           addedLegendCaptions: addedLegendCaptions.value,
           unrequestedDepthCaptions: unrequestedDepthCaptions(canonical),
+          otherModeLegendCaptions: otherModeLegendCaptions(),
           legendColorOverrides,
           legendStrokeOverrides,
           manualSpecificRules: candidateRules

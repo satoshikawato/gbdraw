@@ -23,6 +23,8 @@ import {
  * @property {boolean} [sourceReplaced]
  * @property {Iterable<string>} [addedLegendCaptions] Captions the renderer drew without a manual rule.
  * @property {Iterable<string>} [unrequestedDepthCaptions] Captions of Depth series the request left out (Show Depth off); Python cannot name their rows (OV-81).
+ * @property {Iterable<string>} [otherModeLegendCaptions] OV-80 (E1): the generated rows of the other mode's Result, whose Legend
+ *   rows a mode without a Result of its own shows. Their styles and renames apply where this Result draws the row.
  * @property {Record<string, any>} [legendColorOverrides]
  * @property {Record<string, any>} [legendStrokeOverrides]
  * @property {Record<string, any>[]} [manualSpecificRules]
@@ -161,6 +163,7 @@ const compilePlanBundle = ({
   sourceReplaced = false,
   addedLegendCaptions = [],
   unrequestedDepthCaptions = [],
+  otherModeLegendCaptions = [],
   legendColorOverrides = {},
   legendStrokeOverrides = {},
   manualSpecificRules = [],
@@ -254,6 +257,8 @@ const compilePlanBundle = ({
   // The rule reads the caption an operation addresses in Python's output, so a
   // rename of the row and the styles under its new name are excused too (OV-88).
   const unrequestedDepth = new Set(Array.from(unrequestedDepthCaptions || []).map(text).filter(Boolean));
+  // OV-80: a row only the other mode's Result drew may be absent from this one.
+  const otherModeRows = new Set(Array.from(otherModeLegendCaptions || []).map(text).filter(Boolean));
   const renderedIdsByDirectCaption = new Map();
   Object.entries(featureColorOverrides || {}).forEach(([key, override]) => {
     const caption = text(override?.caption);
@@ -318,6 +323,7 @@ const compilePlanBundle = ({
         from: entry.originalCaption,
         to: entry.caption,
         allowMissing: sourceReplaced || manualCaptions.has(entry.caption) || unrequestedDepth.has(entry.originalCaption)
+          || otherModeRows.has(entry.originalCaption)
       });
     }
     if (
@@ -351,7 +357,7 @@ const compilePlanBundle = ({
     const namedIds = [...(renderedIdsByDirectCaption.get(caption) || [])];
     const legendRenderedIds = entry && entry.featureIds.length > 0 ? entry.featureIds : namedIds;
     const allowMissing = !entry || (sourceReplaced && isOriginal) || unrequestedDepth.has(targetCaption)
-      || (rendererDerivedCaptions.has(caption)
+      || otherModeRows.has(originalCaption) || (rendererDerivedCaptions.has(caption)
       && (legendRenderedIds.length === 0 || legendRenderedIds.every(id => hiddenRenderedIds.has(id))));
     // Each Result styles only the category features it renders. A batch Result
     // that renders none of them draws no row for the category (OV-45).

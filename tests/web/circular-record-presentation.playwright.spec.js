@@ -53,7 +53,7 @@ test('Circular single-record presentation selects, transforms, titles, and round
 
   await page.evaluate(({ first, second }) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'circular';
+    app.setDiagramMode('circular');
     app.cInputType = 'gb';
     app.files.c_gb = new File([`${first}\n${second}`], 'two-records.gbk', {
       type: 'text/plain',

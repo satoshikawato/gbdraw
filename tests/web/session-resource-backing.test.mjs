@@ -293,8 +293,10 @@ test('adopted export reuses descriptors and encodes only a replacement', async (
   assert.equal(metricTotal('base64EncodeCount'), 0);
   assert.strictEqual(unchanged.resources.alpha, resources.alpha);
   assert.strictEqual(unchanged.resources.beta, resources.beta);
-  assert.strictEqual(unchanged.resources.unused, resources.unused);
-  assert.deepEqual(unchanged.resources, resources);
+  // E1 (review m4): a resource that no request or binding names is not
+  // written, as the Python writer drops it.
+  assert.equal(unchanged.resources.unused, undefined);
+  assert.deepEqual(unchanged.resources, { alpha: resources.alpha, beta: resources.beta });
 
   assert.equal(await readFileText(alpha), 'alpha\n');
   resetMetrics();

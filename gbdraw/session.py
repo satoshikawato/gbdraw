@@ -32,6 +32,7 @@ from gbdraw.session_io import (
     materialize_embedded_file,
     normalize_current_session_artifacts,
     safe_embedded_filename,
+    session_with_other_mode_result_at_top,
     validate_session,
     write_session_json,
 )
@@ -73,6 +74,13 @@ class SessionRenderError(SessionError):
     """Raised when canonical session rendering fails."""
 
 
+class SessionDrawingSelectionError(SessionError):
+    """Raised when a Session holds a drawing of each mode and none was named."""
+
+
+DrawingId = Literal["circular", "linear"]
+
+
 @dataclass(frozen=True)
 class SessionDocument:
     """Validated session envelope detached from caller-owned mutable mappings."""
@@ -94,16 +102,53 @@ class SessionDocument:
         return int(self._data["version"])
 
     @property
-    def mode(self) -> Literal["circular", "linear"] | None:
-        """Canonical mode, when the document contains a canonical request."""
+    def drawings(self) -> tuple[DrawingId, ...]:
+        """The drawings with a committed request, top-level set first.
 
-        request = self._data.get("renderRequest")
-        if isinstance(request, Mapping) and request.get("mode") in {
-            "circular",
-            "linear",
-        }:
-            return request["mode"]
-        return None
+        A drawing is named by its mode: Session 45 holds at most one Circular
+        and one Linear Result set (the second in ``otherModeResult``).
+        """
+
+        found: list[DrawingId] = []
+        for request in (
+            self._data.get("renderRequest"),
+            (self._data.get("otherModeResult") or {}).get("renderRequest"),
+        ):
+            if isinstance(request, Mapping) and request.get("mode") in {"circular", "linear"}:
+                found.append(request["mode"])
+        return tuple(found)
+
+    def drawing(self, drawing_id: DrawingId) -> SessionDocument:
+        """The document with ``drawing_id``'s Result set at the top level."""
+
+        drawings = self.drawings
+        if drawing_id not in drawings:
+            raise SessionDrawingSelectionError(
+                f"Session has no {drawing_id} drawing; it has "
+                + (", ".join(drawings) if drawings else "no drawing")
+                + "."
+            )
+        if drawings[0] == drawing_id:
+            return self
+        return SessionDocument(
+            session_with_other_mode_result_at_top(self._data),
+            source_path=self.source_path,
+        )
+
+    @property
+    def mode(self) -> Literal["circular", "linear"] | None:
+        """Canonical mode, when the document contains one canonical request.
+
+        A Session with a drawing of each mode raises
+        :class:`SessionDrawingSelectionError`; use :attr:`drawings`.
+        """
+
+        drawings = self.drawings
+        if len(drawings) > 1:
+            raise SessionDrawingSelectionError(
+                "Session has a circular and a linear drawing; select one with drawing()."
+            )
+        return drawings[0] if drawings else None
 
     @property
     def has_canonical_request(self) -> bool:
@@ -282,8 +327,25 @@ def materialize_session(
     )
 
 
-def session_to_request(materialized: MaterializedSession) -> DiagramRequest:
-    """Decode a canonical request within its resource lifetime."""
+def _selected_drawing(document: SessionDocument, drawing: DrawingId | None) -> SessionDocument:
+    if drawing is not None:
+        return document.drawing(drawing)
+    if len(document.drawings) > 1:
+        raise SessionDrawingSelectionError(
+            "Session has a circular and a linear drawing; pass drawing='circular' or drawing='linear'."
+        )
+    return document
+
+
+def session_to_request(
+    materialized: MaterializedSession,
+    *,
+    drawing: DrawingId | None = None,
+) -> DiagramRequest:
+    """Decode a canonical request within its resource lifetime.
+
+    ``drawing`` names the Result set of a Session that holds one of each mode.
+    """
 
     if not isinstance(materialized, MaterializedSession):
         raise SessionConversionError("A MaterializedSession is required.")
@@ -291,7 +353,7 @@ def session_to_request(materialized: MaterializedSession) -> DiagramRequest:
         raise SessionResourceError(
             "Materialized session resources are no longer active; decode inside the context."
         )
-    document = materialized.document
+    document = _selected_drawing(materialized.document, drawing)
     if not document.has_canonical_request:
         if document.version >= CANONICAL_SESSION_MIN_VERSION:
             raise SessionConversionError("Settings-only Session has no biological render request; load a source in Web before generating.")
@@ -326,15 +388,20 @@ def session_to_request(materialized: MaterializedSession) -> DiagramRequest:
 
 def render_session(
     materialized: MaterializedSession,
+    *,
+    drawing: DrawingId | None = None,
 ) -> RequestRenderResult | CircularBatchRenderResult:
-    """Decode and render a canonical session while its resources are active."""
+    """Decode and render a canonical session while its resources are active.
+
+    ``drawing`` names the Result set of a Session that holds one of each mode.
+    """
 
     from gbdraw.api.session_compat import render_session_compatible_request
 
     try:
         return render_session_compatible_request(
-            session_to_request(materialized),
-            materialized.document.to_dict(),
+            session_to_request(materialized, drawing=drawing),
+            _selected_drawing(materialized.document, drawing).to_dict(),
         )
     except SessionError:
         raise
@@ -416,12 +483,21 @@ def _drop_unreferenced_resources(
     data: dict[str, Any],
     previous: Mapping[str, Any],
 ) -> None:
-    """Drop the previous resources that the request and Web files no longer name."""
+    """Drop the previous resources that the requests and Web files no longer name.
+
+    The other diagram mode's Result set (``otherModeResult``) keeps its request's
+    resources.
+    """
 
     from gbdraw.session_resources import canonical_resource_ids
 
     web_files = data.get("webFiles")
-    referenced = canonical_resource_ids(data["renderRequest"]) | canonical_resource_ids(web_files)
+    other = data.get("otherModeResult")
+    referenced = (
+        canonical_resource_ids(data["renderRequest"])
+        | canonical_resource_ids(web_files)
+        | canonical_resource_ids(other.get("renderRequest") if isinstance(other, Mapping) else None)
+    )
     if isinstance(web_files, Mapping):
         for field in ("conservationLosatFastaSources", "conservationSequenceSources"):
             source_ids = web_files.get(field)
@@ -650,13 +726,18 @@ def _validate_document(data: Mapping[str, Any]) -> None:
                 ) from exc
     from gbdraw.session_resources import canonical_resource_ids
 
-    unresolved = canonical_resource_ids(data.get("renderRequest")) - set(resources)
-    if unresolved:
-        raise SessionResourceError(
-            "renderRequest references missing canonical resource(s): "
-            + ", ".join(sorted(unresolved))
-            + "."
-        )
+    other = data.get("otherModeResult")
+    for label, request in (
+        ("renderRequest", data.get("renderRequest")),
+        ("otherModeResult.renderRequest", other.get("renderRequest") if isinstance(other, Mapping) else None),
+    ):
+        unresolved = canonical_resource_ids(request) - set(resources)
+        if unresolved:
+            raise SessionResourceError(
+                f"{label} references missing canonical resource(s): "
+                + ", ".join(sorted(unresolved))
+                + "."
+            )
 
 
 def _materialize_resources(

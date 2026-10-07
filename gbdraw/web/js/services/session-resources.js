@@ -117,14 +117,39 @@ const rewriteOriginalNameHints = (webFiles, aliases) => {
   return rewritten;
 };
 
+// The request metadata of `webFiles` that one committed request writes: Save
+// keeps the other mode's (E1, `otherModeResult`) where the top-level request
+// has none. Circular and Linear requests write different fields.
+const REQUEST_WEB_FILE_FIELDS = [
+  'linearRecordMetadata', 'conservationLosatFastaSources', 'conservationSequenceSources',
+  'circularInputOriginalName', 'conservationBlastSource'
+];
+const mergeOtherRequestWebFiles = (webFiles, otherWebFiles, aliases) => {
+  if (!otherWebFiles || typeof otherWebFiles !== 'object') return webFiles;
+  const other = rewriteOriginalNameHints(otherWebFiles, aliases);
+  const merged = { ...webFiles };
+  REQUEST_WEB_FILE_FIELDS.forEach((field) => {
+    if (!Object.hasOwn(merged, field) && Object.hasOwn(other, field)) merged[field] = other[field];
+  });
+  const names = { ...(other.resourceOriginalNames || {}), ...(webFiles.resourceOriginalNames || {}) };
+  if (Object.keys(names).length > 0) merged.resourceOriginalNames = names;
+  return merged;
+};
+
 /**
+ * One resource table for the committed request and, when the other diagram
+ * mode keeps a Result too (E1), that mode's committed request: both are
+ * allocated through the same content-deduplicating allocator, so equal bytes
+ * share one resource and a positional ID that names different bytes in the
+ * two requests gets a new ID; each request's references are rewritten.
  * `state` holds the Files and the Linear records; `drawing` holds the Linear
  * comparison plan, whose uploaded comparison files the Session also binds.
  * @param {Record<string, any>} state
- * @param {any} committedRequest
+ * @param {Record<string, any> | null} committedRequest
  * @param {Record<string, any>} [drawing]
+ * @param {Record<string, any> | null} [otherCommittedRequest]
  */
-export const buildSessionResources = async (state, committedRequest, drawing) => {
+export const buildSessionResources = async (state, committedRequest, drawing, otherCommittedRequest = null) => {
   if (
     committedRequest === null
       ? hasBiologicalSessionInputs({ ...state?.files, linearSeqs: state?.linearSeqs })
@@ -145,6 +170,21 @@ export const buildSessionResources = async (state, committedRequest, drawing) =>
   const candidatesBySize = new Map();
   const candidatesByDescriptor = new WeakMap();
   const usedNames = new Set();
+  // Resources of an adopted table that nothing names yet: they keep their IDs
+  // and names, and are written only when a binding or request uses them.
+  /** @type {Map<string, Record<string, any>>} */
+  const reserved = new Map();
+  /** @param {string} id */
+  const taken = (id) => Object.hasOwn(resources, id) || reserved.has(id);
+  /** @param {string} id */
+  const use = (id) => {
+    const descriptor = reserved.get(id);
+    if (descriptor) {
+      resources[id] = descriptor;
+      reserved.delete(id);
+    }
+    return id;
+  };
   let nextResourceNumber = 1;
   let allocation = Promise.resolve();
 
@@ -152,7 +192,7 @@ export const buildSessionResources = async (state, committedRequest, drawing) =>
     let resourceId;
     do {
       resourceId = `resource-${String(nextResourceNumber++).padStart(4, '0')}`;
-    } while (Object.hasOwn(resources, resourceId));
+    } while (taken(resourceId));
     return resourceId;
   };
   const candidateFor = (source) => {
@@ -197,7 +237,7 @@ export const buildSessionResources = async (state, committedRequest, drawing) =>
       if (!encoded.has(descriptor.data)) encoded.set(descriptor.data, id);
     }
     bucket.pending.set(id, candidate);
-    usedNames.add(resources[id].name);
+    usedNames.add((resources[id] || reserved.get(id)).name);
   };
   const equivalentId = async candidate => {
     const bucket = candidatesBySize.get(candidate.size);
@@ -220,19 +260,19 @@ export const buildSessionResources = async (state, committedRequest, drawing) =>
     // transaction so two equal sources cannot publish duplicate payloads.
     allocation = allocation.then(async () => {
       const candidate = candidateFor(source);
-      const existing = preferredId && resources[preferredId];
+      const existing = preferredId && (resources[preferredId] || reserved.get(preferredId));
       if (source.descriptor?.checksum && source.descriptor !== existing
         && source.descriptor.checksum !== existing?.checksum) await bytesFor(candidate);
       if (existing && source.descriptor && sameEncodedPayload(existing, source.descriptor)) {
-        return preferredId;
+        return use(preferredId);
       }
       const equivalent = await equivalentId(candidate);
-      if (equivalent) return equivalent;
+      if (equivalent) return use(equivalent);
       // Preserve the existing collision integrity check through the lazy backing.
       if (existing) await bytesFor(candidate);
       const descriptor = source.descriptor;
       const safePreferred = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(preferredId)
-        && !Object.hasOwn(resources, preferredId)
+        && !taken(preferredId)
         && descriptor?.name === safeResourceLeaf(descriptor.name)
         && !usedNames.has(descriptor.name);
       let id = safePreferred ? preferredId : nextResourceId();
@@ -260,15 +300,30 @@ export const buildSessionResources = async (state, committedRequest, drawing) =>
     return allocation;
   };
 
+  const committedResources = committedRequest?.resources || {};
   if (reuseEncodedResources) {
-    Object.entries(committedRequest.resources).forEach(([id, descriptor]) => {
-      resources[id] = descriptor;
+    // Only what the committed request and its Web metadata name is kept as
+    // is; the bindings and the other mode's request (E1) are allocated below,
+    // so a resource that nothing names any more is not written.
+    const webFiles = committedRequest?.webFiles || {};
+    const named = collectCanonicalResourceIds(committedRequest?.renderRequest);
+    collectCanonicalResourceIds(webFiles, named);
+    ['conservationLosatFastaSources', 'conservationSequenceSources'].forEach((field) => {
+      (Array.isArray(webFiles[field]) ? webFiles[field] : [])
+        .forEach((/** @type {unknown} */ id) => { if (typeof id === 'string' && id) named.add(id); });
+    });
+    Object.entries(committedResources).forEach(([id, descriptor]) => {
+      if (named.has(id)) {
+        resources[id] = descriptor;
+        aliases.set(id, id);
+      } else {
+        reserved.set(id, descriptor);
+      }
       register(id, candidateFor(sessionResourceSource(createSessionResourceFileView(committedTable, id))));
-      aliases.set(id, id);
     });
   }
   for (const id of collectCanonicalResourceIds(committedRequest?.renderRequest)) {
-    if (!Object.hasOwn(committedRequest.resources, id)) {
+    if (!Object.hasOwn(committedResources, id)) {
       throw new Error(`Committed render resource is missing: ${id}.`);
     }
     // A view of one resource id is a single backing, which always has readBytes.
@@ -277,6 +332,23 @@ export const buildSessionResources = async (state, committedRequest, drawing) =>
     );
     if (!reuseEncodedResources) await source.readBytes();
     aliases.set(id, reuseEncodedResources ? id : await allocate(source, source.descriptor));
+  }
+  const otherAliases = new Map();
+  if (otherCommittedRequest) {
+    const reuseOther = isAdoptedCanonicalSession(otherCommittedRequest);
+    const otherTable = otherCommittedRequest.resources === committedRequest?.resources
+      ? committedTable
+      : adoptCurrentSessionResources(otherCommittedRequest.resources || {});
+    for (const id of collectCanonicalResourceIds(otherCommittedRequest.renderRequest)) {
+      if (!Object.hasOwn(otherCommittedRequest.resources, id)) {
+        throw new Error(`Committed render resource is missing: ${id}.`);
+      }
+      const source = /** @type {SessionResourceSource & { readBytes: () => any }} */ (
+        sessionResourceSource(createSessionResourceFileView(otherTable, id))
+      );
+      if (!reuseOther) await source.readBytes();
+      otherAliases.set(id, await allocate(source, source.descriptor, reuseOther ? id : ''));
+    }
   }
 
   const bindSource = async (source, metadata) => bindingForFile(
@@ -354,14 +426,23 @@ export const buildSessionResources = async (state, committedRequest, drawing) =>
   };
 
   const identityAliases = [...aliases].every(([source, target]) => source === target);
+  const otherIdentityAliases = [...otherAliases].every(([source, target]) => source === target);
+  const webFiles = rewriteOriginalNameHints(committedRequest?.webFiles, aliases);
 
   return {
     renderRequest: identityAliases
       ? committedRequest?.renderRequest ?? null
-      : rewriteResourceRefs(committedRequest.renderRequest, aliases),
+      : rewriteResourceRefs(committedRequest?.renderRequest, aliases),
+    ...(otherCommittedRequest ? {
+      otherRenderRequest: otherIdentityAliases
+        ? otherCommittedRequest.renderRequest
+        : rewriteResourceRefs(otherCommittedRequest.renderRequest, otherAliases)
+    } : {}),
     resources,
     webFiles: {
-      ...rewriteOriginalNameHints(committedRequest?.webFiles, aliases),
+      ...(otherCommittedRequest
+        ? mergeOtherRequestWebFiles(webFiles, otherCommittedRequest.webFiles, otherAliases)
+        : webFiles),
       bindings
     }
   };
