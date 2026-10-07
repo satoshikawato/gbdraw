@@ -12,6 +12,7 @@ import {
 } from '../state.js';
 /** @import { DrawingState } from '../state.js' */
 import { createDefaultLayoutPreferences } from './layout-preferences.js';
+import { createDefaultLosatExecution } from './session-active-config-contract.js';
 import { normalizePaletteColors } from '../utils/color-utils.js';
 import { WEB_UX_PROFILE } from '../web-ux-profile.js';
 
@@ -152,17 +153,17 @@ const resetLinearComparisonPlan = (drawing) => {
   plan.edges.splice(0, plan.edges.length, ...retainedEdges);
 };
 
-// Reset Settings returns every drawing to its defaults, each once.
+// Reset Settings returns both drawings to their own mode's defaults
+// (PD-OI-070), and the app-level LOSAT execution and popup settings.
 /** @param {Record<string, any>} state */
 export const resetSettings = (state) => {
-  /** @type {Set<DrawingState>} */
-  const drawings = new Set(Object.values(state.drawings));
-  drawings.forEach((drawing) => {
+  Object.assign(state.losatExecution, createDefaultLosatExecution());
+  state.richFeaturePopup.value = true;
+  /** @type {[string, DrawingState][]} */ (Object.entries(state.drawings)).forEach(([mode, drawing]) => {
     replaceReactiveObject(drawing.form, createDefaultForm());
     drawing.linearRecordLayoutEnabled.value = WEB_UX_PROFILE.linear.arrangeInRowsByDefault;
-    replaceReactiveObject(drawing.adv, createDefaultAdv(state.mode.value));
+    replaceReactiveObject(drawing.adv, createDefaultAdv(mode));
     drawing.linearTypographyLinked.value = true;
-    drawing.modeProfileStateManager?.reset?.(state.mode.value, drawing.adv);
     replaceReactiveObject(drawing.losat, createDefaultLosat());
     replaceReactiveObject(drawing.circularConservation, createDefaultCircularConservation());
     clearReactiveObject(drawing.unmanagedConfigOverrides);

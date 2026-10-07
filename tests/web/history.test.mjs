@@ -1522,30 +1522,30 @@ const createLayoutPreferences = () => ({
   // service and register their captures once they exist. Until then the
   // intent holds neither capture, as a service without those owners.
   const unregisteredIntent = await snapshots.buildHistoryIntent();
-  assert.equal(Object.hasOwn(unregisteredIntent.editorState.legend, 'entryOwners'), false);
+  assert.equal(Object.hasOwn(unregisteredIntent.modes.circular.editorState.legend, 'entryOwners'), false);
   assert.equal(Object.hasOwn(unregisteredIntent.ui, 'compositionUserDeltas'), false);
   assert.throws(() => snapshots.registerCapture('legendOrder', () => []), /Unknown History intent capture: legendOrder/);
   snapshots.registerCapture('legend', () => entryOwners);
   const compositionRecord = { 'result-2': { primary: [[4, 5]] } };
   snapshots.registerCapture('composition', () => compositionRecord);
   const intent = await snapshots.buildHistoryIntent();
-  assert.deepEqual(intent.editorState.legend.entries, [{ caption: 'tRNA', color: '#e8b441' }]);
+  assert.deepEqual(intent.modes.circular.editorState.legend.entries, [{ caption: 'tRNA', color: '#e8b441' }]);
   assert.deepEqual(intent.ui.compositionUserDeltas, compositionRecord);
   compositionRecord['result-2'].primary[0][0] = 9;
   assert.deepEqual(intent.ui.compositionUserDeltas['result-2'].primary, [[4, 5]], 'the intent holds a copy of the capture');
   snapshots.registerCapture('composition', null);
   assert.equal(Object.hasOwn((await snapshots.buildHistoryIntent()).ui, 'compositionUserDeltas'), false);
   state.legendEntries.value = [{ caption: 'tRNA', color: '#c026d3' }];
-  await snapshots.applyHistoryIntent(intent, { changes: [{ path: ['editorState'] }] });
+  await snapshots.applyHistoryIntent(intent, { changes: [{ path: ['modes', 'circular', 'editorState'] }] });
   assert.deepEqual(state.legendEntries.value, [{ caption: 'tRNA', color: '#e8b441' }]);
   entryOwners[0].entries[0].owner = 'specific-color-file';
-  assert.equal(intent.editorState.legend.entryOwners[0].entries[0].owner, '');
+  assert.equal(intent.modes.circular.editorState.legend.entryOwners[0].entries[0].owner, '');
   assert.equal(state.legendEntries.value.some(entry => Object.hasOwn(entry, 'entryOwners')), false);
   assert.equal(forbiddenArtifactBuilds, 0);
   assert.equal(Object.prototype.hasOwnProperty.call(intent, 'results'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent, 'runState'), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(intent.features, 'extractedFeatures'), false);
-  assert.equal(Object.prototype.hasOwnProperty.call(intent.editorState, 'featureCatalog'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent.modes.circular.features, 'extractedFeatures'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(intent.modes.circular.editorState, 'featureCatalog'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent.orthogroupState, 'groups'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(intent.files, 'linearCanonicalComparisons'), false);
   // B23: a LOSAT-cache replay's comparison sequences are held by reference only.

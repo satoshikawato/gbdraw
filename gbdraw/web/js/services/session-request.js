@@ -3,7 +3,7 @@ import { writeCanonicalRecordReverseComplement } from '../app/record-display-opt
 import {
   canonicalFeatureOverrides,
   canonicalFeaturePlacements,
-  draftRowsOfRequest,
+  featureDraftMap,
   featureIdentityKeyOf,
   requestFeatureOverrides,
   requestFeaturePlacements
@@ -94,6 +94,7 @@ import {
 import {
   comparisonFiltersForMode,
   effectiveLinearAxisColor,
+  isModeProfileDefault,
   MODE_DEFAULT_FEATURE_TYPES,
   modeProfile,
   resolveComparisonThresholds,
@@ -1151,6 +1152,26 @@ const buildRecords = ({ state, drawing, filesData, resources }) => {
   };
 };
 
+// The label rendering a Generate draws (OV-159): Auto while the mode shows no
+// labels or a Linear label sits above its feature. The draft keeps the
+// choice, so the control shows it again where it applies (R7).
+/**
+ * @param {Record<string, any>} form
+ * @param {Record<string, any>} adv
+ * @param {boolean} circular
+ * @param {string | null} linearLabelPlacement
+ */
+const effectiveLabelRendering = (form, adv, circular, linearLabelPlacement) => {
+  const labelsMode = circular
+    ? String((typeof form.labels_mode === 'string'
+      ? form.labels_mode
+      : (form.allow_inner_labels ? 'both' : (form.show_labels ? 'out' : 'none'))) || 'none').trim().toLowerCase()
+    : String(form.show_labels_linear || 'none');
+  if (labelsMode === 'none' || linearLabelPlacement === 'above_feature') return 'auto';
+  const normalized = String(adv.label_rendering || '').trim().toLowerCase();
+  return ['embedded_only', 'external_only'].includes(normalized) ? normalized : 'auto';
+};
+
 /**
  * @param {Record<string, any>} state
  * @param {RequestDrawing} drawing
@@ -1181,10 +1202,8 @@ const buildConfigOverrides = (
   if (comparisonHeight?.status === 'invalid') {
     throw diagnosticError('INPUT_INVALID', { field: 'match_height', reason: 'POSITIVE_OR_AUTO' });
   }
-  const linearAxisManaged = drawing.modeProfileStateManager?.isManaged?.(
-    adv,
-    'axis_stroke_color'
-  ) === true;
+  // An axis color still at the Linear default follows the ruler.
+  const linearAxisManaged = isModeProfileDefault('linear', 'axis_stroke_color', adv.axis_stroke_color);
   const linearAxisStrokeColor = circular
     ? null
     : effectiveLinearAxisColor({
@@ -1200,7 +1219,7 @@ const buildConfigOverrides = (
       normalizeArrowShaftWidthRatio(adv.arrow_shaft_width_ratio),
     [CONFIG_OVERRIDE_PATHS.blockStrokeColor]: adv.block_stroke_color || null,
     [CONFIG_OVERRIDE_PATHS.lineStrokeColor]: adv.line_stroke_color || null,
-    [CONFIG_OVERRIDE_PATHS.labelRendering]: adv.label_rendering || 'auto',
+    [CONFIG_OVERRIDE_PATHS.labelRendering]: effectiveLabelRendering(form, adv, circular, linearLabelPlacement),
     [CONFIG_OVERRIDE_PATHS.showGc]: circular ? !form.suppress_gc : Boolean(form.show_gc),
     [CONFIG_OVERRIDE_PATHS.showSkew]: circular
       ? !form.suppress_skew
@@ -1843,8 +1862,12 @@ const buildTrackPlan = ({
   };
 };
 
-/** @param {RequestDrawing} drawing */
-const generatedProteinSettings = (drawing, baseline = {}) => {
+// `losatExecution` is the app-level LOSAT execution setting (`state.losatExecution`).
+/**
+ * @param {RequestDrawing} drawing
+ * @param {Record<string, any>} losatExecution
+ */
+const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
   const { alignOrthogroupFeature: _legacyAlignment, ...currentBaseline } = baseline;
   const blastp = drawing.losat.blastp || {};
   const blastpMode = requireCurrentProteinBlastpMode(blastp.mode);
@@ -1916,7 +1939,7 @@ const generatedProteinSettings = (drawing, baseline = {}) => {
     collinearityColorMode,
     losatpBin: baseline.losatpBin || 'losat',
     ncbiBlastpBin: baseline.ncbiBlastpBin ?? null,
-    losatpThreads: integerSettingOr(drawing.losat.threadsPerJob, null, 1),
+    losatpThreads: integerSettingOr(losatExecution?.threadsPerJob, null, 1),
     proteinBlastpMaxHits: blastpMode === 'pairwise'
       ? requireCurrentProteinBlastpMaxHits(blastp.maxHits)
       : positiveInteger(blastp.maxHits, 5),
@@ -2297,6 +2320,7 @@ const buildComparisons = ({
         : [],
       settings: generatedProteinSettings(
         drawing,
+        state.losatExecution,
         persistedGeneratedComparison?.settings || {}
       )
     });
@@ -2507,7 +2531,7 @@ const projectCanonicalRenderInput = ({
       }
     }
     const selected = selectedRows[0];
-    const savedDraft = drafts.find((draft) => draft.scope === state.mode.value && draft.sourceUid === sourceUid
+    const savedDraft = drafts.find((draft) => draft.sourceUid === sourceUid
       && (selector?.kind === 'recordIndex' ? draft.selector === `#${selector.index + 1}`
         : selector?.kind === 'recordId' ? draft.recordId === selector.value : true));
     const transform = selected ? transformFor(selected) : {
@@ -2604,8 +2628,8 @@ const projectCanonicalRenderInput = ({
   const diagramOptions = {
     featurePlacements: requestFeaturePlacements(drawing.featurePlacementOverrides, state.mode.value, records),
     // Per-feature edits by source identity (design Q4); the rows of other
-    // records and of the other mode stay in the draft (R2).
-    featureOverrides: requestFeatureOverrides(drawing.featureOverrides, state.mode.value, records, {
+    // records stay in the drawing's draft (R2).
+    featureOverrides: requestFeatureOverrides(drawing.featureOverrides, records, {
       bulkLabelText: labelProjection.bulkLabelText
     }),
     configOverrides: buildConfigOverrides(state, drawing, {
@@ -2639,7 +2663,7 @@ const projectCanonicalRenderInput = ({
       : {})
   };
   if (Array.isArray(drawing.annotationSets) && drawing.annotationSets.length > 0) {
-    diagramOptions.annotations = annotationOptionsPayload(drawing.annotationSets, state.mode.value, records);
+    diagramOptions.annotations = annotationOptionsPayload(drawing.annotationSets, records);
   }
   if (state.mode.value === 'circular') {
     diagramOptions.keepFullDefinitionWithPlotTitle = Boolean(drawing.adv.keep_full_definition_with_plot_title);
@@ -3136,10 +3160,14 @@ const applyWebFileBindings = (
 
 // Called only after Session authority has admitted the explicit source-free
 // document. No canonical request or committed owner is created by this projection.
+// A settings-only Session's draft: the shown mode's slice (Session 46), or
+// the flat draft of an older Session.
 export const projectSettingsOnlySession = (data, sessionResourceTable) => ({
   mode: data.ui.mode,
   inputType: data.ui.mode === 'linear' ? data.ui.lInputType : data.ui.cInputType,
-  config: cloneCanonicalJsonValue(data.config),
+  config: cloneCanonicalJsonValue(data.modes && typeof data.modes === 'object'
+    ? data.modes[data.ui.mode]?.config
+    : data.config),
   files: applyWebFileBindings({}, data.webFiles, data.resources, {
     sessionResourceTable, adoptCanonicalPayloads: true
   }),
@@ -5029,9 +5057,8 @@ export const projectCanonicalSessionRequest = ({
       whitelist: projectedWhitelist,
       blacklistText: projectedBlacklistText,
       linearRecordLayout: linearLayout,
-      annotationSets: draftAnnotationSetsOfRequest(options.annotations?.sets, renderRequest.mode),
+      annotationSets: draftAnnotationSetsOfRequest(options.annotations?.sets),
       recordDisplayDrafts: records.flatMap((record, index) => (record.display?.isCircular != null || record.display?.startCoordinate != null) ? [{
-        scope: renderRequest.mode,
         sourceUid: renderRequest.mode === 'linear' ? String(files.linearSeqs[index]?.uid || record.recordKey) : 'circular',
         selector: record.selector?.kind === 'recordIndex' ? `#${record.selector.index + 1}` : '#1',
         recordId: record.selector?.kind === 'recordId' ? record.selector.value : '',
@@ -5040,9 +5067,9 @@ export const projectCanonicalSessionRequest = ({
         reverseComplementOverride: null,
         anchorIntent: null
       }] : []),
-      featurePlacementOverrides: draftRowsOfRequest(canonicalFeaturePlacements(
+      featurePlacementOverrides: featureDraftMap(canonicalFeaturePlacements(
         options.featurePlacements || [], renderRequest.mode
-      ), renderRequest.mode),
+      )),
       circularConservation: renderRequest.mode === 'circular'
         ? projectCircularConservationConfig(options, files)
         : undefined
@@ -5051,8 +5078,8 @@ export const projectCanonicalSessionRequest = ({
       featureVisibilityManualRules: projectedFeatureVisibilityRules,
       // A request written without the Web draft (CLI, Python) carries its
       // per-feature edits only as these rows.
-      featureOverrides: draftRowsOfRequest(
-        projectedFeatureOverrides.map((row) => ({ ...row, labelSourceText: null })), renderRequest.mode
+      featureOverrides: featureDraftMap(
+        projectedFeatureOverrides.map((row) => ({ ...row, labelSourceText: null }))
       ),
       labelOverrideRows: projectedLabelOverrideRows
     },
@@ -5488,7 +5515,7 @@ export const projectCommittedEditorIntent = ({
   const labelProjection = requestLabelProjection(state, drawing);
   // Per-feature edits are live editor intent too (design Q4).
   options.featureOverrides = requestFeatureOverrides(
-    drawing.featureOverrides, candidate.renderRequest.mode, candidate.renderRequest.records,
+    drawing.featureOverrides, candidate.renderRequest.records,
     { bulkLabelText: labelProjection.bulkLabelText }
   );
   addGeneratedTableResources(state, drawing, resources, options, tables, labelProjection);

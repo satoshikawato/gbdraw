@@ -246,7 +246,7 @@ test('@pr-smoke live and downloaded standalone search retain JavaScript regex an
   await expect(page.getByRole('status',{name:'Feature search status'})).toContainText('Invalid JavaScript regular expression. Turn off Regex to return to word search.');
   await regex.uncheck(); await query.fill('NADH'); await query.press('Enter');
   await expect.poll(()=>page.evaluate(()=>[...window.__GBDRAW_APP__.previewFeatureSearchMatches].sort())).toEqual(targets);
-  await page.evaluate(()=>{window.__GBDRAW_APP__.adv.rich_feature_popup=true;});
+  await page.evaluate(()=>{window.__GBDRAW_APP__.richFeaturePopup=true;});
   const pending=page.waitForEvent('download');
   await page.evaluate(()=>window.__GBDRAW_APP__.downloadInteractiveSVG());
   const download=await pending;

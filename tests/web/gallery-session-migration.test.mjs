@@ -74,6 +74,9 @@ const {
 const { applyConfigData } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'config.js'))
 );
+const { splitDraftIntoModes } = await import(
+  pathToFileURL(join(tempRoot, 'js', 'services', 'mode-scoped-migration.js'))
+);
 const { state: webState } = await import(
   pathToFileURL(join(tempRoot, 'js', 'state.js'))
 );
@@ -332,19 +335,29 @@ assert.equal(
   false
 );
 
-assert.equal(admitGallerySession(promotedSyntheticGui), promotedSyntheticGui);
+// The promoted Session keeps its flat draft until publication splits it into
+// its mode's slice; a current Session holds the draft in `modes` only.
+const asCurrent = (promoted) => {
+  const mode = promoted.renderRequest.mode;
+  const split = splitDraftIntoModes(structuredClone(promoted), { committedMode: mode, modeProfiles: null });
+  return { ...split, modes: { [mode]: split.modes[mode] } };
+};
+assert.throws(() => admitGallerySession(promotedSyntheticGui), /Web draft in modes/);
+const currentSyntheticGui = asCurrent(promotedSyntheticGui);
+assert.equal(admitGallerySession(currentSyntheticGui), currentSyntheticGui);
 assert.throws(
   () => promoteGallerySessionToCurrent(promotedSyntheticGui),
   /historical migration supports session versions 31-33 and 39/
 );
-const retiredCurrentConfig = structuredClone(promotedSyntheticGui);
-retiredCurrentConfig.config.adv.cli_circular_track_order = [];
+const retiredCurrentConfig = structuredClone(currentSyntheticGui);
+retiredCurrentConfig.modes.circular.config.adv.cli_circular_track_order = [];
+// A retired field is no registry field of a slice (Session format, plan 4.1).
 assert.throws(
   () => admitGallerySession(retiredCurrentConfig),
-  /config\.adv.*cli_circular_track_order/
+  (error) => error.code === 'INPUT_INVALID' && error.context?.reason === 'FIELDS'
 );
-const currentWithoutWebConfig = structuredClone(promotedSyntheticGui);
-delete currentWithoutWebConfig.config;
+const currentWithoutWebConfig = structuredClone(currentSyntheticGui);
+delete currentWithoutWebConfig.modes;
 assert.throws(
   () => admitGallerySession(currentWithoutWebConfig),
   /missing its active Web configuration/
@@ -750,7 +763,7 @@ const majani = await loadSession('majanivirus_orthogroup.gbdraw-session.json.gz'
 const promotedMajani = (await prepareGallerySessionForPublication(majani)).session;
 const vibrio = await loadSession('vibrio-harveyi-group-collinear.gbdraw-session.json.gz');
 const promotedVibrio = (await prepareGallerySessionForPublication(vibrio)).session;
-assert.equal(promotedVibrio.config.losat.blastp.collinearInferOrthogroups, true);
+assert.equal(promotedVibrio.modes.linear.config.losat.blastp.collinearInferOrthogroups, true);
 assert.equal(
   majani.renderRequest.comparisons.find(({ kind }) => kind === 'generatedProteinComparison')
     .settings.collinearInferOrthogroups,
@@ -824,7 +837,8 @@ for (const [name, promoted] of [
       `${name} resource ${resourceId} repeats its canonical prefix`
     );
   }
-  assert.equal(admitGallerySession(promoted), promoted);
+  const current = asCurrent(promoted);
+  assert.equal(admitGallerySession(current), current);
   assert.throws(
     () => promoteGallerySessionToCurrent(promoted),
     /historical migration supports session versions 31-33 and 39/

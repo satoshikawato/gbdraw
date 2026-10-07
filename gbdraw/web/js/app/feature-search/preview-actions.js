@@ -69,7 +69,8 @@ export const createPreviewFeatureSearch = ({
     clickedFeature
   } = state;
 
-  const getPopupMode = () => (state.activeDrawing().adv?.rich_feature_popup === false ? 'simple' : 'rich');
+  // The rich popup is an app preference (`state.richFeaturePopup`), not a drawing setting.
+  const getPopupMode = () => (state.richFeaturePopup.value === false ? 'simple' : 'rich');
   let refreshRequestId = 0;
   let appliedSearchField = normalizeFeatureSearchField(previewFeatureSearchField.value, { popupMode: getPopupMode() });
   let appliedQualifierKey = String(previewFeatureSearchQualifierKey.value || '');

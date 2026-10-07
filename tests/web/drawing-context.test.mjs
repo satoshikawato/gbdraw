@@ -1,16 +1,18 @@
-// The drawing context (plan OV-80, PR-0a to PR-0c): a diagram mode's settings
+// The drawing context (plan OV-80, PR-0a to PR-1): a diagram mode's settings
 // and edits live only in its drawing (`state.drawings[mode]`,
 // `state.activeDrawing()`). A service reads them from the drawing it is given;
-// an owner resolves the drawing of each action. Until the per-mode settings
-// change, both modes share one drawing, so the conversion changes no behavior.
+// an owner resolves the drawing of each action. Each mode has its own drawing
+// (PR-1).
 //
 // The guard asserts:
 //   1. every `state` key and every drawing member is in exactly one class
 //      (helpers/drawing-state.mjs);
-//   2. the drawing holds exactly the drawing keys, `state` holds none of them,
-//      and `activeDrawing()` returns the drawing of the shown mode;
+//   2. each mode's drawing holds exactly the drawing keys, the two drawings
+//      share no member object, `state` holds none of them, and
+//      `activeDrawing()` returns the drawing of the shown mode;
 //   3. no module reads a drawing key from `state`;
-//   4. a service never resolves the active drawing.
+//   4. a service never resolves the active drawing, and Generate resolves it
+//      once, at its entry.
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
@@ -61,12 +63,17 @@ test('every state key and drawing member is in exactly one class', () => {
   assert.deepEqual([...classOf.keys()].filter((key) => !members.includes(key)), [], 'a classified key left state and the drawing');
 });
 
-test('only the drawing holds the drawing keys, one drawing for both modes', () => {
+test('only the drawings hold the drawing keys, one drawing per mode', () => {
   const { circular, linear } = state.drawings;
   assert.deepEqual(Object.keys(state.drawings), ['circular', 'linear']);
-  assert.equal(circular, linear, 'both modes share one drawing until the per-mode settings change');
-  assert.ok(Object.isFrozen(state.drawings) && Object.isFrozen(circular));
+  assert.notEqual(circular, linear, 'each diagram mode has its own drawing');
+  assert.ok(Object.isFrozen(state.drawings) && Object.isFrozen(circular) && Object.isFrozen(linear));
   assert.deepEqual(Object.keys(circular), [...DRAWING_KEYS]);
+  assert.deepEqual(Object.keys(linear), [...DRAWING_KEYS]);
+  // A member object shared by both drawings would carry an edit across modes.
+  const shared = DRAWING_KEYS.filter((key) => typeof circular[key] === 'object' && circular[key] !== null
+    && circular[key] === linear[key]);
+  assert.deepEqual(shared, [], 'each drawing owns its members');
   assert.deepEqual(DRAWING_KEYS.filter((key) => Object.hasOwn(state, key)), [], 'a drawing key is on state');
   for (const mode of ['circular', 'linear']) {
     state.mode.value = mode;
@@ -113,4 +120,14 @@ test('a service never resolves the active drawing', () => {
     .filter((path) => /\bactiveDrawing\b/.test(readFileSync(path, 'utf8')))
     .map((path) => relative(JS, path));
   assert.deepEqual(resolving, [], 'the owner of the action passes the drawing');
+});
+
+test('Generate resolves its drawing once, at its entry', () => {
+  // The run, its History checkpoint, and its decoration capture use the
+  // drawing the click resolved; the other run-analysis entries draw the
+  // committed request's mode or a fixed mode (ov80 pr0b picks).
+  const source = readFileSync(join(JS, 'app', 'run-analysis.js'), 'utf8');
+  const calls = [...source.matchAll(/\bactiveDrawing\s*\(/g)];
+  assert.equal(calls.length, 1, 'run-analysis.js resolves the shown drawing only in runAnalysis');
+  assert.match(source, /const runAnalysis = async \([^)]*\) => \{\s*const drawing = state\.activeDrawing\(\);/);
 });

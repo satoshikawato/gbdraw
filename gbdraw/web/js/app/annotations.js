@@ -47,15 +47,14 @@ export const createAnnotationEditor = ({
 }) => {
   const recordSelector = createAnnotationRecordSelector({ getCatalog: getRecordCatalog });
   // The catalog feature of a selected-feature target in the current Results:
-  // a drawn feature, or (unless `drawnOnly`) a listed feature they hide, of the
-  // target's mode (R2). The lists are replaced on each Generate, so scanning
-  // their raw rows tracks only the lists.
+  // a drawn feature, or (unless `drawnOnly`) a listed feature they hide. The
+  // shown Results are of the drawing's mode (R2). The lists are replaced on
+  // each Generate, so scanning their raw rows tracks only the lists.
   const catalogFeature = (target, { drawnOnly = false } = {}) => {
     const raw = (value) => (globalThis.window?.Vue?.toRaw ? window.Vue.toRaw(value) : value);
     const lists = [state.extractedFeatures?.value, drawnOnly ? null : state.biologicalFeatures?.value];
     for (const list of lists.map(raw)) {
-      const feature = (Array.isArray(list) ? list : []).find((item) => item?.scope === target?.scope
-        && item?.record_key === target?.recordKey && item?.biological_feature_id === target?.biologicalFeatureId);
+      const feature = (Array.isArray(list) ? list : []).find((item) => item?.record_key === target?.recordKey && item?.biological_feature_id === target?.biologicalFeatureId);
       if (feature) return feature;
     }
     return null;

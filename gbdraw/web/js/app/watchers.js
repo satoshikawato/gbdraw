@@ -165,13 +165,18 @@ export const setupWatchers = ({
       singleLayout.plotTitlePosition === 'none' ? 'bottom' : singleLayout.plotTitlePosition;
   };
 
-  watch(
-    () => state.activeDrawing().currentColors.value,
+  // Each drawing's watchers watch that drawing, so a mode switch, which
+  // changes neither drawing, fires none of them (R10); an edit of the drawing
+  // that is not shown (a Load, a History restore) touches no shown Result.
+  /** @type {DrawingState[]} */
+  const drawingsOfModes = [state.drawings.circular, state.drawings.linear];
+  drawingsOfModes.forEach((drawing) => watch(
+    () => drawing.currentColors.value,
     () => {
-      syncPaletteDraftState();
+      if (drawing === state.activeDrawing()) syncPaletteDraftState();
     },
     { deep: true }
-  );
+  ));
 
   watch(
     () => paletteInstantPreviewEnabled.value,
@@ -183,14 +188,15 @@ export const setupWatchers = ({
     }
   );
 
-  watch(
-    () => state.activeDrawing().canvasPadding,
+  drawingsOfModes.forEach((drawing) => watch(
+    () => drawing.canvasPadding,
     () => {
+      if (drawing !== state.activeDrawing()) return;
       if (semanticFileWatchersSuppressed.value || state.sessionOperationAvailability?.()) return;
       applyCanvasPadding();
     },
     { deep: true }
-  );
+  ));
 
   watch(
     () => layoutRepositionMode.value,
@@ -203,9 +209,9 @@ export const setupWatchers = ({
   );
 
   watch(
-    () => state.activeDrawing().form.multi_record_canvas,
+    () => state.drawings.circular.form.multi_record_canvas,
     (enabled, previousEnabled) => {
-      const drawing = state.activeDrawing();
+      const drawing = state.drawings.circular;
       if (mode.value !== 'circular') return;
       if (enabled === previousEnabled) return;
 
@@ -280,15 +286,14 @@ export const setupWatchers = ({
   // The saved label table is the rules a loaded Session sent; a bulk label
   // edit replaces it with the rows the editor builds. Per-feature label edits
   // are identity rows, which apply before the table (design Q4).
-  watch(
-    () => state.activeDrawing().labelTextBulkOverrides,
+  drawingsOfModes.forEach((drawing) => watch(
+    () => drawing.labelTextBulkOverrides,
     () => {
-      const drawing = state.activeDrawing();
       if (semanticFileWatchersSuppressed.value) return;
       drawing.canonicalLabelOverrideRows.value = [];
     },
     { deep: true }
-  );
+  ));
 
   watch(
     () => labelReflowRequestSeq.value,
@@ -418,7 +423,7 @@ export const setupWatchers = ({
     const drawing = state.activeDrawing();
     try {
       const prepared = prepareSpecificColorImport(text, drawing.manualSpecificRules);
-      if (!await featureActions.commitSpecificRules(prepared.nextRules, 'Import specific color rules', { isCurrent })) return false;
+      if (!await featureActions.commitSpecificRules(prepared.nextRules, 'Import specific color rules', { drawing, isCurrent })) return false;
       console.log(`Loaded ${prepared.importedCount} rules from file.`);
     } catch (e) {
       if (isCurrent()) errorLog.value = normalizeUserFacingError(e, { operation: 'evaluateRules', stage: 'rule-validation' });

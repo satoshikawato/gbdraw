@@ -108,7 +108,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   });
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    app.adv.rich_feature_popup = true;
+    app.richFeaturePopup = true;
     app.form.prefix = 'UNRELATED_PENDING_PREFIX';
   });
 
@@ -247,7 +247,7 @@ test('feature popup record rotation works by pointer and keyboard in rich and si
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount()))
     .toBe(before.history + 1);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.evaluate(() => { window.__GBDRAW_APP__.adv.rich_feature_popup = false; });
+  await page.evaluate(() => { window.__GBDRAW_APP__.richFeaturePopup = false; });
   await page.getByRole('button', { name: 'Open active feature', exact: true }).click();
   const simplePopup = page.locator('.feature-popup--simple');
   await expect(simplePopup).toBeVisible();
@@ -712,7 +712,7 @@ const openLoadedRecordActions = async (page, { query, recordId, reads = 1 }) => 
   const recordReads = () => page.evaluate(() => window.__GBDRAW_RECORD_RESOURCE_READS__);
   const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
   expect(await recordReads()).toBe(0);
-  await page.evaluate(() => { window.__GBDRAW_APP__.adv.rich_feature_popup = true; });
+  await page.evaluate(() => { window.__GBDRAW_APP__.richFeaturePopup = true; });
   const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
   await search.fill(query);
   await search.press('Enter');
@@ -917,7 +917,7 @@ test('Linear CLI Session keeps --region and --reverse_complement through Load an
   await installDiagramRequestObserver(page);
   await openApp(page);
   await loadSessionFile(page, session);
-  await page.evaluate(() => { window.__GBDRAW_APP__.adv.rich_feature_popup = true; });
+  await page.evaluate(() => { window.__GBDRAW_APP__.richFeaturePopup = true; });
   const openRecordActions = async (query) => {
     const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
     await search.fill(query);

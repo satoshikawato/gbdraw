@@ -504,9 +504,9 @@ protein-a\tprotein-b\t95\t20\t1\t0\t10\t30\t50\t70\t1e-20\t120
     renderRequest.comparisons
   );
   assert.equal(state.activeDrawing().losatProgram.value, 'blastn');
-  assert.equal(state.activeDrawing().losat.executionMode, 'threaded');
-  assert.equal(state.activeDrawing().losat.parallelWorkers, '3');
-  assert.equal(state.activeDrawing().losat.totalThreadBudget, '12');
+  assert.equal(state.losatExecution.executionMode, 'threaded');
+  assert.equal(state.losatExecution.parallelWorkers, '3');
+  assert.equal(state.losatExecution.totalThreadBudget, '12');
   assert.equal(state.activeDrawing().losat.blastn.task, 'dc-megablast');
   assert.equal(state.activeDrawing().losat.blastp.mode, 'collinear');
   assert.equal(state.activeDrawing().losat.blastp.maxHits, 1);

@@ -34,13 +34,19 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
 };
 
 /**
- * The saved LOSAT Settings values. A thread value is 'safe', 'available', a
- * count, or blank (Auto), as `resolveLosatThreadPlan` reads it.
- * @typedef {object} LosatSettingsValues
+ * How LOSAT runs (`state.losatExecution`, one app-level setting for both
+ * drawings). A thread value is 'safe', 'available', a count, or blank (Auto),
+ * as `resolveLosatThreadPlan` reads it.
+ * @typedef {object} LosatExecutionValues
  * @property {string} [executionMode]
  * @property {string | number | null} [threadsPerJob]
  * @property {string | number | null} [parallelWorkers]
  * @property {string | number | null} [totalThreadBudget]
+ */
+
+/**
+ * A drawing's LOSAT search settings this module reads.
+ * @typedef {object} LosatSettingsValues
  * @property {{ mode?: string, collinearInferOrthogroups?: boolean, collinearSearchScope?: string }} [blastp]
  */
 
@@ -50,6 +56,7 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
  * @typedef {object} LosatSettingsState
  * @property {Record<string, any>[]} linearSeqs
  * @property {() => LosatSettingsDrawing} activeDrawing
+ * @property {LosatExecutionValues} losatExecution
  * @property {{ value?: { state?: string } }} [losatThreadingStatus]
  */
 
@@ -66,7 +73,8 @@ const appendRequestedIntegerOption = (options, requestedValue, effectiveValue) =
  */
 export const createLosatSettings = ({ state }) => {
   const {
-    linearSeqs
+    linearSeqs,
+    losatExecution
   } = state;
 
   // `state.js` always provides the computed plan.
@@ -79,8 +87,7 @@ export const createLosatSettings = ({ state }) => {
   });
 
   const losatThreadsPerJobFixed = computed(() => {
-    const drawing = state.activeDrawing();
-    return drawing.losatProgram.value !== 'blastp' || drawing.losat.executionMode === 'serial';
+    return state.activeDrawing().losatProgram.value !== 'blastp' || losatExecution.executionMode === 'serial';
   });
 
   // Generate plans its jobs with the same two functions (N-10). Only the
@@ -113,16 +120,13 @@ export const createLosatSettings = ({ state }) => {
     }
   });
 
-  const losatThreadPlan = computed(() => {
-    const drawing = state.activeDrawing();
-    return resolveLosatThreadPlan({
-      hardwareThreads: losatHardwareThreads.value,
-      jobCount: losatEstimatedJobCount.value,
-      totalThreadBudget: drawing.losat.totalThreadBudget,
-      threadsPerJob: losatThreadsPerJobFixed.value ? 1 : drawing.losat.threadsPerJob,
-      parallelWorkers: drawing.losat.parallelWorkers
-    });
-  });
+  const losatThreadPlan = computed(() => resolveLosatThreadPlan({
+    hardwareThreads: losatHardwareThreads.value,
+    jobCount: losatEstimatedJobCount.value,
+    totalThreadBudget: losatExecution.totalThreadBudget,
+    threadsPerJob: losatThreadsPerJobFixed.value ? 1 : losatExecution.threadsPerJob,
+    parallelWorkers: losatExecution.parallelWorkers
+  }));
   const losatSafeThreadBudget = computed(() =>
     resolveLosatThreadPlan({ hardwareThreads: losatHardwareThreads.value }).totalBudget
   );
@@ -133,14 +137,13 @@ export const createLosatSettings = ({ state }) => {
   const losatEffectiveThreadsPerJob = computed(() => losatThreadPlan.value.threadsPerJob);
 
   const losatThreadOptions = computed(() => {
-    const drawing = state.activeDrawing();
     if (losatThreadsPerJobFixed.value) {
-      return appendRequestedIntegerOption([{ value: '1', label: 'Fixed (1)' }], drawing.losat.threadsPerJob, 1);
+      return appendRequestedIntegerOption([{ value: '1', label: 'Fixed (1)' }], losatExecution.threadsPerJob, 1);
     }
     const maxThreads = Math.max(1, losatTotalThreadBudget.value);
     return appendRequestedIntegerOption(
       createPositiveIntegerOptions(maxThreads),
-      drawing.losat.threadsPerJob,
+      losatExecution.threadsPerJob,
       losatEffectiveThreadsPerJob.value
     );
   });
@@ -151,13 +154,12 @@ export const createLosatSettings = ({ state }) => {
     createPositiveIntegerOptions(losatMaxPairWorkers.value).map((option) => ({
       ...option, label: `${option.value} ${option.value === '1' ? 'run' : 'runs'}`
     })),
-    state.activeDrawing().losat.parallelWorkers,
+    losatExecution.parallelWorkers,
     losatThreadPlan.value.pairWorkers
   ));
 
   const losatEffectiveExecutionMode = computed(() => {
-    const drawing = state.activeDrawing();
-    const raw = String(drawing.losat.executionMode || 'auto').trim().toLowerCase();
+    const raw = String(losatExecution.executionMode || 'auto').trim().toLowerCase();
     if (raw === 'serial') return 'serial';
     if (raw === 'threaded') return 'threaded';
     const threadingState = String(state?.losatThreadingStatus?.value?.state || '').trim().toLowerCase();
@@ -185,14 +187,13 @@ export const createLosatSettings = ({ state }) => {
   watch(
     losatTotalThreadBudgetOptions,
     (options) => {
-      const drawing = state.activeDrawing();
-      if (!hasValidLosatIntent(drawing)) return;
-      const raw = String(drawing.losat.totalThreadBudget || 'safe').trim().toLowerCase();
+      if (!hasValidLosatIntent(state.activeDrawing())) return;
+      const raw = String(losatExecution.totalThreadBudget || 'safe').trim().toLowerCase();
       if (['safe', 'available'].includes(raw)) return;
       const values = options.map((option) => option.value);
       if (values.includes(raw)) return;
       const parsed = parsePositiveInteger(raw);
-      drawing.losat.totalThreadBudget = parsed !== null && parsed >= losatHardwareThreads.value
+      losatExecution.totalThreadBudget = parsed !== null && parsed >= losatHardwareThreads.value
         ? 'available'
         : 'safe';
     },

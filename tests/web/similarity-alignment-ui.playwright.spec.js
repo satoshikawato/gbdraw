@@ -2041,7 +2041,7 @@ for(const entry of ['resolved explicit','multiple target ambiguity','automatic r
       group.member_count=group.members.length;
     }
     await importSession(page,Buffer.from(JSON.stringify(seed)),'s06-gallery.gbdraw-session.json');
-    await page.evaluate(async()=>{const app=window.__GBDRAW_APP__;app.openRightDrawerTab('orthogroups');app.selectedOrthogroupId='og_1';app.losat.executionMode='serial';await window.Vue.nextTick()});
+    await page.evaluate(async()=>{const app=window.__GBDRAW_APP__;app.openRightDrawerTab('orthogroups');app.selectedOrthogroupId='og_1';app.losatExecution.executionMode='serial';await window.Vue.nextTick()});
     const drawer=page.locator('.right-drawer');
     const reference=drawer.getByLabel('Exact reference record and feature');
     if(!await reference.isVisible())await drawer.locator('button').filter({has:page.locator('.font-mono',{hasText:/^og_1$/})}).first().click();
@@ -2178,7 +2178,7 @@ test('@pr-smoke native Python engine error reaches Align review and retains choi
   await page.goto('/gbdraw/web/index.html',{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>window.__GBDRAW_APP__);
   await importSession(page,readFileSync('gbdraw/web/gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json'),'native-align.json');
-  await page.evaluate(()=>{const a=window.__GBDRAW_APP__;a.openRightDrawerTab('orthogroups');a.selectedOrthogroupId='og_1';a.losat.executionMode='serial';});
+  await page.evaluate(()=>{const a=window.__GBDRAW_APP__;a.openRightDrawerTab('orthogroups');a.selectedOrthogroupId='og_1';a.losatExecution.executionMode='serial';});
   const drawer=page.locator('.right-drawer');
   const key=await page.evaluate(()=>window.__GBDRAW_APP__.similarityAlignmentDrawerReferenceOptions('og_1').find(o=>o.anchor.recordKey==='record-1').key);
   await drawer.getByLabel('Exact reference record and feature').selectOption(key);

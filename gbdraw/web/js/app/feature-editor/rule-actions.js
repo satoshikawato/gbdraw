@@ -177,7 +177,9 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     }
   };
   /**
-   * @typedef {{ isCurrent?: () => boolean, afterCommit?: (intents: Record<string, any>[]) => void, previousLegendIntents?: Record<string, any>[], sourceRows?: (Record<string, any> | null)[] }} CommitSpecificRulesOptions
+   * `drawing` is the drawing of the action (default: the shown mode's); an
+   * action that awaits before it commits passes the drawing it started on.
+   * @typedef {{ drawing?: DrawingState, isCurrent?: () => boolean, afterCommit?: (intents: Record<string, any>[]) => void, previousLegendIntents?: Record<string, any>[], sourceRows?: (Record<string, any> | null)[] }} CommitSpecificRulesOptions
    */
   /**
    * @param {Record<string, any>[]} rules
@@ -185,14 +187,14 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
    * @param {CommitSpecificRulesOptions} [options]
    */
   const commitSpecificRules = async (rules, label = 'Change specific color rules', options = {}) => {
-    const drawing = state.activeDrawing();
+    const { drawing = state.activeDrawing(), ...commitOptions } = options;
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
     await rerenderIdle();
     for (let attempt = 0; ; attempt += 1) {
       const results = state.results.value;
       const table = JSON.stringify(drawing.manualSpecificRules);
-      const outcome = await commitOnce(drawing, rules, label, options);
+      const outcome = await commitOnce(drawing, rules, label, commitOptions);
       if (outcome || attempt === 2 || state.results.value === results
         || JSON.stringify(drawing.manualSpecificRules) !== table) return outcome;
       await rerenderIdle();
@@ -273,7 +275,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     const snapshot = rulePreparation.snapshot();
     const previousError = state.errorLog?.value;
     try {
-      const applied = await commitSpecificRules(rules, label, { afterCommit, sourceRows });
+      const applied = await commitSpecificRules(rules, label, { drawing, afterCommit, sourceRows });
       if (applied && state.errorLog?.value === ruleFailure.value?.error) state.errorLog.value = null;
       if (applied) ruleFailure.value = null;
       return applied;
@@ -323,7 +325,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       return next;
     });
     try {
-      const applied = await commitSpecificRules(rules, 'Edit specific color rule', { isCurrent: current, sourceRows });
+      const applied = await commitSpecificRules(rules, 'Edit specific color rule', { drawing, isCurrent: current, sourceRows });
       if (applied && patternDrafts.isCurrent(row, token)) patternDrafts.revert(row);
       return applied;
     } catch (cause) {
@@ -550,6 +552,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       const { rules } = parseSpecificRules(text);
       if (selectedSpecificPreset.value !== presetId || !rulePreparation.isCurrent(presetContext)) return;
       return await commitSpecificRules(rules, 'Apply specific color preset', {
+        drawing,
         isCurrent: () => selectedSpecificPreset.value === presetId,
         afterCommit: () => {
           if (presetId === 'bakta') {

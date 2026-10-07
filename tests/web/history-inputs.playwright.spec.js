@@ -261,7 +261,7 @@ test('Linear File removal choices are atomic, undoable, and preserve one slot', 
 const controlState = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   return {
-    rich: app.adv.rich_feature_popup,
+    rich: app.richFeaturePopup,
     input: app.cInputType,
     prefix: app.form.prefix,
     mode: app.mode,

@@ -1502,7 +1502,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   });
 
   const circularTrackSlotIssue = (slot, index = null) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const resolvedIndex = Number.isInteger(Number(index))
       ? Number(index)
       : drawing.adv.circular_track_slots.findIndex((candidate) => candidate === slot);
@@ -1513,14 +1513,14 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const circularTrackGlobalIssues = () => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     return (
       circularTrackValidationPlan(drawing).globalIssues.map((issue) => issue.message)
     );
   };
 
   const circularAnnotationAnchorOptions = (slot = null) => (
-    state.activeDrawing().adv.circular_track_slots
+    state.drawings.circular.adv.circular_track_slots
       .filter((candidate) => (
         candidate &&
         candidate !== slot &&
@@ -1550,7 +1550,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const canAddCircularTrackRenderer = (renderer) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const normalizedRenderer = String(renderer || '').trim();
     if (!UI_RENDERERS.includes(normalizedRenderer)) return false;
     if (normalizedRenderer === 'annotations') return annotationSetIds(drawing).length > 0;
@@ -1569,7 +1569,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const canDuplicateCircularTrackSlot = (slot) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     if (!slot || isManagedConservationSlot(slot)) return false;
     if (slot.enabled === false) return true;
     if (
@@ -1658,7 +1658,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const normalizeSlotsInPlace = () => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const normalized = normalizeCircularTrackSlots(
       drawing.adv.circular_track_slots,
       drawing.adv.nt,
@@ -1746,7 +1746,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
 
   // Reset is the preset reset for the current Track layout.
   const resetCircularTrackSlotsFromSimpleControls = () => (
-    resetCircularTrackSlotsToPreset(state.activeDrawing().form.track_type)
+    resetCircularTrackSlotsToPreset(state.drawings.circular.form.track_type)
   );
 
   // Managed Depth rows follow Depth sources (PD-OI-058). The saved stack is
@@ -1788,15 +1788,18 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   // The only entry for Depth source changes: run the change, then reconcile.
+  // The Circular drawing's Show Depth goes off with its last Depth
+  // source; the other mode's drawing is not touched (OV-82, OV-101).
   const changeCircularDepthSources = (mutate) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const previousSourced = circularSourcedDepthTrackIndexesForState(state);
     mutate();
     reconcileCircularDepthSlots(drawing, previousSourced);
+    if (previousSourced.length > 0 && circularSourcedDepthTrackIndexesForState(state).length === 0) drawing.form.show_depth = false;
   };
 
   const syncCircularConservationSlots = () => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const entries = conservationEntriesForState(state, drawing);
     const slots = Array.isArray(drawing.adv.circular_track_slots)
       ? drawing.adv.circular_track_slots
@@ -1844,7 +1847,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const resetCircularTrackSlotsToPreset = (preset) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const normalizedPreset = normalizeCircularTrackPreset(preset);
@@ -1873,7 +1876,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const setCircularTrackSlotsEnabled = (enabled) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     drawing.adv.circular_track_slots_enabled = Boolean(enabled);
@@ -1886,7 +1889,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const addCircularTrackSlot = (renderer, placement = null) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!canAddCircularTrackRenderer(renderer)) return;
@@ -1911,7 +1914,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const duplicateCircularTrackSlot = (index) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     normalizeSlotsInPlace();
@@ -1935,7 +1938,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const removeCircularTrackSlot = (index) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const idx = Number(index);
@@ -1970,7 +1973,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const moveCircularTrackSlot = (fromIndex, toIndex) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (wouldCircularTrackSlotMoveCrossAxis(drawing, fromIndex, toIndex)) return;
@@ -1994,7 +1997,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const canMoveCircularTrackSlot = (index, direction) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const idx = Number(index);
     const step = Number(direction);
     if (!Number.isInteger(idx) || !Number.isInteger(step) || step === 0) return false;
@@ -2003,7 +2006,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const canMoveCircularTrackSlotOutside = (index) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const idx = Number(index);
     const normalized = normalizedSlotsForCurrentState(drawing);
     if (!Number.isInteger(idx) || idx < 0 || idx >= normalized.length) return false;
@@ -2012,7 +2015,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const canMoveCircularTrackSlotInside = (index) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const idx = Number(index);
     const normalized = normalizedSlotsForCurrentState(drawing);
     if (!Number.isInteger(idx) || idx < 0 || idx >= normalized.length) return false;
@@ -2021,7 +2024,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const canMoveCircularTrackSlotToAxis = (index) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const idx = Number(index);
     const normalized = normalizedSlotsForCurrentState(drawing);
     if (!Number.isInteger(idx) || idx < 0 || idx >= normalized.length) return false;
@@ -2097,25 +2100,25 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const moveCircularTrackSlotOutside = (index) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     if (!canMoveCircularTrackSlotOutside(index)) return;
     moveCircularTrackSlotToPlacement(drawing, index, 'outside');
   };
 
   const moveCircularTrackSlotInside = (index) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     if (!canMoveCircularTrackSlotInside(index)) return;
     moveCircularTrackSlotToPlacement(drawing, index, 'inside');
   };
 
   const moveCircularTrackSlotToAxis = (index) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     if (!canMoveCircularTrackSlotToAxis(index)) return;
     moveCircularTrackSlotToPlacement(drawing, index, 'overlay');
   };
 
   const updateCircularTrackSlotRenderer = (slot, renderer) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     renderer = renderer || slot?.renderer;
@@ -2206,18 +2209,18 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
 
   /** @param {CircularSuppressToggleEvent} [event] */
   const setCircularGcSuppressed = (checked, event = null) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     setCircularSuppressControl(drawing, 'gc_content', checked, event);
   };
 
   /** @param {CircularSuppressToggleEvent} [event] */
   const setCircularSkewSuppressed = (checked, event = null) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     setCircularSuppressControl(drawing, 'gc_skew', checked, event);
   };
 
   const setCircularTrackSlotEnabled = (slot, enabled) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!slot || circularTrackSlotHiddenBySuppressForm(slot, drawing.form)) return;
@@ -2233,11 +2236,11 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const circularTrackSlotEffectiveEnabled = (slot) => (
-    Boolean(slot?.enabled !== false) && !circularTrackSlotHiddenBySuppressForm(slot, state.activeDrawing().form)
+    Boolean(slot?.enabled !== false) && !circularTrackSlotHiddenBySuppressForm(slot, state.drawings.circular.form)
   );
 
   const circularTrackSlotHiddenBySuppress = (slot) =>
-    circularTrackSlotHiddenBySuppressForm(slot, state.activeDrawing().form);
+    circularTrackSlotHiddenBySuppressForm(slot, state.drawings.circular.form);
 
   const circularTrackSlotSuppressMessage = (slot) => {
     if (!circularTrackSlotHiddenBySuppress(slot)) return '';
@@ -2272,7 +2275,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const updateCircularTrackFeatureLane = (slot, laneDirection) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!slot || slot.renderer !== 'features') return;
@@ -2311,7 +2314,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     return '';
   };
   const circularTrackSlotLegendLabelPlaceholder = (slot) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const renderer = String(slot?.renderer || '').trim();
     if (renderer === 'dinucleotide_content' || renderer === 'dinucleotide_skew') {
       const nt = normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, normalizeNt(drawing.adv.nt));
@@ -2331,7 +2334,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   );
 
   const circularTrackSlotSkewColorValue = (slot, key) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     return resolveTrackSlotSkewColorValue(/** @type {any} */ ({
       slot,
       key,
@@ -2360,7 +2363,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const circularTrackSlots = () => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     return (
       Array.isArray(drawing.adv.circular_track_slots)
         ? drawing.adv.circular_track_slots.map((slot, index) => ({ kind: STACK_ENTRY_SLOT, slot, index }))
@@ -2369,7 +2372,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const circularTrackStackEntries = () => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const slots = Array.isArray(drawing.adv.circular_track_slots) ? drawing.adv.circular_track_slots : [];
     const axisIndex = axisIndexForCurrentSlots(drawing, slots);
     const entries = [];
@@ -2392,13 +2395,13 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const circularTrackSlotCliSpec = (slot) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     normalizeSlotsInPlace();
     return buildCircularTrackSlotSpec(slot, drawing.adv.nt, drawing.form.track_type);
   };
 
   const updateCircularTrackSlotMeasure = (slot, field, scalar) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     if (!['width', 'radius'].includes(field) || !drawing.adv.circular_track_slots.includes(slot)) return;
     const numericLeaf = scalar && typeof scalar === 'object' && !Array.isArray(scalar)
       ? scalar.value : scalar;
@@ -2465,7 +2468,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   };
 
   const circularTrackSlotGeometryAutoText = (slot, slotIndex, field) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     if (isManualSlotValue(circularSlotManualValue(slot, field))) return '';
     const geometry = circularTrackSlotDisplayGeometry(drawing, slot, slotIndex);
     if (field === 'width') return formatPxAuto(geometry.widthPx);
@@ -2487,7 +2490,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   );
 
   const circularTrackPresetSummary = () => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     const preset = normalizeCircularTrackPreset(drawing.form.track_type);
     const lengthParam = getPreviewLengthParam(state);
     const lane = laneDirectionForPreset(preset);

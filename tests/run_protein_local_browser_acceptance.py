@@ -314,7 +314,7 @@ def integration_prepare(page, case, raw_cold=False):
       Object.assign(app.losat.blastp, {candidateLimit: options.rawLimit,
         orthogroupMemberMaxHits: 5, collinearInferOrthogroups: options.infer,
         collinearSearchScope: 'adjacent', collinearUnitMode: 'auto', collinearAnchorMode: 'rbh'});
-      app.losat.executionMode = 'serial';
+      app.losatExecution.executionMode = 'serial';
       if (options.rawCold) app.clearLosatCache();
       state.losatDerivedCache.value.clear();
       const {disposeDiagramGenerationWorker} = await import('/gbdraw/web/js/services/diagram-generation.js');

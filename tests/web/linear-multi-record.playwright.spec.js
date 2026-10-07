@@ -1805,7 +1805,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
     app.setLinearComparisonLosatMode('blastp');
     app.setLinearComparisonLosatpMode('collinear');
     app.setLinearComparisonLosatMode('blastn');
-    app.losat.executionMode = 'serial';
+    app.losatExecution.executionMode = 'serial';
     const [first, second, third] = app.linearSeqs;
     const blastRow = 'MixedRecA\tMixedRecB\t100\t60\t0\t0\t1\t60\t1\t60\t1e-30\t150\n';
     app.linearComparisonPlan.mode = 'adjacent';
@@ -2917,7 +2917,7 @@ test('protein raw cache survives cancellation and derived options preserve searc
     await app.setLinearComparisonGlobalAction('losat');
     app.setLinearComparisonLosatMode('blastp');
     app.setLinearComparisonLosatpMode('collinear');
-    app.losat.executionMode = 'serial';
+    app.losatExecution.executionMode = 'serial';
     app.losat.blastp.collinearInferOrthogroups = true;
     for (const field of [
       'orthogroupMembershipMode',
@@ -3180,7 +3180,7 @@ const uploadCompleteRecordSources = async (page, contents =
       show_labels_linear: 'none', legend: 'bottom'
     });
     Object.assign(app.adv, { min_bitscore: 0, evalue: 1, identity: 0, alignment_length: 0 });
-    app.losat.executionMode = 'serial';
+    app.losatExecution.executionMode = 'serial';
     await app.setLinearRecordLayoutEnabled(true);
     app.linearSeqs.forEach((seq, index) => app.setLinearRecordRow(seq.uid, index < 2 ? 1 : 2));
     await app.setLinearComparisonGlobalAction('losat');
@@ -3840,7 +3840,7 @@ test('@comparison-contract one uploaded source stays one file card through recor
 
 test('@comparison-contract LOSAT Settings preserve execution controls and unbounded members through Save and Load', async ({ page }, testInfo) => {
   await openApp(page);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.losat.executionMode)).toBe('threaded');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.losatExecution.executionMode)).toBe('threaded');
   await uploadCompleteRecordSources(page);
   const settings = page.locator('[data-linear-comparison-disclosure="settings"]');
   await expect(settings).toHaveAttribute('open', '');
@@ -3886,7 +3886,7 @@ test('@comparison-contract LOSAT Settings preserve execution controls and unboun
   }
   page.once('dialog', (dialog) => dialog.accept());
   await page.evaluate(() => window.__GBDRAW_APP__.resetSettings());
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.losat.executionMode)).toBe('threaded');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.losatExecution.executionMode)).toBe('threaded');
 });
 
 test('@comparison-contract record rotation adds zero LOSATP source jobs and survives reverse complement and fresh Load', async ({ page }) => {

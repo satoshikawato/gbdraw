@@ -313,9 +313,9 @@ test('JSON cannot forge current-worker provenance and malformed envelopes fail c
 });
 
 // Per-feature edits are identity rows of the Result's mode (design Q4, R2).
-const identityKey = JSON.stringify(['linear', 'record-a', 'feature-a']);
+// A row of the Linear drawing (PR-1: the drawing is the mode).
+const identityKey = JSON.stringify(['record-a', 'feature-a']);
 const identityRow = (fields) => ({
-  scope: 'linear',
   recordKey: 'record-a',
   biologicalFeatureId: 'feature-a',
   featureVisibility: null,
@@ -380,18 +380,24 @@ for (const [domain, makeOptions] of Object.entries(planOptions)) {
   });
 }
 
-// R2 (R-1): the Circular row of the same record key and feature waits for a
-// Circular Result; this Linear Result draws none of it live.
+// R2 (R-1): the Circular drawing's row of the same record key and feature
+// waits for a Circular Result; the plan of this Linear Result reads the Linear
+// drawing only (PR-1), so it draws none of it live.
 test('a per-feature edit of the other mode does not mutate the Result', () => {
   const { admission } = currentFixture();
-  const circularKey = JSON.stringify(['circular', 'record-a', 'feature-a']);
+  const drawings = {
+    circular: { featureOverrides: { [identityKey]: identityRow({ featureVisibility: 'off', labelText: 'other mode' }) } },
+    linear: { featureOverrides: {} }
+  };
   const plan = compileDirectEditorMutationPlan({
     catalogAdmission: admission,
-    featureOverrides: {
-      [circularKey]: identityRow({ scope: 'circular', featureVisibility: 'off', labelText: 'other mode' })
-    }
+    featureOverrides: drawings.linear.featureOverrides
   });
   assert.equal(plan.kind, 'EMPTY');
+  assert.equal(compileDirectEditorMutationPlan({
+    catalogAdmission: admission,
+    featureOverrides: drawings.circular.featureOverrides
+  }).kind, 'MUTATING', 'the same row in the drawing of the Result mutates it');
 });
 
 test('combined current mutations share one root/index and serialize once', () => {

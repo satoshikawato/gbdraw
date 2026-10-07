@@ -552,7 +552,7 @@ export const createFeatureSvgActions = ({
       featurePopupSize.height = 0;
     }
 
-    const popupPosition = getPopupPosition(eventLike, drawing.adv?.rich_feature_popup === false ? 440 : 720);
+    const popupPosition = getPopupPosition(eventLike, state.richFeaturePopup.value === false ? 440 : 720);
     clickedFeaturePos.x = popupPosition.x;
     clickedFeaturePos.y = popupPosition.y;
     if (typeof onFeaturePopupOpened === 'function') {

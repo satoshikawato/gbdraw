@@ -18,7 +18,7 @@ export const RULE_WRITERS = Object.freeze({
   // Undo and Redo install a captured copy (R11); the History apply projects it.
   'js/services/history-snapshot.js': ['replaceFeatureEditState'],
   // A Session replacement installs the saved rules with the saved Result.
-  'js/services/config.js': ['resetSessionBaseline', 'applyFeatureStateData'],
+  'js/services/config.js': ['resetSessionBaseline', 'applyDrawingFeatureData'],
   // Reset Settings, which keeps the current Results, and the Session baseline.
   'js/services/reset.js': ['resetEditorDraftState']
 });

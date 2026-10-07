@@ -14,8 +14,13 @@ export const fixture = (colors, rules) => {
   const depthAttrs = {};
   const depth = { getAttribute: key => depthAttrs[key] ?? null,
     setAttribute: (key, value) => { depthAttrs[key] = value; }, removeAttribute: key => { delete depthAttrs[key]; } };
+  // One dinucleotide skew group of slot `gc_skew`: its two drawn paths.
+  const skewFills = ['#6dded3', '#ad72e3'];
+  const skewPaths = skewFills.map((_, index) => ({ getAttribute: key => (key === 'fill' ? skewFills[index] : null),
+    setAttribute: (key, value) => { if (key === 'fill') skewFills[index] = value; } }));
+  const skew = { getAttribute: key => (key === 'data-gbdraw-slot-id' ? 'gc_skew' : null), querySelectorAll: () => skewPaths };
   const rootAttrs = { xmlns: 'http://www.w3.org/2000/svg', 'xmlns:xlink': 'http://www.w3.org/1999/xlink' };
-  const svg = { querySelectorAll: selector => selector.startsWith('g[') ? (selector.includes('depth') ? [depth] : []) : selector.includes('data-gbdraw-feature-id') ? [path] : [],
+  const svg = { querySelectorAll: selector => selector.startsWith('g[') ? (selector.includes('depth') ? [depth] : selector.includes('skew') ? [skew] : []) : selector.includes('data-gbdraw-feature-id') ? [path] : [],
     getElementById: () => null, getAttribute: key => rootAttrs[key] ?? null,
     setAttribute: (key, value) => { rootAttrs[key] = value; }, removeAttribute: key => { delete rootAttrs[key]; }, cloneNode: () => svg,
     snapshot: () => JSON.stringify({ fill: attrs.fill, depth: depthAttrs }) };
@@ -30,5 +35,5 @@ export const fixture = (colors, rules) => {
   const previewRuntime = createPreviewRuntime({ state, serializeSvg: serializeCleanSvg });
   const actions = createSvgStyles({ state, watch() {}, nextTick: fn => fn(),
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit });
-  return { actions, state, attrs, depthAttrs, ready };
+  return { actions, state, attrs, depthAttrs, skewFills, ready };
 };

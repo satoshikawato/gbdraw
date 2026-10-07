@@ -517,7 +517,7 @@ const state = {
   featurePopupSize: { width: 0, height: 0 },
   featureSelectionDrag: { active: false },
   skipCaptureBaseConfig: ref(false),
-  adv: { rich_feature_popup: false }
+  richFeaturePopup: ref(false)
 };
 const { createFeatureSvgActions } = await import(
   pathToFileURL(join(tempDir, 'app', 'feature-editor', 'svg-actions.js'))

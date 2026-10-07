@@ -748,6 +748,7 @@ export const createFeatureColorActions = ({
         .every(feature => selected.has(feature.svg_id));
       const oldEntry = findLegendEntryByCaption(drawing, oldCaption);
       return ruleActions.commitSpecificRules(rules, 'Rename legend item', {
+        drawing,
         previousLegendIntents: retireOld && oldEntry ? [{ caption: oldCaption, color: oldEntry.color }] : [],
         afterCommit: () => {
           if (retireOld && !sourceRules.length) {
@@ -934,6 +935,7 @@ export const createFeatureColorActions = ({
       && contributors.every(feature => selectedIds.has(feature.svg_id));
     const rules = featureRuleCandidate(drawing, features, color, normalizeCaption(caption), options);
     return ruleActions.commitSpecificRules(rules, 'Change feature color', {
+      drawing,
       previousLegendIntents: replacesExistingGroup
         ? [{ caption: existingEntry.caption, color: existingEntry.color }] : [],
       afterCommit: intents => {
@@ -956,7 +958,7 @@ export const createFeatureColorActions = ({
     const rules = drawing.manualSpecificRules.filter(rule => !(rowRules.includes(rule) && isHashSpecificRule(rule)
       && covered.some(feature => hashRuleTargetsFeatureExactly(rule, feature))))
       .map(rule => rowRules.includes(rule) ? { ...rule, color } : { ...rule });
-    return ruleActions.commitSpecificRules(rules, 'Change legend color');
+    return ruleActions.commitSpecificRules(rules, 'Change legend color', { drawing });
   };
 
   /**
@@ -1131,7 +1133,7 @@ export const createFeatureColorActions = ({
 
     if (choice === 'rule') {
       if (matchingRule) await ruleActions.commitSpecificRules(drawing.manualSpecificRules.map(rule => rule === matchingRule
-        ? { ...rule, color } : { ...rule }), 'Change specific color rule');
+        ? { ...rule, color } : { ...rule }), 'Change specific color rule', { drawing });
     } else if (choice === 'caption') {
       const targetLegendName = normalizeCaption(legendName) || normalizeCaption(getEffectiveLegendCaption(feat));
       if (!targetLegendName) {
@@ -1438,7 +1440,7 @@ export const createFeatureColorActions = ({
       if (qualifier) rules.push({ feat: feature.type, ...qualifier, color,
         cap: feature.type === 'CDS' ? 'other proteins' : `other ${feature.type}s` });
     }
-    const applied = await ruleActions.commitSpecificRules(rules, 'Reset feature color');
+    const applied = await ruleActions.commitSpecificRules(rules, 'Reset feature color', { drawing });
     if (applied) clickedFeature.value = null;
     return applied;
   };
@@ -1653,7 +1655,7 @@ export const createFeatureColorActions = ({
     if (sessionBusy) return sessionBusy;
     if (!feature) return false;
     if (value === null) {
-      return ruleActions.commitSpecificRules(drawing.manualSpecificRules.filter(rule => !hashRuleTargetsFeatureExactly(rule, feature)), 'Reset feature color');
+      return ruleActions.commitSpecificRules(drawing.manualSpecificRules.filter(rule => !hashRuleTargetsFeatureExactly(rule, feature)), 'Reset feature color', { drawing });
     }
     if (String(value).trim().toLowerCase() === 'none') {
       return applyColorToFeatureGroup(drawing, [feature], normalizeCaption(customCaption || getEffectiveLegendCaption(feature) || feature.type), 'none');

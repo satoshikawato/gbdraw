@@ -1764,7 +1764,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     state.files.linearCanonicalComparisons = [];
     state.activeDrawing().losatProgram.value = 'blastn';
     state.activeDrawing().losat.blastn.task = 'megablast';
-    state.activeDrawing().losat.executionMode = 'serial';
+    state.losatExecution.executionMode = 'serial';
     state.losatCache.value = new Map();
 
     const comparisonPlanSnapshot = resolveLinearComparisonPlan({
@@ -1776,7 +1776,7 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     });
     state.linearSeqs.find(({uid})=>uid==='middle').region_reverse=true;
     recordDisplayRows.value = [{ scope: 'linear', sourceUid: 'middle',
-      key: JSON.stringify(['linear', 'middle', '#1']), selector: '#1', recordId: 'MIDDLE', recordLength: 8,
+      key: JSON.stringify(['middle', '#1']), selector: '#1', recordId: 'MIDDLE', recordLength: 8,
       reverse: true, cropped: false, detectedTopology: 'linear' }];
     const linearResult = result('lazy-linear.svg', 'lazy-linear');
     workerResponses.push(response(linearResult, validCatalog(linearResult.name)));

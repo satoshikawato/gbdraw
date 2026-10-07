@@ -111,14 +111,14 @@ export const featureTarget = ({ selector, selectors = null, recordId = null, rec
 
 // A selected feature is named by its original-source identity, which Python
 // resolves after crop, reverse complement, reordering, and duplication (design
-// Q4, OV-03), in the mode of its Result (R2). Null when a selected feature has
-// none: a Result without a feature catalog (a Session before 40 until Generate).
+// Q4, OV-03); the target is of the drawing of the Result's mode (R2). Null when
+// a selected feature has none: a Result without a feature catalog (a Session
+// before 40 until Generate).
 export const featureTargetsFromSelection = (features) => {
   const selected = Array.isArray(features) ? features : [];
   if (!selected.every((feature) => featureIdentityKeyOf(feature))) return null;
   return selected.map((feature) => ({
     kind: 'featureIdentity',
-    scope: feature.scope,
     recordKey: feature.record_key ?? feature.recordKey,
     biologicalFeatureId: feature.biological_feature_id ?? feature.biologicalFeatureId,
     envelope: 'outer_bounds',

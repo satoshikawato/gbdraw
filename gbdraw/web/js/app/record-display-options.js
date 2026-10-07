@@ -16,11 +16,14 @@ import { RECORD_READ_ERROR_LABEL } from './linear-record-selector.js';
 export const RECORD_TARGET_NOT_DISCOVERED = 'not-discovered';
 const recordTargetError = (kind, message) => Object.assign(new Error(message), { kind });
 
-export const recordDisplayKey = ({ scope, sourceUid, selector }) => {
-  if (!['circular', 'linear'].includes(scope) || !sourceUid || !/^#[1-9]\d*$/.test(selector)) {
-    throw new Error('Record display requires a scope, source UID, and exact record selector.');
+// A record display row or draft names its source input and record. A drawing
+// holds the drafts of its own mode's inputs (PD-OI-086): `circular`, or a
+// Linear File card's UID.
+export const recordDisplayKey = ({ sourceUid, selector }) => {
+  if (!sourceUid || !/^#[1-9]\d*$/.test(selector)) {
+    throw new Error('Record display requires a source UID and exact record selector.');
   }
-  return JSON.stringify([scope, sourceUid, selector]);
+  return JSON.stringify([sourceUid, selector]);
 };
 
 export const buildRecordDisplayRows = ({ scope, sourceUid, source, records, selector = '' }) => {
@@ -89,11 +92,21 @@ export const migrateLegacyRecordDisplayDrafts = (drafts) => {
   });
 };
 
-export const validateRecordDisplayDrafts = (drafts) => {
+// A Session 41-44 draft also named each row's mode (`scoped`); the Session 46
+// split moves each row into its mode's drawing.
+/**
+ * @param {unknown} drafts
+ * @param {{ scoped?: boolean }} [options]
+ */
+export const validateRecordDisplayDrafts = (drafts, { scoped = false } = {}) => {
   if (!Array.isArray(drafts)) throw new Error('Record display drafts must be an array.');
+  const fields = scoped
+    ? 'anchorIntent,recordId,reverseComplementOverride,scope,selector,sourceUid,startCoordinate,topologyOverride'
+    : 'anchorIntent,recordId,reverseComplementOverride,selector,sourceUid,startCoordinate,topologyOverride';
   const identities = new Set();
   for (const draft of drafts) {
-    if (!draft || Object.keys(draft).sort().join(',') !== 'anchorIntent,recordId,reverseComplementOverride,scope,selector,sourceUid,startCoordinate,topologyOverride'
+    if (!draft || Object.keys(draft).sort().join(',') !== fields
+      || (scoped && !['circular', 'linear'].includes(draft.scope))
       || typeof draft.recordId !== 'string' || draft.recordId.includes('\0')
       || typeof draft.sourceUid !== 'string' || draft.sourceUid.includes('\0')
       || (draft.topologyOverride !== null && typeof draft.topologyOverride !== 'boolean')
@@ -103,7 +116,7 @@ export const validateRecordDisplayDrafts = (drafts) => {
       throw new Error('Invalid record display draft; only source-bound requested intent is supported.');
     }
     validateAnchorIntent(draft.anchorIntent);
-    const key = recordDisplayKey(draft);
+    const key = scoped ? JSON.stringify([draft.scope, recordDisplayKey(draft)]) : recordDisplayKey(draft);
     if (identities.has(key)) throw new Error('Duplicate record display draft identity.');
     identities.add(key);
   }
@@ -222,7 +235,10 @@ export const createRecordDisplayControls = ({
           cropped: source.cropped, reverse: source.reverse, paired: source.paired })) : [];
       } catch { return []; } // Existing selector control owns its visible validation error.
     }));
-  const draftFor = (row) => state.activeDrawing().recordDisplayDrafts.find((draft) => recordDisplayKey(draft) === row.key) || {};
+  // A row's drafts are those of its mode's drawing.
+  /** @param {Record<string, any>} row @returns {DrawingState} */
+  const drawingOfRow = (row) => (row?.scope === 'linear' ? state.drawings.linear : state.drawings.circular);
+  const draftFor = (row) => drawingOfRow(row).recordDisplayDrafts.find((draft) => recordDisplayKey(draft) === row.key) || {};
   // Linear orientation has one owner, the File card's region_reverse (CO-03,
   // N-09). A row that is the only record its card draws writes it there; the
   // row override remains only for Circular and for a Linear card that draws
@@ -247,7 +263,7 @@ export const createRecordDisplayControls = ({
   const edit = (drawing, row, patch, label) => runUndoable(label, () => {
     let draft = drawing.recordDisplayDrafts.find((entry) => recordDisplayKey(entry) === row.key);
     if (!draft) {
-      draft = { scope: row.scope, sourceUid: row.sourceUid, selector: row.selector,
+      draft = { sourceUid: row.sourceUid, selector: row.selector,
         recordId: row.recordId, topologyOverride: null, startCoordinate: null,
         reverseComplementOverride: null, anchorIntent: null };
       drawing.recordDisplayDrafts.push(draft);
@@ -260,7 +276,7 @@ export const createRecordDisplayControls = ({
     }
   });
   const writeResolvedTransform = (row, { startCoordinate, reverseComplement, anchorIntent }) => {
-    const drawing = state.activeDrawing();
+    const drawing = drawingOfRow(row);
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
     if (typeof reverseComplement !== 'boolean') {
@@ -273,7 +289,6 @@ export const createRecordDisplayControls = ({
     );
     if (!draft) {
       draft = {
-        scope: row.scope,
         sourceUid: row.sourceUid,
         selector: row.selector,
         recordId: row.recordId,
@@ -310,8 +325,8 @@ export const createRecordDisplayControls = ({
         throw new Error('Alignment record source binding changed.');
       }
       const selector = record.region?.selector || record.selector;
-      const drafts = drawing.recordDisplayDrafts.filter(draft => draft.scope === 'linear'
-        && draft.sourceUid === input.sourceUid && (selector?.kind === 'recordIndex'
+      const drafts = drawing.recordDisplayDrafts.filter(draft => draft.sourceUid === input.sourceUid
+        && (selector?.kind === 'recordIndex'
           ? draft.selector === `#${selector.index + 1}`
           : selector?.kind === 'recordId' ? draft.recordId === selector.value : draft.selector === '#1'));
       return { recordKey: orientation.recordKey, orientation, drafts,
@@ -319,20 +334,20 @@ export const createRecordDisplayControls = ({
     });
   };
   const captureAlignmentOrientationIntent = (orientations) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.linear;
     return alignmentRows(drawing, orientations)
       .map(({recordKey, sequence, drafts}) => ({ recordKey,
         reverseComplement: Boolean(sequence.region_reverse), drafts: drafts.map(captureTargetDraft) }));
   };
   const restoreAlignmentOrientationIntent = (checkpoints) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.linear;
     alignmentRows(drawing, checkpoints).forEach(({sequence}, index) => {
       sequence.region_reverse = checkpoints[index].reverseComplement;
       checkpoints[index].drafts.forEach(restoreTargetDraft);
     });
   };
   const commitAlignmentOrientations = (orientations) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.linear;
     alignmentRows(drawing, orientations).forEach(({sequence, orientation, drafts}) => {
       sequence.region_reverse = orientation.reverseComplement;
       drafts.forEach(draft => { draft.reverseComplementOverride = null; });
@@ -395,16 +410,18 @@ export const createRecordDisplayControls = ({
   };
   watch(() => sources.value.map(({ scope, sourceUid, source, paired }) => ({ scope, sourceUid, source, paired })),
     (current, previous = []) => {
-      const drawing = state.activeDrawing();
       if (state.semanticFileWatchersSuppressed?.value || state.sessionImportRollbackInProgress?.value) return;
       const replaced = previous.filter((old) => {
         const next = current.find((entry) => entry.scope === old.scope && entry.sourceUid === old.sourceUid);
         return old.source && (!next || next.source !== old.source || next.paired !== old.paired);
       });
-      for (let index = drawing.recordDisplayDrafts.length - 1; index >= 0; index -= 1) {
-        if (replaced.some((source) => source.scope === drawing.recordDisplayDrafts[index].scope
-          && source.sourceUid === drawing.recordDisplayDrafts[index].sourceUid)) drawing.recordDisplayDrafts.splice(index, 1);
-      }
+      // A replaced source's drafts go from its mode's drawing.
+      replaced.forEach((source) => {
+        const drafts = drawingOfRow(source).recordDisplayDrafts;
+        for (let index = drafts.length - 1; index >= 0; index -= 1) {
+          if (drafts[index].sourceUid === source.sourceUid) drafts.splice(index, 1);
+        }
+      });
     }, { flush: 'sync' });
   const hasPendingChanges = computed(() => {
     const drawing = state.activeDrawing();
@@ -416,7 +433,7 @@ export const createRecordDisplayControls = ({
     const tolerance = options.configOverrides?.['canvas.feature_overlap_tolerance_bp']
       ?? options.config?.canvas?.feature_overlap_tolerance_bp ?? 0;
     const placements = options.featurePlacements || [];
-    // The draft keeps the other mode's rows (R2); compare the rows this request carries.
+    // The draft keeps the rows of other records (R2); compare the rows this request carries.
     const draftPlacementCount = () => {
       try { return requestFeaturePlacements(drawing.featurePlacementOverrides, request.mode, request.records || []).length; }
       catch { return -1; }
@@ -425,7 +442,7 @@ export const createRecordDisplayControls = ({
       || placements.length !== draftPlacementCount()
       || placements.some((row) => {
         const target = drawing.featurePlacementOverrides[
-          featureIdentityKey(request.mode, row.recordKey, row.biologicalFeatureId)]?.placement;
+          featureIdentityKey(row.recordKey, row.biologicalFeatureId)]?.placement;
         return !target || ['kind', 'side', 'level'].some((field) => target[field] !== row.placement[field]);
       })) return true;
     return committedRows.some((row) => {
@@ -513,13 +530,14 @@ export const createRecordDisplayControls = ({
     };
   };
   const captureTargetDraft = (row) => {
-    const drawing = state.activeDrawing();
+    const drawing = drawingOfRow(row);
     const key = recordDisplayKey(row);
     const index = drawing.recordDisplayDrafts.findIndex(
       (draft) => recordDisplayKey(draft) === key
     );
     const owner = linearOrientationOwner(row);
     return {
+      scope: row.scope,
       key,
       index,
       draft: index >= 0 ? cloneJsonData(drawing.recordDisplayDrafts[index]) : null,
@@ -527,7 +545,7 @@ export const createRecordDisplayControls = ({
     };
   };
   const restoreTargetDraft = (checkpoint) => {
-    const drawing = state.activeDrawing();
+    const drawing = drawingOfRow(checkpoint);
     if (checkpoint.ownerUid) {
       const owner = state.linearSeqs.find((seq) => seq.uid === checkpoint.ownerUid);
       if (owner) owner.region_reverse = checkpoint.ownerReverse;

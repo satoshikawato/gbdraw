@@ -1719,32 +1719,31 @@ export const createRunAnalysis = ({
     return makeSafeFilename(withExt);
   };
 
-  /** @param {DrawingState} drawing */
-  const getLosatParallelWorkers = (drawing) => {
-    const raw = String(drawing.losat.parallelWorkers || 'auto').trim().toLowerCase();
+  // How LOSAT runs is one app-level setting (`state.losatExecution`) for both
+  // drawings: the Linear comparisons and the Circular conservation series.
+  const getLosatParallelWorkers = () => {
+    const raw = String(state.losatExecution.parallelWorkers || 'auto').trim().toLowerCase();
     if (raw === 'auto') return undefined;
     const parsed = Number(raw);
     return Number.isInteger(parsed) && parsed >= 1 ? parsed : undefined;
   };
 
-  /** @param {DrawingState} drawing */
-  const getLosatExecutionMode = (drawing) => {
-    const raw = String(drawing.losat.executionMode || 'auto').trim().toLowerCase();
+  const getLosatExecutionMode = () => {
+    const raw = String(state.losatExecution.executionMode || 'auto').trim().toLowerCase();
     return ['auto', 'serial', 'threaded'].includes(raw) ? raw : 'auto';
   };
 
   /** @param {DrawingState} drawing */
   const getLosatThreadsPerJob = (drawing) => {
     if (drawing.losatProgram.value !== 'blastp') return 1;
-    const raw = String(drawing.losat.threadsPerJob || 'auto').trim().toLowerCase();
+    const raw = String(state.losatExecution.threadsPerJob || 'auto').trim().toLowerCase();
     if (raw === 'auto') return undefined;
     const parsed = Number(raw);
     return Number.isInteger(parsed) && parsed >= 1 ? parsed : undefined;
   };
 
-  /** @param {DrawingState} drawing */
-  const getLosatTotalThreadBudget = (drawing) => {
-    const raw = String(drawing.losat.totalThreadBudget || 'safe').trim().toLowerCase();
+  const getLosatTotalThreadBudget = () => {
+    const raw = String(state.losatExecution.totalThreadBudget || 'safe').trim().toLowerCase();
     if (raw === 'safe' || raw === 'auto') return undefined;
     if (raw === 'available') {
       return Math.max(1, Number(globalThis.navigator?.hardwareConcurrency || 4) || 4);
@@ -1755,10 +1754,6 @@ export const createRunAnalysis = ({
     return Math.min(parsed, hardwareBudget);
   };
 
-  const normalizeLabelRendering = (value) => {
-    const normalized = String(value || '').trim().toLowerCase();
-    return ['embedded_only', 'external_only'].includes(normalized) ? normalized : 'auto';
-  };
 
   const hydrateLosatDownloadText = async (cacheKey, cached) => {
     if (classifyRawLosatCacheEntry(cached) !== 'protein-current') {
@@ -2155,6 +2150,7 @@ export const createRunAnalysis = ({
       ?? biologicalFeatures?.value;
     const hasSourceBoundEditorIntent = Object.keys(drawing.featureOverrides).length > 0
       || Object.keys(drawing.featurePlacementOverrides || {}).length > 0
+      || Object.keys(drawing.featureStrokeOverrides).length > 0
       || Object.keys(drawing.legendColorOverrides).length > 0 || Object.keys(drawing.legendStrokeOverrides).length > 0
       || drawing.legendEntries.value.some(entry => entry.originalCaption && entry.originalCaption !== entry.caption);
     // The committed records whose source this Generate replaces or drops. The
@@ -2522,7 +2518,7 @@ export const createRunAnalysis = ({
       // Per-feature Feature visibility decides LOSATP's proteins as the rules do;
       // the helper resolves one record's rows as Generate does (R4).
       const proteinVisibilityRows = (recordKeys) => requestFeatureOverrides(
-        drawing.featureOverrides, mode.value, recordKeys.map((recordKey) => ({ recordKey }))
+        drawing.featureOverrides, recordKeys.map((recordKey) => ({ recordKey }))
       ).filter((row) => row.featureVisibility !== null)
         .map((row) => ({ ...row, labelVisibility: null, labelText: null }));
       /** @type {string | null} */
@@ -2735,13 +2731,6 @@ export const createRunAnalysis = ({
         drawing.adv.plot_title_position = normalizedPlotTitlePosition;
         drawing.adv.keep_full_definition_with_plot_title = keepFullDefinitionWithPlotTitle;
 
-        const labelsModeRaw =
-          typeof drawing.form.labels_mode === 'string'
-            ? drawing.form.labels_mode
-            : (drawing.form.allow_inner_labels ? 'both' : (drawing.form.show_labels ? 'out' : 'none'));
-        const labelsMode = String(labelsModeRaw || 'none').trim().toLowerCase();
-        const normalizedLabelRendering = labelsMode === 'none' ? 'auto' : normalizeLabelRendering(drawing.adv.label_rendering);
-        drawing.adv.label_rendering = normalizedLabelRendering;
         const normalizedCircularLabelPlacement =
           String(drawing.adv.circular_label_placement || '').trim().toLowerCase() === 'radial'
             ? 'radial'
@@ -2861,7 +2850,7 @@ export const createRunAnalysis = ({
             const losatPairs = [];
             const losatJobs = [];
             const pendingJobKeys = new Set();
-            const executionMode = getLosatExecutionMode(drawing);
+            const executionMode = getLosatExecutionMode();
 
             for (let index = 0; index < comparisonEntries.length; index += 1) {
               throwIfGenerationCanceled();
@@ -2933,9 +2922,9 @@ export const createRunAnalysis = ({
               }
               setProcessingStatus(`Running ${circularLosatSuffix.toUpperCase()} conservation: 0/${losatJobs.length} jobs complete`);
               const losatResults = await executeLosatJobs(losatJobs, {
-                concurrency: getLosatParallelWorkers(drawing),
+                concurrency: getLosatParallelWorkers(),
                 executionMode,
-                totalThreadBudget: getLosatTotalThreadBudget(drawing),
+                totalThreadBudget: getLosatTotalThreadBudget(),
                 threadsPerJob: 1,
                 sequences: sequenceEntriesByKey,
                 signal: generationAbortSignal,
@@ -3229,14 +3218,7 @@ export const createRunAnalysis = ({
         drawing.form.plot_title = normalizedPlotTitle;
         drawing.adv.plot_title_position = normalizedPlotTitlePosition;
 
-        const normalizedLabelPlacement = requireCurrentLinearLabelPlacement(
-          drawing.adv.label_placement
-        );
-        let normalizedLabelRendering = drawing.form.show_labels_linear === 'none' ? 'auto' : normalizeLabelRendering(drawing.adv.label_rendering);
-        if (normalizedLabelPlacement === 'above_feature') {
-          normalizedLabelRendering = 'auto';
-        }
-        drawing.adv.label_rendering = normalizedLabelRendering;
+        requireCurrentLinearLabelPlacement(drawing.adv.label_placement);
         if (hasComparisonIntent) {
           const comparisonHeight = classifyOptionalPositiveNumber(drawing.adv.comparison_height);
           if (comparisonHeight.status === 'invalid') {
@@ -3321,9 +3303,9 @@ export const createRunAnalysis = ({
               uniqueJobs: 0
             }
           : null;
-        const losatExecutionMode = useLosat ? getLosatExecutionMode(drawing) : 'serial';
+        const losatExecutionMode = useLosat ? getLosatExecutionMode() : 'serial';
         const losatRequestedThreadsPerJob = useLosat ? getLosatThreadsPerJob(drawing) : undefined;
-        const losatRequestedTotalThreadBudget = useLosat ? getLosatTotalThreadBudget(drawing) : undefined;
+        const losatRequestedTotalThreadBudget = useLosat ? getLosatTotalThreadBudget() : undefined;
         const losatRuntimeWarmup = useLosat
           ? prepareLosatRuntime({ includeThreaded: losatExecutionMode !== 'serial' }).then((runtime) => {
               if (runtime?.threaded && losatThreadingStatus) {
@@ -4069,7 +4051,7 @@ export const createRunAnalysis = ({
             setProcessingStatus(`Running LOSAT: 0/${sourceJobs.length} source jobs complete`);
             const executionStartedAt = getNow();
             const sourceResults = await executeLosatJobs(sourceJobs.map(({ members, batch, ...job }) => job), {
-              concurrency: getLosatParallelWorkers(drawing),
+              concurrency: getLosatParallelWorkers(),
               executionMode: losatExecutionMode,
               totalThreadBudget: losatRequestedTotalThreadBudget,
               threadsPerJob: losatRequestedThreadsPerJob,
@@ -4961,9 +4943,8 @@ export const createRunAnalysis = ({
       featureEditRemovalCount.value = sourceReplaced ? pruneUnmatchedFeatureOverrides({
         featureOverrides: drawing.featureOverrides,
         featurePlacementOverrides: drawing.featurePlacementOverrides,
+        featureStrokeOverrides: drawing.featureStrokeOverrides,
         notices: canonicalExecution.featureIdentityNotices,
-        // Record keys name records of one mode; the reconcile reaches only its edits (R2).
-        scope: canonical.renderRequest.mode,
         replacedRecordKeys: replacedFeatures.filter((feature) => feature.scope === canonical.renderRequest.mode)
           .map((feature) => String(feature.record_key)),
         previousRecords: previousRequestRecords,

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { gunzipSync } from 'node:zlib';
 import { readFile } from 'node:fs/promises';
+import { installSessionImportWorker } from './helpers/session-import-node.mjs';
 
 // Exercise the existing coordinator and gzip writer with browser I/O stubbed.
 globalThis.window = {
@@ -16,8 +17,10 @@ globalThis.document = {
   body: { appendChild: () => {} },
   createElement: () => ({ addEventListener: () => {}, click: () => {}, parentNode: null })
 };
-const { SESSION_VERSION, exportSession, buildConfigData } = await import('../../gbdraw/web/js/services/config.js');
+const { SESSION_VERSION, exportSession, buildConfigData, importSession } = await import('../../gbdraw/web/js/services/config.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+globalThis.alert = () => {};
+installSessionImportWorker();
 const { adoptCurrentSessionDocument } = await import('../../gbdraw/web/js/services/session-authority.js');
 
 const savedDocument = async title => {
@@ -31,7 +34,8 @@ test('source-free Save emits no render metadata and preserves valid raw scalar d
   const fresh = await savedDocument('fresh settings');
   assert.equal(fresh.renderRequest, null);
   assert.equal(fresh.runMetadata, undefined);
-  assert.deepEqual(fresh.config, JSON.parse(JSON.stringify(freshConfig)));
+  // The shown mode's drawing is its slice (Session 46).
+  assert.deepEqual(fresh.modes.circular.config, JSON.parse(JSON.stringify(freshConfig)));
   assert.deepEqual(buildConfigData(state.activeDrawing()), freshConfig);
   assert.equal(adoptCurrentSessionDocument(fresh, SESSION_VERSION).canonical, null);
 
@@ -43,7 +47,7 @@ test('source-free Save emits no render metadata and preserves valid raw scalar d
   });
   const before = buildConfigData(state.activeDrawing());
   const saved = await savedDocument('typed text settings');
-  assert.deepEqual(saved.config, JSON.parse(JSON.stringify(before)));
+  assert.deepEqual(saved.modes.circular.config, JSON.parse(JSON.stringify(before)));
   assert.deepEqual(buildConfigData(state.activeDrawing()), before);
   assert.deepEqual(saved.results, []);
   assert.equal(saved.editorState.featureCatalog, null);
@@ -112,14 +116,24 @@ test('writer and current admission reject invalid scalar drafts without altering
     { value: '', unit: 'px' }, { value: 1, unit: 'em' }, { value: true, unit: 'px' },
     { value: Infinity, unit: 'px' }, Infinity, NaN
   ]) {
-    slot.width = scalar;
+    // A rejected Load restores the drawing's slots, so the slot is read again.
+    state.activeDrawing().adv.circular_track_slots[0].width = scalar;
     const before = buildConfigData(state.activeDrawing());
     await assert.rejects(exportSession('invalid scalar settings'), /width|positive|scalar/i);
     assert.deepEqual(buildConfigData(state.activeDrawing()), before);
+    // Session 46 Load checks each slice as a current-writer draft of its mode
+    // (a value JSON cannot write is the writer's check only).
+    const text = JSON.stringify(scalar);
+    if (text === undefined || text === 'null' || /null/.test(text)) continue;
     const invalid = structuredClone(valid);
-    invalid.config.adv.circular_track_slots[0].width = scalar;
+    invalid.modes.circular.config.adv.circular_track_slots[0].width = scalar;
     const invalidBefore = structuredClone(invalid);
-    assert.throws(() => adoptCurrentSessionDocument(invalid, SESSION_VERSION), /width|positive|scalar/i);
+    const loaded = await importSession({
+      target: { files: [new Blob([JSON.stringify(invalid)], { type: 'application/json' })], value: 'selected' }
+    });
+    assert.equal(loaded.status, 'error', text);
     assert.deepEqual(invalid, invalidBefore);
+    // A rejected Load leaves the drawing as it was.
+    assert.deepEqual(buildConfigData(state.activeDrawing()), before, `drawing after the rejected Load of ${text}`);
   }
 });

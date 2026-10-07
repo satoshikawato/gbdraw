@@ -373,6 +373,8 @@ export const createAppSetup = () => {
     paletteDefinitions,
     paletteNames,
     paletteInstantPreviewEnabled,
+    losatExecution,
+    richFeaturePopup,
     appliedPaletteName,
     appliedPaletteColors,
     newSpecRule,
@@ -1689,10 +1691,12 @@ export const createAppSetup = () => {
     Number(uiCount) || 1,
     representativeDepthFiles(slots).length
   );
+  // The Depth panels read the drawing's series and never write them (OV-109):
+  // the Depth transitions and the Session reconcile grow, trim and label the
+  // list, and a series it does not hold yet shows its defaults.
   /** @param {DrawingState} drawing */
   const rowsForDepthTrackCount = (drawing, count) => {
     const normalizedCount = Math.max(1, Number(count) || 1);
-    ensureDepthTrackEditableConfigCount(drawing, normalizedCount);
     return Array.from({ length: normalizedCount }, (_, index) => ({
       index,
       key: `depth-track-${index}`,
@@ -1731,8 +1735,9 @@ export const createAppSetup = () => {
     const text = String(value ?? '').trim();
     target[key] = text === '' ? null : numeric ? Number(text) : text;
   };
-  const activeDepthTrackCount = () => {
-    if (mode.value === 'linear') {
+  /** @param {'circular' | 'linear'} [drawingMode] */
+  const activeDepthTrackCount = (drawingMode = mode.value) => {
+    if (drawingMode === 'linear') {
       return linearDepthTrackUiCount();
     }
     return sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular);
@@ -1754,7 +1759,7 @@ export const createAppSetup = () => {
     ensureDepthTrackConfigShape(drawing.adv.depth_tracks, targetCount, depthTrackConfigDefaults(drawing));
   };
   const circularDepthTrackRows = computed(() => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.circular;
     return rowsForDepthTrackCount(
       drawing,
       sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular)
@@ -1930,15 +1935,18 @@ export const createAppSetup = () => {
     ensureDepthTrackEditableConfigCount(drawing, idx + 1);
     return drawing.adv.depth_tracks[idx];
   };
+  // A series' saved settings, or its defaults while the drawing holds none (read only, OV-109).
+  /** @param {DrawingState} drawing @param {number} index */
+  const readDepthTrackConfig = (drawing, index) => (
+    drawing.adv.depth_tracks[index] || normalizeDepthTrackConfig(drawing, null, index)
+  );
   const getDepthTrackLabel = (index) => {
-    const drawing = state.activeDrawing();
-    const config = depthTrackConfigForIndex(drawing, index);
+    const config = readDepthTrackConfig(state.activeDrawing(), Math.max(0, Number(index) || 0));
     return String(config?.label ?? '');
   };
   const getDepthTrackColor = (index) => {
-    const drawing = state.activeDrawing();
     const idx = Math.max(0, Number(index) || 0);
-    const config = depthTrackConfigForIndex(drawing, idx);
+    const config = readDepthTrackConfig(state.activeDrawing(), idx);
     return String(config?.color || depthTrackFallbackColor(idx));
   };
   const setDepthTrackColor = (index, value) => {
@@ -2120,7 +2128,7 @@ export const createAppSetup = () => {
     if (sessionBusy) return sessionBusy;
     depthTrackUiCounts.circular = sourceDepthTrackCount(files.c_depth, depthTrackUiCounts.circular) + 1;
     ensureDepthTrackConfigCount(drawing, depthTrackUiCounts.circular);
-    if (canShowDepthTrack.value) drawing.form.show_depth = true;
+    if (hasCircularDepthFiles.value) drawing.form.show_depth = true;
   };
   const addLinearDepthTrack = () => {
     const drawing = state.drawings.linear;
@@ -2129,7 +2137,7 @@ export const createAppSetup = () => {
     const nextCount = linearDepthTrackUiCount() + 1;
     padLinearDepthRows(nextCount);
     ensureDepthTrackConfigCount(drawing, nextCount);
-    if (canShowDepthTrack.value) drawing.form.show_depth = true;
+    if (hasAnyLinearDepthFiles.value) drawing.form.show_depth = true;
   };
   const removeCircularDepthTrack = (index) => {
     const drawing = state.drawings.circular;
@@ -2146,7 +2154,7 @@ export const createAppSetup = () => {
       if (idx < drawing.adv.depth_tracks.length) drawing.adv.depth_tracks.splice(idx, 1);
       depthTrackUiCounts.circular = count <= 1 ? 1 : Math.max(1, count - 1);
       refreshDepthTrackLabelsAfterRemoval(drawing, previousFiles, circularDepthRepresentatives(), idx);
-      ensureDepthTrackConfigCount(drawing, activeDepthTrackCount());
+      ensureDepthTrackConfigCount(drawing, activeDepthTrackCount('circular'));
       const activeFileCount = circularDepthRepresentatives().length;
       // The removed series' rows before the Axis lower its index, as in Linear,
       // so no other row crosses the Axis (R10).
@@ -2186,7 +2194,7 @@ export const createAppSetup = () => {
       });
       if (idx < drawing.adv.depth_tracks.length) drawing.adv.depth_tracks.splice(idx, 1);
       depthTrackAutoLabels.splice(idx, 1);
-      ensureDepthTrackConfigCount(drawing, activeDepthTrackCount());
+      ensureDepthTrackConfigCount(drawing, activeDepthTrackCount('linear'));
       const previousAxisIndex = Number(drawing.adv.linear_track_slots_axis_index);
       const removedManagedSlotCountBeforeAxis = Number.isInteger(previousAxisIndex)
         ? drawing.adv.linear_track_slots.reduce((count, slot, slotIndex) => {
@@ -2223,21 +2231,16 @@ export const createAppSetup = () => {
       depthTrackUiCounts.circular
     ],
     () => {
-      const drawing = state.activeDrawing();
       depthTrackUiCounts.circular = Math.max(
         depthTrackUiCounts.circular,
         sourceDepthTrackCount(files.c_depth, 1)
       );
-      ensureDepthTrackConfigCount(drawing, activeDepthTrackCount());
+      // Each drawing holds a series for each of its own mode's Depth sources.
+      ensureDepthTrackConfigCount(state.drawings.circular, activeDepthTrackCount('circular'));
+      ensureDepthTrackConfigCount(state.drawings.linear, activeDepthTrackCount('linear'));
     },
     { deep: true, immediate: true }
   );
-  // Show Depth is off where the shown mode has no Depth source.
-  const repairShowDepth = () => {
-    const drawing = state.activeDrawing();
-    if (!canShowDepthTrack.value && drawing.form.show_depth) drawing.form.show_depth = false;
-  };
-  watch(() => [canShowDepthTrack.value, state.activeDrawing().form.show_depth], repairShowDepth, { immediate: true });
   /** @param {DrawingState} drawing */
   const isCircularConservationUploadSource = (drawing) => (
     String(drawing.circularConservation.source || '').trim().toLowerCase() === 'upload'
@@ -2467,7 +2470,7 @@ export const createAppSetup = () => {
   };
   watch(
     () => {
-      const drawing = state.activeDrawing();
+      const drawing = state.drawings.circular;
       return [
         drawing.circularConservation.source,
         files.c_conservation_blasts,
@@ -2481,7 +2484,7 @@ export const createAppSetup = () => {
   );
   watch(
     () => {
-      const drawing = state.activeDrawing();
+      const drawing = state.drawings.circular;
       return [
         drawing.adv.circular_track_slots_enabled,
         drawing.circularConservation.enabled,
@@ -2556,24 +2559,10 @@ export const createAppSetup = () => {
       // displayed is read before its editor intent is projected; it then shows
       // its own inventory, so a Generate or rerender made while another Result
       // was displayed does not replace it.
+      // A Result shown again by a mode switch is a selection in its own
+      // mode's drawing, whose Legend edits it was last shown with (PD-OI-086).
       const selecting = context.phase === 'result-selection' && !context.bindingOptions.trustedRestore;
-      // E1: a Result shown by a mode switch, or opened by Session Load on the
-      // mode of the Session's other Result set, rebuilds its Legend rows from
-      // its own rows and the shared Legend edits before its editor intent is
-      // projected, so the projection never reads the other mode's rows.
-      const modeSwitch = selecting || context.phase === 'session-load' ? context.bindingOptions.modeSwitch : null;
-      if (modeSwitch) {
-        if (!selecting) rememberCommittedEditorState(drawing, context);
-        const resultLegendOrder = legendActions.captureResultInventory(context.root, {
-          resultIdentity: context.resultIdentity,
-          liveResultIdentities: liveResultIdentities()
-        });
-        const arrival = legendActions.adoptArrivingResultRows(context.root, {
-          ownRows: modeSwitch.legendRows, inventory: resultLegendOrder, resultIdentity: context.resultIdentity
-        });
-        legendActions.adoptResultInventory(context.resultIdentity);
-        await projectEditorIntentOnDisplay(drawing, context, resultLegendOrder, arrival);
-      } else if (selecting) {
+      if (selecting) {
         const resultLegendOrder = legendActions.captureResultInventory(context.root, {
           resultIdentity: context.resultIdentity,
           liveResultIdentities: liveResultIdentities()
@@ -2603,8 +2592,7 @@ export const createAppSetup = () => {
       legendActions.extractLegendEntries({
         replaceGeneratedInventory: !selecting && (!context.bindingOptions.isIncrementalEdit
           || Boolean(context.bindingOptions.replaceGeneratedLegend)),
-        liveResultIdentities: results.value.map(previewRuntime.getResultIdentity),
-        byCaption: Boolean(modeSwitch)
+        liveResultIdentities: results.value.map(previewRuntime.getResultIdentity)
       });
     },
     bindComposition(context) {
@@ -2870,8 +2858,8 @@ export const createAppSetup = () => {
       recordSessionLifecycleEvent('session-import-paint-opportunity-completed');
     },
     installLoadedArtifactSlots: (/** @type {LoadedArtifactSlots} */ slots) => installLoadedArtifactSlots(slots),
-    beforePreviewMount: (/** @type {{ results: any[], resultIndex: number, opensOtherSet: boolean }} */ {
-      results: importedResults, resultIndex, opensOtherSet
+    beforePreviewMount: (/** @type {{ results: any[], resultIndex: number }} */ {
+      results: importedResults, resultIndex
     }) => {
       const selectedResult = importedResults[resultIndex] || null;
       if (!selectedResult) return null;
@@ -2883,11 +2871,7 @@ export const createAppSetup = () => {
         generationToken: token,
         catalogState: state.featureCatalog?.value || null,
         phase: 'session-load',
-        // E1: a Session opened on its other set's mode shows that Result with
-        // Legend rows rebuilt from its own inventory and the saved Legend edits.
-        bindingOptions: opensOtherSet
-          ? { isIncrementalEdit: true, modeSwitch: Object.freeze({ legendRows: null }) }
-          : { isIncrementalEdit: true },
+        bindingOptions: { isIncrementalEdit: true },
         isCurrent: () => (
           results.value[resultIndex] === selectedResult
           && Number(selectedResultIndex.value) === resultIndex
@@ -3132,12 +3116,12 @@ export const createAppSetup = () => {
       JSON.stringify([drawing.manualSpecificRules, drawing.featureColorOverrides, drawing.legendColorOverrides])
     ],
     visibility: JSON.stringify([
-      Object.values(drawing.featureOverrides).map((row) => [row.scope, row.recordKey, row.biologicalFeatureId, row.featureVisibility]),
+      Object.values(drawing.featureOverrides).map((row) => [row.recordKey, row.biologicalFeatureId, row.featureVisibility]),
       drawing.featureVisibilityManualRules
     ]),
     labels: JSON.stringify([
       Object.values(drawing.featureOverrides).map((row) => [
-        row.scope, row.recordKey, row.biologicalFeatureId, row.labelVisibility, row.labelText, row.labelSourceText
+        row.recordKey, row.biologicalFeatureId, row.labelVisibility, row.labelText, row.labelSourceText
       ]),
       drawing.labelTextBulkOverrides
     ]),
@@ -3218,21 +3202,18 @@ export const createAppSetup = () => {
   ]);
   // D-07 (PD-OI-062): a batch Result shows the canonical color, visibility,
   // Legend, and label edits when it is displayed. Labels follow in the
-  // binder's label step. `arrival` (E1): a Result shown by a mode switch whose
-  // rebuilt rows removed an entry from it or list another order than it shows.
+  // binder's label step.
   /**
    * @param {DrawingState} drawing
    * @param {any} context
    * @param {string[]} resultLegendOrder
-   * @param {{ legendChanged: boolean, reorder: boolean } | null} [arrival]
    */
-  const projectEditorIntentOnDisplay = async (drawing, context, resultLegendOrder, arrival = null) => {
+  const projectEditorIntentOnDisplay = async (drawing, context, resultLegendOrder) => {
     const identity = context.resultIdentity;
     const current = currentEditorProjectionState(drawing);
     const departedIntent = departedResultIntent.get(identity);
     departedResultIntent.delete(identity);
-    if (!arrival?.legendChanged && !arrival?.reorder
-      && departedIntent !== undefined && departedIntent === displayedIntentSignature(drawing)) {
+    if (departedIntent !== undefined && departedIntent === displayedIntentSignature(drawing)) {
       lastBoundResultIdentity = identity;
       labelProjectionResultIdentity = '';
       recordStructuralMetric('displayedResultEditorProjectionCount', 0, {
@@ -3253,7 +3234,7 @@ export const createAppSetup = () => {
     labelProjectionResultIdentity = previous.labels !== current.labels ? identity : '';
     // B20: a Result last shown with another Legend order receives the current
     // order, also the default order, which is its own generated order (OV-47).
-    const replayDefaultLegendOrder = arrival?.reorder || previous.legendOrder !== current.legendOrder
+    const replayDefaultLegendOrder = previous.legendOrder !== current.legendOrder
       ? resultLegendOrder : null;
     /** @type {ReturnType<typeof compileDisplayedResultOperations>} */
     let operations = null;
@@ -3270,7 +3251,7 @@ export const createAppSetup = () => {
       deletedCaptions: (operations?.legendDeletes || []).map(({ caption }) => caption)
     };
     const restoresLegend = legendActions.hasRetiredResultLegend(legend);
-    const projects = colors || visibility || hasOperations || restoresLegend || Boolean(arrival?.legendChanged);
+    const projects = colors || visibility || hasOperations || restoresLegend;
     recordStructuralMetric('displayedResultEditorProjectionCount', projects ? 1 : 0, {
       phase: context.phase,
       rootGeneration: context.rootGeneration
@@ -3278,8 +3259,7 @@ export const createAppSetup = () => {
     if (!projects) return;
     try {
       await projectMountedEditorIntent({ colors, visibility });
-      const legendChanged = legendActions.prepareDisplayedResultLegend(context.root, legend)
-        || Boolean(arrival?.legendChanged);
+      const legendChanged = legendActions.prepareDisplayedResultLegend(context.root, legend);
       previewRuntime.applyEditorOperations(hasOperations ? operations : null, {
         afterApply: (root) => { if (legendChanged) legendActions.compactLegendEntries(root); }
       });
@@ -3313,31 +3293,6 @@ export const createAppSetup = () => {
     if (arriving) rememberShownResultInventory(arriving);
     return arriving;
   };
-  // The arriving Result is shown as a selection; its Legend rows are rebuilt
-  // from the rows it was last shown with (E1).
-  /** @param {Readonly<ArtifactSlot> | null} arriving */
-  const presentArrivingResult = (arriving) => previewRuntime.presentSelectedResult(arriving && results.value.length > 0
-    ? { modeSwitch: Object.freeze({ legendRows: arriving.legendRows }) }
-    : {});
-  // The specific color rules each mode's Result was last shown with. A rule
-  // edit made while the other mode was shown may change the Legend rows this
-  // Result draws (a Legend rename of a feature row is a rule): once it is shown
-  // again, it asks for the automatic rerender, as an Undo of a rule edit does
-  // (OV-43). The rows Python draws then equal its next Generate's.
-  /** @type {Record<'circular' | 'linear', Record<string, any>[] | null>} */
-  const rulesShownWith = { circular: null, linear: null };
-  /**
-   * @param {'circular' | 'linear'} arrivingMode
-   * @param {{ promise: Promise<unknown> } | null} expectation The arriving Result's readiness.
-   */
-  const followRulesOnArrival = (arrivingMode, expectation) => {
-    const rules = rulesShownWith[arrivingMode];
-    rulesShownWith[arrivingMode] = null;
-    if (!rules || !expectation) return;
-    expectation.promise.then(() => {
-      if (mode.value === arrivingMode) specificRuleRestorePorts.followRestoredSpecificRules(rules);
-    }, () => {});
-  };
 
   // E1 (R10, R13): the one transition between the diagram modes, in one task
   // so a switch is one History step. Undo and Redo of a switch run it through
@@ -3348,12 +3303,10 @@ export const createAppSetup = () => {
   //      selection, and the displayed Result's projection state (it followed
   //      every live edit until now).
   //   2. Swap the artifact slots (`swapArtifactSlots`).
-  //   3. Set `mode`.
-  //   4. Swap the settings profile (mode profiles).
-  //   5. Repair Show Depth for the arriving mode.
-  //   6. Reset the departing mode's transient UI.
-  //   7. Show the arriving Result as a selection; it asks for the automatic
-  //      rerender when the rule table changed since it was last shown.
+  //   3. Set `mode`. Each mode has its own drawing (PD-OI-086), so the
+  //      template now binds the arriving drawing and no setting is written.
+  //   4. Reset the departing mode's transient UI.
+  //   5. Show the arriving Result as a selection.
   /**
    * @param {'circular' | 'linear'} nextMode
    * @returns {boolean} Whether the mode changed.
@@ -3367,22 +3320,16 @@ export const createAppSetup = () => {
     featureActions.suspendSpecificRulePatternDrafts();
     featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
     rememberDepartingResultProjection(drawing);
-    rulesShownWith[previousMode] = results.value.length > 0 ? drawing.manualSpecificRules.map((rule) => ({ ...rule })) : null;
     // 2. Artifact slots.
-    const arriving = swapArtifactSlots(nextMode);
+    swapArtifactSlots(nextMode);
     // 3. Mode.
     mode.value = nextMode;
-    // 4. Settings profile, in the arriving mode's drawing.
-    const arrivingDrawing = state.drawings[nextMode];
-    arrivingDrawing.modeProfileStateManager.transition(arrivingDrawing.adv, previousMode, nextMode);
-    // 5. Show Depth.
-    repairShowDepth();
-    // 6. Transient UI. "Showing the last successful result" named the
+    // 4. Transient UI. "Showing the last successful result" named the
     // departing mode's Result.
     resetModeTransientUi();
     failedGeneratePreservedResult.value = false;
-    // 7. Presentation, then the rerender a changed rule table asks for.
-    followRulesOnArrival(nextMode, presentArrivingResult(arriving));
+    // 5. Presentation: the arriving Result is shown as a selection.
+    previewRuntime.presentSelectedResult({});
     return true;
   };
   historySnapshots.registerModeTransition(transitionDiagramMode);
@@ -3418,8 +3365,6 @@ export const createAppSetup = () => {
   const installLoadedArtifactSlots = ({ opening, stashed }) => {
     artifactSlots.circular = null;
     artifactSlots.linear = null;
-    rulesShownWith.circular = null;
-    rulesShownWith.linear = null;
     if (stashed) artifactSlots[stashed.mode] = stashed;
     if (!opening) return;
     historySnapshots.installArtifactSlot(opening, { mode: opening.mode });
@@ -3439,8 +3384,7 @@ export const createAppSetup = () => {
       unmatched: countUnresolvedFeatureEdits({
         featureOverrides: drawing.featureOverrides,
         featurePlacementOverrides: drawing.featurePlacementOverrides,
-        notices,
-        scope: state.generatedMode.value
+        notices
       }),
       removed: Number(featureEditRemovalCount.value) || 0
     };
@@ -3454,8 +3398,7 @@ export const createAppSetup = () => {
     return removeUnresolvedFeatureEdits({
       featureOverrides: drawing.featureOverrides,
       featurePlacementOverrides: drawing.featurePlacementOverrides,
-      notices: featureIdentityNotices.value,
-      scope: state.generatedMode.value
+      notices: featureIdentityNotices.value
     }) > 0;
   });
   const addFeatureVisibilityRuleWithHistory = undoableAction('Add feature visibility rule', addFeatureVisibilityRule);
@@ -4047,8 +3990,10 @@ export const createAppSetup = () => {
 
   const { resetAllPositions, resetCanvasPadding } = legendLayout;
 
+  // Reset Settings resets both drawings (PD-OI-070); the Linear records and
+  // comparisons are the Linear drawing's.
   const resetSettings = () => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.linear;
     const sessionBusy = sessionOperationAvailability();
     if (sessionBusy) return sessionBusy;
     const proceed = window.confirm(
@@ -4075,7 +4020,8 @@ export const createAppSetup = () => {
       circularTrackNewRenderer.value = 'dinucleotide_skew';
       linearTrackNewRenderer.value = 'dinucleotide_skew';
       depthTrackUiCounts.circular = 1;
-      ensureDepthTrackConfigCount(drawing, activeDepthTrackCount());
+      ensureDepthTrackConfigCount(state.drawings.circular, activeDepthTrackCount('circular'));
+      ensureDepthTrackConfigCount(drawing, activeDepthTrackCount('linear'));
       return true;
     });
   };
@@ -4109,14 +4055,14 @@ export const createAppSetup = () => {
     return Math.min(Math.max(numeric, safeMin), safeMax);
   };
 
-  /** @param {DrawingState} drawing */
-  const getFeaturePopupConstraints = (drawing, left = clickedFeaturePos.x, top = clickedFeaturePos.y) => {
+  // The popup's size follows the app-level rich popup preference.
+  const getFeaturePopupConstraints = (left = clickedFeaturePos.x, top = clickedFeaturePos.y) => {
     const viewportWidth = Math.max(1, window.innerWidth || 1);
     const viewportHeight = Math.max(1, window.innerHeight || 1);
     const availableWidth = Math.max(1, viewportWidth - (FEATURE_POPUP_MARGIN * 2));
     const availableHeight = Math.max(1, viewportHeight - (FEATURE_POPUP_MARGIN * 2));
     const desiredMinWidth =
-      drawing.adv.rich_feature_popup === false ? FEATURE_POPUP_SIMPLE_MIN_WIDTH : FEATURE_POPUP_RICH_MIN_WIDTH;
+      richFeaturePopup.value === false ? FEATURE_POPUP_SIMPLE_MIN_WIDTH : FEATURE_POPUP_RICH_MIN_WIDTH;
     const minWidth = Math.min(desiredMinWidth, availableWidth);
     const minHeight = Math.min(FEATURE_POPUP_MIN_HEIGHT, availableHeight);
     return {
@@ -4128,11 +4074,10 @@ export const createAppSetup = () => {
   };
 
   const featurePopupStyle = computed(() => {
-    const drawing = state.activeDrawing();
     const style = {
       top: `${clickedFeaturePos.y}px`,
       left: `${clickedFeaturePos.x}px`,
-      maxHeight: `${getFeaturePopupConstraints(drawing).maxHeight}px`
+      maxHeight: `${getFeaturePopupConstraints().maxHeight}px`
     };
     if (featurePopupSize.width > 0) {
       style.width = `${featurePopupSize.width}px`;
@@ -4339,9 +4284,8 @@ export const createAppSetup = () => {
   };
 
   const onFeaturePopupResize = (event) => {
-    const drawing = state.activeDrawing();
     if (!featurePopupResize.active) return;
-    const constraints = getFeaturePopupConstraints(drawing, clickedFeaturePos.x, clickedFeaturePos.y);
+    const constraints = getFeaturePopupConstraints(clickedFeaturePos.x, clickedFeaturePos.y);
     const nextWidth = featurePopupResize.startWidth + (event.clientX - featurePopupResize.startX);
     const nextHeight = featurePopupResize.startHeight + (event.clientY - featurePopupResize.startY);
     featurePopupSize.width = clampNumber(nextWidth, constraints.minWidth, constraints.maxWidth);
@@ -4380,13 +4324,12 @@ export const createAppSetup = () => {
   };
 
   const startFeaturePopupResize = (event) => {
-    const drawing = state.activeDrawing();
     if (event.button !== 0) return;
     if (!clickedFeature.value) return;
     const popup = featurePopupRef.value;
     if (!popup) return;
     const rect = popup.getBoundingClientRect();
-    const constraints = getFeaturePopupConstraints(drawing, rect.left, rect.top);
+    const constraints = getFeaturePopupConstraints(rect.left, rect.top);
 
     featurePopupDrag.active = false;
     document.removeEventListener('mousemove', onFeaturePopupDrag);
@@ -5476,13 +5419,16 @@ export const createAppSetup = () => {
     linearTrackSlotPlacementLabel: linearTrackSlotEditor.linearTrackSlotPlacementLabel,
     linearTrackSlotUsesPresetGeometry: linearTrackSlotEditor.linearTrackSlotUsesPresetGeometry,
     losat: drawingMember('losat'),
+    losatExecution,
+    richFeaturePopup,
     ...losatSettings,
     losatCacheInfo,
     losatThreadingStatus,
     orthogroups,
     featureOrthogroupIndex,
-    orthogroupNameOverrides: drawingMember('orthogroupNameOverrides'),
-    orthogroupDescriptionOverrides: drawingMember('orthogroupDescriptionOverrides'),
+    // Similarity groups are the Linear drawing's.
+    orthogroupNameOverrides: state.drawings.linear.orthogroupNameOverrides,
+    orthogroupDescriptionOverrides: state.drawings.linear.orthogroupDescriptionOverrides,
     selectedOrthogroupId,
     orthogroupSearch,
     orthogroupSortMode,

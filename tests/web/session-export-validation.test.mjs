@@ -188,7 +188,7 @@ try {
   const session = JSON.parse(gunzipSync(
     Buffer.from(await saved.blob.arrayBuffer())
   ).toString('utf8'));
-  assert.equal(session.config.adv.circular_track_slots[0].width, '16px');
+  assert.equal(session.modes.circular.config.adv.circular_track_slots[0].width, '16px');
   assert.equal(
     session.renderRequest.diagramOptions.tracks.circularTrackSlots[0].width,
     null

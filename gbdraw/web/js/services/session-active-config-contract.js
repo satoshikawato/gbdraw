@@ -12,6 +12,7 @@ import { diagnosticError } from '../utils/error-normalization.js';
 import { validateRecordDisplayDrafts } from '../app/record-display-options.js';
 import { requireLinearLabelVisibilityMode } from './linear-label-visibility.js';
 import { canonicalFeaturePlacements } from './feature-placement.js';
+import { validateScopedFeaturePlacements } from './feature-edit-migration.js';
 const circularTracks = trackDefaultsForMode('circular'), linearTracks = trackDefaultsForMode('linear');
 export const CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 4, LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION = 3;
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value), has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
@@ -61,7 +62,7 @@ export const createDefaultForm = () => ({
  * @returns {Record<string, any>}
  */
 export const createDefaultAdv = (mode = 'circular') => ({
-  rich_feature_popup: true, features: [...MODE_DEFAULT_FEATURE_TYPES], feature_shapes: createDefaultFeatureRenderings(), arrow_head_length_ratio: null,
+  features: [...MODE_DEFAULT_FEATURE_TYPES], feature_shapes: createDefaultFeatureRenderings(), arrow_head_length_ratio: null,
   arrow_shaft_width_ratio: DEFAULT_ARROW_SHAFT_WIDTH_RATIO, window_size: null, step_size: null, nt: 'GC', def_font_size: null,
   circular_definition_interval: null, label_font_size: null, circular_label_spacing: null, linear_label_spacing: null, label_rendering: 'auto',
   circular_label_placement: 'horizontal', label_placement: 'auto', label_rotation: null, block_stroke_width: null, block_stroke_color: null,
@@ -87,8 +88,12 @@ export const createDefaultLosatpHitLimits = () => ({
   orthogroup: { candidateLimit: null, orthogroupMemberMaxHits: null },
   collinear: { candidateLimit: 5, orthogroupMemberMaxHits: 5 }
 });
+// How LOSAT runs: one app-level setting for both drawings (Session `ui.losatExecution`).
+export const createDefaultLosatExecution = () => ({
+  executionMode: 'threaded', totalThreadBudget: 'safe', threadsPerJob: 'auto', parallelWorkers: undefined
+});
 export const createDefaultLosat = () => ({
-  outfmt: '6', parallelWorkers: undefined, executionMode: 'threaded', totalThreadBudget: 'safe', threadsPerJob: 'auto',
+  outfmt: '6',
   blastn: { task: 'megablast' }, blastp: { mode: 'orthogroup', hitLimitsByMode: createDefaultLosatpHitLimits(), maxHits: 5, candidateLimit: null, orthogroupMembershipMode: 'anchor_core_v1',
     orthogroupMemberMaxHits: null, collinearInferOrthogroups: false, collinearMinAnchors: 1, collinearMaxUnitGap: 0, collinearMaxDiagonalDrift: 0,
     collinearMaxConflictsInMergeGap: 1, collinearMaxParalogLinksPerOrthogroup: 2, collinearColorMode: 'orientation',
@@ -103,7 +108,9 @@ export const CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS = Object.freeze([
   'linearRecordLayout', 'linearComparisonPlan', 'importedComparisonResolution', 'webEdits'
 ]);
 export const CURRENT_WRITER_FORM_FIELDS = Object.freeze([...Object.keys(createDefaultForm()), 'legend']);
-export const CURRENT_WRITER_ADV_FIELDS = Object.freeze([...Object.keys(createDefaultAdv()), 'plot_title_position', 'losatProgram']);
+// `rich_feature_popup` is read from a Session 40-44 draft only: Session 46
+// keeps the app preference in `ui.richFeaturePopup`.
+export const CURRENT_WRITER_ADV_FIELDS = Object.freeze([...Object.keys(createDefaultAdv()), 'plot_title_position', 'losatProgram', 'rich_feature_popup']);
 const DOMAIN_SHAPES = Object.freeze({ form: 'object', adv: 'object', losat: 'object', cliOptions: 'object', colors: 'object',
   circularConservation: 'object', modeProfiles: 'object', linearRecordLayout: 'object', linearComparisonPlan: 'object', webEdits: 'object',
   importedComparisonResolution: 'object', unmanagedConfigOverrides: 'object',
@@ -184,11 +191,13 @@ export const validateImportedLinearTrackSlots = (config = {}, { depthTrackCount 
     anchorlessRenderers: ['spacer'], depthTrackCount });
 };
 /**
- * Throws when `storedConfig` is not a current-writer active configuration.
- * @param {{ mode: string, storedConfig: Record<string, any> }} input
+ * Throws when `storedConfig` is not a current-writer active configuration:
+ * a Session 46 slice of `mode`, or (`scopedDrafts`) the flat draft of a
+ * Session 41-44, whose record display and placement rows name their mode.
+ * @param {{ mode: string, storedConfig: Record<string, any>, scopedDrafts?: boolean }} input
  * @returns {void}
  */
-export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }) => {
+export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config, scopedDrafts = false }) => {
   if (!['circular', 'linear'].includes(mode)) throw new Error(`Current session active configuration has unsupported mode: ${String(mode)}.`);
   if (!isObject(config)) throw new Error('Current session is missing its active Web configuration.');
   assertSafeObjectKeys(config, 'Current session active configuration');
@@ -198,8 +207,11 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }
     throw new Error(`Current session active configuration contains unknown domain(s): ${unknownDomains.join(', ')}.`);
   if (!isObject(config.form) || !isObject(config.adv)) throw new Error('Current session is missing its active form or advanced settings.');
   validateDomainShapes(config); validateCollections(config); requireCurrentWebStateFieldNames(config);
-  if (has(config, 'recordDisplayDrafts')) validateRecordDisplayDrafts(config.recordDisplayDrafts);
-  if (has(config, 'featurePlacementOverrides')) canonicalFeaturePlacements(config.featurePlacementOverrides);
+  if (has(config, 'recordDisplayDrafts')) validateRecordDisplayDrafts(config.recordDisplayDrafts, { scoped: scopedDrafts });
+  if (has(config, 'featurePlacementOverrides')) {
+    if (scopedDrafts) validateScopedFeaturePlacements(config.featurePlacementOverrides);
+    else canonicalFeaturePlacements(config.featurePlacementOverrides, mode);
+  }
   if (has(config.adv, 'feature_overlap_tolerance_bp') && (!Number.isSafeInteger(config.adv.feature_overlap_tolerance_bp)
     || config.adv.feature_overlap_tolerance_bp < 0)) throw new Error('Feature overlap tolerance must be a non-negative integer.');
   assertFields(config.form, new Set(CURRENT_WRITER_FORM_FIELDS), 'config.form'); assertFields(config.adv, new Set(CURRENT_WRITER_ADV_FIELDS), 'config.adv');
@@ -208,11 +220,12 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }
   if (has(config.form, 'linear_track_layout')) requireCurrentLinearTrackLayout(config.form.linear_track_layout);
   if (has(config.adv, 'label_placement')) requireCurrentLinearLabelPlacement(config.adv.label_placement);
   if (has(config.adv, 'multi_record_size_mode')) requireCurrentCircularMultiRecordSizeMode(config.adv.multi_record_size_mode);
-  requireLinearLabelVisibilityMode(
+  // A Session 46 slice may omit a field: it reads that mode's default (plan 4.1).
+  if (has(config.adv, 'linear_accession_visibility')) requireLinearLabelVisibilityMode(
     config.adv.linear_accession_visibility,
     'Linear Accession visibility'
   );
-  requireLinearLabelVisibilityMode(
+  if (has(config.adv, 'linear_length_visibility')) requireLinearLabelVisibilityMode(
     config.adv.linear_length_visibility,
     'Linear Length / Coordinates visibility'
   );

@@ -130,11 +130,12 @@ const renderedResultIndexes = (catalogAdmission, renderedId) => (
   catalogAdmission.resultIndexesByRenderedId.get(renderedId) || new Set()
 );
 
-// Per-feature edits name a source identity in one mode; each Result of that
-// mode draws it with its own rendered ID (design Q4 6.2, R2).
-const identityTargets = (catalogAdmission, row) => (row?.scope === catalogAdmission.mode
-  ? resolvedStableTargets(catalogAdmission, biologicalFeatureKey(row?.recordKey, row?.biologicalFeatureId))
-  : []);
+// Per-feature edits name a source identity in the drawing of the catalog's
+// mode; each Result of that mode draws it with its own rendered ID (design Q4
+// 6.2, R2).
+const identityTargets = (catalogAdmission, row) => (
+  resolvedStableTargets(catalogAdmission, biologicalFeatureKey(row?.recordKey, row?.biologicalFeatureId))
+);
 
 const normalizedLegendEntries = (entries) => (
   Array.isArray(entries)

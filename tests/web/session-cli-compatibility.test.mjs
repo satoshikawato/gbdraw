@@ -145,7 +145,8 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
           assert.equal(hash(await readFileBytes(state.files.c_gff)), hash(await readFile(args[1])));
           assert.equal(hash(await readFileBytes(state.files.c_fasta)), hash(await readFile(args[3])));
         }
-        // The original malformed adjunct is still invalid, even beside a valid request.
+        // A draft outside `modes` is a Session-format error, even beside a
+        // valid request (Session 46 keeps the Web draft in `modes`).
         const before = getCommittedCanonicalRenderRequest();
         const errorLog = console.error;
         console.error = () => {};
@@ -153,7 +154,7 @@ for (const [label, mode, args, sourcePaths, legend] of cases) {
           const rejected = await load(JSON.stringify({ ...session, config: { adv: {} } }));
           assert.equal(rejected.status, 'error');
           assert.equal(rejected.error.code, 'INPUT_INVALID');
-          assert.deepEqual(rejected.error.context, {field:'config',reason:'FIELDS'});
+          assert.deepEqual(rejected.error.context, {field:'schema',reason:'FIELDS'});
           assert.deepEqual(getCommittedCanonicalRenderRequest(), before);
         } finally {
           console.error = errorLog;

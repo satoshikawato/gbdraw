@@ -1,21 +1,19 @@
 // @ts-check
 import { createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat, validateCurrentWriterActiveConfig } from './session-active-config-contract.js';
-import { resolveActiveLayoutPreference } from './layout-preferences.js';
+import {
+  LEGACY_LAYOUT_PREFERENCE_FIELDS, normalizeLayoutPreferences, resolveActiveLayoutPreference, restoredLayoutPreferences
+} from './layout-preferences.js';
+import { splitDraftIntoModes, validateModeSliceFields } from './mode-scoped-migration.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
 import { FEATURE_CATALOG_SCHEMA, migrateLegacyFeatureCatalog } from './feature-catalog.js';
 import { migrateSessionFeatureEdits, migrateSessionFeaturePlacements } from './feature-edit-migration.js';
 import { adoptCurrentSessionResources } from './session-resource-backing.js';
 import { defaultFeatureRendering } from '../utils/feature-rendering.js';
-const CURRENT_VERSION = 45, CURRENT_REQUEST_SCHEMA = 9, ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
-const ARTIFACT_FIELDS = ['results', 'features', 'editorState', 'orthogroupState', 'runMetadata', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest'];
-// A published Gallery file carries no draft intent for its unused mode (GUI
-// remediation S00 decision 1). These fields, read only by the other mode, are
-// written with fresh defaults; mode profiles own the per-mode title and fonts.
-const UNUSED_MODE_FRESH_FIELDS = Object.freeze({
-  circular: Object.freeze({ adv: Object.freeze(['linear_show_replicon', 'linear_accession_visibility', 'linear_length_visibility']) }),
-  linear: Object.freeze({ form: Object.freeze(['multi_record_canvas']) })
-});
+const CURRENT_VERSION = 46, CURRENT_REQUEST_SCHEMA = 9, ACCEPTED_REQUEST_SCHEMAS = new Set([CURRENT_REQUEST_SCHEMA]), HISTORICAL_VERSIONS = new Set([31, 32, 33, 39]), CACHE_LIMIT_BYTES = 64 * 1024 * 1024;
+const ARTIFACT_FIELDS = ['results', 'editorState', 'orthogroupState', 'runMetadata', 'losatCache', 'losatDerivedCache', 'proteinIdentityManifest'];
+// The top-level homes of the flat draft that Session 46 moved into `modes`.
+const RETIRED_DRAFT_FIELDS = ['config', 'features'];
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const clone = (value) => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const has = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
@@ -43,7 +41,17 @@ export const applyDerivedCachePublicationPolicy = (session, { limitBytes = CACHE
 // A CLI-written Session has no Web configuration; publication derives it from
 // the request, as Session Load does, so a Gallery Session can be built from its
 // declared command.
-const isCliWritten = (session) => !has(session, 'config') && session?.cliInvocation?.generatedBy === 'gbdraw';
+const isCliWritten = (session) => !has(session, 'config') && !has(session, 'modes')
+  && session?.cliInvocation?.generatedBy === 'gbdraw';
+// The draft of the Session's mode: its slice (Session 46) or the flat draft of
+// an older Session that admission promoted. Publication writes the slice of the
+// Session's mode only; the other mode takes its defaults (plan 4.3).
+const modeSlice = (session) => {
+  const slice = isObject(session?.modes) ? session.modes[session.renderRequest?.mode] : null;
+  return isObject(slice) ? slice : null;
+};
+const draftConfig = (session) => (has(session, 'modes') ? modeSlice(session)?.config || {} : session?.config);
+const draftFeatures = (session) => (has(session, 'modes') ? modeSlice(session)?.features : session?.features);
 const validateEnvelope = (session) => {
   if (!isObject(session) || session.format !== 'gbdraw-session') throw new Error('Gallery publication requires a gbdraw-session document.'); if (Number(session.version) !== CURRENT_VERSION) throw new Error(`Gallery publication requires session version ${CURRENT_VERSION}.`);
   if (!isObject(session.renderRequest) || !ACCEPTED_REQUEST_SCHEMAS.has(Number(session.renderRequest.schema))) throw new Error(`Gallery publication requires canonical renderRequest schema ${CURRENT_REQUEST_SCHEMA}.`);
@@ -51,12 +59,23 @@ const validateEnvelope = (session) => {
   if (has(session, 'otherModeResult')) throw new Error('Gallery publication requires a Session with one diagram mode.');
   return session;
 };
+// A Session 46 keeps the Web draft in `modes` only (plan 4.1).
+const validateCurrentFields = (session) => {
+  if (RETIRED_DRAFT_FIELDS.some((field) => has(session, field))) throw new Error('Gallery publication requires the Web draft in modes (Session 46).');
+  if (has(session, 'modes')) {
+    const modes = session.modes;
+    if (!isObject(modes) || Object.keys(modes).some((mode) => mode !== 'circular' && mode !== 'linear'))
+      throw new Error('Gallery publication requires modes to hold a circular and a linear slice only.');
+    Object.values(modes).forEach((slice) => validateModeSliceFields(slice));
+  }
+  return session;
+};
 const validateCurrent = (session) => {
-  validateEnvelope(session); validateCurrentWriterActiveConfig({ mode: session.renderRequest.mode, storedConfig: session.config });
+  validateEnvelope(session); validateCurrentWriterActiveConfig({ mode: session.renderRequest.mode, storedConfig: draftConfig(session) });
   return session;
 };
 const publicationConfig = (session, projection) => {
-  const projected = clone(projection.config || {}), stored = session.config || {}, losat = createDefaultLosat();
+  const projected = clone(projection.config || {}), stored = draftConfig(session) || {}, losat = createDefaultLosat();
   const config = { ...projected,
     form: { ...createDefaultForm(), ...projected.form, ...stored.form },
     adv: { ...createDefaultAdv(projection.mode), ...projected.adv, ...stored.adv },
@@ -67,24 +86,50 @@ const publicationConfig = (session, projection) => {
     linearComparisonPlan: clone(stored.linearComparisonPlan || projected.linearComparisonPlan
       || { mode: 'none', defaultSource: 'losat', edges: [] })
   };
-  for (const key of ['palette', 'annotationSets', 'recordDisplayDrafts', 'featurePlacementOverrides', 'modeProfiles', 'linearRecordLayout', 'losatProgram'])
+  for (const key of ['palette', 'annotationSets', 'recordDisplayDrafts', 'featurePlacementOverrides', 'linearRecordLayout', 'losatProgram'])
     if (has(stored, key)) config[key] = clone(stored[key]);
   if (stored.colorsAreOverrides === true && Object.keys(stored.colors || {}).length) Object.assign(config, { colors: clone(stored.colors), colorsAreOverrides: true });
   const colors = session.renderRequest.diagramOptions?.colors;
   if (!colors?.defaultColors && !colors?.defaultColorsFile) Object.assign(config, { colors: {}, colorsAreOverrides: false });
   for (const key of ['webEdits', 'paletteInstantPreviewEnabled']) if (has(stored, key)) config[key] = clone(stored[key]);
   delete config.blastSource; delete config.adv.losatProgram;
-  if (isCliWritten(session)) {
-    // Legend and plot-title positions are layout preferences of the request.
-    const committedLayout = resolveActiveLayoutPreference(projection.layoutPreferences, projection.mode,
-      Boolean(config.form.multi_record_canvas));
-    Object.assign(config.form, { legend: committedLayout.legend });
-    Object.assign(config.adv, { plot_title_position: committedLayout.plotTitlePosition });
-  }
-  const fresh = { form: createDefaultForm(), adv: createDefaultAdv(projection.mode) };
-  for (const [domain, fields] of Object.entries(UNUSED_MODE_FRESH_FIELDS[projection.mode]))
-    for (const field of fields) config[domain][field] = fresh[domain][field];
   return config;
+};
+// The layout preferences of the Session's drawing: a Session 46 slice's slot
+// over its request's layout, or an older Session's layout as Session Load
+// restores it. The request reads the shown slot's Legend and plot-title
+// positions from the drawing's form and advanced settings.
+const publicationLayout = (session, config, projection) => {
+  const mode = projection.mode;
+  const slot = modeSlice(session)?.ui?.layoutPreferences;
+  const ui = isObject(session.ui) ? session.ui : {};
+  const layout = has(session, 'modes')
+    ? normalizeLayoutPreferences({ ...normalizeLayoutPreferences(projection.layoutPreferences),
+      ...(isObject(slot) ? { [mode]: slot } : {}) })
+    : restoredLayoutPreferences(ui, { mode, multiRecord: Boolean(config.form?.multi_record_canvas),
+      projected: projection.layoutPreferences,
+      active: { legend: config.form?.legend, plotTitlePosition: config.adv?.plot_title_position } });
+  const active = resolveActiveLayoutPreference(layout, mode, Boolean(config.form?.multi_record_canvas));
+  Object.assign(config.form, { legend: active.legend });
+  Object.assign(config.adv, { plot_title_position: active.plotTitlePosition });
+  return layout;
+};
+// The published Session 46: the Session's mode's slice holds the rebuilt
+// configuration and its layout slot; the other slice is absent, so it takes
+// that mode's defaults. An older Session's flat draft is split by the registry
+// (plan 4.2); a Session 46 keeps the rest of its slice. The layout has one
+// home, so the older `ui` layout fields go.
+const publishedSession = (session, config, layout, projection) => {
+  const mode = projection.mode;
+  const flat = !has(session, 'modes');
+  const draft = flat ? { ...session, config, ui: { ...(isObject(session.ui) ? session.ui : {}), mode } } : { config, ui: { mode } };
+  // Override colors merge into the committed request's colors.
+  const split = splitDraftIntoModes(draft, { committedMode: mode, modeProfiles: null, paletteColors: projection.config?.colors || null });
+  const slice = flat ? split.modes[mode] : { ...modeSlice(session), config: split.modes[mode].config };
+  const published = flat ? split : { ...session };
+  const ui = Object.fromEntries(Object.entries(isObject(published.ui) ? published.ui : {})
+    .filter(([field]) => !LEGACY_LAYOUT_PREFERENCE_FIELDS.includes(field)));
+  return { ...published, ui, modes: { [mode]: { ...slice, ui: { ...(slice.ui || {}), layoutPreferences: clone(layout[mode]) } } } };
 };
 const publicationCanonicalRequest = (
   request,
@@ -107,16 +152,17 @@ const rebuildIntent = async (session, owners) => {
     }
   );
   const projection = owners.projectRequest({ renderRequest,
-    resources: session.resources, webFiles: session.webFiles || {}, legacyFiles: session.files, storedConfig: session.config,
+    resources: session.resources, webFiles: session.webFiles || {}, legacyFiles: session.files, storedConfig: draftConfig(session),
     initializeCliInputs: isCliWritten(session),
     fileBindings: session.cliInvocation?.fileBindings, sessionResourceTable: adoptCurrentSessionResources(session.resources),
     deferResourceContent: false, adoptCanonicalPayloads: true });
   const config = publicationConfig(session, projection); validateCurrentWriterActiveConfig({ mode: projection.mode, storedConfig: config });
+  const layout = publicationLayout(session, config, projection);
   const filesData = projection.files;
   if (projection.mode === 'linear') filesData.linearSeqs.forEach((sequence, index) => {
     sequence.cardinality = renderRequest.records[index]?.cardinality;
   });
-  const { state, drawing } = owners.buildRequestState({ session, projection, config, filesData });
+  const { state, drawing } = owners.buildRequestState({ session: { ...session, features: draftFeatures(session) }, projection, config, filesData });
   const plan = projection.mode === 'linear' ? owners.resolveComparisonPlan({ plan: drawing.linearComparisonPlan, sequences: filesData.linearSeqs,
     layout: drawing.linearRecordLayoutEnabled.value ? drawing.linearRecordRows : [],
     losatProgram: drawing.losatProgram.value, blastpMode: drawing.losat?.blastp?.mode }) : null;
@@ -142,7 +188,7 @@ const rebuildIntent = async (session, owners) => {
     else delete diagramOptions.featureShapes;
     return { ...request, diagramOptions };
   };
-  return { config, rebuilt, equivalence: await owners.assertRequestsEquivalent({ expectedRequest: comparable(renderRequest),
+  return { config, layout, projection, rebuilt, equivalence: await owners.assertRequestsEquivalent({ expectedRequest: comparable(renderRequest),
     expectedResources: session.resources, actualRequest: comparable(rebuilt.renderRequest), actualResources: rebuilt.resources }) };
 };
 const mergeReplayResources = (prepared, replayed) => {
@@ -209,7 +255,7 @@ export const createGallerySessionPublication = (owners) => {
           )
         }
       : session?.editorState,
-    // Session 45 keys per-feature edits by source identity (design Q4 4.3).
+    // The current writer keys per-feature edits by source identity (design Q4 4.3).
     features: migrateSessionFeatureEdits({
       features: session?.features,
       mode: session?.renderRequest?.mode,
@@ -219,18 +265,11 @@ export const createGallerySessionPublication = (owners) => {
   const admit = (session) => {
     const version = Number(session?.version);
     if (version === CURRENT_VERSION) {
-      if ([7, 8].includes(Number(session.renderRequest?.schema))) {
-        return validateCurrent({ ...session, renderRequest: publicationCanonicalRequest(
-          session.renderRequest,
-          owners.promoteRequest,
-          {
-            featureCatalog: session.editorState?.featureCatalog || null,
-            legacyOrthogroupState: session.orthogroupState || null
-          }
-        ) });
-      }
+      validateCurrentFields(session);
       return isCliWritten(session) ? validateEnvelope(session) : validateCurrent(session);
     }
+    // An older Session is promoted to the current request and kept as a flat
+    // draft until `prepare` splits it into the Session's mode slice.
     if ([40, 41, 42, 44].includes(version)) return validateCurrent(promoteVisibilityState({ ...session, version: CURRENT_VERSION,
       renderRequest: publicationCanonicalRequest(
         session.renderRequest,
@@ -245,19 +284,18 @@ export const createGallerySessionPublication = (owners) => {
   };
   const rebuild = (session) => rebuildIntent(session, owners);
   const prepare = async (source) => {
-    const admitted = admit(source), { config, rebuilt, equivalence } = await rebuild(admitted);
+    const admitted = admit(source), { config, layout, projection, rebuilt, equivalence } = await rebuild(admitted);
     const session = {
-      ...admitted,
-      config,
+      ...publishedSession(admitted, config, layout, projection),
       renderRequest: rebuilt.renderRequest,
       resources: rebuilt.resources,
       webFiles: rebuilt.webFiles,
       orthogroupState: currentOrthogroupState(admitted.orthogroupState)
     };
-    return { session: validateCurrent(session), equivalence };
+    return { session: validateCurrent(validateCurrentFields(session)), equivalence };
   };
   const finalize = async ({ prepared, replayed }) => {
-    validateCurrent(prepared); validateCurrent(replayed);
+    validateCurrent(validateCurrentFields(prepared)); validateCurrent(validateCurrentFields(replayed));
     const resources = mergeReplayResources(prepared, replayed);
     await owners.assertRequestsEquivalent({ expectedRequest: prepared.renderRequest, expectedResources: prepared.resources, actualRequest: replayed.renderRequest,
       actualResources: replayed.resources, normalizeReplayGeneratedResources: true });
@@ -266,6 +304,6 @@ export const createGallerySessionPublication = (owners) => {
     session = applyDerivedCachePublicationPolicy(session);
     return { session, equivalence: (await rebuild(session)).equivalence };
   };
-  const validate = (session) => (validateCurrent(session), rebuild(session));
+  const validate = (session) => (validateCurrent(validateCurrentFields(session)), rebuild(session));
   return Object.freeze({ admitGallerySession: admit, finalizeGallerySessionPublication: finalize, prepareGallerySessionForPublication: prepare, validateGalleryPublicationReadiness: validate });
 };

@@ -504,12 +504,12 @@ withIdentityRows.renderRequest.diagramOptions.featureOverrides = [{
   labelVisibility: null,
   labelText: null
 }];
-// The Web reads a request's identity rows into its draft (PR-Q4-4), in the
-// request's mode (R2).
+// The Web reads a request's identity rows into the draft of the request's
+// mode's drawing (PR-Q4-4, R2), keyed by the identity pair (PR-1).
 assert.deepEqual(
   projectCanonicalSessionRequest(withIdentityRows).semanticFeatureState.featureOverrides,
-  { [JSON.stringify(['circular', canonical.renderRequest.records[0].recordKey, 'f1234abcd'])]: {
-    scope: 'circular', ...withIdentityRows.renderRequest.diagramOptions.featureOverrides[0], labelSourceText: null
+  { [JSON.stringify([canonical.renderRequest.records[0].recordKey, 'f1234abcd'])]: {
+    ...withIdentityRows.renderRequest.diagramOptions.featureOverrides[0], labelSourceText: null
   } }
 );
 const malformedIdentityRows = structuredClone(withIdentityRows);
@@ -518,29 +518,27 @@ assert.throws(
   () => projectCanonicalSessionRequest(malformedIdentityRows),
   { code: 'INPUT_INVALID', context: { field: 'schema', reason: 'FIELDS' } }
 );
-// The writer sends the draft rows of the request's mode and records (R2). A
-// Linear Session can use the Circular grid's record key (`record-1`) for the
-// same feature (R-1): the request carries only its own mode's rows.
+// The writer sends the rows of the drawing's request records (R2). A Linear
+// Session can use the Circular grid's record key (`record-1`) for the same
+// feature (R-1): each mode's drawing holds its own rows (PR-1), so the
+// Circular request carries the Circular drawing's rows only.
 {
   const recordKey = canonical.renderRequest.records[0].recordKey;
   assert.equal(recordKey, 'record-1');
-  const edit = (scope, fields) => ({
-    scope, recordKey, biologicalFeatureId: 'f1234abcd', featureVisibility: null,
+  const edit = (fields) => ({
+    recordKey, biologicalFeatureId: 'f1234abcd', featureVisibility: null,
     labelVisibility: null, labelText: null, labelSourceText: null, ...fields
   });
   state.featureOverrides = {
-    [JSON.stringify(['circular', recordKey, 'f1234abcd'])]: edit('circular', {
+    [JSON.stringify([recordKey, 'f1234abcd'])]: edit({
       labelVisibility: 'on', labelText: 'Renamed', labelSourceText: 'source'
     }),
-    [JSON.stringify(['linear', recordKey, 'f1234abcd'])]: edit('linear', { featureVisibility: 'off' }),
-    [JSON.stringify(['linear', 'linear-seq-other-mode', 'f1'])]: {
-      ...edit('linear', { featureVisibility: 'off' }), recordKey: 'linear-seq-other-mode', biologicalFeatureId: 'f1'
+    [JSON.stringify(['linear-seq-other-record', 'f1'])]: {
+      ...edit({ featureVisibility: 'off' }), recordKey: 'linear-seq-other-record', biologicalFeatureId: 'f1'
     }
   };
-  const placement = (scope, kind) => ({ scope, recordKey, biologicalFeatureId: 'f1234abcd', placement: { kind } });
   state.featurePlacementOverrides = {
-    [JSON.stringify(['circular', recordKey, 'f1234abcd'])]: placement('circular', 'main'),
-    [JSON.stringify(['linear', recordKey, 'f1234abcd'])]: placement('linear', 'main')
+    [JSON.stringify([recordKey, 'f1234abcd'])]: { recordKey, biologicalFeatureId: 'f1234abcd', placement: { kind: 'main' } }
   };
   const before = structuredClone([state.featureOverrides, state.featurePlacementOverrides]);
   state.form.multi_record_canvas = true;
@@ -552,8 +550,7 @@ assert.throws(
     { recordKey, biologicalFeatureId: 'f1234abcd', placement: { kind: 'main' } }
   ]);
   state.form.multi_record_canvas = false;
-  // The request removes no row of the other mode (the Linear request:
-  // tests/web/joint-display-placement.test.mjs).
+  // The request removes no row of a record it does not draw.
   assert.deepEqual([state.featureOverrides, state.featurePlacementOverrides], before);
   state.featureOverrides = {};
   state.featurePlacementOverrides = {};
@@ -2089,7 +2086,7 @@ const oneSourceFilesData = {
   linearComparisons: []
 };
 const oneSourceRows = [1, 2].map((index) => ({
-  key: JSON.stringify(['linear', 'one-source', `#${index}`]),
+  key: JSON.stringify(['one-source', `#${index}`]),
   scope: 'linear', sourceUid: 'one-source', selector: `#${index}`,
   recordId: 'duplicate', recordLength: 100, detectedTopology: 'circular',
   reverse: false, cropped: false
@@ -2112,8 +2109,9 @@ assert.equal(unchangedOneSource.renderRequest.schema, CANONICAL_REQUEST_SCHEMA);
 assert.equal(unchangedOneSource.renderRequest.records.length, 1);
 assert.equal(unchangedOneSource.renderRequest.records[0].cardinality, 'all');
 
+// A drawing's record display draft (its mode is the drawing's, PR-1).
 oneSourceState.recordDisplayDrafts = [{
-  scope: 'linear', sourceUid: 'one-source', selector: '#2', recordId: 'duplicate',
+  sourceUid: 'one-source', selector: '#2', recordId: 'duplicate',
   topologyOverride: null, startCoordinate: 25, reverseComplementOverride: true,
   anchorIntent: null
 }];
@@ -2270,8 +2268,7 @@ for (const [label, targetPatch, transformPatch, requestPatch] of [
     // Live per-feature edits are identity rows; a bulk edit without a known
     // label stays a label-table rule (design Q4).
     featureOverrides: {
-      [JSON.stringify([committed.renderRequest.mode, committed.renderRequest.records[0].recordKey, 'f1'])]: {
-        scope: committed.renderRequest.mode,
+      [JSON.stringify([committed.renderRequest.records[0].recordKey, 'f1'])]: {
         recordKey: committed.renderRequest.records[0].recordKey, biologicalFeatureId: 'f1',
         featureVisibility: 'off', labelVisibility: null, labelText: 'Renamed f1', labelSourceText: null
       }

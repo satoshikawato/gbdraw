@@ -300,15 +300,15 @@ test('clicking the text of a checkbox label records an Undo step', async ({ page
   const label = page.locator('label.option-label', { hasText: 'Rich Feature Popup' }).first();
   await reveal(label);
   const before = await page.evaluate(() => ({
-    value: window.__GBDRAW_APP__.adv.rich_feature_popup, undo: window.__GBDRAW_HISTORY__.getUndoCount()
+    value: window.__GBDRAW_APP__.richFeaturePopup, undo: window.__GBDRAW_HISTORY__.getUndoCount()
   }));
   await label.locator('span').first().click();
   await settle(page);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.rich_feature_popup)).toBe(!before.value);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.richFeaturePopup)).toBe(!before.value);
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(before.undo + 1);
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.adv.rich_feature_popup)).toBe(before.value);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.richFeaturePopup)).toBe(before.value);
 });
 
 test('a checkbox click while a text field has focus records its own Undo step', async ({ page }) => {
@@ -320,7 +320,7 @@ test('a checkbox click while a text field has focus records its own Undo step', 
     .locator('input[type=checkbox]');
   await reveal(checkbox);
   const before = await page.evaluate(() => ({
-    value: window.__GBDRAW_APP__.adv.rich_feature_popup, undo: window.__GBDRAW_HISTORY__.getUndoCount()
+    value: window.__GBDRAW_APP__.richFeaturePopup, undo: window.__GBDRAW_HISTORY__.getUndoCount()
   }));
   await prefix.fill('audit');
   await checkbox.click();
@@ -329,7 +329,7 @@ test('a checkbox click while a text field has focus records its own Undo step', 
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.undo());
   await settle(page);
   expect(await page.evaluate(() => ({
-    value: window.__GBDRAW_APP__.adv.rich_feature_popup, prefix: window.__GBDRAW_APP__.form.prefix
+    value: window.__GBDRAW_APP__.richFeaturePopup, prefix: window.__GBDRAW_APP__.form.prefix
   }))).toEqual({ value: before.value, prefix: 'audit' });
 });
 
@@ -387,7 +387,7 @@ test('default threaded LOSAT without cross-origin isolation reports a recognized
     app.setLinearComparisonLosatMode('blastp');
   }, BATCH_RECORDS);
   await settle(page);
-  expect(await page.evaluate(() => window.__GBDRAW_APP__.losat.executionMode)).toBe('threaded');
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.losatExecution.executionMode)).toBe('threaded');
   const outcome = await generateAndWaitForResult(page, { expectedStatus: 'error', requireCommittedResult: false });
   expect(outcome.health.errorCode).not.toBe('UNKNOWN');
   expect(await page.evaluate(() => window.__GBDRAW_APP__.errorLog?.stage)).not.toBe('request-validation');

@@ -86,7 +86,7 @@ const state = {
   featureList: ref({ rows: [feature, hidden] }),
   featureListState: (row) => ({ drawn: row === feature, renderedId: row === feature ? row.svg_id : '' }),
   orthogroups: ref([]),
-  adv: { rich_feature_popup: true },
+  richFeaturePopup: ref(true),
   previewFeatureSearchInput: ref(''),
   previewFeatureSearchQuery: ref(''),
   previewFeatureSearchField: ref('all'),

@@ -205,7 +205,7 @@ test('comparison thresholds resolve once on the generated domains without rewrit
 test('Generate keeps the numeric draft: no Generate-path draft assignments are added (R7 ratchet)', () => {
   // Generate-path draft assignments in run-analysis.js may only shrink (69 on
   // dev before X-02). Lower the baseline when one is removed.
-  const BASELINE = 46;
+  const BASELINE = 44;
   const source = readFileSync(new URL('../../gbdraw/web/js/app/run-analysis.js', import.meta.url), 'utf8');
   const assignments = source.split('\n').filter((line) => (
     /^\s*(drawing\.)?(adv|form|circularConservation|losat(\.[a-z]+)?)\.[a-zA-Z_]+(\[[^\]]*\])?\s*=[^=]/.test(line)

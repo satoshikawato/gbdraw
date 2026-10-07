@@ -39,13 +39,12 @@ export const admitFeatureOverrideTable = (result, records) => {
 };
 
 // Load replaces the edits of the committed request's records, as Load Label
-// TSV replaces the label edits; edits of other records and of the other mode
-// stay (R2).
-export const replaceFeatureEdits = (featureOverrides, rows, mode, records) => {
+// TSV replaces the label edits; edits of other records stay (R2).
+export const replaceFeatureEdits = (featureOverrides, rows, records) => {
   Object.values(featureOverrides).forEach((row) => {
-    if (rowBelongsToRequest(row, mode, records)) updateFeatureOverride(featureOverrides, row, CLEARED_EDITS);
+    if (rowBelongsToRequest(row, records)) updateFeatureOverride(featureOverrides, row, CLEARED_EDITS);
   });
-  rows.forEach((row) => updateFeatureOverride(featureOverrides, { scope: mode, ...row }, editsOf(row)));
+  rows.forEach((row) => updateFeatureOverride(featureOverrides, row, editsOf(row)));
 };
 
 /**
@@ -76,7 +75,7 @@ export const createFeatureEditTableActions = ({
     const drawing = state.activeDrawing();
     const committed = getCommittedSession();
     const records = committed?.renderRequest?.records || [];
-    const rows = committed && records.length ? requestFeatureOverrides(drawing.featureOverrides, committed.renderRequest.mode, records) : [];
+    const rows = committed && records.length ? requestFeatureOverrides(drawing.featureOverrides, records) : [];
     if (!committed || rows.length === 0) {
       window.alert('No feature edits to export.');
       return false;
@@ -128,7 +127,7 @@ export const createFeatureEditTableActions = ({
       // A Generate that finished meanwhile names other records.
       if (getCommittedSession() !== committed || state.sessionOperationAvailability?.()) return false;
       const { rows, unmatchedRows } = admitFeatureOverrideTable(response?.result, records);
-      replaceFeatureEdits(drawing.featureOverrides, rows, committed.renderRequest.mode, records);
+      replaceFeatureEdits(drawing.featureOverrides, rows, records);
       await projectFeatureEdits();
       if (state.errorLog?.value === failure.value?.error) state.errorLog.value = null;
       failure.value = null;

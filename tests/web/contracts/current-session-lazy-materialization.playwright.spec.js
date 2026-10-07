@@ -757,7 +757,7 @@ test('a GenBank ring file reuses the FASTA ring search, records the Web runtime,
     await page.evaluate(async (rows) => {
       const { state } = await import('/gbdraw/web/js/state.js');
       window.__GBDRAW_RING_PROBE__.rows = rows;
-      state.activeDrawing().losat.executionMode = 'serial';
+      state.losatExecution.executionMode = 'serial';
       state.losatCache.value = new Map();
       state.losatCacheInfo.value = [];
       window.__GBDRAW_RING_PROBE__.searchRun = null;

@@ -180,7 +180,7 @@ console.log('History restores nullable config values and preserves key guards.')
   await restoreHistory.captureBaseline();
   await restoreHistory.initializeIntentBaseline();
   await restoreHistory.runUndoable('Rich Feature Popup', () => {
-    state.activeDrawing().adv.rich_feature_popup = !state.activeDrawing().adv.rich_feature_popup;
+    state.richFeaturePopup.value = !state.richFeaturePopup.value;
   });
   await restoreHistory.runUndoable('Label Mode', () => { state.activeDrawing().form.labels_mode = 'both'; });
   const edited = settings();

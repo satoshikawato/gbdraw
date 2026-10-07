@@ -1,4 +1,5 @@
 // @ts-check
+/** @import { DrawingState } from '../state.js' */
 import { ruleMatchDeclined, ruleMatchesReady, firstMatchingRule } from './rule-matching.js';
 import { ruleMatchesFeature } from '../services/rule-matchers.js';
 import {
@@ -91,11 +92,14 @@ export const createSvgStyles = ({
     return updated;
   };
 
+  // The palette styles the displayed Result with the settings of the drawing
+  // of that Result's mode: its rules, edits and skew slot colors (OV-108).
   const applyPaletteToSvg = ({
     recolorPairwise = false,
     recolorCollinear = false
   } = {}) => {
-    const drawing = state.activeDrawing();
+    const resultMode = (state.generatedMode?.value ?? mode.value) === 'linear' ? 'linear' : 'circular';
+    const drawing = state.drawings[resultMode];
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
     if (!svgContent.value || !extractedFeatures.value.length) return;
@@ -154,10 +158,10 @@ export const createSvgStyles = ({
     if (skewGroups.length > 0) {
       skewGroups.forEach((skewGroup) => {
         const slotId = String(skewGroup.getAttribute('data-gbdraw-slot-id') || '').trim();
-        const customSlotsEnabled = mode.value === 'circular'
+        const customSlotsEnabled = resultMode === 'circular'
           ? drawing.adv.circular_track_slots_enabled
           : drawing.adv.linear_track_slots_enabled;
-        const slots = mode.value === 'circular'
+        const slots = resultMode === 'circular'
           ? drawing.adv.circular_track_slots
           : drawing.adv.linear_track_slots;
         const slot = customSlotsEnabled && Array.isArray(slots)
@@ -504,16 +508,16 @@ export const createSvgStyles = ({
     { deep: true }
   );
 
-  watch(
+  // Each drawing's track toggles; a mode switch changes neither drawing, so it
+  // applies nothing (R10).
+  /** @type {DrawingState[]} */ ([state.drawings.circular, state.drawings.linear]).forEach((drawing) => watch(
+    () => [drawing.form.suppress_gc, drawing.form.suppress_skew, drawing.form.show_gc, drawing.form.show_skew, drawing.form.show_depth],
     () => {
-      const drawing = state.activeDrawing();
-      return [drawing.form.suppress_gc, drawing.form.suppress_skew, drawing.form.show_gc, drawing.form.show_skew, drawing.form.show_depth];
-    },
-    () => {
+      if (drawing !== state.activeDrawing()) return;
       if (state.semanticFileWatchersSuppressed?.value || state.sessionOperationAvailability?.()) return;
       applyTrackVisibility();
     }
-  );
+  ));
 
   return {
     applyPaletteToSvg,

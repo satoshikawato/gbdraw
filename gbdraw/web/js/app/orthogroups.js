@@ -303,7 +303,7 @@ const renderedFeatureIdForMember = (member, renderedIndex) => {
  * reactive objects.
  * @typedef {object} OrthogroupEditorState
  * @property {{ value: Record<string, any>[] }} orthogroups
- * @property {() => OrthogroupEditorDrawing} activeDrawing
+ * @property {{ linear: OrthogroupEditorDrawing }} drawings Similarity groups are the Linear drawing's (registry: `config.webEdits`, linear only).
  * @property {{ value: string }} selectedOrthogroupId
  * @property {{ value: string }} orthogroupSearch
  * @property {{ value: string }} orthogroupSortMode
@@ -451,7 +451,7 @@ export const createOrthogroupEditor = ({ state }) => {
   };
 
   const resolveOrthogroupName = (groupOrId) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.linear;
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const id = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     if (!id) return '';
@@ -459,7 +459,7 @@ export const createOrthogroupEditor = ({ state }) => {
   };
 
   const resolveOrthogroupDescription = (groupOrId) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.linear;
     const group = typeof groupOrId === 'string' ? getOrthogroupById(groupOrId) : groupOrId;
     const id = group ? orthogroupIdValue(group) : normalizeText(groupOrId);
     if (!id) return '';
@@ -474,7 +474,7 @@ export const createOrthogroupEditor = ({ state }) => {
   const orthogroupScopeLabel = (groupOrId) => groupMetadataScopeLabel(orthogroupScope(groupOrId));
 
   const isOrthogroupRenamed = (groupOrId) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.linear;
     const id = typeof groupOrId === 'string'
       ? normalizeText(groupOrId)
       : orthogroupIdValue(groupOrId);
@@ -537,7 +537,7 @@ export const createOrthogroupEditor = ({ state }) => {
   });
 
   const orthogroupRows = computed(() => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.linear;
     // Renamed markers depend on description override keys, not their text.
     Reflect.ownKeys(drawing.orthogroupDescriptionOverrides);
     return filteredOrthogroups.value.map((group) => ({
@@ -742,7 +742,7 @@ export const createOrthogroupEditor = ({ state }) => {
   };
 
   const setOrthogroupNameOverride = (orthogroupId, value) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.linear;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
@@ -759,7 +759,7 @@ export const createOrthogroupEditor = ({ state }) => {
   };
 
   const setOrthogroupDescriptionOverride = (orthogroupId, value) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.linear;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
@@ -776,7 +776,7 @@ export const createOrthogroupEditor = ({ state }) => {
   };
 
   const resetOrthogroupRename = (orthogroupId = selectedOrthogroupId.value) => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.linear;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const id = normalizeText(orthogroupId);
@@ -786,10 +786,10 @@ export const createOrthogroupEditor = ({ state }) => {
   };
 
   // Dormant names are listed and cleared here (D-21).
-  const orthogroupDormantNames = computed(() => Object.values(state.activeDrawing().orthogroupDormantOverrides || {})
+  const orthogroupDormantNames = computed(() => Object.values(state.drawings.linear.orthogroupDormantOverrides || {})
     .map((entry) => normalizeText(entry?.name) || normalizeText(entry?.description)).filter(Boolean));
   const clearOrthogroupDormantOverrides = () => {
-    const drawing = state.activeDrawing();
+    const drawing = state.drawings.linear;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     Object.keys(drawing.orthogroupDormantOverrides || {}).forEach((key) => delete drawing.orthogroupDormantOverrides[key]);

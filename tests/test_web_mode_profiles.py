@@ -57,10 +57,11 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
     assert "managedAdvStateForMode(mode).axis_stroke_color" in contract_source
     assert "'data-gbdraw-role'" in sanitization_source
     assert "'data-gbdraw-orientation'" in sanitization_source
-    assert "createDefaultAdv(state.mode.value)" in reset_source
-    assert "modeProfileStateManager?.reset?" in reset_source
-    # The mode transition swaps the profiles; tests/web/session-active-mode
-    # ("each mode keeps its own title and fonts") covers it in the browser.
+    # Each mode's drawing resets to its own mode's defaults (PR-1: one drawing
+    # per mode, so no profile swaps values on a mode switch).
+    assert "createDefaultAdv(mode)" in reset_source
+    assert "modeProfileStateManager" not in reset_source
+    assert "modeProfileStateManager" not in state_source
 
     # Each mode resolves its thresholds with its own defaults (X-02: one
     # resolver on the generated domains; Generate keeps the draft).
@@ -74,7 +75,8 @@ def test_web_mode_profile_consumers_use_mode_specific_defaults() -> None:
     assert "comparisonFiltersForMode('linear')" in run_source
     assert not (WEB_ROOT / "js" / "app" / "cli-args.js").exists()
     assert "effectiveLinearAxisColor({" in request_source
-    assert "drawing.modeProfileStateManager?.isManaged?." in request_source
+    # The Linear axis color follows the ruler while it is the mode default.
+    assert "isModeProfileDefault('linear', 'axis_stroke_color', adv.axis_stroke_color)" in request_source
     blast_config = SimpleNamespace()
     color_modes = configure_pairwise_identity_legend_from_comparisons(
         blast_config,
