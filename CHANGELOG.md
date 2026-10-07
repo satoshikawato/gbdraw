@@ -16,6 +16,13 @@ write-up of a release.
   color, so the CLI draws it as the Web app does. Before, it resolved to `#2E8B57`
   (seagreen). `rebeccapurple` (`#663399`) is now accepted. The other 146 CSS color
   names were already correct.
+- Sessions (CLI and Python API): a Session that a CLI run wrote with `--session_output` or
+  `--save_session` no longer replays an empty label text as the label "nan". A label
+  override row with an empty label text hides the label when the written Session is
+  replayed, as it does in the first run, and the row keeps its empty text. The same
+  reader now keeps an empty cell or the text "NA" in a feature visibility, label
+  whitelist, qualifier priority, color, or annotation table as written; before, these
+  cells were read as missing values.
 - Legend colors (web app): Generate no longer fails with "The generated result could
   not be accepted" after a color or stroke is set on a row added in the Legend editor,
   in Linear and Circular. The added row is drawn with its color and stroke after
