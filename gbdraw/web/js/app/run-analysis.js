@@ -34,7 +34,8 @@ import {
   promoteCanonicalRenderRequestToCurrent,
   readCanonicalResourceRecordCount,
   requestLabelProjection,
-  requestLabelTableTsv
+  requestLabelTableTsv,
+  requireLinearComparisonPlanSnapshot
 } from '../services/session-request.js';
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
 import {
@@ -2334,12 +2335,7 @@ export const createRunAnalysis = ({
       candidateRules = colorCandidate.rules;
       runState.manualSpecificRules = candidateRules;
       if (mode.value === 'linear') {
-        if (!activeComparisonPlanSnapshot || !Array.isArray(activeComparisonPlanSnapshot.edges)) {
-          throw new Error('A resolved Linear comparison plan is required.');
-        }
-        if (activeComparisonPlanSnapshot.error) {
-          throw new Error(activeComparisonPlanSnapshot.error);
-        }
+        requireLinearComparisonPlanSnapshot(activeComparisonPlanSnapshot);
       }
       if (typeof validateAnnotationTargets === 'function' && annotationSets.length > 0) {
         const annotationError = validateAnnotationTargets();

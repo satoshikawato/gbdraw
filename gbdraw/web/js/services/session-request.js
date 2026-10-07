@@ -1884,7 +1884,7 @@ const PLAN_ISSUE_REASONS = Object.freeze({
   'missing-upload': 'BLAST_TSV_REQUIRED', 'selected-losat-requires-pairwise': 'LOSAT_PLAN'
 });
 
-const requireLinearComparisonPlanSnapshot = (snapshot) => {
+export const requireLinearComparisonPlanSnapshot = (snapshot) => {
   if (!snapshot || !Array.isArray(snapshot.edges)) {
     throw new Error('A resolved Linear comparison plan is required.');
   }

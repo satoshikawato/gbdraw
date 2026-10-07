@@ -28,7 +28,7 @@ const UNCLASSIFIED_THROW_BASELINE = {
   'app/linear-track-slots.js': 34,
   'app/preview-runtime.js': 7,
   'app/record-display-options.js': 23,
-  'app/run-analysis.js': 18,
+  'app/run-analysis.js': 17,
   'mode-profiles.js': 9,
   'services/config.js': 15,
   'services/current-option-values.js': 7,
