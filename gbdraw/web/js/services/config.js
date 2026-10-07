@@ -1,5 +1,5 @@
 // @ts-check
-import { diagnosticError, normalizeUserFacingError } from './error-normalization.js';
+import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from './error-normalization.js';
 import { state, sessionOperationAvailability, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { resolveColorToHex } from '../app/color-utils.js';
 import {
@@ -4600,7 +4600,7 @@ const importSessionDocument = async (e, options = {}) => {
           )
         }));
       } catch (error) {
-        legacyFeatureRecoveryPlan = { status: 'failed', warning: normalizeUserFacingError(error).summary };
+        legacyFeatureRecoveryPlan = { status: 'failed', warning: normalizeCaughtError(error).summary };
       }
     }
     // Session 45 keys per-feature edits by source identity: an older Session's
@@ -4916,7 +4916,7 @@ const importSessionDocument = async (e, options = {}) => {
     };
   } catch (err) {
     if (err?.name === 'AbortError' && !commitStarted) return { status: 'canceled' };
-    const error = normalizeUserFacingError(err, { stage: 'request-validation' });
+    const error = normalizeCaughtError(err, { stage: 'request-validation' });
     const currentAlert = state.errorLog.value;
     const canNotify = currentAlert === previousAlert || currentAlert === null;
     if (commitStarted && rollbackSnapshot) {

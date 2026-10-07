@@ -81,7 +81,7 @@ import {
 } from '../app/track-slot-validation.js';
 import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from '../app/annotations/state.js';
 import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
-import { SESSION_TABLE_LABELS, diagnosticError, normalizeUserFacingError } from './error-normalization.js';
+import { SESSION_TABLE_LABELS, diagnosticError, normalizeCaughtError } from './error-normalization.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import {
   arrowHeadLengthRatioForState,
@@ -3396,9 +3396,7 @@ const readSessionTable = (table, read) => {
   try {
     return read();
   } catch (error) {
-    // The callbacks passed here are parsers that throw Error objects;
-    // normalizeUserFacingError returns null only for a falsy throw.
-    const model = /** @type {NonNullable<ReturnType<typeof normalizeUserFacingError>>} */ (normalizeUserFacingError(error));
+    const model = normalizeCaughtError(error);
     if (['UNKNOWN', 'VALIDATION_UNCLASSIFIED'].includes(model.code)) throw error;
     throw diagnosticError(model.code, { ...model.context, sessionTable: table }, { stage: model.stage });
   }
