@@ -7,7 +7,7 @@ from gbdraw.svg.elements import Group
 
 from ....config.models import GbdrawConfig
 from ....configurators import DepthConfigurator
-from ....core.sequence import determine_length_parameter
+from ....auto_sizes import determine_length_parameter
 from ...drawers.circular.depth import DepthDrawer
 
 

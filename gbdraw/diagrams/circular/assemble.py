@@ -22,6 +22,7 @@ from pandas import DataFrame
 from svgwrite import Drawing
 from svgwrite.container import Group
 
+from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasConfigurator
 from ...analysis.conservation import (
     ConservationTrack,
@@ -1606,10 +1607,11 @@ def _draw_resolved_circular_slot(
         return canvas
 
     if renderer == "features":
-        base_width = (
-            float(canvas_config.radius)
-            * float(canvas_config.track_ratio)
-            * float(cfg.canvas.circular.track_ratio_factors[str(canvas_config.length_param)][0])
+        base_width = circular_track_width_px(
+            "features",
+            radius=canvas_config.radius,
+            track_ratio=canvas_config.track_ratio,
+            factors=cfg.canvas.circular.track_ratio_factors[str(canvas_config.length_param)],
         )
         resolved_feature_width = float(resolved_slot.draw_width_px)
         if render_context.feature_layout is not None:

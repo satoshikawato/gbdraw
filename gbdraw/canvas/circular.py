@@ -8,7 +8,7 @@ from typing import Literal
 from svgwrite import Drawing
 
 from ..config.models import CircularRenderProfile
-from ..core.sequence import determine_length_parameter
+from ..auto_sizes import determine_length_parameter
 
 
 class CircularCanvasConfigurator:

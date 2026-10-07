@@ -17,7 +17,7 @@ from gbdraw.canvas.circular import CircularCanvasConfigurator
 from gbdraw.config.models import CircularRenderProfile, GbdrawConfig
 from gbdraw.config.modify import modify_config_dict
 from gbdraw.config.toml import load_config_toml
-from gbdraw.core.sequence import determine_length_parameter
+from gbdraw.auto_sizes import determine_length_parameter
 from gbdraw.features.coordinates import get_strand
 from gbdraw.features.colors import preprocess_color_tables
 from gbdraw.features.factory import create_feature_dict

@@ -5,13 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from gbdraw.auto_sizes import scalar_axis_tick_font_size
+
 
 DEPTH_AXIS_STROKE_WIDTH_PX = 0.8
 DEPTH_AXIS_TICK_SIZE_PX = 3.0
 DEPTH_AXIS_SMALL_TICK_SIZE_PX = 2.0
-DEPTH_AXIS_DEFAULT_FONT_MIN_PX = 5.0
-DEPTH_AXIS_DEFAULT_FONT_MAX_PX = 8.0
-DEPTH_AXIS_DEFAULT_FONT_WIDTH_FRACTION = 0.22
 
 
 @dataclass(frozen=True)
@@ -27,13 +26,7 @@ def depth_axis_tick_font_size_px(
     tick_font_size = getattr(depth_config, "tick_font_size", None)
     if tick_font_size is not None:
         return max(0.0, float(tick_font_size))
-    return max(
-        DEPTH_AXIS_DEFAULT_FONT_MIN_PX,
-        min(
-            DEPTH_AXIS_DEFAULT_FONT_MAX_PX,
-            float(track_width_px) * DEPTH_AXIS_DEFAULT_FONT_WIDTH_FRACTION,
-        ),
-    )
+    return scalar_axis_tick_font_size("circular", track_width_px)
 
 
 def resolve_depth_axis_footprint(

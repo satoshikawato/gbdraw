@@ -5,6 +5,9 @@ from __future__ import annotations
 import math
 from collections.abc import Callable
 from typing import Any, cast
+
+from gbdraw.auto_sizes import scalar_axis_tick_font_size
+
 from .record_coordinates import DisplaySeries, RecordDisplayTransform, SeriesPoint
 
 
@@ -22,11 +25,6 @@ def project_scalar_samples(
     # Every caller reaches this point only when ``transform.start_coordinate`` is set,
     # where project_local_series returns DisplaySeries (it returns the input points when unset).
     return cast(tuple[DisplaySeries, ...], transform.project_local_series(points))
-
-
-LINEAR_SCALAR_AXIS_DEFAULT_FONT_MIN_PX = 5.0
-LINEAR_SCALAR_AXIS_DEFAULT_FONT_MAX_PX = 8.0
-LINEAR_SCALAR_AXIS_DEFAULT_FONT_HEIGHT_FRACTION = 0.7
 
 
 def has_tick_value(values: list[float], candidate: float) -> bool:
@@ -184,13 +182,7 @@ def linear_scalar_axis_tick_font_size_px(
     tick_font_size = getattr(axis_config, "tick_font_size", None)
     if tick_font_size is not None:
         return max(0.0, float(tick_font_size))
-    return max(
-        LINEAR_SCALAR_AXIS_DEFAULT_FONT_MIN_PX,
-        min(
-            LINEAR_SCALAR_AXIS_DEFAULT_FONT_MAX_PX,
-            float(track_height_px) * LINEAR_SCALAR_AXIS_DEFAULT_FONT_HEIGHT_FRACTION,
-        ),
-    )
+    return scalar_axis_tick_font_size("linear", track_height_px)
 
 
 ScalarTickFormatter = Callable[[float], str]

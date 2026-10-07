@@ -37,6 +37,7 @@ from ...analysis.depth_tracks import (
     sync_depth_track_legend_entries,
 )
 from ...analysis.protein_colinearity import OrthogroupResult, OrthogroupGraphResult
+from ...auto_sizes import linear_tick_interval
 from ...canvas import LinearCanvasConfigurator
 from ...config.models import (
     GbdrawConfig,
@@ -58,7 +59,6 @@ from ...render.groups.linear import LengthBarGroup, LegendGroup, PlotTitleGroup
 from ...render.groups.linear.length_bar import (
     RULER_LABEL_OFFSET,
     RULER_TICK_LENGTH,
-    auto_linear_tick_interval,
     format_linear_tick_label,
 )
 from ...io.comparisons import filter_comparison_dataframe, load_comparisons
@@ -1291,7 +1291,7 @@ def _linear_axis_ruler_bounds(
     tick_interval = (
         int(interval)
         if interval is not None and int(interval) > 0
-        else auto_linear_tick_interval(max(1, int(canvas_config.longest_genome)))
+        else linear_tick_interval(max(1, int(canvas_config.longest_genome)))
     )
     if span <= 0 or tick_interval <= 0:
         return None

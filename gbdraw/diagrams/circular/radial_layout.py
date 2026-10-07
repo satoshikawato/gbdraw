@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass, replace
 from typing import Any, Collection, Literal, Mapping, Sequence, TypedDict
 
+from ...auto_sizes import circular_track_width_px
 from ...canvas import CircularCanvasConfigurator
 from ...config.models import GbdrawConfig
 from ...configurators import DepthConfigurator
@@ -485,19 +486,14 @@ def _default_width_px(
     canvas_config: CircularCanvasConfigurator,
     cfg: GbdrawConfig,
 ) -> float:
-    length_param = str(canvas_config.length_param)
-    base = float(canvas_config.radius) * float(canvas_config.track_ratio)
-    if renderer == "features":
-        return base * float(cfg.canvas.circular.track_ratio_factors[length_param][0])
-    if renderer == "sequence_conservation":
-        return base * float(cfg.canvas.circular.track_ratio_factors[length_param][0])
-    if renderer == "depth":
-        return base * float(cfg.canvas.circular.track_ratio_factors[length_param][1]) * 0.5
-    if renderer == "dinucleotide_skew":
-        return base * float(cfg.canvas.circular.track_ratio_factors[length_param][2])
     if renderer == "ticks":
         return 0.0
-    return base * float(cfg.canvas.circular.track_ratio_factors[length_param][1])
+    return circular_track_width_px(
+        renderer,
+        radius=canvas_config.radius,
+        track_ratio=canvas_config.track_ratio,
+        factors=cfg.canvas.circular.track_ratio_factors[str(canvas_config.length_param)],
+    )
 
 
 def _default_spacing_px(axis_radius_px: float) -> float:

@@ -12,7 +12,6 @@ import logging
 import math
 import sys
 from dataclasses import replace
-from typing import Optional
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.api.record_planning import RecordInputManifest
@@ -636,31 +635,6 @@ def handle_output_formats(out_formats: list[str]) -> list[str]:
     return out_formats
 
 
-def calculate_window_step(seq_length: int, cfg, manual_window: Optional[int], manual_step: Optional[int]) -> tuple[int, int]:
-    """Calculate window and step sizes based on genome length."""
-    if not manual_window:
-        if seq_length < 1_000_000:
-            window = cfg.objects.sliding_window.default[0]
-        elif seq_length < 10_000_000:
-            window = cfg.objects.sliding_window.up1m[0]
-        else:
-            window = cfg.objects.sliding_window.up10m[0]
-    else:
-        window = manual_window
-
-    if not manual_step:
-        if seq_length < 1_000_000:
-            step = cfg.objects.sliding_window.default[1]
-        elif seq_length < 10_000_000:
-            step = cfg.objects.sliding_window.up1m[1]
-        else:
-            step = cfg.objects.sliding_window.up10m[1]
-    else:
-        step = manual_step
-
-    return window, step
-
-
 def load_records_table_records(
     records_table: RecordsTable,
     *,
@@ -719,7 +693,6 @@ __all__ = [
     "add_feature_args",
     "add_input_args",
     "add_label_args",
-    "calculate_window_step",
     "handle_output_formats",
     "setup_logging",
     "validate_input_args",

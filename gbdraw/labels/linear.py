@@ -13,7 +13,7 @@ from ..features.coordinates import get_strand
 from ..features.ids import compute_feature_object_hash
 from ..core.record_metadata import _source_feature_index
 from ..core.text import calculate_bbox_dimensions
-from ..core.sequence import determine_length_parameter
+from ..auto_sizes import determine_length_parameter
 from ..layout.linear_coords import normalize_position_to_linear_track
 from ..layout.linear import (
     LinearFeatureLaneGeometry,

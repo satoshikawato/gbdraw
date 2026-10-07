@@ -7,7 +7,7 @@ from typing import Literal, Tuple
 from gbdraw.svg.elements import Path, Text, TextPath
 
 from ....config.models import CircularRenderProfile
-from ....core.sequence import determine_length_parameter
+from ....auto_sizes import determine_length_parameter
 from ....layout.circular import calculate_feature_position_factors_circular
 from ....layout.common import calculate_cds_ratio
 from ....svg.ids import stable_svg_id

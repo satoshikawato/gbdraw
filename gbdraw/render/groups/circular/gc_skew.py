@@ -5,7 +5,7 @@ from Bio.SeqRecord import SeqRecord
 from pandas import DataFrame
 from gbdraw.svg.elements import Group
 
-from ....core.sequence import determine_length_parameter
+from ....auto_sizes import determine_length_parameter
 from ....config.models import GbdrawConfig
 from ...drawers.circular.gc_skew import SkewDrawer
 from ....configurators import GcSkewConfigurator

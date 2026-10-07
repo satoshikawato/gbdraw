@@ -8,7 +8,7 @@ from Bio.SeqRecord import SeqRecord
 from gbdraw.svg.elements import Group
 
 from ....canvas import CircularCanvasConfigurator
-from ....core.sequence import determine_length_parameter
+from ....auto_sizes import determine_length_parameter
 from ....features.factory import FeatureBuildResult
 from ....features.objects import FeatureObject
 from ....labels.circular import prepare_label_list

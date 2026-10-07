@@ -76,6 +76,7 @@ from gbdraw.config.models.objects import (
 from gbdraw.analysis.collinearity_units import CollinearityUnitMode
 from gbdraw.analysis.skew import skew_df
 from gbdraw.api.config import apply_config_overrides
+from gbdraw.auto_sizes import depth_sliding_window, determine_length_parameter, sliding_window
 from gbdraw.api.options import (
     AnnotationOptions,
     CircularDiagramOptions,
@@ -669,27 +670,11 @@ def _resolve_circular_window_step(
     step: int | None,
 ) -> tuple[int, int]:
     """Resolve circular window/step with record-length defaults."""
-    resolved_window = window
-    resolved_step = step
-    seq_length = len(record.seq)
-
-    if resolved_window is None:
-        if seq_length < 1_000_000:
-            resolved_window = cfg.objects.sliding_window.default[0]
-        elif seq_length < 10_000_000:
-            resolved_window = cfg.objects.sliding_window.up1m[0]
-        else:
-            resolved_window = cfg.objects.sliding_window.up10m[0]
-
-    if resolved_step is None:
-        if seq_length < 1_000_000:
-            resolved_step = cfg.objects.sliding_window.default[1]
-        elif seq_length < 10_000_000:
-            resolved_step = cfg.objects.sliding_window.up1m[1]
-        else:
-            resolved_step = cfg.objects.sliding_window.up10m[1]
-
-    return int(resolved_window), int(resolved_step)
+    auto_window, auto_step = sliding_window(len(record.seq), cfg)
+    return (
+        int(window) if window is not None else auto_window,
+        int(step) if step is not None else auto_step,
+    )
 
 
 def _validate_depth_bounds(min_depth: float | None, max_depth: float | None) -> None:
@@ -772,9 +757,10 @@ def _resolve_depth_window_step(
 
     _validate_positive_optional("depth_window", depth_window)
     _validate_positive_optional("depth_step", depth_step)
+    auto_depth_window, auto_depth_step = depth_sliding_window(window, step)
     return (
-        int(depth_window) if depth_window is not None else max(100, int(window) // 10),
-        int(depth_step) if depth_step is not None else max(1, int(step) // 10),
+        int(depth_window) if depth_window is not None else auto_depth_window,
+        int(depth_step) if depth_step is not None else auto_depth_step,
     )
 
 
@@ -1279,17 +1265,12 @@ def _has_mixed_short_and_long_records(
     length_threshold: int,
 ) -> bool:
     """Return whether record lengths span both short and long buckets."""
-    has_short = False
-    has_long = False
     threshold = int(length_threshold)
-    for record_length in record_lengths:
-        if int(record_length) < threshold:
-            has_short = True
-        else:
-            has_long = True
-        if has_short and has_long:
-            return True
-    return False
+    size_classes = {
+        determine_length_parameter(int(record_length), threshold)
+        for record_length in record_lengths
+    }
+    return len(size_classes) > 1
 
 
 def _harmonize_multi_record_circular_style_cfg(
@@ -2005,21 +1986,9 @@ def assemble_linear_diagram_from_records(
     longest_genome = max(len(record.seq) for record in records)
 
     # Match legacy CLI behavior: linear window/step are based on the longest genome.
-    if window is None:
-        if longest_genome < 1_000_000:
-            window = cfg.objects.sliding_window.default[0]
-        elif longest_genome < 10_000_000:
-            window = cfg.objects.sliding_window.up1m[0]
-        else:
-            window = cfg.objects.sliding_window.up10m[0]
-
-    if step is None:
-        if longest_genome < 1_000_000:
-            step = cfg.objects.sliding_window.default[1]
-        elif longest_genome < 10_000_000:
-            step = cfg.objects.sliding_window.up1m[1]
-        else:
-            step = cfg.objects.sliding_window.up10m[1]
+    auto_window, auto_step = sliding_window(longest_genome, cfg)
+    window = auto_window if window is None else window
+    step = auto_step if step is None else step
     resolved_depth_window, resolved_depth_step = _resolve_depth_window_step(
         window=int(window),
         step=int(step),
@@ -2417,24 +2386,10 @@ def assemble_circular_diagram_from_record(
                 axis_index=circular_track_axis_index,
             )
 
-    seq_length = len(gb_record.seq)
-
     # Match legacy CLI behavior: circular window/step are based on the record length.
-    if window is None:
-        if seq_length < 1_000_000:
-            window = cfg.objects.sliding_window.default[0]
-        elif seq_length < 10_000_000:
-            window = cfg.objects.sliding_window.up1m[0]
-        else:
-            window = cfg.objects.sliding_window.up10m[0]
-
-    if step is None:
-        if seq_length < 1_000_000:
-            step = cfg.objects.sliding_window.default[1]
-        elif seq_length < 10_000_000:
-            step = cfg.objects.sliding_window.up1m[1]
-        else:
-            step = cfg.objects.sliding_window.up10m[1]
+    auto_window, auto_step = sliding_window(len(gb_record.seq), cfg)
+    window = auto_window if window is None else window
+    step = auto_step if step is None else step
     resolved_depth_window, resolved_depth_step = _resolve_depth_window_step(
         window=int(window),
         step=int(step),

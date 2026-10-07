@@ -7,6 +7,7 @@ from typing import Literal
 
 from gbdraw.svg.elements import Path, Text, TextPath
 
+from ..auto_sizes import circular_tick_intervals
 from ..core.numeric import scaled_tick_text
 from ..core.text import calculate_bbox_dimensions
 from .ids import stable_svg_id
@@ -42,17 +43,7 @@ def get_circular_tick_intervals(total_len: int, manual_interval: int | None = No
         tick_small = int(manual_interval) // 10
         return tick_large, tick_small
 
-    if total_len <= 30000:
-        return 1000, 100
-    if 30000 < total_len <= 50000:
-        return 5000, 1000
-    if 50000 < total_len <= 150000:
-        return 10000, 1000
-    if 150000 < total_len <= 1000000:
-        return 50000, 10000
-    if 1000000 < total_len <= 10000000:
-        return 500000, 100000
-    return 1000000, 200000
+    return circular_tick_intervals(total_len)
 
 
 def _format_tick_label_text(tick: int, total_len: int, tick_interval: int | None) -> str:
