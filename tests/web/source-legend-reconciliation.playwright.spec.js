@@ -55,6 +55,96 @@ const reveal = async locator => {
   return locator;
 };
 
+// The swatch of row `caption` in each Legend group of the selected Result and of the mounted SVG.
+const rowStyle = (page, caption) => page.evaluate(async target => {
+  const { state: s } = await import('./js/state.js');
+  const { getAllFeatureLegendGroups, getLegendEntrySwatch } = await import('./js/app/legend/utils.js');
+  const styles = svg => getAllFeatureLegendGroups(svg).map(group => {
+    const swatch = getLegendEntrySwatch(group.querySelector(`g[data-legend-key="${CSS.escape(target)}"]`));
+    return swatch && [swatch.getAttribute('fill'), swatch.getAttribute('stroke'), swatch.getAttribute('stroke-width')];
+  });
+  const content = s.results.value[s.selectedResultIndex.value].content;
+  return {
+    result: styles(new DOMParser().parseFromString(content, 'image/svg+xml').documentElement),
+    mounted: styles(s.svgContainer.value.querySelector('svg'))
+  };
+}, caption);
+const legendIndex = caption => window.__GBDRAW_APP__.legendEntries.findIndex(e => e.caption === caption);
+const expectRow = async (page, caption, style) => {
+  const current = await rowStyle(page, caption);
+  expect(current.result.length).toBeGreaterThan(0);
+  expect(current.result).toEqual(current.result.map(() => style));
+  expect(current.mounted).toEqual(current.result);
+};
+
+// OV-86: a style on a row the Legend editor added failed every later Generate.
+for (const mode of ['linear', 'circular']) {
+  test(`M1 ${mode}: a style on a Legend editor added row survives Generate, rename, Session replay, and removal`, async ({ browser }, testInfo) => {
+    test.setTimeout(900_000);
+    const page = await load(browser);
+    page.setDefaultTimeout(180_000);
+    let fresh;
+    try {
+      if (mode === 'linear') await switchMode(page, 'linear');
+      const input = mode === 'linear'
+        ? page.getByTestId('linear-genbank-1')
+        : page.getByLabel('GenBank/DDBJ File', { exact: true });
+      await input.setInputFiles('tests/fixtures/forced_label_underlay.gb');
+      await generate(page);
+      await page.evaluate(async () => {
+        const app = window.__GBDRAW_APP__;
+        app.newLegendCaption = 'Manual row';
+        app.newLegendColor = '#118833';
+        await app.addNewLegendEntry();
+      });
+      await expect.poll(() => page.evaluate(legendIndex, 'Manual row')).toBeGreaterThanOrEqual(0);
+      await generate(page);
+      // Linear styles the fill first and Circular the stroke; each alone failed.
+      const edits = {
+        fill: () => page.evaluate(caption => {
+          const app = window.__GBDRAW_APP__;
+          return app.updateLegendEntryColor(app.legendEntries.findIndex(e => e.caption === caption), '#7b2cbf');
+        }, 'Manual row'),
+        stroke: () => page.evaluate(caption => {
+          const app = window.__GBDRAW_APP__;
+          const index = app.legendEntries.findIndex(e => e.caption === caption);
+          return app.updateLegendEntryStrokeColor(index, '#e63946') && app.updateLegendEntryStrokeWidth(index, 2);
+        }, 'Manual row')
+      };
+      for (const edit of mode === 'linear' ? ['fill', 'stroke'] : ['stroke', 'fill']) {
+        expect(await edits[edit]()).toBe(true);
+        await generate(page);
+      }
+      const styled = ['#7b2cbf', '#e63946', '2'];
+      await expectRow(page, 'Manual row', styled);
+      await evaluateWithRetainedPromise(page, async index => {
+        await window.__GBDRAW_APP__.renameLegendEntry(index, 'Manual renamed');
+      }, await page.evaluate(legendIndex, 'Manual row'));
+      await expect.poll(() => page.evaluate(legendIndex, 'Manual renamed')).toBeGreaterThanOrEqual(0);
+      await generate(page);
+      await expectRow(page, 'Manual renamed', styled);
+      await expectRow(page, 'Manual row', null);
+      const saved = testInfo.outputPath(`added-row-style-${mode}.gbdraw-session.json.gz`);
+      await download(page, 'Save Session', saved);
+      fresh = await load(browser, saved);
+      await expectRow(fresh, 'Manual renamed', styled);
+      await generate(fresh);
+      await expectRow(fresh, 'Manual renamed', styled);
+      await fresh.evaluate(caption => {
+        const app = window.__GBDRAW_APP__;
+        app.deleteLegendEntry(app.legendEntries.findIndex(e => e.caption === caption));
+      }, 'Manual renamed');
+      await generate(fresh);
+      await expectRow(fresh, 'Manual renamed', null);
+      expect(page.externalRequests).toEqual([]);
+      expect(fresh.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+      if (fresh) await fresh.context().close();
+    }
+  });
+}
+
 test('L1-L8 generated legend categories reconcile while valid category and layout preferences survive', async ({ browser }, testInfo) => {
   test.setTimeout(1_800_000);
   const page = await load(browser, seeds.lambda);

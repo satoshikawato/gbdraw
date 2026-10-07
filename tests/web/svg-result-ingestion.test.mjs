@@ -15,6 +15,7 @@ import {
   admitCurrentGeneratedResults,
   admitCurrentSessionResults,
   admitLegacyImportedResults,
+  applyEditorOperationsToMountedSvg,
   createCurrentSessionResultSource,
   createEmptySvgMutationPlan,
   createLegacyImportResultSource,
@@ -472,6 +473,50 @@ test('direct Legend rename, deletion, and addition are applied through catalog-b
     });
     assertContent(results[0].content);
   });
+});
+
+// OV-86: Python never draws a row the Legend editor added. Admission adds the row
+// before it styles rows, so the row's own fill and stroke reach it, and an added row
+// takes the renderer's row shape without another row's style.
+test('a fill and stroke on a Legend editor added row style the row the plan adds', () => {
+  const { response, admission } = currentFixture();
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: admission,
+    legendEntries: [
+      { caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' },
+      { caption: 'Manual row', originalCaption: 'Manual row', color: '#7b2cbf' },
+      { caption: 'Plain row', originalCaption: 'Plain row', color: '#118833' }
+    ],
+    originalLegendOrder: ['CDS'],
+    legendColorOverrides: { 'Manual row': '#7b2cbf' },
+    legendStrokeOverrides: {
+      'Manual row': { strokeColor: '#e63946', strokeWidth: 2 },
+      CDS: { strokeColor: '#445566', strokeWidth: 3 }
+    }
+  });
+  // The style still requires its row; the same plan adds it.
+  assert.deepEqual(plan.operationsByResult[0].legendFills.map(({ caption, allowMissing }) => [caption, allowMissing]), [
+    ['Manual row', false]
+  ]);
+  const swatches = (content) => Object.fromEntries(
+    [...content.matchAll(/<g data-legend-key="([^"]+)"[^>]*><path ([^>]*)>/g)].map(([, caption, path]) => [caption, path])
+  );
+  const expected = {
+    CDS: 'fill="#aaaaaa" stroke="#445566" stroke-width="3"',
+    'Manual row': 'fill="#7b2cbf" stroke="#e63946" stroke-width="2"',
+    'Plain row': 'fill="#118833"'
+  };
+  const [result] = admitCurrentGeneratedResults(response, {
+    catalogAdmission: admission,
+    mutationPlan: plan,
+    sanitizer: { sanitize: (value) => value },
+    parser: FakeDomParser
+  });
+  assert.deepEqual(swatches(result.content), expected);
+  // A displayed Result receives the same operations through the same executor (D-07).
+  const mounted = buildSvgRoot();
+  applyEditorOperationsToMountedSvg(mounted, plan.operationsByResult[0]);
+  assert.deepEqual(swatches(serializeNode(mounted)), expected);
 });
 
 test('a requested Legend addition reuses an exact renderer-produced caption', () => {
