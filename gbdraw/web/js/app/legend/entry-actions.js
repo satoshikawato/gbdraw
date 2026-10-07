@@ -6,6 +6,7 @@ import {
   getLegendEntrySwatch,
   getVisibleFeatureLegendGroup,
   isLegendOrderEdited,
+  mountedLegendRowFeatureIds,
   orderLegendEntries,
   parseTransformXY
 } from './utils.js';
@@ -204,9 +205,19 @@ export const createLegendEntryActions = ({
    */
   const templateRowStroke = (targetGroup) => {
     const template = targetGroup.querySelector('g[data-legend-key]');
-    const swatch = getLegendEntrySwatch(template)
-      || targetGroup.querySelector('path[fill]:not([fill="none"]):not([fill^="url("])');
-    const override = template ? legendStrokeOverrides[String(template.getAttribute('data-legend-key') || '').trim()] : null;
+    return rendererRowStroke(template, getLegendEntrySwatch(template)
+      || targetGroup.querySelector('path[fill]:not([fill="none"]):not([fill^="url("])'));
+  };
+
+  // The stroke the renderer drew on Legend row `row` (its swatch), before the
+  // row's own stroke edit, whose captured original Reset Stroke restores.
+  /**
+   * @param {Element | null} row
+   * @param {Element | null} [swatch]
+   * @returns {{ color: string | null, width: string | number | null }}
+   */
+  const rendererRowStroke = (row, swatch = getLegendEntrySwatch(row)) => {
+    const override = row ? legendStrokeOverrides[String(row.getAttribute('data-legend-key') || '').trim()] : null;
     /**
      * @param {unknown} value The row's own stroke edit, if any.
      * @param {string} original The override field that holds the drawn value.
@@ -1282,14 +1293,43 @@ export const createLegendEntryActions = ({
     return [...entries.slice(0, at), entry, ...entries.slice(at)];
   };
 
+  // OV-167: the stroke Generate draws on a restored row this page holds no
+  // removed copy of (after a Session load, or a row removed before the page
+  // opened). Python strokes a row by its kind: the rows of drawn features
+  // with the feature block stroke, the GC and Depth rows with their track's
+  // stroke. A drawn row of the same kind shows it; else, for a feature row,
+  // the renderer's feature stroke (`originalSvgStroke`). Null keeps the add
+  // path's stroke, the first row's (OV-121).
+  /**
+   * @param {SVGSVGElement} svg
+   * @param {Element} group
+   * @param {string} caption
+   * @param {Set<string>} returning The captions this Restore returns.
+   * @returns {{ color: string | number | null, width: string | number | null } | null}
+   */
+  const restoredRowStroke = (svg, group, caption, returning) => {
+    const entries = legendEntries.value || [];
+    /** @param {string} key */
+    const drawsFeatures = (key) => mountedLegendRowFeatureIds(svg, key, entries).length > 0;
+    const featureRow = drawsFeatures(caption);
+    const peer = directLegendEntryGroups(group).find((entry) => {
+      const key = String(entry.getAttribute('data-legend-key') || '').trim();
+      return key !== caption && !returning.has(key) && drawsFeatures(key) === featureRow;
+    });
+    if (peer) return rendererRowStroke(peer);
+    const renderer = originalSvgStroke.value;
+    return featureRow && renderer?.color != null ? { color: renderer.color, width: renderer.width } : null;
+  };
+
   // OV-154: Restore and Restore all in the Legend editor. A restored row leaves
   // the deleted list, so Generate draws it again, and the displayed Result
   // draws it now: the add path draws the row in the color Generate gives it,
-  // with the swatch stroke the row had when it was removed (the renderer's row
-  // stroke when this page did not remove it), the editor list takes it at its
-  // place in the default order (PD-OI-063), the one ordering of the mounted
-  // Legend moves it there, and the layout owner lays the Legend out once, as
-  // Python lays these rows out (zero shift). Resolves to whether a row returned.
+  // with the swatch stroke the row had when it was removed (the stroke
+  // Generate draws for its kind when this page did not remove it, OV-167),
+  // the editor list takes it at its place in the default order (PD-OI-063),
+  // the one ordering of the mounted Legend moves it there, and the layout
+  // owner lays the Legend out once, as Python lays these rows out (zero
+  // shift). Resolves to whether a row returned.
   /** @param {number[] | null} [indexes] Indexes into the deleted list; every row when omitted. */
   const restoreDeletedLegendEntries = async (indexes = null) => {
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -1306,6 +1346,7 @@ export const createLegendEntryActions = ({
       originalLegendOrder: inventory
     };
     let entries = [...(legendEntries.value || [])];
+    const returningCaptions = new Set(returning.map(legendCaption));
     for (const entry of returning) {
       const caption = legendCaption(entry);
       const rowRules = legendRowRules(caption, context);
@@ -1317,12 +1358,15 @@ export const createLegendEntryActions = ({
       getAllFeatureLegendGroups(svg).forEach((group, index) => {
         const removed = getLegendEntrySwatch(restoredEntryTemplate(caption, group, index));
         const swatch = getLegendEntrySwatch(findLegendEntryGroup(group, caption));
-        if (!removed || !swatch) return;
-        for (const attribute of ['stroke', 'stroke-width']) {
-          const value = removed.getAttribute(attribute);
-          if (value === null) swatch.removeAttribute(attribute);
-          else swatch.setAttribute(attribute, value);
-        }
+        if (!swatch) return;
+        const stroke = removed
+          ? { color: removed.getAttribute('stroke'), width: removed.getAttribute('stroke-width') }
+          : restoredRowStroke(svg, group, caption, returningCaptions);
+        if (!stroke) return;
+        if (stroke.color === null) swatch.removeAttribute('stroke');
+        else swatch.setAttribute('stroke', String(stroke.color));
+        if (stroke.width === null) swatch.removeAttribute('stroke-width');
+        else swatch.setAttribute('stroke-width', String(stroke.width));
       });
       entries = withEntryAtDefaultPlace(entries, { ...entry, color }, inventory);
     }
