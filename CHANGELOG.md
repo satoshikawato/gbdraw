@@ -12,6 +12,12 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Text measurement: label, Legend, and title widths now apply the bundled fonts'
+  GPOS pair kerning, as browsers draw the text. Before, only the older `kern` table
+  was read. The two hold the same pairs for Latin, Greek, and Cyrillic text, so those
+  diagrams do not move. Hebrew text in Liberation Sans (the default font, also used
+  for `Arial`, `Helvetica`, and `sans-serif`) is now kerned, so its labels and Legend
+  rows can shift by up to about 1 px per kerned letter pair at 14 pt.
 - Legend colors (web app): Generate no longer fails with "The generated result could
   not be accepted" after a color or stroke is set on a row added in the Legend editor,
   in Linear and Circular. The added row is drawn with its color and stroke after

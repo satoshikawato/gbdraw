@@ -41,73 +41,218 @@ _BUNDLED_FONT_FAMILY_ALIASES = {
 # ------------------------------------------------------------------
 #  Kerning Support
 # ------------------------------------------------------------------
-def _get_kerning_value(font, left_glyph_index, right_glyph_index):
+# Pair kerning follows HarfBuzz, which Chromium and Firefox shape text with
+# (hb-ot-shape.cc, ``hb_ot_shape_planner_t::compile``): when the font's GPOS
+# table has a ``kern`` feature, its pair-positioning lookups give the kerning
+# and the legacy ``kern`` table is ignored; otherwise the first horizontal
+# ``kern`` subtable that lists the pair gives it. The pairs are looked up in
+# string order, without skipping marks; scripts are not told apart, so the
+# lookups of every ``kern`` feature apply (their coverage is per script in
+# the bundled fonts).
+
+
+@dataclass(frozen=True)
+class _GlyphPairSubtable:
+    """GPOS PairPos format 1: explicit first/second glyph pairs."""
+
+    values: Mapping[tuple[str, str], int]
+
+    def match(self, left: str, right: str) -> Optional[int]:
+        return self.values.get((left, right))
+
+
+@dataclass(frozen=True)
+class _ClassPairSubtable:
+    """GPOS PairPos format 2: first-glyph coverage and two class definitions."""
+
+    first_glyphs: frozenset[str]
+    first_classes: Mapping[str, int]
+    second_classes: Mapping[str, int]
+    values: tuple[tuple[int, ...], ...]
+
+    def match(self, left: str, right: str) -> Optional[int]:
+        if left not in self.first_glyphs:
+            return None
+        first_class = self.first_classes.get(left, 0)
+        second_class = self.second_classes.get(right, 0)
+        if first_class >= len(self.values) or second_class >= len(self.values[first_class]):
+            return None
+        return self.values[first_class][second_class]
+
+
+_PairSubtable = Union[_GlyphPairSubtable, _ClassPairSubtable]
+
+
+@dataclass(frozen=True)
+class _FontPairKerning:
+    """Pair kerning of one font, in font design units."""
+
+    gpos_lookups: Optional[tuple[tuple[_PairSubtable, ...], ...]]
+    legacy_pairs: Mapping[tuple[str, str], int]
+
+    def value(self, left: str, right: str) -> int:
+        if self.gpos_lookups is None:
+            return self.legacy_pairs.get((left, right), 0)
+        total = 0
+        for subtables in self.gpos_lookups:
+            # Within a lookup the first subtable that applies to the pair wins;
+            # every lookup of the feature applies.
+            for subtable in subtables:
+                adjustment = subtable.match(left, right)
+                if adjustment is not None:
+                    total += adjustment
+                    break
+        return total
+
+
+_pair_kerning_cache: Dict[int, tuple[TTFont, _FontPairKerning]] = {}
+
+
+def _x_advance(value_record) -> int:
+    return int(getattr(value_record, "XAdvance", 0) or 0) if value_record is not None else 0
+
+
+def _pair_subtable(subtable) -> Optional[_PairSubtable]:
+    if getattr(subtable, "Format", None) == 1:
+        values: Dict[tuple[str, str], int] = {}
+        for first, pair_set in zip(subtable.Coverage.glyphs, subtable.PairSet):
+            for record in pair_set.PairValueRecord:
+                values.setdefault((first, record.SecondGlyph), _x_advance(record.Value1))
+        return _GlyphPairSubtable(values)
+    if getattr(subtable, "Format", None) == 2:
+        return _ClassPairSubtable(
+            first_glyphs=frozenset(subtable.Coverage.glyphs),
+            first_classes=dict(subtable.ClassDef1.classDefs) if subtable.ClassDef1 else {},
+            second_classes=dict(subtable.ClassDef2.classDefs) if subtable.ClassDef2 else {},
+            values=tuple(
+                tuple(_x_advance(class2.Value1) for class2 in class1.Class2Record)
+                for class1 in subtable.Class1Record
+            ),
+        )
+    return None
+
+
+def _gpos_kern_lookups(font) -> Optional[tuple[tuple[_PairSubtable, ...], ...]]:
+    """Return the pair lookups of GPOS ``kern`` features, or None without one."""
+    if "GPOS" not in font:
+        return None
+    table = font["GPOS"].table
+    if table is None or table.FeatureList is None or table.LookupList is None:
+        return None
+    lookup_indices = sorted(
+        {
+            int(index)
+            for record in table.FeatureList.FeatureRecord
+            if record.FeatureTag == "kern"
+            for index in record.Feature.LookupListIndex
+        }
+    )
+    if not lookup_indices:
+        return None
+    lookups: List[tuple[_PairSubtable, ...]] = []
+    for index in lookup_indices:
+        lookup = table.LookupList.Lookup[index]
+        raw_subtables = list(lookup.SubTable)
+        if lookup.LookupType == 9:
+            raw_subtables = [
+                subtable.ExtSubTable
+                for subtable in raw_subtables
+                if subtable.ExtensionLookupType == 2
+            ]
+        elif lookup.LookupType != 2:
+            continue
+        subtables = tuple(
+            parsed
+            for parsed in (_pair_subtable(subtable) for subtable in raw_subtables)
+            if parsed is not None
+        )
+        if subtables:
+            lookups.append(subtables)
+    return tuple(lookups)
+
+
+def _legacy_kern_pairs(font) -> Dict[tuple[str, str], int]:
+    pairs: Dict[tuple[str, str], int] = {}
+    if "kern" not in font:
+        return pairs
+    for subtable in getattr(font["kern"], "kernTables", ()):
+        if subtable.coverage & 1 and hasattr(subtable, "kernTable"):
+            for pair, value in subtable.kernTable.items():
+                pairs.setdefault(pair, int(value))
+    return pairs
+
+
+def _font_pair_kerning(font) -> _FontPairKerning:
+    cached = _pair_kerning_cache.get(id(font))
+    if cached is not None and cached[0] is font:
+        return cached[1]
+    try:
+        gpos_lookups = _gpos_kern_lookups(font)
+    except Exception as e:
+        logger.debug(f"Error reading GPOS table: {e}")
+        gpos_lookups = None
+    legacy_pairs: Dict[tuple[str, str], int] = {}
+    if gpos_lookups is None:
+        try:
+            legacy_pairs = _legacy_kern_pairs(font)
+        except Exception as e:
+            logger.debug(f"Error reading kern table: {e}")
+    kerning = _FontPairKerning(gpos_lookups=gpos_lookups, legacy_pairs=legacy_pairs)
+    _pair_kerning_cache[id(font)] = (font, kerning)
+    return kerning
+
+
+def _get_kerning_value(font, left_glyph, right_glyph) -> int:
     """
-    Get kerning adjustment value for a glyph pair from kern or GPOS tables.
+    Get the kerning adjustment for a glyph pair from GPOS or the kern table.
 
     Args:
         font: TTFont object
-        left_glyph_index: Glyph index of the left glyph
-        right_glyph_index: Glyph index of the right glyph
+        left_glyph: Glyph name of the left glyph (as the cmap returns it)
+        right_glyph: Glyph name of the right glyph
 
     Returns:
         int: Kerning adjustment value in font design units, or 0 if not found
     """
-    if left_glyph_index is None or right_glyph_index is None:
+    if left_glyph is None or right_glyph is None:
         return 0
+    return _font_pair_kerning(font).value(left_glyph, right_glyph)
 
-    try:
-        # Try kern table first (simpler, faster, used in older fonts)
-        if "kern" in font:
-            kern_table = font["kern"]
-            if hasattr(kern_table, "kernTables"):
-                for subtable in kern_table.kernTables:
-                    if subtable.coverage & 1:
-                        pair = (left_glyph_index, right_glyph_index)
-                        if hasattr(subtable, "kernTable") and pair in subtable.kernTable:
-                            return subtable.kernTable[pair]
-    except Exception as e:
-        logger.debug(f"Error reading kern table: {e}")
 
-    try:
-        # Try GPOS table (modern OpenType fonts)
-        if "GPOS" in font:
-            gpos_table = font["GPOS"]
-            if hasattr(gpos_table, "table") and gpos_table.table:
-                lookup_list = gpos_table.table.LookupList
-                if lookup_list:
-                    for lookup in lookup_list.Lookup:
-                        if lookup.LookupType == 2:
-                            for subtable in lookup.SubTable:
-                                if hasattr(subtable, "PairSets") and hasattr(subtable, "Coverage"):
-                                    coverage = subtable.Coverage
-                                    if hasattr(coverage, "glyphs") and left_glyph_index in coverage.glyphs:
-                                        try:
-                                            left_idx = coverage.glyphs.index(left_glyph_index)
-                                            if left_idx < len(subtable.PairSets):
-                                                pair_set = subtable.PairSets[left_idx]
-                                                if pair_set:
-                                                    for pvr in pair_set:
-                                                        if hasattr(pvr, "SecondGlyph") and pvr.SecondGlyph == right_glyph_index:
-                                                            if hasattr(pvr, "Value1") and hasattr(pvr.Value1, "XAdvance"):
-                                                                return pvr.Value1.XAdvance
-                                        except (ValueError, IndexError, AttributeError):
-                                            pass
-                                elif hasattr(subtable, "ClassDef1") and hasattr(subtable, "ClassDef2"):
-                                    class_def1 = subtable.ClassDef1
-                                    class_def2 = subtable.ClassDef2
-                                    class1 = class_def1.get(left_glyph_index, 0) if hasattr(class_def1, "get") else 0
-                                    class2 = class_def2.get(right_glyph_index, 0) if hasattr(class_def2, "get") else 0
-                                    if hasattr(subtable, "Class1Record") and class1 < len(subtable.Class1Record):
-                                        class1_record = subtable.Class1Record[class1]
-                                        if hasattr(class1_record, "Class2Record") and class2 < len(class1_record.Class2Record):
-                                            class2_record = class1_record.Class2Record[class2]
-                                            if hasattr(class2_record, "Value1") and hasattr(class2_record.Value1, "XAdvance"):
-                                                return class2_record.Value1.XAdvance
-    except Exception as e:
-        logger.debug(f"Error reading GPOS table: {e}")
+def _class_pair_candidates(subtable: _ClassPairSubtable, glyph_order) -> set[tuple[str, str]]:
+    seconds_by_class: Dict[int, List[str]] = {}
+    for glyph in glyph_order:
+        seconds_by_class.setdefault(subtable.second_classes.get(glyph, 0), []).append(glyph)
+    pairs: set[tuple[str, str]] = set()
+    for first in subtable.first_glyphs:
+        first_class = subtable.first_classes.get(first, 0)
+        row = subtable.values[first_class] if first_class < len(subtable.values) else ()
+        for second_class, adjustment in enumerate(row):
+            if adjustment:
+                pairs.update((first, second) for second in seconds_by_class.get(second_class, ()))
+    return pairs
 
-    return 0
+
+def font_pair_kerning_table(font) -> Dict[tuple[str, str], int]:
+    """Return every glyph pair that ``get_text_bbox_size_pixels`` kerns in ``font``.
+
+    Keys are glyph-name pairs in string order; values are the non-zero
+    adjustments in font design units, sorted by key.
+    """
+    kerning = _font_pair_kerning(font)
+    candidates: set[tuple[str, str]] = set(kerning.legacy_pairs)
+    for subtables in kerning.gpos_lookups or ():
+        for subtable in subtables:
+            if isinstance(subtable, _GlyphPairSubtable):
+                candidates.update(subtable.values)
+            else:
+                candidates.update(_class_pair_candidates(subtable, font.getGlyphOrder()))
+    table: Dict[tuple[str, str], int] = {}
+    for left, right in sorted(candidates):
+        adjustment = kerning.value(left, right)
+        if adjustment:
+            table[(left, right)] = adjustment
+    return table
 
 
 # ------------------------------------------------------------------
@@ -316,9 +461,9 @@ def get_text_bbox_size_pixels(font_path, text, font_size, dpi, *, svg_units: boo
     Directly parses the font file using fontTools to calculate text dimensions.
     This logic was originally in find_font_files.py.
 
-    The width calculation accounts for kerning adjustments from the font's kern
-    table (legacy fonts) or GPOS table (modern OpenType fonts), providing
-    accurate bounding box dimensions that match the actual rendered text.
+    The width calculation accounts for pair kerning: the GPOS ``kern`` feature
+    when the font has one, else the legacy ``kern`` table (see
+    ``_get_kerning_value``), as browsers shaping with HarfBuzz apply it.
 
     Args:
         font_path (str): Path to the font file (e.g., .ttf, .otf).
@@ -663,6 +808,7 @@ __all__ = [
     "calculate_svg_bbox_dimensions",
     "create_text_element",
     "dominant_baseline_shift_em",
+    "font_pair_kerning_table",
     "get_font_vertical_metrics",
     "get_text_bbox_size_pixels",
     "parse_mixed_content_text",
