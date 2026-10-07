@@ -91,9 +91,11 @@ for (const outcome of ['stale','error']) {
     s.state.addedLegendCaptions.value.add('Independent manual legend');
     const before=JSON.stringify(s.state.manualSpecificRules), result=s.state.results.value;
     const captions=[...s.state.fileLegendCaptions.value], count=s.transactions.length;
+    let replacements=0;
     s.setLegendPreparation(async()=>{
       if(outcome==='error') throw new Error('measurement failed');
-      s.state.svgResultIdentity.value='replacement';
+      // Every preparation goes stale, so no attempt may commit (OV-166 retries).
+      s.state.svgResultIdentity.value=`replacement-${++replacements}`;
     });
     const candidate=rules.map(r=>({...r,cap:'Changed'}));
     if(outcome==='error') await assert.rejects(()=>s.actions.commitSpecificRules(candidate),/measurement failed/);
@@ -105,6 +107,28 @@ for (const outcome of ['stale','error']) {
   });
 }
 
+
+// OV-166: a rule commit made during an automatic rerender waits for the
+// rerender, but its preparation can still span the binding of the Result the
+// rerender wrote: the binder reads that Result's Legend rows, which changes
+// the inputs the candidate was prepared from while the Results stay the same.
+// The commit prepares once more against the bound Result and applies; it is
+// not dropped.
+test('a rule commit whose preparation spans the rerendered Result binding prepares again and applies (OV-166)', async () => {
+  const s=setup();
+  const results=s.state.results.value;
+  let preparations=0;
+  s.setLegendPreparation(async()=>{
+    preparations+=1;
+    // The binder's extraction of the rerendered Result, once.
+    if(preparations===1) s.state.legendEntries.value=[{caption:'CDS',originalCaption:'CDS',color:'#808080'}];
+  });
+  assert.equal(await s.actions.commitSpecificRules(rules),true);
+  assert.equal(preparations,2,'one more preparation, against the bound Result');
+  assert.deepEqual(s.state.manualSpecificRules.map(r=>r.cap),['Shared [#112233]','Shared [#445566]']);
+  assert.equal(s.transactions.length,1);
+  assert.notEqual(results,s.state.results.value,'the Legend rows applied');
+});
 
 test('historical caption ownership retains every source color before normalization',async()=>{
   const s=setup();s.state.manualSpecificRules.push(...rules.map(rule=>({...rule})));
