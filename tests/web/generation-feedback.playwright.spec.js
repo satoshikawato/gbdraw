@@ -178,7 +178,7 @@ test('Linear comparison preparation, real search counts, cache reuse, and no-com
   const external = await prepare(page, baseURL);
   await page.evaluate(async content => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     await window.Vue.nextTick();
     while (app.linearSeqs.length < 2) app.addLinearSeq();
     for (let i = 0; i < 2; i += 1) {
@@ -222,7 +222,7 @@ test('S03 Linear LOSAT draft edits never replace the committed request before Ge
   await prepare(page,baseURL);
   await page.evaluate(async content => {
     const app=window.__GBDRAW_APP__;
-    app.mode='linear';await window.Vue.nextTick();
+    app.setDiagramMode('linear');await window.Vue.nextTick();
     while(app.linearSeqs.length<2) app.addLinearSeq();
     for(let i=0;i<2;i++) app.setLinearSeqPrimaryFile(i,'gb',new File([content],`record-${i}.gbk`,{type:'text/plain'}));
     await app.setLinearComparisonGlobalAction('losat');await window.Vue.nextTick();

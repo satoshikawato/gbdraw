@@ -323,15 +323,9 @@ test('synthetic current session restores and exports without materializing resou
   ]) {
     expect(exported.resources[resourceId]).toEqual(syntheticSource.resources[resourceId]);
   }
-  expect(exported.resources['unused-lazy-contract']).toEqual({
-    kind: 'web-file',
-    name: 'unused-lazy-contract.txt',
-    type: 'text/plain',
-    size: 7,
-    lastModified: 0,
-    encoding: 'base64',
-    data: Buffer.from('unused\n').toString('base64')
-  });
+  // Save writes only the resources a request or a binding names, as the
+  // Python writer does (E1, REVIEW-1 m4); the unused one is dropped unread.
+  expect(exported.resources).not.toHaveProperty('unused-lazy-contract');
 });
 
 test('neutral cached conservation session regenerates three ordered rings offline', async ({

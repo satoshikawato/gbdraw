@@ -17,7 +17,6 @@ import {
 } from '../services/layout-preferences.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { isCommittedSvgResultMounted } from '../services/svg-result-ingestion.js';
-import { featureStateFromCatalog } from '../services/feature-catalog.js';
 
 export const runRecordDiscoveryWatcher = async ({
   rollbackInProgress,
@@ -97,15 +96,11 @@ export const setupWatchers = ({
 }) => {
   const {
     manualSpecificRules,
-    extractedFeatures,
-    biologicalFeatures,
     layoutRepositionMode,
-    editableLabels,
     results,
     svgContent,
     selectedResultIndex,
     form,
-    generatedMode,
     shouldDeferCircularPreviewUpdates,
     mode,
     cInputType,
@@ -117,13 +112,9 @@ export const setupWatchers = ({
     svgContainer,
     layoutPreferences,
     suppressCircularMultiRecordDefaults,
-    featureRecordIds,
     selectedFeatureRecordIdx,
     featurePanelTab,
     labelSearch,
-    orthogroups,
-    collinearGroups,
-    featureOrthogroupIndex,
     selectedOrthogroupAlignmentFeature,
     selectedOrthogroupId,
     orthogroupSearch,
@@ -325,48 +316,27 @@ export const setupWatchers = ({
     }
   );
 
-  watch(
-    () => mode.value,
-    () => {
-      if (semanticFileWatchersSuppressed.value) return;
-
-      // Vue replaces the mode-keyed container. Release its frozen live-edit
-      // payload first so the new root materializes the selected Result content.
-      previewRuntime.clearActiveRuntime();
-
-      if (typeof resetPreviewViewport === 'function') {
-        resetPreviewViewport();
-      }
-
-      // The retained Result's catalog owns this projection across mode inactivity.
-      const features = state.featureCatalog?.value && generatedMode.value === mode.value
-        ? featureStateFromCatalog(window.Vue.toRaw(state.featureCatalog.value), { mode: mode.value })
-        : {};
-      extractedFeatures.value = features.extractedFeatures || [];
-      if (biologicalFeatures) biologicalFeatures.value = features.biologicalFeatures || [];
-      featureRecordIds.value = features.featureRecordIds || [];
-      selectedFeatureRecordIdx.value = 0;
-      // Mode inactivity clears projections, not durable label/visibility intent.
-      editableLabels.value = [];
-      orthogroups.value = features.orthogroups || [];
-      collinearGroups.value = features.collinearGroups || [];
-      featureOrthogroupIndex.value = features.featureOrthogroupIndex || new Map();
-      selectedOrthogroupAlignmentFeature.value = '';
-      selectedOrthogroupId.value = '';
-      orthogroupSearch.value = '';
-      clearLabelBuildNotices();
-      labelSearch.value = '';
-      featurePanelTab.value = 'colors';
-      clickedPairwiseMatch.value = null;
-      clickedLabel.value = null;
-      closeLabelTextScopeDialog();
-      hiddenLabelTextDialog.show = false;
-      hiddenLabelTextDialog.featureId = '';
-      hiddenLabelTextDialog.reason = '';
-      resetRightDrawer();
-      linearReorderNotice.value = '';
-    }
-  );
+  // E1: the transient UI of the departing mode. The mode transition in the
+  // composition root calls it after it installed the arriving mode's artifact
+  // (R10); durable label and visibility intent stays (R2).
+  const resetModeTransientUi = () => {
+    if (typeof resetPreviewViewport === 'function') resetPreviewViewport();
+    selectedFeatureRecordIdx.value = 0;
+    selectedOrthogroupAlignmentFeature.value = '';
+    selectedOrthogroupId.value = '';
+    orthogroupSearch.value = '';
+    clearLabelBuildNotices();
+    labelSearch.value = '';
+    featurePanelTab.value = 'colors';
+    clickedPairwiseMatch.value = null;
+    clickedLabel.value = null;
+    closeLabelTextScopeDialog();
+    hiddenLabelTextDialog.show = false;
+    hiddenLabelTextDialog.featureId = '';
+    hiddenLabelTextDialog.reason = '';
+    resetRightDrawer();
+    linearReorderNotice.value = '';
+  };
 
   const auxiliaryImportFailure = ref(null);
   const canRetryAuxiliaryImportFailure = computed(() => Boolean(auxiliaryImportFailure.value
@@ -568,5 +538,5 @@ export const setupWatchers = ({
       console.warn('Could not load browser palette definitions.', normalizeUserFacingError(error, { stage: 'initialization' }));
     }
   });
-  return { waitForAuxiliaryFileImport, auxiliaryFileImportPending: () => pendingFileImports.size > 0, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure };
+  return { waitForAuxiliaryFileImport, auxiliaryFileImportPending: () => pendingFileImports.size > 0, canRetryAuxiliaryImportFailure, retryAuxiliaryImportFailure, resetModeTransientUi };
 };
