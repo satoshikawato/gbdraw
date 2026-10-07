@@ -103,8 +103,7 @@ write-up of a release.
   shared between the modes: a mode's Result shown again shows the Legend
   renames, added rows, deletions, and row order made in the other mode, as
   its next Generate draws them, for the rows it draws. A rename of a feature
-  row redraws that Result once it is shown. A switch alone does not reorder
-  a Legend.
+  row redraws that Result once it is shown.
 - Sessions: **Save Session** writes the Result of each mode. Session 45 gains an
   optional `otherModeResult` field for the Result set of the mode that is not at
   the top level; its request uses the same resource table. **Load Session**

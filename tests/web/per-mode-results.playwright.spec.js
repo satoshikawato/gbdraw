@@ -11,6 +11,7 @@ const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise, generateAndWaitForResult, openApp } = require('./helpers/app-lifecycle.cjs');
 const { openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { semanticSnapshot, settleLive } = require('./helpers/live-generate-parity.cjs');
+const { popup, closeEditor } = require('./helpers/mode-transition.cjs');
 
 test.describe.configure({ retries: 0 });
 
@@ -889,6 +890,63 @@ test('an edit after a rolled-back Load commits into the restored Result', async 
   });
   expect(edit).toEqual({ sameRoot: true, outcome: true, mounted: true, committed: true });
 });
+
+// UJ-02 (gbdraw-41 journey): a mode without a Result of its own shows no
+// Result of the other mode. Its Preview says so, the record display reports no
+// change pending Generate, and SVG export (the Result Preview card, shown only
+// with a Result) is absent, so no other mode's Result can be exported. Shown
+// again, a mode's own Result has its features, opens a feature popup, and
+// exports itself.
+const UJ02 = [
+  { session: 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json', mode: 'circular', other: 'linear', features: 37 },
+  { session: 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json', mode: 'linear', other: 'circular', features: 73 }
+];
+for (const { session, mode, other, features } of UJ02) {
+  test(`UJ-02: a ${mode} Result is neither shown nor exported in ${other} and comes back whole`, async ({ page }) => {
+    test.setTimeout(300_000);
+    const svgButton = () => page.getByRole('button', { name: 'SVG', exact: true });
+    const exportSvg = async () => {
+      const [download] = await Promise.all([page.waitForEvent('download'), svgButton().click()]);
+      const path = await download.path();
+      return { name: download.suggestedFilename(), content: readFileSync(path, 'utf8') };
+    };
+    const featureIds = (content) => [...new Set(content.match(/data-gbdraw-feature-id="[^"]+"/g) || [])].sort();
+    const pending = () => page.evaluate(() => {
+      const value = window.__GBDRAW_APP__.recordDisplayControls.hasPendingChanges;
+      return Boolean(value && typeof value === 'object' ? value.value : value);
+    });
+    await load(page, session);
+    await showMode(page, mode);
+    await generate(page);
+    const own = await shown(page);
+    expect(own).toMatchObject({ mode, generatedMode: mode, count: 1, mounted: true });
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.length)).toBe(features);
+    const exported = await exportSvg();
+
+    await showMode(page, other);
+    // (a) the empty Preview, and no Result of the other mode mounted.
+    await expectEmptyPreview(page, other);
+    // (b) no record display change pending Generate.
+    expect(await pending(), 'hasPendingChanges').toBe(false);
+    await expect(page.getByText(/has changes pending Generate/)).toHaveCount(0);
+    // (c) no export of the other mode's Result.
+    await expect(svgButton()).toHaveCount(0);
+
+    await showMode(page, mode);
+    // (d) its own Result, with its features.
+    expect(await shown(page)).toMatchObject({ mode, generatedMode: mode, identity: own.identity, mounted: true });
+    expect(await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.length)).toBe(features);
+    expect(await pending(), 'hasPendingChanges').toBe(false);
+    // (e) a feature popup opens.
+    expect((await popup(page)).featureId).toBeTruthy();
+    await closeEditor(page);
+    // (f) SVG export downloads this Result.
+    const again = await exportSvg();
+    expect(again.name).toBe(exported.name);
+    expect(featureIds(again.content)).toEqual(featureIds(exported.content));
+    expect(featureIds(again.content).length).toBeGreaterThan(0);
+  });
+}
 
 // The displayed Result always belongs to the shown mode (Phase E relies on it):
 // after every path that installs a Result or a mode, `generatedMode === mode`
