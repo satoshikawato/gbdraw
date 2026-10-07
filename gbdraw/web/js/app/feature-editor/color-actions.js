@@ -74,7 +74,6 @@ export const createFeatureColorActions = ({
     originalLegendColors,
     originalSvgStroke,
     featureStrokeOverrides,
-    skipExtractOnSvgChange,
     addedLegendCaptions
   } = state;
 
@@ -334,25 +333,6 @@ export const createFeatureColorActions = ({
   const persistCurrentSvg = (svg = getCurrentSvg(), reason = 'feature-color') => {
     if (!svg) return;
     pendingCommitReason ||= reason;
-  };
-
-  const getLiveLegendColor = (caption) => {
-    const svg = getCurrentSvg();
-    const normalizedCaption = normalizeCaption(caption);
-    if (!svg || !normalizedCaption) return null;
-    const escapedCaption = globalThis.CSS?.escape
-      ? globalThis.CSS.escape(normalizedCaption)
-      : normalizedCaption.replace(/["\\]/g, '\\$&');
-    for (const targetGroup of getAllFeatureLegendGroups(svg)) {
-      const entryGroup = targetGroup.querySelector(`g[data-legend-key="${escapedCaption}"]`);
-      if (!entryGroup) continue;
-      const colorPath = Array.from(entryGroup.querySelectorAll('path')).find((path) => {
-        const fill = path.getAttribute('fill');
-        return fill && fill !== 'none' && !fill.startsWith('url(');
-      });
-      if (colorPath) return colorPath.getAttribute('fill');
-    }
-    return null;
   };
 
   const exactHashRulesForFeature = (feature) => manualSpecificRules.filter(

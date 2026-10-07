@@ -684,7 +684,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     });
   };
 
-  const findExistingColorForCaption = (currentFeat, caption) => {
+  const findExistingColorForCaption = (_currentFeat, caption) => {
     const targetCaption = normalizeCaption(caption);
     if (!targetCaption) return null;
 

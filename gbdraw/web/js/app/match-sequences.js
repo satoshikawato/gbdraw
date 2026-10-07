@@ -622,7 +622,7 @@ export const analyzeCatalogSequenceSourceCoverage = ({
     );
   };
 
-  catalogItems.forEach((item, itemIndex) => {
+  catalogItems.forEach((item) => {
     const recordKeys = Array.isArray(item?.recordKeys)
       ? item.recordKeys.map(text)
       : [];
