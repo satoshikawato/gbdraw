@@ -17,7 +17,8 @@ const { state, sessionOperationAvailability } = await load('state.js');
 const { createHistoryManager } = await load('services/history.js');
 const { createAnnotationEditor } = await load('app/annotations.js');
 const { createLinearRecordSelector } = await load('app/linear-record-selector.js');
-const { createRulePreparation, ruleMatchesFeature } = await load('app/rule-matching.js');
+const { createRulePreparation } = await load('app/rule-matching.js');
+const { ruleMatchesFeature } = await load('services/rule-matchers.js');
 const gate = () => {
   let release;
   const promise = new Promise(resolve => { release = resolve; });

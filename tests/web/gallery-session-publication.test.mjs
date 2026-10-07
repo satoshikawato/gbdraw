@@ -6,7 +6,7 @@ import { gunzipSync } from 'node:zlib';
 if (!globalThis.crypto) globalThis.crypto = webcrypto;
 
 const { resolveLinearComparisonPlan } = await import(
-  '../../gbdraw/web/js/app/linear-comparisons.js'
+  '../../gbdraw/web/js/services/linear-comparisons.js'
 );
 
 const {

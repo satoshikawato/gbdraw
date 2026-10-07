@@ -73,7 +73,7 @@ test('a Circular Main placement and Feature visibility edit stay out of Linear r
   expect(await page.evaluate(async (id) => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('./js/state.js');
-    const { getFeatureVisibilityOverride } = await import('./js/app/feature-visibility.js');
+    const { getFeatureVisibilityOverride } = await import('./js/services/feature-visibility.js');
     const feature = app.extractedFeatures.find((item) => item.biological_feature_id === id);
     return [
       feature.scope,

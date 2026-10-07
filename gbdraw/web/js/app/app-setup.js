@@ -8,7 +8,7 @@ import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan } from './candidate-render.js';
 import {
   countUnresolvedFeatureEdits, removeUnresolvedFeatureEdits, requestFeatureVisibilityRules
-} from './feature-visibility.js';
+} from '../services/feature-visibility.js';
 import { isLegendOrderEdited } from './legend/utils.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
@@ -159,7 +159,7 @@ import {
   normalizeLinearComparisonPlan,
   plainTextLinearRecordLabel,
   reconcileLinearComparisonPlan
-} from './linear-comparisons.js';
+} from '../services/linear-comparisons.js';
 import {
   projectLinearComparisonLosatModeSelection,
   projectLinearComparisonLosatpModeSelection,

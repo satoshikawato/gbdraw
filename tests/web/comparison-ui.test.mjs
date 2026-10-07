@@ -15,8 +15,8 @@ await Promise.all([
     join(appRoot, 'comparison-ui.js')
   ),
   cp(
-    join(repoRoot, 'gbdraw', 'web', 'js', 'app', 'linear-comparisons.js'),
-    join(appRoot, 'linear-comparisons.js')
+    join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'linear-comparisons.js'),
+    join(tempRoot, 'js', 'services', 'linear-comparisons.js')
   ),
   cp(
     join(repoRoot, 'gbdraw', 'web', 'js', 'mode-profiles.js'),
@@ -47,7 +47,7 @@ const {
   createDefaultLinearComparisonPlan,
   createLinearComparisonEdge,
   resolveLinearComparisonPlan
-} = await import(pathToFileURL(join(appRoot, 'linear-comparisons.js')));
+} = await import(pathToFileURL(join(tempRoot, 'js', 'services', 'linear-comparisons.js')));
 const { comparisonStateForMode } = await import(
   pathToFileURL(join(tempRoot, 'js', 'mode-profiles.js'))
 );

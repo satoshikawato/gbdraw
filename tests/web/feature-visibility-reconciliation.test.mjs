@@ -9,7 +9,7 @@ import {
   countUnresolvedFeatureEdits,
   pruneUnmatchedFeatureOverrides,
   removeUnresolvedFeatureEdits
-} from '../../gbdraw/web/js/app/feature-visibility.js';
+} from '../../gbdraw/web/js/services/feature-visibility.js';
 
 // The rows of a Linear request; R2 scopes each draft row to its mode.
 const key = (recordKey, featureId, scope = 'linear') => JSON.stringify([scope, recordKey, featureId]);

@@ -6,7 +6,6 @@ import { pathToFileURL } from 'node:url';
 
 const repoRoot = process.cwd();
 const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'services');
-const appSourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'app');
 const webSourceDir = join(repoRoot, 'gbdraw', 'web', 'js');
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-history-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
@@ -26,23 +25,14 @@ for (const filename of [
   'json-clone.js',
   'feature-selector.js',
   'feature-utils.js',
+  'feature-visibility.js',
+  'layout-preferences.js',
   'runtime-test-hooks.js',
   'svg-serialization.js'
 ]) {
   await writeFile(
     join(tempDir, 'services', filename),
     await readFile(join(sourceDir, filename), 'utf8'),
-    'utf8'
-  );
-}
-for (const filename of [
-  'feature-visibility.js',
-  'layout-preferences.js',
-  'plot-title-position.js'
-]) {
-  await writeFile(
-    join(tempDir, 'app', filename),
-    await readFile(join(appSourceDir, filename), 'utf8'),
     'utf8'
   );
 }

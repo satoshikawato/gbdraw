@@ -1,6 +1,6 @@
 // @ts-check
 import { createDefaultAdv, createDefaultCircularConservation, createDefaultForm, createDefaultLosat, validateCurrentWriterActiveConfig } from './session-active-config-contract.js';
-import { resolveActiveLayoutPreference } from '../app/layout-preferences.js';
+import { resolveActiveLayoutPreference } from './layout-preferences.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
 import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
 import { FEATURE_CATALOG_SCHEMA, migrateLegacyFeatureCatalog } from './feature-catalog.js';

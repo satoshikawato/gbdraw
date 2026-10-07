@@ -7,7 +7,6 @@ import { pathToFileURL } from 'node:url';
 
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-match-sequences-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
-await mkdir(join(tempDir, 'app'));
 await mkdir(join(tempDir, 'services'));
 await mkdir(join(tempDir, 'utils'));
 await writeFile(
@@ -36,8 +35,8 @@ await writeFile(
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'app', 'match-sequences.js'),
-  await readFile('gbdraw/web/js/app/match-sequences.js', 'utf8'),
+  join(tempDir, 'services', 'match-sequences.js'),
+  await readFile('gbdraw/web/js/services/match-sequences.js', 'utf8'),
   'utf8'
 );
 await writeFile(
@@ -59,7 +58,7 @@ const {
   extractMatchedSpan,
   resolveCircularComparisonSequenceAvailability,
   reverseComplementNucleotide
-} = await import(pathToFileURL(join(tempDir, 'app', 'match-sequences.js')));
+} = await import(pathToFileURL(join(tempDir, 'services', 'match-sequences.js')));
 const { readRecordSourceSpan, recordSourceInterval } = await import(
   pathToFileURL(join(tempDir, 'services', 'record-source-coordinates.js'))
 );
