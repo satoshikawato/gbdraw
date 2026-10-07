@@ -2477,7 +2477,7 @@ export const createAppSetup = () => {
         context.bindingOptions.trustedRestore
         || context.bindingOptions.isIncrementalEdit
       ) return;
-      legendLayout.captureOriginalStroke();
+      legendActions.captureOriginalStroke();
       // Generate already padded its candidates; another batch Result shows
       // the current canvas padding when it is displayed (D-09).
       if (shouldBindComposition(context)) legendLayout.applyCanvasPadding();

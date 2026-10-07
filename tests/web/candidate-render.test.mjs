@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { compileDirectEditorMutationPlan } from '../../gbdraw/web/js/app/candidate-render.js';
+import { legendRowFeatureIds } from '../../gbdraw/web/js/app/legend/utils.js';
 import { biologicalFeatureKey } from '../../gbdraw/web/js/services/feature-catalog.js';
 
 const stableKey = biologicalFeatureKey('record-a', 'feature-a');
@@ -25,7 +26,9 @@ const admission = () => ({
     stableKey,
     [{ resultIndex: 0, renderedId: 'f0001' }]
   ]]),
-  resultIndexesByRenderedId: new Map([['f0001', new Set([0])]])
+  resultIndexesByRenderedId: new Map([['f0001', new Set([0])]]),
+  // The rendered features of each Result with the renderer's fill.
+  renderedFeaturesByResult: [new Map([['f0001', { fill_color: '#94a3b8' }]])]
 });
 
 test('empty, default, stale, renderer, manual-rule, and legacy inputs compile to EMPTY', () => {
@@ -367,4 +370,46 @@ test('a Legend style on a Depth series the request left out may miss its row', (
     ['depth', true], ['Ghost', false]
   ]);
   assert.deepEqual(hidden.legendStrokes.map(({ caption, allowMissing }) => [caption, allowMissing]), [['depth', true]]);
+});
+
+// OV-123 (R3, PD-OI-066): one rule says which features a Legend row's stroke
+// reaches. The live stroke reads the mounted Result and Generate the Result as
+// it is drawn; both call it.
+test('a Legend row stroke reaches the listed, named, and same-colored features without their own stroke', () => {
+  const drawnFills = [['f1', '#54BCF8'], ['f1', '#54bcf8'], ['f2', '#d3d3d3'], ['f3', '#54bcf8'], ['f4', '#123456']];
+  assert.deepEqual(legendRowFeatureIds({ color: '#54bcf8' }, { drawnFills }), ['f1', 'f3']);
+  assert.deepEqual(legendRowFeatureIds({ color: '#54bcf8' }, { drawnFills, namedIds: ['f4'], ownStrokeIds: ['f3'] }), ['f1', 'f4']);
+  assert.deepEqual(legendRowFeatureIds({ color: '#54bcf8', featureIds: ['f2', 'f9'] }, { drawnFills }), ['f2']);
+  assert.deepEqual(legendRowFeatureIds({ color: 'none' }, { drawnFills }), []);
+  assert.deepEqual(legendRowFeatureIds(undefined, { drawnFills, namedIds: ['f2'] }), ['f2']);
+});
+
+test('a stroke on a generated Legend row reaches the features each Result draws in its color', () => {
+  const featureB = biologicalFeatureKey('record-a', 'feature-b');
+  const plan = compileDirectEditorMutationPlan({
+    catalogAdmission: {
+      resultNames: ['record-a.svg', 'record-b.svg'],
+      renderedTargetsByOverrideKey: new Map([
+        [stableKey, [{ resultIndex: 0, renderedId: 'f0001' }]],
+        [featureB, [{ resultIndex: 1, renderedId: 'f0002' }]]
+      ]),
+      resultIndexesByRenderedId: new Map([['f0001', new Set([0])], ['f0002', new Set([1])]]),
+      renderedFeaturesByResult: [
+        new Map([['f0001', { fill_color: '#54bcf8' }], ['f0003', { fill_color: '#54bcf8' }], ['f0004', { fill_color: '#d3d3d3' }]]),
+        new Map([['f0002', { fill_color: '#d3d3d3' }], ['f0005', { fill_color: '#54bcf8' }]])
+      ]
+    },
+    // f0001 keeps its own stroke; f0002 is drawn in the row's color by its fill edit.
+    featureStrokeOverrides: { [stableKey]: { strokeColor: '#2a9d8f' } },
+    featureColorOverrides: { [featureB]: { color: '#54bcf8' } },
+    legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#54bcf8' }],
+    originalLegendOrder: ['CDS'],
+    legendStrokeOverrides: { CDS: { strokeColor: '#e63946', strokeWidth: 3 } }
+  });
+  assert.deepEqual(plan.operationsByResult.map(({ legendStrokes }) => legendStrokes.map(
+    ({ caption, allowMissing, renderedIds }) => ({ caption, allowMissing, renderedIds })
+  )), [
+    [{ caption: 'CDS', allowMissing: false, renderedIds: ['f0003'] }],
+    [{ caption: 'CDS', allowMissing: false, renderedIds: ['f0002', 'f0005'] }]
+  ]);
 });

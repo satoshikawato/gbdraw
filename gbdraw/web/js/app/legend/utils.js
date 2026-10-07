@@ -1,5 +1,6 @@
 // @ts-check
 import { parseTransform } from '../legend-layout/transform-utils.js';
+import { getFeatureElementIndex, getFeatureFillElements } from '../../services/feature-dom.js';
 
 export { parseTransform };
 
@@ -112,6 +113,81 @@ export const getLegendEntrySwatch = (entryGroup) => Array.from(
   const fill = path.getAttribute('fill');
   return fill && fill !== 'none' && !fill.startsWith('url(');
 }) || null;
+
+/** @param {unknown} value */
+const paintKey = (value) => String(value ?? '').trim().toLowerCase();
+
+/**
+ * Whether a feature stroke edit (the feature popup) sets a stroke color or width.
+ * @param {unknown} override
+ */
+export const setsFeatureStroke = (override) => {
+  if (!override || typeof override !== 'object') return false;
+  const { strokeColor, strokeWidth } = /** @type {Record<string, unknown>} */ (override);
+  return Boolean(String(strokeColor ?? '').trim()) || (strokeWidth !== undefined && strokeWidth !== null && strokeWidth !== '');
+};
+
+/**
+ * The features of one Result that a Legend row's stroke rule reads.
+ * @typedef {object} LegendRowFeatureFacts
+ * @property {Iterable<readonly [string, unknown]>} drawnFills The rendered feature ID and the fill of each drawn feature part.
+ * @property {Iterable<string>} [namedIds] The features a feature color edit names into the row (its Legend caption).
+ * @property {Iterable<string>} [ownStrokeIds] The features with a stroke edit of their own.
+ */
+
+// The features a stroke on a Legend row reaches in one Result (R3, PD-OI-066,
+// OV-123): the features the row lists (`featureIds`, kept by older Sessions),
+// else the features a feature color edit names into the row and the features
+// drawn in the row's color, the color the renderer gives the features of the
+// row. A feature with a stroke edit of its own keeps it: the explicit
+// per-feature edit wins over the row. The live stroke edits and their History
+// apply read the mounted Result (`mountedLegendRowFeatureIds`); Generate and
+// the display of a batch Result read the Result as it is drawn
+// (app/candidate-render.js).
+/**
+ * @param {{ color?: unknown, featureIds?: readonly unknown[] } | null | undefined} entry
+ * @param {LegendRowFeatureFacts} facts
+ * @returns {string[]}
+ */
+export const legendRowFeatureIds = (entry, { drawnFills, namedIds = [], ownStrokeIds = [] }) => {
+  const listed = new Set((Array.isArray(entry?.featureIds) ? entry.featureIds : [])
+    .map((id) => String(id ?? '').trim()).filter(Boolean));
+  const named = new Set(namedIds);
+  const color = paintKey(entry?.color);
+  const own = new Set(ownStrokeIds);
+  /** @type {Set<string>} */
+  const reached = new Set();
+  for (const [id, fill] of drawnFills) {
+    if (!id || own.has(id)) continue;
+    if (listed.size > 0
+      ? listed.has(id)
+      : named.has(id) || (color && color !== 'none' && paintKey(fill) === color)) reached.add(id);
+  }
+  return [...reached];
+};
+
+// `legendRowFeatureIds` on a mounted SVG: the row is the listed Legend entry
+// `caption`, else the row the SVG draws.
+/**
+ * @param {Element} svg
+ * @param {string} caption
+ * @param {ReadonlyArray<{ caption?: unknown, color?: unknown, featureIds?: readonly unknown[] }>} [legendEntries]
+ * @param {{ namedIds?: Iterable<string>, ownStrokeIds?: Iterable<string> }} [features]
+ * @returns {string[]}
+ */
+export const mountedLegendRowFeatureIds = (svg, caption, legendEntries = [], { namedIds = [], ownStrokeIds = [] } = {}) => {
+  const drawnRow = getAllFeatureLegendGroups(svg)
+    .map((group) => Array.from(group.querySelectorAll('g[data-legend-key]'))
+      .find((entry) => entry.getAttribute('data-legend-key') === caption))
+    .find(Boolean);
+  const row = legendEntries.find((entry) => entry?.caption === caption)
+    || { color: getLegendEntrySwatch(drawnRow)?.getAttribute('fill') };
+  const featureIndex = getFeatureElementIndex(svg);
+  /** @type {Array<[string, string]>} */
+  const drawnFills = [...featureIndex.keys()].flatMap((id) => getFeatureFillElements(svg, id, featureIndex)
+    .map((element) => /** @type {[string, string]} */ ([id, element.getAttribute('fill') || ''])));
+  return legendRowFeatureIds(row, { drawnFills, namedIds, ownStrokeIds });
+};
 
 /** The anchor of a Legend entry: its text position, else its swatch position. */
 export const legendEntryAnchor = (entryGroup) => {

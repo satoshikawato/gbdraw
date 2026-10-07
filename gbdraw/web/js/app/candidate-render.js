@@ -2,7 +2,7 @@
 /** @import { FeatureCatalogAdmission } from '../services/feature-catalog.js' */
 /** @import { SvgAdmissionRuntime, SvgResultTransform } from '../services/svg-result-ingestion.js' */
 import { resolveColorToHex } from '../utils/color-utils.js';
-import { defaultLegendCaptionOrder, isLegendOrderEdited } from './legend/utils.js';
+import { defaultLegendCaptionOrder, isLegendOrderEdited, legendRowFeatureIds } from './legend/utils.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
 import {
@@ -263,6 +263,28 @@ const compilePlanBundle = ({
     renderedIdsByDirectCaption.set(caption, renderedIds);
   });
   const allResultIndexes = operationsByResult.map((_, index) => index);
+  // The fill each feature of a Result is drawn with (its feature fill edit, else
+  // the renderer's fill) and the features with a stroke edit of their own: what
+  // a Legend row's stroke reads to reach the row's features, as the live stroke
+  // does on the mounted Result (`legendRowFeatureIds`, OV-123).
+  /** @type {Map<number, { drawnFills: Array<[string, string]>, ownStrokeIds: string[] }>} */
+  const drawnFeaturesByResult = new Map();
+  /** @param {number} resultIndex */
+  const drawnFeaturesIn = (resultIndex) => {
+    const known = drawnFeaturesByResult.get(resultIndex);
+    if (known) return known;
+    const operations = operationsByResult[resultIndex];
+    const edited = new Map(operations.featureFills.map(({ renderedId, color }) => [renderedId, color]));
+    /** @type {Map<string, Record<string, any>>} */
+    const rendered = catalogAdmission.renderedFeaturesByResult?.[resultIndex] || new Map();
+    const drawn = {
+      /** @type {Array<[string, string]>} */
+      drawnFills: [...rendered].map(([renderedId, feature]) => [renderedId, edited.get(renderedId) ?? text(feature?.fill_color)]),
+      ownStrokeIds: operations.featureStrokes.map(({ renderedId }) => renderedId)
+    };
+    drawnFeaturesByResult.set(resultIndex, drawn);
+    return drawn;
+  };
 
   // D-08 (PD-OI-063): an edited Legend order is replayed over the renderer's
   // slots. The renderer places generated entries in their generated order and
@@ -325,8 +347,8 @@ const compilePlanBundle = ({
     if (deletedCaptions.has(originalCaption)) return;
     const isOriginal = originalCaptions.has(originalCaption);
     const targetCaption = isOriginal ? originalCaption : caption;
-    const legendRenderedIds = entry && entry.featureIds.length > 0
-      ? entry.featureIds : [...(renderedIdsByDirectCaption.get(caption) || [])];
+    const namedIds = [...(renderedIdsByDirectCaption.get(caption) || [])];
+    const legendRenderedIds = entry && entry.featureIds.length > 0 ? entry.featureIds : namedIds;
     const allowMissing = !entry || (sourceReplaced && isOriginal) || unrequestedDepth.has(caption)
       || (rendererDerivedCaptions.has(caption)
       && (legendRenderedIds.length === 0 || legendRenderedIds.every(id => hiddenRenderedIds.has(id))));
@@ -352,7 +374,7 @@ const compilePlanBundle = ({
       if (strokeColor || strokeWidth !== null) operationsByResult.forEach((operations, resultIndex) => {
         operations.legendStrokes.push({
           caption: targetCaption, strokeColor, strokeWidth, allowMissing: allowMissingIn(resultIndex),
-          renderedIds: renderedIdsIn(resultIndex)
+          renderedIds: legendRowFeatureIds(entry, { ...drawnFeaturesIn(resultIndex), namedIds })
         });
       });
     }

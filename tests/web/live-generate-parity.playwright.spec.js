@@ -72,6 +72,11 @@ const popupEdit = async (page, match, edit = {}) => {
       await app.updateClickedFeatureColor(change.fill);
       if (app.featureStyleScopeDialog.show) await app.handleFeatureStyleScopeChoice(change.scope || 'single');
     }
+    if (change.stroke) {
+      await app.setClickedFeatureStrokeColorValue(change.stroke);
+      if (app.featureStyleScopeDialog.show) await app.handleFeatureStyleScopeChoice(change.scope || 'single');
+    }
+    if (change.resetStroke) await app.resetClickedFeatureStroke();
     if (change.visibility) {
       app.clickedFeature.featureVisibility = change.visibility;
       await app.updateClickedFeatureVisibility(change.visibility);
@@ -148,6 +153,15 @@ const legendRowStroke = async (page, caption, color, width) => {
   await settleLive(page);
 };
 
+// The Legend editor's stroke color control, one History step.
+const legendRowStrokeColor = async (page, caption, color) => {
+  await evaluateWithRetainedPromise(page, async ({ row, value }) => {
+    const app = window.__GBDRAW_APP__;
+    await app.setLegendEntryStrokeColorValue(app.legendEntries.findIndex((entry) => entry.caption === row), value);
+  }, { row: caption, value: color });
+  await settleLive(page);
+};
+
 // A row added in the Legend editor.
 const legendRowAdd = async (page, caption, color) => {
   await evaluateWithRetainedPromise(page, async ({ row, value }) => {
@@ -165,7 +179,7 @@ const FL1_ALPHA = { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e6394
 const KINDS = [
   'visibility rule add', 'visibility rule action', 'visibility rule delete', 'feature Off', 'feature On',
   'label text', 'label Off', 'label On', 'color rule add', 'color rule color', 'color rule delete', 'feature color',
-  'undo', 'redo', 'Result switch', 'legend color', 'legend add'
+  'undo', 'redo', 'Result switch', 'legend color', 'legend add', 'legend stroke', 'feature stroke'
 ];
 
 // The matrix: one edit kind in one set of states, with the setup before the
@@ -374,6 +388,75 @@ const CASES = [
     states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
     setup: async (page) => { await legendRowStroke(page, 'CDS', '#e63946', 3); await generate(page); },
     run: (page) => legendRowAdd(page, 'Manual row', '#118833')
+  },
+  // OV-123: a stroke on a generated Legend row reaches the features drawn in
+  // the row's color, live and at Generate; a batch Result shows it on display.
+  {
+    kind: 'legend stroke',
+    edit: 'Legend row stroke on a generated row',
+    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'unbound' },
+    run: (page) => legendRowStroke(page, 'CDS', '#e63946', 3)
+  },
+  {
+    kind: 'legend stroke',
+    edit: 'Legend row stroke on a generated row',
+    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'bound' },
+    run: (page) => legendRowStroke(page, 'CDS', '#e63946', 3)
+  },
+  {
+    kind: 'undo',
+    edit: 'Undo of a Legend row stroke on a generated row',
+    states: { mode: 'linear', results: 'single', reflow: 'on', labels: 'bound' },
+    setup: (page) => legendRowStrokeColor(page, 'CDS', '#e63946'),
+    run: (page) => history(page, 'undo')
+  },
+  {
+    kind: 'redo',
+    edit: 'Redo of a Legend row stroke on a generated row',
+    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    setup: async (page) => { await legendRowStrokeColor(page, 'CDS', '#e63946'); await history(page, 'undo'); },
+    run: (page) => history(page, 'redo')
+  },
+  {
+    kind: 'legend stroke',
+    edit: 'Legend row stroke Reset of a stroke Generate drew',
+    states: { mode: 'linear', results: 'single', reflow: 'on', labels: 'unbound' },
+    setup: async (page) => { await legendRowStroke(page, 'CDS', '#e63946', 3); await generate(page); },
+    run: (page) => appAction(page, 'resetLegendEntryStroke', 0)
+  },
+  // A feature's own stroke (the popup) wins over its Legend row's stroke, live
+  // and at Generate; without it, the feature shows the row's stroke.
+  {
+    kind: 'legend stroke',
+    edit: 'Legend row stroke on a row with a feature stroked in the popup',
+    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'bound' },
+    setup: (page) => popupEdit(page, 'FL1', { stroke: '#2a9d8f' }),
+    run: (page) => legendRowStroke(page, 'CDS', '#e63946', 3)
+  },
+  {
+    kind: 'feature stroke',
+    edit: 'Feature stroke (popup, this feature only) on a feature of a stroked Legend row',
+    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'bound' },
+    setup: (page) => legendRowStroke(page, 'CDS', '#e63946', 3),
+    run: (page) => popupEdit(page, 'FL1', { stroke: '#2a9d8f' })
+  },
+  {
+    kind: 'feature stroke',
+    edit: 'Feature stroke Reset (popup) of a feature in a stroked Legend row',
+    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'bound' },
+    setup: async (page) => {
+      await legendRowStroke(page, 'CDS', '#e63946', 3);
+      await popupEdit(page, 'FL1', { stroke: '#2a9d8f' });
+      await generate(page);
+    },
+    run: (page) => popupEdit(page, 'FL1', { resetStroke: true })
+  },
+  {
+    kind: 'Result switch',
+    edit: 'Result switch after a Legend row stroke on a generated row',
+    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
+    setup: (page) => legendRowStroke(page, 'CDS', '#e63946', 3),
+    run: (page) => showResult(page, 1)
   },
   {
     kind: 'color rule color',
