@@ -188,8 +188,11 @@ export const createFeatureSelection = ({ state, onMounted = null, onUnmounted = 
     mode
   } = state;
 
+  /** @type {number | null} */
   let statusTimeoutId = null;
+  /** @type {{ svg: SVGSVGElement, pointerId: number, startX: number, startY: number, additive: boolean } | null} */
   let pendingDrag = null;
+  /** @type {{ startX: number, startY: number, originX: number, originY: number, minX?: number, maxX?: number, minY?: number, maxY?: number } | null} */
   let activeToolbarDrag = null;
   const toolbarOffset = reactive({ x: 0, y: 0 });
 

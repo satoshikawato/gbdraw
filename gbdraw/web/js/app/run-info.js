@@ -1572,6 +1572,9 @@ const requireExactRecords = async (renderRequest, files) => {
 
 // Export Feature Edits TSV (design Q4 6.4): request featureOverrides rows as the
 // Source recipe writes its --feature_override_table, or why no table carries them.
+/**
+ * @param {Pick<SourceRecipeOptions, 'resources' | 'readResourceRecordCount'> & { renderRequest: Record<string, any>, rows: any }} options
+ */
 export const buildFeatureOverrideTable = async ({
   renderRequest, resources, rows, readResourceRecordCount = null
 }) => {

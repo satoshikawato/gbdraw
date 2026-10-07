@@ -11,6 +11,7 @@ import {
   updateFeatureOverride
 } from '../services/feature-placement.js';
 import { normalizeTsvCell as normalizeCell } from '../utils/tsv-cell.js';
+/** @import { FeatureRequestRecord } from '../services/feature-placement.js' */
 export { escapeRegexLiteral, exactRegexValue } from './feature-selector.js';
 
 const REQUIRED_COLUMNS = ['record_id', 'feature_type', 'qualifier', 'value', 'action'];
@@ -324,6 +325,18 @@ const removeFeatureEdits = ({
 // A label source text kept for a bulk edit goes with its feature. Edits of
 // features outside the crop or display stay dormant, and the other mode's
 // edits wait for their mode (R2). Returns the count of removed edits.
+/**
+ * @param {{
+ *   featureOverrides?: Record<string, any>,
+ *   featurePlacementOverrides?: Record<string, any>,
+ *   notices?: Record<string, any>[],
+ *   scope?: string,
+ *   replacedRecordKeys?: string[],
+ *   previousRecords?: Record<string, any>[],
+ *   currentRecords?: Record<string, any>[],
+ *   biologicalFeatures?: Record<string, any>[]
+ * }} [options]
+ */
 export const pruneUnmatchedFeatureOverrides = ({
   featureOverrides = {},
   featurePlacementOverrides = {},
@@ -341,8 +354,9 @@ export const pruneUnmatchedFeatureOverrides = ({
     featureOverrides,
     featurePlacementOverrides,
     unresolved: unresolvedNoticeKinds(notices, scope, (recordKey) => replaced.has(recordKey)),
-    dropped: (row) => rowBelongsToRequest(row, scope, previousRecords)
-      && !rowBelongsToRequest(row, scope, currentRecords),
+    // The records are those of canonical render requests, which all carry `recordKey`.
+    dropped: (row) => rowBelongsToRequest(row, scope, /** @type {FeatureRequestRecord[]} */ (previousRecords))
+      && !rowBelongsToRequest(row, scope, /** @type {FeatureRequestRecord[]} */ (currentRecords)),
     sourceGone: (key, row) => row?.scope === scope && replaced.has(row?.recordKey) && !present.has(key)
   });
 };

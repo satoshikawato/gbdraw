@@ -76,8 +76,8 @@ export const createFeatureEditTableActions = ({
   const downloadFeatureEditTable = async () => {
     const committed = getCommittedSession();
     const records = committed?.renderRequest?.records || [];
-    const rows = records.length ? requestFeatureOverrides(featureOverrides, committed.renderRequest.mode, records) : [];
-    if (rows.length === 0) {
+    const rows = committed && records.length ? requestFeatureOverrides(featureOverrides, committed.renderRequest.mode, records) : [];
+    if (!committed || rows.length === 0) {
       window.alert('No feature edits to export.');
       return false;
     }
@@ -114,11 +114,12 @@ export const createFeatureEditTableActions = ({
     const committed = getCommittedSession();
     const records = committed?.renderRequest?.records || [];
     try {
-      if (!records.length) {
+      if (!committed || !records.length) {
         window.alert('No diagram is currently displayed. Generate a diagram, then load the feature edits TSV.');
         return false;
       }
-      const response = await readFeatureOverrideTable({
+      // app-setup wires the helper; a missing one throws here and is reported as a Feature edits TSV error.
+      const response = await /** @type {NonNullable<typeof readFeatureOverrideTable>} */ (readFeatureOverrideTable)({
         files: [{ role: 'featureOverrides', bytes: await cloneFileBytesForTransfer(file) }],
         canonicalRequest: committed.renderRequest,
         resources: committed.resources
