@@ -69,7 +69,7 @@ export const runRecordDiscoveryWatcher = async ({
  * @property {() => void} resetRightDrawer The right drawer owner's reset.
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
- * @property {WatchersPreviewRuntime | null} [previewRuntime]
+ * @property {WatchersPreviewRuntime} previewRuntime The preview owner's mounted-Result binding.
  * @property {(() => Promise<any>) | null} [preparePaletteDefinitions] The palette loader's load of the browser palette definitions.
  */
 
@@ -92,7 +92,7 @@ export const setupWatchers = ({
   // R13: the label owner's ports (app/feature-editor/label-actions.js).
   closeLabelTextScopeDialog,
   clearLabelBuildNotices,
-  previewRuntime = null,
+  previewRuntime,
   preparePaletteDefinitions = null
 }) => {
   const {
@@ -252,14 +252,13 @@ export const setupWatchers = ({
     nextTick(async () => {
       const root = svgContainer.value?.querySelector('svg') || null;
       if (!root) {
-        previewRuntime?.clearActiveRuntime?.();
+        previewRuntime.clearActiveRuntime();
         return;
       }
       const resultIndex = Number(selectedResultIndex.value) || 0;
       const result = results.value[resultIndex] || null;
       try {
-        // app/app-setup.js, the only caller, always passes the preview runtime here.
-        const context = /** @type {WatchersPreviewRuntime} */ (previewRuntime).createMountedResultContext({
+        const context = previewRuntime.createMountedResultContext({
           root,
           result,
           resultIndex,
@@ -270,7 +269,7 @@ export const setupWatchers = ({
             trustedRestore: Boolean(trustedArtifactRestoreInProgress.value)
           }
         });
-        await /** @type {WatchersPreviewRuntime} */ (previewRuntime).bindMountedResult(context);
+        await previewRuntime.bindMountedResult(context);
       } catch (error) {
         if ([
           'PREVIEW_BIND_STALE',
@@ -333,7 +332,7 @@ export const setupWatchers = ({
 
       // Vue replaces the mode-keyed container. Release its frozen live-edit
       // payload first so the new root materializes the selected Result content.
-      previewRuntime?.clearActiveRuntime?.();
+      previewRuntime.clearActiveRuntime();
 
       if (typeof resetPreviewViewport === 'function') {
         resetPreviewViewport();

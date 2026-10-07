@@ -20,6 +20,13 @@ write-up of a release.
   `--save_session`) keeps the resource IDs and file names of the Session's unchanged
   inputs. Before, the rewritten Session renamed them to positional IDs such as
   `record-1-genbank`, and table files lost the names they were uploaded with.
+- Depth tracks: Depth TSV positions now follow a crop and a reverse complement,
+  in Linear and Circular, on the command line, in the Python API, and in the web
+  app. A crop such as `--region chr:601-800` drew the TSV rows at positions 1-200
+  in place of the rows at 601-800, and a reverse-complemented record drew its
+  coverage mirrored. Positions are source coordinates of the named record; a crop
+  keeps only the positions inside it, and a reverse complement flips them. The
+  automatic Depth maximum now comes from the drawn positions only.
 - CLI: `gbdraw circular|linear --session <Session 41-44> --session_output out.json`
   (and `--save_session`) no longer fails with "Feature placement drafts require a
   circular or linear scope." for a Session whose Feature placement drafts were saved by

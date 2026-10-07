@@ -185,8 +185,8 @@ a leaf test when all of these hold:
 3. No other tracked file names it, by file name or, for Python, by module name
    (`tests.test_<name>`). The check reads the head tree. It ignores metadata,
    documentation, and policy-documentation paths and the runner lists
-   `tests/ci/**`, `.github/workflows/**`, `playwright*.config.js`, and
-   `package.json`.
+   `tests/ci/**`, `.github/workflows/**`, `playwright.config.js`,
+   `tests/web/playwright/*.config.js`, and `package.json`.
 
 Condition 3 makes a test file that another file imports, runs, or reads a
 helper, whatever its name. On `dc255c4a`, 361 of the 404 files that meet
