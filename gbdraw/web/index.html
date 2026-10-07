@@ -3938,13 +3938,13 @@
                                 <div class="mt-2 p-2 bg-slate-50 rounded border border-slate-200 flex gap-2 items-end">
                                     <div class="flex-grow">
                                         <label class="text-[9px] font-bold text-slate-500 block mb-1">ADD KEY</label>
-                                        <select v-model="newColorFeat" aria-label="Add key" class="form-input text-xs py-1 px-2 h-8">
+                                        <select v-model="newColorFeat" aria-label="Add key" class="form-input text-xs py-1 px-2 h-8" :disabled="!semanticMutationAvailable">
                                             <option v-for="k in defaultColorKeys" :value="k">{{ k }}</option>
                                         </select>
                                     </div>
                                     <div>
                                         <label class="text-[9px] font-bold text-slate-500 block mb-1">COLOR</label>
-                                        <input type="color" v-model="newColorVal" aria-label="Add key color" class="h-8 w-10 p-0 border border-slate-300 rounded cursor-pointer">
+                                        <input type="color" v-model="newColorVal" aria-label="Add key color" class="h-8 w-10 p-0 border border-slate-300 rounded cursor-pointer" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <button @click.prevent="addCustomColor" class="btn btn-secondary text-xs h-8" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-plus" aria-hidden="true"></i> Add
@@ -4009,17 +4009,17 @@
 
                                 <div class="bg-slate-50 p-2 rounded border border-slate-200">
                                     <div class="grid grid-cols-2 gap-1 mb-1">
-                                        <select v-model="newSpecRule.feat" aria-label="New color rule feature type" class="form-input form-input-compact">
+                                        <select v-model="newSpecRule.feat" aria-label="New color rule feature type" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
                                             <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                                         </select>
-                                        <input v-model="newSpecRule.qual" list="specific-rule-qualifier-options" placeholder="Qualifier (choose or type)" aria-label="Qualifier name" class="form-input form-input-compact">
+                                        <input v-model="newSpecRule.qual" list="specific-rule-qualifier-options" placeholder="Qualifier (choose or type)" aria-label="Qualifier name" class="form-input form-input-compact" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div class="flex gap-1 mb-1">
-                                        <input v-model="newSpecRule.val" data-new-specific-rule-pattern aria-label="New color rule pattern" placeholder="Python regex (e.g. (?i)NADH)" class="form-input form-input-compact flex-grow">
-                                        <input type="color" v-model="newSpecRule.color" aria-label="New color rule color" class="h-6 w-7 p-0 border rounded cursor-pointer shrink-0">
+                                        <input v-model="newSpecRule.val" data-new-specific-rule-pattern aria-label="New color rule pattern" placeholder="Python regex (e.g. (?i)NADH)" class="form-input form-input-compact flex-grow" :disabled="!semanticMutationAvailable">
+                                        <input type="color" v-model="newSpecRule.color" aria-label="New color rule color" class="h-6 w-7 p-0 border rounded cursor-pointer shrink-0" :disabled="!semanticMutationAvailable">
                                     </div>
                                     <div class="flex gap-1">
-                                        <input v-model="newSpecRule.cap" aria-label="New color rule legend caption" placeholder="Legend Caption (Optional)" class="form-input form-input-compact flex-grow">
+                                        <input v-model="newSpecRule.cap" aria-label="New color rule legend caption" placeholder="Legend Caption (Optional)" class="form-input form-input-compact flex-grow" :disabled="!semanticMutationAvailable">
                                         <button aria-label="Add color rule" @click="addSpecificRule" class="btn btn-secondary text-xs h-7 px-3" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i></button>
                                     </div>
                                 </div>
@@ -4064,7 +4064,7 @@
                                     <span v-if="adv.features.length === 0" class="ui-hint italic py-1">No features selected</span>
                                 </div>
                                 <div class="flex gap-2">
-                                    <select v-model="newFeatureToAdd" aria-label="Feature type to add" aria-describedby="help-feature-feature-types" class="form-input text-xs py-0.5 px-2 h-7">
+                                    <select v-model="newFeatureToAdd" aria-label="Feature type to add" aria-describedby="help-feature-feature-types" class="form-input text-xs py-0.5 px-2 h-7" :disabled="!semanticMutationAvailable">
                                         <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                                     </select>
                                     <button @click.prevent="addFeature" class="btn btn-secondary text-xs h-7 shrink-0" :disabled="!semanticMutationAvailable">
@@ -4312,10 +4312,10 @@
 
                                     <div class="bg-slate-50 p-2 rounded border border-slate-200 mb-2">
                                         <div class="flex gap-1 mb-1">
-                                            <select v-model="newPriorityRule.feat" class="form-input text-xs p-1 h-7 w-24 shrink-0">
+                                            <select v-model="newPriorityRule.feat" aria-label="New priority rule feature type" class="form-input text-xs p-1 h-7 w-24 shrink-0" :disabled="!semanticMutationAvailable">
                                                 <option v-for="k in featureKeys" :value="k">{{ k }}</option>
                                             </select>
-                                            <input v-model="newPriorityRule.order" placeholder="product,gene,locus_tag" class="form-input text-xs p-1 h-7 flex-grow">
+                                            <input v-model="newPriorityRule.order" aria-label="New priority rule qualifier order" placeholder="product,gene,locus_tag" class="form-input text-xs p-1 h-7 flex-grow" :disabled="!semanticMutationAvailable">
                                             <button aria-label="Add priority rule" @click="addPriorityRule" class="btn btn-secondary text-xs h-7 px-3" :disabled="!semanticMutationAvailable"><i class="ph ph-plus" aria-hidden="true"></i></button>
                                         </div>
                                     </div>

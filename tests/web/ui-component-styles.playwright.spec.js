@@ -316,24 +316,19 @@ test('linear: every visible settings text is 11 px or more and 4.5:1 (UI-06)', a
 
 // GX-01, GX-12: while a Session operation runs, the settings setters refuse edits (and a
 // field bound with v-model would write in the middle of the operation), so every control
-// in the settings panel must look and be disabled; an enabled one would show the typed
-// value and silently drop it when the operation ends. Controls that stay enabled:
+// in the settings panel must look and be disabled, as docs/REFERENCE/web-app.md states;
+// an enabled one would show the typed value and silently drop it when the operation
+// ends. Controls that stay enabled:
 const BUSY_ENABLED_CONTROLS = {
   selectors: [
     // Disclosures and links to another setting change only what the panel shows.
     'button[aria-expanded]',
     'button[aria-controls]',
-    // Exports read the current settings and change nothing.
+    // Exports read the settings and change nothing.
     'button:has(.ph-download-simple)'
   ],
-  names: [
-    // Moves focus to the Multi-Record Canvas setting.
-    'Show Multi-Record Canvas setting',
-    // Drafts of a new row: the typed value stays in the form, and the row's Add
-    // button is disabled until the operation ends.
-    'Add key', 'Add key color', 'Feature type to add', 'New color rule feature type', 'Qualifier name',
-    'New color rule pattern', 'New color rule color', 'New color rule legend caption'
-  ]
+  // A link to another setting without aria-controls (it focuses that setting).
+  names: ['Show Multi-Record Canvas setting']
 };
 
 for (const mode of ['circular', 'linear']) {
@@ -343,9 +338,11 @@ for (const mode of ['circular', 'linear']) {
     const renderers = await page.evaluate((mode) => window.__GBDRAW_APP__.adv[`${mode}_track_slots`]
       .map((slot) => slot.renderer), mode);
     expect(renderers).toEqual(expect.arrayContaining(['depth', 'annotations', 'dinucleotide_skew']));
-    // An annotation row shows its style colors; Linear also shows a second file's
-    // defaults, the Collinear settings, and the record rows.
+    // An annotation row shows its style colors, and labels on show the label filters;
+    // Linear also shows a second file's defaults, the Collinear settings, and the record rows.
     await page.getByRole('button', { name: 'Coordinates', exact: true }).click();
+    await page.locator(mode === 'linear' ? '#linear-show-labels' : '#circular-label-mode')
+      .selectOption(mode === 'linear' ? 'all' : 'out');
     if (mode === 'linear') {
       await page.evaluate(async () => {
         const app = window.__GBDRAW_APP__;
