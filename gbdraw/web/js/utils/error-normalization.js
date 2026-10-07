@@ -90,6 +90,9 @@ const REASONS = Object.freeze({
   DEPTH_SERIES: 'Select an existing Depth TSV or remove the slot.',
   BOTH_ENDPOINTS: 'Supply both region endpoints or leave both empty.', SPECIFIC_COLUMNS: 'Supply four or five tab-separated columns.',
   COLOR: 'Use none, a supported named color, or a hex color with 3 or 6 digits.',
+  // Output Prefix (gbdraw/api/requests.py RenderOutputRequest).
+  FILENAME: 'Use one file name without a folder: no / \\ : * ? " < > | or control characters, no trailing dot, and not a Windows device name such as CON or NUL.',
+  FILENAME_LENGTH: 'Use at most 200 bytes in UTF-8, for example 200 ASCII characters.',
   BOOLEAN: 'Use true or false.', INTEGER: 'Use an integer.', NONNEGATIVE: 'Use a finite value of zero or greater.',
   FINITE: 'Use a finite number.', POSITIVE_INTEGER: 'Use an integer greater than zero.',
   POSITIVE: 'Use a finite value greater than zero.', POSITIVE_OR_AUTO: 'Use Auto or a finite value greater than zero.',
@@ -182,6 +185,7 @@ const DEFINITIONS = Object.freeze({
 const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Protein BLASTP Pairwise max hits',
   losatp_max_hits: 'Protein BLASTP Pairwise max hits', losatp_max_target_seqs: 'Protein BLASTP Max target seqs',
   losatp_member_max_hits: 'Protein BLASTP member hits per protein',
+  output_prefix: 'Output Prefix',
   arrow_head_length_ratio: 'Arrow head length ratio', arrow_shaft_width_ratio: 'Arrow shaft width ratio',
   keep_definition_left_aligned: 'Lock Definition Column', window: 'Window', step: 'Step',
   depth_window: 'Depth Window', depth_step: 'Depth Step', dinucleotide: 'Dinucleotide',

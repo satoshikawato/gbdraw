@@ -198,6 +198,25 @@ export const resolveDisplayProteinId = (feature, member = null, fallback = '') =
     fallback
   );
 
+// A feature's own protein ID, for a row labeled Protein ID: unlike
+// resolveDisplayProteinId, never its locus tag, gene, or other identifier.
+// The Interactive SVG mirrors it (featureProteinId).
+/**
+ * @param {Record<string, any> | null | undefined} feature
+ * @param {Record<string, any> | null} [member]
+ * @returns {string}
+ */
+export const resolveFeatureProteinId = (feature, member = null) =>
+  firstNonInternalProteinDisplayText(
+    directFeatureDisplayValue(feature, 'displayProteinId', 'display_protein_id'),
+    directFeatureDisplayValue(member, 'displayProteinId', 'display_protein_id'),
+    directFeatureDisplayValue(feature, 'sourceProteinId', 'source_protein_id'),
+    directFeatureDisplayValue(member, 'sourceProteinId', 'source_protein_id'),
+    getFeatureQualifierDisplayValue(feature, 'protein_id'),
+    directFeatureDisplayValue(feature, 'proteinId', 'protein_id'),
+    directFeatureDisplayValue(member, 'proteinId', 'protein_id')
+  );
+
 export const resolveInternalProteinId = (feature, member = null, fallback = '') => firstFeatureText(
   directFeatureValue(feature, 'proteinId', 'protein_id'),
   directFeatureValue(member, 'proteinId', 'protein_id'),

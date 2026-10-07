@@ -388,6 +388,56 @@ def test_legend_stroke_width_failure_is_typed_not_value_error():
     assert _web(caught.value)["context"] == {"reason": "NONNEGATIVE"}
 
 
+@pytest.mark.parametrize(
+    ("prefix", "reason"),
+    [
+        ('PRIVATE:c*?"<>|', "FILENAME"),
+        ("nested/PRIVATE", "FILENAME"),
+        ("CON", "FILENAME"),
+        ("nul.txt", "FILENAME"),
+        ("PRIVATE b.", "FILENAME"),
+        ("", "REQUIRED"),
+        ("P" * 201, "FILENAME_LENGTH"),
+        # 101 two-byte characters are 202 bytes in UTF-8.
+        ("é" * 101, "FILENAME_LENGTH"),
+    ],
+    ids=["characters", "folder", "device", "device-extension", "trailing-dot", "empty", "201-bytes", "202-utf8-bytes"],
+)
+def test_output_prefix_failure_names_the_output_prefix_field(prefix: str, reason: str):
+    from gbdraw.api.requests import RenderOutputRequest
+
+    with pytest.raises(ValidationError) as caught:
+        RenderOutputRequest(output_prefix=prefix)
+    payload = serialize_web_error(caught.value, operation="generate", stage="request-validation")
+    assert payload["code"] == "INPUT_INVALID"
+    assert payload["context"] == {"field": "output_prefix", "reason": reason}
+    assert "PRIVATE" not in json.dumps(payload)
+
+
+def test_output_prefix_length_limit_counts_utf8_bytes():
+    from gbdraw.api.requests import RenderOutputRequest
+
+    assert RenderOutputRequest(output_prefix="x" * 200).output_prefix == "x" * 200
+    assert RenderOutputRequest(output_prefix="é" * 100).output_prefix == "é" * 100
+
+
+def test_radial_inner_label_fit_failure_reports_the_fixed_track_row(tmp_path: Path):
+    from gbdraw.circular import _get_args, run_circular_from_namespace
+
+    with pytest.raises(ValidationError) as caught:
+        run_circular_from_namespace(_get_args([
+            "--gbk", str(Path(__file__).parent / "test_inputs" / "HmmtDNA.gbk"),
+            "-o", str(tmp_path / "radial"),
+            "--labels", "both", "--label_placement", "radial",
+            "--circular_track_slot", "features:features@r=330px,w=40px",
+            "--circular_track_slot", "gc_content:dinucleotide_content@side=inside,r=290px,w=40px",
+        ]))
+    assert str(caught.value).startswith("radial inner labels cannot fit the fixed circular geometry")
+    payload = _web(caught.value)
+    assert payload["code"] == "TRACK_LAYOUT"
+    assert payload["context"] == {"reason": "CANNOT_FIT", "slotIndex": 0}
+
+
 def test_specific_color_table_failure_reports_row_without_value(tmp_path: Path):
     from gbdraw.io.colors import read_color_table
 

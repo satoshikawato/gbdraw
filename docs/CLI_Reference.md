@@ -577,9 +577,10 @@ remains visible and causes a warning when combined with `--hide_scale`; omit or
 disable that slot to hide the scale.
 
 For fresh Circular input, output names are derived from record IDs when
-`--output` is omitted. An ID used this way must be one filename component:
-directory separators, absolute paths, `.` or `..`, ASCII control characters,
-and Windows-reserved device, stream, or wildcard names are rejected. Pass an
+`--output` is omitted. An ID used this way must be one filename component of
+at most 200 bytes in UTF-8: directory separators, absolute paths, `.` or `..`,
+ASCII control characters, and Windows-reserved device, stream, or wildcard names
+are rejected. Pass an
 explicit `--output` path or prefix for such records.
 Session replay keeps its saved prefix unless an output override is supplied.
 
