@@ -4,6 +4,7 @@ import { resolveColorToHex, toNativeColorInputValue } from '../../utils/color-ut
 import {
   defaultLegendCaptionOrder,
   getAllFeatureLegendGroups,
+  getLegendEntrySwatch,
   getVisibleFeatureLegendGroup,
   isLegendOrderEdited,
   orderLegendEntries,
@@ -87,7 +88,6 @@ export const createLegendEntryActions = ({
     results,
     selectedResultIndex,
     svgContainer,
-    adv,
     legendEntries,
     deletedLegendEntries,
     originalLegendOrder,
@@ -95,7 +95,8 @@ export const createLegendEntryActions = ({
     newLegendCaption,
     newLegendColor,
     legendStrokeOverrides,
-    legendColorOverrides
+    legendColorOverrides,
+    originalSvgStroke
   } = state;
 
   /** @type {(() => void) | null} */
@@ -205,6 +206,35 @@ export const createLegendEntryActions = ({
 
   const onLegendGeometryChanged = () => legendGeometryChangedHandler?.();
 
+  // The stroke Generate gives a row added here: the renderer's first Legend row
+  // as it drew it, before that row's own stroke edit, whose captured original
+  // Reset Stroke restores (OV-121, PD-OI-066). The draft's block stroke applies
+  // on Generate, so it is not read here (R1).
+  /**
+   * @param {Element} targetGroup
+   * @returns {{ color: string | null, width: string | number | null }}
+   */
+  const templateRowStroke = (targetGroup) => {
+    const template = targetGroup.querySelector('g[data-legend-key]');
+    const swatch = getLegendEntrySwatch(template)
+      || targetGroup.querySelector('path[fill]:not([fill="none"]):not([fill^="url("])');
+    const override = template ? legendStrokeOverrides[String(template.getAttribute('data-legend-key') || '').trim()] : null;
+    /**
+     * @param {unknown} value The row's own stroke edit, if any.
+     * @param {string} original The override field that holds the drawn value.
+     * @param {string} attribute
+     * @param {() => string | number | null} inherited
+     */
+    const drawn = (value, original, attribute, inherited) => {
+      if (value === undefined || value === null || value === '') return swatch?.getAttribute(attribute) ?? null;
+      return Object.prototype.hasOwnProperty.call(override, original) ? override[original] : inherited();
+    };
+    return {
+      color: drawn(override?.strokeColor, 'originalStrokeColor', 'stroke', () => originalSvgStroke.value.color),
+      width: drawn(override?.strokeWidth, 'originalStrokeWidth', 'stroke-width', () => originalSvgStroke.value.width)
+    };
+  };
+
   const addLegendEntry = async (caption, color, options = {}) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
@@ -282,7 +312,6 @@ export const createLegendEntryActions = ({
       lineHeight: lineMargin,
       textXOffset: xMargin
     } = reflowMetrics;
-    const firstColorRect = targetGroup.querySelector('path[fill]:not([fill="none"]):not([fill^="url("])');
 
     let fontSize = 14;
     let fontFamily = 'Arial';
@@ -294,26 +323,10 @@ export const createLegendEntryActions = ({
       if (ff) fontFamily = ff;
     }
 
-    let strokeColor = 'black';
-    let strokeWidth = 0.5;
-    if (adv.block_stroke_color) {
-      strokeColor = adv.block_stroke_color;
-    }
-    if (adv.block_stroke_width !== null && adv.block_stroke_width !== undefined) {
-      strokeWidth = adv.block_stroke_width;
-    }
-    if (!adv.block_stroke_color && firstColorRect) {
-      const existingStroke = firstColorRect.getAttribute('stroke');
-      if (existingStroke && existingStroke !== 'none') {
-        strokeColor = existingStroke;
-      }
-    }
-    if ((adv.block_stroke_width === null || adv.block_stroke_width === undefined) && firstColorRect) {
-      const existingStrokeWidth = firstColorRect.getAttribute('stroke-width');
-      if (existingStrokeWidth) {
-        strokeWidth = parseFloat(existingStrokeWidth);
-      }
-    }
+    const templateStroke = templateRowStroke(targetGroup);
+    const strokeColor = String(templateStroke.color || '').trim() || 'none';
+    const templateWidth = Number.parseFloat(String(templateStroke.width ?? ''));
+    const strokeWidth = Number.isFinite(templateWidth) ? templateWidth : 0.5;
 
     try {
       const parser = new DOMParser();

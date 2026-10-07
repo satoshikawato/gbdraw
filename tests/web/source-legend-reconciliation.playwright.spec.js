@@ -145,6 +145,83 @@ for (const mode of ['linear', 'circular']) {
   });
 }
 
+// `forced_label_underlay.gb` generated in `mode`.
+const loadGenerated = async (browser, mode) => {
+  const page = await load(browser);
+  page.setDefaultTimeout(180_000);
+  if (mode === 'linear') await switchMode(page, 'linear');
+  const input = mode === 'linear'
+    ? page.getByTestId('linear-genbank-1')
+    : page.getByLabel('GenBank/DDBJ File', { exact: true });
+  await input.setInputFiles('tests/fixtures/forced_label_underlay.gb');
+  await generate(page);
+  return page;
+};
+const addLegendRow = async (page, caption, color) => {
+  await evaluateWithRetainedPromise(page, async row => {
+    const app = window.__GBDRAW_APP__;
+    app.newLegendCaption = row.caption;
+    app.newLegendColor = row.color;
+    await app.addNewLegendEntry();
+  }, { caption, color });
+  await expect.poll(() => page.evaluate(legendIndex, caption)).toBeGreaterThanOrEqual(0);
+};
+// The swatch stroke of row `caption` (color normalized, width as a number) in each
+// Legend group of the selected Result and of the mounted SVG.
+const rowStroke = (page, caption) => page.evaluate(async target => {
+  const { state: s } = await import('./js/state.js');
+  const { getAllFeatureLegendGroups, getLegendEntrySwatch } = await import('./js/app/legend/utils.js');
+  const paint = document.createElement('canvas').getContext('2d');
+  const color = value => { paint.fillStyle = '#010203'; paint.fillStyle = String(value); return String(paint.fillStyle); };
+  const strokes = svg => getAllFeatureLegendGroups(svg).map(group => {
+    const swatch = getLegendEntrySwatch(group.querySelector(`g[data-legend-key="${CSS.escape(target)}"]`));
+    return swatch && [color(swatch.getAttribute('stroke')), Number(swatch.getAttribute('stroke-width'))];
+  });
+  const content = s.results.value[s.selectedResultIndex.value].content;
+  return {
+    result: strokes(new DOMParser().parseFromString(content, 'image/svg+xml').documentElement),
+    mounted: strokes(s.svgContainer.value.querySelector('svg'))
+  };
+}, caption);
+const expectStroke = async (page, caption, stroke) => {
+  const current = await rowStroke(page, caption);
+  expect(current.result.length).toBeGreaterThan(0);
+  expect(current.result).toEqual(current.result.map(() => stroke));
+  expect(current.mounted).toEqual(current.result);
+};
+
+// OV-121 (PD-OI-066): a row added in the Legend editor without a stroke of its own
+// takes the renderer's first row as Generate copies it, before that row's own
+// stroke edit, live and at Generate; a later edit of the first row leaves it.
+for (const mode of ['linear', 'circular']) {
+  test(`M2 ${mode}: a Legend editor added row takes the first row's drawn stroke live and at Generate`, async ({ browser }) => {
+    test.setTimeout(600_000);
+    const page = await loadGenerated(browser, mode);
+    try {
+      const first = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries[0].caption);
+      const [drawn] = (await rowStroke(page, first)).result;
+      const strokeFirstRow = (color, width) => page.evaluate(edit => {
+        const app = window.__GBDRAW_APP__;
+        return app.updateLegendEntryStrokeColor(0, edit.color) && app.updateLegendEntryStrokeWidth(0, edit.width);
+      }, { color, width });
+      expect(await strokeFirstRow('#e63946', 3)).toBe(true);
+      await addLegendRow(page, 'Manual row', '#118833');
+      await expectStroke(page, 'Manual row', drawn);
+      await generate(page);
+      await expectStroke(page, first, ['#e63946', 3]);
+      await expectStroke(page, 'Manual row', drawn);
+      expect(await strokeFirstRow('#2a9d8f', 1)).toBe(true);
+      await expectStroke(page, 'Manual row', drawn);
+      await generate(page);
+      await expectStroke(page, first, ['#2a9d8f', 1]);
+      await expectStroke(page, 'Manual row', drawn);
+      expect(page.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+    }
+  });
+}
+
 test('L1-L8 generated legend categories reconcile while valid category and layout preferences survive', async ({ browser }, testInfo) => {
   test.setTimeout(1_800_000);
   const page = await load(browser, seeds.lambda);

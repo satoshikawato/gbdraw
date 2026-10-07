@@ -17,6 +17,10 @@ write-up of a release.
   in Linear and Circular. The added row is drawn with its color and stroke after
   Generate, a rename, and Session Save and Load. At Generate, an added row no longer
   takes the edited stroke of the first Legend row.
+- Legend editor (web app): a row added in the Legend editor now has the same stroke
+  when it is added and after Generate: the stroke of the first Legend row as the
+  diagram drew it. Before, the row took that row's edited stroke, and the Block
+  Stroke settings before Generate, until the next Generate drew the drawn stroke.
 - CLI: `gbdraw circular|linear --session <file> --session_output out.json` (and
   `--save_session`) keeps the resource IDs and file names of the Session's unchanged
   inputs. Before, the rewritten Session renamed them to positional IDs such as

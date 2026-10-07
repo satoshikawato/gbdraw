@@ -138,13 +138,34 @@ const legendRowColor = async (page, caption, color) => {
   await settleLive(page);
 };
 
+// A stroke on a Legend row (the Legend editor's stroke controls).
+const legendRowStroke = async (page, caption, color, width) => {
+  await page.evaluate(({ row, value, size }) => {
+    const app = window.__GBDRAW_APP__;
+    const index = app.legendEntries.findIndex((entry) => entry.caption === row);
+    return app.updateLegendEntryStrokeColor(index, value) && app.updateLegendEntryStrokeWidth(index, size);
+  }, { row: caption, value: color, size: width });
+  await settleLive(page);
+};
+
+// A row added in the Legend editor.
+const legendRowAdd = async (page, caption, color) => {
+  await evaluateWithRetainedPromise(page, async ({ row, value }) => {
+    const app = window.__GBDRAW_APP__;
+    app.newLegendCaption = row;
+    app.newLegendColor = value;
+    await app.addNewLegendEntry();
+  }, { row: caption, value: color });
+  await settleLive(page);
+};
+
 const FL1_ALPHA = { feat: 'CDS', qual: 'locus_tag', val: '^FL1$', color: '#e63946', cap: 'alpha' };
 
 // The edit kinds. Each appears at least once in the matrix.
 const KINDS = [
   'visibility rule add', 'visibility rule action', 'visibility rule delete', 'feature Off', 'feature On',
   'label text', 'label Off', 'label On', 'color rule add', 'color rule color', 'color rule delete', 'feature color',
-  'undo', 'redo', 'Result switch', 'legend color'
+  'undo', 'redo', 'Result switch', 'legend color', 'legend add'
 ];
 
 // The matrix: one edit kind in one set of states, with the setup before the
@@ -337,6 +358,22 @@ const CASES = [
     states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'unbound' },
     setup: (page) => popupEdit(page, { type: 'repeat_region' }, { fill: '#e63946' }),
     run: (page) => legendRowColor(page, 'repeat_region', '#f4a261')
+  },
+  // OV-121: a row added in the Legend editor takes the first row's stroke as
+  // Generate copies it, not that row's stroke edit.
+  {
+    kind: 'legend add',
+    edit: 'Legend editor row add after a stroke on the first row',
+    states: { mode: 'linear', results: 'single', reflow: 'on', labels: 'bound' },
+    setup: async (page) => { await legendRowStroke(page, 'CDS', '#e63946', 3); await generate(page); },
+    run: (page) => legendRowAdd(page, 'Manual row', '#118833')
+  },
+  {
+    kind: 'legend add',
+    edit: 'Legend editor row add after a stroke on the first row',
+    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    setup: async (page) => { await legendRowStroke(page, 'CDS', '#e63946', 3); await generate(page); },
+    run: (page) => legendRowAdd(page, 'Manual row', '#118833')
   },
   {
     kind: 'color rule color',
