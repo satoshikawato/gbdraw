@@ -52,7 +52,6 @@ import {
   migrateLegacyLinearLabelVisibility,
   requireLinearLabelVisibilityMode
 } from './linear-label-visibility.js';
-import { isCliInvocationSessionExportable } from '../app/run-info.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
 import { normalizeCircularPlotTitlePosition } from '../app/plot-title-position.js';
 import {
@@ -61,7 +60,6 @@ import {
   replaceLayoutPreferences,
   resolveActiveLayoutPreference
 } from '../app/layout-preferences.js';
-import { reconcileImportedLinearTypographyLink } from '../app/linear-typography.js';
 import {
   serializeFeatureVisibilityRules,
   normalizeFeatureVisibilityRule,
@@ -218,6 +216,7 @@ import {
   CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS,
   createDefaultLosatpHitLimits,
   LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,
+  reconcileImportedLinearTypographyLink,
   validateCurrentWriterActiveConfig,
   validateImportedCircularTrackSlots,
   validateImportedLinearTrackSlots
@@ -503,6 +502,17 @@ const hydrateMissingMultiRecordPositionsFromCliInvocation = (config, cliInvocati
 
   adv.multi_record_positions = positions;
   config.adv = adv;
+};
+
+/**
+ * @param {Record<string, any> | null | undefined} invocation
+ * @returns {boolean}
+ */
+const isCliInvocationSessionExportable = (invocation) => {
+  if (!invocation || typeof invocation !== 'object') return false;
+  if (invocation.sessionExportable === false) return false;
+  const bindings = Array.isArray(invocation.fileBindings) ? invocation.fileBindings : [];
+  return bindings.every((binding) => String(binding?.slot || '').startsWith('files.'));
 };
 
 const makeSafeFilename = (name) => {
