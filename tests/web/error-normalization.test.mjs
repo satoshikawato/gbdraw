@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { normalizeCircularGeometryShortcuts } from '../../gbdraw/web/js/app/circular-track-slots.js';
-import { diagnosticError, normalizeUserFacingError } from '../../gbdraw/web/js/services/error-normalization.js';
+import { diagnosticError, normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 import { deserializeWorkerError, normalizeGenerationResponse } from '../../gbdraw/web/js/services/diagram-generation.js';
 globalThis.self = {};
 const { serializeError, callJsonHelper, resolveGenerationCleanupOutcome } = await import('../../gbdraw/web/js/workers/diagram-generation-worker.js');
@@ -438,7 +438,7 @@ test('a live edit failure note offers Retry only when the same request can succe
   const note = html.match(/<p v-if="labelReflowProcessing \|\| labelReflowLastError"[^>]*>([^<]*)<\/p>/)[1];
   assert.doesNotMatch(note, /Retry the live edit/, 'the failure note is not fixed text');
   assert.match(note, /: labelReflowLastError\.note \}\}/);
-  const { liveEditFailure } = await import('../../gbdraw/web/js/services/error-normalization.js');
+  const { liveEditFailure } = await import('../../gbdraw/web/js/utils/error-normalization.js');
   assert.equal(liveEditFailure(null), null);
   const prefix = /^Live edit failed: direct edits already applied are kept; geometry may still need updating\. /;
   const repeating = [
@@ -480,7 +480,7 @@ test('a live edit failure note offers Retry only when the same request can succe
 // failure that names the feature and offers Save Session.
 test('a forced label that the diagram does not draw names the feature (OV-06)', async () => {
   const { requireUniqueEditableLabelBindings } = await import('../../gbdraw/web/js/app/feature-editor/label-actions.js');
-  const { liveEditFailure } = await import('../../gbdraw/web/js/services/error-normalization.js');
+  const { liveEditFailure } = await import('../../gbdraw/web/js/utils/error-normalization.js');
   const label = (featureId) => ({ getAttribute: (name) => (name === 'data-label-feature-id' ? featureId : null) });
   const features = [
     { svg_id: 'f59dc64fc', type: 'repeat_region', start: 1000, end: 1600, note: 'PRIVATE_NOTE' },

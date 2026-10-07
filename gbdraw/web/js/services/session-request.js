@@ -10,7 +10,7 @@ import {
 } from './feature-placement.js';
 import { resultRenderedFeatures } from './feature-catalog.js';
 export { canonicalFeaturePlacements } from './feature-placement.js';
-import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../app/color-utils.js';
+import { buildDefaultColorOverrideTsv, normalizePaletteColors } from '../utils/color-utils.js';
 import {
   parseColorTable,
   parsePriorityRules,
@@ -41,7 +41,7 @@ import {
   normalizeCircularTrackSlot,
   parseCircularTrackSlotSpecs
 } from '../app/circular-track-slots.js';
-import { countGenBankRecords } from '../app/genbank-header.js';
+import { countGenBankRecords } from './genbank-header.js';
 import { projectCircularMeasureDraft } from '../app/circular-track-slots/measure-editor.js';
 import {
   buildLinearTrackSlotPayload,
@@ -63,7 +63,7 @@ import {
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
-} from '../app/conservation-series.js';
+} from './conservation-series.js';
 import {
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
@@ -81,7 +81,7 @@ import {
 } from '../app/track-slot-validation.js';
 import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from '../app/annotations/state.js';
 import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
-import { SESSION_TABLE_LABELS, diagnosticError, normalizeUserFacingError } from './error-normalization.js';
+import { SESSION_TABLE_LABELS, diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import {
   arrowHeadLengthRatioForState,
@@ -1363,7 +1363,7 @@ const addGeneratedTableResources = (
 const addColorTableResources = (state, resources, diagramOptions) => {
   const paletteName = String(state.selectedPalette.value || 'default');
   const paletteColors = state.canonicalPublicationFiles && !state.canonicalPublicationFiles.d_color ? {}
-    : state.normalizePaletteColors(state.paletteDefinitions.value?.[paletteName]
+    : normalizePaletteColors(state.paletteDefinitions.value?.[paletteName]
       || state.paletteDefinitions.value?.default || {});
   const defaultColors = buildDefaultColorOverrideTsv({
     colors: state.currentColors.value,
@@ -2325,7 +2325,7 @@ export const buildCanonicalRequestState = ({ session, projection, config,
   };
   return {
     ...Object.fromEntries(Object.entries(refs).map(([key, value]) => [key, publicationRef(value)])),
-    form: config.form || {}, adv: config.adv || {}, normalizePaletteColors,
+    form: config.form || {}, adv: config.adv || {},
     manualSpecificRules: publicationClone(config.rules || []), manualWhitelist: publicationClone(config.whitelist || []), manualPriorityRules: publicationClone(config.qualifierPriorityRules || []),
     featureOverrides: publicationClone(features.featureOverrides || {}),
     labelTextBulkOverrides: publicationClone(features.labelTextBulkOverrides || {}),

@@ -1,7 +1,7 @@
 // @ts-check
 import { createBoundedJsonReceiver } from './bounded-json-transport.js';
 import { recordSessionLifecycleEvent } from './runtime-test-hooks.js';
-import { diagnosticError } from './error-normalization.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 
 let nextOperationId = 1;
 

@@ -1,5 +1,5 @@
 // @ts-check
-import { normalizeUserFacingError } from '../services/error-normalization.js';
+import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { discoveryErrorIsFinal } from './record-discovery.js';
 import { buildDisambiguatedRecordEntries, formatRecordLength } from './record-options.js';
 

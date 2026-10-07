@@ -9,7 +9,6 @@ const sourceDir = join(repoRoot, 'gbdraw', 'web', 'js', 'app');
 const tempRoot = await mkdtemp(join(tmpdir(), 'gbdraw-file-imports-'));
 const tempDir = join(tempRoot, 'app');
 await mkdir(tempDir);
-await mkdir(join(tempRoot, 'services'));
 await mkdir(join(tempRoot, 'utils'));
 await writeFile(
   join(tempRoot, 'utils', 'tsv-cell.js'),
@@ -18,8 +17,8 @@ await writeFile(
 );
 await writeFile(join(tempRoot, 'package.json'), '{"type":"module"}\n', 'utf8');
 await writeFile(
-  join(tempRoot, 'services', 'error-normalization.js'),
-  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'services', 'error-normalization.js'), 'utf8'),
+  join(tempRoot, 'utils', 'error-normalization.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'error-normalization.js'), 'utf8'),
   'utf8'
 );
 await writeFile(
@@ -28,8 +27,8 @@ await writeFile(
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'color-utils.js'),
-  await readFile(join(sourceDir, 'color-utils.js'), 'utf8'),
+  join(tempRoot, 'utils', 'color-utils.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'color-utils.js'), 'utf8'),
   'utf8'
 );
 await writeFile(

@@ -21,45 +21,45 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
 
     feature_utils_path = tmp_path / "feature-utils.mjs"
     feature_utils_path.write_text(
-        (WEB_ROOT / "js" / "app" / "feature-utils.js").read_text(encoding="utf-8"),
+        (WEB_ROOT / "js" / "services" / "feature-utils.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     sequence_fasta_path = tmp_path / "feature-sequence-fasta.mjs"
     sequence_fasta_path.write_text(
-        (WEB_ROOT / "js" / "app" / "feature-sequence-fasta.js")
+        (WEB_ROOT / "js" / "services" / "feature-sequence-fasta.js")
         .read_text(encoding="utf-8")
         .replace("./feature-utils.js", "./feature-utils.mjs"),
         encoding="utf-8",
     )
     color_utils_path = tmp_path / "color-utils.mjs"
     color_utils_path.write_text(
-        (WEB_ROOT / "js" / "app" / "color-utils.js").read_text(encoding="utf-8"),
+        (WEB_ROOT / "js" / "utils" / "color-utils.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     conservation_series_path = tmp_path / "conservation-series.mjs"
     conservation_series_path.write_text(
-        (WEB_ROOT / "js" / "app" / "conservation-series.js")
+        (WEB_ROOT / "js" / "services" / "conservation-series.js")
         .read_text(encoding="utf-8")
-        .replace("./color-utils.js", "./color-utils.mjs"),
+        .replace("../utils/color-utils.js", "./color-utils.mjs"),
         encoding="utf-8",
     )
     (tmp_path / "record-source-coordinates.mjs").write_text(
-        (WEB_ROOT / "js" / "app" / "record-source-coordinates.js").read_text(encoding="utf-8"),
+        (WEB_ROOT / "js" / "services" / "record-source-coordinates.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     match_sequences_path = tmp_path / "match-sequences.mjs"
     match_sequences_path.write_text(
         (WEB_ROOT / "js" / "app" / "match-sequences.js")
         .read_text(encoding="utf-8")
-        .replace("./record-source-coordinates.js", "./record-source-coordinates.mjs")
-        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
-        .replace("./conservation-series.js", "./conservation-series.mjs")
-        .replace("./genbank-header.js", "./genbank-header.mjs")
+        .replace("../services/record-source-coordinates.js", "./record-source-coordinates.mjs")
+        .replace("../services/feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
+        .replace("../services/conservation-series.js", "./conservation-series.mjs")
+        .replace("../services/genbank-header.js", "./genbank-header.mjs")
         .replace("../services/file-content-cache.js", "./file-content-cache.mjs"),
         encoding="utf-8",
     )
     (tmp_path / "genbank-header.mjs").write_text(
-        (WEB_ROOT / "js" / "app" / "genbank-header.js").read_text(encoding="utf-8"),
+        (WEB_ROOT / "js" / "services" / "genbank-header.js").read_text(encoding="utf-8"),
         encoding="utf-8",
     )
     (tmp_path / "file-content-cache.mjs").write_text(
@@ -80,9 +80,9 @@ def test_collinearity_popup_uses_display_ids_and_hides_internal_rows(tmp_path: P
     module_path = tmp_path / "pairwise-match-popup.mjs"
     module_path.write_text(
         source_path.read_text(encoding="utf-8")
-        .replace("./record-source-coordinates.js", "./record-source-coordinates.mjs")
-        .replace("./feature-utils.js", "./feature-utils.mjs")
-        .replace("./feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
+        .replace("../services/record-source-coordinates.js", "./record-source-coordinates.mjs")
+        .replace("../services/feature-utils.js", "./feature-utils.mjs")
+        .replace("../services/feature-sequence-fasta.js", "./feature-sequence-fasta.mjs")
         .replace("./match-sequences.js", "./match-sequences.mjs")
         .replace("./losat-normalization.js", "./losat-normalization.mjs")
         .replace("../services/feature-identity.js", "./feature-identity.mjs")

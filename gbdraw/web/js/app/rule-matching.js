@@ -1,8 +1,8 @@
 // @ts-check
 import { normalizeSpecificRule } from './specific-color-rules.js';
-import { normalizeFeatureSelectorMetadata } from './feature-selector.js';
-import { getFeatureColorRuleHash } from './feature-utils.js';
-import { normalizeUserFacingError } from '../services/error-normalization.js';
+import { normalizeFeatureSelectorMetadata } from '../services/feature-selector.js';
+import { getFeatureColorRuleHash } from '../services/feature-utils.js';
+import { normalizeUserFacingError } from '../utils/error-normalization.js';
 
 // Ephemeral Python results belong to feature objects, never a session or a SVG.
 // An absent result is pending, not a non-match; a declined one (`matches:

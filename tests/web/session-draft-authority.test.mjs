@@ -1310,7 +1310,7 @@ assert.equal(failedImportEvent.target.value, '');
 
 
 // A late failed Session read cannot replace a notification from a later action.
-const { normalizeUserFacingError } = await import('../../gbdraw/web/js/services/error-normalization.js');
+const { normalizeUserFacingError } = await import('../../gbdraw/web/js/utils/error-normalization.js');
 const beforeLateRead = rollbackState();
 const lateFile = new File(['{}'], 'PRIVATE_LATE_SESSION.json');
 let failLateRead;

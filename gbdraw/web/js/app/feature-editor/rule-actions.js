@@ -1,14 +1,14 @@
 // @ts-check
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
-import { normalizeUserFacingError } from '../../services/error-normalization.js';
+import { normalizeUserFacingError } from '../../utils/error-normalization.js';
 import { ruleMatchesFeature, firstMatchingRule, ruleMatchesReady, runWhenPrepared } from '../rule-matching.js';
-import { resolveColorToHex } from '../color-utils.js';
+import { resolveColorToHex } from '../../utils/color-utils.js';
 import { parseSpecificRules, serializeSpecificRules } from '../file-imports.js';
-import { getFeatureColorRuleHash } from '../feature-utils.js';
+import { getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
   buildLegendIntents, createRuleLegendCaptions, legendRowRules, rendererLegendRows, ruleLegendCaption
 } from '../specific-color-rules.js';
-import { resolveFeatureLabelSelector } from '../feature-selector.js';
+import { resolveFeatureLabelSelector } from '../../services/feature-selector.js';
 import { downloadTextFile } from '../../services/text-download.js';
 import {
   featureOverrideKey,

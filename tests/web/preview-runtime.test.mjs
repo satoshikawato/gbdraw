@@ -18,7 +18,6 @@ const legendTransformSourcePath = join(
   'transform-utils.js'
 );
 const serviceNames = [
-  'error-normalization.js',
   'current-worker-result-source.js',
   'runtime-test-hooks.js',
   'session-feature-metadata.js',
@@ -49,6 +48,13 @@ await Promise.all(serviceNames.map(async (name) => {
   const servicePath = join(repoRoot, 'gbdraw', 'web', 'js', 'services', name);
   await writeFile(join(tempDir, 'services', name), await readFile(servicePath, 'utf8'), 'utf8');
 }));
+
+await mkdir(join(tempDir, 'utils'), { recursive: true });
+await writeFile(
+  join(tempDir, 'utils', 'error-normalization.js'),
+  await readFile(join(repoRoot, 'gbdraw', 'web', 'js', 'utils', 'error-normalization.js'), 'utf8'),
+  'utf8'
+);
 
 const { createPreviewRuntime } = await import(pathToFileURL(join(tempDir, 'app', 'preview-runtime.js')));
 

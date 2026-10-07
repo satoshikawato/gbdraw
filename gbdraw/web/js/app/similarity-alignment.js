@@ -1,5 +1,5 @@
 // @ts-check
-import { normalizeUserFacingError } from '../services/error-normalization.js';
+import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import { plainTextLinearRecordLabel } from './linear-comparisons.js';
 import { resolveLinearRecordEffectiveDefinition } from './linear-sources.js';
 import { canonicalRecordReverseComplement } from './record-display-options.js';
@@ -9,7 +9,7 @@ import {
   orthogroupIdStatus
 } from '../services/feature-identity.js';
 import { materializeRecordTranslations } from './legend-layout/composition-actions.js';
-import { isInternalProteinDisplayId } from './feature-utils.js';
+import { isInternalProteinDisplayId } from '../services/feature-utils.js';
 
 const { computed, ref } = window.Vue;
 

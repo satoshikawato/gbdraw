@@ -1,7 +1,7 @@
 // @ts-check
-import { diagnosticError, normalizeUserFacingError } from './error-normalization.js';
+import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { state, sessionOperationAvailability, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
-import { resolveColorToHex } from '../app/color-utils.js';
+import { normalizePaletteColors, resolveColorToHex } from '../utils/color-utils.js';
 import {
   captureRightDrawerState,
   resetRightDrawerState,
@@ -332,7 +332,7 @@ const paletteColorsFromDefinitions = (paletteName) => {
   if (!name) return null;
   const definitions = state.paletteDefinitions?.value || {};
   const colors = definitions[name];
-  return hasColorEntries(colors) ? state.normalizePaletteColors(cloneColors(colors)) : null;
+  return hasColorEntries(colors) ? normalizePaletteColors(cloneColors(colors)) : null;
 };
 
 const cloneStringMap = (source) => {
@@ -2341,12 +2341,12 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
   if (hasColorEntries(data.colors)) {
     if (data.colorsAreOverrides) {
       const paletteColors = paletteColorsFromDefinitions(state.selectedPalette.value) || {};
-      state.currentColors.value = state.normalizePaletteColors({
+      state.currentColors.value = normalizePaletteColors({
         ...paletteColors,
         ...normalizeColorMap(data.colors)
       });
     } else {
-      state.currentColors.value = state.normalizePaletteColors(normalizeColorMap(data.colors));
+      state.currentColors.value = normalizePaletteColors(normalizeColorMap(data.colors));
     }
   } else {
     const paletteColors = paletteColorsFromDefinitions(state.selectedPalette.value);
@@ -2430,7 +2430,7 @@ export const applyConfigData = (data, { resolveTrackPlacements = true } = {}) =>
 
 const restorePaletteStateAfterConfigImport = () => {
   const draftPaletteName = String(state.selectedPalette.value || state.appliedPaletteName.value || 'default');
-  const draftColors = state.normalizePaletteColors(cloneColors(state.currentColors.value));
+  const draftColors = normalizePaletteColors(cloneColors(state.currentColors.value));
   const hasPreviewResults = Array.isArray(state.results.value) && state.results.value.length > 0;
 
   if (
@@ -2451,7 +2451,7 @@ const restorePaletteStateAfterConfigImport = () => {
 
 const restorePaletteStateFromSession = (ui = {}) => {
   const draftPaletteName = String(state.selectedPalette.value || state.appliedPaletteName.value || 'default');
-  const draftColors = state.normalizePaletteColors(cloneColors(state.currentColors.value));
+  const draftColors = normalizePaletteColors(cloneColors(state.currentColors.value));
   const savedAppliedPaletteName = String(ui.appliedPaletteName || draftPaletteName || 'default');
   const savedAppliedPaletteColors =
     ui.appliedPaletteColors && typeof ui.appliedPaletteColors === 'object'
@@ -2474,11 +2474,11 @@ const restorePaletteStateFromSession = (ui = {}) => {
       : draftColors;
 
   state.appliedPaletteName.value = savedAppliedPaletteName;
-  state.appliedPaletteColors.value = state.normalizePaletteColors(cloneColors(savedAppliedPaletteColors));
+  state.appliedPaletteColors.value = normalizePaletteColors(cloneColors(savedAppliedPaletteColors));
 
   if (!state.paletteInstantPreviewEnabled.value && savedPendingPaletteName) {
     state.pendingPaletteName.value = savedPendingPaletteName;
-    state.pendingPaletteColors.value = state.normalizePaletteColors(cloneColors(savedPendingPaletteColors));
+    state.pendingPaletteColors.value = normalizePaletteColors(cloneColors(savedPendingPaletteColors));
   } else {
     state.pendingPaletteName.value = '';
     state.pendingPaletteColors.value = {};

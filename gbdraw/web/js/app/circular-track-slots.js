@@ -6,14 +6,14 @@ import {
   normalizeFileList,
   orderedConservationSources,
   safeConservationSlotId
-} from './conservation-series.js';
+} from '../services/conservation-series.js';
 import {
   isDefaultManagedDepthSlot,
   parseDepthTrackIndexIdentity,
   reconcileManagedDepthSlots,
   representativeDepthFiles
 } from './depth-track-state.js';
-import { resolveColorToHex } from './color-utils.js';
+import { resolveColorToHex } from '../utils/color-utils.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
 import {
   findTrackSlotGeometry,
@@ -25,7 +25,7 @@ import {
 import { featureSlotEdits } from './track-slot-edits.js';
 import { parseOptionalCircularScalar, parseOptionalPixel, validateCustomTrackPlan } from './track-slot-validation.js';
 import { visibleFeatureUnderlaysForState } from '../utils/feature-rendering.js';
-import { diagnosticError } from '../services/error-normalization.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 
 const SUPPORTED_RENDERERS = [
   'features',

@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
-import { normalizeUserFacingError } from '../../gbdraw/web/js/services/error-normalization.js';
+import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 
 const WEB_ROOT = new URL('../../gbdraw/web/js/', import.meta.url);
 const UNCLASSIFIED = new Set(['UNKNOWN', 'VALIDATION_UNCLASSIFIED']);
@@ -132,7 +132,7 @@ test('JS validation throw sites normalize to a recognized diagnostic or shrink (
 const NATIVE_VALIDATION_BASELINE = { exactMessages: 92, patterns: 20 };
 
 test('the JS message-classification tables only shrink (R6 ratchet)', async () => {
-  const source = readFileSync(new URL('services/error-normalization.js', WEB_ROOT), 'utf8');
+  const source = readFileSync(new URL('utils/error-normalization.js', WEB_ROOT), 'utf8');
   // The module has no imports, so a copy can expose its private table size.
   const probe = await import(`data:text/javascript,${encodeURIComponent(
     `${source}\nexport const nativeValidationSize = NATIVE_VALIDATIONS.size;`

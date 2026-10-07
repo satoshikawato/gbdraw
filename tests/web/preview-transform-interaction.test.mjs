@@ -36,6 +36,7 @@ await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app', 'feature-editor'), { recursive: true });
 await mkdir(join(tempDir, 'app', 'legend'), { recursive: true });
 await mkdir(join(tempDir, 'services'), { recursive: true });
+await mkdir(join(tempDir, 'utils'), { recursive: true });
 
 const copyModule = async (source, destination) => {
   await writeFile(
@@ -45,7 +46,7 @@ const copyModule = async (source, destination) => {
   );
 };
 
-await copyModule('services/error-normalization.js', 'services/error-normalization.js');
+await copyModule('utils/error-normalization.js', 'utils/error-normalization.js');
 await copyModule('app/ui.js', 'app/ui.js');
 await copyModule('app/feature-dom.js', 'app/feature-dom.js');
 await copyModule('app/feature-editor/svg-actions.js', 'app/feature-editor/svg-actions.js');
@@ -60,12 +61,12 @@ await writeFile(
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'app', 'color-utils.js'),
+  join(tempDir, 'utils', 'color-utils.js'),
   'export const resolveColorToHex = (value) => value || "#94a3b8";\n',
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'app', 'feature-utils.js'),
+  join(tempDir, 'services', 'feature-utils.js'),
   [
     'export const formatFeatureLength = () => "";',
     'export const formatFeatureLocation = () => "";',
@@ -90,7 +91,7 @@ await writeFile(
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'app', 'feature-sequence-fasta.js'),
+  join(tempDir, 'services', 'feature-sequence-fasta.js'),
   'export const buildFeatureSequenceFastas = () => ({ nucleotideFasta: "", aminoAcidFasta: "" });\n',
   'utf8'
 );

@@ -1,6 +1,6 @@
 // @ts-check
-import { getFeatureCaption } from '../app/feature-utils.js';
-import { diagnosticError } from './error-normalization.js';
+import { getFeatureCaption } from './feature-utils.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 import { cloneJsonData } from './json-clone.js';
 
 // Drafts keyed by original-source feature identity: Feature placement rows and

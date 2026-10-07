@@ -9,7 +9,7 @@ import test from 'node:test';
 import { buildCanonicalRenderRequest } from '../../gbdraw/web/js/services/session-request.js';
 import { createDefaultLinearComparisonPlan } from '../../gbdraw/web/js/app/linear-comparisons.js';
 import { resolveComparisonThresholds } from '../../gbdraw/web/js/mode-profiles.js';
-import { normalizeUserFacingError } from '../../gbdraw/web/js/services/error-normalization.js';
+import { normalizeUserFacingError } from '../../gbdraw/web/js/utils/error-normalization.js';
 
 const ref = (value) => ({ value });
 const genbankText = 'LOCUS       WEBTEST                    4 bp    DNA     linear   UNK 01-JAN-1980\nORIGIN\n        1 atgc\n//\n';

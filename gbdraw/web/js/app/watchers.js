@@ -1,7 +1,7 @@
 // @ts-check
 /** @import { MountedResultContext, MountedResultContextOptions } from './preview-runtime.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
-import { normalizeUserFacingError } from '../services/error-normalization.js';
+import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
   parseBlacklistWords,
   parseColorTable,

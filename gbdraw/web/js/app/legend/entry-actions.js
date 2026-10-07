@@ -1,6 +1,6 @@
 // @ts-check
-import { normalizeUserFacingError } from '../../services/error-normalization.js';
-import { resolveColorToHex, toNativeColorInputValue } from '../color-utils.js';
+import { normalizeUserFacingError } from '../../utils/error-normalization.js';
+import { resolveColorToHex, toNativeColorInputValue } from '../../utils/color-utils.js';
 import {
   defaultLegendCaptionOrder,
   getAllFeatureLegendGroups,

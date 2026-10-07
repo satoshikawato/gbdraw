@@ -1,12 +1,12 @@
 // @ts-check
-import { formatFastaEntry } from './feature-sequence-fasta.js';
-import { recordSourceInterval } from './record-source-coordinates.js';
+import { formatFastaEntry } from '../services/feature-sequence-fasta.js';
+import { recordSourceInterval } from '../services/record-source-coordinates.js';
 import {
   orderedConservationSources,
   orderedOptionalConservationFiles
-} from './conservation-series.js';
+} from '../services/conservation-series.js';
 import { readFileText } from '../services/file-content-cache.js';
-import { genbankHeaderIds } from './genbank-header.js';
+import { genbankHeaderIds } from '../services/genbank-header.js';
 
 /**
  * A registered sequence source: one record whose bases a match span reads.

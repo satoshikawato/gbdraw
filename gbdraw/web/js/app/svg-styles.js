@@ -5,7 +5,7 @@ import {
   interpolateColor,
   resolveCollinearMatchColor,
   resolvePairwiseLegendGradientColorKeys
-} from './color-utils.js';
+} from '../utils/color-utils.js';
 import {
   getFeatureElementIndex,
   getFeatureFillElements,

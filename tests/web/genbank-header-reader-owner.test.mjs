@@ -1,5 +1,5 @@
 // R9 / G-J(2) (Web GUI audit 2026-09-30, P08 follow-up): the Web has one
-// GenBank header reader, app/genbank-header.js, whose record IDs follow the
+// GenBank header reader, services/genbank-header.js, whose record IDs follow the
 // Python loader (IN-02, IN-03). Another module that matches a header keyword
 // (LOCUS, ACCESSION, VERSION, DEFINITION, ORGANISM) reads headers a second way
 // and can drift from the loader. The baseline of pre-guard sites may only
@@ -8,10 +8,10 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 
-import { countGenBankRecords } from '../../gbdraw/web/js/app/genbank-header.js';
+import { countGenBankRecords } from '../../gbdraw/web/js/services/genbank-header.js';
 
 const WEB_ROOT = new URL('../../gbdraw/web/js/', import.meta.url);
-const OWNER = 'app/genbank-header.js';
+const OWNER = 'services/genbank-header.js';
 const HEADER_KEYWORD = /\b(?:LOCUS|ACCESSION|VERSION|DEFINITION|ORGANISM)\b/g;
 
 // Shrink-only: file -> header keyword sites outside the owner.
@@ -44,7 +44,7 @@ export const headerReaderProblems = (sitesByFile, baseline = OUTSIDE_OWNER_BASEL
   return problems;
 };
 
-test('only app/genbank-header.js reads GenBank header keywords (G-J(2), R9)', () => {
+test('only services/genbank-header.js reads GenBank header keywords (G-J(2), R9)', () => {
   const sitesByFile = Object.fromEntries(listModules(WEB_ROOT).map((file) => [
     file, headerKeywordSites(readFileSync(new URL(file, WEB_ROOT), 'utf8'))
   ]));
@@ -54,7 +54,7 @@ test('only app/genbank-header.js reads GenBank header keywords (G-J(2), R9)', ()
 
 test('the reader guard flags a second header reader and a stale baseline', () => {
   const secondReader = "const id = text.match(/^ACCESSION\\s+(\\S+)/m)?.[1];\n";
-  const proseOnly = '// ORGANISM lines are read by app/genbank-header.js\nconst DEFINITION_ROLES = 1;\n';
+  const proseOnly = '// ORGANISM lines are read by services/genbank-header.js\nconst DEFINITION_ROLES = 1;\n';
   assert.equal(headerKeywordSites(secondReader), 1);
   assert.equal(headerKeywordSites(proseOnly), 0, 'comments and longer identifiers are not readers');
   assert.match(headerReaderProblems({ 'app/new-reader.js': 1 }).join('\n'), /app\/new-reader\.js: 1 GenBank header keyword site/);

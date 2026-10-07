@@ -80,7 +80,7 @@ import {
   recordStructuralMetric
 } from '../services/runtime-test-hooks.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
-import { colorValueMode, toNativeColorInputValue } from './color-utils.js';
+import { colorValueMode, toNativeColorInputValue } from '../utils/color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
 import { PAIRWISE_MATCH_SELECTOR } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
@@ -90,7 +90,7 @@ import { createLegendManager } from './legend.js';
 import { createPaletteLoader } from './palettes.js';
 import { afterPaint, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions } from './similarity-alignment.js';
-import { diagnosticError, normalizeUserFacingError } from '../services/error-normalization.js';
+import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import {
@@ -179,7 +179,7 @@ import {
   orderedOptionalConservationFiles,
   parseConservationLabelText,
   reconcileConservationSeries
-} from './conservation-series.js';
+} from '../services/conservation-series.js';
 import {
   getDepthTrackFallbackLabel,
   getDepthTrackLabelFromFile,

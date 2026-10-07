@@ -8,7 +8,7 @@ import {
   orderLegendEntries
 } from '../app/legend/utils.js';
 import { isCurrentWorkerGenerationResponse } from './current-worker-result-source.js';
-import { diagnosticError } from './error-normalization.js';
+import { diagnosticError } from '../utils/error-normalization.js';
 import { sanitizeSvgContent } from './svg-sanitization.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { collectRenderedFeatureIdentitiesFromSvgRoot } from './session-feature-metadata.js';

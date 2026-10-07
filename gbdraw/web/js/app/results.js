@@ -1,4 +1,6 @@
 // @ts-check
+import { normalizePaletteColors } from '../utils/color-utils.js';
+
 /**
  * The palette refs the manager reads and writes (state.js owns them).
  * @typedef {object} ResultsManagerState
@@ -10,7 +12,6 @@
  * @property {{ value: Record<string, string> }} appliedPaletteColors
  * @property {{ value: string }} pendingPaletteName
  * @property {{ value: Record<string, string> }} pendingPaletteColors
- * @property {(colors: Record<string, string>) => Record<string, string>} normalizePaletteColors
  * @property {() => any} [sessionOperationAvailability] The busy outcome of a Session operation, if any.
  */
 
@@ -24,8 +25,7 @@ export const createResultsManager = ({ state }) => {
     appliedPaletteName,
     appliedPaletteColors,
     pendingPaletteName,
-    pendingPaletteColors,
-    normalizePaletteColors
+    pendingPaletteColors
   } = state;
   const cloneColors = (colors) => ({ ...(colors || {}) });
   const getPaletteMap = () => {

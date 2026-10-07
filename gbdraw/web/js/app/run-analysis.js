@@ -46,7 +46,7 @@ import {
 import {
   normalizeFileList,
   orderedConservationSources
-} from './conservation-series.js';
+} from '../services/conservation-series.js';
 import {
   applyLinearTrackOrderPlacements,
   clampLinearTrackAxisIndex,
@@ -78,7 +78,7 @@ import {
 import {
   buildDefaultColorOverrideTsv,
   normalizePaletteColors
-} from './color-utils.js';
+} from '../utils/color-utils.js';
 import {
   serializeLabelWhitelistRules,
   serializeQualifierPriorityRules,
@@ -130,7 +130,7 @@ import {
   discoverSequenceRecords,
   discoveryErrorIsFinal
 } from './record-discovery.js';
-import { genbankHeaderIds } from './genbank-header.js';
+import { genbankHeaderIds } from '../services/genbank-header.js';
 import {
   LOSAT_DERIVED_CACHE_SCHEMA,
   NUCLEOTIDE_LOSAT_CACHE_SCHEMA,
@@ -151,7 +151,7 @@ import {
   webLosatRuntimeRecord
 } from './losat-cache.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
-import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../services/error-normalization.js';
+import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
   cloneFileBytesForTransfer,
   readFileBytes,

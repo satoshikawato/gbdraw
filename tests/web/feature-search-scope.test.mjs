@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import * as featureUtils from '../../gbdraw/web/js/app/feature-utils.js';
+import * as featureUtils from '../../gbdraw/web/js/services/feature-utils.js';
 import { runFeatureSearch } from '../../gbdraw/web/js/app/feature-search/search-core.js';
 import { buildMatchPopupPayload } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
 import { STANDALONE_INTERACTIVE_SCRIPT } from '../../gbdraw/web/js/services/standalone-interactivity-assets.js';

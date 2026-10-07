@@ -1,5 +1,5 @@
 // @ts-check
-import { diagnosticError } from '../../services/error-normalization.js';
+import { diagnosticError } from '../../utils/error-normalization.js';
 import { featureIdentityKeyOf, rowBelongsToRequest } from '../../services/feature-placement.js';
 
 /**

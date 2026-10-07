@@ -72,10 +72,8 @@ const PROJECTION_SHAPE_BASELINE = {
 // that moves the imported code down removes its entries in the same pull
 // request; the list ends empty. May only shrink.
 const LAYER_IMPORT_BASELINE = {
-  'layer.import-direction.v1|mode-profiles.js->services/error-normalization.js': 1,
   'layer.import-direction.v1|services/config.js->app/annotations/state.js': 1,
   'layer.import-direction.v1|services/config.js->app/circular-track-slots.js': 7,
-  'layer.import-direction.v1|services/config.js->app/color-utils.js': 1,
   'layer.import-direction.v1|services/config.js->app/current-option-values.js': 9,
   'layer.import-direction.v1|services/config.js->app/definition-line-style-state.js': 1,
   'layer.import-direction.v1|services/config.js->app/depth-track-state.js': 8,
@@ -97,7 +95,6 @@ const LAYER_IMPORT_BASELINE = {
   'layer.import-direction.v1|services/config.js->app/session-feature-metadata.js': 2,
   'layer.import-direction.v1|services/config.js->app/specific-color-rules.js': 1,
   'layer.import-direction.v1|services/export.js->app/feature-search/preview-svg.js': 1,
-  'layer.import-direction.v1|services/feature-placement.js->app/feature-utils.js': 1,
   'layer.import-direction.v1|services/gallery-session-migration.js->app/circular-track-slots.js': 3,
   'layer.import-direction.v1|services/gallery-session-migration.js->app/current-option-values.js': 4,
   'layer.import-direction.v1|services/gallery-session-migration.js->app/layout-preferences.js': 1,
@@ -121,14 +118,11 @@ const LAYER_IMPORT_BASELINE = {
   'layer.import-direction.v1|services/session-request.js->app/annotations/state.js': 2,
   'layer.import-direction.v1|services/session-request.js->app/circular-track-slots.js': 10,
   'layer.import-direction.v1|services/session-request.js->app/circular-track-slots/measure-editor.js': 1,
-  'layer.import-direction.v1|services/session-request.js->app/color-utils.js': 2,
-  'layer.import-direction.v1|services/session-request.js->app/conservation-series.js': 2,
   'layer.import-direction.v1|services/session-request.js->app/current-option-values.js': 23,
   'layer.import-direction.v1|services/session-request.js->app/depth-track-state.js': 3,
   'layer.import-direction.v1|services/session-request.js->app/feature-editor/label-override-table.js': 3,
   'layer.import-direction.v1|services/session-request.js->app/feature-visibility.js': 2,
   'layer.import-direction.v1|services/session-request.js->app/file-imports.js': 7,
-  'layer.import-direction.v1|services/session-request.js->app/genbank-header.js': 1,
   'layer.import-direction.v1|services/session-request.js->app/layout-preferences.js': 2,
   'layer.import-direction.v1|services/session-request.js->app/linear-comparisons.js': 1,
   'layer.import-direction.v1|services/session-request.js->app/linear-label-visibility.js': 1,
@@ -139,18 +133,13 @@ const LAYER_IMPORT_BASELINE = {
   'layer.import-direction.v1|services/session-request.js->app/record-display-options.js': 3,
   'layer.import-direction.v1|services/session-request.js->app/record-options.js': 3,
   'layer.import-direction.v1|services/session-request.js->app/track-slot-validation.js': 4,
-  'layer.import-direction.v1|services/standalone-interactivity.js->app/feature-utils.js': 1,
-  'layer.import-direction.v1|services/standalone-interactivity.js->app/record-source-coordinates.js': 2,
   'layer.import-direction.v1|services/svg-result-ingestion.js->app/feature-dom.js': 3,
   'layer.import-direction.v1|services/svg-result-ingestion.js->app/legend/utils.js': 4,
-  'layer.import-direction.v1|state.js->app/color-utils.js': 3,
-  'layer.import-direction.v1|state.js->app/feature-selector.js': 1,
   'layer.import-direction.v1|state.js->app/feature-visibility.js': 3,
   'layer.import-direction.v1|state.js->app/layout-preferences.js': 3,
   'layer.import-direction.v1|state.js->app/linear-comparisons.js': 2,
   'layer.import-direction.v1|state.js->app/match-sequences.js': 1,
-  'layer.import-direction.v1|state.js->app/plot-title-position.js': 1,
-  'layer.import-direction.v1|utils/optional-positive-number.js->services/error-normalization.js': 1
+  'layer.import-direction.v1|state.js->app/plot-title-position.js': 1
 };
 
 const SUBJECT_DETECTORS = [

@@ -10,7 +10,7 @@ import {
   createAnnotationRecordSelector,
   reconcileAnnotationRecordBindings
 } from './annotations/record-selector.js';
-import { getFeatureCaption, getFeatureColorRuleHash } from './feature-utils.js';
+import { getFeatureCaption, getFeatureColorRuleHash } from '../services/feature-utils.js';
 import { readFileText } from '../services/file-content-cache.js';
 import { downloadTextFile } from '../services/text-download.js';
 

@@ -78,7 +78,7 @@ test.describe('active Result Feature fill transaction', () => {
     const { featureOverrideKey } = await import(
       '/gbdraw/web/js/services/feature-override-identity.js'
     );
-    const { formatFeatureLocation } = await import('/gbdraw/web/js/app/feature-utils.js');
+    const { formatFeatureLocation } = await import('/gbdraw/web/js/services/feature-utils.js');
     const rendered = (feature) => {
       const id = String(feature?.svg_id || '').trim();
       return id && getFeatureFillElements(svg, id).length > 0;

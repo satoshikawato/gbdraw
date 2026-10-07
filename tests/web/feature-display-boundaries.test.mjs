@@ -9,12 +9,12 @@ const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-feature-display-boundaries-
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await writeFile(
   join(tempDir, 'feature-utils.js'),
-  await readFile('gbdraw/web/js/app/feature-utils.js', 'utf8'),
+  await readFile('gbdraw/web/js/services/feature-utils.js', 'utf8'),
   'utf8'
 );
 await writeFile(
   join(tempDir, 'feature-sequence-fasta.js'),
-  await readFile('gbdraw/web/js/app/feature-sequence-fasta.js', 'utf8'),
+  await readFile('gbdraw/web/js/services/feature-sequence-fasta.js', 'utf8'),
   'utf8'
 );
 
