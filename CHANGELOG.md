@@ -12,6 +12,10 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Depth tracks (web app): a Depth series that no record gives a Depth TSV now
+  fails Generate with "The depth input or settings are invalid. Depth series N.
+  Supply the required value." and the **Depth** actions. The same failure showed
+  "The operation failed without recognized diagnostic information".
 - CLI: `gbdraw circular|linear --session <file> --session_output out.json` (and
   `--save_session`) keeps the resource IDs and file names of the Session's unchanged
   inputs. Before, the rewritten Session renamed them to positional IDs such as
