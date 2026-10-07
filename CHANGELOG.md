@@ -12,6 +12,17 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Color names (CLI and Python API): `seashell` now resolves to `#FFF5EE`, the CSS
+  color, so the CLI draws it as the Web app does. Before, it resolved to `#2E8B57`
+  (seagreen). `rebeccapurple` (`#663399`) is now accepted. The other 146 CSS color
+  names were already correct.
+- Sessions (CLI and Python API): a Session that a CLI run wrote with `--session_output` or
+  `--save_session` no longer replays an empty label text as the label "nan". A label
+  override row with an empty label text hides the label when the written Session is
+  replayed, as it does in the first run, and the row keeps its empty text. The same
+  reader now keeps an empty cell or the text "NA" in a feature visibility, label
+  whitelist, qualifier priority, color, or annotation table as written; before, these
+  cells were read as missing values.
 - Legend colors (web app): Generate no longer fails with "The generated result could
   not be accepted" after a color or stroke is set on a row added in the Legend editor,
   in Linear and Circular. The added row is drawn with its color and stroke after
@@ -103,8 +114,7 @@ write-up of a release.
   shared between the modes: a mode's Result shown again shows the Legend
   renames, added rows, deletions, and row order made in the other mode, as
   its next Generate draws them, for the rows it draws. A rename of a feature
-  row redraws that Result once it is shown. A switch alone does not reorder
-  a Legend.
+  row redraws that Result once it is shown.
 - Sessions: **Save Session** writes the Result of each mode. Session 45 gains an
   optional `otherModeResult` field for the Result set of the mode that is not at
   the top level; its request uses the same resource table. **Load Session**

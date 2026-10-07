@@ -235,7 +235,10 @@ test('settings-only Load replaces existing work and rejected candidates preserve
   const inactive = await snapshot(page);
   expect(inactive.circularSources[0]).toBe(true);
   expect(inactive.linearSources.flat().some(Boolean)).toBe(false);
-  await assertCoherent(await capture(page, testInfo, 'inactive-source'), 'mode switch preserves the full Session');
+  // E1: Linear has no Result of its own, so it shows and exports none; Save
+  // still writes the Circular Result, and Load opens on Circular, which has one.
+  expect(inactive.results).toBe(0);
+  expect(await page.locator('.origin-top svg').count()).toBe(0);
   const inactiveSave = await save(page, testInfo, 'inactive-source');
   expect(inactiveSave.document.renderRequest).toEqual(promoted);
   expect(inactiveSave.document.runMetadata).toEqual(runMetadata);
