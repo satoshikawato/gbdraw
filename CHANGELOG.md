@@ -68,6 +68,10 @@ write-up of a release.
 - Legend editor (web app): opening or closing a row's **Stroke options** no longer
   makes an Undo step, and Sessions no longer save which rows show their stroke
   options. Loading a Session closes them.
+- Legend editor (web app): rows removed in the Legend editor are listed under
+  **Deleted items**, each with **Restore**, and **Restore all** returns every one. A
+  restored row returns at once where Generate draws it; each click is one Undo step,
+  and Sessions save the rows still removed. Before, only Undo returned a removed row.
 - Result names (web app): a live edit that redraws a loaded Session's Result (such
   as a Legend color, or Undo or Redo of a color step) keeps the Result's saved name.
   Before, the redraw renamed it after the **Output prefix** (a Gallery Session's

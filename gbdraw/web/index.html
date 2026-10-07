@@ -6786,6 +6786,21 @@
                                 </div>
                             </div>
                             <div v-if="legendEntries.length === 0" class="text-center text-slate-400 text-sm py-4">No legend entries found</div>
+                            <div v-if="deletedLegendEntries.length > 0" class="pt-2 border-t border-slate-200">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span id="deleted-legend-items-label" class="text-[10px] font-bold text-slate-500 uppercase">Deleted items</span>
+                                    <button @click="restoreAllDeletedLegendEntries" class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50" title="Restore all deleted items" :disabled="!semanticMutationAvailable">
+                                        <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> Restore all
+                                    </button>
+                                </div>
+                                <ul aria-labelledby="deleted-legend-items-label" class="space-y-1">
+                                    <li v-for="(entry, idx) in deletedLegendEntries" :key="`deleted-${idx}-${entry.caption}`" class="flex items-center gap-2 p-1.5 bg-slate-50 rounded border border-slate-100">
+                                        <div class="w-4 h-4 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: entry.color }" :title="entry.color"></div>
+                                        <span class="flex-1 text-xs text-slate-500 truncate min-w-0">{{ entry.caption }}</span>
+                                        <button :aria-label="`Restore ${entry.caption}`" @click="restoreDeletedLegendEntry(idx)" class="text-[10px] text-blue-600 hover:text-blue-800 shrink-0 px-1" title="Restore this item" :disabled="!semanticMutationAvailable">Restore</button>
+                                    </li>
+                                </ul>
+                            </div>
                         </div>
 
                         <div class="px-3 py-2 border-t border-slate-200 shrink-0">

@@ -4,7 +4,7 @@ const { gunzipSync } = require('node:zlib');
 const { load, generate, switchMode, download } = require('./helpers/mode-transition.cjs');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { openBatch, openWithGenBank } = require('./helpers/audit-browser.cjs');
-const { settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
+const { expectLiveEqualsGenerate, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
 
 const seeds = {
   lambda: 'gbdraw/web/gallery/sessions/lambda_basic_linear.gbdraw-session.json',
@@ -733,6 +733,106 @@ test('M13 circular: Stroke options is a disclosure without a History step or a s
     await page.context().close();
   }
 });
+
+// The drawn Legend captions in reading order (top to bottom, then left to right).
+const drawnLegendOrder = page => page.evaluate(() => {
+  const svg = window.__GBDRAW_APP__.svgContainer.querySelector('svg');
+  return [...svg.querySelectorAll('#legend g[data-legend-key]')]
+    .filter(entry => !entry.closest('[display="none"]'))
+    .map(entry => ({ caption: entry.querySelector('text')?.textContent.trim() || '', box: entry.querySelector('text').getBoundingClientRect() }))
+    .sort((left, right) => (Math.abs(left.box.y - right.box.y) < 2 ? left.box.x - right.box.x : left.box.y - right.box.y))
+    .map(({ caption }) => caption);
+});
+// `loadGenerated` with GC content in Linear too, so each mode has a middle row.
+const loadWithGc = async (browser, mode) => {
+  const page = await loadGenerated(browser, mode);
+  if (mode === 'linear') {
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_gc = true; });
+    await generate(page);
+  }
+  return page;
+};
+
+// OV-154: the Legend editor lists the rows it deleted, each with Restore, and
+// Restore all. Each click is one History step; a restored row returns at once
+// where Generate draws it, and the Session saves the shorter deleted list.
+for (const mode of ['linear', 'circular']) {
+  test(`M14 ${mode}: deleted Legend rows return through Restore and Restore all`, async ({ browser }, testInfo) => {
+    test.setTimeout(900_000);
+    const page = await loadWithGc(browser, mode);
+    let fresh;
+    try {
+      const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+      const step = async direction => {
+        await evaluateWithRetainedPromise(page, name => window.__GBDRAW_HISTORY__[name](), direction);
+        await settleLive(page);
+      };
+      await page.locator('.drawer-toggle').click();
+      await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
+      const drawer = page.locator('.right-drawer');
+      const deletedList = drawer.getByRole('list', { name: 'Deleted items' });
+      const generated = await legendRowsByCaption(page);
+      expect(generated.editor).toEqual(expect.arrayContaining(['CDS', 'repeat_region', 'GC content']));
+      await expect(deletedList).toHaveCount(0);
+      await deleteLegendRow(page, 'repeat_region');
+      await deleteLegendRow(page, 'CDS');
+      await settleLive(page);
+      await expect(deletedList.getByRole('listitem')).toHaveCount(2);
+      const without = caption => generated.editor.filter(entry => entry !== caption);
+
+      let start = await undoCount();
+      await deletedList.getByRole('button', { name: 'Restore repeat_region' }).click();
+      await expect.poll(() => page.evaluate(legendIndex, 'repeat_region')).toBeGreaterThanOrEqual(0);
+      await settleLive(page);
+      expect(await undoCount(), 'Restore is one step').toBe(start + 1);
+      await expect(deletedList.getByRole('listitem')).toHaveCount(1);
+      const one = await legendRowsByCaption(page);
+      expect(one.editor, 'the row returns at its place').toEqual(without('CDS'));
+      expect(one.drawn).toEqual(oneRowEach(one));
+      expect(await drawnLegendOrder(page)).toEqual(without('CDS'));
+      await step('undo');
+      expect((await legendRowsByCaption(page)).editor).toEqual(without('CDS').filter(entry => entry !== 'repeat_region'));
+      await expect(deletedList.getByRole('listitem')).toHaveCount(2);
+      await step('redo');
+      expect(await legendRowsByCaption(page)).toEqual(one);
+      await expect(deletedList.getByRole('listitem')).toHaveCount(1);
+
+      const saved = testInfo.outputPath(`restore-${mode}.gbdraw-session.json.gz`);
+      const session = readSession(await download(page, 'Save Session', saved));
+      expect(session.editorState.legend.deletedEntries.map(entry => entry.caption), 'the Session saves the shorter list').toEqual(['CDS']);
+      await expectLiveEqualsGenerate(page, { label: `${mode}: Restore` });
+      expect((await legendRowsByCaption(page)).editor).toEqual(without('CDS'));
+
+      start = await undoCount();
+      await drawer.getByRole('button', { name: 'Restore all' }).click();
+      await expect.poll(() => page.evaluate(legendIndex, 'CDS')).toBeGreaterThanOrEqual(0);
+      await settleLive(page);
+      expect(await undoCount(), 'Restore all is one step').toBe(start + 1);
+      await expect(deletedList).toHaveCount(0);
+      const all = await legendRowsByCaption(page);
+      expect(all.editor, 'every row returns at its place').toEqual(generated.editor);
+      expect(await drawnLegendOrder(page)).toEqual(generated.editor);
+      await expectLiveEqualsGenerate(page, { label: `${mode}: Restore all` });
+      expect(await legendRowsByCaption(page)).toEqual(all);
+
+      fresh = await load(browser, saved);
+      fresh.setDefaultTimeout(180_000);
+      await fresh.locator('.drawer-toggle').click();
+      await fresh.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
+      const loadedList = fresh.locator('.right-drawer').getByRole('list', { name: 'Deleted items' });
+      await expect(loadedList.getByRole('listitem')).toHaveCount(1);
+      await loadedList.getByRole('button', { name: 'Restore CDS' }).click();
+      // The first Python helper after a Load starts the diagram Worker.
+      await expect.poll(() => fresh.evaluate(legendIndex, 'CDS'), { timeout: 180_000 }).toBeGreaterThanOrEqual(0);
+      await settleLive(fresh);
+      expect((await legendRowsByCaption(fresh)).editor, 'a loaded Session restores its row').toEqual(generated.editor);
+      expect(page.externalRequests).toEqual([]);
+    } finally {
+      await page.context().close();
+      if (fresh) await fresh.context().close();
+    }
+  });
+}
 
 test('L1-L8 generated legend categories reconcile while valid category and layout preferences survive', async ({ browser }, testInfo) => {
   test.setTimeout(1_800_000);
