@@ -11,7 +11,8 @@
 // G03 (UI-13, TK-11): the pane does not scroll sideways or leave a gap above the
 // Generate bar, the Custom Track Slots title is not cut, and no track-row control
 // overlaps another or leaves its row.
-// GX-01, GX-12: a pending Session operation disables every settings control.
+// GX-01, GX-12: a pending Session operation disables every settings control, and a
+// disabled field looks disabled.
 // UI-08: an upload zone whose file failed inspection does not look ready.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
@@ -144,6 +145,9 @@ const measure = async (page) => {
       const CONTROLS = 'input:not([type="hidden"]), select, textarea, button';
       const inactive = (element) => {
         if (element.closest(':disabled, [aria-disabled="true"]')) return true;
+        // The "(auto)" value or unit drawn with a disabled field.
+        if (element.matches('.auto-value-placeholder, .track-slot-auto-placeholder, .track-slot-unit-suffix')
+          && element.parentElement.querySelector(':scope > :disabled')) return true;
         const label = element.closest('label');
         const labelled = label && (label.control || label.querySelector(CONTROLS));
         if (labelled?.disabled) return true;
@@ -363,8 +367,18 @@ for (const mode of ['circular', 'linear']) {
       .map((control) => ({ control, name: control.getAttribute('aria-label') || control.textContent.trim() }))
       .filter(({ control, name }) => !selectors.some((selector) => control.matches(selector)) && !names.includes(name))
       .map(({ control, name }) => name || control.outerHTML.slice(0, 80)), BUSY_ENABLED_CONTROLS);
+    // A disabled field, and the "(auto)" value drawn behind it, must also look disabled
+    // (.form-input fades its opacity).
+    await page.waitForFunction(() => document.getAnimations()
+      .every((animation) => animation.playState !== 'running' || animation.effect?.getTiming().iterations === Infinity));
+    const undimmed = await page.evaluate(() => Array
+      .from(document.querySelectorAll(['.settings-pane .form-input:disabled',
+        '.settings-pane .auto-value-field:has(> .form-input:disabled) > .auto-value-placeholder'].join(', ')))
+      .filter((element) => element.checkVisibility() && Number(getComputedStyle(element).opacity) >= 1)
+      .map((element) => element.getAttribute('aria-label') || element.textContent.trim() || element.outerHTML.slice(0, 80)));
     await page.evaluate(() => { window.__GBDRAW_APP__.sessionSavePending = false; });
     expect(enabled).toEqual([]);
+    expect(undimmed, 'disabled fields that look enabled').toEqual([]);
   });
 }
 

@@ -1308,6 +1308,11 @@
             .form-input-compact { font-size: 10px; padding: 0.2rem 0.5rem; line-height: 1.2; height: 1.5rem; }
             .auto-value-input { display: block; width: 100%; box-sizing: border-box; background: transparent; position: relative; z-index: 1; }
             .track-slot-geometry-input { height: 1.5rem; padding-right: 1.55rem !important; background: transparent; position: relative; z-index: 1; }
+            /* A disabled field dims like a disabled .btn, and so do the "(auto)" value and unit drawn with it.
+               The ground is left alone, so an "(auto)" value behind a transparent input stays visible. */
+            .form-input:disabled { cursor: not-allowed; opacity: 0.5; }
+            .auto-value-field:has(> .form-input:disabled) > .auto-value-placeholder,
+            .track-slot-pixel-field:has(> .form-input:disabled) > :is(.track-slot-auto-placeholder, .track-slot-unit-suffix) { opacity: 0.5; }
             .form-checkbox { @apply h-4 w-4 rounded border-gray-300 bg-gray-100 text-blue-600 focus:ring-2 focus:ring-blue-500; }
 
             /* Not text-base: its 24 px line height would survive a per-element text size. */
