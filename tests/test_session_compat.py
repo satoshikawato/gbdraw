@@ -132,6 +132,7 @@ def test_released_session_44_schema_7_catalog_4_is_typed_readable(
 
 def test_cli_writer_projects_released_web_config_to_session_46_mode_slices() -> None:
     source = {
+        "version": 41,
         "ui": {"mode": "circular"},
         "config": {
             "adv": {

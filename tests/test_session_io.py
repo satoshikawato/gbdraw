@@ -1671,10 +1671,10 @@ def test_version_39_writer_promotes_once_and_preserves_web_inventory() -> None:
             == source["config"]["adv"]["circular_track_slots"]
         )
         assert "circular_track_slots" not in linear["config"]["adv"]
-        assert (
-            linear["config"]["adv"]["linear_track_slots"]
-            == source["config"]["adv"]["linear_track_slots"]
-        )
+        # Web Load gives each Linear slot its own params (schema 2).
+        assert linear["config"]["adv"]["linear_track_slots"] == [
+            {**slot, "params": {}} for slot in source["config"]["adv"]["linear_track_slots"]
+        ]
         # The shown mode keeps its flat value; the other mode its saved profile.
         assert linear["config"]["adv"]["identity"] == source["config"]["adv"]["identity"]
         assert circular["config"]["adv"]["identity"] == 88

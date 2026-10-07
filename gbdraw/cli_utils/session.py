@@ -39,6 +39,7 @@ from gbdraw.session_io import (
     get_session_slot,
     migrate_legacy_linear_comparison_draft_for_current_writer,
     migrate_session_flat_draft,
+    mode_split_palette_colors,
     safe_embedded_filename,
     serialize_file_entry,
     session_depth_source_widths,
@@ -1006,6 +1007,7 @@ def _split_session_adjunct(
         depth_sources=session_depth_source_widths(
             bindings if isinstance(bindings, Mapping) else session.get("files")
         ),
+        palette_colors=mode_split_palette_colors(adjunct.get("config")),
     )
 
 

@@ -25,6 +25,7 @@ from gbdraw.session_io import (
     expand_session_feature_catalog,
     migrate_session_flat_draft,
     session_depth_source_widths,
+    mode_split_palette_colors,
     session_mode,
     split_draft_into_modes,
     validate_session,
@@ -479,13 +480,17 @@ def test_cli_resave_of_a_config_less_session_44_moves_its_request_annotation_tar
     assert "INFO: 1 annotation(s) from Session version 44 named a feature by hash=" in caplog.text
 
 
-def test_split_moves_instant_preview_to_the_app_unless_ui_has_it() -> None:
-    # Registry row 175: for any source version; an existing ui value wins.
+def test_split_moves_a_boolean_instant_preview_to_the_app() -> None:
+    # Registry row 174, for any source version. Web Load applies ui, then a
+    # boolean draft value, so the draft value wins over a saved ui value.
     assert _split(_draft(paletteInstantPreviewEnabled=True))["ui"]["paletteInstantPreviewEnabled"] is True
     shown = {"ui": {"mode": "circular", "paletteInstantPreviewEnabled": False},
              "config": {"paletteInstantPreviewEnabled": True}}
     result = _split(shown)
-    assert result["ui"]["paletteInstantPreviewEnabled"] is False
+    assert result["ui"]["paletteInstantPreviewEnabled"] is True
+    unread = {"ui": {"mode": "circular", "paletteInstantPreviewEnabled": False},
+              "config": {"paletteInstantPreviewEnabled": "yes"}}
+    assert _split(unread)["ui"]["paletteInstantPreviewEnabled"] is False
     assert "paletteInstantPreviewEnabled" not in result["modes"]["circular"].get("config", {})
 
 
@@ -496,8 +501,9 @@ def test_split_resolves_override_colors_against_the_draft_palette() -> None:
         import tomllib
 
         palette = {key: str(value) for key, value in tomllib.load(handle)["default"].items()}
-    result = _split(_draft(palette="default", colors={"CDS": " #123456 ", "collinear_block_2": "#000000"},
-                           colorsAreOverrides=True))
+    draft = _draft(palette="default", colors={"CDS": " #123456 ", "collinear_block_2": "#000000"},
+                   colorsAreOverrides=True)
+    result = _split(draft, palette_colors=mode_split_palette_colors(draft["config"]))
 
     colors = result["modes"]["circular"]["config"]["colors"]
     assert result["modes"]["linear"]["config"]["colors"] == colors

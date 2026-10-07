@@ -2367,24 +2367,48 @@ def _palette_colors(name: object) -> dict[str, Any]:
     return _normalize_palette_colors({str(key): str(value) for key, value in colors.items()})
 
 
-def _with_resolved_override_colors(config: Mapping[str, Any]) -> dict[str, Any]:
+def _merges_override_colors(config: object) -> bool:
+    colors = config.get("colors") if isinstance(config, Mapping) else None
+    return (
+        isinstance(config, Mapping)
+        and _js_truthy(config.get("colorsAreOverrides"))
+        and isinstance(colors, Mapping)
+        and len(colors) > 0
+    )
+
+
+def mode_split_palette_colors(config: object) -> dict[str, Any] | None:
+    """The palette colors a draft's override colors merge into, else ``None``.
+
+    The split's ``palette_colors`` context: the draft palette's colors (an
+    empty name reads as the ``default`` a fresh Load selects) when the draft
+    keeps ``colorsAreOverrides`` with colors after the older migrations.
+    """
+
+    if not _merges_override_colors(config):
+        return None
+    assert isinstance(config, Mapping)
+    return _palette_colors(_js_text(config.get("palette")) or "default")
+
+
+def _with_resolved_override_colors(
+    config: Mapping[str, Any], palette_colors: Mapping[str, Any] | None
+) -> dict[str, Any]:
     """The draft ``config`` with ``colorsAreOverrides`` resolved and dropped.
 
-    With the flag and colors, the stored colors override the draft palette's
-    colors, as Web Load reads them (``services/config.js`` applyConfigData);
-    otherwise the stored colors are complete. Named colors stay as saved:
-    Web Load resolves them afterwards, as it does for complete colors.
+    With the flag and colors, the stored colors override ``palette_colors``,
+    as Web Load reads them (``services/config.js`` applyConfigData); otherwise
+    the stored colors are complete. Named colors stay as saved: Web Load
+    resolves them afterwards, as it does for complete colors.
     """
 
     resolved = {key: value for key, value in config.items() if key != "colorsAreOverrides"}
-    colors = config.get("colors")
-    if _js_truthy(config.get("colorsAreOverrides")) and isinstance(colors, Mapping) and colors:
+    if _merges_override_colors(config):
         # ``normalizeColorMap``: each value trimmed (``resolveColorToHex`` keeps
         # a name it cannot resolve without a browser).
+        colors = config["colors"]
         overrides = {key: _js_text(value) if _js_truthy(value) else "" for key, value in colors.items()}
-        resolved["colors"] = _normalize_palette_colors(
-            {**_palette_colors(_js_text(config.get("palette")) or "default"), **overrides}
-        )
+        resolved["colors"] = _normalize_palette_colors({**(palette_colors or {}), **overrides})
     return resolved
 
 
@@ -2517,6 +2541,7 @@ def split_draft_into_modes(
     committed_mode: object,
     mode_profiles: object = None,
     depth_sources: Mapping[DiagramMode, int] | Mapping[str, object] | None = None,
+    palette_colors: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Split the flat Web draft of a Session 27-44 into Session 46 mode slices.
 
@@ -2530,10 +2555,11 @@ def split_draft_into_modes(
     that a slice does not take is absent there (that mode's default), and a
     field that no row names is dropped. App-level settings move to the top
     level: ``config.losat``'s execution settings to ``ui.losatExecution``,
-    ``config.adv.rich_feature_popup`` to ``ui.richFeaturePopup``,
-    ``config.paletteInstantPreviewEnabled`` to ``ui`` (unless ``ui`` has it),
-    and ``config.cliOptions`` to ``cliOptions``. ``config.colorsAreOverrides``
-    is resolved into ``colors`` and dropped.
+    ``config.adv.rich_feature_popup`` to ``ui.richFeaturePopup``, a boolean
+    ``config.paletteInstantPreviewEnabled`` to ``ui`` (over a saved ``ui``
+    value, as Load applies it last), and ``config.cliOptions`` to
+    ``cliOptions``. ``config.colorsAreOverrides`` is resolved into ``colors``
+    over ``palette_colors`` (``mode_split_palette_colors``) and dropped.
 
     ``committed_mode`` is the saved Result's mode (``renderRequest.mode``, else
     ``ui.mode``). ``mode_profiles`` defaults to ``config.modeProfiles``, and
@@ -2554,11 +2580,9 @@ def split_draft_into_modes(
         )
     config_value = draft.get("config")
     if isinstance(config_value, Mapping) and "colorsAreOverrides" in config_value:
-        config_value = _with_resolved_override_colors(config_value)
+        config_value = _with_resolved_override_colors(config_value, palette_colors)
         draft = {**draft, "config": config_value}
     config: Mapping[str, Any] = config_value if isinstance(config_value, Mapping) else {}
-    ui_value = draft.get("ui")
-    ui: Mapping[str, Any] = ui_value if isinstance(ui_value, Mapping) else {}
     profiles = config.get("modeProfiles") if mode_profiles is None else mode_profiles
     active = _profile_active_mode(draft, profiles) or committed
     if depth_sources is None:
@@ -2625,9 +2649,10 @@ def split_draft_into_modes(
     app_ui: dict[str, Any] = {"losatExecution": execution} if execution else {}
     if "rich_feature_popup" in adv:
         app_ui["richFeaturePopup"] = _json_clone(adv["rich_feature_popup"])
-    # An existing ``ui`` value wins over the draft's.
-    if "paletteInstantPreviewEnabled" in config and "paletteInstantPreviewEnabled" not in ui:
-        app_ui["paletteInstantPreviewEnabled"] = _json_clone(config["paletteInstantPreviewEnabled"])
+    # Web Load applies ``ui``, then a boolean draft value, which wins.
+    preview = config.get("paletteInstantPreviewEnabled")
+    if isinstance(preview, bool):
+        app_ui["paletteInstantPreviewEnabled"] = preview
     if app_ui:
         result["ui"] = {**(result.get("ui") or {}), **app_ui}
     # Session provenance, written only when the draft has it.
@@ -2636,6 +2661,271 @@ def split_draft_into_modes(
     if isinstance(config_value, Mapping):
         result["modes"] = {mode: slices[mode] for mode in DIAGRAM_MODES}
     return result
+
+
+# --- Sessions 27-44: the Web Load value migrations of the draft config ------
+#
+# Twins of the config steps of ``migrateSessionDataToCurrent`` (Sessions before
+# 40) and of the current-writer restore (40-44) in the Web ``services/config.js``.
+# ``tools/generate_draft_value_migration_vectors.mjs`` runs the Web functions and
+# writes the vectors these twins read.
+
+_CURRENT_CIRCULAR_TRACK_SLOT_SCHEMA = 4
+_LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA = 3
+_CURRENT_LINEAR_TRACK_SLOT_SCHEMA = 2
+_LEGACY_LINEAR_TRACK_SLOT_SCHEMA = 1
+# A Session up to this version saved Linear slots with schema-1 meaning,
+# whatever schema version it stored (LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION).
+_LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION = 32
+# The Web writers of Sessions 27-33 saved slot and feature-shape forms that
+# today's readers fill in (``withoutLegacyNullCircularSlotSpacing`` and
+# ``migrateLegacyFeatureRenderingConfig``).
+_LEGACY_SLOT_SHAPE_SESSION_VERSION = 33
+_LINEAR_TRACK_RENDERERS = (
+    "features", "dinucleotide_content", "dinucleotide_skew", "depth", "annotations", "spacer",
+)
+_LINEAR_TRACK_RENDERER_ALIASES = {
+    "gc_content": "dinucleotide_content",
+    "content": "dinucleotide_content",
+    "gc_skew": "dinucleotide_skew",
+    "skew": "dinucleotide_skew",
+}
+
+
+def _js_integer(value: object) -> bool:
+    return (isinstance(value, int) and not isinstance(value, bool)) or (
+        isinstance(value, float) and value.is_integer()
+    )
+
+
+def _current_option_value(value: object, fallback: str, supported: tuple[str, ...], label: str) -> str:
+    """``requireCurrentValue`` in the Web ``services/current-option-values.js``."""
+
+    normalized = ("" if value is None else _js_string(value)).strip(_JS_WHITESPACE).lower() or fallback
+    if normalized not in supported:
+        raise ValidationError(
+            f"{label} must be one of: {', '.join(supported)}.", diagnostic=_SESSION_FIELDS_INVALID
+        )
+    return normalized
+
+
+def _migrated_linear_track_layout(value: object) -> str:
+    normalized = ("" if value is None else _js_string(value)).strip(_JS_WHITESPACE).lower() or "middle"
+    normalized = {"spreadout": "above", "tuckin": "below"}.get(normalized, normalized)
+    return _current_option_value(normalized, "middle", ("above", "middle", "below"), "Linear track layout")
+
+
+def _migrated_linear_label_placement(value: object) -> str:
+    normalized = ("" if value is None else _js_string(value)).strip(_JS_WHITESPACE).lower() or "auto"
+    return _current_option_value(
+        "above_feature" if normalized == "on_feature" else normalized,
+        "auto",
+        ("auto", "above_feature"),
+        "Linear label placement",
+    )
+
+
+def _migrated_circular_multi_record_size_mode(value: object) -> str:
+    normalized = ("" if value is None else _js_string(value)).strip(_JS_WHITESPACE).lower() or "auto"
+    return _current_option_value(
+        "auto" if normalized == "sqrt" else normalized,
+        "auto",
+        ("auto", "linear", "equal"),
+        "Circular multi-record size mode",
+    )
+
+
+def migrate_persisted_web_option_values(config: object) -> object:
+    """Move a Session 27-39 draft's retired option values to today's.
+
+    Linear track layout ``spreadout``/``tuckin`` becomes ``above``/``below``,
+    label placement ``on_feature`` becomes ``above_feature``, and multi-record
+    size ``sqrt`` becomes ``auto``; any other value must be a current one. The
+    twin of the option-value steps of ``migratePersistedWebOptionValues``.
+    """
+
+    if not isinstance(config, Mapping):
+        return config
+    migrated = dict(config)
+    form = config.get("form")
+    if isinstance(form, Mapping) and "linear_track_layout" in form:
+        migrated["form"] = {**form, "linear_track_layout": _migrated_linear_track_layout(form["linear_track_layout"])}
+    adv = config.get("adv")
+    if isinstance(adv, Mapping):
+        adv = dict(adv)
+        if "label_placement" in adv:
+            adv["label_placement"] = _migrated_linear_label_placement(adv["label_placement"])
+        if "multi_record_size_mode" in adv:
+            adv["multi_record_size_mode"] = _migrated_circular_multi_record_size_mode(adv["multi_record_size_mode"])
+        migrated["adv"] = adv
+    return migrated
+
+
+def _require_current_circular_track_slots(config: Mapping[str, Any]) -> None:
+    """Refuse Circular slots that the Web would still have to migrate.
+
+    The Web migrates schema-3 Circular slots (``migrateImportedCircularTrackSlots``),
+    but no Session 27-44 written by ``main`` or a release has them, so Python
+    has no twin of that step and refuses such a draft instead of writing it.
+    """
+
+    from .session import SessionFormatError
+
+    adv = config.get("adv")
+    if not isinstance(adv, Mapping) or "circular_track_slots" not in adv:
+        return
+    if not isinstance(adv["circular_track_slots"], list):
+        raise ValidationError("Custom Track Slots must be an array.", diagnostic=_SESSION_FIELDS_INVALID)
+    schema = adv.get("circular_track_slots_schema_version")
+    if _js_integer(schema) and schema == _CURRENT_CIRCULAR_TRACK_SLOT_SCHEMA:
+        return
+    if _js_integer(schema) and schema == _LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA:
+        raise SessionFormatError(
+            "Custom Track Slots of Circular slot schema 3 cannot be migrated by Python; "
+            "open and save the Session in the Web app first.",
+            diagnostic=_SESSION_FIELDS_INVALID,
+        )
+    raise ValidationError(
+        "Custom Track Slots use an obsolete schema. Recreate the slots with schema version "
+        f"{_CURRENT_CIRCULAR_TRACK_SLOT_SCHEMA}.",
+        diagnostic=_SESSION_FIELDS_INVALID,
+    )
+
+
+def _without_legacy_null_circular_slot_spacing(config: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Drop the ``spacing: null`` that Session 27-33 writers saved in each Circular slot.
+
+    Only while Custom Track Slots are off, where the null is lossless. The twin
+    of ``withoutLegacyNullCircularSlotSpacing``.
+    """
+
+    adv = config.get("adv")
+    if (
+        not isinstance(adv, Mapping)
+        or _js_truthy(adv.get("circular_track_slots_enabled"))
+        or not (
+            _js_integer(adv.get("circular_track_slots_schema_version"))
+            and adv["circular_track_slots_schema_version"] == _CURRENT_CIRCULAR_TRACK_SLOT_SCHEMA
+        )
+        or not isinstance(adv.get("circular_track_slots"), list)
+    ):
+        return config
+    return {
+        **config,
+        "adv": {
+            **adv,
+            "circular_track_slots": [
+                {key: value for key, value in slot.items() if key != "spacing"}
+                if isinstance(slot, Mapping) and "spacing" in slot and slot["spacing"] is None
+                else slot
+                for slot in adv["circular_track_slots"]
+            ],
+        },
+    }
+
+
+def _linear_track_renderer(value: object) -> str:
+    text = (_js_string(value) if _js_truthy(value) else "features").strip(_JS_WHITESPACE).lower()
+    renderer = _LINEAR_TRACK_RENDERER_ALIASES.get(text) or text
+    return renderer if renderer in _LINEAR_TRACK_RENDERERS else "features"
+
+
+def migrate_imported_linear_track_slots(config: object, source_version: object) -> object:
+    """Bring a draft's Linear slots to schema 2.
+
+    A Session up to 32 saved them with schema-1 meaning whatever it stored;
+    later ones state their schema. A schema-1 features slot loses its height and
+    spacing, and every slot gets its own ``params`` object. The twin of
+    ``migrateImportedLinearTrackSlots`` and ``migrateLinearTrackSlotsToCurrentSchema``.
+    """
+
+    adv = config.get("adv") if isinstance(config, Mapping) else None
+    if not isinstance(config, Mapping) or not isinstance(adv, Mapping) or "linear_track_slots" not in adv:
+        return config
+    slots = adv["linear_track_slots"]
+    if not isinstance(slots, list):
+        raise ValidationError("Custom Track Slots must be an array.", diagnostic=_SESSION_FIELDS_INVALID)
+    obsolete = ValidationError(
+        "Custom Track Slots use an obsolete schema. Recreate the slots with schema version "
+        f"{_CURRENT_LINEAR_TRACK_SLOT_SCHEMA}.",
+        diagnostic=_SESSION_FIELDS_INVALID,
+    )
+    supported = (_LEGACY_LINEAR_TRACK_SLOT_SCHEMA, _CURRENT_LINEAR_TRACK_SLOT_SCHEMA)
+    stored = adv.get("linear_track_slots_schema_version", _ABSENT)
+    if stored is not _ABSENT and not (_js_integer(stored) and stored in supported):
+        raise obsolete
+    if _js_integer(source_version) and cast(int, source_version) <= _LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION:
+        schema: object = _LEGACY_LINEAR_TRACK_SLOT_SCHEMA
+    else:
+        schema = stored
+    if schema is _ABSENT or schema not in supported:
+        raise obsolete
+
+    def migrated(slot: object) -> object:
+        if not isinstance(slot, Mapping):
+            return slot
+        params = slot.get("params")
+        result = {**slot, "params": dict(params) if isinstance(params, Mapping) else {}}
+        if schema == _LEGACY_LINEAR_TRACK_SLOT_SCHEMA and _linear_track_renderer(slot.get("renderer")) == "features":
+            result.pop("height", None)
+            result.pop("spacing", None)
+        return result
+
+    return {
+        **config,
+        "adv": {
+            **adv,
+            "linear_track_slots_schema_version": _CURRENT_LINEAR_TRACK_SLOT_SCHEMA,
+            "linear_track_slots": [migrated(slot) for slot in slots],
+        },
+    }
+
+
+def _with_legacy_repeat_region_shape(config: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Give a Session 27-33 draft's repeat regions the rectangle they were drawn as.
+
+    The twin of ``migrateLegacyFeatureRenderingConfig`` for a legacy Session.
+    """
+
+    adv = config.get("adv")
+    if not isinstance(adv, Mapping):
+        return config
+    features = adv.get("features")
+    if isinstance(features, list) and "repeat_region" not in features:
+        return config
+    shapes = adv.get("feature_shapes")
+    shapes = shapes if isinstance(shapes, Mapping) else {}
+    if "repeat_region" in shapes:
+        return config
+    return {**config, "adv": {**adv, "feature_shapes": {**shapes, "repeat_region": "rectangle"}}}
+
+
+def migrate_session_draft_values(config: object, source_version: int) -> object:
+    """The Web Load value migrations of a Session 27-44 draft config, in its order.
+
+    Before 40 (``migrateSessionDataToCurrent``): the option values, the
+    Circular slot check, the Session 27-33 slot spacing, the Linear slots, and
+    the Session 27-33 repeat-region shape. From 40 (the current-writer
+    restore): the Circular slot check and the Linear slots, and a stored
+    ``colors`` drops ``colorsAreOverrides`` (``restoreCurrentWriterActiveConfig``),
+    so such colors load as saved.
+    """
+
+    if not isinstance(config, Mapping):
+        return config
+    if source_version < CURRENT_AUTHORITY_SESSION_MIN_VERSION:
+        migrated = migrate_persisted_web_option_values(config)
+        assert isinstance(migrated, Mapping)
+        config = migrated
+    elif "colors" in config:
+        config = {key: value for key, value in config.items() if key != "colorsAreOverrides"}
+    _require_current_circular_track_slots(config)
+    legacy_shapes = source_version <= _LEGACY_SLOT_SHAPE_SESSION_VERSION
+    if legacy_shapes:
+        config = _without_legacy_null_circular_slot_spacing(config)
+    migrated = migrate_imported_linear_track_slots(config, source_version)
+    assert isinstance(migrated, Mapping)
+    return _with_legacy_repeat_region_shape(migrated) if legacy_shapes else dict(migrated)
 
 
 _DEFAULT_ANNOTATION_STYLE: dict[str, Any] = {
@@ -2813,6 +3103,7 @@ def migrate_session_flat_draft(session: Mapping[str, Any]) -> SessionDraftMigrat
     """Run the Session 27-44 draft migrations in Web Load's order.
 
     Field names and placement rows (``migrate_persisted_web_state_field_names``),
+    the draft's option values, slots and shapes (``migrate_session_draft_values``),
     then per-feature edits through the saved catalog
     (``migrate_session_feature_edits``; without a catalog they are dropped),
     then the ``hash=`` annotation targets of a Session 40-44
@@ -2831,7 +3122,7 @@ def migrate_session_flat_draft(session: Mapping[str, Any]) -> SessionDraftMigrat
     catalog = editor_state.get("featureCatalog") if isinstance(editor_state, Mapping) else None
     config = session.get("config")
     if isinstance(config, Mapping):
-        config = migrate_persisted_web_state_field_names(config)
+        config = migrate_session_draft_values(migrate_persisted_web_state_field_names(config), version)
         migrated["config"] = config
     features = session.get("features")
     dropped = narrowed = 0
@@ -4210,6 +4501,7 @@ def build_session_json(
             payload,
             committed_mode=context.mode,
             depth_sources=session_depth_source_widths(files_for_web),
+            palette_colors=mode_split_palette_colors(payload.get("config")),
         )
     _attach_current_web_file_bindings(payload, files_for_web)
     payload.pop("files", None)
@@ -5913,7 +6205,10 @@ __all__ = [
     "load_session",
     "materialize_embedded_file",
     "migrate_legacy_linear_comparison_draft_for_current_writer",
+    "migrate_persisted_web_option_values",
     "migrate_persisted_web_state_field_names",
+    "migrate_imported_linear_track_slots",
+    "migrate_session_draft_values",
     "migrate_session_annotation_targets",
     "migrate_session_feature_edits",
     "migrate_legacy_repeat_feature_shape_args",
@@ -5924,6 +6219,7 @@ __all__ = [
     "session_mode",
     "session_to_cli_args",
     "split_draft_into_modes",
+    "mode_split_palette_colors",
     "migrate_session_flat_draft",
     "SessionDraftMigration",
     "validate_session",
