@@ -5,13 +5,13 @@
   "description": "Playwright test dependencies for the gbdraw web UI.",
   "scripts": {
     "test:playwright": "playwright test",
-    "test:web:functional-full": "playwright test --config=playwright.functional.config.js",
-    "test:web:comparison-contracts": "playwright test --config=playwright.functional.config.js --grep @comparison-contract --workers=1 --retries=0",
-    "test:web:pr-smoke": "playwright test --config=playwright.pr-smoke.config.js",
+    "test:web:functional-full": "playwright test --config=tests/web/playwright/functional.config.js",
+    "test:web:comparison-contracts": "playwright test --config=tests/web/playwright/functional.config.js --grep @comparison-contract --workers=1 --retries=0",
+    "test:web:pr-smoke": "playwright test --config=tests/web/playwright/pr-smoke.config.js",
     "test:web:functional-smoke": "npm run test:web:functional-full",
-    "test:web:perf-smoke": "playwright test --config=playwright.perf.config.js",
-    "test:web:gallery-publication": "playwright test --config=playwright.gallery-publication.config.js",
-    "test:web:vibrio-generate": "playwright test --config=playwright.vibrio.config.js"
+    "test:web:perf-smoke": "playwright test --config=tests/web/playwright/perf.config.js",
+    "test:web:gallery-publication": "playwright test --config=tests/web/playwright/gallery-publication.config.js",
+    "test:web:vibrio-generate": "playwright test --config=tests/web/playwright/vibrio.config.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

@@ -80,11 +80,11 @@ const BASE_PLAYWRIGHT_CONFIG = readFileSync(
   'utf8'
 );
 const FUNCTIONAL_PLAYWRIGHT_CONFIG = readFileSync(
-  join(REPOSITORY_ROOT, 'playwright.functional.config.js'),
+  join(REPOSITORY_ROOT, 'tests/web/playwright/functional.config.js'),
   'utf8'
 );
 const PR_SMOKE_PLAYWRIGHT_CONFIG = readFileSync(
-  join(REPOSITORY_ROOT, 'playwright.pr-smoke.config.js'),
+  join(REPOSITORY_ROOT, 'tests/web/playwright/pr-smoke.config.js'),
   'utf8'
 );
 const WORKFLOW_NAMES = readdirSync(
@@ -599,7 +599,15 @@ test('right drawer availability and transitions have one production owner', () =
     ...occurrenceOwners(/\b(?:showRightDrawer|rightDrawerTab)\.value\s*=(?!=)/g).keys()
   ];
 
-  assert.deepEqual(transitionOwners, ['app/right-drawer.js']);
+  // Exactly one module writes the drawer state. R13 layering slice S8 moves the
+  // state functions from app/right-drawer.js to services/right-drawer-state.js
+  // and leaves the controller in app/right-drawer.js; until the POST layering
+  // guard pins the new path, either path may be the one owner.
+  assert.equal(transitionOwners.length, 1, `right drawer transitions have one owner: ${JSON.stringify(transitionOwners)}`);
+  assert.ok(
+    ['app/right-drawer.js', 'services/right-drawer-state.js'].includes(transitionOwners[0]),
+    `right drawer transitions are owned by a known module: ${JSON.stringify(transitionOwners)}`
+  );
   assert.deepEqual(
     occurrenceOwners(/\b(?:showFeaturePanel|showLegendPanel)\b/g),
     new Map()
@@ -1615,11 +1623,11 @@ test('PR-to-dev jobs and aggregate use the trusted selective plan', () => {
 test('PR smoke selection is explicit while the full functional inventory stays wide', () => {
   assert.equal(
     PACKAGE_SCRIPTS['test:web:functional-full'],
-    'playwright test --config=playwright.functional.config.js'
+    'playwright test --config=tests/web/playwright/functional.config.js'
   );
   assert.equal(
     PACKAGE_SCRIPTS['test:web:pr-smoke'],
-    'playwright test --config=playwright.pr-smoke.config.js'
+    'playwright test --config=tests/web/playwright/pr-smoke.config.js'
   );
   assert.equal(
     PACKAGE_SCRIPTS['test:web:functional-smoke'],
@@ -1758,7 +1766,7 @@ test('Gallery readiness routes jobs from direct-parent evidence and aggregates t
   assert.doesNotMatch(browser, /matrix|Vibrio|test:web:vibrio-generate/);
   assert.equal(
     PACKAGE_SCRIPTS['test:web:vibrio-generate'],
-    'playwright test --config=playwright.vibrio.config.js'
+    'playwright test --config=tests/web/playwright/vibrio.config.js'
   );
   assert.match(DEPLOY_WORKFLOW, /npm run test:web:vibrio-generate/);
 

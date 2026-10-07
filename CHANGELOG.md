@@ -24,10 +24,21 @@ write-up of a release.
 - Legend editor (web app): Generate draws the Legend with a row added in the Legend
   editor where the add placed it. Before, Generate moved the added row away from the
   other rows, in Linear past the right edge of the canvas, where its caption was cut.
+- Feature strokes (web app): a stroke set on one feature in the feature popup is no
+  longer lost when Generate draws a Result without that feature, such as a Generate
+  in the other mode (Circular or Linear). The stroke stays in the draft and in a
+  saved Session, and the next Generate that draws the feature draws it again.
 - CLI: `gbdraw circular|linear --session <file> --session_output out.json` (and
   `--save_session`) keeps the resource IDs and file names of the Session's unchanged
   inputs. Before, the rewritten Session renamed them to positional IDs such as
   `record-1-genbank`, and table files lost the names they were uploaded with.
+- Depth tracks: Depth TSV positions now follow a crop and a reverse complement,
+  in Linear and Circular, on the command line, in the Python API, and in the web
+  app. A crop such as `--region chr:601-800` drew the TSV rows at positions 1-200
+  in place of the rows at 601-800, and a reverse-complemented record drew its
+  coverage mirrored. Positions are source coordinates of the named record; a crop
+  keeps only the positions inside it, and a reverse complement flips them. The
+  automatic Depth maximum now comes from the drawn positions only.
 - CLI: `gbdraw circular|linear --session <Session 41-44> --session_output out.json`
   (and `--save_session`) no longer fails with "Feature placement drafts require a
   circular or linear scope." for a Session whose Feature placement drafts were saved by

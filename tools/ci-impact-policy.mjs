@@ -81,7 +81,6 @@ const POLICY_DOCUMENTS = new Set([
 const METADATA_DIRECTORIES = freeze(['.agents', '.claude', '.codex', '.cursor']);
 const METADATA_FILES = new Set([
   '.github/pull_request_template.md',
-  '.dockerignore',
   '.gitattributes',
   '.gitignore',
   'CITATION.cff',
@@ -155,6 +154,10 @@ const isValidRepositoryPath = (path) => typeof path === 'string'
   && !path.includes('\0')
   && path.split('/').every((part) => part && part !== '.' && part !== '..');
 
+// The base Playwright configuration and the variants that spread it.
+export const isPlaywrightConfigPath = (path) => path === 'playwright.config.js'
+  || /^tests\/web\/playwright\/[^/]+\.config\.js$/.test(path);
+
 export const classifyPath = (path) => {
   const classified = (impact, reason) => freeze({ path, impact, reason });
   if (!isValidRepositoryPath(path)) return classified('full', 'INVALID_REPOSITORY_PATH');
@@ -162,7 +165,7 @@ export const classifyPath = (path) => {
   if (path.startsWith('.github/workflows/') || path.startsWith('tests/ci/')
       || /^tools\/(?:ci-impact|check-web|web-(?:architecture|product|change)|check-promotion)/.test(path)
       || /^tests\/web\/(?:architecture|product-impact|promotion-readiness).*\.test\.mjs$/.test(path)
-      || /^playwright.*\.config\.js$/.test(path)) {
+      || isPlaywrightConfigPath(path)) {
     return classified('ci-only', 'CI_CONTROL_PLANE');
   }
   if (METADATA_FILES.has(path)) return classified('metadata', 'METADATA_FILE_ALLOWLIST');
