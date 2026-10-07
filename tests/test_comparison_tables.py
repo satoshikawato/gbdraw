@@ -293,7 +293,10 @@ def test_web_generate_reports_a_malformed_blast_table_line_as_a_comparison_diagn
     assert not workspace.exists()
 
 
-_COLUMN_MAPPING = re.compile(r"names\s*=\s*(?:list\(|tuple\()?\s*COMPARISON_COLUMNS")
+# read_csv names, or a column assignment onto an already read frame.
+_COLUMN_MAPPING = re.compile(
+    r"(?:names\s*=\s*|\.columns\s*=\s*|set_axis\()(?:list\(|tuple\()?\s*COMPARISON_COLUMNS"
+)
 
 
 def test_outfmt_table_columns_have_one_reader() -> None:
@@ -307,7 +310,8 @@ def test_outfmt_table_columns_have_one_reader() -> None:
         if count:
             readers[path.relative_to(package_root).as_posix()] = count
 
-    assert readers == {"io/comparisons.py": 1}
+    # The file reader and the DataFrame normalizer, both in the one owner.
+    assert readers == {"io/comparisons.py": 2}
 
 
 # --- CO-06: record-ID binding --------------------------------------------------

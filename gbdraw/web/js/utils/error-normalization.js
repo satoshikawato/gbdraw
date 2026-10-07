@@ -121,6 +121,7 @@ const REASONS = Object.freeze({
   RECORD_ID: 'A table row names another displayed record in this column. Swap the query and subject columns of the table, or assign the table to the pair it describes.',
   BLAST_TSV_REQUIRED: 'Choose a BLAST TSV for this pair, or set the pair to No comparison or Run LOSAT.',
   PAIR_TOPOLOGY: 'Each selected pair must join two different available records on adjacent rows, and appear once.',
+  OUTFMT7_FIELDS: 'List all 12 standard BLAST outfmt 6 fields in the "# Fields:" line, or remove the line so that the first 12 columns are read in the standard order.',
   FORCED_LABEL: 'Open the feature\'s popup and set Label visibility to Default, or change the setting that prevents its label.'
 });
 const DEFINITIONS = Object.freeze({

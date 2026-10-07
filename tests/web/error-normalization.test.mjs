@@ -594,3 +594,7 @@ test('an Upload pair without its BLAST TSV names the missing file (CI-06)', () =
   assert.match(producerSummary('COMPARISON_INPUT', { reason: 'BLAST_TSV_REQUIRED' }), /Choose a BLAST TSV for this pair/);
   assert.match(producerSummary('COMPARISON_INPUT', { reason: 'PAIR_TOPOLOGY' }), /adjacent rows/);
 });
+
+test('an outfmt 7 Fields line that cannot be read names the line (CI-07d)', () => {
+  assert.match(producerSummary('COMPARISON_INPUT', { reason: 'OUTFMT7_FIELDS', row: 2 }), /^The comparison input is invalid\. Line 2\. List all 12 standard/);
+});
