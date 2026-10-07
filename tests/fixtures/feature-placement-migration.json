@@ -1,5 +1,5 @@
 {
-  "description": "Session 41-44 Feature placement drafts (input, keyed by [recordKey, biologicalFeatureId]) and the Session 45 drafts both readers must produce. A Main row is kept for both modes, a lane row for the mode of its side, and a row whose key does not encode its identity is kept as is. Read by tests/test_session_io.py (session_io) and tests/web/feature-edit-migration.test.mjs (feature-edit-migration.js).",
+  "description": "Session 41-44 Feature placement drafts (input, keyed by [recordKey, biologicalFeatureId]) and the Session 45 drafts both readers must produce. A Main row is kept for both modes, a lane row for the mode of its side, and a row whose key does not encode its identity, or whose side is not a lane side, is kept as is (also a key or side such as `__proto__` or `constructor`). Read by tests/test_session_compat.py (session_io) and tests/web/feature-edit-migration.test.mjs (feature-edit-migration.js).",
   "input": {
     "[\"rec-1\",\"f1\"]": {
       "recordKey": "rec-1",
@@ -59,6 +59,42 @@
       "placement": {
         "kind": "lane",
         "side": "outward",
+        "level": 1
+      }
+    },
+    "[\"rec-1\",\"f8\"]": {
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f8",
+      "placement": {
+        "kind": "lane",
+        "side": "constructor",
+        "level": 1
+      }
+    },
+    "[\"rec-1\",\"f9\"]": {
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f9",
+      "placement": {
+        "kind": "lane",
+        "side": "toString",
+        "level": 1
+      }
+    },
+    "[\"rec-1\",\"f10\"]": {
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f10",
+      "placement": {
+        "kind": "lane",
+        "side": "__proto__",
+        "level": 1
+      }
+    },
+    "__proto__": {
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f11",
+      "placement": {
+        "kind": "lane",
+        "side": "inward",
         "level": 1
       }
     }
@@ -136,6 +172,42 @@
       "placement": {
         "kind": "lane",
         "side": "outward",
+        "level": 1
+      }
+    },
+    "[\"rec-1\",\"f8\"]": {
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f8",
+      "placement": {
+        "kind": "lane",
+        "side": "constructor",
+        "level": 1
+      }
+    },
+    "[\"rec-1\",\"f9\"]": {
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f9",
+      "placement": {
+        "kind": "lane",
+        "side": "toString",
+        "level": 1
+      }
+    },
+    "[\"rec-1\",\"f10\"]": {
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f10",
+      "placement": {
+        "kind": "lane",
+        "side": "__proto__",
+        "level": 1
+      }
+    },
+    "__proto__": {
+      "recordKey": "rec-1",
+      "biologicalFeatureId": "f11",
+      "placement": {
+        "kind": "lane",
+        "side": "inward",
         "level": 1
       }
     }

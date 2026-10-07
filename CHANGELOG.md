@@ -44,6 +44,12 @@ write-up of a release.
   longer lost when Generate draws a Result without that feature, such as a Generate
   in the other mode (Circular or Linear). The stroke stays in the draft and in a
   saved Session, and the next Generate that draws the feature draws it again.
+- Web: Load of a Session 44 or older whose Feature visibility edit holds a value such
+  as `constructor` (a hand edit; no writer saves one) drops that edit and reports it
+  with the other dropped edits, as the CLI does. Before, Load failed with an invalid
+  draft. A Session 41-44 Feature placement draft keyed `__proto__` is now rejected by
+  Load like any other key that does not name its feature, as the CLI rejects it.
+  Before, Load lost the row without a message.
 - CLI: `gbdraw circular|linear --session <Session 40-44> --session_output out.json`
   (and `--save_session`) moves an annotation's `hash=` target to the feature's
   source identity where the Session's saved feature catalog makes the figure
