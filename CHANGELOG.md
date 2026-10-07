@@ -12,6 +12,10 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Legend layout (CLI and Python API): Legend coordinates no longer depend on the Python
+  version. A Circular Legend whose rows run side by side summed their widths with the
+  built-in `sum()`, which Python 3.12 made compensated, so Python 3.10 and 3.11 placed
+  those rows up to about 1e-13 px differently from 3.12 and later, and from the web app.
 - Legend editor (web app): every Legend edit (adding, removing, renaming, or moving a
   row, Sort, a side change, Undo and Redo) lays the Legend out as Python does, with the
   same text measurement and the font, size, and wrap width the diagram was drawn with,
