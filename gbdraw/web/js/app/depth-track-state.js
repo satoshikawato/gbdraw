@@ -100,7 +100,8 @@ const fallbackColor = (index, defaults = {}) => {
 };
 
 const depthFileBaseName = (file) => {
-  const rawName = String(file?.name || '').split(/[\\/]/).pop().trim();
+  // split always returns at least one element, so pop is not undefined.
+  const rawName = /** @type {string} */ (String(file?.name || '').split(/[\\/]/).pop()).trim();
   if (!rawName) return '';
   return rawName.replace(/\.[^.]+$/, '').trim() || rawName;
 };
@@ -124,6 +125,7 @@ export const isRecordMajorDepthFileMatrix = (value) => (
 );
 
 export const parseDepthTrackIndexIdentity = (value, fieldName = 'track_index') => {
+  /** @type {number | null} */
   let numeric = null;
   if (typeof value === 'number') {
     numeric = value;
@@ -133,7 +135,7 @@ export const parseDepthTrackIndexIdentity = (value, fieldName = 'track_index') =
   ) {
     numeric = Number(value.trim());
   }
-  if (!Number.isSafeInteger(numeric) || numeric < 0) {
+  if (numeric === null || !Number.isSafeInteger(numeric) || numeric < 0) {
     throw new Error(`${fieldName} must be a non-negative integer.`);
   }
   return numeric;
@@ -320,6 +322,7 @@ export const reconcileDepthTracksToFiles = ({
 // The logical series a Depth row references: its track_index, else its
 // depth_<n> ID, else 0 (the Python default). A row's position in the stack
 // never selects a series. A row whose series was removed references none.
+/** @returns {number | null} */
 export const depthSlotTrackIndex = (slot) => {
   const rawTrackIndex = slot?.params?.track_index;
   if (rawTrackIndex !== null && rawTrackIndex !== undefined && rawTrackIndex !== '') {
@@ -379,6 +382,7 @@ const cloneSlot = (slot) => ({
   params: cloneParams(slot?.params)
 });
 
+/** @param {number | null} [removedTrackIndex] */
 const disableInvalidManualDepthSlot = (slot, removedTrackIndex = null) => {
   const next = cloneSlot(slot);
   next.enabled = false;
@@ -471,7 +475,10 @@ export const reconcileManagedDepthSlots = ({
   sourced = [],
   managedPredicate = isDefaultManagedDepthSlot
 } = {}) => {
+  // depthSlotTrackIndex returns null for a row bound to no series, so the lookups below may ask for null.
+  /** @type {Set<number | null>} */
   const before = new Set(previousSourced);
+  /** @type {Set<number | null>} */
   const after = new Set(sourced);
   const kept = (Array.isArray(slots) ? slots : []).filter((slot) => {
     if (!isDepthSlot(slot) || !managedPredicate(slot)) return true;
@@ -479,7 +486,8 @@ export const reconcileManagedDepthSlots = ({
     return !before.has(trackIndex) || after.has(trackIndex);
   });
   const referenced = new Set(kept.filter(isDepthSlot).map((slot) => depthSlotTrackIndex(slot)));
-  const additions = Array.from(after)
+  // `after` is built from `sourced`, which holds only numbers; null is only looked up in it.
+  const additions = /** @type {number[]} */ (Array.from(after))
     .filter((trackIndex) => !before.has(trackIndex) && !referenced.has(trackIndex))
     .sort((left, right) => left - right);
   return { slots: kept, additions };

@@ -352,6 +352,7 @@ export const inferLinearTrackAxisIndexFromSlots = (slots) => {
   return normalizedSlots.filter((slot) => effectiveLinearSlotPlacement(slot) === 'above').length;
 };
 
+/** @param {number | null} [axisIndex] */
 export const resolveLinearTrackAxisIndex = (slots, axisIndex = null) => {
   const normalizedSlots = Array.isArray(slots) ? slots : [];
   const clamped = clampLinearTrackAxisIndex(axisIndex, normalizedSlots.length);
@@ -404,13 +405,13 @@ export const enforceSingleLinearOnAxisSlot = (slots, axisIndex) => {
         ? index
         : null
     ))
-    .filter((index) => Number.isInteger(index));
+    .filter((index) => index !== null);
   if (onAxisIndices.length === 0) {
     return resolveLinearTrackAxisIndex(normalizedSlots, axisIndex);
   }
 
   const clampedAxis = clampLinearTrackAxisIndex(axisIndex, normalizedSlots.length);
-  const keepIndex = onAxisIndices.includes(clampedAxis) ? clampedAxis : onAxisIndices[0];
+  const keepIndex = clampedAxis !== null && onAxisIndices.includes(clampedAxis) ? clampedAxis : onAxisIndices[0];
   onAxisIndices.forEach((index) => {
     if (index === keepIndex) return;
     syncLinearSlotPlacementFromSide(normalizedSlots[index], index < keepIndex ? 'above' : 'below');
@@ -778,6 +779,7 @@ export const migrateLinearTrackSlotsToCurrentSchema = (
   });
 };
 
+/** @param {number | null} [axisIndex] */
 export const applyLinearTrackOrderPlacements = (slots, axisIndex = null, nt = 'GC', trackLayout = 'middle') => {
   const normalized = normalizeLinearTrackSlots(slots, nt, trackLayout);
   const resolvedAxis = syncLinearSlotsFromAxisIndex(normalized, axisIndex);
@@ -798,6 +800,7 @@ const hasBlankLinearSlotGeometry = (slot) => (
   Number(slot?.z || 0) === 0
 );
 
+/** @param {string | null} [renderer] */
 const isDefaultManagedLinearSlot = (slot, renderer = null) => {
   if (!slot || typeof slot !== 'object' || Array.isArray(slot)) return false;
   const normalizedRenderer = normalizeRenderer(slot.renderer);

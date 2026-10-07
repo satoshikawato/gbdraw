@@ -58,6 +58,7 @@ export const resolveInheritedSkewSlotColor = ({
   paletteDefinitions = {},
   selectedPalette = 'default'
 } = {}) => {
+  if (!key) return '#777777';
   const paletteKey = SKEW_COLOR_PARAM_TO_PALETTE_KEY[key];
   if (!paletteKey) return '#777777';
 
@@ -92,6 +93,6 @@ export const resolveTrackSlotSkewColorValue = ({
     paletteDefinitions,
     selectedPalette
   });
-  const explicit = normalizeColorInputValue(slot?.params?.[key]);
+  const explicit = normalizeColorInputValue(key === undefined ? undefined : slot?.params?.[key]);
   return explicit || inherited;
 };

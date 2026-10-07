@@ -74,8 +74,9 @@ export const planLinearSourceRowMove = ({
   ));
   const rowSlots = sourceRows.flat().sort((left, right) => left - right);
   const slotIndex = new Map(rowSlots.map((row, slot) => [row, slot]));
+  // A group without rows has no slot; the subtraction is then NaN and the comparison false.
   const consecutiveBlocks = slotIndex.size === rowSlots.length && sourceRows.every((rows) => (
-    slotIndex.get(rows.at(-1)) - slotIndex.get(rows[0]) === rows.length - 1
+    /** @type {number} */ (slotIndex.get(rows.at(-1))) - /** @type {number} */ (slotIndex.get(rows[0])) === rows.length - 1
   ));
   if (!consecutiveBlocks) {
     return { allowed: false, reason: 'custom-layout', rows: layout };
