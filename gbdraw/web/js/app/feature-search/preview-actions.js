@@ -19,6 +19,8 @@ import {
 } from './preview-svg.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import { featureOverrideValue } from '../../services/feature-placement.js';
+/** @import { FeatureSearchIndex } from './search-core.js' */
+/** @import { FeatureElementIndex } from './preview-svg.js' */
 
 /**
  * @typedef {object} PreviewFeatureSearchOptions
@@ -72,8 +74,11 @@ export const createPreviewFeatureSearch = ({
   let appliedSearchField = normalizeFeatureSearchField(previewFeatureSearchField.value, { popupMode: getPopupMode() });
   let appliedQualifierKey = String(previewFeatureSearchQualifierKey.value || '');
   let appliedUseRegex = Boolean(previewFeatureSearchUseRegex.value);
+  /** @type {FeatureSearchIndex | null} */
   let searchIndex = null;
+  /** @type {FeatureElementIndex | null} */
   let featureElementIndex = null;
+  /** @type {SVGSVGElement | null} */
   let featureElementIndexSvg = null;
   const appliedSearchDomState = createPreviewFeatureSearchDomState();
   const getSvg = () => resolvePreviewSvg(svgContainer.value);
@@ -134,7 +139,8 @@ export const createPreviewFeatureSearch = ({
       featureElementIndex = getPreviewFeatureElementIndex(svg);
       recordStructuralMetric('featureDomFullScanCount', 1, { phase: 'feature-search' });
     }
-    return featureElementIndex;
+    // The check above assigns the index unless it is already set.
+    return /** @type {FeatureElementIndex} */ (featureElementIndex);
   };
   const previewFeatureSearchFieldOptions = computed(() => getFeatureSearchFieldOptions({ popupMode: getPopupMode() }));
   const previewFeatureSearchQualifierEnabled = computed(() => (

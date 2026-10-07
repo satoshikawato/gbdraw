@@ -63,6 +63,15 @@ const isAllocatedRow = (caption, rule) => {
 const drawsRow = (row, rule) => row.color === fillIdentity(rule.color)
   && (row.caption === rule.cap || isAllocatedRow(row.caption, rule));
 
+/**
+ * The Legend state the allocation reads.
+ * @typedef {object} LegendRowContext
+ * @property {Record<string, any>[]} [legendEntries]
+ * @property {string[]} [originalLegendOrder]
+ * @property {Partial<SpecificColorRule>[]} [rules]
+ */
+
+/** @param {LegendRowContext} [context] */
 export const rendererLegendRows = ({ legendEntries = [], originalLegendOrder = [], rules = [] } = {}) => {
   const generated = new Set((originalLegendOrder || []).map(normalizeText).filter(Boolean));
   const normalizedRules = (rules || []).map((rule) => normalizeSpecificRule(rule)).filter((rule) => rule.cap);
@@ -135,6 +144,10 @@ const mayBeAllocated = (rule, legendEntries) => Boolean(rule.cap) && (legendEntr
 ));
 
 // The legend caption Generate draws for one rule of `context.rules`.
+/**
+ * @param {Partial<SpecificColorRule> | null | undefined} rule
+ * @param {LegendRowContext} [context]
+ */
 export const ruleLegendCaption = (rule, { rules = [], legendEntries = [], originalLegendOrder = [] } = {}) => {
   const normalized = normalizeSpecificRule(rule);
   if (!mayBeAllocated(normalized, legendEntries)) return normalized.cap;
@@ -156,6 +169,10 @@ export const buildLegendIntents = (rules, rendererRows = []) => {
 
 // The rules a legend row draws, by the allocation above (never by reading a
 // suffix back): editing that row edits these rules.
+/**
+ * @param {string} caption
+ * @param {LegendRowContext} [context]
+ */
 export const legendRowRules = (caption, { rules = [], legendEntries = [], originalLegendOrder = [] } = {}) => {
   const target = normalizeText(caption);
   if (!target) return [];
@@ -178,6 +195,7 @@ export const diffLegendIntents = (currentEntries, desiredIntents) => {
     current.set(caption, { ...entry, caption, color: normalizeColor(entry?.color) });
   });
 
+  /** @type {Record<'add' | 'update' | 'remove' | 'unchanged', Array<Record<string, any> & { caption: string, color: string }>>} */
   const diff = { add: [], update: [], remove: [], unchanged: [] };
   current.forEach((entry, caption) => {
     if (!desired.has(caption)) {

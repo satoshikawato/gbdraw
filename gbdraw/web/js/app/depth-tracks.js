@@ -5,7 +5,8 @@ export const getDepthTrackFallbackLabel = (index) => {
 };
 
 export const getDepthTrackFileBaseName = (file) => {
-  const rawName = String(file?.name || '').split(/[\\/]/).pop().trim();
+  // split always returns at least one element, so pop is not undefined.
+  const rawName = /** @type {string} */ (String(file?.name || '').split(/[\\/]/).pop()).trim();
   if (!rawName) return '';
   const withoutExtension = rawName.replace(/\.[^.]+$/, '').trim();
   return withoutExtension || rawName;

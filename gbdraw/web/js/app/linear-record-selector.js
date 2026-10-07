@@ -78,6 +78,7 @@ export const createLinearRecordSelector = ({
 }) => {
   const selectorStateByUid = reactive({});
   let refreshGeneration = 0;
+  /** @type {{ fingerprint: any[], promise: Promise<any> | null } | null} */
   let activeRefresh = null;
   const recordDiscoverySuppressed = () => Boolean(
     state.semanticFileWatchersSuppressed?.value ||
@@ -238,6 +239,7 @@ export const createLinearRecordSelector = ({
     if (activeRefresh && sameFingerprint(activeRefresh.fingerprint, fingerprint)) {
       return activeRefresh.promise;
     }
+    /** @type {{ fingerprint: any[], promise: Promise<any> | null }} */
     const entry = { fingerprint, promise: null };
     entry.promise = runRefresh(options).then((expanded) => {
       if (expanded) return refresh(options);

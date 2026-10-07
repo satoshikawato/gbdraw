@@ -114,6 +114,7 @@ const formatFactor = (value) => {
 
 const withAuto = (text) => (String(text || '').trim() ? `${text} (auto)` : '');
 
+/** @param {string | null} [activeLength] */
 const formatShortLong = (values, formatter, activeLength = null) => {
   if (!values || typeof values !== 'object') return '';
   if (activeLength === 'short' || activeLength === 'long') {
@@ -269,6 +270,7 @@ const circularRadiusText = (state, renderer) => {
     : formatShortLong(value, formatFactor, null);
 };
 
+/** @param {{ height?: any } | null} [trackConfig] */
 const depthTickFontSize = (state, trackConfig = null) => {
   const mode = String(state?.mode?.value || state?.mode || 'circular');
   if (mode === 'linear') {

@@ -29,6 +29,7 @@ const normalizeDefinitionLineFill = (value) => {
   return normalized || null;
 };
 
+/** @returns {{ font_size: number | null, font_weight: string | null, fill: string | null }} */
 export const createDefaultDefinitionLineStyle = () => ({
   font_size: null,
   font_weight: null,

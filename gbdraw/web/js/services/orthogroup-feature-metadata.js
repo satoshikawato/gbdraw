@@ -481,6 +481,11 @@ const resolveOrthogroupFeatureMetadata = (
     : null;
 };
 
+/**
+ * @param {OrthogroupFeatureIndex} index
+ * @param {any} feature
+ * @param {number | null} [fallbackRecordIndex]
+ */
 export const enrichFeatureWithOrthogroup = (
   index,
   feature,

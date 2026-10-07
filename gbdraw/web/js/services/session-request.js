@@ -4591,13 +4591,10 @@ export const projectCanonicalSessionRequest = ({
     ...projectedLinearTrackSlots
   ].reduce((width, slot) => {
     if (slot?.renderer !== 'depth') return width;
-    // parseDepthTrackIndexIdentity throws unless the value is a non-negative
-    // integer, so it returns a number; its `let numeric = null` makes tsc
-    // infer a `null` return, hence the cast through unknown.
-    const trackIndex = /** @type {number} */ (/** @type {unknown} */ (parseDepthTrackIndexIdentity(
+    const trackIndex = parseDepthTrackIndexIdentity(
       slot?.params?.track_index ?? 0,
       `Depth slot '${slot?.id || ''}' track_index`
-    )));
+    );
     return Math.max(width, trackIndex + 1);
   }, 0);
   const projectedDepthTrackCount = canonicalDepth

@@ -454,7 +454,10 @@ const overlayLegend = (primary, legend, side, obstacles, spacing, policy) => {
     (name) => candidatesByName[name]
   );
   const growthKey = (candidate, index) => {
-    const union = unionBounds([primary, candidate.bounds]);
+    // unionBounds is null only for an empty list; this one holds two entries.
+    const union = /** @type {NonNullable<ReturnType<typeof unionBounds>>} */ (
+      unionBounds([primary, candidate.bounds])
+    );
     const metrics = {
       addedArea: union.width * union.height - primary.width * primary.height,
       addedExtent: union.width - primary.width + union.height - primary.height,
@@ -514,6 +517,7 @@ export const planComposition = ({
   const resolvedOverlayPolicy = validateOverlayPolicy(overlayPolicy);
   const obstacles = overlayObstacles.map((bounds, index) => validateBounds(bounds, `overlayObstacles[${index}]`));
   const working = [{ role: 'primary', translation: [0, 0], bounds: primary }];
+  /** @type {ReturnType<typeof dockLegend> | ReturnType<typeof overlayLegend> | null} */
   let legendPlacement = null;
   if (legendBounds && legendSide !== 'none') {
     const legend = validateBounds(legendBounds, 'legendBounds');
@@ -540,7 +544,10 @@ export const planComposition = ({
       });
     }
   }
-  const painted = unionBounds(working.map((placement) => placement.bounds));
+  // `working` always holds the primary entry, so the union is not null.
+  const painted = /** @type {NonNullable<ReturnType<typeof unionBounds>>} */ (
+    unionBounds(working.map((placement) => placement.bounds))
+  );
   const outerX = resolvedSpacing.edgePaddingPx - painted.x;
   const outerY = resolvedSpacing.edgePaddingPx - painted.y;
   const placements = Object.fromEntries(working.map((placement) => [
@@ -828,6 +835,7 @@ export const applyCompositionEdit = (svg, options = {}) => {
     setLeading(target, primaryPlacement.automaticTranslation, deltas.primary[index]);
   });
 
+  /** @type {ReturnType<typeof targetPayload> | null} */
   let legendPayload = null;
   if (legendTarget && metadata.legend) {
     const placement = plan.placements.legend;
@@ -845,6 +853,7 @@ export const applyCompositionEdit = (svg, options = {}) => {
     );
   }
 
+  /** @type {ReturnType<typeof targetPayload> | null} */
   let titlePayload = null;
   if (titleTarget && metadata.title) {
     const placement = plan.placements.title;
@@ -1197,6 +1206,12 @@ const legacyRenderedTranslation = (target, fallbackValue) => {
 // pre-recordKey SVGs bind once through the active plan's stable feature IDs;
 // DOM order, row number, rendered record ID, and array position never become
 // persisted identity.
+/**
+ * @param {any} svg
+ * @param {any[]} [baseTranslations]
+ * @param {any[]} [recordKeys]
+ * @param {{ records?: unknown } | null} [activePlan] The active plan; only its `records` are read.
+ */
 export const materializeRecordTranslations = (
   svg,
   baseTranslations = [],

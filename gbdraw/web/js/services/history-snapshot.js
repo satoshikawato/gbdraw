@@ -862,6 +862,10 @@ export const createHistorySnapshotService = ({
     setGeneratedArtifactRef(state.pendingPaletteColors, ownerSet.pendingPaletteColors || {});
   };
 
+  /**
+   * @param {any} identity
+   * @param {{ results?: any[] | null }} [options]
+   */
   const setGeneratedArtifactIdentity = (identity, { results = null } = {}) => {
     const fingerprint = String(identity?.fingerprint || '').toLowerCase();
     if (

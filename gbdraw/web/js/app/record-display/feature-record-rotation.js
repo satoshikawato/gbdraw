@@ -303,7 +303,7 @@ const pendingStartFor = (target) => {
 
 const initialDraft = () => ({
   active: false,
-  feature: null,
+  feature: /** @type {PopupFeature | null} */ (null),
   identity: { recordKey: '', biologicalFeatureId: '' },
   recordLabel: '',
   position: 'start',
@@ -324,7 +324,7 @@ const initialDraft = () => ({
   reading: false,
   status: '',
   statusKind: 'idle',
-  startCoordinate: null,
+  startCoordinate: /** @type {number | null} */ (null),
   preview: '',
   // The record's start and orientation already staged for Generate (PD-OI-085).
   pendingPreview: ''
@@ -355,7 +355,8 @@ export const createFeatureRecordRotationWorkflow = ({
   // into a closed or retargeted popup.
   let draftGeneration = 0;
 
-  const resolveDraft = () => action.resolve({ feature: draft.feature, intent: intentFor(draft) });
+  // recompute is the only caller; it returns early without a feature and stores the snapshot's feature before its second call.
+  const resolveDraft = () => action.resolve({ feature: /** @type {PopupFeature} */ (draft.feature), intent: intentFor(draft) });
 
   const recompute = () => {
     if (!draft.active || !draft.feature) return null;

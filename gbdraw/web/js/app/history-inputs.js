@@ -68,6 +68,7 @@ export const setupHistoryInputs = ({ root, history, nextTick }) => {
 
   const txByElement = new WeakMap();
   const beginByElement = new WeakMap();
+  /** @type {Promise<void> | null} */
   let pendingCommit = null;
 
   const beginForElement = (element, source = 'input-adapter') => {

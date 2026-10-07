@@ -50,6 +50,14 @@ export const isPristineLinearSource = (source) => {
   );
 };
 
+/**
+ * @typedef {{ allowed: false, reason: string, sourceIndex?: number }
+ *   | { allowed: true, intent: string, sourceIndex: number, insertionIndex: number,
+ *       sourceUid: any, recordCount: number, removedUids: any[], retainedSequences: any[] }
+ * } LinearSourceRemovalPlan
+ */
+
+/** @returns {LinearSourceRemovalPlan} */
 export const planLinearSourceRemoval = ({ sequences, sourceUid, intent }) => {
   const ordered = Array.from(sequences || []);
   const groups = groupLinearSourceRecords(ordered);

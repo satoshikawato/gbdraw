@@ -9,11 +9,16 @@ const WHEEL_TRANSITION_FALLBACK_MS = 260;
 /** @param {Record<string, any>} state Shape owned by state.js. */
 export const createPanZoom = (state) => {
   const { zoom, layoutRepositionMode, isPanning, panStart, canvasPan, canvasContainerRef, svgContainer } = state;
+  /** @type {number | null} */
   let panFrameId = null;
+  /** @type {{ x: number, y: number } | null} */
   let pendingPanPointer = null;
   const previewTransformInteractionSources = new Set();
+  /** @type {number | null} */
   let wheelBurstTimerId = null;
+  /** @type {number | null} */
   let wheelFallbackTimerId = null;
+  /** @type {HTMLElement | null} */
   let wheelTransitionTarget = null;
   let wheelBurstComplete = false;
   let wheelTransitionComplete = false;
@@ -183,6 +188,7 @@ export const createPanZoom = (state) => {
     return nextPan;
   };
 
+  /** @param {{ resetZoom?: boolean, pan?: { x?: number, y?: number } | null }} [options] */
   const resetPreviewViewport = ({ resetZoom = false, pan = null } = {}) => {
     cancelPreviewTransformInteraction({ reconcile: false });
     panStart.x = 0;

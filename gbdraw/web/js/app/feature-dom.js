@@ -74,6 +74,7 @@ export const clearFeatureElementIndex = (svg) => {
   if (svg) featureElementIndexCache.delete(svg);
 };
 
+/** @param {Map<string, Element[]> | null} [featureIndex] */
 export const getFeatureElements = (svg, featureId, featureIndex = null) => {
   const normalizedId = String(featureId || '').trim();
   if (!svg || !normalizedId) return [];
@@ -86,5 +87,6 @@ export const getFeatureElements = (svg, featureId, featureIndex = null) => {
   return byId ? [byId] : [];
 };
 
+/** @param {Map<string, Element[]> | null} [featureIndex] */
 export const getFeatureFillElements = (svg, featureId, featureIndex = null) =>
   filterFeatureFillTargets(getFeatureElements(svg, featureId, featureIndex));

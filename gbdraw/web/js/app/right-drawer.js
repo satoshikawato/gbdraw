@@ -118,7 +118,7 @@ export const createRightDrawerController = ({
     onClose();
     const returnFocus = Boolean(focusReturn?.isFocusInDrawer?.());
     closeRightDrawerState(state);
-    if (returnFocus) focusReturn.focusToggle();
+    if (returnFocus) focusReturn?.focusToggle();
   };
   const resetRightDrawer = () => {
     onClose();
