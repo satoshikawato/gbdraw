@@ -248,6 +248,9 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
   });
   expect(order).toEqual({ present: true, ordered: true, pairInRecordList: 0 });
 
+  // Scroll only as far as a user must to reach Add: Playwright centers a target
+  // that is entirely below the fold, which alone moves the first card out of view.
+  await inputAddAction(page).evaluate((button) => button.scrollIntoView({ block: 'nearest' }));
   await inputAddAction(page).click();
   await expect(page.locator('[data-linear-record-card]')).toHaveCount(2);
   await expectInside(firstUploader, settingsPane);
