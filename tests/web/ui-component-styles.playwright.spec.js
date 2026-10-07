@@ -11,7 +11,7 @@
 // G03 (UI-13, TK-11): the pane does not scroll sideways or leave a gap above the
 // Generate bar, the Custom Track Slots title is not cut, and no track-row control
 // overlaps another or leaves its row.
-// GX-01: a pending Session operation disables every track-row control.
+// GX-01, GX-12: a pending Session operation disables every settings control.
 // UI-08: an upload zone whose file failed inspection does not look ready.
 const { test, expect } = require('@playwright/test');
 const { readFileSync } = require('node:fs');
@@ -314,26 +314,58 @@ test('linear: every visible settings text is 11 px or more and 4.5:1 (UI-06)', a
   expect.soft(result.faintIcons, 'icon-only buttons under 3:1').toEqual([]);
 });
 
-// GX-01: while a Session operation runs, every setter refuses edits, so every track-row
-// control (and each Depth series' legend title) must look and be disabled; an enabled
-// one would show the typed value and silently drop it when the operation ends.
+// GX-01, GX-12: while a Session operation runs, the settings setters refuse edits (and a
+// field bound with v-model would write in the middle of the operation), so every control
+// in the settings panel must look and be disabled; an enabled one would show the typed
+// value and silently drop it when the operation ends. Controls that stay enabled:
+const BUSY_ENABLED_CONTROLS = {
+  selectors: [
+    // Disclosures and links to another setting change only what the panel shows.
+    'button[aria-expanded]',
+    'button[aria-controls]',
+    // Exports read the current settings and change nothing.
+    'button:has(.ph-download-simple)'
+  ],
+  names: [
+    // Moves focus to the Multi-Record Canvas setting.
+    'Show Multi-Record Canvas setting',
+    // Drafts of a new row: the typed value stays in the form, and the row's Add
+    // button is disabled until the operation ends.
+    'Add key', 'Add key color', 'Feature type to add', 'New color rule feature type', 'Qualifier name',
+    'New color rule pattern', 'New color rule color', 'New color rule legend caption'
+  ]
+};
+
 for (const mode of ['circular', 'linear']) {
-  test(`${mode}: a pending Session operation disables every track-row control (GX-01)`, async ({ page }) => {
-    test.setTimeout(240_000);
+  test(`${mode}: a pending Session operation disables every settings control (GX-01, GX-12)`, async ({ page }) => {
+    test.setTimeout(300_000);
     await stackWithEveryRowKind(page, mode);
     const renderers = await page.evaluate((mode) => window.__GBDRAW_APP__.adv[`${mode}_track_slots`]
       .map((slot) => slot.renderer), mode);
     expect(renderers).toEqual(expect.arrayContaining(['depth', 'annotations', 'dinucleotide_skew']));
+    // An annotation row shows its style colors; Linear also shows a second file's
+    // defaults, the Collinear settings, and the record rows.
+    await page.getByRole('button', { name: 'Coordinates', exact: true }).click();
+    if (mode === 'linear') {
+      await page.evaluate(async () => {
+        const app = window.__GBDRAW_APP__;
+        app.addLinearSeq();
+        await app.setLinearComparisonGlobalAction('losat');
+      });
+      await openAllDetails(page);
+      await page.getByRole('group', { name: 'LOSAT Mode' }).getByRole('button', { name: 'LOSATP', exact: true }).click();
+      await page.getByRole('combobox', { name: 'LOSATP mode' }).selectOption('collinear');
+      await page.getByLabel('Arrange linear records in rows', { exact: true }).check();
+    }
     await page.evaluate(() => { window.__GBDRAW_APP__.sessionSavePending = true; });
-    const enabled = await page.evaluate((mode) => {
-      const rows = [
-        ...document.querySelectorAll(`[data-capture^="${mode}-track-slot-"]`),
-        ...Array.from(document.querySelectorAll('input[aria-label$="legend title"]'))
-      ];
-      return rows.flatMap((root) => (root.matches('input') ? [root] : Array.from(root.querySelectorAll('input, select, textarea, button'))))
-        .filter((control) => control.checkVisibility() && !control.closest('.help-tip') && !control.disabled)
-        .map((control) => control.getAttribute('aria-label') || control.getAttribute('title') || control.outerHTML.slice(0, 80));
-    }, mode);
+    await openAllDetails(page);
+    const enabled = await page.evaluate(({ selectors, names }) => Array
+      .from(document.querySelectorAll('.settings-pane :is(input, select, textarea, button)'))
+      .filter((control) => control.checkVisibility() && !control.closest('.help-tip')
+        && !control.disabled && control.getAttribute('aria-disabled') !== 'true')
+      .map((control) => ({ control, name: control.getAttribute('aria-label') || control.textContent.trim() }))
+      .filter(({ control, name }) => !selectors.some((selector) => control.matches(selector)) && !names.includes(name))
+      .map(({ control, name }) => name || control.outerHTML.slice(0, 80)), BUSY_ENABLED_CONTROLS);
     await page.evaluate(() => { window.__GBDRAW_APP__.sessionSavePending = false; });
     expect(enabled).toEqual([]);
   });

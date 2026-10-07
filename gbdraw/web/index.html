@@ -1763,6 +1763,7 @@
                                         :aria-label="`Default definition for file ${sourceIndex + 1}`"
                                         placeholder="e.g., Escherichia coli O157:H7 Sakai"
                                         class="form-input px-1 py-0.5 text-xs"
+                                        :disabled="!semanticMutationAvailable"
                                     >
                                 </div>
                                 <div>
@@ -1774,6 +1775,7 @@
                                         :aria-label="`Default subtitle for file ${sourceIndex + 1}`"
                                         placeholder="e.g., Complete genome"
                                         class="form-input px-1 py-0.5 text-xs"
+                                        :disabled="!semanticMutationAvailable"
                                     >
                                 </div>
                             </div>
@@ -1869,7 +1871,7 @@
                                 <div class="text-[10px] font-bold text-white bg-slate-500 px-1.5 py-0.5 rounded-full shrink-0">#{{ idx + 1 }}</div>
                             </div>
 
-                                    <button v-if="(lInputType === 'gff' ? seq.gff && seq.fasta : seq.gb) && !recordDisplayControls.rowsFor(seq.uid).length" type="button" @click="refreshLinearRecordSelectors" class="text-xs text-blue-600">Load record rotation controls</button>
+                                    <button v-if="(lInputType === 'gff' ? seq.gff && seq.fasta : seq.gb) && !recordDisplayControls.rowsFor(seq.uid).length" type="button" @click="refreshLinearRecordSelectors" class="text-xs text-blue-600" :disabled="!semanticMutationAvailable">Load record rotation controls</button>
                                     <record-display-control v-for="row in recordDisplayControls.rowsFor(seq.uid)" :key="row.key" :row="row" :controller="recordDisplayControls"></record-display-control>
 
                             <details v-if="source.records.length > 1" class="rounded border border-slate-200 bg-white/70 p-2">
@@ -2320,7 +2322,7 @@
                                         </div>
                                         <div>
                                             <label class="linear-primary-label mb-1">Evidence scope</label>
-                                            <select v-model="losat.blastp.collinearSearchScope" aria-label="Collinear evidence scope" class="form-input px-2 py-1.5 text-xs">
+                                            <select v-model="losat.blastp.collinearSearchScope" aria-label="Collinear evidence scope" class="form-input px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                                 <option value="adjacent">Adjacent pairs</option>
                                                 <option value="all">All records</option>
                                             </select>
@@ -2438,11 +2440,12 @@
                                                 class="max-w-full text-left text-[9px] text-amber-700"
                                                 :aria-label="`Keep BLAST TSV but do not use it for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`"
                                                 @click="deactivateLinearComparisonFile(pair.draft.id)"
+                                                :disabled="!semanticMutationAvailable"
                                             >Keep file but do not use</button>
                                         </div>
                                         <div v-if="pair.draft?.file && !(pair.source === 'upload' && pair.draft.fileActive)" class="flex min-w-0 flex-wrap items-center justify-between gap-1 rounded bg-amber-50 px-1.5 py-1 text-[9px] text-amber-800">
                                             <span class="min-w-0 flex-1 truncate" :title="pair.draft.file.name">Retained, inactive BLAST TSV: {{ pair.draft.file.name }}</span>
-                                            <button type="button" class="btn btn-secondary shrink-0 px-1 py-0.5 text-[9px]" :aria-label="`Reuse BLAST TSV for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`" @click="reuseLinearComparisonFile(pair.draft.id)">Reuse TSV</button>
+                                            <button type="button" class="btn btn-secondary shrink-0 px-1 py-0.5 text-[9px]" :aria-label="`Reuse BLAST TSV for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`" @click="reuseLinearComparisonFile(pair.draft.id)" :disabled="!semanticMutationAvailable">Reuse TSV</button>
                                         </div>
                                     </section>
                                 </template>
@@ -2468,7 +2471,7 @@
                                     <ul class="space-y-0.5 text-[9px] leading-snug text-amber-800">
                                         <li v-for="issue in unplaced.issues" :key="`${unplaced.draft.id}-${issue.code}`">{{ issue.message }}</li>
                                     </ul>
-                                    <button type="button" class="btn btn-danger min-w-0 w-full px-1 py-0.5 text-[9px]" :aria-label="`Omit unplaced comparison ${unplaced.draft.id}`" @click="omitLinearComparison(unplaced.draft.id)">Omit</button>
+                                    <button type="button" class="btn btn-danger min-w-0 w-full px-1 py-0.5 text-[9px]" :aria-label="`Omit unplaced comparison ${unplaced.draft.id}`" @click="omitLinearComparison(unplaced.draft.id)" :disabled="!semanticMutationAvailable">Omit</button>
                             </div>
                         </details>
                         </section>
@@ -2521,7 +2524,7 @@
                                 <div v-if="linearRecordLayoutEnabled" class="min-w-0 space-y-1.5">
                                     <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_4.5rem] gap-1" v-for="(seq, idx) in linearSeqs" :key="`layout-${seq.uid}`">
                                         <div class="min-w-0 self-center truncate text-[10px] font-semibold text-slate-600" :title="linearComparisonRecordLabel(seq.uid)">#{{ idx + 1 }} {{ linearComparisonRecordLabel(seq.uid) }}</div>
-                                        <input type="number" min="1" :value="linearRecordRowFor(seq.uid, idx + 1)" @input="setLinearRecordRow(seq.uid, $event.target.value)" class="form-input form-input-compact min-w-0" :aria-label="`Linear record row for sequence ${idx + 1}`">
+                                        <input type="number" min="1" :value="linearRecordRowFor(seq.uid, idx + 1)" @input="setLinearRecordRow(seq.uid, $event.target.value)" class="form-input form-input-compact min-w-0" :aria-label="`Linear record row for sequence ${idx + 1}`" :disabled="!semanticMutationAvailable">
                                         <div class="col-span-2 grid min-w-0 grid-cols-2 gap-1">
                                             <button type="button" class="btn btn-secondary min-w-0 px-1 py-0.5 text-[10px]" @click="moveLinearRecordWithinRow(seq.uid, -1)" :disabled="!semanticMutationAvailable">Up</button>
                                             <button type="button" class="btn btn-secondary min-w-0 px-1 py-0.5 text-[10px]" @click="moveLinearRecordWithinRow(seq.uid, 1)" :disabled="!semanticMutationAvailable">Down</button>
@@ -2569,6 +2572,7 @@
                                                         class="max-w-full text-left text-[10px] text-amber-700"
                                                         :aria-label="`Use automatic Raw LOSAT filename for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`"
                                                         @click="deactivateResolvedLinearComparisonLosatFilename(pair.edgeKey)"
+                                                        :disabled="!semanticMutationAvailable"
                                                     >Use automatic filename</button>
                                                     <div class="text-[10px] text-slate-500">{{ linearLosatCacheInfoByEdgeKey[pair.edgeKey] ? 'Raw result ready' : 'Raw result not ready' }}</div>
                                                     <button
@@ -2581,7 +2585,7 @@
                                                 </template>
                                                 <div v-else class="flex min-w-0 flex-wrap items-center justify-between gap-1 rounded bg-amber-50 px-1.5 py-1 text-[10px] text-amber-800">
                                                     <span class="min-w-0 flex-1 truncate" :title="pair.draft.losatFilename">Retained, inactive filename: {{ pair.draft.losatFilename }}</span>
-                                                    <button type="button" class="btn btn-secondary shrink-0 px-1 py-0.5 text-[10px]" :aria-label="`Reuse Raw LOSAT filename for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`" @click="reuseLinearComparisonLosatFilename(pair.draft.id)">Reuse name</button>
+                                                    <button type="button" class="btn btn-secondary shrink-0 px-1 py-0.5 text-[10px]" :aria-label="`Reuse Raw LOSAT filename for #${pair.queryIndex + 1} to #${pair.subjectIndex + 1}`" @click="reuseLinearComparisonLosatFilename(pair.draft.id)" :disabled="!semanticMutationAvailable">Reuse name</button>
                                                 </div>
                                             </div>
                                         </template>
@@ -2593,8 +2597,8 @@
                                         <label class="linear-primary-label block">Retained Raw LOSAT filename</label>
                                         <input type="text" :value="unplaced.draft.losatFilename" @change="setLinearComparisonLosatFilename(unplaced.draft.id, $event.target.value)" :aria-label="`Raw LOSAT filename for unplaced comparison ${unplaced.draft.id}`" class="form-input min-w-0 px-2 py-1.5 text-xs" :disabled="!semanticMutationAvailable">
                                         <div class="flex min-w-0 flex-wrap gap-1">
-                                            <button v-if="!unplaced.draft.losatFilenameActive" type="button" class="btn btn-secondary flex-1 px-1 py-1 text-[10px]" @click="reuseLinearComparisonLosatFilename(unplaced.draft.id)">Reuse name and LOSAT</button>
-                                            <button v-else type="button" class="btn btn-secondary flex-1 px-1 py-1 text-[10px]" @click="deactivateLinearComparisonLosatFilename(unplaced.draft.id)">Use automatic filename</button>
+                                            <button v-if="!unplaced.draft.losatFilenameActive" type="button" class="btn btn-secondary flex-1 px-1 py-1 text-[10px]" @click="reuseLinearComparisonLosatFilename(unplaced.draft.id)" :disabled="!semanticMutationAvailable">Reuse name and LOSAT</button>
+                                            <button v-else type="button" class="btn btn-secondary flex-1 px-1 py-1 text-[10px]" @click="deactivateLinearComparisonLosatFilename(unplaced.draft.id)" :disabled="!semanticMutationAvailable">Use automatic filename</button>
                                         </div>
                                     </div>
                                 </template>
@@ -2661,7 +2665,7 @@
                             <div v-for="set in annotationSets" :key="set.id" class="rounded border border-slate-200 bg-white p-2 space-y-2">
                                 <div class="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-1">
                                     <input :value="set.id" @change="renameAnnotationSet(set, $event.target.value)" class="form-input px-1 py-0.5 text-[10px]" aria-label="Annotation set id" :disabled="!semanticMutationAvailable">
-                                    <button aria-label="Duplicate set" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="duplicateAnnotationSet(set)" title="Duplicate set"><i class="ph ph-copy" aria-hidden="true"></i></button>
+                                    <button aria-label="Duplicate set" type="button" class="btn btn-secondary h-6 w-6 p-0 text-[10px]" @click="duplicateAnnotationSet(set)" title="Duplicate set" :disabled="!semanticMutationAvailable"><i class="ph ph-copy" aria-hidden="true"></i></button>
                                     <button aria-label="Delete set" type="button" class="btn btn-danger h-6 w-6 p-0 text-[10px]" @click="removeAnnotationSet(set)" title="Delete set" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                 </div>
                                 <input :value="set.legendLabel" @input="setAnnotationSetLegendLabel(set, $event.target.value)" aria-label="Set legend label" class="form-input px-1 py-0.5 text-[10px]" placeholder="Set legend label (optional)" :disabled="!semanticMutationAvailable">
@@ -2713,8 +2717,8 @@
                                         </div>
                                     </div>
                                     <div class="grid grid-cols-3 gap-1 items-center">
-                                        <input type="color" :value="(item.style || set.defaultStyle).stroke" @input="setAnnotationStyle(set, item, 'stroke', $event.target.value)" class="form-input h-7 p-0" title="Stroke color" aria-label="Annotation stroke color">
-                                        <input type="color" :value="(item.style || set.defaultStyle).fill || '#94a3b8'" @input="setAnnotationStyle(set, item, 'fill', $event.target.value)" class="form-input h-7 p-0" title="Fill color" aria-label="Annotation fill color">
+                                        <input type="color" :value="(item.style || set.defaultStyle).stroke" @input="setAnnotationStyle(set, item, 'stroke', $event.target.value)" class="form-input h-7 p-0" title="Stroke color" aria-label="Annotation stroke color" :disabled="!semanticMutationAvailable">
+                                        <input type="color" :value="(item.style || set.defaultStyle).fill || '#94a3b8'" @input="setAnnotationStyle(set, item, 'fill', $event.target.value)" class="form-input h-7 p-0" title="Fill color" aria-label="Annotation fill color" :disabled="!semanticMutationAvailable">
                                         <label class="flex items-center gap-1 text-[10px]"><input type="checkbox" :checked="Boolean((item.style || set.defaultStyle).hatch)" @change="setAnnotationStyle(set, item, 'hatch', $event.target.checked ? { angle: 45, spacing: 5, color: (item.style || set.defaultStyle).stroke, width: 1, cross: false } : null)" :disabled="!semanticMutationAvailable"> Hatch</label>
                                     </div>
                                 </div>
@@ -2872,7 +2876,7 @@
                                     @change="addCircularConservationComparisonFile"
                                     class="hidden"
                                  :disabled="!semanticMutationAvailable">
-                                <button v-if="circularConservation.source === 'losat'" type="button" data-history-ignore class="btn btn-secondary text-xs w-full" @click="openCircularConservationComparisonFilePicker">
+                                <button v-if="circularConservation.source === 'losat'" type="button" data-history-ignore class="btn btn-secondary text-xs w-full" @click="openCircularConservationComparisonFilePicker" :disabled="!semanticMutationAvailable">
                                     <i class="ph ph-plus" aria-hidden="true"></i> Add Seq
                                 </button>
                             </div>
@@ -3697,7 +3701,7 @@
                                                 type="button"
                                                 class="btn btn-secondary text-[10px] py-1 px-2"
                                                 @click="refreshCircularRecordOrder"
-                                                :disabled="cInputType === 'gb' ? !files.c_gb : (!files.c_gff || !files.c_fasta)"
+                                                :disabled="!semanticMutationAvailable || (cInputType === 'gb' ? !files.c_gb : (!files.c_gff || !files.c_fasta))"
                                             >
                                                 Reload Records
                                             </button>
@@ -3770,7 +3774,7 @@
                                     </div>
                                     <div>
                                         <span class="input-label text-[10px] mb-0">Font size <help-tip id="help-title-font-size" :text="mode === 'circular' ? 'Font size for the circular shared plot title. Only used when the title position is Top or Bottom.' : 'Font size for the linear plot title.'"></help-tip></span>
-                                        <input type="number" :value="optionalNumberInputValue(adv.plot_title_font_size)" @input="setOptionalNumberInputValue(adv, 'plot_title_font_size', $event.target.value)" class="form-input form-input-compact" placeholder="Auto (32)" aria-label="Plot Title Font Size" aria-describedby="help-title-font-size">
+                                        <input type="number" :value="optionalNumberInputValue(adv.plot_title_font_size)" @input="setOptionalNumberInputValue(adv, 'plot_title_font_size', $event.target.value)" class="form-input form-input-compact" placeholder="Auto (32)" aria-label="Plot Title Font Size" aria-describedby="help-title-font-size" :disabled="!semanticMutationAvailable">
                                     </div>
                                 </div>
                                 <div v-if="mode === 'circular' && adv.plot_title_position !== 'none'" class="flex items-center text-xs">
@@ -3787,7 +3791,7 @@
                                 <div>
                                     <span class="input-label text-[10px] mb-0">Default font size <help-tip id="help-title-default-font-size" text="Font size for record-label text (species/strain in circular; organism/replicon/accession/length stack in linear)."></help-tip></span>
                                     <auto-value-field :visible="autoValueVisible(adv.def_font_size, 'definitionFontSize')" :text="autoValueText('definitionFontSize')">
-                                        <input type="number" :value="optionalNumberInputValue(adv.def_font_size)" @input="setOptionalNumberInputValue(adv, 'def_font_size', $event.target.value)" class="form-input form-input-compact auto-value-input" aria-label="Default font size" aria-describedby="help-title-default-font-size">
+                                        <input type="number" :value="optionalNumberInputValue(adv.def_font_size)" @input="setOptionalNumberInputValue(adv, 'def_font_size', $event.target.value)" class="form-input form-input-compact auto-value-input" aria-label="Default font size" aria-describedby="help-title-default-font-size" :disabled="!semanticMutationAvailable">
                                     </auto-value-field>
                                 </div>
 
@@ -3811,7 +3815,7 @@
                                             <p v-if="isDefinitionLineStyleMuted(row)" class="ui-hint pt-1.5">This line is hidden; its style applies when it is shown.</p>
                                             <div class="grid grid-cols-1 gap-2 pt-1.5">
                                                 <label class="input-label text-[9px]">Size
-                                                    <input type="number" min="0.1" step="0.5" :value="getDefinitionLineStyleSize(row.key)" @input="setDefinitionLineStyleSize(row.key, $event.target.value)" class="form-input form-input-compact px-1" placeholder="Default" :aria-label="row.label + ' style size'">
+                                                    <input type="number" min="0.1" step="0.5" :value="getDefinitionLineStyleSize(row.key)" @input="setDefinitionLineStyleSize(row.key, $event.target.value)" class="form-input form-input-compact px-1" placeholder="Default" :aria-label="row.label + ' style size'" :disabled="!semanticMutationAvailable">
                                                 </label>
                                                 <div>
                                                     <div class="input-label text-[9px] mb-1">Weight</div>
@@ -3823,9 +3827,9 @@
                                                 <div>
                                                     <div class="input-label text-[9px] mb-1">Color</div>
                                                     <div class="flex items-center gap-1 min-w-0">
-                                                        <input v-if="getDefinitionLineStyleColorMode(row.key) === 'color'" type="color" :value="getDefinitionLineStyleSwatchValue(row.key)" @input="setDefinitionLineStyleColor(row.key, $event.target.value)" class="h-6 w-8 p-0 border border-slate-200 rounded cursor-pointer shrink-0 bg-white" :title="row.label + ' color'" :aria-label="row.label + ' definition line color'">
+                                                        <input v-if="getDefinitionLineStyleColorMode(row.key) === 'color'" type="color" :value="getDefinitionLineStyleSwatchValue(row.key)" @input="setDefinitionLineStyleColor(row.key, $event.target.value)" class="h-6 w-8 p-0 border border-slate-200 rounded cursor-pointer shrink-0 bg-white" :title="row.label + ' color'" :aria-label="row.label + ' definition line color'" :disabled="!semanticMutationAvailable">
                                                         <span v-else class="h-6 w-8 px-0.5 border border-slate-200 rounded shrink-0 bg-slate-50 text-[10px] text-slate-500 inline-flex items-center justify-center" :title="row.label + ' color: ' + (getDefinitionLineStyleColorMode(row.key) === 'none' ? 'None' : 'Auto')" :aria-label="row.label + ' definition line color state'" :data-definition-line-color-state="getDefinitionLineStyleColorMode(row.key)">{{ getDefinitionLineStyleColorMode(row.key) === 'none' ? 'None' : 'Auto' }}</span>
-                                                        <input type="text" :value="getDefinitionLineStyleFill(row.key)" @input="setDefinitionLineStyleColor(row.key, $event.target.value)" class="form-input form-input-compact min-w-0 px-1" placeholder="Default" :aria-label="row.label + ' definition line fill value'">
+                                                        <input type="text" :value="getDefinitionLineStyleFill(row.key)" @input="setDefinitionLineStyleColor(row.key, $event.target.value)" class="form-input form-input-compact min-w-0 px-1" placeholder="Default" :aria-label="row.label + ' definition line fill value'" :disabled="!semanticMutationAvailable">
                                                     </div>
                                                 </div>
                                             </div>
@@ -3884,7 +3888,7 @@
                                     <span class="text-[9px] font-semibold text-blue-600">Affects -d &amp; -t</span>
                                 </div>
                                 <div class="flex items-center gap-2">
-                                    <select v-model="selectedSpecificPreset" aria-label="Preset scheme" aria-describedby="help-colors-preset-schemes" class="form-input text-xs h-7 py-1 flex-grow bg-white">
+                                    <select v-model="selectedSpecificPreset" aria-label="Preset scheme" aria-describedby="help-colors-preset-schemes" class="form-input text-xs h-7 py-1 flex-grow bg-white" :disabled="!semanticMutationAvailable">
                                         <option disabled value="">Select preset...</option>
                                         <option v-for="p in specificRulePresets" :value="p.id">{{ p.label }}</option>
                                     </select>
@@ -4568,7 +4572,7 @@
                                                 :value="optionalNumberInputValue(adv.scale_font_size)"
                                                 @input="setLinearScaleFontSize($event.target.value)"
                                                 class="form-input form-input-compact auto-value-input"
-                                                aria-label="Linear scale font size" aria-describedby="help-linear-axis-scale-font-size">
+                                                aria-label="Linear scale font size" aria-describedby="help-linear-axis-scale-font-size" :disabled="!semanticMutationAvailable">
                                         </auto-value-field>
                                     </div>
                                     <div>
@@ -4578,7 +4582,7 @@
                                                 type="number"
                                                 :value="optionalNumberInputValue(adv.ruler_label_font_size)"
                                                 @input="setLinearRulerLabelFontSize($event.target.value)"
-                                                :disabled="linearTypographyLinked"
+                                                :disabled="!semanticMutationAvailable || (linearTypographyLinked)"
                                                 class="form-input form-input-compact auto-value-input disabled:opacity-50 disabled:cursor-not-allowed"
                                                 aria-label="Linear ruler label font size" aria-describedby="help-linear-axis-ruler-label-font-size">
                                         </auto-value-field>
