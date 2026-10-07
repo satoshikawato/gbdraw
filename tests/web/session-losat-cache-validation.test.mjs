@@ -70,6 +70,8 @@ const {
   validateSessionLosatArtifacts
 } = await import('../../gbdraw/web/js/services/config.js');
 const { state } = await import('../../gbdraw/web/js/state.js');
+// The composition root's transform of an older Session's Results (R13 port).
+const { transformLegacyResultSvg } = await import('../../gbdraw/web/js/app/app-setup.js');
 
 const rawEntry = (key) => ({
   schema: 2,
@@ -1036,7 +1038,10 @@ test('visible protein cache entries from the frozen v39 session recover stable e
     .filter((entry) => entry.display !== false)
     .map((entry) => [entry.queryRecordInstanceKey, entry.subjectRecordInstanceKey]);
   const file = new Blob([JSON.stringify(sessionData)], { type: 'application/json' });
-  const result = await importSession({ target: { files: [file], value: 'selected' } });
+  const result = await importSession(
+    { target: { files: [file], value: 'selected' } },
+    { transformLegacyResultSvg }
+  );
 
   assert.equal(result.status, 'ok');
   assert.deepEqual(
@@ -1076,7 +1081,10 @@ test('a conflicting restored edge key is not exposed under the wrong endpoints',
   ].join('->');
   visibleEntries[0].edgeKey = conflictingEdgeKey;
   const file = new Blob([JSON.stringify(sessionData)], { type: 'application/json' });
-  const result = await importSession({ target: { files: [file], value: 'selected' } });
+  const result = await importSession(
+    { target: { files: [file], value: 'selected' } },
+    { transformLegacyResultSvg }
+  );
 
   assert.equal(result.status, 'ok');
   assert.equal(state.losatCacheInfo.value[0].edgeKey, undefined);

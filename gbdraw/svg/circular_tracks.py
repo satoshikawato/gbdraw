@@ -143,7 +143,6 @@ def generate_circular_scalar_area_path_desc(
     value_column: str = "value_normalized",
     position_column: str = "position",
     close_at_record_len: bool = False,
-    source_positions: bool = False,
     record_transform: RecordDisplayTransform | None = None,
 ) -> str:
     """Return an annular filled area path for normalized scalar values."""
@@ -156,7 +155,7 @@ def generate_circular_scalar_area_path_desc(
     values = np.clip(values, 0.0, 1.0)
     positions = scalar_df[position_column].to_numpy(dtype=float)
     if record_transform is not None and record_transform.start_coordinate is not None:
-        segments = project_scalar_samples(positions, values, record_transform, source_positions=source_positions)
+        segments = project_scalar_samples(positions, values, record_transform)
         positions = np.array([p.position for segment in segments for p in segment.points])
         values = np.array([p.value for segment in segments for p in segment.points])
     elif close_at_record_len and len(positions) > 0 and np.isclose(positions[0], 0.0):
@@ -197,7 +196,6 @@ def generate_circular_depth_path_desc(
         track_width,
         norm_factor,
         value_column="depth_normalized",
-        source_positions=True,
         record_transform=record_transform,
     )
 

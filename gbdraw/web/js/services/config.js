@@ -6,7 +6,7 @@ import {
   captureRightDrawerState,
   resetRightDrawerState,
   restoreRightDrawerState
-} from '../app/right-drawer.js';
+} from './right-drawer-state.js';
 import { resetLayoutState, resetSettings as resetSettingsState } from './reset.js';
 import { serializeCleanSvg } from './svg-serialization.js';
 import { cloneJsonData, cloneJsonValue } from './json-clone.js';
@@ -52,21 +52,19 @@ import {
   migrateLegacyLinearLabelVisibility,
   requireLinearLabelVisibilityMode
 } from './linear-label-visibility.js';
-import { isCliInvocationSessionExportable } from '../app/run-info.js';
 import { migrateLegacyOrthogroupMembers } from './legacy-similarity-alignment.js';
-import { normalizeCircularPlotTitlePosition } from '../app/plot-title-position.js';
 import {
   migrateLegacyLayoutPreferences,
+  normalizeCircularPlotTitlePosition,
   normalizeLayoutPreferences,
   replaceLayoutPreferences,
   resolveActiveLayoutPreference
-} from '../app/layout-preferences.js';
-import { reconcileImportedLinearTypographyLink } from '../app/linear-typography.js';
+} from './layout-preferences.js';
 import {
   serializeFeatureVisibilityRules,
   normalizeFeatureVisibilityRule,
   splitLegacyVisibilityRules
-} from '../app/feature-visibility.js';
+} from './feature-visibility.js';
 import { canonicalFeatureOverrides, featureDraftMap } from './feature-placement.js';
 import {
   ANNOTATION_TARGET_MIGRATION_NOTICE,
@@ -86,7 +84,7 @@ import {
   analyzeCatalogSequenceSourceCoverage,
   buildRestoredMatchSequenceSources,
   resolveCircularComparisonSequenceAvailability
-} from '../app/match-sequences.js';
+} from './match-sequences.js';
 import {
   CANONICAL_REQUEST_SCHEMA,
   buildCanonicalRenderRequest,
@@ -103,7 +101,7 @@ import {
   normalizeLinearComparisonPlan,
   reconcileLinearComparisonPlan,
   resolveLinearComparisonPlan
-} from '../app/linear-comparisons.js';
+} from './linear-comparisons.js';
 import { buildSessionResources as assembleSessionResources } from './session-resources.js';
 import {
   base64ToBytes,
@@ -154,13 +152,7 @@ import { convertMainSessionComparisonFrames } from './main-session-comparison-fr
 import { downloadBlob } from './text-download.js';
 import { normalizeAnnotationSets } from './annotation-state.js';
 import { applySpecificRuleProvenance } from './specific-color-rules.js';
-import { applyStrokeOverridesToSvg } from '../app/legend/stroke-actions.js';
 import { normalizeLegacyLegendEntryGroups } from './svg-result-normalization.js';
-import {
-  COMPOSITION_METADATA_ATTRIBUTE,
-  COMPOSITION_SCHEMA_ATTRIBUTE,
-  normalizeLegacyComposition
-} from '../app/legend-layout/composition-actions.js';
 import {
   LOSAT_DERIVED_CACHE_SCHEMA,
   buildValidatedProteinIdentityIndex,
@@ -218,6 +210,7 @@ import {
   CURRENT_WRITER_ACTIVE_CONFIG_DOMAINS,
   createDefaultLosatpHitLimits,
   LEGACY_CIRCULAR_TRACK_SLOT_SCHEMA_VERSION,
+  reconcileImportedLinearTypographyLink,
   validateCurrentWriterActiveConfig,
   validateImportedCircularTrackSlots,
   validateImportedLinearTrackSlots
@@ -289,6 +282,26 @@ const { nextTick } = window.Vue;
  * @property {Record<string, any>} [legacyArtifacts]
  * @property {Record<string, any>} [runMetadata]
  * @property {Record<string, any>} [cliInvocation]
+ */
+
+/**
+ * What an older Session's Result needs from the Session: the committed legend
+ * and title sides with the saved user offsets, and the extracted features with
+ * the two saved stroke override maps.
+ * @typedef {object} LegacyResultSvgData
+ * @property {{ legendSide: string, titleSide: string, userDeltas: Record<string, number[] | null> }} composition
+ * @property {{
+ *   features: Record<string, any>[],
+ *   legendStrokeOverrides: Record<string, any>,
+ *   featureStrokeOverrides: Record<string, any>
+ * }} strokes
+ */
+
+/**
+ * The composition root's transform of an older Session's Result (R13 port):
+ * it gives a Result without composition metadata the legacy composition and
+ * projects the saved strokes. Returns whether the SVG changed.
+ * @typedef {(svg: Element, data: LegacyResultSvgData) => boolean} LegacyResultSvgTransform
  */
 export const SESSION_VERSION = 45;
 const CURRENT_AUTHORITY_SESSION_MIN_VERSION = 40;
@@ -503,6 +516,17 @@ const hydrateMissingMultiRecordPositionsFromCliInvocation = (config, cliInvocati
 
   adv.multi_record_positions = positions;
   config.adv = adv;
+};
+
+/**
+ * @param {Record<string, any> | null | undefined} invocation
+ * @returns {boolean}
+ */
+const isCliInvocationSessionExportable = (invocation) => {
+  if (!invocation || typeof invocation !== 'object') return false;
+  if (invocation.sessionExportable === false) return false;
+  const bindings = Array.isArray(invocation.fileBindings) ? invocation.fileBindings : [];
+  return bindings.every((binding) => String(binding?.slot || '').startsWith('files.'));
 };
 
 const makeSafeFilename = (name) => {
@@ -4114,13 +4138,12 @@ const applySessionFeatureRecoveryPlan = (plan, { generationId = 'session-feature
  */
 
 /**
- * @param {string | null} [titleOverride]
+ * @param {string | null | undefined} titleOverride
  * @param {ExportSessionDocumentOptions} options
  */
 const exportSessionDocument = async (
   titleOverride = null,
-  // The only caller (exportSession) always passes storedConfig, savedUi, and isCurrent.
-  { linearRecordCatalog = null, recordDisplayRows = null, storedConfig, savedUi, isCurrent } = /** @type {ExportSessionDocumentOptions} */ ({})
+  { linearRecordCatalog = null, recordDisplayRows = null, storedConfig, savedUi, isCurrent }
 ) => {
   const resolvedTitle =
     typeof titleOverride === 'string'
@@ -4343,6 +4366,11 @@ const exportSessionDocument = async (
   return { status: 'saved', blob: compressed, filename: sessionFilename };
 };
 
+/**
+ * @param {Record<string, any>} [options] The options of `importSession` with
+ * `isCurrent` and `signal`; `transformLegacyResultSvg` is the composition
+ * root's `LegacyResultSvgTransform` port.
+ */
 const importSessionDocument = async (e, options = {}) => {
   const file = e.target.files[0];
   if (!file) return { status: 'skipped' };
@@ -4522,14 +4550,14 @@ const importSessionDocument = async (e, options = {}) => {
           Boolean(canonicalProjection.config?.form?.multi_record_canvas)
         )
       : null;
+    // The composition and stroke owners transform an older Session's Result
+    // through the composition root's port (R13); this module passes data only.
+    /** @type {LegacyResultSvgTransform} */
+    const transformLegacyResultSvg = options.transformLegacyResultSvg;
     const transformRestoredSessionSvg = (svg) => {
       const legendGroupsChanged = normalizeLegacyLegendEntryGroups(svg);
-      let compositionChanged = false;
-      if (
-        svg.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) === null
-        && svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) === null
-      ) {
-        normalizeLegacyComposition(svg, {
+      const legacyResultChanged = transformLegacyResultSvg(svg, {
+        composition: {
           legendSide: committedLayout?.legend || restoredConfig?.form?.legend || 'none',
           titleSide: committedLayout?.plotTitlePosition
             || restoredConfig?.adv?.plot_title_position || 'none',
@@ -4545,16 +4573,14 @@ const importSessionDocument = async (e, options = {}) => {
               ? [ui.plotTitleUserOffset.x, ui.plotTitleUserOffset.y]
               : null
           }
-        });
-        compositionChanged = true;
-      }
-      const strokeCount = applyStrokeOverridesToSvg({
-        svg,
-        features: restoredFeatureState.extractedFeatures || [],
-        legendStrokeOverrides: restoredEditorState?.legend?.strokeOverrides || {},
-        featureStrokeOverrides: restoredEditorState?.featureStrokes?.overrides || {}
+        },
+        strokes: {
+          features: restoredFeatureState.extractedFeatures || [],
+          legendStrokeOverrides: restoredEditorState?.legend?.strokeOverrides || {},
+          featureStrokeOverrides: restoredEditorState?.featureStrokes?.overrides || {}
+        }
       });
-      return legendGroupsChanged || compositionChanged || strokeCount > 0;
+      return legendGroupsChanged || legacyResultChanged;
     };
 
     recordSessionLifecycleEvent('svg-admission-start');

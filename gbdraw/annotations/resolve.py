@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Literal, cast
 from Bio.SeqFeature import SeqFeature
 from Bio.SeqRecord import SeqRecord
 
-from gbdraw.core.record_metadata import _read_coord_map
+from gbdraw.core.record_metadata import _read_coord_map, _source_to_local_index
 from gbdraw.exceptions import ValidationError
 from gbdraw.features.selector_values import (
     get_feature_hash,
@@ -119,8 +119,8 @@ def _source_interval_to_local(
     clipped = low != source_start or high != source_end
     if high < low:
         return (0, 0), True
-    first_local = (low - coord_base) * coord_step
-    last_local = (high - coord_base) * coord_step
+    first_local = _source_to_local_index(low, coord_base, coord_step)
+    last_local = _source_to_local_index(high, coord_base, coord_step)
     return (min(first_local, last_local), max(first_local, last_local) + 1), clipped
 
 

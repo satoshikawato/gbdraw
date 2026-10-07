@@ -172,7 +172,7 @@ const {
 } = await import('../../gbdraw/web/js/app/run-analysis.js');
 const {
   resolveLinearComparisonPlan
-} = await import('../../gbdraw/web/js/app/linear-comparisons.js');
+} = await import('../../gbdraw/web/js/services/linear-comparisons.js');
 const {
   applyEditorStateData,
   applyFeatureStateData,
@@ -665,8 +665,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
     prepareCandidateCommit: ({
       generationResponse,
       catalogAdmission,
-      featureColorOverrides,
-      featureStrokeOverrides
+      featureColorOverrides
     }) => {
       if (failCandidateAdmission) {
         throw new Error('forced current Result admission failure');
@@ -674,8 +673,7 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
       const candidate = {
         results: structuredClone(generationResponse.results),
         featureState: featureStateFromCatalog(catalogAdmission.catalog),
-        featureColorOverrides: structuredClone(featureColorOverrides),
-        featureStrokeOverrides: structuredClone(featureStrokeOverrides)
+        featureColorOverrides: structuredClone(featureColorOverrides)
       };
       return candidate;
     },
@@ -689,12 +687,20 @@ test('audit-5 owner: direct simple createRunAnalysis path is worker-only and cat
   const committedResult = result('audit-simple.svg', 'committed');
   const committedCatalog = validCatalog(committedResult.name);
   workerResponses.push(response(committedResult, committedCatalog));
+  // OV-84: a stroke on a feature this Result does not draw (here, a record of
+  // the other mode) stays in the draft through the Generate.
+  const dormantStrokeKey = 'linear-seq-other\u0000feature-x';
+  state.featureStrokeOverrides[dormantStrokeKey] = { strokeColor: '#ff0000', strokeWidth: 3 };
 
   assert.deepEqual(
     await runner.runAnalysis(),
     { status: 'ok' },
     JSON.stringify(state.errorLog.value)
   );
+  assert.deepEqual(state.featureStrokeOverrides, {
+    [dormantStrokeKey]: { strokeColor: '#ff0000', strokeWidth: 3 }
+  });
+  delete state.featureStrokeOverrides[dormantStrokeKey];
   assert.deepEqual(labelNoticeClears.splice(0), ['build', 'rerender']);
   assert.equal(state.failedGeneratePreservedResult.value, false);
   assert.deepEqual(state.results.value, [committedResult]);
@@ -1532,13 +1538,11 @@ test('neutral conservation replay delegates lazy resources to the shared reader'
     prepareCandidateCommit: ({
       generationResponse,
       catalogAdmission,
-      featureColorOverrides,
-      featureStrokeOverrides
+      featureColorOverrides
     }) => ({
       results: structuredClone(generationResponse.results),
       featureState: featureStateFromCatalog(catalogAdmission.catalog),
-      featureColorOverrides: structuredClone(featureColorOverrides),
-      featureStrokeOverrides: structuredClone(featureStrokeOverrides)
+      featureColorOverrides: structuredClone(featureColorOverrides)
     }),
     resetPreviewViewport: () => {}
   }));
@@ -2259,13 +2263,11 @@ test('Linear mode none ignores dormant comparison state while active depth and a
     prepareCandidateCommit: ({
       generationResponse,
       catalogAdmission,
-      featureColorOverrides,
-      featureStrokeOverrides
+      featureColorOverrides
     }) => ({
       results: structuredClone(generationResponse.results),
       featureState: featureStateFromCatalog(catalogAdmission.catalog),
-      featureColorOverrides: structuredClone(featureColorOverrides),
-      featureStrokeOverrides: structuredClone(featureStrokeOverrides)
+      featureColorOverrides: structuredClone(featureColorOverrides)
     }),
     resetPreviewViewport: ({ pan = null } = {}) => {
       state.canvasPan.x = Number(pan?.x) || 0;

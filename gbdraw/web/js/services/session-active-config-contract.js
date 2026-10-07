@@ -271,6 +271,27 @@ export const validateCurrentWriterActiveConfig = ({ mode, storedConfig: config }
   validateImportedCircularTrackSlots(config); validateImportedLinearTrackSlots(config);
 };
 
+const linearTypographyValuesMatch = (adv = {}) => (
+  Object.is(adv.scale_font_size, adv.ruler_label_font_size)
+);
+
+/**
+ * @param {{
+ *   adv: Record<string, any>,
+ *   linked: any,
+ *   ui?: { linearTypographyLinked?: boolean }
+ * }} options
+ */
+export const reconcileImportedLinearTypographyLink = ({ adv, linked, ui = {} }) => {
+  if (!linked || typeof linked !== 'object' || !('value' in linked)) return false;
+  // Omission takes the fresh linked default; unequal values still open unlinked.
+  linked.value = (
+    (ui.linearTypographyLinked ?? true) === true
+    && linearTypographyValuesMatch(adv)
+  );
+  return linked.value;
+};
+
 // Artifact metadata admission is shared by Session, History and Align/Reset.
 // The binding deliberately excludes current orientation, translations, labels and
 // row order: manual Reverse, style and stable reorder do not rewrite history.
@@ -281,7 +302,8 @@ const sortedValue = (value) => Array.isArray(value)
 
 export const validateAlignmentResetReceiptShape = (receipt, request) => {
   if (receipt === null || receipt === undefined) return null;
-  const invalid = () => { throw new Error('Alignment reset receipt is malformed or stale.'); };
+  // A malformed or stale receipt (OV-115, OV-130) is one user-facing failure.
+  const invalid = () => { throw diagnosticError('ALIGNMENT_RESET_EVIDENCE'); };
   if (!isObject(receipt)
     || Object.keys(receipt).sort().join(',') !== 'binding,directions,referenceDeltaX'
     || !/^[0-9a-f]{64}$/.test(receipt.binding)
@@ -343,7 +365,7 @@ const resetBinding = async (canonical) => {
 export const validateSimilarityAlignmentResetReceipt = async (receipt, canonical) => {
   const validated = validateAlignmentResetReceiptShape(receipt, canonical?.renderRequest);
   if (validated && validated.binding !== await resetBinding(canonical)) {
-    throw new Error('Alignment reset receipt source or plan binding changed.');
+    throw diagnosticError('ALIGNMENT_RESET_EVIDENCE');
   }
   return validated;
 };

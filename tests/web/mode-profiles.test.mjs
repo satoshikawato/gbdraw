@@ -32,7 +32,7 @@ const {
   WEB_UX_PROFILE_VERSION
 } = await import(pathToFileURL(join(tempDir, 'js', 'web-ux-profile.js')));
 const { resolveLinearComparisonPlan } = await import(
-  pathToFileURL(join(tempDir, 'js', 'app', 'linear-comparisons.js'))
+  pathToFileURL(join(tempDir, 'js', 'services', 'linear-comparisons.js'))
 );
 
 const normalizedComparison = (filters) => ({

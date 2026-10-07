@@ -1,10 +1,10 @@
 // @ts-check
 const { defineConfig } = require('@playwright/test');
-const baseConfig = require('./playwright.config.js');
+const baseConfig = require('../../../playwright.config.js');
 
 module.exports = defineConfig({
   ...baseConfig,
-  testDir: './tests/web/contracts',
+  testDir: '../contracts',
   testMatch: 'gallery-publication-parity.serial.spec.js',
   fullyParallel: false,
   retries: 0,

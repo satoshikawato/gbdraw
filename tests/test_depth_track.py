@@ -2449,3 +2449,148 @@ def test_linear_depth_dataframe_is_computed_once_per_record(
 
     assert call_count == 1
     assert canvas.tostring().count("L") < 200
+
+
+# OV-119: Depth TSV positions are source coordinates of the named record. A crop
+# keeps only the positions inside it, and a reverse complement flips them.
+
+_FRAME_LENGTH = 1000
+
+
+def _frame_record() -> SeqRecord:
+    record = SeqRecord(Seq("ACGT" * (_FRAME_LENGTH // 4)), id="chr", name="chr")
+    record.annotations.update({"molecule_type": "DNA", "topology": "circular"})
+    return record
+
+
+def _frame_table(*spans: tuple[int, int, float]) -> pd.DataFrame:
+    depths = [0.0] * _FRAME_LENGTH
+    for start, end, value in spans:
+        for position in range(start, end + 1):
+            depths[position - 1] = float(value)
+    return pd.DataFrame(
+        {
+            "reference_name": ["chr"] * _FRAME_LENGTH,
+            "position": list(range(1, _FRAME_LENGTH + 1)),
+            "depth": depths,
+        }
+    )
+
+
+# Coverage 100 inside chr:601-700; 500 and 900 outside the chr:601-800 crop.
+_CROP_SPANS = ((1, 200, 500.0), (601, 700, 100.0), (801, 1000, 900.0))
+# Coverage 100 only at source 1-100.
+_HEAD_SPANS = ((1, 100, 100.0),)
+_HEAD_BINS = [(position, 100.0 if position == 0 else 0.0) for position in range(0, 1000, 100)]
+_HEAD_BINS_FLIPPED = [(position, 100.0 if position == 900 else 0.0) for position in range(0, 1000, 100)]
+
+_RECORD_FRAME_CASES = {
+    "crop": ("chr:601-800", False, _CROP_SPANS, [(0, 100.0), (100, 0.0)]),
+    "crop_rc": ("chr:601-800:rc", False, _CROP_SPANS, [(0, 0.0), (100, 100.0)]),
+    "reverse": (None, True, _HEAD_SPANS, _HEAD_BINS_FLIPPED),
+    "forward_control": (None, False, _HEAD_SPANS, _HEAD_BINS),
+}
+
+
+def _transformed_frame_record(region: str | None, reverse: bool) -> SeqRecord:
+    import logging
+
+    from gbdraw.io.record_select import reverse_records
+    from gbdraw.io.regions import apply_region_specs, parse_region_spec
+
+    log = logging.getLogger(__name__)
+    record = _frame_record()
+    if region is not None:
+        record = apply_region_specs([record], [parse_region_spec(region)], log=log)[0]
+    return reverse_records((record,), reverse, log=log)[0]
+
+
+@pytest.mark.parametrize("case", sorted(_RECORD_FRAME_CASES))
+def test_depth_df_maps_source_positions_through_the_record_coordinate_map(case: str) -> None:
+    region, reverse, spans, expected = _RECORD_FRAME_CASES[case]
+    record = _transformed_frame_record(region, reverse)
+
+    binned = depth_df(record, _frame_table(*spans), window=100, step=100)
+
+    assert list(zip(binned["position"].tolist(), binned["depth"].tolist())) == expected
+
+
+def test_depth_df_crop_keeps_only_rows_inside_the_crop_for_partial_windows() -> None:
+    record = _transformed_frame_record("chr:651-750", False)
+    table = _frame_table((1, 100, 7.0), (651, 700, 10.0), (701, 750, 30.0), (751, 1000, 9.0))
+
+    binned = depth_df(record, table, window=40, step=40)
+
+    assert binned["position"].tolist() == [0, 40, 80]
+    assert binned["depth"].tolist() == pytest.approx([10.0, 25.0, 30.0])
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+@pytest.mark.parametrize("case", sorted(_RECORD_FRAME_CASES))
+def test_drawn_depth_follows_crop_and_reverse_complement(
+    mode: str, case: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import gbdraw.render.drawers.circular.depth as circular_drawer
+    import gbdraw.render.drawers.linear.depth as linear_drawer
+    from gbdraw.api.request_render import plan_request
+    from gbdraw.api.requests import (
+        CircularDiagramRequest,
+        InMemoryRecordSource,
+        LinearDiagramRequest,
+        RecordInput,
+        RecordPresentation,
+    )
+    from gbdraw.io.regions import parse_region_spec
+
+    region, reverse, spans, expected = _RECORD_FRAME_CASES[case]
+    drawn: list[tuple[int, list[tuple[int, float]]]] = []
+    if mode == "circular":
+        real_circular = circular_drawer.generate_circular_depth_path_desc
+
+        def capture_circular(radius, record_len, plot_df, *args, **kwargs):
+            drawn.append((int(record_len), list(zip(plot_df["position"], plot_df["depth"]))))
+            return real_circular(radius, record_len, plot_df, *args, **kwargs)
+
+        monkeypatch.setattr(circular_drawer, "generate_circular_depth_path_desc", capture_circular)
+        request_type, options_type = CircularDiagramRequest, CircularDiagramOptions
+    else:
+        real_linear = linear_drawer.calculate_depth_path_desc
+
+        def capture_linear(start_x, start_y, plot_df, record_len, *args, **kwargs):
+            drawn.append((int(record_len), list(zip(plot_df["position"], plot_df["depth"]))))
+            return real_linear(start_x, start_y, plot_df, record_len, *args, **kwargs)
+
+        monkeypatch.setattr(linear_drawer, "calculate_depth_path_desc", capture_linear)
+        request_type, options_type = LinearDiagramRequest, LinearDiagramOptions
+
+    request = request_type(
+        records=(
+            RecordInput(
+                InMemoryRecordSource(_frame_record()),
+                region=parse_region_spec(region) if region is not None else None,
+                presentation=RecordPresentation(reverse_complement=reverse),
+            ),
+        ),
+        options=options_type(
+            config=apply_config_overrides(
+                None, {"canvas.show_gc": False, "canvas.show_skew": False}
+            ),
+            depth_table=_frame_table(*spans),
+            depth_window=100,
+            depth_step=100,
+        ),
+    )
+    result = plan_request(request).build()
+    drawing = result.drawing if hasattr(result, "drawing") else result
+    svg = drawing.tostring()
+
+    expected_length = 200 if region is not None else _FRAME_LENGTH
+    assert drawn == [(expected_length, expected)]
+    # The Auto depth maximum comes from the rows inside the drawn region.
+    tick_labels = {
+        "".join(node.itertext())
+        for node in ET.fromstring(svg).iter()
+        if node.tag.endswith("}text")
+    }
+    assert "100x" in tick_labels
+    assert not {"500x", "900x"} & tick_labels

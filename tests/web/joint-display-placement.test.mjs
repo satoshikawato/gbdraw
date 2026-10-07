@@ -15,7 +15,7 @@ import {
   featureIdentityKeyOf, nameFeaturePlacementFailure, restorePlacements
 } from '../../gbdraw/web/js/services/feature-placement.js';
 
-import { resolveLinearComparisonPlan } from '../../gbdraw/web/js/app/linear-comparisons.js';
+import { resolveLinearComparisonPlan } from '../../gbdraw/web/js/services/linear-comparisons.js';
 
 const target = (recordKey = 'card', biologicalFeatureId = 'feature') => ({
   recordKey, biologicalFeatureId, placement: { kind: 'main' }

@@ -3,7 +3,7 @@
 import { webcrypto } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { gunzipSync, gzipSync } from 'node:zlib';
-import { resolveLinearComparisonPlan } from '../gbdraw/web/js/app/linear-comparisons.js';
+import { resolveLinearComparisonPlan } from '../gbdraw/web/js/services/linear-comparisons.js';
 import {
   createGallerySessionPublication
 } from '../gbdraw/web/js/services/gallery-session-publication.js';

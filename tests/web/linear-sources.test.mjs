@@ -13,7 +13,7 @@ import {
   splitLosatSourceResult
 } from '../../gbdraw/web/js/app/linear-sources.js';
 import { readFileSync } from 'node:fs';
-import { buildLosatJobSpecs } from '../../gbdraw/web/js/app/linear-comparisons.js';
+import { buildLosatJobSpecs } from '../../gbdraw/web/js/services/linear-comparisons.js';
 import {
   buildLosatCachePayload,
   extractLosatFastaFast

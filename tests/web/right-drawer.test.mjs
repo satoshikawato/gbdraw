@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
+import { createRightDrawerController } from '../../gbdraw/web/js/app/right-drawer.js';
 import {
   captureRightDrawerState,
-  createRightDrawerController,
   restoreRightDrawerState
-} from '../../gbdraw/web/js/app/right-drawer.js';
+} from '../../gbdraw/web/js/services/right-drawer-state.js';
 
 const ref = (value) => ({ value });
 

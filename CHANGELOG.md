@@ -24,10 +24,50 @@ write-up of a release.
 - Legend editor (web app): Generate draws the Legend with a row added in the Legend
   editor where the add placed it. Before, Generate moved the added row away from the
   other rows, in Linear past the right edge of the canvas, where its caption was cut.
+- Legend names (web app): Generate no longer fails with "The generated result
+  could not be accepted" after a **Depth** row renamed in the Legend is hidden by
+  **Show Depth**, in Linear and Circular. The row is not drawn; as for a renamed GC
+  row that is switched off, it returns under its series caption when Depth is
+  shown again.
+- Legend names (web app): a Legend rename of a row that only track data names
+  (a Depth series, an annotation set legend label) is now retired together with
+  that data, with the color and stroke stored under the new name. Generate no
+  longer fails with "The generated result could not be accepted" after the Depth
+  file or track of a renamed row is removed, or the file is replaced by one with
+  another label. A replacement that keeps the row's caption keeps the rename, and
+  Undo restores the data, the name, and the styles.
+- Depth tracks (web app): a Depth series that no record gives a Depth TSV now
+  fails Generate with "The depth input or settings are invalid. Depth series N.
+  Supply the required value." and the **Depth** actions. The same failure showed
+  "The operation failed without recognized diagnostic information".
+- Feature strokes (web app): a stroke set on one feature in the feature popup is no
+  longer lost when Generate draws a Result without that feature, such as a Generate
+  in the other mode (Circular or Linear). The stroke stays in the draft and in a
+  saved Session, and the next Generate that draws the feature draws it again.
+- CLI: `gbdraw circular|linear --session <Session 40-44> --session_output out.json`
+  (and `--save_session`) keeps the Feature visibility, Label visibility, and label
+  text edits that the Web app saved by rendered feature ID. Before, the rewritten
+  Session dropped them: the diagram kept their effect through the request's tables,
+  but the Web app no longer listed them as edits. The replay now moves each edit to
+  `features.featureOverrides` through the Session's saved feature catalog, as the
+  Web app does on Load, and logs how many edits it dropped or now applies to fewer
+  features.
+- Labels (web app): **Load Label TSV** with a table that applies to no label of the
+  displayed Results no longer removes the existing label edits. Before, it cleared the
+  bulk and per-feature label edits, recorded a "Load label edits" Undo step, and
+  reported "Applied to 0 label(s)." It now changes nothing, records no step, and says
+  that no row matched and that the existing label edits were kept.
 - CLI: `gbdraw circular|linear --session <file> --session_output out.json` (and
   `--save_session`) keeps the resource IDs and file names of the Session's unchanged
   inputs. Before, the rewritten Session renamed them to positional IDs such as
   `record-1-genbank`, and table files lost the names they were uploaded with.
+- Depth tracks: Depth TSV positions now follow a crop and a reverse complement,
+  in Linear and Circular, on the command line, in the Python API, and in the web
+  app. A crop such as `--region chr:601-800` drew the TSV rows at positions 1-200
+  in place of the rows at 601-800, and a reverse-complemented record drew its
+  coverage mirrored. Positions are source coordinates of the named record; a crop
+  keeps only the positions inside it, and a reverse complement flips them. The
+  automatic Depth maximum now comes from the drawn positions only.
 - CLI: `gbdraw circular|linear --session <Session 41-44> --session_output out.json`
   (and `--save_session`) no longer fails with "Feature placement drafts require a
   circular or linear scope." for a Session whose Feature placement drafts were saved by

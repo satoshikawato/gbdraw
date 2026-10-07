@@ -6,7 +6,7 @@ import {
   requestFeatureVisibilityRules,
   resolveFeatureDrawn,
   setFeatureVisibilityOverride
-} from '../../gbdraw/web/js/app/feature-visibility.js';
+} from '../../gbdraw/web/js/services/feature-visibility.js';
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 

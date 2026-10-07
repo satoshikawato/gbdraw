@@ -40,7 +40,7 @@ const {
   createLinearComparisonEdge,
   hasLinearComparisonIntent,
   resolveLinearComparisonPlan
-} = await load('app/linear-comparisons.js');
+} = await load('services/linear-comparisons.js');
 
 const set = createAnnotationSet({
   id: 'review',

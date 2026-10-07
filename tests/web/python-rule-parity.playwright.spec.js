@@ -228,7 +228,8 @@ test('25,000-feature Python preparation keeps the event loop responsive and reus
   await openApp(page);
   expect((await getDiagramWorkerActivity(page)).constructions).toBe(0);
   const result = await page.evaluate(async () => {
-    const { createRulePreparation, ruleMatchesFeature } = await import('/gbdraw/web/js/app/rule-matching.js');
+    const { createRulePreparation } = await import('/gbdraw/web/js/app/rule-matching.js');
+    const { ruleMatchesFeature } = await import('/gbdraw/web/js/services/rule-matchers.js');
     const { runDiagramHelperOperation, DIAGRAM_HELPER_OPERATIONS } = await import('/gbdraw/web/js/services/diagram-generation.js');
     const features = Array.from({ length: 25000 }, (_, i) => ({ type: 'CDS', svg_id: `f${i}`, qualifiers: { product: [i % 2 ? 'other' : 'β-lactamase'] } }));
     const state = { extractedFeatures: { value: features }, manualSpecificRules: [] };

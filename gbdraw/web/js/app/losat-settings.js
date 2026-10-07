@@ -1,6 +1,6 @@
 // @ts-check
 import { normalizeCollinearSearchScope } from '../services/losat-normalization.js';
-import { buildLosatJobSpecs } from './linear-comparisons.js';
+import { buildLosatJobSpecs } from '../services/linear-comparisons.js';
 import { losatRecordGencode, planLosatSourceJobs } from './linear-sources.js';
 import { getLosatHardwareThreads, resolveLosatThreadPlan } from '../services/losat-thread-plan.js';
 import { losatThreadingPrecondition } from '../services/losat.js';

@@ -14,7 +14,7 @@ const modulePaths = [
   'gbdraw/web/js/app/pairwise-match-popup.js',
   'gbdraw/web/js/services/feature-utils.js',
   'gbdraw/web/js/services/feature-sequence-fasta.js',
-  'gbdraw/web/js/app/match-sequences.js',
+  'gbdraw/web/js/services/match-sequences.js',
   'gbdraw/web/js/services/record-source-coordinates.js',
   'gbdraw/web/js/services/genbank-header.js',
   'gbdraw/web/js/services/conservation-series.js',
@@ -49,8 +49,8 @@ const instrumentedPopupSource = popupSource
     "import { buildFeatureSequenceFastas as buildFeatureSequenceFastasBase } from '../services/feature-sequence-fasta.js';"
   )
   .replace(
-    "import { buildMatchSequenceBundle } from './match-sequences.js';",
-    "import { buildMatchSequenceBundle as buildMatchSequenceBundleBase } from './match-sequences.js';"
+    "import { buildMatchSequenceBundle } from '../services/match-sequences.js';",
+    "import { buildMatchSequenceBundle as buildMatchSequenceBundleBase } from '../services/match-sequences.js';"
   )
   .replace(
     '  featureIdentity,\n  identityMatches,\n  renderedFeatureIdentity,',
@@ -104,7 +104,7 @@ const { admitFeatureCatalog } = await import(pathToFileURL(join(
 )));
 const { createSequenceSourceRegistry } = await import(pathToFileURL(join(
   tempRoot,
-  'gbdraw/web/js/app/match-sequences.js'
+  'gbdraw/web/js/services/match-sequences.js'
 )));
 
 const elementFrom = (attributes) => ({

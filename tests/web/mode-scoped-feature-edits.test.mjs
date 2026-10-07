@@ -11,7 +11,7 @@ import {
   countUnresolvedFeatureEdits,
   pruneUnmatchedFeatureOverrides,
   removeUnresolvedFeatureEdits
-} from '../../gbdraw/web/js/app/feature-visibility.js';
+} from '../../gbdraw/web/js/services/feature-visibility.js';
 import { replaceFeatureEdits } from '../../gbdraw/web/js/app/feature-editor/feature-edit-table.js';
 import { migrateSessionFeaturePlacements } from '../../gbdraw/web/js/services/feature-edit-migration.js';
 import {

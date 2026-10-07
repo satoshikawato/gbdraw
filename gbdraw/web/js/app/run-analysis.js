@@ -75,7 +75,7 @@ import { buildRunInfo, buildSourceRecipe, summarizeLosatRuntimes } from './run-i
 import {
   buildLosatJobSpecs,
   resolveLinearComparisonPlan
-} from './linear-comparisons.js';
+} from '../services/linear-comparisons.js';
 import {
   buildDefaultColorOverrideTsv,
   normalizePaletteColors
@@ -89,7 +89,7 @@ import { rebindRuleColorOverrides } from './rule-matching.js';
 import {
   pruneUnmatchedFeatureOverrides,
   serializeFeatureVisibilityRules
-} from './feature-visibility.js';
+} from '../services/feature-visibility.js';
 import {
   normalizeDefinitionLineStyleState
 } from '../services/definition-line-style-state.js';
@@ -102,7 +102,7 @@ import { downloadBlob, downloadTextFile } from '../services/text-download.js';
 import {
   normalizeCircularPlotTitlePosition,
   normalizeLinearPlotTitlePosition
-} from './plot-title-position.js';
+} from '../services/layout-preferences.js';
 import {
   normalizeCurrentPairwiseMatchStyle,
   requireCurrentCircularMultiRecordSizeMode,
@@ -4890,11 +4890,9 @@ export const createRunAnalysis = ({
         featureColorOverrides,
         cloneJsonValue(candidateCommit.featureColorOverrides, {})
       );
-      Object.keys(featureStrokeOverrides).forEach((key) => delete featureStrokeOverrides[key]);
-      Object.assign(
-        featureStrokeOverrides,
-        cloneJsonValue(candidateCommit.featureStrokeOverrides, {})
-      );
+      // Feature strokes stay in the draft when this Result does not draw their
+      // feature (the other mode's, or one this request leaves out); the next
+      // Generate that draws the feature draws them again (R2, OIPC-C06, OV-84).
       setFeatureEditorStatus({
         status: candidateExtractedFeatures.length ? 'summary-ready' : 'idle',
         generationId: featureExtractionRequestId,

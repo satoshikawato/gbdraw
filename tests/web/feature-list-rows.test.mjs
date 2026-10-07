@@ -6,7 +6,7 @@ import {
   featureDrawnContext,
   listFeatureRows,
   setFeatureVisibilityOverride
-} from '../../gbdraw/web/js/app/feature-visibility.js';
+} from '../../gbdraw/web/js/services/feature-visibility.js';
 
 // R-5 (Owner decision 2026-10-05): the Features list and Search features list
 // the displayed Result's biological features that are of a selected type, have

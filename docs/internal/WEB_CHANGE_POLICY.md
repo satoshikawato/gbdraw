@@ -94,15 +94,41 @@ a pull request branch to be up to date with `dev`, so a pull request that
 passed on an older base can merge without another CI cycle. Two rules replace
 the up-to-date requirement:
 
-- After a pull request that changes a governance, policy, checker, or
-  authority file merges into `dev`, update every other open pull request to
-  `dev` with `gh pr update-branch <number>`, and merge it only after its
-  required checks pass again. These files are the
-  [current guard scope](#current-guard-scope),
-  `docs/internal/SELECTIVE_CI.md`, `tools/ci-impact.mjs`, and
-  `tools/ci-impact-policy.mjs`. Both required checks run trusted code from the
-  pull request base, so a result computed on the older base applied the old
-  rules.
+- After a pull request that changes how the required checks judge a pull
+  request merges into `dev`, update every other open pull request to `dev`
+  with `gh pr update-branch <number>`, and merge it only after its required
+  checks pass again. Both required checks run trusted code from the pull
+  request base, so a result computed on the older base applied the old rules.
+  These files are:
+  - the checker: `tools/check-web-change-budget.mjs`,
+    `tools/web-architecture-detectors.mjs`,
+    `tools/web-architecture-evaluation.mjs`,
+    `tools/web-owner-graph-detectors.mjs`,
+    `tools/web-product-impact-evaluation.mjs`,
+    `tools/web-product-impact-decision-source.mjs`,
+    `tools/web-change-source.mjs`, `tools/web-promotion-context.mjs`, and
+    `tools/check-promotion-readiness.mjs`;
+  - the rule data that the checker reads from the base:
+    `tools/web-change-policy.json`, `tools/web-architecture-rules.json`,
+    `tools/web-architecture-violations.json`,
+    `tools/web-product-impact-map.json`, `tools/web-product-decisions.json`,
+    and `tools/web-owner-graph.json`;
+  - the CI plan: `tools/ci-impact.mjs` and `tools/ci-impact-policy.mjs`;
+  - the workflows of the two required checks: `.github/workflows/test.yml` and
+    `.github/workflows/web-base-policy.yml`.
+- A change to `tools/web-design-rule-guards.json` updates only the open pull
+  requests that change a file named by an added, removed, or changed entry.
+  The checker reads the registry only to classify changes to those files.
+- Any other change needs no update of open pull requests. This covers a guard
+  test such as `tests/web/architecture-contracts.test.mjs`, the rule text in
+  `gbdraw/web/CLAUDE.md`, and the policy, contract, and template documents of
+  the [current guard scope](#current-guard-scope) and
+  `docs/internal/SELECTIVE_CI.md`. The checks classify these files by path and
+  do not read their content from the base, and integrated `dev` staging runs
+  a changed guard test on the merged SHA. If the required checks of such an
+  open pull request run again later, the trusted base check compares the
+  newer `dev` tree with the pull request head, so it can report those files as
+  part of the pull request. Update the pull request then.
 - Integrated `dev` staging is the safety net after merge. It runs on each
   exact merged SHA and finds conflicts between pull requests that passed on
   different bases.

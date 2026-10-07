@@ -17,7 +17,6 @@ const {
   buildRunInfo,
   LOSAT_DATABASE_SCOPE_NOTE,
   buildSourceRecipe,
-  isCliInvocationSessionExportable,
   quoteShellArg,
   reproducibilityLabel,
   summarizeLosatRuntimes
@@ -1000,7 +999,7 @@ const linearCanonical = canonical({
   assert.equal(reproducibilityLabel(info.reproducibility.level), 'Source recipe needs helper files');
   assert.match(info.reproducibility.notes.join('\n'), /combined_d\.tsv/);
   assert.match(info.reproducibility.notes.join('\n'), /\.gbdraw-session\.json/);
-  assert.equal(isCliInvocationSessionExportable(info.invocation), false);
+  assert.equal(info.invocation.sessionExportable, false);
 }
 
 {
@@ -1058,7 +1057,7 @@ const linearCanonical = canonical({
   ]);
   assert.equal(info.reproducibility.level, 'exact-uploaded-files');
   assert.equal(reproducibilityLabel(info.reproducibility.level), 'Source recipe ready');
-  assert.equal(isCliInvocationSessionExportable(info.invocation), true);
+  assert.equal(info.invocation.sessionExportable, true);
 }
 
 {
@@ -1079,7 +1078,7 @@ const linearCanonical = canonical({
   assert.match(info.reproducibility.notes.join('\n'), /Download reproducibility files/);
   assert.match(info.reproducibility.notes.join('\n'), /session restore/);
   assert.equal(info.sessionCommand, '');
-  assert.equal(isCliInvocationSessionExportable(info.invocation), false);
+  assert.equal(info.invocation.sessionExportable, false);
 }
 
 // Until the atomic writer can represent display, no source recipe may claim a
