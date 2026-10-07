@@ -4,6 +4,7 @@ import {
   readLeadingTranslate,
   replaceLeadingTranslate
 } from './transform-utils.js';
+import { planLegendComposition } from '../../services/legend-layout.js';
 
 export const COMPOSITION_SCHEMA_VERSION = 1;
 export const COMPOSITION_SCHEMA_ATTRIBUTE = 'data-gbdraw-composition-schema';
@@ -319,8 +320,6 @@ const translated = (bounds, dx, dy) => ({
 });
 const maxX = (bounds) => bounds.x + bounds.width;
 const maxY = (bounds) => bounds.y + bounds.height;
-const centerX = (bounds) => bounds.x + bounds.width / 2;
-const centerY = (bounds) => bounds.y + bounds.height / 2;
 const unionBounds = (boundsList) => {
   if (!boundsList.length) return null;
   const minX = Math.min(...boundsList.map((bounds) => bounds.x));
@@ -329,176 +328,20 @@ const unionBounds = (boundsList) => {
   const bottom = Math.max(...boundsList.map(maxY));
   return { x: minX, y: minY, width: right - minX, height: bottom - minY };
 };
-const intersects = (left, right, clearance = 0) => !(
-  maxX(left) + clearance <= right.x ||
-  maxX(right) + clearance <= left.x ||
-  maxY(left) + clearance <= right.y ||
-  maxY(right) + clearance <= left.y
-);
-const alignMin = (bounds, x, y) => ({
-  translation: [x - bounds.x, y - bounds.y],
-  bounds: { x, y, width: bounds.width, height: bounds.height }
+
+// The metadata and the editor hold bounds as {x, y, width, height}; Python's
+// planner holds min/max boxes. The planner is the Python-order port in
+// services/legend-layout.js (`planLegendComposition`), so a replan equals
+// `plan_composition` given the same boxes; the payloads go back as
+// `_bounds_payload` writes them.
+/** @param {{ x: number, y: number, width: number, height: number }} bounds */
+const toBox = (bounds) => ({
+  minX: bounds.x, minY: bounds.y, maxX: bounds.x + bounds.width, maxY: bounds.y + bounds.height
 });
-
-const dockLegend = (primary, legend, side, spacing) => {
-  if (side === 'left') {
-    return alignMin(
-      legend,
-      primary.x - spacing.dockGapPx - legend.width,
-      centerY(primary) - legend.height / 2
-    );
-  }
-  if (side === 'right') {
-    return alignMin(legend, maxX(primary) + spacing.dockGapPx, centerY(primary) - legend.height / 2);
-  }
-  if (side === 'top') {
-    return alignMin(
-      legend,
-      centerX(primary) - legend.width / 2,
-      primary.y - spacing.dockGapPx - legend.height
-    );
-  }
-  return alignMin(legend, centerX(primary) - legend.width / 2, maxY(primary) + spacing.dockGapPx);
-};
-
-const overlayAxisRange = (minimum, maximum, itemSize, nearMinimum, boundaryRatio) => {
-  let low = minimum;
-  let high = maximum - itemSize;
-  const midpointStart = low + boundaryRatio * (high - low);
-  if (nearMinimum) high = Math.min(high, midpointStart);
-  else low = Math.max(low, midpointStart);
-  return low > high ? null : [low, high];
-};
-
-const overlayAxisValues = (range, itemSize, obstacles, clearance, axis) => {
-  const values = new Set(range);
-  obstacles.forEach((obstacle) => {
-    if (axis === 'x') {
-      values.add(obstacle.x - clearance - itemSize);
-      values.add(maxX(obstacle) + clearance);
-    } else {
-      values.add(obstacle.y - clearance - itemSize);
-      values.add(maxY(obstacle) + clearance);
-    }
-  });
-  return [...values].filter((value) => value >= range[0] && value <= range[1]).sort((a, b) => a - b);
-};
-
-const compareScore = (left, right) => {
-  for (let index = 0; index < left.length; index += 1) {
-    if (left[index] !== right[index]) return left[index] - right[index];
-  }
-  return 0;
-};
-
-const overlayLegend = (primary, legend, side, obstacles, spacing, policy) => {
-  const left = side === 'upper_left' || side === 'lower_left';
-  const upper = side === 'upper_left' || side === 'upper_right';
-  const anchorX = left ? primary.x : maxX(primary) - legend.width;
-  const anchorY = upper ? primary.y : maxY(primary) - legend.height;
-  const anchor = alignMin(legend, anchorX, anchorY);
-  const conflicts = (bounds) => obstacles
-    .map((obstacle, index) => intersects(bounds, obstacle, spacing.overlayClearancePx) ? index : -1)
-    .filter((index) => index >= 0);
-  const initialConflicts = conflicts(anchor.bounds);
-  const xRange = overlayAxisRange(
-    primary.x,
-    maxX(primary),
-    legend.width,
-    left,
-    policy.quadrantBoundaryRatio
-  );
-  const yRange = overlayAxisRange(
-    primary.y,
-    maxY(primary),
-    legend.height,
-    upper,
-    policy.quadrantBoundaryRatio
-  );
-  if (xRange && yRange) {
-    if (initialConflicts.length === 0) return anchor;
-    const candidates = [];
-    overlayAxisValues(xRange, legend.width, obstacles, spacing.overlayClearancePx, 'x').forEach((x) => {
-      overlayAxisValues(yRange, legend.height, obstacles, spacing.overlayClearancePx, 'y').forEach((y) => {
-        candidates.push([x, y]);
-      });
-    });
-    const candidateScore = ([x, y]) => {
-      const metrics = {
-        totalAnchorDistance: Math.abs(x - anchorX) + Math.abs(y - anchorY),
-        xAnchorDistance: Math.abs(x - anchorX),
-        yAnchorDistance: Math.abs(y - anchorY),
-        nearEdgeX: left ? x : -x,
-        nearEdgeY: upper ? y : -y
-      };
-      return policy.candidateScoreOrder.map((name) => metrics[name]);
-    };
-    candidates.sort((a, b) => compareScore(candidateScore(a), candidateScore(b)));
-    for (const [x, y] of candidates) {
-      const candidate = alignMin(legend, x, y);
-      if (conflicts(candidate.bounds).length === 0) return candidate;
-    }
-  }
-  const horizontal = alignMin(
-    legend,
-    left ? primary.x - spacing.overlayClearancePx - legend.width : maxX(primary) + spacing.overlayClearancePx,
-    anchorY
-  );
-  const vertical = alignMin(
-    legend,
-    anchorX,
-    upper ? primary.y - spacing.overlayClearancePx - legend.height : maxY(primary) + spacing.overlayClearancePx
-  );
-  const candidatesByName = { horizontal, vertical };
-  const canvasGrowthCandidates = policy.canvasGrowthCandidateOrder.map(
-    (name) => candidatesByName[name]
-  );
-  const growthKey = (candidate, index) => {
-    // unionBounds is null only for an empty list; this one holds two entries.
-    const union = /** @type {NonNullable<ReturnType<typeof unionBounds>>} */ (
-      unionBounds([primary, candidate.bounds])
-    );
-    const metrics = {
-      addedArea: union.width * union.height - primary.width * primary.height,
-      addedExtent: union.width - primary.width + union.height - primary.height,
-      candidateOrder: index
-    };
-    return policy.canvasGrowthScoreOrder.map((name) => metrics[name]);
-  };
-  return canvasGrowthCandidates
-    .map((candidate, index) => ({ candidate, score: growthKey(candidate, index) }))
-    .sort((a, b) => compareScore(a.score, b.score))[0]
-    .candidate;
-};
-
-const placeTitle = (primary, title, side, spacing, legendPlacement, legendSide) => {
-  if (side === 'center') {
-    return alignMin(title, centerX(primary) - title.width / 2, centerY(primary) - title.height / 2);
-  }
-  const sameSide = Boolean(legendPlacement) && side === legendSide;
-  let placement;
-  if (side === 'top') {
-    const targetBottom = sameSide
-      ? legendPlacement.bounds.y - spacing.stackGapPx
-      : primary.y - spacing.titleGapPx;
-    placement = alignMin(title, centerX(primary) - title.width / 2, targetBottom - title.height);
-  } else {
-    const targetTop = sameSide
-      ? maxY(legendPlacement.bounds) + spacing.stackGapPx
-      : maxY(primary) + spacing.titleGapPx;
-    placement = alignMin(title, centerX(primary) - title.width / 2, targetTop);
-  }
-  if (
-    legendPlacement && (legendSide === 'left' || legendSide === 'right') &&
-    intersects(placement.bounds, legendPlacement.bounds)
-  ) {
-    const y = side === 'top'
-      ? legendPlacement.bounds.y - spacing.stackGapPx - title.height
-      : maxY(legendPlacement.bounds) + spacing.stackGapPx;
-    placement = alignMin(title, centerX(primary) - title.width / 2, y);
-  }
-  return placement;
-};
+/** @param {import('../../services/legend-layout.js').LayoutBox} box */
+const toPayloadBounds = (box) => ({
+  x: box.minX, y: box.minY, width: box.maxX - box.minX, height: box.maxY - box.minY
+});
 
 export const planComposition = ({
   primaryBounds,
@@ -516,55 +359,27 @@ export const planComposition = ({
   const resolvedSpacing = validateSpacing(spacing);
   const resolvedOverlayPolicy = validateOverlayPolicy(overlayPolicy);
   const obstacles = overlayObstacles.map((bounds, index) => validateBounds(bounds, `overlayObstacles[${index}]`));
-  const working = [{ role: 'primary', translation: [0, 0], bounds: primary }];
-  /** @type {ReturnType<typeof dockLegend> | ReturnType<typeof overlayLegend> | null} */
-  let legendPlacement = null;
-  if (legendBounds && legendSide !== 'none') {
-    const legend = validateBounds(legendBounds, 'legendBounds');
-    if (legend.width > 0 && legend.height > 0) {
-      legendPlacement = ['left', 'right', 'top', 'bottom'].includes(legendSide)
-        ? dockLegend(primary, legend, legendSide, resolvedSpacing)
-        : overlayLegend(
-          primary,
-          legend,
-          legendSide,
-          obstacles,
-          resolvedSpacing,
-          resolvedOverlayPolicy
-        );
-      working.push({ role: 'legend', ...legendPlacement });
-    }
-  }
-  if (titleBounds && titleSide !== 'none') {
-    const title = validateBounds(titleBounds, 'titleBounds');
-    if (title.width > 0 && title.height > 0) {
-      working.push({
-        role: 'title',
-        ...placeTitle(primary, title, titleSide, resolvedSpacing, legendPlacement, legendSide)
-      });
-    }
-  }
-  // `working` always holds the primary entry, so the union is not null.
-  const painted = /** @type {NonNullable<ReturnType<typeof unionBounds>>} */ (
-    unionBounds(working.map((placement) => placement.bounds))
-  );
-  const outerX = resolvedSpacing.edgePaddingPx - painted.x;
-  const outerY = resolvedSpacing.edgePaddingPx - painted.y;
-  const placements = Object.fromEntries(working.map((placement) => [
+  const legend = legendBounds && legendSide !== 'none' ? validateBounds(legendBounds, 'legendBounds') : null;
+  const title = titleBounds && titleSide !== 'none' ? validateBounds(titleBounds, 'titleBounds') : null;
+  const plan = planLegendComposition({
+    primary: toBox(primary),
+    legend: legend ? toBox(legend) : null,
+    title: title ? toBox(title) : null,
+    legendSide,
+    titleSide,
+    overlayObstacles: obstacles.map(toBox),
+    spacing: resolvedSpacing,
+    overlayPolicy: resolvedOverlayPolicy
+  });
+  const placements = Object.fromEntries(plan.placements.map((placement) => [
     placement.role,
-    {
-      automaticTranslation: [
-        placement.translation[0] + outerX,
-        placement.translation[1] + outerY
-      ],
-      finalBounds: translated(placement.bounds, outerX, outerY)
-    }
+    { automaticTranslation: placement.translation, finalBounds: toPayloadBounds(placement.finalBounds) }
   ]));
   return {
-    width: painted.width + resolvedSpacing.edgePaddingPx * 2,
-    height: painted.height + resolvedSpacing.edgePaddingPx * 2,
+    width: plan.canvas.maxX - plan.canvas.minX,
+    height: plan.canvas.maxY - plan.canvas.minY,
     placements,
-    overlayObstacles: obstacles.map((bounds) => translated(bounds, outerX, outerY)),
+    overlayObstacles: plan.overlayObstacles.map(toPayloadBounds),
     overlayPolicy: resolvedOverlayPolicy,
     spacing: resolvedSpacing
   };
