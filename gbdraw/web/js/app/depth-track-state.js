@@ -507,3 +507,20 @@ export const syncDepthSlotLabels = ({ slots, depthTracks, activeCount = null } =
     }
   });
 };
+
+/**
+ * The Legend captions the draft's Depth series would draw: each series label, and
+ * the legend label of each Depth row. The request carries no Depth source while
+ * Show Depth is off, so Python cannot name these rows then (OV-81).
+ * @param {{ depthTracks?: any[], slots?: any[] }} [options]
+ * @returns {string[]}
+ */
+export const depthSeriesLegendCaptions = ({ depthTracks, slots } = {}) => {
+  const captions = [
+    ...(Array.isArray(depthTracks) ? depthTracks : []).map((track) => track?.label),
+    ...(Array.isArray(slots) ? slots : [])
+      .filter((slot) => String(slot?.renderer || '') === 'depth')
+      .map((slot) => slot?.params?.legend_label)
+  ].map((caption) => String(caption ?? '').trim());
+  return [...new Set(captions.filter(Boolean))];
+};

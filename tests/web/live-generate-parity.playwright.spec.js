@@ -664,8 +664,9 @@ const openCanvas = async (page, mode, canvas) => {
 };
 
 // OV-65 (open): a Legend color on a row named only by a track's data (an annotation
-// set, a depth file) fails Generate once the track data is removed; the two cases
-// below are marked test.fail until the Web retires such a preference.
+// set) fails Generate once the track data is removed; the case below is marked
+// test.fail until the Web retires such a preference. Removing the depth file turns
+// Show Depth off, so its Depth row is excused as in the OV-81 cases (it passes).
 // A region annotation with a legend label draws a Legend row from its set; the
 // slot of the set is added through the track slot control.
 const addAnnotationRow = async (page, label) => {
@@ -744,7 +745,6 @@ const SIBLINGS = [
   {
     name: 'Depth row after its depth file is removed',
     mode: 'circular',
-    knownMismatch: 'OV-65: no data of the draft names the row, so Python reports it neither drawn nor suppressed and admission rejects the Legend color',
     absent: ['Depth'],
     run: async (page) => {
       await page.evaluate(() => {
@@ -757,6 +757,37 @@ const SIBLINGS = [
       await generate(page);
       await colorLegendRow(page, 'Depth');
       await page.evaluate(() => { window.__GBDRAW_APP__.files.c_depth = []; });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'Depth row after Show Depth is switched off, Circular',
+    mode: 'circular',
+    absent: ['depth'],
+    run: async (page) => {
+      await page.evaluate((text) => {
+        window.__GBDRAW_APP__.setCircularDepthFile(0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));
+      }, DEPTH_TSV);
+      await settleLive(page);
+      await generate(page);
+      await colorLegendRow(page, 'depth');
+      await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = false; });
+      await settleLive(page);
+    }
+  },
+  {
+    name: 'Depth row after Show Depth is switched off, Linear',
+    mode: 'linear',
+    absent: ['depth'],
+    run: async (page) => {
+      await page.evaluate((text) => {
+        const app = window.__GBDRAW_APP__;
+        app.setLinearDepthFile(app.linearSeqs[0], 0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' }));
+      }, DEPTH_TSV);
+      await settleLive(page);
+      await generate(page);
+      await colorLegendRow(page, 'depth');
+      await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = false; });
       await settleLive(page);
     }
   },
@@ -816,6 +847,31 @@ for (const { name, mode, canvas = null, absent = null, knownMismatch, run } of S
     await generate(page);
     const captions = (await semanticSnapshot(page)).legend.map(({ caption }) => caption);
     for (const caption of absent) expect(captions, name).not.toContain(caption);
+  });
+}
+
+// OV-81: the Legend color of a Depth row hidden by Show Depth is kept; showing
+// Depth again draws the row in that color.
+for (const [mode, addDepth] of [
+  ['circular', (text) => { window.__GBDRAW_APP__.setCircularDepthFile(0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' })); }],
+  ['linear', (text) => { const app = window.__GBDRAW_APP__; app.setLinearDepthFile(app.linearSeqs[0], 0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' })); }]
+]) {
+  test(`a Depth Legend color returns when Show Depth is switched on again (${mode})`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await openCanvas(page, mode, null);
+    await page.evaluate(addDepth, DEPTH_TSV);
+    await settleLive(page);
+    await generate(page);
+    await colorLegendRow(page, 'depth', '#7b2cbf');
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = false; });
+    await settleLive(page);
+    await generate(page);
+    expect((await semanticSnapshot(page)).legend.map(({ caption }) => caption)).not.toContain('depth');
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = true; });
+    await settleLive(page);
+    await generate(page);
+    const row = (await semanticSnapshot(page)).legend.find(({ caption }) => caption === 'depth');
+    expect(row?.fill.toLowerCase()).toBe('#7b2cbf');
   });
 }
 

@@ -22,6 +22,7 @@ import {
  * @property {string[]} [originalLegendOrder]
  * @property {boolean} [sourceReplaced]
  * @property {Iterable<string>} [addedLegendCaptions] Captions the renderer drew without a manual rule.
+ * @property {Iterable<string>} [unrequestedDepthCaptions] Captions of Depth series the request left out (Show Depth off); Python cannot name their rows (OV-81).
  * @property {Record<string, any>} [legendColorOverrides]
  * @property {Record<string, any>} [legendStrokeOverrides]
  * @property {Record<string, any>[]} [manualSpecificRules]
@@ -148,6 +149,7 @@ const compilePlanBundle = ({
   originalLegendOrder = [],
   sourceReplaced = false,
   addedLegendCaptions = [],
+  unrequestedDepthCaptions = [],
   legendColorOverrides = {},
   legendStrokeOverrides = {},
   manualSpecificRules = [],
@@ -242,6 +244,9 @@ const compilePlanBundle = ({
   const rendererDerivedCaptions = new Set(
     Array.from(addedLegendCaptions || []).map(text).filter(Boolean)
   );
+  // A Depth row the draft keeps but Show Depth hides is excused like a switched-off
+  // GC row. Python reports the GC rows; it is sent no Depth source, so the draft says.
+  const unrequestedDepth = new Set(Array.from(unrequestedDepthCaptions || []).map(text).filter(Boolean));
   const renderedIdsByDirectCaption = new Map();
   Object.entries(featureColorOverrides || {}).forEach(([key, override]) => {
     const caption = text(override?.caption);
@@ -317,7 +322,8 @@ const compilePlanBundle = ({
     const targetCaption = isOriginal ? originalCaption : caption;
     const legendRenderedIds = entry?.featureIds.length > 0
       ? entry.featureIds : [...(renderedIdsByDirectCaption.get(caption) || [])];
-    const allowMissing = !entry || (sourceReplaced && isOriginal) || (rendererDerivedCaptions.has(caption)
+    const allowMissing = !entry || (sourceReplaced && isOriginal) || unrequestedDepth.has(caption)
+      || (rendererDerivedCaptions.has(caption)
       && (legendRenderedIds.length === 0 || legendRenderedIds.every(id => hiddenRenderedIds.has(id))));
     // Each Result styles only the category features it renders. A batch Result
     // that renders none of them draws no row for the category (OV-45).
