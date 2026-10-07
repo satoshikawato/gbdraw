@@ -896,6 +896,69 @@ for (const mode of ['linear', 'circular']) {
   });
 }
 
+// OV-168: Reset Stroke and Reset all strokes give each part the stroke Generate
+// draws. In Circular on forced_label_underlay the first feature path is the
+// repeat_region underlay, which Python draws without a stroke; the reset
+// stroke of a feature is the block stroke, and an underlay keeps none.
+const drawnStrokes = page => page.evaluate(async () => {
+  const { state: s } = await import('./js/state.js');
+  const { getAllFeatureLegendGroups, getLegendEntrySwatch } = await import('./js/app/legend/utils.js');
+  const paint = document.createElement('canvas').getContext('2d');
+  const color = value => { paint.fillStyle = '#010203'; paint.fillStyle = String(value); return String(paint.fillStyle); };
+  const stroke = element => [color(element.getAttribute('stroke')), Number(element.getAttribute('stroke-width'))];
+  const read = svg => ({
+    features: Object.fromEntries([...svg.querySelectorAll('path[data-gbdraw-feature-id], path[id^="f"]')]
+      .map(path => [path.getAttribute('id'), stroke(path)])),
+    swatches: Object.fromEntries(getAllFeatureLegendGroups(svg).flatMap((group, index) => [...group.querySelectorAll('g[data-legend-key]')]
+      .map(entry => [`${index}:${entry.getAttribute('data-legend-key')}`, stroke(getLegendEntrySwatch(entry))])))
+  });
+  const content = s.results.value[s.selectedResultIndex.value].content;
+  return {
+    result: read(new DOMParser().parseFromString(content, 'image/svg+xml').documentElement),
+    mounted: read(s.svgContainer.value.querySelector('svg'))
+  };
+});
+test('M17 circular: Reset Stroke and Reset all strokes give the strokes Generate draws, next to an underlay', async ({ browser }) => {
+  test.setTimeout(600_000);
+  const page = await loadGenerated(browser, 'circular');
+  try {
+    const generated = await drawnStrokes(page);
+    expect(Object.keys(generated.mounted.features).length).toBeGreaterThan(1);
+    const strokeRows = async () => {
+      for (const [caption, stroke, width] of [['CDS', '#e63946', 3], ['repeat_region', '#2a9d8f', 4]]) {
+        await evaluateWithRetainedPromise(page, async row => {
+          const app = window.__GBDRAW_APP__;
+          const index = app.legendEntries.findIndex(e => e.caption === row.caption);
+          await app.setLegendEntryStrokeColorValue(index, row.stroke);
+          await app.updateLegendEntryStrokeWidth(index, row.width);
+        }, { caption, stroke, width });
+      }
+      await settleLive(page);
+      expect(await drawnStrokes(page), 'the rows are stroked').not.toEqual(generated);
+    };
+    const expectGenerated = async label => {
+      await settleLive(page);
+      expect(await drawnStrokes(page), `${label}: live`).toEqual(generated);
+      await generate(page);
+      expect(await drawnStrokes(page), `${label}: after Generate`).toEqual(generated);
+    };
+    await strokeRows();
+    for (const caption of ['CDS', 'repeat_region']) {
+      await evaluateWithRetainedPromise(page, async row => {
+        const app = window.__GBDRAW_APP__;
+        await app.resetLegendEntryStroke(app.legendEntries.findIndex(e => e.caption === row));
+      }, caption);
+    }
+    await expectGenerated('Reset Stroke');
+    await strokeRows();
+    await evaluateWithRetainedPromise(page, async () => { await window.__GBDRAW_APP__.resetAllStrokes(); });
+    await expectGenerated('Reset all strokes');
+    expect(page.externalRequests).toEqual([]);
+  } finally {
+    await page.context().close();
+  }
+});
+
 // OV-158 (Owner decision 2026-10-07): renaming a feature row in the Legend
 // editor turns it into a rule row, which the live edit appended to the Legend
 // and Generate kept last. The row keeps its place, live and at Generate,
