@@ -6754,19 +6754,19 @@
                             <div v-for="(entry, idx) in legendEntries" :key="idx" class="p-2 bg-slate-50 rounded border border-slate-100">
                                 <div class="flex items-center gap-1">
                                     <div class="flex flex-col shrink-0">
-                                        <button aria-label="Move up" @click="moveLegendEntryUp(idx)" :disabled="!semanticMutationAvailable || (idx === 0)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move up">
+                                        <button :aria-label="`Move ${entry.caption} up`" @click="moveLegendEntryUp(idx)" :disabled="!semanticMutationAvailable || (idx === 0)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move up">
                                             <i class="ph ph-caret-up text-xs" aria-hidden="true"></i>
                                         </button>
-                                        <button aria-label="Move down" @click="moveLegendEntryDown(idx)" :disabled="!semanticMutationAvailable || (idx === legendEntries.length - 1)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move down">
+                                        <button :aria-label="`Move ${entry.caption} down`" @click="moveLegendEntryDown(idx)" :disabled="!semanticMutationAvailable || (idx === legendEntries.length - 1)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move down">
                                             <i class="ph ph-caret-down text-xs" aria-hidden="true"></i>
                                         </button>
                                     </div>
                                     <div class="w-6 h-6 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: entry.color }" :title="entry.color"></div>
-                                    <input type="text" :value="entry.caption" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0" :disabled="!semanticMutationAvailable">
-                                    <button aria-label="Stroke options" data-history-ignore :aria-expanded="isLegendStrokeOptionsOpen(entry.caption) ? 'true' : 'false'" @click="toggleLegendStrokeOptions(entry.caption)" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="isLegendStrokeOptionsOpen(entry.caption) ? 'Hide stroke options' : 'Show stroke options'">
+                                    <input type="text" :value="entry.caption" :aria-label="`Legend entry ${entry.caption} name`" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0" :disabled="!semanticMutationAvailable">
+                                    <button :aria-label="`Stroke options for ${entry.caption}`" data-history-ignore :aria-expanded="isLegendStrokeOptionsOpen(entry.caption) ? 'true' : 'false'" @click="toggleLegendStrokeOptions(entry.caption)" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="isLegendStrokeOptionsOpen(entry.caption) ? 'Hide stroke options' : 'Show stroke options'">
                                         <i class="ph text-xs" :class="isLegendStrokeOptionsOpen(entry.caption) ? 'ph-caret-up' : 'ph-sliders-horizontal'" aria-hidden="true"></i>
                                     </button>
-                                    <button aria-label="Remove entry" @click="deleteLegendEntry(idx)" class="text-red-400 hover:text-red-600 shrink-0" title="Remove entry" :disabled="!semanticMutationAvailable">
+                                    <button :aria-label="`Remove ${entry.caption}`" @click="deleteLegendEntry(idx)" class="text-red-400 hover:text-red-600 shrink-0" title="Remove entry" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-trash text-sm" aria-hidden="true"></i>
                                     </button>
                                 </div>

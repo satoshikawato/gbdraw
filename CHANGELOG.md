@@ -75,6 +75,10 @@ write-up of a release.
 - Legend editor (web app): a renamed feature row (for example `tRNA`) keeps its place
   in the Legend, live and after Generate, in Linear and Circular. Before, the rename
   moved the row to the end of the Legend.
+- Legend editor (web app): each row's name field and its move, **Stroke options**, and
+  remove buttons now have accessible names that include the row's caption (for
+  example "Move CDS up" and "Remove CDS"), so assistive technology tells the rows
+  apart. Before, the name field had no name and every row's buttons shared one name.
 - Sessions (web app): a Session saved before Merge was limited to two rows of one
   feature type (for example one that merged `GC skew (+)` into `GC skew (-)`) loads
   as saved and keeps its merged row; a new Merge between such rows is no longer

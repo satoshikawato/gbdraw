@@ -465,12 +465,11 @@ for (const mode of ['linear', 'circular']) {
       }, stroked)]);
       await expectSteps('delete a row', [() => deleteLegendRow(page, 'repeat_region')]);
       await expectSteps('add a row', [() => addLegendRow(page, 'Manual row', '#118833')]);
-      // The second delete uses the editor's Remove entry control.
+      // The second delete uses the editor's Remove control of the row.
       await expectSteps('add a row, then delete it', [
         () => addLegendRow(page, 'Second row', '#7b2cbf'),
         async () => {
-          const index = await page.evaluate(legendIndex, 'Second row');
-          await page.locator('.right-drawer').getByRole('button', { name: 'Remove entry' }).nth(index).click();
+          await page.locator('.right-drawer').getByRole('button', { name: 'Remove Second row', exact: true }).click();
           await expect.poll(() => page.evaluate(legendIndex, 'Second row')).toBe(-1);
         }
       ]);
@@ -705,7 +704,8 @@ test('M13 circular: Stroke options is a disclosure without a History step or a s
     await page.locator('.drawer-toggle').click();
     await page.evaluate(() => window.__GBDRAW_APP__.openRightDrawerTab('legend'));
     const drawer = page.locator('.right-drawer');
-    const toggle = drawer.getByRole('button', { name: 'Stroke options' }).first();
+    const caption = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries[0].caption);
+    const toggle = drawer.getByRole('button', { name: `Stroke options for ${caption}`, exact: true });
     const start = await undoCount();
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
@@ -723,7 +723,6 @@ test('M13 circular: Stroke options is a disclosure without a History step or a s
     await settleLive(page);
     expect(await undoCount(), 'closing it records no step').toBe(start + 1);
 
-    const caption = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries[0].caption);
     const saved = readSession(await download(page, 'Save Session', testInfo.outputPath('stroke-options.gbdraw-session.json.gz')));
     const { legend } = saved.editorState;
     expect(legend.entries.filter(e => Object.hasOwn(e, 'showStroke')), 'the Session does not save the disclosure').toEqual([]);
