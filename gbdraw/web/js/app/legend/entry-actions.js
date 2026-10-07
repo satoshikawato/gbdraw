@@ -17,7 +17,7 @@ import {
   legendRowRules,
   SPECIFIC_COLOR_FILE_OWNER
 } from '../../services/specific-color-rules.js';
-import { getFeatureElementIndex, getFeatureFillElements } from '../../services/feature-dom.js';
+import { getFeatureElementIndex, getFeatureFillElements, isAutoFeatureUnderlay } from '../../services/feature-dom.js';
 import { featureOverrideKey } from '../../services/feature-override-identity.js';
 
 const normalizedColor = (value) => {
@@ -1345,7 +1345,7 @@ export const createLegendEntryActions = ({
     const featureIndex = getFeatureElementIndex(svg);
     for (const id of mountedLegendRowFeatureIds(svg, caption, legendEntries.value || [], { ownStrokeIds })) {
       const block = getFeatureFillElements(svg, id, featureIndex)
-        .find((element) => element.getAttribute('data-gbdraw-auto-feature-underlay') !== 'true');
+        .find((element) => !isAutoFeatureUnderlay(element));
       if (block) return { color: block.getAttribute('stroke'), width: block.getAttribute('stroke-width') };
     }
     return null;

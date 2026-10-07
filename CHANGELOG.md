@@ -12,6 +12,13 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Legend editor (web app): Reset Stroke, Reset all strokes, and the **Auto** stroke
+  color give each feature the stroke Generate draws when the diagram has an automatic
+  underlay (for example `repeat_region` in Circular), and Reset all strokes returns
+  each Legend row to the stroke it was drawn with. Before, these gave the features no
+  stroke there, because the default stroke was read from the underlay, which is drawn
+  without one, and Reset all strokes gave every Legend row that default stroke, GC
+  rows included.
 - Specific color rules (web app): a rule added or edited while an automatic
   rerender is updating the diagram is applied once the rerendered diagram is
   ready. Before, it could be dropped without a message when the diagram finished
