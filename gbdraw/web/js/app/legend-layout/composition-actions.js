@@ -1089,6 +1089,10 @@ const legacyAdmissionBounds = (
   };
 };
 
+/**
+ * @param {any} svg The root SVG element of a legacy Result; checked below.
+ * @param {{ legendSide?: string, titleSide?: string, userDeltas?: Record<string, any> | null }} [options]
+ */
 export const normalizeLegacyComposition = (
   svg,
   { legendSide = 'none', titleSide = 'none', userDeltas: savedUserDeltas = null } = {}

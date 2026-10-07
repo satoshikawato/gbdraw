@@ -81,7 +81,7 @@ import {
 } from './track-slot-validation.js';
 import { annotationOptionsPayload, draftAnnotationSetsOfRequest } from './annotation-state.js';
 import { classifyOptionalNumber, classifyOptionalPositiveNumber, projectOptionalNumber } from '../utils/optional-positive-number.js';
-import { SESSION_TABLE_LABELS, diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { SESSION_TABLE_LABELS, diagnosticError, normalizeCaughtError } from '../utils/error-normalization.js';
 import { materializeLegacySimilarityAlignment } from './legacy-similarity-alignment.js';
 import {
   arrowHeadLengthRatioForState,
@@ -617,7 +617,7 @@ const projectComparisonThresholds = ({ evalue, bitscore, identity, alignmentLeng
 // documented fallback; projected render values use projectOptionalNumber.
 const integerSettingOr = (value, fallback, minimum) => {
   const { value: numeric } = classifyOptionalNumber(value);
-  return Number.isInteger(numeric) && numeric >= minimum ? numeric : fallback;
+  return typeof numeric === 'number' && Number.isInteger(numeric) && numeric >= minimum ? numeric : fallback;
 };
 
 // A record label or subtitle is saved resolved. Sessions written since file
@@ -644,7 +644,8 @@ const validateProjectedDepthSources = (depthRows, logicalTrackCount) => {
 };
 
 const normalizeResourceName = (resourceId, name) => {
-  const basename = String(name || 'resource.dat').replace(/\\/g, '/').split('/').pop();
+  // split() always returns at least one element, so pop() is a string.
+  const basename = /** @type {string} */ (String(name || 'resource.dat').replace(/\\/g, '/').split('/').pop());
   const safe = basename.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[._]+|[._]+$/g, '');
   const prefix = `${resourceId}-`;
   let leaf = safe || 'resource.dat';
@@ -655,10 +656,11 @@ const normalizeResourceName = (resourceId, name) => {
 };
 
 const normalizeOriginalResourceName = (name) => {
-  const basename = String(name || '')
+  // split() always returns at least one element, so pop() is a string.
+  const basename = /** @type {string} */ (String(name || '')
     .replace(/\\/g, '/')
     .split('/')
-    .pop()
+    .pop())
     .replace(/[\u0000-\u001f\u007f]/g, '')
     .trim();
   if (!basename || basename === '.' || basename === '..') return '';
@@ -775,6 +777,7 @@ const createResourceBuilder = ({ encode = true } = {}) => {
     return resourceId;
   };
 
+  /** @param {unknown} [columns] */
   const addCanonicalTable = (resourceId, rows, columns = null) => {
     if (resources[resourceId]) return resourceId;
     const normalizedRows = Array.isArray(rows)
@@ -921,8 +924,10 @@ const circularRecordKey = (record) => {
 };
 
 const linearRegionPayload = (seq) => {
-  const start = projectOptionalNumber(seq?.region_start, { field: 'region' });
-  const end = projectOptionalNumber(seq?.region_end, { field: 'region' });
+  // projectOptionalNumber yields null or a finite number: the only arm without
+  // a number-or-null value is 'invalid', which it throws on.
+  const start = /** @type {number | null} */ (projectOptionalNumber(seq?.region_start, { field: 'region' }));
+  const end = /** @type {number | null} */ (projectOptionalNumber(seq?.region_end, { field: 'region' }));
   if (start === null && end === null) return null;
   if (start === null || end === null) {
     throw diagnosticError('REGION_INVALID', { field: 'region', reason: 'BOTH_ENDPOINTS' });
@@ -1245,7 +1250,10 @@ const buildConfigOverrides = (
           ...(hasComparisonIntent
             ? {
                 [CONFIG_OVERRIDE_PATHS.comparisonHeight]:
-                  comparisonHeight.status === 'auto' ? null : comparisonHeight.value,
+                  // hasComparisonIntent && !circular holds here, so comparisonHeight is set.
+                  /** @type {NonNullable<typeof comparisonHeight>} */ (comparisonHeight).status === 'auto'
+                    ? null
+                    : /** @type {NonNullable<typeof comparisonHeight>} */ (comparisonHeight).value,
                 [CONFIG_OVERRIDE_PATHS.pairwiseMatchStyle]: adv.pairwise_match_style
               }
             : {}),
@@ -2906,6 +2914,13 @@ const resourceAsLegacyFile = (resources, resourceId) => {
   return file;
 };
 
+/**
+ * @typedef {(resourceId: string, metadata?: Record<string, any>) => unknown} ResourceFileResolver
+ *   Builds the file a Session binding stands for from its resource id and the
+ *   binding's recorded name, type, and modification time.
+ */
+
+/** @param {ResourceFileResolver | null} [resolveResourceFile] */
 const webBindingAsLegacyFile = (resources, binding, resolveResourceFile = null, schema = 1) => {
   if (binding === null || binding === undefined) return null;
   const resourceId = String(binding.resourceId || '').trim();
@@ -2921,12 +2936,23 @@ const webBindingAsLegacyFile = (resources, binding, resolveResourceFile = null, 
   return { ...file, ...metadata, name: schema === 2 ? metadata.name : (metadata.name || file.name) };
 };
 
+/** @param {ResourceFileResolver | null} [resolveResourceFile] */
 const webBindingValueAsLegacyFile = (resources, value, resolveResourceFile = null, schema = 1) => (
   Array.isArray(value)
     ? value.map((item) => webBindingValueAsLegacyFile(resources, item, resolveResourceFile, schema))
     : webBindingAsLegacyFile(resources, value, resolveResourceFile, schema)
 );
 
+/**
+ * @param {Record<string, any>} files
+ * @param {Record<string, any> | null | undefined} webMetadata
+ * @param {Record<string, any> | null | undefined} resources
+ * @param {{
+ *   resolveResourceFile?: ResourceFileResolver | null,
+ *   sessionResourceTable?: any,
+ *   adoptCanonicalPayloads?: boolean
+ * }} [options]
+ */
 const applyWebFileBindings = (
   files,
   webMetadata,
@@ -3089,6 +3115,7 @@ const projectGeneratedProteinPipeline = (
   if (requestSchema >= 8 && Object.hasOwn(settings, 'alignOrthogroupFeature')) {
     throw new Error('Current canonical protein settings cannot contain legacy alignment state.');
   }
+  /** @type {{ target: string, sourceSchema: number } | null} */
   let legacySimilarityAlignment = null;
   if (requestSchema <= 7 && settings.alignOrthogroupFeature !== null &&
       settings.alignOrthogroupFeature !== undefined) {
@@ -3171,6 +3198,7 @@ const requireExactCanonicalFields = (value, required, fieldName) => {
   }
 };
 
+/** @param {ResourceFileResolver | null} [resolveResourceFile] */
 const canonicalDepthResourceFile = (
   ref,
   resources,
@@ -3209,6 +3237,15 @@ const canonicalDepthText = (value, fieldName) => {
   return value.trim();
 };
 
+/**
+ * @param {{
+ *   options: Record<string, any>,
+ *   records: unknown[],
+ *   resources: Record<string, any> | null | undefined,
+ *   mode: string,
+ *   resolveResourceFile?: ResourceFileResolver | null
+ * }} params
+ */
 const projectCanonicalDepthTracks = ({
   options,
   records,
@@ -3230,7 +3267,9 @@ const projectCanonicalDepthTracks = ({
     throw new Error('diagramOptions.depthTracks must be a non-empty array.');
   }
 
+  /** @type {unknown[][]} */
   const sourceRows = Array.from({ length: records.length }, () => []);
+  /** @type {unknown[][]} */
   const fileRows = Array.from({ length: records.length }, () => []);
   const tracks = options.depthTracks.map((track, trackIndex) => {
     const fieldName = `diagramOptions.depthTracks[${trackIndex}]`;
@@ -3357,7 +3396,7 @@ const readSessionTable = (table, read) => {
   try {
     return read();
   } catch (error) {
-    const model = normalizeUserFacingError(error);
+    const model = normalizeCaughtError(error);
     if (['UNKNOWN', 'VALIDATION_UNCLASSIFIED'].includes(model.code)) throw error;
     throw diagnosticError(model.code, { ...model.context, sessionTable: table }, { stage: model.stage });
   }
@@ -3658,6 +3697,15 @@ const projectLegacyCanonicalCircularSlot = (slot) => {
   return migrateLegacyCircularTrackSlot(projected);
 };
 
+/**
+ * @param {Record<string, any> | null | undefined} resources
+ * @param {Array<Record<string, any> | null | undefined>} records
+ * @param {string} [originalName]
+ * @param {{
+ *   resolveResourceFile?: ResourceFileResolver | null,
+ *   sessionResourceTable?: any
+ * }} [options]
+ */
 const combineCircularGenbankResources = (
   resources,
   records,
@@ -3855,6 +3903,7 @@ export const projectCanonicalSessionRequest = ({
       .map((sourceIndex) => values?.[sourceIndex])
   );
   if (records.length === 0) throw new Error('Canonical renderRequest records are required.');
+  /** @type {ReturnType<typeof canonicalSimilarityAlignment> | null} */
   let similarityAlignment = null;
   let recordTranslations = [];
   if (renderRequest.mode === 'linear' && renderRequest.schema >= 8) {
@@ -4051,6 +4100,8 @@ export const projectCanonicalSessionRequest = ({
   const {
     blastSource: _cliBlastSource, losatProgram: _cliLosatProgram, ...cliProteinSettings
   } = projectedProteinPipeline?.config || {};
+  // The legacy file bag that the Web form state reads; its fields depend on the mode.
+  /** @type {Record<string, any>} */
   const files = { linearSeqs: [] };
   if (renderRequest.mode === 'circular') {
     files.circularRecords = records.map((record) => {
@@ -4154,6 +4205,8 @@ export const projectCanonicalSessionRequest = ({
         const file = resolveResourceFile
           ? resolveResourceFile(comparison.resourceId)
           : resourceAsLegacyFile(resources, comparison.resourceId);
+        // An unmapped source index is undefined; it never named a sequence here.
+        if (queryIndex === undefined || subjectIndex === undefined) return;
         if (files.linearSeqs[queryIndex] && subjectIndex === queryIndex + 1) {
           files.linearSeqs[queryIndex].blast = file;
         }
@@ -4177,6 +4230,8 @@ export const projectCanonicalSessionRequest = ({
         if (
           comparison.kind === 'precomputedProteinComparison' &&
           (
+            queryRecordIndex === undefined ||
+            subjectRecordIndex === undefined ||
             !Number.isInteger(queryRecordIndex) ||
             !Number.isInteger(subjectRecordIndex) ||
             !files.linearSeqs[queryRecordIndex] ||
@@ -4226,6 +4281,7 @@ export const projectCanonicalSessionRequest = ({
               .get(Number(pair?.queryRecordIndex));
             const subjectIndex = normalizedRecordOrdering.projectedIndexBySourceIndex
               .get(Number(pair?.subjectRecordIndex));
+            if (queryIndex === undefined || subjectIndex === undefined) return;
             if (!files.linearSeqs[queryIndex] || !files.linearSeqs[subjectIndex]) return;
             files.linearComparisons.push({
               id: `linear-comparison-canonical-losat-${index + 1}`,
@@ -4535,10 +4591,13 @@ export const projectCanonicalSessionRequest = ({
     ...projectedLinearTrackSlots
   ].reduce((width, slot) => {
     if (slot?.renderer !== 'depth') return width;
-    const trackIndex = parseDepthTrackIndexIdentity(
+    // parseDepthTrackIndexIdentity throws unless the value is a non-negative
+    // integer, so it returns a number; its `let numeric = null` makes tsc
+    // infer a `null` return, hence the cast through unknown.
+    const trackIndex = /** @type {number} */ (/** @type {unknown} */ (parseDepthTrackIndexIdentity(
       slot?.params?.track_index ?? 0,
       `Depth slot '${slot?.id || ''}' track_index`
-    );
+    )));
     return Math.max(width, trackIndex + 1);
   }, 0);
   const projectedDepthTrackCount = canonicalDepth

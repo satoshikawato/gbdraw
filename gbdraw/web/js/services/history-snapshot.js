@@ -169,6 +169,10 @@ const setRef = (target, value) => {
   }
 };
 
+/**
+ * @param target A Vue ref, or any other value (the fallback is returned for a non-ref).
+ * @param {unknown} [fallback] The value for a target that is not a ref.
+ */
 const getRef = (target, fallback = null) => (
   target && typeof target === 'object' && 'value' in target
     ? target.value
@@ -179,6 +183,10 @@ const setGeneratedArtifactRef = (target, value) => {
   if (target && typeof target === 'object' && 'value' in target) target.value = value;
 };
 
+/**
+ * @param target A Vue ref, or any other value (the fallback is returned for a non-ref).
+ * @param {unknown} [fallback] The value for a target that is not a ref.
+ */
 const getGeneratedArtifactRef = (target, fallback = null) => (
   target && typeof target === 'object' && 'value' in target ? target.value : fallback
 );
@@ -485,6 +493,10 @@ const collectCurrentFileIds = (state, fileStore) => {
   return fileIds;
 };
 
+/**
+ * @param {HistorySnapshotFileStore} fileStore
+ * @param {HistorySnapshotServiceOptions['normalizeLinearSeqList']} [normalizeLinearSeqList]
+ */
 const applyFilesData = (state, filesData, fileStore, normalizeLinearSeqList = null) => {
   if (!state.files) return;
   state.matchSequenceRegistry?.reset?.();
@@ -567,6 +579,18 @@ const applyFilesData = (state, filesData, fileStore, normalizeLinearSeqList = nu
  * @property {(value: any) => any} restoreValue
  *   The stored file, or an array of them, that the descriptors name (`null` when none).
  *
+ * @typedef {object} HistorySnapshotRuntimeOwner
+ *   The generated-artifact runtime owner that the composition root registers (`app/app-setup.js`).
+ * @property {() => Record<string, any>} capture The runtime state, with its canonical session.
+ * @property {(snapshot: any, options?: any) => unknown} restore Installs a captured runtime state.
+ *
+ * @typedef {object} HistorySnapshotTransportIdentity
+ *   The frozen identity of the generated artifact that a transport carries.
+ * @property {1} schema
+ * @property {'SHA-256'} algorithm
+ * @property {string} fingerprint
+ * @property {Readonly<Record<string, any>>} ownerReferences
+ *
  * @typedef {Record<string, any>} HistorySnapshotData
  *   A domain payload that the snapshot service holds by value (config, ui, features, editor state,
  *   orthogroup state, run state): the owner that builds it declares its shape.
@@ -626,8 +650,11 @@ export const createHistorySnapshotService = ({
     throw new Error('createHistorySnapshotService requires state and fileStore.');
   }
 
+  /** @type {((intent: HistorySnapshotData, context: Record<string, any>) => unknown) | null} */
   let afterApplyHistoryIntent = null;
+  /** @type {HistorySnapshotRuntimeOwner | null} */
   let generatedArtifactRuntimeOwner = null;
+  /** @type {HistorySnapshotTransportIdentity | null} */
   let currentGeneratedArtifactIdentity = null;
   let currentGeneratedArtifactRetainedBytes = 0;
   let generatedArtifactRestoreDepth = 0;
@@ -641,6 +668,7 @@ export const createHistorySnapshotService = ({
   // Intent captures of owners created after this service (R13): the
   // composition root registers each once its owner exists. An unregistered
   // capture adds nothing to the intent, as for a service without that owner.
+  /** @type {{ legend: (() => unknown) | null, composition: (() => unknown) | null }} */
   const captures = { legend: null, composition: null };
   const registerCapture = (name, capture) => {
     if (!Object.hasOwn(captures, name)) throw new Error(`Unknown History intent capture: ${name}`);
@@ -751,6 +779,7 @@ export const createHistorySnapshotService = ({
 
   const installGeneratedArtifactOwnerSet = (
     ownerSet,
+    /** @type {{ selectedResultIndex?: number, installResults?: ((results: any[]) => unknown) | null }} */
     { selectedResultIndex = 0, installResults = null } = {}
   ) => {
     if (!ownerSet || typeof ownerSet !== 'object') {

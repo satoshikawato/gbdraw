@@ -1,5 +1,5 @@
 // @ts-check
-import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { state, sessionOperationAvailability, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
 import { normalizePaletteColors, resolveColorToHex } from '../utils/color-utils.js';
 import {
@@ -529,13 +529,18 @@ const normalizeLabelRendering = (value) => {
   return ['auto', 'embedded_only', 'external_only'].includes(normalized) ? normalized : 'auto';
 };
 
+/**
+ * @param {any} configData
+ * @param {string | null} [mode]
+ */
 const withHistoricalPairwiseMatchStyleFallback = (configData, mode = null) => {
   if (!isPlainObject(configData) || !isPlainObject(configData.adv)) return configData;
   const adv = Object.prototype.hasOwnProperty.call(configData.adv, 'pairwise_match_style')
     ? configData.adv
     : { ...configData.adv, pairwise_match_style: 'ribbon' };
   const profiles = configData.modeProfiles;
-  const activeMode = ['circular', 'linear'].includes(mode)
+  // `mode` may be null here; includes() simply finds no match for it.
+  const activeMode = /** @type {Array<string | null>} */ (['circular', 'linear']).includes(mode)
     ? mode
     : profiles?.activeMode;
   if (
@@ -686,7 +691,8 @@ const migrateImportedLinearTrackSlots = (configData = {}, sourceSessionVersion =
   }
   const sessionUsesLegacySemantics = (
     Number.isInteger(sourceSessionVersion) &&
-    sourceSessionVersion <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
+    // Number.isInteger above is false for null, so the version is a number here.
+    /** @type {number} */ (sourceSessionVersion) <= LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION
   );
   const sourceSchemaVersion = sessionUsesLegacySemantics
     ? LEGACY_LINEAR_TRACK_SLOT_SCHEMA_VERSION
@@ -935,10 +941,15 @@ const normalizeDepthTracks = (tracks, legacyAdv = {}) => {
   return normalized;
 };
 
+/** @type {string | null} */
 let lastSessionFilename = null;
+/** @type {Record<string, any> | null} */
 let preservedCliOptions = null;
+/** @type {Record<string, any> | null} */
 let committedCanonicalSession = null;
+/** @type {ReturnType<typeof adoptCurrentSessionResources> | null} */
 let activeSessionResourceTable = null;
+/** @type {Record<string, any> | null} */
 let adoptedProteinIdentityManifest = null;
 // Current-session preflight receipts pair each adopted cache value with the
 // exact manifest that already validated its protein references and raw text.
@@ -1116,6 +1127,10 @@ export const buildEditorStateData = () => ({
   featureCatalog: admittedFeatureCatalog(state.featureCatalog?.value)
 });
 
+/**
+ * @param {Record<string, any>} [editorState]
+ * @param {{ featureCatalog?: unknown }} [options]
+ */
 const normalizeEditorStateData = (editorState = {}, { featureCatalog = undefined } = {}) => {
   const defaults = defaultEditorStateData();
   const source = isPlainObject(editorState) ? editorState : {};
@@ -1158,6 +1173,7 @@ const replacePlainObject = (target, source) => {
   });
 };
 
+/** @type {((request: Record<string, any>) => any) | null} */
 let unmanagedConfigOverrideValidator = null;
 
 export const setUnmanagedConfigOverrideValidator = (validator) => {
@@ -1647,9 +1663,13 @@ const preflightSessionImport = async (sessionData) => {
   validateSessionVersion(sourceSessionVersion);
   const rawData = await convertMainSessionComparisonFrames(sessionData);
   const currentSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
+  /** @type {ReturnType<typeof adoptCurrentSessionDocument> | null} */
   let adoptedSession = null;
+  /** @type {ReturnType<typeof adoptCurrentSessionResources> | null} */
   let currentResourceTable = null;
+  /** @type {Awaited<ReturnType<typeof validateCurrentWriterFeatureCatalog>> | null} */
   let validatedFeatureCatalog = null;
+  /** @type {ReturnType<typeof normalizeEditorStateData> | null} */
   let normalizedEditorState = null;
   let normalizedData;
 
@@ -2566,6 +2586,7 @@ const deserializeFile = (entry) => {
   return file;
 };
 
+/** @type {{ clearActiveRuntime?: () => void } | null} */
 let activePreviewRuntime = null;
 
 export const setPreviewRuntime = (runtime) => {
@@ -2707,6 +2728,7 @@ const serializeLosatCache = () => {
 
   // A replaced source can leave earlier bindings in the live cache. Persist
   // only protein evidence that the Session's current manifest can resolve.
+  /** @type {ReturnType<typeof buildValidatedProteinIdentityIndex>} */
   let identityIndex = null;
   let reusedValidation = false;
   try {
@@ -2865,6 +2887,10 @@ const applyProteinIdentityManifest = (manifest, { adoptCurrent = false } = {}) =
   adoptedProteinIdentityManifest = adoptCurrent ? manifest : null;
 };
 
+/**
+ * @param {Record<string, any>} [orthogroupState]
+ * @param {{ legacyRecords?: any, catalogFeatureState?: Record<string, any> | null }} [options]
+ */
 export const applyOrthogroupStateData = (
   orthogroupState = {}, { legacyRecords = null, catalogFeatureState = null } = {}
 ) => {
@@ -2980,6 +3006,11 @@ export const materializeLinearRecordFiles = (
   return sourceSequences;
 };
 
+/**
+ * @param {string} [mode]
+ * @param {Record<string, any>} [sourceState]
+ * @param {Record<string, any> | null} [comparisonPlanOrOptions]
+ */
 export const serializeActiveRenderFiles = async (
   mode = state.mode.value,
   sourceState = state,
@@ -3142,7 +3173,12 @@ export const adoptCanonicalRenderArtifacts = (
   const nextCommittedCanonicalSession = preserveAdoptedResources
     ? adoptRuntimeCanonicalSession(ownedCanonical)
     : cloneCanonicalSession(ownedCanonical);
+  /** @type {ReturnType<typeof deserializeCanonicalComparisons> | null} */
   let nextLinearComparisons = null;
+  /** @type {{
+   *   blasts: any[], fastas: any[], sequenceSources: any[],
+   *   projectedConservation: Record<string, any> | undefined, series: Record<string, any>[]
+   * } | null} */
   let nextCircularState = null;
   if (projection.mode === 'linear') {
     nextLinearComparisons = deserializeCanonicalComparisons(
@@ -3227,7 +3263,7 @@ export const canonicalRenderArtifactOwner = Object.freeze({
 });
 
 /**
- * @param {Record<string, any>} filesData
+ * @param {Record<string, any> | null} filesData
  * @param {{ adoptCanonicalPayloads?: boolean, resolveRecordInputs?: boolean, targetState?: Record<string, any> }} [options]
  */
 const applyFiles = (filesData, { adoptCanonicalPayloads = false, resolveRecordInputs = true, targetState = state } = {}) => {
@@ -4068,12 +4104,23 @@ const applySessionFeatureRecoveryPlan = (plan, { generationId = 'session-feature
 };
 
 /**
+ * @typedef {{
+ *   linearRecordCatalog?: any,
+ *   recordDisplayRows?: any,
+ *   storedConfig: ActiveWebConfig,
+ *   savedUi: Record<string, any>,
+ *   isCurrent: () => boolean
+ * }} ExportSessionDocumentOptions
+ */
+
+/**
  * @param {string | null} [titleOverride]
- * @param {{ linearRecordCatalog?: any, recordDisplayRows?: any, storedConfig?: ActiveWebConfig, savedUi?: Record<string, any>, isCurrent?: () => boolean }} [options]
+ * @param {ExportSessionDocumentOptions} options
  */
 const exportSessionDocument = async (
   titleOverride = null,
-  { linearRecordCatalog = null, recordDisplayRows = null, storedConfig, savedUi, isCurrent } = {}
+  // The only caller (exportSession) always passes storedConfig, savedUi, and isCurrent.
+  { linearRecordCatalog = null, recordDisplayRows = null, storedConfig, savedUi, isCurrent } = /** @type {ExportSessionDocumentOptions} */ ({})
 ) => {
   const resolvedTitle =
     typeof titleOverride === 'string'
@@ -4305,6 +4352,7 @@ const importSessionDocument = async (e, options = {}) => {
     state.semanticFileWatchersSuppressed.value
   );
   const rollbackStateExtension = options?.rollbackState;
+  /** @type {ReturnType<typeof captureSessionImportSnapshot> | null} */
   let rollbackSnapshot = null;
   let rollbackExtensionSnapshot;
   let commitStarted = false;
@@ -4345,7 +4393,7 @@ const importSessionDocument = async (e, options = {}) => {
         unmanagedConfigValidation
       );
     }
-    const canonicalSession = Boolean(projectionResult);
+    const canonicalSession = projectionResult !== null;
     const settingsOnly = isSettingsOnlySessionDocument(data);
     const currentSchemaSession = sourceSessionVersion >= CURRENT_AUTHORITY_SESSION_MIN_VERSION;
     const committedMode = projectionResult?.renderState.mode;
@@ -4389,6 +4437,7 @@ const importSessionDocument = async (e, options = {}) => {
     const storedEditorState = canonicalSession
       ? projectionResult.artifactState.editorState
       : data.editorState;
+    /** @type {ReturnType<typeof featureStateFromCatalog> | null} */
     let currentCatalogFeatureState = null;
     let validatedSessionCatalog = currentSchemaSession
       ? projectionResult?.validatedFeatureCatalog || null
@@ -4533,6 +4582,7 @@ const importSessionDocument = async (e, options = {}) => {
         );
     recordSessionLifecycleEvent('svg-admission-end');
 
+    /** @type {Record<string, any> | null} */
     let legacyFeatureRecoveryPlan = null;
     const legacyFeatureSnapshot = {
       mode: candidateMode, cInputType: candidateFiles.cInputType.value,
@@ -4550,7 +4600,7 @@ const importSessionDocument = async (e, options = {}) => {
           )
         }));
       } catch (error) {
-        legacyFeatureRecoveryPlan = { status: 'failed', warning: normalizeUserFacingError(error).summary };
+        legacyFeatureRecoveryPlan = { status: 'failed', warning: normalizeCaughtError(error).summary };
       }
     }
     // Session 45 keys per-feature edits by source identity: an older Session's
@@ -4596,7 +4646,8 @@ const importSessionDocument = async (e, options = {}) => {
       if (recovered) {
         const recoveredWithoutRenderedIdEdits = { ...recovered };
         RENDERED_ID_FEATURE_EDIT_FIELDS.forEach((field) => delete recoveredWithoutRenderedIdEdits[field]);
-        legacyFeatureRecoveryPlan.recoveredFeatureState = {
+        // `recovered` came from legacyFeatureRecoveryPlan.recoveredFeatureState, so the plan is set.
+        /** @type {Record<string, any>} */ (legacyFeatureRecoveryPlan).recoveredFeatureState = {
           ...recoveredWithoutRenderedIdEdits,
           featureOverrides: features.featureOverrides,
           labelOverrideRows: features.labelOverrideRows
@@ -4865,7 +4916,7 @@ const importSessionDocument = async (e, options = {}) => {
     };
   } catch (err) {
     if (err?.name === 'AbortError' && !commitStarted) return { status: 'canceled' };
-    const error = normalizeUserFacingError(err, { stage: 'request-validation' });
+    const error = normalizeCaughtError(err, { stage: 'request-validation' });
     const currentAlert = state.errorLog.value;
     const canNotify = currentAlert === previousAlert || currentAlert === null;
     if (commitStarted && rollbackSnapshot) {
@@ -4899,7 +4950,9 @@ const importSessionDocument = async (e, options = {}) => {
 };
 
 
+/** @type {{ canceled: boolean, promise: Promise<any> | null } | null} */
 let sessionSaveInFlight = null;
+/** @type {{ canceled: boolean, controller: AbortController } | null} */
 let activeSessionImport = null;
 
 export const disposeSessionOperations = () => {
@@ -4926,6 +4979,7 @@ export const exportSession = (titleOverride = null, options = {}) => {
   const { availability = sessionOperationAvailability } = options;
   const busy = availability('save');
   if (busy) return Promise.resolve(busy);
+  /** @type {{ canceled: boolean, promise: Promise<any> | null }} */
   const operation = { canceled: false, promise: null };
   const previousAlert = state.errorLog.value;
   const isCurrent = () => sessionSaveInFlight === operation && !operation.canceled;
