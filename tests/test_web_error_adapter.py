@@ -212,3 +212,19 @@ def test_unknown_config_path_keeps_correction_without_private_path():
     assert model['code'] == 'INPUT_INVALID'
     assert model['context'] == {'field': 'configOverrides', 'reason': 'UNKNOWN_CONFIG_PATH'}
     assert 'PRIVATE_' not in json.dumps(model)
+
+
+def test_undecodable_input_is_unreadable_not_unclassified_validation(helpers, tmp_path):
+    # CI-08: UnicodeDecodeError is a ValueError, so the validation flag hid the
+    # INPUT_UNREADABLE branch and a gzip GenBank read VALIDATION_UNCLASSIFIED.
+    error = UnicodeDecodeError('utf-8', b'\x1f\x8b', 0, 1, 'invalid start byte')
+    assert serialize_web_error(error, operation='listSequenceRecords', stage='helper')['code'] == 'INPUT_UNREADABLE'
+    wrapped = ValidationError('Could not decode PRIVATE')
+    wrapped.__cause__ = error
+    assert serialize_web_error(wrapped, operation='generate', stage='request-validation')['code'] == 'INPUT_UNREADABLE'
+    gzipped = tmp_path / 'PRIVATE.gbk'
+    gzipped.write_bytes(b'\x1f\x8b\x08\x00' + bytes(range(128, 256)))
+    result = json.loads(helpers['list_sequence_records'](str(gzipped), 'genbank'))
+    assert result['error'] == {'code': 'INPUT_UNREADABLE', 'operation': 'listSequenceRecords',
+                               'stage': 'helper', 'context': {}}
+

@@ -287,7 +287,10 @@ def _classify_native(error: BaseException, chain: list[BaseException], stage: st
         if code != "VALIDATION_UNCLASSIFIED":
             return code, context, stage
     validation = isinstance(error, (ValidationError, ParseError, ValueError, TypeError, KeyError, json.JSONDecodeError))
-    if not validation and isinstance(error, (InputFileError, OSError, UnicodeError)):
+    # UnicodeError is a ValueError: test the explicit chain before the validation flag (CI-08).
+    if any(isinstance(cause, UnicodeError) for cause in chain) or (
+        not validation and isinstance(error, (InputFileError, OSError))
+    ):
         return "INPUT_UNREADABLE", {}, stage
     if stage in RENDER_FAILURE_STAGES and not isinstance(error, MemoryError):
         name = next((cls.__name__ for cls in type(error).__mro__ if cls in EXCEPTION_TYPES), None)
