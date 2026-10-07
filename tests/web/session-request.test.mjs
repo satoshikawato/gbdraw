@@ -16,6 +16,7 @@ const {
   CANONICAL_REQUEST_SCHEMA,
   buildCanonicalRenderRequest: buildCanonicalRenderRequestRaw,
   bindCanonicalTypedResource,
+  canonicalLinearRecordLayout,
   decodeCanonicalResourceText,
   managedConfigOverridePathsForMode,
   normalizeWebGridColumnOrdering,
@@ -5527,4 +5528,32 @@ for (const invalid of ['10', '10px', true, [], {}, Infinity, NaN]) {
   assert.deepEqual(specificFailure.context, { sessionTable: 'specific-colors', field: 'color', reason: 'COLOR', row: 1 });
   assert.equal(specificFailure.summary, 'The table is invalid. Session table: Specific colors. Line 1. Field: color. '
     + 'Use none, a supported named color, or a hex color with 3 or 6 digits.');
+}
+
+// E1 (REVIEW-2 P-b): Session Load admits the alignment plan and record
+// translations of a Linear Result set kept in `otherModeResult` with the rules
+// the request projection applies to the top-level set.
+{
+  const gallery = JSON.parse(await readFile(
+    join(process.cwd(), 'gbdraw', 'web', 'gallery', 'sessions', 'BGC0000708-BGC0000713.gbdraw-session.json'), 'utf8'
+  ));
+  const request = gallery.renderRequest;
+  assert.equal(request.mode, 'linear');
+  const admitted = canonicalLinearRecordLayout(request);
+  assert.deepEqual(admitted.similarityAlignment, request.layout.similarityAlignment);
+  assert.deepEqual(admitted.recordTranslations, request.layout.recordTranslations);
+  const projected = projectCanonicalSessionRequest({
+    renderRequest: request, resources: gallery.resources, webFiles: gallery.webFiles, deferResourceContent: true
+  }).config.linearRecordLayout;
+  assert.deepEqual(admitted, {
+    similarityAlignment: projected.similarityAlignment, recordTranslations: projected.recordTranslations
+  });
+  const partial = structuredClone(request);
+  partial.layout.recordTranslations = partial.layout.recordTranslations.slice(1);
+  assert.throws(() => canonicalLinearRecordLayout(partial), /does not cover the displayed record keys/);
+  const foreign = structuredClone(request);
+  foreign.layout.similarityAlignment.records[0].recordKey = 'not-a-record';
+  assert.throws(() => canonicalLinearRecordLayout(foreign), /similarityAlignment/);
+  assert.deepEqual(canonicalLinearRecordLayout({ ...request, mode: 'circular' }),
+    { similarityAlignment: null, recordTranslations: [] });
 }

@@ -60,7 +60,7 @@ test('a non-numeric comparison e-value is rejected instead of using the default 
   const examples = path.join(root, 'examples');
   await page.evaluate(async ({ first, second, table }) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     await window.Vue.nextTick();
     if (app.linearSeqs.length < 2) app.addLinearSeq();
     app.setLinearSeqPrimaryFile(0, 'gb', new File([first], 'MjeNMV.gb', { type: 'text/plain' }));

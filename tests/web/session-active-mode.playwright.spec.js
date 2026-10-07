@@ -72,6 +72,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
   test.setTimeout(360_000);
   await openApp(page);
   await load(page, divergentFixture);
+  const circular = await snapshot(page);
   await page.getByRole('button', { name: 'Linear', exact: true }).click();
   await page.getByTestId('linear-genbank-1').setInputFiles(linearSource);
   await page.evaluate(async () => {
@@ -82,9 +83,11 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     state.featurePanelTab.value = 'labels';
   });
   const before = await snapshot(page);
+  // E1: Linear shows its own empty Result slot; the Circular Result waits in its slot.
   expect(before.mode).toBe('linear');
-  expect(before.generatedMode).toBe('circular');
-  expect(before.request.mode).toBe('circular');
+  expect(before.generatedMode).toBe('linear');
+  expect(before.request).toBeNull();
+  expect(before.results).toEqual([]);
   expect(before.config.adv.scale_font_size).toBe(19);
   expect(before.linearSource).toBeTruthy();
   expect(before.history[0]).toBeGreaterThan(0);
@@ -110,19 +113,25 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(loadWorker.constructions).toBeLessThanOrEqual(1);
     expect(loadWorker.instances.flatMap(instance => instance.helpers.map(helper => helper.operation)))
       .toEqual(loadWorker.helpers ? ['validateConfigOverrides'] : []);
+    // E1 (contract): a Session with a Result opens on that Result's mode.
     const restored = await snapshot(fresh);
-    expect(restored.mode).toBe('linear');
+    expect(restored.mode).toBe('circular');
     expect(restored.generatedMode).toBe('circular');
-    expect(restored.config.modeProfiles).toEqual(before.config.modeProfiles);
-    expect(restored.config.adv.scale_font_size).toBe(19);
     expect(restored.circularSource).toEqual(before.circularSource);
     expect(restored.linearSource).toEqual(before.linearSource);
-    expect(restored.request).toEqual(await promoteRequest(fresh, before.request));
-    expect(restored.results).toEqual(before.results);
-    expect(restored.selectedResultIndex).toBe(before.selectedResultIndex);
+    expect(restored.request).toEqual(await promoteRequest(fresh, circular.request));
+    expect(restored.results).toEqual(circular.results);
+    expect(restored.selectedResultIndex).toBe(circular.selectedResultIndex);
     expect(restored.featurePanelTab).toBe(before.featurePanelTab);
     expect(restored.downloadDpi).toBe(before.downloadDpi);
     expect(restored.history).toEqual([0, 0]);
+    // The Linear draft and its settings profile wait in Linear.
+    await fresh.getByRole('button', { name: 'Linear', exact: true }).click();
+    const linearDraft = await snapshot(fresh);
+    expect(linearDraft.mode).toBe('linear');
+    expect(linearDraft.results).toEqual([]);
+    expect(linearDraft.config.modeProfiles).toEqual(before.config.modeProfiles);
+    expect(linearDraft.config.adv.scale_font_size).toBe(19);
 
     const second = await save(fresh, info.outputPath('linear-draft-resaved.gbdraw-session.json.gz'));
     expect(second.ui.mode).toBe('linear');
@@ -135,7 +144,6 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(second.webFiles.bindings.linearSeqs[0].gb).toEqual(first.webFiles.bindings.linearSeqs[0].gb);
     expect(second.webFiles.resourceOriginalNames).toEqual(first.webFiles.resourceOriginalNames);
     expect(second.ui.selectedResultIndex).toBe(first.ui.selectedResultIndex);
-    expect(second.ui.featurePanelTab).toBe(first.ui.featurePanelTab);
 
     await generateAndWaitForResult(fresh);
     const generated = await snapshot(fresh);
@@ -144,7 +152,7 @@ test('current biological Save, fresh Load, and re-save keep a Linear draft besid
     expect(generated.request.mode).toBe('linear');
     expect(generated.request.diagramOptions.configOverrides['objects.scale.font_size.short']).toBe(19);
     expect(generated.request.diagramOptions.configOverrides['objects.scale.font_size.long']).toBe(19);
-    expect(generated.results[0].content).not.toBe(restored.results[0].content);
+    expect(generated.results[0].content).not.toBe(circular.results[0].content);
     expect(generated.linearSource).toEqual(before.linearSource);
   } finally {
     await context.close();

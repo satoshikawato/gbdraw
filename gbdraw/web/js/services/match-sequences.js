@@ -327,6 +327,8 @@ export const createSequenceSourceRegistry = (initialSources = []) => {
   return {
     get sources() { return owner.sources; },
     buildTrustedOwner: (nextSources = []) => buildOwner(nextSources, { trusted: true }),
+    // E1: the owner `reset` would install, for a mode's artifact slot.
+    buildSourceOwner: (/** @type {Record<string, any>[]} */ nextSources) => buildOwner(nextSources),
     captureTrustedOwner: () => owner,
     register,
     replaceTrustedOwner,

@@ -491,10 +491,12 @@ def render_canonical_session_if_present(
     document = load_session_document(session)
     if not document.has_canonical_request:
         raise ValidationError("Settings-only Session has no biological render request; load a source in Web before generating.")
-    if document.mode != mode:
+    # A Session 45 can hold a Result set of each mode: the subcommand renders its own.
+    if mode not in document.drawings:
         raise ValidationError(
-            f"Session renderRequest mode is {document.mode!r}; expected {mode!r}."
+            f"Session has no {mode} drawing; it has a {' and a '.join(document.drawings)} drawing."
         )
+    document = document.drawing(mode)
 
     output_path = Path(output_override) if output_override else None
     output_directory = (
@@ -504,7 +506,7 @@ def render_canonical_session_if_present(
         document,
         output_directory=output_directory,
     ) as materialized:
-        request = session_to_request(materialized)
+        request = session_to_request(materialized, drawing=mode)
         legacy_source_request = request
         request = with_request_output(
             request,

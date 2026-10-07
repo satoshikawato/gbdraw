@@ -104,7 +104,7 @@ test('Linear automatic replicon names follow Generate and preserve saved subtitl
   await openApp(page);
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     Object.assign(app.form, { legend: 'none', show_gc: false, show_skew: false, show_labels_linear: 'none' });
     Object.assign(app.adv, {
       linear_show_replicon: false,
@@ -453,7 +453,7 @@ test('Web fresh/reset Lock ON preserves explicit drafts, Result on Load, and reg
 test('Linear Lock Definition Column measures single, shared, and mixed rows after unequal translations', async ({ page }, testInfo) => {
   test.setTimeout(120000);
   await openApp(page);
-  await page.evaluate(() => { window.__GBDRAW_APP__.mode = 'linear'; });
+  await page.evaluate(() => { window.__GBDRAW_APP__.setDiagramMode('linear'); });
   const source = ['A', 'B', 'C', 'D'].map((id, index) =>
     makeDefinitionGenbank(id, `                     /plasmid="${id}"\n`, 100 - 20 * index)).join('');
   await page.locator('[data-linear-source-card] input[type="file"]').first().setInputFiles({
@@ -616,7 +616,7 @@ test('Pairwise pointer feedback commits selection and preserves keyboard focus',
     const { admitLegacyImportedResults, createLegacyImportResultSource } = await import(
       '/gbdraw/web/js/services/svg-result-ingestion.js'
     );
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     const committed = admitLegacyImportedResults(createLegacyImportResultSource([{
       name: 'pairwise-selection.svg',
       content: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 80">
@@ -784,7 +784,7 @@ test('Linear record rows and N-to-M comparison batches remain keyed by sequence 
 
   const setup = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     app.addLinearSeq();
     app.addLinearSeq();
     app.addLinearSeq();
@@ -899,7 +899,7 @@ test('Linear records precede comparison pairs in DOM and keyboard order at narro
 
   const uids = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     while (app.linearSeqs.length < 5) app.addLinearSeq();
     app.linearSeqs.forEach((sequence, index) => {
       sequence.definition = `Timeline record ${index + 1}`;
@@ -1062,7 +1062,7 @@ test('Selected pairs focuses Add and repairs an unplaced draft in its boundary',
 
   const uids = await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     app.addLinearSeq();
     app.addLinearSeq();
     app.linearSeqs.forEach((sequence, index) => {
@@ -1124,7 +1124,7 @@ test('Comparison card actions target the active owner of duplicate directional d
 
   const [uidA, uidB] = await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     app.addLinearSeq();
     const [first, second] = app.linearSeqs;
     app.linearComparisonPlan.mode = 'selected';
@@ -1192,7 +1192,7 @@ test('Normalize Record Lengths rejects a shared Linear row and remains recoverab
   await openApp(page, { waitForPalette: false });
   const sharedRowUids = await page.evaluate(async (records) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     app.lInputType = 'gb';
     app.addLinearSeq();
     records.forEach((content, index) => app.setLinearSeqPrimaryFile(index, 'gb', new File(
@@ -1279,7 +1279,7 @@ test('No comparison completes a real render without touching dormant comparison 
   const dormantEdgeKey = await page.evaluate(async (records) => {
     const app = window.__GBDRAW_APP__;
     const { state } = await import('./js/state.js');
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     app.lInputType = 'gb';
     app.addLinearSeq();
     app.addLinearSeq();
@@ -1422,7 +1422,7 @@ test('Automatic Linear renders every record from one GenBank source and survives
   const sourceName = 'automatic-multi-record.gbk';
   await page.evaluate(async ({ content, name }) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     app.lInputType = 'gb';
     const source = new File(
       [content], name, { type: 'text/plain', lastModified: 1 }
@@ -1789,7 +1789,7 @@ test('Sparse upload and mixed selected renders keep snapshots and raw cache iden
   await openApp(page, { waitForPalette: false });
   const [uidA, uidB, uidC] = await page.evaluate(async (records) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     app.lInputType = 'gb';
     app.setLinearRecordLayoutEnabled(false);
     app.addLinearSeq();
@@ -2358,7 +2358,7 @@ ${origin}
 
   await page.evaluate(({ firstRecord, secondRecord }) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     app.lInputType = 'gb';
     app.addLinearSeq();
     app.setLinearSeqPrimaryFile(0, 'gb', new File([firstRecord], 'record-a.gbk', {
@@ -2745,7 +2745,7 @@ ORIGIN
 `;
   await page.evaluate((content) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     app.lInputType = 'gb';
     app.setLinearSeqPrimaryFile(0, 'gb', new File([content], 'two-records.gb', {
       type: 'text/plain',
@@ -2819,7 +2819,7 @@ AAAAAAAAAA
 `;
   await page.evaluate(({ gffText, fastaText }) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     app.lInputType = 'gff';
     app.setLinearSeqPrimaryFile(0, 'gff', new File([gffText], 'records.gff3', {
       type: 'text/plain',
@@ -2896,7 +2896,7 @@ test('protein raw cache survives cancellation and derived options preserve searc
 
   await page.evaluate(async (records) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     app.lInputType = 'gb';
     app.addLinearSeq();
     records.forEach((content, index) => app.setLinearSeqPrimaryFile(
@@ -3164,7 +3164,7 @@ const uploadCompleteRecordSources = async (page, contents =
 ) => {
   await page.evaluate(async (contents) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     app.lInputType = 'gb';
     const upload = async (index, chunks, name) => {
       app.setLinearSeqPrimaryFile(index, 'gb', new File(chunks, name, {
@@ -3468,7 +3468,7 @@ test('@comparison-contract source order survives pending multi-record discovery'
   await openApp(page, { waitForPalette: false });
   await page.evaluate(async ({ readyText, delayedText }) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     app.lInputType = 'gb';
     app.setLinearSeqPrimaryFile(0, 'gb', new File([readyText], 'ready.gbff', {
       type: 'text/plain', lastModified: 1
@@ -3511,7 +3511,7 @@ test('@comparison-contract GFF3 and FASTA source order moves both bindings with 
   });
   await page.evaluate(async ({ first, second }) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     app.lInputType = 'gff';
     const upload = async (index, source, stem) => {
       app.setLinearSeqPrimaryFile(index, 'gff', new File([source.gff], `${stem}.gff3`, {
@@ -4168,7 +4168,7 @@ test('File-level default organism and subtitle apply across records and allow pe
 
   await page.evaluate(async ({ content, name }) => {
     const app = window.__GBDRAW_APP__;
-    app.mode = 'linear';
+    app.setDiagramMode('linear');
     app.lInputType = 'gb';
     const source = new File([content], name, { type: 'text/plain', lastModified: 1 });
     app.setLinearSeqPrimaryFile(0, 'gb', source);
@@ -4257,7 +4257,7 @@ test('File-level default organism and subtitle apply across records and allow pe
 test('GenBank file upload infers each record definition and leaves the file defaults empty', async ({ page }) => {
   await openApp(page);
   await page.evaluate(() => {
-    window.__GBDRAW_APP__.mode = 'linear';
+    window.__GBDRAW_APP__.setDiagramMode('linear');
   });
 
   const sampleGenbank = `LOCUS       NC_002695            1000 bp    DNA     circular BCT 12-FEB-2021
