@@ -12,6 +12,10 @@ write-up of a release.
 
 ## [Unreleased]
 
+- CLI: `gbdraw circular|linear --session <file> --session_output out.json` (and
+  `--save_session`) keeps the resource IDs and file names of the Session's unchanged
+  inputs. Before, the rewritten Session renamed them to positional IDs such as
+  `record-1-genbank`, and table files lost the names they were uploaded with.
 - CLI: `gbdraw circular|linear --session <Session 41-44> --session_output out.json`
   (and `--save_session`) no longer fails with "Feature placement drafts require a
   circular or linear scope." for a Session whose Feature placement drafts were saved by

@@ -667,20 +667,9 @@ def _validate_settings_only_session(session: Mapping[str, Any]) -> None:
             or not isinstance(config.get("adv"), Mapping) or not isinstance(ui, Mapping)
             or ui.get("mode") not in ("circular", "linear")):
         raise ValidationError("Settings-only Session requires an active Web configuration and mode.")
-    referenced: set[str] = set()
+    from .session_resources import canonical_resource_ids
 
-    def visit(value: Any) -> None:
-        if isinstance(value, Mapping):
-            if "resourceId" in value:
-                referenced.add(value["resourceId"])
-            for child in value.values():
-                visit(child)
-        elif isinstance(value, list):
-            for child in value:
-                visit(child)
-
-    visit(bindings)
-    if set(session["resources"]) - referenced:
+    if set(session["resources"]) - canonical_resource_ids(bindings):
         raise ValidationError("Settings-only Session contains an unbound resource.")
 
 
@@ -2590,6 +2579,18 @@ def _embedded_entry_bytes(entry: Mapping[str, Any]) -> bytes | None:
     return None
 
 
+def _embedded_resource_bytes(entry: Mapping[str, Any]) -> bytes:
+    """The bytes of a resource descriptor, checked against its size and checksum."""
+
+    data = _embedded_entry_bytes(entry)
+    if data is None or len(data) != entry.get("size"):
+        raise ValidationError("Invalid embedded resource bytes or byte size.")
+    checksum = entry.get("checksum")
+    if checksum and hashlib.sha256(data).hexdigest() != str(checksum).lower().removeprefix("sha256:"):
+        raise ValidationError("Embedded resource checksum does not match.")
+    return data
+
+
 def _project_web_file_binding(
     resources: Mapping[str, Any],
     binding: Any,
@@ -2632,101 +2633,20 @@ def _attach_current_web_file_bindings(
     payload: dict[str, Any],
     files: Mapping[str, Any],
 ) -> None:
+    from .session_resources import SessionResourceTable
+
     resources_value = payload.get("resources")
     if not isinstance(resources_value, dict):
         raise ValidationError("Current session resources must be an object.")
     resources = resources_value
-    candidates: dict[int, list[str]] = {}
-    encoded: dict[tuple[int | None, str], str] = {}
-    decoded: dict[int, bytes] = {}
-    identities: dict[int, str] = {}
-    canonical_by_identity: dict[tuple[int, str], str] = {}
-    used_names = {safe_embedded_filename(entry.get("name")) for entry in resources.values()}
-    next_number = 1
-
-    def register(resource_id: str, entry: Mapping[str, Any]) -> None:
-        candidates.setdefault(entry["size"], []).append(resource_id)
-        if entry.get("encoding") == "base64":
-            encoded.setdefault((entry["size"], entry["data"]), resource_id)
-
-    for resource_id, resource in resources.items():
+    for resource_id in resources:
         if not isinstance(resource_id, str) or resource_id != resource_id.strip() or not resource_id:
             raise ValidationError("Canonical resource IDs must be unique non-empty strings.")
-        register(resource_id, resource)
-
-    def read(entry: Mapping[str, Any]) -> bytes:
-        key = id(entry)
-        if key not in decoded:
-            data = _embedded_entry_bytes(entry)
-            if data is None or len(data) != entry.get("size"):
-                raise ValidationError("Invalid embedded resource bytes or byte size.")
-            checksum = entry.get("checksum")
-            if checksum:
-                actual = hashlib.sha256(data).hexdigest()
-                if actual != str(checksum).lower().removeprefix("sha256:"):
-                    raise ValidationError("Embedded resource checksum does not match.")
-                identities[key] = actual
-            decoded[key] = data
-        return decoded[key]
-
-    def identity(entry: Mapping[str, Any]) -> str:
-        data = read(entry)
-        if id(entry) not in identities:
-            identities[id(entry)] = hashlib.sha256(data).hexdigest()
-        return identities[id(entry)]
+    table = SessionResourceTable(resources)
 
     def allocate_file(entry: Mapping[str, Any], preferred_id: str, metadata: Mapping[str, Any]) -> dict[str, Any]:
-        nonlocal next_number
-        size = entry.get("size")
-        existing = resources.get(preferred_id)
-        if entry.get("checksum") and entry is not existing and entry.get("checksum") != (existing or {}).get("checksum"):
-            read(entry)
-        resource_id = (
-            preferred_id if existing is not None and all(
-                entry.get(field) == existing.get(field) for field in ("encoding", "data", "size")
-            ) else encoded.get((size, entry["data"])) if entry.get("encoding") == "base64" else None
-        )
-        if resource_id is None and size in candidates:
-            digest = identity(entry)
-            resource_id = canonical_by_identity.get((size, digest))
-            pending = candidates[size]
-            while pending and resource_id is None:
-                candidate_id = pending.pop()
-                candidate_digest = identity(resources[candidate_id])
-                canonical_by_identity.setdefault((size, candidate_digest), candidate_id)
-                resource_id = canonical_by_identity.get((size, digest))
-        if resource_id is None:
-            # Validation is required for introduced payloads; retain encoded bytes.
-            data = read(entry)
-            safe_name = safe_embedded_filename(entry.get("name"), fallback="resource.dat")
-            if (re.fullmatch(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*", preferred_id)
-                    and preferred_id not in resources and safe_name == entry.get("name")
-                    and safe_name not in used_names):
-                resource_id, name = preferred_id, safe_name
-            else:
-                while True:
-                    candidate = f"resource-{next_number:04d}"
-                    next_number += 1
-                    name = f"{candidate}-{safe_name}"
-                    if candidate not in resources and name not in used_names:
-                        resource_id = candidate
-                        break
-            resources[resource_id] = {
-                **entry, "kind": str(entry.get("kind") or "web-file"), "name": name,
-                "size": len(data),
-                "type": str(entry.get("type") or "application/octet-stream"),
-                "encoding": "base64", "data": (
-                    entry["data"] if entry.get("encoding") != DEPTH_FILE_ENCODING
-                    else base64.b64encode(data).decode("ascii")
-                ),
-            }
-            decoded[id(resources[resource_id])] = data
-            if id(entry) in identities:
-                identities[id(resources[resource_id])] = identities[id(entry)]
-            used_names.add(name)
-            register(resource_id, resources[resource_id])
         return {
-            "resourceId": resource_id,
+            "resourceId": table.bind(entry, preferred_id=preferred_id),
             "name": str(metadata.get("name", "file")),
             "type": str(metadata.get("type") or ""),
             "lastModified": metadata.get("lastModified", 0),
@@ -2819,6 +2739,7 @@ def _attach_current_web_file_bindings(
         "linearSeqs": sequence_bindings,
         "linearComparisons": comparison_bindings,
     }
+    resources.update(table.descriptors())
     web_files_value = payload.get("webFiles")
     web_files = (
         _json_clone(dict(web_files_value))

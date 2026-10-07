@@ -7,10 +7,8 @@ temporary and are valid only while the materialization context is active.
 
 from __future__ import annotations
 
-import base64
 import copy
 import json
-import mimetypes
 import re
 import tempfile
 from contextlib import AbstractContextManager
@@ -43,7 +41,6 @@ if TYPE_CHECKING:
         RequestRenderResult,
     )
     from gbdraw.api.requests import DiagramRequest
-    from gbdraw.session_request_codec import CanonicalRequestResource
 
 
 _RESOURCE_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
@@ -351,25 +348,31 @@ def _build_session_document_from_resolved_request(
     created_at: datetime | None = None,
     adjunct: Mapping[str, Any] | None = None,
     web_file_inventory: Mapping[str, Any] | None = None,
+    resources: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> SessionDocument:
-    """Build a current document without resolving an already-rendered request."""
+    """Build a current document without resolving an already-rendered request.
+
+    ``resources`` are the resources of the Session being saved again: equal
+    bytes keep their IDs, and those that neither the request nor a Web file
+    binding names are dropped.
+    """
 
     from gbdraw.session_request_codec import (
         CanonicalRequestCodecError,
         encode_canonical_request,
     )
+    from gbdraw.session_resources import SessionResourceTable
     from gbdraw.api.session_compat import (
         project_legacy_similarity_alignment_for_current_write,
     )
 
     try:
+        table = SessionResourceTable(resources)
         encoded = encode_canonical_request(
-            project_legacy_similarity_alignment_for_current_write(request)
+            project_legacy_similarity_alignment_for_current_write(request),
+            table=table,
         )
-        resources = {
-            resource.resource_id: _serialize_canonical_resource(resource)
-            for resource in encoded.resources
-        }
+        descriptors = table.descriptors()
     except (CanonicalRequestCodecError, ValidationError) as exc:
         raise SessionConversionError(str(exc)) from exc
 
@@ -388,13 +391,15 @@ def _build_session_document_from_resolved_request(
         "version": CURRENT_SESSION_VERSION,
         "createdAt": timestamp.isoformat(),
         "renderRequest": encoded.payload,
-        "resources": resources,
+        "resources": descriptors,
         "results": [],
         "editorState": {"featureCatalog": None},
     }
     data.update(adjunct_data)
     if web_file_inventory is not None:
         _attach_current_web_file_bindings(data, web_file_inventory)
+    if resources:
+        _drop_unreferenced_resources(data, resources)
     editor_state = data.get("editorState")
     if isinstance(editor_state, Mapping):
         normalized_editor_state = copy.deepcopy(dict(editor_state))
@@ -404,6 +409,38 @@ def _build_session_document_from_resolved_request(
         data["title"] = str(title)
     normalize_current_session_artifacts(data)
     return SessionDocument(data)
+
+
+def _drop_unreferenced_resources(
+    data: dict[str, Any],
+    previous: Mapping[str, Any],
+) -> None:
+    """Drop the previous resources that the request and Web files no longer name."""
+
+    from gbdraw.session_resources import canonical_resource_ids
+
+    web_files = data.get("webFiles")
+    referenced = canonical_resource_ids(data["renderRequest"]) | canonical_resource_ids(web_files)
+    if isinstance(web_files, Mapping):
+        for field in ("conservationLosatFastaSources", "conservationSequenceSources"):
+            source_ids = web_files.get(field)
+            if isinstance(source_ids, list):
+                referenced.update(item for item in source_ids if isinstance(item, str))
+    data["resources"] = {
+        resource_id: descriptor
+        for resource_id, descriptor in data["resources"].items()
+        if resource_id in referenced or resource_id not in previous
+    }
+    original_names = web_files.get("resourceOriginalNames") if isinstance(web_files, Mapping) else None
+    if isinstance(web_files, Mapping) and isinstance(original_names, Mapping):
+        data["webFiles"] = {
+            **web_files,
+            "resourceOriginalNames": {
+                resource_id: name
+                for resource_id, name in original_names.items()
+                if resource_id in data["resources"]
+            },
+        }
 
 
 def build_session_document(
@@ -603,6 +640,15 @@ def _validate_document(data: Mapping[str, Any]) -> None:
             raise SessionResourceError(
                 f"Canonical resource {resource_id!r} has invalid size metadata."
             )
+    from gbdraw.session_resources import canonical_resource_ids
+
+    unresolved = canonical_resource_ids(data.get("renderRequest")) - set(resources)
+    if unresolved:
+        raise SessionResourceError(
+            "renderRequest references missing canonical resource(s): "
+            + ", ".join(sorted(unresolved))
+            + "."
+        )
 
 
 def _materialize_resources(
@@ -630,33 +676,6 @@ def _materialize_resources(
                 f"Canonical resource {resource_id!r} could not be materialized: {exc}"
             ) from exc
     return result
-
-
-def _serialize_canonical_resource(
-    resource: CanonicalRequestResource,
-) -> dict[str, Any]:
-    if resource.content is not None:
-        content = resource.content
-        last_modified = 0
-    else:
-        assert resource.source_path is not None
-        try:
-            content = resource.source_path.read_bytes()
-            last_modified = int(resource.source_path.stat().st_mtime * 1000)
-        except OSError as exc:
-            raise SessionResourceError(
-                f"Could not read canonical resource: {resource.source_path}"
-            ) from exc
-    media_type = mimetypes.guess_type(resource.name)[0] or "application/octet-stream"
-    return {
-        "kind": resource.kind,
-        "name": safe_embedded_filename(resource.name),
-        "type": media_type,
-        "size": len(content),
-        "lastModified": last_modified,
-        "encoding": "base64",
-        "data": base64.b64encode(content).decode("ascii"),
-    }
 
 
 def _classify_validation_error(exc: ValidationError) -> SessionError:
