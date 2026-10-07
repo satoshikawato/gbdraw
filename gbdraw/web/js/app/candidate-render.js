@@ -257,6 +257,8 @@ const compilePlanBundle = ({
   );
   // A Depth row the draft keeps but Show Depth hides is excused like a switched-off
   // GC row. Python reports the GC rows; it is sent no Depth source, so the draft says.
+  // The rule reads the caption an operation addresses in Python's output, so a
+  // rename of the row and the styles under its new name are excused too (OV-88).
   const unrequestedDepth = new Set(Array.from(unrequestedDepthCaptions || []).map(text).filter(Boolean));
   const renderedIdsByDirectCaption = new Map();
   Object.entries(featureColorOverrides || {}).forEach(([key, override]) => {
@@ -298,7 +300,7 @@ const compilePlanBundle = ({
       addToResults(operationsByResult, allResultIndexes, 'legendRenames', {
         from: entry.originalCaption,
         to: entry.caption,
-        allowMissing: sourceReplaced || manualCaptions.has(entry.caption),
+        allowMissing: sourceReplaced || manualCaptions.has(entry.caption) || unrequestedDepth.has(entry.originalCaption),
         xPos: legendOrderChanged ? null : entry.xPos,
         yPos: legendOrderChanged ? null : entry.yPos
       });
@@ -333,7 +335,7 @@ const compilePlanBundle = ({
     const targetCaption = isOriginal ? originalCaption : caption;
     const legendRenderedIds = entry && entry.featureIds.length > 0
       ? entry.featureIds : [...(renderedIdsByDirectCaption.get(caption) || [])];
-    const allowMissing = !entry || (sourceReplaced && isOriginal) || unrequestedDepth.has(caption)
+    const allowMissing = !entry || (sourceReplaced && isOriginal) || unrequestedDepth.has(targetCaption)
       || (rendererDerivedCaptions.has(caption)
       && (legendRenderedIds.length === 0 || legendRenderedIds.every(id => hiddenRenderedIds.has(id))));
     // Each Result styles only the category features it renders. A batch Result

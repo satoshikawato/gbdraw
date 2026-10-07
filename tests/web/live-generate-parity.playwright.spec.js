@@ -818,10 +818,11 @@ for (const { name, mode, canvas = null, absent = null, run } of SIBLINGS) {
 
 // OV-81: the Legend color of a Depth row hidden by Show Depth is kept; showing
 // Depth again draws the row in that color.
-for (const [mode, addDepth] of [
+const DEPTH_ADDERS = [
   ['circular', (text) => { window.__GBDRAW_APP__.setCircularDepthFile(0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' })); }],
   ['linear', (text) => { const app = window.__GBDRAW_APP__; app.setLinearDepthFile(app.linearSeqs[0], 0, new File([text], 'depth.tsv', { type: 'text/tab-separated-values' })); }]
-]) {
+];
+for (const [mode, addDepth] of DEPTH_ADDERS) {
   test(`a Depth Legend color returns when Show Depth is switched on again (${mode})`, async ({ page }) => {
     test.setTimeout(120_000);
     await openCanvas(page, mode, null);
@@ -838,6 +839,31 @@ for (const [mode, addDepth] of [
     await generate(page);
     const row = (await semanticSnapshot(page)).legend.find(({ caption }) => caption === 'depth');
     expect(row?.fill.toLowerCase()).toBe('#7b2cbf');
+  });
+
+  // OV-88: a Depth row renamed in the Legend is excused like an unrenamed one:
+  // its rename and the styles under the new name do not fail the Generate. As
+  // for a renamed GC row that is switched off, the Result without the row ends
+  // the rename, so the row returns under its series caption.
+  test(`a Depth row renamed in the Legend does not fail Generate while Show Depth hides it (${mode})`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await openCanvas(page, mode, null);
+    await page.evaluate(addDepth, DEPTH_TSV);
+    await settleLive(page);
+    await generate(page);
+    await renameRow(page, 'depth', 'Coverage');
+    await settleLive(page);
+    await colorLegendRow(page, 'Coverage', '#7b2cbf');
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = false; });
+    await settleLive(page);
+    await generate(page);
+    const hidden = (await semanticSnapshot(page)).legend.map(({ caption }) => caption);
+    expect(hidden).not.toContain('Coverage');
+    expect(hidden).not.toContain('depth');
+    await page.evaluate(() => { window.__GBDRAW_APP__.form.show_depth = true; });
+    await settleLive(page);
+    await generate(page);
+    expect((await semanticSnapshot(page)).legend.map(({ caption }) => caption)).toContain('depth');
   });
 }
 
