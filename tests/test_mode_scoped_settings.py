@@ -477,3 +477,38 @@ def test_cli_resave_of_a_config_less_session_44_moves_its_request_annotation_tar
     assert all(not annotation_set["annotations"] for annotation_set in saved["modes"]["circular"]["config"]["annotationSets"])
     assert saved["renderRequest"]["diagramOptions"]["annotations"] == source["renderRequest"]["diagramOptions"]["annotations"]
     assert "INFO: 1 annotation(s) from Session version 44 named a feature by hash=" in caplog.text
+
+
+def test_split_moves_instant_preview_to_the_app_unless_ui_has_it() -> None:
+    # Registry row 175: for any source version; an existing ui value wins.
+    assert _split(_draft(paletteInstantPreviewEnabled=True))["ui"]["paletteInstantPreviewEnabled"] is True
+    shown = {"ui": {"mode": "circular", "paletteInstantPreviewEnabled": False},
+             "config": {"paletteInstantPreviewEnabled": True}}
+    result = _split(shown)
+    assert result["ui"]["paletteInstantPreviewEnabled"] is False
+    assert "paletteInstantPreviewEnabled" not in result["modes"]["circular"].get("config", {})
+
+
+def test_split_resolves_override_colors_against_the_draft_palette() -> None:
+    # Web Load reads colors marked colorsAreOverrides over the palette's colors
+    # (services/config.js applyConfigData); the split stores the result.
+    with (REPO_ROOT / "gbdraw" / "data" / "color_palettes.toml").open("rb") as handle:
+        import tomllib
+
+        palette = {key: str(value) for key, value in tomllib.load(handle)["default"].items()}
+    result = _split(_draft(palette="default", colors={"CDS": " #123456 ", "collinear_block_2": "#000000"},
+                           colorsAreOverrides=True))
+
+    colors = result["modes"]["circular"]["config"]["colors"]
+    assert result["modes"]["linear"]["config"]["colors"] == colors
+    assert colors["CDS"] == "#123456"
+    assert colors["tRNA"] == palette["tRNA"]
+    assert "collinear_block_2" not in colors
+    assert colors["pairwise_match"] == palette.get("pairwise_match", "#d3d3d3")
+    for mode in DIAGRAM_MODES:
+        assert "colorsAreOverrides" not in result["modes"][mode]["config"]
+
+    # Without the flag the stored colors are complete and stay as saved.
+    complete = _split(_draft(palette="default", colors={"CDS": "red"}, colorsAreOverrides=False))
+    assert complete["modes"]["circular"]["config"]["colors"] == {"CDS": "red"}
+    assert "colorsAreOverrides" not in complete["modes"]["circular"]["config"]

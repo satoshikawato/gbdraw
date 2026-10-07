@@ -9,6 +9,7 @@ import base64
 import binascii
 import copy
 import csv
+import functools
 import gzip
 import hashlib
 import io
@@ -16,6 +17,7 @@ import json
 import math
 import os
 import re
+import sys
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime
@@ -2310,6 +2312,82 @@ def _mode_profile_values(mode_profiles: object, mode: DiagramMode) -> Mapping[st
     return values if isinstance(values, Mapping) else {}
 
 
+# The comparison colors every Web palette holds (``DEFAULT_COMPARISON_COLORS``
+# in the Web ``utils/color-utils.js``).
+_DEFAULT_COMPARISON_COLORS = {
+    "pairwise_match": "#d3d3d3",
+    "pairwise_match_min": "#FFE7E7",
+    "pairwise_match_max": "#FF7272",
+    "collinear_block_plus_min": "#f0f1f5",
+    "collinear_block_plus": "#8b9cc1",
+    "collinear_block_minus_min": "#FFE7E7",
+    "collinear_block_minus": "#E15759",
+}
+_INDEXED_COLLINEAR_BLOCK_COLOR = re.compile(r"collinear_block_[0-9]+\Z")
+
+
+def _normalize_palette_colors(colors: Mapping[str, Any]) -> dict[str, Any]:
+    """The twin of ``normalizePaletteColors`` in the Web ``utils/color-utils.js``."""
+
+    normalized = {key: value for key, value in colors.items() if not _INDEXED_COLLINEAR_BLOCK_COLOR.match(key)}
+    if _js_truthy(normalized.get("collinear_block_plus_max")) and not _js_truthy(
+        normalized.get("collinear_block_plus")
+    ):
+        normalized["collinear_block_plus"] = normalized["collinear_block_plus_max"]
+    for key, value in _DEFAULT_COMPARISON_COLORS.items():
+        if not _js_truthy(normalized.get(key)):
+            normalized[key] = value
+    return normalized
+
+
+@functools.cache
+def _color_palettes() -> dict[str, Any]:
+    if sys.version_info >= (3, 11):
+        import tomllib
+    else:
+        import tomli as tomllib
+    from importlib import resources
+
+    with resources.files("gbdraw.data").joinpath("color_palettes.toml").open("rb") as handle:
+        return tomllib.load(handle)
+
+
+def _palette_colors(name: object) -> dict[str, Any]:
+    """A palette's normalized colors, or none (``paletteColorsFromDefinitions``).
+
+    The Web reads the palettes from ``gallery/palettes/palettes.json``, which
+    ``tools/generate_palette_explorer_assets.py`` writes from the same
+    ``gbdraw/data/color_palettes.toml``.
+    """
+
+    palette = _js_text(name)
+    colors = _color_palettes().get(palette) if palette != "title" else None
+    if not isinstance(colors, Mapping) or not colors:
+        return {}
+    return _normalize_palette_colors({str(key): str(value) for key, value in colors.items()})
+
+
+def _with_resolved_override_colors(config: Mapping[str, Any]) -> dict[str, Any]:
+    """The draft ``config`` with ``colorsAreOverrides`` resolved and dropped.
+
+    With the flag and colors, the stored colors override the draft palette's
+    colors, as Web Load reads them (``services/config.js`` applyConfigData);
+    otherwise the stored colors are complete. Named colors stay as saved:
+    Web Load resolves them afterwards, as it does for complete colors.
+    """
+
+    resolved = {key: value for key, value in config.items() if key != "colorsAreOverrides"}
+    colors = config.get("colors")
+    if _js_truthy(config.get("colorsAreOverrides")) and isinstance(colors, Mapping) and colors:
+        # ``normalizeColorMap``: each value trimmed (``resolveColorToHex`` keeps
+        # a name it cannot resolve without a browser).
+        overrides = {key: _js_text(value) if _js_truthy(value) else "" for key, value in colors.items()}
+        resolved["colors"] = _normalize_palette_colors(
+            {**_palette_colors(_js_text(config.get("palette")) or "default"), **overrides}
+        )
+    return resolved
+
+
 def _profile_active_mode(draft: Mapping[str, Any], mode_profiles: object) -> DiagramMode | None:
     """The mode whose values a flat draft holds for the mode-profile fields.
 
@@ -2452,8 +2530,10 @@ def split_draft_into_modes(
     that a slice does not take is absent there (that mode's default), and a
     field that no row names is dropped. App-level settings move to the top
     level: ``config.losat``'s execution settings to ``ui.losatExecution``,
-    ``config.adv.rich_feature_popup`` to ``ui.richFeaturePopup``, and
-    ``config.cliOptions`` to ``cliOptions``.
+    ``config.adv.rich_feature_popup`` to ``ui.richFeaturePopup``,
+    ``config.paletteInstantPreviewEnabled`` to ``ui`` (unless ``ui`` has it),
+    and ``config.cliOptions`` to ``cliOptions``. ``config.colorsAreOverrides``
+    is resolved into ``colors`` and dropped.
 
     ``committed_mode`` is the saved Result's mode (``renderRequest.mode``, else
     ``ui.mode``). ``mode_profiles`` defaults to ``config.modeProfiles``, and
@@ -2473,6 +2553,9 @@ def split_draft_into_modes(
             diagnostic=_SESSION_FIELDS_INVALID,
         )
     config_value = draft.get("config")
+    if isinstance(config_value, Mapping) and "colorsAreOverrides" in config_value:
+        config_value = _with_resolved_override_colors(config_value)
+        draft = {**draft, "config": config_value}
     config: Mapping[str, Any] = config_value if isinstance(config_value, Mapping) else {}
     ui_value = draft.get("ui")
     ui: Mapping[str, Any] = ui_value if isinstance(ui_value, Mapping) else {}
@@ -2542,9 +2625,9 @@ def split_draft_into_modes(
     app_ui: dict[str, Any] = {"losatExecution": execution} if execution else {}
     if "rich_feature_popup" in adv:
         app_ui["richFeaturePopup"] = _json_clone(adv["rich_feature_popup"])
-    preview = config.get("paletteInstantPreviewEnabled")
-    if isinstance(preview, bool) and "paletteInstantPreviewEnabled" not in ui:
-        app_ui["paletteInstantPreviewEnabled"] = preview
+    # An existing ``ui`` value wins over the draft's.
+    if "paletteInstantPreviewEnabled" in config and "paletteInstantPreviewEnabled" not in ui:
+        app_ui["paletteInstantPreviewEnabled"] = _json_clone(config["paletteInstantPreviewEnabled"])
     if app_ui:
         result["ui"] = {**(result.get("ui") or {}), **app_ui}
     # Session provenance, written only when the draft has it.
