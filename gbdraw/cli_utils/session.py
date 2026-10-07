@@ -41,6 +41,7 @@ from gbdraw.session_io import (
     get_session_slot,
     migrate_legacy_linear_comparison_draft_for_current_writer,
     migrate_persisted_web_state_field_names,
+    migrate_session_annotation_targets,
     migrate_session_feature_edits,
     safe_embedded_filename,
     serialize_file_entry,
@@ -832,6 +833,10 @@ def _project_session_adjunct_for_current_write(
         if isinstance(saved_editor_state, Mapping)
         else None
     )
+    render_request_value = session.get("renderRequest")
+    render_request = (
+        render_request_value if isinstance(render_request_value, Mapping) else {}
+    )
     if (
         source_version < CURRENT_SESSION_VERSION
         and isinstance(features, Mapping)
@@ -839,14 +844,9 @@ def _project_session_adjunct_for_current_write(
     ):
         # The rendered-ID edit maps become identity drafts through the
         # Session's saved catalog, as the Web app moves them on Load.
-        render_request = session.get("renderRequest")
         migration = migrate_session_feature_edits(
             features,
-            mode=(
-                render_request.get("mode")
-                if isinstance(render_request, Mapping)
-                else None
-            ),
+            mode=render_request.get("mode"),
             catalog=saved_catalog,
         )
         adjunct["features"] = migration.features
@@ -943,6 +943,29 @@ def _project_session_adjunct_for_current_write(
         assert isinstance(migrated_config, Mapping)
         config = migrated_config
         adjunct["config"] = config
+    if (
+        CURRENT_AUTHORITY_SESSION_MIN_VERSION <= source_version < CURRENT_SESSION_VERSION
+        and isinstance(config, Mapping)
+    ):
+        # R-7: a hash= annotation target moves to its source feature where the
+        # Session's saved catalog makes the figure certain, as the Web app
+        # moves it on Load. The request keeps the targets that drew the figure.
+        annotation_migration = migrate_session_annotation_targets(
+            config.get("annotationSets"),
+            mode=render_request.get("mode"),
+            catalog=saved_catalog,
+            records=render_request.get("records"),
+        )
+        if annotation_migration.migrated_count:
+            config = {**config, "annotationSets": annotation_migration.annotation_sets}
+            adjunct["config"] = config
+            logger.info(
+                "INFO: %d annotation(s) from Session version %d named a feature "
+                "by hash=; in the written Session each names that feature by "
+                "its source.",
+                annotation_migration.migrated_count,
+                source_version,
+            )
     if source_version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
         return adjunct, web_file_inventory
 
