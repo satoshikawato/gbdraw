@@ -57,20 +57,20 @@
       "sha256": "c4eff1370fc8ed7f732e8f34cece56c0cedecf6c7d24680839682587db424e5a"
     },
     "gallery/sessions/BGC0000708-BGC0000713.gbdraw-session.json": {
-      "bytes": 2904547,
-      "sha256": "fa5abf33a82aa75dd39e2e5a944d3fb03de70baca87ffcbc53f3c4819e443b30"
+      "bytes": 2904452,
+      "sha256": "ce1d2800eeef31d53049cb7c75e0fe88a3f739cacec7f8522929e47eaf7697d7"
     },
     "gallery/sessions/HmmtDNA_ATskew.gbdraw-session.json": {
-      "bytes": 325225,
-      "sha256": "bd16c8af7d8e54fc054ce20ac04b55db9506e357f63258e92c0c58874e93cd8a"
+      "bytes": 325073,
+      "sha256": "8b2b37b5f8774ec6458bccf2970cf198f0e3f1748fb99309eaa224712204b879"
     },
     "gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json": {
       "bytes": 272879,
       "sha256": "f4e3f36364bca0d96e21f46a278bc51f3b90d00bb6307d6d53d86ecbeb079329"
     },
     "gallery/sessions/Vnig_TUMSAT-TG-2018.gbdraw-session.json.gz": {
-      "bytes": 11650106,
-      "sha256": "70f65a7a9ce6bc0071f9b6a0e95554ae142d35f9b145daedd81c3b1e29a645c5"
+      "bytes": 11650098,
+      "sha256": "cff1a06dd98f3ed326ee99eeda7f6ab65df7dd37aa822472ce811f4f4ef7c88e"
     },
     "gallery/sessions/hepatoplasmataceae_collinear.gbdraw-session.json.gz": {
       "bytes": 11430395,
@@ -93,8 +93,8 @@
       "sha256": "6472f92b2cfc7a28bfabb0b2c62dea913ba70804c6c2596473b309f64cd5b82c"
     },
     "gallery/sessions/vibrio-harveyi-group-collinear.gbdraw-session.json.gz": {
-      "bytes": 22316423,
-      "sha256": "2cab403462fba20e13a2623aea47dd029bf7b8bbe13e67a2d85041f09050ca8b"
+      "bytes": 22316422,
+      "sha256": "92a64ba20a4b8f13e48ab43b6bd9ebe04bdfb8bb51564e2d7fb90d428887b0c6"
     },
     "gallery/sources/BGC0000708-BGC0000713.svg": {
       "bytes": 245739,
