@@ -32,6 +32,7 @@ from .api.request_render import (
     CircularBatchRequestPlan,
     RequestRenderResult,
     build_request_plan_diagram,
+    diagram_request_output_paths,
     plan_request,
     render_prepared_request,
     render_request,
@@ -95,7 +96,6 @@ from .cli_utils.session import (
     DiagramRunResult,
     RenderedSvg,
     add_session_args,
-    diagram_request_output_paths,
     diagram_request_rendered_svgs,
     parse_session_pre_args,
     preflight_session_sidecar_if_requested,
@@ -755,7 +755,8 @@ def circular_main(cmd_args) -> None:
                 session_output=session_request.session_output,
             ):
                 return
-            # This local document is the only holder of the parsed payload.
+            # Sessions 27-30 replay through CLI arguments. This local document
+            # is the only holder of the parsed payload.
             session = document._data
             run_spec = session_to_cli_args(
                 session,

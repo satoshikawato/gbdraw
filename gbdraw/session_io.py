@@ -1541,60 +1541,6 @@ def _validate_other_mode_run_metadata(run_metadata: Any, results: list[Any]) -> 
             raise ValidationError("runMetadata.featureIdentityNotices contains an invalid notice.", diagnostic=_OTHER_MODE_RESULT_INVALID)
 
 
-def session_with_other_mode_result_at_top(session: Mapping[str, Any]) -> dict[str, Any]:
-    """The same Session with its two Result sets swapped (Session 46).
-
-    The ``otherModeResult`` set moves to the top level and the top-level set
-    moves into ``otherModeResult``; the shared draft, Legend edits, ``ui``
-    preferences and caches stay where they are. A per-set field that the moved
-    set lacks is absent at the top level, so a reader takes its default; it is
-    never the other set's value.
-    """
-    other = session.get("otherModeResult")
-    if not isinstance(other, Mapping):
-        raise ValidationError("Session has no otherModeResult.", diagnostic=_OTHER_MODE_RESULT_INVALID)
-
-    def mapping(value: Any) -> Mapping[str, Any]:
-        return value if isinstance(value, Mapping) else {}
-
-    set_fields = ("renderRequest", "results", "runMetadata", "cliInvocation")
-    editor_fields = OTHER_MODE_RESULT_EDITOR_FIELDS - {"legend"}
-    top_editor = mapping(session.get("editorState"))
-    top_legend = mapping(top_editor.get("legend"))
-    top_ui = mapping(session.get("ui"))
-    other_editor = mapping(other.get("editorState"))
-    other_legend = mapping(other_editor.get("legend"))
-    other_ui = mapping(other.get("ui"))
-
-    def per_set(source: Mapping[str, Any], fields: frozenset[str] | set[str]) -> dict[str, Any]:
-        return {key: source[key] for key in fields if key in source}
-
-    def shared(source: Mapping[str, Any], fields: frozenset[str] | set[str]) -> dict[str, Any]:
-        return {key: value for key, value in source.items() if key not in fields}
-
-    moved_top: dict[str, Any] = per_set(session, set(set_fields))
-    moved_top["editorState"] = {
-        **per_set(top_editor, editor_fields),
-        "legend": per_set(top_legend, OTHER_MODE_RESULT_LEGEND_FIELDS),
-    }
-    moved_top["ui"] = per_set(top_ui, OTHER_MODE_RESULT_UI_FIELDS)
-    swapped = shared(session, {*set_fields, "otherModeResult"})
-    swapped.update(per_set(other, set(set_fields)))
-    swapped["editorState"] = {
-        **shared(top_editor, OTHER_MODE_RESULT_EDITOR_FIELDS),
-        **per_set(other_editor, editor_fields),
-        "legend": {
-            **shared(top_legend, OTHER_MODE_RESULT_LEGEND_FIELDS),
-            **per_set(other_legend, OTHER_MODE_RESULT_LEGEND_FIELDS),
-        },
-    }
-    swapped["ui"] = {**shared(top_ui, OTHER_MODE_RESULT_UI_FIELDS), **per_set(other_ui, OTHER_MODE_RESULT_UI_FIELDS)}
-    # The field holds a set only when it has a Result.
-    if moved_top.get("results"):
-        swapped["otherModeResult"] = moved_top
-    return swapped
-
-
 def _validate_current_feature_catalog_authority(
     session: Mapping[str, Any],
     version: int,

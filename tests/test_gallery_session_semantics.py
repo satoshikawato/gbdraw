@@ -18,6 +18,7 @@ from gbdraw.api import (
     session_to_request,
 )
 from gbdraw.api.session_compat import build_session_compatible_request_diagram
+from gbdraw.session import session_drawing_artifacts
 from gbdraw.session_request_codec import CANONICAL_REQUEST_SCHEMA
 from tools.prepare_interactive_gallery_assets import EXAMPLES, GallerySessionExample
 
@@ -254,7 +255,7 @@ def _materialized_track_geometry(example_id: str) -> dict[str, Any]:
         ) as materialized:
             prepared = build_session_compatible_request_diagram(
                 session_to_request(materialized),
-                document.to_dict(),
+                session_drawing_artifacts(document),
             )
     geometry = getattr(prepared.drawing, "_gbdraw_track_slot_geometry", None)
     assert isinstance(geometry, dict)

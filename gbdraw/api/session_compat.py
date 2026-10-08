@@ -32,11 +32,10 @@ from gbdraw.layout.similarity_alignment import (
     AlignmentResolutionRationale,
     SimilarityAlignmentPlan,
 )
-from gbdraw.session import SessionDocument
+from gbdraw.session_drawings import SessionDrawingArtifacts, drawing_draft_config
 from gbdraw.session_io import (
     classify_raw_losat_cache_entry,
     empty_protein_identity_manifest,
-    validate_session,
 )
 
 from .options import LinearMultiRecordOptions, LinearRecordTranslation
@@ -260,11 +259,8 @@ def _legacy_derived_evidence_entries(
 
 
 def _session_protein_mode(artifacts: Mapping[str, Any]) -> ProteinBlastpMode | None:
-    # Session 46 keeps the LOSATP settings in the Linear slice.
-    modes = artifacts.get("modes")
-    linear = modes.get("linear") if isinstance(modes, Mapping) else None
-    config = linear.get("config") if isinstance(linear, Mapping) else artifacts.get("config")
-    losat = config.get("losat") if isinstance(config, Mapping) else None
+    # The LOSATP settings are Linear settings.
+    losat = drawing_draft_config(artifacts, "linear").get("losat")
     blastp = losat.get("blastp") if isinstance(losat, Mapping) else None
     configured = blastp.get("mode") if isinstance(blastp, Mapping) else None
     if str(configured or "") in {"pairwise", "orthogroup", "collinear"}:
@@ -855,7 +851,7 @@ def _legacy_similarity_alignment_plan(
 
 def promote_legacy_session_similarity_alignment_request(
     request: DiagramRequest,
-    session_artifacts: Mapping[str, Any],
+    drawing: SessionDrawingArtifacts,
     *,
     plan: LinearRequestPlan | None = None,
 ) -> DiagramRequest:
@@ -867,6 +863,7 @@ def promote_legacy_session_similarity_alignment_request(
 
     if not isinstance(request, LinearDiagramRequest):
         return request
+    session_artifacts = drawing.fields
     orthogroup_state = session_artifacts.get("orthogroupState")
     session_target = (
         orthogroup_state.get("selectedOrthogroupAlignmentFeature")
@@ -893,13 +890,8 @@ def promote_legacy_session_similarity_alignment_request(
         raise ValidationError(
             "Legacy Session contains conflicting similarity alignment owners."
         )
-    session_version = session_artifacts.get("version")
-    if (
-        isinstance(session_version, bool)
-        or not isinstance(session_version, int)
-        # Session 44 introduced the typed similarity alignment state.
-        or session_version >= 44
-    ):
+    # Session 44 introduced the typed similarity alignment state.
+    if drawing.version >= 44:
         raise ValidationError(
             "Current Sessions must store typed similarity alignment state."
         )
@@ -1104,7 +1096,7 @@ _MAIN_DISPLAY_FRAME_SESSION_VERSION = 42
 def _main_display_frame_rows_to_search_frame(
     plan: DiagramRequestPlan,
     request: DiagramRequest,
-    session_artifacts: Mapping[str, Any],
+    drawing: SessionDrawingArtifacts,
 ) -> DiagramRequest:
     """Convert main Session comparison rows to the search frame once (PD-OI-073).
 
@@ -1116,12 +1108,10 @@ def _main_display_frame_rows_to_search_frame(
     is converted with its rows.
     """
 
-    version = session_artifacts.get("version")
     if (
         not isinstance(plan, LinearRequestPlan)
         or not isinstance(request, LinearDiagramRequest)
-        or not isinstance(version, int)
-        or version > _MAIN_DISPLAY_FRAME_SESSION_VERSION
+        or drawing.version > _MAIN_DISPLAY_FRAME_SESSION_VERSION
         or not request.options.linear_comparisons
     ):
         return request
@@ -1152,18 +1142,18 @@ def _main_display_frame_rows_to_search_frame(
 
 def _adapt_session_plan(
     plan: DiagramRequestPlan,
-    session_artifacts: Mapping[str, Any],
+    drawing: SessionDrawingArtifacts,
 ) -> tuple[AdaptedSessionRequest, ProteinExtractionResult | None]:
     """Adapt ``plan``'s request and artifacts; also return the protein extraction
     of ``plan`` when the adaptation ran one, so its build reuses it."""
 
-    source = _read_session_artifact_source(session_artifacts)
+    source = _read_session_artifact_source(drawing.fields)
     request = promote_legacy_session_similarity_alignment_request(
         plan.request,
-        session_artifacts,
+        drawing,
         plan=plan if isinstance(plan, LinearRequestPlan) else None,
     )
-    request = _main_display_frame_rows_to_search_frame(plan, request, session_artifacts)
+    request = _main_display_frame_rows_to_search_frame(plan, request, drawing)
     if request is not plan.request:
         plan = _replace_plan_request(plan, request)
     current_raw = source.current_raw_entries
@@ -1271,16 +1261,21 @@ def _adapt_session_plan(
     ), extraction
 
 
+def _require_drawing(drawing: object) -> SessionDrawingArtifacts:
+    if not isinstance(drawing, SessionDrawingArtifacts):
+        raise ValidationError(
+            "Session compatibility input must be a drawing of a loaded SessionDocument."
+        )
+    return drawing
+
+
 def adapt_session_request(
     request: DiagramRequest,
-    session_artifacts: Mapping[str, Any],
+    drawing: SessionDrawingArtifacts,
 ) -> AdaptedSessionRequest:
-    """Convert one validated persisted session to the current render contract."""
+    """Convert one drawing of a validated Session to the current render contract."""
 
-    if not isinstance(session_artifacts, Mapping):
-        raise ValidationError("Session compatibility input must be an object.")
-    validate_session(session_artifacts)
-    return _adapt_session_plan(plan_request(request), session_artifacts)[0]
+    return _adapt_session_plan(plan_request(request), _require_drawing(drawing))[0]
 
 
 def _adjust_migration_report(
@@ -1302,30 +1297,27 @@ def _adjust_migration_report(
 
 def build_session_compatible_request_diagram(
     request: DiagramRequest,
-    session_artifacts: Mapping[str, Any],
+    drawing: SessionDrawingArtifacts,
 ) -> PreparedDiagramRequest | PreparedCircularBatchRequest:
-    """Build a released session after adapting it to current artifacts."""
+    """Build one drawing of a released session after adapting its artifacts."""
 
-    if not isinstance(session_artifacts, Mapping):
-        raise ValidationError("Session compatibility input must be an object.")
-    validate_session(session_artifacts)
     prepared, _report = _build_session_compatible_plan(
         plan_request(request),
-        session_artifacts,
+        _require_drawing(drawing),
     )
     return prepared
 
 
 def _build_session_compatible_plan(
     plan: DiagramRequestPlan,
-    session_artifacts: Mapping[str, Any],
+    drawing: SessionDrawingArtifacts,
 ) -> tuple[
     PreparedDiagramRequest | PreparedCircularBatchRequest,
     SessionMigrationReport,
 ]:
     """Adapt and build one already-resolved session request plan."""
 
-    adapted, extraction = _adapt_session_plan(plan, session_artifacts)
+    adapted, extraction = _adapt_session_plan(plan, drawing)
     if adapted.request is not plan.request:
         # The replacement keeps the records, their inputs and the record keys
         # that the extraction read.
@@ -1343,27 +1335,19 @@ def _build_session_compatible_plan(
 
 def render_session_compatible_request(
     request: DiagramRequest,
-    session_artifacts: Mapping[str, Any] | SessionDocument,
+    drawing: SessionDrawingArtifacts,
     *,
     include_feature_catalog: bool = False,
 ) -> RequestRenderResult | CircularBatchRenderResult:
-    """Render a released session through its sole compatibility adapter.
+    """Render one drawing of a released session through its sole compatibility adapter."""
 
-    A ``SessionDocument`` was validated when it was built; it is read in place.
-    """
-
-    if isinstance(session_artifacts, SessionDocument):
-        session_artifacts = session_artifacts._data
-    elif isinstance(session_artifacts, Mapping):
-        validate_session(session_artifacts)
-    else:
-        raise ValidationError("Session compatibility input must be an object.")
+    _require_drawing(drawing)
     plan = plan_request(request)
     batch_outputs_preflighted = isinstance(plan, CircularBatchRequestPlan)
     plan.preflight_outputs()
     prepared, migration_report = _build_session_compatible_plan(
         plan,
-        session_artifacts,
+        drawing,
     )
     result = render_prepared_request(
         prepared,

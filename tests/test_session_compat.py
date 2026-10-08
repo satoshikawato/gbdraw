@@ -24,7 +24,7 @@ from gbdraw.analysis.collinearity import (
 from gbdraw.analysis.protein_colinearity import OrthogroupMember, OrthogroupResult
 from gbdraw.circular import circular_main
 from gbdraw.linear import linear_main
-import gbdraw.cli_utils.session as cli_session_module
+import gbdraw.session_migration as session_migration
 from gbdraw.api.request_render import (
     CurrentRequestArtifacts,
     PreparedDiagramRequest,
@@ -49,11 +49,14 @@ from gbdraw.api.session_compat import (
 )
 from gbdraw.exceptions import ValidationError
 from gbdraw.session import (
+    SessionDocument,
+    SessionDrawingSpec,
     build_session_document,
     load_session_document,
     materialize_session,
     render_session,
     save_session_document,
+    session_drawing_artifacts,
     session_to_request,
 )
 from gbdraw.session_io import (
@@ -153,7 +156,7 @@ def test_cli_writer_projects_released_web_config_to_session_46_mode_slices() -> 
     }
 
     adjunct, web_file_inventory = (
-        cli_session_module._project_session_adjunct_for_current_write(
+        session_migration.project_session_adjunct_for_current_write(
             source,
             source_version=41,
         )
@@ -277,7 +280,7 @@ def test_released_legacy_alignment_session_promotes_to_current_typed_state(
             (record.record_key, 0.0, 0.0)
             for record in request.records
         ]
-        adapted = adapt_session_request(request, document.to_dict())
+        adapted = adapt_session_request(request, session_drawing_artifacts(document))
         assert not hasattr(adapted.request.options, "align_orthogroup_feature")
         assert adapted.request.similarity_alignment == request.similarity_alignment
         save_session_document(current_path, request)
@@ -506,7 +509,7 @@ def test_session_adapter_passes_plain_prepared_request_to_current_renderer(
         fake_render,
     )
 
-    result = render_session_compatible_request(request, session_artifacts)
+    result = render_session_compatible_request(request, _drawing(session_artifacts))
 
     assert captured == [PreparedDiagramRequest]
     assert isinstance(result, SessionCompatibleRequestRenderResult)
@@ -542,6 +545,12 @@ def _released_canonical_session(
     if isinstance(nested_output, dict):
         nested_output["outputPrefix"] = "ignored-legacy-prefix"
     return data
+
+
+def _drawing(data: dict[str, Any] | SessionDocument):
+    """The only drawing of a validated Session, as the adapter reads it."""
+
+    return session_drawing_artifacts(load_session_document(data))
 
 
 def _released_cli_session(
@@ -696,7 +705,7 @@ def test_unresolved_session_batch_preflights_all_resolved_outputs(
     )
 
     with pytest.raises(ValidationError, match="already exist"):
-        render_session_compatible_request(request, session_artifacts)
+        render_session_compatible_request(request, _drawing(session_artifacts))
 
     assert not (tmp_path / "diagram_1.svg").exists()
     assert second_output.read_text(encoding="utf-8") == "occupied"
@@ -761,7 +770,7 @@ def test_feature_analysis_ids_fail_closed_across_protein_request_artifacts(
         ValidationError,
         match="no verified session artifact resolved",
     ):
-        adapt_session_request(request, session)
+        adapt_session_request(request, _drawing(session))
 
 
 @pytest.mark.parametrize("compound", [False, True], ids=["exact", "compound"])
@@ -802,7 +811,7 @@ def test_typed_protein_results_fail_closed_for_unresolved_analysis_ids(
         ValidationError,
         match="no verified session artifact resolved",
     ):
-        adapt_session_request(request, session)
+        adapt_session_request(request, _drawing(session))
 
 
 @pytest.mark.parametrize(
@@ -912,7 +921,7 @@ def test_released_schema_v2_fixture_promotes_to_current_typed_artifacts(
     with materialize_session(document, output_directory=tmp_path) as materialized:
         adapted = adapt_session_request(
             session_to_request(materialized),
-            document.to_dict(),
+            session_drawing_artifacts(document),
         )
 
     protein_entries = tuple(
@@ -934,7 +943,7 @@ def test_released_schema_v2_typed_alignment_survives_protein_artifact_promotion(
 
     with materialize_session(document, output_directory=tmp_path) as materialized:
         request = session_to_request(materialized)
-        adapted = adapt_session_request(request, document.to_dict())
+        adapted = adapt_session_request(request, session_drawing_artifacts(document))
 
     adapted_options = adapted.request.options
     assert adapted.request.similarity_alignment == request.similarity_alignment
@@ -1038,7 +1047,7 @@ def test_version_39_typed_replay_retains_dormant_comparison_resource(
         },
     }
     adjunct, web_file_inventory = (
-        cli_session_module._project_session_adjunct_for_current_write(
+        session_migration.project_session_adjunct_for_current_write(
             migration_source,
             source_version=39,
         )
@@ -1046,8 +1055,7 @@ def test_version_39_typed_replay_retains_dormant_comparison_resource(
 
     with materialize_session(source_document, output_directory=tmp_path) as materialized:
         rewritten = build_session_document(
-            session_to_request(materialized),
-            adjunct=adjunct,
+            drawings=[SessionDrawingSpec(session_to_request(materialized), state=adjunct)],
             web_file_inventory=web_file_inventory,
         ).to_dict()
 
@@ -1090,7 +1098,7 @@ def test_current_typed_replay_retains_web_only_conservation_fastas(
     ]
 
     adjunct, web_file_inventory = (
-        cli_session_module._project_session_adjunct_for_current_write(
+        session_migration.project_session_adjunct_for_current_write(
             source_payload,
             source_version=source_document.version,
         )
@@ -1099,8 +1107,7 @@ def test_current_typed_replay_retains_web_only_conservation_fastas(
 
     with materialize_session(source_document, output_directory=tmp_path) as materialized:
         rewritten = build_session_document(
-            session_to_request(materialized),
-            adjunct=adjunct,
+            drawings=[SessionDrawingSpec(session_to_request(materialized), state=adjunct)],
             web_file_inventory=web_file_inventory,
         ).to_dict()
 
@@ -1149,13 +1156,15 @@ def test_released_schema_v2_fixture_sidecar_collision_is_atomic(
     assert not output_prefix.with_suffix(".svg").exists()
 
 
-def test_session_adapter_rejects_unsupported_session_schema(tmp_path: Path) -> None:
+def test_session_adapter_reads_only_drawings_of_validated_sessions(tmp_path: Path) -> None:
     request = _linear_request(tmp_path)
-    data = build_session_document(request).to_dict()
-    data["version"] = 38
+    data: Any = build_session_document(request).to_dict()
 
-    with pytest.raises(ValidationError, match="Unsupported session version"):
+    with pytest.raises(ValidationError, match="drawing of a loaded SessionDocument"):
         adapt_session_request(request, data)
+    data["version"] = 38
+    with pytest.raises(ValidationError, match="Unsupported session version"):
+        load_session_document(data)
 
 
 def test_current_artifact_type_rejects_legacy_cache_schema() -> None:
@@ -1333,7 +1342,7 @@ def test_cli_replay_validates_the_sidecar_drafts_before_it_renders(
     }
     source = tmp_path / "placements.v44.json"
     source.write_text(json.dumps(session), encoding="utf-8")
-    split = cli_session_module.split_draft_into_modes
+    split = session_migration.split_draft_into_modes
 
     def split_without_scopes(draft: Any, **context: Any) -> dict[str, Any]:
         # A split that puts every row in the Circular slice: the sidecar the
@@ -1346,7 +1355,7 @@ def test_cli_replay_validates_the_sidecar_drafts_before_it_renders(
         }
         return result
 
-    monkeypatch.setattr(cli_session_module, "split_draft_into_modes", split_without_scopes)
+    monkeypatch.setattr(session_migration, "split_draft_into_modes", split_without_scopes)
     sidecar = tmp_path / "out.gbdraw-session.json"
 
     with pytest.raises(ValidationError):
@@ -1602,7 +1611,7 @@ def test_session_44_rendered_id_feature_edits_survive_the_cli_sidecar(
     assert [
         record.getMessage()
         for record in caplog.records
-        if record.name == cli_session_module.__name__
+        if record.name == session_migration.__name__
     ] == (
         [
             f"WARNING: {narrowed} Feature visibility edit(s) from Session version 44 "
@@ -1677,7 +1686,7 @@ def test_session_44_hash_annotation_targets_move_in_the_cli_sidecar(
     fixture = Path(__file__).parent / "fixtures" / case["fixture"]
     source = json.loads(gzip.decompress(fixture.read_bytes()))
     sidecar = tmp_path / "replay.gbdraw-session.json"
-    caplog.set_level("INFO", logger=cli_session_module.__name__)
+    caplog.set_level("INFO", logger=session_migration.__name__)
 
     linear_main(
         [
@@ -1712,7 +1721,7 @@ def test_session_44_hash_annotation_targets_move_in_the_cli_sidecar(
     assert [
         record.getMessage()
         for record in caplog.records
-        if record.name == cli_session_module.__name__
+        if record.name == session_migration.__name__
     ] == [
         "INFO: 1 annotation(s) from Session version 44 named a feature by hash=; "
         "in the written Session each names that feature by its source."

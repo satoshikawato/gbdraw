@@ -119,13 +119,15 @@ Use `render_session()` for a supported saved session and
 
 | Function | Purpose |
 |---|---|
-| `build_session_document()` | resolve a request and embed its resources in a session document |
+| `build_session_document()` | resolve one request, or several drawings, and embed their resources in a session document |
 | `save_session_document()` | build and write the document |
 | `load_session_document()` | parse and validate a saved document |
+| `upgrade_session_document()` | return a Session 31–44 in the current version without rendering it |
 | `materialize_session()` | expose embedded resources as temporary paths |
-| `session_to_request()` | convert a materialized session to a typed request |
+| `session_to_request()` | convert one drawing of a materialized session to a typed request |
 | `with_request_output()` | replace output settings without mutating the request |
-| `render_session()` | migrate supported persisted state and replay the request plus saved analysis artifacts |
+| `render_session()` | migrate supported persisted state and replay one drawing's request plus saved analysis artifacts |
+| `render_session_drawings()` | render several drawings together, with distinct output names |
 
 `build_session_document()` and `save_session_document()` accept optional
 `title` and `created_at` values. If `created_at` is omitted, the writer records
@@ -137,14 +139,55 @@ Materialized paths expire when the materialization context closes. `session_to_r
 Session conversion rejects values from the wrong mode. For example, a Circular
 request containing Linear track values raises `SessionConversionError`.
 
-A Session 46 saved by the Web app can hold a Result set of each mode, the second
-in `otherModeResult`. `SessionDocument.drawings` names the sets by mode
-(`("circular", "linear")`, the top-level set first), and
-`SessionDocument.drawing("linear")` returns the document with that set at the
-top level. Pass `drawing="circular"` or `drawing="linear"` to
-`session_to_request()` and `render_session()` for such a Session; without it,
-they and `SessionDocument.mode` raise `SessionDrawingSelectionError`. A Session
-with one set works as before.
+### Drawings
+
+A Session (project) holds one or more drawings. `SessionDocument.drawings`
+lists them in document order as `SessionDrawing(id, name, mode,
+has_canonical_request)`; a `SessionDrawing` is a drawing of the project, not an
+SVG drawing such as `RequestRenderResult.drawing`. A drawing without a
+committed render, such as the one drawing of a settings-only Session, has
+`has_canonical_request=False`.
+
+`SessionDocument.drawing(selector, mode=...)` selects a drawing by its exact ID,
+else by a unique exact name; without a selector it returns the only drawing, or
+the only drawing of `mode`. `SessionDocument.active_drawing_id` names the
+drawing the Web app opens. `SessionDocument.mode` and
+`SessionDocument.has_canonical_request` describe the only drawing. With several
+drawings, they and an unselected or unknown selection raise
+`SessionDrawingSelectionError`, whose message lists each drawing's ID, mode and
+name.
+
+Pass `drawing=` (an ID or a name) to `session_to_request()` and
+`render_session()` to choose the drawing. `render_session_drawings()` renders
+every drawing that has a committed render, or the drawings named in
+`drawings=`; it skips the others with a logged notice, and naming one of them
+raises `SessionDrawingSelectionError`. One drawing keeps its output names.
+Several drawings write `<base>_<id>`, where `<base>` is `output_prefix` or the
+drawing's own prefix, and a Circular batch inside still appends `_<n>`. Every
+output path of every selected drawing is checked before the first file is
+written, and each embedded resource is parsed once for all drawings. The
+result maps drawing IDs to render results in document order.
+
+The current Session version, 46, holds at most one drawing of each mode: a
+Circular drawing with ID `circular` and name `Circular`, and a Linear drawing
+with ID `linear` and name `Linear`. The Web app writes the second drawing's
+Result set in `otherModeResult`. Each drawing keeps its settings and Legend
+edits in its mode's slice of `modes`; both drawings share the LOSAT caches.
+`build_session_document(drawings=[...])` takes typed requests or
+`SessionDrawingSpec(request, mode=, id=, name=, state=)` values, where `state`
+holds Web-owned drawing fields such as `results`, `editorState`, or the
+drawing's slice in `modes`; `active_drawing=` names the drawing to open. It
+rejects what version 46 cannot hold: two drawings of one mode, a second drawing
+without its Results, other IDs or names, or a second drawing whose shared
+fields differ from the first's.
+
+`upgrade_session_document()` returns a current document unchanged. A Session
+31–44 gets the migrations of a CLI re-save without a render: its request is
+decoded, adapted to current typed state, and encoded again with the same
+resource IDs, and its Web-owned fields are migrated. Results with a feature
+catalog (Sessions 40–44) are kept; Sessions 31–39 saved none, so their
+Results are dropped until the next render. Sessions 27–30 have no canonical
+request and raise `SessionVersionError`.
 
 Request schemas 6 and 7 record each input's runtime cardinality. This lets a
 selectorless source retain `RecordCardinality.ALL` until record planning expands

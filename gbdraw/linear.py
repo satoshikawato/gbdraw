@@ -9,12 +9,13 @@ import math
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Literal, Mapping, Optional, Sequence, cast
+from typing import Literal, Optional, Sequence, cast
 from .config.toml import load_config_toml
 from .render.export import parse_formats
 from .api.request_render import (
     CurrentRequestArtifacts,
     RequestRenderResult,
+    diagram_request_output_paths,
     render_request,
 )
 from .api.session_compat import (
@@ -102,7 +103,6 @@ from .cli_utils.common import (
 from .cli_utils.session import (
     DiagramRunResult,
     add_session_args,
-    diagram_request_output_paths,
     make_rendered_svg,
     parse_session_pre_args,
     preflight_session_sidecar_if_requested,
@@ -114,7 +114,8 @@ from .render.track_slot_metadata import (
     collect_track_slot_geometry_records,
 )
 from .render.output_paths import preflight_output_paths
-from .session import load_session_document
+from .session import load_session_document, session_drawing_artifacts
+from .session_drawings import SessionDrawingArtifacts
 from .session_io import session_to_cli_args
 from .cli_utils.losat_output import (
     parse_positive_int as _parse_positive_int,
@@ -1044,7 +1045,8 @@ def linear_main(cmd_args) -> None:
                 session_output=session_request.session_output,
             ):
                 return
-            # This local document is the only holder of the parsed payload.
+            # Sessions 27-30 replay through CLI arguments. This local document
+            # is the only holder of the parsed payload.
             session = document._data
             run_spec = session_to_cli_args(
                 session,
@@ -1057,7 +1059,9 @@ def linear_main(cmd_args) -> None:
             args.overwrite = session_request.overwrite
             args.save_session = session_request.save_session
             args.session_output = session_request.session_output
-            args._gbdraw_source_session = session
+            args._gbdraw_source_session = (
+                session_drawing_artifacts(document) if document.drawings else None
+            )
             run_result = run_linear_from_namespace(args)
             save_session_sidecar_if_requested(
                 save_session=session_request.save_session,
@@ -1244,7 +1248,7 @@ def run_linear_from_namespace(args: argparse.Namespace) -> DiagramRunResult:
     """Run linear rendering from an already parsed argparse namespace."""
 
     source_session = getattr(args, "_gbdraw_source_session", None)
-    if not isinstance(source_session, Mapping):
+    if not isinstance(source_session, SessionDrawingArtifacts):
         source_session = None
     out_file_prefix: str = args.output
     blast_files: list[str] | None = args.blast

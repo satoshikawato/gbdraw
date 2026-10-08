@@ -6,11 +6,11 @@
 from __future__ import annotations
 
 import argparse
-import logging
+import copy
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence, cast
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Sequence
 
 from gbdraw.exceptions import ValidationError
 from gbdraw.io.cli_tables import (
@@ -30,31 +30,26 @@ from gbdraw.render.track_slot_metadata import (
     collect_track_slot_geometry_records,
 )
 from gbdraw.session_io import (
-    CURRENT_AUTHORITY_SESSION_MIN_VERSION,
-    MODE_SCOPED_SESSION_MIN_VERSION,
     SessionBuildContext,
     SessionFileBinding,
-    _project_web_file_binding,
     _write_validated_session_json,
     build_session_json,
     get_session_slot,
-    migrate_legacy_linear_comparison_draft_for_current_writer,
-    migrate_session_flat_draft,
-    mode_split_palette_colors,
     safe_embedded_filename,
     serialize_file_entry,
-    session_depth_source_widths,
-    session_mode,
-    split_draft_into_modes,
     validate_current_mode_slices,
+)
+from gbdraw.session_migration import (
+    project_session_adjunct_for_current_write,
+    replace_current_derived_feature_state,
+    with_current_artifacts,
 )
 
 if TYPE_CHECKING:
     from gbdraw.api.requests import DiagramRequest
     from gbdraw.render.interactive_svg import InteractiveSvgContext
     from gbdraw.session import SessionDocument
-
-logger = logging.getLogger(__name__)
+    from gbdraw.session_drawings import SessionDrawingArtifacts
 
 
 @dataclass(frozen=True)
@@ -226,30 +221,6 @@ def preflight_session_sidecar_if_requested(
     return sidecar_path
 
 
-def diagram_request_output_paths(request: DiagramRequest) -> tuple[Path, ...]:
-    """Return every file path one resolved typed request will write."""
-
-    from gbdraw.api.requests import CircularBatchRequest
-
-    outputs = (
-        request.outputs
-        if isinstance(request, CircularBatchRequest)
-        else (request.output,)
-    )
-    return tuple(
-        Path(path)
-        for output in outputs
-        for path in resolve_output_paths(
-            str(
-                Path(output.output_directory or ".")
-                / output.output_prefix
-            ),
-            output.formats,
-            include_base_svg=True,
-        )
-    )
-
-
 def diagram_request_rendered_svgs(
     request: DiagramRequest,
 ) -> tuple[RenderedSvg, ...]:
@@ -336,29 +307,6 @@ def _feature_catalog_for_svg_results(
     return build_feature_catalog(items)
 
 
-def _replace_current_derived_feature_state(
-    payload: dict[str, Any],
-    feature_catalog: Mapping[str, object],
-) -> None:
-    # The catalog stays at the top level, with the committed set; the draft is
-    # in the mode slices (Session 46).
-    editor_state = payload.get("editorState")
-    editor_state = (
-        dict(editor_state) if isinstance(editor_state, Mapping) else {}
-    )
-    editor_state["featureCatalog"] = dict(feature_catalog)
-    payload["editorState"] = editor_state
-
-    orthogroup_state = payload.get("orthogroupState")
-    orthogroup_state = (
-        dict(orthogroup_state)
-        if isinstance(orthogroup_state, Mapping)
-        else {}
-    )
-    orthogroup_state.pop("groups", None)
-    payload["orthogroupState"] = orthogroup_state
-
-
 def save_session_sidecar_if_requested(
     *,
     save_session: bool,
@@ -375,6 +323,8 @@ def save_session_sidecar_if_requested(
 
     if not save_session and not session_output:
         return None
+    from gbdraw.api.request_render import diagram_request_output_paths
+
     sidecar_path = preflight_session_sidecar_if_requested(
         save_session=save_session,
         session_output=session_output,
@@ -473,26 +423,26 @@ def render_canonical_session_if_present(
     """Render an authoritative canonical request and bypass legacy CLI replay."""
 
     from gbdraw.session import (
-        _build_session_document_from_resolved_request,
+        _build_session_document_from_drawings,
+        _DrawingBuild,
         _write_session_document,
         load_session_document,
         materialize_session,
+        session_drawing_artifacts,
         session_to_request,
         with_request_output,
     )
+    from gbdraw.api.request_render import diagram_request_output_paths
     from gbdraw.session_io import CANONICAL_SESSION_MIN_VERSION
 
     document = load_session_document(session)
     if document.version < CANONICAL_SESSION_MIN_VERSION:
         return False
-    if not document.has_canonical_request:
+    if not any(drawing.has_canonical_request for drawing in document.drawings):
         raise ValidationError("Settings-only Session has no biological render request; load a source in Web before generating.")
-    # A Session 46 can hold a Result set of each mode: the subcommand renders its own.
-    if mode not in document.drawings:
-        raise ValidationError(
-            f"Session has no {mode} drawing; it has a {' and a '.join(document.drawings)} drawing."
-        )
-    document = document.drawing(mode)
+    # The subcommand renders the drawing of its own mode.
+    drawing = document.drawing(mode=mode)
+    drawing_view = session_drawing_artifacts(document, drawing.id)
 
     output_path = Path(output_override) if output_override else None
     output_directory = (
@@ -502,7 +452,7 @@ def render_canonical_session_if_present(
         document,
         output_directory=output_directory,
     ) as materialized:
-        request = session_to_request(materialized, drawing=mode)
+        request = session_to_request(materialized, drawing=drawing.id)
         legacy_source_request = request
         request = with_request_output(
             request,
@@ -543,9 +493,9 @@ def render_canonical_session_if_present(
                 diagram_output_paths=diagram_request_output_paths(request),
                 overwrite=overwrite,
             )
-            source_session = document.to_dict()
+            source_session = copy.deepcopy(dict(drawing_view.fields))
             source_resources = source_session["resources"]
-            adjunct, web_file_inventory = _project_session_adjunct_for_current_write(
+            adjunct, web_file_inventory = project_session_adjunct_for_current_write(
                 source_session,
                 source_version=document.version,
             )
@@ -553,7 +503,7 @@ def render_canonical_session_if_present(
 
         rendered = _render_request(
             request,
-            session_document=document,
+            session_drawing=drawing_view,
             include_feature_catalog=sidecar_path is not None,
         )
         from gbdraw.features.overrides import log_feature_identity_notices
@@ -563,55 +513,14 @@ def render_canonical_session_if_present(
 
         if sidecar_path is not None:
             assert adjunct is not None
-            protein_id_map = getattr(rendered, "protein_id_map", None) or {}
-            losat_entries = getattr(rendered, "losat_cache_entries", ())
-            identity_manifest = getattr(rendered, "protein_identity_manifest", None)
-            legacy_raw = getattr(rendered, "legacy_protein_raw_candidates", ())
-            legacy_derived = getattr(rendered, "legacy_protein_derived_evidence", ())
-            if protein_id_map:
-                from gbdraw.api.session_compat import (
-                    rewrite_protein_artifact_references,
-                )
-
-                adjunct = rewrite_protein_artifact_references(
-                    adjunct,
-                    protein_id_map,
-                )
-            for artifact_key in (
-                "losatCache",
-                "losatDerivedCache",
-                "proteinIdentityManifest",
-                "legacyArtifacts",
-            ):
-                adjunct.pop(artifact_key, None)
-            adjunct["losatCache"] = {
-                "entries": [dict(entry) for entry in losat_entries]
-            }
-            adjunct["losatDerivedCache"] = {
-                "entries": []
-            }
-            adjunct["proteinIdentityManifest"] = dict(
-                identity_manifest
-                or {
-                    "schema": 2,
-                    "proteinSets": {},
-                    "recordAnalyses": {},
-                    "recordInstances": {},
-                }
+            adjunct = with_current_artifacts(
+                adjunct,
+                losat_cache_entries=getattr(rendered, "losat_cache_entries", ()),
+                protein_identity_manifest=getattr(rendered, "protein_identity_manifest", None),
+                legacy_protein_raw_candidates=getattr(rendered, "legacy_protein_raw_candidates", ()),
+                legacy_protein_derived_evidence=getattr(rendered, "legacy_protein_derived_evidence", ()),
+                protein_id_map=getattr(rendered, "protein_id_map", None),
             )
-            legacy_artifacts: dict[str, Any] = {}
-            if legacy_raw:
-                legacy_artifacts["proteinRawCandidates"] = {
-                    "schema": 1,
-                    "entries": [dict(entry) for entry in legacy_raw],
-                }
-            if legacy_derived:
-                legacy_artifacts["proteinDerivedEvidence"] = {
-                    "schema": 1,
-                    "entries": [dict(entry) for entry in legacy_derived],
-                }
-            if legacy_artifacts:
-                adjunct["legacyArtifacts"] = legacy_artifacts
             svg_results = []
             for output in rendered.output_paths:
                 if output.suffix.lower() != ".svg" or not output.is_file():
@@ -637,7 +546,7 @@ def render_canonical_session_if_present(
                 catalog_results,
                 catalog_contexts,
             )
-            _replace_current_derived_feature_state(
+            replace_current_derived_feature_state(
                 adjunct,
                 feature_catalog,
             )
@@ -679,12 +588,20 @@ def render_canonical_session_if_present(
                 adjunct["runMetadata"] = run_metadata
             else:
                 adjunct.pop("runMetadata", None)
+            # The rendered drawing replaces its own parts; the others stay.
             _write_session_document(
                 sidecar_path,
-                _build_session_document_from_resolved_request(
-                    rendered_request,
-                    title=str(source_session.get("title") or replay_prefix),
-                    adjunct=adjunct,
+                _build_session_document_from_drawings(
+                    (
+                        _DrawingBuild(
+                            mode=drawing.mode,
+                            request=rendered_request,
+                            state=adjunct,
+                            id=drawing.id,
+                        ),
+                    ),
+                    base=document,
+                    title=str(drawing_view.fields.get("title") or replay_prefix),
                     web_file_inventory=web_file_inventory,
                     resources=source_resources,
                 ),
@@ -693,338 +610,15 @@ def render_canonical_session_if_present(
     return True
 
 
-def _project_web_file_inventory(
-    session: Mapping[str, Any],
-) -> dict[str, Any] | None:
-    web_files = session.get("webFiles")
-    resources = session.get("resources")
-    if not isinstance(web_files, Mapping) or not isinstance(resources, Mapping):
-        return None
-    bindings_value = web_files.get("bindings")
-    has_current_bindings = (
-        isinstance(bindings_value, Mapping) and bindings_value.get("schema") in (1, 2)
-    )
-    # has_current_bindings is true only when bindings_value is a Mapping.
-    bindings = cast(
-        "Mapping[str, Any]", bindings_value if has_current_bindings else {}
-    )
-    direct_source_fields = {
-        "conservationLosatFastaSources": "c_conservation_fastas",
-        "conservationSequenceSources": "c_conservation_sequence_sources",
-    }
-    has_direct_sources = any(
-        isinstance(web_files.get(field), list) for field in direct_source_fields
-    )
-    if not has_current_bindings and not has_direct_sources:
-        return None
-
-    original_names_value = web_files.get("resourceOriginalNames")
-    original_names = (
-        original_names_value if isinstance(original_names_value, Mapping) else {}
-    )
-
-    def restore(value: Any) -> Any:
-        return _project_web_file_binding(resources, value, schema=bindings["schema"])
-
-    def restore_resource_id(value: Any) -> Any:
-        if isinstance(value, list):
-            return [restore_resource_id(item) for item in value]
-        resource_id = str(value or "").strip()
-        if not resource_id:
-            return None
-        return _project_web_file_binding(
-            resources,
-            {
-                "resourceId": resource_id,
-                "name": original_names.get(resource_id),
-            },
-            schema=None,
-        )
-
-    files: dict[str, Any] = {}
-    for slot in (
-        "c_gb",
-        "c_gff",
-        "c_fasta",
-        "c_depth",
-        "c_conservation_blasts",
-        "c_conservation_fastas",
-        "c_conservation_sequence_sources",
-        "d_color",
-        "t_color",
-        "blacklist",
-        "whitelist",
-        "qualifier_priority",
-    ):
-        if slot in bindings:
-            files[slot] = restore(bindings[slot])
-    files["c_conservation_blasts_source"] = (
-        "losat-cache"
-        if bindings.get("c_conservation_blasts_source") == "losat-cache"
-        else None
-    )
-
-    linear_sequences = bindings.get("linearSeqs")
-    if isinstance(linear_sequences, list):
-        files["linearSeqs"] = [
-            {
-                **dict(sequence),
-                "gb": restore(sequence.get("gb")),
-                "gff": restore(sequence.get("gff")),
-                "fasta": restore(sequence.get("fasta")),
-                "depth": restore(sequence.get("depth")),
-                "blast": restore(sequence.get("blast")),
-            }
-            for sequence in linear_sequences
-            if isinstance(sequence, Mapping)
-        ]
-    linear_comparisons = bindings.get("linearComparisons")
-    if isinstance(linear_comparisons, list):
-        files["linearComparisons"] = [
-            {**dict(comparison), "file": restore(comparison.get("file"))}
-            for comparison in linear_comparisons
-            if isinstance(comparison, Mapping)
-        ]
-    for source_field, slot in direct_source_fields.items():
-        source_ids = web_files.get(source_field)
-        if isinstance(source_ids, list) and slot not in files:
-            files[slot] = restore_resource_id(source_ids)
-    return files
-
-
-# Similarity-alignment flags a projected source session drops from its argv:
-# the current flag and the spellings that legacy sessions carry.
-_SIMILARITY_ALIGNMENT_FLAGS = frozenset(
-    {
-        "--similarity_alignment_feature",
-        "--align_orthogroup_feature",
-        "--align-orthogroup-feature",
-    }
-)
-
-
-def _project_session_adjunct_for_current_write(
-    session: Mapping[str, Any],
-    *,
-    source_version: int,
-) -> tuple[dict[str, Any], dict[str, Any] | None]:
-    """Detach non-canonical state and migrate released Web-owned field names."""
-
-    adjunct = {
-        key: value
-        for key, value in session.items()
-        if key
-        not in {
-            "format",
-            "version",
-            "createdAt",
-            "renderRequest",
-            "resources",
-            "files",
-        }
-    }
-    if source_version < MODE_SCOPED_SESSION_MIN_VERSION:
-        # The older draft migrations, in Web Load's order: the rendered-ID edit
-        # maps become identity drafts through the Session's saved catalog, and
-        # a hash= annotation target moves to its source feature where that
-        # catalog makes the figure certain (R-7). The request keeps the targets
-        # that drew the figure.
-        migration = migrate_session_flat_draft(session)
-        for key in ("config", "features"):
-            if key in migration.session:
-                adjunct[key] = migration.session[key]
-            else:
-                adjunct.pop(key, None)
-        if migration.dropped_feature_edit_count:
-            logger.warning(
-                "WARNING: %d feature edit(s) from Session version %d could not "
-                "be matched to a feature of its saved diagram and were dropped "
-                "from the written Session.",
-                migration.dropped_feature_edit_count,
-                source_version,
-            )
-        if migration.narrowed_visibility_count:
-            logger.warning(
-                "WARNING: %d Feature visibility edit(s) from Session version %d "
-                "hid every feature with the same hash; in the written Session "
-                "each applies only to the feature that was edited.",
-                migration.narrowed_visibility_count,
-                source_version,
-            )
-        if migration.migrated_annotation_count:
-            logger.info(
-                "INFO: %d annotation(s) from Session version %d named a feature "
-                "by hash=; in the written Session each names that feature by "
-                "its source.",
-                migration.migrated_annotation_count,
-                source_version,
-            )
-    orthogroup_state = adjunct.get("orthogroupState")
-    if isinstance(orthogroup_state, Mapping):
-        projected_orthogroup_state = dict(orthogroup_state)
-        projected_orthogroup_state.pop(
-            "selectedOrthogroupAlignmentFeature",
-            None,
-        )
-        adjunct["orthogroupState"] = projected_orthogroup_state
-    cli_invocation = adjunct.get("cliInvocation")
-    if isinstance(cli_invocation, Mapping):
-        projected_invocation = dict(cli_invocation)
-        args = cli_invocation.get("args")
-        bindings = cli_invocation.get("fileBindings")
-        if isinstance(args, list):
-            projected_args: list[str] = []
-            retained_indexes: dict[int, int] = {}
-            index = 0
-            while index < len(args):
-                token = str(args[index])
-                if token in _SIMILARITY_ALIGNMENT_FLAGS:
-                    index += 2
-                    continue
-                if token.startswith(
-                    tuple(f"{flag}=" for flag in _SIMILARITY_ALIGNMENT_FLAGS)
-                ):
-                    index += 1
-                    continue
-                retained_indexes[index] = len(projected_args)
-                projected_args.append(token)
-                index += 1
-            projected_invocation["args"] = projected_args
-            if isinstance(bindings, list):
-                projected_bindings = []
-                for binding in bindings:
-                    if not isinstance(binding, Mapping):
-                        projected_bindings.append(binding)
-                        continue
-                    arg_index = binding.get("argIndex")
-                    if arg_index not in retained_indexes:
-                        raise ValidationError(
-                            "Legacy similarity alignment cannot own a CLI file binding."
-                        )
-                    projected_bindings.append(
-                        {
-                            **dict(binding),
-                            "argIndex": retained_indexes[arg_index],
-                        }
-                    )
-                projected_invocation["fileBindings"] = projected_bindings
-        adjunct["cliInvocation"] = projected_invocation
-    editor_state_value = adjunct.get("editorState")
-    if isinstance(editor_state_value, Mapping):
-        editor_state = dict(editor_state_value)
-        catalog = editor_state.get("featureCatalog")
-        if isinstance(catalog, Mapping) and catalog.get("schema") == 3:
-            from gbdraw.web_support.feature_catalog import (
-                promote_legacy_feature_catalog,
-            )
-
-            editor_state["featureCatalog"] = promote_legacy_feature_catalog(catalog)
-            adjunct["editorState"] = editor_state
-    web_file_inventory = _project_web_file_inventory(session)
-    if source_version >= CURRENT_AUTHORITY_SESSION_MIN_VERSION:
-        return _split_session_adjunct(adjunct, session, source_version), web_file_inventory
-    config = adjunct.get("config")
-
-    if isinstance(config, Mapping):
-        source_files = session.get("files")
-        has_source_file_inventory = (
-            isinstance(source_files, Mapping) and bool(source_files)
-        ) or web_file_inventory is not None
-        migrated_config, migrated_files = (
-            migrate_legacy_linear_comparison_draft_for_current_writer(
-                config,
-                source_files
-                if isinstance(source_files, Mapping)
-                else (web_file_inventory or {}),
-                force_web_draft=(
-                    isinstance(config.get("linearRecordLayout"), Mapping)
-                    or not isinstance(config.get("cliOptions"), Mapping)
-                ),
-            )
-        )
-        adjunct["config"] = migrated_config
-        web_file_inventory = migrated_files if has_source_file_inventory else None
-    else:
-        adjunct.pop("config", None)
-    if isinstance(adjunct.get("ui"), Mapping):
-        adjunct["ui"] = dict(adjunct["ui"])
-        adjunct["ui"].pop("blastSource", None)
-    else:
-        adjunct.pop("ui", None)
-    web_files_value = adjunct.get("webFiles")
-    if isinstance(web_files_value, Mapping):
-        web_files = dict(web_files_value)
-        bindings_value = web_files.get("bindings")
-        if isinstance(bindings_value, Mapping):
-            bindings = dict(bindings_value)
-            bindings.pop("linearCanonicalComparisons", None)
-            if web_file_inventory is not None:
-                bindings = {}
-            else:
-                linear_sequences = bindings.get("linearSeqs")
-                if isinstance(linear_sequences, list):
-                    bindings["linearSeqs"] = [
-                        {
-                            key: value
-                            for key, value in sequence.items()
-                            if key not in {"blast", "losat_filename"}
-                        }
-                        if isinstance(sequence, Mapping)
-                        else sequence
-                        for sequence in linear_sequences
-                    ]
-                bindings["linearComparisons"] = []
-            web_files["bindings"] = bindings
-        metadata_value = web_files.get("linearRecordMetadata")
-        if isinstance(metadata_value, list):
-            web_files["linearRecordMetadata"] = [
-                {
-                    key: value
-                    for key, value in metadata.items()
-                    if key not in {"losatFilename", "losat_filename"}
-                }
-                if isinstance(metadata, Mapping)
-                else metadata
-                for metadata in metadata_value
-            ]
-        adjunct["webFiles"] = web_files
-    return _split_session_adjunct(adjunct, session, source_version), web_file_inventory
-
-
-def _split_session_adjunct(
-    adjunct: dict[str, Any],
-    session: Mapping[str, Any],
-    source_version: int,
-) -> dict[str, Any]:
-    """Move an older source's flat draft into the Session 46 mode slices.
-
-    A Session 46 source keeps its ``modes`` (and ``otherModeResult``) as they
-    are. Each mode's Depth sources are counted in the source's bindings.
-    """
-
-    if source_version >= MODE_SCOPED_SESSION_MIN_VERSION:
-        return adjunct
-    web_files = session.get("webFiles")
-    bindings = web_files.get("bindings") if isinstance(web_files, Mapping) else None
-    return split_draft_into_modes(
-        adjunct,
-        committed_mode=session_mode(session),
-        depth_sources=session_depth_source_widths(
-            bindings if isinstance(bindings, Mapping) else session.get("files")
-        ),
-        palette_colors=mode_split_palette_colors(adjunct.get("config")),
-    )
-
-
 def _render_request(
     request,
     *,
-    session_document=None,
+    session_drawing: SessionDrawingArtifacts | None = None,
     include_feature_catalog: bool = False,
 ):
     """Import the request renderer lazily to keep CLI session imports lightweight."""
 
-    if session_document is None:
+    if session_drawing is None:
         from gbdraw.api.request_render import render_request
 
         return render_request(
@@ -1035,7 +629,7 @@ def _render_request(
 
     return render_session_compatible_request(
         request,
-        session_document,
+        session_drawing,
         include_feature_catalog=include_feature_catalog,
     )
 
@@ -1448,7 +1042,6 @@ __all__ = [
     "build_track_slot_geometry_run_metadata",
     "collect_embedded_files_from_cli_args",
     "collect_track_slot_geometry_records",
-    "diagram_request_output_paths",
     "diagram_request_rendered_svgs",
     "make_rendered_svg",
     "parse_session_pre_args",

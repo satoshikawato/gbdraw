@@ -146,6 +146,22 @@ write-up of a release.
   metadata also records the font file, font size, DPI, and wrap width the Legend was
   laid out with, and the diagram bounds it was placed against, so that the web app
   can lay out an edited Legend as Python does. Drawn content is unchanged.
+- Python API: a Session's diagrams are drawings. `SessionDocument.drawings`
+  lists them as `SessionDrawing` values (ID, name, mode, and whether a committed
+  render exists); `SessionDocument.drawing()` selects one by ID or name, and
+  `SessionDocument.active_drawing_id` names the one the Web app opens. A
+  selection that is missing, unknown, or ambiguous raises
+  `SessionDrawingSelectionError` with the list of drawings. Pass `drawing=` to
+  `session_to_request()` and `render_session()`. The new
+  `render_session_drawings()` renders several drawings together: several
+  drawings write `<base>_<id>` outputs, every output path is checked before the
+  first write, and each embedded resource is parsed once for all drawings.
+  `build_session_document()` and `save_session_document()` take
+  `drawings=[...]` (typed requests or `SessionDrawingSpec` values) and
+  `active_drawing=`; the undocumented `adjunct=` argument is replaced by
+  `SessionDrawingSpec(state=...)`. The new `upgrade_session_document()` returns
+  a Session 31–44 in the current version without rendering it. Session 46
+  holds at most one Circular and one Linear drawing, named by their mode.
 - Legend colors (web app): Generate no longer fails with "The generated result could
   not be accepted" after a color or stroke is set on a row added in the Legend editor,
   in Linear and Circular. The added row is drawn with its color and stroke after
@@ -305,8 +321,8 @@ write-up of a release.
   and its **Generate** button switches to that mode and generates there.
   `gbdraw circular --session` and `gbdraw linear --session` render the Result
   set of their own mode; a re-save with `--save_session` or `--session_output`
-  puts that set at the top level, keeps the other mode's set in
-  `otherModeResult`, and keeps the saved `ui.mode`.
+  replaces only that set, where it is, and keeps the other mode's set and the
+  saved `ui.mode`.
 - CLI: `gbdraw circular|linear --session <file> --session_output out.json` (and
   `--save_session`) keeps the resource IDs and file names of the Session's unchanged
   inputs. Before, the rewritten Session renamed them to positional IDs such as

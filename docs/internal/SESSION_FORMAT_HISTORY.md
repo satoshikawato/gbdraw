@@ -71,18 +71,17 @@ source files instead.
 
 On the command line, `gbdraw circular --session` and `gbdraw linear --session`
 render the set of their own mode, at the top level or in `otherModeResult`. A
-re-save with `--save_session` or `--session_output` writes Session 46: the
-subcommand's set at the top level, the other set in `otherModeResult`, and an
-older Session's draft split into `modes` as the Web app splits it. It keeps
-`ui.mode`, so the Web app still opens on the saved mode. The re-save replaces
-the subcommand's set with the new render and keeps the other set. It also
-changes these parts that both sets share:
+re-save with `--save_session` or `--session_output` writes Session 46. It
+replaces the subcommand's set with the new render where that set is, keeps the
+other set, and splits an older Session's draft into `modes` as the Web app
+splits it. It keeps `ui.mode`, so the Web app still opens on the saved mode. It
+also changes these parts that both sets share:
 
 - `losatCache` holds the entries that the render returns, and
   `losatDerivedCache` is emptied.
 - `proteinIdentityManifest` and `legacyArtifacts` are replaced by the render's.
-- When the render migrates legacy protein IDs, the protein references are
-  rewritten throughout the Session, `otherModeResult` included.
+- When the render migrates legacy protein IDs (only Sessions 44 and older have
+  them), the protein references are rewritten throughout the Session.
 - Resources that neither set's request nor the Web files name are dropped.
 
 ## Unreleased: Web Load of 0.13.0 Sessions

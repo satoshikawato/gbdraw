@@ -314,16 +314,15 @@ their saved counterparts. Other diagram options are
 rejected because they would combine persisted and new settings ambiguously.
 
 When you replay a Session 31 or later with `--save_session` or
-`--session_output`, the CLI writes the
-regenerated Result set at the top level, keeps the other mode's set in
-`otherModeResult` and the saved `ui.mode`, and preserves the editable draft's
-component bytes, order and File metadata. The Web writer instead puts the shown
-mode's set at the top level. The re-save also replaces what both sets share:
+`--session_output`, the CLI replaces the rendered drawing's Result set where it
+is, at the top level or in `otherModeResult`, keeps the other mode's set and
+the saved `ui.mode`, and preserves the editable draft's component bytes, order
+and File metadata. The re-save also replaces what both sets share:
 `losatCache` holds the entries the new render returns, `losatDerivedCache` is
 emptied, and `proteinIdentityManifest` and `legacyArtifacts` come from the new
-render. If the render migrates older protein IDs, gbdraw rewrites the protein
-references throughout the Session, including `otherModeResult`. A resource
-whose bytes are unchanged
+render. If the render migrates older protein IDs (only Sessions 44 and older
+have them), gbdraw rewrites the protein references throughout the Session. A
+resource whose bytes are unchanged
 keeps its ID and file name; a resource whose bytes changed is stored under a new
 ID, and resources that nothing names any more are dropped. Explicit Web
 bindings, including null and empty lists, take precedence over historical

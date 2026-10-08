@@ -684,12 +684,12 @@ def test_canonical_session_replay_uses_current_overwrite_permission(
     def fake_render(
         request,
         *,
-        session_document=None,
+        session_drawing=None,
         include_feature_catalog=False,
     ):
         captured["overwrite"] = request.output.overwrite
         captured["include_feature_catalog"] = include_feature_catalog
-        assert session_document is not None
+        assert session_drawing is not None
         return SimpleNamespace(feature_identity_notices=())
 
     monkeypatch.setattr(cli_session, "_render_request", fake_render)
@@ -735,10 +735,10 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
     def fake_render(
         request,
         *,
-        session_document=None,
+        session_drawing=None,
         include_feature_catalog=False,
     ):
-        assert session_document is not None
+        assert session_drawing is not None
         assert include_feature_catalog is True
         rendered_request = replace(
             request,
@@ -754,9 +754,10 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
             feature_identity_notices=(),
         )
 
-    def fake_build(request, **kwargs):
-        captured["saved_request"] = request
-        captured["adjunct"] = kwargs["adjunct"]
+    def fake_build(drawings, **kwargs):
+        (drawing,) = drawings
+        captured["saved_request"] = drawing.request
+        captured["adjunct"] = drawing.state
         return object()
 
     def fake_write(path, document, **kwargs):
@@ -765,7 +766,7 @@ def test_legacy_canonical_sidecar_saves_rendered_request_and_migrated_adjunct(
     monkeypatch.setattr(cli_session, "_render_request", fake_render)
     monkeypatch.setattr(
         session_module,
-        "_build_session_document_from_resolved_request",
+        "_build_session_document_from_drawings",
         fake_build,
     )
     monkeypatch.setattr(session_module, "_write_session_document", fake_write)
