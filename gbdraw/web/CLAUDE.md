@@ -107,7 +107,7 @@ in the same change.
 | SVG Result admission and sanitization | `js/services/svg-result-ingestion.js` |
 | Feature-editor entry point | `js/app/feature-editor.js` |
 | Feature-editor helpers | `js/app/feature-editor/` |
-| Right-side editor drawer state and transitions | `js/app/right-drawer.js` |
+| Right-side editor drawer state and transitions | `js/services/right-drawer-state.js`; the drawer controller is `js/app/right-drawer.js` |
 | Legend entry point | `js/app/legend.js` |
 | Legend helpers | `js/app/legend/` |
 | Legend/diagram positioning | `js/app/legend-layout.js`, `js/app/legend-layout/` |
@@ -241,7 +241,7 @@ the domain projections `projectPaletteAndRules` in `app/app-setup.js` (palette
 and specific rules) and `projectFeatureVisibility` in
 `app/feature-editor/visibility-actions.js` (feature visibility and the labels of
 the features it hides or shows),
-`orderLegendEntries` in `app/legend/utils.js` (legend order), and
+`orderLegendEntries` in `services/legend-svg.js` (legend order), and
 `resolveFeatureDrawn` in `services/feature-visibility.js` (whether a feature is
 drawn, as Python's `should_render_feature` answers; the Features list and
 Search features read it through `listFeatureRows`). A displayed batch Result whose shared legend entries already follow
@@ -306,7 +306,7 @@ orientation owner is the File card's `region_reverse`
 
 Reuse compares every input that is knowable without extraction as data; an
 invalidation event is only an optimization. LOSAT job planning is one pure plan
-for execution and the estimate: `planLosatSourceJobs` (`app/linear-sources.js`)
+for execution and the estimate: `planLosatSourceJobs` (`services/linear-sources.js`)
 and `buildLosatJobSpecs` (`services/linear-comparisons.js`).
 
 Guards: `tests/web/linear-sources.test.mjs` (one-file packaging equals separate
