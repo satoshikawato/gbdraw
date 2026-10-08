@@ -4687,6 +4687,8 @@ export const createAppSetup = () => {
   // Replacing or removing the file resets it in the replacement's History step.
   const RETIRED_LINEAR_RECORD_PRESENTATION = Object.freeze({ region_record_id: '', region_start: null,
     region_end: null, region_reverse: false, definition: '', record_subtitle: '' });
+  // The record reference names a record of the old file, so any replacement retires it.
+  const RETIRED_LINEAR_RECORD_REFERENCE = Object.freeze({ region_record_id: '' });
   /** @param {DrawingState} drawing */
   const retireCircularRecordSelector = ({ form, adv }) => {
     form.circular_record_selector = '';
@@ -5054,9 +5056,9 @@ export const createAppSetup = () => {
       ...group.sequence,
       [field]: nextValue,
       ...(field === 'gb' && nextValue ? { file_definition: '', file_subtitle: '' } : {}),
-      ...(seq[field] && sourceReplacementRetiresPresentation({
+      ...(!seq[field] ? {} : sourceReplacementRetiresPresentation({
         removed: !nextValue, previousRecordCount: group.records.length
-      }) ? RETIRED_LINEAR_RECORD_PRESENTATION : {})
+      }) ? RETIRED_LINEAR_RECORD_PRESENTATION : RETIRED_LINEAR_RECORD_REFERENCE)
     });
     const keepSource = field === 'gb' ? Boolean(nextValue) : Boolean(replacement.gff || replacement.fasta);
     applyLinearSeqMutation(drawing, linearSeqs.flatMap((entry) => (

@@ -172,6 +172,34 @@ test('a Circular definition edit after Generate leaves the committed Result unch
   expect(rewritten).toBe(false);
 });
 
+// D-32 Linear twin: one record replacing one record with another record ID
+// keeps the region and Definition but not the record reference of the old file.
+test('replacing a one-record Linear file with another record ID keeps the region and draws the new record', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openLinear(page);
+  await uploadLinear(page, 0, 'first.gb', FIRST_RECORD_TEXT);
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const sequence = app.linearSeqs[0];
+    app.setLinearRecordSelector(sequence, 'TESTA');
+    app.setLinearRecordCrop(sequence, 'region_start', 100);
+    app.setLinearRecordCrop(sequence, 'region_end', 3000);
+    sequence.definition = 'Genome A custom';
+  });
+  await settle(page);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.linearSeqs[0].region_record_id)).not.toBe('');
+  await uploadLinear(page, 0, 'second.gb', SECOND_RECORD_TEXT);
+  const outcome = await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    const result = await app.runAnalysis();
+    const sequence = app.linearSeqs[0];
+    return { status: result?.status, code: app.errorLog?.code || null, recordId: sequence.region_record_id,
+      start: sequence.region_start, end: sequence.region_end, definition: sequence.definition };
+  });
+  expect(outcome).toEqual({ status: 'ok', code: null, recordId: '', start: 100, end: 3000, definition: 'Genome A custom' });
+  expect(await resultRecordIds(page)).toEqual(['TESTB']);
+});
+
 test('replacing a cropped Linear file with a multi-record file expands it and clears record options', async ({ page }) => {
   test.setTimeout(300_000);
   await openLinear(page);
