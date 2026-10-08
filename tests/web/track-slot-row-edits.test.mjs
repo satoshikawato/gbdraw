@@ -246,3 +246,38 @@ test('circular: an invalid Depth track index stays visible with a field error an
   assert.equal(field.text.value, '0');
   assert.equal(field.error.value, '');
 });
+
+// TK-09 review: the Dinucleotide setting and a row's dinucleotide are inputs of
+// the Hide GC projection, so their edits run it; the editor state equals what
+// Generate projects (run-analysis applies the same projection to the request).
+test('circular: Dinucleotide and row dinucleotide edits re-run the Hide GC Skew projection', async () => {
+  const { applyCircularSuppressControlsToSlots } = await import(pathToFileURL(join(tempRoot, 'app', 'circular-track-slots.js')));
+  const { applyCircularTrackOrderPlacements } = await import(pathToFileURL(join(tempRoot, 'services', 'circular-track-slot-model.js')));
+  const previousConfirm = globalThis.confirm;
+  globalThis.confirm = () => true;
+  try {
+    const editor = MODES.circular(ROWS.circular());
+    const { state } = editor;
+    const requestSlots = () => applyCircularSuppressControlsToSlots(
+      applyCircularTrackOrderPlacements(state.adv.circular_track_slots, state.adv.nt, state.form.track_type, state.adv.circular_track_slots_axis_index),
+      state.form,
+      state.adv.nt
+    );
+    const enabled = () => editor.slots().find((slot) => slot.id === 'gc_skew').enabled;
+    editor.editor.setCircularSkewSuppressed(true);
+    assert.equal(enabled(), false);
+
+    editor.editor.setCircularDinucleotide('AT');
+    assert.equal(state.adv.nt, 'AT');
+    assert.equal(enabled(), true, 'the GC row no longer uses the Dinucleotide setting');
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.slots())), JSON.parse(JSON.stringify(requestSlots())));
+
+    const row = editor.slots().find((slot) => slot.id === 'gc_skew');
+    editor.editor.setCircularTrackSlotNt(row, ' AT ');
+    assert.equal(row.params.nt, 'AT');
+    assert.equal(enabled(), false, 'the row now uses the Dinucleotide setting');
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.slots())), JSON.parse(JSON.stringify(requestSlots())));
+  } finally {
+    globalThis.confirm = previousConfirm;
+  }
+});

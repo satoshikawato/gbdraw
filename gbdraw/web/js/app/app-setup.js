@@ -5380,6 +5380,8 @@ export const createAppSetup = () => {
     setCircularTrackSlotsEnabled: circularTrackSlotEditor.setCircularTrackSlotsEnabled,
     setCircularGcSuppressed: circularTrackSlotEditor.setCircularGcSuppressed,
     setCircularSkewSuppressed: circularTrackSlotEditor.setCircularSkewSuppressed,
+    setCircularDinucleotide: circularTrackSlotEditor.setCircularDinucleotide,
+    setCircularTrackSlotNt: circularTrackSlotEditor.setCircularTrackSlotNt,
     addCircularTrackSlot: circularTrackSlotEditor.addCircularTrackSlot,
     canAddCircularTrackRenderer: circularTrackSlotEditor.canAddCircularTrackRenderer,
     duplicateCircularTrackSlot: circularTrackSlotEditor.duplicateCircularTrackSlot,
