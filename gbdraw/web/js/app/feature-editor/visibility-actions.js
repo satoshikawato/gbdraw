@@ -28,8 +28,8 @@ import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/
 /**
  * The label owner's reaction the composition root registers once that owner exists.
  * @typedef {object} VisibilityActionsPorts
- * @property {(options?: { reflow?: boolean, rerender?: boolean }) => boolean} applyFeatureVisibilityToLabels
- *   Projects the stored visibility overrides onto the labels and queues the label reflow.
+ * @property {(options?: { reflow?: boolean, rerender?: boolean, labels?: boolean }) => boolean} applyFeatureVisibilityToLabels
+ *   Projects the stored visibility overrides (`labels`: the whole label intent) onto the labels and queues the label reflow.
  */
 
 /**
@@ -413,16 +413,19 @@ export const createFeatureVisibilityActions = ({
   // (`rerender`) that draws a feature the Result does not draw, or changes a
   // Legend source, reruns the rerender, as the action did; a Result display
   // does not, so a feature Python does not draw cannot repeat it. A loaded
-  // table (`reflow`) also places the labels, as a visibility edit does.
+  // table (`reflow`) also places the labels, as a visibility edit does. A
+  // caller that also projects the label intent (`labels`) has the label owner
+  // project it in the same follow, so the edit queues one label request.
   // Returns whether the Result changed. A caller that shows the visibility in
   // its own compile passes `show: false`.
-  const projectFeatureVisibility = async ({ rerender = false, reflow = false, show = true } = {}) => {
+  const projectFeatureVisibility = async ({ rerender = false, reflow = false, show = true, labels = false } = {}) => {
     const drawing = state.activeDrawing();
     const projection = await runProjection(drawing, { legend: rerender, show });
-    if (!projection) return false;
-    const drawsMissing = rerender && projection.needsRerender;
-    if (projection.updated || reflow || drawsMissing) followLabels({ reflow, rerender: drawsMissing });
-    return projection.updated;
+    const drawsMissing = rerender && Boolean(projection?.needsRerender);
+    if (labels || (projection && (projection.updated || reflow || drawsMissing))) {
+      followLabels({ reflow: reflow && Boolean(projection), rerender: drawsMissing, labels });
+    }
+    return Boolean(projection?.updated);
   };
 
   // OV-19 (PD-OI-066, R10): the one transition of a visibility rule edit, from

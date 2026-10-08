@@ -865,6 +865,51 @@ test('a batch Result kept without the paint edits shows them after an Undo of Ge
   await expectLiveEqualsGenerate(page, { label: 'a batch Result kept without the paint edits, after an Undo of Generate' });
 });
 
+// U2BFIX2 review M3: a batch Result whose display a Save started meanwhile
+// declines shows the palette and visibility edits made on another Result once
+// Save ends, while it stays displayed, so a later Save keeps them.
+test('a batch Result displayed while Save runs shows the edits once Save ends (circular, two-Result batch)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await legendRowColor(page, 'tRNA', '#7b2cbf');
+  await addVisibilityRule(page, BATCH_0004_OFF);
+  await page.evaluate(async () => {
+    const service = await import('/gbdraw/web/js/services/config.js');
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    window.releaseSave = release;
+    window.__GBDRAW_APP__.selectResult(1);
+    window.pendingSave = service.exportSession('declined-display', { beforeExport: () => gate });
+  });
+  await expect.poll(() => page.evaluate(async () => {
+    const { isCommittedSvgResultMounted } = await import('/gbdraw/web/js/services/svg-result-ingestion.js');
+    const app = window.__GBDRAW_APP__;
+    return app.sessionSavePending && app.selectedResultIndex === 1 && isCommittedSvgResultMounted(app.results[1]);
+  })).toBe(true);
+  await settleLive(page);
+  await evaluateWithRetainedPromise(page, async () => { window.releaseSave(); await window.pendingSave; });
+  await expectLiveEqualsGenerate(page, { label: 'a batch Result displayed while Save ran' });
+});
+
+// U2BFIX2 review L1: a label edit removed while another Result was displayed
+// leaves a batch Result saved with it; its first display after Load shows the
+// label as Generate draws it.
+test('a batch Result saved with a label edit removed meanwhile shows the label after Load (circular, two-Result batch)', async ({ page, browser }, testInfo) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await showResult(page, 1);
+  await popupEdit(page, 'TESTB_0001', { labelText: 'edited on B' });
+  await showResult(page, 0);
+  await appAction(page, 'resetAllLabelTextOverrides');
+  const saved = testInfo.outputPath('label-batch.gbdraw-session.json');
+  await download(page, 'Save Session', saved);
+  const loaded = await load(browser, saved);
+  if (await loaded.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex) !== 0) await showResult(loaded, 0);
+  await showResult(loaded, 1);
+  await expectLiveEqualsGenerate(loaded, { label: 'a label edit removed before Save, after Load' });
+  await loaded.context().close();
+});
+
 // OV-129, OV-150: a stroke reset or Undo returns each feature part and Legend
 // swatch to the stroke Python drew for it: a connector line its
 // `line_stroke_*`, a block its `block_stroke_*` of the genome size class.
@@ -1000,12 +1045,40 @@ test('a stroke and a palette change reach a Session 30 Result loaded without a f
   expect(live, 'each feature is filled as Generate fills it').toEqual(await featureFills());
 });
 
+// Load Feature Edits TSV with one row per [locus_tag, label_visibility,
+// label_text] of the first record.
+const loadFeatureEdits = (page, rows) => evaluateWithRetainedPromise(page, async (edits) => {
+  const app = window.__GBDRAW_APP__;
+  const lines = edits.map(([tag, visibility, text]) => (
+    `#1\thash=${app.extractedFeatures.find((item) => item.locus_tag === tag).svg_id}\t\t${visibility}\t${text}`
+  ));
+  const table = ['record\tfeature_selector\tfeature_visibility\tlabel_visibility\tlabel_text', ...lines, ''].join('\n');
+  await app.loadFeatureEditTable({ target: { files: [new File([table], 'edits.tsv', { type: 'text/plain' })], value: '' } });
+}, rows).then(() => settleLive(page));
+
+// Label Rendering = Embedded Only, generated; the first Result is displayed.
+// Records the first-record features whose labels it draws.
+/** @type {string[]} */
+let embeddedLabelFeatures = [];
+const generateEmbeddedOnly = async (page) => {
+  await page.evaluate(() => { window.__GBDRAW_APP__.adv.label_rendering = 'embedded_only'; });
+  await generate(page);
+  if (await page.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex) !== 0) await showResult(page, 0);
+  embeddedLabelFeatures = await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    const svg = app.svgContainer.querySelector('svg');
+    return app.extractedFeatures.filter((item) => String(item.locus_tag || '').startsWith('TESTA_')
+      && svg.querySelector(`text[data-label-feature-id="${item.svg_id}"]`)).map((item) => item.locus_tag);
+  });
+  expect(embeddedLabelFeatures.length, 'Embedded Only draws two labels of the first record').toBeGreaterThan(1);
+};
+
 // The work guard (allowlist) at the app, on a two-Result batch: each edit kind
 // runs exactly the compile stages of its entry (the compile's structural
 // metric, live compiles only), a Result display or a History step compiles
-// once, and an edit sends only the worker requests its entry allows (`render`
-// is the automatic rerender). Stages are `COMPILE_STAGES` in
-// app/candidate-render.js.
+// once, and an edit sends exactly the worker requests of its entry, each as
+// often as listed (`render` is the automatic rerender). Stages are
+// `COMPILE_STAGES` in app/candidate-render.js.
 const WORK_ALLOWLIST = [
   {
     // A stroke action prepares only the saved rules (OV-198), whose matches
@@ -1025,26 +1098,60 @@ const WORK_ALLOWLIST = [
   { kind: 'Legend row stroke', stages: ['strokes'], compiles: 1, requests: [], run: (page) => legendRowStrokeColor(page, 'CDS', '#e63946') },
   { kind: 'Legend row color (no rule)', stages: ['legendFills'], compiles: 1, requests: [], run: (page) => legendRowColor(page, 'tRNA', '#7b2cbf') },
   { kind: 'History step (Undo of a Legend row color)', stages: ['legendFills'], compiles: 1, requests: [], run: (page) => history(page, 'undo') },
-  { kind: 'palette change', stages: ['fills', 'rules', 'legendFills'], compiles: 1, requests: ['evaluateRules'], run: (page) => switchPalette(page, 'arctic') },
+  // The rules' matches are prepared: the palette sends no request.
+  { kind: 'palette change', stages: ['fills', 'rules', 'legendFills'], compiles: 1, requests: [], run: (page) => switchPalette(page, 'arctic') },
   {
     kind: 'Result display after a palette change and a stroke', stages: ['legend', 'fills', 'rules', 'legendFills', 'strokes'],
     compiles: 1, requests: [], run: (page) => showResult(page, 1)
   },
   {
     // One compile for the field set that changes the rules Generate reads (the
-    // value); the other steps of the add leave them as they were.
-    kind: 'Feature visibility rule add', stages: ['visibility'], compiles: 1, requests: ['evaluateRules', 'render'],
+    // value); the other steps of the add leave them as they were. The rule's
+    // matches are one request; it hides features, so no rerender.
+    kind: 'Feature visibility rule add', stages: ['visibility'], compiles: 1, requests: ['evaluateRules'],
     run: (page) => addVisibilityRule(page, BATCH_0004_OFF)
   },
   {
     // A rule commit changes a Legend source, so the automatic rerender draws
-    // the Result again (OV-43); its compile is Generate's plan.
-    kind: 'color rule commit', stages: ['fills', 'rules', 'legendFills'], compiles: 1, requests: ['evaluateRules', 'render'],
+    // the Result again (OV-43); its compile is Generate's plan. Requests: the
+    // commit's caption normalization and rule matches, and the rerender's
+    // caption normalization.
+    kind: 'color rule commit', stages: ['fills', 'rules', 'legendFills'], compiles: 1,
+    requests: ['evaluateRules', 'evaluateRules', 'evaluateRules', 'render'],
     run: (page) => addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0002$', color: '#2266aa', cap: 'CDS' })
   },
   {
     kind: 'Result display, nothing changed', stages: ['legend'], compiles: 1, requests: [],
     before: (page) => showResult(page, 0), run: (page) => showResult(page, 1)
+  },
+  {
+    // OV-200 (U2BFIX2 review M1): only Python decides whether the label text
+    // fits, so the table asks for the rerender; its one label follow places
+    // the labels too, so one reflow runs (Auto Reflow on). Requests: the
+    // table, the visibility rule's matches on the catalog Generate drew, and
+    // the rerender's caption normalization (two before: a superseded reflow).
+    kind: 'Feature Edits TSV load (Embedded Only)', stages: ['visibility'], compiles: 1,
+    requests: ['readFeatureOverrideTable', 'evaluateRules', 'evaluateRules', 'render'],
+    before: async (page) => {
+      await generateEmbeddedOnly(page);
+      await page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = true; });
+    },
+    run: (page) => loadFeatureEdits(page, [[embeddedLabelFeatures[0], '', 'dup edited']])
+  },
+  {
+    // A label a table hides needs no fit decision: no rerender (Auto Reflow
+    // off). The table keeps the label text it loaded before. Requests: the
+    // table, and the color and visibility rule matches on the catalog the
+    // rerender drew.
+    kind: 'Feature Edits TSV load, label Off (Embedded Only)', stages: ['visibility'], compiles: 1,
+    requests: ['readFeatureOverrideTable', 'evaluateRules', 'evaluateRules'],
+    before: (page) => page.evaluate(() => { window.__GBDRAW_APP__.autoLabelReflowEnabled = false; }),
+    run: (page) => loadFeatureEdits(page, [[embeddedLabelFeatures[0], '', 'dup edited'], [embeddedLabelFeatures[1], 'off', '']])
+  },
+  {
+    // The rerender decides the fit; its caption normalization is the request.
+    kind: 'popup label text (Embedded Only)', stages: [], compiles: 0, requests: ['evaluateRules', 'render'],
+    run: (page) => popupEdit(page, embeddedLabelFeatures[0], { labelText: 'dup' })
   }
 ];
 
@@ -1065,22 +1172,22 @@ test('each edit kind runs only the compile stages and worker requests of its all
     };
   });
   const observed = [];
-  for (const { kind, run, before, stages, compiles, requests } of WORK_ALLOWLIST) {
+  for (const { kind, run, before } of WORK_ALLOWLIST) {
     if (before) await before(page);
     await page.evaluate(() => { window.__workLog.length = 0; });
     await run(page);
     const log = await page.evaluate(() => window.__workLog.map(({ name, stages: ran, domains, operation }) => ({ name, ran, domains, operation })));
     // A rerender compiles Generate's plan (no domains) and shows its Result.
     const live = log.filter(({ name, domains }) => name === 'editorPlanCompile' && domains);
-    const sent = [...new Set(log.flatMap(({ name, operation }) => (
+    const sent = log.flatMap(({ name, operation }) => (
       name === 'diagramHelperRequest' ? [operation] : (name === 'render' ? ['render'] : [])
-    )))];
-    observed.push({ kind, stages: [...new Set(live.flatMap(({ ran }) => ran))].sort(), compiles: live.length, sent: sent.sort() });
-    expect(new Set(live.flatMap(({ ran }) => ran)), `${kind}: compile stages`).toEqual(new Set(stages));
-    if (compiles !== undefined) expect(live.length, `${kind}: compiles`).toBe(compiles);
-    expect(sent.filter((request) => !requests.includes(request)), `${kind}: worker requests outside the allowlist`).toEqual([]);
+    )).sort();
+    observed.push({ kind, stages: [...new Set(live.flatMap(({ ran }) => ran))].sort(), compiles: live.length, requests: sent });
   }
   console.log(JSON.stringify(observed));
+  expect(observed).toEqual(WORK_ALLOWLIST.map(({ kind, stages, compiles, requests }) => ({
+    kind, stages: [...stages].sort(), compiles, requests: [...requests].sort()
+  })));
 });
 
 // OV-200 (PD-OI-066): with Label Rendering = Embedded Only, Python draws no
@@ -1091,23 +1198,19 @@ const LONG_LABEL = 'A_LABEL_TEXT_FAR_TOO_LONG_TO_FIT_INSIDE_ITS_FEATURE_'.repeat
 const TSV_LABEL_CASES = [
   { mode: 'circular', rendering: 'embedded_only', visibility: 'on', text: LONG_LABEL, name: 'Label visibility On for a label that does not fit, Embedded Only' },
   { mode: 'linear', rendering: 'embedded_only', visibility: 'on', text: LONG_LABEL, name: 'Label visibility On for a label that does not fit, Embedded Only' },
-  { mode: 'circular', rendering: null, visibility: '', text: 'alpha edited', name: 'a label text' }
+  { mode: 'circular', rendering: null, visibility: '', text: 'alpha edited', name: 'a label text' },
+  // U2BFIX2 review M2: the table's label follow with Auto Reflow on.
+  { mode: 'circular', rendering: 'embedded_only', visibility: '', text: LONG_LABEL, reflow: 'on', name: 'a label text that does not fit, Embedded Only, Auto Reflow on' }
 ];
-for (const { mode, rendering, visibility, text: labelText, name } of TSV_LABEL_CASES) {
+for (const { mode, rendering, visibility, text: labelText, reflow = 'off', name } of TSV_LABEL_CASES) {
   test(`Load Feature Edits TSV with ${name} (${mode}, one Result, labels unbound)`, async ({ page }) => {
     test.setTimeout(180_000);
-    await open(page, { mode, results: 'single', reflow: 'off' });
+    await open(page, { mode, results: 'single', reflow });
     if (rendering) {
       await page.evaluate((value) => { window.__GBDRAW_APP__.adv.label_rendering = value; }, rendering);
       await generate(page);
     }
-    const id = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.find((item) => item.locus_tag === 'FL1').svg_id);
-    await evaluateWithRetainedPromise(page, async (row) => {
-      const text = `record\tfeature_selector\tfeature_visibility\tlabel_visibility\tlabel_text\n${row}\n`;
-      const files = [new File([text], 'edits.tsv', { type: 'text/plain' })];
-      await window.__GBDRAW_APP__.loadFeatureEditTable({ target: { files, value: '' } });
-    }, `#1\thash=${id}\t\t${visibility}\t${labelText}`);
-    await settleLive(page);
+    await loadFeatureEdits(page, [['FL1', visibility, labelText]]);
     expect(await page.evaluate(() => Object.values(window.__GBDRAW_APP__.featureOverrides).some((row) => row.labelText)),
       'the table applied the row').toBe(true);
     await expectLiveEqualsGenerate(page, { label: `Feature Edits TSV, ${name} (${mode})` });

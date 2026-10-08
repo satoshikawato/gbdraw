@@ -494,25 +494,30 @@ assert.equal(appliedPreviewChanges.length, previewChangeCountBeforeStaleApply);
 
   assert.equal(await owner.projectFeatureVisibility({ rerender: true }), false);
   assert.deepEqual(follows, [], 'nothing to follow when the Result draws what Generate draws');
+  // U2BFIX2 review M1: a caller that also projects the label intent (a loaded
+  // table, a History step) has the label owner project it in the same follow.
+  assert.equal(await owner.projectFeatureVisibility({ rerender: true, labels: true }), false);
+  assert.deepEqual(follows, [{ reflow: false, rerender: false, labels: true }]);
+  follows.length = 0;
 
   // OV-35: a Result display (or a History step) that hides A hides its label.
   setFeatureVisibilityOverride(overrides, featureOf('A'), 'off');
   assert.equal(await owner.projectFeatureVisibility(), true);
   assert.deepEqual(mounted, { 'svg-A': 'off' });
-  assert.deepEqual(follows, [{ reflow: false, rerender: false }], 'the label follows the feature');
+  assert.deepEqual(follows, [{ reflow: false, rerender: false, labels: false }], 'the label follows the feature');
 
   // B is shown, which the Result does not draw.
   setFeatureVisibilityOverride(overrides, featureOf('A'), 'default');
   setFeatureVisibilityOverride(overrides, featureOf('B'), 'on');
   await owner.projectFeatureVisibility();
-  assert.deepEqual(follows.at(-1), { reflow: false, rerender: false }, 'a Result display does not rerender');
+  assert.deepEqual(follows.at(-1), { reflow: false, rerender: false, labels: false }, 'a Result display does not rerender');
   await owner.projectFeatureVisibility({ rerender: true });
-  assert.deepEqual(follows.at(-1), { reflow: false, rerender: true }, 'a History step rerenders to draw B');
+  assert.deepEqual(follows.at(-1), { reflow: false, rerender: true, labels: false }, 'a History step rerenders to draw B');
   await owner.projectFeatureVisibility({ rerender: true, reflow: true });
-  assert.deepEqual(follows.at(-1), { reflow: true, rerender: true }, 'a loaded table also places the labels');
+  assert.deepEqual(follows.at(-1), { reflow: true, rerender: true, labels: false }, 'a loaded table also places the labels');
   setFeatureVisibilityOverride(overrides, featureOf('B'), 'off');
   await owner.projectFeatureVisibility({ rerender: true, reflow: true });
-  assert.deepEqual(follows.at(-1), { reflow: true, rerender: false });
+  assert.deepEqual(follows.at(-1), { reflow: true, rerender: false, labels: false });
 
   setFeatureVisibilityOverride(overrides, featureOf('A'), 'off');
   const projectionsBefore = projections;

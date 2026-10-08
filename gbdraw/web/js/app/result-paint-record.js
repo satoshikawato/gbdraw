@@ -16,16 +16,17 @@
  */
 
 // A paint state no editor state equals: a Result recorded with it shows
-// every paint domain on its next display.
+// every paint domain and the labels on its next display. The Legend order is
+// kept: replaying the default order needs the Result's generated inventory.
 /** @param {EditorPaintState} current @returns {EditorPaintState} */
-const unknownPaint = (current) => ({ ...current, colors: [null, ''], visibility: '', strokes: '' });
+const unknownPaint = (current) => ({ ...current, colors: [null, ''], visibility: '', strokes: '', labels: '' });
 
 export const createResultPaintRecord = () => {
   /** @type {Map<string, EditorPaintState>} */
   const shownByResult = new Map();
   let bound = '';
-  // The paint domains the displayed Result was not shown (a declined
-  // display); recorded with it when it leaves.
+  // The paint domains the displayed Result was not shown (a declined or
+  // failed display); recorded with it when it leaves.
   /** @type {Partial<EditorPaintState> | null} */
   let behind = null;
   /** @param {EditorPaintState} state */
@@ -82,16 +83,28 @@ export const createResultPaintRecord = () => {
       return shownByResult.get(identity) || current;
     },
     /**
-     * The displayed Result now shows `current`, or, when its palette and
-     * rules projection `declined`, the fills and visibility of `previous`.
+     * The displayed Result now shows `current`, but the fills and visibility
+     * of `previous` when its palette and rules projection `declined`, and
+     * every paint domain of `previous` when its projection or compile
+     * `failed` (its labels follow in the binder's label step).
      * @param {string} identity
      * @param {EditorPaintState} current
      * @param {EditorPaintState} previous
-     * @param {{ declined?: boolean }} [options]
+     * @param {{ declined?: boolean, failed?: boolean }} [options]
      */
-    shown(identity, current, previous, { declined = false } = {}) {
-      behind = declined ? { colors: previous.colors, visibility: previous.visibility } : null;
+    shown(identity, current, previous, { declined = false, failed = false } = {}) {
+      const { colors, visibility, strokes, legendOrder } = previous;
+      behind = failed ? { colors, visibility, strokes, legendOrder } : (declined ? { colors, visibility } : null);
       shownByResult.set(identity, { ...current, ...behind });
+    },
+    /**
+     * What the displayed Result `identity` still shows of the state before a
+     * declined or failed display, or null (shown in full, or not displayed).
+     * @param {string} identity
+     * @returns {Partial<EditorPaintState> | null}
+     */
+    lacking(identity) {
+      return bound === identity ? behind : null;
     },
     /** @param {string} identity The Result shown again with the intent it left with (E1). */
     rebind(identity) {

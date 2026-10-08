@@ -502,6 +502,47 @@ test('a feature visibility edit commits its label once and queues the label refl
   assert.equal(harness.state.labelReflowRequestSeq.value, 1, 'a declined reflow is not queued');
 });
 
+// U2BFIX2 review M1 (OV-200): with Embedded Only only Python decides whether a
+// label text fits, so a projected text asks for the rerender; a label the
+// projection hides needs none. A loaded table projects the feature visibility
+// and the labels in one follow, which queues one request.
+const EMBEDDED_ONLY = { configOverrides: { 'labels.rendering': 'embedded_only' } };
+test('with Embedded Only, a projected label text asks for one rerender and a hidden label for none', () => {
+  const featureId = 'feature:one/[a]';
+  const hidden = buildHarness({ diagramOptions: EMBEDDED_ONLY });
+  setRow(hidden.state, featureId, { labelVisibility: 'off' });
+  assert.equal(hidden.actions.reconcileLabelOverrides(), true);
+  assert.equal(hidden.state.labelReflowForceRequestSeq.value, 0, 'a hidden label');
+
+  const edited = buildHarness({ diagramOptions: EMBEDDED_ONLY });
+  const { state, actions } = edited;
+  setRow(state, featureId, { labelText: 'edited' });
+  assert.equal(actions.reconcileLabelOverrides(), true);
+  assert.equal(state.labelReflowForceRequestSeq.value, 1, 'a changed text');
+  state.autoLabelReflowEnabled.value = true;
+  setRow(state, featureId, { labelText: 'edited again' });
+  assert.equal(actions.applyFeatureVisibilityToLabels({ reflow: true, labels: true }), true);
+  assert.deepEqual([state.labelReflowForceRequestSeq.value, state.labelReflowRequestSeq.value], [2, 0],
+    'one request for the loaded table');
+});
+
+// U2BFIX2 review L3 (OV-237): the labels of a Result no popup bound are bound
+// once per mounted root; a later projection (a History step) does not bind
+// them again.
+test('the label projection binds the labels of a mounted root once', () => {
+  const svg = new DOMParser().parseFromString(
+    '<svg><path data-gbdraw-feature-id="fa" d="M0 0" /></svg>', 'image/svg+xml'
+  ).documentElement;
+  const harness = buildHarness({ svg, featureId: 'fa' });
+  /** @type {string[]} */
+  const scans = [];
+  const query = svg.querySelectorAll.bind(svg);
+  svg.querySelectorAll = (selector) => { scans.push(selector); return query(selector); };
+  harness.actions.reconcileLabelOverrides();
+  harness.actions.reconcileLabelOverrides();
+  assert.equal(scans.filter((selector) => selector.includes('dominant-baseline')).length, 1);
+});
+
 // B6 (R2, R3): a Label TSV import writes the label intent of every batch Result
 // once. The displayed Result binds its labels as the editor does; another
 // Result's committed content carries the renderer's label bindings.

@@ -3223,9 +3223,11 @@ export const createAppSetup = () => {
     show = true
   } = {}) => {
     if (colors && !await projectPaletteAndRules({ prepareRules, show: false })) return false;
-    if (visibility) await projectFeatureVisibility({ rerender, reflow, show: false });
+    // The visibility projection follows with the labels, so one edit queues
+    // one label request.
+    if (visibility) await projectFeatureVisibility({ rerender, reflow, labels, show: false });
     if (legend) reconcileLegendEntries(legend);
-    if (labels) reconcileLabelOverrides();
+    if (labels && !visibility) reconcileLabelOverrides();
     const shown = [...new Set([...(colors ? FILL_DOMAINS : []), ...(visibility ? VISIBILITY_DOMAINS : []), ...domains])];
     if (show && shown.length > 0) showEditorIntent({ domains: shown });
     return shown;
@@ -3489,8 +3491,10 @@ export const createAppSetup = () => {
     /** @type {string[]} */
     let domains = [...LEGEND_STRUCTURE_DOMAINS];
     // The palette and rules declined (rules changed meanwhile, or a Session
-    // operation): the Result keeps the fills and visibility it shows.
+    // operation): the Result keeps the fills and visibility it shows until
+    // the blocker clears. A failed projection or compile showed none.
     let declined = false;
+    let failed = false;
     try {
       // The palette, rules, and visibility prepare their matches when their
       // intent changed (`colors`, `visibility`); then one compile of the
@@ -3500,6 +3504,7 @@ export const createAppSetup = () => {
       domains = [...domains, ...(prepared || []), ...(strokes ? STROKE_DOMAINS : [])];
       operations = compileDisplayedResultOperations(drawing, context.resultIndex, { replayDefaultLegendOrder, domains });
     } catch (error) {
+      failed = true;
       console.error('Editor edits could not be compiled for the displayed Result.', normalizeUserFacingError(error));
     }
     const hasOperations = Boolean(operations) && domains.some((domain) => operations[domain].length > 0);
@@ -3514,15 +3519,51 @@ export const createAppSetup = () => {
       phase: context.phase,
       rootGeneration: context.rootGeneration
     });
-    if (!projects) return;
+    if (!projects && !failed) return;
+    if (projects) {
+      try {
+        const legendChanged = legendActions.prepareDisplayedResultLegend(context.root, legend);
+        showEditorIntent({
+          domains,
+          operations,
+          afterApply: () => { if (legendChanged) legendActions.onLegendGeometryChanged(); }
+        });
+      } catch (error) {
+        failed = true;
+        console.error('Editor edits could not be shown on the displayed Result.', normalizeUserFacingError(error));
+      }
+    }
+    resultPaintRecord.shown(identity, current, previous, { declined, failed });
+    if (declined && !failed) await showDeclinedPaint(identity);
+  };
+  // A display that a Session operation or the rule preparation declined shows
+  // the fills and visibility once the blocker clears, while its Result stays
+  // displayed, so a Save or the next display reads the Result with them. A
+  // projection declined again without a blocker waits for the next display.
+  const displayBlocked = () => Boolean(sessionOperationAvailability()) || ruleMatchingPending.value;
+  /** @type {(() => void) | null} */
+  let stopDeclinedPaintWait = null;
+  /** @param {string} identity */
+  const showDeclinedPaint = async (identity) => {
+    stopDeclinedPaintWait?.();
+    stopDeclinedPaintWait = null;
+    if (displayBlocked()) {
+      stopDeclinedPaintWait = watch(displayBlocked, (blocked) => { if (!blocked) void showDeclinedPaint(identity); });
+      return;
+    }
+    const lacking = resultPaintRecord.lacking(identity);
+    if (!lacking?.colors || lacking.visibility === undefined) return;
+    const current = currentEditorProjectionState(state.activeDrawing());
     try {
-      const legendChanged = legendActions.prepareDisplayedResultLegend(context.root, legend);
-      showEditorIntent({
-        domains,
-        operations,
-        afterApply: () => { if (legendChanged) legendActions.onLegendGeometryChanged(); }
+      const shown = await projectMountedEditorIntent({
+        colors: !sameColors(lacking.colors, current.colors),
+        visibility: lacking.visibility !== current.visibility
       });
-      resultPaintRecord.shown(identity, current, previous, { declined });
+      if (shown === false) {
+        if (displayBlocked()) void showDeclinedPaint(identity);
+        return;
+      }
+      if (resultPaintRecord.lacking(identity) === lacking) resultPaintRecord.shown(identity, current, current);
     } catch (error) {
       console.error('Editor edits could not be shown on the displayed Result.', normalizeUserFacingError(error));
     }
