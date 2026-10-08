@@ -2694,6 +2694,7 @@ export const createAppSetup = () => {
     cancelRunAnalysis,
     runLabelReflow,
     refreshCircularRecordOrder,
+    releaseSourceInputFailure,
     downloadCliHelperFiles,
     downloadLosatCache,
     downloadLosatPair,
@@ -2716,6 +2717,7 @@ export const createAppSetup = () => {
     prepareLinearRecordCatalog,
     recordDisplayRows: recordDisplayControls.allRows,
     assertActiveModeInputs,
+    readDraftSignature: () => history.getCurrentIntentSignature(),
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
     canonicalSessionVersion: SESSION_VERSION,
@@ -2856,7 +2858,14 @@ export const createAppSetup = () => {
     resultsManager,
     runLabelReflow,
     refreshCircularRecordOrder,
-    refreshLinearRecordSelectors: linearRecordSelector.refresh,
+    // UJ-08: a discovery that reads every Linear source ends a Generate
+    // failure about those inputs, as the Circular discovery does.
+    refreshLinearRecordSelectors: async (/** @type {{ suppress?: boolean } | undefined} */ options) => {
+      const outcome = await linearRecordSelector.refresh(options);
+      const ready = linearSeqs.every((/** @type {Record<string, any>} */ seq) => linearRecordSelector.statusFor(seq) === 'ready');
+      if (ready) releaseSourceInputFailure('linear');
+      return outcome;
+    },
     resetPreviewViewport,
     resetRightDrawer: rightDrawerActions.resetRightDrawer,
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
@@ -4682,6 +4691,42 @@ export const createAppSetup = () => {
   const circularRecordSelectionEnabled = computed(() => semanticMutationAvailable.value
     && mode.value === 'circular'
     && !state.activeDrawing().form.multi_record_canvas && circularRecordDiscoveryState.value.status === 'ready');
+  // CI-03: the per-record presentation a source file carries in each mode.
+  // Replacing or removing the file resets it in the replacement's History step.
+  const RETIRED_LINEAR_RECORD_PRESENTATION = Object.freeze({ region_record_id: '', region_start: null,
+    region_end: null, region_reverse: false, definition: '', record_subtitle: '' });
+  /** @param {DrawingState} drawing */
+  const retireCircularRecordPresentation = ({ form, adv }) => {
+    form.circular_record_selector = '';
+    form.circular_region_start = null;
+    form.circular_region_end = null;
+    form.circular_reverse = false;
+    form.circular_record_label = '';
+    form.circular_record_subtitle = '';
+    if (adv.circular_grouping_intent === 'single') adv.circular_grouping_intent = 'auto';
+  };
+  // D-32: one record replacing one record (a new version of the same genome)
+  // keeps it; a removed file or a replaced multi-record file retires it.
+  /** @param {{ removed: boolean, previousRecordCount: number }} replacement */
+  const sourceReplacementRetiresPresentation = ({ removed, previousRecordCount }) => removed || previousRecordCount > 1;
+  /**
+   * The Circular source file controls (upload, replace, Remove).
+   * @param {'c_gb' | 'c_gff' | 'c_fasta'} field
+   * @param {File | null} value
+   */
+  const setCircularSourceFile = (field, value) => {
+    const drawing = state.drawings.circular;
+    const busy = sessionOperationAvailability();
+    if (busy) return busy;
+    const nextValue = value ?? null;
+    const previous = files[field];
+    if (previous === nextValue) return;
+    files[field] = nextValue;
+    if (!previous || !sourceReplacementRetiresPresentation({
+      removed: !nextValue, previousRecordCount: circularRecordList.value.length
+    })) return;
+    retireCircularRecordPresentation(drawing);
+  };
   const setCircularRecordPresentationSelector = (value) => {
     const drawing = state.drawings.circular;
     const busy = sessionOperationAvailability();
@@ -5009,9 +5054,9 @@ export const createAppSetup = () => {
       ...group.sequence,
       [field]: nextValue,
       ...(field === 'gb' && nextValue ? { file_definition: '', file_subtitle: '' } : {}),
-      ...(group.records.length > 1 ? {
-        region_record_id: '', region_start: null, region_end: null, region_reverse: false
-      } : {})
+      ...(seq[field] && sourceReplacementRetiresPresentation({
+        removed: !nextValue, previousRecordCount: group.records.length
+      }) ? RETIRED_LINEAR_RECORD_PRESENTATION : {})
     });
     const keepSource = field === 'gb' ? Boolean(nextValue) : Boolean(replacement.gff || replacement.fasta);
     applyLinearSeqMutation(drawing, linearSeqs.flatMap((entry) => (
@@ -5593,6 +5638,7 @@ export const createAppSetup = () => {
     circularRecordSelectionEnabled,
     showCircularCanvasSetting,
     setCircularRecordPresentationSelector,
+    setCircularSourceFile,
     paletteDefinitions,
     paletteNames,
     selectedPalette: drawingMember('selectedPalette'),

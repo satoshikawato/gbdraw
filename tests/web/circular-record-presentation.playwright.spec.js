@@ -325,3 +325,44 @@ test('Loaded Session shows the saved record selector as uninspected, not as miss
   await expect(select.locator('option:checked')).toHaveText('NC_012920.1 (16,569 bp)');
   await shot('record-control-inspected.png');
 });
+
+// CI-03: a replaced or removed multi-record source retires the record selector,
+// crop, orientation, and title lines chosen for one of its records, in the
+// same History step; one record replacing one record keeps them (D-32).
+test('replacing or removing a multi-record source resets its one-record presentation in one History step', async ({ page }) => {
+  test.setTimeout(300000);
+  await openApp(page);
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = false; });
+  const presentation = () => page.evaluate(() => {
+    const { form, adv } = window.__GBDRAW_APP__;
+    return [form.circular_record_selector, form.circular_region_start, form.circular_region_end, form.circular_reverse,
+      form.circular_record_label, form.circular_record_subtitle, adv.circular_grouping_intent];
+  });
+  const clean = ['', null, null, false, '', '', 'auto'];
+  const choose = async () => {
+    await nativeUpload(page, `${firstGenbank}\n${secondGenbank}`, 'two.gb');
+    await ready(page);
+    await page.getByLabel('Circular record', { exact: true }).selectOption('BGC0000709');
+    await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.form, {
+      circular_region_start: 500, circular_region_end: 3000, circular_reverse: true,
+      circular_record_label: 'Label X', circular_record_subtitle: 'Sub Y'
+    }));
+    expect(await presentation()).toEqual(['BGC0000709', 500, 3000, true, 'Label X', 'Sub Y', 'single']);
+  };
+  await choose();
+  const undoBefore = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  await nativeUpload(page, singleSource);
+  await ready(page);
+  expect(await presentation()).toEqual(clean);
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoBefore + 1);
+  await page.getByRole('button', { name: 'Undo', exact: true }).click();
+  await expect.poll(presentation).toEqual(['BGC0000709', 500, 3000, true, 'Label X', 'Sub Y', 'single']);
+  await page.getByRole('button', { name: 'Redo', exact: true }).click();
+  await expect.poll(presentation).toEqual(clean);
+  await ready(page);
+  await generateAndWaitForResult(page);
+
+  await choose();
+  await page.getByRole('button', { name: 'Remove GenBank/DDBJ File', exact: true }).click();
+  await expect.poll(presentation).toEqual(clean);
+});
