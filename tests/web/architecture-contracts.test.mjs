@@ -529,35 +529,39 @@ test('History intent and SVG admission have one production ownership path', () =
   );
   // An older Session's Result gets the legacy composition once, in the
   // admission transform of services/config.js after its legend entry groups
-  // and before its strokes: services/config.js calls the composition root's
-  // transformLegacyResultSvg port (R13 layering plan D4 B1), and app/app-setup.js
-  // calls the two owners, which stay in app/.
+  // (and, in the stroke form, before its strokes): services/config.js calls the
+  // composition root's transformLegacyResultSvg port (R13 layering plan D4 B1),
+  // and app/app-setup.js calls the owners, which stay in app/. In the
+  // stroke-free form (edit-unify U2a) the saved bytes show the strokes, the
+  // executor is the only writer of a live stroke edit, and no stroke
+  // projection or reapply is left anywhere.
   const configSource = productionSources.get('services/config.js');
   const setupSource = productionSources.get('app/app-setup.js');
   const configImports = directImports.get('services/config.js');
+  const strokeFree = occurrenceOwners(
+    /\b(?:applyStrokeOverridesToSvg|reapplyStrokeOverrides|reconcileStrokeOverrides)\b/g
+  ).size === 0;
   const legacyOwnerModules = [
     'app/legend-layout/composition-actions.js',
-    'app/legend/stroke-actions.js'
+    ...(strokeFree ? [] : ['app/legend/stroke-actions.js'])
   ];
   const legacyCompositionCalls = occurrenceOwners(/\bnormalizeLegacyComposition\(svg,/g);
   const legacyStrokeCalls = occurrenceOwners(/\bapplyStrokeOverridesToSvg\(\{/g);
+  const strokeCall = strokeFree ? '' : String.raw`[\s\S]+applyStrokeOverridesToSvg\(\{`;
   assert.deepEqual(
     occurrenceOwners(/\bexport const (?:normalizeLegacyComposition|applyStrokeOverridesToSvg)\b/g),
-    new Map([
-      ['app/legend-layout/composition-actions.js', 1],
-      ['app/legend/stroke-actions.js', 1]
-    ])
+    new Map(legacyOwnerModules.map((module) => [module, 1]))
   );
   assert.match(configSource, /normalizeLegacyLegendEntryGroups\(svg\)[\s\S]+transformLegacyResultSvg\(svg,/);
   assert.deepEqual(legacyOwnerModules.filter((module) => configImports.has(module)), []);
   assert.doesNotMatch(configSource, /\bnormalizeLegacyComposition\b|\bapplyStrokeOverridesToSvg\b/);
   assert.match(
     setupSource,
-    /export const transformLegacyResultSvg\b[\s\S]+COMPOSITION_SCHEMA_ATTRIBUTE\) === null[\s\S]+COMPOSITION_METADATA_ATTRIBUTE\) === null[\s\S]+normalizeLegacyComposition\(svg,[\s\S]+applyStrokeOverridesToSvg\(\{/
+    new RegExp(String.raw`export const transformLegacyResultSvg\b[\s\S]+COMPOSITION_SCHEMA_ATTRIBUTE\) === null[\s\S]+COMPOSITION_METADATA_ATTRIBUTE\) === null[\s\S]+normalizeLegacyComposition\(svg,` + strokeCall)
   );
   assert.deepEqual(legacyOwnerModules.filter((module) => !directImports.get('app/app-setup.js').has(module)), []);
   assert.deepEqual(legacyCompositionCalls, new Map([['app/app-setup.js', 1]]));
-  assert.equal(legacyStrokeCalls.get('app/app-setup.js'), 1);
+  assert.equal(legacyStrokeCalls.get('app/app-setup.js'), strokeFree ? undefined : 1);
   assert.equal(legacyStrokeCalls.has('services/config.js'), false);
   assert.deepEqual(occurrenceOwners(/\btransformLegacyResultSvg\(svg,/g), new Map([['services/config.js', 1]]));
   assert.deepEqual(occurrenceOwners(/\bbuildHistorySnapshot\b/g), new Map());
