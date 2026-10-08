@@ -2862,7 +2862,8 @@ export const createAppSetup = () => {
     // failure about those inputs, as the Circular discovery does.
     refreshLinearRecordSelectors: async (/** @type {{ suppress?: boolean } | undefined} */ options) => {
       const outcome = await linearRecordSelector.refresh(options);
-      if (linearSeqs.every((seq) => linearRecordSelector.statusFor(seq) === 'ready')) releaseSourceInputFailure('linear');
+      const ready = linearSeqs.every((/** @type {Record<string, any>} */ seq) => linearRecordSelector.statusFor(seq) === 'ready');
+      if (ready) releaseSourceInputFailure('linear');
       return outcome;
     },
     resetPreviewViewport,
