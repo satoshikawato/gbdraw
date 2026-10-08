@@ -32,6 +32,8 @@
         "tests/web/feature-color-actions.test.mjs",
         "tests/web/feature-visibility-actions.test.mjs",
         "tests/web/gui-audit-20260930-editor.playwright.spec.js",
+        "tests/web/live-generate-parity-legend.playwright.spec.js",
+        "tests/web/live-generate-parity-track-data.playwright.spec.js",
         "tests/web/live-generate-parity.playwright.spec.js"
       ],
       "allowlists": []

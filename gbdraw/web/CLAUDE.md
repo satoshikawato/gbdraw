@@ -279,8 +279,11 @@ Guards: `tests/web/gui-audit-20260930-editor.playwright.spec.js` (a Result shows
 the edits made on another Result, also after Undo, Save, and Load),
 `tests/web/feature-visibility-actions.test.mjs`,
 `tests/web/feature-color-actions.test.mjs`,
-`tests/web/live-generate-parity.playwright.spec.js` (a live edit equals the next
-Generate), and the `projection-shapes` baseline in
+`tests/web/live-generate-parity.playwright.spec.js` (the matrix of edit kinds
+and editor states) with `tests/web/live-generate-parity-legend.playwright.spec.js`
+and `tests/web/live-generate-parity-track-data.playwright.spec.js` (Legend edits,
+track-data changes, and mode switches): a live edit equals the next Generate;
+and the `projection-shapes` baseline in
 `tests/web/owner-graph-baseline.test.mjs`.
 
 ### R4: A fast path matches the canonical reader or declines
