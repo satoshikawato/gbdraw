@@ -13,7 +13,7 @@ from pandas import DataFrame
 from gbdraw.exceptions import ValidationError
 from gbdraw.analysis.skew import (
     _build_prefix_counts,
-    _window_count_from_prefix,
+    _window_counts,
     counted_dinucleotide,
 )
 
@@ -93,33 +93,20 @@ def circular_dinucleotide_content_df(
         return pd.DataFrame(columns=[content_legend])
 
     seq_bytes = seq_str.encode("ascii")
-    prefix_nt_1 = _build_prefix_counts(seq_bytes, ord(nt_1))
-    prefix_nt_2 = _build_prefix_counts(seq_bytes, ord(nt_2))
-    total_nt_1 = prefix_nt_1[-1]
-    total_nt_2 = prefix_nt_2[-1]
-    half_window = int(window) // 2
-    window_length = float(window)
-
-    starts: list[int] = []
-    content_values: list[float] = []
-    for position in range(0, seq_length, step):
-        circular_start = (int(position) - half_window) % seq_length
-        nt_1_count = _window_count_from_prefix(
-            prefix_nt_1,
-            seq_length,
-            start=circular_start,
-            window=window,
-            total_count=total_nt_1,
-        )
-        nt_2_count = _window_count_from_prefix(
-            prefix_nt_2,
-            seq_length,
-            start=circular_start,
-            window=window,
-            total_count=total_nt_2,
-        )
-        starts.append(position)
-        content_values.append((nt_1_count + nt_2_count) / window_length)
+    starts = np.arange(0, seq_length, step, dtype=np.int64)
+    circular_starts = (starts - int(window) // 2) % seq_length
+    total_counts = _window_counts(
+        _build_prefix_counts(seq_bytes, ord(nt_1)),
+        seq_length,
+        starts=circular_starts,
+        window=window,
+    ) + _window_counts(
+        _build_prefix_counts(seq_bytes, ord(nt_2)),
+        seq_length,
+        starts=circular_starts,
+        window=window,
+    )
+    content_values = total_counts / float(window)
 
     return pd.DataFrame({content_legend: content_values}, index=starts)
 
