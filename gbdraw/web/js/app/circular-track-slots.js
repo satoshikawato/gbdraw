@@ -30,7 +30,6 @@ import {
   parseOptionalPixel,
   validateCustomTrackPlan
 } from '../services/track-slot-validation.js';
-import { visibleFeatureUnderlaysForState } from '../utils/feature-rendering.js';
 import {
   applyCircularGeometryShortcuts,
   applyCircularTrackOrderPlacements,
@@ -699,14 +698,6 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     if (normalizedRenderer === 'depth') {
       return circularAvailableDepthTrackCountForState(state) > 0;
     }
-    if (
-      normalizedRenderer === 'features' &&
-      visibleFeatureUnderlaysForState(state).length > 0
-    ) {
-      return !drawing.adv.circular_track_slots.some((slot) => (
-        slot?.enabled !== false && slot?.renderer === 'features'
-      ));
-    }
     return true;
   };
 
@@ -715,12 +706,6 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     const drawing = state.drawings.circular;
     if (!slot || isManagedConservationSlot(slot) || state.sessionOperationAvailability?.()) return false;
     if (slot.enabled === false) return true;
-    if (
-      slot.renderer === 'features' &&
-      visibleFeatureUnderlaysForState(state).length > 0
-    ) {
-      return false;
-    }
     if (slot.renderer === 'annotations') return annotationSetIds(drawing).length > 0;
     if (slot.renderer === 'depth') return circularAvailableDepthTrackCountForState(state) > 0;
     return true;

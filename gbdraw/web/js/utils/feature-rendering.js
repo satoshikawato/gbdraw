@@ -89,19 +89,6 @@ export const normalizeFeatureRenderingMap = (source) => {
   return normalized;
 };
 
-/** @param {Record<string, any>} drawing */
-export const visibleFeatureUnderlaysForState = (drawing) => {
-  const featureShapes = {
-    repeat_region: defaultFeatureRendering('repeat_region'),
-    ...normalizeFeatureRenderingMap(drawing?.adv?.feature_shapes || {})
-  };
-  return Array.from(drawing?.adv?.features || [])
-    .map((featureType) => String(featureType || '').trim())
-    .filter((featureType) => (
-      (featureShapes[featureType] || defaultFeatureRendering(featureType)) === 'underlay'
-    ));
-};
-
 export const createDefaultFeatureRenderings = () => ({
   ...DEFAULT_FEATURE_RENDERINGS
 });
