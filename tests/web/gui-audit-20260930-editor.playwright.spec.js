@@ -572,11 +572,15 @@ const applyPopupLabel = (page, featureId, text, visibility, choice = null) => ev
     .includes('This feature has no label in the current Result.');
   app.clickedFeature.labelVisibility = edit.visibility;
   if (edit.text !== null) app.clickedFeature.labelText = edit.text;
-  await app.updateClickedFeatureLabelText();
+  // Label Not Shown keeps the Apply open until its choice; no choice cancels.
+  let applying = true;
+  const applied = Promise.resolve(app.updateClickedFeatureLabelText()).finally(() => { applying = false; });
+  while (applying && !app.hiddenLabelTextDialog.show) await new Promise((resolve) => setTimeout(resolve, 20));
   await window.Vue.nextTick();
   const asked = app.hiddenLabelTextDialog.show
     && Boolean([...document.querySelectorAll('h3')].find((node) => node.textContent === 'Label Not Shown'));
-  if (asked && edit.choice) await app.handleHiddenLabelTextChoice(edit.choice);
+  if (asked) await app.handleHiddenLabelTextChoice(edit.choice || 'cancel');
+  await applied;
   app.clickedFeature = null;
   return { hint, asked };
 }, { featureId, text, visibility, choice });
@@ -1296,11 +1300,15 @@ const editTextOnly = (page, locator, text) => evaluateWithRetainedPromise(page, 
   await window.Vue.nextTick();
   const note = document.querySelector('[data-label-visibility-hint]')?.textContent.trim() || '';
   app.clickedFeature.labelText = edit.text;
-  await app.updateClickedFeatureLabelText();
+  // Label Not Shown keeps the Apply open until its choice.
+  let applying = true;
+  const applied = Promise.resolve(app.updateClickedFeatureLabelText()).finally(() => { applying = false; });
+  while (applying && !app.hiddenLabelTextDialog.show) await new Promise((resolve) => setTimeout(resolve, 20));
   await window.Vue.nextTick();
   const heading = [...document.querySelectorAll('h3')].find((node) => node.textContent === 'Label Not Shown');
   const dialog = heading?.parentElement.querySelector('p').textContent.trim() || null;
   if (app.hiddenLabelTextDialog.show) await app.handleHiddenLabelTextChoice('text_only');
+  await applied;
   app.clickedFeature = null;
   return { note, dialog };
 }, { locator, text });

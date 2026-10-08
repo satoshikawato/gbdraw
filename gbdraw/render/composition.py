@@ -51,6 +51,16 @@ def _bounds_payload(bounds: Aabb) -> dict[str, float]:
     }
 
 
+def _corner_bounds_payload(bounds: Aabb) -> dict[str, float]:
+    """Return ``bounds`` field for field, so readers need no ``x + width``."""
+    return {
+        "maxX": _wire_number(bounds.max_x),
+        "maxY": _wire_number(bounds.max_y),
+        "minX": _wire_number(bounds.min_x),
+        "minY": _wire_number(bounds.min_y),
+    }
+
+
 def _translation_payload(placement: CompositionPlacement) -> list[float]:
     return [_wire_number(placement.dx), _wire_number(placement.dy)]
 
@@ -87,7 +97,7 @@ def _metadata_payload(
     title_placement: CompositionPlacement | None,
     legend_side: LegendPlacement,
     title_side: TitlePlacement,
-    legend_reflow_metrics: Mapping[str, float] | None,
+    legend_reflow_metrics: Mapping[str, object] | None,
 ) -> str:
     spacing = plan.spacing
     payload = {
@@ -102,8 +112,10 @@ def _metadata_payload(
         ),
         "legendReflow": (
             {
-                key: _wire_number(value)
-                for key, value in legend_reflow_metrics.items()
+                **legend_reflow_metrics,
+                "primaryLocalBounds": _corner_bounds_payload(
+                    plan.primary_local_bounds
+                ),
             }
             if legend_reflow_metrics is not None
             else None
@@ -251,28 +263,56 @@ def _coerce_title_side(value: TitlePlacement | str) -> TitlePlacement:
         raise ValueError(f"unknown title side: {value!r}") from exc
 
 
+_LEGEND_REFLOW_POSITIVE_FIELDS = (
+    "colorRectSize",
+    "fontSize",
+    "lineHeight",
+    "textXOffset",
+)
+
+
+def _reflow_number(value: object, field: str, *, positive: bool) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"legend reflow metric {field} must be a finite number")
+    number = float(value)
+    if not math.isfinite(number) or number < 0.0 or (positive and number == 0.0):
+        bound = "positive" if positive else "non-negative"
+        raise ValueError(f"legend reflow metric {field} must be finite and {bound}")
+    return _wire_number(number)
+
+
 def _validate_legend_reflow_metrics(
-    value: Mapping[str, float] | None,
+    value: Mapping[str, object] | None,
     *,
     required: bool,
-) -> Mapping[str, float] | None:
+) -> dict[str, object] | None:
+    """Validate the Legend layout inputs written as ``legendReflow``.
+
+    ``fontFile``, ``fontSize`` and ``dpi`` are what the Legend layout measured
+    captions with, and ``wrapWidth`` the exact width it wrapped rows in.
+    """
     if value is None:
         if required:
             raise ValueError("legend target requires legend reflow metrics")
         return None
     if not required:
         raise ValueError("legend reflow metrics require a legend target")
-    required_keys = {"colorRectSize", "lineHeight", "textXOffset"}
+    required_keys = {*_LEGEND_REFLOW_POSITIVE_FIELDS, "dpi", "fontFile", "wrapWidth"}
     if set(value) != required_keys:
         raise ValueError("legend reflow metrics have an invalid field set")
-    if any(
-        isinstance(raw, bool) or not isinstance(raw, (int, float))
-        for raw in value.values()
-    ):
-        raise ValueError("legend reflow metrics must be finite and positive")
-    normalized = {key: float(raw) for key, raw in value.items()}
-    if any(not math.isfinite(number) or number <= 0.0 for number in normalized.values()):
-        raise ValueError("legend reflow metrics must be finite and positive")
+    normalized: dict[str, object] = {
+        field: _reflow_number(value[field], field, positive=True)
+        for field in _LEGEND_REFLOW_POSITIVE_FIELDS
+    }
+    dpi = value["dpi"]
+    if isinstance(dpi, bool) or not isinstance(dpi, int) or dpi <= 0:
+        raise ValueError("legend reflow metric dpi must be a positive integer")
+    normalized["dpi"] = dpi
+    font_file = value["fontFile"]
+    if font_file is not None and (not isinstance(font_file, str) or not font_file.strip()):
+        raise ValueError("legend reflow metric fontFile must be a non-empty string or None")
+    normalized["fontFile"] = font_file
+    normalized["wrapWidth"] = _reflow_number(value["wrapWidth"], "wrapWidth", positive=False)
     return normalized
 
 
@@ -285,7 +325,7 @@ def apply_composition_plan(
     legend_target: Group | None = None,
     legend_role: str = _LEGEND_ROLE,
     legend_side: LegendPlacement | str = LegendPlacement.NONE,
-    legend_reflow_metrics: Mapping[str, float] | None = None,
+    legend_reflow_metrics: Mapping[str, object] | None = None,
     title_target: Group | None = None,
     title_role: str = _TITLE_ROLE,
     title_side: TitlePlacement | str = TitlePlacement.NONE,

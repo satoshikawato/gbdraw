@@ -11,7 +11,7 @@ import {
   planLosatSourceJobs,
   prepareLosatSourceBatches,
   splitLosatSourceResult
-} from '../../gbdraw/web/js/app/linear-sources.js';
+} from '../../gbdraw/web/js/services/linear-sources.js';
 import { readFileSync } from 'node:fs';
 import { buildLosatJobSpecs } from '../../gbdraw/web/js/services/linear-comparisons.js';
 import {

@@ -4,7 +4,7 @@ import { ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { resolveColorToHex } from '../../utils/color-utils.js';
 import { getFeatureCaption, getFeatureColorRuleHash, getFeatureHashCandidates } from '../../services/feature-utils.js';
 import { exactRegexValue } from '../../services/feature-selector.js';
-import { getAllFeatureLegendGroups, mountedLegendRowFeatureIds, setsFeatureStroke } from '../legend/utils.js';
+import { getAllFeatureLegendGroups, mountedLegendRowFeatureIds, setsFeatureStroke } from '../../services/legend-svg.js';
 import {
   featureOverrideKey,
   getFeatureOverride
@@ -33,7 +33,6 @@ import {
 /**
  * @typedef {object} FeatureColorActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(svg: SVGSVGElement) => void} compactLegendEntries The Legend layout owner's removal of gaps between the entries.
  * @property {(options?: { replaceGeneratedInventory?: boolean }) => any} extractLegendEntries
  *   The Legend owner's reading of the mounted Legend rows.
  * @property {() => void} onLegendGeometryChanged The Legend owner's reaction to a change of Legend geometry.
@@ -47,7 +46,6 @@ import {
 /** @param {FeatureColorActionsOptions} options */
 export const createFeatureColorActions = ({
   state,
-  compactLegendEntries,
   extractLegendEntries,
   onLegendGeometryChanged,
   ruleActions,
@@ -716,7 +714,8 @@ export const createFeatureColorActions = ({
       }
     }
 
-    compactLegendEntries(svg);
+    // The layout owner lays the Legend out as Python would with the renamed
+    // row (zero shift; OV-127) and docks it.
     onLegendGeometryChanged();
     persistCurrentSvg(svg);
     return true;
@@ -739,6 +738,10 @@ export const createFeatureColorActions = ({
       const oldEntry = findLegendEntryByCaption(oldCaption);
       return ruleActions.commitSpecificRules(rules, 'Rename legend item', {
         previousLegendIntents: retireOld && oldEntry ? [{ caption: oldCaption, color: oldEntry.color }] : [],
+        // OV-158 (Owner decision 2026-10-07): a renamed row keeps its place;
+        // a row that joins another row keeps that row's place.
+        legendPlacement: retireOld && oldEntry && !findLegendEntryByCaption(caption)
+          ? { caption, at: oldEntry.caption } : null,
         afterCommit: () => {
           if (retireOld && !sourceRules.length) {
             const adoptedCaption = getEffectiveLegendCaption(features[0]);

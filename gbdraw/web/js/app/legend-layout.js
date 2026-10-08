@@ -26,10 +26,8 @@ import {
 /**
  * @typedef {object} LegendLayoutOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(svg: SVGSVGElement) => void} reflowDualLegendLayout
- *   The Legend manager's reflow of a diagram with a horizontal and a vertical Legend.
- * @property {(svg: SVGSVGElement, layout: string, maxWidthOverride?: number | null) => void} reflowSingleLegendLayout
- *   The Legend manager's reflow of a diagram with one Legend.
+ * @property {(svg: SVGSVGElement, options?: { side?: string }) => import('../services/legend-layout.js').LayoutBox | null} layOutLegend
+ *   The Legend manager's layout of the Legend for a side as Python lays it out.
  * @property {((label?: string, options?: { source?: string, owner?: unknown }) => Promise<any>) | null} [beginHistoryTransaction]
  *   History's begin of one step (R11); resolves to the transaction, or null when History is busy.
  * @property {((transaction: any, options?: Record<string, any>) => Promise<any>) | null} [commitHistoryTransaction]
@@ -42,8 +40,7 @@ import {
 /** @param {LegendLayoutOptions} options */
 export const createLegendLayout = ({
   state,
-  reflowDualLegendLayout,
-  reflowSingleLegendLayout,
+  layOutLegend,
   beginHistoryTransaction = null,
   commitHistoryTransaction = null,
   previewRuntime = null,
@@ -62,8 +59,7 @@ export const createLegendLayout = ({
   const canvasActions = createLegendCanvasActions({ state, commitActiveResultEdit });
   const repositionActions = createLegendRepositionActions({
     state,
-    reflowDualLegendLayout,
-    reflowSingleLegendLayout,
+    layOutLegend,
     commitActiveResultEdit
   });
 

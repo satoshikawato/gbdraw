@@ -39,7 +39,7 @@ for (const mode of ['circular', 'linear']) {
     const discovery = await page.evaluate(async mode => {
       const app = window.__GBDRAW_APP__;
       const file = mode === 'linear' ? app.linearSeqs[0].gb : app.files.c_gb;
-      const { discoverSequenceRecords, normalizeSequenceRecords } = await import('./js/app/record-discovery.js');
+      const { discoverSequenceRecords, normalizeSequenceRecords } = await import('./js/services/record-discovery.js');
       const { runDiagramHelperOperation, DIAGRAM_HELPER_OPERATIONS } = await import('./js/services/diagram-generation.js');
       const fast = await discoverSequenceRecords({ file, format: 'genbank' });
       const response = await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.LIST_SEQUENCE_RECORDS, {

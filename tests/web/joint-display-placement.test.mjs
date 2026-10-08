@@ -9,7 +9,7 @@ import {
 import { createDefaultForm, createDefaultAdv } from '../../gbdraw/web/js/services/session-active-config-contract.js';
 import {
   buildRecordDisplayRows, requestedRecordDisplay, validateRecordDisplayDrafts
-} from '../../gbdraw/web/js/app/record-display-options.js';
+} from '../../gbdraw/web/js/services/record-display-model.js';
 import { createFeaturePlacementActions } from '../../gbdraw/web/js/app/feature-editor/placement-actions.js';
 import {
   featureIdentityKeyOf, nameFeaturePlacementFailure, restorePlacements

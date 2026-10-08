@@ -12,7 +12,7 @@ import { compileDirectEditorMutationPlan } from './candidate-render.js';
 import {
   countUnresolvedFeatureEdits, removeUnresolvedFeatureEdits, requestFeatureVisibilityRules
 } from '../services/feature-visibility.js';
-import { isLegendOrderEdited } from './legend/utils.js';
+import { isLegendOrderEdited } from '../services/legend-svg.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
 import { createRecordDisplayControls } from './record-display-options.js';
@@ -70,7 +70,7 @@ import {
   setLinearSourceDefaultSubtitle,
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
-} from './linear-sources.js';
+} from '../services/linear-sources.js';
 import { captureSvgExport, serializeCleanSvg } from '../services/svg-serialization.js';
 import { copyTextToClipboard } from '../utils/clipboard.js';
 import { downloadTextFile } from '../services/text-download.js';
@@ -175,7 +175,7 @@ import {
   discoverComparisonSequenceRecordLabel,
   discoverGffFastaRecords,
   discoverSequenceRecords
-} from './record-discovery.js';
+} from '../services/record-discovery.js';
 import {
   applyComparisonSequenceRecordLabel,
   conservationSourceDescriptors,
@@ -1355,6 +1355,7 @@ export const createAppSetup = () => {
     doPan,
     endPan,
     resetPreviewViewport,
+    fitPreviewToViewport,
     cancelPreviewTransformInteraction,
     disposePanZoom,
     previewTransformInteraction
@@ -1385,8 +1386,7 @@ export const createAppSetup = () => {
     beginHistoryTransaction: history.begin,
     commitHistoryTransaction: history.commit,
     commitActiveResultEdit: previewRuntime.commitActiveResultEdit,
-    readActiveResultIdentity: () => previewRuntime.getActiveRuntime()?.resultIdentity,
-    getCommittedRequest: getCommittedCanonicalRenderRequest
+    readActiveResultIdentity: () => previewRuntime.getActiveRuntime()?.resultIdentity
   });
   // History captures register once their owner exists (R13).
   historySnapshots.registerCapture('legend', legendActions.captureLegendEntryOwners);
@@ -1435,7 +1435,6 @@ export const createAppSetup = () => {
     isPatternEditAvailable: () => !sessionImportPending.value,
     nextTick,
     prepareFileLegendEntries: /** @type {any} */ (legendActions.prepareFileLegendEntries),
-    compactLegendEntries: legendActions.compactLegendEntries,
     extractLegendEntries: legendActions.extractLegendEntries,
     onLegendGeometryChanged: legendActions.onLegendGeometryChanged,
     featureSelection,
@@ -2405,8 +2404,7 @@ export const createAppSetup = () => {
   };
   const legendLayout = createLegendLayout({
     state,
-    reflowDualLegendLayout: legendActions.reflowDualLegendLayout,
-    reflowSingleLegendLayout: legendActions.reflowSingleLegendLayout,
+    layOutLegend: legendActions.layOutLegend,
     beginHistoryTransaction: history.begin,
     commitHistoryTransaction: history.commit,
     previewRuntime,
@@ -2426,6 +2424,10 @@ export const createAppSetup = () => {
   );
   // A legacy imported SVG without composition metadata stays unbound: it has
   // no composition to capture and no canvas to pad.
+  // Mounted Results whose Legend `adoptLegend` laid out; the commit waits for
+  // the later binding steps (`initializeStrokeAndCanvas`).
+  /** @type {WeakSet<Element>} */
+  const mountedLegendLayouts = new WeakSet();
   const shouldBindComposition = (context) => (
     context.root.getAttribute(COMPOSITION_SCHEMA_ATTRIBUTE) !== null
     || context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
@@ -2447,6 +2449,16 @@ export const createAppSetup = () => {
   ].map(previewRuntime.getResultIdentity);
   previewRuntime.configureMountedResultBinder({
     async adoptLegend(context) {
+      // The Legend layout port (zero shift) reads the bundled-font metrics;
+      // they load with the first Result that has a Legend, so the Legend
+      // edits, which lay the Legend out synchronously, find them loaded.
+      // Once loaded, the binder does not wait: an edit waiting for this
+      // binding (a rule commit after a rerender) reads its Legend unchanged.
+      if (context.root.getElementById?.('legend') && !legendActions.isLegendLayoutReady()) {
+        await legendActions.prepareLegendLayout().catch((error) => {
+          console.error('The Legend layout could not load its font metrics.', normalizeUserFacingError(error));
+        });
+      }
       // OV-47: each Result has its own default Legend order. A Result being
       // displayed is read before its editor intent is projected; it then shows
       // its own inventory, so a Generate or rerender made while another Result
@@ -2482,11 +2494,19 @@ export const createAppSetup = () => {
         legendActions.adoptResultInventory(context.resultIdentity, { restored: true });
         return;
       }
-      // OV-122, OV-124: a generated or newly displayed Result shows the rows
-      // added and deleted in the Legend editor with the live layout before its
-      // entries are read.
-      if (!context.bindingOptions.isIncrementalEdit && shouldBindComposition(context)) {
-        legendActions.layOutMountedLegendEdits(context.root);
+      // A Result the renderer drew: generated, newly displayed, or drawn again
+      // by an automatic rerender. An incremental edit, a History restore, and
+      // a loaded Session show bytes already laid out.
+      const drawn = !context.bindingOptions.isIncrementalEdit
+        || Boolean(context.bindingOptions.replaceGeneratedLegend);
+      // It shows the Legend editor's edits laid out as Python lays the edited
+      // rows out, before its entries are read (zero shift; OV-122, OV-124,
+      // OV-126, OV-127).
+      if (
+        drawn && context.root.getAttribute(COMPOSITION_METADATA_ATTRIBUTE) !== null
+        && legendActions.layOutMountedLegendEdits(context.root)
+      ) {
+        mountedLegendLayouts.add(context.root);
       }
       if (context.bindingOptions.skipLegendExtraction) return;
       recordStructuralMetric('legendDomFullScanCount', 1, {
@@ -2496,8 +2516,7 @@ export const createAppSetup = () => {
       // A draw that replays an edited Legend order replays it on the displayed
       // mode's Results only.
       legendActions.extractLegendEntries({
-        replaceGeneratedInventory: !selecting && (!context.bindingOptions.isIncrementalEdit
-          || Boolean(context.bindingOptions.replaceGeneratedLegend)),
+        replaceGeneratedInventory: !selecting && drawn,
         liveResultIdentities: results.value.map(previewRuntime.getResultIdentity),
         byCaption: Boolean(modeSwitch)
       });
@@ -2536,14 +2555,16 @@ export const createAppSetup = () => {
       }
     },
     initializeStrokeAndCanvas(context) {
-      if (
-        context.bindingOptions.trustedRestore
-        || context.bindingOptions.isIncrementalEdit
-      ) return;
-      legendActions.captureOriginalStroke();
-      // Generate already padded its candidates; another batch Result shows
-      // the current canvas padding when it is displayed (D-09).
-      if (shouldBindComposition(context)) legendLayout.applyCanvasPadding();
+      const legendLaidOut = mountedLegendLayouts.delete(context.root);
+      if (!context.bindingOptions.trustedRestore && !context.bindingOptions.isIncrementalEdit) {
+        legendActions.captureOriginalStroke();
+        // Generate already padded its candidates; another batch Result shows
+        // the current canvas padding when it is displayed (D-09).
+        if (shouldBindComposition(context)) legendLayout.applyCanvasPadding();
+      }
+      // The Legend laid out at mount is committed with the bindings the
+      // steps since added, so the Result's content is its mounted SVG (R1).
+      if (legendLaidOut) previewRuntime.commitActiveResultEdit('legend-position');
     },
     reconcileSelection(context) {
       if (
@@ -2822,6 +2843,7 @@ export const createAppSetup = () => {
         specificRuleNotice.value = '';
         recordSessionLifecycleEvent('history-baseline-end');
         if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = false;
+        closeLegendStrokeOptions();
       }
     }
   });
@@ -2837,13 +2859,17 @@ export const createAppSetup = () => {
     resetLegendPosition,
     getLegendEntryStrokeColor,
     getLegendEntryStrokeWidth,
+    isLegendStrokeOptionsOpen,
+    toggleLegendStrokeOptions,
+    closeLegendStrokeOptions,
     setLegendEntryStrokeColorValue,
     updateLegendEntryStrokeColor,
     updateLegendEntryStrokeWidth,
     reconcileLegendEntries,
     reconcileStrokeOverrides,
     resetLegendEntryStroke,
-    resetAllStrokes
+    resetAllStrokes,
+    restoreDeletedLegendEntries
   } = legendActions;
 
   const {
@@ -2951,6 +2977,16 @@ export const createAppSetup = () => {
     if (labels) reconcileLabelOverrides();
     return true;
   };
+
+  /**
+   * @param {string} label
+   * @param {number[] | null} indexes
+   */
+  const restoreLegendItems = (label, indexes) => history.runUndoableCheckpoint(label, async () => {
+    const restored = await restoreDeletedLegendEntries(indexes);
+    if (restored === true) await projectMountedEditorIntent({ colors: true, prepareRules: false });
+    return restored;
+  });
 
   historySnapshots.setAfterApplyHistoryIntent(async (_intent, /** @type {{ domains?: Set<string>, changes?: Record<string, any>, direction?: string }} */ { domains, changes, direction } = {}) => {
     if (!svgContainer.value?.querySelector?.('svg')) return;
@@ -3168,7 +3204,7 @@ export const createAppSetup = () => {
       const legendChanged = legendActions.prepareDisplayedResultLegend(context.root, legend)
         || Boolean(arrival?.legendChanged);
       previewRuntime.applyEditorOperations(hasOperations ? operations : null, {
-        afterApply: (root) => { if (legendChanged) legendActions.compactLegendEntries(root); }
+        afterApply: () => { if (legendChanged) legendActions.onLegendGeometryChanged(); }
       });
       projectedEditorStateByResult.set(identity, current);
     } catch (error) {
@@ -5001,6 +5037,7 @@ export const createAppSetup = () => {
     layoutRepositionMode,
     isPanning,
     handleWheel,
+    fitPreviewToViewport,
     canvasPan,
     canvasContainerRef,
     startPan,
@@ -5608,8 +5645,18 @@ export const createAppSetup = () => {
     newLegendColor,
     updateLegendEntryColor,
     renameLegendEntry,
-    deleteLegendEntry,
-    addNewLegendEntry,
+    // A Legend that gains or loses a row is one checkpoint step, so Undo and
+    // Redo return the Legend as it was laid out, canvas included (OV-125).
+    deleteLegendEntry: /** @param {number} index */ (index) => history.runUndoableCheckpoint(
+      'Delete legend item',
+      () => deleteLegendEntry(index)
+    ),
+    addNewLegendEntry: () => history.runUndoableCheckpoint('Add legend item', addNewLegendEntry),
+    // OV-154: a Restore returns deleted rows in one checkpoint step, as a delete
+    // removes them; the palette then reaches the returned rows.
+    deletedLegendEntries,
+    restoreDeletedLegendEntry: /** @param {number} index */ (index) => restoreLegendItems('Restore legend item', [index]),
+    restoreAllDeletedLegendEntries: () => restoreLegendItems('Restore legend items', null),
     moveLegendEntryUp,
     moveLegendEntryDown,
     sortLegendEntries,
@@ -5617,10 +5664,12 @@ export const createAppSetup = () => {
     resetLegendPosition: undoableAction('Reset legend position', resetLegendPosition),
     getLegendEntryStrokeColor,
     getLegendEntryStrokeWidth,
+    isLegendStrokeOptionsOpen,
+    toggleLegendStrokeOptions,
     setLegendEntryStrokeColorValue: setLegendEntryStrokeColorValueWithHistory,
     updateLegendEntryStrokeColor,
-    updateLegendEntryStrokeWidth,
-    resetLegendEntryStroke,
+    updateLegendEntryStrokeWidth: undoableAction('Change legend stroke width', updateLegendEntryStrokeWidth),
+    resetLegendEntryStroke: undoableAction('Reset legend stroke', resetLegendEntryStroke),
     resetAllStrokes,
     resetAllPositions: undoableAction('Reset positions', resetAllPositions),
     resetLayout: undoableAction('Reset layout', resetLayout),

@@ -15,7 +15,7 @@ import { downloadTextFile } from '../../services/text-download.js';
 import { defaultFeatureRendering } from '../../utils/feature-rendering.js';
 import { readFileText } from '../../services/file-content-cache.js';
 import { normalizeTsvCell } from '../../utils/tsv-cell.js';
-import { COMPARISON_LEGEND_SELECTOR } from '../legend/utils.js';
+import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
 
 export const EXCLUDED_GROUP_SELECTOR = [
   '#legend',
@@ -913,8 +913,44 @@ export const createFeatureLabelActions = ({
     return { ...projection, svg };
   };
 
+  // Label text alone keeps Default visibility, which follows Show Labels and
+  // the label filters. When they leave this feature unlabeled, Label Not Shown
+  // asks before anything is written, as applying On does (Owner Q1, Q2): the
+  // caller's History step stays open until the choice, so Show and Keep hidden
+  // are one step each and Cancel writes nothing and records none.
+  /** @type {((choice: string) => unknown) | null} */
+  let answerHiddenLabelTextDialog = null;
+
   // One popup Label edit: the overrides, then the displayed Result.
   const applyPopupLabelEdit = (feature, featureId, edit, { forceReflow = false } = {}) => {
+    const row = rowOf(feature);
+    if (edit.text.trim() && edit.visibility === 'default'
+      && normalizeVisibilityMode(row?.labelVisibility) === 'default'
+      && normalizeFeatureOverrideLabelText(edit.text) !== normalizeFeatureOverrideLabelText(String(row?.labelText ?? edit.sourceText))
+      && !getEditableLabelByFeatureId(featureId)) {
+      answerHiddenLabelTextDialog?.('cancel');
+      hiddenLabelTextDialog.featureId = featureId;
+      hiddenLabelTextDialog.reason = labelAbsenceReason(feature, getCommittedRequest()?.diagramOptions);
+      hiddenLabelTextDialog.show = true;
+      const writeText = () => applyDirectFeatureLabelOverride(feature, edit.text, edit.sourceText, edit.sourceText);
+      return new Promise((resolve) => {
+        answerHiddenLabelTextDialog = (choice) => {
+          let written;
+          if (choice === 'text_only') written = writeText();
+          else if (choice === 'show') {
+            written = applyLabelOn(featureId, ({ forceReflow: force = false } = {}) => {
+              writeText();
+              setLabelVisibilityOverride(feature, 'on');
+              const projection = applyDirectVisibilityToCurrentSvg(featureId, 'on');
+              queueLabelReflow(force || !projection.available);
+            });
+          } else written = syncClickedFeatureLabelState();
+          resolve(written);
+          return written;
+        };
+      });
+    }
+
     const visibilityChanged = setLabelVisibilityOverride(feature, edit.visibility);
     const textChanged = applyDirectFeatureLabelOverride(feature, edit.text, edit.sourceText, edit.sourceText);
 
@@ -928,18 +964,6 @@ export const createFeatureLabelActions = ({
     if (mutatedSvg && (textProjection.changed || visibilityProjection.changed)) {
       commitLabelEdit();
       syncLabelEditor({ queueIncompleteVisibility: false });
-    }
-
-    // Label text alone keeps Default visibility, which follows Show Labels and
-    // the label filters. When they leave this feature unlabeled, ask whether
-    // to show the label (On) or keep only the text.
-    if (textChanged && !visibilityChanged && edit.text.trim()
-      && edit.visibility === 'default'
-      && !getEditableLabelByFeatureId(featureId)) {
-      hiddenLabelTextDialog.featureId = featureId;
-      hiddenLabelTextDialog.reason = labelAbsenceReason(feature, getCommittedRequest()?.diagramOptions);
-      hiddenLabelTextDialog.show = true;
-      return;
     }
 
     if (visibilityChanged || (!edit.hasEditableLabel && textChanged)) {
@@ -988,20 +1012,14 @@ export const createFeatureLabelActions = ({
     hiddenLabelTextDialog.reason = '';
   };
 
+  // The Label Not Shown dialog answers the Apply that opened it.
   const handleHiddenLabelTextChoice = (choice) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    if (!hiddenLabelTextDialog.show) return;
-    const featureId = hiddenLabelTextDialog.featureId;
+    const answer = answerHiddenLabelTextDialog;
+    answerHiddenLabelTextDialog = null;
     closeHiddenLabelTextDialog();
-    if (choice !== 'show' || !featureId) return;
-    const feature = featureById(featureId);
-    if (!featureIdentityKeyOf(feature)) return;
-    return applyLabelOn(featureId, ({ forceReflow = false } = {}) => {
-      setLabelVisibilityOverride(feature, 'on');
-      const projection = applyDirectVisibilityToCurrentSvg(featureId, 'on');
-      queueLabelReflow(forceReflow || !projection.available);
-    });
+    return answer?.(choice);
   };
 
   // Owner decisions Q1 and Q2 (2026-10-04): applying Label visibility On asks

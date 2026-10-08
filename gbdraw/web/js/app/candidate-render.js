@@ -2,7 +2,7 @@
 /** @import { FeatureCatalogAdmission } from '../services/feature-catalog.js' */
 /** @import { SvgAdmissionRuntime, SvgResultTransform } from '../services/svg-result-ingestion.js' */
 import { resolveColorToHex } from '../utils/color-utils.js';
-import { defaultLegendCaptionOrder, isLegendOrderEdited, legendRowFeatureIds } from './legend/utils.js';
+import { defaultLegendCaptionOrder, isLegendOrderEdited, legendRowFeatureIds } from '../services/legend-svg.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
 import {
@@ -295,8 +295,9 @@ const compilePlanBundle = ({
 
   // D-08 (PD-OI-063): an edited Legend order is replayed over the renderer's
   // slots. The renderer places generated entries in their generated order and
-  // direct additions after them; only a different order emits an operation,
-  // and a renamed entry then takes its slot from that order. A displayed batch
+  // direct additions after them; only a different order emits an operation.
+  // A renamed entry keeps its row, and the Legend layout places it (OV-156,
+  // zero shift), so a rename carries no position. A displayed batch
   // Result that may still show an earlier edited order also receives its own
   // default order, the generated order of that Result (D-07, B20, OV-47).
   const legendOrderChanged = isLegendOrderEdited(currentEntries, [...originalCaptions]);
@@ -322,9 +323,7 @@ const compilePlanBundle = ({
         from: entry.originalCaption,
         to: entry.caption,
         allowMissing: sourceReplaced || manualCaptions.has(entry.caption) || unrequestedDepth.has(entry.originalCaption)
-          || otherModeRows.has(entry.originalCaption),
-        xPos: legendOrderChanged ? null : entry.xPos,
-        yPos: legendOrderChanged ? null : entry.yPos
+          || otherModeRows.has(entry.originalCaption)
       });
     }
     if (

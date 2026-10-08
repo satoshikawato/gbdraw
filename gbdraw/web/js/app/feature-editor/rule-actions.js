@@ -36,6 +36,11 @@ import { featureDrawnContext, resultLegendSources, sameLegendSources } from '../
  */
 
 /**
+ * A Legend row a rule commit draws in the place of the row `at` (OV-158).
+ * @typedef {{ caption: string, at: string }} LegendPlacement
+ */
+
+/**
  * The Legend rows a rule commit draws, prepared and not yet applied.
  * @typedef {object} PreparedFileLegend
  * @property {{ add: any[], update: any[], remove: any[], unchanged: any[] }} diff
@@ -46,7 +51,7 @@ import { featureDrawnContext, resultLegendSources, sameLegendSources } from '../
 /**
  * @typedef {object} FeatureRuleActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(intents: Record<string, any>[], options?: { previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
+ * @property {(intents: Record<string, any>[], options?: { previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean, placement?: LegendPlacement | null }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
  *   The Legend owner's preparation of the rows the rules draw.
  * @property {import('../rule-matching.js').RulePreparation} rulePreparation
  * @property {(label: string, fn: () => any, options?: Record<string, any>) => any} runUndoable History's undoable step.
@@ -116,7 +121,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // The legend rows the candidate rules draw on rendered features, and the rows
   // the commit retires: those the current rules draw (so it retires the row
   // Generate drew) and `retiredLegendIntents`, rows this commit replaces, which
-  // are no renderer rows for the N-06 caption allocation.
+  // are no renderer rows for the N-06 caption allocation. `removedRuleRows` are
+  // the rows of current rules that no candidate rule names, drawn or not.
   const candidateLegendIntents = (candidateRules, retiredLegendIntents) => {
     const rendered = (extractedFeatures.value || []).filter(feature =>
       featureOverrideValue(featureOverrides, feature, 'featureVisibility') !== 'off');
@@ -128,10 +134,13 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
         ...retiredLegendIntents.map(intent => ({ cap: intent?.caption, color: intent?.color }))]
     });
     const currentCaption = createRuleLegendCaptions(manualSpecificRules, rendererRows);
+    const ruleRows = manualSpecificRules.filter(rule => rule.cap)
+      .map(rule => ({ caption: currentCaption(rule), color: rule.color }));
+    const candidateCaptions = new Set(buildLegendIntents(candidateRules, rendererRows).intents.map(intent => intent.caption));
     return {
       intents: buildLegendIntents(candidateRules.filter(rule => used.has(rule)), rendererRows).intents,
-      previousIntents: [...manualSpecificRules.filter(rule => rule.cap)
-        .map(rule => ({ caption: currentCaption(rule), color: rule.color })), ...retiredLegendIntents]
+      previousIntents: [...ruleRows, ...retiredLegendIntents],
+      removedRuleRows: ruleRows.filter(row => !candidateCaptions.has(row.caption))
     };
   };
   // OV-43 (Owner decision 2026-10-06, option A): whether a rule table change
@@ -146,18 +155,49 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     resultLegendSources(state, legendSourceContext(before)),
     resultLegendSources(state, legendSourceContext(after))
   );
+  // OV-152: rules that recolor a whole type keep its caption, so their Legend
+  // source is that of the type's default row and the live Legend follows them
+  // (`legendSourceOf`). A change that removes the last such rule of a type
+  // makes Python draw the default row again, which the live removal of the
+  // rule row does not; the automatic rerender draws it.
+  /** @param {Record<string, any>[]} rules */
+  const typeRowCaptions = (rules) => new Set(rules
+    .filter(rule => String(rule?.cap ?? '').trim() && rule.cap === rule.feat)
+    .map(rule => rule.cap));
+  /**
+   * @param {Record<string, any>[]} before
+   * @param {Record<string, any>[]} after
+   * @param {(caption: string) => boolean} [shown] Whether the Legend already shows
+   *   the default row of a type (a History restore returns the rows it held).
+   */
+  const redrawsLegendFor = (before, after, shown = () => false) => {
+    const kept = typeRowCaptions(after);
+    return changesLegendSource(before, after)
+      || [...typeRowCaptions(before)].some(caption => !kept.has(caption) && !shown(caption));
+  };
+  // The Legend rows a History restore returned, shown or deleted in the editor.
+  /** @param {string} caption */
+  const legendHoldsRow = (caption) => [
+    ...(state.legendEntries?.value || []), ...(state.deletedLegendEntries?.value || [])
+  ].some((entry) => captionMatches(entry?.caption, caption) || captionMatches(entry?.originalCaption, caption));
   // Undo and Redo of a rule edit restore the rules; the composition root
   // passes the rules they replaced, and a changed Legend source asks for the
-  // rerender, as the edit did.
+  // rerender, as the edit did. A removed whole-type rule asks for it only
+  // when the restored Legend lacks the type's default row (OV-169): Undo of
+  // an Apply to all returns the row it recolored, so it needs no Python run.
   const followRestoredRules = (previousRules) => (
     JSON.stringify(previousRules) !== JSON.stringify(manualSpecificRules)
-    && changesLegendSource(previousRules, manualSpecificRules)
+    && redrawsLegendFor(previousRules, manualSpecificRules, legendHoldsRow)
     && ports.requestAutomaticRerender()
   );
   // The automatic rerender replaces the Results the candidate was prepared
   // against, which makes the candidate stale (#857). An edit made while one runs
   // waits for it and, when it replaced the Results under an unchanged rule
-  // table, prepares again instead of dropping the edit.
+  // table, prepares again instead of dropping the edit. The rerender is idle
+  // before the binder has read the Result it wrote, so a preparation can also
+  // go stale on that binding with the Results unchanged (OV-166): any change
+  // of the inputs the candidate was prepared from counts, unless another
+  // commit, the caller, or a Session operation superseded this one.
   /** @returns {Promise<void>} */
   const rerenderIdle = () => (state.labelReflowProcessing?.value
     ? new Promise((resolve) => {
@@ -169,16 +209,31 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   // popup stores the caption's color when it recolors a whole group) would
   // win at Generate over the recolored rule, so a commit that recolors the row
   // retires it; `afterCommit` may store a new one.
-  const retireSupersededLegendColors = (intents) => {
+  // OV-152: a commit that removes a rule row (Clear All, a deleted or
+  // recaptioned rule) retires that copy too; left behind, it would paint the
+  // row Generate draws for the features' palette color. A copy has the removed
+  // rule's caption and color. A color set in the Legend editor is no copy: the
+  // editor recolors the rules of a row a rule draws (legend.js), so its colors
+  // sit on rows no rule draws and stay.
+  /**
+   * @param {{ caption: string, color: string }[]} intents
+   * @param {{ caption: string, color: string }[]} removedRuleRows
+   */
+  const retireSupersededLegendColors = (intents, removedRuleRows) => {
     const overrides = state.legendColorOverrides;
     for (const { caption, color } of intents) {
       if (Object.hasOwn(overrides, caption) && resolveColorToHex(overrides[caption]) !== resolveColorToHex(color)) {
         delete overrides[caption];
       }
     }
+    for (const { caption, color } of removedRuleRows) {
+      if (Object.hasOwn(overrides, caption) && resolveColorToHex(overrides[caption]) === resolveColorToHex(color)) {
+        delete overrides[caption];
+      }
+    }
   };
   /**
-   * @typedef {{ isCurrent?: () => boolean, afterCommit?: (intents: Record<string, any>[]) => void, previousLegendIntents?: Record<string, any>[], sourceRows?: (Record<string, any> | null)[] }} CommitSpecificRulesOptions
+   * @typedef {{ isCurrent?: () => boolean, afterCommit?: (intents: Record<string, any>[]) => void, previousLegendIntents?: Record<string, any>[], sourceRows?: (Record<string, any> | null)[], legendPlacement?: LegendPlacement | null }} CommitSpecificRulesOptions
    */
   /**
    * @param {Record<string, any>[]} rules
@@ -192,9 +247,15 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     for (let attempt = 0; ; attempt += 1) {
       const results = state.results.value;
       const table = JSON.stringify(manualSpecificRules);
+      const inputs = rulePreparation.snapshot();
+      const revision = preparationRevision;
       const outcome = await commitOnce(rules, label, options);
-      if (outcome || attempt === 2 || state.results.value === results
-        || JSON.stringify(manualSpecificRules) !== table) return outcome;
+      const stale = state.results.value !== results || !rulePreparation.isCurrent(inputs);
+      if (outcome || attempt === 2 || !stale
+        || JSON.stringify(manualSpecificRules) !== table
+        || preparationRevision !== revision + 1
+        || options.isCurrent?.() === false
+        || state.sessionOperationAvailability?.()) return outcome;
       await rerenderIdle();
     }
   };
@@ -216,22 +277,23 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
    * @param {string} label
    * @param {CommitSpecificRulesOptions} [options]
    */
-  const commitOnce = async (rules, label, { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], sourceRows = rules.map(rule => manualSpecificRules.includes(rule) ? rule : null) } = {}) => {
+  const commitOnce = async (rules, label, { isCurrent = () => true, afterCommit = () => {}, previousLegendIntents = [], sourceRows = rules.map(rule => manualSpecificRules.includes(rule) ? rule : null), legendPlacement = null } = {}) => {
     const revision = ++preparationRevision;
     const candidate = await prepareRules(rules);
     if (!candidate) return false;
     const current = () => revision === preparationRevision && !state.sessionOperationAvailability?.() && isCurrent()
       && rulePreparation.isCurrent(candidate.snapshot);
     if (!current()) return false;
-    const { intents, previousIntents } = candidateLegendIntents(candidate.rules, previousLegendIntents);
+    const { intents, previousIntents, removedRuleRows } = candidateLegendIntents(candidate.rules, previousLegendIntents);
     const previousCaptions = new Set(previousIntents.map(intent => intent.caption));
     const legend = await prepareFileLegendEntries(intents.filter(intent => !(state.deletedLegendEntries?.value || [])
       .some(entry => (entry.originalCaption || entry.caption) === intent.caption)), {
       previousFileIntents: previousIntents,
-      isCurrent: current
+      isCurrent: current,
+      placement: legendPlacement
     });
     if (!legend) return false;
-    const redrawsLegend = changesLegendSource([...manualSpecificRules], candidate.rules);
+    const redrawsLegend = redrawsLegendFor([...manualSpecificRules], candidate.rules);
     let applied = false;
     // One History step: the rule transition first, then the legend rows it
     // draws (R13); a checkpoint when the legend gains or loses a row.
@@ -253,7 +315,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
         ...intents.map(intent => intent.caption)
       ]);
       applyRulePreview();
-      retireSupersededLegendColors(intents);
+      retireSupersededLegendColors(intents, removedRuleRows);
       afterCommit(intents);
       applied = true;
       legend.apply();

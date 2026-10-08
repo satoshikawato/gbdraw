@@ -41,6 +41,15 @@ export const getFeaturePart = (element) => {
   return CONNECTOR_ID_SUFFIX_RE.test(elementId) ? FEATURE_PART_CONNECTOR : FEATURE_PART_BLOCK;
 };
 
+// An automatic feature underlay (gbdraw/annotations/feature_underlays.py): a
+// feature-owned block the renderer draws without a stroke (`stroke="none"`,
+// `stroke-width="0"`, gbdraw/render/drawers/*/annotations.py), not with the
+// feature block stroke.
+export const AUTO_FEATURE_UNDERLAY_ATTRIBUTE = 'data-gbdraw-auto-feature-underlay';
+export const AUTO_FEATURE_UNDERLAY_STROKE = Object.freeze({ color: 'none', width: 0 });
+/** @param {Element | null | undefined} element */
+export const isAutoFeatureUnderlay = (element) => element?.getAttribute?.(AUTO_FEATURE_UNDERLAY_ATTRIBUTE) === 'true';
+
 export const isFeatureFillTarget = (element) => (
   getFeaturePart(element) === FEATURE_PART_BLOCK
   && !String(element?.getAttribute?.('id') || element?.id || '').endsWith('__outline')

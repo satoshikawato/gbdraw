@@ -12,6 +12,31 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Layout (CLI and Python API): Legend, multi-record and definition coordinates no
+  longer depend on the Python version. The side-by-side rows of a Circular Legend, the
+  multi-record grid, the rows of a multi-record Linear diagram, and the definition text
+  block summed floats with the built-in `sum()`, which Python 3.12 made compensated, so
+  Python 3.10 and 3.11 placed them up to about 1e-13 px differently from 3.12 and later,
+  and from the web app.
+- Legend editor (web app): every Legend edit (adding, removing, renaming, or moving a
+  row, Sort, a side change, Undo and Redo) lays the Legend out as Python does, with the
+  same text measurement and the font, size, and wrap width the diagram was drawn with,
+  so the Legend and the canvas you see equal those of the next Generate, in Linear and
+  Circular. Before, the web app used its own layout: rows could overlap after an edit
+  (for example an added row and a renamed row in Circular), Generate could move rows
+  and change the canvas size, and in Linear a renamed row that was not the last one
+  moved at Generate.
+- Legend editor (web app): Reset Stroke, Reset all strokes, and the **Auto** stroke
+  color give each feature the stroke Generate draws when the diagram has an automatic
+  underlay (for example `repeat_region` in Circular), and Reset all strokes returns
+  each Legend row to the stroke it was drawn with. Before, these gave the features no
+  stroke there, because the default stroke was read from the underlay, which is drawn
+  without one, and Reset all strokes gave every Legend row that default stroke, GC
+  rows included.
+- Specific color rules (web app): a rule added or edited while an automatic
+  rerender is updating the diagram is applied once the rerendered diagram is
+  ready. Before, it could be dropped without a message when the diagram finished
+  updating during the edit.
 - Color names (CLI and Python API): `seashell` now resolves to `#FFF5EE`, the CSS
   color, so the CLI draws it as the Web app does. Before, it resolved to `#2E8B57`
   (seagreen). `rebeccapurple` (`#663399`) is now accepted. The other 146 CSS color
@@ -23,6 +48,19 @@ write-up of a release.
   reader now keeps an empty cell or the text "NA" in a feature visibility, label
   whitelist, qualifier priority, color, or annotation table as written; before, these
   cells were read as missing values.
+- Text measurement: label, Legend, and title widths now apply the bundled fonts'
+  GPOS pair kerning, as browsers draw the text. Before, only the older `kern` table
+  was read. The two hold the same pairs for Latin, Greek, and Cyrillic text, so those
+  diagrams do not move. Hebrew text in Liberation Sans (the default font, also used
+  for `Arial`, `Helvetica`, and `sans-serif`) is now kerned, so its labels and Legend
+  rows can shift by up to about 1 px per kerned letter pair at 14 pt.
+- Text measurement: repeated spaces, tabs, and line breaks in labels and captions, and
+  characters the bundled fonts lack (for example Japanese), are now measured as Chromium
+  draws them: collapsed into one space, and one em wide instead of nothing.
+- SVG output: the Legend part (`legendReflow`) of the `data-gbdraw-composition`
+  metadata also records the font file, font size, DPI, and wrap width the Legend was
+  laid out with, and the diagram bounds it was placed against, so that the web app
+  can lay out an edited Legend as Python does. Drawn content is unchanged.
 - Legend colors (web app): Generate no longer fails with "The generated result could
   not be accepted" after a color or stroke is set on a row added in the Legend editor,
   in Linear and Circular. The added row is drawn with its color and stroke after
@@ -44,6 +82,47 @@ write-up of a release.
   and the canvas as the removal left them, in Linear and Circular: the other rows
   close the gap. Before, Generate kept the gap and the earlier canvas size. A batch
   Result shown after the removal is laid out the same way.
+- Legend editor (web app): removing a row, adding a row, changing a row's stroke
+  width, and Reset Stroke are each one Undo step, as the stroke color is. Undo and
+  Redo of a removed or added row return the Legend, its strokes, and the canvas as
+  they were. Before, these edits made no Undo step when they were not made through
+  a control, adding a row never made one, Undo of a removal left the rows out of
+  place, and an added row that Undo returned took the first row's stroke edit.
+- Legend editor (web app): rows added or removed in the Legend editor keep their
+  layout through an automatic rerender (for example after a Feature Visibility
+  rule), as Generate draws them. Before, the rerender moved an added row, in Linear
+  far to the right of the other rows, and kept the earlier canvas size.
+- Legend editor (web app): after a row without features, such as GC content, is
+  renamed in the Legend editor, Generate draws the Legend and the canvas as the
+  rename left them, and the rows keep their spacing. Before, Generate moved only the
+  renamed row, which left uneven gaps, and kept the earlier canvas width.
+- Legend colors (web app): after **Apply to all** in the feature popup colors every
+  feature of a Legend row, removing the rules it wrote (**Clear All** in SPECIFIC
+  RULES, or deleting the last of them) also removes the Legend color it stored for
+  the row, in the same Undo step. The row then takes the palette color its features
+  return to, live and after Generate. Before, Generate drew the row in the popup's
+  color, and the saved Session kept it. A Legend color set on a row in the Legend
+  editor is kept.
+- Legend editor (web app): opening or closing a row's **Stroke options** no longer
+  makes an Undo step, and Sessions no longer save which rows show their stroke
+  options. Loading a Session closes them.
+- Legend editor (web app): rows removed in the Legend editor are listed under
+  **Deleted items**, each with **Restore**, and **Restore all** returns every one. A
+  restored row returns at once where Generate draws it; each click is one Undo step,
+  and Sessions save the rows still removed. Before, only Undo returned a removed row.
+- Legend editor (web app): a renamed feature row (for example `tRNA`) keeps its place
+  in the Legend, live and after Generate, in Linear and Circular. Before, the rename
+  moved the row to the end of the Legend.
+- Legend editor (web app): each row's name field, its move, **Stroke options**, and
+  remove buttons, and the stroke color, stroke width, and reset controls inside
+  **Stroke options** now have accessible names that include the row's caption (for
+  example "Move CDS up", "Remove CDS", and "Reset stroke of CDS to default"), so
+  assistive technology tells the rows apart. Before, the name field and the stroke
+  width had no name of their own and every row's buttons shared one name.
+- Sessions (web app): a Session saved before Merge was limited to two rows of one
+  feature type (for example one that merged `GC skew (+)` into `GC skew (-)`) loads
+  as saved and keeps its merged row; a new Merge between such rows is no longer
+  offered.
 - Result names (web app): a live edit that redraws a loaded Session's Result (such
   as a Legend color, or Undo or Redo of a color step) keeps the Result's saved name.
   Before, the redraw renamed it after the **Output prefix** (a Gallery Session's

@@ -133,6 +133,13 @@ Presentation rules do not edit the input annotation. Their order is:
 5. Shape, stroke, overlap, title, definition, and legend settings affect only
    the drawing.
 
+When several specific-color rules match one feature, the first match wins.
+Rules are tried by qualifier key, in the order the keys appear on the feature,
+and then by row order within one key; the row order of rules with different
+qualifier keys has no effect. The Web app's **Move rule up** and **Move rule
+down** therefore change the result only between rules with the same qualifier
+key, and the CLI orders the rules the same way.
+
 A partial default-color table changes only the listed feature types. Omitted
 feature types retain their values from the selected palette.
 

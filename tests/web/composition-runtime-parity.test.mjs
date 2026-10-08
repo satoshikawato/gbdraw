@@ -25,10 +25,9 @@ const cases = JSON.parse(oracle.stdout);
 const assertEquivalent = (actual, expected, path = 'plan') => {
   if (typeof expected === 'number') {
     assert.equal(typeof actual, 'number', `${path} is not numeric`);
-    assert.ok(
-      Math.abs(actual - expected) <= 1e-9,
-      `${path}: expected ${expected}, received ${actual}`
-    );
+    // The replan is Python's planner in Python's order of operations
+    // (services/legend-layout.js), so the numbers are equal, not close.
+    assert.ok(actual === expected, `${path}: expected ${expected}, received ${actual}`);
     return;
   }
   if (Array.isArray(expected)) {

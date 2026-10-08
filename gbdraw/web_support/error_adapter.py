@@ -17,7 +17,7 @@ from gbdraw.exceptions import (
 
 OPERATIONS = frozenset("""unknown generate align feature-extraction export-svg export-png export-pdf evaluateRules readPdfFont
 buildProteinLosatCacheKeys convertLosatpPairsToGenomicPayload convertMainSessionComparisonFrame
-extractCdsProteinFasta extractFirstFasta generateLegendEntrySvg hydrateProteinLosatTsv
+extractCdsProteinFasta extractFirstFasta hydrateProteinLosatTsv
 listGffFastaRecords listSequenceRecords measureLegendText promoteLegacyLosatpCache
 readComparisonSequence readFeatureOverrideTable resolveLegacyProteinReferences resolveSimilarityAlignment
 validateConfigOverrides""".split())

@@ -107,7 +107,7 @@ const featurePresentation = (page, locusTags) => page.evaluate((tags) => {
 }, locusTags);
 
 const legendCaptions = (page, { source = 'mounted' } = {}) => page.evaluate(async (from) => {
-  const { getVisibleFeatureLegendGroup } = await import('/gbdraw/web/js/app/legend/utils.js');
+  const { getVisibleFeatureLegendGroup } = await import('/gbdraw/web/js/services/legend-svg.js');
   const app = window.__GBDRAW_APP__;
   const root = from === 'mounted'
     ? app.svgContainer.querySelector('svg')
@@ -140,7 +140,12 @@ const editFeature = (page, locusTag, edit) => evaluateWithRetainedPromise(page, 
   if (change.labelText !== undefined || change.labelVisibility) {
     if (change.labelText !== undefined) app.clickedFeature.labelText = change.labelText;
     if (change.labelVisibility) app.clickedFeature.labelVisibility = change.labelVisibility;
-    await app.updateClickedFeatureLabelText();
+    // Label Not Shown keeps the Apply open until its choice (Keep hidden here).
+    let applying = true;
+    const applied = Promise.resolve(app.updateClickedFeatureLabelText()).finally(() => { applying = false; });
+    while (applying && !app.hiddenLabelTextDialog?.show) await new Promise((resolve) => setTimeout(resolve, 20));
+    if (app.hiddenLabelTextDialog?.show) await app.handleHiddenLabelTextChoice('text_only');
+    await applied;
   }
   if (change.visibility) {
     app.clickedFeature.featureVisibility = change.visibility;

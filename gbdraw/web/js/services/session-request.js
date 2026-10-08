@@ -1,5 +1,5 @@
 // @ts-check
-import { writeCanonicalRecordReverseComplement } from '../app/record-display-options.js';
+import { writeCanonicalRecordReverseComplement } from './record-display-model.js';
 import {
   canonicalFeatureOverrides,
   canonicalFeaturePlacements,
@@ -67,7 +67,7 @@ import {
 import {
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
-} from '../app/linear-sources.js';
+} from './linear-sources.js';
 import {
   linearRecordLayoutHasSharedRow,
   resolveEffectiveLinearRecordRows
@@ -163,7 +163,7 @@ import { sha256Hex } from './byte-utils.js';
 import { cloneJsonData } from './json-clone.js';
 import { isCanonicalResourceReferenceField } from './canonical-resource-references.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
-import { recordDisplayKey, requestedRecordTransform } from '../app/record-display-options.js';
+import { recordDisplayKey, requestedRecordTransform } from './record-display-model.js';
 
 /** @import { SessionResourceSource } from './session-resources.js' */
 
