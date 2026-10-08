@@ -527,6 +527,54 @@ test('a fill and stroke on a Legend editor added row style the row the plan adds
   assert.deepEqual(swatches(serializeNode(mounted)), expected);
 });
 
+// D-07 (PD-OI-062): a batch Result shows the editor operations through the
+// executor when it is displayed. Showing them again changes nothing, and an
+// operation for a feature or Legend row the Result does not draw is skipped.
+const mountedPaint = (admission) => compileDirectEditorMutationPlan({
+  ...planOptions.fill(admission),
+  ...planOptions.stroke(admission),
+  ...planOptions.Legend(admission),
+  featureOverrides: { [identityKey]: identityRow({ featureVisibility: 'off' }) }
+}).operationsByResult[0];
+
+test('the mounted executor is idempotent', () => {
+  const { admission } = currentFixture();
+  const operations = mountedPaint(admission);
+  const mounted = buildSvgRoot();
+  applyEditorOperationsToMountedSvg(mounted, operations);
+  const once = serializeNode(mounted);
+  assert.notEqual(once, serializeNode(buildSvgRoot()));
+  applyEditorOperationsToMountedSvg(mounted, operations);
+  assert.equal(serializeNode(mounted), once);
+});
+
+test('a mounted batch Result skips the features and Legend rows it does not draw', () => {
+  const { admission } = currentFixture();
+  const renamed = compileDirectEditorMutationPlan({
+    catalogAdmission: admission,
+    legendEntries: [{ caption: 'Genes', originalCaption: 'CDS', color: '#aaaaaa' }],
+    originalLegendOrder: ['CDS']
+  }).operationsByResult[0];
+  [mountedPaint(admission), renamed].forEach((operations) => {
+    const mounted = buildSvgRoot({ missingFeature: true });
+    mounted.querySelector('g[data-legend-key]').setAttribute('data-legend-key', 'tRNA');
+    const drawn = serializeNode(mounted);
+    applyEditorOperationsToMountedSvg(mounted, operations);
+    assert.equal(serializeNode(mounted), drawn);
+  });
+});
+
+test('a mounted Result shown again after its edits were removed returns to what Python drew', {
+  todo: 'OV-144: the mounted executor applies operations but never reverts one'
+}, () => {
+  const { admission } = currentFixture();
+  const mounted = buildSvgRoot();
+  const python = serializeNode(mounted);
+  applyEditorOperationsToMountedSvg(mounted, mountedPaint(admission));
+  applyEditorOperationsToMountedSvg(mounted, createEmptySvgMutationPlan(1).operationsByResult[0]);
+  assert.equal(serializeNode(mounted), python);
+});
+
 test('a requested Legend addition reuses an exact renderer-produced caption', () => {
   const { response, admission } = currentFixture();
   const plan = compileDirectEditorMutationPlan({

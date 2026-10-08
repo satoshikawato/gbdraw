@@ -11,6 +11,7 @@
 const { test, expect } = require('@playwright/test');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
+const { download, load } = require('./helpers/mode-transition.cjs');
 const {
   open, generate, popupEdit, addVisibilityRule, appAction, addColorRule, history, FL1_OFF,
   legendRowColor, FL1_ALPHA, renameRow
@@ -344,6 +345,26 @@ const CASES = [
     states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
     setup: (page) => legendRowStroke(page, 'CDS', '#e63946', 3),
     run: (page) => showResult(page, 1)
+  },
+  // OV-144 (D-07, PD-OI-062): a batch Result shown with a stroke edit that was
+  // removed while another Result was shown returns to Python's stroke when it
+  // is shown again.
+  {
+    kind: 'Result switch',
+    edit: 'Result switch back to a Result shown with a Legend row stroke that was reset since',
+    states: { mode: 'circular', results: 'batch', reflow: 'on', labels: 'unbound' },
+    setup: async (page) => {
+      await legendRowStroke(page, 'CDS', '#e63946', 3);
+      await showResult(page, 1);
+      await showResult(page, 0);
+      await page.evaluate((row) => {
+        const app = window.__GBDRAW_APP__;
+        return app.resetLegendEntryStroke(app.legendEntries.findIndex((entry) => entry.caption === row));
+      }, 'CDS');
+      await settleLive(page);
+    },
+    run: (page) => showResult(page, 1),
+    knownMismatch: 'OV-144: the displayed batch Result keeps a stroke edit removed since it was last shown'
   },
   {
     kind: 'color rule color',
@@ -686,3 +707,81 @@ for (const { edit, states, setup, run, knownMismatch } of CASES) {
     await expectLiveEqualsGenerate(page, { label: `${edit} (${statesName(states)})` });
   });
 }
+
+// OV-144 (D-07, PD-OI-062): the executor's record of Python's strokes travels
+// with a Result through Save Session and Load, so a stroke edit removed after
+// Load leaves a batch Result that showed it when that Result is shown again.
+test('a stroke removed after Load leaves a batch Result that showed it (circular, two-Result batch)', async ({ page, browser }, testInfo) => {
+  test.fail(true, 'OV-144: the displayed batch Result keeps a stroke edit removed since it was last shown');
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await legendRowStroke(page, 'CDS', '#e63946', 3);
+  await showResult(page, 1);
+  await showResult(page, 0);
+  const saved = testInfo.outputPath('stroked-batch.gbdraw-session.json');
+  await download(page, 'Save Session', saved);
+  const loaded = await load(browser, saved);
+  if (await loaded.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex) !== 0) await showResult(loaded, 0);
+  await loaded.evaluate((row) => {
+    const app = window.__GBDRAW_APP__;
+    return app.resetLegendEntryStroke(app.legendEntries.findIndex((entry) => entry.caption === row));
+  }, 'CDS');
+  await settleLive(loaded);
+  await showResult(loaded, 1);
+  await expectLiveEqualsGenerate(loaded, { label: 'a stroke removed after Load' });
+  await loaded.context().close();
+});
+
+// OV-129, OV-150: a stroke reset or Undo returns each feature part and Legend
+// swatch to the stroke Python drew for it: a connector line its
+// `line_stroke_*`, a block its `block_stroke_*` of the genome size class.
+// Python's strokes are read before the first edit; the stroke width counts
+// too, which the semantic snapshot leaves out.
+const drawnStrokes = (page) => page.evaluate(() => {
+  const root = window.__GBDRAW_APP__.svgContainer?.querySelector('svg');
+  const strokes = (element) => [element.getAttribute('stroke'), element.getAttribute('stroke-width')];
+  const features = [...root.querySelectorAll('[data-gbdraw-feature-id]')].map((element) => [
+    element.getAttribute('data-gbdraw-rendered-feature-id') || element.getAttribute('data-gbdraw-feature-id'),
+    element.getAttribute('data-gbdraw-feature-part') || element.localName,
+    ...strokes(element)
+  ]);
+  const swatches = [...root.querySelectorAll('g[data-legend-key]')].map((entry) => {
+    const swatch = [...entry.querySelectorAll('path')].find((path) => {
+      const fill = path.getAttribute('fill');
+      return fill && fill !== 'none' && !fill.startsWith('url(');
+    });
+    return [entry.getAttribute('data-legend-key'), 'swatch', ...(swatch ? strokes(swatch) : [])];
+  });
+  return [...features, ...swatches];
+});
+const STROKE_RESET_CASES = {
+  'popup Reset Stroke of a spliced feature': {
+    finding: 'OV-150: the connector of a spliced feature takes the block stroke on Reset Stroke',
+    edit: (page) => popupEdit(page, 'TESTA_0004', { stroke: '#e63946' }),
+    revert: (page) => popupEdit(page, 'TESTA_0004', { resetStroke: true })
+  },
+  'Reset all strokes after a Legend row stroke': {
+    finding: 'OV-129: Reset all strokes gives connectors and every size class the first feature stroke',
+    edit: (page) => legendRowStroke(page, 'CDS', '#e63946', 3),
+    revert: (page) => appAction(page, 'resetAllStrokes')
+  },
+  'Undo of a Legend row stroke': {
+    finding: 'OV-129: the History stroke reconcile gives connectors the first feature stroke',
+    edit: (page) => legendRowStrokeColor(page, 'CDS', '#e63946'),
+    revert: (page) => history(page, 'undo')
+  }
+};
+for (const [name, { finding, edit, revert }] of Object.entries(STROKE_RESET_CASES)) {
+  test(`${name} returns each feature part to Python's stroke (circular, two-Result batch)`, async ({ page }) => {
+    test.fail(true, finding);
+    test.setTimeout(120_000);
+    await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+    const drawn = await drawnStrokes(page);
+    await edit(page);
+    expect(await drawnStrokes(page), 'the edit changes strokes').not.toEqual(drawn);
+    await revert(page);
+    expect(await drawnStrokes(page), 'every part is back at the stroke Python drew').toEqual(drawn);
+    await expectLiveEqualsGenerate(page, { label: name });
+  });
+}
+
