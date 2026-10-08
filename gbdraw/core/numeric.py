@@ -37,4 +37,21 @@ def compensated_sum(values: Iterable[float]) -> float:
     return total
 
 
-__all__ = ["compensated_sum"]
+def scaled_tick_text(position: int, divisor: int, interval: int | None) -> str:
+    """Return ``position / divisor`` with the decimals that ``interval`` needs.
+
+    The decimals are the fewest (at most 6) that write ``interval / divisor``
+    exactly, so a 250 bp interval in kbp gives ``0.25``, ``0.5``, ``0.75``;
+    trailing zeros are dropped. Without an interval the value is rounded.
+    """
+    decimals = 0
+    step = abs(int(interval or 0))
+    while step and decimals < 6 and (step * 10**decimals) % divisor:
+        decimals += 1
+    value = float(position) / float(divisor)
+    if decimals == 0:
+        return f"{value:.0f}"
+    return f"{value:.{decimals}f}".rstrip("0").rstrip(".")
+
+
+__all__ = ["compensated_sum", "scaled_tick_text"]

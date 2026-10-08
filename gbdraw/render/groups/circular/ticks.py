@@ -117,6 +117,7 @@ class TickGroup:
             group_identifier=str(self.tick_group.attribs.get("id", "tick")),
             record_identifier=str(self.gb_record.id),
             record_transform=self.record_transform,
+            tick_interval=self.tick_large,
         )
         for tick_path_large in tick_paths_large:
             self.tick_group.add(tick_path_large)
