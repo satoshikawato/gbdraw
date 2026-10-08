@@ -431,6 +431,9 @@ class _CommonOptions:
     thresholds: Thresholds = field(default_factory=Thresholds)
 
 
+_SCALE_INTERVAL_PATH = "objects.scale.interval"
+
+
 def _validate_common_options(options: _CommonOptions) -> None:
     expected_types = (
         ("features", options.features, FeatureOptions),
@@ -452,6 +455,20 @@ def _validate_common_options(options: _CommonOptions) -> None:
     ):
         raise ValidationError(
             "depth_tracks must contain DepthTrackOptions values."
+        )
+    # Typed here, not in the request contract, so a Session that stores a value
+    # <= 0 still draws the automatic interval (D-04).
+    overrides = options.config_overrides
+    interval = overrides.get(_SCALE_INTERVAL_PATH) if isinstance(overrides, Mapping) else None
+    if isinstance(interval, int) and not isinstance(interval, bool) and interval <= 0:
+        raise ValidationError(
+            f"Invalid value for config override {_SCALE_INTERVAL_PATH!r}; "
+            "expected a positive integer or None.",
+            diagnostic={
+                "code": "INPUT_INVALID",
+                "configPath": _SCALE_INTERVAL_PATH,
+                "reason": "POSITIVE_INTEGER_OR_AUTO",
+            },
         )
 
 

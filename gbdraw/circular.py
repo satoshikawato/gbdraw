@@ -506,7 +506,7 @@ def _get_args(
         type=float)
     parser.add_argument(
         '--scale_interval',
-        help='Manual scale interval for circular mode (in bp). Overrides automatic calculation.',
+        help='Manual scale interval for circular mode (in bp; must be > 0). Overrides automatic calculation.',
         type=int)
     parser.add_argument(
         '--hide_scale',
@@ -605,6 +605,9 @@ def _get_args(
         parser.error("--gc_content_large_tick_interval must be > 0")
     if args.gc_content_small_tick_interval is not None and args.gc_content_small_tick_interval <= 0:
         parser.error("--gc_content_small_tick_interval must be > 0")
+    # A legacy Session replays a stored value <= 0 as the automatic interval (D-04).
+    if args.scale_interval is not None and args.scale_interval <= 0 and not _allow_legacy_track_transport:
+        parser.error("--scale_interval must be > 0")
     if args.gc_skew_width is not None and args.gc_skew_width <= 0:
         parser.error("--gc_skew_width must be > 0")
     if args.gc_skew_radius is not None and args.gc_skew_radius <= 0:

@@ -473,8 +473,8 @@ options:
                         Inner label y-radius offset factor (float; default
                         from config)
   --scale_interval SCALE_INTERVAL
-                        Manual scale interval for circular mode (in bp).
-                        Overrides automatic calculation.
+                        Manual scale interval for circular mode (in bp; must
+                        be > 0). Overrides automatic calculation.
   --hide_scale          Hide the primary genome-coordinate scale while
                         retaining the circular axis.
   --tick_label_font_size TICK_LABEL_FONT_SIZE
@@ -1371,8 +1371,9 @@ options:
                         color when --ruler_on_axis is active, otherwise
                         black).
   --scale_interval SCALE_INTERVAL
-                        Manual tick interval for "ruler" scale style (in bp).
-                        Overrides automatic calculation; optional
+                        Manual tick interval for "ruler" scale style (in bp;
+                        must be > 0). Overrides automatic calculation;
+                        optional
   --legend_box_size LEGEND_BOX_SIZE
                         Legend box size (optional; float; default: 24 (pixels,
                         96 dpi) for genomes <= 50 kb, 20 for genomes >= 50
