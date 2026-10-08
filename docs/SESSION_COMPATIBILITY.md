@@ -238,7 +238,10 @@ programs) saves what the web app saves: one `nucleotideBlast` resource per
 compared record pair with the raw search-frame rows, and one schema 2
 `losatCache` entry per pair with the web raw key and the non-key `runtime`
 record. Entries that the web app searches carry `runtime` too, as
-`{kind: "losat", source: "wasm", version: null, program}`. The saved request carries the resolved comparisons, not the search
+`{kind: "losat", source: "wasm", version: null, program}`. A CLI or Python
+runtime outside the package records only its executable's name as `path` (for
+example `losat` or `blastn`), so a shared Session carries no local directory;
+the bundled runtime records `gbdraw/bin/<platform>/losat`. The saved request carries the resolved comparisons, not the search
 intent, so replay needs no LOSAT runtime. A request that still carries the
 search intent cannot be encoded; resolve or render it first.
 
