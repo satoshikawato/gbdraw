@@ -4,16 +4,16 @@ import {
   extractFeatureMetadataForPreview
 } from './feature-metadata-extraction.js';
 import { normalizeUserFacingError, retryCanSucceed } from '../utils/error-normalization.js';
-import { cloneJsonValue } from '../services/json-clone.js';
-import { enrichFeatureWithOrthogroup } from '../services/orthogroup-feature-metadata.js';
+import { cloneJsonValue } from './json-clone.js';
+import { enrichFeatureWithOrthogroup } from './orthogroup-feature-metadata.js';
 import {
   RECORD_INDEX_KEYS,
   RENDERED_FEATURE_ID_KEYS,
   STABLE_FEATURE_ID_KEYS,
   nonnegativeIntegerAliasStatus,
   textAliasStatus
-} from '../services/feature-identity.js';
-import { getCommittedSvgResultMetadata } from '../services/svg-result-ingestion.js';
+} from './feature-identity.js';
+import { getCommittedSvgResultMetadata } from './svg-result-ingestion.js';
 import {
   addRenderedIdentity,
   createRenderedIdentityCollection,
@@ -21,9 +21,9 @@ import {
   normalizeFeatureRecordIndex,
   normalizeRenderedFeatureId,
   stableRenderedFeatureRecordKey
-} from '../services/session-feature-metadata.js';
+} from './session-feature-metadata.js';
 
-export { normalizeRenderedFeatureId } from '../services/session-feature-metadata.js';
+export { normalizeRenderedFeatureId } from './session-feature-metadata.js';
 
 const MISSING_INPUTS_WARNING =
   'Feature metadata could not be recovered because the session does not include embedded GenBank inputs. Generate the diagram again or save a session with embedded inputs.';

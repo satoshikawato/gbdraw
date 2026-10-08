@@ -34,7 +34,6 @@ globalThis.__GBDRAW_TEST_HOOKS__ = {
 const tempDir = await mkdtemp(join(tmpdir(), 'gbdraw-preview-transform-'));
 await writeFile(join(tempDir, 'package.json'), '{"type":"module"}\n', 'utf8');
 await mkdir(join(tempDir, 'app', 'feature-editor'), { recursive: true });
-await mkdir(join(tempDir, 'app', 'legend'), { recursive: true });
 await mkdir(join(tempDir, 'services'), { recursive: true });
 await mkdir(join(tempDir, 'utils'), { recursive: true });
 
@@ -107,7 +106,7 @@ await writeFile(
   'utf8'
 );
 await writeFile(
-  join(tempDir, 'app', 'legend', 'utils.js'),
+  join(tempDir, 'services', 'legend-svg.js'),
   'export const COMPARISON_LEGEND_SELECTOR = "[data-gbdraw-role=comparison-legend]";\n',
   'utf8'
 );

@@ -6804,38 +6804,53 @@
                             <div v-for="(entry, idx) in legendEntries" :key="idx" class="p-2 bg-slate-50 rounded border border-slate-100">
                                 <div class="flex items-center gap-1">
                                     <div class="flex flex-col shrink-0">
-                                        <button aria-label="Move up" @click="moveLegendEntryUp(idx)" :disabled="!semanticMutationAvailable || (idx === 0)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move up">
+                                        <button :aria-label="`Move ${entry.caption} up`" @click="moveLegendEntryUp(idx)" :disabled="!semanticMutationAvailable || (idx === 0)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move up">
                                             <i class="ph ph-caret-up text-xs" aria-hidden="true"></i>
                                         </button>
-                                        <button aria-label="Move down" @click="moveLegendEntryDown(idx)" :disabled="!semanticMutationAvailable || (idx === legendEntries.length - 1)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move down">
+                                        <button :aria-label="`Move ${entry.caption} down`" @click="moveLegendEntryDown(idx)" :disabled="!semanticMutationAvailable || (idx === legendEntries.length - 1)" class="text-slate-400 hover:text-slate-600 disabled:text-slate-200 disabled:cursor-not-allowed p-0 leading-none" title="Move down">
                                             <i class="ph ph-caret-down text-xs" aria-hidden="true"></i>
                                         </button>
                                     </div>
                                     <div class="w-6 h-6 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: entry.color }" :title="entry.color"></div>
-                                    <input type="text" :value="entry.caption" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0" :disabled="!semanticMutationAvailable">
-                                    <button aria-label="Stroke options" :aria-expanded="entry.showStroke ? 'true' : 'false'" @click="entry.showStroke = !entry.showStroke" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="entry.showStroke ? 'Hide stroke options' : 'Show stroke options'">
-                                        <i class="ph text-xs" :class="entry.showStroke ? 'ph-caret-up' : 'ph-sliders-horizontal'" aria-hidden="true"></i>
+                                    <input type="text" :value="entry.caption" :aria-label="`Legend entry ${entry.caption} name`" @change="renameLegendEntry(idx, $event.target.value)" class="flex-1 text-xs border border-slate-200 rounded px-2 py-1 min-w-0" :disabled="!semanticMutationAvailable">
+                                    <button :aria-label="`Stroke options for ${entry.caption}`" data-history-ignore :aria-expanded="isLegendStrokeOptionsOpen(entry.caption) ? 'true' : 'false'" @click="toggleLegendStrokeOptions(entry.caption)" class="text-slate-400 hover:text-slate-600 shrink-0 p-0.5" :title="isLegendStrokeOptionsOpen(entry.caption) ? 'Hide stroke options' : 'Show stroke options'">
+                                        <i class="ph text-xs" :class="isLegendStrokeOptionsOpen(entry.caption) ? 'ph-caret-up' : 'ph-sliders-horizontal'" aria-hidden="true"></i>
                                     </button>
-                                    <button aria-label="Remove entry" @click="deleteLegendEntry(idx)" class="text-red-400 hover:text-red-600 shrink-0" title="Remove entry" :disabled="!semanticMutationAvailable">
+                                    <button :aria-label="`Remove ${entry.caption}`" @click="deleteLegendEntry(idx)" class="text-red-400 hover:text-red-600 shrink-0" title="Remove entry" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-trash text-sm" aria-hidden="true"></i>
                                     </button>
                                 </div>
-                                <div v-if="entry.showStroke" class="mt-2 pt-2 border-t border-slate-200 flex items-center gap-2 text-[10px]">
+                                <div v-if="isLegendStrokeOptionsOpen(entry.caption)" class="mt-2 pt-2 border-t border-slate-200 flex items-center gap-2 text-[10px]">
                                     <span class="text-slate-500 shrink-0">Stroke:</span>
                                     <color-value-control
                                         :model-value="getLegendEntryStrokeColor(idx)"
                                         fallback="#000000"
                                         @update:model-value="setLegendEntryStrokeColorValue(idx, $event)"
-                                        aria-label="Legend stroke color"
+                                        :aria-label="`Legend stroke color for ${entry.caption}`"
                                         class="w-28 shrink-0">
                                     </color-value-control>
-                                    <input type="number" :value="getLegendEntryStrokeWidth(idx)" @change="updateLegendEntryStrokeWidth(idx, $event.target.value)" class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5" placeholder="Width" step="0.5" min="0" title="Stroke width" :disabled="!semanticMutationAvailable">
-                                    <button aria-label="Reset stroke to default" @click="resetLegendEntryStroke(idx)" class="text-slate-400 hover:text-slate-600 shrink-0" title="Reset stroke to default" :disabled="!semanticMutationAvailable">
+                                    <input type="number" :aria-label="`Legend stroke width for ${entry.caption}`" :value="getLegendEntryStrokeWidth(idx)" @change="updateLegendEntryStrokeWidth(idx, $event.target.value)" class="w-14 text-[10px] border border-slate-200 rounded px-1 py-0.5" placeholder="Width" step="0.5" min="0" title="Stroke width" :disabled="!semanticMutationAvailable">
+                                    <button :aria-label="`Reset stroke of ${entry.caption} to default`" @click="resetLegendEntryStroke(idx)" class="text-slate-400 hover:text-slate-600 shrink-0" title="Reset stroke to default" :disabled="!semanticMutationAvailable">
                                         <i class="ph ph-arrow-counter-clockwise text-xs" aria-hidden="true"></i>
                                     </button>
                                 </div>
                             </div>
                             <div v-if="legendEntries.length === 0" class="text-center text-slate-400 text-sm py-4">No legend entries found</div>
+                            <div v-if="deletedLegendEntries.length > 0" class="pt-2 border-t border-slate-200">
+                                <div class="flex items-center justify-between mb-1">
+                                    <span id="deleted-legend-items-label" class="text-[10px] font-bold text-slate-500 uppercase">Deleted items</span>
+                                    <button @click="restoreAllDeletedLegendEntries" class="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50" title="Restore all deleted items" :disabled="!semanticMutationAvailable">
+                                        <i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i> Restore all
+                                    </button>
+                                </div>
+                                <ul aria-labelledby="deleted-legend-items-label" class="space-y-1">
+                                    <li v-for="(entry, idx) in deletedLegendEntries" :key="`deleted-${idx}-${entry.caption}`" class="flex items-center gap-2 p-1.5 bg-slate-50 rounded border border-slate-100">
+                                        <div class="w-4 h-4 rounded border border-slate-300 shrink-0" :style="{ backgroundColor: entry.color }" :title="entry.color"></div>
+                                        <span class="flex-1 text-xs text-slate-500 truncate min-w-0">{{ entry.caption }}</span>
+                                        <button :aria-label="`Restore ${entry.caption}`" @click="restoreDeletedLegendEntry(idx)" class="text-[10px] text-blue-600 hover:text-blue-800 shrink-0 px-1" title="Restore this item" :disabled="!semanticMutationAvailable">Restore</button>
+                                    </li>
+                                </ul>
+                            </div>
                         </div>
 
                         <div class="px-3 py-2 border-t border-slate-200 shrink-0">

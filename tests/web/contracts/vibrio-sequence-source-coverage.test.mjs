@@ -22,7 +22,7 @@ const { adoptCurrentSessionResources } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'session-resource-backing.js'))
 );
 const { groupLinearSourceRecords } = await import(
-  pathToFileURL(join(tempRoot, 'js', 'app', 'linear-sources.js'))
+  pathToFileURL(join(tempRoot, 'js', 'services', 'linear-sources.js'))
 );
 const { planLinearSourceRowMove } = await import(
   pathToFileURL(join(tempRoot, 'js', 'services', 'linear-record-layout.js'))

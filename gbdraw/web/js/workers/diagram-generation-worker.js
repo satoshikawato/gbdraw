@@ -807,35 +807,6 @@ const HELPER_OPERATION_SPECS = Object.freeze({
         jsonArgument(payload.configOverrides, {})
       ]
     )
-  },
-  [DIAGRAM_HELPER_OPERATIONS.GENERATE_LEGEND_ENTRY_SVG]: {
-    keys: [
-      'caption',
-      'color',
-      'yOffset',
-      'rectSize',
-      'fontSize',
-      'fontFamily',
-      'xOffset',
-      'strokeColor',
-      'strokeWidth'
-    ],
-    fileRoles: [],
-    run: (pyodide, payload) => callJsonHelper(
-      pyodide,
-      'generate_legend_entry_svg',
-      [
-        String(payload.caption || ''),
-        String(payload.color || ''),
-        payload.yOffset ?? 0,
-        payload.rectSize ?? 14,
-        payload.fontSize ?? 14,
-        String(payload.fontFamily || 'Arial'),
-        payload.xOffset ?? 0,
-        String(payload.strokeColor || 'black'),
-        payload.strokeWidth ?? 0.5
-      ]
-    )
   }
 });
 

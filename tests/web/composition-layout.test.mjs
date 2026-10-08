@@ -13,13 +13,14 @@ import {
   normalizeLegacyComposition,
   parseCompositionMetadata,
   planComposition,
+  replanCompositionMetadata,
   resetCompositionUserDeltas
 } from '../../gbdraw/web/js/app/legend-layout/composition-actions.js';
 import {
   prependTranslate,
   readLeadingTranslate,
   replaceLeadingTranslate
-} from '../../gbdraw/web/js/app/legend-layout/transform-utils.js';
+} from '../../gbdraw/web/js/services/svg-transform.js';
 
 class FakeElement {
   constructor({ tagName = 'g', id = '', attributes = {}, bbox = { x: 0, y: 0, width: 1, height: 1 } } = {}) {
@@ -498,6 +499,110 @@ assert.deepEqual(minimumExtentGrowth.placements.primary.finalBounds, {
   assert.throws(
     () => parseCompositionMetadata(svg),
     /legendReflow requires a legend target/
+  );
+}
+
+// The Legend layout inputs Python writes into legendReflow: absent from SVGs
+// written before them, all or none, and kept unchanged by a composition edit.
+const pythonLayoutInputs = {
+  dpi: 96,
+  fontFile: 'LiberationSans-Regular',
+  fontSize: 14,
+  primaryLocalBounds: { minX: 10.1, minY: 20, maxX: 110.30000000000001, maxY: 100 },
+  wrapWidth: 100.20000000000002
+};
+/** @param {Record<string, unknown>} reflow */
+const withLegendReflow = (reflow) => {
+  const fixture = schemaOneSvg();
+  const metadata = JSON.parse(fixture.svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE));
+  metadata.legendReflow = reflow;
+  fixture.svg.setAttribute(COMPOSITION_METADATA_ATTRIBUTE, JSON.stringify(metadata));
+  return fixture;
+};
+/** @param {FakeElement} svg */
+const editLegendSide = (svg) => applyCompositionEdit(svg, {
+  legendSide: 'bottom',
+  legendLocalBounds: { x: -2, y: -5, width: 80, height: 25 },
+  titleLocalBounds: { x: -5, y: -10, width: 60, height: 20 }
+});
+
+{
+  const { svg } = schemaOneSvg();
+  assert.deepEqual(parseCompositionMetadata(svg).legendReflow, legendReflow);
+  editLegendSide(svg);
+  assert.deepEqual(
+    JSON.parse(svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE)).legendReflow,
+    legendReflow
+  );
+}
+
+{
+  const full = { ...legendReflow, ...pythonLayoutInputs };
+  const { svg } = withLegendReflow(full);
+  assert.deepEqual(parseCompositionMetadata(svg).legendReflow, full);
+  editLegendSide(svg);
+  assert.deepEqual(JSON.parse(svg.getAttribute(COMPOSITION_METADATA_ATTRIBUTE)).legendReflow, full);
+  assert.equal(
+    parseCompositionMetadata(withLegendReflow({ ...full, fontFile: null }).svg).legendReflow.fontFile,
+    null
+  );
+}
+
+// A replan docks against the primary box Python recorded (Z1), while it is
+// still the primary's box: rebuilt from x and width, a max edge can differ
+// by one ulp. A recorded box the primary no longer has is not used.
+{
+  const replan = (primaryLocalBounds) => replanCompositionMetadata(
+    parseCompositionMetadata(withLegendReflow({ ...legendReflow, ...pythonLayoutInputs, primaryLocalBounds }).svg),
+    { titleSide: 'none' }
+  );
+  const request = {
+    legendBounds: { x: -2, y: -5, width: 30, height: 20 },
+    legendSide: 'right',
+    spacing: compositionSpacing,
+    overlayPolicy
+  };
+  // The fixture's primary: final bounds (16, 56, 100, 80) less its automatic
+  // translation (6, 36).
+  const derived = planComposition({ ...request, primaryBounds: { x: 10, y: 20, width: 100, height: 80 } });
+  const exact = { minX: 10, minY: 20, maxX: 110.00000000000001, maxY: 100.00000000000001 };
+  const recorded = planComposition({ ...request, primaryBox: exact });
+  assert.notDeepEqual(recorded, derived, 'the ulp reaches the plan');
+  assert.deepEqual(replan(exact), recorded);
+  assert.deepEqual(replan({ minX: 10, minY: 20, maxX: 111, maxY: 100 }), derived);
+}
+
+for (const field of Object.keys(pythonLayoutInputs)) {
+  /** @type {Record<string, unknown>} */
+  const partial = { ...legendReflow, ...pythonLayoutInputs };
+  delete partial[field];
+  assert.throws(
+    () => parseCompositionMetadata(withLegendReflow(partial).svg),
+    /incomplete set of Python layout inputs/,
+    `legendReflow without ${field} was accepted`
+  );
+}
+
+for (const [field, invalid, message] of [
+  ['dpi', 96.5, /dpi must be a positive integer/],
+  ['dpi', 0, /dpi must be a positive integer/],
+  ['dpi', '96', /dpi must be a positive integer/],
+  ['dpi', true, /dpi must be a positive integer/],
+  ['fontFile', '', /fontFile must be a non-empty string or null/],
+  ['fontFile', 3, /fontFile must be a non-empty string or null/],
+  ['fontSize', 0, /legendReflow\.fontSize must be positive/],
+  ['fontSize', '14', /legendReflow\.fontSize must be a finite number/],
+  ['wrapWidth', -1, /legendReflow\.wrapWidth must be non-negative/],
+  ['wrapWidth', null, /legendReflow\.wrapWidth must be a finite number/],
+  ['primaryLocalBounds', null, /primaryLocalBounds must be an object/],
+  ['primaryLocalBounds', { minX: 0, minY: 0, maxX: 1 }, /primaryLocalBounds\.maxY must be a finite number/],
+  ['primaryLocalBounds', { minX: 5, minY: 0, maxX: 1, maxY: 1 }, /primaryLocalBounds must not be inverted/]
+]) {
+  const reflow = { ...legendReflow, ...pythonLayoutInputs, [String(field)]: invalid };
+  assert.throws(
+    () => parseCompositionMetadata(withLegendReflow(reflow).svg),
+    message,
+    `legendReflow.${field} accepted ${JSON.stringify(invalid)}`
   );
 }
 

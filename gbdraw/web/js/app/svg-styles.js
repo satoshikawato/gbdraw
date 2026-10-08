@@ -13,7 +13,7 @@ import {
   getFeatureIdentity
 } from './feature-editor/svg-actions.js';
 import { isFeatureFillTarget } from '../services/feature-dom.js';
-import { getAllFeatureLegendGroups, PAIRWISE_LEGEND_SELECTOR, parseTransformXY } from './legend/utils.js';
+import { getAllFeatureLegendGroups, PAIRWISE_LEGEND_SELECTOR, parseTransformXY } from '../services/legend-svg.js';
 import { getFeatureOverride } from '../services/feature-override-identity.js';
 import { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';

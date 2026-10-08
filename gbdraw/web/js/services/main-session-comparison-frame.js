@@ -4,7 +4,7 @@
 // complement. Comparison tables now use the search frame (D-18, PD-OI-073),
 // so Load rewrites those stored tables once; a re-saved Session keeps the
 // search frame. The table is read and rewritten by Python (one table reader).
-import { discoverGffFastaRecords, discoverSequenceRecords } from '../app/record-discovery.js';
+import { discoverGffFastaRecords, discoverSequenceRecords } from './record-discovery.js';
 import { base64ToBytes, bytesToText, textToBase64, textToBytes } from './byte-utils.js';
 
 export const MAIN_DISPLAY_FRAME_SESSION_VERSION = 42;

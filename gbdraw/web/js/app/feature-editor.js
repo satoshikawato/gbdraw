@@ -39,7 +39,6 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {(callback?: () => void) => Promise<void>} nextTick Vue `nextTick`
  * @property {(intents: Record<string, any>[], options?: { previousFileIntents?: Record<string, any>[], isCurrent?: () => boolean }) => Promise<PreparedFileLegend | false>} prepareFileLegendEntries
  *   The Legend owner's preparation of the rows the rules draw.
- * @property {(svg: SVGSVGElement) => void} compactLegendEntries The Legend layout owner's removal of gaps between the entries.
  * @property {(options?: { replaceGeneratedInventory?: boolean }) => any} extractLegendEntries
  *   The Legend owner's reading of the mounted Legend rows.
  * @property {() => void} onLegendGeometryChanged The Legend owner's reaction to a change of Legend geometry.
@@ -74,7 +73,6 @@ export const createFeatureEditor = ({
   isCurrentFeature,
   nextTick,
   prepareFileLegendEntries,
-  compactLegendEntries,
   extractLegendEntries,
   onLegendGeometryChanged,
   featureSelection = null,
@@ -109,7 +107,6 @@ export const createFeatureEditor = ({
   });
   const colorActions = createFeatureColorActions({
     state,
-    compactLegendEntries,
     extractLegendEntries,
     onLegendGeometryChanged,
     ruleActions,

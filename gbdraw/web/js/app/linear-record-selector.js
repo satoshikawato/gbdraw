@@ -1,6 +1,6 @@
 // @ts-check
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
-import { discoveryErrorIsFinal } from './record-discovery.js';
+import { discoveryErrorIsFinal } from '../services/record-discovery.js';
 import { buildDisambiguatedRecordEntries, formatRecordLength } from '../services/record-options.js';
 
 export const AUTOMATIC_RECORD_OPTION_LABEL = 'Automatic (no explicit selector)';

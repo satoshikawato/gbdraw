@@ -5,11 +5,12 @@ import {
   getFeatureElements,
   getFeatureIdentity
 } from '../feature-editor/svg-actions.js';
-import { getAllFeatureLegendGroups, mountedLegendRowFeatureIds, setsFeatureStroke } from './utils.js';
+import { getAllFeatureLegendGroups, mountedLegendRowFeatureIds, setsFeatureStroke } from '../../services/legend-svg.js';
 import {
   featureOverrideKey,
   migrateLegacyFeatureOverrides
 } from '../../services/feature-override-identity.js';
+import { AUTO_FEATURE_UNDERLAY_STROKE, isAutoFeatureUnderlay } from '../../services/feature-dom.js';
 
 const hasOwn = (value, key) => Object.prototype.hasOwnProperty.call(value || {}, key);
 
@@ -181,8 +182,20 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
     featureColorOverrides,
     featureStrokeOverrides,
     originalSvgStroke,
-    svgContainer
+    svgContainer,
+    legendStrokeOptionsOpen
   } = state;
+
+  // OV-157: a row's Stroke options button shows or hides its stroke controls.
+  // That is view state, kept out of the Legend entries, so the click records
+  // no History step and the Session does not save it.
+  /** @param {string} caption */
+  const isLegendStrokeOptionsOpen = (caption) => Boolean(legendStrokeOptionsOpen?.has(caption));
+  /** @param {string} caption */
+  const toggleLegendStrokeOptions = (caption) => {
+    if (!legendStrokeOptionsOpen?.delete(caption)) legendStrokeOptionsOpen?.add(caption);
+  };
+  const closeLegendStrokeOptions = () => legendStrokeOptionsOpen?.clear();
 
   const captureLegendSwatchStroke = (caption) => {
     const svg = svgContainer.value?.querySelector?.('svg');
@@ -208,12 +221,14 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
   );
 
   // The stroke the renderer gives a feature block, read from the first feature
-  // path. Generate applies the stroke edits before the Result is mounted, so a
+  // path that is not an automatic underlay (drawn without a stroke, OV-168).
+  // Generate applies the stroke edits before the Result is mounted, so a
   // path that an edit reached gives the stroke the edit recorded it replaced:
   // its Legend row's (the row's swatch as drawn), else its own (OV-123).
   const captureOriginalStroke = () => {
     const svg = svgContainer.value?.querySelector?.('svg');
-    const firstFeaturePath = svg?.querySelector?.('path[id^="f"]');
+    const firstFeaturePath = Array.from(svg?.querySelectorAll?.('path[id^="f"]') || [])
+      .find((path) => !isAutoFeatureUnderlay(path));
     if (!svg || !firstFeaturePath) return;
     const svgId = getFeatureIdentity(firstFeaturePath);
     const edits = liveFeatureEdits();
@@ -235,6 +250,19 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
       color: recorded ? recorded.originalStrokeColor : firstFeaturePath.getAttribute('stroke'),
       width: Number.isFinite(strokeWidth) ? strokeWidth : null
     };
+  };
+
+  // The stroke a reset gives a feature part when no edit recorded the one it
+  // replaced: the renderer's block stroke, or none on an automatic underlay
+  // (OV-168).
+  /** @param {Element} element */
+  const featureBaseStroke = (element) => (
+    isAutoFeatureUnderlay(element) ? AUTO_FEATURE_UNDERLAY_STROKE : originalSvgStroke.value
+  );
+  /** @param {Element} element */
+  const restoreFeatureStroke = (element) => {
+    const base = featureBaseStroke(element);
+    return restoreStrokeAttributes(element, base.color, base.width);
   };
 
   const getLegendEntryStrokeColor = (idx) => {
@@ -317,7 +345,8 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
     }
     const inheritedColor = originalSvgStroke.value.color;
     applyStrokeToFeaturesByCaption(entry.caption, inheritedColor, null, {
-      removeStroke: inheritedColor === null
+      removeStroke: inheritedColor === null,
+      inherit: true
     });
     return true;
   };
@@ -346,7 +375,7 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
     const featureIndex = getFeatureElementIndex(svg);
     rowFeatureIds(svg, entry.caption).forEach((svgId) => {
       getFeatureElements(svg, svgId, featureIndex).forEach((el) => {
-        if (restoreStrokeAttributes(el, originalColor, originalWidth)) updatedCount++;
+        if (restoreFeatureStroke(el)) updatedCount++;
       });
     });
 
@@ -381,19 +410,19 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
     const featurePaths = svg.querySelectorAll(FEATURE_SELECTOR);
     let updatedCount = 0;
     featurePaths.forEach((path) => {
-      if (restoreStrokeAttributes(path, originalColor, originalWidth)) updatedCount++;
+      if (restoreFeatureStroke(path)) updatedCount++;
     });
 
-    const legendGroups = getAllFeatureLegendGroups(svg);
-    for (const targetGroup of legendGroups) {
-      const paths = targetGroup.querySelectorAll('path');
-      paths.forEach((p) => {
-        const fill = p.getAttribute('fill');
-        if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-          if (restoreStrokeAttributes(p, originalColor, originalWidth)) updatedCount++;
-        }
+    // A row with a stroke edit returns to the stroke its swatch was drawn
+    // with, which the edit recorded; the other swatches are as drawn (the GC
+    // and Depth rows have their track's stroke, not the feature stroke).
+    Object.entries(legendStrokeOverrides).forEach(([caption, override]) => {
+      const color = hasOwn(override, 'originalStrokeColor') ? override.originalStrokeColor : originalColor;
+      const width = hasOwn(override, 'originalStrokeWidth') ? override.originalStrokeWidth : originalWidth;
+      getLegendSwatches(svg, caption).forEach((swatch) => {
+        if (restoreStrokeAttributes(swatch, color, width)) updatedCount++;
       });
-    }
+    });
 
     const overridesRemoved =
       Object.keys(legendStrokeOverrides).length > 0 ||
@@ -410,11 +439,13 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
     return updatedCount > 0 || overridesRemoved;
   };
 
+  // `inherit`: the row's features take their own base stroke color
+  // (`featureBaseStroke`), an automatic underlay none (OV-168).
   const applyStrokeToFeaturesByCaption = (
     caption,
     strokeColor,
     strokeWidth,
-    { removeStroke = false } = {}
+    { removeStroke = false, inherit = false } = {}
   ) => {
     if (!svgContainer.value) return;
     const svg = svgContainer.value.querySelector('svg');
@@ -426,14 +457,15 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
     const reached = rowFeatureIds(svg, caption);
     reached.forEach((svgId) => {
       getFeatureElements(svg, svgId, featureIndex).forEach((el) => {
-        if (removeStroke) {
+        const color = inherit ? featureBaseStroke(el).color : strokeColor;
+        if (inherit ? color === null : removeStroke) {
           if (el.getAttribute('stroke') !== null) {
             el.removeAttribute('stroke');
             updatedCount++;
           }
-        } else if (strokeColor !== null) {
-          if (el.getAttribute('stroke') !== String(strokeColor)) {
-            el.setAttribute('stroke', strokeColor);
+        } else if (color !== null) {
+          if (el.getAttribute('stroke') !== String(color)) {
+            el.setAttribute('stroke', String(color));
             updatedCount++;
           }
         }
@@ -563,7 +595,7 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
         const featureIndex = getFeatureElementIndex(svg);
         rowFeatureIds(svg, caption).forEach((featureId) => {
           getFeatureElements(svg, featureId, featureIndex).forEach((element) => {
-            if (restoreStrokeAttributes(element, originalColor, originalWidth)) changed = true;
+            if (restoreFeatureStroke(element)) changed = true;
           });
         });
         getLegendSwatches(svg, caption).forEach((swatch) => {
@@ -581,19 +613,20 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
       featureBaselines.forEach((baseline, key) => {
         const feature = featuresByOverrideKey.get(key);
         if (!feature) return;
-        const baselineColor = hasOwn(baseline, 'originalStrokeColor')
-          ? baseline.originalStrokeColor
-          : originalColor;
-        const baselineWidth = hasOwn(baseline, 'originalStrokeWidth')
-          ? baseline.originalStrokeWidth
-          : originalWidth;
         getFeatureElements(svg, feature.svg_id).forEach((element) => {
+          const base = featureBaseStroke(element);
+          const baselineColor = hasOwn(baseline, 'originalStrokeColor')
+            ? baseline.originalStrokeColor
+            : base.color;
+          const baselineWidth = hasOwn(baseline, 'originalStrokeWidth')
+            ? baseline.originalStrokeWidth
+            : base.width;
           if (restoreStrokeAttributes(element, baselineColor, baselineWidth)) changed = true;
         });
       });
     } else {
       svg.querySelectorAll(FEATURE_SELECTOR).forEach((path) => {
-        if (restoreStrokeAttributes(path, originalColor, originalWidth)) changed = true;
+        if (restoreFeatureStroke(path)) changed = true;
       });
     }
 
@@ -605,13 +638,16 @@ export const createLegendStrokeActions = ({ state, commitActiveResultEdit = null
   return {
     applyStrokeToFeaturesByCaption,
     captureOriginalStroke,
+    closeLegendStrokeOptions,
     getLegendEntryStrokeColor,
     getLegendEntryStrokeWidth,
+    isLegendStrokeOptionsOpen,
     reconcileStrokeOverrides,
     reapplyStrokeOverrides,
     resetAllStrokes,
     resetLegendEntryStroke,
     setLegendEntryStrokeColorValue,
+    toggleLegendStrokeOptions,
     updateLegendEntryStrokeColor,
     updateLegendEntryStrokeWidth
   };

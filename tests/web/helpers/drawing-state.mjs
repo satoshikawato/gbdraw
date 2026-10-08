@@ -84,7 +84,7 @@ export const TRANSIENT_KEYS = Object.freeze([
   'featurePopupRef', 'featurePopupDrag', 'featurePopupSize', 'featurePopupResize', 'clickedLabel',
   'clickedLabelPos', 'featureStyleScopeDialog', 'resetColorDialog', 'legendRenameDialog',
   'labelTextScopeDialog', 'featureVisibilityScopeDialog', 'hiddenLabelTextDialog', 'labelOnDialog',
-  'sidebarWidth', 'isResizing', 'newLegendCaption', 'newLegendColor', 'legendDragging', 'legendDragStart',
+  'sidebarWidth', 'isResizing', 'newLegendCaption', 'newLegendColor', 'legendStrokeOptionsOpen', 'legendDragging', 'legendDragStart',
   'legendOriginalTransform', 'legendInitialTransform', 'diagramDragging', 'diagramDragStart',
   'diagramElementIds', 'diagramElementOriginalTransforms', 'diagramElements', 'lengthBarElement',
   'lengthBarOriginalTransform', 'plotTitleElement', 'plotTitleDragging', 'plotTitleDragStart',
