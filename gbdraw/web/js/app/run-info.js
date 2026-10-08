@@ -647,14 +647,21 @@ const sourceSpec = (record) => {
   );
 };
 
+// The row of each record, and, when the order of the positions within a row is
+// not the record order (CI-02: Up/Down), each record's 1-based place in its row:
+// a records table orders a row by `column`, then by its record order.
 const layoutRows = (request, records) => {
   const positions = request.layout?.multiRecordPositions;
-  if (positions == null) return [];
+  /** @type {number[]} */
+  const columns = [];
+  if (positions == null) return { rows: [], columns };
   if (!Array.isArray(positions)) {
     throw new SourceRecipeUnavailable('Source recipe unavailable: record placement is invalid.');
   }
-  if (positions.length === 0) return [];
+  if (positions.length === 0) return { rows: [], columns };
   const rows = Array(records.length).fill(null);
+  /** @type {Map<number, number[]>} The records of each row, in position order. */
+  const rowMembers = new Map();
   positions.forEach((position) => {
     const text = String(position || '').trim();
     const separator = text.lastIndexOf('@');
@@ -686,13 +693,20 @@ const layoutRows = (request, records) => {
       );
     }
     rows[recordIndex] = row;
+    rowMembers.set(row, [...(rowMembers.get(row) || []), recordIndex]);
   });
   if (rows.some((row) => row === null)) {
     throw new SourceRecipeUnavailable(
       'Source recipe unavailable: record placement is incomplete for a records table.'
     );
   }
-  return rows;
+  const recordOrder = [...rowMembers.values()].every((members) => (
+    members.every((recordIndex, at) => at === 0 || recordIndex > members[at - 1])
+  ));
+  if (!recordOrder) {
+    rowMembers.forEach((members) => members.forEach((recordIndex, at) => { columns[recordIndex] = at + 1; }));
+  }
+  return { rows, columns };
 };
 
 const gridCoordinate = (value) => {
@@ -749,7 +763,7 @@ const appendInputArgs = async (args, request, files) => {
       }
     }
   }
-  const requestedRows = layoutRows(request, records);
+  const { rows: requestedRows, columns: requestedColumns } = layoutRows(request, records);
   records.forEach((record, index) => {
     const presentationRow = gridCoordinate(record.presentation?.gridRow);
     if (presentationRow !== '' && requestedRows.length && presentationRow !== requestedRows[index]) {
@@ -816,7 +830,7 @@ const appendInputArgs = async (args, request, files) => {
         reverse_complement: region ? '0' : (record.presentation?.reverseComplement ? '1' : '0'),
         order: index + 1,
         row: gridCoordinate(record.presentation?.gridRow) || requestedTableRows[index] || '',
-        column: gridCoordinate(record.presentation?.gridColumn),
+        column: gridCoordinate(record.presentation?.gridColumn) || requestedColumns[index] || '',
         topology: record.display?.isCircular == null ? '' : record.display.isCircular ? 'circular' : 'linear',
         display_start: record.display?.startCoordinate ?? ''
       };
