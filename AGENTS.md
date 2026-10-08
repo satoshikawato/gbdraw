@@ -161,7 +161,7 @@ For changes affecting Web runtime or normative Web behavior contracts:
 ## Pull request communication
 
 - Before creating, changing, or reviewing PR wording,
-  read and apply `.agents/skills/write-clear-pull-request/SKILL.md`.
+  read and apply `.claude/skills/write-clear-pull-request/SKILL.md`.
 - Prepare the title and body file. Run
   `node tools/check-pr-language.mjs --title "<title>" --body-file <path>` once
   before `gh pr create`, using the same wording.

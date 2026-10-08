@@ -52,6 +52,7 @@ venv.bak/
 .vscode/
 .idea/
 .claude/settings.local.json
+CLAUDE.local.md
 *.swp
 
 # --- OS Generated ---
