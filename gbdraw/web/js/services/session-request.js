@@ -664,12 +664,19 @@ const resolveSavedRecordOverride = ({ savedOverride, fileDefault, resolved }) =>
   return resolved === fileDefault ? '' : resolved;
 };
 
+// A Depth series that no record gives a file (TK-06). The one producer of
+// this failure for the request builder and the Session projections.
+/** @param {number} seriesIndex */
+const depthSeriesWithoutSource = (seriesIndex) => (
+  diagnosticError('DEPTH_INVALID', { seriesIndex, reason: 'DEPTH_SERIES_SOURCE' })
+);
+
 const validateProjectedDepthSources = (depthRows, logicalTrackCount) => {
   for (let trackIndex = 0; trackIndex < logicalTrackCount; trackIndex += 1) {
     const hasSource = depthRows.some((row) => (
       Array.isArray(row) && Boolean(row[trackIndex]?.resourceId)
     ));
-    if (!hasSource) throw diagnosticError('DEPTH_INVALID', { seriesIndex: trackIndex, reason: 'REQUIRED' });
+    if (!hasSource) throw depthSeriesWithoutSource(trackIndex);
   }
 };
 
@@ -1578,7 +1585,7 @@ const buildDepthResources = ({ state, drawing, filesData, resources, diagramOpti
   );
   diagramOptions.depthTracks = Array.from({ length: logicalTrackCount }, (_, trackIndex) => {
     const sources = rows.map((row) => row[trackIndex] || null);
-    if (!sources.some(Boolean)) throw diagnosticError('DEPTH_INVALID', { seriesIndex: trackIndex, reason: 'REQUIRED' });
+    if (!sources.some(Boolean)) throw depthSeriesWithoutSource(trackIndex);
     const sharedSource = sources[0] && sources.every((source) => source === sources[0]);
     const sourceName = `depth-tracks-${trackIndex + 1}-source`;
     const source = sharedSource
@@ -3440,7 +3447,7 @@ const projectCanonicalDepthTracks = ({
       sourceRefs = Array.from({ length: records.length }, () => track.source);
     }
     if (!sourceRefs.some((ref) => ref !== null && ref !== undefined)) {
-      throw diagnosticError('DEPTH_INVALID', { seriesIndex: trackIndex, reason: 'REQUIRED' });
+      throw depthSeriesWithoutSource(trackIndex);
     }
     sourceRefs.forEach((ref, recordIndex) => {
       sourceRows[recordIndex][trackIndex] = ref ?? null;

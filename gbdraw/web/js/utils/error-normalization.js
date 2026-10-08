@@ -88,6 +88,7 @@ const REASONS = Object.freeze({
   JSON_FORMAT: 'Use valid JSON.', VISIBILITY_ACTION: 'Use show, off, or exclude_matching; accepted aliases are on, hide, false, and 0.',
   TARGET_RECORD: 'Choose an available target record.',
   DEPTH_SERIES: 'Select an existing Depth TSV or remove the slot.',
+  DEPTH_SERIES_SOURCE: 'Attach a Depth TSV to this series, or remove the series.',
   BOTH_ENDPOINTS: 'Supply both region endpoints or leave both empty.', SPECIFIC_COLUMNS: 'Supply four or five tab-separated columns.',
   COLOR: 'Use none, a supported named color, or a hex color with 3 or 6 digits.',
   // Output Prefix (gbdraw/api/requests.py RenderOutputRequest).
@@ -395,7 +396,7 @@ const nativeValidation = (message) => {
   const labelRequired = /^Invalid label TSV at line ([0-9]+): column ([1-4]) \((record_id|feature_type|qualifier|value)\) is required\.$/.exec(message);
   if (labelRequired) return { code: 'TABLE_INVALID', stage: 'request-validation', context: { row: Number(labelRequired[1]), field: labelRequired[3], reason: 'REQUIRED' } };
   const series = /^Depth series #([0-9]+) \(logical track index ([0-9]+)\) has no TSV source in any record\.(?: Add a TSV or remove the series\.)?$/.exec(message);
-  if (series) return { code: 'DEPTH_INVALID', stage: 'request-validation', context: { seriesIndex: Number(series[2]), reason: 'REQUIRED' } };
+  if (series) return { code: 'DEPTH_INVALID', stage: 'request-validation', context: { seriesIndex: Number(series[2]), reason: 'DEPTH_SERIES_SOURCE' } };
   return null;
 };
 // The native track validator already identifies its failures. Project its

@@ -1447,7 +1447,7 @@ emptyDepthColumn.renderRequest.diagramOptions.depthTrackFiles = [[null]];
 emptyDepthColumn.renderRequest.diagramOptions.depthTrackLabels = ['Empty'];
 assert.throws(
   () => projectCanonicalSessionRequest(emptyDepthColumn),
-  { code: 'DEPTH_INVALID', context: { seriesIndex: 0, reason: 'REQUIRED' } }
+  { code: 'DEPTH_INVALID', context: { seriesIndex: 0, reason: 'DEPTH_SERIES_SOURCE' } }
 );
 
 const blastTable = { ...genbank, name: 'hits.tsv', data: btoa('ref\tcmp\t99\t4\t0\t0\t1\t4\t4\t1\t1e-20\t50\n') };
@@ -3635,7 +3635,8 @@ assert.throws(
   /Circular Depth matrix has 1 record rows; expected 2/
 );
 // OV-89: a Depth series that no record gives a source is a Depth failure the
-// user can fix, with the series named (it was UNKNOWN).
+// user can fix, with the series named (it was UNKNOWN), and it offers to
+// attach a TSV or remove the series (TK-06).
 assert.throws(
   () => buildCanonicalRenderRequest({
     state,
@@ -3645,7 +3646,7 @@ assert.throws(
       linearSeqs: []
     }
   }),
-  { code: 'DEPTH_INVALID', stage: 'request-validation', context: { seriesIndex: 1, reason: 'REQUIRED' } }
+  { code: 'DEPTH_INVALID', stage: 'request-validation', context: { seriesIndex: 1, reason: 'DEPTH_SERIES_SOURCE' } }
 );
 
 state.mode.value = 'linear';
@@ -3724,7 +3725,7 @@ const emptyCanonicalDepth = structuredClone(sparseDepthCanonical);
 emptyCanonicalDepth.renderRequest.diagramOptions.depthTracks[0].source = [null, null];
 assert.throws(
   () => projectCanonicalSessionRequest(emptyCanonicalDepth),
-  { code: 'DEPTH_INVALID', context: { seriesIndex: 0, reason: 'REQUIRED' } }
+  { code: 'DEPTH_INVALID', context: { seriesIndex: 0, reason: 'DEPTH_SERIES_SOURCE' } }
 );
 const circularDepthHeight = structuredClone(circularSparseCanonical);
 circularDepthHeight.renderRequest.diagramOptions.depthTracks[0].height = 12;
