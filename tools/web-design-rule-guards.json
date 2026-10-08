@@ -199,6 +199,20 @@
           "kind": "count"
         }
       ]
+    },
+    {
+      "id": "R15",
+      "heading": "R15: Drawing context and mode-scoped settings",
+      "guards": [
+        "tests/test_mode_scoped_settings.py",
+        "tests/test_mode_split_vectors.py",
+        "tests/web/drawing-context.test.mjs",
+        "tests/web/mode-scoped-session.test.mjs",
+        "tests/web/mode-scoped-settings.playwright.spec.js",
+        "tests/web/mode-split-vectors.test.mjs",
+        "tests/web/per-mode-drawings.test.mjs"
+      ],
+      "allowlists": []
     }
   ]
 }

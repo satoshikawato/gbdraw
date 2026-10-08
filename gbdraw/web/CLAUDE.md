@@ -86,6 +86,9 @@ in the same change.
 | Vue mount and exports | `js/app.js` |
 | Composition and dependency wiring | `js/app/app-setup.js` |
 | Reactive state and computed values | `js/state.js` |
+| Each diagram mode's drawing (settings, editor edits, derived values) | `js/state.js` (`drawings`, `activeDrawing`; R15) |
+| Registry of what a mode's Session slice holds | `gbdraw/web_support/mode_scoped_settings.py`, generated into `js/mode-scoped-settings.generated.js` by `tools/generate_mode_scoped_settings.py` |
+| Session 46 mode slices and the split of a Session 27–44 draft into them | `js/services/mode-scoped-migration.js` (Python twin: `split_draft_into_modes` in `gbdraw/session_io.py`) |
 | Generate-button orchestration | `js/app/run-analysis.js` |
 | Canonical request/session projection and equivalence | `js/services/session-request.js` |
 | Current active-config defaults, inventory, and validation | `js/services/session-active-config-contract.js` |
@@ -168,7 +171,7 @@ applied and report the failure. Metadata-only edits
 with no static SVG target, such as Similarity group names and descriptions,
 update canonical state only.
 
-## Design rules R1-R14
+## Design rules R1-R15
 
 Each rule names one owner and the guard that enforces it. Cite the rule id in PR
 descriptions and tests. Change the code and its guard together, and lower a
@@ -211,17 +214,18 @@ successful source-replacing Generate (`pruneUnmatchedFeatureOverrides` in
 `services/feature-visibility.js`), or **Remove N unmatched feature edits**
 (`removeUnresolvedFeatureEdits`). Result selection, mount, record selection,
 mode change, hiding, and reflow never touch them. Per-feature edits
-(`state.featureOverrides`) and Feature placements are keyed by
-`JSON.stringify([scope, recordKey, biologicalFeatureId])`, where `scope` is the
-mode of the Result the edit was made on (an admitted catalog gives each feature
-its Result's mode). Both modes can use the same record key for the same feature
-(`record-1` in a Gallery or Python Session), so a request, the live projection,
-and every reconcile reach only the rows of their own mode and records; the
-other mode's rows stay in the draft. Only `services/feature-placement.js`
-builds a draft key. A selected-feature annotation target (`featureIdentity`)
-names its mode the same way, and `annotationOptionsPayload` in
-`services/annotation-state.js` gives a request only the targets of its mode and
-records, without `scope`.
+(`featureOverrides`) and Feature placements live in the drawing of the mode
+they were made in (R15) and are keyed by
+`JSON.stringify([recordKey, biologicalFeatureId])`. Both modes can use the same
+record key for the same feature (`record-1` in a Gallery or Python Session);
+each drawing holds its own row, so a request, the live projection, and every
+reconcile read only the rows of their own drawing and records, and the other
+drawing keeps its rows. Only `services/feature-placement.js` builds a draft
+key. A selected-feature annotation target (`featureIdentity`) belongs to its
+drawing the same way, and `annotationOptionsPayload` in
+`services/annotation-state.js` gives a request only the targets of its records.
+A row or target of a Session 41–44 that names its mode (`scope`) keeps that
+field only until the Session 46 split moves it into that mode's drawing.
 
 Guards: `tests/web/non-edit-state-preservation.playwright.spec.js` with
 `tests/web/non-edit-state-diff.test.mjs` (user-owned state is identical before
@@ -387,8 +391,8 @@ transition in `app/feature-editor/placement-actions.js`: the composition root
 passes it to the stack editors as the `changeTrackLayout` port, each editor
 routes its feature-slot edits through it (`featureSlotEdits` in
 `app/track-slot-edits.js`), and a template passes `$event` so Cancel restores
-the control. An edit that would leave a lane Feature placement of
-either mode undrawable asks first (Owner decision Q3); Reset applies the edit
+the control. An edit that would leave a lane Feature placement of the
+drawing undrawable asks first (Owner decision Q3); Reset applies the edit
 and removes those rows as one History step. The control's History adapter
 records an edit that loses no lane, and restores install state as is (R11).
 
@@ -496,7 +500,8 @@ tip is a reachable disclosure).
 ### R13: Owner layering and ports
 
 Modules sit in layers, lowest first: leaves (`utils/`, `config.js`,
-`web-ux-profile.js`, `mode-profiles.js`, `mode-profiles.generated.js`), then
+`web-ux-profile.js`, `mode-profiles.js`, `mode-profiles.generated.js`,
+`mode-scoped-settings.generated.js`), then
 state-free `services/`, then
 `state.js`, then the two state-bound services (`services/config.js`,
 `services/reset.js`), the only services that import `state.js`, then owner
@@ -604,6 +609,59 @@ run, declared factory parameters, no suppression, type-import direction) and
 run the `typescript` version pinned in `package.json` and fail until `npm ci`
 has installed it.
 
+### R15: Drawing context and mode-scoped settings
+
+Each diagram mode has one drawing, `state.drawings.circular` and
+`state.drawings.linear` (`createDrawingState` in `state.js`). A drawing holds
+that mode's settings (`form`, `adv`, the LOSAT search fields, the comparison
+plan, record display, the layout slot), its editor edits (per-feature edits and
+placements, colors and color rules, label tables and filters, Legend edits,
+annotation sets, canvas padding), and the values derived from them, under their
+former `state` names. Nothing else holds them, and the two drawings share no
+member object, so a setting or an edit made in one mode never reaches the other
+(PD-OI-086).
+
+- `state` keeps only what both modes share: the input files, the LOSAT caches,
+  the LOSAT execution and thread settings, app settings (Auto Reflow, PNG DPI,
+  palette Instant Preview), the Session title, the shown Result and its
+  artifacts (each mode keeps its own Result, `services/artifact-slot.js`), and
+  transient flags. Every `state` key and drawing member is in exactly one class
+  in `tests/web/helpers/drawing-state.mjs`. A value both modes should share is
+  a Product decision: record it in the Product Contract before moving it out
+  of the drawing.
+- A state-free service takes the `drawing` it reads as a parameter and never
+  resolves the active one. An owner resolves `state.activeDrawing()`, the
+  drawing of the shown mode, once per action, or the drawing of the mode its
+  action is about, and passes it down. Generate resolves its drawing once, at
+  the entry of `runAnalysis`; its request, validation, and commit use that
+  drawing only. A reflow or rerender of a committed Result uses the drawing of
+  that Result's mode.
+- A mode switch (`transitionDiagramMode`) writes no drawing (R10). History
+  stays one manager, and a switch is one step (R11).
+- A Session 46 saves each drawing as `modes.circular` and `modes.linear`.
+  `gbdraw/web_support/mode_scoped_settings.py` is the one registry of what a
+  slice holds (domain, path, modes, row key, migration token);
+  `tools/generate_mode_scoped_settings.py` writes it into
+  `js/mode-scoped-settings.generated.js`, which is never edited by hand. Load
+  rebuilds each drawing from the projection of that mode's committed request,
+  then the slice's stored values, then the mode's defaults.
+  `services/mode-scoped-migration.js` splits a Session 27–44 draft into the two
+  slices, and `split_draft_into_modes` in `gbdraw/session_io.py` is its Python
+  twin. A Session 45 is not read.
+
+Guards: `tests/web/drawing-context.test.mjs` (the key classes, one drawing per
+mode, no drawing key read from `state`, no service resolving the active drawing,
+and Generate resolving it once); `tests/web/per-mode-drawings.test.mjs` (no
+shared member object, and each mode's request carries its own drawing's
+values); `tests/web/mode-scoped-session.test.mjs` (the Session 46 round trip,
+and a Session 45 or a field outside the registry rejected);
+`tests/web/mode-split-vectors.test.mjs` with `tests/test_mode_split_vectors.py`
+(the JavaScript and Python splits agree on shared vectors);
+`tests/test_mode_scoped_settings.py` (the registry rows, and the generated file
+equal to its Python source); and
+`tests/web/mode-scoped-settings.playwright.spec.js` (settings, Legend edits,
+Depth, and History per mode in the browser).
+
 ## Computation ownership
 
 Follow [Computation ownership](../../docs/internal/ARCHITECTURE_FITNESS_FUNCTION_RATCHET.md#computation-ownership)
@@ -634,7 +692,8 @@ state and the persisted/rendered model. It owns:
 - explicit track-slot projection;
 - per-feature edit and Feature placement rows (`diagramOptions.featureOverrides`
   and `featurePlacements`, built by `services/feature-placement.js`);
-- the current `ui.layoutPreferences` representation.
+- the layout-preference slot that a committed request sets in its mode's
+  drawing (`modes.<mode>.ui.layoutPreferences` in a Session 46).
 
 `services/config.js` coordinates user-facing save and load actions. It must not
 grow a parallel model of render fields. Compatibility migrations are reader
