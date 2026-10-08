@@ -3245,3 +3245,48 @@ test('BGC session selected feature Hide undo redo keeps visibility and legend st
   expect(states.serialized.every((state) => state.count > 0 && state.hidden)).toBe(true);
   expect(states.serializedContent).not.toContain('gbdraw-feature-selected');
 });
+
+// TK-03 (gui-fix rv/tracks.md): a Custom Track Slots row's track index that
+// passes through an index with no Depth series must not add series. With two
+// series, ArrowUp then ArrowDown on `depth_2` leaves two series, and Generate
+// and Save Session succeed (before: the render added "Depth 3", and both failed
+// with DEPTH_INVALID "Depth series 3").
+test('TK-03: stepping a Depth row track index past the series adds no series', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openApp(page);
+  await page.getByLabel('GenBank/DDBJ File', { exact: true }).setInputFiles(hmmtDnaPath);
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.length), { timeout: 60_000 })
+    .toBeGreaterThan(0);
+  const depthTsv = (base) => Array.from({ length: 6 }, (_, index) => `NC_012920.1\t${index * 3000 + 1}\t${base + index}`).join('\n');
+  await page.evaluate(async ({ a, b }) => {
+    const app = window.__GBDRAW_APP__;
+    app.setCircularDepthFile(0, new File([a], 'depth_a.tsv', { type: 'text/tab-separated-values' }));
+    app.addCircularDepthTrack();
+    app.setCircularDepthFile(1, new File([b], 'depth_b.tsv', { type: 'text/tab-separated-values' }));
+    await window.Vue.nextTick();
+  }, { a: depthTsv(10), b: depthTsv(20) });
+  const seriesCount = () => page.evaluate(() => window.__GBDRAW_APP__.adv.depth_tracks.length);
+  await expect.poll(seriesCount).toBe(2);
+  const toggle = await reveal(page.locator('[aria-controls="circular-custom-track-slots-panel"]'));
+  if (await page.locator('#circular-custom-track-slots-panel').count() === 0) await toggle.click();
+  await page.getByRole('checkbox', { name: 'Use custom stack', exact: true }).check();
+  const trackIndex = page.getByLabel('Depth track index depth_2', { exact: true });
+  await expect(trackIndex).toHaveValue('1');
+  await trackIndex.click();
+  await page.keyboard.press('ArrowUp');
+  await expect(trackIndex).toHaveValue('2');
+  expect(await seriesCount(), 'after ArrowUp').toBe(2);
+  await page.keyboard.press('ArrowDown');
+  await expect(trackIndex).toHaveValue('1');
+  await trackIndex.press('Tab');
+  expect(await seriesCount(), 'after ArrowDown').toBe(2);
+  await generateAndWaitForResult(page);
+  expect(await seriesCount(), 'after Generate').toBe(2);
+  const pending = page.waitForEvent('download');
+  const saved = await evaluateWithRetainedPromise(page, async () => {
+    window.__GBDRAW_APP__.sessionTitle = 'tk-03-depth-track-index';
+    return await window.__GBDRAW_APP__.saveSessionWithTitle();
+  });
+  expect(saved.status, JSON.stringify(saved)).toBe('saved');
+  await pending;
+});

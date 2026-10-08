@@ -209,7 +209,7 @@ import {
   depthTrackCoverageCount,
   depthTrackMatrixWidth,
   ensureDepthTrackConfigCount as ensureDepthTrackConfigCountEntries,
-  ensureDepthTrackConfigShape,
+  depthTrackConfigForEdit,
   isDefaultManagedDepthSlot,
   isRecordMajorDepthFileMatrix,
   normalizeDepthTrackConfig as normalizeDepthTrackConfigEntry,
@@ -1753,12 +1753,6 @@ export const createAppSetup = () => {
     );
     drawing.adv.depth_tracks.splice(0, drawing.adv.depth_tracks.length, ...normalized);
   };
-  /** @param {DrawingState} drawing */
-  const ensureDepthTrackEditableConfigCount = (drawing, count = activeDepthTrackCount()) => {
-    const targetCount = Math.max(1, Number(count) || 1);
-    if (!Array.isArray(drawing.adv.depth_tracks)) drawing.adv.depth_tracks = [];
-    ensureDepthTrackConfigShape(drawing.adv.depth_tracks, targetCount, depthTrackConfigDefaults(drawing));
-  };
   const circularDepthTrackRows = computed(() => {
     const drawing = state.drawings.circular;
     return rowsForDepthTrackCount(
@@ -1930,11 +1924,15 @@ export const createAppSetup = () => {
     const rawTrackIndex = Number(slot?.params?.track_index);
     return Number.isInteger(rawTrackIndex) && rawTrackIndex >= 0 ? rawTrackIndex : 0;
   };
-  /** @param {DrawingState} drawing */
+  // A series' settings for an edit of the shown drawing, or null when the index
+  // names no series of its mode: the edit is dropped and `depth_tracks` does not
+  // grow (TK-03).
+  /** @param {DrawingState} drawing @param {number} index */
   const depthTrackConfigForIndex = (drawing, index) => {
-    const idx = Math.max(0, Number(index) || 0);
-    ensureDepthTrackEditableConfigCount(drawing, idx + 1);
-    return drawing.adv.depth_tracks[idx];
+    if (!Array.isArray(drawing.adv.depth_tracks)) drawing.adv.depth_tracks = [];
+    return depthTrackConfigForEdit(
+      drawing.adv.depth_tracks, index, activeDepthTrackCount(), depthTrackConfigDefaults(drawing)
+    );
   };
   // A series' saved settings, or its defaults while the drawing holds none (read only, OV-109).
   /** @param {DrawingState} drawing @param {number} index */
@@ -1957,6 +1955,7 @@ export const createAppSetup = () => {
     const idx = Math.max(0, Number(index) || 0);
     const color = String(value ?? '').trim();
     const config = depthTrackConfigForIndex(drawing, idx);
+    if (!config) return;
     config.color = color || depthTrackFallbackColor(idx);
   };
   /** @param {DrawingState} drawing */
@@ -1981,6 +1980,7 @@ export const createAppSetup = () => {
     if (sessionBusy) return sessionBusy;
     const idx = Math.max(0, Number(index) || 0);
     const config = depthTrackConfigForIndex(drawing, idx);
+    if (!config) return;
     retireLegendStylesOfUnnamedCaptions(() => {
       config.label = String(value ?? '');
       syncDepthTrackSlotLabelsForTrack(drawing, idx);
@@ -1994,6 +1994,8 @@ export const createAppSetup = () => {
     if (sessionBusy) return sessionBusy;
     if (!slot) return;
     const idx = normalizeDepthSlotTrackIndex(slot);
+    // A slot whose index names no series has no series label to edit (TK-03).
+    if (!depthTrackConfigForIndex(state.activeDrawing(), idx)) return;
     retireLegendStylesOfUnnamedCaptions(() => {
       slot.params = slot.params && typeof slot.params === 'object' ? { ...slot.params } : {};
       const label = String(value ?? '');

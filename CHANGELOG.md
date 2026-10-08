@@ -12,6 +12,10 @@ write-up of a release.
 
 ## [Unreleased]
 
+- Custom Track Slots (web app): stepping a Depth row's track index past the loaded
+  Depth series (for example ArrowUp then ArrowDown) no longer adds a series that made
+  Generate and **Save Session** fail with "Depth series 3"; a label edit on a row whose
+  index names no series changes nothing (TK-03).
 - Color names (CLI and Python API): `seashell` now resolves to `#FFF5EE`, the CSS
   color, so the CLI draws it as the Web app does. Before, it resolved to `#2E8B57`
   (seagreen). `rebeccapurple` (`#663399`) is now accepted. The other 146 CSS color
