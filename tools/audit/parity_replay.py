@@ -6,7 +6,8 @@ CLI from this checkout in a fresh work directory and compares the CLI SVG with
 the GUI SVG through tests/utils/svg_compare.compare_svgs, ignoring the same
 binding attributes as the Gallery publication parity check plus the root
 baseProfile attribute. A probe whose GUI SVG equals the baseline SVG reports
-NO_EFFECT instead of MATCH.
+NO_EFFECT instead of MATCH; every compared row also reports
+same_as_baseline_in_gui.
 
 Usage:
     python tools/audit/parity_replay.py <probe-dir> <input> [<input> ...]
@@ -83,6 +84,8 @@ def replay_probe(probe_dir: Path, entry: dict, inputs: list[Path]) -> dict:
     return {
         "name": name,
         "outcome": outcome,
+        # Kept beside the outcome so a GUI no-op whose replay differs still shows as DIFF.
+        "same_as_baseline_in_gui": bool(entry.get("sameAsBaseline")),
         "message": comparison.message,
         "differences": comparison.differences,
     }

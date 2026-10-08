@@ -21,9 +21,8 @@ const CIRCULAR_PROBES = [
   ['species_title_bottom', 'a.form.species="Homo sapiens"; a.form.strain="Ref"; a.adv.plot_title_position="bottom"; a.adv.keep_full_definition_with_plot_title=true;'],
   ['nt_AT_window', 'a.adv.nt="AT"; a.adv.window_size=200; a.adv.step_size=50;'],
   ['scale_interval', 'a.adv.scale_interval=2000;'],
-  // A non-positive Scale Interval falls back to the automatic interval on both surfaces
-  // (gbdraw/svg/circular_ticks.py), so it draws the baseline. The edge probed instead is an
-  // interval longer than the 16.6 kb record: no tick labels.
+  // A Scale Interval of 0 or less is rejected on both surfaces (D-04), so it is no parity
+  // probe. The edge probed instead is an interval longer than the 16.6 kb record: no tick labels.
   ['scale_interval_over_length', 'a.adv.scale_interval=20000;'],
   ['strokes', 'a.adv.block_stroke_width=1.5; a.adv.block_stroke_color="#ff0000"; a.adv.axis_stroke_width=4; a.adv.axis_stroke_color="#0000ff";'],
   ['def_font', 'a.adv.def_font_size=30;'],

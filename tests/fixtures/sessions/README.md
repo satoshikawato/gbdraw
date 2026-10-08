@@ -131,8 +131,9 @@ values Session 46 Load gives the pointers the split leaves absent. A Session
 its request, which the Python split does not.
 
 `scale-interval-zero-circular-cli.v44.gbdraw-session.json.gz`,
-`scale-interval-negative-linear-api.v44.gbdraw-session.json.gz`, and
-`scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz` hold a scale
+`scale-interval-negative-linear-api.v44.gbdraw-session.json.gz`,
+`scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz`, and
+`scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz` hold a scale
 interval of 0 or less, written by the first-parent `main` commit `fe6861f0`
 CLI (in `diagramOptions.config`) and typed API (in `configOverrides`, where
 `main`'s Web Save also writes it), and by the release tag `0.13.0` CLI (in

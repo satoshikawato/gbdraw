@@ -32,6 +32,7 @@ SESSIONS = REPO_ROOT / "tests" / "fixtures" / "sessions"
 MAIN_CLI_CIRCULAR_ZERO = SESSIONS / "scale-interval-zero-circular-cli.v44.gbdraw-session.json.gz"
 MAIN_API_LINEAR_NEGATIVE = SESSIONS / "scale-interval-negative-linear-api.v44.gbdraw-session.json.gz"
 RELEASED_CLI_LINEAR_NEGATIVE = SESSIONS / "scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz"
+RELEASED_CLI_CIRCULAR_ZERO = SESSIONS / "scale-interval-zero-circular-cli.v30.gbdraw-session.json.gz"
 CLI_MODULES = {"circular": circular_cli_module, "linear": linear_cli_module}
 EXPECTED_DIAGNOSTIC = {
     "code": "INPUT_INVALID",
@@ -88,6 +89,11 @@ def test_python_api_rejects_a_non_positive_scale_interval(draw: Any, options_typ
         with pytest.raises(ValidationError, match=r"'objects\.scale\.interval'") as excinfo:
             draw(records, options=options_type(config_overrides={"objects.scale.interval": value}))
         assert excinfo.value.diagnostic == EXPECTED_DIAGNOSTIC
+        config = load_default_config()
+        config["objects"]["scale"]["interval"] = value
+        with pytest.raises(ValidationError, match=r"'objects\.scale\.interval'") as excinfo:
+            draw(records, options=options_type(config=config))
+        assert excinfo.value.diagnostic == EXPECTED_DIAGNOSTIC
 
 
 def test_a_web_generate_request_rejects_what_a_session_load_reads_as_automatic(tmp_path: Path) -> None:
@@ -134,15 +140,20 @@ def test_a_main_session_with_a_non_positive_interval_draws_the_automatic_interva
     assert _cli_replay_svg(session, tmp_path, "cli-stored") == _cli_replay_svg(automatic, tmp_path, "cli-automatic")
 
 
+@pytest.mark.parametrize(
+    ("fixture", "stored"),
+    [(RELEASED_CLI_LINEAR_NEGATIVE, "-5"), (RELEASED_CLI_CIRCULAR_ZERO, "0")],
+    ids=["linear-negative", "circular-zero"],
+)
 def test_a_released_legacy_cli_session_with_a_non_positive_interval_still_replays(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    fixture: Path, stored: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    session = _session(RELEASED_CLI_LINEAR_NEGATIVE)
+    session = _session(fixture)
     assert session["version"] == 30
     automatic = json.loads(json.dumps(session))
     args = automatic["cliInvocation"]["args"]
     index = args.index("--scale_interval")
-    assert args[index + 1] == "-5"
+    assert args[index + 1] == stored
     del args[index : index + 2]
     assert _cli_replay_svg(session, tmp_path, "stored") == _cli_replay_svg(automatic, tmp_path, "automatic")
