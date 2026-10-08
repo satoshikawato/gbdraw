@@ -1,5 +1,7 @@
 // @ts-check
 import {
+  ChoiceDialog,
+  dialogFocus,
   OperationError,
   RecordDisplayControl,
   AutoValueField,
@@ -14,10 +16,11 @@ import { formatFeatureLocation } from './services/feature-utils.js';
 const { createApp } = window.Vue;
 
 const app = createApp({
-  components: { OperationError, CircularMeasureInput, RecordDisplayControl, AutoValueField, ColorValueControl, FileUploader, HelpTip },
+  components: { ChoiceDialog, OperationError, CircularMeasureInput, RecordDisplayControl, AutoValueField, ColorValueControl, FileUploader, HelpTip },
   methods: { formatFeatureLocation },
   setup: createAppSetup
 });
+app.directive('dialog-focus', dialogFocus);
 
 const mountedApp = app.mount('#app');
 window.__GBDRAW_APP__ = mountedApp;

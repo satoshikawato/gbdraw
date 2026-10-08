@@ -229,8 +229,9 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
       '[data-linear-record-list] .upload-zone',
       '[data-linear-comparison-card]',
       '.basic-settings',
-      '.generate-bar',
-      '[data-linear-advanced-comparison]'
+      '[data-linear-advanced-comparison]',
+      // UI-12 (Owner decision 2026-10-07): Generate is last in Tab order.
+      '.generate-bar'
     ];
     const elements = selectors.map((selector) => document.querySelector(selector));
     return {
@@ -248,6 +249,9 @@ test('fresh Linear keeps primary input visible and uses command/status semantics
   });
   expect(order).toEqual({ present: true, ordered: true, pairInRecordList: 0 });
 
+  // Scroll only as far as a user must to reach Add: Playwright centers a target
+  // that is entirely below the fold, which alone moves the first card out of view.
+  await inputAddAction(page).evaluate((button) => button.scrollIntoView({ block: 'nearest' }));
   await inputAddAction(page).click();
   await expect(page.locator('[data-linear-record-card]')).toHaveCount(2);
   await expectInside(firstUploader, settingsPane);
@@ -1439,8 +1443,8 @@ test('mobile layout has no overflow, fixed-action overlap, or semantic tab-order
       comparison: [comparison.clientWidth, comparison.scrollWidth],
       order: follows(recordList, comparison)
         && follows(comparison, basic)
-        && follows(basic, generate)
-        && follows(generate, advanced),
+        && follows(basic, advanced)
+        && follows(advanced, generate),
       pairInRecords: recordList.querySelectorAll('[data-edge-key]').length
     };
   });
@@ -1455,7 +1459,7 @@ test('mobile layout has no overflow, fixed-action overlap, or semantic tab-order
   }).first();
   await firstUploader.focus();
   const tabSections = ['input'];
-  for (let step = 0; step < 60; step += 1) {
+  for (let step = 0; step < 200; step += 1) {
     await page.keyboard.press('Tab');
     const section = await page.evaluate(() => {
       const active = document.activeElement;
@@ -1467,9 +1471,9 @@ test('mobile layout has no overflow, fixed-action overlap, or semantic tab-order
       return '';
     });
     if (section && tabSections.at(-1) !== section) tabSections.push(section);
-    if (section === 'advanced') break;
+    if (section === 'generate') break;
   }
-  expect(tabSections).toEqual(['input', 'comparison', 'basic', 'generate', 'advanced']);
+  expect(tabSections).toEqual(['input', 'comparison', 'basic', 'advanced', 'generate']);
 
   const advancedSummary = page.locator(
     '[data-linear-advanced-comparison] summary[aria-label="Advanced comparison and layout"]'
