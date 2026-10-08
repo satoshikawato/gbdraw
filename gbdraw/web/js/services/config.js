@@ -90,6 +90,7 @@ import {
   buildCanonicalRenderRequest,
   canonicalLinearRecordLayout,
   legacyTableRowsNotice,
+  linearDefinitionVisibilityOf,
   managedConfigOverridePathsForMode,
   promoteCanonicalRenderRequestToCurrent,
   projectCanonicalSessionRequest,
@@ -236,7 +237,7 @@ import {
   validateModeSliceFields
 } from './mode-scoped-migration.js';
 
-const { nextTick } = window.Vue;
+const { nextTick, ref } = window.Vue;
 
 // How LOSAT runs: one app-level setting for both drawings (Session 46
 // `ui.losatExecution`; a Session 44 or older draft keeps it in `config.losat`).
@@ -1011,6 +1012,14 @@ let lastSessionFilename = null;
 let preservedCliOptions = null;
 /** @type {Record<string, any> | null} */
 let committedCanonicalSession = null;
+// Counts replacements of the committed Session, so a computed that reads the
+// committed request follows Generate, Load, a History restore, and a mode switch.
+const committedCanonicalRevision = ref(0);
+/** @param {Record<string, any> | null} next */
+const setCommittedCanonicalSession = (next) => {
+  committedCanonicalSession = next;
+  committedCanonicalRevision.value += 1;
+};
 /** @type {ReturnType<typeof adoptCurrentSessionResources> | null} */
 let activeSessionResourceTable = null;
 /** @type {Record<string, any> | null} */
@@ -3557,7 +3566,7 @@ export const adoptCanonicalRenderArtifacts = (
   // Everything that can validate, project, or deserialize finishes before the
   // committed request and its comparison-backed draft resources are replaced.
   activeSessionResourceTable = sessionResourceTable;
-  committedCanonicalSession = nextCommittedCanonicalSession;
+  setCommittedCanonicalSession(nextCommittedCanonicalSession);
   if (nextLinearComparisons) {
     state.files.linearCanonicalComparisons = nextLinearComparisons;
   }
@@ -3583,11 +3592,17 @@ export const adoptCanonicalRenderArtifacts = (
   }
 };
 
-export const getCommittedCanonicalRenderRequest = () => (
-  committedCanonicalSession?.renderRequest || null
-);
+export const getCommittedCanonicalRenderRequest = () => {
+  void committedCanonicalRevision.value;
+  return committedCanonicalSession?.renderRequest || null;
+};
 
 export const getCommittedCanonicalSession = () => committedCanonicalSession;
+
+// The Linear Accession and Length visibility the shown Result was drawn with.
+export const getCommittedLinearDefinitionVisibility = () => (
+  linearDefinitionVisibilityOf(getCommittedCanonicalRenderRequest())
+);
 
 // The record count of a committed source, as the Source recipe reads it before
 // it names records by #index (Export Feature Edits TSV).
@@ -3601,7 +3616,7 @@ export const canonicalRenderArtifactOwner = Object.freeze({
   capture: () => Object.freeze({ committedCanonicalSession, activeSessionResourceTable }),
   /** @param {{ committedCanonicalSession: any, activeSessionResourceTable: any } | null} snapshot */
   restore: (snapshot) => {
-    committedCanonicalSession = snapshot?.committedCanonicalSession ?? null;
+    setCommittedCanonicalSession(snapshot?.committedCanonicalSession ?? null);
     activeSessionResourceTable = snapshot?.activeSessionResourceTable ?? null;
   }
 });
@@ -4120,9 +4135,9 @@ const restoreSessionImportSnapshot = async (snapshot) => {
     state.legacyProteinRawCandidates.value = cloneJsonData(snapshot.legacyProteinRawCandidates);
     state.legacyProteinDerivedEvidence.value = cloneJsonData(snapshot.legacyProteinDerivedEvidence);
     state.losatCacheInfo.value = cloneJsonData(snapshot.losatCacheInfo);
-    committedCanonicalSession = isAdoptedCanonicalSession(snapshot.committedCanonicalSession)
+    setCommittedCanonicalSession(isAdoptedCanonicalSession(snapshot.committedCanonicalSession)
       ? snapshot.committedCanonicalSession
-      : cloneCanonicalSession(snapshot.committedCanonicalSession);
+      : cloneCanonicalSession(snapshot.committedCanonicalSession));
     activeSessionResourceTable = snapshot.activeSessionResourceTable;
     state.skipCaptureBaseConfig.value = true;
     applyResultsData(snapshot.results, snapshot.ui);
@@ -4163,7 +4178,7 @@ const clearObject = (target) => {
 const resetSessionBaseline = () => {
   activePreviewRuntime?.clearActiveRuntime?.();
   preservedCliOptions = null;
-  committedCanonicalSession = null;
+  setCommittedCanonicalSession(null);
   activeSessionResourceTable = null;
   adoptedProteinIdentityManifest = null;
   state.sessionResourceDiscoveryDeferred.value = false;
@@ -5358,7 +5373,7 @@ const importSessionDocument = async (e, options = {}) => {
     resetSessionBaseline();
     state.sessionResourceDiscoveryDeferred.value = currentSchemaSession;
     if (currentSchemaSession) {
-      committedCanonicalSession = adoptedCanonicalSession;
+      setCommittedCanonicalSession(adoptedCanonicalSession);
       activeSessionResourceTable = currentResourceTable;
     }
     state.sessionTitle.value = canonicalSession
@@ -5648,7 +5663,7 @@ const importSessionDocument = async (e, options = {}) => {
       semanticFileWatchersSuppressedBeforeImport;
     await nextTick();
     if (!currentSchemaSession) {
-      committedCanonicalSession = cloneCanonicalSession(data);
+      setCommittedCanonicalSession(cloneCanonicalSession(data));
       activeSessionResourceTable = null;
     }
     recordSessionLifecycleEvent('interactiveReady', {

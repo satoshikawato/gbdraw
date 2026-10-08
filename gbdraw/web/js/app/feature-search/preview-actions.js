@@ -343,21 +343,70 @@ export const createPreviewFeatureSearch = ({
   const goToNext = () => goToMatch(previewFeatureSearchActiveIndex.value + 1);
   const goToPrevious = () => goToMatch(previewFeatureSearchActiveIndex.value - 1);
 
-  const clearSearch = () => {
-    previewFeatureSearchInput.value = '';
-    previewFeatureSearchQuery.value = '';
-    previewFeatureSearchField.value = 'all';
-    previewFeatureSearchQualifierKey.value = '';
-    previewFeatureSearchUseRegex.value = false;
-    appliedSearchField = 'all';
-    appliedQualifierKey = '';
-    appliedUseRegex = false;
+  /**
+   * @typedef {object} SearchDraft
+   * @property {string} input
+   * @property {string} query
+   * @property {string} field
+   * @property {string} qualifierKey
+   * @property {boolean} useRegex
+   * @property {string} appliedField
+   * @property {string} appliedQualifierKey
+   * @property {boolean} appliedUseRegex
+   */
+  /** @type {Readonly<SearchDraft>} */
+  const EMPTY_SEARCH = Object.freeze({
+    input: '', query: '', field: 'all', qualifierKey: '', useRegex: false,
+    appliedField: 'all', appliedQualifierKey: '', appliedUseRegex: false
+  });
+  /** @returns {SearchDraft} */
+  const captureSearch = () => ({
+    input: String(previewFeatureSearchInput.value || ''),
+    query: String(previewFeatureSearchQuery.value || ''),
+    field: String(previewFeatureSearchField.value || 'all'),
+    qualifierKey: String(previewFeatureSearchQualifierKey.value || ''),
+    useRegex: Boolean(previewFeatureSearchUseRegex.value),
+    appliedField: appliedSearchField,
+    appliedQualifierKey,
+    appliedUseRegex
+  });
+  /** @param {Readonly<SearchDraft>} draft */
+  const installSearch = (draft) => {
+    previewFeatureSearchInput.value = draft.input;
+    previewFeatureSearchQuery.value = draft.query;
+    previewFeatureSearchField.value = draft.field;
+    previewFeatureSearchQualifierKey.value = draft.qualifierKey;
+    previewFeatureSearchUseRegex.value = draft.useRegex;
+    appliedSearchField = draft.appliedField;
+    appliedQualifierKey = draft.appliedQualifierKey;
+    appliedUseRegex = draft.appliedUseRegex;
     previewFeatureSearchMatches.value = [];
     previewFeatureSearchMatchDetails.value = {};
     previewFeatureSearchActiveIndex.value = -1;
     previewFeatureSearchError.value = '';
     clearPreviewClasses();
+  };
+
+  const clearSearch = () => {
+    installSearch(EMPTY_SEARCH);
     scheduleRefreshSearch({ preserveActive: false });
+  };
+
+  // A search belongs to the mode it was typed in: the mode transition keeps
+  // the departing mode's search and installs the arriving one's, which the
+  // arriving Result's mount applies (`handleMountedResultReady`).
+  /** @type {Map<string, SearchDraft>} */
+  const searchByMode = new Map();
+  /** @param {string} departing @param {string} arriving */
+  const switchModeSearch = (departing, arriving) => {
+    searchByMode.set(departing, captureSearch());
+    installSearch(searchByMode.get(arriving) || EMPTY_SEARCH);
+    searchByMode.delete(arriving);
+  };
+  // A loaded Session replaces the Results of both modes that a search named.
+  const resetModeSearches = () => {
+    searchByMode.clear();
+    clearSearch();
   };
 
   watch(
@@ -420,6 +469,8 @@ export const createPreviewFeatureSearch = ({
     goToNext,
     goToPrevious,
     clearSearch,
+    switchModeSearch,
+    resetModeSearches,
     handleMountedResultReady,
     openActiveMatch,
     refreshSearch: scheduleRefreshSearch,

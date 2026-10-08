@@ -289,8 +289,6 @@
             min-width: min(300px, calc(100vw - 24px));
         }
         .pairwise-match-popup {
-            /* The footer (h-8) is not part of the popup's room: the inline max-height runs to the viewport bottom. */
-            --app-footer-clearance: 2rem;
             width: min(460px, calc(100vw - 24px));
             min-width: min(280px, calc(100vw - 24px));
             min-height: min(180px, calc(100vh - 24px));
@@ -1386,7 +1384,7 @@
                     <button data-history-ignore @click="saveSessionWithTitle" :disabled="!sessionSaveAvailable" :aria-busy="sessionSavePending" class="app-config-button disabled:opacity-40 disabled:cursor-wait" title="Save the current Result and settings draft without generating" aria-label="Save Session" aria-describedby="session-save-help">
                         <i :class="sessionSavePending ? 'ph ph-spinner animate-spin' : 'ph ph-archive'" aria-hidden="true"></i> Save Session
                     </button>
-                    <button data-history-managed @click="$refs.sessionInput.click()" :disabled="!sessionLoadAvailable" :aria-busy="sessionImportPending" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" title="Load Session" aria-label="Load Session">
+                    <button data-history-managed @click="openSessionFilePicker" :disabled="!sessionLoadAvailable" :aria-busy="sessionImportPending" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" title="Load Session" aria-label="Load Session">
                         <i class="ph ph-archive-tray" aria-hidden="true"></i> Load Session
                     </button>
                     <input data-history-managed type="file" ref="sessionInput" accept=".json,.gz,application/json,application/gzip" class="hidden" @change="importSession">
@@ -4900,9 +4898,9 @@
                     <button v-if="canRetryFeatureEditTableImport" type="button" @click="retryFeatureEditTableImport" class="btn btn-secondary btn-sm">Retry Feature Edits TSV import</button>
                     <button v-if="canRetryFeatureEditTableImport" type="button" @click="reselectFeatureEditTable" class="btn btn-secondary btn-sm">Reselect Feature Edits TSV</button>
                     <button v-if="canRetrySpecificRuleFailure" type="button" @click="retrySpecificRuleFailure" :disabled="!semanticMutationAvailable" class="btn btn-secondary btn-sm">Retry rule operation</button>
-                    <button v-if="canEditSpecificRuleFailure && errorDisplay.actions.includes('edit-pattern')" type="button" @click="editSpecificRuleFailure" class="btn-secondary text-xs">Edit pattern</button>
-                    <button v-if="errorDisplay.actions.includes('generate') && errorDisplay.operation !== 'generate'" type="button" @click="generateFromError" :disabled="processing" class="btn-secondary text-xs">Generate</button>
-                    <button v-if="(errorDisplay.actions.includes('save-session') && errorDisplay.operation !== 'session-save') || generationFailureRecovery === 'restore-failed'" type="button" @click="saveSessionWithTitle" :disabled="sessionImportPending" class="btn-secondary text-xs">Save Session</button>
+                    <button v-if="canEditSpecificRuleFailure && errorDisplay.actions.includes('edit-pattern')" type="button" @click="editSpecificRuleFailure" class="btn btn-secondary btn-sm">Edit pattern</button>
+                    <button v-if="errorDisplay.actions.includes('generate') && errorDisplay.operation !== 'generate'" type="button" @click="generateFromError" :disabled="processing" class="btn btn-secondary btn-sm">Generate</button>
+                    <button v-if="(errorDisplay.actions.includes('save-session') && errorDisplay.operation !== 'session-save') || generationFailureRecovery === 'restore-failed'" type="button" @click="saveSessionWithTitle" :disabled="sessionImportPending" class="btn btn-secondary btn-sm">Save Session</button>
                     <button v-if="generationFailureRecovery === 'restore-failed' || errorDisplay.actions.includes('reload')" type="button" @click="reloadAfterOperationError" class="btn btn-secondary btn-sm">Reload</button>
                     <button v-if="errorDisplay.operation.startsWith('export-') && errorDisplay.actions.includes('use-svg')" type="button" @click="downloadSVG" class="btn btn-secondary btn-sm">Use SVG</button>
                     <button v-if="errorDisplay.operation === 'export-svg' && !canRetryInteractiveSvgExport && errorDisplay.actions.includes('retry')" type="button" @click="downloadSVG" class="btn btn-secondary btn-sm">Retry SVG export</button>
@@ -5978,7 +5976,7 @@
                          role="dialog"
                          aria-label="Pairwise match details"
                          class="fixed z-50 feature-popup pairwise-match-popup custom-scrollbar bg-white rounded-xl shadow-2xl border border-slate-200 p-4"
-                         :style="[pairwiseMatchPopupStyle, { maxHeight: `calc(${pairwiseMatchPopupStyle.maxHeight} - var(--app-footer-clearance))` }]">
+                         :style="pairwiseMatchPopupStyle">
                         <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100 cursor-move">
                             <div class="w-4 h-4 rounded mt-1 border border-slate-200"
                                  :style="{ backgroundColor: clickedPairwiseMatch.fill || '#94a3b8' }"></div>
@@ -7349,6 +7347,11 @@
             <div v-else class="h-full flex flex-col items-center justify-center text-slate-300 border-4 border-dashed border-slate-200 rounded-3xl p-12 bg-slate-50/30">
                 <i class="ph ph-dna text-6xl mb-4 text-slate-200" aria-hidden="true"></i>
                 <p class="font-medium text-slate-400">No {{ mode === 'linear' ? 'Linear' : 'Circular' }} Result yet. Configure settings and click Generate.</p>
+                <button type="button" data-history-managed @click="loadExampleSession" :disabled="!sessionLoadAvailable || exampleSessionPending" :aria-busy="exampleSessionPending"
+                        class="btn btn-secondary btn-sm mt-4" aria-describedby="example-session-help">
+                    <i :class="exampleSessionPending ? 'ph ph-spinner animate-spin' : 'ph ph-play-circle'" aria-hidden="true"></i> Load an example
+                </button>
+                <p id="example-session-help" class="ui-hint mt-2">Opens the human mitochondrial genome Session from the Gallery.</p>
             </div>
         </div>
     </main>
@@ -7650,6 +7653,19 @@
                 </p>
             </section>
         </div>
+        <!-- UJ-09: loading a Session asks before it replaces unsaved work -->
+        <choice-dialog v-if="sessionReplaceDialog.show" labelledby="session-replace-title" describedby="session-replace-description"
+             @cancel="resolveSessionReplacement('cancel')" @keydown.tab="trapDialogFocus"
+             class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
+            <h2 id="session-replace-title" class="text-base font-bold text-slate-800">Replace the current work?</h2>
+            <p id="session-replace-description" class="mt-2 text-sm leading-relaxed text-slate-600">
+                Loading a Session replaces the current settings and Results and clears Undo history. Changes since the last Save Session or Load Session are lost.
+            </p>
+            <div class="mt-4 flex justify-end gap-2">
+                <button type="button" data-history-ignore @click="resolveSessionReplacement('cancel')" class="btn btn-secondary btn-sm">Cancel</button>
+                <button type="button" data-history-ignore @click="resolveSessionReplacement('load')" class="btn btn-primary btn-sm">{{ sessionReplaceDialog.actionLabel }}</button>
+            </div>
+        </choice-dialog>
         <!-- Q3: a layout edit that would leave lane Feature placements undrawable -->
         <div v-if="featurePlacementActions.layoutChange.open" class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4"
              @click.self="featurePlacementActions.resolveLayoutChange('cancel')" @keydown.esc.prevent.stop="featurePlacementActions.resolveLayoutChange('cancel')" @keydown.tab="trapDialogFocus">

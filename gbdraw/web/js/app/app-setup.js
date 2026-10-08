@@ -43,6 +43,7 @@ import {
   disposeSessionOperations,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
+  getCommittedLinearDefinitionVisibility,
   readCommittedResourceRecordCount,
   assertActiveModeInputs,
   importSession as importSessionFromFile,
@@ -97,6 +98,7 @@ import { createPaletteLoader } from './palettes.js';
 import { afterPaint, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions } from './similarity-alignment.js';
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { popupViewportBottom } from '../utils/popup-bounds.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import {
@@ -1823,9 +1825,15 @@ export const createAppSetup = () => {
     const shown = resolveLinearLabelVisibility('auto', {
       hasSharedRow: linearLabelHasSharedRow.value
     });
+    // The shown Result already has Auto's outcome: say what it shows.
+    const applied = getCommittedLinearDefinitionVisibility();
+    const effect = linearLabelAutoFields.value
+      .every((/** @type {{ visibilityKey: string }} */ row) => applied[row.visibilityKey] === shown)
+      ? `Auto ${shown ? 'shows' : 'hides'} these fields throughout the diagram`
+      : `Auto will ${shown ? 'show' : 'hide'} these fields throughout the diagram on the next successful Generate`;
     return shown
-      ? `${fields}: Auto will show these fields throughout the diagram on the next successful Generate because no rendered row contains multiple records.`
-      : `${fields}: Auto will hide these fields throughout the diagram on the next successful Generate because at least one rendered row contains multiple records. Choose Show in Record Labels to keep a field visible.`;
+      ? `${fields}: ${effect} because no rendered row contains multiple records.`
+      : `${fields}: ${effect} because at least one rendered row contains multiple records. Choose Show in Record Labels to keep a field visible.`;
   });
   const focusLinearLabelVisibility = async (key) => {
     if (mode.value !== 'linear') return;
@@ -2890,6 +2898,35 @@ export const createAppSetup = () => {
   const sessionLoadAvailable = computed(() => !sessionSaveLoadAvailability('load'));
   const sessionBusyReason = computed(() => sessionSaveLoadAvailability('save')?.reason || '');
   const circularRecordPresentationPanel = ref(null);
+  // UJ-09 (Owner 2026-10-05): loading a Session replaces the work and clears
+  // History, so every route that loads one asks first when History changed
+  // since the last Save or Load. Cancel loads nothing.
+  const sessionReplaceDialog = reactive({ show: false, actionLabel: '' });
+  /** @type {(() => void) | null} */
+  let pendingSessionReplacement = null;
+  /** @param {string} actionLabel @param {() => void} proceed */
+  const confirmSessionReplacement = async (actionLabel, proceed) => {
+    if (!await history.hasChangesSinceSavePoint()) {
+      proceed();
+      return;
+    }
+    pendingSessionReplacement = proceed;
+    sessionReplaceDialog.actionLabel = actionLabel;
+    sessionReplaceDialog.show = true;
+  };
+  /** @param {'load' | 'cancel'} choice */
+  const resolveSessionReplacement = (choice) => {
+    const proceed = pendingSessionReplacement;
+    pendingSessionReplacement = null;
+    sessionReplaceDialog.show = false;
+    // The file picker opens inside the click that confirmed.
+    if (choice === 'load') proceed?.();
+  };
+  // The template's hidden file input (`ref="sessionInput"`).
+  const sessionInput = ref(null);
+  const openSessionFilePicker = () => confirmSessionReplacement(
+    'Load Session', () => sessionInput.value?.click()
+  );
   let nextSessionPreviewToken = 1;
   const importSession = (event) => importSessionFromFile(event, {
     availability: sessionSaveLoadAvailability,
@@ -2945,6 +2982,7 @@ export const createAppSetup = () => {
         // A replaced document resets transient UI: the selection named features
         // of the previous Session.
         featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
+        previewFeatureSearch.resetModeSearches();
         await nextTick();
         recordSessionLifecycleEvent('history-baseline-start');
         if (!await history.initializeIntentBaseline('Loaded session', { isCurrent: result.isCurrent })) {
@@ -2957,6 +2995,24 @@ export const createAppSetup = () => {
         if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = false;
         closeLegendStrokeOptions();
       }
+    }
+  });
+  // UJ-06 (Owner 2026-10-07): the empty state's Load an example reads the
+  // bundled HmmtDNA Gallery Session from this origin and loads it through the
+  // Load Session path, with the same confirmation.
+  const EXAMPLE_SESSION_NAME = 'HmmtDNA_basic_circular.gbdraw-session.json';
+  const exampleSessionPending = ref(false);
+  const loadExampleSession = () => confirmSessionReplacement('Load example', async () => {
+    exampleSessionPending.value = true;
+    try {
+      const response = await fetch(`./gallery/sessions/${EXAMPLE_SESSION_NAME}`);
+      if (!response.ok) throw new Error(`The example Session could not be read (HTTP ${response.status}).`);
+      const file = new File([await response.blob()], EXAMPLE_SESSION_NAME, { type: 'application/json' });
+      await importSession({ target: { files: [file], value: '' } });
+    } catch (error) {
+      errorLog.value = normalizeUserFacingError(error);
+    } finally {
+      exampleSessionPending.value = false;
     }
   });
 
@@ -3365,7 +3421,8 @@ export const createAppSetup = () => {
   //   2. Swap the artifact slots (`swapArtifactSlots`).
   //   3. Set `mode`. Each mode has its own drawing (PD-OI-086), so the
   //      template now binds the arriving drawing and no setting is written.
-  //   4. Reset the departing mode's transient UI.
+  //   4. Reset the departing mode's transient UI; the Preview search is kept
+  //      per mode.
   //   5. Show the arriving Result as a selection.
   /**
    * @param {'circular' | 'linear'} nextMode
@@ -3387,6 +3444,7 @@ export const createAppSetup = () => {
     // 4. Transient UI. "Showing the last successful result" named the
     // departing mode's Result.
     resetModeTransientUi();
+    previewFeatureSearch.switchModeSearch(previousMode, nextMode);
     failedGeneratePreservedResult.value = false;
     // 5. Presentation: the arriving Result is shown as a selection.
     previewRuntime.presentSelectedResult({ modeArrival: true });
@@ -3861,7 +3919,7 @@ export const createAppSetup = () => {
     if (!palette || similarityAlignmentCompact.value) return;
     const margin = 12;
     const maxX = Math.max(margin, window.innerWidth - palette.offsetWidth - margin);
-    const maxY = Math.max(margin, window.innerHeight - palette.offsetHeight - margin);
+    const maxY = Math.max(margin, popupViewportBottom() - palette.offsetHeight - margin);
     similarityAlignmentPalettePosition.x = Math.min(
       Math.max(similarityAlignmentPalettePosition.x ?? maxX, margin), maxX
     );
@@ -4138,7 +4196,7 @@ export const createAppSetup = () => {
   // The popup's size follows the app-level rich popup preference.
   const getFeaturePopupConstraints = (left = clickedFeaturePos.x, top = clickedFeaturePos.y) => {
     const viewportWidth = Math.max(1, window.innerWidth || 1);
-    const viewportHeight = Math.max(1, window.innerHeight || 1);
+    const viewportHeight = popupViewportBottom();
     const availableWidth = Math.max(1, viewportWidth - (FEATURE_POPUP_MARGIN * 2));
     const availableHeight = Math.max(1, viewportHeight - (FEATURE_POPUP_MARGIN * 2));
     const desiredMinWidth =
@@ -4170,7 +4228,7 @@ export const createAppSetup = () => {
 
   const getPairwiseMatchPopupConstraints = (left = clickedPairwiseMatchPos.x, top = clickedPairwiseMatchPos.y) => {
     const viewportWidth = Math.max(1, window.innerWidth || 1);
-    const viewportHeight = Math.max(1, window.innerHeight || 1);
+    const viewportHeight = popupViewportBottom();
     const availableWidth = Math.max(1, viewportWidth - (FEATURE_POPUP_MARGIN * 2));
     const availableHeight = Math.max(1, viewportHeight - (FEATURE_POPUP_MARGIN * 2));
     const minWidth = Math.min(PAIRWISE_MATCH_POPUP_MIN_WIDTH, availableWidth);
@@ -4277,7 +4335,7 @@ export const createAppSetup = () => {
     const height = popup?.offsetHeight || 360;
     const margin = FEATURE_POPUP_MARGIN;
     const maxX = Math.max(margin, window.innerWidth - width - margin);
-    const maxY = Math.max(margin, window.innerHeight - height - margin);
+    const maxY = Math.max(margin, popupViewportBottom() - height - margin);
     const nextX = event.clientX - pairwiseMatchPopupDrag.offsetX;
     const nextY = event.clientY - pairwiseMatchPopupDrag.offsetY;
     clickedPairwiseMatchPos.x = Math.min(Math.max(nextX, margin), maxX);
@@ -4356,7 +4414,7 @@ export const createAppSetup = () => {
     const height = popup?.offsetHeight || 260;
     const margin = 12;
     const maxX = Math.max(margin, window.innerWidth - width - margin);
-    const maxY = Math.max(margin, window.innerHeight - height - margin);
+    const maxY = Math.max(margin, popupViewportBottom() - height - margin);
     const nextX = event.clientX - featurePopupDrag.offsetX;
     const nextY = event.clientY - featurePopupDrag.offsetY;
     clickedFeaturePos.x = Math.min(Math.max(nextX, margin), maxX);
@@ -4562,7 +4620,7 @@ export const createAppSetup = () => {
     sessionTitle.value = normalizeSessionTitle(input);
   };
 
-  const saveSessionWithTitle = () => exportSession(null, {
+  const exportSessionWithTitle = () => exportSession(null, {
     availability: sessionSaveLoadAvailability,
     recordDisplayRows: recordDisplayControls.allRows,
     // Save writes every Result: the other mode's slot goes beside the shown one (E1).
@@ -4600,6 +4658,12 @@ export const createAppSetup = () => {
     },
     onError: (error) => { errorLog.value = normalizeUserFacingError(error); }
   });
+  // UJ-09: a saved download is the History position Load Session compares with.
+  const saveSessionWithTitle = async () => {
+    const result = await exportSessionWithTitle();
+    if (result?.status === 'saved') history.markSavePoint();
+    return result;
+  };
 
   const openFeatureEditorFromList = (feat, event) => {
     return openFeatureEditorForFeature(feat, event);
@@ -5937,6 +6001,12 @@ export const createAppSetup = () => {
     saveSessionWithTitle,
     editSessionTitle,
     importSession,
+    sessionInput,
+    openSessionFilePicker,
+    loadExampleSession,
+    exampleSessionPending,
+    sessionReplaceDialog,
+    resolveSessionReplacement,
     circularRecordPresentationPanel,
     canUndoHistory,
     canRedoHistory,
