@@ -492,6 +492,19 @@ export const createHistoryManager = ({
 
   const clearRedo = () => clearStack(redoStack);
 
+  // UJ-09: the History position of the last Save or Load. Work is unsaved
+  // when an Undo or Redo step was added or traversed since then, or when a
+  // control's transaction is still open.
+  /** @param {any[]} stack */
+  const topEntry = (stack) => stack[stack.length - 1] || null;
+  let savePoint = { undo: null, redo: null };
+  const markSavePoint = () => {
+    savePoint = { undo: topEntry(undoStack), redo: topEntry(redoStack) };
+  };
+  const hasChangesSinceSavePoint = () => Boolean(activeTransaction && !activeTransaction.closed)
+    || topEntry(undoStack) !== savePoint.undo
+    || topEntry(redoStack) !== savePoint.redo;
+
   const enforceLimits = () => {
     let evicted = false;
     while (undoStack.length > maxActions) {
@@ -571,6 +584,7 @@ export const createHistoryManager = ({
     if (!isCurrent()) return false;
     clearStack(undoStack);
     clearRedo();
+    markSavePoint();
     currentCheckpoint = null;
     currentCheckpointSignature = '';
     setCurrentIntent(intentRecord);
@@ -1278,10 +1292,12 @@ export const createHistoryManager = ({
     getDiagnostics: () => ({ ...diagnostics, retainedEntryBytes: totalEntryBytes }),
     getRedoCount: () => redoStack.length,
     getUndoCount: () => undoStack.length,
+    hasChangesSinceSavePoint,
     historyAvailability,
     historyLimitMessage,
     traversalPending: () => traversals.value > 0,
     initializeIntentBaseline,
+    markSavePoint,
     redo,
     redoLabel,
     restoring,

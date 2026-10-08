@@ -2881,6 +2881,35 @@ export const createAppSetup = () => {
   const sessionLoadAvailable = computed(() => !sessionSaveLoadAvailability('load'));
   const sessionBusyReason = computed(() => sessionSaveLoadAvailability('save')?.reason || '');
   const circularRecordPresentationPanel = ref(null);
+  // UJ-09 (Owner 2026-10-05): loading a Session replaces the work and clears
+  // History, so every route that loads one asks first when History changed
+  // since the last Save or Load. Cancel loads nothing.
+  const sessionReplaceDialog = reactive({ show: false, actionLabel: '' });
+  /** @type {(() => void) | null} */
+  let pendingSessionReplacement = null;
+  /** @param {string} actionLabel @param {() => void} proceed */
+  const confirmSessionReplacement = (actionLabel, proceed) => {
+    if (!history.hasChangesSinceSavePoint()) {
+      proceed();
+      return;
+    }
+    pendingSessionReplacement = proceed;
+    sessionReplaceDialog.actionLabel = actionLabel;
+    sessionReplaceDialog.show = true;
+  };
+  /** @param {'load' | 'cancel'} choice */
+  const resolveSessionReplacement = (choice) => {
+    const proceed = pendingSessionReplacement;
+    pendingSessionReplacement = null;
+    sessionReplaceDialog.show = false;
+    // The file picker opens inside the click that confirmed.
+    if (choice === 'load') proceed?.();
+  };
+  // The template's hidden file input (`ref="sessionInput"`).
+  const sessionInput = ref(null);
+  const openSessionFilePicker = () => confirmSessionReplacement(
+    'Load Session', () => sessionInput.value?.click()
+  );
   let nextSessionPreviewToken = 1;
   const importSession = (event) => importSessionFromFile(event, {
     availability: sessionSaveLoadAvailability,
@@ -2936,6 +2965,7 @@ export const createAppSetup = () => {
         // A replaced document resets transient UI: the selection named features
         // of the previous Session.
         featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
+        previewFeatureSearch.resetModeSearches();
         await nextTick();
         recordSessionLifecycleEvent('history-baseline-start');
         if (!await history.initializeIntentBaseline('Loaded session', { isCurrent: result.isCurrent })) {
@@ -3355,7 +3385,8 @@ export const createAppSetup = () => {
   //   2. Swap the artifact slots (`swapArtifactSlots`).
   //   3. Set `mode`. Each mode has its own drawing (PD-OI-086), so the
   //      template now binds the arriving drawing and no setting is written.
-  //   4. Reset the departing mode's transient UI.
+  //   4. Reset the departing mode's transient UI; the Preview search is kept
+  //      per mode.
   //   5. Show the arriving Result as a selection.
   /**
    * @param {'circular' | 'linear'} nextMode
@@ -3377,6 +3408,7 @@ export const createAppSetup = () => {
     // 4. Transient UI. "Showing the last successful result" named the
     // departing mode's Result.
     resetModeTransientUi();
+    previewFeatureSearch.switchModeSearch(previousMode, nextMode);
     failedGeneratePreservedResult.value = false;
     // 5. Presentation: the arriving Result is shown as a selection.
     previewRuntime.presentSelectedResult({ modeArrival: true });
@@ -4545,7 +4577,7 @@ export const createAppSetup = () => {
     sessionTitle.value = normalizeSessionTitle(input);
   };
 
-  const saveSessionWithTitle = () => exportSession(null, {
+  const exportSessionWithTitle = () => exportSession(null, {
     availability: sessionSaveLoadAvailability,
     recordDisplayRows: recordDisplayControls.allRows,
     // Save writes every Result: the other mode's slot goes beside the shown one (E1).
@@ -4583,6 +4615,12 @@ export const createAppSetup = () => {
     },
     onError: (error) => { errorLog.value = normalizeUserFacingError(error); }
   });
+  // UJ-09: a saved download is the History position Load Session compares with.
+  const saveSessionWithTitle = async () => {
+    const result = await exportSessionWithTitle();
+    if (result?.status === 'saved') history.markSavePoint();
+    return result;
+  };
 
   const openFeatureEditorFromList = (feat, event) => {
     return openFeatureEditorForFeature(feat, event);
@@ -5869,6 +5907,10 @@ export const createAppSetup = () => {
     saveSessionWithTitle,
     editSessionTitle,
     importSession,
+    sessionInput,
+    openSessionFilePicker,
+    sessionReplaceDialog,
+    resolveSessionReplacement,
     circularRecordPresentationPanel,
     canUndoHistory,
     canRedoHistory,

@@ -314,3 +314,64 @@ test('a 0.13.0 Gallery Session loads, and its Custom Track Slots turned on name 
   });
   expect(await importSnapshot(page)).toEqual(loaded);
 });
+
+// UJ-09 (Owner 2026-10-05): Load Session replaces the work and clears History,
+// so it asks first when History changed since the last Save or Load. Cancel
+// keeps the work and History; with nothing to lose the file picker opens at once.
+test('Load Session asks before it replaces work changed since the last Save or Load', async ({
+  page
+}) => {
+  test.setTimeout(180_000);
+  await openApp(page);
+  await loadBaselineSession(page);
+  const loadButton = page.getByRole('button', { name: 'Load Session', exact: true });
+  const confirm = page.getByRole('dialog', { name: 'Replace the current work?', exact: true });
+  const undoCount = () => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
+  let pickers = 0;
+  page.on('filechooser', () => { pickers += 1; });
+
+  await loadButton.click();
+  await expect.poll(() => pickers).toBe(1);
+  await expect(confirm).toHaveCount(0);
+
+  const prefix = page.locator('#output-prefix');
+  await prefix.fill('unsaved-work');
+  await prefix.press('Tab');
+  await expect.poll(undoCount).toBe(1);
+  await loadButton.click();
+  await expect(confirm).toBeVisible();
+  await expect(confirm).toHaveAttribute('aria-modal', 'true');
+  await expect(confirm.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(confirm).toHaveCount(0);
+  await expect(loadButton).toBeFocused();
+  expect(pickers).toBe(1);
+  expect(await undoCount()).toBe(1);
+  await expect(prefix).toHaveValue('unsaved-work');
+
+  await loadButton.click();
+  const chooserPromise = page.waitForEvent('filechooser');
+  await confirm.getByRole('button', { name: 'Load Session', exact: true }).click();
+  const chooser = await chooserPromise;
+  const loaded = page.waitForEvent('dialog');
+  await chooser.setFiles(baselineSession);
+  const alert = await loaded;
+  expect(alert.message()).toBe('Session loaded successfully!');
+  await alert.accept();
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.sessionImportPending === false);
+  await expect.poll(undoCount).toBe(0);
+  await expect(prefix).not.toHaveValue('unsaved-work');
+
+  // A Save is the new point: Load asks again only after a later change.
+  await prefix.fill('saved-work');
+  await prefix.press('Tab');
+  await expect.poll(undoCount).toBe(1);
+  const download = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Save Session', exact: true }).click();
+  await download;
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.sessionSavePending)).toBe(false);
+  const pickersBefore = pickers;
+  await loadButton.click();
+  await expect.poll(() => pickers).toBe(pickersBefore + 1);
+  await expect(confirm).toHaveCount(0);
+});

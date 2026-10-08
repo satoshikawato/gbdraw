@@ -391,3 +391,38 @@ test('docked search and controls remain reachable across Preview sizes and Edito
   await cdp.send('Emulation.clearDeviceMetricsOverride');
   await writeFile(testInfo.outputPath('docked-preview-matrix.json'), JSON.stringify(observations, null, 2));
 });
+
+// The Preview search belongs to the mode it was typed in (2026-10-05 re-audit):
+// switching modes neither carries the query into the other mode's Result nor
+// loses it, and a Session load starts with no search.
+test('the Preview feature search is kept per diagram mode', async ({ page }) => {
+  test.setTimeout(180000);
+  await page.setViewportSize({ width: 1440, height: 844 });
+  page.on('dialog', (dialog) => dialog.accept());
+  await openApp(page);
+  const session = join(process.cwd(), 'gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json');
+  await page.locator('input[accept^=".json,"]').setInputFiles(session);
+  await page.waitForFunction(() => window.__GBDRAW_APP__.results.length && window.__GBDRAW_APP__.extractedFeatures.length);
+  const search = page.getByRole('searchbox', { name: 'Search features', exact: true });
+  await search.fill('tRNA');
+  await search.press('Enter');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.previewFeatureSearchMatches.length)).toBeGreaterThan(1);
+  const searchState = () => page.evaluate(() => ({
+    input: window.__GBDRAW_APP__.previewFeatureSearchInput,
+    query: window.__GBDRAW_APP__.previewFeatureSearchQuery
+  }));
+
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
+  expect(await searchState()).toEqual({ input: '', query: '' });
+
+  await page.getByRole('button', { name: 'Circular', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('circular');
+  await expect(search).toHaveValue('tRNA');
+  expect(await searchState()).toEqual({ input: 'tRNA', query: 'tRNA' });
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_APP__.previewFeatureSearchMatches.length)).toBeGreaterThan(1);
+
+  await page.locator('input[accept^=".json,"]').setInputFiles(session);
+  await page.waitForFunction(() => !window.__GBDRAW_APP__.sessionImportPending && window.__GBDRAW_APP__.results.length);
+  await expect.poll(searchState).toEqual({ input: '', query: '' });
+});

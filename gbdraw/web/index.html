@@ -1386,7 +1386,7 @@
                     <button data-history-ignore @click="saveSessionWithTitle" :disabled="!sessionSaveAvailable" :aria-busy="sessionSavePending" class="app-config-button disabled:opacity-40 disabled:cursor-wait" title="Save the current Result and settings draft without generating" aria-label="Save Session" aria-describedby="session-save-help">
                         <i :class="sessionSavePending ? 'ph ph-spinner animate-spin' : 'ph ph-archive'" aria-hidden="true"></i> Save Session
                     </button>
-                    <button data-history-managed @click="$refs.sessionInput.click()" :disabled="!sessionLoadAvailable" :aria-busy="sessionImportPending" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" title="Load Session" aria-label="Load Session">
+                    <button data-history-managed @click="openSessionFilePicker" :disabled="!sessionLoadAvailable" :aria-busy="sessionImportPending" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" title="Load Session" aria-label="Load Session">
                         <i class="ph ph-archive-tray" aria-hidden="true"></i> Load Session
                     </button>
                     <input data-history-managed type="file" ref="sessionInput" accept=".json,.gz,application/json,application/gzip" class="hidden" @change="importSession">
@@ -7649,6 +7649,19 @@
                 </p>
             </section>
         </div>
+        <!-- UJ-09: loading a Session asks before it replaces unsaved work -->
+        <choice-dialog v-if="sessionReplaceDialog.show" labelledby="session-replace-title" describedby="session-replace-description"
+             @cancel="resolveSessionReplacement('cancel')" @keydown.tab="trapDialogFocus"
+             class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
+            <h2 id="session-replace-title" class="text-base font-bold text-slate-800">Replace the current work?</h2>
+            <p id="session-replace-description" class="mt-2 text-sm leading-relaxed text-slate-600">
+                Loading a Session replaces the current settings and Results and clears Undo history. Changes since the last Save Session or Load Session are lost.
+            </p>
+            <div class="mt-4 flex justify-end gap-2">
+                <button type="button" data-history-ignore @click="resolveSessionReplacement('cancel')" class="btn btn-secondary btn-sm">Cancel</button>
+                <button type="button" data-history-ignore @click="resolveSessionReplacement('load')" class="btn btn-primary btn-sm">{{ sessionReplaceDialog.actionLabel }}</button>
+            </div>
+        </choice-dialog>
         <!-- Q3: a layout edit that would leave lane Feature placements undrawable -->
         <div v-if="featurePlacementActions.layoutChange.open" class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4"
              @click.self="featurePlacementActions.resolveLayoutChange('cancel')" @keydown.esc.prevent.stop="featurePlacementActions.resolveLayoutChange('cancel')" @keydown.tab="trapDialogFocus">
