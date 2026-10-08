@@ -19,8 +19,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterator, Literal, Mapping, Sequence
 
 from gbdraw.exceptions import ValidationError
+from gbdraw.io.table_text import legacy_table_rows
 from gbdraw.render.output_paths import preflight_output_paths
 from gbdraw.session_io import (
+    CURRENT_AUTHORITY_SESSION_MIN_VERSION,
     CURRENT_SESSION_VERSION,
     CANONICAL_SESSION_MIN_VERSION,
     DEPTH_FILE_ENCODING,
@@ -342,6 +344,7 @@ class _SessionMaterializationContext(AbstractContextManager[MaterializedSession]
         )
         self._owner: tempfile.TemporaryDirectory[str] | None = None
         self._materialized: MaterializedSession | None = None
+        self._table_rows: AbstractContextManager[None] | None = None
 
     def __enter__(self) -> MaterializedSession:
         if self._materialized is not None:
@@ -369,6 +372,14 @@ class _SessionMaterializationContext(AbstractContextManager[MaterializedSession]
                 output_directory=self._output_directory,
                 _lifetime=_MaterializationLifetime(),
             )
+            # Sessions 31-39 read their Default colors, Label whitelist and
+            # Qualifier priority rows as the current writer writes them, as
+            # Web Load does (OV-148); the saved resource is not rewritten.
+            version = self._document.version
+            self._table_rows = legacy_table_rows(
+                CANONICAL_SESSION_MIN_VERSION <= version < CURRENT_AUTHORITY_SESSION_MIN_VERSION
+            )
+            self._table_rows.__enter__()
             return self._materialized
         except SessionError:
             self._cleanup_after_failed_enter()
@@ -382,6 +393,8 @@ class _SessionMaterializationContext(AbstractContextManager[MaterializedSession]
     def __exit__(self, exc_type, exc_value, traceback) -> Literal[False]:
         if self._materialized is not None:
             self._materialized._lifetime.active = False
+        if self._table_rows is not None:
+            self._table_rows.__exit__(None, None, None)
         if self._owner is None:
             return False
         try:

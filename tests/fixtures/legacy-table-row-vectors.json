@@ -1,0 +1,97 @@
+{
+  "description": "Sessions 31-39 stored the Default colors, Label whitelist and Qualifier priority tables as their Web writer wrote them, before cell values were normalized. Read from such a Session, each `text` reads as `repairedText` (the current writer's rows; a comment, blank or, for Default colors, `[` line is kept, a dropped row becomes a blank line) and lists `repairs` by 1-based line. A Default colors row whose color is outside the Default colors forms (tests/fixtures/default_color_domain.json) is dropped and listed as `invalid` (OV-272); a color name reads as its hex in the Web (OV-160). Readers: gbdraw/web/js/services/file-imports.js (`legacyRows`) and gbdraw/io/table_text.py (`repair_legacy_table_text`). `valid` reads the same with and without the repair (OV-40, OV-148).",
+  "cases": [
+    {
+      "name": "Label whitelist",
+      "table": "label-whitelist",
+      "columns": 3,
+      "text": "CDS\tproduct\tkinase\nCDS\tproduct\tDNA\t\tpolymerase \npolymerase\n\tproduct\tATP\nCDS\tproduct\t\n",
+      "repairedText": "CDS\tproduct\tkinase\nCDS\tproduct\tDNA polymerase\n\n\nCDS\tproduct\t\n",
+      "repairs": [
+        {
+          "row": 2,
+          "repair": "joined"
+        },
+        {
+          "row": 3,
+          "repair": "dropped"
+        },
+        {
+          "row": 4,
+          "repair": "dropped"
+        }
+      ],
+      "valid": "CDS\tproduct\tkinase"
+    },
+    {
+      "name": "Label whitelist of whitelist-tab-keyword.v39",
+      "table": "label-whitelist",
+      "columns": 3,
+      "text": "CDS\tproduct\tcytochrome\tc oxidase\n",
+      "repairedText": "CDS\tproduct\tcytochrome c oxidase\n",
+      "repairs": [
+        {
+          "row": 1,
+          "repair": "joined"
+        }
+      ],
+      "valid": "CDS\tproduct\tcytochrome c oxidase"
+    },
+    {
+      "name": "Qualifier priority",
+      "table": "qualifier-priority",
+      "columns": 2,
+      "text": "feature_type\tpriorities\nCDS\tgene,\tproduct\nrRNA\n\tproduct\ntRNA\t\n",
+      "repairedText": "feature_type\tpriorities\nCDS\tgene, product\n\n\n\n",
+      "repairs": [
+        {
+          "row": 2,
+          "repair": "joined"
+        },
+        {
+          "row": 3,
+          "repair": "dropped"
+        },
+        {
+          "row": 4,
+          "repair": "dropped"
+        },
+        {
+          "row": 5,
+          "repair": "dropped"
+        }
+      ],
+      "valid": "CDS\tgene,product"
+    },
+    {
+      "name": "Default colors",
+      "table": "default-colors",
+      "columns": 2,
+      "text": "feature_type\tcolor\n# note\n[palette]\nCDS\t#54bcf8\ntRNA\tred\t\nrRNA\n\tblue\nmisc_RNA\tnot-a-color\nmisc_feature\tcurrentColor\nncRNA\trgb(1, 2, 3)\n",
+      "repairedText": "feature_type\tcolor\n# note\n[palette]\nCDS\t#54bcf8\ntRNA\tred\n\n\n\n\nncRNA\trgb(1, 2, 3)\n",
+      "repairs": [
+        {
+          "row": 5,
+          "repair": "joined"
+        },
+        {
+          "row": 6,
+          "repair": "dropped"
+        },
+        {
+          "row": 7,
+          "repair": "dropped"
+        },
+        {
+          "row": 8,
+          "repair": "invalid"
+        },
+        {
+          "row": 9,
+          "repair": "invalid"
+        }
+      ],
+      "valid": "CDS\t#54bcf8"
+    }
+  ]
+}

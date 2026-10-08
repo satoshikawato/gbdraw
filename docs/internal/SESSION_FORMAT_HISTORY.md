@@ -112,10 +112,12 @@ them: the extra cells of a row join its last column with one space, and a row
 without its required columns is dropped (`feature_type` and `qualifier` for
 Label whitelist, `feature_type` and `priorities` for Qualifier priority, and
 `feature_type` and a color for Default colors). The Load notice names each
-table and line read this way. Sessions 40 and later are read as before, and
-table file imports and CLI replay (`--session`) still reject such a row. When
-another table of a Session fails to load, the message names the table, for
-example `Session table: Specific colors.`
+table and line read this way. CLI replay and re-save (`--session`,
+`gbdraw render --session`) and `upgrade_session_document` read them the same
+way and log a warning that names the lines; a re-saved Session holds the table
+as read. Sessions 40 and later are read as before, and table file imports
+still reject such a row. When another table of a Session fails to load, the
+message names the table, for example `Session table: Specific colors.`
 
 ## Unreleased: Session 46 and Web feature edits by source identity
 

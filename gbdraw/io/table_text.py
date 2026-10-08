@@ -12,7 +12,10 @@ from __future__ import annotations
 import csv
 import io
 import logging
-from typing import Any
+import re
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any, Callable, Iterator, NamedTuple, Sequence
 
 import pandas as pd
 
@@ -44,12 +47,98 @@ def table_text_stream(lines: list[str]) -> io.StringIO:
     return io.StringIO("".join(lines))
 
 
+class LegacyRows(NamedTuple):
+    """How a Session 31-39 table reads a row: the cells it requires, whether ``[`` lines are
+    skipped, and which complete rows hold valid values (``None``: every one)."""
+
+    complete: Callable[[Sequence[str]], bool]
+    skips_sections: bool = False
+    valid: Callable[[Sequence[str]], bool] | None = None
+
+
+# Sessions 31-39 stored the Default colors, Label whitelist and Qualifier
+# priority tables as their Web writer wrote them, before cell values were
+# normalized: a tab in a value made extra cells and a line break a short row.
+# While such a Session is read (`legacy_table_rows`), these tables read a row as
+# the current writer writes it, as Web Load does (services/file-imports.js
+# `tableCells`, OV-40): the extra cells join the last cell with one space, and a
+# row without its required cells is dropped. A Default colors row whose color is
+# outside the Default colors forms is dropped too and listed as invalid, as Web
+# Load does (`parseColorTable`, OV-272). The resource bytes stay as saved.
+def _keyed_row(cells: Sequence[str]) -> bool:
+    return bool(cells[0] and cells[1])
+
+
+def _default_colors_row_valid(cells: Sequence[str]) -> bool:
+    """The ``feature_type<TAB>color`` header, or a row with a documented user color."""
+
+    from .colors import is_user_color  # colors.py reads its tables through this module
+
+    key, color = cells[0], cells[1]
+    return (key.lower() == "feature_type" and color.lower() == "color") or is_user_color(color)
+
+
+LEGACY_TABLE_ROWS = {
+    "label-whitelist": LegacyRows(_keyed_row),
+    "qualifier-priority": LegacyRows(_keyed_row),
+    "default-colors": LegacyRows(_keyed_row, skips_sections=True, valid=_default_colors_row_valid),
+}
+_READS_LEGACY_TABLE_ROWS: ContextVar[bool] = ContextVar("gbdraw_legacy_table_rows", default=False)
+
+
+@contextmanager
+def legacy_table_rows(active: bool) -> Iterator[None]:
+    """Read the tables of :data:`LEGACY_TABLE_ROWS` as Session 31-39 tables while ``active``."""
+
+    token = _READS_LEGACY_TABLE_ROWS.set(active or _READS_LEGACY_TABLE_ROWS.get())
+    try:
+        yield
+    finally:
+        _READS_LEGACY_TABLE_ROWS.reset(token)
+
+
+def repair_legacy_table_text(
+    text: str, rows: LegacyRows, *, columns: int
+) -> tuple[str, list[dict[str, Any]]]:
+    """Return the table as the current writer writes it and its repaired rows by 1-based line.
+
+    A blank, comment or skipped section line stays; a dropped row becomes a blank
+    line, so later line numbers still match the file.
+    """
+
+    lines: list[str] = []
+    repairs: list[dict[str, Any]] = []
+    for row, line in enumerate(text.split("\n"), start=1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or (rows.skips_sections and stripped.startswith("[")):
+            lines.append(line)
+            continue
+        parts = line.rstrip("\r").split("\t")
+        cells = [
+            re.sub(r"[\t\r\n]+", " ", cell).strip()
+            for cell in (*parts[: columns - 1], "\t".join(parts[columns - 1 :]))
+        ]
+        if len(parts) < columns or not rows.complete(cells):
+            repairs.append({"row": row, "repair": "dropped"})
+            lines.append("")
+            continue
+        if len(parts) > columns:
+            repairs.append({"row": row, "repair": "joined"})
+        if rows.valid is not None and not rows.valid(cells):
+            repairs.append({"row": row, "repair": "invalid"})
+            lines.append("")
+            continue
+        lines.append("\t".join(cells))
+    return "\n".join(lines), repairs
+
+
 def read_literal_table(
     source: Any,
     *,
     names: list[str],
     label: str,
     filepath: str | None = None,
+    legacy_rows: LegacyRows | None = None,
     **options: Any,
 ) -> pd.DataFrame:
     """Read a tab-separated styling table; every cell is text and a ``"`` is a plain character.
@@ -61,6 +150,8 @@ def read_literal_table(
     otherwise take the extra leading cells as an index and read the row shifted. A row
     with fewer cells is left to the caller's missing-value check. ``label`` names the
     table in the message and ``filepath`` names the file when ``source`` is a stream.
+    Within :func:`legacy_table_rows`, a table with ``legacy_rows`` is first read as
+    :func:`repair_legacy_table_text` returns it, and its repaired rows are logged.
     ``options`` are further ``pandas.read_csv`` options and may replace the defaults (the
     python engine, an error on a row with the wrong number of fields).
     """
@@ -69,6 +160,19 @@ def read_literal_table(
     else:
         filepath = str(source)
         text = "".join(read_table_lines(filepath))
+    if legacy_rows is not None and _READS_LEGACY_TABLE_ROWS.get():
+        text, repairs = repair_legacy_table_text(text, legacy_rows, columns=len(names))
+        for kind, reason in (
+            ("joined", "had extra cells, joined into the last column with one space"),
+            ("dropped", "lacked a required column and were dropped"),
+            ("invalid", "had a value outside the documented forms and were dropped"),
+        ):
+            lines = [str(repair["row"]) for repair in repairs if repair["repair"] == kind]
+            if lines:
+                logger.warning(
+                    f"WARNING: The {label} '{filepath}' of a Session 31-39 was read as the "
+                    f"current version writes it: line(s) {', '.join(lines)} {reason}."
+                )
     rows = [
         (line_no, raw_line)
         for line_no, raw_line in enumerate(text.split("\n"), start=1)

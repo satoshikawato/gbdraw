@@ -335,3 +335,26 @@ def test_a_resave_prints_the_results_the_upgrade_drops(tmp_path: Path) -> None:
     ) in result.stdout.splitlines()
     resaved = load_session_document(tmp_path / "crop.gbdraw-session.json").to_dict()
     assert [entry["name"] for entry in resaved["results"]] == ["crop"]
+
+
+def test_a_resave_reads_session_39_table_rows_as_the_current_writer_writes_them(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    # OV-148: the Session 39 Label whitelist row has four cells (a tab typed in
+    # the keyword). It is read as the current writer writes it, as Web Load reads
+    # it, and the re-save holds the table it read, so the 46 reads it again.
+    source = SESSION_FIXTURES / "whitelist-tab-keyword.v39.gbdraw-session.json.gz"
+    render_main(["--session", str(source), "-o", str(tmp_path / "fig"), "-f", "svg", "--save_session"])
+
+    assert _svgs(tmp_path) == ["fig.svg"]
+    assert "cytochrome c oxidase" in (tmp_path / "fig.svg").read_text(encoding="utf-8")
+    assert "line(s) 1 had extra cells, joined into the last column with one space" in caplog.text
+    resaved = load_session_document(tmp_path / "fig.gbdraw-session.json").to_dict()
+    assert resaved["version"] == CURRENT_SESSION_VERSION
+    assert base64.b64decode(resaved["resources"]["label-whitelist-table"]["data"]).decode() == (
+        "feature_type\tqualifier\tkeyword\nCDS\tproduct\tcytochrome c oxidase\n"
+    )
+    caplog.clear()
+    render_main(["--session", str(tmp_path / "fig.gbdraw-session.json"), "-o", str(tmp_path / "again"), "-f", "svg"])
+    assert (tmp_path / "again.svg").read_bytes() == (tmp_path / "fig.svg").read_bytes()
+    assert "had extra cells" not in caplog.text

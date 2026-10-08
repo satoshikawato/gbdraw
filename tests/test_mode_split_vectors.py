@@ -26,7 +26,6 @@ from typing import Any
 
 import pytest
 
-from gbdraw.exceptions import ParseError
 from gbdraw.session_io import (
     expand_session_feature_catalog,
     migrate_session_flat_draft,
@@ -161,9 +160,6 @@ _TWO_MODE_FIXTURES = {
     "inactive-class-m.v44.gbdraw-session.json.gz": ("linear", {"rows"}),
     "two-mode-thresholds.v42.gbdraw-session.json.gz": ("circular", {"rows"}),
 }
-# OV-148: the Session 31-39 table-row repair (Web file-imports.js) has no
-# Python twin yet, so the upgrade reads the saved Label whitelist as written.
-_UPGRADE_FAILS = {"whitelist-tab-keyword.v39.gbdraw-session.json.gz"}
 _FIXTURE_VECTORS = {case["fixture"]: case for case in CASES if "fixture" in case and "omit" not in case}
 
 
@@ -243,11 +239,6 @@ def test_the_27_44_chain_composes_to_one_drawing_and_carries_drawing_b(fixture: 
             (mode_a, DRAWING_NAMES[mode_a], None)
         ]
         return
-    if name in _UPGRADE_FAILS:
-        with pytest.raises(ParseError, match="Malformed line in filter list file"):
-            upgrade_session_document(REPO_ROOT / fixture, temporary_directory=tmp_path)
-        return
-
     upgraded = upgrade_session_document(REPO_ROOT / fixture, temporary_directory=tmp_path).document.to_dict()
 
     assert upgraded["version"] == 46

@@ -19,7 +19,7 @@ from pandas import DataFrame
 
 from ..core.color import normalize_hex_color
 from ..exceptions import InputFileError, ParseError, ValidationError
-from .table_text import read_literal_table
+from .table_text import LEGACY_TABLE_ROWS, read_literal_table
 
 logger = logging.getLogger(__name__)
 
@@ -309,6 +309,7 @@ def load_default_colors(
                     user_defined_default_colors,
                     names=column_names,
                     label="default colors file",
+                    legacy_rows=LEGACY_TABLE_ROWS["default-colors"],
                     engine="c",
                 ).set_index("feature_type")
             )
