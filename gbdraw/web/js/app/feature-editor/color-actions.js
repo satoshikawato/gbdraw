@@ -119,11 +119,6 @@ export const createFeatureColorActions = ({
       args.forEach((arg) => Array.isArray(arg) ? arg.forEach(add) : add(arg));
       add(clickedFeature.value?.feat);
       add(featureStyleScopeDialog.feat);
-      for (const feature of [...targets]) {
-        findFeaturesWithSameLegendItem(feature).forEach(add);
-        findFeaturesWithSameDisplayedLabel(feature).forEach(add);
-        findFeaturesWithSameIndividualLabel(feature).forEach(add);
-      }
       const candidates = [...drawing.manualSpecificRules];
       targets.forEach((feature) => {
         const hash = getFeatureQualifier(feature);
