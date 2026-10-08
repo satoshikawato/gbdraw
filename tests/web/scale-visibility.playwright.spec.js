@@ -247,6 +247,7 @@ test('Arrow controls render in both modes and survive a session round trip', asy
       type: 'text/plain',
       lastModified: 32
     }));
+    app.adv.features.splice(0, app.adv.features.length, 'CDS');
     Object.assign(app.form, {
       show_gc: false,
       show_skew: false,
@@ -256,11 +257,19 @@ test('Arrow controls render in both modes and survive a session round trip', asy
     await window.Vue.nextTick();
   }, genbank);
 
-  expect(await page.evaluate(() => ({
+  // Arrow settings are per mode (PD-OI-086): Linear starts at the defaults,
+  // and its controls set its own values.
+  const arrowSettings = () => page.evaluate(() => ({
     shape: window.__GBDRAW_APP__.adv.feature_shapes.CDS,
     head: window.__GBDRAW_APP__.adv.arrow_head_length_ratio,
     shaft: window.__GBDRAW_APP__.adv.arrow_shaft_width_ratio
-  }))).toEqual({ shape: 'arrow', head: 1.25, shaft: 0.25 });
+  }));
+  expect(await arrowSettings()).toEqual({ shape: 'arrow', head: null, shaft: 1 });
+  await expect(rendering).toHaveValue('arrow');
+  await expect(shaftRatio).toHaveValue('1');
+  await headRatio.fill('1.25');
+  await shaftRatio.fill('0.25');
+  expect(await arrowSettings()).toEqual({ shape: 'arrow', head: 1.25, shaft: 0.25 });
   expect(await runDiagram(page)).toEqual({
     result: { status: 'ok' },
     errorSummary: '',
@@ -328,6 +337,11 @@ test('Arrow controls render in both modes and survive a session round trip', asy
   expect(await page.evaluate((expectedPath) => (
     String(window.__GBDRAW_APP__.results?.[0]?.content || '').includes(expectedPath)
   ), linearGeometry.d)).toBe(true);
+  await page.evaluate(async () => {
+    window.__GBDRAW_APP__.setDiagramMode('circular');
+    await window.Vue.nextTick();
+  });
+  expect(await arrowSettings()).toEqual({ shape: 'arrow', head: 1.25, shaft: 0.25 });
 
   expect(await page.evaluate(() => {
     const originalConfirm = window.confirm;
