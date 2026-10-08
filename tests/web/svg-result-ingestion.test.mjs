@@ -1149,12 +1149,13 @@ test('Load records Python\'s paint on a Session 44 Result', () => {
 // prepared matches), and Feature visibility with Generate's precedence, so every
 // feature and Legend row fill the displayed Result shows is an operation.
 const previewFeature = (admission) => admission.renderedFeaturesByResult[0].get('f0001');
-const previewPlan = (admission, { paletteColors = { CDS: '#aaaaaa' }, drawnContext = null, ...options } = {}) => (
+const PREVIEW_DOMAINS = ['featureFills', 'featureVisibility', 'legendFills'];
+const previewPlan = (admission, { paletteColors = { CDS: '#aaaaaa' }, drawnContext = null, domains = PREVIEW_DOMAINS, ...options } = {}) => (
   compileDirectEditorMutationPlan({
     catalogAdmission: admission,
     legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' }],
     originalLegendOrder: ['CDS'],
-    livePreview: { paletteColors, drawnContext },
+    livePreview: { domains, paletteColors, drawnContext },
     ...options
   }).operationsByResult[0]
 );
@@ -1167,8 +1168,8 @@ test('live fills follow override > rule > palette > what Python drew', () => {
   const fills = (options) => previewPlan(admission, options).featureFills.map(({ color }) => color);
   assert.deepEqual(fills(), [], 'the palette Python drew needs no operation');
   assert.deepEqual(fills({ paletteColors: { CDS: '#00ff00' } }), ['#00ff00']);
-  assert.deepEqual(fills({ paletteColors: { CDS: '#00ff00' }, manualSpecificRules: [rule] }), [],
-    'a feature whose rule match is not known keeps what Python drew');
+  assert.deepEqual(fills({ paletteColors: { CDS: '#00ff00' }, manualSpecificRules: [rule] }), [null],
+    'a feature whose rule match is not known keeps the fill the Result shows');
   recordRuleMatches([previewFeature(admission)], [ruleKey(rule)], () => ({ matched: [0], priorities: [0], declined: [] }));
   assert.deepEqual(fills({ paletteColors: { CDS: '#00ff00' }, manualSpecificRules: [rule] }), ['#ff0000']);
   assert.deepEqual(fills({
@@ -1205,6 +1206,101 @@ test('a Legend fill reconcile shows the rule or palette color of a row whose own
   assert.equal(featureFill(mounted), '#aaaaaa');
 });
 
+// Review U2b #1: a live rename rewrites the shown row's key, so a palette or
+// rule reconcile finds the row under its new key and keeps its Legend color or
+// shows the new palette color, as Generate draws the renamed row.
+test('a Legend fill reconcile reaches a row renamed live', () => {
+  const { admission } = currentFixture();
+  const renamed = { legendEntries: [{ caption: 'Proteins', originalCaption: 'CDS', color: '#aaaaaa' }] };
+  const mounted = buildSvgRoot();
+  reconcileMountedResult(mounted, previewPlan(admission, { legendColorOverrides: { CDS: '#ff0000' } }), { domains: ['legendFills'] });
+  mounted.querySelector('g[data-legend-key]').setAttribute('data-legend-key', 'Proteins');
+  reconcileMountedResult(mounted, previewPlan(admission, {
+    ...renamed, legendColorOverrides: { Proteins: '#ff0000' }, paletteColors: { CDS: '#00ff00' }
+  }), { domains: ['featureFills', 'legendFills'] });
+  assert.equal(swatchFill(mounted), '#ff0000', 'the renamed row keeps its Legend color');
+  const palette = buildSvgRoot();
+  reconcileMountedResult(palette, previewPlan(admission, { paletteColors: { CDS: '#00ff00' } }), { domains: ['legendFills'] });
+  palette.querySelector('g[data-legend-key]').setAttribute('data-legend-key', 'Proteins');
+  reconcileMountedResult(palette, previewPlan(admission, { ...renamed, paletteColors: { CDS: '#0000ff' } }), { domains: ['legendFills'] });
+  assert.equal(swatchFill(palette), '#0000ff', 'the renamed row shows the current palette color');
+});
+
+// Review U2b #5: a rule whose match is not known (pending or declined) keeps
+// the palette paint the Result shows, as the painter before U2b did.
+test('a feature fill reconcile keeps the shown palette paint while a rule match is unknown', () => {
+  const { admission } = currentFixture();
+  const mounted = buildSvgRoot();
+  reconcileMountedResult(mounted, previewPlan(admission, { paletteColors: { CDS: '#00ff00' } }), { domains: ['featureFills'] });
+  assert.equal(featureFill(mounted), '#00ff00');
+  const declined = { feat: 'CDS', qual: 'location', val: '1..9', cap: 'Declined', color: '#ff0000' };
+  recordRuleMatches([previewFeature(admission)], [ruleKey(declined)], () => ({ matched: [], priorities: [], declined: [0] }));
+  reconcileMountedResult(mounted, previewPlan(admission, { paletteColors: { CDS: '#00ff00' }, manualSpecificRules: [declined] }), { domains: ['featureFills'] });
+  assert.equal(featureFill(mounted), '#00ff00', 'the palette paint stays');
+});
+
+// The work guard (allowlist): each edit kind compiles exactly the stages its
+// shown domains need, read through the compile's structural metric. Any stage
+// not listed fails, and a stroke edit reads no specific-color rule match.
+// Domains as app/app-setup.js names them for each edit kind.
+const STROKES = ['featureStrokes', 'legendStrokes'];
+const FILLS = ['featureFills', 'legendFills'];
+const LEGEND_STRUCTURE = ['legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder'];
+const EDIT_KIND_STAGES = [
+  ['feature stroke (popup)', STROKES, ['strokes']],
+  ['Legend row stroke', STROKES, ['strokes']],
+  ['Legend row color (no rule)', ['legendFills'], ['legendFills']],
+  ['palette change', FILLS, ['fills', 'rules', 'legendFills']],
+  ['color rule commit', FILLS, ['fills', 'rules', 'legendFills']],
+  ['Feature visibility edit', ['featureVisibility'], ['visibility']],
+  ['History step of a Legend row stroke and color', [...FILLS, ...STROKES], ['fills', 'rules', 'legendFills', 'strokes']],
+  ['Result display, every paint domain changed', [...LEGEND_STRUCTURE, ...FILLS, 'featureVisibility', ...STROKES],
+    ['legend', 'fills', 'rules', 'legendFills', 'visibility', 'strokes']],
+  ['Result display, nothing changed', LEGEND_STRUCTURE, ['legend']],
+  ['Generate', null, ['fills', 'visibility', 'labels', 'legend', 'legendFills', 'strokes']]
+];
+test('each edit kind runs exactly the compile stages of its allowlist', () => {
+  const { admission } = currentFixture();
+  const feature = previewFeature(admission);
+  const rule = { feat: 'CDS', qual: 'gene', val: 'x', cap: 'Rule row', color: '#ff0000' };
+  recordRuleMatches([feature], [ruleKey(rule)], () => ({ matched: [], priorities: [], declined: [] }));
+  // A feature's rule match results are read through its raw object
+  // (services/rule-matchers.js), so a read of this feature's results counts.
+  let ruleReads = 0;
+  const vue = globalThis.window.Vue;
+  const toRaw = vue.toRaw;
+  vue.toRaw = (value) => { if (value === feature) ruleReads += 1; return toRaw(value); };
+  const key = biologicalFeatureKey('record-a', 'feature-a');
+  const context = { featureOverrides: {}, rules: [], selectedTypes: new Set(['CDS']), colorRules: [rule] };
+  const metrics = [];
+  const hooks = globalThis.__GBDRAW_TEST_HOOKS__;
+  globalThis.__GBDRAW_TEST_HOOKS__ = { onStructuralMetric: (metric) => metrics.push(metric) };
+  try {
+    for (const [kind, domains, allowed] of EDIT_KIND_STAGES) {
+      metrics.length = 0;
+      ruleReads = 0;
+      compileDirectEditorMutationPlan({
+        catalogAdmission: admission,
+        featureStrokeOverrides: { [key]: { strokeColor: '#e63946' } },
+        featureOverrides: { [key]: { recordKey: 'record-a', biologicalFeatureId: 'feature-a', featureVisibility: 'off', labelText: 'x' } },
+        legendEntries: [{ caption: 'Proteins', originalCaption: 'CDS', color: '#aaaaaa' }],
+        originalLegendOrder: ['CDS'],
+        legendColorOverrides: { Proteins: '#334455' },
+        legendStrokeOverrides: { Proteins: { strokeColor: '#e63946' } },
+        manualSpecificRules: [rule],
+        livePreview: domains && { domains, paletteColors: { CDS: '#00ff00' }, drawnContext: context, shownFills: () => new Map() }
+      });
+      assert.equal(ruleReads > 0, allowed.includes('rules'), `${kind}: a specific-color rule match is read only by the rules stage`);
+      const compiles = metrics.filter(({ name }) => name === 'editorPlanCompile');
+      assert.equal(compiles.length, 1, `${kind}: one compile`);
+      assert.deepEqual(new Set(compiles[0].stages), new Set(allowed), `${kind}: the stages of its allowlist`);
+    }
+  } finally {
+    globalThis.__GBDRAW_TEST_HOOKS__ = hooks;
+    vue.toRaw = toRaw;
+  }
+});
+
 // A Result without a feature catalog (a Session older than 40) is reached
 // through the features read from it, so live edits still show.
 test('a Result without a feature catalog receives the editor operations of its features', () => {
@@ -1213,7 +1309,7 @@ test('a Result without a feature catalog receives the editor operations of its f
   const operations = compileDirectEditorMutationPlan({
     catalogAdmission: addressing,
     featureStrokeOverrides: { [featureOverrideKey(feature)]: { strokeColor: '#e63946', strokeWidth: 3 } },
-    livePreview: { paletteColors: { CDS: '#00ff00' }, drawnContext: null }
+    livePreview: { domains: ['featureStrokes', 'featureFills'], paletteColors: { CDS: '#00ff00' }, drawnContext: null }
   }).operationsByResult[0];
   const mounted = buildSvgRoot();
   reconcileMountedResult(mounted, operations, { domains: ['featureStrokes', 'featureFills'] });
@@ -1233,7 +1329,7 @@ test('a Result without a feature catalog takes Python\'s fills from the displaye
     catalogAdmission: displayedFeatureAddressing([feature], ['diagram.svg'], 0, mounted),
     legendEntries: [{ caption: 'CDS', color: '#aaaaaa' }],
     legendStrokeOverrides: { CDS: { strokeColor: '#e63946' } },
-    livePreview: { paletteColors: { CDS: '#AAAAAA' }, drawnContext: null }
+    livePreview: { domains: ['featureFills', 'legendStrokes'], paletteColors: { CDS: '#AAAAAA' }, drawnContext: null }
   }).operationsByResult[0];
   assert.deepEqual(operations.featureFills, []);
   assert.deepEqual(operations.legendStrokes.map(({ renderedIds }) => renderedIds), [['f0001']]);

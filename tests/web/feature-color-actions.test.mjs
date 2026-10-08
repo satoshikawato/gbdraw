@@ -174,13 +174,16 @@ const actions = createFeatureColorActions({
       legendEntries.value = intents.map(entry=>({...entry}));
       for (const feature of extractedFeatures.value) {
         const rule=firstMatchingRule(feature,manualSpecificRules);
-        if(rule) {
-          featureColorOverrides[featureOverrideKey(feature)]={color:rule.color,caption:rule.cap};
-          applyRulePreviewFill(feature.svg_id, rule.color);
-        }else delete featureColorOverrides[featureOverrideKey(feature)];
+        if(rule) featureColorOverrides[featureOverrideKey(feature)]={color:rule.color,caption:rule.cap};
+        else delete featureColorOverrides[featureOverrideKey(feature)];
+      }
+      afterCommit(intents);
+      // As `commitOnce`: the fills show after `afterCommit`, at the end of the step.
+      for (const feature of extractedFeatures.value) {
+        const rule=firstMatchingRule(feature,manualSpecificRules);
+        if(rule) applyRulePreviewFill(feature.svg_id, rule.color);
       }
       applySpecificRulesCount++;
-      afterCommit(intents);
       return true;
     },
     countFeaturesMatchingRule: () => 0,

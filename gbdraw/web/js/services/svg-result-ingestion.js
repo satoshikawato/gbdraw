@@ -52,6 +52,7 @@ const text = (value) => String(value ?? '').trim();
 /**
  * One Result's compiled editor operations. The planner is app/candidate-render.js;
  * this module declares the shape it applies.
+ * A live feature fill of `color: null` keeps the fill the Result shows.
  * @typedef {Record<
  *   'featureFills' | 'featureStrokes' | 'featureVisibility' | 'labelText' | 'labelVisibility'
  *   | 'legendFills' | 'legendStrokes' | 'legendRenames' | 'legendDeletes' | 'legendAdds' | 'legendOrder',
@@ -445,6 +446,17 @@ const removeAttributeIfPresent = (element, name) => {
   return true;
 };
 
+// An operation that keeps what the Result shows (a live value not known yet)
+// still claims the attribute, so a reconcile leaves it as it is.
+/**
+ * @param {{ painted: Map<Element, Set<string>> }} index
+ * @param {Element} element
+ * @param {string} name
+ */
+const keepPaintAttribute = (index, element, name) => {
+  index.painted.set(element, (index.painted.get(element) || new Set()).add(name));
+};
+
 // A paint attribute the executor changes keeps Python's value beside it
 // (`resultBaseAttribute`), recorded on the first change. The index notes
 // each attribute an operation sets, so a reconcile leaves it alone.
@@ -455,8 +467,7 @@ const removeAttributeIfPresent = (element, name) => {
  * @param {string | number | null} value null removes the attribute.
  */
 const setPaintAttribute = (index, element, name, value) => {
-  const painted = index.painted.get(element) || new Set();
-  index.painted.set(element, painted.add(name));
+  keepPaintAttribute(index, element, name);
   const current = element.getAttribute(name);
   const next = value === null ? null : String(value);
   if (current === next) return false;
@@ -603,7 +614,9 @@ const applyFeatureOperations = (index, operations) => {
     if (targets.length === 0) {
       throw new Error('Sanitized SVG content is missing a rendered Feature fill target.');
     }
-    targets.forEach((element) => setPaintAttribute(index, element, 'fill', color));
+    targets.forEach((element) => (color === null
+      ? keepPaintAttribute(index, element, 'fill')
+      : setPaintAttribute(index, element, 'fill', color)));
   });
   operations.featureStrokes.forEach(({ renderedId, strokeColor, strokeWidth }) => {
     requireFeatureElements(index, renderedId).forEach((element) => {
@@ -726,11 +739,19 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
     featureVisibility: operations.featureVisibility.filter(present)
   });
   if (index.legends().groups.length > 0) {
+    // A live rename rewrites a shown row's key (`data-legend-key`), so a row
+    // the operations name by Python's caption is found under its new one
+    // (`renamedCaption`) when the Result shows it renamed.
     const allowMissing = (operation) => ({ ...operation, allowMissing: true });
+    const onShownRow = ({ renamedCaption = '', ...operation }) => ({
+      ...operation,
+      caption: renamedCaption && !index.legends().entries.has(operation.caption) ? renamedCaption : operation.caption,
+      allowMissing: true
+    });
     applyLegendOperations(index, {
-      legendFills: operations.legendFills.map(allowMissing),
+      legendFills: operations.legendFills.map(onShownRow),
       legendStrokes: operations.legendStrokes.map((operation) => ({
-        ...allowMissing(operation),
+        ...onShownRow(operation),
         renderedIds: (operation.renderedIds || []).filter((renderedId) => present({ renderedId }))
       })),
       legendRenames: operations.legendRenames.map(allowMissing),

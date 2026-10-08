@@ -32,6 +32,7 @@ const visibilityPort = (state, getCommittedRequest, show, addressing = () => dis
   const hidden = new Set(compileDirectEditorMutationPlan({
     catalogAdmission,
     livePreview: {
+      domains,
       paletteColors: {},
       drawnContext: featureDrawnContext(state.activeDrawing(), { diagramOptions: getCommittedRequest()?.diagramOptions })
     }

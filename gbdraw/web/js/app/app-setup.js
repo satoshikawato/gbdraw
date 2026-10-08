@@ -18,7 +18,7 @@ import {
 import { drawnBlockStroke, isLegendOrderEdited } from '../services/legend-svg.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
-import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
+import { displayedFeatureAddressing, drawnFeatureFills } from '../services/feature-override-identity.js';
 import { createDefaultLosatpHitLimits } from '../services/session-active-config-contract.js';
 import { createRecordDisplayControls } from './record-display-options.js';
 import { isCurrentFeature } from '../services/feature-identity.js';
@@ -1469,13 +1469,16 @@ export const createAppSetup = () => {
   // one call of their projection, shared by `projectMountedEditorIntent`, the
   // palette watcher, and a rule commit. It prepares the rule matches first
   // unless the caller prepared them (`prepareRules: false`, which applies at
-  // once), and resolves to false when the rules changed meanwhile. The style
-  // owner paints the tracks; feature and Legend row fills show through the
-  // port, compiled with Generate's precedence.
-  const projectPaletteAndRules = ({ recolor = {}, prepareRules = true } = {}) => {
+  // once), and resolves to false when the rules changed meanwhile or a Session
+  // operation is in progress (the Result stays as it is, tracks and features
+  // alike). The style owner paints the tracks; feature and Legend row fills
+  // show through the port, compiled with Generate's precedence, unless the
+  // caller shows them in its own compile (`show: false`).
+  const projectPaletteAndRules = ({ recolor = {}, prepareRules = true, show = true } = {}) => {
     const project = () => {
+      if (sessionOperationAvailability()) return false;
       svgActions.applyPaletteToSvg(recolor);
-      showEditorIntent({ domains: FILL_DOMAINS });
+      if (show) showEditorIntent({ domains: FILL_DOMAINS });
       return true;
     };
     return prepareRules
@@ -3193,14 +3196,18 @@ export const createAppSetup = () => {
   // inventory; a newly displayed Result receives the diagram-wide Legend
   // operations Generate applies. A loaded table (`reflow`) also places the
   // labels, as a visibility edit does. The palette and the rules (`colors`)
-  // project through `projectPaletteAndRules`. Strokes and Legend row colors
-  // show through `showEditorIntent`.
+  // and the visibility prepare their matches through their projections; the
+  // fills, the visibility, and the other paint `domains` of the step then show
+  // in one compile through `showEditorIntent`, or in the caller's (`show:
+  // false`). Resolves to the domains shown, or false when the palette and
+  // rules did not project (rules changed meanwhile, or a Session operation).
   /**
    * @param {{
    *   colors?: boolean, prepareRules?: boolean, visibility?: boolean, rerender?: boolean,
-   *   reflow?: boolean, labels?: boolean,
+   *   reflow?: boolean, labels?: boolean, domains?: readonly string[], show?: boolean,
    *   legend?: Parameters<typeof reconcileLegendEntries>[0] | null
    * }} [options]
+   * @returns {Promise<string[] | false>}
    */
   const projectMountedEditorIntent = async ({
     colors = false,
@@ -3209,13 +3216,17 @@ export const createAppSetup = () => {
     rerender = false,
     reflow = false,
     legend = null,
-    labels = false
+    labels = false,
+    domains = [],
+    show = true
   } = {}) => {
-    if (colors && !await projectPaletteAndRules({ prepareRules })) return false;
-    if (visibility) await projectFeatureVisibility({ rerender, reflow });
+    if (colors && !await projectPaletteAndRules({ prepareRules, show: false })) return false;
+    if (visibility) await projectFeatureVisibility({ rerender, reflow, show: false });
     if (legend) reconcileLegendEntries(legend);
     if (labels) reconcileLabelOverrides();
-    return true;
+    const shown = [...new Set([...(colors ? FILL_DOMAINS : []), ...(visibility ? VISIBILITY_DOMAINS : []), ...domains])];
+    if (show && shown.length > 0) showEditorIntent({ domains: shown });
+    return shown;
   };
 
   /**
@@ -3268,11 +3279,10 @@ export const createAppSetup = () => {
               : _intent.editorState.legend.entries
           }
         : null,
-      labels: changedDomains.has('features') || editorState
+      labels: changedDomains.has('features') || editorState,
+      domains: editorPaintDomains(changes)
     });
     if (!projected) return;
-    const paintDomains = editorPaintDomains(changes);
-    if (paintDomains.length) showEditorIntent({ domains: paintDomains });
     await nextTick();
     // The restored form decides which track groups the mounted Result shows.
     // The visibility watcher is suppressed while a step restores files (a Depth
@@ -3366,19 +3376,20 @@ export const createAppSetup = () => {
   /**
    * @param {DrawingState} drawing
    * @param {number} resultIndex
-   * @param {{ replayDefaultLegendOrder?: string[] | null, preview?: boolean }} [options] `preview`
-   *   false compiles only the edits Python does not draw, as Generate does.
+   * @param {{ replayDefaultLegendOrder?: string[] | null, domains?: readonly string[] | null }} [options]
+   *   The operation domains the displayed Result shows, previewed live and compiled alone; null
+   *   compiles the edits Python does not draw, as Generate does.
    */
-  const compileDisplayedResultOperations = (drawing, resultIndex, { replayDefaultLegendOrder = null, preview = true } = {}) => {
+  const compileDisplayedResultOperations = (drawing, resultIndex, { replayDefaultLegendOrder = null, domains = null } = {}) => {
     const catalog = toRaw(state.featureCatalog.value);
+    const svg = svgContainer.value?.querySelector?.('svg') || null;
     // A Result without a catalog (a Session older than 40) is reached through
     // the features read from it and the fills it draws.
     const plan = compileDirectEditorMutationPlan({
       catalogAdmission: catalog
         ? admitFeatureCatalog(catalog, toRaw(results.value), { mode: state.generatedMode.value })
         : displayedFeatureAddressing(
-          toRaw(extractedFeatures.value) || [], results.value.map((result) => result?.name), resultIndex,
-          svgContainer.value?.querySelector?.('svg') || null
+          toRaw(extractedFeatures.value) || [], results.value.map((result) => result?.name), resultIndex, svg
         ),
       featureColorOverrides: drawing.featureColorOverrides,
       featureStrokeOverrides: drawing.featureStrokeOverrides,
@@ -3392,19 +3403,23 @@ export const createAppSetup = () => {
       legendStrokeOverrides: drawing.legendStrokeOverrides,
       manualSpecificRules: drawing.manualSpecificRules,
       replayDefaultLegendOrder,
-      livePreview: preview ? {
+      livePreview: domains ? {
+        domains,
         paletteColors: toRaw(appliedPaletteColors.value),
-        drawnContext: featureDrawnContext(drawing, { diagramOptions: getCommittedCanonicalRenderRequest()?.diagramOptions })
+        drawnContext: domains.includes('featureVisibility')
+          ? featureDrawnContext(drawing, { diagramOptions: getCommittedCanonicalRenderRequest()?.diagramOptions })
+          : null,
+        shownFills: () => drawnFeatureFills(svg)
       } : null
     });
     return plan.operationsByResult[resultIndex] || null;
   };
   // The port of the editor intent onto the displayed Result (design §5.4):
-  // the operations Generate compiles from the active drawing (`domains` of
-  // them unless given), reconciled by the executor Generate uses, which
-  // returns each attribute of `domains` no operation sets to Python's value;
-  // then one commit of the Result. Live edits, History, and the display of
-  // a batch Result call it.
+  // the operations of `domains` Generate compiles from the active drawing
+  // (the compile runs only the stages they need) unless given, reconciled by
+  // the executor Generate uses, which returns each attribute of `domains` no
+  // operation sets to Python's value; then one commit of the Result. Live
+  // edits, History, and the display of a batch Result call it.
   /**
    * @param {{
    *   domains: readonly string[],
@@ -3417,9 +3432,7 @@ export const createAppSetup = () => {
     if (shown === undefined) {
       const resultIndex = previewRuntime.getActiveRuntime()?.resultIndex ?? (Number(selectedResultIndex.value) || 0);
       try {
-        const compiled = compileDisplayedResultOperations(state.activeDrawing(), resultIndex);
-        shown = compiled && Object.fromEntries(Object.entries(compiled)
-          .map(([domain, entries]) => [domain, domains.includes(domain) ? entries : []]));
+        shown = compileDisplayedResultOperations(state.activeDrawing(), resultIndex, { domains });
       } catch (error) {
         console.error('Editor edits could not be compiled for the displayed Result.', normalizeUserFacingError(error));
         return false;
@@ -3433,6 +3446,7 @@ export const createAppSetup = () => {
   const STROKE_DOMAINS = Object.freeze(['featureStrokes', 'legendStrokes']);
   const LEGEND_FILL_DOMAINS = Object.freeze(['legendFills']);
   const FILL_DOMAINS = Object.freeze(['featureFills', 'legendFills']);
+  const VISIBILITY_DOMAINS = Object.freeze(['featureVisibility']);
   /** @type {ReadonlyArray<[string[], readonly string[]]>} */
   const EDITOR_PAINT_PATHS = Object.freeze([
     [['editorState', 'featureStrokes'], STROKE_DOMAINS],
@@ -3462,14 +3476,10 @@ export const createAppSetup = () => {
     if (changed === true) showEditorIntent({ domains });
     return changed;
   });
-  // A displayed Result whose strokes changed since it was last shown returns
-  // to Python's strokes before the stroke operations apply (OV-144). Fills and
-  // visibility show through the palette, rule, and visibility projections,
-  // which prepare the rule matches they read and reconcile their domains.
-  const DISPLAY_PROJECTED_DOMAINS = Object.freeze([
-    'featureFills', 'featureStrokes', 'featureVisibility',
-    'legendFills', 'legendStrokes', 'legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder'
-  ]);
+  // A displayed Result shows the Legend structure edits and the paint domains
+  // whose intent changed since it was last shown; each paint domain it shows
+  // returns to Python's values where no operation sets it (OV-144).
+  const LEGEND_STRUCTURE_DOMAINS = Object.freeze(['legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder']);
   // D-07 (PD-OI-062): a batch Result shows the canonical color, visibility,
   // Legend, and label edits when it is displayed. Labels follow in the
   // binder's label step.
@@ -3509,15 +3519,19 @@ export const createAppSetup = () => {
       ? resultLegendOrder : null;
     /** @type {ReturnType<typeof compileDisplayedResultOperations>} */
     let operations = null;
+    /** @type {string[]} */
+    let domains = [...LEGEND_STRUCTURE_DOMAINS];
     try {
-      // The edits Python did not draw; the palette, rules, and visibility
-      // project when their intent changed (`colors`, `visibility`).
-      operations = compileDisplayedResultOperations(drawing, context.resultIndex, { replayDefaultLegendOrder, preview: false });
+      // The palette, rules, and visibility prepare their matches when their
+      // intent changed (`colors`, `visibility`); then one compile of the
+      // domains the Result shows.
+      const prepared = await projectMountedEditorIntent({ colors, visibility, show: false });
+      domains = [...domains, ...(prepared || []), ...(strokes ? STROKE_DOMAINS : [])];
+      operations = compileDisplayedResultOperations(drawing, context.resultIndex, { replayDefaultLegendOrder, domains });
     } catch (error) {
       console.error('Editor edits could not be compiled for the displayed Result.', normalizeUserFacingError(error));
     }
-    const hasOperations = Boolean(operations)
-      && DISPLAY_PROJECTED_DOMAINS.some((domain) => operations[domain].length > 0);
+    const hasOperations = Boolean(operations) && domains.some((domain) => operations[domain].length > 0);
     const legend = {
       resultIdentity: identity,
       liveResultIdentities: liveResultIdentities(),
@@ -3531,13 +3545,10 @@ export const createAppSetup = () => {
     });
     if (!projects) return;
     try {
-      await projectMountedEditorIntent({ colors, visibility });
-      // With the fills and visibility, whose rule matches the projections prepared.
-      operations = compileDisplayedResultOperations(drawing, context.resultIndex, { replayDefaultLegendOrder });
       const legendChanged = legendActions.prepareDisplayedResultLegend(context.root, legend);
       showEditorIntent({
-        domains: strokes ? STROKE_DOMAINS : [],
-        operations: hasOperations || strokes ? operations : null,
+        domains,
+        operations,
         afterApply: () => { if (legendChanged) legendActions.onLegendGeometryChanged(); }
       });
       projectedEditorStateByResult.set(identity, current);

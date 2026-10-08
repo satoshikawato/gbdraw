@@ -264,15 +264,16 @@ export const createFeatureVisibilityActions = ({
       ))
       : uniqueFeaturesBySvgId(Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []);
   };
-  // Shows the projection; returns whether the Result changed and whether the
-  // rerender must draw a feature or the Legend.
+  // Shows the projection, unless the caller shows it in its own compile
+  // (`show: false`); returns whether the Result changed (or is to change) and
+  // whether the rerender must draw a feature or the Legend.
   /**
    * @param {DrawingState} drawing
    * @param {Record<string, any>[]} features
-   * @param {{ targeted?: boolean, legend?: boolean }} [projection]
+   * @param {{ targeted?: boolean, legend?: boolean, show?: boolean }} [projection]
    */
-  const projectDrawn = (drawing, features, projection = {}) => ({
-    updated: showEditorIntent({ domains: VISIBILITY_DOMAINS }),
+  const projectDrawn = (drawing, features, { show = true, ...projection } = {}) => ({
+    updated: show ? showEditorIntent({ domains: VISIBILITY_DOMAINS }) : true,
     needsRerender: needsRerenderFor(drawing, features, projection)
   });
   // Also the reaction the popup and Label On ask this owner for: the matches
@@ -389,7 +390,7 @@ export const createFeatureVisibilityActions = ({
   let projectionRun = 0;
   let ruleTableError = null;
   /** @param {DrawingState} drawing */
-  const runProjection = async (drawing, { legend = true } = {}) => {
+  const runProjection = async (drawing, { legend = true, show = true } = {}) => {
     const run = ++projectionRun;
     const prepared = /** @type {any} */ (await prepareDrawn());
     if (run !== projectionRun) return null;
@@ -401,7 +402,7 @@ export const createFeatureVisibilityActions = ({
     }
     if (ruleTableError && state.errorLog?.value === ruleTableError) state.errorLog.value = null;
     ruleTableError = null;
-    return projectDrawn(drawing, displayedFeatures(), { legend });
+    return projectDrawn(drawing, displayedFeatures(), { legend, show });
   };
 
   // The one projection of this domain (R3), which History apply, the display
@@ -412,10 +413,11 @@ export const createFeatureVisibilityActions = ({
   // Legend source, reruns the rerender, as the action did; a Result display
   // does not, so a feature Python does not draw cannot repeat it. A loaded
   // table (`reflow`) also places the labels, as a visibility edit does.
-  // Returns whether the Result changed.
-  const projectFeatureVisibility = async ({ rerender = false, reflow = false } = {}) => {
+  // Returns whether the Result changed. A caller that shows the visibility in
+  // its own compile passes `show: false`.
+  const projectFeatureVisibility = async ({ rerender = false, reflow = false, show = true } = {}) => {
     const drawing = state.activeDrawing();
-    const projection = await runProjection(drawing, { legend: rerender });
+    const projection = await runProjection(drawing, { legend: rerender, show });
     if (!projection) return false;
     const drawsMissing = rerender && projection.needsRerender;
     if (projection.updated || reflow || drawsMissing) followLabels({ reflow, rerender: drawsMissing });

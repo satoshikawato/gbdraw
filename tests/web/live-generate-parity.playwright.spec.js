@@ -65,12 +65,29 @@ const legendRowAdd = async (page, caption, color) => {
   await settleLive(page);
 };
 
+// A palette change with instant preview (the palette menu).
+const switchPalette = async (page, name) => {
+  await page.evaluate((palette) => {
+    const app = window.__GBDRAW_APP__;
+    app.paletteInstantPreviewEnabled = true;
+    app.selectedPalette = palette;
+    return app.updatePalette();
+  }, name);
+  await settleLive(page);
+};
+
+// A Legend row renamed in the Legend editor (`renameRow`), settled.
+const renameLegendRow = async (page, caption, name) => {
+  await renameRow(page, caption, name);
+  await settleLive(page);
+};
+
 // The edit kinds. Each appears at least once in the matrix.
 const KINDS = [
   'visibility rule add', 'visibility rule action', 'visibility rule delete', 'feature Off', 'feature On',
   'label text', 'label Off', 'label On', 'color rule add', 'color rule color', 'color rule delete', 'feature color',
   'undo', 'redo', 'Result switch', 'legend color', 'legend add', 'legend stroke', 'feature stroke',
-  'feature legend name', 'feature color reset', 'label Default'
+  'feature legend name', 'feature color reset', 'label Default', 'palette'
 ];
 
 // The matrix: one edit kind in one set of states, with the setup before the
@@ -477,6 +494,61 @@ const CASES = [
     setup: async (page) => { await popupEdit(page, 'FL1', { fill: '#c83366' }); await generate(page); },
     run: (page) => popupEdit(page, 'FL1', { resetFill: true })
   },
+  // Review U2b #1 (cross-domain): a Legend structure edit, then a paint edit.
+  // A row without features (GC content) is renamed live: the rename rewrites
+  // the row's key on the Result, and a later palette or rule reconcile must
+  // still find the row. (A feature row's rename is a rule and rerenders.)
+  {
+    kind: 'palette',
+    edit: 'Palette change after a Legend row rename with a Legend color',
+    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    setup: async (page) => { await legendRowColor(page, 'GC content', '#ff0000'); await renameLegendRow(page, 'GC content', 'GC percent'); },
+    run: (page) => switchPalette(page, 'alpine_retreat')
+  },
+  {
+    kind: 'palette',
+    edit: 'Palette change after a palette change and a Legend row rename',
+    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'bound' },
+    setup: async (page) => { await switchPalette(page, 'alpine_retreat'); await renameLegendRow(page, 'GC content', 'GC percent'); },
+    run: (page) => switchPalette(page, 'arctic')
+  },
+  {
+    kind: 'palette',
+    edit: 'Palette change after a Legend editor row add',
+    states: { mode: 'circular', results: 'batch', reflow: 'on', labels: 'unbound' },
+    setup: (page) => legendRowAdd(page, 'Manual row', '#118833'),
+    run: (page) => switchPalette(page, 'alpine_retreat')
+  },
+  {
+    kind: 'color rule add',
+    edit: 'Specific color rule add after a Legend row rename with a Legend color',
+    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'bound' },
+    setup: async (page) => { await legendRowColor(page, 'GC content', '#7b2cbf'); await renameLegendRow(page, 'GC content', 'GC percent'); },
+    run: (page) => addColorRule(page, FL1_ALPHA)
+  },
+  // Review U2a #4 (OV-146) on a batch Result: Undo of a Legend color or a rule
+  // commit after a palette switch shows the palette Generate draws.
+  {
+    kind: 'undo',
+    edit: 'Undo of a Legend row color on the other batch Result after a palette switch',
+    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
+    setup: async (page) => {
+      await switchPalette(page, 'alpine_retreat');
+      await legendRowColor(page, 'CDS', '#ff0000');
+      await showResult(page, 1);
+    },
+    run: (page) => history(page, 'undo')
+  },
+  {
+    kind: 'undo',
+    edit: 'Undo of a color rule commit after a palette switch',
+    states: { mode: 'circular', results: 'batch', reflow: 'on', labels: 'unbound' },
+    setup: async (page) => {
+      await switchPalette(page, 'alpine_retreat');
+      await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0004$', color: '#c83366', cap: 'CDS' });
+    },
+    run: (page) => history(page, 'undo')
+  },
   {
     kind: 'Result switch',
     edit: 'Result switch after deleting a same-product rule Generate drew',
@@ -868,3 +940,70 @@ test('a stroke and a palette change reach a Session 30 Result loaded without a f
   expect(live, 'each feature is filled as Generate fills it').toEqual(await featureFills());
 });
 
+// The work guard (allowlist) at the app, on a two-Result batch: each edit kind
+// runs exactly the compile stages of its entry (the compile's structural
+// metric, live compiles only), a Result display or a History step compiles
+// once, and an edit sends only the worker requests its entry allows (`render`
+// is the automatic rerender). Stages are `COMPILE_STAGES` in
+// app/candidate-render.js.
+const WORK_ALLOWLIST = [
+  {
+    // A stroke action prepares only the saved rules (OV-198), whose matches
+    // are known: no request.
+    kind: 'feature stroke (popup)', stages: ['strokes'], compiles: 1, requests: [],
+    run: (page) => evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      await app.setClickedFeatureStrokeColorValue('#2a9d8f');
+      if (app.featureStyleScopeDialog.show) await app.handleFeatureStyleScopeChoice('single');
+    }),
+    before: (page) => evaluateWithRetainedPromise(page, async () => {
+      const app = window.__GBDRAW_APP__;
+      await app.openFeatureEditorFromList(app.filteredFeatures.find((item) => item.locus_tag === 'TESTA_0001'), null);
+      await window.Vue.nextTick();
+    }).then(() => settleLive(page))
+  },
+  { kind: 'Legend row stroke', stages: ['strokes'], compiles: 1, requests: [], run: (page) => legendRowStrokeColor(page, 'CDS', '#e63946') },
+  { kind: 'Legend row color (no rule)', stages: ['legendFills'], compiles: 1, requests: [], run: (page) => legendRowColor(page, 'tRNA', '#7b2cbf') },
+  { kind: 'History step (Undo of a Legend row color)', stages: ['legendFills'], compiles: 1, requests: [], run: (page) => history(page, 'undo') },
+  { kind: 'palette change', stages: ['fills', 'rules', 'legendFills'], compiles: 1, requests: ['evaluateRules'], run: (page) => switchPalette(page, 'arctic') },
+  {
+    kind: 'Result display after a palette change and a stroke', stages: ['legend', 'fills', 'rules', 'legendFills', 'strokes'],
+    compiles: 1, requests: [], run: (page) => showResult(page, 1)
+  },
+  { kind: 'Feature visibility rule add', stages: ['visibility'], requests: ['evaluateRules', 'render'], run: (page) => addVisibilityRule(page, BATCH_0004_OFF) }
+];
+
+test('each edit kind runs only the compile stages and worker requests of its allowlist', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0001$', color: '#c83366', cap: 'CDS' });
+  await generate(page);
+  await page.evaluate(() => {
+    window.__workLog = [];
+    const hooks = window.__GBDRAW_TEST_HOOKS__ || {};
+    const metric = hooks.onStructuralMetric;
+    const render = hooks.beforeDiagramGenerationResponse;
+    window.__GBDRAW_TEST_HOOKS__ = {
+      ...hooks,
+      onStructuralMetric: (event) => { metric?.(event); window.__workLog.push(event); },
+      beforeDiagramGenerationResponse: (...args) => { window.__workLog.push({ name: 'render' }); return render?.(...args); }
+    };
+  });
+  const observed = [];
+  for (const { kind, run, before, stages, compiles, requests } of WORK_ALLOWLIST) {
+    if (before) await before(page);
+    await page.evaluate(() => { window.__workLog.length = 0; });
+    await run(page);
+    const log = await page.evaluate(() => window.__workLog.map(({ name, stages: ran, domains, operation }) => ({ name, ran, domains, operation })));
+    // A rerender compiles Generate's plan (no domains) and shows its Result.
+    const live = log.filter(({ name, domains }) => name === 'editorPlanCompile' && domains);
+    const sent = [...new Set(log.flatMap(({ name, operation }) => (
+      name === 'diagramHelperRequest' ? [operation] : (name === 'render' ? ['render'] : [])
+    )))];
+    observed.push({ kind, stages: [...new Set(live.flatMap(({ ran }) => ran))].sort(), compiles: live.length, sent: sent.sort() });
+    expect(new Set(live.flatMap(({ ran }) => ran)), `${kind}: compile stages`).toEqual(new Set(stages));
+    if (compiles !== undefined) expect(live.length, `${kind}: compiles`).toBe(compiles);
+    expect(sent.filter((request) => !requests.includes(request)), `${kind}: worker requests outside the allowlist`).toEqual([]);
+  }
+  console.log(JSON.stringify(observed));
+});
