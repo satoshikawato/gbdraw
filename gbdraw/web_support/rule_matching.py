@@ -85,13 +85,12 @@ def evaluate_rules_json(features_json: str, rules_json: str, kind: str = "color"
         selector = item["selector"]
         record = item.get("record", "")
         if kind == "color":
-            ordered = list(iter_specific_color_rules(feature, color_rules, record, selector=selector))
-            matched = list(dict.fromkeys(int(match[0]) for match in ordered))
-            ranks = [None] * len(rules)
-            for color, _, rank in ordered:
-                if ranks[int(color)] is None:
-                    ranks[int(color)] = rank
-            priorities.append(ranks)
+            # The rules it matches in yield order, each with its first rank.
+            ranks: dict[int, int] = {}
+            for color, _, rank in iter_specific_color_rules(feature, color_rules, record, selector=selector):
+                ranks.setdefault(int(color), rank)
+            matched = list(ranks)
+            priorities.append(list(ranks.values()))
             matches.append(matched)
             winners.append(matched[0] if matched else -1)
         elif kind == "visibility":

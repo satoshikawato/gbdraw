@@ -295,7 +295,7 @@ test('late rule helper replies cannot publish cache entries while Session is pen
   });
   const pending = owner.prepare([rule]);
   state.sessionSavePending.value = true;
-  reply.release({ matches: [[0]], priorities: [0] });
+  reply.release({ matches: [[0]], priorities: [[0]] });
   assert.equal(await pending, false);
   assert.equal(ruleMatchesFeature(feature, rule), null);
   state.sessionSavePending.value = false;

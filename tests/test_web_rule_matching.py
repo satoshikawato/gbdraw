@@ -143,3 +143,16 @@ def test_visibility_helper_rejects_a_table_with_the_error_and_row_generate_repor
     with pytest.raises(ParseError) as helper:
         evaluate_rules_json("[]", json.dumps(rules), "visibility")
     assert str(helper.value) == str(generate.value)
+
+
+def test_color_priorities_are_aligned_with_the_matched_rules():
+    """OV-193: one rank per matched rule, not one per rule."""
+    payload = [dict(type="CDS", qualifiers={"product": ["NADH"]}, record="rec",
+                    selector={"hash": "h1", "location": "1..9", "record_location": "rec:1..9:+"}),
+               dict(type="CDS", qualifiers={"product": ["other"]}, record="rec", selector={"hash": "h2"})]
+    rules = [dict(feat="CDS", qual="product", val="NADH"), dict(feat="*", qual="hash", val="h1"),
+             dict(feat="CDS", qual="hash", val="h1"), dict(feat="CDS", qual="hash", val="h1"),
+             dict(feat="tRNA", qual="hash", val="h1")]
+    answer = json.loads(evaluate_rules_json(json.dumps(payload), json.dumps(rules)))
+    assert answer["matches"] == [[2, 3, 0, 1], []]
+    assert answer["priorities"] == [[0, 0, 2, 4], []]

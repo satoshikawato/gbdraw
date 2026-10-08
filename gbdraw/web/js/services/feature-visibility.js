@@ -1,6 +1,6 @@
 // @ts-check
 import { exactRegexValue } from './feature-selector.js';
-import { firstMatchingRuleIfKnown, ruleMatchesFeature, visibilityRuleMatchesFeature } from './rule-matchers.js';
+import { ruleMatcher, visibilityRuleMatchesFeature } from './rule-matchers.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey as stableKeyOf } from './feature-catalog.js';
 import {
   featureIdentityKey,
@@ -12,6 +12,7 @@ import {
 } from './feature-placement.js';
 import { normalizeTsvCell as normalizeCell } from '../utils/tsv-cell.js';
 /** @import { FeatureRequestRecord } from './feature-placement.js' */
+/** @import { RuleMatcher } from './rule-matchers.js' */
 export { escapeRegexLiteral, exactRegexValue } from './feature-selector.js';
 
 const REQUIRED_COLUMNS = ['record_id', 'feature_type', 'qualifier', 'value', 'action'];
@@ -430,6 +431,15 @@ export const featureDrawnContext = (drawing, {
     : null,
   colorRules: Array.isArray(drawing?.manualSpecificRules) ? drawing.manualSpecificRules : []
 });
+// The color rule matches of a context's rules, built once per context: a
+// context is built for one pass over the features (OV-193).
+/** @type {WeakMap<object, RuleMatcher>} */
+const colorMatchersByContext = new WeakMap();
+const colorRuleMatcher = (context) => {
+  let matcher = colorMatchersByContext.get(context);
+  if (!matcher) colorMatchersByContext.set(context, matcher = ruleMatcher(context.colorRules));
+  return matcher;
+};
 
 // "Is this feature drawn?" as Generate answers it
 // (gbdraw/features/visibility.py::should_render_feature): the feature's
@@ -440,7 +450,8 @@ export const featureDrawnContext = (drawing, {
 // (app/rule-matching.js, R4); the shared vectors in
 // tests/fixtures/feature_drawn_cases.json hold both sides to one answer.
 // Returns true, false, or null while a match it needs is unknown.
-export const resolveFeatureDrawn = (feature, { featureOverrides, rules, selectedTypes, colorRules }) => {
+export const resolveFeatureDrawn = (feature, context) => {
+  const { featureOverrides, rules, selectedTypes } = context;
   if (!feature) return null;
   const override = getFeatureVisibilityOverride(featureOverrides, feature);
   if (override === 'on' || override === 'off') return override === 'on';
@@ -455,9 +466,7 @@ export const resolveFeatureDrawn = (feature, { featureOverrides, rules, selected
   }
   if (!selectedTypes) return null;
   if (selectedTypes.size === 0 || selectedTypes.has(String(feature?.type ?? ''))) return true;
-  const colorMatches = colorRules.map((rule) => ruleMatchesFeature(feature, rule));
-  if (colorMatches.includes(true)) return true;
-  return colorMatches.includes(null) ? null : false;
+  return colorRuleMatcher(context).matchesAny(feature);
 };
 
 // Whether a Result draws a catalog feature (R-5): the resolver's answer, else
@@ -517,6 +526,8 @@ const legendSourceOf = (catalogFeatures, context, { asRendered, withColors }) =>
   const color = (rule) => (withColors ? colorOf(rule) : '');
   const usage = (rule) => JSON.stringify([caption(rule), color(rule)]);
   const rules = context.colorRules;
+  const ruleMatches = colorRuleMatcher(context);
+  const captionedTypes = new Set(rules.filter((rule) => caption(rule)).map((rule) => rule.feat));
   const typesByRecord = new Map();
   const winnersByType = new Map();
   for (const feature of catalogFeatures.biological) {
@@ -530,8 +541,8 @@ const legendSourceOf = (catalogFeatures, context, { asRendered, withColors }) =>
     const winners = winnersByType.get(type) || [];
     winnersByType.set(type, winners);
     // A type without a captioned rule needs no match.
-    if (!rules.some((rule) => caption(rule) && (rule.feat === type || rule.feat === '*'))) continue;
-    const winner = firstMatchingRuleIfKnown(row, rules);
+    if (!captionedTypes.has(type) && !captionedTypes.has('*')) continue;
+    const winner = ruleMatches.firstIfKnown(row);
     if (winner === undefined) return null;
     winners.push(winner);
   }

@@ -120,7 +120,9 @@ const commitActiveResultEdit = () => {
 };
 
 const { featureOverrideKey } = await import(pathToFileURL(join(tempDir, 'services', 'feature-override-identity.js')));
-const { createRulePreparation, firstMatchingRule, runWhenPrepared } = await import(pathToFileURL(join(tempDir, 'app', 'rule-matching.js')));
+const { createRulePreparation, runWhenPrepared } = await import(pathToFileURL(join(tempDir, 'app', 'rule-matching.js')));
+const { ruleMatcher } = await import(pathToFileURL(join(tempDir, 'services', 'rule-matchers.js')));
+const firstMatchingRule = (feature, rules) => ruleMatcher(rules).first(feature);
 // The rule owner's `runWithRuleMatches` for these fakes: the color matches of the rules, prepared once.
 const runWithRuleMatchesOf = (preparation, state) => (rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit);
 const preparationState = { extractedFeatures, biologicalFeatures, manualSpecificRules };
@@ -193,7 +195,7 @@ const actions = createFeatureColorActions({
     findFeaturesWithSameLegendItem: () => legendSiblings,
     findMatchingRegexRule: () => specificRule,
     getDisplayedFeatureLabel: (feature) => feature.displayLabel || feature.product || '',
-    getEffectiveLegendCaption: () => 'Core',
+    effectiveLegendCaptions: () => () => 'Core',
     getLegendRowRules: (caption) => legendRowRules(caption, { rules: manualSpecificRules, legendEntries: legendEntries.value }),
     getIndividualFeatureLabel: (feature) => feature.product || '',
     // FE-09 (D-14): "This feature only" always writes the stable hash.
@@ -790,7 +792,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
         committed.push(rules.map((rule) => ({ ...rule })));
         return true;
       },
-      getEffectiveLegendCaption: (feature) => feature.type,
+      effectiveLegendCaptions: () => (feature) => feature.type,
       getLegendRowRules: (caption) => legendRowRules(caption, { rules: resetRules }),
       getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
       findFeaturesWithSameLegendItem: () => [],
@@ -860,7 +862,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
       ruleActions: {
         runWithRuleMatches: runWithRuleMatchesOf(createRulePreparation({ state: withDrawings(renameState), evaluate: evaluatePythonRules }), renameState),
         commitSpecificRules: async (nextRules) => { committed.push(nextRules.map((rule) => ({ ...rule }))); return true; },
-        getEffectiveLegendCaption: (feature) => feature.legendCaption || rules.find((rule) => rule.feat === feature.type)?.cap || feature.type,
+        effectiveLegendCaptions: () => (feature) => feature.legendCaption || rules.find((rule) => rule.feat === feature.type)?.cap || feature.type,
         getLegendRowRules: (caption) => legendRowRules(caption, {
           rules, legendEntries: stateLegendEntries.value, originalLegendOrder: originalOrder.value
         }),

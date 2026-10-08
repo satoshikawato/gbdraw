@@ -2,8 +2,8 @@
 /** @import { DrawingState } from '../../state.js' */
 import { createSpecificRulePatternDrafts } from './pattern-drafts.js';
 import { normalizeUserFacingError } from '../../utils/error-normalization.js';
-import { firstMatchingRule, ruleMatchesReady, runWhenPrepared } from '../rule-matching.js';
-import { ruleMatchesFeature } from '../../services/rule-matchers.js';
+import { runWhenPrepared } from '../rule-matching.js';
+import { ruleMatcher, ruleMatchesFeature } from '../../services/rule-matchers.js';
 import { resolveColorToHex } from '../../utils/color-utils.js';
 import { parseSpecificRules, serializeSpecificRules } from '../../services/file-imports.js';
 import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
@@ -119,7 +119,8 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   const candidateLegendIntents = (drawing, candidateRules, retiredLegendIntents) => {
     const rendered = (extractedFeatures.value || []).filter(feature =>
       featureOverrideValue(drawing.featureOverrides, feature, 'featureVisibility') !== 'off');
-    const used = new Set(rendered.map(feature => firstMatchingRule(feature, candidateRules)).filter(Boolean));
+    const candidateMatches = ruleMatcher(candidateRules);
+    const used = new Set(rendered.map(feature => candidateMatches.first(feature)).filter(Boolean));
     const rendererRows = rendererLegendRows({
       legendEntries: drawing.legendEntries?.value,
       originalLegendOrder: state.originalLegendOrder?.value,
@@ -494,20 +495,26 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
 
   // Resolve the effective legend item label used by current SVG coloring
   // priority: a rule's feature belongs to the row Generate draws for it (N-06).
-  const getEffectiveLegendCaption = (feat) => {
+  // One reader serves a pass over many features (OV-193).
+  /** @returns {(feat: Record<string, any> | null | undefined) => string} */
+  const effectiveLegendCaptions = () => {
     const drawing = state.activeDrawing();
-    if (!feat) return '';
+    const ruleMatches = ruleMatcher(drawing.manualSpecificRules);
+    const context = legendRowContext(drawing);
+    return (feat) => {
+      if (!feat) return '';
+      const rule = ruleMatches.first(feat);
+      if (rule && normalizeCaption(rule.cap)) return ruleLegendCaption(rule, context);
 
-    const rule = firstMatchingRule(feat, drawing.manualSpecificRules);
-    if (rule && normalizeCaption(rule.cap)) return ruleLegendCaption(rule, legendRowContext(drawing));
+      const overrideCaption = normalizeCaption(
+        getFeatureOverride(drawing.featureColorOverrides, feat)?.caption
+      );
+      if (overrideCaption) return overrideCaption;
 
-    const overrideCaption = normalizeCaption(
-      getFeatureOverride(drawing.featureColorOverrides, feat)?.caption
-    );
-    if (overrideCaption) return overrideCaption;
-
-    return normalizeCaption(feat.type) || normalizeCaption(getIndividualFeatureLabel(feat));
+      return normalizeCaption(feat.type) || normalizeCaption(getIndividualFeatureLabel(feat));
+    };
   };
+  const getEffectiveLegendCaption = (feat) => effectiveLegendCaptions()(feat);
 
   const addCustomColor = () => {
     const drawing = state.activeDrawing();
@@ -729,11 +736,12 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
 
   const refreshFeatureOverrides = (features) => {
     const drawing = state.activeDrawing();
-    if (!features || features.length === 0 || !ruleMatchesReady(features, drawing.manualSpecificRules)) return;
+    const ruleMatches = ruleMatcher(drawing.manualSpecificRules);
+    if (!features || features.length === 0 || !ruleMatches.ready(features)) return;
     migrateLegacyFeatureOverrides(drawing.featureColorOverrides, features);
 
     for (const feat of features) {
-      const rule = firstMatchingRule(feat, drawing.manualSpecificRules);
+      const rule = ruleMatches.first(feat);
       const key = featureOverrideKey(feat);
       if (key) {
         if (rule) drawing.featureColorOverrides[key] = { color: rule.color, caption: rule.cap };
@@ -744,7 +752,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
 
   const findMatchingRegexRule = (feat) => {
     const drawing = state.activeDrawing();
-    return firstMatchingRule(feat, drawing.manualSpecificRules.filter((rule) => rule.qual !== 'hash'));
+    return ruleMatcher(drawing.manualSpecificRules.filter((rule) => rule.qual !== 'hash')).first(feat);
   };
 
   const countFeaturesMatchingRule = (rule) => {
@@ -761,11 +769,12 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
 
   /** @param {string | null} [caption] */
   const findFeaturesWithSameLegendItem = (currentFeat, caption = null) => {
-    const targetCaption = normalizeCaption(caption || getEffectiveLegendCaption(currentFeat));
+    const captionOf = effectiveLegendCaptions();
+    const targetCaption = normalizeCaption(caption || captionOf(currentFeat));
     if (!targetCaption) return [];
     return extractedFeatures.value.filter((f) => {
       if (f.svg_id === currentFeat.svg_id) return false;
-      return captionMatches(getEffectiveLegendCaption(f), targetCaption);
+      return captionMatches(captionOf(f), targetCaption);
     });
   };
 
@@ -851,6 +860,7 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     getFeatureColor,
     getFeatureColorValue,
     getDisplayedFeatureLabel,
+    effectiveLegendCaptions,
     getEffectiveLegendCaption,
     getIndividualFeatureLabel,
     getFeatureQualifier,
