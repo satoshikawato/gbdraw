@@ -39,6 +39,11 @@ from gbdraw.web_support.mode_scoped_settings import (
     unmanaged_config_override_modes,
 )
 
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = Path(__file__).parent / "fixtures" / "sessions"
 FIELDS_INVALID = {"code": "INPUT_INVALID", "field": "schema", "reason": "FIELDS"}
@@ -499,8 +504,6 @@ def test_split_resolves_override_colors_against_the_draft_palette() -> None:
     # Web Load reads colors marked colorsAreOverrides over the palette's colors
     # (services/config.js applyConfigData); the split stores the result.
     with (REPO_ROOT / "gbdraw" / "data" / "color_palettes.toml").open("rb") as handle:
-        import tomllib
-
         palette = {key: str(value) for key, value in tomllib.load(handle)["default"].items()}
     draft = _draft(palette="default", colors={"CDS": " #123456 ", "collinear_block_2": "#000000"},
                    colorsAreOverrides=True)
