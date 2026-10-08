@@ -4681,6 +4681,37 @@ export const createAppSetup = () => {
   const circularRecordSelectionEnabled = computed(() => semanticMutationAvailable.value
     && mode.value === 'circular'
     && !state.activeDrawing().form.multi_record_canvas && circularRecordDiscoveryState.value.status === 'ready');
+  // CI-03: the per-record presentation a source file carries. Replacing or
+  // removing the file resets it in both modes, in the replacement's History step.
+  const RETIRED_RECORD_PRESENTATION = Object.freeze({
+    circular: Object.freeze({ circular_record_selector: '', circular_region_start: null, circular_region_end: null,
+      circular_reverse: false, circular_record_label: '', circular_record_subtitle: '' }),
+    linear: Object.freeze({ region_record_id: '', region_start: null, region_end: null, region_reverse: false,
+      definition: '', record_subtitle: '' })
+  });
+  // D-32: one record replacing one record (a new version of the same genome)
+  // keeps it; a removed file or a replaced multi-record file retires it.
+  /** @param {{ removed: boolean, previousRecordCount: number }} replacement */
+  const sourceReplacementRetiresPresentation = ({ removed, previousRecordCount }) => removed || previousRecordCount > 1;
+  /**
+   * The Circular source file controls (upload, replace, Remove).
+   * @param {'c_gb' | 'c_gff' | 'c_fasta'} field
+   * @param {File | null} value
+   */
+  const setCircularSourceFile = (field, value) => {
+    const drawing = state.drawings.circular;
+    const busy = sessionOperationAvailability();
+    if (busy) return busy;
+    const nextValue = value ?? null;
+    const previous = files[field];
+    if (previous === nextValue) return;
+    files[field] = nextValue;
+    if (!previous || !sourceReplacementRetiresPresentation({
+      removed: !nextValue, previousRecordCount: circularRecordList.value.length
+    })) return;
+    Object.assign(drawing.form, RETIRED_RECORD_PRESENTATION.circular);
+    if (drawing.adv.circular_grouping_intent === 'single') drawing.adv.circular_grouping_intent = 'auto';
+  };
   const setCircularRecordPresentationSelector = (value) => {
     const drawing = state.drawings.circular;
     const busy = sessionOperationAvailability();
@@ -5008,9 +5039,9 @@ export const createAppSetup = () => {
       ...group.sequence,
       [field]: nextValue,
       ...(field === 'gb' && nextValue ? { file_definition: '', file_subtitle: '' } : {}),
-      ...(group.records.length > 1 ? {
-        region_record_id: '', region_start: null, region_end: null, region_reverse: false
-      } : {})
+      ...(seq[field] && sourceReplacementRetiresPresentation({
+        removed: !nextValue, previousRecordCount: group.records.length
+      }) ? RETIRED_RECORD_PRESENTATION.linear : {})
     });
     const keepSource = field === 'gb' ? Boolean(nextValue) : Boolean(replacement.gff || replacement.fasta);
     applyLinearSeqMutation(drawing, linearSeqs.flatMap((entry) => (
@@ -5590,6 +5621,7 @@ export const createAppSetup = () => {
     circularRecordSelectionEnabled,
     showCircularCanvasSetting,
     setCircularRecordPresentationSelector,
+    setCircularSourceFile,
     paletteDefinitions,
     paletteNames,
     selectedPalette: drawingMember('selectedPalette'),
