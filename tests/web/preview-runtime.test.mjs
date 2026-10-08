@@ -111,8 +111,17 @@ const runtime = createPreviewRuntime({
   }
 });
 
+// An editor's edit of the mounted elements' display, committed as every editor
+// edit commits (R1); false when nothing changed or no Result is displayed.
+const editDisplay = (edits) => {
+  const changed = edits.filter(([element, mode]) => (mode === 'off'
+    ? element.getAttribute('display') !== 'none' : element.getAttribute('display') !== null));
+  changed.forEach(([element, mode]) => (mode === 'off' ? element.setAttribute('display', 'none') : element.removeAttribute('display')));
+  return changed.length > 0 && runtime.commitActiveResultEdit('feature-visibility');
+};
+
 runtime.mountResultSvg(0, svg);
-assert.equal(runtime.applyFeatureVisibilityChanges([{ featureId: 'feature-a', mode: 'off' }]), true);
+assert.equal(editDisplay([[featureA, 'off']]), true);
 assert.equal(featureA.getAttribute('display'), 'none');
 assert.equal(serializeCount, 1);
 assert.equal(resultReplacementCount, 1);
@@ -121,16 +130,13 @@ assert.equal(state.skipCaptureBaseConfig.value, true);
 
 state.skipCaptureBaseConfig.value = false;
 const resultAfterSingleEdit = state.results.value[0];
-assert.equal(runtime.applyFeatureVisibilityChanges([{ featureId: 'feature-a', mode: 'off' }]), false);
+assert.equal(editDisplay([[featureA, 'off']]), false);
 assert.equal(serializeCount, 1);
 assert.equal(resultReplacementCount, 1);
 assert.equal(state.results.value[0], resultAfterSingleEdit);
 assert.equal(state.skipCaptureBaseConfig.value, false);
 
-assert.equal(runtime.applyFeatureVisibilityChanges([
-  { featureId: 'feature-a', mode: 'on' },
-  { featureId: 'feature-b', mode: 'off' }
-]), true);
+assert.equal(editDisplay([[featureA, 'on'], [featureBBlock, 'off'], [featureBConnector, 'off']]), true);
 assert.equal(featureA.getAttribute('display'), null);
 assert.equal(featureBBlock.getAttribute('display'), 'none');
 assert.equal(featureBConnector.getAttribute('display'), 'none');
@@ -139,10 +145,7 @@ assert.equal(resultReplacementCount, 2);
 
 state.skipCaptureBaseConfig.value = false;
 const resultAfterBulkEdit = state.results.value[0];
-assert.equal(runtime.applyFeatureVisibilityChanges([
-  { featureId: 'feature-a', mode: 'on' },
-  { featureId: 'feature-b', mode: 'off' }
-]), false);
+assert.equal(editDisplay([[featureA, 'on'], [featureBBlock, 'off'], [featureBConnector, 'off']]), false);
 assert.equal(serializeCount, 2);
 assert.equal(resultReplacementCount, 2);
 assert.equal(state.results.value[0], resultAfterBulkEdit);
@@ -186,7 +189,7 @@ delete legacyBlock.attributes['data-gbdraw-feature-id'];
 delete legacyBlock.attributes['data-gbdraw-feature-part'];
 const legacySvg = makeSvg([legacyConnector, legacyBlock]);
 state.svgContainer.value = { querySelector: (selector) => (selector === 'svg' ? legacySvg : null) };
-assert.equal(runtime.applyFeatureVisibilityChanges([{ featureId: 'feature-c', mode: 'off' }]), true);
+assert.equal(editDisplay([[legacyBlock, 'off'], [legacyConnector, 'off']]), true);
 assert.equal(legacyBlock.getAttribute('display'), 'none');
 assert.equal(legacyConnector.getAttribute('display'), 'none');
 assert.equal(runtime.getActiveRuntime().resultIndex, 1);
@@ -203,7 +206,7 @@ assert.equal(state.results.value[1].content, '<svg data-count="4" data-elements=
   runtime.clearActiveRuntime();
   state.results.value = [...kept];
   const writes = resultReplacementCount;
-  assert.equal(runtime.applyFeatureVisibilityChanges([{ featureId: 'feature-c', mode: 'on' }]), true);
+  assert.equal(editDisplay([[legacyBlock, 'on'], [legacyConnector, 'on']]), true);
   assert.equal(runtime.getActiveRuntime().svg, legacySvg);
   assert.equal(resultReplacementCount, writes + 1);
 }
@@ -217,7 +220,7 @@ assert.equal(state.results.value[1].content, '<svg data-count="4" data-elements=
   state.results.value = arriving;
   state.selectedResultIndex.value = 0;
   const writes = resultReplacementCount;
-  assert.equal(runtime.applyFeatureVisibilityChanges([{ featureId: 'feature-c', mode: 'on' }]), false);
+  assert.equal(editDisplay([[legacyBlock, 'off']]), false);
   assert.equal(runtime.commitActiveResultEdit('track-visibility'), false);
   assert.equal(resultReplacementCount, writes);
   assert.equal(state.results.value[0].content, '<svg id="arriving"></svg>');
@@ -226,7 +229,7 @@ assert.equal(state.results.value[1].content, '<svg data-count="4" data-elements=
   const arrivingBlock = new FakeFeatureElement('feature-d__part1', { featureId: 'feature-d', fill: '#333333' });
   const arrivingSvg = makeSvg([arrivingBlock]);
   state.svgContainer.value = { querySelector: (selector) => (selector === 'svg' ? arrivingSvg : null) };
-  assert.equal(runtime.applyFeatureVisibilityChanges([{ featureId: 'feature-d', mode: 'off' }]), true);
+  assert.equal(editDisplay([[arrivingBlock, 'off']]), true);
   assert.equal(runtime.getActiveRuntime().svg, arrivingSvg);
   assert.equal(state.results.value[0].content, '<svg data-count="6" data-elements="1"></svg>');
 }

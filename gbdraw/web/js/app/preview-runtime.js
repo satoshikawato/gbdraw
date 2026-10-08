@@ -1,10 +1,6 @@
 // @ts-check
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
-  getFeatureElementIndex,
-  normalizeFeatureIdentity
-} from '../services/feature-dom.js';
-import {
   reconcileMountedResult,
   getCommittedSvgResultMetadata,
   getCommittedSvgResultRuntimeIdentity,
@@ -163,23 +159,6 @@ import {
  * @property {() => unknown} restore The artifact owner's restore.
  * @property {string} [phase]
  */
-
-const normalizeVisibilityMode = (value) => {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'suppress') return 'exclude_matching';
-  return ['on', 'off', 'exclude_matching'].includes(normalized) ? normalized : 'default';
-};
-
-const normalizeChanges = (changes) => {
-  if (!Array.isArray(changes)) return [];
-  const byFeatureId = new Map();
-  changes.forEach((change) => {
-    const featureId = normalizeFeatureIdentity(change?.featureId ?? change?.svgId ?? change?.id);
-    if (!featureId) return;
-    byFeatureId.set(featureId, { ...change, featureId });
-  });
-  return Array.from(byFeatureId.values());
-};
 
 const REQUIRED_BINDING_FLAGS = Object.freeze([
   'rootAdopted',
@@ -1048,49 +1027,6 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     bindingOptions
   );
 
-  const buildFeatureIndex = (runtime) => {
-    const indexed = runtime?.svg ? getFeatureElementIndex(runtime.svg) : new Map();
-    runtime.indexes.features = indexed;
-    return indexed;
-  };
-
-  const getFeatureElements = (featureId) => {
-    const normalizedId = normalizeFeatureIdentity(featureId);
-    const runtime = activeRuntime || ensureRuntimeForCurrentSvg();
-    if (!runtime?.svg || !normalizedId) return [];
-
-    const featureIndex = runtime.indexes.features || buildFeatureIndex(runtime);
-    const indexed = featureIndex.get(normalizedId);
-    if (indexed?.length) return indexed;
-
-    const byId = runtime.svg.getElementById?.(normalizedId);
-    return byId ? [byId] : [];
-  };
-
-  const applyFeatureVisibilityChanges = (changes, { reason = 'feature-visibility' } = {}) => {
-    const normalized = normalizeChanges(changes);
-    if (normalized.length === 0) return false;
-
-    let updated = 0;
-    normalized.forEach((change) => {
-      const mode = normalizeVisibilityMode(change?.mode);
-      getFeatureElements(change.featureId).forEach((element) => {
-        if (mode === 'off') {
-          if (element.getAttribute?.('display') === 'none') return;
-          element.setAttribute('display', 'none');
-        } else {
-          if (element.getAttribute?.('display') === null) return;
-          element.removeAttribute('display');
-        }
-        updated += 1;
-      });
-    });
-
-    if (updated === 0) return false;
-    commitActiveResultEdit(reason);
-    return true;
-  };
-
   // R1: the one commit for an editor's edit of the displayed Result's SVG.
   // Serializes the mounted root into its Result at once, so no edit waits for
   // a Result switch; unchanged content is not written.
@@ -1145,7 +1081,6 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
   return {
     acceptReadyReceipt,
     applyEditorOperations,
-    applyFeatureVisibilityChanges,
     bindMountedResult,
     clearActiveRuntime,
     commitActiveResultEdit,
@@ -1153,7 +1088,6 @@ export const createPreviewRuntime = ({ state, serializeSvg }) => {
     configureMountedResultBinder,
     createMountedResultContext,
     getActiveRuntime,
-    getFeatureElements,
     getResultIdentity: resultRuntimeIdentity,
     invalidateReadinessExpectation,
     invalidateReadyReceipt,

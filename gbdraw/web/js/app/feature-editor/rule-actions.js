@@ -326,11 +326,15 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
         ...[...drawing.addedLegendCaptions.value].filter(caption => !previousCaptions.has(caption)),
         ...intents.map(intent => intent.caption)
       ]);
-      applyRulePreview();
+      refreshFeatureOverrides(extractedFeatures.value);
       retireSupersededLegendColors(drawing, intents, removedRuleRows);
       afterCommit(intents);
       applied = true;
       legend.apply();
+      // The step shows its fills once its rules, feature fills, and Legend
+      // colors are written and its rows drawn: every feature and row fill is
+      // an operation of the one compile (OV-146).
+      projectPaletteAndRules({ prepareRules: false });
       return legend.diff;
     });
     if (applied) rulePreparation.notifyChanges(candidate);
@@ -358,11 +362,6 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       return false;
     }
   };
-  const applyRulePreview = () => {
-    refreshFeatureOverrides(extractedFeatures.value);
-    projectPaletteAndRules({ prepareRules: false });
-  };
-
   const editSpecificRulePattern = (row, value) => {
     const busy = state.sessionOperationAvailability?.();
     return busy || patternDrafts.edit(row, value);
@@ -885,7 +884,6 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
       const drawing = state.activeDrawing();
       return moveSpecificRule(drawing, index, -1);
     },
-    refreshFeatureOverrides,
     runWithRuleMatches,
     removeSpecificRule: (index) => {
       const drawing = state.activeDrawing();

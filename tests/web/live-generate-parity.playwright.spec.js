@@ -798,3 +798,39 @@ test('Reset all strokes after loading a Session 46 Result saved without paint re
     .toBe(false);
   await expectLiveEqualsGenerate(page, { label: 'Reset all strokes after Load' });
 });
+
+// EU U2a review #1: a Session older than 40 adopts no feature catalog. The
+// editor port addresses the displayed features from the Session's extracted
+// features and the fills it draws, so a Legend row stroke, its reset and a
+// palette change reach the loaded 0.13.0 (Session 30) Result.
+test('a stroke and a palette change reach a Session 30 Result loaded without a feature catalog', async ({ page }) => {
+  test.setTimeout(240_000);
+  await openFresh(page);
+  await loadSessionFile(page, 'tests/fixtures/sessions/BGC0000708-BGC0000713.v30.gbdraw-session.json.gz');
+  expect(await page.evaluate(async () => (await import('/gbdraw/web/js/state.js')).state.featureCatalog.value)).toBeNull();
+  const drawn = await drawnStrokes(page);
+  const row = await page.evaluate(() => window.__GBDRAW_APP__.legendEntries[0].caption);
+  await legendRowStroke(page, row, '#e63946', 3);
+  expect((await drawnStrokes(page)).some(([, , stroke]) => stroke === '#e63946'), 'the row stroke is shown').toBe(true);
+  await appAction(page, 'resetAllStrokes');
+  expect(await drawnStrokes(page), 'Reset all strokes returns Python\'s strokes').toEqual(drawn);
+  const fills = () => page.evaluate(() => [...window.__GBDRAW_APP__.svgContainer.querySelectorAll('[data-gbdraw-feature-id]')]
+    .map((element) => String(element.getAttribute('fill')).toLowerCase()));
+  const before = await fills();
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    app.paletteInstantPreviewEnabled = true;
+    app.selectedPalette = app.paletteNames.find((name) => name !== app.selectedPalette);
+    return app.updatePalette();
+  });
+  await settleLive(page);
+  // A 0.13.0 Result has no part or label records, so it is compared with
+  // Generate by the fill of each feature.
+  expect(await fills(), 'the palette change reaches the Result').not.toEqual(before);
+  const featureFills = async () => Object.fromEntries(Object.entries((await semanticSnapshot(page)).features)
+    .map(([id, { fill }]) => [id, fill]));
+  const live = await featureFills();
+  await generate(page);
+  expect(live, 'each feature is filled as Generate fills it').toEqual(await featureFills());
+});
+

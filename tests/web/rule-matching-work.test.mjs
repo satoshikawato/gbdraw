@@ -5,7 +5,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
-import { createSvgStyles } from '../../gbdraw/web/js/app/svg-styles.js';
+import { compileDirectEditorMutationPlan } from '../../gbdraw/web/js/app/candidate-render.js';
+import { displayedFeatureAddressing } from '../../gbdraw/web/js/services/feature-override-identity.js';
 import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-editor/color-actions.js';
 import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor/rule-actions.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
@@ -68,24 +69,19 @@ test('a whole-feature pass over K features and K hash rules does O(K) work', asy
     const { features, rules, state } = setup(count, count_);
     const preparation = createRulePreparation({ state, evaluate: evaluateHashRules });
     assert.equal(await preparation.prepare(rules), true);
-    const elements = features.map((feature) => {
-      const attributes = {
-        id: feature.svg_id, 'data-gbdraw-feature-id': feature.svg_id, 'data-gbdraw-feature-part': 'block', fill: '#000000'
-      };
-      return { getAttribute: (key) => attributes[key] ?? null, setAttribute: (key, value) => { attributes[key] = value; } };
-    });
-    const svg = { querySelectorAll: (selector) => (selector.includes('data-gbdraw-feature-id') ? elements : []) };
-    Object.assign(state, {
-      svgContent: ref('<svg/>'), svgContainer: ref({ querySelector: () => svg }), appliedPaletteColors: ref({ CDS: '#cccccc' }),
-      appliedPaletteName: ref('default'), paletteDefinitions: ref({}),
-      featuresBySvgId: ref(new Map())
-    });
-    const styles = createSvgStyles({ state, watch() {}, nextTick: (fn) => fn?.(), commitActiveResultEdit: () => true });
+    // The live rule paint of the displayed Result (app/candidate-render.js, the
+    // compile's `rules` stage).
+    const catalogAdmission = displayedFeatureAddressing(features, ['diagram.svg'], 0);
+    /** @type {{ renderedId: string, color: string | null }[]} */
+    let fills = [];
     measured.push(await count_.measure(() => {
       assert.equal(preparation.isPrepared(rules), true);
-      styles.applySpecificRulesToSvg();
+      fills = compileDirectEditorMutationPlan({
+        catalogAdmission, manualSpecificRules: rules,
+        livePreview: { domains: ['featureFills'], paletteColors: { CDS: '#cccccc' }, drawnContext: null }
+      }).operationsByResult[0].featureFills;
     }));
-    assert.equal(elements.at(-1).getAttribute('fill'), '#111111');
+    assert.deepEqual(fills.at(-1), { renderedId: hashOf(count - 1), color: '#111111' });
   }
   linear(...measured);
 });

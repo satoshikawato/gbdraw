@@ -1,5 +1,6 @@
 // @ts-check
 import { stableFeatureOverrideKey } from './feature-catalog.js';
+import { pythonDrawnAttribute } from './result-paint-bases.js';
 
 const text = (value) => String(value ?? '').trim();
 const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
@@ -207,4 +208,43 @@ export const migrateLegacyFeatureOverrides = (
   }
   reportDiagnostic();
   return result;
+};
+
+// What a feature catalog's admission gives the editor compile, for a Result
+// without a catalog (a Session older than 40): each feature read from the
+// displayed Result is reached by its override key, and its fill is the one
+// the mounted Result records as Python's (a catalog row's `fill_color`).
+/**
+ * @param {readonly Record<string, any>[]} features
+ * @param {readonly string[]} resultNames
+ * @param {number} resultIndex The displayed Result.
+ * @param {Element | null} [svg] The displayed Result.
+ */
+export const displayedFeatureAddressing = (features, resultNames, resultIndex, svg = null) => {
+  /** @type {Map<string, string>} */
+  const fillByRenderedId = new Map();
+  Array.from(svg?.querySelectorAll?.('[data-gbdraw-feature-id]') || []).forEach((element) => {
+    const id = text(element.getAttribute('data-gbdraw-rendered-feature-id') || element.getAttribute('data-gbdraw-feature-id'));
+    const fill = text(pythonDrawnAttribute(element, 'fill'));
+    if (id && fill && fill !== 'none' && !fillByRenderedId.has(id)) fillByRenderedId.set(id, fill);
+  });
+  /** @type {Map<string, { resultIndex: number, renderedId: string }[]>} */
+  const renderedTargetsByOverrideKey = new Map();
+  /** @type {Map<string, Record<string, any>>} */
+  const rendered = new Map();
+  features.forEach((feature) => {
+    const renderedId = text(feature?.svg_id ?? feature?.svgId);
+    if (!renderedId || rendered.has(renderedId)) return;
+    rendered.set(renderedId, feature);
+    new Set([featureOverrideKey(feature), renderedId]).forEach((key) => {
+      if (key) renderedTargetsByOverrideKey.set(key, [...(renderedTargetsByOverrideKey.get(key) || []), { resultIndex, renderedId }]);
+    });
+  });
+  return {
+    resultNames,
+    renderedTargetsByOverrideKey,
+    resultIndexesByRenderedId: new Map([...rendered.keys()].map((renderedId) => [renderedId, new Set([resultIndex])])),
+    renderedFeaturesByResult: resultNames.map((_, index) => (index === resultIndex ? rendered : new Map())),
+    fillByRenderedId
+  };
 };

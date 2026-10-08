@@ -1,6 +1,5 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
-import { ruleMatcher } from '../services/rule-matchers.js';
 import { ruleLegendCaptions } from '../services/specific-color-rules.js';
 import {
   appliedFeatureColors,
@@ -9,14 +8,7 @@ import {
   resolveCollinearMatchColor,
   resolvePairwiseLegendGradientColorKeys
 } from '../utils/color-utils.js';
-import {
-  getFeatureElementIndex,
-  getFeatureFillElements,
-  getFeatureIdentity
-} from './feature-editor/svg-actions.js';
-import { isFeatureFillTarget } from '../services/feature-dom.js';
-import { getAllFeatureLegendGroups, PAIRWISE_LEGEND_SELECTOR, parseTransformXY } from '../services/legend-svg.js';
-import { getFeatureOverride } from '../services/feature-override-identity.js';
+import { PAIRWISE_LEGEND_SELECTOR } from '../services/legend-svg.js';
 import { getGroupsByBaseIds } from '../services/svg-result-normalization.js';
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
 
@@ -98,7 +90,7 @@ const paletteLegendColor = (legendKey, palette) => {
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
  * @property {(options?: { recolor?: Record<string, any>, prepareRules?: boolean }) => boolean | Promise<boolean>} projectPaletteAndRules
  *   The root's projection of the palette and the rules (R3), which prepares the
- *   rule matches and applies both through this owner.
+ *   rule matches, paints the tracks through this owner, and shows the fills.
  */
 
 /** @param {SvgStylesOptions} options */
@@ -109,13 +101,11 @@ export const createSvgStyles = ({
   // R13: the preview owner's commit of an edit to the displayed Result.
   commitActiveResultEdit = null,
   // R13: the composition root's projection of the palette and the rules (R3),
-  // which prepares the rule matches and applies both through this owner.
+  // which prepares the rule matches and paints the tracks through this owner.
   projectPaletteAndRules
 }) => {
   const {
     svgContent,
-    extractedFeatures,
-    featuresBySvgId,
     appliedPaletteColors,
     pairwiseMatchFactors,
     svgContainer,
@@ -169,8 +159,9 @@ export const createSvgStyles = ({
     return rowColors;
   };
 
-  // The palette styles the displayed Result with the settings of the drawing
-  // of that Result's mode: its rules, edits and skew slot colors (OV-108).
+  // The palette styles the tracks of the displayed Result with the settings of
+  // the drawing of that Result's mode: its skew slot colors (OV-108). Feature
+  // and Legend row fills are editor operations (`projectPaletteAndRules`).
   const applyPaletteToSvg = ({
     recolorPairwise = false,
     recolorCollinear = false
@@ -179,40 +170,14 @@ export const createSvgStyles = ({
     const drawing = state.drawings[resultMode];
     const busy = state.sessionOperationAvailability?.();
     if (busy) return busy;
-    if (!svgContent.value || !extractedFeatures.value.length) return;
+    if (!svgContent.value) return;
     if (!svgContainer.value) return;
-    const ruleMatches = ruleMatcher(drawing.manualSpecificRules);
-    if (!ruleMatches.ready(extractedFeatures.value)) return;
 
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
 
     const colors = appliedFeatureColors(state);
-    const featurePaths = Array.from(getFeatureElementIndex(svg).values()).flat();
-    const featureLookup = featuresBySvgId?.value || new Map();
     let updatedCount = 0;
-
-    featurePaths.forEach((path) => {
-      if (!isFeatureFillTarget(path)) return;
-      const svgId = getFeatureIdentity(path);
-      const feat = featureLookup.get(svgId);
-      if (!feat) return;
-
-      const paletteColor = colors[feat.type] || colors.default;
-      if (!paletteColor) return;
-      // A declined live match keeps the color Generate drew (R4).
-      if (ruleMatches.declined(feat)) return;
-
-      const hasSpecificRule = ruleMatches.matchesAny(feat) === true;
-
-      if (!hasSpecificRule && !getFeatureOverride(drawing.featureColorOverrides, feat)) {
-        const currentFill = path.getAttribute('fill');
-        if (currentFill !== paletteColor) {
-          path.setAttribute('fill', paletteColor);
-          updatedCount++;
-        }
-      }
-    });
 
     const gcContentGroups = getGroupsByBaseIds(
       svg,
@@ -344,66 +309,6 @@ export const createSvgStyles = ({
       }
     }
 
-    const featureLegendGroups = getAllFeatureLegendGroups(svg);
-    const keepsColor = legendRowKeepsColor(drawing);
-    featureLegendGroups.forEach((featureLegendGroup) => {
-      if (!featureLegendGroup) return;
-
-      const entryGroups = featureLegendGroup.querySelectorAll('g[data-legend-key]');
-
-      if (entryGroups.length > 0) {
-        entryGroups.forEach((entryGroup) => {
-          const legendKey = entryGroup.getAttribute('data-legend-key');
-          if (!legendKey || keepsColor(legendKey)) return;
-
-          const newColor = paletteLegendColor(legendKey, colors);
-          if (!newColor) return;
-
-          const paths = entryGroup.querySelectorAll('path');
-          for (const path of paths) {
-            const fill = path.getAttribute('fill');
-            if (fill && fill !== 'none' && !fill.startsWith('url(')) {
-              if (setColorAttributeIfChanged(path, 'fill', newColor)) updatedCount++;
-              break;
-            }
-          }
-        });
-      } else {
-        const texts = featureLegendGroup.querySelectorAll('text');
-        const allPaths = featureLegendGroup.querySelectorAll('path');
-        texts.forEach((textEl) => {
-          const textContent = textEl.textContent?.trim();
-          if (!textContent || keepsColor(textContent)) return;
-
-          const newColor = paletteLegendColor(textContent, colors);
-          if (!newColor) return;
-
-          const textPos = parseTransformXY(textEl.getAttribute('transform'));
-          let bestPath = null;
-          let bestX = -Infinity;
-          for (const path of allPaths) {
-            const pathPos = parseTransformXY(path.getAttribute('transform'));
-            const fill = path.getAttribute('fill');
-            if (
-              Math.abs(pathPos.y - textPos.y) < 2 &&
-              pathPos.x < textPos.x &&
-              fill &&
-              fill !== 'none' &&
-              !fill.startsWith('url(')
-            ) {
-              if (pathPos.x > bestX) {
-                bestX = pathPos.x;
-                bestPath = path;
-              }
-            }
-          }
-          if (bestPath) {
-            if (setColorAttributeIfChanged(bestPath, 'fill', newColor)) updatedCount++;
-          }
-        });
-      }
-    });
-
     if (colors.pairwise_match_min && colors.pairwise_match_max) {
       const allPairwiseLegends = svg.querySelectorAll(PAIRWISE_LEGEND_SELECTOR);
       allPairwiseLegends.forEach((pairwiseLegend) => {
@@ -412,50 +317,6 @@ export const createSvgStyles = ({
     }
 
     if (updatedCount > 0) commitActiveResultEdit?.('palette');
-  };
-
-  const applySpecificRulesToSvg = () => {
-    const drawing = state.activeDrawing();
-    const sessionBusy = state.sessionOperationAvailability?.();
-    if (sessionBusy) return sessionBusy;
-    if (!svgContent.value || !extractedFeatures.value.length) return;
-    if (!drawing.manualSpecificRules.length) return;
-    if (!svgContainer.value) return;
-    const ruleMatches = ruleMatcher(drawing.manualSpecificRules);
-    if (!ruleMatches.ready(extractedFeatures.value)) return;
-
-    const svg = svgContainer.value.querySelector('svg');
-    if (!svg) return;
-
-    const featureElementIndex = getFeatureElementIndex(svg);
-    const colors = appliedFeatureColors(state);
-    let updatedCount = 0;
-
-    extractedFeatures.value.forEach((feat) => {
-      if (!feat.svg_id) return;
-      // A declined live match keeps the color Generate drew (R4).
-      if (ruleMatches.declined(feat)) return;
-
-      const matchingRule = ruleMatches.first(feat);
-
-      const elements = getFeatureFillElements(svg, feat.svg_id, featureElementIndex);
-      if (elements.length > 0) {
-        const newColor = matchingRule
-          ? matchingRule.color
-          : colors[feat.type] || colors.default;
-        elements.forEach((el) => {
-          if (el.getAttribute('fill') !== newColor) {
-            el.setAttribute('fill', newColor);
-            updatedCount++;
-          }
-        });
-      }
-    });
-
-    if (updatedCount > 0) {
-      commitActiveResultEdit?.('specific-rules');
-      console.log(`Applied specific rules: updated ${updatedCount} elements`);
-    }
   };
 
   const applyTrackVisibility = () => {
@@ -569,7 +430,6 @@ export const createSvgStyles = ({
   return {
     applyPaletteToSvg,
     paletteLegendRowColors,
-    applySpecificRulesToSvg,
     applyTrackVisibility
   };
 };

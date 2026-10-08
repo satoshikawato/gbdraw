@@ -48,8 +48,8 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
  * @property {FeatureSelectionPort | null} [featureSelection]
  * @property {((reason: string) => boolean) | null} [commitActiveResultEdit]
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
- * @property {((changes: { featureId: string, mode: string }[], options?: { reason?: string }) => boolean) | null} [applyFeatureVisibilityChanges]
- *   The preview owner's projection of feature visibility changes.
+ * @property {(options: { domains: readonly string[] }) => boolean} showEditorIntent
+ *   The root's port of the editor intent onto the displayed Result (R3, R13).
  * @property {(index: number) => any} selectResult The preview owner's selection of a Result.
  * @property {() => boolean} [isPatternEditAvailable] False while a Session import is pending.
  * @property {PreviewTransformInteractionPort | null} [previewTransformInteraction]
@@ -67,8 +67,8 @@ import { createFeatureEditTableActions } from './feature-editor/feature-edit-tab
 export const createFeatureEditor = ({
   state,
   rulePreparation,
-  // R13: History's undoable steps and the preview owner's commit, visibility
-  // projection, and Result selection arrive as ports.
+  // R13: History's undoable steps, the preview owner's commit and Result
+  // selection, and the root's editor intent port arrive as ports.
   runUndoable,
   runUndoableCheckpoint,
   closeAfterDialogChoice,
@@ -83,7 +83,7 @@ export const createFeatureEditor = ({
   onLegendGeometryChanged,
   featureSelection = null,
   commitActiveResultEdit = null,
-  applyFeatureVisibilityChanges = null,
+  showEditorIntent,
   selectResult,
   isPatternEditAvailable = () => true,
   previewTransformInteraction = null,
@@ -110,7 +110,6 @@ export const createFeatureEditor = ({
     prepareDrawnFeatureMatches: (...args) => editorPorts.prepareDrawnFeatureMatches(...args),
     onFeaturePopupOpened: (...args) => editorPorts.syncLabelEditor(...args),
     featureSelection,
-    applyFeatureVisibilityChanges,
     previewTransformInteraction
   });
   const colorActions = createFeatureColorActions({
@@ -130,7 +129,7 @@ export const createFeatureEditor = ({
   // visibility through it.
   const visibilityActions = createFeatureVisibilityActions({
     state,
-    applyVisibilityPreviewChanges: featureSvgActions.applyVisibilityPreviewChanges,
+    showEditorIntent,
     ports: editorPorts,
     selectResult,
     rulePreparation,
@@ -242,7 +241,6 @@ export const createFeatureEditor = ({
     clearAlignmentOverlay: featureSvgActions.clearAlignmentOverlay,
     dispose: featureSvgActions.dispose,
     openFeatureEditorForFeature,
-    refreshFeatureOverrides: ruleActions.refreshFeatureOverrides,
     getEditableLabelByFeatureId: labelActions.getEditableLabelByFeatureId,
     syncLabelEditor: labelActions.syncLabelEditor,
     // R13: label owner ports the root hands Generate and the watchers.

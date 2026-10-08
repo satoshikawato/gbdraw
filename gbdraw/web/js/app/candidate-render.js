@@ -5,6 +5,8 @@ import { normalizeDefaultColor } from '../utils/color-utils.js';
 import { defaultLegendCaptionOrder, isLegendOrderEdited, legendRowFeatureIds } from '../services/legend-svg.js';
 import { cloneJsonValue } from '../services/json-clone.js';
 import { biologicalFeatureKey } from '../services/feature-catalog.js';
+import { ruleMatcher } from '../services/rule-matchers.js';
+import { resolveFeatureDrawn } from '../services/feature-visibility.js';
 import {
   admitCurrentGeneratedResults
 } from '../services/svg-result-ingestion.js';
@@ -13,7 +15,8 @@ import {
  * The committed editor state a direct mutation plan compiles. Python and the
  * editor owners define the row shapes (R7), so each map is a record here.
  * @typedef {object} EditorPlanOptions
- * @property {FeatureCatalogAdmission} catalogAdmission
+ * @property {EditorAddressing} catalogAdmission The feature catalog's admission, or the addressing of
+ *   a Result without a catalog (`displayedFeatureAddressing`).
  * @property {Record<string, any>} [featureColorOverrides]
  * @property {Record<string, any>} [featureStrokeOverrides]
  * @property {Record<string, any>} [featureOverrides]
@@ -31,10 +34,27 @@ import {
  * @property {string[] | null} [replayDefaultLegendOrder]
  * @property {SvgResultTransform[]} [resultTransforms] One transform per Result, by index.
  * @property {SvgResultTransform | null} [transformSvg] A transform applied to every Result.
+ * @property {LivePreview | null} [livePreview] The draft's palette, specific-color rules, and Feature
+ *   visibility as the displayed Result previews them. Generate leaves it out: Python drew them.
  */
 
 /**
- * @typedef {EditorPlanOptions & SvgAdmissionRuntime & { generationResponse: any }} CandidateCommitOptions
+ * What Python draws from the draft at Generate, previewed live: the applied
+ * palette, the specific-color rules through their prepared matches (Python's,
+ * R4), and whether each rendered feature is drawn (`resolveFeatureDrawn`).
+ * @typedef {object} LivePreview
+ * @property {Record<string, string>} paletteColors
+ * @property {ReturnType<typeof import('../services/feature-visibility.js').featureDrawnContext> | null} drawnContext
+ *   `featureDrawnContext` of the drawing.
+ */
+
+/**
+ * What the compile reads of a feature catalog's admission.
+ * @typedef {FeatureCatalogAdmission | ReturnType<typeof import('../services/feature-override-identity.js').displayedFeatureAddressing>} EditorAddressing
+ */
+
+/**
+ * @typedef {EditorPlanOptions & SvgAdmissionRuntime & { generationResponse: any, catalogAdmission: FeatureCatalogAdmission }} CandidateCommitOptions
  */
 
 const text = (value) => String(value ?? '').trim();
@@ -116,6 +136,31 @@ const matchingRuleDerivedFill = (override, manualSpecificRules) => {
   ));
 };
 
+const samePaint = (left, right) => (
+  text(resolveColorToHex(text(left))).toLowerCase() === text(resolveColorToHex(text(right))).toLowerCase()
+);
+
+// The palette color of a Legend row Python draws for a feature type or a
+// track (`other <type>s` rows take their type's color).
+/** @type {Record<string, string>} */
+const LEGEND_PALETTE_KEYS = {
+  'GC content': 'gc_content',
+  'GC skew (+)': 'skew_high',
+  'GC skew (-)': 'skew_low'
+};
+/** @param {string} caption @param {Record<string, string>} palette */
+const paletteLegendColor = (caption, palette) => {
+  const key = LEGEND_PALETTE_KEYS[caption] || caption;
+  if (palette[key]) return palette[key];
+  const lower = caption.toLowerCase();
+  if (lower === 'other proteins') return palette.CDS || '';
+  if (!lower.startsWith('other ')) return '';
+  let type = caption.slice(6).trim();
+  if (type.toLowerCase() === 'proteins') return palette.CDS || '';
+  if (type.endsWith('s')) type = type.slice(0, -1);
+  return palette[type] || '';
+};
+
 const resolvedStableTargets = (catalogAdmission, key) => (
   catalogAdmission.renderedTargetsByOverrideKey.get(key) || []
 );
@@ -164,13 +209,19 @@ const compilePlanBundle = ({
   manualSpecificRules = [],
   replayDefaultLegendOrder = null,
   resultTransforms = [],
-  transformSvg = null
+  transformSvg = null,
+  livePreview = null
 }) => {
   if (!catalogAdmission || !Array.isArray(catalogAdmission.resultNames)) {
     throw new Error('Direct editor mutation planning requires an admitted feature catalog.');
   }
   const operationsByResult = catalogAdmission.resultNames.map(() => emptyOperations());
   const normalizedFeatureColorOverrides = {};
+  const drawnFillById = 'fillByRenderedId' in catalogAdmission ? catalogAdmission.fillByRenderedId : null;
+  // The fill Python drew a rendered feature with: its catalog row's, else the
+  // displayed Result's (a Result without a catalog).
+  /** @param {string} renderedId @param {Record<string, any> | undefined} feature */
+  const pythonFill = (renderedId, feature) => text(feature?.fill_color) || text(drawnFillById?.get(renderedId));
 
   Object.entries(featureColorOverrides || {}).forEach(([key, rawOverride]) => {
     const color = normalizePaint(
@@ -218,7 +269,7 @@ const compilePlanBundle = ({
       const operations = operationsByResult[resultIndex];
       if (!operations) return;
       if (featureMode === 'on' || featureMode === 'off') {
-        operations.featureVisibility.push({ renderedId, mode: featureMode });
+        if (!livePreview) operations.featureVisibility.push({ renderedId, mode: featureMode });
         if (featureMode === 'off') hiddenRenderedIds.add(renderedId);
       }
       if (typeof row?.labelText === 'string') {
@@ -229,6 +280,33 @@ const compilePlanBundle = ({
       }
     });
   });
+
+  const rules = Array.isArray(manualSpecificRules) ? manualSpecificRules : [];
+  const ruleMatches = ruleMatcher(rules);
+  // Fill precedence, live as at Generate: a feature's fill edit, else its
+  // first matching rule, else its palette color, else what Python drew. Python
+  // drew the rules and the palette of the request, so only the live preview
+  // emits them, where they differ from Python's fill; a feature whose rule
+  // match is not known yet keeps Python's fill. Python draws every rendered
+  // feature, so visibility names the rendered features the resolver hides.
+  if (livePreview) {
+    const { paletteColors = {}, drawnContext = null } = livePreview;
+    operationsByResult.forEach((operations, resultIndex) => {
+      const edited = new Set(operations.featureFills.map(({ renderedId }) => renderedId));
+      /** @type {Map<string, Record<string, any>>} */
+      const rendered = catalogAdmission.renderedFeaturesByResult?.[resultIndex] || new Map();
+      rendered.forEach((feature, renderedId) => {
+        const rule = edited.has(renderedId) ? undefined : ruleMatches.firstIfKnown(feature);
+        const color = rule === undefined ? '' : normalizePaint(
+          rule ? rule.color : (paletteColors[feature.type] || paletteColors.default), 'feature fill'
+        );
+        if (color && !samePaint(color, pythonFill(renderedId, feature))) operations.featureFills.push({ renderedId, color });
+        if (drawnContext && resolveFeatureDrawn(feature, drawnContext) === false) {
+          operations.featureVisibility.push({ renderedId, mode: 'off' });
+        }
+      });
+    });
+  }
 
   const currentEntries = normalizedLegendEntries(legendEntries);
   const originalCaptions = new Set(
@@ -286,7 +364,7 @@ const compilePlanBundle = ({
     const rendered = catalogAdmission.renderedFeaturesByResult?.[resultIndex] || new Map();
     const drawn = {
       /** @type {Array<[string, string]>} */
-      drawnFills: [...rendered].map(([renderedId, feature]) => [renderedId, edited.get(renderedId) ?? text(feature?.fill_color)]),
+      drawnFills: [...rendered].map(([renderedId, feature]) => [renderedId, edited.get(renderedId) ?? pythonFill(renderedId, feature)]),
       ownStrokeIds: operations.featureStrokes.map(({ renderedId }) => renderedId)
     };
     drawnFeaturesByResult.set(resultIndex, drawn);
@@ -353,6 +431,8 @@ const compilePlanBundle = ({
   // Apply a returning category's preference without synthesizing a manual row.
   const entriesByCaption = new Map([...dormantEntries, ...currentEntries].map(entry => [entry.caption, entry]));
   const styledCaptions = new Set([...Object.keys(legendColorOverrides), ...Object.keys(legendStrokeOverrides)]);
+  /** @type {Set<string>} */
+  const filledCaptions = new Set();
   styledCaptions.forEach(caption => {
     const entry = entriesByCaption.get(caption);
     const originalCaption = entry?.originalCaption || caption;
@@ -376,6 +456,7 @@ const compilePlanBundle = ({
       || (legendRenderedIds.length > 0 && renderedIdsIn(resultIndex).length === 0);
     if (hasOwn(legendColorOverrides, caption)) {
       const color = normalizePaint(legendColorOverrides[caption], 'legend color');
+      if (color) filledCaptions.add(targetCaption);
       if (color) operationsByResult.forEach((operations, resultIndex) => {
         operations.legendFills.push({ caption: targetCaption, color, allowMissing: allowMissingIn(resultIndex) });
       });
@@ -392,6 +473,26 @@ const compilePlanBundle = ({
       });
     }
   });
+
+  // A row without a Legend color of its own shows its rule's color, else its
+  // palette color, as Python draws them (OV-146: every swatch fill is an
+  // operation, so a reconcile never returns a rule or palette row to an older
+  // fill). A Result may not draw the row.
+  if (livePreview) {
+    /** @type {Map<string, string>} */
+    const ruleColors = new Map();
+    rules.forEach((rule) => {
+      const caption = text(rule?.cap);
+      if (caption && !ruleColors.has(caption)) ruleColors.set(caption, text(rule.color));
+    });
+    new Set([...originalCaptions, ...ruleColors.keys()]).forEach((caption) => {
+      if (filledCaptions.has(caption) || deletedCaptions.has(caption)) return;
+      const color = normalizePaint(
+        ruleColors.get(caption) || paletteLegendColor(caption, livePreview.paletteColors || {}), 'legend color'
+      );
+      if (color) addToResults(operationsByResult, allResultIndexes, 'legendFills', { caption, color, allowMissing: true });
+    });
+  }
 
   deletedCaptions.forEach((caption) => {
     // Explicit deletions remain valid while their category is absent, including

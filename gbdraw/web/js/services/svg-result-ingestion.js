@@ -777,6 +777,8 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => 
   const record = (element, name, edited, original) => {
     const current = element.getAttribute(name);
     if (edited === null || edited === undefined || edited === '') return;
+    // A catalog row without Python's fill cannot say what Python drew: no record.
+    if (name === 'fill' && !text(original)) return;
     if (samePaint(name, current, original) || !samePaint(name, current, edited)) return;
     if (!element.hasAttribute(resultBaseAttribute(name))) element.setAttribute(resultBaseAttribute(name), text(original));
   };

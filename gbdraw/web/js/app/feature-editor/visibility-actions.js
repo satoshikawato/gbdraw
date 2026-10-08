@@ -34,8 +34,9 @@ import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/
 /**
  * @typedef {object} FeatureVisibilityActionsOptions
  * @property {Record<string, any>} state App state (state.js; not yet typed).
- * @property {(changes: { featureId: string, mode: string }[], options?: { reason?: string }) => boolean} applyVisibilityPreviewChanges
- *   The feature SVG owner's preview of visibility changes.
+ * @property {(options: { domains: readonly string[] }) => boolean} showEditorIntent
+ *   The root's port of the editor intent onto the displayed Result (R13), which
+ *   compiles Feature visibility with `resolveFeatureDrawn`, as Generate draws it.
  * @property {VisibilityActionsPorts} ports
  * @property {(index: number) => any} selectResult The preview owner's selection of the Result a History command targets.
  * @property {import('../rule-matching.js').RulePreparation | null} [rulePreparation]
@@ -43,11 +44,14 @@ import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/
  *   The committed canonical request (Python owns the option fields, R7).
  */
 
+// The paint domain this owner shows through the port.
+const VISIBILITY_DOMAINS = Object.freeze(['featureVisibility']);
+
 /** @param {FeatureVisibilityActionsOptions} options */
 export const createFeatureVisibilityActions = ({
   state,
-  // R13: the feature SVG owner's preview of visibility changes.
-  applyVisibilityPreviewChanges,
+  // R13: the root's port of the editor intent onto the displayed Result.
+  showEditorIntent,
   // R13: the composition root registers `applyFeatureVisibilityToLabels` once
   // the label owner exists; this owner only calls it.
   ports,
@@ -215,7 +219,6 @@ export const createFeatureVisibilityActions = ({
       : drawing.featureVisibilityManualRules.map((rule) => normalizeFeatureVisibilityRule(rule))
   );
 
-  const featureSvgId = (feature) => normalizeText(feature?.svg_id ?? feature?.svgId ?? feature?.id);
   const sameFeature = (left, right) => {
     const key = featureIdentityKeyOf(left);
     return Boolean(key) && key === featureIdentityKeyOf(right);
@@ -233,32 +236,24 @@ export const createFeatureVisibilityActions = ({
     resultLegendSources(state, context)
   );
 
-  // The live projection of what the label rerender and Generate draw (R3): a
-  // feature the displayed Result draws shows the resolver's answer, and an
-  // unknown answer leaves it as it is. A feature the Result does not draw and
-  // the resolver draws needs geometry the Result does not have, so the action
-  // asks for the rerender, which draws what Generate draws (R-5); so does an
-  // unknown answer for a feature the action names (`targeted`), and, unless
-  // the caller declines it (`legend`), a changed Legend source of any Result
-  // (OV-42). The resolver reads Python's rule matches, so an action prepares
-  // them first (`prepareDrawn`).
+  // The live projection of what the label rerender and Generate draw (R3):
+  // the port shows the resolver's answer for every feature the displayed
+  // Result draws, and an unknown answer keeps Python's. A feature the Result
+  // does not draw and the resolver draws needs geometry the Result does not
+  // have, so the action asks for the rerender, which draws what Generate draws
+  // (R-5); so does an unknown answer for a feature the action names
+  // (`targeted`), and, unless the caller declines it (`legend`), a changed
+  // Legend source of any Result (OV-42). The resolver reads Python's rule
+  // matches, so an action prepares them first (`prepareDrawn`).
   /** @param {DrawingState} drawing */
-  const drawnChanges = (drawing, features, { targeted = false, legend = true } = {}) => {
+  const needsRerenderFor = (drawing, features, { targeted = false, legend = true } = {}) => {
     const context = featureDrawnContext(drawing, { diagramOptions: getCommittedRequest()?.diagramOptions });
     const catalogFeatures = resultCatalogFeatures(state);
-    let needsRerender = false;
-    const changes = features.flatMap((feature) => {
-      const shown = catalogFeatures
-        ? catalogFeatures.renderedByIdentity.get(stableFeatureOverrideKey(feature)) : feature;
-      const drawn = resolveFeatureDrawn(shown || feature, context);
-      if (!shown) {
-        needsRerender ||= drawn === true || (targeted && drawn === null);
-        return [];
-      }
-      const featureId = featureSvgId(shown);
-      return featureId && drawn !== null ? [{ featureId, mode: drawn ? 'on' : 'off' }] : [];
-    });
-    return { changes, needsRerender: needsRerender || (legend && legendSourceChanged(context)) };
+    return features.some((feature) => {
+      if (!catalogFeatures || catalogFeatures.renderedByIdentity.has(stableFeatureOverrideKey(feature))) return false;
+      const drawn = resolveFeatureDrawn(feature, context);
+      return drawn === true || (targeted && drawn === null);
+    }) || (legend && legendSourceChanged(context));
   };
   // Every catalog feature of the displayed Result, as drawn where it is drawn.
   const displayedFeatures = () => {
@@ -269,17 +264,17 @@ export const createFeatureVisibilityActions = ({
       ))
       : uniqueFeaturesBySvgId(Array.isArray(extractedFeatures.value) ? extractedFeatures.value : []);
   };
-  // Applies the projection; returns whether a mounted element changed and
-  // whether the rerender must draw a feature or the Legend.
+  // Shows the projection; returns whether the Result changed and whether the
+  // rerender must draw a feature or the Legend.
   /**
    * @param {DrawingState} drawing
    * @param {Record<string, any>[]} features
-   * @param {{ targeted?: boolean, legend?: boolean, reason?: string }} [projection]
+   * @param {{ targeted?: boolean, legend?: boolean }} [projection]
    */
-  const projectDrawn = (drawing, features, { targeted = false, legend = true, ...options } = {}) => {
-    const { changes, needsRerender } = drawnChanges(drawing, features, { targeted, legend });
-    return { updated: applyVisibilityPreviewChanges(changes, options), needsRerender };
-  };
+  const projectDrawn = (drawing, features, projection = {}) => ({
+    updated: showEditorIntent({ domains: VISIBILITY_DOMAINS }),
+    needsRerender: needsRerenderFor(drawing, features, projection)
+  });
   // Also the reaction the popup and Label On ask this owner for: the matches
   // `resolveFeatureDrawn` reads are this owner's read model (R13).
   /**
@@ -329,7 +324,7 @@ export const createFeatureVisibilityActions = ({
     const commandResultIndex = Number(selectedResultIndex?.value || 0);
     const commandGenerationKey = String(resultGenerationKey?.value ?? '');
 
-    const applyChangeSet = async (direction, reason) => {
+    const applyChangeSet = async (direction) => {
       if (!(await ensureCommandTargetResult(commandResultIndex, commandGenerationKey))) return false;
       await prepareDrawn();
       const useAfter = direction === 'apply';
@@ -341,7 +336,7 @@ export const createFeatureVisibilityActions = ({
           mode: useAfter ? change.after : change.before
         }))
       );
-      const { updated, needsRerender } = projectDrawn(drawing, changedFeatures, { reason, targeted: true });
+      const { updated, needsRerender } = projectDrawn(drawing, changedFeatures, { targeted: true });
       if (!updated && !overrideChanged) return false;
       updateClickedFeatureVisibilityFromRules(drawing, targetFeatures);
       followLabels({ rerender: needsRerender });
@@ -353,8 +348,8 @@ export const createFeatureVisibilityActions = ({
       resultIndex: commandResultIndex,
       resultGenerationKey: commandGenerationKey,
       changes,
-      apply: () => applyChangeSet('apply', 'bulk-feature-visibility-apply'),
-      revert: () => applyChangeSet('revert', 'bulk-feature-visibility-undo'),
+      apply: () => applyChangeSet('apply'),
+      revert: () => applyChangeSet('revert'),
       estimateBytes: () => JSON.stringify({ resultIndex: commandResultIndex, resultGenerationKey: commandGenerationKey, changes }).length * 2
     };
   };

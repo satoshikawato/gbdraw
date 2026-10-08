@@ -29,6 +29,8 @@ import {
   reconcileMountedResult
 } from '../../gbdraw/web/js/services/svg-result-ingestion.js';
 import { stripResultBaseAttributes } from '../../gbdraw/web/js/services/result-paint-bases.js';
+import { recordRuleMatches, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
+import { displayedFeatureAddressing, featureOverrideKey } from '../../gbdraw/web/js/services/feature-override-identity.js';
 
 class FakeElement {
   constructor(tagName, attributes = {}, children = []) {
@@ -1036,4 +1038,116 @@ test('Load records Python\'s paint on a Session 46 Result saved without records'
   assert.equal(python.CDS, '#54bcf8 gray 2');
   assert.equal(python.repeat_region, '#d3d3d3 gray 2.0');
   assert.equal(python.f9cf91913, saved.f9cf91913, 'an unedited feature keeps its paint');
+});
+
+// U2b: the live preview compiles the palette, the specific-color rules (their
+// prepared matches), and Feature visibility with Generate's precedence, so every
+// feature and Legend row fill the displayed Result shows is an operation.
+const previewFeature = (admission) => admission.renderedFeaturesByResult[0].get('f0001');
+const previewPlan = (admission, { paletteColors = { CDS: '#aaaaaa' }, drawnContext = null, ...options } = {}) => (
+  compileDirectEditorMutationPlan({
+    catalogAdmission: admission,
+    legendEntries: [{ caption: 'CDS', originalCaption: 'CDS', color: '#aaaaaa' }],
+    originalLegendOrder: ['CDS'],
+    livePreview: { paletteColors, drawnContext },
+    ...options
+  }).operationsByResult[0]
+);
+const swatchFill = (svg) => svg.querySelector('g[data-legend-key]').querySelector('path').getAttribute('fill');
+const featureFill = (svg) => svg.querySelector('[data-gbdraw-feature-id]').getAttribute('fill');
+
+test('live fills follow override > rule > palette > what Python drew', () => {
+  const { admission } = currentFixture();
+  const rule = { feat: 'CDS', qual: 'gene', val: 'x', cap: 'Rule row', color: '#ff0000' };
+  const fills = (options) => previewPlan(admission, options).featureFills.map(({ color }) => color);
+  assert.deepEqual(fills(), [], 'the palette Python drew needs no operation');
+  assert.deepEqual(fills({ paletteColors: { CDS: '#00ff00' } }), ['#00ff00']);
+  assert.deepEqual(fills({ paletteColors: { CDS: '#00ff00' }, manualSpecificRules: [rule] }), [],
+    'a feature whose rule match is not known keeps what Python drew');
+  recordRuleMatches([previewFeature(admission)], [ruleKey(rule)], () => ({ matched: [0], priorities: [0], declined: [] }));
+  assert.deepEqual(fills({ paletteColors: { CDS: '#00ff00' }, manualSpecificRules: [rule] }), ['#ff0000']);
+  assert.deepEqual(fills({
+    paletteColors: { CDS: '#00ff00' }, manualSpecificRules: [rule],
+    featureColorOverrides: { [biologicalFeatureKey('record-a', 'feature-a')]: '#123456' }
+  }), ['#123456'], 'a fill edit wins');
+  assert.deepEqual(compileDirectEditorMutationPlan({
+    catalogAdmission: admission, manualSpecificRules: [rule]
+  }).operationsByResult[0].featureFills, [], 'Generate leaves the rules and palette to Python');
+});
+
+test('live visibility hides the rendered features the resolver does not draw', () => {
+  const { admission } = currentFixture();
+  const context = (selected) => ({ featureOverrides: {}, rules: [], selectedTypes: new Set(selected), colorRules: [] });
+  assert.deepEqual(previewPlan(admission, { drawnContext: context(['tRNA']) }).featureVisibility,
+    [{ renderedId: 'f0001', mode: 'off' }]);
+  assert.deepEqual(previewPlan(admission, { drawnContext: context(['CDS']) }).featureVisibility, []);
+});
+
+// OV-146: a swatch whose Legend-only color was retired shows its rule's or
+// palette's color on the next Legend fill reconcile, not the fill Python drew.
+test('a Legend fill reconcile shows the rule or palette color of a row whose own color left', () => {
+  const { admission } = currentFixture();
+  const mounted = buildSvgRoot();
+  reconcileMountedResult(mounted, previewPlan(admission, { legendColorOverrides: { CDS: '#334455' } }), { domains: ['legendFills'] });
+  assert.equal(swatchFill(mounted), '#334455');
+  const rule = { feat: 'CDS', qual: 'gene', val: 'x', cap: 'CDS', color: '#ff0000' };
+  reconcileMountedResult(mounted, previewPlan(admission, { manualSpecificRules: [rule] }), { domains: ['legendFills'] });
+  assert.equal(swatchFill(mounted), '#ff0000');
+  reconcileMountedResult(mounted, previewPlan(admission, { paletteColors: { CDS: '#00ff00' } }), { domains: ['legendFills'] });
+  assert.equal(swatchFill(mounted), '#00ff00');
+  reconcileMountedResult(mounted, previewPlan(admission), { domains: ['featureFills', 'legendFills'] });
+  assert.equal(swatchFill(mounted), '#aaaaaa');
+  assert.equal(featureFill(mounted), '#aaaaaa');
+});
+
+// A Result without a feature catalog (a Session older than 40) is reached
+// through the features read from it, so live edits still show.
+test('a Result without a feature catalog receives the editor operations of its features', () => {
+  const feature = { svg_id: 'f0001', type: 'CDS', id: 'f0001' };
+  const addressing = displayedFeatureAddressing([feature], ['diagram.svg'], 0);
+  const operations = compileDirectEditorMutationPlan({
+    catalogAdmission: addressing,
+    featureStrokeOverrides: { [featureOverrideKey(feature)]: { strokeColor: '#e63946', strokeWidth: 3 } },
+    livePreview: { paletteColors: { CDS: '#00ff00' }, drawnContext: null }
+  }).operationsByResult[0];
+  const mounted = buildSvgRoot();
+  reconcileMountedResult(mounted, operations, { domains: ['featureStrokes', 'featureFills'] });
+  const element = mounted.querySelector('[data-gbdraw-feature-id]');
+  assert.deepEqual(['stroke', 'stroke-width', 'fill'].map((name) => element.getAttribute(name)), ['#e63946', '3', '#00ff00']);
+  reconcileMountedResult(mounted, createEmptySvgMutationPlan(1).operationsByResult[0], { domains: ['featureStrokes', 'featureFills'] });
+  assert.deepEqual(['stroke', 'stroke-width', 'fill'].map((name) => element.getAttribute(name)), [null, null, '#aaaaaa']);
+});
+
+// Without a catalog, Python's fill of each feature is read from the displayed
+// Result: a palette color equal to it is no operation, and a Legend row
+// stroke reaches the features drawn with the row's color.
+test('a Result without a feature catalog takes Python\'s fills from the displayed Result', () => {
+  const feature = { svg_id: 'f0001', type: 'CDS', id: 'f0001' };
+  const mounted = buildSvgRoot();
+  const operations = compileDirectEditorMutationPlan({
+    catalogAdmission: displayedFeatureAddressing([feature], ['diagram.svg'], 0, mounted),
+    legendEntries: [{ caption: 'CDS', color: '#aaaaaa' }],
+    legendStrokeOverrides: { CDS: { strokeColor: '#e63946' } },
+    livePreview: { paletteColors: { CDS: '#AAAAAA' }, drawnContext: null }
+  }).operationsByResult[0];
+  assert.deepEqual(operations.featureFills, []);
+  assert.deepEqual(operations.legendStrokes.map(({ renderedIds }) => renderedIds), [['f0001']]);
+});
+
+// A catalog row that does not say which fill Python drew gives no record, so
+// a later fill reconcile cannot remove the fill.
+test('the Load normalizer records no fill Python is not known to have drawn', () => {
+  const featureCatalog = catalog();
+  featureCatalog.items[0].features[0].fillColor = '';
+  const response = normalizeGenerationResponse({ results: [{ name: 'diagram.svg', content: '<svg/>' }], metadata: { featureCatalog } });
+  const admission = admitFeatureCatalog(featureCatalog, response.results, { mode: 'linear' });
+  const svg = buildSvgRoot();
+  svg.querySelector('[data-gbdraw-feature-id]').setAttribute('fill', '#112233');
+  const plan = createSavedResultPlan(response.results, admission, {
+    featureColorOverrides: { [biologicalFeatureKey('record-a', 'feature-a')]: '#112233' },
+    featureStrokeOverrides: {}, legendEntries: [], legendColorOverrides: {}, legendStrokeOverrides: {},
+    originalLegendColors: {}, originalSvgStroke: { color: null, width: null }
+  });
+  plan.operationsByResult[0].callerTransforms.forEach((transform) => transform(svg));
+  assert.doesNotMatch(serializeNode(svg), /data-gbdraw-base-fill/);
 });
