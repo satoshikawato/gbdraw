@@ -124,6 +124,9 @@ const { createRulePreparation, firstMatchingRule, runWhenPrepared } = await impo
 // The rule owner's `runWithRuleMatches` for these fakes: the color matches of the rules, prepared once.
 const runWithRuleMatchesOf = (preparation, state) => (rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit);
 const preparationState = { extractedFeatures, biologicalFeatures, manualSpecificRules };
+let legendSiblings = [featureB, hashOnlyFeature];
+const preparedRuleSets = [];
+const runWithRuleMatchesForActions = runWithRuleMatchesOf(createRulePreparation({ state: withDrawings(preparationState), evaluate: evaluatePythonRules }), preparationState);
 const actions = createFeatureColorActions({
   state: withDrawings({
     results: ref([]),
@@ -155,7 +158,10 @@ const actions = createFeatureColorActions({
   },
   extractLegendEntries: () => {},
   ruleActions: {
-    runWithRuleMatches: runWithRuleMatchesOf(createRulePreparation({ state: withDrawings(preparationState), evaluate: evaluatePythonRules }), preparationState),
+    runWithRuleMatches: (rules, commit) => {
+      preparedRuleSets.push(rules.map((rule) => `${rule.feat}|${rule.qual}|${rule.val}`));
+      return runWithRuleMatchesForActions(rules, commit);
+    },
     commitSpecificRules: async (rules, _label, {afterCommit = () => {}, previousLegendIntents = []} = {}) => {
       committedLegendIntents.push(previousLegendIntents);
       const preparation = createRulePreparation({state:withDrawings({extractedFeatures,biologicalFeatures,manualSpecificRules}),evaluate:evaluatePythonRules});
@@ -184,7 +190,7 @@ const actions = createFeatureColorActions({
         (feature.displayLabel || feature.product) === label
     ),
     findFeaturesWithSameIndividualLabel: () => [],
-    findFeaturesWithSameLegendItem: () => [featureB, hashOnlyFeature],
+    findFeaturesWithSameLegendItem: () => legendSiblings,
     findMatchingRegexRule: () => specificRule,
     getDisplayedFeatureLabel: (feature) => feature.displayLabel || feature.product || '',
     getEffectiveLegendCaption: () => 'Core',
@@ -237,6 +243,31 @@ legendEntries.value = [{ caption: 'Manual row', color: '#111111' }];
 await actions.setFeatureColor(featureA, '#abcdef', 'Manual row');
 assert.deepEqual(committedLegendIntents.at(-1), []);
 assert.equal(legendColorOverrides['Manual row'], undefined);
+
+// A popup color change prepares only the clicked feature's rules: the sibling
+// features of its legend item add no rules, so the request stays constant
+// (it was siblings x features on a large Session).
+{
+  manualSpecificRules.splice(0);
+  legendSiblings = Array.from({ length: 50 }, (_, index) => ({
+    id: `sibling-${index}`,
+    svg_id: `hash-sibling-${index}`,
+    type: 'CDS',
+    product: `product ${index}`,
+    qualifiers: { product: [`product ${index}`] },
+    start: 100 + index,
+    end: 110 + index
+  }));
+  preparedRuleSets.length = 0;
+  clickedFeature.value = { feat: featureA, legendName: 'Core' };
+  await actions.updateClickedFeatureColor('#123456');
+  const distinctRuleKeys = new Set(preparedRuleSets.flat());
+  assert.ok(distinctRuleKeys.size <= 3, `prepared ${distinctRuleKeys.size} distinct rules for 50 siblings`);
+  legendSiblings = [featureB, hashOnlyFeature];
+  clickedFeature.value = null;
+  Object.assign(featureStyleScopeDialog, { show: false });
+  manualSpecificRules.splice(0);
+}
 
 const labelFeatureA = {
   id: 'label-feature-a',
