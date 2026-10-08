@@ -1226,6 +1226,8 @@ export const executeCanonicalRenderCandidate = async ({
  *   The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
  * @property {() => Promise<void>} [settleComparisonRecordLabels] D12: ring rows added just before Generate are named before it reads them.
  * @property {((mode: string, state: any) => void) | null} [assertActiveModeInputs]
+ * @property {(() => string) | null} [readDraftSignature] The History signature of the committed draft
+ *   intent (UJ-10: a Cancel compares the canceled draft with the draft of the shown Result).
  *   services/config.js owns the active-mode input check shared with Save.
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
@@ -1262,6 +1264,7 @@ export const createRunAnalysis = ({
   settleComparisonRecordLabels = async () => {},
   // services/config.js owns the active-mode input check shared with Save.
   assertActiveModeInputs = null,
+  readDraftSignature = null,
   // R13: the label owner's ports (app/feature-editor/label-actions.js).
   closeLabelTextScopeDialog,
   clearLabelBuildNotices,
@@ -5009,6 +5012,9 @@ export const createRunAnalysis = ({
     }
   };
 
+  // UJ-10: the Results a successful Generate showed and the draft it read.
+  /** @type {{ results: any, signature: string } | null} */
+  let shownGenerateDraft = null;
   /**
    * @param {Record<string, any> | null} [comparisonPlanSnapshot]
    * @param {Record<string, any> | null} [generatedArtifactHandle]
@@ -5037,6 +5043,7 @@ export const createRunAnalysis = ({
     const initialResults = results.value;
     /** @type {string | null} */
     let historyRecovery = null;
+    let runDraftIsShown = false;
     processing.value = true;
     processingStatus.value = 'Preparing input files...';
     generationCancelRequested.value = false;
@@ -5079,6 +5086,10 @@ export const createRunAnalysis = ({
       }
       const execute = (handle) => {
         beforeHandle = handle || generatedArtifactHandle;
+        // History has settled the draft this run reads.
+        const signature = readDraftSignature?.() || '';
+        runDraftIsShown = Boolean(signature) && shownGenerateDraft?.signature === signature
+          && shownGenerateDraft.results === results.value;
         return runAnalysisInternal(drawing, {
           decorationContinuity, comparisonPlanSnapshot, generatedArtifactHandle: beforeHandle,
           comparisonExecution, isCurrentOperation, isCurrentAlert
@@ -5142,12 +5153,14 @@ export const createRunAnalysis = ({
         outcome = publicOutcome;
       }
       if (outcome?.status === 'canceled' && isCurrentOperation()) {
-        failedGeneratePreservedResult.value = results.value.length > 0;
+        // 'current': the canceled run read the draft of the shown Result (UJ-10).
+        failedGeneratePreservedResult.value = results.value.length > 0 && (runDraftIsShown ? 'current' : true);
       } else if (outcome?.status === 'ok') {
         failedGeneratePreservedResult.value = false;
         if (generationFailureRecovery) generationFailureRecovery.value = null;
       }
       await afterGenerate?.(outcome);
+      if (outcome?.status === 'ok') shownGenerateDraft = { results: results.value, signature: readDraftSignature?.() || '' };
       return outcome;
     } catch (cause) {
       outcome = await failOperation(cause, { handle: beforeHandle, isCurrent: isCurrentAlert, isCurrentOperation,

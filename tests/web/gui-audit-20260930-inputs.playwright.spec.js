@@ -425,3 +425,33 @@ test('completing the Linear input that failed Generate clears that input error',
   await uploadLinear(page, 1, 'second.gb', SECOND_RECORD_TEXT);
   await expect.poll(() => generationError(page), { timeout: 60_000 }).toBe(null);
 });
+
+// UJ-10: Cancel names unapplied changes only when the canceled Generate
+// differed from the shown Result.
+test('Cancel of a Generate without changes says the shown Result is current', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openWithGenBank(page, HMMT);
+  await generateAndWaitForResult(page);
+  const cancelInsideRun = () => evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    const started = window.__AUDIT_LIFECYCLE__.filter((name) => name === 'generate-start').length;
+    const run = app.runAnalysis();
+    await new Promise((resolve) => {
+      const poll = () => (window.__AUDIT_LIFECYCLE__.filter((name) => name === 'generate-start').length > started
+        ? resolve() : setTimeout(poll, 1));
+      poll();
+    });
+    app.cancelGeneration();
+    return { status: (await run).status, preserved: app.failedGeneratePreservedResult };
+  });
+  const notice = page.getByRole('status').filter({ hasText: 'Showing the last successful result.' });
+  expect(await cancelInsideRun()).toEqual({ status: 'canceled', preserved: 'current' });
+  await expect(notice).toContainText('It matches the current settings.');
+  await expect(notice).not.toContainText('Current changes were not applied.');
+
+  await page.getByLabel('Species', { exact: true }).fill('Changed species');
+  await page.getByLabel('Species', { exact: true }).blur();
+  await settle(page);
+  expect(await cancelInsideRun()).toEqual({ status: 'canceled', preserved: true });
+  await expect(notice).toContainText('Current changes were not applied.');
+});

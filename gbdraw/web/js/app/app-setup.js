@@ -2717,6 +2717,7 @@ export const createAppSetup = () => {
     prepareLinearRecordCatalog,
     recordDisplayRows: recordDisplayControls.allRows,
     assertActiveModeInputs,
+    readDraftSignature: () => history.getCurrentIntentSignature(),
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
     canonicalSessionVersion: SESSION_VERSION,

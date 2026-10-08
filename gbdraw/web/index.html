@@ -4998,7 +4998,8 @@
                      role="status"
                      class="-mx-4 border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0">
                     <p class="font-semibold">Showing the last successful result.</p>
-                    <p>Current changes were not applied.</p>
+                    <p v-if="failedGeneratePreservedResult === 'current'">It matches the current settings.</p>
+                    <p v-else>Current changes were not applied.</p>
                 </div>
 
                 <div v-if="similarityAlignmentBusy"
