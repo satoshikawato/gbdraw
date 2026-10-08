@@ -43,6 +43,7 @@ import {
   disposeSessionOperations,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
+  getCommittedLinearDefinitionVisibility,
   readCommittedResourceRecordCount,
   assertActiveModeInputs,
   importSession as importSessionFromFile,
@@ -1823,9 +1824,14 @@ export const createAppSetup = () => {
     const shown = resolveLinearLabelVisibility('auto', {
       hasSharedRow: linearLabelHasSharedRow.value
     });
+    // The shown Result already has Auto's outcome: say what it shows.
+    const applied = getCommittedLinearDefinitionVisibility();
+    const effect = linearLabelAutoFields.value.every((row) => applied[row.visibilityKey] === shown)
+      ? `Auto ${shown ? 'shows' : 'hides'} these fields throughout the diagram`
+      : `Auto will ${shown ? 'show' : 'hide'} these fields throughout the diagram on the next successful Generate`;
     return shown
-      ? `${fields}: Auto will show these fields throughout the diagram on the next successful Generate because no rendered row contains multiple records.`
-      : `${fields}: Auto will hide these fields throughout the diagram on the next successful Generate because at least one rendered row contains multiple records. Choose Show in Record Labels to keep a field visible.`;
+      ? `${fields}: ${effect} because no rendered row contains multiple records.`
+      : `${fields}: ${effect} because at least one rendered row contains multiple records. Choose Show in Record Labels to keep a field visible.`;
   });
   const focusLinearLabelVisibility = async (key) => {
     if (mode.value !== 'linear') return;

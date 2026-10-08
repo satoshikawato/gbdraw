@@ -344,6 +344,24 @@ const canonicalRecordTranslations = (value, recordKeys, path, { requireCoverage 
   return translations;
 };
 
+// The Linear Accession and Length visibility a committed request resolved,
+// by the `adv` key that selects it; null when the request is not Linear.
+/**
+ * @param {Record<string, any> | null} renderRequest
+ * @returns {Record<string, boolean | null>}
+ */
+export const linearDefinitionVisibilityOf = (renderRequest) => {
+  const overrides = renderRequest?.mode === 'linear'
+    ? renderRequest.diagramOptions?.configOverrides || {}
+    : {};
+  /** @param {string} path @returns {boolean | null} */
+  const read = (path) => (typeof overrides[path] === 'boolean' ? overrides[path] : null);
+  return {
+    linear_accession_visibility: read(CONFIG_OVERRIDE_PATHS.linearDefinitionShowAccession),
+    linear_length_visibility: read(CONFIG_OVERRIDE_PATHS.linearDefinitionShowLength)
+  };
+};
+
 // E1: the similarity alignment plan and record translations of a committed
 // Linear request, admitted with the rules the request projection applies;
 // Session Load takes them from the Linear Result set wherever it sits.

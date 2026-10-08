@@ -487,8 +487,8 @@ assignments. Changing the layout recalculates Auto but never rewrites an explici
 Show or Hide selection. **Replicon** remains a separate checkbox.
 
 The Auto explanation in **Linear Layout** and **Record Labels** names the affected
-fields and describes the next successful Generate, which may differ from the
-current Result. Select **Record Labels: Accession** or **Record Labels: Length /
+fields. It describes the current Result when that Result already shows or hides
+them as Auto now would, and otherwise the next successful Generate. Select **Record Labels: Accession** or **Record Labels: Length /
 Coordinates** beside that explanation to open the label controls and focus the
 matching selection. This navigation changes no value and creates no Undo entry.
 Choose **Show** yourself if shared rows should retain that field, then Generate.
