@@ -29,10 +29,13 @@ const UNCLASSIFIED_THROW_BASELINE = {
   'app/record-display-options.js': 10,
   'app/run-analysis.js': 17,
   'mode-profiles.js': 2,
+  'services/circular-track-slot-model.js': 2,
   'services/config.js': 15,
   'services/current-option-values.js': 7,
   'services/feature-metadata-extraction.js': 2,
   'services/file-imports.js': 0,
+  'services/linear-track-slot-model.js': 34,
+  'services/record-display-model.js': 13,
   'services/session-file.js': 6,
   'services/session-import-client.js': 0,
   'services/session-request.js': 89,
@@ -42,18 +45,6 @@ const UNCLASSIFIED_THROW_BASELINE = {
   'utils/optional-positive-number.js': 0
 };
 
-// Web layering slices S3, S4 and S6 move four of these modules from app/ to
-// services/. A move PR is a runtime change and may not rename a key of this
-// registered baseline, so each new key sits beside the old one (same count when
-// written) and names the file it replaces. Exactly one of the pair exists; the
-// move PR deletes the old key, and the cleanup after the slices deletes this
-// table.
-const PENDING_MOVES = {
-  'services/current-option-values.js': 'app/current-option-values.js',
-  'services/feature-metadata-extraction.js': 'app/feature-metadata-extraction.js',
-  'services/file-imports.js': 'app/file-imports.js',
-  'services/track-slot-validation.js': 'app/track-slot-validation.js'
-};
 const fileExists = (file) => existsSync(new URL(file, WEB_ROOT));
 
 // Literal parts of the first argument of `throw new Error(`; null is a hole.
@@ -111,12 +102,7 @@ const unclassifiedThrowSites = (file) => {
 
 test('JS validation throw sites normalize to a recognized diagnostic or shrink (G-G(2))', () => {
   for (const [file, baseline] of Object.entries(UNCLASSIFIED_THROW_BASELINE)) {
-    if (!fileExists(file)) {
-      const old = PENDING_MOVES[file];
-      assert.ok(old && fileExists(old) && old in UNCLASSIFIED_THROW_BASELINE,
-        `${file}: no such file; delete the key (a move PR deletes the old key, not this one)`);
-      continue;
-    }
+    assert.ok(fileExists(file), `${file}: no such file; delete its key and register the moved file in an authority-only pull request`);
     const sites = unclassifiedThrowSites(file);
     assert.ok(sites.length <= baseline,
       `${file}: new unclassified throw sites; raise them with diagnosticError(code, context):\n${sites.join('\n')}`);
