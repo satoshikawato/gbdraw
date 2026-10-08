@@ -1338,6 +1338,37 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     if (event?.target) event.target.checked = nextChecked;
   };
 
+  // The Dinucleotide setting and a row's dinucleotide are inputs of the Hide
+  // GC projection (TK-09), so their edits run it here (R10).
+  /** @param {DrawingState} drawing */
+  const projectCircularSuppressControls = (drawing) => {
+    const slots = drawing.adv.circular_track_slots;
+    applyCircularSuppressControlsToSlots(slots, drawing.form, drawing.adv.nt)
+      .forEach((slot, index) => replaceObjectContents(slots[index], slot));
+  };
+
+  /** @param {unknown} value */
+  const setCircularDinucleotide = (value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
+    const drawing = state.drawings.circular;
+    drawing.adv.nt = String(value ?? '');
+    projectCircularSuppressControls(drawing);
+  };
+
+  /**
+   * @param {Record<string, any> | null | undefined} slot
+   * @param {unknown} value
+   */
+  const setCircularTrackSlotNt = (slot, value) => {
+    const sessionBusy = state.sessionOperationAvailability?.();
+    if (sessionBusy) return sessionBusy;
+    if (!slot) return;
+    slot.params = cloneParams(slot.params);
+    slot.params.nt = String(value ?? '').trim();
+    projectCircularSuppressControls(state.drawings.circular);
+  };
+
   /** @param {CircularSuppressToggleEvent} [event] */
   const setCircularGcSuppressed = (checked, event = null) => {
     const drawing = state.drawings.circular;
@@ -1693,6 +1724,8 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     }),
     setCircularGcSuppressed,
     setCircularSkewSuppressed,
+    setCircularDinucleotide,
+    setCircularTrackSlotNt,
     canAddCircularTrackRenderer,
     canDuplicateCircularTrackSlot,
     circularTrackSlotEffectiveEnabled,

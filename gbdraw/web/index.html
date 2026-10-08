@@ -3610,7 +3610,7 @@
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">dinucleotide <help-tip :id="`help-circular-slot-dinucleotide-${entry.index}`" text="Two-base code used for this content/skew track, such as GC or AT."></help-tip></span>
-                                                            <input v-model.trim="entry.slot.params.nt" :aria-label="`Circular track slot ${entry.slot.id} Track dinucleotide`" :aria-describedby="`help-circular-slot-dinucleotide-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" placeholder="GC" :disabled="!semanticMutationAvailable">
+                                                            <input :value="entry.slot.params.nt" @input="setCircularTrackSlotNt(entry.slot, $event.target.value)" :aria-label="`Circular track slot ${entry.slot.id} Track dinucleotide`" :aria-describedby="`help-circular-slot-dinucleotide-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" placeholder="GC" :disabled="!semanticMutationAvailable">
                                                         </div>
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">legend label <help-tip :id="`help-circular-slot-legend-label-${entry.index}`" text="Base text shown in the diagram legend. Leave blank to use the auto label shown here; two-color tracks add (+) and (-)."></help-tip></span>
@@ -4703,7 +4703,7 @@
                                 </div>
                                 <div>
                                     <span class="input-label text-[10px]">Dinucleotide <help-tip id="help-gc-dinucleotide" text="Dinucleotide to use (e.g., 'GC'). Default is 'GC'."></help-tip></span>
-                                    <input type="text" v-model="adv.nt" aria-label="Dinucleotide" aria-describedby="help-gc-dinucleotide" class="form-input form-input-compact w-full" placeholder="GC" :disabled="!semanticMutationAvailable">
+                                    <input type="text" :value="adv.nt" @input="mode === 'circular' ? setCircularDinucleotide($event.target.value) : (adv.nt = $event.target.value)" aria-label="Dinucleotide" aria-describedby="help-gc-dinucleotide" class="form-input form-input-compact w-full" placeholder="GC" :disabled="!semanticMutationAvailable">
                                 </div>
                             </div>
 
