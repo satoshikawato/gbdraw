@@ -7,7 +7,7 @@ import {
   formatFeatureLocation,
   getFeatureCaption,
   normalizeStringArray,
-  resolveDisplayProteinId
+  resolveFeatureProteinId
 } from '../../services/feature-utils.js';
 import {
   PAIRWISE_MATCH_SELECTOR,
@@ -18,7 +18,7 @@ import { buildFeatureSequenceFastas } from '../../services/feature-sequence-fast
 import { getFeatureOverride } from '../../services/feature-override-identity.js';
 import { featureIdentityKeyOf, featureOverrideValue } from '../../services/feature-placement.js';
 import { resultCatalogFeatures, stableFeatureOverrideKey } from '../../services/feature-catalog.js';
-import { COMPARISON_LEGEND_SELECTOR } from '../legend/utils.js';
+import { COMPARISON_LEGEND_SELECTOR } from '../../services/legend-svg.js';
 import { recordStructuralMetric } from '../../services/runtime-test-hooks.js';
 import {
   featureIdentity,
@@ -323,7 +323,7 @@ export const createFeatureSvgActions = ({
 
   const buildOrthogroupDetailRows = (feat) => {
     const member = feat?.orthogroupMember || feat?.orthogroup_member || null;
-    const proteinId = resolveDisplayProteinId(feat, member);
+    const proteinId = resolveFeatureProteinId(feat, member);
     const rows = [
       { key: 'orthogroup_id', label: 'Similarity group ID', value: feat?.orthogroupId || feat?.orthogroup_id },
       { key: 'orthogroup_members', label: 'Members', value: feat?.orthogroupMemberCount || feat?.orthogroup_member_count },

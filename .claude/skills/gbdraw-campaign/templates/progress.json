@@ -1,0 +1,7 @@
+{
+  "campaign": "<campaign>",
+  "items": [
+    {"id": "PR-A", "title": "<what the PR delivers>", "weight": 3, "status": "todo", "pr": null},
+    {"id": "PR-B", "title": "<what the PR delivers>", "weight": 1, "status": "todo", "pr": null}
+  ]
+}

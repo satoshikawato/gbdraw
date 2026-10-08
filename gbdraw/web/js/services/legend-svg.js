@@ -1,6 +1,6 @@
 // @ts-check
-import { parseTransform } from '../legend-layout/transform-utils.js';
-import { getFeatureElementIndex, getFeatureFillElements } from '../../services/feature-dom.js';
+import { parseTransform } from './svg-transform.js';
+import { getFeatureElementIndex, getFeatureFillElements } from './feature-dom.js';
 
 export { parseTransform };
 

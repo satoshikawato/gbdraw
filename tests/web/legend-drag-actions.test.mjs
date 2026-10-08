@@ -1,13 +1,11 @@
 import assert from 'node:assert/strict';
 
 import { createLegendDragActions } from '../../gbdraw/web/js/app/legend/drag-actions.js';
-import { createLegendLayoutActions } from '../../gbdraw/web/js/app/legend/layout-actions.js';
 import {
   COMPOSITION_METADATA_ATTRIBUTE,
   COMPOSITION_ROLE_ATTRIBUTE,
   COMPOSITION_SCHEMA_ATTRIBUTE
 } from '../../gbdraw/web/js/app/legend-layout/composition-actions.js';
-import { parseTransformXY } from '../../gbdraw/web/js/app/legend/utils.js';
 
 const targetPayload = (role, automaticTranslation, boundsKey, bounds) => ({
   automaticTranslation,
@@ -87,64 +85,6 @@ class AttributeNode {
   closest() {
     return null;
   }
-}
-
-const layoutFixture = (primaryWidth) => {
-  const texts = [
-    new AttributeNode({
-      attributes: { transform: 'translate(22,7)' },
-      bbox: { x: 0, y: 0, width: 10, height: 10 }
-    }),
-    new AttributeNode({
-      attributes: { transform: 'translate(90,7)' },
-      bbox: { x: 0, y: 0, width: 10, height: 10 }
-    })
-  ];
-  const paths = [
-    new AttributeNode({ attributes: { fill: '#112233', transform: 'translate(0,7)' } }),
-    new AttributeNode({ attributes: { fill: '#445566', transform: 'translate(68,7)' } })
-  ];
-  const featureLegend = new AttributeNode({ id: 'feature_legend' });
-  featureLegend.querySelectorAll = (selector) => {
-    if (selector === 'text') return texts;
-    if (selector === 'path') return paths;
-    return [];
-  };
-
-  const legend = new AttributeNode({
-    id: 'legend',
-    bbox: { x: 0, y: 0, width: primaryWidth, height: 14 }
-  });
-  legend.children = [featureLegend];
-  legend.querySelector = (selector) => (selector === '#feature_legend' ? featureLegend : null);
-
-  const svg = new AttributeNode({
-    attributes: {
-      [COMPOSITION_SCHEMA_ATTRIBUTE]: '1',
-      [COMPOSITION_METADATA_ATTRIBUTE]: JSON.stringify(compositionMetadata(primaryWidth))
-    }
-  });
-  svg.getElementById = (id) => (id === 'legend' ? legend : null);
-  return { svg, texts };
-};
-
-{
-  const actions = createLegendLayoutActions();
-  const exactFit = layoutFixture(136);
-  actions.updatePairwiseLegendPositions(exactFit.svg);
-  assert.deepEqual(
-    exactFit.texts.map((text) => parseTransformXY(text.getAttribute('transform')).y),
-    [7, 7],
-    'two 68 px entries must remain on one row at the exact 136 px primary-width boundary'
-  );
-
-  const oneMillipixelNarrow = layoutFixture(135.999);
-  actions.updatePairwiseLegendPositions(oneMillipixelNarrow.svg);
-  assert.deepEqual(
-    oneMillipixelNarrow.texts.map((text) => parseTransformXY(text.getAttribute('transform')).y),
-    [7, 31],
-    'the second entry must wrap only when its measured row exceeds the full primary width'
-  );
 }
 
 const dragFixture = () => {

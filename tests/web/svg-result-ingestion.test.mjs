@@ -440,9 +440,11 @@ test('direct Legend rename, deletion, and addition are applied through catalog-b
         }],
         originalLegendOrder: ['CDS']
       },
+      // A rename keeps the row where the renderer drew it; the Legend layout
+      // places it (OV-156).
       assertContent: (content) => {
         assert.match(content, /data-legend-key="Genes"/);
-        assert.match(content, /transform="translate\(20, 30\)"/);
+        assert.doesNotMatch(content, /transform=/);
       }
     },
     {

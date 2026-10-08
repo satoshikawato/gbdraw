@@ -64,7 +64,9 @@ The exact surface controls are listed in the [Web app](web-app.md),
 Circular slots use side, radius or width, gaps, z-order, and renderer
 parameters. In the Web app, Width and Radius use numeric fields with px/×R
 selectors; R is the base circle radius. A unit change preserves the number,
-and blank means Auto. See [Circular track Width and Radius](web-app.md#circular-track-width-and-radius)
+and blank means Auto. A slot with a radius is drawn at that radius, and the
+other rows on its side keep the stack order around it: rows before it are
+placed farther from the center, rows after it closer. See [Circular track Width and Radius](web-app.md#circular-track-width-and-radius)
 for input, History, Session and Generate behavior. Linear slots use order,
 side or overlay ownership, reserved height,
 spacing, and an axis boundary. A feature slot's reserved band and the feature
@@ -130,6 +132,13 @@ Presentation rules do not edit the input annotation. Their order is:
    filtering runs next, then ordinary label overrides replace selected text.
 5. Shape, stroke, overlap, title, definition, and legend settings affect only
    the drawing.
+
+When several specific-color rules match one feature, the first match wins.
+Rules are tried by qualifier key, in the order the keys appear on the feature,
+and then by row order within one key; the row order of rules with different
+qualifier keys has no effect. The Web app's **Move rule up** and **Move rule
+down** therefore change the result only between rules with the same qualifier
+key, and the CLI orders the rules the same way.
 
 A partial default-color table changes only the listed feature types. Omitted
 feature types retain their values from the selected palette.

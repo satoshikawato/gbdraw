@@ -79,6 +79,31 @@ export const stripTransientPreviewState = (svg, { stripCursor = true } = {}) => 
   }
 };
 
+// The preview feature-search classes (app/feature-search/preview-svg.js) that
+// an export strips from its clone.
+export const PREVIEW_FEATURE_SEARCH_MATCH_CLASS = 'gbdraw-preview-feature-search-match';
+export const PREVIEW_FEATURE_SEARCH_ACTIVE_CLASS = 'gbdraw-preview-feature-search-active-match';
+export const PREVIEW_FEATURE_SEARCH_DIMMED_CLASS = 'gbdraw-preview-feature-search-dimmed';
+export const PREVIEW_FEATURE_SEARCH_ROOT_ACTIVE_CLASS = 'gbdraw-preview-feature-search-results-active';
+export const PREVIEW_FEATURE_SEARCH_ROOT_UPDATING_CLASS = 'gbdraw-preview-feature-search-updating';
+
+export const PREVIEW_FEATURE_SEARCH_CLASSES = Object.freeze([
+  PREVIEW_FEATURE_SEARCH_MATCH_CLASS,
+  PREVIEW_FEATURE_SEARCH_ACTIVE_CLASS,
+  PREVIEW_FEATURE_SEARCH_DIMMED_CLASS
+]);
+
+export const stripPreviewFeatureSearchClasses = (svg) => {
+  if (!svg) return;
+  setClassToken(svg, PREVIEW_FEATURE_SEARCH_ROOT_ACTIVE_CLASS, false);
+  setClassToken(svg, PREVIEW_FEATURE_SEARCH_ROOT_UPDATING_CLASS, false);
+  PREVIEW_FEATURE_SEARCH_CLASSES.forEach((className) => {
+    svg.querySelectorAll(`.${className}`).forEach((element) => {
+      setClassToken(element, className, false);
+    });
+  });
+};
+
 export const serializeCleanSvg = (svg, options = {}) => {
   if (!svg) return '';
   const clone = svg.cloneNode(true);

@@ -1,12 +1,12 @@
 // @ts-check
-import { parseTransform } from './utils.js';
+import { parseTransform } from '../../services/legend-svg.js';
 import { setClassToken } from '../../services/svg-serialization.js';
 import {
   bindCompositionMetadata,
   COMPOSITION_SCHEMA_ATTRIBUTE,
   compositionUserDeltas
 } from '../legend-layout/composition-actions.js';
-import { replaceLeadingTranslate } from '../legend-layout/transform-utils.js';
+import { replaceLeadingTranslate } from '../../services/svg-transform.js';
 
 /**
  * @typedef {object} LegendDragActionsOptions

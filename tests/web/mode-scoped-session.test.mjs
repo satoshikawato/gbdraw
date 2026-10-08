@@ -60,7 +60,8 @@ test('Session 46 saves each drawing as its mode slice and loads it back into tha
   state.drawings.linear.adv.depth_min = 3;
   state.drawings.linear.form.plot_title = 'Linear only';
   // OV-120: a renamed row the last Linear Generate did not draw.
-  const waiting = { caption: 'Coverage', originalCaption: 'depth', color: '#7b2cbf', showStroke: false, featureIds: [] };
+  // A Legend row holds no `showStroke` since OV-157 (view state, #940).
+  const waiting = { caption: 'Coverage', originalCaption: 'depth', color: '#7b2cbf', featureIds: [] };
   state.drawings.linear.dormantLegendEntries.value = [waiting];
   const saved = await save('two drawings');
 

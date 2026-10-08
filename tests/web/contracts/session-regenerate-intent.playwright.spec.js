@@ -1696,7 +1696,7 @@ test('loaded current preview supports direct edits before the first Generate', a
     return {
       color: app.updateLegendEntryColor(index, color),
       stroke: await app.setLegendEntryStrokeColorValue(index, stroke),
-      strokeWidth: app.updateLegendEntryStrokeWidth(index, strokeWidth)
+      strokeWidth: await app.updateLegendEntryStrokeWidth(index, strokeWidth)
     };
   }, {
     color: DIRECT_LEGEND_COLOR,

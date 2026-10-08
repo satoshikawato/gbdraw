@@ -1,5 +1,5 @@
 // @ts-check
-import { writeCanonicalRecordReverseComplement } from '../app/record-display-options.js';
+import { writeCanonicalRecordReverseComplement } from './record-display-model.js';
 import {
   canonicalFeatureOverrides,
   canonicalFeaturePlacements,
@@ -67,7 +67,7 @@ import {
 import {
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
-} from '../app/linear-sources.js';
+} from './linear-sources.js';
 import {
   linearRecordLayoutHasSharedRow,
   resolveEffectiveLinearRecordRows
@@ -165,7 +165,7 @@ import { sha256Hex } from './byte-utils.js';
 import { cloneJsonData } from './json-clone.js';
 import { isCanonicalResourceReferenceField } from './canonical-resource-references.js';
 import { recordStructuralMetric } from './runtime-test-hooks.js';
-import { recordDisplayKey, requestedRecordTransform } from '../app/record-display-options.js';
+import { recordDisplayKey, requestedRecordTransform } from './record-display-model.js';
 
 /** @import { SessionResourceSource } from './session-resources.js' */
 
@@ -1962,19 +1962,23 @@ const generatedProteinSettings = (drawing, losatExecution, baseline = {}) => {
   };
 };
 
-const comparisonPlanErrorMessage = (snapshot) => {
-  const direct = String(snapshot?.error || '').trim();
-  if (direct) return direct;
-  const issue = Array.isArray(snapshot?.errors) ? snapshot.errors[0] : null;
-  return String(issue?.message || issue || '').trim();
-};
+// The correction of a resolver issue the comparison panel reports (CI-06).
+const PLAN_ISSUE_REASONS = Object.freeze({
+  'missing-upload': 'BLAST_TSV_REQUIRED', 'selected-losat-requires-pairwise': 'LOSAT_PLAN'
+});
 
-const requireLinearComparisonPlanSnapshot = (snapshot) => {
+export const requireLinearComparisonPlanSnapshot = (snapshot) => {
   if (!snapshot || !Array.isArray(snapshot.edges)) {
     throw new Error('A resolved Linear comparison plan is required.');
   }
-  const error = comparisonPlanErrorMessage(snapshot);
-  if (error) throw new Error(error);
+  const issue = Array.isArray(snapshot.errors) ? snapshot.errors[0] : null;
+  if (issue || String(snapshot.error || '').trim()) {
+    const edge = snapshot.edges.find((item) => item?.id && item.id === issue?.edgeId);
+    throw diagnosticError('COMPARISON_INPUT', {
+      reason: PLAN_ISSUE_REASONS[issue?.code] || 'PAIR_TOPOLOGY',
+      queryRecordIndex: edge?.queryIndex, subjectRecordIndex: edge?.subjectIndex
+    });
+  }
   return snapshot;
 };
 
@@ -2240,7 +2244,9 @@ const buildComparisons = ({
     if (edge.source === 'upload') {
       const file = uploadFilesByEdgeId.get(String(edge.id || ''));
       if (!file) {
-        throw new Error(`The uploaded comparison '${edge.edgeKey}' has no active BLAST TSV file.`);
+        throw diagnosticError('COMPARISON_INPUT', {
+          reason: 'BLAST_TSV_REQUIRED', queryRecordIndex: edge.queryIndex, subjectRecordIndex: edge.subjectIndex
+        });
       }
       const resourceId = `comparison-nucleotide-${edge.ordinal + 1}`;
       comparisons.push({

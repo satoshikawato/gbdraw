@@ -39,7 +39,7 @@ for (const mode of ['circular', 'linear']) {
     const discovery = await page.evaluate(async mode => {
       const app = window.__GBDRAW_APP__;
       const file = mode === 'linear' ? app.linearSeqs[0].gb : app.files.c_gb;
-      const { discoverSequenceRecords, normalizeSequenceRecords } = await import('./js/app/record-discovery.js');
+      const { discoverSequenceRecords, normalizeSequenceRecords } = await import('./js/services/record-discovery.js');
       const { runDiagramHelperOperation, DIAGRAM_HELPER_OPERATIONS } = await import('./js/services/diagram-generation.js');
       const fast = await discoverSequenceRecords({ file, format: 'genbank' });
       const response = await runDiagramHelperOperation(DIAGRAM_HELPER_OPERATIONS.LIST_SEQUENCE_RECORDS, {
@@ -173,7 +173,7 @@ test('replacement draft does not inherit saved catalog; invalid, Retry, Replace 
   expect((await snapshot(page)).primary).toBe('invalid.gb');
   expect((await snapshot(page)).result).toBe(original.result);
   await expect(page.locator('[data-circular-discovery-status]')).toHaveText(
-    'No records were found. Choose input containing records.'
+    'No records were found. Choose input containing records. The file is not a GenBank/DDBJ flat file: it has no record header line.'
   );
   await expect(page.locator('[data-circular-discovery-status]')).not.toContainText('invalid.gb');
   await page.getByRole('button', { name: 'Retry source inspection' }).click();

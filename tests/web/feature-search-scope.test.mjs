@@ -4,6 +4,11 @@ import * as featureUtils from '../../gbdraw/web/js/services/feature-utils.js';
 import { runFeatureSearch } from '../../gbdraw/web/js/app/feature-search/search-core.js';
 import { buildMatchPopupPayload } from '../../gbdraw/web/js/app/pairwise-match-popup.js';
 import { STANDALONE_INTERACTIVE_SCRIPT } from '../../gbdraw/web/js/services/standalone-interactivity-assets.js';
+import {
+  FEATURE_CATALOG_SCHEMA,
+  featureStateFromCatalog,
+  validateFeatureCatalog
+} from '../../gbdraw/web/js/services/feature-catalog.js';
 
 // Feature Search and the Interactive SVG runtime are two implementations of one
 // contract (the runtime cannot import modules). These cases bind them together.
@@ -191,6 +196,88 @@ test('Interactive SVG search and location text match the app', () => {
   }
 });
 
+// The popup title and the Details Protein ID of the Interactive SVG follow the
+// app popup (getFeatureCaption and resolveFeatureProteinId): the app reads the
+// admitted catalog, the runtime the catalog entry with its rendered ID.
+test('Interactive SVG popup title and Protein ID match the app popup', () => {
+  const internal = `f_${'0'.repeat(64)}`;
+  const qualifierSets = [
+    { gene: ['TRNF'], product: ['tRNA-Phe'], note: ['NAR: 1455'] },
+    { gene: ['COX1'], product: ['cytochrome c oxidase subunit I'], protein_id: ['YP_003024028.1'] },
+    { gene: ['TRNF'] },
+    { locus_tag: ['LOC_0001'], protein_id: [internal] },
+    { note: [`${'n'.repeat(49)}😀tail`] },
+    {},
+    { product: [internal], gene: ['dnaA'] }
+  ];
+  const ids = qualifierSets.map((_, index) => `f${String(index).padStart(4, '0')}`);
+  const catalog = {
+    schema: FEATURE_CATALOG_SCHEMA,
+    items: [{
+      resultIndex: 0,
+      resultName: 'diagram.svg',
+      recordKeys: ['record-1'],
+      features: ids.map((svgId, index) => ({
+        svgId,
+        recordKey: 'record-1',
+        biologicalFeatureId: `b${index}`,
+        fillColor: '#abcdef',
+        drawnSelector: null
+      })),
+      biologicalFeatures: qualifierSets.map((qualifiers, index) => ({
+        recordKey: 'record-1',
+        biologicalFeatureId: `b${index}`,
+        record_idx: 0,
+        sourceFeatureIndex: index,
+        record_id: 'REC',
+        type: index === 0 ? 'tRNA' : 'CDS',
+        start: 10 * index,
+        end: 10 * index + 5,
+        strand: 1,
+        anchorProfile: { precision: 'exact', operator: 'single', partOrder: 'biological', strand: '+' },
+        qualifiers
+      })),
+      orthogroups: [],
+      annotations: [],
+      comparisonMatches: []
+    }]
+  };
+  const results = [{ name: 'diagram.svg', content: '<svg />' }];
+  const appFeatures = featureStateFromCatalog(validateFeatureCatalog(structuredClone(catalog), results))
+    .extractedFeatures;
+  const embedded = new Function(`
+    ${embeddedFunction('normalizeArray')}
+    ${embeddedFunction('getFeatureQualifiers')}
+    ${embeddedFunction('isInternalProteinDisplayId')}
+    ${embeddedFunction('firstNonInternalDisplayText')}
+    ${embeddedFunction('qualifierDisplayValue')}
+    ${embeddedFunction('featureCaption')}
+    ${embeddedFunction('featureProteinId')}
+    return { featureCaption: featureCaption, featureProteinId: featureProteinId };
+  `)();
+  const runtimeFeatures = catalog.items[0].biologicalFeatures.map((feature, index) => ({
+    ...feature,
+    svg_id: ids[index]
+  }));
+  const titles = runtimeFeatures.map((feature) => embedded.featureCaption(feature));
+  assert.deepEqual(titles, appFeatures.map((feature) => featureUtils.getFeatureCaption(feature)));
+  assert.deepEqual(titles.slice(0, 5), [
+    'tRNA-Phe', 'cytochrome c oxidase subunit I', 'TRNF', 'LOC_0001', `${'n'.repeat(49)}😀`
+  ]);
+  const proteinIds = runtimeFeatures.map((feature) => embedded.featureProteinId(feature, null));
+  assert.deepEqual(proteinIds, appFeatures.map((feature) => featureUtils.resolveFeatureProteinId(feature, null)));
+  // Only a protein ID names the Protein ID row; the gene or locus tag of a tRNA does not.
+  assert.deepEqual(proteinIds, ['', 'YP_003024028.1', '', '', '', '', '']);
+  // An edited label is the title in both rules.
+  const edited = { ...runtimeFeatures[0], display_label: 'Phe' };
+  assert.equal(embedded.featureCaption(edited), 'Phe');
+  assert.equal(featureUtils.getFeatureCaption({ ...appFeatures[0], display_label: 'Phe' }), 'Phe');
+  // A similarity-group member's protein ID still counts.
+  const member = { proteinId: 'WP_000001.1' };
+  assert.equal(embedded.featureProteinId(runtimeFeatures[0], member), 'WP_000001.1');
+  assert.equal(featureUtils.resolveFeatureProteinId(appFeatures[0], member), 'WP_000001.1');
+});
+
 test('match popup feature sections show the shared split location', () => {
   const origin = features.find((feature) => feature.svg_id === 'f-origin');
   const rendered = { ...origin, fileIdx: 0, sourceFeatureIndex: 5, stable_feature_id: 'stable-origin' };
@@ -219,4 +306,40 @@ test('match popup feature sections show the shared split location', () => {
   assert.equal(query.rows.find((row) => row.label === 'Location').value, '3901..4000, 1..200 (+)');
   assert.deepEqual(query.featureRows.map((row) => row.location), ['3901..4000, 1..200 (+)']);
   assert.equal(createEmbeddedSearch('rich').locationText(rendered), '3901..4000, 1..200 (+)');
+});
+
+test('match popup span rows use the input-file coordinates of the Interval rows (CI-05)', () => {
+  // Record 0 is source 3000..8000 (crop); record 1 is source 1000..12000
+  // reverse-complemented. data-qstart/qend/sstart/send are record-local.
+  const groups = {
+    0: { 'data-gbdraw-record-source-start': '3000', 'data-gbdraw-record-source-end': '8000', 'data-gbdraw-record-source-step': '1' },
+    1: { 'data-gbdraw-record-source-start': '1000', 'data-gbdraw-record-source-end': '12000', 'data-gbdraw-record-source-step': '-1' }
+  };
+  const svg = { querySelector: (selector) => {
+    const group = groups[/data-gbdraw-record-index="(\d+)"/.exec(selector)?.[1] ?? ''];
+    return group ? { getAttribute: (name) => group[name] ?? null } : null;
+  } };
+  const attributes = {
+    'data-gbdraw-pairwise-match-id': 'm1', 'data-match-kind': 'pairwise', 'data-source-index': '0',
+    'data-query-record-id': 'Q', 'data-subject-record-id': 'S',
+    'data-query-record-index': '0', 'data-subject-record-index': '1',
+    'data-qstart': '1', 'data-qend': '4', 'data-sstart': '4', 'data-send': '1'
+  };
+  const sequences = { 'linear:record:0': 'ACGTACGT', 'linear:record:1': 'TTGGCCAA' };
+  const payload = buildMatchPopupPayload(
+    { ownerSVGElement: svg, style: { fill: '' }, getAttribute: (name) => attributes[name] || '' },
+    { resolveSequenceSource: (key) => ({ source: { recordId: key, sequence: sequences[key] } }) }
+  );
+  const rows = Object.fromEntries(payload.sections.flatMap((section) => section.rows).map((row) => [row.label, row.value]));
+  const spans = payload.sequenceBundle.entries.map(({ span }) => `${span.start}..${span.end}`);
+  assert.deepEqual(spans, [rows['Query interval'], rows['Subject interval']]);
+  assert.deepEqual(spans, ['3000..3003', '11997..12000']);
+  // The bases and the FASTA headers are unchanged.
+  assert.match(payload.sequenceBundle.entries[0].fasta, /coords=3000\.\.3003\|strand=\+\nACGT\n$/);
+  // A record shown as in its file (rotate only) keeps its coordinates.
+  const plain = buildMatchPopupPayload(
+    { ownerSVGElement: { querySelector: () => null }, style: { fill: '' }, getAttribute: (name) => attributes[name] || '' },
+    { resolveSequenceSource: (key) => ({ source: { recordId: key, sequence: sequences[key] } }) }
+  );
+  assert.deepEqual(plain.sequenceBundle.entries.map(({ span }) => `${span.start}..${span.end}`), ['1..4', '4..1']);
 });

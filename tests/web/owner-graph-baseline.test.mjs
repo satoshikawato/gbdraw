@@ -72,17 +72,6 @@ const PROJECTION_SHAPE_BASELINE = {
 // that moves the imported code down removes its entries in the same pull
 // request; the list ends empty. May only shrink.
 const LAYER_IMPORT_BASELINE = {
-  'layer.import-direction.v1|services/config.js->app/losat-cache.js': 13,
-  'layer.import-direction.v1|services/config.js->app/record-display-options.js': 1,
-  'layer.import-direction.v1|services/config.js->app/session-feature-metadata.js': 2,
-  'layer.import-direction.v1|services/export.js->app/feature-search/preview-svg.js': 1,
-  'layer.import-direction.v1|services/gallery-session-publication.js->app/record-display-options.js': 1,
-  'layer.import-direction.v1|services/main-session-comparison-frame.js->app/record-discovery.js': 2,
-  'layer.import-direction.v1|services/session-active-config-contract.js->app/record-display-options.js': 2,
-  'layer.import-direction.v1|services/session-authority.js->app/record-display-options.js': 1,
-  'layer.import-direction.v1|services/session-request.js->app/linear-sources.js': 2,
-  'layer.import-direction.v1|services/session-request.js->app/record-display-options.js': 3,
-  'layer.import-direction.v1|services/svg-result-ingestion.js->app/legend/utils.js': 4
 };
 
 const SUBJECT_DETECTORS = [

@@ -9,7 +9,7 @@ import {
   getAllFeatureLegendGroups,
   getVisibleFeatureLegendGroup,
   isCurrentLegendHorizontal
-} from './legend/utils.js';
+} from '../services/legend-svg.js';
 import { legendRowRules } from '../services/specific-color-rules.js';
 
 /**
@@ -25,8 +25,6 @@ import { legendRowRules } from '../services/specific-color-rules.js';
  *   The preview owner's commit of an edit to the displayed Result (R1, R13).
  * @property {(() => string | undefined) | null} [readActiveResultIdentity]
  *   The preview owner's runtime identity of the mounted Result.
- * @property {() => ({ diagramOptions?: Record<string, any> } | null)} [getCommittedRequest]
- *   The committed canonical request (Python owns the option fields, R7).
  */
 
 /** @param {LegendManagerOptions} options */
@@ -37,18 +35,13 @@ export const createLegendManager = ({
   commitHistoryTransaction = null,
   // R13: the preview owner's ports; the Legend owners never hold it.
   commitActiveResultEdit = null,
-  readActiveResultIdentity = null,
-  getCommittedRequest = () => null
+  readActiveResultIdentity = null
 }) => {
   const layoutActions = createLegendLayoutActions();
   const entryActions = createLegendEntryActions({
     state,
-    updatePairwiseLegendPositions: layoutActions.updatePairwiseLegendPositions,
-    reflowDualLegendLayout: layoutActions.reflowDualLegendLayout,
-    compactLegendEntries: layoutActions.compactLegendEntries,
     commitActiveResultEdit,
-    readActiveResultIdentity,
-    getCommittedRequest
+    readActiveResultIdentity
   });
   const sortActions = createLegendSortActions({
     state,

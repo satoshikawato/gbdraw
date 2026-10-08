@@ -5,7 +5,7 @@ import {
 } from './layout-preferences.js';
 import { splitDraftIntoModes, validateModeSliceFields } from './mode-scoped-migration.js';
 import { migrateLegacyLinearLabelVisibility } from './linear-label-visibility.js';
-import { migrateLegacyRecordDisplayDrafts } from '../app/record-display-options.js';
+import { migrateLegacyRecordDisplayDrafts } from './record-display-model.js';
 import { FEATURE_CATALOG_SCHEMA, migrateLegacyFeatureCatalog } from './feature-catalog.js';
 import { migrateSessionFeatureEdits, migrateSessionFeaturePlacements } from './feature-edit-migration.js';
 import { adoptCurrentSessionResources } from './session-resource-backing.js';

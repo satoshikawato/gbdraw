@@ -14,7 +14,7 @@ const inspect = async page => {
 };
 const inspectNow = page => page.evaluate(async () => {
   const { state: s } = await import('./js/state.js');
-  const { getVisibleFeatureLegendGroup, getAllFeatureLegendGroups } = await import('./js/app/legend/utils.js');
+  const { getVisibleFeatureLegendGroup, getAllFeatureLegendGroups } = await import('./js/services/legend-svg.js');
   const root=s.svgContainer.value.querySelector('svg');
   const result=new DOMParser().parseFromString(s.results.value[s.selectedResultIndex.value].content,'image/svg+xml').documentElement;
   const entries=svg=>[...(getVisibleFeatureLegendGroup(svg)?.querySelectorAll('g[data-legend-key]')||[])].map(e=>({caption:e.getAttribute('data-legend-key'),color:e.querySelector('path[fill]')?.getAttribute('fill')}));

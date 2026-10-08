@@ -28,8 +28,12 @@ _URL_REFERENCE_RE = re.compile(r"url\(#([^)]+)\)")
 _TRANSFORM_RE = re.compile(r"(matrix|rotate|scale|translate)\(([^)]*)\)")
 _LEGEND_REFLOW_METRICS = {
     "colorRectSize": 14.0,
+    "dpi": 96,
+    "fontFile": "LiberationSans-Regular",
+    "fontSize": 14.0,
     "lineHeight": 24.0,
     "textXOffset": 22.0,
+    "wrapWidth": 100.0,
 }
 
 
@@ -187,8 +191,11 @@ def test_composition_metadata_schema_one_is_exact_and_deterministic() -> None:
         '{"legend":{"automaticTranslation":[142.0,91.0],"localBounds":'
         '{"height":20.0,"width":30.0,"x":-2.0,"y":-5.0},"role":"legend",'
         '"selector":"[data-gbdraw-composition-role=\\"legend\\"]"},'
-        '"legendReflow":{"colorRectSize":14.0,"lineHeight":24.0,'
-        '"textXOffset":22.0},"legendSide":"right","overlayObstacles":[],'
+        '"legendReflow":{"colorRectSize":14.0,"dpi":96,'
+        '"fontFile":"LiberationSans-Regular","fontSize":14.0,'
+        '"lineHeight":24.0,"primaryLocalBounds":{"maxX":110.0,'
+        '"maxY":100.0,"minX":10.0,"minY":20.0},"textXOffset":22.0,'
+        '"wrapWidth":100.0},"legendSide":"right","overlayObstacles":[],'
         '"overlayPolicy":{"candidateScoreOrder":["totalAnchorDistance",'
         '"xAnchorDistance","yAnchorDistance","nearEdgeX","nearEdgeY"],'
         '"canvasGrowthCandidateOrder":["horizontal","vertical"],'
@@ -391,25 +398,33 @@ def test_binding_error_is_reported_before_any_svg_mutation() -> None:
         (None, "legend target requires legend reflow metrics"),
         ({"colorRectSize": 14.0}, "invalid field set"),
         (
-            {"colorRectSize": 14.0, "lineHeight": float("nan"), "textXOffset": 22.0},
-            "finite and positive",
+            {
+                key: value
+                for key, value in _LEGEND_REFLOW_METRICS.items()
+                if key != "wrapWidth"
+            },
+            "invalid field set",
         ),
         (
-            {"colorRectSize": 14.0, "lineHeight": "invalid", "textXOffset": 22.0},
-            "finite and positive",
+            {**_LEGEND_REFLOW_METRICS, "primaryLocalBounds": {}},
+            "invalid field set",
         ),
-        (
-            {"colorRectSize": 14.0, "lineHeight": "24", "textXOffset": 22.0},
-            "finite and positive",
-        ),
-        (
-            {"colorRectSize": 14.0, "lineHeight": True, "textXOffset": 22.0},
-            "finite and positive",
-        ),
+        ({**_LEGEND_REFLOW_METRICS, "lineHeight": float("nan")}, "lineHeight must be finite"),
+        ({**_LEGEND_REFLOW_METRICS, "lineHeight": "invalid"}, "lineHeight must be a finite number"),
+        ({**_LEGEND_REFLOW_METRICS, "lineHeight": "24"}, "lineHeight must be a finite number"),
+        ({**_LEGEND_REFLOW_METRICS, "lineHeight": True}, "lineHeight must be a finite number"),
+        ({**_LEGEND_REFLOW_METRICS, "fontSize": 0.0}, "fontSize must be finite and positive"),
+        ({**_LEGEND_REFLOW_METRICS, "wrapWidth": -1.0}, "wrapWidth must be finite and non-negative"),
+        ({**_LEGEND_REFLOW_METRICS, "wrapWidth": float("inf")}, "wrapWidth must be finite"),
+        ({**_LEGEND_REFLOW_METRICS, "dpi": 96.0}, "dpi must be a positive integer"),
+        ({**_LEGEND_REFLOW_METRICS, "dpi": 0}, "dpi must be a positive integer"),
+        ({**_LEGEND_REFLOW_METRICS, "dpi": True}, "dpi must be a positive integer"),
+        ({**_LEGEND_REFLOW_METRICS, "fontFile": ""}, "fontFile must be a non-empty string"),
+        ({**_LEGEND_REFLOW_METRICS, "fontFile": 3}, "fontFile must be a non-empty string"),
     ],
 )
 def test_legend_reflow_metrics_are_required_and_strict(
-    metrics: dict[str, float] | None,
+    metrics: dict[str, object] | None,
     message: str,
 ) -> None:
     drawing, first, second, legend, title = _drawing_with_targets()

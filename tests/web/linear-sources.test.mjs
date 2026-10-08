@@ -11,7 +11,7 @@ import {
   planLosatSourceJobs,
   prepareLosatSourceBatches,
   splitLosatSourceResult
-} from '../../gbdraw/web/js/app/linear-sources.js';
+} from '../../gbdraw/web/js/services/linear-sources.js';
 import { readFileSync } from 'node:fs';
 import { buildLosatJobSpecs } from '../../gbdraw/web/js/services/linear-comparisons.js';
 import {
@@ -424,4 +424,20 @@ test('shared LOSATP specs and job plan vectors', async () => {
       searchContext: batch.searchContext
     })), vector.expected.jobs, vector.name);
   }
+});
+
+// GX-09: the LOSAT FASTA extraction reports a region outside the record as
+// crop_genbank.py does (CI-01): REGION_INVALID with the region correction.
+test('LOSAT FASTA extraction reports a region beyond the record as a region failure (GX-09)', async () => {
+  const text = '>TINY.1\n' + 'ACGT'.repeat(15) + '\n';
+  const extract = (regionSpec) => extractLosatFastaFast({ text, fmt: 'fasta', regionSpec, recordSelector: null, reverseFlag: '0' });
+  await assert.rejects(extract('1000-2000'), (error) => {
+    assert.equal(error.code, 'REGION_INVALID');
+    assert.deepEqual(error.context, { field: 'region', reason: 'RECORD_BOUNDS' });
+    return true;
+  });
+  // A partial overrun is clamped, and a reversed span is a reverse-complemented crop
+  // (parseRegionText, like parse_region_spec), so the ORDER reason has no input here.
+  assert.equal((await extract('31-2000')).canonicalLength, 30);
+  assert.equal((await extract('2-1')).fasta, '>TINY.1\nGT\n');
 });

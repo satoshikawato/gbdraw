@@ -196,13 +196,17 @@
           "body": "Open Custom Track Slots and reset the stack to the Middle template before adding the AT skew track.",
           "media": {
             "src": "./media/HmmtDNA_ATskew/manual-05-01-middle-template.webp",
-            "alt": "Compact Custom Track Slots controls with Reset to Middle highlighted and the Middle preset summary visible.",
-            "caption": "Choose Reset to Middle; the template contains features, ticks, GC content, and GC skew."
+            "alt": "Compact Custom Track Slots controls with Middle highlighted under Reset to preset and the Middle preset summary visible.",
+            "caption": "Under Reset to preset, choose Middle; the template contains features, ticks, GC content, and GC skew."
           },
           "capture": {
             "source": "webapp",
             "openDetails": ["Layout"],
             "actions": [
+              {
+                "type": "click",
+                "selector": "button[aria-controls='circular-custom-track-slots-panel'][aria-expanded='false']"
+              },
               {
                 "type": "evaluate",
                 "script": "const app = window.__GBDRAW_APP__; if (app) { app.adv.circular_track_slots_enabled = true; app.resetCircularTrackSlotsToPreset?.('middle'); }"
@@ -212,10 +216,10 @@
                 "script": "() => { const app = window.__GBDRAW_APP__; const slots = app?.adv?.circular_track_slots; return app?.adv?.circular_track_slots_enabled === true && Array.isArray(slots) && slots.length === 4 && slots.map((slot) => slot.id).join(',') === 'features,ticks,gc_content,gc_skew'; }"
               }
             ],
-            "clipSelectors": ["#circular-custom-track-slots-panel > .grid.grid-cols-3", "#circular-custom-track-slots-panel > .rounded.border.border-sky-200"],
+            "clipSelectors": ["#circular-custom-track-slots-panel > [role='group']", "#circular-custom-track-slots-panel > .rounded.border.border-sky-200"],
             "highlightSelector": "button[title='Replace the current custom stack with the Middle template']",
             "cropPadding": {
-              "top": 12,
+              "top": 4,
               "right": 12,
               "bottom": 12,
               "left": 12

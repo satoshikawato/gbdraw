@@ -79,6 +79,7 @@ def _web_default_grid(
     config_overrides: dict | None = None,
     center_reserved_radius: float | None = None,
     species: str | None = None,
+    circular_track_slots: list[str] | None = None,
 ):
     overrides = dict(WEB_DEFAULT_OVERRIDES)
     overrides.update(config_overrides or {})
@@ -87,7 +88,10 @@ def _web_default_grid(
         options=CircularDiagramOptions(
             config_overrides=overrides,
             output=CircularOutputOptions(legend="left"),
-            tracks=CircularRequestTrackOptions(center_reserved_radius=center_reserved_radius),
+            tracks=CircularRequestTrackOptions(
+                circular_track_slots=circular_track_slots,
+                center_reserved_radius=center_reserved_radius,
+            ),
             species=species,
         ),
         layout=CircularMultiRecordOptions(multi_record_positions=["#1@1"]),
@@ -138,6 +142,29 @@ def test_species_line_wraps_at_word_boundaries_only_when_placement_fails() -> No
     for organism in (MYCOBACTERIUM, ESCHERICHIA):
         lines = _definition_lines(_web_default_grid(_record_with_organism(organism)).tostring())
         assert lines[0] == organism
+
+
+@pytest.mark.circular
+def test_pinned_track_on_the_definition_wraps_the_species_line() -> None:
+    # A pinned row that overlaps only the one-line definition fails because of
+    # the definition band, so the species line wraps (TK-02).
+    slots = ["gc_skew:dinucleotide_skew@side=inside,r=0.5"]
+    wrapped = _definition_lines(
+        _web_default_grid(_record_with_organism(SALMONELLA), circular_track_slots=slots).tostring()
+    )
+    species_lines = wrapped[: len(wrapped) - 4]
+
+    assert len(species_lines) >= 2
+    assert " ".join(species_lines) == SALMONELLA
+
+    # An explicit center_reserved_radius is not wrapped away.
+    with pytest.raises(ValidationError) as caught:
+        _web_default_grid(
+            _record_with_organism(SALMONELLA),
+            circular_track_slots=slots,
+            center_reserved_radius=250.0,
+        )
+    assert _layout_reason(caught.value) == "CENTER_RESERVED"
 
 
 @pytest.mark.circular

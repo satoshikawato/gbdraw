@@ -61,8 +61,12 @@ const edit = (page, svgId, change) => evaluateWithRetainedPromise(page, async ({
   if (requested.labelText !== undefined || requested.labelVisibility) {
     if (requested.labelText !== undefined) app.clickedFeature.labelText = requested.labelText;
     if (requested.labelVisibility) app.clickedFeature.labelVisibility = requested.labelVisibility;
-    await app.updateClickedFeatureLabelText();
-    if (app.hiddenLabelTextDialog?.show) await app.handleHiddenLabelTextChoice('keep');
+    // Label Not Shown keeps the Apply open until its choice (Keep hidden here).
+    let applying = true;
+    const applied = Promise.resolve(app.updateClickedFeatureLabelText()).finally(() => { applying = false; });
+    while (applying && !app.hiddenLabelTextDialog?.show) await new Promise((resolve) => setTimeout(resolve, 20));
+    if (app.hiddenLabelTextDialog?.show) await app.handleHiddenLabelTextChoice('text_only');
+    await applied;
   }
   if (requested.visibility) {
     app.clickedFeature.featureVisibility = requested.visibility;

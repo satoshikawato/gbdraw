@@ -1,7 +1,6 @@
 // @ts-check
 import { setDpiInPng } from '../utils/png.js';
-import { stripPreviewFeatureSearchClasses } from '../app/feature-search/preview-svg.js';
-import { ensureSvgDefs, stripTransientPreviewState } from './svg-serialization.js';
+import { ensureSvgDefs, stripPreviewFeatureSearchClasses, stripTransientPreviewState } from './svg-serialization.js';
 import { downloadBlob } from './text-download.js';
 import { preparePdfFonts } from './pdf-fonts.js';
 

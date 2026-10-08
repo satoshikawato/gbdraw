@@ -26,7 +26,7 @@ const {
   getLegendChildById,
   parseTransformXY
 } = await import(
-  pathToFileURL(join(tempRoot, 'app', 'legend', 'utils.js'))
+  pathToFileURL(join(tempRoot, 'services', 'legend-svg.js'))
 );
 const { createLegendEntryActions } = await import(
   pathToFileURL(join(tempRoot, 'app', 'legend', 'entry-actions.js'))
@@ -88,7 +88,10 @@ assert.match(configSource, /skipCaptureBaseConfig\.value = true;\s+applyResultsD
 const sessionLegendSyncSource = appSetupSource.match(
   /adoptLegend\(context\)[\s\S]*?\n    bindComposition/
 )?.[0] || '';
-assert.match(sessionLegendSyncSource, /extractLegendEntries\(\{\s*replaceGeneratedInventory: !selecting && \(!context\.bindingOptions\.isIncrementalEdit/);
+assert.match(
+  sessionLegendSyncSource,
+  /const drawn = !context\.bindingOptions\.isIncrementalEdit\s*\|\| Boolean\(context\.bindingOptions\.replaceGeneratedLegend\);[\s\S]+extractLegendEntries\(\{\s*replaceGeneratedInventory: !selecting && drawn,/
+);
 assert.doesNotMatch(sessionLegendSyncSource, /initPyodide|addLegendEntry|removeLegendEntry/);
 assert.doesNotMatch(appSetupSource, /restoreLoadedSessionLegendEntries/);
 assert.match(configSource, /const entries = normalizeSessionLegendEntries\(legend\.entries\)/);
@@ -222,14 +225,13 @@ const mockLegendEntry = (caption, color, x) => {
   };
   const actions = createLegendEntryActions({
     state: withDrawings(state),
-    compactLegendEntries: () => {},
-    reflowDualLegendLayout: () => { layoutRefreshes += 1; },
-    updatePairwiseLegendPositions: () => { layoutRefreshes += 1; },
     commitActiveResultEdit: () => {
       dirtyMarks += 1;
       return true;
     }
   });
+  // The layout owner lays the Legend out after a restore (zero shift).
+  actions.setLegendGeometryChangedHandler(() => { layoutRefreshes += 1; });
 
   assert.equal(actions.reconcileLegendEntries(), false);
   assert.equal(dirtyMarks, 0);
@@ -283,25 +285,24 @@ const mockLegendEntry = (caption, color, x) => {
     state.legendEntries.value.map((entry) => ({
       caption: entry.caption,
       color: entry.color,
-      showStroke: entry.showStroke,
       featureIds: entry.featureIds
     })),
     [
       {
         caption: 'Beta',
         color: '#abcdef',
-        showStroke: true,
         featureIds: ['feature-safe']
       },
       {
         caption: 'Gamma',
         color: '#778899',
-        showStroke: false,
         featureIds: []
       }
     ],
     'the sanitized mounted legend remains visual authority and mismatched metadata is ignored'
   );
+  assert.equal(state.legendEntries.value.some((entry) => Object.hasOwn(entry, 'showStroke')), false,
+    'the Stroke options disclosure is view state, not a Legend entry field (OV-157)');
 
   const capturedOwners = actions.captureLegendEntryOwners();
   featureLegend.children[0].setAttribute('data-legend-owner', 'specific-color-file');
@@ -453,9 +454,6 @@ const mockLegendEntry = (caption, color, x) => {
   };
   const actions = createLegendEntryActions({
     state: withDrawings(state),
-    compactLegendEntries: () => {},
-    reflowDualLegendLayout: () => {},
-    updatePairwiseLegendPositions: () => {},
     commitActiveResultEdit: () => true
   });
   const generate = (...rendered) => {
@@ -534,9 +532,6 @@ const mockLegendEntry = (caption, color, x) => {
   let commits = 0;
   const actions = createLegendEntryActions({
     state: withDrawings(state),
-    compactLegendEntries: () => {},
-    reflowDualLegendLayout: () => {},
-    updatePairwiseLegendPositions: () => {},
     commitActiveResultEdit: () => { commits += 1; return true; },
     readActiveResultIdentity: () => 'result-1'
   });
@@ -633,9 +628,6 @@ const mockLegendEntry = (caption, color, x) => {
   const live = ['result-1', 'result-2'];
   const actions = createLegendEntryActions({
     state: withDrawings(state),
-    compactLegendEntries: () => {},
-    reflowDualLegendLayout: () => {},
-    updatePairwiseLegendPositions: () => {},
     commitActiveResultEdit: () => true,
     readActiveResultIdentity: () => identity
   });

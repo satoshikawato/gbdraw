@@ -521,6 +521,10 @@ const originalLegendColors = ref({}); // Store original colors: { caption: color
 const newLegendCaption = ref(defaultEditorDraftState.newLegendCaption);
 const newLegendColor = ref(defaultEditorDraftState.newLegendColor);
 
+// The Legend editor rows whose stroke options are shown, by caption: app-level
+// view state, which History and the Session do not hold (OV-157).
+const legendStrokeOptionsOpen = reactive(new Set());
+
 // Original stroke values from SVG generation (gbdraw's auto-determined defaults)
 const originalSvgStroke = ref({ color: null, width: null });
 
@@ -859,7 +863,7 @@ const createDrawingState = (drawingMode) => {
     featureVisibilityManualRules,
     labelTextBulkOverrides: reactive({}), // { sourceText: text }
     canonicalLabelOverrideRows: ref([]),
-    legendEntries: ref([]), // [{caption, originalCaption, color, yPos, showStroke, featureIds}]
+    legendEntries: ref([]), // [{caption, originalCaption, color, yPos, featureIds}]
     deletedLegendEntries: ref([]),
     // OV-120: renamed rows the last Generate did not draw (GC off, Show Depth
     // off); their renames apply again when a Generate draws the row.
@@ -1057,6 +1061,7 @@ export const state = {
   originalLegendColors,
   newLegendCaption,
   newLegendColor,
+  legendStrokeOptionsOpen,
   originalSvgStroke,
   legendDragging,
   legendDragStart,

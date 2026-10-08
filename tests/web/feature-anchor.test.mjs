@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { resolveFeatureAnchor } from '../../gbdraw/web/js/app/record-display/feature-anchor.js';
-import { validateAnchorIntent } from '../../gbdraw/web/js/app/record-display-options.js';
+import { validateAnchorIntent } from '../../gbdraw/web/js/services/record-display-model.js';
 
 const identity = { recordKey: 'record-1', biologicalFeatureId: 'feature-1' };
 

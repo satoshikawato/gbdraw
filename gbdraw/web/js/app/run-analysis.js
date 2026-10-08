@@ -12,10 +12,10 @@ import {
   validateFeatureIdentityNotices
 } from '../services/feature-placement.js';
 import { rekeyOrthogroupOverrides } from '../services/orthogroup-feature-metadata.js';
-import { resolveLinearRegionBounds } from './feature-metadata-extraction.js';
+import { resolveLinearRegionBounds } from '../services/feature-metadata-extraction.js';
 import { buildSimilarityAlignmentResetReceipt, validateSimilarityAlignmentResetReceipt } from '../services/session-active-config-contract.js';
 import { prepareLosatRuntime, runLosatPairsParallel } from '../services/losat.js';
-import { losatRecordGencode, prepareLosatSourceBatches, splitLosatSourceResult } from './linear-sources.js';
+import { losatRecordGencode, prepareLosatSourceBatches, splitLosatSourceResult } from '../services/linear-sources.js';
 import {
   cancelDiagramGeneration,
   DIAGRAM_HELPER_OPERATIONS,
@@ -35,7 +35,8 @@ import {
   promoteCanonicalRenderRequestToCurrent,
   readCanonicalResourceRecordCount,
   requestLabelProjection,
-  requestLabelTableTsv
+  requestLabelTableTsv,
+  requireLinearComparisonPlanSnapshot
 } from '../services/session-request.js';
 import { labelDrawingBlocker } from './feature-editor/label-actions.js';
 import {
@@ -134,7 +135,7 @@ import {
   discoverGffFastaRecords,
   discoverSequenceRecords,
   discoveryErrorIsFinal
-} from './record-discovery.js';
+} from '../services/record-discovery.js';
 import { genbankHeaderIds } from '../services/genbank-header.js';
 import {
   LOSAT_DERIVED_CACHE_SCHEMA,
@@ -154,7 +155,7 @@ import {
   losatEdgeFilename,
   validateDerivedProteinReferences,
   webLosatRuntimeRecord
-} from './losat-cache.js';
+} from '../services/losat-cache.js';
 import { comparisonFiltersForMode, resolveComparisonThresholds } from '../mode-profiles.js';
 import { diagnosticError, liveEditFailure, normalizeUserFacingError } from '../utils/error-normalization.js';
 import {
@@ -886,7 +887,8 @@ const applyLosatSequenceTransforms = (record, regionSpec, reverseFlag) => {
     const start = Math.max(0, region.start - 1);
     const end = Math.min(sequence.length, region.end);
     if (start >= end && (region.start !== 1 || region.end !== sequence.length)) {
-      throw new Error(`Start position (${region.start}) must be less than end position (${region.end}).`);
+      // The region starts after the record ends, as crop_genbank.py reports it (GX-09).
+      throw diagnosticError('REGION_INVALID', { field: 'region', reason: 'RECORD_BOUNDS' });
     }
     sequence = sequence.slice(start, end);
     if (region.reverse) sequence = reverseComplementSequence(sequence);
@@ -2332,12 +2334,7 @@ export const createRunAnalysis = ({
       candidateRules = colorCandidate.rules;
       requestDrawing = { ...drawing, manualSpecificRules: candidateRules };
       if (mode.value === 'linear') {
-        if (!activeComparisonPlanSnapshot || !Array.isArray(activeComparisonPlanSnapshot.edges)) {
-          throw new Error('A resolved Linear comparison plan is required.');
-        }
-        if (activeComparisonPlanSnapshot.error) {
-          throw new Error(activeComparisonPlanSnapshot.error);
-        }
+        requireLinearComparisonPlanSnapshot(activeComparisonPlanSnapshot);
       }
       if (typeof validateAnnotationTargets === 'function' && drawing.annotationSets.length > 0) {
         const annotationError = validateAnnotationTargets();

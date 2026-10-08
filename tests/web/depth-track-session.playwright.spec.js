@@ -2221,7 +2221,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     .locator('input[type="checkbox"]')
     .click();
   await circularAnnotationRow
-    .getByRole('checkbox', { name: 'band', exact: true })
+    .getByRole('checkbox', { name: 'Circular track slot review_overlay mark band', exact: true })
     .click();
 
   await page.evaluate(async () => {
@@ -2253,7 +2253,7 @@ test('P3 Custom Track drafts survive fresh-page session re-save and Reset histor
     .locator('input[type="checkbox"]')
     .click();
   await linearAnnotationRow
-    .getByRole('checkbox', { name: 'highlight', exact: true })
+    .getByRole('checkbox', { name: 'Linear track slot inactive_overlay mark highlight', exact: true })
     .click();
   await page.evaluate(async () => {
     window.__GBDRAW_APP__.setDiagramMode('circular');

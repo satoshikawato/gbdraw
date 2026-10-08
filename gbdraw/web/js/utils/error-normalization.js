@@ -1,6 +1,6 @@
 // @ts-check
 const OPERATIONS = new Set(['unknown', 'generate', 'align', 'feature-extraction', 'export-svg', 'export-png', 'export-pdf', 'evaluateRules', 'readPdfFont', 'buildProteinLosatCacheKeys', 'convertMainSessionComparisonFrame',
-  'convertLosatpPairsToGenomicPayload', 'extractCdsProteinFasta', 'extractFirstFasta', 'generateLegendEntrySvg',
+  'convertLosatpPairsToGenomicPayload', 'extractCdsProteinFasta', 'extractFirstFasta',
   'hydrateProteinLosatTsv', 'listGffFastaRecords', 'listSequenceRecords', 'measureLegendText',
   'promoteLegacyLosatpCache', 'readComparisonSequence', 'readFeatureOverrideTable', 'resolveLegacyProteinReferences',
   'resolveSimilarityAlignment', 'validateConfigOverrides', 'session-save']);
@@ -90,12 +90,14 @@ const REASONS = Object.freeze({
   DEPTH_SERIES: 'Select an existing Depth TSV or remove the slot.',
   BOTH_ENDPOINTS: 'Supply both region endpoints or leave both empty.', SPECIFIC_COLUMNS: 'Supply four or five tab-separated columns.',
   COLOR: 'Use none, a supported named color, or a hex color with 3 or 6 digits.',
+  // Output Prefix (gbdraw/api/requests.py RenderOutputRequest).
+  FILENAME: 'Use one file name without a folder: no / \\ : * ? " < > | or control characters, no trailing dot, and not a Windows device name such as CON or NUL.',
+  FILENAME_LENGTH: 'Use at most 200 bytes in UTF-8, for example 200 ASCII characters.',
   BOOLEAN: 'Use true or false.', INTEGER: 'Use an integer.', NONNEGATIVE: 'Use a finite value of zero or greater.',
   FINITE: 'Use a finite number.', POSITIVE_INTEGER: 'Use an integer greater than zero.',
   POSITIVE: 'Use a finite value greater than zero.', POSITIVE_OR_AUTO: 'Use Auto or a finite value greater than zero.',
   NONNEGATIVE_INTEGER: 'Use an integer of zero or greater.', PERCENT: 'Use a finite value between 0 and 100.',
   ARRAY: 'Use a list.', OBJECT: 'Use an object.', FIELDS: 'Check the required fields.', REQUIRED: 'Supply the required value.',
-  STRICT_ORDER: 'The start must be less than the end.',
   ORDER: 'The start or minimum must not exceed the end or maximum.', RECORD_BOUNDS: 'Keep the region within the record length.',
   STRAND: 'Use -1, 1, or no strand.', DISPLAY_START_BOUNDS: 'Use a display start between 1 and the record length.', CROP_START_CONFLICT: 'Choose a crop or an explicit display start.',
   REFERENCE_REQUIRED: 'Supply the depth reference column.', REFERENCE_MISMATCH: 'Match depth references to the selected record.',
@@ -103,7 +105,7 @@ const REASONS = Object.freeze({
   NO_MATCH: 'Choose an available record.', AMBIGUOUS: 'Use #index to distinguish records with the same ID.',
   SELECTOR_FORMAT: 'Use #<number> or a record ID.', SELECT_ONE: 'Select exactly one record.',
   REGION_FORMAT: 'Use record_id:start-end[:rc] or #index:start-end[:rc].',
-  CANNOT_FIT: 'Move the track, reduce widths, disable conflicting labels, or place it outside.',
+  CANNOT_FIT: 'Move the track, reduce widths, disable conflicting labels, or place it on the other side of the Axis.',
   DEFINITION_RESERVED: 'The center definition text limits the inside tracks. Shorten Species or Strain, reduce Default font size, set a smaller Center Reserved Radius, or place tracks outside.',
   CENTER_RESERVED: 'The Center Reserved Radius limits the inside tracks. Set a smaller Center Reserved Radius or place tracks outside.',
   SPLIT_LANES: 'Set that feature\'s Feature placement to Auto or Main, or use split feature lanes (Track Preset Middle).',
@@ -118,6 +120,12 @@ const REASONS = Object.freeze({
   FORMAT: 'Use GenBank or the required GFF3 and FASTA inputs.', NO_PROTEINS: 'Choose input containing CDS proteins.',
   EMPTY_ENDPOINT: 'Check the comparison endpoints.', INDEX_ALIGNMENT: 'Check the comparison endpoints.',
   SOURCE_INDEX: 'Check the comparison endpoints.', SOURCE_VIEW_CONFLICT: 'Check the comparison inputs and display transforms.',
+  RECORD_ID: 'A table row names another displayed record in this column. Swap the query and subject columns of the table, or assign the table to the pair it describes.',
+  BLAST_TSV_REQUIRED: 'Choose a BLAST TSV for this pair, or set the pair to No comparison or Run LOSAT.',
+  PAIR_TOPOLOGY: 'Each selected pair must join two different available records on adjacent rows, and appear once.',
+  OUTFMT7_FIELDS: 'List all 12 standard BLAST outfmt 6 fields in the "# Fields:" line, or remove the line so that the first 12 columns are read in the standard order.',
+  EMPTY_FILE: 'The file is empty.', NOT_GENBANK: 'The file is not a GenBank/DDBJ flat file: it has no record header line.',
+  FASTA_IN_GENBANK: 'This file looks like FASTA. Use GFF3 + FASTA input, or a GenBank/DDBJ flat file.',
   FORCED_LABEL: 'Open the feature\'s popup and set Label visibility to Default, or change the setting that prevents its label.'
 });
 const DEFINITIONS = Object.freeze({
@@ -144,13 +152,14 @@ const DEFINITIONS = Object.freeze({
   REGION_INVALID: ['The region is invalid.', ['edit-region', 'retry']],
   DEPTH_INVALID: ['The depth input or settings are invalid.', ['edit-depth', 'disable-track', 'retry']],
   TABLE_INVALID: ['The table is invalid.', ['edit-table', 'retry']],
-  COMPARISON_INPUT: ['The comparison input is invalid. Supply a comparison sequence file (FASTA, GenBank, or DDBJ) or BLAST outfmt 6/7 as required.', ['edit-comparison', 'retry']],
+  // The third element is the guidance when the producer names no reason.
+  COMPARISON_INPUT: ['The comparison input is invalid.', ['edit-comparison', 'retry'], 'Supply a comparison sequence file (FASTA, GenBank, or DDBJ) or BLAST outfmt 6/7 as required.'],
   LOSAT_RUNTIME: ['The comparison search could not run or returned unusable output. Check the LOSAT or NCBI BLAST+ runtime, then Generate again.', ['edit-comparison', 'retry']],
   LOSAT_THREADING_UNAVAILABLE: ['Threaded LOSAT execution is unavailable in this browser environment. Select Serial or Auto execution, then Generate again.', ['edit-comparison', 'retry']],
   COMPARISON_IDENTITY: ['Comparison endpoints disagree with the displayed features. Review the comparison inputs and display transforms; save a Session if it continues.', ['edit-comparison', 'retry', 'save-session']],
   ANNOTATION_TARGET: ['The region annotation target is invalid.', ['edit-annotation', 'retry']],
   TRACK_INVALID: ['The track settings are invalid.', ['edit-track', 'retry']],
-  TRACK_LAYOUT: ['A circular track does not fit inside.', ['edit-track', 'retry']],
+  TRACK_LAYOUT: ['A circular track does not fit.', ['edit-track', 'retry']],
   FEATURE_PLACEMENT: ['A Feature placement uses a lane that the current feature track does not have.', ['edit-track', 'retry']],
   FEATURE_IDENTITY: ['A feature edit does not identify a record of the current inputs. Generate again; if it continues, save a Session for investigation.', ['retry', 'save-session']],
   // The same request fails the same way until the setting or the mode changes.
@@ -176,6 +185,7 @@ const DEFINITIONS = Object.freeze({
 const FIELD_LABELS = Object.freeze({ protein_blastp_max_hits: 'Protein BLASTP Pairwise max hits',
   losatp_max_hits: 'Protein BLASTP Pairwise max hits', losatp_max_target_seqs: 'Protein BLASTP Max target seqs',
   losatp_member_max_hits: 'Protein BLASTP member hits per protein',
+  output_prefix: 'Output Prefix',
   arrow_head_length_ratio: 'Arrow head length ratio', arrow_shaft_width_ratio: 'Arrow shaft width ratio',
   keep_definition_left_aligned: 'Lock Definition Column', window: 'Window', step: 'Step',
   depth_window: 'Depth Window', depth_step: 'Depth Step', dinucleotide: 'Dinucleotide',
@@ -372,8 +382,6 @@ const nativeValidation = (message) => {
   const scalar = /^Circular track slot '[\s\S]*' (radius|width) must be a positive finite px or factor scalar\.$/.exec(message);
   if (scalar) return { code: 'TRACK_INVALID', stage: 'request-validation', context: { field: scalar[1], reason: 'POSITIVE_SCALAR' } };
   if (/^Circular track slot '[\s\S]*' uses obsolete field '(?:spacing|strict|compress|reserve)'\. Use inner_gap_px and outer_gap_px for physical gaps\.$/.test(message)) return { code: 'TRACK_INVALID', stage: 'request-validation', context: { reason: 'CIRCULAR_GAPS' } };
-  const order = /^Start position \([0-9]+\) must be less than end position \([0-9]+\)\.$/.test(message);
-  if (order) return { code: 'REGION_INVALID', stage: 'request-validation', context: { reason: 'STRICT_ORDER' } };
   const selector = /^Record selector #[0-9]+ is out of range \(loaded ([0-9]+) record\(s\)\)\.$/.exec(message);
   if (selector) return { code: 'RECORD_SELECTION', stage: 'request-validation', context: { reason: 'OUT_OF_RANGE', recordCount: Number(selector[1]) } };
   for (const [template, reason] of /** @type {[RegExp, string][]} */ ([
@@ -450,7 +458,7 @@ const contextFor = (value) => {
   if (typeof value.sessionTable === 'string' && Object.hasOwn(SESSION_TABLE_LABELS, value.sessionTable)) context.sessionTable = value.sessionTable;
   // The diagram mode whose Result the failure concerns, when it is not the one shown (E1).
   if (value.diagramMode === 'circular' || value.diagramMode === 'linear') context.diagramMode = value.diagramMode;
-  for (const key of ['position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'placementIndex']) {
+  for (const key of ['position', 'row', 'column', 'inputOrdinal', 'recordIndex', 'seriesIndex', 'slotIndex', 'recordCount', 'columnCount', 'codepoint', 'innerPx', 'outerPx', 'placementIndex', 'queryRecordIndex', 'subjectRecordIndex']) {
     if (Number.isSafeInteger(value[key]) && value[key] >= 0 && value[key] <= (key === 'codepoint' ? 0x10ffff : 10000000)) {
       if (key !== 'position' || context.positionUnit === 'python-character') context[key] = value[key];
     }
@@ -490,6 +498,9 @@ export const normalizeUserFacingError = (value, {
     diagramMode !== undefined ? `Diagram: ${diagramMode === 'linear' ? 'Linear' : 'Circular'}.` : '',
     sessionTable !== undefined ? `Session table: ${SESSION_TABLE_LABELS[sessionTable]}.` : '',
     inputOrdinal !== undefined ? `${ORDINAL_LABELS[result.code] || 'Sequence'} ${inputOrdinal}.` : '',
+    // A comparison pair as the comparison panel numbers it (#1 to #2).
+    result.context.queryRecordIndex !== undefined && result.context.subjectRecordIndex !== undefined
+      ? `Pair: #${result.context.queryRecordIndex + 1} to #${result.context.subjectRecordIndex + 1}.` : '',
     featureCaption !== undefined ? `Feature: ${featureCaption}.` : '',
     row !== undefined ? `Line ${row}.` : '',
     column !== undefined ? `Column ${column}.` : '',
@@ -500,7 +511,7 @@ export const normalizeUserFacingError = (value, {
     featureCount > 1 ? `Features affected: ${featureCount}.` : ''
   ].filter(Boolean).map((text) => ` ${text}`).join('');
   const band = innerPx !== undefined && outerPx !== undefined ? ` Available band: ${innerPx}–${outerPx} px.` : '';
-  const guidance = REASONS[result.context.reason] || '';
+  const guidance = REASONS[result.context.reason] || DEFINITIONS[result.code][2] || '';
   const field = result.context.field ? ` Field: ${FIELD_LABELS[result.context.field] || result.context.field}.` : '';
   const position = result.context.position !== undefined ? ` Python character position ${result.context.position} (zero-based).` : '';
   const columns = result.context.columnCount !== undefined ? ` Required columns: ${result.context.columnCount}.` : '';

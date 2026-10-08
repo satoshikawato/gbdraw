@@ -24,7 +24,7 @@ const {
   inferredDefinitionForRecord,
   resolveLinearRecordEffectiveDefinition,
   resolveLinearRecordEffectiveSubtitle
-} = await import('../../gbdraw/web/js/app/linear-sources.js');
+} = await import('../../gbdraw/web/js/services/linear-sources.js');
 const { createLinearSeq } = await import('../../gbdraw/web/js/state.js');
 
 test('createLinearSeq handles file_definition and file_subtitle', () => {

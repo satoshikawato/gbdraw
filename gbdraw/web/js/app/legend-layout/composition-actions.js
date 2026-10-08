@@ -3,7 +3,8 @@ import {
   prependTranslate,
   readLeadingTranslate,
   replaceLeadingTranslate
-} from './transform-utils.js';
+} from '../../services/svg-transform.js';
+import { planLegendComposition } from '../../services/legend-layout.js';
 
 export const COMPOSITION_SCHEMA_VERSION = 1;
 export const COMPOSITION_SCHEMA_ATTRIBUTE = 'data-gbdraw-composition-schema';
@@ -43,6 +44,13 @@ const LEGACY_COMPOSITION_SPACING_V0 = Object.freeze({
   stackGapPx: 20,
   titleGapPx: 20
 });
+const LEGEND_LAYOUT_INPUT_FIELDS = Object.freeze([
+  'dpi',
+  'fontFile',
+  'fontSize',
+  'primaryLocalBounds',
+  'wrapWidth'
+]);
 const LEGACY_LEGEND_LINE_HEIGHT_RATIO_V0 = 24 / 14;
 const LEGACY_LEGEND_TEXT_OFFSET_RATIO_V0 = 22 / 14;
 const LEGACY_OVERLAY_POLICY_V0 = Object.freeze({
@@ -103,6 +111,25 @@ const validateBounds = (value, path, { positive = false } = {}) => {
   };
   if (positive && (bounds.width <= 0 || bounds.height <= 0)) {
     fail(`${path} must have positive width and height.`);
+  }
+  return bounds;
+};
+
+/**
+ * Python's Aabb field for field (min/max form, not x/width).
+ * @param {any} value
+ * @param {string} path
+ */
+const validateCornerBounds = (value, path) => {
+  if (!isPlainObject(value)) fail(`${path} must be an object.`);
+  const bounds = {
+    minX: finiteNumber(value.minX, `${path}.minX`),
+    minY: finiteNumber(value.minY, `${path}.minY`),
+    maxX: finiteNumber(value.maxX, `${path}.maxX`),
+    maxY: finiteNumber(value.maxY, `${path}.maxY`)
+  };
+  if (bounds.maxX < bounds.minX || bounds.maxY < bounds.minY) {
+    fail(`${path} must not be inverted.`);
   }
   return bounds;
 };
@@ -222,7 +249,7 @@ const validateLegendReflow = (value, { required }) => {
   }
   if (!required) fail('composition.legendReflow requires a legend target.');
   if (!isPlainObject(value)) fail('composition.legendReflow must be an object.');
-  return {
+  const reflow = {
     colorRectSize: positiveNumber(
       value.colorRectSize,
       'composition.legendReflow.colorRectSize'
@@ -232,6 +259,33 @@ const validateLegendReflow = (value, { required }) => {
       value.textXOffset,
       'composition.legendReflow.textXOffset'
     )
+  };
+  // The inputs Python laid the Legend out with. SVGs written before Python
+  // emitted them carry none; parsing keeps them so a composition edit writes
+  // them back unchanged.
+  const present = LEGEND_LAYOUT_INPUT_FIELDS.filter((field) => (
+    Object.prototype.hasOwnProperty.call(value, field)
+  ));
+  if (present.length === 0) return reflow;
+  if (present.length !== LEGEND_LAYOUT_INPUT_FIELDS.length) {
+    fail('composition.legendReflow has an incomplete set of Python layout inputs.');
+  }
+  if (!Number.isInteger(value.dpi) || value.dpi <= 0) {
+    fail('composition.legendReflow.dpi must be a positive integer.');
+  }
+  if (value.fontFile !== null && (typeof value.fontFile !== 'string' || !value.fontFile.trim())) {
+    fail('composition.legendReflow.fontFile must be a non-empty string or null.');
+  }
+  return {
+    ...reflow,
+    dpi: value.dpi,
+    fontFile: value.fontFile,
+    fontSize: positiveNumber(value.fontSize, 'composition.legendReflow.fontSize'),
+    primaryLocalBounds: validateCornerBounds(
+      value.primaryLocalBounds,
+      'composition.legendReflow.primaryLocalBounds'
+    ),
+    wrapWidth: nonNegativeNumber(value.wrapWidth, 'composition.legendReflow.wrapWidth')
   };
 };
 
@@ -319,8 +373,6 @@ const translated = (bounds, dx, dy) => ({
 });
 const maxX = (bounds) => bounds.x + bounds.width;
 const maxY = (bounds) => bounds.y + bounds.height;
-const centerX = (bounds) => bounds.x + bounds.width / 2;
-const centerY = (bounds) => bounds.y + bounds.height / 2;
 const unionBounds = (boundsList) => {
   if (!boundsList.length) return null;
   const minX = Math.min(...boundsList.map((bounds) => bounds.x));
@@ -329,181 +381,39 @@ const unionBounds = (boundsList) => {
   const bottom = Math.max(...boundsList.map(maxY));
   return { x: minX, y: minY, width: right - minX, height: bottom - minY };
 };
-const intersects = (left, right, clearance = 0) => !(
-  maxX(left) + clearance <= right.x ||
-  maxX(right) + clearance <= left.x ||
-  maxY(left) + clearance <= right.y ||
-  maxY(right) + clearance <= left.y
-);
-const alignMin = (bounds, x, y) => ({
-  translation: [x - bounds.x, y - bounds.y],
-  bounds: { x, y, width: bounds.width, height: bounds.height }
+
+// The metadata and the editor hold bounds as {x, y, width, height}; Python's
+// planner holds min/max boxes. The planner is the Python-order port in
+// services/legend-layout.js (`planLegendComposition`), so a replan equals
+// `plan_composition` given the same boxes; the payloads go back as
+// `_bounds_payload` writes them.
+/** @param {{ x: number, y: number, width: number, height: number }} bounds */
+const toBox = (bounds) => ({
+  minX: bounds.x, minY: bounds.y, maxX: bounds.x + bounds.width, maxY: bounds.y + bounds.height
+});
+/** @param {import('../../services/legend-layout.js').LayoutBox} box */
+const toPayloadBounds = (box) => ({
+  x: box.minX, y: box.minY, width: box.maxX - box.minX, height: box.maxY - box.minY
 });
 
-const dockLegend = (primary, legend, side, spacing) => {
-  if (side === 'left') {
-    return alignMin(
-      legend,
-      primary.x - spacing.dockGapPx - legend.width,
-      centerY(primary) - legend.height / 2
-    );
-  }
-  if (side === 'right') {
-    return alignMin(legend, maxX(primary) + spacing.dockGapPx, centerY(primary) - legend.height / 2);
-  }
-  if (side === 'top') {
-    return alignMin(
-      legend,
-      centerX(primary) - legend.width / 2,
-      primary.y - spacing.dockGapPx - legend.height
-    );
-  }
-  return alignMin(legend, centerX(primary) - legend.width / 2, maxY(primary) + spacing.dockGapPx);
-};
-
-const overlayAxisRange = (minimum, maximum, itemSize, nearMinimum, boundaryRatio) => {
-  let low = minimum;
-  let high = maximum - itemSize;
-  const midpointStart = low + boundaryRatio * (high - low);
-  if (nearMinimum) high = Math.min(high, midpointStart);
-  else low = Math.max(low, midpointStart);
-  return low > high ? null : [low, high];
-};
-
-const overlayAxisValues = (range, itemSize, obstacles, clearance, axis) => {
-  const values = new Set(range);
-  obstacles.forEach((obstacle) => {
-    if (axis === 'x') {
-      values.add(obstacle.x - clearance - itemSize);
-      values.add(maxX(obstacle) + clearance);
-    } else {
-      values.add(obstacle.y - clearance - itemSize);
-      values.add(maxY(obstacle) + clearance);
-    }
-  });
-  return [...values].filter((value) => value >= range[0] && value <= range[1]).sort((a, b) => a - b);
-};
-
-const compareScore = (left, right) => {
-  for (let index = 0; index < left.length; index += 1) {
-    if (left[index] !== right[index]) return left[index] - right[index];
-  }
-  return 0;
-};
-
-const overlayLegend = (primary, legend, side, obstacles, spacing, policy) => {
-  const left = side === 'upper_left' || side === 'lower_left';
-  const upper = side === 'upper_left' || side === 'upper_right';
-  const anchorX = left ? primary.x : maxX(primary) - legend.width;
-  const anchorY = upper ? primary.y : maxY(primary) - legend.height;
-  const anchor = alignMin(legend, anchorX, anchorY);
-  const conflicts = (bounds) => obstacles
-    .map((obstacle, index) => intersects(bounds, obstacle, spacing.overlayClearancePx) ? index : -1)
-    .filter((index) => index >= 0);
-  const initialConflicts = conflicts(anchor.bounds);
-  const xRange = overlayAxisRange(
-    primary.x,
-    maxX(primary),
-    legend.width,
-    left,
-    policy.quadrantBoundaryRatio
-  );
-  const yRange = overlayAxisRange(
-    primary.y,
-    maxY(primary),
-    legend.height,
-    upper,
-    policy.quadrantBoundaryRatio
-  );
-  if (xRange && yRange) {
-    if (initialConflicts.length === 0) return anchor;
-    const candidates = [];
-    overlayAxisValues(xRange, legend.width, obstacles, spacing.overlayClearancePx, 'x').forEach((x) => {
-      overlayAxisValues(yRange, legend.height, obstacles, spacing.overlayClearancePx, 'y').forEach((y) => {
-        candidates.push([x, y]);
-      });
-    });
-    const candidateScore = ([x, y]) => {
-      const metrics = {
-        totalAnchorDistance: Math.abs(x - anchorX) + Math.abs(y - anchorY),
-        xAnchorDistance: Math.abs(x - anchorX),
-        yAnchorDistance: Math.abs(y - anchorY),
-        nearEdgeX: left ? x : -x,
-        nearEdgeY: upper ? y : -y
-      };
-      return policy.candidateScoreOrder.map((name) => metrics[name]);
-    };
-    candidates.sort((a, b) => compareScore(candidateScore(a), candidateScore(b)));
-    for (const [x, y] of candidates) {
-      const candidate = alignMin(legend, x, y);
-      if (conflicts(candidate.bounds).length === 0) return candidate;
-    }
-  }
-  const horizontal = alignMin(
-    legend,
-    left ? primary.x - spacing.overlayClearancePx - legend.width : maxX(primary) + spacing.overlayClearancePx,
-    anchorY
-  );
-  const vertical = alignMin(
-    legend,
-    anchorX,
-    upper ? primary.y - spacing.overlayClearancePx - legend.height : maxY(primary) + spacing.overlayClearancePx
-  );
-  const candidatesByName = { horizontal, vertical };
-  const canvasGrowthCandidates = policy.canvasGrowthCandidateOrder.map(
-    (name) => candidatesByName[name]
-  );
-  const growthKey = (candidate, index) => {
-    // unionBounds is null only for an empty list; this one holds two entries.
-    const union = /** @type {NonNullable<ReturnType<typeof unionBounds>>} */ (
-      unionBounds([primary, candidate.bounds])
-    );
-    const metrics = {
-      addedArea: union.width * union.height - primary.width * primary.height,
-      addedExtent: union.width - primary.width + union.height - primary.height,
-      candidateOrder: index
-    };
-    return policy.canvasGrowthScoreOrder.map((name) => metrics[name]);
-  };
-  return canvasGrowthCandidates
-    .map((candidate, index) => ({ candidate, score: growthKey(candidate, index) }))
-    .sort((a, b) => compareScore(a.score, b.score))[0]
-    .candidate;
-};
-
-const placeTitle = (primary, title, side, spacing, legendPlacement, legendSide) => {
-  if (side === 'center') {
-    return alignMin(title, centerX(primary) - title.width / 2, centerY(primary) - title.height / 2);
-  }
-  const sameSide = Boolean(legendPlacement) && side === legendSide;
-  let placement;
-  if (side === 'top') {
-    const targetBottom = sameSide
-      ? legendPlacement.bounds.y - spacing.stackGapPx
-      : primary.y - spacing.titleGapPx;
-    placement = alignMin(title, centerX(primary) - title.width / 2, targetBottom - title.height);
-  } else {
-    const targetTop = sameSide
-      ? maxY(legendPlacement.bounds) + spacing.stackGapPx
-      : maxY(primary) + spacing.titleGapPx;
-    placement = alignMin(title, centerX(primary) - title.width / 2, targetTop);
-  }
-  if (
-    legendPlacement && (legendSide === 'left' || legendSide === 'right') &&
-    intersects(placement.bounds, legendPlacement.bounds)
-  ) {
-    const y = side === 'top'
-      ? legendPlacement.bounds.y - spacing.stackGapPx - title.height
-      : maxY(legendPlacement.bounds) + spacing.stackGapPx;
-    placement = alignMin(title, centerX(primary) - title.width / 2, y);
-  }
-  return placement;
-};
-
+/**
+ * Replan the composition. A `legendBox` (min/max, as the Legend layout port
+ * returns it) takes precedence over `legendBounds`, and a `primaryBox` over
+ * `primaryBounds`, so the planner reads those bounds exactly as Python holds
+ * them.
+ * @param {{
+ *   primaryBounds: any, legendBounds?: any, titleBounds?: any,
+ *   legendBox?: import('../../services/legend-layout.js').LayoutBox | null,
+ *   primaryBox?: import('../../services/legend-layout.js').LayoutBox | null,
+ *   legendSide?: string, titleSide?: string, spacing: any, overlayPolicy: any, overlayObstacles?: any[]
+ * }} request
+ */
 export const planComposition = ({
   primaryBounds,
+  primaryBox = null,
   legendBounds = null,
   titleBounds = null,
+  legendBox = null,
   legendSide = 'none',
   titleSide = 'none',
   spacing,
@@ -512,59 +422,39 @@ export const planComposition = ({
 }) => {
   if (!LEGEND_SIDES.has(legendSide)) fail(`Unknown legend side ${JSON.stringify(legendSide)}.`);
   if (!TITLE_SIDES.has(titleSide)) fail(`Unknown title side ${JSON.stringify(titleSide)}.`);
-  const primary = validateBounds(primaryBounds, 'primaryBounds', { positive: true });
+  if (primaryBox) validateBounds(toPayloadBounds(primaryBox), 'primaryBox', { positive: true });
+  const primary = primaryBox || toBox(validateBounds(primaryBounds, 'primaryBounds', { positive: true }));
   const resolvedSpacing = validateSpacing(spacing);
   const resolvedOverlayPolicy = validateOverlayPolicy(overlayPolicy);
   const obstacles = overlayObstacles.map((bounds, index) => validateBounds(bounds, `overlayObstacles[${index}]`));
-  const working = [{ role: 'primary', translation: [0, 0], bounds: primary }];
-  /** @type {ReturnType<typeof dockLegend> | ReturnType<typeof overlayLegend> | null} */
-  let legendPlacement = null;
-  if (legendBounds && legendSide !== 'none') {
-    const legend = validateBounds(legendBounds, 'legendBounds');
-    if (legend.width > 0 && legend.height > 0) {
-      legendPlacement = ['left', 'right', 'top', 'bottom'].includes(legendSide)
-        ? dockLegend(primary, legend, legendSide, resolvedSpacing)
-        : overlayLegend(
-          primary,
-          legend,
-          legendSide,
-          obstacles,
-          resolvedSpacing,
-          resolvedOverlayPolicy
-        );
-      working.push({ role: 'legend', ...legendPlacement });
-    }
+  /** @type {import('../../services/legend-layout.js').LayoutBox | null} */
+  let legend = null;
+  if (legendSide !== 'none' && legendBox) {
+    validateBounds(toPayloadBounds(legendBox), 'legendBox');
+    legend = legendBox;
+  } else if (legendSide !== 'none' && legendBounds) {
+    legend = toBox(validateBounds(legendBounds, 'legendBounds'));
   }
-  if (titleBounds && titleSide !== 'none') {
-    const title = validateBounds(titleBounds, 'titleBounds');
-    if (title.width > 0 && title.height > 0) {
-      working.push({
-        role: 'title',
-        ...placeTitle(primary, title, titleSide, resolvedSpacing, legendPlacement, legendSide)
-      });
-    }
-  }
-  // `working` always holds the primary entry, so the union is not null.
-  const painted = /** @type {NonNullable<ReturnType<typeof unionBounds>>} */ (
-    unionBounds(working.map((placement) => placement.bounds))
-  );
-  const outerX = resolvedSpacing.edgePaddingPx - painted.x;
-  const outerY = resolvedSpacing.edgePaddingPx - painted.y;
-  const placements = Object.fromEntries(working.map((placement) => [
+  const title = titleBounds && titleSide !== 'none' ? validateBounds(titleBounds, 'titleBounds') : null;
+  const plan = planLegendComposition({
+    primary,
+    legend,
+    title: title ? toBox(title) : null,
+    legendSide,
+    titleSide,
+    overlayObstacles: obstacles.map(toBox),
+    spacing: resolvedSpacing,
+    overlayPolicy: resolvedOverlayPolicy
+  });
+  const placements = Object.fromEntries(plan.placements.map((placement) => [
     placement.role,
-    {
-      automaticTranslation: [
-        placement.translation[0] + outerX,
-        placement.translation[1] + outerY
-      ],
-      finalBounds: translated(placement.bounds, outerX, outerY)
-    }
+    { automaticTranslation: placement.translation, finalBounds: toPayloadBounds(placement.finalBounds) }
   ]));
   return {
-    width: painted.width + resolvedSpacing.edgePaddingPx * 2,
-    height: painted.height + resolvedSpacing.edgePaddingPx * 2,
+    width: plan.canvas.maxX - plan.canvas.minX,
+    height: plan.canvas.maxY - plan.canvas.minY,
     placements,
-    overlayObstacles: obstacles.map((bounds) => translated(bounds, outerX, outerY)),
+    overlayObstacles: plan.overlayObstacles.map(toPayloadBounds),
     overlayPolicy: resolvedOverlayPolicy,
     spacing: resolvedSpacing
   };
@@ -576,12 +466,26 @@ const localPrimaryBounds = (metadata) => translated(
   -metadata.primary.automaticTranslation[1]
 );
 
+// The primary box Python planned with (`legendReflow.primaryLocalBounds`,
+// recorded since Z1) while it is still the primary's box: rebuilt from x and
+// width, a max edge can differ from Python's by one ulp. Null for a Result
+// written before Python recorded it, or whose primary has changed since.
+/** @returns {import('../../services/legend-layout.js').LayoutBox | null} */
+const recordedPrimaryBox = (metadata) => {
+  const recorded = metadata.legendReflow?.primaryLocalBounds;
+  if (!recorded) return null;
+  const derived = toBox(localPrimaryBounds(metadata));
+  const keys = /** @type {const} */ (['minX', 'minY', 'maxX', 'maxY']);
+  return keys.every((key) => Math.abs(recorded[key] - derived[key]) <= 1e-6) ? recorded : null;
+};
+
 export const replanCompositionMetadata = (
   metadata,
   {
     legendSide = metadata.legendSide,
     titleSide = metadata.titleSide,
     legendLocalBounds = metadata.legend?.localBounds || null,
+    legendLocalBox = null,
     titleLocalBounds = metadata.title?.localBounds || null
   } = {}
 ) => {
@@ -593,7 +497,9 @@ export const replanCompositionMetadata = (
   ));
   return planComposition({
     primaryBounds: localPrimaryBounds(metadata),
+    primaryBox: recordedPrimaryBox(metadata),
     legendBounds: legendLocalBounds,
+    legendBox: legendLocalBox,
     titleBounds: titleLocalBounds,
     legendSide,
     titleSide,
@@ -798,16 +704,21 @@ export const applyCompositionEdit = (svg, options = {}) => {
   const titleSide = options.titleSide ?? metadata.titleSide;
   const legendTarget = binding.legend.targets[0] || null;
   const titleTarget = binding.title.targets[0] || null;
-  const legendLocalBounds = options.legendLocalBounds ?? (
-    legendTarget && legendSide !== 'none'
-      ? measureCompositionTargetLocalBounds(legendTarget)
-      : metadata.legend?.localBounds || null
+  // The Legend and title bounds are Python's (the metadata), or the Legend
+  // layout port's after a Legend edit (`legendLocalBox`), never the browser's
+  // text extents, so a composition edit docks them where Python would. Only a
+  // legacy Session's normalized metadata is measured on the mounted SVG.
+  /** @param {Element | null} target @param {string} side @param {any} recorded */
+  const localBoundsOf = (target, side, recorded) => (
+    metadata.legacyNormalized && target && side !== 'none'
+      ? measureCompositionTargetLocalBounds(target)
+      : recorded || null
   );
-  const titleLocalBounds = options.titleLocalBounds ?? (
-    titleTarget && titleSide !== 'none'
-      ? measureCompositionTargetLocalBounds(titleTarget)
-      : metadata.title?.localBounds || null
-  );
+  const legendLocalBox = options.legendLocalBox ?? null;
+  const legendLocalBounds = options.legendLocalBounds
+    ?? (legendLocalBox ? toPayloadBounds(legendLocalBox) : localBoundsOf(legendTarget, legendSide, metadata.legend?.localBounds));
+  const titleLocalBounds = options.titleLocalBounds
+    ?? localBoundsOf(titleTarget, titleSide, metadata.title?.localBounds);
   // Legacy sessions are admitted while detached, where browser geometry APIs
   // return empty boxes. Their renderer-authored canvas geometry is sufficient
   // for a safe, layout-neutral import. The first explicit layout edit happens
@@ -828,6 +739,7 @@ export const applyCompositionEdit = (svg, options = {}) => {
     legendSide,
     titleSide,
     legendLocalBounds,
+    legendLocalBox,
     titleLocalBounds
   });
   const primaryPlacement = plan.placements.primary;

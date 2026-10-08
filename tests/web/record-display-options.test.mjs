@@ -1,13 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  buildRecordDisplayRows, createRecordDisplayControls, parseRecordDisplayStart, reconcileRecordDisplayDrafts,
-  RECORD_TARGET_NOT_DISCOVERED,
-  effectiveRecordReverseComplement, migrateLegacyRecordDisplayDrafts, recordDisplaySurface,
-  requestedRecordTransform, selectedFeatureDisplayStart, validateAnchorIntent,
-  validateRecordDisplayDrafts
+  createRecordDisplayControls, RECORD_TARGET_NOT_DISCOVERED, selectedFeatureDisplayStart
 } from '../../gbdraw/web/js/app/record-display-options.js';
-import { circularDiscoveryForInput, parseSequenceRecordText } from '../../gbdraw/web/js/app/record-discovery.js';
+import {
+  buildRecordDisplayRows, parseRecordDisplayStart, reconcileRecordDisplayDrafts, effectiveRecordReverseComplement, migrateLegacyRecordDisplayDrafts, recordDisplaySurface, requestedRecordTransform, validateAnchorIntent, validateRecordDisplayDrafts
+} from '../../gbdraw/web/js/services/record-display-model.js';
+import { circularDiscoveryForInput, parseSequenceRecordText } from '../../gbdraw/web/js/services/record-discovery.js';
 import { isCurrentFeature } from '../../gbdraw/web/js/services/feature-identity.js';
 
 import { createFeaturePlacementActions } from '../../gbdraw/web/js/app/feature-editor/placement-actions.js';

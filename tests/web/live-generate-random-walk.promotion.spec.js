@@ -259,7 +259,7 @@ const applyStep = (page, step) => evaluateWithRetainedPromise(page, async (curre
         notes.push(`label text scope ${choice}`);
         answer(app.handleLabelTextScopeChoice(choice));
       } else if (app.hiddenLabelTextDialog.show) {
-        const choice = choose(['show', 'keep']);
+        const choice = choose(['show', 'text_only', 'cancel']);
         notes.push(`hidden label text ${choice}`);
         answer(app.handleHiddenLabelTextChoice(choice));
       } else if (app.legendRenameDialog.show) {

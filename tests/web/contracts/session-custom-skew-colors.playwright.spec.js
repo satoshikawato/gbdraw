@@ -87,7 +87,7 @@ const openCustomTrackSlots = async (page) => {
   }
   const panel = page.locator('#circular-custom-track-slots-panel');
   if (!await panel.isVisible()) {
-    await page.getByRole('button', { name: 'Custom Track Slots' }).click();
+    await page.getByRole('button', { name: 'Custom Track Slots', exact: true }).click();
   }
   await expect(panel).toBeVisible();
 };

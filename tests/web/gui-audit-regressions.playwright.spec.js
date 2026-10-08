@@ -158,7 +158,7 @@ for (const { method, delayedAsset, extension } of [
   const filename = await page.evaluate((extension) => window.__GBDRAW_APP__.results[0].name.replace(/\.svg$/, `.${extension}`), extension);
   await page.evaluate((method) => { window.__AUDIT_EXPORT__ = window.__GBDRAW_APP__[method](); }, method);
   await requestStarted;
-  await page.locator('select[class*="border-green-300"]').selectOption('1');
+  await page.locator('[aria-label="Result Preview"] h2 select').selectOption('1');
   const pending = page.waitForEvent('download');
   release();
   await page.evaluate(() => window.__AUDIT_EXPORT__);
