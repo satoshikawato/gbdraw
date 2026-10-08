@@ -261,7 +261,8 @@ def test_local_web_package_data_excludes_gallery_assets() -> None:
     assert "bin/*/*" in build_support.get_excluded_package_data_patterns(include_browser_wheel=False)
 
     assert [pattern for pattern in package_data_patterns if "web/gallery" in pattern] == [
-        "web/gallery/palettes/palettes.json"
+        "web/gallery/palettes/palettes.json",
+        "web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json",
     ]
     assert "web/js/services/*.js" in package_data_patterns
     assert "web/tutorial-data/*.json" in package_data_patterns
@@ -1432,8 +1433,11 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
     )
     assert [
         path.relative_to(build_root).as_posix()
-        for path in (build_root / "gbdraw/web/gallery").rglob("*") if path.is_file()
-    ] == ["gbdraw/web/gallery/palettes/palettes.json"]
+        for path in sorted((build_root / "gbdraw/web/gallery").rglob("*")) if path.is_file()
+    ] == [
+        "gbdraw/web/gallery/palettes/palettes.json",
+        "gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json",
+    ]
     copied_wheels = sorted(
         path.name for path in (build_root / "gbdraw" / "web").glob("gbdraw-*.whl")
     )
@@ -1489,7 +1493,10 @@ def test_built_wheel_contains_offline_gui_assets(tmp_path: Path) -> None:
             name for name in outer_names if name.startswith("gbdraw/web/gallery/")
         )
         assert browser_wheels == [browser_wheel_member]
-        assert gallery_members == ["gbdraw/web/gallery/palettes/palettes.json"]
+        assert gallery_members == [
+            "gbdraw/web/gallery/palettes/palettes.json",
+            "gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json",
+        ]
         assert "gbdraw/web/js/services/record-discovery.js" in outer_names
         assert "gbdraw/web/js/services/record-options.js" in outer_names
         assert "gbdraw/web/js/app/linear-record-selector.js" in outer_names
