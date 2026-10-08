@@ -419,6 +419,21 @@ const exampleControls = (page) => ({
   chooser: page.getByRole('dialog', { name: 'Choose an example', exact: true }),
   confirm: page.getByRole('dialog', { name: 'Replace the current work?', exact: true })
 });
+// Owner 2026-10-08: an example opens fitted. The rendered SVG lies inside the
+// preview frame, at a zoom other than the 1.0 its Session stored.
+const exampleFit = (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  const container = app.canvasContainerRef;
+  const frame = container.getBoundingClientRect();
+  const box = app.svgContainer.querySelector('svg').getBoundingClientRect();
+  const left = frame.left + container.clientLeft;
+  const top = frame.top + container.clientTop;
+  const inside = box.left >= left - 1 && box.top >= top - 1
+    && box.right <= left + container.clientWidth + 1 && box.bottom <= top + container.clientHeight + 1;
+  return { inside, zoomChanged: app.zoom !== 1 };
+});
+const expectExampleFitted = (page) => expect.poll(() => exampleFit(page))
+  .toEqual({ inside: true, zoomChanged: true });
 const acceptLoadedSession = async (page, title) => {
   const loaded = page.waitForEvent('dialog');
   return async () => {
@@ -435,6 +450,7 @@ const acceptLoadedSession = async (page, title) => {
 
 test('Load an example lists every Gallery example and loads the chosen Circular or Linear .gz Session', async ({ page }) => {
   test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
   const external = await blockExternalRequests(page);
   // The Linear .gz entry answers with the gzip of the small lambda Session, so
   // the file-name route of .gz loading runs without a 6 MB download.
@@ -467,6 +483,7 @@ test('Load an example lists every Gallery example and loads the chosen Circular 
   await chooser.locator('[data-gallery-example="HmmtDNA_basic_circular"]').click();
   await circularLoaded();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('circular');
+  await expectExampleFitted(page);
 
   await openApp(page);
   await example.click();
@@ -474,6 +491,7 @@ test('Load an example lists every Gallery example and loads the chosen Circular 
   await chooser.locator(`[data-gallery-example="${gzEntry.id}"]`).click();
   await linearLoaded();
   expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
+  await expectExampleFitted(page);
   expect(gzRequests).toHaveLength(1);
   expect(external).toEqual([]);
 });

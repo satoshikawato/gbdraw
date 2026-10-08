@@ -3003,7 +3003,8 @@ export const createAppSetup = () => {
   // serves the Gallery catalog (gbdraw.app, not the pip GUI), and its chooser
   // lists every catalog example. The choice closes the chooser, asks the UJ-09
   // question, and loads the Session through the Load Session path. The catalog
-  // read does not hold up startup.
+  // read does not hold up startup. A loaded example opens fitted, as the Fit
+  // button leaves it (Owner 2026-10-08); Load Session keeps the saved zoom.
   const galleryExamples = ref(/** @type {GalleryExample[]} */ ([]));
   void readGalleryExamples().then((examples) => { galleryExamples.value = examples; });
   const exampleChooserOpen = ref(false);
@@ -3019,7 +3020,12 @@ export const createAppSetup = () => {
       exampleSessionPending.value = true;
       try {
         const file = await fetchGalleryExampleSession(example);
-        await importSession({ target: { files: [file], value: '' } });
+        // The import resolves after the shown Result's preview is mounted.
+        const { status } = await importSession({ target: { files: [file], value: '' } }) || {};
+        if (status === 'ok' || status === 'legacy') {
+          await nextTick();
+          fitPreviewToViewport();
+        }
       } catch (error) {
         errorLog.value = normalizeUserFacingError(error);
       } finally {
