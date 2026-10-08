@@ -1051,6 +1051,77 @@ Retired names and their replacements are listed under
   per anchor under Query and Subject. It listed every anchor of the block for
   every group and joined the anchors into one row; the Web popup was not
   affected. Gallery SVGs carry the fix after their next refresh (OV-18).
+- Layout (CLI and Python API): Circular track rows next to a row with a **Radius**
+  follow two rules. Two adjacent rows keep the larger of their facing gaps, so an
+  explicit **Outer gap** after a pinned row no longer fails with "Circular track slot
+  order cannot be honored" (GX-04). A row with a Radius and an Auto width compresses
+  like Auto, centred on its Radius, so typing a row's Auto radius back gives the Auto
+  layout and a Radius just above it renders (GX-05, GX-17). A row with an explicit
+  width keeps it.
+- Layout (CLI and Python API): a custom stack that repeats the default stack, which
+  the web app sends when **Use custom stack** is turned on and nothing is typed,
+  draws the default figure. Before, the GC rows packed under the ticks instead of
+  keeping their preset radii (MG1655). Tracked Sessions and reference SVGs do not
+  change (GX-19).
+- Custom Track Slots (web app): changing a row's renderer keeps only the parameters
+  the new renderer accepts, so Generate no longer stops with "retains '…' from
+  another renderer" after Ticks to Dinucleotide content or Depth to another renderer
+  (TK-04). An invalid Circular Depth track index (`1.5`, `-1`) stays in the field with
+  the message "Enter a whole number of 0 or more." and the row keeps its last valid
+  index (TK-07).
+- Custom Track Slots (web app): **Hide GC Skew** and **Hide GC Content** reach only the
+  rows that use the drawing's **Dinucleotide** setting, so an AT skew row stays enabled
+  (TK-09). Reset and Reset to preset build one Depth row per loaded Depth series, also
+  while Show Depth is off (TK-10). **Duplicate** is disabled while a Session operation
+  runs (GX-01).
+- Custom Track Slots (web app): a Depth series without a Depth TSV fails Generate with
+  "Attach a Depth TSV to this series, or remove the series." (TK-06). The help tips
+  for a Depth series name say that typing renames the series everywhere and what a
+  blank gives (TK-08). **Width** and **Radius** reject `0x10`, `0b11`, and `0o7`, and
+  a bad value gives one alert that names the field (TK-12). A stack without a Features
+  row generates when the record has no underlay features, as in the CLI (TK-13).
+- Custom Track Slots (web app): before the first Generate the Auto notes read
+  "≈ 37 px (estimate)", and the ticks row is estimated instead of "0 px" (TK-15).
+  After Generate, the **Radius** note of a ticks row shows the tick anchor, so typing
+  it back keeps the ticks where they were (GX-18).
+- Generate (web app): Generate with no input says so at once instead of after the
+  diagram Worker starts (5.7 s warm, 26-42 s cold) (UI-07). An input error band
+  (`NO_RECORDS`, `FASTA_REQUIRED`, `INPUT_REQUIRED`) ends when the replaced or
+  completed input is read; other errors stay (UJ-08). Canceling a Generate when
+  nothing changed since the shown Result says "It matches the current settings."
+  (UJ-10).
+- Input files (web app): replacing or removing a Circular GenBank file resets the
+  single-record selector, crop, reverse complement, Record label, and Subtitle in one
+  History step, in Circular and Linear, so Generate no longer fails with
+  `RECORD_SELECTION`. A one-record file replacing a one-record file keeps the crop and
+  titles (CI-03).
+- Run info (web app): the Source recipe of a Circular multi-record canvas keeps the
+  order set with Up and Down, so the CLI draws the records in the order the web app
+  does (CI-02).
+- Labels (web app): a label drawn only because of Label visibility **On** or **Off**
+  returns to the Default state after Undo, the popup's Default, Reset all label text,
+  and Label TSV import, as Generate draws it (UJ-01, GX-21).
+- Region Annotations (web app): the panel notice names an annotation or set id the
+  editor changed (for example `region_1` to `region_1_2`). Importing a table without
+  rows asks before it removes every set, and Import errors appear in the panel notice
+  instead of a browser alert (FL-14).
+- Feature captions (web app): a feature with no label, product, gene, locus tag or note
+  is named `tRNA at 577..647` (1-based, split locations joined) in the popup title,
+  the label text default, the default Legend name, and the Interactive SVG popup.
+  It read `576..647`. Stored Legend names keep their text (GX-10).
+- Load Session (web app): **Load Session** asks "Replace the current work?" before it
+  replaces work changed since the last Save or Load (UJ-09). The empty state offers
+  **Load an example**, which loads the bundled HmmtDNA Circular Session; the pip
+  package ships that Session too (UJ-06).
+- Preview (web app): the Preview feature search belongs to its mode and a Session load
+  clears it (observation). After a Generate, the Linear Auto notice says "Auto
+  shows/hides these fields" when the shown Result already does (observation).
+- Popups (web app): Escape closes the top layer only, a popup before the Editor
+  drawer, and focus returns to the drawer's **Edit** button. A popup keeps clear of
+  the footer when opened low or dragged down, and releasing a drag past its limit no
+  longer closes it (GX-22).
+- Legend Name Scope (web app): **Cancel** closes the dialog at once and records no Undo
+  step, also right after a Session load (GX-20).
 
 ## [0.14.0](./docs/RELEASE_NOTES_0.14.0.md)
 
