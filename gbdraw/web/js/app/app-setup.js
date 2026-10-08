@@ -15,7 +15,7 @@ import { compileDirectEditorMutationPlan } from './candidate-render.js';
 import {
   countUnresolvedFeatureEdits, featureDrawnContext, removeUnresolvedFeatureEdits, requestFeatureVisibilityRules
 } from '../services/feature-visibility.js';
-import { isLegendOrderEdited } from '../services/legend-svg.js';
+import { drawnBlockStroke, isLegendOrderEdited } from '../services/legend-svg.js';
 import { admitFeatureCatalog } from '../services/feature-catalog.js';
 import { labelSettingsVisible } from '../services/feature-placement.js';
 import { displayedFeatureAddressing } from '../services/feature-override-identity.js';
@@ -92,7 +92,7 @@ import {
   recordStructuralMetric
 } from '../services/runtime-test-hooks.js';
 import { createPanZoom, createSidebarResize, setupGlobalUiEvents } from './ui.js';
-import { colorValueMode, toNativeColorInputValue } from '../utils/color-utils.js';
+import { colorValueMode, normalizeOptionalHexColor, toNativeColorInputValue } from '../utils/color-utils.js';
 import { createFeatureEditor } from './feature-editor.js';
 import { PAIRWISE_MATCH_SELECTOR } from './pairwise-match-popup.js';
 import { createFeatureSelection } from './feature-selection.js';
@@ -2725,6 +2725,11 @@ export const createAppSetup = () => {
     initializeStrokeAndCanvas(context) {
       const legendLaidOut = mountedLegendLayouts.delete(context.root);
       if (!context.bindingOptions.trustedRestore && !context.bindingOptions.isIncrementalEdit) {
+        // Save keeps the block stroke Python drew on the shown Result, as Load
+        // reads it, for the readers of Sessions saved before the executor's
+        // records (0.14.0).
+        const blockStroke = drawnBlockStroke(context.root);
+        if (blockStroke) state.originalSvgStroke.value = { ...blockStroke, color: normalizeOptionalHexColor(blockStroke.color) };
         // Generate already padded its candidates; another batch Result shows
         // the current canvas padding when it is displayed (D-09).
         if (shouldBindComposition(context)) legendLayout.applyCanvasPadding();

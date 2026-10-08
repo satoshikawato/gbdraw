@@ -9,6 +9,8 @@
 // in live-generate-parity-track-data.playwright.spec.js, and the steps they all
 // use in tests/web/helpers/live-generate-parity-steps.cjs.
 const { test, expect } = require('@playwright/test');
+const { readFileSync, writeFileSync } = require('node:fs');
+const { gunzipSync } = require('node:zlib');
 const { evaluateWithRetainedPromise } = require('./helpers/app-lifecycle.cjs');
 const { BATCH_FIXTURE, loadSessionFile, openFresh, openWithGenBank } = require('./helpers/audit-browser.cjs');
 const { expectLiveEqualsGenerate, semanticSnapshot, settleLive, showResult } = require('./helpers/live-generate-parity.cjs');
@@ -797,6 +799,38 @@ test('Reset all strokes after loading a Session 46 Result saved without paint re
   expect((await drawnStrokes(page)).some(([, , stroke]) => ['#2a9d8f', '#e63946'].includes(stroke)), 'no edited stroke is left')
     .toBe(false);
   await expectLiveEqualsGenerate(page, { label: 'Reset all strokes after Load' });
+});
+// U2a review #3 (OV-195): Load reads the stroke Python drew on a connector
+// from the connectors no stroke edit reached (Linear draws every record in one
+// size class), not from the feature edit or the Session's block stroke, so
+// Reset Stroke of a spliced feature on a Result saved before the executor's
+// records returns its connector to the line stroke. The Session is saved here
+// and its records are removed, as a Save before EU U1 wrote it.
+test('Reset Stroke of a spliced feature after loading a Session saved without paint records matches Generate (linear, two records)', async ({ page, browser }, testInfo) => {
+  test.setTimeout(240_000);
+  await openFresh(page);
+  await page.getByRole('button', { name: 'Linear', exact: true }).click();
+  await page.waitForFunction(() => window.__GBDRAW_APP__?.mode === 'linear');
+  await page.evaluate(async (text) => {
+    window.__GBDRAW_APP__.setLinearSeqPrimaryFile(0, 'gb', new File([text], 'web_batch_two_records.gb', { type: 'text/plain', lastModified: 1000 }));
+    await window.Vue.nextTick();
+  }, readFileSync(BATCH_FIXTURE, 'utf8'));
+  await settleLive(page);
+  await generate(page);
+  const drawn = await drawnStrokes(page);
+  expect(drawn.filter(([, part]) => part === 'connector').length, 'both records draw a connector').toBe(2);
+  await popupEdit(page, 'TESTA_0004', { stroke: '#e63946' });
+  const saved = testInfo.outputPath('spliced-stroke.gbdraw-session.json');
+  const bytes = await download(page, 'Save Session', saved);
+  const session = JSON.parse((bytes[0] === 0x1f ? gunzipSync(bytes) : bytes).toString('utf8'));
+  session.results.forEach((result) => { result.content = result.content.replace(/ data-gbdraw-base-[a-z-]+="[^"]*"/g, ''); });
+  writeFileSync(saved, JSON.stringify(session));
+  const loaded = await load(browser, saved);
+  expect((await drawnStrokes(loaded)).some(([, , stroke]) => stroke === '#e63946'), 'the Result shows the saved stroke').toBe(true);
+  await popupEdit(loaded, 'TESTA_0004', { resetStroke: true });
+  expect(await drawnStrokes(loaded), 'every part is back at the stroke Python drew').toEqual(drawn);
+  await expectLiveEqualsGenerate(loaded, { label: 'Reset Stroke after Load' });
+  await loaded.context().close();
 });
 
 // EU U2a review #1: a Session older than 40 adopts no feature catalog. The

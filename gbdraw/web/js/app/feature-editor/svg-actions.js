@@ -490,8 +490,6 @@ export const createFeatureSvgActions = ({
       appliedLegendName: effectiveCaption,
       strokeColor: currentStrokeColor,
       strokeWidth: currentStrokeWidth,
-      originalStrokeColor: currentStrokeColor,
-      originalStrokeWidth: currentStrokeWidth,
       labelKey: '',
       labelText: '',
       labelSourceText: '',

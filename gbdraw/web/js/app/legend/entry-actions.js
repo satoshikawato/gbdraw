@@ -1,6 +1,6 @@
 // @ts-check
 /** @import { DrawingState } from '../../state.js' */
-import { resolveColorToHex, toNativeColorInputValue } from '../../utils/color-utils.js';
+import { normalizeOptionalHexColor, resolveColorToHex, toNativeColorInputValue } from '../../utils/color-utils.js';
 import {
   defaultLegendCaptionOrder,
   getAllFeatureLegendGroups,
@@ -1040,9 +1040,11 @@ export const createLegendEntryActions = ({
       inventoryByResult.set(identity, [...originalLegendOrder.value]);
     }
 
+    // Kept as a Session holds them, so a Save and Load round trip keeps them (B24).
     if (Object.keys(originalLegendColors.value).length === 0 && visuallySortedEntries.length > 0) {
       visuallySortedEntries.forEach((entry) => {
-        originalLegendColors.value[entry.caption] = entry.color;
+        const color = normalizeOptionalHexColor(entry.color);
+        if (color) originalLegendColors.value[entry.caption] = color;
       });
     }
   };

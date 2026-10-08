@@ -73,8 +73,9 @@ Session** download, kept unchanged, from commit `7e7dd82d` (Session 46, before
 the Result executor recorded Python's paint). Its Result shows a feature
 stroke, a Legend row stroke, and a Legend row color without
 `data-gbdraw-base-*` records. It is the positive fixture for the Load reader
-that records them from the Session's `originalStroke*`, `originalColors`, and
-catalog fills (`createSavedResultPlan`). The steps, inputs, and hashes are in
+that records them from the strokes of the parts no edit reached, the block
+stroke a Session 46 keeps (`originalSvgStroke`), `originalColors`, and catalog
+fills (`createSavedResultPlan`). The steps, inputs, and hashes are in
 `forced-label-underlay-strokes.provenance.json`.
 
 `whitelist-tab-keyword.v39.gbdraw-session.json.gz` is a Web **Save Session**
@@ -114,7 +115,9 @@ rule, a feature placement, and a label edit. The Linear Result is the committed
 Result while `ui.mode` is `circular`, both modes have a staged record-display
 row, and the inactive Linear profile holds an edited plot title. It is the
 positive fixture for the reader that splits one Session 27–44 draft into
-drawings; `TESTA.gb` and the Depth TSV are stored once for both modes.
+drawings, and, with its Linear Legend row stroke and colors, for the Sessions
+40–45 path of the Load reader above (`savedResultEdits`); `TESTA.gb` and the
+Depth TSV are stored once for both modes.
 `inactive-class-m.v44.gbdraw-session.json.gz` is a Web **Save Session**
 download from the same commit: Circular has `TESTA.gb` and a Result, and Linear
 has no inputs but an edited plot title, Accession, Length, and legend position.

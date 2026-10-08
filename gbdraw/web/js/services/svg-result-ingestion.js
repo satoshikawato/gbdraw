@@ -2,9 +2,11 @@
 /** @import { FeatureCatalogAdmission } from './feature-catalog.js' */
 import {
   AUTO_FEATURE_UNDERLAY_STROKE,
+  FEATURE_PART_CONNECTOR,
   FEATURE_SELECTOR,
   filterFeatureFillTargets,
   getFeatureIdentity,
+  getFeaturePart,
   isAutoFeatureUnderlay
 } from './feature-dom.js';
 import {
@@ -750,10 +752,11 @@ export const reconcileMountedResult = (svg, operations, { resultIndex = 0, domai
  * @property {Record<string, string>} legendColorOverrides
  * @property {Record<string, any>} legendStrokeOverrides
  * @property {Record<string, string>} originalLegendColors
- * @property {{ color: string | null, width: number | null }} originalSvgStroke
+ * @property {'circular' | 'linear'} mode
+ * @property {{ color: string | null, width: number | null } | null} blockStroke Python's block stroke of
+ *   the set's Result as a Session 46 kept it (`originalSvgStroke`); null when the Session's is not known to be.
  */
 
-const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object || {}, key);
 /** @param {string} name @param {unknown} left @param {unknown} right */
 const samePaint = (name, left, right) => {
   const a = text(left).toLowerCase();
@@ -762,16 +765,36 @@ const samePaint = (name, left, right) => {
   return Number(a) === Number(b);
 };
 
+// Python strokes the feature parts of one kind alike within one size class
+// (a Circular record; a whole Linear canvas): a block and its outline with
+// the block stroke, a block drawn under an outline with none, a connector
+// with the line stroke. A Legend swatch of a feature row has the block stroke
+// of the first record.
+/** @param {Element} element @param {readonly Element[]} parts @param {boolean} perRecord */
+const strokeKind = (element, parts, perRecord) => {
+  const record = perRecord ? text(element.getAttribute('data-gbdraw-record-index')) : '';
+  if (getFeaturePart(element) === FEATURE_PART_CONNECTOR) return `${record}|connector`;
+  const id = text(element.getAttribute('id'));
+  const outlined = Boolean(id) && parts.some((part) => part.getAttribute('id') === `${id}__outline`);
+  return `${record}|${outlined ? 'outlined' : 'block'}`;
+};
+
 // Session 46 (0.14.0) and older current Sessions saved a Result with its
 // stroke and color edits drawn in but without the records of Python's values.
-// Load records them once from the values the Session kept (`originalStroke*`,
-// the Legend's original colors, the catalog fills), on each element that
-// shows its edit, so Reset and Undo return it to Python's value.
+// Load records them once, on each element that shows its edit, so Reset and
+// Undo return it to Python's value: fills from the catalog, swatch fills
+// from the Legend's original colors, and strokes from the parts of the same
+// kind that no saved stroke edit reached (a stroke an edit or the Session
+// kept may be an edited one, or another Result's). A Session 46 with one
+// Result kept that Result's block stroke. A kind no part of which escaped the
+// edits, or whose parts disagree, is not known: its parts get no record and
+// show the saved stroke until Generate.
 /**
  * @param {Element} svg
- * @param {{ resultIndex: number, catalogAdmission: FeatureCatalogAdmission, edits: SavedResultEdits }} saved
+ * @param {{ resultIndex: number, catalogAdmission: FeatureCatalogAdmission, edits: SavedResultEdits,
+ *   blockStroke: SavedResultEdits['blockStroke'] }} saved
  */
-const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => {
+const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits, blockStroke }) => {
   const index = createLazyMutationIndex(svg, { phase: 'session-load', resultIndex });
   /** @param {Element} element @param {string} name @param {unknown} edited @param {unknown} original */
   const record = (element, name, edited, original) => {
@@ -779,29 +802,16 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => 
     if (edited === null || edited === undefined || edited === '') return;
     // A catalog row without Python's fill cannot say what Python drew: no record.
     if (name === 'fill' && !text(original)) return;
-    if (samePaint(name, current, original) || !samePaint(name, current, edited)) return;
+    // A value read from the drawing returns as written; one the Session kept
+    // as a number is as good as any spelling of it.
+    const drawn = typeof original === 'number' ? samePaint(name, current, original) : text(current) === text(original);
+    if (drawn || !samePaint(name, current, edited)) return;
     if (!element.hasAttribute(resultBaseAttribute(name))) element.setAttribute(resultBaseAttribute(name), text(original));
   };
   /** @param {string} key */
   const renderedIdsOf = (key) => (catalogAdmission.renderedTargetsByOverrideKey.get(key) || [])
     .filter((target) => target.resultIndex === resultIndex).map((target) => target.renderedId);
   const elementsOf = (/** @type {string} */ renderedId) => index.features().get(renderedId) || [];
-  // Python's stroke of a feature part: none on an automatic underlay, else
-  // the one the edit recorded, else the block stroke the Session kept.
-  /** @param {Element} element @param {Record<string, any> | null} edit */
-  const drawnStroke = (element, edit) => {
-    if (isAutoFeatureUnderlay(element)) return AUTO_FEATURE_UNDERLAY_STROKE;
-    return {
-      color: hasOwn(edit, 'originalStrokeColor') ? edit?.originalStrokeColor : edits.originalSvgStroke.color,
-      width: hasOwn(edit, 'originalStrokeWidth') ? edit?.originalStrokeWidth : edits.originalSvgStroke.width
-    };
-  };
-  /** @param {Element} element @param {Record<string, any>} edit @param {Record<string, any> | null} originals */
-  const recordStroke = (element, edit, originals) => {
-    const drawn = drawnStroke(element, originals);
-    record(element, 'stroke', edit.strokeColor, drawn.color);
-    record(element, 'stroke-width', edit.strokeWidth, drawn.width);
-  };
 
   /** @type {Map<string, string>} */
   const editedFills = new Map();
@@ -820,30 +830,63 @@ const recordSavedEditBases = (svg, { resultIndex, catalogAdmission, edits }) => 
       ));
     });
   });
-  /** @type {string[]} */
-  const ownStrokeIds = [];
+  /** @type {Array<[string, Record<string, any>]>} The rendered features each stroke edit reaches. */
+  const stroked = [];
   Object.entries(edits.featureStrokeOverrides).forEach(([key, edit]) => {
-    if (!setsFeatureStroke(edit)) return;
-    renderedIdsOf(key).forEach((renderedId) => {
-      ownStrokeIds.push(renderedId);
-      elementsOf(renderedId).forEach((element) => recordStroke(element, edit, edit));
-    });
+    if (setsFeatureStroke(edit)) renderedIdsOf(key).forEach((renderedId) => stroked.push([renderedId, edit]));
   });
-
+  const ownStrokeIds = stroked.map(([renderedId]) => renderedId);
   const drawnFills = [...renderedFeatures].map(([renderedId, feature]) => (
     /** @type {[string, string]} */ ([renderedId, editedFills.get(renderedId) ?? text(feature?.fill_color)])
   ));
-  const rows = index.legends().entries;
-  Object.entries(edits.legendStrokeOverrides).forEach(([caption, edit]) => {
-    if (!setsFeatureStroke(edit)) return;
+  /** @type {Array<[string, Record<string, any>]>} */
+  const strokedRows = Object.entries(edits.legendStrokeOverrides).filter(([, edit]) => setsFeatureStroke(edit));
+  strokedRows.forEach(([caption, edit]) => {
     const entry = edits.legendEntries.find((row) => text(row?.caption) === caption);
     legendRowFeatureIds(entry, { drawnFills, namedIds: namedIdsByCaption.get(caption) || [], ownStrokeIds })
-      .forEach((renderedId) => elementsOf(renderedId).forEach((element) => recordStroke(element, edit, null)));
+      .forEach((renderedId) => stroked.push([renderedId, edit]));
+  });
+
+  // Python's stroke of each kind: the one every unedited part of it shows.
+  const perRecord = edits.mode === 'circular';
+  const reached = new Set(stroked.map(([renderedId]) => renderedId));
+  /** @type {Map<string, { color: unknown, width: unknown } | null>} null: the parts disagree. */
+  const drawnStrokes = new Map();
+  index.features().forEach((parts, renderedId) => {
+    if (reached.has(renderedId)) return;
+    parts.filter((element) => !isAutoFeatureUnderlay(element)).forEach((element) => {
+      const kind = strokeKind(element, parts, perRecord);
+      const drawn = { color: element.getAttribute('stroke'), width: element.getAttribute('stroke-width') };
+      const known = drawnStrokes.get(kind);
+      if (known === undefined) drawnStrokes.set(kind, drawn);
+      else if (known && !(samePaint('stroke', known.color, drawn.color) && samePaint('stroke-width', known.width, drawn.width))) {
+        drawnStrokes.set(kind, null);
+      }
+    });
+  });
+  const firstPart = [...index.features().values()].flat().find((element) => !isAutoFeatureUnderlay(element));
+  const firstBlocks = `${perRecord ? text(firstPart?.getAttribute('data-gbdraw-record-index')) : ''}|block`;
+  if (blockStroke && !drawnStrokes.has(firstBlocks)) drawnStrokes.set(firstBlocks, blockStroke);
+  /** @param {Element} element @param {{ color: unknown, width: unknown } | null | undefined} drawn @param {Record<string, any>} edit */
+  const recordStroke = (element, drawn, edit) => {
+    if (!drawn) return;
+    record(element, 'stroke', edit.strokeColor, drawn.color);
+    record(element, 'stroke-width', edit.strokeWidth, drawn.width);
+  };
+  stroked.forEach(([renderedId, edit]) => {
+    const parts = elementsOf(renderedId);
+    parts.forEach((element) => recordStroke(
+      element,
+      isAutoFeatureUnderlay(element) ? AUTO_FEATURE_UNDERLAY_STROKE : drawnStrokes.get(strokeKind(element, parts, perRecord)),
+      edit
+    ));
+  });
+
+  const rows = index.legends().entries;
+  strokedRows.forEach(([caption, edit]) => {
     (rows.get(caption) || []).forEach((row) => {
       const swatch = legendSwatch(row);
-      if (!swatch) return;
-      record(swatch, 'stroke', edit.strokeColor, hasOwn(edit, 'originalStrokeColor') ? edit.originalStrokeColor : edits.originalSvgStroke.color);
-      record(swatch, 'stroke-width', edit.strokeWidth, hasOwn(edit, 'originalStrokeWidth') ? edit.originalStrokeWidth : edits.originalSvgStroke.width);
+      if (swatch) recordStroke(swatch, drawnStrokes.get(firstBlocks), edit);
     });
   });
   Object.entries(edits.legendColorOverrides).forEach(([caption, color]) => {
@@ -886,6 +929,11 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
   const legacyNormalizationCount = results.filter(normalizes).length;
   if (legacyNormalizationCount === 0 && !results.some(needsRecords)) return createEmptySvgMutationPlan(results.length);
   const savedEdits = /** @type {SavedResultEdits} */ (edits);
+  // The Session's block stroke is that of one Result; a batch's Results may
+  // differ in size class.
+  const kept = edits?.blockStroke;
+  const blockStroke = results.length === 1 && text(kept?.color) && kept?.width !== null && kept?.width !== undefined
+    ? kept : null;
   return Object.freeze({
     kind: 'MUTATING',
     legacyNormalizationCount,
@@ -895,7 +943,7 @@ export const createSavedResultPlan = (results, catalogAdmission, edits, legacy =
       const transforms = [
         ...(legacy && normalizes(result) ? [legacy.transform] : []),
         ...(needsRecords(result)
-          ? [(/** @type {Element} */ svg) => recordSavedEditBases(svg, { resultIndex, catalogAdmission, edits: savedEdits })]
+          ? [(/** @type {Element} */ svg) => recordSavedEditBases(svg, { resultIndex, catalogAdmission, edits: savedEdits, blockStroke })]
           : [])
       ];
       return transforms.length > 0

@@ -32,6 +32,13 @@ import { stripResultBaseAttributes } from '../../gbdraw/web/js/services/result-p
 import { recordRuleMatches, ruleKey } from '../../gbdraw/web/js/services/rule-matchers.js';
 import { displayedFeatureAddressing, featureOverrideKey } from '../../gbdraw/web/js/services/feature-override-identity.js';
 
+// Session Load (services/config.js) reads the editor state through Vue state.
+globalThis.window = { Vue: {
+  ref: (value) => ({ value }), reactive: (value) => value, toRaw: (value) => value,
+  computed: (getter) => ({ get value() { return getter(); } }), nextTick: async () => {}
+} };
+const { savedResultEdits } = await import('../../gbdraw/web/js/services/config.js');
+
 class FakeElement {
   constructor(tagName, attributes = {}, children = []) {
     this.tagName = tagName;
@@ -990,27 +997,48 @@ const parseSvgText = (content) => {
   return root.children[0];
 };
 
+// The Session fixtures Load reads below, and Load's records on one saved
+// Result set of `mode` (`patch` changes a saved Result before Load reads it).
+const sessionFixture = (name) => JSON.parse(gunzipSync(readFileSync(new URL(
+  `../fixtures/sessions/${name}`, import.meta.url
+))).toString('utf8'));
+const FORCED_STROKES = 'forced-label-underlay-strokes.v46.gbdraw-session.json.gz';
+const loadSavedResults = (session, {
+  mode = 'circular', modeScoped = true, results = normalizeLogicalResults(session.results),
+  featureCatalog = session.editorState.featureCatalog, patch = () => {}
+} = {}) => {
+  const admission = admitFeatureCatalog(featureCatalog, results, { adopt: true, mode });
+  const plan = createSavedResultPlan(results, admission, savedResultEdits(session, mode, session.editorState, modeScoped));
+  return results.map((result, index) => {
+    const svg = parseSvgText(result.content);
+    patch(svg, index);
+    (plan.operationsByResult[index].callerTransforms || []).forEach((transform) => transform(svg));
+    return svg;
+  });
+};
+// What Reset shows: a reconcile without edits.
+const resetPaint = (svg) => {
+  reconcileMountedResult(svg, createEmptySvgMutationPlan(1).operationsByResult[0]);
+  return svg;
+};
+const partStrokes = (svg) => Object.fromEntries(svg.querySelectorAll('[data-gbdraw-feature-id]')
+  .map((element) => [element.id, `${element.getAttribute('stroke')} ${element.getAttribute('stroke-width')}`]));
+const connectorPart = (featureId, stroke, width) => new FakeElement('path', {
+  id: `${featureId}__line1`, 'data-gbdraw-feature-id': featureId, 'data-gbdraw-feature-part': 'connector',
+  'data-gbdraw-record-index': '0', fill: 'none', stroke, 'stroke-width': width
+});
+
 // EU U2a: a Session 46 Result saved before the executor recorded Python's
-// paint shows its edits without records. Load records Python's paint from the
-// Session (`originalStroke*`, the Legend's `originalColors`, and the catalog
-// fills), so a reconcile without the edits returns each part and swatch to
-// it (tests/fixtures/sessions/forced-label-underlay-strokes.provenance.json).
+// paint shows its edits without records. Load records Python's paint (the
+// strokes of the parts no stroke edit reached, the catalog fills, the
+// Legend's `originalColors`), so a reconcile without the edits returns each
+// part and swatch to it
+// (tests/fixtures/sessions/forced-label-underlay-strokes.provenance.json).
 test('Load records Python\'s paint on a Session 46 Result saved without records', () => {
-  const session = JSON.parse(gunzipSync(readFileSync(new URL(
-    '../fixtures/sessions/forced-label-underlay-strokes.v46.gbdraw-session.json.gz', import.meta.url
-  ))).toString('utf8'));
+  const session = sessionFixture(FORCED_STROKES);
   const results = normalizeLogicalResults(session.results);
   const admission = admitFeatureCatalog(session.editorState.featureCatalog, results, { adopt: true, mode: 'circular' });
-  const { editorState, features } = session.modes.circular;
-  const edits = {
-    featureColorOverrides: features.featureColorOverrides || {},
-    featureStrokeOverrides: editorState.featureStrokes.overrides,
-    legendEntries: editorState.legend.entries,
-    legendColorOverrides: editorState.legend.colorOverrides,
-    legendStrokeOverrides: editorState.legend.strokeOverrides,
-    originalLegendColors: session.editorState.legend.originalColors,
-    originalSvgStroke: session.editorState.originalSvgStroke
-  };
+  const edits = savedResultEdits(session, 'circular', session.editorState, true);
   const svg = parseSvgText(results[0].content);
   const paint = () => Object.fromEntries([
     ...svg.querySelectorAll('[data-gbdraw-feature-id]').filter((element) => element.getAttribute('data-gbdraw-feature-part') === 'block')
@@ -1029,15 +1057,92 @@ test('Load records Python\'s paint on a Session 46 Result saved without records'
   const recorded = [{ ...results[0], content: serializeNode(svg) }];
   assert.equal(createSavedResultPlan(recorded, admission, edits).kind, createEmptySvgMutationPlan(1).kind,
     'a Result with records is admitted as saved');
-  reconcileMountedResult(svg, createEmptySvgMutationPlan(1).operationsByResult[0]);
+  resetPaint(svg);
   const python = paint();
-  // A width the Session kept as a number returns as that number.
-  assert.equal(python.f38ba7c3f, '#54bcf8 gray 2.0');
+  // Every block of this Result shows an edit, so the block stroke is the one
+  // the Session 46 kept for its only Result; a width kept as a number
+  // returns as that number.
+  assert.equal(python.f38ba7c3f, '#54bcf8 #808080 2.0');
   ['f841fb8a8', 'f2f7a48cf__instance_4_4b227777d4dd1fc6', 'f2f7a48cf__instance_5_ef2d127de37b942b']
-    .forEach((renderedId) => assert.equal(python[renderedId], '#54bcf8 gray 2', renderedId));
-  assert.equal(python.CDS, '#54bcf8 gray 2');
+    .forEach((renderedId) => assert.equal(python[renderedId], '#54bcf8 #808080 2', renderedId));
+  assert.equal(python.CDS, '#54bcf8 #808080 2');
   assert.equal(python.repeat_region, '#d3d3d3 gray 2.0');
   assert.equal(python.f9cf91913, saved.f9cf91913, 'an unedited feature keeps its paint');
+});
+
+// U2a review #2 (OV-195): the 7e7dd82d writer kept as a feature edit's
+// `originalStroke*` the stroke the feature showed when its popup opened, so a
+// feature stroked after its Legend row kept the row's stroke there. Load does
+// not read Python's stroke from it.
+test('Load does not take Python\'s stroke from a feature edit\'s originalStroke*', () => {
+  const session = sessionFixture(FORCED_STROKES);
+  Object.assign(Object.values(session.modes.circular.editorState.featureStrokes.overrides)[0], {
+    originalStrokeColor: '#e63946', originalStrokeWidth: 3
+  });
+  const [svg] = loadSavedResults(session);
+  assert.equal(partStrokes(resetPaint(svg)).f38ba7c3f, '#808080 2.0');
+});
+
+// U2a review #3 (OV-195): Python strokes a connector with the line stroke, a
+// block with the block stroke of its record's size class. Load reads each
+// kind from the parts of the Result that no stroke edit reached, not from one
+// stroke the Session kept.
+test('Load gives each kind of feature part the stroke Python drew for it in this Result', () => {
+  const [svg] = loadSavedResults(sessionFixture(FORCED_STROKES), {
+    patch: (root) => {
+      root.appendChild(connectorPart('f841fb8a8', '#e63946', '3'));
+      root.appendChild(connectorPart('f9cf91913', 'lightgray', '5.0'));
+    }
+  });
+  assert.equal(partStrokes(resetPaint(svg)).f841fb8a8__line1, 'lightgray 5.0');
+});
+
+// A kind of part every one of which shows a stroke edit has no known Python
+// stroke: its parts get no record, so Reset and Undo leave the saved stroke
+// on them until Generate.
+test('Load records no stroke Python is not known to have drawn', () => {
+  const [svg] = loadSavedResults(sessionFixture(FORCED_STROKES), {
+    patch: (root) => root.appendChild(connectorPart('f841fb8a8', '#e63946', '3'))
+  });
+  assert.equal(svg.getElementById('f841fb8a8__line1').hasAttribute('data-gbdraw-base-stroke'), false);
+  assert.equal(partStrokes(resetPaint(svg)).f841fb8a8__line1, '#e63946 3');
+});
+
+// The block stroke a Session kept is that of one Result; the Results of a
+// batch may differ in size class, so none of them takes it.
+test('Load gives no Result of a batch the block stroke the Session kept', () => {
+  const session = sessionFixture(FORCED_STROKES);
+  const [first] = session.results;
+  const featureCatalog = structuredClone(session.editorState.featureCatalog);
+  featureCatalog.items.push({ ...structuredClone(featureCatalog.items[0]), resultIndex: 1, resultName: 'other.svg' });
+  loadSavedResults(session, {
+    results: normalizeLogicalResults([first, { ...first, name: 'other.svg' }]), featureCatalog
+  }).forEach((svg) => {
+    assert.doesNotMatch(serializeNode(svg), /data-gbdraw-base-stroke/);
+  });
+});
+
+// Sessions 40-45 (main writes 44) keep one flat draft, whose edits the
+// committed Result shows (tests/fixtures/sessions/two-mode-project.provenance.json:
+// a Linear Legend row stroke, a row color, feature fills). Load records
+// Python's paint on it the same way.
+test('Load records Python\'s paint on a Session 44 Result', () => {
+  const session = sessionFixture('two-mode-project.v44.gbdraw-session.json.gz');
+  const edits = savedResultEdits(session, 'linear', session.editorState, false);
+  assert.deepEqual(Object.keys(edits.legendStrokeOverrides), ['tRNA_RENAMED']);
+  assert.deepEqual(edits.legendColorOverrides, { CDS: '#112233' });
+  assert.equal(Object.keys(edits.featureColorOverrides).length, 2);
+  const [svg] = loadSavedResults(session, { mode: 'linear', modeScoped: false });
+  assert.match(serializeNode(svg), /#333333/);
+  Object.entries(partStrokes(resetPaint(svg))).forEach(([id, stroke]) => (
+    assert.equal(stroke, id.includes('__line') ? 'lightgray 5.0' : 'gray 2.0', id)
+  ));
+  svg.querySelectorAll('g[data-legend-key]').forEach((row) => {
+    const swatch = row.querySelector('path');
+    const caption = row.getAttribute('data-legend-key');
+    assert.equal(`${swatch.getAttribute('stroke')} ${swatch.getAttribute('stroke-width')}`, 'gray 2.0', caption);
+    if (caption === 'CDS') assert.equal(swatch.getAttribute('fill'), '#54bcf8');
+  });
 });
 
 // U2b: the live preview compiles the palette, the specific-color rules (their
@@ -1146,7 +1251,7 @@ test('the Load normalizer records no fill Python is not known to have drawn', ()
   const plan = createSavedResultPlan(response.results, admission, {
     featureColorOverrides: { [biologicalFeatureKey('record-a', 'feature-a')]: '#112233' },
     featureStrokeOverrides: {}, legendEntries: [], legendColorOverrides: {}, legendStrokeOverrides: {},
-    originalLegendColors: {}, originalSvgStroke: { color: null, width: null }
+    originalLegendColors: {}, blockStroke: null
   });
   plan.operationsByResult[0].callerTransforms.forEach((transform) => transform(svg));
   assert.doesNotMatch(serializeNode(svg), /data-gbdraw-base-fill/);

@@ -665,9 +665,7 @@ clickedFeature.value = {
   feat: strokeFeature,
   color: '#cccccc',
   strokeColor: '#111111',
-  strokeWidth: 1,
-  originalStrokeColor: '#111111',
-  originalStrokeWidth: 1
+  strokeWidth: 1
 };
 // A stroke edit writes the intent only, with the stroke Python drew; the
 // composition root shows it through the executor (EU U2a).
@@ -726,9 +724,7 @@ clickedFeature.value = {
   color: '#cccccc',
   legendName: 'Core',
   strokeColor: '#111111',
-  strokeWidth: 1,
-  originalStrokeColor: '#111111',
-  originalStrokeWidth: 1
+  strokeWidth: 1
 };
 assert.equal(await actions.setClickedFeatureStrokeColorValue('#445566'), false);
 assert.equal(await actions.handleFeatureStyleScopeChoice('caption'), true);

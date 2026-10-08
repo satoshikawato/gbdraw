@@ -1,7 +1,7 @@
 // @ts-check
 import { diagnosticError, normalizeCaughtError, normalizeUserFacingError } from '../utils/error-normalization.js';
 import { state, sessionOperationAvailability, normalizeLinearSeqList, collapseEmptyLinearSeqList } from '../state.js';
-import { normalizeDefaultColor, normalizePaletteColors, resolveColorToHex } from '../utils/color-utils.js';
+import { normalizeDefaultColor, normalizeOptionalHexColor, normalizePaletteColors, resolveColorToHex } from '../utils/color-utils.js';
 import {
   captureRightDrawerState,
   resetRightDrawerState,
@@ -821,17 +821,6 @@ const normalizeHexColor = (value, fallback = '#4e79a7') => {
     return `#${shortMatch[1].split('').map((char) => char + char).join('').toLowerCase()}`;
   }
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : fallback;
-};
-
-const normalizeOptionalHexColor = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  const resolved = resolveColorToHex(String(value).trim());
-  const color = String(resolved || '').trim();
-  const shortMatch = color.match(/^#([0-9a-fA-F]{3})$/);
-  if (shortMatch) {
-    return `#${shortMatch[1].split('').map((char) => char + char).join('').toLowerCase()}`;
-  }
-  return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : null;
 };
 
 // A stored entry color is read with the Default colors domain (D-41). An entry
@@ -2236,7 +2225,9 @@ const restoreLoadedSetSequenceSources = async ({
 // The stroke and color edits the saved Results of `mode` show (its Session 46
 // slice, else the flat draft) and the values the Session kept as Python's
 // (`setEditorState`: the set's own editor state). Load records Python's values
-// from them on a Result saved without those records.
+// from them on a Result saved without those records. Only a Session 46 kept
+// Python's block stroke in `originalSvgStroke`; Sessions 40-45 kept the first
+// feature's stroke as shown, which may be an underlay's or an edited one.
 /**
  * @param {Record<string, any>} data
  * @param {'circular' | 'linear'} mode
@@ -2244,7 +2235,7 @@ const restoreLoadedSetSequenceSources = async ({
  * @param {boolean} modeScoped A Session 46 (mode slices).
  * @returns {SavedResultEdits}
  */
-const savedResultEdits = (data, mode, setEditorState, modeScoped) => {
+export const savedResultEdits = (data, mode, setEditorState, modeScoped) => {
   const slice = modeScoped
     ? data.modes?.[mode]
     : { editorState: data.editorState, features: data.features };
@@ -2257,7 +2248,8 @@ const savedResultEdits = (data, mode, setEditorState, modeScoped) => {
     legendColorOverrides: edits.legend.colorOverrides,
     legendStrokeOverrides: edits.legend.strokeOverrides,
     originalLegendColors: kept.legend.originalColors,
-    originalSvgStroke: kept.originalSvgStroke
+    mode,
+    blockStroke: modeScoped ? kept.originalSvgStroke : null
   };
 };
 
