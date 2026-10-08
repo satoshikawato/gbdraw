@@ -4514,3 +4514,35 @@ def test_manifest_presentation_identity_check_still_rejects_view_fields(key: str
             protein_colinearity_module._reject_manifest_presentation_identity(
                 {"proteinSets": [{"nested": ({key: 1},)}]}
             )
+
+
+def test_raw_protein_tsv_validation_parses_each_distinct_text_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from uuid import uuid4
+
+    token = uuid4().hex  # The verdict memo is process-wide; use texts no other test has.
+    query_id, subject_id = f"q_{token}", f"s_{token}"
+    valid = f"{query_id}\t{subject_id}\t100\t1\t0\t0\t1\t1\t1\t1\t0\t50\n"
+    bad_number = valid.replace("\t100\t", "\tnan\t")
+    parse_calls = 0
+    real_parse = protein_colinearity_module.parse_losatp_outfmt6
+
+    def count_parse(text):
+        nonlocal parse_calls
+        parse_calls += 1
+        return real_parse(text)
+
+    monkeypatch.setattr(protein_colinearity_module, "parse_losatp_outfmt6", count_parse)
+
+    def matches(text: str) -> bool:
+        return protein_colinearity_module.raw_protein_tsv_matches_bindings(
+            text, query_ids={query_id}, subject_ids={subject_id}
+        )
+
+    assert [matches(valid) for _ in range(4)] == [True] * 4
+    assert parse_calls == 1
+    assert [matches(bad_number) for _ in range(4)] == [False] * 4
+    assert parse_calls == 2
+    assert matches(f"# comment {token}\n")
+    assert parse_calls == 3  # A distinct text parses once, even without rows.

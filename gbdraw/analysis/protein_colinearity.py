@@ -1578,6 +1578,27 @@ def _fasta_record_instance_key(
     return matches[0]
 
 
+# The parse verdict depends only on the text. Key by digest so the memo does not
+# keep the (possibly multi-megabyte) texts alive, and bound it.
+_OUTFMT6_PARSE_VERDICTS: dict[bytes, bool] = {}
+_OUTFMT6_PARSE_VERDICTS_MAX = 1024
+
+
+def _is_parseable_losatp_outfmt6(text: str) -> bool:
+    key = hashlib.sha256(text.encode("utf-8", "surrogatepass")).digest()
+    verdict = _OUTFMT6_PARSE_VERDICTS.get(key)
+    if verdict is None:
+        try:
+            parse_losatp_outfmt6(text)
+            verdict = True
+        except ParseError:
+            verdict = False
+        if len(_OUTFMT6_PARSE_VERDICTS) >= _OUTFMT6_PARSE_VERDICTS_MAX:
+            _OUTFMT6_PARSE_VERDICTS.clear()
+        _OUTFMT6_PARSE_VERDICTS[key] = verdict
+    return verdict
+
+
 def raw_protein_tsv_matches_bindings(
     text: str,
     *,
@@ -1596,11 +1617,7 @@ def raw_protein_tsv_matches_bindings(
             or columns[1] not in subject_ids
         ):
             return False
-    try:
-        parse_losatp_outfmt6(str(text))
-    except ParseError:
-        return False
-    return True
+    return _is_parseable_losatp_outfmt6(str(text))
 
 
 def is_protein_losat_cache_entry(entry: Mapping[str, object] | object) -> TypeGuard[Mapping[str, object]]:
