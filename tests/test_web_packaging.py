@@ -1390,7 +1390,7 @@ def test_build_py_copies_offline_gui_assets(tmp_path: Path) -> None:
         / "js"
         / "workers"
         / "losat-wasi-thread-worker.js",
-        build_root / "gbdraw" / "web" / "js" / "app" / "record-discovery.js",
+        build_root / "gbdraw" / "web" / "js" / "services" / "record-discovery.js",
         build_root / "gbdraw" / "web" / "js" / "services" / "record-options.js",
         build_root / "gbdraw" / "web" / "js" / "app" / "linear-record-selector.js",
         build_root / "gbdraw" / "web" / "js" / "app" / "right-drawer.js",
