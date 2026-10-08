@@ -631,7 +631,6 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     depthTrackCount: circularAvailableDepthTrackCountForState(state),
     depthSourcedTrackIndexes: circularSourcedDepthTrackIndexesForState(state),
     annotationSetIds: annotationSetIds(drawing),
-    visibleFeatureUnderlays: visibleFeatureUnderlaysForState(state),
     conservationSeries: conservationEntriesForState(state, drawing)
   });
 

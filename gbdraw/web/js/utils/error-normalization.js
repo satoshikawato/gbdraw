@@ -418,7 +418,7 @@ const TRACK_ISSUES = Object.freeze({
   annotation_layer: ['LAYER', 'layer'], annotation_anchor_required: ['OVERLAY_ANCHOR', 'anchor_slot'],
   annotation_anchor_without_overlay: ['OVERLAY_SIDE', 'side'], conservation_unmanaged: ['CONSERVATION_SOURCE'],
   conservation_source_missing: ['CONSERVATION_SOURCE'], features_multiple: ['FEATURES_COUNT'],
-  feature_underlay_features_count: ['FEATURES_COUNT'], annotation_anchor_unknown: ['OVERLAY_ANCHOR', 'anchor_slot'],
+  annotation_anchor_unknown: ['OVERLAY_ANCHOR', 'anchor_slot'],
   annotation_anchor_ineligible: ['OVERLAY_ANCHOR', 'anchor_slot'], annotation_underlay_z: ['DRAW_ORDER', 'z'],
   annotation_foreground_z: ['DRAW_ORDER', 'z'], axis_side_conflict: ['TRACK_SIDE', 'side']
 });

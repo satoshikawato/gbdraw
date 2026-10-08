@@ -89,8 +89,7 @@ import {
   defaultFeatureRendering,
   normalizeArrowHeadLengthRatio,
   normalizeArrowShaftWidthRatio,
-  normalizeFeatureRenderingMap,
-  visibleFeatureUnderlaysForState
+  normalizeFeatureRenderingMap
 } from '../utils/feature-rendering.js';
 import {
   comparisonFiltersForMode,
@@ -1749,7 +1748,6 @@ const buildTrackPlan = ({
     recordCount
   });
   const annotationSetIds = annotationSetIdsForState(drawing);
-  const visibleFeatureUnderlays = visibleFeatureUnderlaysForState(drawing);
 
   if (circular && drawing.adv.circular_track_slots_enabled) {
     const validation = assertValidCustomTrackPlan(validateCustomTrackPlan({
@@ -1759,7 +1757,6 @@ const buildTrackPlan = ({
       trackType: drawing.form.track_type,
       depthTrackCount,
       annotationSetIds,
-      visibleFeatureUnderlays,
       conservationSeries: conservationSeriesForValidation({
         drawing,
         filesData,
@@ -1791,7 +1788,6 @@ const buildTrackPlan = ({
       trackType: drawing.form.linear_track_layout,
       depthTrackCount,
       annotationSetIds,
-      visibleFeatureUnderlays,
       conservationSeries: []
     }));
     const depthRequested = validation.enabledSlots.some(
@@ -1840,7 +1836,6 @@ const buildTrackPlan = ({
         trackType: drawing.form.track_type,
         depthTrackCount,
         annotationSetIds,
-        visibleFeatureUnderlays,
         conservationSeries: []
       }));
       return {

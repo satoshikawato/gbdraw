@@ -23,6 +23,7 @@ from gbdraw.exceptions import ValidationError
 from gbdraw.features.colors import compute_feature_hash
 from gbdraw.features.objects import FeatureLocationPart, FeatureObject
 from gbdraw.io.colors import load_default_colors
+from gbdraw.web_support.error_adapter import serialize_web_error
 from gbdraw.web_support.feature_metadata import extract_features_from_records_payload
 
 
@@ -420,26 +421,44 @@ def test_underlay_uses_actual_custom_feature_slot(mode: str) -> None:
         assert slots[0]["widthPx"] == pytest.approx(slots[1]["widthPx"])
 
 
+def _assemble_without_feature_slot(mode: str, record: SeqRecord):
+    if mode == "circular":
+        return assemble_circular_diagram_from_record(
+            record,
+            cfg=_DEFAULT_CFG,
+            selected_features_set=["CDS", "repeat_region"],
+            circular_track_slots=["axis:ticks"],
+            legend="none",
+        )
+    return assemble_linear_diagram_from_records(
+        [record],
+        cfg=_DEFAULT_CFG,
+        selected_features_set=["CDS", "repeat_region"],
+        linear_track_slots=["gap:spacer@side=above"],
+        legend="none",
+    )
+
+
 @pytest.mark.parametrize("mode", ["circular", "linear"])
 def test_visible_underlay_requires_enabled_feature_slot(mode: str) -> None:
     record = _record(include_cds=False)
-    with pytest.raises(ValidationError, match="enabled features track slot"):
-        if mode == "circular":
-            assemble_circular_diagram_from_record(
-                record,
-                cfg=_DEFAULT_CFG,
-                selected_features_set=["repeat_region"],
-                circular_track_slots=["axis:ticks"],
-                legend="none",
-            )
-        else:
-            assemble_linear_diagram_from_records(
-                [record],
-                cfg=_DEFAULT_CFG,
-                selected_features_set=["repeat_region"],
-                linear_track_slots=["gap:spacer@side=above"],
-                legend="none",
-            )
+    with pytest.raises(ValidationError, match="enabled features track slot") as raised:
+        _assemble_without_feature_slot(mode, record)
+    # The Web reads the typed diagnostic; it no longer checks the configured
+    # underlay types itself (TK-13).
+    payload = serialize_web_error(raised.value, operation="generate", stage="render")
+    assert (payload["code"], payload["context"]) == (
+        "TRACK_INVALID",
+        {"reason": "FEATURES_COUNT"},
+    )
+
+
+@pytest.mark.parametrize("mode", ["circular", "linear"])
+def test_record_without_underlay_features_needs_no_feature_slot(mode: str) -> None:
+    """Underlay types are configured, but the record has none of them (TK-13)."""
+    record = _record()
+    record.features = [feature for feature in record.features if feature.type != "repeat_region"]
+    assert _assemble_without_feature_slot(mode, record).tostring()
 
 
 @pytest.mark.parametrize("mode", ["circular", "linear"])

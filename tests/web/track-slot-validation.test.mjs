@@ -103,7 +103,6 @@ const validate = (overrides = {}) => validateCustomTrackPlan({
   trackType: 'middle',
   depthTrackCount: 0,
   annotationSetIds: [],
-  visibleFeatureUnderlays: false,
   conservationSeries: [],
   ...overrides
 });
@@ -173,84 +172,31 @@ test('limits Linear to one enabled Features row and ignores a disabled duplicate
   assert.equal(valid.rowIssues.size, 0);
 });
 
-test('requires exactly one Circular Features row only for visible feature underlays', () => {
-  const duplicate = validate({
-    mode: 'circular',
-    slots: [feature('a', { side: 'inside' }), feature('b', { side: 'outside' })],
-    axisIndex: 1,
-    visibleFeatureUnderlays: 1
-  });
-  assert.deepEqual(
-    duplicate.globalIssues.map((issue) => issue.code),
-    ['feature_underlay_features_count']
-  );
-
-  const missing = validate({
+// TK-13 (Owner 2026-10-05: match the CLI): whether a stack needs a Features
+// row for underlays depends on the record's features, so the Web plan does
+// not reject a stack for the configured underlay types; Python reports
+// TRACK_INVALID FEATURES_COUNT when the record has underlay features.
+test('accepts a stack without one Features row whatever underlay types are configured (TK-13)', () => {
+  const ticksOnly = validate({
     mode: 'circular',
     slots: [{ id: 'ticks', renderer: 'ticks', enabled: true, side: 'inside', z: 0, params: {} }],
-    axisIndex: 0,
-    visibleFeatureUnderlays: true
+    axisIndex: 0
   });
-  assert.deepEqual(
-    missing.globalIssues.map((issue) => issue.code),
-    ['feature_underlay_features_count']
-  );
-
-  const noUnderlay = validate({
+  assert.deepEqual(ticksOnly.globalIssues, []);
+  const twoCircular = validate({
     mode: 'circular',
     slots: [feature('a', { side: 'inside' }), feature('b', { side: 'outside' })],
-    axisIndex: 1,
-    visibleFeatureUnderlays: false
+    axisIndex: 1
   });
-  assert.equal(noUnderlay.globalIssues.length, 0);
-});
-
-test('requires exactly one Linear Features row for visible feature underlays', () => {
-  const missing = validate({
-    slots: [depth('depth', 0, { side: 'below' })],
-    axisIndex: 0,
-    depthTrackCount: 1,
-    visibleFeatureUnderlays: ['repeat_region']
-  });
-  assert.ok(
-    missing.globalIssues.some((issue) => issue.code === 'feature_underlay_features_count')
-  );
-
-  const exactlyOne = validate({
-    slots: [feature()],
-    axisIndex: 0,
-    visibleFeatureUnderlays: ['repeat_region']
-  });
-  assert.equal(
-    exactlyOne.globalIssues.some((issue) => issue.code === 'feature_underlay_features_count'),
-    false
-  );
-
-  const duplicate = validate({
-    slots: [feature('features_a'), feature('features_b')],
-    axisIndex: 0,
-    visibleFeatureUnderlays: ['repeat_region']
-  });
+  assert.deepEqual(twoCircular.globalIssues, []);
+  const depthOnly = validate({ slots: [depth('depth', 0, { side: 'below' })], axisIndex: 0, depthTrackCount: 1 });
+  assert.deepEqual(depthOnly.globalIssues, []);
+  // Linear draws one Features row in any case.
+  const duplicate = validate({ slots: [feature('features_a'), feature('features_b')], axisIndex: 0 });
   assert.ok(rowCodes(duplicate, 1).includes('features_multiple'));
-  assert.ok(
-    duplicate.globalIssues.some((issue) => issue.code === 'feature_underlay_features_count')
-  );
-
-  const disabledDuplicate = validate({
-    slots: [feature(), feature('disabled_features', { enabled: false })],
-    axisIndex: 0,
-    visibleFeatureUnderlays: ['repeat_region']
-  });
-  assert.equal(disabledDuplicate.rowIssues.size, 0);
-  assert.equal(
-    disabledDuplicate.globalIssues.some(
-      (issue) => issue.code === 'feature_underlay_features_count'
-    ),
-    false
-  );
 });
 
-test('Linear editor live validation uses visible feature-underlay intent', () => {
+test('Linear editor live validation does not read the configured underlay types (TK-13)', () => {
   const state = {
     form: { linear_track_layout: 'middle', show_depth: false },
     adv: {
@@ -268,10 +214,7 @@ test('Linear editor live validation uses visible feature-underlay intent', () =>
     annotationSets: []
   };
   const editor = createLinearTrackSlotEditor({ state: withDrawings(state) });
-  assert.match(
-    editor.linearTrackGlobalIssues().join(' '),
-    /exactly one enabled Linear Features row/
-  );
+  assert.deepEqual(editor.linearTrackGlobalIssues(), []);
 });
 
 test('rejects an empty enabled Linear stack but preserves Circular axis-only drafts', () => {
@@ -287,8 +230,7 @@ test('rejects an empty enabled Linear stack but preserves Circular axis-only dra
     const circular = validate({
       mode: 'circular',
       slots,
-      axisIndex: slots.length,
-      visibleFeatureUnderlays: false
+      axisIndex: slots.length
     });
     assert.equal(
       circular.globalIssues.some((issue) => issue.code === 'linear_slots_empty'),
@@ -379,8 +321,7 @@ test('derives an omitted Circular feature side from lane_direction', () => {
       side: null,
       params: { lane_direction: 'split' }
     })],
-    axisIndex: 0,
-    visibleFeatureUnderlays: false
+    axisIndex: 0
   });
 
   assert.equal(plan.rowIssues.size, 0);

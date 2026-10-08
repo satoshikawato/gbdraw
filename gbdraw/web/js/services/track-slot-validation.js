@@ -529,12 +529,6 @@ const inferredCustomTrackAxisIndex = (slots, mode, trackType) => {
   return firstInner < 0 ? slots.length : firstInner;
 };
 
-const featureUnderlaysVisible = (value) => {
-  if (Array.isArray(value)) return value.length > 0;
-  if (typeof value === 'number') return value > 0;
-  return Boolean(value);
-};
-
 const nonnegativeFiniteNumber = (value) => {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'boolean') return Number.NaN;
@@ -597,7 +591,6 @@ const collectCustomTrackIssues = ({
   depthTrackCount,
   depthSourcedTrackIndexes,
   annotationSetIds,
-  visibleFeatureUnderlays,
   conservationSeries
 }) => {
   const rowIssues = new Map();
@@ -1083,18 +1076,9 @@ const collectCustomTrackIssues = ({
       message: 'Linear Custom Track Slots support only one enabled Features row.'
     }));
   }
-  if (featureUnderlaysVisible(visibleFeatureUnderlays)) {
-    const featureCount = enabledIndexes.filter(
-      (index) => normalizedString(draftSlots[index]?.renderer) === 'features'
-    ).length;
-    if (featureCount !== 1) {
-      globalIssues.push(globalIssue({
-        code: 'feature_underlay_features_count',
-        field: 'slots',
-        message: `Visible feature underlays require exactly one enabled ${modeLabel} Features row.`
-      }));
-    }
-  }
+  // Whether the plan needs a Features row for underlays depends on the
+  // record's features, which only Python reads; it reports TRACK_INVALID
+  // FEATURES_COUNT, as the CLI does (TK-13).
 
   const enabledById = new Map(
     normalizedEnabled
@@ -1210,7 +1194,6 @@ export const validateCustomTrackPlan = (options = {}) => collectCustomTrackIssue
   depthTrackCount: options.depthTrackCount,
   depthSourcedTrackIndexes: options.depthSourcedTrackIndexes,
   annotationSetIds: options.annotationSetIds,
-  visibleFeatureUnderlays: options.visibleFeatureUnderlays,
   conservationSeries: options.conservationSeries
 });
 

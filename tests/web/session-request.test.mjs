@@ -3904,12 +3904,14 @@ const checkLinearCombination = (label, assertion) => {
     linearCombinationFailures.push(`${label}: ${String(error?.message || error)}`);
   }
 };
-checkLinearCombination('underlay without Features', () => assert.throws(
-  () => buildCanonicalRenderRequest({
+// TK-13: the request keeps a stack without a Features row; Python decides from
+// the record's features whether the underlays need one.
+checkLinearCombination('underlay without Features', () => assert.doesNotThrow(
+  () => buildCanonicalRenderRequestRaw({
     state: underlayWithoutFeaturesState,
-    filesData: linearFilesData
-  }),
-  /Visible feature underlays require exactly one enabled(?: Linear)? Features row/i
+    filesData: linearFilesData,
+    comparisonPlanSnapshot: comparisonSnapshotForState(underlayWithoutFeaturesState, linearFilesData)
+  })
 ));
 
 const allDisabledLinearState = linearCombinationRegressionState({
