@@ -875,6 +875,9 @@ test(`individual Feature, Label, and Legend edits update the mounted SVG: ${live
     expect(await page.evaluate((id) => ((feature) => window.__GBDRAW_APP__.featureOverrides[JSON.stringify([feature?.record_key, feature?.biological_feature_id])]?.labelText ?? undefined)(window.__GBDRAW_APP__.extractedFeatures.find((item) => item.svg_id === id)), target)).toBe('S05 direct label retained');
     const retained = await snapshot(page);
     expect(retained.result).toContain('S05 direct label retained');
+    // Escape closes the top layer: the feature popup, then the drawer.
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.feature-popup')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(page.locator('.right-drawer')).toHaveAttribute('aria-hidden', 'true');
     expect(await snapshot(page)).toEqual(retained);

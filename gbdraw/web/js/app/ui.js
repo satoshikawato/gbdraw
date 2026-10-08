@@ -433,14 +433,19 @@ export const setupGlobalUiEvents = ({
     }
   };
 
+  // Escape closes the top layer only: an open popup first, so the drawer that
+  // opened it stays and focus returns to its opener there; then the canvas
+  // controls and the drawer.
   const handleEscapeKey = (e) => {
-    if (e.key === 'Escape' && !modalDialogOpen()) {
+    if (e.key !== 'Escape' || modalDialogOpen()) return;
+    if (clickedFeature.value || clickedPairwiseMatch?.value || clickedLabel.value) {
       if (clickedFeature.value) clickedFeature.value = null;
       if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
       if (clickedLabel.value) clickedLabel.value = null;
-      if (showCanvasControls.value) showCanvasControls.value = false;
-      closeRightDrawer();
+      return;
     }
+    if (showCanvasControls.value) showCanvasControls.value = false;
+    closeRightDrawer();
   };
 
   onMounted(() => {

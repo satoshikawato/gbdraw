@@ -315,6 +315,20 @@ test('the operation error panel offers Generate and no Save after a failed Save 
   assert.equal(saveFailure.operation, 'session-save');
 });
 
+// #941 residual: every action of an operation error panel is the same small
+// button (`btn btn-secondary btn-sm`), so a new action cannot miss the style.
+test('every operation error panel action is a small secondary button', () => {
+  const indexHtml = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const panels = indexHtml.match(/<operation-error[\s\S]*?<\/operation-error>/g) || [];
+  const buttons = panels.flatMap((panel) => panel.match(/<button\b[^>]*>[^<]*/g) || []);
+  assert.ok(buttons.length >= 15, `operation error actions found: ${buttons.length}`);
+  const unstyled = buttons.filter((button) => {
+    const classes = new Set((button.match(/\sclass="([^"]*)"/)?.[1] || '').split(/\s+/));
+    return !['btn', 'btn-secondary', 'btn-sm'].every((name) => classes.has(name));
+  }).map((button) => button.replace(/^[^>]*>/, '').trim());
+  assert.deepEqual(unstyled, []);
+});
+
 // R6: locators the producer keeps are shown in the summary, wording only here.
 test('summary shows Sequence, Line, Track row, Depth series, band and setting locators', () => {
   for (const [source, pattern] of [
