@@ -129,3 +129,14 @@ Web Load makes it (`tests/web/mode-split-vectors.test.mjs`); the Python split
 values Session 46 Load gives the pointers the split leaves absent. A Session
 27–39 case has no `expectedModes`: Web Load reads such a Session's settings from
 its request, which the Python split does not.
+
+`scale-interval-zero-circular-cli.v44.gbdraw-session.json.gz`,
+`scale-interval-negative-linear-api.v44.gbdraw-session.json.gz`, and
+`scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz` hold a scale
+interval of 0 or less, written by the first-parent `main` commit `fe6861f0`
+CLI (in `diagramOptions.config`) and typed API (in `configOverrides`, where
+`main`'s Web Save also writes it), and by the release tag `0.13.0` CLI (in
+`cliInvocation`). Those writers drew such a value as the automatic interval.
+They are the positive fixtures for the reader that keeps drawing it so after
+fresh input rejects it (D-04, `test_scale_interval_domain.py`). The commands
+and hashes are in `scale-interval.provenance.json`.

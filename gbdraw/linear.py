@@ -950,9 +950,10 @@ def _get_args(args, *, _legacy_session: bool = False) -> argparse.Namespace:
         parser.error("--gc_content_large_tick_interval must be > 0")
     if args.gc_content_small_tick_interval is not None and args.gc_content_small_tick_interval <= 0:
         parser.error("--gc_content_small_tick_interval must be > 0")
-    # A legacy Session replays a stored value <= 0 as the automatic interval (D-04).
-    if args.scale_interval is not None and args.scale_interval <= 0 and not _legacy_session:
-        parser.error("--scale_interval must be > 0")
+    if args.scale_interval is not None and args.scale_interval <= 0:
+        if not _legacy_session:
+            parser.error("--scale_interval must be > 0")
+        args.scale_interval = None  # D-04: a released legacy Session drew <= 0 as automatic.
     if args.linear_track_order and args.linear_track_slot:
         parser.error("--linear_track_order cannot be combined with --linear_track_slot")
     if args.linear_track_axis_index is not None and not (args.linear_track_order or args.linear_track_slot):

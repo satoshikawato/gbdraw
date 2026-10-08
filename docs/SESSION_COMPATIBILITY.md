@@ -230,6 +230,16 @@ an integer, as the definition line interval. This restores the 0.13.0 Web and
 CLI spacing. The rule is applied when the overrides are applied, so the stored
 request is unchanged and replay writes the same overrides back.
 
+## Unreleased: a scale interval of 0 or less
+
+Session version 46 and request schema 9 are unchanged. `--scale_interval`, the
+Python API's `objects.scale.interval`, and Web **Generate Diagram** reject a
+scale interval of 0 or less. Earlier writers stored such a value and drew the
+automatic interval, so a Session that stores one in
+`renderRequest.diagramOptions.config`, in `configOverrides`, or in a Session
+27–30 `cliInvocation` still replays with the automatic interval, and Web Load
+shows the field as Auto. Saving it again stores no interval.
+
 ## Unreleased: CLI and Python LOSATN / TLOSATX results
 
 Session version 44 and request schema 8 are unchanged. A Linear run with

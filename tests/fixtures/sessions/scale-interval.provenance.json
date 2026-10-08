@@ -1,0 +1,36 @@
+{
+  "purpose": "Positive fixtures for the D-04 Session read rule: a stored scale interval <= 0 draws the automatic interval.",
+  "record": "tests/fixtures/regex_rules.gb (sha256 e33d282b370b092a0d3b4ccf26a70db9b01f3b28ea8758b728fee1812b7be88b), copied as record.gb",
+  "compression": "gzip -n -9",
+  "fixtures": {
+    "scale-interval-zero-circular-cli.v44.gbdraw-session.json.gz": {
+      "sourceCommit": "fe6861f06d0eaaecac0ba4ee6b1c3095019789df",
+      "history": "first-parent main",
+      "writer": "gbdraw/circular.py --session_output (CLI sidecar), run with PYTHONPATH=<detached worktree at fe6861f0>",
+      "command": "python -m gbdraw.cli circular --gbk record.gb --scale_interval 0 -o main-circular-zero -f svg --session_output main-circular-zero.gbdraw-session.json",
+      "storedAt": "renderRequest.diagramOptions.config.objects.scale.interval = 0",
+      "sessionVersion": 44,
+      "requestSchema": 8,
+      "sha256": "085f4b67fd60f77252bc94f636f4fb36e3ebd852a3014801029e190e8535bee1"
+    },
+    "scale-interval-negative-linear-api.v44.gbdraw-session.json.gz": {
+      "sourceCommit": "fe6861f06d0eaaecac0ba4ee6b1c3095019789df",
+      "history": "first-parent main",
+      "writer": "gbdraw.api.save_session_document, run with PYTHONPATH=<detached worktree at fe6861f0>",
+      "command": "save_session_document('main-linear-negative.gbdraw-session.json', LinearDiagramRequest(records=(RecordInput(source=GenBankInputSource(path='record.gb')),), options=LinearDiagramOptions(config_overrides={'objects.scale.interval': -5}), output=RenderOutputRequest(output_prefix='main-linear-negative', output_directory=Path('.'), formats=('svg',))), created_at=datetime(2026, 10, 8, tzinfo=timezone.utc))",
+      "storedAt": "renderRequest.diagramOptions.configOverrides['objects.scale.interval'] = -5 (the location main's Web Save also writes: session-request.js leaf(CONFIG_OVERRIDE_PATHS.scaleInterval, adv.scale_interval), with no min on the field)",
+      "sessionVersion": 44,
+      "requestSchema": 8,
+      "sha256": "5ef658013f72a97b5ae179b32abdd5114b830b02536b878f1e1c41f33af3597e"
+    },
+    "scale-interval-negative-linear-cli.v30.gbdraw-session.json.gz": {
+      "sourceCommit": "8be9e3a5a2e1bc4cd983b502716ae44330396f28",
+      "history": "release tag 0.13.0",
+      "writer": "gbdraw/linear.py --session_output (CLI sidecar) of tag 0.13.0, run from `git archive 0.13.0 gbdraw`",
+      "command": "python -m gbdraw.cli linear --gbk record.gb --scale_interval -5 -o v013-linear-negative -f svg --session_output v013-linear-negative.gbdraw-session.json",
+      "storedAt": "cliInvocation.args (--scale_interval -5); no renderRequest",
+      "sessionVersion": 30,
+      "sha256": "611d06003c7e0d02352e012f6631c293268a492b63fe5f5c4d6bcc8ff49ec549"
+    }
+  }
+}

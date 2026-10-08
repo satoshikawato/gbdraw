@@ -1382,6 +1382,7 @@ def canonical_payload_for_session_decode(
     """Return a detached canonical payload with supported migrations applied."""
 
     detached = copy.deepcopy(dict(payload))
+    _read_non_positive_scale_interval_as_automatic(detached)
     if session_version == _LEGACY_MULTILINE_CONSERVATION_LABEL_SESSION_VERSION:
         _migrate_legacy_multiline_conservation_labels(detached)
     if session_version > _LEGACY_LINEAR_TRACK_SLOT_SESSION_VERSION:
@@ -1406,6 +1407,29 @@ def canonical_payload_for_session_decode(
         _migrate_legacy_linear_track_slot(slot) for slot in slots
     ]
     return detached
+
+
+def _read_non_positive_scale_interval_as_automatic(payload: dict[str, Any]) -> None:
+    """Read a stored scale interval <= 0 as the automatic interval (D-04).
+
+    Writers before D-04 stored any typed integer (main fe6861f0: the CLI in
+    ``config``, the Web and typed API in ``configOverrides``) and drew <= 0 as
+    automatic; fresh requests now reject it.
+    """
+
+    options = payload.get("diagramOptions")
+    if not isinstance(options, dict):
+        return
+    config = options.get("config")
+    objects = config.get("objects") if isinstance(config, dict) else None
+    scale = objects.get("scale") if isinstance(objects, dict) else None
+    overrides = options.get("configOverrides")
+    for holder, key in ((scale, "interval"), (overrides, "objects.scale.interval")):
+        if not isinstance(holder, dict):
+            continue
+        value = holder.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and value <= 0:
+            holder[key] = None
 
 
 def _migrate_legacy_multiline_conservation_labels(

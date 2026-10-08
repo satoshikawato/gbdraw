@@ -605,9 +605,10 @@ def _get_args(
         parser.error("--gc_content_large_tick_interval must be > 0")
     if args.gc_content_small_tick_interval is not None and args.gc_content_small_tick_interval <= 0:
         parser.error("--gc_content_small_tick_interval must be > 0")
-    # A legacy Session replays a stored value <= 0 as the automatic interval (D-04).
-    if args.scale_interval is not None and args.scale_interval <= 0 and not _allow_legacy_track_transport:
-        parser.error("--scale_interval must be > 0")
+    if args.scale_interval is not None and args.scale_interval <= 0:
+        if not _allow_legacy_track_transport:
+            parser.error("--scale_interval must be > 0")
+        args.scale_interval = None  # D-04: a released legacy Session drew <= 0 as automatic.
     if args.gc_skew_width is not None and args.gc_skew_width <= 0:
         parser.error("--gc_skew_width must be > 0")
     if args.gc_skew_radius is not None and args.gc_skew_radius <= 0:
