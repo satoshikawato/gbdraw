@@ -685,10 +685,10 @@ def _normalize_circular_track_slots(
             if slot.outer_gap_px is not None
             else None
         )
+        # An Auto width compresses like Auto, also on a row with a radius (GX-17).
         compress = (
             renderer in NUMERIC_CIRCULAR_TRACK_RENDERERS
             and side == "inside"
-            and slot.radius is None
             and (slot.width is None or auto_compress)
         )
 

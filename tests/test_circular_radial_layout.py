@@ -818,7 +818,7 @@ def test_cli_outer_gap_after_a_pinned_row_is_reserved(tmp_path: Path) -> None:
     assert (tmp_path / "gx04.svg").is_file()
 
 
-def _gx05_args(gc_content_radius: str, output: Path) -> list[str]:
+def _gx05_args(gc_content_spec: str, output: Path) -> list[str]:
     return [
         "--gbk",
         str(_HMMTDNA),
@@ -834,7 +834,7 @@ def _gx05_args(gc_content_radius: str, output: Path) -> list[str]:
         "--circular_track_slot",
         "ticks:ticks@side=inside,tick_label_layout=label_in_tick_out",
         "--circular_track_slot",
-        f"gc_content:dinucleotide_content@side=inside,r={gc_content_radius}",
+        f"gc_content:dinucleotide_content@side=inside,{gc_content_spec}",
         "--circular_track_slot",
         "gc_skew:dinucleotide_skew@side=inside",
         "--circular_track_axis_index",
@@ -846,16 +846,37 @@ def _gx05_args(gc_content_radius: str, output: Path) -> list[str]:
     ]
 
 
-def test_cli_pin_beyond_the_room_of_uncompressible_rows_fails_with_cannot_fit(tmp_path: Path) -> None:
-    # GX-05: Auto never compresses feature or tick rows, and a row with a radius
-    # keeps its width, so nothing between gc_content and the Axis can give way.
-    # gc_content's Auto radius is 0.60128 R; r=0.6013 is 0.007 px beyond the room
-    # features and ticks need, so it reports CANNOT_FIT. r=0.6 leaves them room.
-    circular_main(_gx05_args("0.6", tmp_path / "fits"))
-    assert (tmp_path / "fits.svg").is_file()
+def test_cli_pin_just_above_the_auto_radius_compresses_the_pinned_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # GX-05, GX-17: gc_content's Auto radius is 0.60128 R. At r=0.6013 its full
+    # width left features and ticks 0.007 px too little room. A pinned row with
+    # an Auto width now compresses like Auto, centred on its radius.
+    import gbdraw.diagrams.circular.assemble as assemble_module
 
+    layouts = []
+    resolve = assemble_module.resolve_circular_radial_layout
+
+    def capture(*args, **kwargs):
+        layout = resolve(*args, **kwargs)
+        layouts.append(layout)
+        return layout
+
+    monkeypatch.setattr(assemble_module, "resolve_circular_radial_layout", capture)
+    circular_main(_gx05_args("r=0.6013", tmp_path / "gx05"))
+
+    assert (tmp_path / "gx05.svg").is_file()
+    gc_content = next(slot for slot in layouts[-1].slots if slot.id == "gc_content")
+    assert gc_content.anchor_radius_px == pytest.approx(0.6013 * layouts[-1].axis.radius_px)
+    assert gc_content.packing_band_px.center_px == pytest.approx(gc_content.anchor_radius_px)
+    assert gc_content.compressed
+    assert 10.0 <= gc_content.resolved_width_px < gc_content.requested_width_px
+
+
+def test_cli_pinned_row_with_an_explicit_width_keeps_it(tmp_path: Path) -> None:
+    # An explicit width is not compressed: the same pin then leaves the ticks no room.
     with pytest.raises(ValidationError, match="'ticks' cannot fit inside between") as error:
-        circular_main(_gx05_args("0.6013", tmp_path / "beyond"))
+        circular_main(_gx05_args("r=0.6013,w=74.1px", tmp_path / "explicit"))
     assert error.value.diagnostic == {
         "code": "TRACK_LAYOUT",
         "reason": "CANNOT_FIT",
@@ -863,3 +884,93 @@ def test_cli_pin_beyond_the_room_of_uncompressible_rows_fails_with_cannot_fit(tm
         "outerPx": 386,
         "slotIndex": 1,
     }
+
+
+def _pinned_below_a_fixed_row(radius: float, **pinned_fields) -> CircularRadialLayout:
+    canvas_config, cfg = _small_radial_canvas()
+    canvas_config.radius = 300.0
+    return resolve_circular_radial_layout(
+        total_length=1000,
+        canvas_config=canvas_config,
+        slots=[
+            CircularTrackSlot(id="above", renderer="dinucleotide_skew", side="inside", width=ScalarSpec(40.0, "px")),
+            CircularTrackSlot(
+                id="pinned",
+                renderer="dinucleotide_content",
+                side="inside",
+                radius=ScalarSpec(radius, "factor"),
+                **pinned_fields,
+            ),
+        ],
+    )
+
+
+def test_pinned_row_with_an_auto_width_compresses_centred_on_its_radius() -> None:
+    # GX-17: the row above keeps its explicit 40 px; the pinned row gives way.
+    layout = _pinned_below_a_fixed_row(0.8)
+
+    by_id = {slot.id: slot for slot in layout.slots}
+    pinned, above = by_id["pinned"], by_id["above"]
+    assert pinned.anchor_radius_px == pytest.approx(240.0)
+    assert pinned.packing_band_px.center_px == pytest.approx(240.0)
+    assert pinned.compressed
+    assert 10.0 <= pinned.resolved_width_px < pinned.requested_width_px
+    assert above.resolved_width_px == pytest.approx(40.0)
+    assert pinned.packing_band_px.outer_px <= above.packing_band_px.inner_px - 3.0 + 1e-6
+
+
+def test_pinned_row_keeps_auto_minimum_and_an_explicit_width() -> None:
+    # Below Auto's minimum width (10 px) the layout fails with CANNOT_FIT, and an
+    # explicit width is never compressed.
+    with pytest.raises(ValidationError) as error:
+        _pinned_below_a_fixed_row(0.84)
+    assert (error.value.diagnostic or {}).get("reason") == "CANNOT_FIT"
+    with pytest.raises(ValidationError):
+        _pinned_below_a_fixed_row(0.8, width=ScalarSpec(57.0, "px"))
+
+
+def test_inside_row_pinned_beyond_the_axis_keeps_its_width() -> None:
+    # Auto never places inside rows at or beyond the Axis, so such a pin keeps
+    # its full width, as before GX-17.
+    canvas_config, cfg = _small_radial_canvas()
+    canvas_config.radius = 300.0
+    layout = resolve_circular_radial_layout(
+        total_length=1000,
+        canvas_config=canvas_config,
+        slots=[
+            CircularTrackSlot(id="gc_skew", renderer="dinucleotide_skew", side="inside", radius=ScalarSpec(1.3, "factor")),
+            CircularTrackSlot(id="features", renderer="features", params={"lane_direction": "inside"}),
+        ],
+        feature_dict={"a": _Feature(0)},
+    )
+    gc_skew = next(slot for slot in layout.slots if slot.id == "gc_skew")
+    assert gc_skew.anchor_radius_px == pytest.approx(390.0)
+    assert not gc_skew.compressed
+    assert gc_skew.resolved_width_px == pytest.approx(gc_skew.requested_width_px)
+
+
+def test_row_pinned_above_an_earlier_pinned_row_does_not_bound_the_rows_before_it() -> None:
+    # gc_content is listed after at_skew but pinned above it (out of stack order).
+    # It is no lower bound for the group of features and at_skew, which still
+    # place around it as before GX-17.
+    canvas_config, cfg = _small_radial_canvas()
+    canvas_config.radius = 300.0
+    layout = resolve_circular_radial_layout(
+        total_length=1000,
+        canvas_config=canvas_config,
+        slots=[
+            CircularTrackSlot(id="features", renderer="features", params={"lane_direction": "inside"}),
+            CircularTrackSlot(id="at_skew", renderer="dinucleotide_skew", side="inside", radius=ScalarSpec(0.45, "factor")),
+            CircularTrackSlot(
+                id="gc_content",
+                renderer="dinucleotide_content",
+                side="inside",
+                radius=ScalarSpec(0.8, "factor"),
+                width=ScalarSpec(20.0, "px"),
+            ),
+        ],
+        feature_dict={"a": _Feature(0)},
+    )
+    by_id = {slot.id: slot.packing_band_px for slot in layout.slots}
+    assert by_id["at_skew"].center_px == pytest.approx(135.0)
+    assert by_id["features"].inner_px > by_id["at_skew"].outer_px

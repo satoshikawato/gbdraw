@@ -2504,24 +2504,30 @@ _WEB_PRESET_FEATURE_LANES = {"tuckin": ("inside", 0), "middle": ("split", 0), "s
 
 def _web_preset_stack(track_type: str, **radius: str) -> tuple[list[str], int]:
     lane, axis_index = _WEB_PRESET_FEATURE_LANES[track_type]
-    numeric = {
+    rows = {
+        "features": f"features:features@lane_direction={lane}",
+        "ticks": "ticks:ticks@side=inside,tick_label_layout=label_in_tick_out",
         "gc_content": "gc_content:dinucleotide_content@side=inside",
         "gc_skew": "gc_skew:dinucleotide_skew@side=inside",
     }
     return [
-        f"features:features@lane_direction={lane}",
-        "ticks:ticks@side=inside,tick_label_layout=label_in_tick_out",
-        *(f"{spec},r={radius[slot_id]}" if slot_id in radius else spec for slot_id, spec in numeric.items()),
+        f"{spec},r={radius[slot_id]}" if slot_id in radius else spec for slot_id, spec in rows.items()
     ], axis_index
 
 
-def _web_preset_layout(monkeypatch: pytest.MonkeyPatch, track_type: str, **radius: str):
+def _web_preset_layout(
+    monkeypatch: pytest.MonkeyPatch,
+    track_type: str,
+    input_filename: str = "HmmtDNA.gbk",
+    **radius: str,
+):
     slots, axis_index = _web_preset_stack(track_type, **radius)
     layout = _capture_circular_radial_layout(
         monkeypatch,
         track_type=track_type,
         circular_track_slots=slots,
         circular_track_axis_index=axis_index,
+        input_filename=input_filename,
     )
     monkeypatch.undo()
     return layout
@@ -2563,17 +2569,22 @@ def _slot_geometry(layout) -> dict[str, tuple[float, ...]]:
     }
 
 
+@pytest.mark.parametrize("input_filename", ["HmmtDNA.gbk", "MG1655.gbk"])
 @pytest.mark.parametrize("track_type", ["tuckin", "middle", "spreadout"])
-@pytest.mark.parametrize("slot_id", ["gc_content", "gc_skew"])
-def test_numeric_row_pinned_at_its_auto_radius_keeps_the_auto_layout(
+@pytest.mark.parametrize("slot_id", ["features", "ticks", "gc_content", "gc_skew"])
+def test_row_pinned_at_its_auto_radius_keeps_the_auto_layout(
     monkeypatch: pytest.MonkeyPatch,
+    input_filename: str,
     track_type: str,
     slot_id: str,
 ) -> None:
-    auto = _web_preset_layout(monkeypatch, track_type)
+    # GX-17: typing a row's Auto radius back gives the Auto layout, also where
+    # Auto compressed the numeric rows (MG1655 Tuckin): a pinned row with an
+    # Auto width compresses like Auto.
+    auto = _web_preset_layout(monkeypatch, track_type, input_filename)
     auto_radius = next(slot for slot in auto.slots if slot.id == slot_id).anchor_radius_px
 
-    pinned = _web_preset_layout(monkeypatch, track_type, **{slot_id: f"{auto_radius!r}px"})
+    pinned = _web_preset_layout(monkeypatch, track_type, input_filename, **{slot_id: f"{auto_radius!r}px"})
 
     observed = _slot_geometry(pinned)
     expected = _slot_geometry(auto)

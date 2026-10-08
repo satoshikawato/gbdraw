@@ -66,10 +66,12 @@ parameters. In the Web app, Width and Radius use numeric fields with px/×R
 selectors; R is the base circle radius. A unit change preserves the number,
 and blank means Auto. A slot with a radius is drawn at that radius, and the
 other rows on its side keep the stack order around it: rows before it are
-placed farther from the center, rows after it closer. Two adjacent rows on one
-side keep the larger of their facing gaps, the inner row's outer gap
-(`outer_gap_px`) or the outer row's inner gap (`inner_gap_px`), also next to a
-row with a radius. See [Circular track Width and Radius](web-app.md#circular-track-width-and-radius)
+placed farther from the center, rows after it closer. When the inside rows do
+not fit, numeric rows with an Auto width are compressed together as in an Auto
+stack, a row with a radius included (centred on it); an explicit width is kept. Two adjacent
+rows on one side keep the larger of their facing gaps, the inner row's outer
+gap (`outer_gap_px`) or the outer row's inner gap (`inner_gap_px`); a gap that
+is not set may shrink with compressed rows, to no less than 1 px. See [Circular track Width and Radius](web-app.md#circular-track-width-and-radius)
 for input, History, Session and Generate behavior. Linear slots use order,
 side or overlay ownership, reserved height,
 spacing, and an axis boundary. A feature slot's reserved band and the feature
