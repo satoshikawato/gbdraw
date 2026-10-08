@@ -30,15 +30,6 @@ MANUALLY_MANAGED_FIGURES: dict[str, str] = {
         "Browser screenshot; recapture with the Gallery tutorial screenshot tool from the "
         "Lambda session and its declarative No comparison capture contract."
     ),
-    "docs/TUTORIALS/images/tutorial-8-interactive-feature-popup.png": (
-        "Browser screenshot; recapture after loading the tutorial session and opening a feature popup."
-    ),
-    "docs/TUTORIALS/images/tutorial-8-interactive-match-popup.png": (
-        "Browser screenshot; recapture after loading the tutorial session and opening a match popup."
-    ),
-    "docs/TUTORIALS/images/tutorial-8-loaded-session.png": (
-        "Browser screenshot; recapture from the local web app after loading the documented session."
-    ),
     "gbdraw/web/assets/gbdraw-logo-title.png": (
         "Brand asset derived from the adjacent SVG; update and verify both logo files together."
     ),
