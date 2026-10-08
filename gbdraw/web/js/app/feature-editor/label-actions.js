@@ -90,6 +90,11 @@ export const requireUniqueEditableLabelBindings = (
   }, /** @type {{ stage?: string, operation?: string }} */ ({ stage: 'render', operation: 'generate' }));
 };
 
+// Whether a label is drawn only when it fits inside its feature, which only
+// Python measures: a label edit then asks for the label rerender.
+/** @param {Record<string, any> | null | undefined} diagramOptions */
+const labelsEmbeddedOnly = (diagramOptions) => diagramOptions?.configOverrides?.['labels.rendering'] === 'embedded_only';
+
 // A feature drawn as underlay has no label (gbdraw/features/factory.py), and
 // with Label Rendering = Embedded Only no label is drawn that does not fit
 // inside its feature (gbdraw/labels/). Returns 'underlay', 'embedded_only', or
@@ -100,7 +105,7 @@ export const labelDrawingBlocker = (feature, diagramOptions) => {
   if (featureType && (
     diagramOptions?.featureShapes?.[featureType] || defaultFeatureRendering(featureType)
   ) === 'underlay') return 'underlay';
-  return diagramOptions?.configOverrides?.['labels.rendering'] === 'embedded_only' ? 'embedded_only' : '';
+  return labelsEmbeddedOnly(diagramOptions) ? 'embedded_only' : '';
 };
 // Why the diagram draws no label for a feature (`labelAbsenceReason`): the one
 // table of sentences the popup note and the Label Not Shown dialog both render.
@@ -829,10 +834,18 @@ export const createFeatureLabelActions = ({
     return { changed, rerender: visibilityProjection.unavailableOverride };
   };
 
+  // The labels of a Result no popup has bound yet are bound first, as the
+  // binder's label step binds them (OV-237). OV-200: with Embedded Only, a
+  // label the projection changed is placed by the label rerender, which draws
+  // it only when it fits, as Generate does.
   const reconcileLabelOverrides = () => {
     const drawing = state.activeDrawing();
     const svg = svgContainer.value?.querySelector?.('svg');
-    return svg ? projectLabelIntent(drawing, svg).changed : false;
+    if (!svg) return false;
+    const changed = Boolean((svg.querySelector(EDITABLE_LABEL_SELECTOR)
+      ? projectLabelIntent(drawing, svg) : syncLabelEditor())?.changed);
+    if (changed && labelsEmbeddedOnly(getCommittedRequest()?.diagramOptions)) queueLabelReflow(true);
+    return changed;
   };
 
   // A feature visibility edit shows or hides the feature's label in the same
@@ -1015,7 +1028,7 @@ export const createFeatureLabelActions = ({
     }
 
     if (textChanged) {
-      queueLabelReflow();
+      queueLabelReflow(labelsEmbeddedOnly(getCommittedRequest()?.diagramOptions));
     }
   };
 

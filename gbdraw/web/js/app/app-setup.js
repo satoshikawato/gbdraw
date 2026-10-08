@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
 /** @import { RulePreparation } from './rule-matching.js' */
+/** @import { EditorPaintState } from './result-paint-record.js' */
 /** @import { FeatureEditorOptions } from './feature-editor.js' */
 /** @import { ColorActionsRuleActions } from './feature-editor/color-actions.js' */
 /** @import { UserFacingError } from '../utils/error-normalization.js' */
@@ -11,7 +12,8 @@
 /** @import { LinearComparisonPlan } from '../services/linear-comparisons.js' */
 /** @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots */
 import { createRulePreparation } from './rule-matching.js';
-import { compileDirectEditorMutationPlan } from './candidate-render.js';
+import { compileDirectEditorMutationPlan, editorPaintDomains, LIVE_EDIT_DOMAINS } from './candidate-render.js';
+import { createResultPaintRecord } from './result-paint-record.js';
 import {
   countUnresolvedFeatureEdits, featureDrawnContext, removeUnresolvedFeatureEdits, requestFeatureVisibilityRules
 } from '../services/feature-visibility.js';
@@ -3296,16 +3298,13 @@ export const createAppSetup = () => {
   });
 
   // Each Result's bytes reflect the editor state it was committed or last
-  // shown with. A displayed Result receives a domain only when that state
-  // changed since, so a Result without new edits gets no projection work and
-  // an Undo reaches a Result that is displayed again.
-  const projectedEditorStateByResult = new Map();
-  let lastBoundResultIdentity = '';
+  // shown with (`createResultPaintRecord`).
+  const resultPaintRecord = createResultPaintRecord();
   // A displayed Result whose label intent changed since it was last shown
   // receives the label projection in the binder's label step, also when no
   // label intent remains (an undone or replaced Label TSV import).
   let labelProjectionResultIdentity = '';
-  /** @param {DrawingState} drawing */
+  /** @param {DrawingState} drawing @returns {EditorPaintState} */
   const currentEditorProjectionState = (drawing) => ({
     colors: [
       toRaw(appliedPaletteColors.value),
@@ -3330,24 +3329,17 @@ export const createAppSetup = () => {
   const sameColors = (left, right) => left[0] === right[0] && left[1] === right[1];
   /** @param {DrawingState} drawing */
   const rememberCommittedEditorState = (drawing, context) => {
-    const current = currentEditorProjectionState(drawing);
-    const identities = new Set(liveResultIdentities().filter(Boolean));
-    // Before Session 40 (no feature catalog) strokes reached a Result only
-    // when it was mounted, so a batch Result may be saved without them: each
-    // one not shown now receives them when it is displayed.
-    const strokesUnknown = !state.featureCatalog.value;
-    identities.forEach((identity) => {
-      if (projectedEditorStateByResult.has(identity)) return;
-      projectedEditorStateByResult.set(identity, strokesUnknown && identity !== context.resultIdentity
-        ? { ...current, strokes: '' } : current);
-    });
-    [...projectedEditorStateByResult.keys()].forEach((identity) => {
-      if (!identities.has(identity)) projectedEditorStateByResult.delete(identity);
+    const identities = liveResultIdentities();
+    // A loaded Session and a History restore keep each Result's bytes as
+    // they were saved or kept, a batch Result not displayed since the last
+    // edits without them (also a Session older than 40, whose strokes
+    // reached only the mounted Result).
+    resultPaintRecord.commit(identities, context.resultIdentity, currentEditorProjectionState(drawing), {
+      restored: context.phase === 'session-load' || Boolean(context.bindingOptions.trustedRestore)
     });
     [...departedResultIntent.keys()].forEach((identity) => {
-      if (!identities.has(identity)) departedResultIntent.delete(identity);
+      if (!identities.includes(identity)) departedResultIntent.delete(identity);
     });
-    lastBoundResultIdentity = context.resultIdentity;
   };
   // E1: the Result shown until a mode switch followed every live edit. When
   // it is shown again with the same editor intent, nothing is projected and
@@ -3367,11 +3359,8 @@ export const createAppSetup = () => {
   ]);
   /** @param {DrawingState} drawing */
   const rememberDepartingResultProjection = (drawing) => {
-    if (lastBoundResultIdentity && projectedEditorStateByResult.has(lastBoundResultIdentity)) {
-      projectedEditorStateByResult.set(lastBoundResultIdentity, currentEditorProjectionState(drawing));
-      departedResultIntent.set(lastBoundResultIdentity, displayedIntentSignature(drawing));
-    }
-    lastBoundResultIdentity = '';
+    const departed = resultPaintRecord.depart(currentEditorProjectionState(drawing));
+    if (departed) departedResultIntent.set(departed, displayedIntentSignature(drawing));
   };
   /**
    * @param {DrawingState} drawing
@@ -3440,26 +3429,10 @@ export const createAppSetup = () => {
     }
     return previewRuntime.applyEditorOperations(shown, { domains, afterApply });
   };
-  // The paint domains each edit kind shows, live and on Undo and Redo: a
-  // Legend row stroke also strokes the row's features; the palette and the
-  // rules fill features and Legend rows.
-  const STROKE_DOMAINS = Object.freeze(['featureStrokes', 'legendStrokes']);
-  const LEGEND_FILL_DOMAINS = Object.freeze(['legendFills']);
-  const FILL_DOMAINS = Object.freeze(['featureFills', 'legendFills']);
-  const VISIBILITY_DOMAINS = Object.freeze(['featureVisibility']);
-  /** @type {ReadonlyArray<[string[], readonly string[]]>} */
-  const EDITOR_PAINT_PATHS = Object.freeze([
-    [['editorState', 'featureStrokes'], STROKE_DOMAINS],
-    [['editorState', 'legend', 'strokeOverrides'], STROKE_DOMAINS],
-    [['editorState', 'legend', 'colorOverrides'], LEGEND_FILL_DOMAINS]
-  ]);
-  /** @param {unknown} changes A History step's change list. @returns {string[]} */
-  const editorPaintDomains = (changes) => [...new Set((Array.isArray(changes) ? changes : []).flatMap(({ path } = {}) => (
-    Array.isArray(path)
-      ? EDITOR_PAINT_PATHS.filter(([paintPath]) => paintPath.every((key, index) => index >= path.length || path[index] === key))
-        .flatMap(([, domains]) => domains)
-      : []
-  )))];
+  // The paint domains each edit kind shows, live and on Undo and Redo.
+  const {
+    strokes: STROKE_DOMAINS, legendFills: LEGEND_FILL_DOMAINS, fills: FILL_DOMAINS, visibility: VISIBILITY_DOMAINS
+  } = LIVE_EDIT_DOMAINS;
   /**
    * The one transition of a live edit of the paint intent (design §5.8): the
    * action writes the active drawing's intent and returns true when it
@@ -3479,7 +3452,7 @@ export const createAppSetup = () => {
   // A displayed Result shows the Legend structure edits and the paint domains
   // whose intent changed since it was last shown; each paint domain it shows
   // returns to Python's values where no operation sets it (OV-144).
-  const LEGEND_STRUCTURE_DOMAINS = Object.freeze(['legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder']);
+  const LEGEND_STRUCTURE_DOMAINS = LIVE_EDIT_DOMAINS.legendStructure;
   // D-07 (PD-OI-062): a batch Result shows the canonical color, visibility,
   // Legend, and label edits when it is displayed. Labels follow in the
   // binder's label step.
@@ -3494,7 +3467,7 @@ export const createAppSetup = () => {
     const departedIntent = departedResultIntent.get(identity);
     departedResultIntent.delete(identity);
     if (departedIntent !== undefined && departedIntent === displayedIntentSignature(drawing)) {
-      lastBoundResultIdentity = identity;
+      resultPaintRecord.rebind(identity);
       labelProjectionResultIdentity = '';
       recordStructuralMetric('displayedResultEditorProjectionCount', 0, {
         phase: context.phase,
@@ -3502,13 +3475,7 @@ export const createAppSetup = () => {
       });
       return;
     }
-    // The Result shown until now followed every live edit.
-    if (lastBoundResultIdentity && lastBoundResultIdentity !== identity
-      && projectedEditorStateByResult.has(lastBoundResultIdentity)) {
-      projectedEditorStateByResult.set(lastBoundResultIdentity, current);
-    }
-    lastBoundResultIdentity = identity;
-    const previous = projectedEditorStateByResult.get(identity) || current;
+    const previous = resultPaintRecord.display(identity, current);
     const colors = !sameColors(previous.colors, current.colors);
     const visibility = previous.visibility !== current.visibility;
     const strokes = previous.strokes !== current.strokes;
@@ -3521,11 +3488,15 @@ export const createAppSetup = () => {
     let operations = null;
     /** @type {string[]} */
     let domains = [...LEGEND_STRUCTURE_DOMAINS];
+    // The palette and rules declined (rules changed meanwhile, or a Session
+    // operation): the Result keeps the fills and visibility it shows.
+    let declined = false;
     try {
       // The palette, rules, and visibility prepare their matches when their
       // intent changed (`colors`, `visibility`); then one compile of the
       // domains the Result shows.
       const prepared = await projectMountedEditorIntent({ colors, visibility, show: false });
+      declined = prepared === false;
       domains = [...domains, ...(prepared || []), ...(strokes ? STROKE_DOMAINS : [])];
       operations = compileDisplayedResultOperations(drawing, context.resultIndex, { replayDefaultLegendOrder, domains });
     } catch (error) {
@@ -3551,7 +3522,7 @@ export const createAppSetup = () => {
         operations,
         afterApply: () => { if (legendChanged) legendActions.onLegendGeometryChanged(); }
       });
-      projectedEditorStateByResult.set(identity, current);
+      resultPaintRecord.shown(identity, current, previous, { declined });
     } catch (error) {
       console.error('Editor edits could not be shown on the displayed Result.', normalizeUserFacingError(error));
     }

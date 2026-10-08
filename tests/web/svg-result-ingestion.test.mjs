@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { gunzipSync } from 'node:zlib';
 
-import { compileDirectEditorMutationPlan } from '../../gbdraw/web/js/app/candidate-render.js';
+import { compileDirectEditorMutationPlan, editorPaintDomains, LIVE_EDIT_DOMAINS } from '../../gbdraw/web/js/app/candidate-render.js';
 import {
   requireUniqueEditableLabelBindings
 } from '../../gbdraw/web/js/app/feature-editor/label-actions.js';
@@ -1209,20 +1209,23 @@ test('a Legend fill reconcile shows the rule or palette color of a row whose own
 // Review U2b #1: a live rename rewrites the shown row's key, so a palette or
 // rule reconcile finds the row under its new key and keeps its Legend color or
 // shows the new palette color, as Generate draws the renamed row.
-test('a Legend fill reconcile reaches a row renamed live', () => {
+const RENAMED_ROW = { legendEntries: [{ caption: 'Proteins', originalCaption: 'CDS', color: '#aaaaaa' }] };
+test('a palette reconcile keeps the Legend color of a row renamed live', () => {
   const { admission } = currentFixture();
-  const renamed = { legendEntries: [{ caption: 'Proteins', originalCaption: 'CDS', color: '#aaaaaa' }] };
   const mounted = buildSvgRoot();
   reconcileMountedResult(mounted, previewPlan(admission, { legendColorOverrides: { CDS: '#ff0000' } }), { domains: ['legendFills'] });
   mounted.querySelector('g[data-legend-key]').setAttribute('data-legend-key', 'Proteins');
   reconcileMountedResult(mounted, previewPlan(admission, {
-    ...renamed, legendColorOverrides: { Proteins: '#ff0000' }, paletteColors: { CDS: '#00ff00' }
+    ...RENAMED_ROW, legendColorOverrides: { Proteins: '#ff0000' }, paletteColors: { CDS: '#00ff00' }
   }), { domains: ['featureFills', 'legendFills'] });
   assert.equal(swatchFill(mounted), '#ff0000', 'the renamed row keeps its Legend color');
+});
+test('a palette reconcile shows the current palette color on a row renamed live', () => {
+  const { admission } = currentFixture();
   const palette = buildSvgRoot();
   reconcileMountedResult(palette, previewPlan(admission, { paletteColors: { CDS: '#00ff00' } }), { domains: ['legendFills'] });
   palette.querySelector('g[data-legend-key]').setAttribute('data-legend-key', 'Proteins');
-  reconcileMountedResult(palette, previewPlan(admission, { ...renamed, paletteColors: { CDS: '#0000ff' } }), { domains: ['legendFills'] });
+  reconcileMountedResult(palette, previewPlan(admission, { ...RENAMED_ROW, paletteColors: { CDS: '#0000ff' } }), { domains: ['legendFills'] });
   assert.equal(swatchFill(palette), '#0000ff', 'the renamed row shows the current palette color');
 });
 
@@ -1241,20 +1244,23 @@ test('a feature fill reconcile keeps the shown palette paint while a rule match 
 
 // The work guard (allowlist): each edit kind compiles exactly the stages its
 // shown domains need, read through the compile's structural metric. Any stage
-// not listed fails, and a stroke edit reads no specific-color rule match.
-// Domains as app/app-setup.js names them for each edit kind.
-const STROKES = ['featureStrokes', 'legendStrokes'];
-const FILLS = ['featureFills', 'legendFills'];
-const LEGEND_STRUCTURE = ['legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder'];
+// not listed fails, and a stroke edit reads no specific-color rule match. The
+// domains are the ones app/app-setup.js shows for each edit kind
+// (`LIVE_EDIT_DOMAINS`, and `editorPaintDomains` for a History step's changes).
+const { strokes: STROKES, fills: FILLS, legendFills: LEGEND_FILLS, visibility: VISIBILITY, legendStructure: LEGEND_STRUCTURE } = LIVE_EDIT_DOMAINS;
 const EDIT_KIND_STAGES = [
   ['feature stroke (popup)', STROKES, ['strokes']],
   ['Legend row stroke', STROKES, ['strokes']],
-  ['Legend row color (no rule)', ['legendFills'], ['legendFills']],
+  ['Legend row color (no rule)', LEGEND_FILLS, ['legendFills']],
   ['palette change', FILLS, ['fills', 'rules', 'legendFills']],
   ['color rule commit', FILLS, ['fills', 'rules', 'legendFills']],
-  ['Feature visibility edit', ['featureVisibility'], ['visibility']],
-  ['History step of a Legend row stroke and color', [...FILLS, ...STROKES], ['fills', 'rules', 'legendFills', 'strokes']],
-  ['Result display, every paint domain changed', [...LEGEND_STRUCTURE, ...FILLS, 'featureVisibility', ...STROKES],
+  ['Feature visibility edit', VISIBILITY, ['visibility']],
+  ['History step of a Legend row stroke and color', editorPaintDomains([
+    { path: ['editorState', 'legend', 'strokeOverrides', 'Proteins'] },
+    { path: ['editorState', 'legend', 'colorOverrides'] }
+  ]), ['legendFills', 'strokes']],
+  ['History step of a feature stroke', editorPaintDomains([{ path: ['editorState', 'featureStrokes'] }]), ['strokes']],
+  ['Result display, every paint domain changed', [...LEGEND_STRUCTURE, ...FILLS, ...VISIBILITY, ...STROKES],
     ['legend', 'fills', 'rules', 'legendFills', 'visibility', 'strokes']],
   ['Result display, nothing changed', LEGEND_STRUCTURE, ['legend']],
   ['Generate', null, ['fills', 'visibility', 'labels', 'legend', 'legendFills', 'strokes']]

@@ -10,6 +10,7 @@ import {
   normalizeFeatureVisibilityRule,
   normalizeVisibilityMode,
   removeEditorQualifierFeatureVisibilityRule,
+  requestFeatureVisibilityRules,
   resolveFeatureDrawn,
   resultLegendSources,
   sameLegendSources,
@@ -430,14 +431,17 @@ export const createFeatureVisibilityActions = ({
   // rules and the labels of the features they hide or show, as the label
   // rerender and Generate draw them; a rule that draws a feature the Result
   // does not draw asks for the rerender (R-5). The draft keeps a rule that
-  // Generate rejects.
+  // Generate rejects. An edit that leaves the rules Generate reads as they
+  // were (a rule added, or a field set before its value) projects nothing.
   /** @param {DrawingState} drawing */
   const editFeatureVisibilityRules = async (drawing, edit) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const rules = [...drawing.featureVisibilityManualRules];
     if (edit(rules) === false) return false;
+    const requested = JSON.stringify(requestFeatureVisibilityRules(drawing.featureVisibilityManualRules));
     drawing.featureVisibilityManualRules.splice(0, drawing.featureVisibilityManualRules.length, ...rules);
+    if (JSON.stringify(requestFeatureVisibilityRules(rules)) === requested) return true;
     const projection = await runProjection(drawing);
     if (projection?.updated || projection?.needsRerender) followLabels({ rerender: projection.needsRerender });
     return true;

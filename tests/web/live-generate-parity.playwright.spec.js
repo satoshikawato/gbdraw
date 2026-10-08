@@ -82,6 +82,15 @@ const renameLegendRow = async (page, caption, name) => {
   await settleLive(page);
 };
 
+// A row deleted in the Legend editor, settled.
+const deleteLegendRow = async (page, caption) => {
+  await evaluateWithRetainedPromise(page, async (row) => {
+    const app = window.__GBDRAW_APP__;
+    await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === row));
+  }, caption);
+  await settleLive(page);
+};
+
 // The edit kinds. Each appears at least once in the matrix.
 const KINDS = [
   'visibility rule add', 'visibility rule action', 'visibility rule delete', 'feature Off', 'feature On',
@@ -519,6 +528,30 @@ const CASES = [
     setup: (page) => legendRowAdd(page, 'Manual row', '#118833'),
     run: (page) => switchPalette(page, 'alpine_retreat')
   },
+  // Review U2BFIX #5: a Legend row delete (a writer not yet migrated to the
+  // edit port) with a palette change, a Legend row stroke, and a Legend row
+  // color shown through the port.
+  {
+    kind: 'palette',
+    edit: 'Palette change after a Legend row delete',
+    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'unbound' },
+    setup: (page) => deleteLegendRow(page, 'tRNA'),
+    run: (page) => switchPalette(page, 'alpine_retreat')
+  },
+  {
+    kind: 'legend stroke',
+    edit: 'Legend row stroke after a Legend row delete',
+    states: { mode: 'linear', results: 'single', reflow: 'off', labels: 'unbound' },
+    setup: (page) => deleteLegendRow(page, 'repeat_region'),
+    run: (page) => legendRowStroke(page, 'CDS', '#e63946', 3)
+  },
+  {
+    kind: 'legend color',
+    edit: 'Legend row color after a Legend row delete',
+    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'bound' },
+    setup: (page) => deleteLegendRow(page, 'repeat_region'),
+    run: (page) => legendRowColor(page, 'CDS', '#f4a261')
+  },
   {
     kind: 'color rule add',
     edit: 'Specific color rule add after a Legend row rename with a Legend color',
@@ -667,10 +700,6 @@ const legendList = (page) => page.evaluate(() => {
   const app = window.__GBDRAW_APP__;
   return app.legendEntries.map((entry) => ({ caption: entry.caption, color: app.legendEntryColor(entry) }));
 });
-const deleteLegendRow = (page, caption) => evaluateWithRetainedPromise(page, async (row) => {
-  const app = window.__GBDRAW_APP__;
-  await app.deleteLegendEntry(app.legendEntries.findIndex((entry) => entry.caption === row));
-}, caption).then(() => settleLive(page));
 const RESET_CASES = [
   {
     domain: 'a Legend row stroke (OV-287)',
@@ -803,6 +832,37 @@ test('a stroke removed after Load leaves a batch Result that showed it (circular
   await showResult(loaded, 1);
   await expectLiveEqualsGenerate(loaded, { label: 'a stroke removed after Load' });
   await loaded.context().close();
+});
+
+// U2BFIX review #1: Save keeps each batch Result's bytes as stored, so a Result
+// not displayed since the paint edits is saved without them. Its first
+// display after Load shows every paint domain, as Generate draws it.
+test('a batch Result saved before it showed the paint edits shows them after Load (circular, two-Result batch)', async ({ page, browser }, testInfo) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await legendRowStroke(page, 'CDS', '#e63946', 3);
+  await popupEdit(page, 'TESTA_0001', { stroke: '#2a9d8f' });
+  await legendRowColor(page, 'tRNA', '#7b2cbf');
+  const saved = testInfo.outputPath('stale-batch.gbdraw-session.json');
+  await download(page, 'Save Session', saved);
+  const loaded = await load(browser, saved);
+  if (await loaded.evaluate(() => window.__GBDRAW_APP__.selectedResultIndex) !== 0) await showResult(loaded, 0);
+  await showResult(loaded, 1);
+  await expectLiveEqualsGenerate(loaded, { label: 'a batch Result saved without the paint edits, after Load' });
+  await loaded.context().close();
+});
+
+// The same for an Undo of Generate, which restores the Results generated
+// before it with their bytes as they were kept.
+test('a batch Result kept without the paint edits shows them after an Undo of Generate (circular, two-Result batch)', async ({ page }) => {
+  test.setTimeout(240_000);
+  await open(page, { mode: 'circular', results: 'batch', reflow: 'off' });
+  await legendRowColor(page, 'tRNA', '#7b2cbf');
+  await legendRowStroke(page, 'CDS', '#e63946', 3);
+  await generate(page);
+  await history(page, 'undo');
+  await showResult(page, 1);
+  await expectLiveEqualsGenerate(page, { label: 'a batch Result kept without the paint edits, after an Undo of Generate' });
 });
 
 // OV-129, OV-150: a stroke reset or Undo returns each feature part and Legend
@@ -970,7 +1030,22 @@ const WORK_ALLOWLIST = [
     kind: 'Result display after a palette change and a stroke', stages: ['legend', 'fills', 'rules', 'legendFills', 'strokes'],
     compiles: 1, requests: [], run: (page) => showResult(page, 1)
   },
-  { kind: 'Feature visibility rule add', stages: ['visibility'], requests: ['evaluateRules', 'render'], run: (page) => addVisibilityRule(page, BATCH_0004_OFF) }
+  {
+    // One compile for the field set that changes the rules Generate reads (the
+    // value); the other steps of the add leave them as they were.
+    kind: 'Feature visibility rule add', stages: ['visibility'], compiles: 1, requests: ['evaluateRules', 'render'],
+    run: (page) => addVisibilityRule(page, BATCH_0004_OFF)
+  },
+  {
+    // A rule commit changes a Legend source, so the automatic rerender draws
+    // the Result again (OV-43); its compile is Generate's plan.
+    kind: 'color rule commit', stages: ['fills', 'rules', 'legendFills'], compiles: 1, requests: ['evaluateRules', 'render'],
+    run: (page) => addColorRule(page, { feat: 'CDS', qual: 'locus_tag', val: '_0002$', color: '#2266aa', cap: 'CDS' })
+  },
+  {
+    kind: 'Result display, nothing changed', stages: ['legend'], compiles: 1, requests: [],
+    before: (page) => showResult(page, 0), run: (page) => showResult(page, 1)
+  }
 ];
 
 test('each edit kind runs only the compile stages and worker requests of its allowlist', async ({ page }) => {
@@ -1006,4 +1081,44 @@ test('each edit kind runs only the compile stages and worker requests of its all
     expect(sent.filter((request) => !requests.includes(request)), `${kind}: worker requests outside the allowlist`).toEqual([]);
   }
   console.log(JSON.stringify(observed));
+});
+
+// OV-200 (PD-OI-066): with Label Rendering = Embedded Only, Python draws no
+// label that does not fit inside its feature. A Feature Edits TSV that turns
+// such a label On, with Auto Reflow off, shows what Generate draws: no label.
+// OV-237: a TSV label text reaches labels no popup has bound yet.
+const LONG_LABEL = 'A_LABEL_TEXT_FAR_TOO_LONG_TO_FIT_INSIDE_ITS_FEATURE_'.repeat(4);
+const TSV_LABEL_CASES = [
+  { mode: 'circular', rendering: 'embedded_only', visibility: 'on', text: LONG_LABEL, name: 'Label visibility On for a label that does not fit, Embedded Only' },
+  { mode: 'linear', rendering: 'embedded_only', visibility: 'on', text: LONG_LABEL, name: 'Label visibility On for a label that does not fit, Embedded Only' },
+  { mode: 'circular', rendering: null, visibility: '', text: 'alpha edited', name: 'a label text' }
+];
+for (const { mode, rendering, visibility, text: labelText, name } of TSV_LABEL_CASES) {
+  test(`Load Feature Edits TSV with ${name} (${mode}, one Result, labels unbound)`, async ({ page }) => {
+    test.setTimeout(180_000);
+    await open(page, { mode, results: 'single', reflow: 'off' });
+    if (rendering) {
+      await page.evaluate((value) => { window.__GBDRAW_APP__.adv.label_rendering = value; }, rendering);
+      await generate(page);
+    }
+    const id = await page.evaluate(() => window.__GBDRAW_APP__.extractedFeatures.find((item) => item.locus_tag === 'FL1').svg_id);
+    await evaluateWithRetainedPromise(page, async (row) => {
+      const text = `record\tfeature_selector\tfeature_visibility\tlabel_visibility\tlabel_text\n${row}\n`;
+      const files = [new File([text], 'edits.tsv', { type: 'text/plain' })];
+      await window.__GBDRAW_APP__.loadFeatureEditTable({ target: { files, value: '' } });
+    }, `#1\thash=${id}\t\t${visibility}\t${labelText}`);
+    await settleLive(page);
+    expect(await page.evaluate(() => Object.values(window.__GBDRAW_APP__.featureOverrides).some((row) => row.labelText)),
+      'the table applied the row').toBe(true);
+    await expectLiveEqualsGenerate(page, { label: `Feature Edits TSV, ${name} (${mode})` });
+  });
+}
+// The same for a popup label text that no longer fits (Label visibility Default).
+test('Popup label text that does not fit, Embedded Only (circular, one Result)', async ({ page }) => {
+  test.setTimeout(180_000);
+  await open(page, { mode: 'circular', results: 'single', reflow: 'off' });
+  await page.evaluate(() => { window.__GBDRAW_APP__.adv.label_rendering = 'embedded_only'; });
+  await generate(page);
+  await popupEdit(page, 'FL1', { labelText: LONG_LABEL });
+  await expectLiveEqualsGenerate(page, { label: 'popup label text that does not fit' });
 });

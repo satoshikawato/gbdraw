@@ -182,14 +182,40 @@ const paletteFeatureColor = (palette, type) => {
 // runs every stage but `rules`; a live display runs the stages of the domains
 // it shows. `rules` matches the specific-color rules for the live feature fills.
 const COMPILE_STAGES = Object.freeze({
-  fills: ['featureFills'],
-  rules: ['featureFills'],
-  visibility: ['featureVisibility'],
-  labels: ['labelText', 'labelVisibility'],
-  legend: ['legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder'],
-  legendFills: ['legendFills'],
-  strokes: ['featureStrokes', 'legendStrokes']
+  fills: Object.freeze(['featureFills']),
+  rules: Object.freeze(['featureFills']),
+  visibility: Object.freeze(['featureVisibility']),
+  labels: Object.freeze(['labelText', 'labelVisibility']),
+  legend: Object.freeze(['legendRenames', 'legendDeletes', 'legendAdds', 'legendOrder']),
+  legendFills: Object.freeze(['legendFills']),
+  strokes: Object.freeze(['featureStrokes', 'legendStrokes'])
 });
+
+// The operation domains each kind of live edit shows on the displayed Result
+// (app-setup): a Legend row stroke also strokes the row's features; the
+// palette and the rules fill features and Legend rows; a Result display shows
+// the Legend structure and the paint domains whose intent changed.
+export const LIVE_EDIT_DOMAINS = Object.freeze({
+  strokes: COMPILE_STAGES.strokes,
+  legendFills: COMPILE_STAGES.legendFills,
+  fills: Object.freeze(['featureFills', 'legendFills']),
+  visibility: COMPILE_STAGES.visibility,
+  legendStructure: COMPILE_STAGES.legend
+});
+/** @type {ReadonlyArray<[string[], readonly string[]]>} */
+const EDITOR_PAINT_PATHS = Object.freeze([
+  [['editorState', 'featureStrokes'], LIVE_EDIT_DOMAINS.strokes],
+  [['editorState', 'legend', 'strokeOverrides'], LIVE_EDIT_DOMAINS.strokes],
+  [['editorState', 'legend', 'colorOverrides'], LIVE_EDIT_DOMAINS.legendFills]
+]);
+// The paint domains an Undo or Redo shows, by the paths of the step's changes.
+/** @param {unknown} changes A History step's change list. @returns {string[]} */
+export const editorPaintDomains = (changes) => [...new Set((Array.isArray(changes) ? changes : []).flatMap(({ path } = {}) => (
+  Array.isArray(path)
+    ? EDITOR_PAINT_PATHS.filter(([paintPath]) => paintPath.every((key, index) => index >= path.length || path[index] === key))
+      .flatMap(([, domains]) => domains)
+    : []
+)))];
 
 const resolvedStableTargets = (catalogAdmission, key) => (
   catalogAdmission.renderedTargetsByOverrideKey.get(key) || []
