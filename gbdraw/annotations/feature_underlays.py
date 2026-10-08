@@ -163,13 +163,17 @@ def feature_underlay_anchor_slot_id(slots: Sequence[object]) -> str:
         if bool(getattr(slot, "enabled", True))
         and str(getattr(slot, "renderer", "")).strip().lower() == "features"
     ]
+    # The record has features drawn as underlays, so the plan needs one
+    # Features row to draw them on (the Web relies on this check, TK-13).
     if not feature_slots:
         raise ValidationError(
-            "Visible feature underlays require an enabled features track slot."
+            "Visible feature underlays require an enabled features track slot.",
+            diagnostic={"code": "TRACK_INVALID", "reason": "FEATURES_COUNT"},
         )
     if len(feature_slots) != 1:
         raise ValidationError(
-            "Visible feature underlays require exactly one enabled features track slot."
+            "Visible feature underlays require exactly one enabled features track slot.",
+            diagnostic={"code": "TRACK_INVALID", "reason": "FEATURES_COUNT"},
         )
     return str(getattr(feature_slots[0], "id"))
 

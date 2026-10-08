@@ -635,10 +635,29 @@ export const createFeatureLabelActions = ({
     return { available: true, changed };
   };
 
+  // The Label visibility On and Off each mounted Result was drawn with, by
+  // feature identity key: the intent of the Result's first projection. Only
+  // Python decides whether Default draws a label, so a feature whose On or Off
+  // returns to Default asks for the rerender, as a missing On label does
+  // (UJ-01, R3).
+  /** @type {WeakMap<Element, Map<string, string>>} */
+  const drawnLabelVisibility = new WeakMap();
   /** @param {DrawingState} drawing */
+  const labelVisibilityIntent = (drawing) => new Map(Object.entries(drawing.featureOverrides)
+    .map(([key, row]) => /** @type {[string, string]} */ ([key, normalizeVisibilityMode(row?.labelVisibility)]))
+    .filter(([, visibility]) => visibility !== 'default'));
+  /** @param {DrawingState} drawing @param {Element} svg */
+  const labelVisibilityReturnsToDefault = (drawing, svg) => {
+    const intent = labelVisibilityIntent(drawing);
+    const drawn = drawnLabelVisibility.get(svg);
+    if (!drawn) drawnLabelVisibility.set(svg, intent);
+    return Array.from(drawn?.keys() || []).some((key) => !intent.has(key));
+  };
+
+  /** @param {DrawingState} drawing @param {Element} svg */
   const applyStoredVisibilityOverridesToSvg = (drawing, svg) => {
     let changed = false;
-    let unavailableOverride = false;
+    let unavailableOverride = labelVisibilityReturnsToDefault(drawing, svg);
     const displayed = displayedFeatures();
     const context = drawnContext(drawing);
     svg.querySelectorAll(VISIBILITY_LABEL_SELECTOR).forEach((textEl) => {
@@ -728,6 +747,7 @@ export const createFeatureLabelActions = ({
    *   reportedLabelBinding?: { featureIds: readonly string[], report: (error: unknown) => void } | null,
    *   queueIncompleteVisibility?: boolean
    * }} [options]
+   * @returns {{ changed: boolean, rerender: boolean } | undefined} The projection; undefined when no Result is mounted.
    */
   const syncLabelEditor = ({
     requiredFeatureIds = [],
@@ -777,7 +797,7 @@ export const createFeatureLabelActions = ({
       { allowMissing: true, features }
     );
 
-    projectLabelIntent(drawing, svg, { queueIncompleteVisibility });
+    const projection = projectLabelIntent(drawing, svg, { queueIncompleteVisibility });
     // A label reflow keeps its Result: the same check reports to the reflow
     // after the binding completes instead of failing it.
     if (reportedLabelBinding) {
@@ -787,11 +807,14 @@ export const createFeatureLabelActions = ({
         reportedLabelBinding.report(error);
       }
     }
+    return projection;
   };
 
   // One projection of the label intent onto the mounted Result, shared by a
   // live edit, a Label TSV import, History apply, and the display of a Result.
-  /** @param {DrawingState} drawing */
+  // `rerender`: only the label rerender can show the intent; a caller that
+  // queues its own reflow (`queueIncompleteVisibility: false`) forces it then.
+  /** @param {DrawingState} drawing @param {Element} svg @param {{ queueIncompleteVisibility?: boolean }} [options] */
   const projectLabelIntent = (drawing, svg, { queueIncompleteVisibility = true } = {}) => {
     const textChanged = projectLabelTextIntent(drawing, svg);
     const visibilityProjection = applyStoredVisibilityOverridesToSvg(drawing, svg);
@@ -802,13 +825,13 @@ export const createFeatureLabelActions = ({
     if (queueIncompleteVisibility && visibilityProjection.unavailableOverride) {
       queueLabelReflow(true);
     }
-    return changed;
+    return { changed, rerender: visibilityProjection.unavailableOverride };
   };
 
   const reconcileLabelOverrides = () => {
     const drawing = state.activeDrawing();
     const svg = svgContainer.value?.querySelector?.('svg');
-    return svg ? projectLabelIntent(drawing, svg) : false;
+    return svg ? projectLabelIntent(drawing, svg).changed : false;
   };
 
   // A feature visibility edit shows or hides the feature's label in the same
@@ -984,7 +1007,9 @@ export const createFeatureLabelActions = ({
     }
 
     if (visibilityChanged || (!edit.hasEditableLabel && textChanged)) {
-      queueLabelReflow(forceReflow || !visibilityProjection.available);
+      const svg = svgContainer.value?.querySelector?.('svg');
+      queueLabelReflow(forceReflow || !visibilityProjection.available
+        || Boolean(svg && labelVisibilityReturnsToDefault(drawing, svg)));
       return;
     }
 
@@ -1271,8 +1296,7 @@ export const createFeatureLabelActions = ({
     closeLabelTextScopeDialog();
     closeHiddenLabelTextDialog();
     commitLabelEdit();
-    syncLabelEditor();
-    queueLabelReflow();
+    queueLabelReflow(Boolean(syncLabelEditor({ queueIncompleteVisibility: false })?.rerender));
   };
 
   // A Label TSV row selects labels in every Result of a batch. The displayed
@@ -1412,8 +1436,7 @@ export const createFeatureLabelActions = ({
 
       closeLabelTextScopeDialog();
       closeHiddenLabelTextDialog();
-      syncLabelEditor();
-      queueLabelReflow();
+      queueLabelReflow(Boolean(syncLabelEditor({ queueIncompleteVisibility: false })?.rerender));
 
       let message = `Loaded ${rows.length} row(s). Applied to ${applicable.length} label(s).`;
       if (skippedNonTrackableCount > 0) {

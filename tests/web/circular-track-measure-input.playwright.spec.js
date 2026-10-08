@@ -255,7 +255,7 @@ test('plain input and complete suffix paste share the codec; invalid text stays 
     await expect(input).toHaveAttribute('aria-invalid', 'true');
     expect(await scalar(page)).toEqual({ value: text, unit: 'px' });
     const errorId = (await input.getAttribute('aria-describedby')).split(' ').find(id => id.endsWith('-error'));
-    await expect(page.locator(`#${errorId}`)).toContainText('positive finite');
+    await expect(page.locator(`#${errorId}`)).toContainText('Width must be a number greater than 0, in px or ×R.');
     await selectUnit(page, 'factor');
     await expect(input).toHaveValue(text);
     expect(await scalar(page)).toEqual({ value: text, unit: 'factor' });
@@ -668,7 +668,7 @@ test('nonfinite numeric action writes are rejected before History; finite, Auto,
       } catch (caught) { error = caught.message; }
       return { error, same: row.width === before };
     }, kind);
-    expect(rejected.error).toMatch(/positive finite px or factor scalar/);
+    expect(rejected.error).toMatch(/must be a number greater than 0, in px or ×R/);
     expect(rejected.same).toBe(true);
     expect(await snapshot(page)).toEqual(baseline);
     expect(await workerCounts(page)).toEqual(workers);

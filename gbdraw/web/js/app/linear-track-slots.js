@@ -14,8 +14,7 @@ import {
   normalizeOptionalText
 } from '../services/track-slot-display.js';
 import { featureSlotEdits } from './track-slot-edits.js';
-import { parseOptionalPixel, validateCustomTrackPlan } from '../services/track-slot-validation.js';
-import { visibleFeatureUnderlaysForState } from '../utils/feature-rendering.js';
+import { paramsKeptOnRendererChange, parseOptionalPixel, validateCustomTrackPlan } from '../services/track-slot-validation.js';
 
 import {
   applyLinearTrackOrderPlacements,
@@ -71,13 +70,6 @@ export const linearAvailableDepthTrackCountForState = (state) => {
 
 const linearSourcedDepthTrackIndexesForState = (state) => (
   activeDepthTrackIndices((Array.isArray(state?.linearSeqs) ? state.linearSeqs : []).map((seq) => seq?.depth))
-);
-
-/** @param {DrawingState} drawing */
-export const linearDepthTrackCountForState = (state, drawing) => (
-  Boolean(drawing?.form?.show_depth)
-    ? linearAvailableDepthTrackCountForState(state)
-    : 0
 );
 
 export const hasEnabledLinearTrackRenderer = (slots, renderer) => {
@@ -238,7 +230,6 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     depthTrackCount: linearAvailableDepthTrackCountForState(state),
     depthSourcedTrackIndexes: linearSourcedDepthTrackIndexesForState(state),
     annotationSetIds: annotationSetIds(drawing),
-    visibleFeatureUnderlays: visibleFeatureUnderlaysForState(state),
     conservationSeries: []
   });
 
@@ -305,9 +296,11 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     return true;
   };
 
+  // Duplicate shares the availability of the other row controls (GX-01).
   const canDuplicateLinearTrackSlot = (slot) => {
     const drawing = state.drawings.linear;
-    if (!slot || slot.enabled === false) return Boolean(slot);
+    if (!slot || state.sessionOperationAvailability?.()) return false;
+    if (slot.enabled === false) return true;
     const renderer = normalizeRenderer(slot.renderer);
     if (renderer === 'features') return false;
     if (renderer === 'annotations') return annotationSetIds(drawing).length > 0;
@@ -410,9 +403,11 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     const drawing = state.drawings.linear;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
+    // One Depth row per loaded Depth series; Show Depth is not an input (TK-10).
+    const depthTrackCount = linearAvailableDepthTrackCountForState(state);
     const slots = createDefaultLinearTrackSlots({
-      showDepth: Boolean(drawing.form.show_depth),
-      depthTrackCount: linearDepthTrackCountForState(state, drawing),
+      showDepth: depthTrackCount > 0,
+      depthTrackCount,
       showGc: Boolean(drawing.form.show_gc),
       showSkew: Boolean(drawing.form.show_skew),
       nt: drawing.adv.nt,
@@ -700,8 +695,11 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     if (!slot) return;
-    slot.renderer = normalizeRenderer(renderer);
-    slot.params = cloneParams(slot.params);
+    const nextRenderer = normalizeRenderer(renderer);
+    slot.params = nextRenderer === normalizeRenderer(slot.renderer)
+      ? cloneParams(slot.params)
+      : paramsKeptOnRendererChange(slot.params, nextRenderer);
+    slot.renderer = nextRenderer;
     if (slot.renderer === 'depth') {
       slot.params.track_index = normalizeTrackIndex(slot.params.track_index) ?? 0;
     }

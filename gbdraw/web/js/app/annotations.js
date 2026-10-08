@@ -14,6 +14,17 @@ import { getFeatureCaption, getFeatureColorRuleHash } from '../services/feature-
 import { readFileText } from '../services/file-content-cache.js';
 import { downloadTextFile } from '../services/text-download.js';
 
+// The editor keeps every id valid: an empty id takes the default and a used
+// one a numbered suffix. The panel notice names the id it stored (FL-14).
+/** @param {string} field @param {any} requested @param {string} stored @param {string} owner */
+const idEditNotice = (field, requested, stored, owner) => {
+  const text = String(requested ?? '').trim();
+  if (text === stored) return '';
+  return text
+    ? `${field} "${text}" is used by ${owner}, so it was saved as "${stored}".`
+    : `${field} cannot be empty, so it was saved as "${stored}".`;
+};
+
 const nextAnnotationId = (annotations, prefix) => {
   const ids = new Set(annotations.map((item) => item.id));
   let index = annotations.length + 1;
@@ -34,16 +45,19 @@ const nextAnnotationId = (annotations, prefix) => {
  * @typedef {object} AnnotationEditorOptions
  * @property {AnnotationEditorState} state
  * @property {() => AnnotationRecordCatalog | null | undefined} getRecordCatalog
- * @property {(notice: string) => void} onImportNotice Shows or clears the notice of the last import.
+ * @property {(notice: string) => void} onImportNotice Shows or clears the panel notice: the outcome of
+ *   the last import or id edit.
  * @property {<T>(change: () => T) => T} [retireLegendStylesOfUnnamedCaptions] Runs a track data change and
  *   retires the Legend styles of the captions it no longer names (OV-65).
+ * @property {<T extends object>(value: T) => T} [reactive] Makes the dialog state reactive (Vue's `reactive`).
  */
 
 /**
  * @param {AnnotationEditorOptions} options
  */
 export const createAnnotationEditor = ({
-  state, getRecordCatalog, onImportNotice, retireLegendStylesOfUnnamedCaptions = (change) => change()
+  state, getRecordCatalog, onImportNotice, retireLegendStylesOfUnnamedCaptions = (change) => change(),
+  reactive = (value) => value
 }) => {
   const recordSelector = createAnnotationRecordSelector({ getCatalog: getRecordCatalog });
   // The catalog feature of a selected-feature target in the current Results:
@@ -97,6 +111,7 @@ export const createAnnotationEditor = ({
     const oldId = String(set?.id || '');
     const nextId = uniqueAnnotationSetId(drawing.annotationSets.filter((item) => item !== set), id);
     set.id = nextId;
+    onImportNotice?.(idEditNotice('Set id', id, nextId, 'another set'));
     [drawing.adv.circular_track_slots, drawing.adv.linear_track_slots].forEach((slots) => (
       (Array.isArray(slots) ? slots : []).forEach((slot) => {
         if (slot?.renderer === 'annotations' && slot?.params?.set_id === oldId) slot.params.set_id = nextId;
@@ -166,6 +181,7 @@ export const createAnnotationEditor = ({
     let id = base;
     for (let index = 2; used.has(id); index += 1) id = `${base}_${index}`;
     item.id = id;
+    onImportNotice?.(idEditNotice('Annotation id', value, id, 'another annotation of this set'));
   };
   const setAnnotationStyle = (set, item, field, value) => {
     const sessionBusy = state.sessionOperationAvailability?.();
@@ -183,11 +199,31 @@ export const createAnnotationEditor = ({
       : coordinateTarget({ start: 1, end: 1 });
     item.target.record = record;
   };
-  const importAnnotationTable = (text) => {
+  // An import replaces every set. A table without rows would remove them all,
+  // so it asks first (FL-14); the caller's History step stays open until the
+  // choice, and Cancel changes nothing.
+  const replaceAllDialog = reactive({ show: false, setCount: 0 });
+  /** @type {((choice: string) => void) | null} */
+  let answerReplaceAllDialog = null;
+  const askReplaceAll = (setCount) => {
+    answerReplaceAllDialog?.('cancel');
+    replaceAllDialog.setCount = setCount;
+    replaceAllDialog.show = true;
+    return new Promise((resolve) => { answerReplaceAllDialog = resolve; });
+  };
+  const handleReplaceAllChoice = (choice) => {
+    const answer = answerReplaceAllDialog;
+    answerReplaceAllDialog = null;
+    replaceAllDialog.show = false;
+    answer?.(choice);
+  };
+  const importAnnotationTable = async (text) => {
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     onImportNotice?.('');
     const { sets, notice } = parseAnnotationTableWithNotice(text);
+    const setCount = state.activeDrawing().annotationSets.length;
+    if (sets.length === 0 && setCount > 0 && await askReplaceAll(setCount) !== 'remove') return;
     replaceSets(sets);
     onImportNotice?.(notice);
   };
@@ -230,9 +266,9 @@ export const createAnnotationEditor = ({
     try {
       const text = await readFileText(file);
       if (!isCurrent()) return;
-      return importAnnotationTable(text);
+      return await importAnnotationTable(text);
     } catch (error) {
-      if (isCurrent()) alert(`Could not import annotations: ${error.message}`);
+      if (isCurrent()) onImportNotice?.(`Could not import annotations: ${error.message}`);
     } finally {
       if (sequence === importSequence && input.files?.[0] === file) input.value = '';
     }
@@ -241,6 +277,7 @@ export const createAnnotationEditor = ({
     addAnnotationSet, renameAnnotationSet, setAnnotationSetLegendLabel, duplicateAnnotationSet, removeAnnotationSet,
     addCoordinateAnnotation, addSelectedFeatures, removeAnnotation, renameAnnotation, setAnnotationStyle, setAnnotationTargetKind,
     importAnnotationTable, importAnnotationTableFile, replaceAnnotationSets: replaceSets,
+    annotationReplaceAllDialog: replaceAllDialog, handleAnnotationReplaceAllChoice: handleReplaceAllChoice,
     canDownloadAnnotationTable, downloadAnnotationTable, featureTargetCaption,
     recordOptionsFor: recordSelector.optionsFor,
     recordValueFor: recordSelector.valueFor,

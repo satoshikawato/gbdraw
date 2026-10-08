@@ -183,8 +183,9 @@ test('malformed annotations preserve the draft and a valid import is undoable', 
   const before = await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.annotationSets));
   const upload = panel.locator('input[type=file]');
   await upload.setInputFiles({ name: 'bad.tsv', mimeType: 'text/plain', buffer: Buffer.from('set_id\tid\tmark\tfeature_selector\ns\ta\thighlight\t;\n') });
-  await expect.poll(() => dialogs.length).toBe(1);
-  expect(dialogs[0]).toContain('feature_selector requires');
+  // FL-14: the panel notice names the error; no browser alert.
+  await expect(panel.getByRole('status')).toContainText('feature_selector requires');
+  expect(dialogs).toEqual([]);
   expect(await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.annotationSets))).toBe(before);
   await upload.setInputFiles({ name: 'good.tsv', mimeType: 'text/plain', buffer: Buffer.from('set_id\tid\tmark\tstart\tend\nloaded\ta\tband\t1\t8\n') });
   await expect(panel.getByLabel('Annotation set id')).toHaveValue('loaded');
@@ -352,12 +353,15 @@ test('invalid annotation coordinates preserve the draft and the last successful 
   const before = await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.annotationSets));
   const dialogs = [];
   page.on('dialog', (dialog) => dialogs.push(dialog.message()));
-  for (const [index, start] of ['abc', '0', '-10', '1.5'].entries()) {
-    await panel.locator('input[type=file]').setInputFiles({ name: 'bad.tsv', mimeType: 'text/plain', buffer: Buffer.from(`set_id\tid\tmark\tstart\tend\ns\ta\thighlight\t${start}\t3000\n`) });
-    await expect.poll(() => dialogs.length).toBe(index + 1);
-    expect(dialogs.at(-1)).toContain('positive integers');
+  // FL-14: each error shows in the panel notice; no browser alert.
+  const upload = panel.locator('input[type=file]');
+  for (const start of ['abc', '0', '-10', '1.5']) {
+    await upload.setInputFiles({ name: 'bad.tsv', mimeType: 'text/plain', buffer: Buffer.from(`set_id\tid\tmark\tstart\tend\ns\ta\thighlight\t${start}\t3000\n`) });
+    await expect.poll(() => upload.inputValue()).toBe('');
+    await expect(panel.getByRole('status')).toContainText('positive integers');
     expect(await page.evaluate(() => JSON.stringify(window.__GBDRAW_APP__.annotationSets))).toBe(before);
   }
+  expect(dialogs).toEqual([]);
   const oldResult = await page.evaluate(() => window.__GBDRAW_APP__.results[0].content);
   await panel.getByPlaceholder('Start (1-based)', { exact: true }).fill('1.5');
   await panel.getByPlaceholder('Start (1-based)', { exact: true }).press('Tab');

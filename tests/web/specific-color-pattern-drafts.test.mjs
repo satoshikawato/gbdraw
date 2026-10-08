@@ -278,3 +278,15 @@ for (const operation of ['save', 'load']) {
     assert.equal(s.actions.specificRulePatternDraft(s.row), null);
   });
 }
+
+// GX-10: the rule editor's name for an unnamed feature writes its 1-based
+// range, as its popup caption does (`formatFeatureRange`).
+test('an unnamed feature is named by its 1-based range in the rule editor', () => {
+  const { actions } = setup();
+  assert.equal(actions.getIndividualFeatureLabel({ type: 'tRNA', start: 576, end: 647 }), 'tRNA at 577..647');
+  assert.equal(actions.getIndividualFeatureLabel({
+    type: 'CDS', start: 90, end: 400,
+    location_parts: [{ start: 90, end: 120 }, { start: 300, end: 400, display: '301..400' }]
+  }), 'CDS at 91..120, 301..400');
+  assert.equal(actions.getIndividualFeatureLabel({ type: 'CDS', product: 'named', start: 0, end: 9 }), 'named');
+});

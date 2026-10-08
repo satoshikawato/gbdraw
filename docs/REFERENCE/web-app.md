@@ -290,11 +290,14 @@ source." **Generate Diagram** then stops on that row. Add a file, or disable or
 remove the row. A Session whose inactive custom stack has no Depth row does not
 gain one when you turn the stack on; use **Reset**.
 
-**Hide GC Content** and **Hide GC Skew** disable the matching enabled rows,
-whether or not the custom stack is in use, and turning the option off enables
-those rows again. Rows you disabled yourself stay disabled. A row's resolved
+**Hide GC Content** and **Hide GC Skew** disable the matching enabled rows
+that use the **Dinucleotide** setting, whether or not the custom stack is in
+use, and turning the option off enables those rows again. A row with another
+dinucleotide, such as an AT skew row, is not affected. Rows you disabled yourself stay disabled. A row's resolved
 **(auto)** geometry comes from the last generated diagram and appears only for
-rows it drew; a disabled row shows the estimate.
+rows it drew; any other row, and every row before the first Generate, shows an
+estimate written as "≈ … (estimate)". A ticks row's **Radius** note is the tick
+anchor, the radius that a typed **Radius** pins, not the centre of its band.
 
 ### Follow a Result and its settings draft
 
@@ -487,8 +490,8 @@ assignments. Changing the layout recalculates Auto but never rewrites an explici
 Show or Hide selection. **Replicon** remains a separate checkbox.
 
 The Auto explanation in **Linear Layout** and **Record Labels** names the affected
-fields and describes the next successful Generate, which may differ from the
-current Result. Select **Record Labels: Accession** or **Record Labels: Length /
+fields. It describes the current Result when that Result already shows or hides
+them as Auto now would, and otherwise the next successful Generate. Select **Record Labels: Accession** or **Record Labels: Length /
 Coordinates** beside that explanation to open the label controls and focus the
 matching selection. This navigation changes no value and creates no Undo entry.
 Choose **Show** yourself if shared rows should retain that field, then Generate.

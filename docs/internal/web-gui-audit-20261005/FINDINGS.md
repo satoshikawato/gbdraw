@@ -138,6 +138,113 @@
 | FL-13 | Specific colors の TSV で、Web は `#` のコメント行と空行を受け付けるが、CLI は "Missing values" で拒否する | Web と Python の reader の違い（#800 の `read_literal_table` で解消する可能性がある。merge 後に確かめる） |
 | FL-14 | Region Annotations が黙って値を変える: 重複した id → `region_1_2`、空の id → `region`、重複した set id → `annotations_2`。空の TSV を Import すると、確認なしで全 set が消える。Import のエラーは native の `alert()` だけで、panel の notice は空のまま | annotations の入力の正規化 |
 
+## 修正の状況（2026-10-08）
+
+59 件の状況: 修正済み 45、別の PR で修正済み 11、説明を足した（挙動は維持） 2、0.15.0 1（合計 59）。修正した PR は #939（A-out）、#941（A-ui）と Lane B（`fix/web-gui-audit-b`）。FL-10 は Python 側が #939、Web 側が #945 なので「修正済み」に数えた。UJ-03 の行は FL-01 を含む。
+
+| ID | 優先 | 状況 | PR / 確かめ方 |
+|---|---|---|---|
+| TK-01 | P1 | 修正済み | #939 |
+| TK-02 | P2 | 修正済み | #939 |
+| TK-03 | P2 | 別の PR で修正済み | #945（PER-MODE）。`depth-track-session` の TK-03 case と `depth-track-state.test.mjs` が、`29c631e2` で通る |
+| TK-04 | P2 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-tracks）。`track-slot-row-edits.test.mjs` |
+| TK-05 | P2 | 別の PR で修正済み | #805 |
+| TK-06 | P3 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-depth）。`DEPTH_INVALID` / `DEPTH_SERIES_SOURCE` |
+| TK-07 | P3 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-tracks）。欄に誤りを出し、行は直前の有効な index を保つ |
+| TK-08 | P3 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-depth）。help の文を直した |
+| TK-09 | P3 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-tracks）。Hide GC は **Dinucleotide** の行だけに届く |
+| TK-10 | P3 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-tracks）。Reset は Show Depth に関わらず Depth の行を作る |
+| TK-11 | P3 | 修正済み | #941（UI-01 の刷新で解消。guard で固定） |
+| TK-12 | P3 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-depth）。小数の parser を一つにした |
+| TK-13 | P3 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-depth）。underlay の検査を Python に一本化 |
+| TK-14 | P3 | 修正済み | #941（docs を直した。disclosure は閉じたまま） |
+| TK-15 | P3 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-depth）。Generate 前は「≈ … (estimate)」 |
+| UI-01 | P2 | 修正済み | #941 |
+| UI-02 | P3 | 修正済み | #941 |
+| UI-03 | P3 | 修正済み | #941 |
+| UI-04 | P3 | 修正済み | #941（TK-16 を含む） |
+| UI-05 | P3 | 修正済み | #941 |
+| UI-06 | P3 | 修正済み | #941 |
+| UI-07 | P3 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-run）。Worker を起こす前に入力を検査する |
+| UI-08 | P3 | 修正済み | #941（HANDOFF は A-out としていたが、#941 が直した） |
+| UI-09 | P3 | 修正済み | #941 |
+| UI-10 | P3 | 0.15.0 | Owner の決定（2026-10-07）。multi-drawing（v0.15.0）で扱う |
+| UI-11 | P3 | 修正済み | #941（Fit ボタン） |
+| UI-12 | P3 | 修正済み | #941 |
+| UI-13 | P3 | 修正済み | #941 |
+| CI-01 | P3 | 修正済み | #939 |
+| CI-02 | P2 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-run）。`run-info.test.mjs` |
+| CI-03 | P2 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-run）。単一 record から単一 record への置き換えは D-32 のとおり crop と Definition を残す |
+| CI-04 | P2 | 修正済み | #939 |
+| CI-05 | P3 | 修正済み | #939 |
+| CI-06 | P2 | 修正済み | #939 |
+| CI-07 | P3 | 修正済み | #939（a、b、d を直した。c は一行の説明を足し、挙動は維持。Owner-delegated） |
+| CI-08 | P3 | 修正済み | #939 |
+| UJ-01 | P2 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-labels）。`live-generate-parity` の `label Default` 5 case |
+| UJ-02 | P3 | 別の PR で修正済み | #937（E1）。`per-mode-results` の UJ-02 case が `29c631e2` で通る |
+| UJ-03 | P3 | 別の PR で修正済み | #857、#870（FL-01 を含む） |
+| UJ-04 | P3 | 修正済み | #939 |
+| UJ-05 | P3 | 修正済み | #939 |
+| UJ-06 | P3 | 修正済み | Lane B（`fix/web-gui-audit-b`）（**Load an example**。例の Session は pip package にも入れる。D-B05） |
+| UJ-07 | P3 | 修正済み | #939 |
+| UJ-08 | P3 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-run）。入力のエラーだけを、検出が成功した時に消す |
+| UJ-09 | P3 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-session）。**Load Session** の前に確認を出す |
+| UJ-10 | P3 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-run）。変更がなければ「It matches the current settings.」 |
+| FL-02 | P2 | 別の PR で修正済み | #940（OV-152）。`live-generate-parity` の case が `29c631e2` で通る |
+| FL-03 | P2 | 別の PR で修正済み | #892（OV-63） |
+| FL-04 | P3 | 別の PR で修正済み | #894（OV-62） |
+| FL-05 | P3 | 別の PR で修正済み | #940（OV-154）。`source-legend-reconciliation` M14 が `29c631e2` で通る |
+| FL-06 | P2 | 別の PR で修正済み | #892（OV-63） |
+| FL-07 | P2 | 別の PR で修正済み | #940（OV-127）。`source-legend-reconciliation` M10 が `29c631e2` で通る |
+| FL-08 | P3 | 修正済み | #939 |
+| FL-09 | P3 | 修正済み | #939 |
+| FL-10 | P3 | 修正済み | Python 側は #939、Web 側は #945（PER-MODE）。`gui-audit-20260930-options` の FL-10 case と `output-prefix.test.mjs` が `29c631e2` で通る |
+| FL-11 | P3 | 説明を足した（挙動は維持） | #941（Bakta preset の panel の文と help を直した。Owner-delegated） |
+| FL-12 | P3 | 説明を足した（挙動は維持） | #941（rule の順序の一行と owner の docs。Owner-delegated） |
+| FL-13 | P3 | 別の PR で修正済み | #812（OV-27）。tab だけの行は GX-07 で #939 が直した |
+| FL-14 | P3 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-labels）。panel の通知と、空の TSV の Import の確認 |
+
+### その他の観察
+
+| 観察 | 状況 | PR / 確かめ方 |
+|---|---|---|
+| feature 検索の query が mode を越えて残る | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-session）。検索は mode ごとに持つ |
+| Linear の Auto の通知が Generate の後も未来形 | 修正済み | Lane B（`fix/web-gui-audit-b`）（b-session）。表示中の Result に合わせて現在形にする |
+| Reset alignment のダイアログ | 修正済み | #941 |
+| 1600 px の右 drawer | 説明を足した（挙動は維持） | #941。overlay は契約 `PD-OI-054` による |
+| preview の popup が footer で切れる | 修正済み | #941、さらに Lane B（`fix/web-gui-audit-b`）（b-session）で全 popup の下限を一つにした |
+| region と逆相補の順序 | 修正済み | #939（`docs/CLI_Reference.md` と入力形式の docs） |
+| Interactive SVG の popup の題 | 修正済み | #939 |
+| 凡例の改名後の移動、Feature Edits TSV、scope の選択で popup が閉じる | 本節の対象外 | `REVERIFICATION.md` の記録のまま |
+
+### 新しく見つけた不具合（GX）
+
+| ID | 扱い |
+|---|---|
+| GX-01 | 修正済み。#941（`index.html` の bindings）と Lane B（`fix/web-gui-audit-b`）（b-tracks。Duplicate の predicate） |
+| GX-02 | 修正済み。#941（zoom の上限と刻み） |
+| GX-03 | 修正済み。#939（Gallery の refresh tool） |
+| GX-04 | 修正済み。Lane B（`fix/web-gui-audit-b`）（gx0405）。隣り合う二行は向き合う gap の大きい方を保つ。基準 SVG は変わらない |
+| GX-05 | 修正済み。Lane B（`fix/web-gui-audit-b`）（gx0405）。GX-17 の規則で、例のコマンドが描ける。resolver への別の変更はない |
+| GX-06 | 修正済み。#939（`TRACK_LAYOUT` / `CANNOT_FIT`） |
+| GX-07 | 修正済み。#939（`read_table_lines`） |
+| GX-08 | 修正済み。#939（Protein ID の行） |
+| GX-09 | 修正済み。#939（`REGION_INVALID`） |
+| GX-10 | 修正済み。Lane B（`fix/web-gui-audit-b`）（gx10、b-labels）。caption は 1 始まりで、strand は付けない（D-B01） |
+| GX-11 | 修正済み。#939（Interactive SVG の検索欄） |
+| GX-12 | 修正済み。#941（設定欄の `:disabled` と見た目） |
+| GX-13 | 修正済み。#941（暗くするのは操作部品だけ） |
+| GX-14 | 修正済み。#941（tutorial の caption と alt） |
+| GX-15 | 修正済み。#941（match popup の文字色） |
+| GX-16 | 別の PR で修正済み。#945（PER-MODE、OV-161）。`feature-fill-scope` の case が `29c631e2` で通る |
+| GX-17 | 修正済み。Lane B（`fix/web-gui-audit-b`）（gx0405）。Auto の幅の行は、radius を指定しても Auto と同じく縮む（Owner の決定、2026-10-08） |
+| GX-18 | 修正済み。Lane B（`fix/web-gui-audit-b`）（b-depth）。ticks の行の Radius の注は tick の anchor を示す |
+| GX-19 | 修正済み。Lane B（`fix/web-gui-audit-b`）（gx0405、D-B02）。**Use custom stack** を入れただけでは図が変わらない |
+| GX-20 | 修正済み。Lane B（`fix/web-gui-audit-b`）（b-depth）。Legend Name Scope の Cancel はすぐ閉じる |
+| GX-21 | 修正済み。Lane B（`fix/web-gui-audit-b`）（b-labels）。Auto Reflow が on の時の label Off の Undo |
+| GX-22 | 修正済み。Lane B（`fix/web-gui-audit-b`）（b-session）。popup のドラッグ後の click で閉じない |
+| GX-23 | 修正済み。Lane B（`fix/web-gui-audit-b`）（b-session）。`test_web_packaging.py` の path |
+
 ## その他の観察（未分類、軽微）
 
 - feature 検索の query が mode を切り替えても残り、すべての feature が薄く表示される（UJ）。

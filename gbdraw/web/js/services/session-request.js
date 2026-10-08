@@ -89,8 +89,7 @@ import {
   defaultFeatureRendering,
   normalizeArrowHeadLengthRatio,
   normalizeArrowShaftWidthRatio,
-  normalizeFeatureRenderingMap,
-  visibleFeatureUnderlaysForState
+  normalizeFeatureRenderingMap
 } from '../utils/feature-rendering.js';
 import {
   comparisonFiltersForMode,
@@ -342,6 +341,24 @@ const canonicalRecordTranslations = (value, recordKeys, path, { requireCoverage 
     }
   }
   return translations;
+};
+
+// The Linear Accession and Length visibility a committed request resolved,
+// by the `adv` key that selects it; null when the request is not Linear.
+/**
+ * @param {Record<string, any> | null} renderRequest
+ * @returns {Record<string, boolean | null>}
+ */
+export const linearDefinitionVisibilityOf = (renderRequest) => {
+  const overrides = renderRequest?.mode === 'linear'
+    ? renderRequest.diagramOptions?.configOverrides || {}
+    : {};
+  /** @param {string} path @returns {boolean | null} */
+  const read = (path) => (typeof overrides[path] === 'boolean' ? overrides[path] : null);
+  return {
+    linear_accession_visibility: read(CONFIG_OVERRIDE_PATHS.linearDefinitionShowAccession),
+    linear_length_visibility: read(CONFIG_OVERRIDE_PATHS.linearDefinitionShowLength)
+  };
 };
 
 // E1: the similarity alignment plan and record translations of a committed
@@ -664,12 +681,19 @@ const resolveSavedRecordOverride = ({ savedOverride, fileDefault, resolved }) =>
   return resolved === fileDefault ? '' : resolved;
 };
 
+// A Depth series that no record gives a file (TK-06). The one producer of
+// this failure for the request builder and the Session projections.
+/** @param {number} seriesIndex */
+const depthSeriesWithoutSource = (seriesIndex) => (
+  diagnosticError('DEPTH_INVALID', { seriesIndex, reason: 'DEPTH_SERIES_SOURCE' })
+);
+
 const validateProjectedDepthSources = (depthRows, logicalTrackCount) => {
   for (let trackIndex = 0; trackIndex < logicalTrackCount; trackIndex += 1) {
     const hasSource = depthRows.some((row) => (
       Array.isArray(row) && Boolean(row[trackIndex]?.resourceId)
     ));
-    if (!hasSource) throw diagnosticError('DEPTH_INVALID', { seriesIndex: trackIndex, reason: 'REQUIRED' });
+    if (!hasSource) throw depthSeriesWithoutSource(trackIndex);
   }
 };
 
@@ -1578,7 +1602,7 @@ const buildDepthResources = ({ state, drawing, filesData, resources, diagramOpti
   );
   diagramOptions.depthTracks = Array.from({ length: logicalTrackCount }, (_, trackIndex) => {
     const sources = rows.map((row) => row[trackIndex] || null);
-    if (!sources.some(Boolean)) throw diagnosticError('DEPTH_INVALID', { seriesIndex: trackIndex, reason: 'REQUIRED' });
+    if (!sources.some(Boolean)) throw depthSeriesWithoutSource(trackIndex);
     const sharedSource = sources[0] && sources.every((source) => source === sources[0]);
     const sourceName = `depth-tracks-${trackIndex + 1}-source`;
     const source = sharedSource
@@ -1742,7 +1766,6 @@ const buildTrackPlan = ({
     recordCount
   });
   const annotationSetIds = annotationSetIdsForState(drawing);
-  const visibleFeatureUnderlays = visibleFeatureUnderlaysForState(drawing);
 
   if (circular && drawing.adv.circular_track_slots_enabled) {
     const validation = assertValidCustomTrackPlan(validateCustomTrackPlan({
@@ -1752,7 +1775,6 @@ const buildTrackPlan = ({
       trackType: drawing.form.track_type,
       depthTrackCount,
       annotationSetIds,
-      visibleFeatureUnderlays,
       conservationSeries: conservationSeriesForValidation({
         drawing,
         filesData,
@@ -1784,7 +1806,6 @@ const buildTrackPlan = ({
       trackType: drawing.form.linear_track_layout,
       depthTrackCount,
       annotationSetIds,
-      visibleFeatureUnderlays,
       conservationSeries: []
     }));
     const depthRequested = validation.enabledSlots.some(
@@ -1833,7 +1854,6 @@ const buildTrackPlan = ({
         trackType: drawing.form.track_type,
         depthTrackCount,
         annotationSetIds,
-        visibleFeatureUnderlays,
         conservationSeries: []
       }));
       return {
@@ -3440,7 +3460,7 @@ const projectCanonicalDepthTracks = ({
       sourceRefs = Array.from({ length: records.length }, () => track.source);
     }
     if (!sourceRefs.some((ref) => ref !== null && ref !== undefined)) {
-      throw diagnosticError('DEPTH_INVALID', { seriesIndex: trackIndex, reason: 'REQUIRED' });
+      throw depthSeriesWithoutSource(trackIndex);
     }
     sourceRefs.forEach((ref, recordIndex) => {
       sourceRows[recordIndex][trackIndex] = ref ?? null;

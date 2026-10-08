@@ -121,7 +121,8 @@ test('Generate reports real cold/warm stages and preserves the successful Result
   await page.evaluate(async () => {
     const app = window.__GBDRAW_APP__;
     window.successfulResults = app.results;
-    app.adv.scale_interval = 12345;
+    // An edit since the shown Result, made as a History step like a user edit (UJ-10).
+    await window.__GBDRAW_HISTORY__.runUndoable('Set scale interval', () => { app.adv.scale_interval = 12345; });
     window.feedbackHistory = [window.__GBDRAW_HISTORY__.getUndoCount(), window.__GBDRAW_HISTORY__.getRedoCount()];
     const config = await import('./js/services/config.js');
     window.appliedBeforeCancel = config.getCommittedCanonicalRenderRequest();

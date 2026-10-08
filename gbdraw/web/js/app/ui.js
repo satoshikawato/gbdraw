@@ -419,7 +419,19 @@ export const setupGlobalUiEvents = ({
   // a choice unmounts the dialog before this document listener runs.
   const modalDialogOpen = () => Boolean(document.querySelector('[role="dialog"][aria-modal="true"]'));
 
+  // A click whose press began in a popup (a drag released past the popup's
+  // clamp, a text selection) is not a click outside it.
+  let pressStartedInPopup = false;
+  /** @param {MouseEvent} e */
+  const rememberPressTarget = (e) => {
+    pressStartedInPopup = e.target instanceof Element
+      && Boolean(e.target.closest('.feature-popup, .pairwise-match-popup, .label-popup'));
+  };
+
   const closeFeaturePopup = (e) => {
+    const startedInPopup = pressStartedInPopup;
+    pressStartedInPopup = false;
+    if (startedInPopup) return;
     if (
       !e.target.closest('[data-modal-overlay], [aria-modal="true"]')
       && !e.target.closest('.feature-popup')
@@ -433,22 +445,29 @@ export const setupGlobalUiEvents = ({
     }
   };
 
+  // Escape closes the top layer only: an open popup first, so the drawer that
+  // opened it stays and focus returns to its opener there; then the canvas
+  // controls and the drawer.
   const handleEscapeKey = (e) => {
-    if (e.key === 'Escape' && !modalDialogOpen()) {
+    if (e.key !== 'Escape' || modalDialogOpen()) return;
+    if (clickedFeature.value || clickedPairwiseMatch?.value || clickedLabel.value) {
       if (clickedFeature.value) clickedFeature.value = null;
       if (clickedPairwiseMatch?.value) clickedPairwiseMatch.value = null;
       if (clickedLabel.value) clickedLabel.value = null;
-      if (showCanvasControls.value) showCanvasControls.value = false;
-      closeRightDrawer();
+      return;
     }
+    if (showCanvasControls.value) showCanvasControls.value = false;
+    closeRightDrawer();
   };
 
   onMounted(() => {
+    document.addEventListener('mousedown', rememberPressTarget, true);
     document.addEventListener('click', closeFeaturePopup);
     document.addEventListener('keydown', handleEscapeKey);
   });
 
   onUnmounted(() => {
+    document.removeEventListener('mousedown', rememberPressTarget, true);
     document.removeEventListener('click', closeFeaturePopup);
     document.removeEventListener('keydown', handleEscapeKey);
   });

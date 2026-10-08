@@ -300,18 +300,24 @@ test('Auto disclosure names draft fields and navigates without changing Result o
     undo: window.__GBDRAW_HISTORY__.getUndoCount(),
     redo: window.__GBDRAW_HISTORY__.getRedoCount()
   }));
+  // The wording is in the present tense once the shown Result already hides
+  // every Auto field, and in the future tense until then.
+  let shownResult = null;
   for (const accessionMode of ['auto', 'show', 'hide']) {
     for (const lengthMode of ['auto', 'show', 'hide']) {
       await focusAfterHistoryCapture(page, accession);
       await accession.selectOption(accessionMode);
       await focusAfterHistoryCapture(page, length);
       await length.selectOption(lengthMode);
-      const autoFields = [accessionMode === 'auto' ? 'Accession' : null,
-        lengthMode === 'auto' ? 'Length / Coordinates' : null].filter(Boolean);
+      const autoModes = { Accession: accessionMode, 'Length / Coordinates': lengthMode };
+      const autoFields = Object.keys(autoModes).filter((field) => autoModes[field] === 'auto');
       const text = await layout.locator('[role="status"]').innerText();
       if (autoFields.length) {
-        expect(text).toContain(`${autoFields.join(' and ')}: Auto will hide`);
-        expect(text).toContain(hiddenReason);
+        const applied = shownResult && autoFields.every((field) => shownResult[field] === 'hide');
+        expect(text).toContain(applied
+          ? `${autoFields.join(' and ')}: Auto hides these fields throughout the diagram because at least one rendered row contains multiple records`
+          : `${autoFields.join(' and ')}: Auto will hide`);
+        if (!applied) expect(text).toContain(hiddenReason);
         await expect(labels).toHaveText(text);
       } else {
         expect(text).toBe('');
@@ -322,6 +328,8 @@ test('Auto disclosure names draft fields and navigates without changing Result o
         .parseFromString(window.__GBDRAW_APP__.results[0].content, 'image/svg+xml').documentElement.textContent);
       expect(svgText.includes('NC_012920.1')).toBe(accessionMode === 'show');
       expect(svgText.includes('16,569 bp')).toBe(lengthMode === 'show');
+      shownResult = Object.fromEntries(Object.entries(autoModes)
+        .map(([field, mode]) => [field, mode === 'show' ? 'show' : 'hide']));
     }
   }
   await focusAfterHistoryCapture(page, accession);
@@ -366,6 +374,9 @@ test('Auto disclosure names draft fields and navigates without changing Result o
   await expect(layout).toContainText('Auto will show');
   await expect(layout).toContainText('no rendered row contains multiple records');
   expect(await runDiagram(page)).toEqual({ result: { status: 'ok' }, errorSummary: '', errorDetails: [] });
+  // After that Generate the shown Result has Auto's outcome: no future tense.
+  await expect(layout).toContainText('Accession and Length / Coordinates: Auto shows these fields throughout the diagram because no rendered row contains multiple records.');
+  await expect(labels).toHaveText(await layout.locator('[role="status"]').innerText());
   const beforeNavigation = await snapshot();
   await page.getByRole('button', { name: 'Record Labels: Length / Coordinates', exact: true }).click();
   await expect(length).toBeFocused();
@@ -379,7 +390,7 @@ test('Auto disclosure names draft fields and navigates without changing Result o
   await focusAfterHistoryCapture(page, secondRow);
   await secondRow.fill('2');
   await secondRow.press('Tab');
-  await expect(layout).toContainText('Auto will show');
+  await expect(layout).toContainText('Auto shows');
   await focusAfterHistoryCapture(page, accession);
   await accession.selectOption('hide');
   await focusAfterHistoryCapture(page, length);

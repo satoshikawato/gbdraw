@@ -2566,8 +2566,7 @@
       feature &amp;&amp; feature.note,
       Array.from(qualifierDisplayValue(feature, 'note')).slice(0, 50).join('')
     );
-    return caption || String(feature &amp;&amp; feature.type) + ' at ' +
-      String(feature &amp;&amp; feature.start) + '..' + String(feature &amp;&amp; feature.end);
+    return caption || String(feature &amp;&amp; feature.type) + ' at ' + rangeText(feature);
   }
 
   // The Protein ID of the Details tab: a protein ID only, never the gene or
@@ -4510,21 +4509,25 @@
     }, 0);
   }
 
-  // Mirrors app/feature-utils.js formatFeatureLocation/formatFeatureLength.
+  // Mirrors services/feature-utils.js formatFeatureRange/formatFeatureLocation/formatFeatureLength.
   function featureLocationParts(feature) {
     return feature &amp;&amp; Array.isArray(feature.location_parts) &amp;&amp; feature.location_parts.length
       ? feature.location_parts
       : [feature];
   }
 
-  function locationText(feature) {
-    var range = featureLocationParts(feature).map(function (part) {
+  function rangeText(feature) {
+    return featureLocationParts(feature).map(function (part) {
       var display = String(part &amp;&amp; part.display || '').trim();
       if (display) return display;
       var start = Number(part &amp;&amp; part.start);
       var end = Number(part &amp;&amp; part.end);
       return Number.isFinite(start) &amp;&amp; Number.isFinite(end) ? String(start + 1) + '..' + String(end) : '';
     }).filter(Boolean).join(', ');
+  }
+
+  function locationText(feature) {
+    var range = rangeText(feature);
     var strand = String(feature &amp;&amp; feature.strand || '').trim();
     return range &amp;&amp; strand ? range + ' (' + strand + ')' : range;
   }

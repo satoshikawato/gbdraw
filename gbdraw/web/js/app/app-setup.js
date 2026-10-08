@@ -43,6 +43,7 @@ import {
   disposeSessionOperations,
   getCommittedCanonicalSession,
   getCommittedCanonicalRenderRequest,
+  getCommittedLinearDefinitionVisibility,
   readCommittedResourceRecordCount,
   assertActiveModeInputs,
   importSession as importSessionFromFile,
@@ -97,6 +98,7 @@ import { createPaletteLoader } from './palettes.js';
 import { afterPaint, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions } from './similarity-alignment.js';
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { popupViewportBottom } from '../utils/popup-bounds.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import {
@@ -1613,7 +1615,7 @@ export const createAppSetup = () => {
   const linearTrackSlotEditor = createLinearTrackSlotEditor({ state, changeTrackLayout });
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
-    state, getRecordCatalog: getAnnotationRecordCatalog, retireLegendStylesOfUnnamedCaptions,
+    state, getRecordCatalog: getAnnotationRecordCatalog, retireLegendStylesOfUnnamedCaptions, reactive,
     onImportNotice: (notice) => { annotationImportNotice.value = notice; }
   });
   watch(
@@ -1823,9 +1825,15 @@ export const createAppSetup = () => {
     const shown = resolveLinearLabelVisibility('auto', {
       hasSharedRow: linearLabelHasSharedRow.value
     });
+    // The shown Result already has Auto's outcome: say what it shows.
+    const applied = getCommittedLinearDefinitionVisibility();
+    const effect = linearLabelAutoFields.value
+      .every((/** @type {{ visibilityKey: string }} */ row) => applied[row.visibilityKey] === shown)
+      ? `Auto ${shown ? 'shows' : 'hides'} these fields throughout the diagram`
+      : `Auto will ${shown ? 'show' : 'hide'} these fields throughout the diagram on the next successful Generate`;
     return shown
-      ? `${fields}: Auto will show these fields throughout the diagram on the next successful Generate because no rendered row contains multiple records.`
-      : `${fields}: Auto will hide these fields throughout the diagram on the next successful Generate because at least one rendered row contains multiple records. Choose Show in Record Labels to keep a field visible.`;
+      ? `${fields}: ${effect} because no rendered row contains multiple records.`
+      : `${fields}: ${effect} because at least one rendered row contains multiple records. Choose Show in Record Labels to keep a field visible.`;
   });
   const focusLinearLabelVisibility = async (key) => {
     if (mode.value !== 'linear') return;
@@ -2694,6 +2702,7 @@ export const createAppSetup = () => {
     cancelRunAnalysis,
     runLabelReflow,
     refreshCircularRecordOrder,
+    releaseSourceInputFailure,
     downloadCliHelperFiles,
     downloadLosatCache,
     downloadLosatPair,
@@ -2716,6 +2725,7 @@ export const createAppSetup = () => {
     prepareLinearRecordCatalog,
     recordDisplayRows: recordDisplayControls.allRows,
     assertActiveModeInputs,
+    readDraftSignature: () => history.getCurrentIntentSignature(),
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
     clearLabelBuildNotices: featureActions.clearLabelBuildNotices,
     canonicalSessionVersion: SESSION_VERSION,
@@ -2856,7 +2866,14 @@ export const createAppSetup = () => {
     resultsManager,
     runLabelReflow,
     refreshCircularRecordOrder,
-    refreshLinearRecordSelectors: linearRecordSelector.refresh,
+    // UJ-08: a discovery that reads every Linear source ends a Generate
+    // failure about those inputs, as the Circular discovery does.
+    refreshLinearRecordSelectors: async (/** @type {{ suppress?: boolean } | undefined} */ options) => {
+      const outcome = await linearRecordSelector.refresh(options);
+      const ready = linearSeqs.every((/** @type {Record<string, any>} */ seq) => linearRecordSelector.statusFor(seq) === 'ready');
+      if (ready) releaseSourceInputFailure('linear');
+      return outcome;
+    },
     resetPreviewViewport,
     resetRightDrawer: rightDrawerActions.resetRightDrawer,
     closeLabelTextScopeDialog: featureActions.closeLabelTextScopeDialog,
@@ -2881,6 +2898,35 @@ export const createAppSetup = () => {
   const sessionLoadAvailable = computed(() => !sessionSaveLoadAvailability('load'));
   const sessionBusyReason = computed(() => sessionSaveLoadAvailability('save')?.reason || '');
   const circularRecordPresentationPanel = ref(null);
+  // UJ-09 (Owner 2026-10-05): loading a Session replaces the work and clears
+  // History, so every route that loads one asks first when History changed
+  // since the last Save or Load. Cancel loads nothing.
+  const sessionReplaceDialog = reactive({ show: false, actionLabel: '' });
+  /** @type {(() => void) | null} */
+  let pendingSessionReplacement = null;
+  /** @param {string} actionLabel @param {() => void} proceed */
+  const confirmSessionReplacement = async (actionLabel, proceed) => {
+    if (!await history.hasChangesSinceSavePoint()) {
+      proceed();
+      return;
+    }
+    pendingSessionReplacement = proceed;
+    sessionReplaceDialog.actionLabel = actionLabel;
+    sessionReplaceDialog.show = true;
+  };
+  /** @param {'load' | 'cancel'} choice */
+  const resolveSessionReplacement = (choice) => {
+    const proceed = pendingSessionReplacement;
+    pendingSessionReplacement = null;
+    sessionReplaceDialog.show = false;
+    // The file picker opens inside the click that confirmed.
+    if (choice === 'load') proceed?.();
+  };
+  // The template's hidden file input (`ref="sessionInput"`).
+  const sessionInput = ref(null);
+  const openSessionFilePicker = () => confirmSessionReplacement(
+    'Load Session', () => sessionInput.value?.click()
+  );
   let nextSessionPreviewToken = 1;
   const importSession = (event) => importSessionFromFile(event, {
     availability: sessionSaveLoadAvailability,
@@ -2936,6 +2982,7 @@ export const createAppSetup = () => {
         // A replaced document resets transient UI: the selection named features
         // of the previous Session.
         featureSelection.clearFeatureSelection({ clearStatus: true, syncDom: false });
+        previewFeatureSearch.resetModeSearches();
         await nextTick();
         recordSessionLifecycleEvent('history-baseline-start');
         if (!await history.initializeIntentBaseline('Loaded session', { isCurrent: result.isCurrent })) {
@@ -2948,6 +2995,24 @@ export const createAppSetup = () => {
         if (circularRecordPresentationPanel.value) circularRecordPresentationPanel.value.open = false;
         closeLegendStrokeOptions();
       }
+    }
+  });
+  // UJ-06 (Owner 2026-10-07): the empty state's Load an example reads the
+  // bundled HmmtDNA Gallery Session from this origin and loads it through the
+  // Load Session path, with the same confirmation.
+  const EXAMPLE_SESSION_NAME = 'HmmtDNA_basic_circular.gbdraw-session.json';
+  const exampleSessionPending = ref(false);
+  const loadExampleSession = () => confirmSessionReplacement('Load example', async () => {
+    exampleSessionPending.value = true;
+    try {
+      const response = await fetch(`./gallery/sessions/${EXAMPLE_SESSION_NAME}`);
+      if (!response.ok) throw new Error(`The example Session could not be read (HTTP ${response.status}).`);
+      const file = new File([await response.blob()], EXAMPLE_SESSION_NAME, { type: 'application/json' });
+      await importSession({ target: { files: [file], value: '' } });
+    } catch (error) {
+      errorLog.value = normalizeUserFacingError(error);
+    } finally {
+      exampleSessionPending.value = false;
     }
   });
 
@@ -3014,6 +3079,7 @@ export const createAppSetup = () => {
     setFeatureColorValue,
     updateClickedFeatureColor,
     cancelFeatureStyleScope,
+    cancelLegendRename,
     handleColorScopeChoice,
     handleFeatureStyleScopeChoice,
     handleLegendNameCommit,
@@ -3355,7 +3421,8 @@ export const createAppSetup = () => {
   //   2. Swap the artifact slots (`swapArtifactSlots`).
   //   3. Set `mode`. Each mode has its own drawing (PD-OI-086), so the
   //      template now binds the arriving drawing and no setting is written.
-  //   4. Reset the departing mode's transient UI.
+  //   4. Reset the departing mode's transient UI; the Preview search is kept
+  //      per mode.
   //   5. Show the arriving Result as a selection.
   /**
    * @param {'circular' | 'linear'} nextMode
@@ -3377,6 +3444,7 @@ export const createAppSetup = () => {
     // 4. Transient UI. "Showing the last successful result" named the
     // departing mode's Result.
     resetModeTransientUi();
+    previewFeatureSearch.switchModeSearch(previousMode, nextMode);
     failedGeneratePreservedResult.value = false;
     // 5. Presentation: the arriving Result is shown as a selection.
     previewRuntime.presentSelectedResult({ modeArrival: true });
@@ -3482,10 +3550,13 @@ export const createAppSetup = () => {
   /**
    * @param {() => string} label
    * @param {(choice: string, ...rest: any[]) => any} handler
+   * @param {() => void} [cancel]
    */
-  const scopeChoiceWithHistory = (label, handler) => (/** @type {string} */ choice, /** @type {any[]} */ ...rest) => (
+  const scopeChoiceWithHistory = (label, handler, cancel = cancelFeatureStyleScope) => (
+    /** @type {string} */ choice, /** @type {any[]} */ ...rest
+  ) => (
     choice === 'cancel'
-      ? cancelFeatureStyleScope()
+      ? cancel()
       : history.runUndoable(label(), () => handler(choice, ...rest))
   );
   const handleColorScopeChoiceWithHistory = scopeChoiceWithHistory(() => 'Change feature color', handleColorScopeChoice);
@@ -3494,7 +3565,11 @@ export const createAppSetup = () => {
     handleFeatureStyleScopeChoice
   );
   const handleLegendNameCommitWithHistory = undoableAction('Rename legend item', handleLegendNameCommit);
-  const handleLegendRenameChoiceWithHistory = undoableAction('Rename legend item', handleLegendRenameChoice);
+  const handleLegendRenameChoiceWithHistory = scopeChoiceWithHistory(
+    () => 'Rename legend item',
+    handleLegendRenameChoice,
+    cancelLegendRename
+  );
   const handleResetColorChoiceWithHistory = undoableAction('Reset feature color', handleResetColorChoice);
   const resetClickedFeatureFillColorWithHistory = undoableAction('Reset feature color', resetClickedFeatureFillColor);
   const updateClickedFeatureStrokeWithHistory = undoableAction('Change feature stroke', updateClickedFeatureStroke);
@@ -3844,7 +3919,7 @@ export const createAppSetup = () => {
     if (!palette || similarityAlignmentCompact.value) return;
     const margin = 12;
     const maxX = Math.max(margin, window.innerWidth - palette.offsetWidth - margin);
-    const maxY = Math.max(margin, window.innerHeight - palette.offsetHeight - margin);
+    const maxY = Math.max(margin, popupViewportBottom() - palette.offsetHeight - margin);
     similarityAlignmentPalettePosition.x = Math.min(
       Math.max(similarityAlignmentPalettePosition.x ?? maxX, margin), maxX
     );
@@ -4121,7 +4196,7 @@ export const createAppSetup = () => {
   // The popup's size follows the app-level rich popup preference.
   const getFeaturePopupConstraints = (left = clickedFeaturePos.x, top = clickedFeaturePos.y) => {
     const viewportWidth = Math.max(1, window.innerWidth || 1);
-    const viewportHeight = Math.max(1, window.innerHeight || 1);
+    const viewportHeight = popupViewportBottom();
     const availableWidth = Math.max(1, viewportWidth - (FEATURE_POPUP_MARGIN * 2));
     const availableHeight = Math.max(1, viewportHeight - (FEATURE_POPUP_MARGIN * 2));
     const desiredMinWidth =
@@ -4153,7 +4228,7 @@ export const createAppSetup = () => {
 
   const getPairwiseMatchPopupConstraints = (left = clickedPairwiseMatchPos.x, top = clickedPairwiseMatchPos.y) => {
     const viewportWidth = Math.max(1, window.innerWidth || 1);
-    const viewportHeight = Math.max(1, window.innerHeight || 1);
+    const viewportHeight = popupViewportBottom();
     const availableWidth = Math.max(1, viewportWidth - (FEATURE_POPUP_MARGIN * 2));
     const availableHeight = Math.max(1, viewportHeight - (FEATURE_POPUP_MARGIN * 2));
     const minWidth = Math.min(PAIRWISE_MATCH_POPUP_MIN_WIDTH, availableWidth);
@@ -4260,7 +4335,7 @@ export const createAppSetup = () => {
     const height = popup?.offsetHeight || 360;
     const margin = FEATURE_POPUP_MARGIN;
     const maxX = Math.max(margin, window.innerWidth - width - margin);
-    const maxY = Math.max(margin, window.innerHeight - height - margin);
+    const maxY = Math.max(margin, popupViewportBottom() - height - margin);
     const nextX = event.clientX - pairwiseMatchPopupDrag.offsetX;
     const nextY = event.clientY - pairwiseMatchPopupDrag.offsetY;
     clickedPairwiseMatchPos.x = Math.min(Math.max(nextX, margin), maxX);
@@ -4339,7 +4414,7 @@ export const createAppSetup = () => {
     const height = popup?.offsetHeight || 260;
     const margin = 12;
     const maxX = Math.max(margin, window.innerWidth - width - margin);
-    const maxY = Math.max(margin, window.innerHeight - height - margin);
+    const maxY = Math.max(margin, popupViewportBottom() - height - margin);
     const nextX = event.clientX - featurePopupDrag.offsetX;
     const nextY = event.clientY - featurePopupDrag.offsetY;
     clickedFeaturePos.x = Math.min(Math.max(nextX, margin), maxX);
@@ -4581,7 +4656,9 @@ export const createAppSetup = () => {
       if (error) throw error;
       return { linearRecordCatalog: catalog };
     },
-    onError: (error) => { errorLog.value = normalizeUserFacingError(error); }
+    onError: (error) => { errorLog.value = normalizeUserFacingError(error); },
+    // UJ-09: a saved download is the History position Load Session compares with.
+    onSaved: () => history.markSavePoint()
   });
 
   const openFeatureEditorFromList = (feat, event) => {
@@ -4674,6 +4751,52 @@ export const createAppSetup = () => {
   const circularRecordSelectionEnabled = computed(() => semanticMutationAvailable.value
     && mode.value === 'circular'
     && !state.activeDrawing().form.multi_record_canvas && circularRecordDiscoveryState.value.status === 'ready');
+  // CI-03: the per-record presentation a source file carries in each mode.
+  // Replacing or removing the file resets it in the replacement's History step.
+  const RETIRED_LINEAR_RECORD_PRESENTATION = Object.freeze({ region_record_id: '', region_start: null,
+    region_end: null, region_reverse: false, definition: '', record_subtitle: '' });
+  // The record reference names a record of the old file, so any replacement retires it.
+  const RETIRED_LINEAR_RECORD_REFERENCE = Object.freeze({ region_record_id: '' });
+  /** @param {DrawingState} drawing */
+  const retireCircularRecordSelector = ({ form, adv }) => {
+    form.circular_record_selector = '';
+    if (adv.circular_grouping_intent === 'single') adv.circular_grouping_intent = 'auto';
+  };
+  /** @param {DrawingState} drawing */
+  const retireCircularRecordPresentation = (drawing) => {
+    const { form } = drawing;
+    retireCircularRecordSelector(drawing);
+    form.circular_region_start = null;
+    form.circular_region_end = null;
+    form.circular_reverse = false;
+    form.circular_record_label = '';
+    form.circular_record_subtitle = '';
+  };
+  // D-32: one record replacing one record (a new version of the same genome)
+  // keeps its crop and titles; a removed file or a replaced multi-record file
+  // retires them. The record selector names a record of the old file, so any
+  // replacement retires it.
+  /** @param {{ removed: boolean, previousRecordCount: number }} replacement */
+  const sourceReplacementRetiresPresentation = ({ removed, previousRecordCount }) => removed || previousRecordCount > 1;
+  /**
+   * The Circular source file controls (upload, replace, Remove).
+   * @param {'c_gb' | 'c_gff' | 'c_fasta'} field
+   * @param {File | null} value
+   */
+  const setCircularSourceFile = (field, value) => {
+    const drawing = state.drawings.circular;
+    const busy = sessionOperationAvailability();
+    if (busy) return busy;
+    const nextValue = value ?? null;
+    const previous = files[field];
+    if (previous === nextValue) return;
+    files[field] = nextValue;
+    if (!previous) return;
+    if (sourceReplacementRetiresPresentation({
+      removed: !nextValue, previousRecordCount: circularRecordList.value.length
+    })) retireCircularRecordPresentation(drawing);
+    else retireCircularRecordSelector(drawing);
+  };
   const setCircularRecordPresentationSelector = (value) => {
     const drawing = state.drawings.circular;
     const busy = sessionOperationAvailability();
@@ -5001,9 +5124,9 @@ export const createAppSetup = () => {
       ...group.sequence,
       [field]: nextValue,
       ...(field === 'gb' && nextValue ? { file_definition: '', file_subtitle: '' } : {}),
-      ...(group.records.length > 1 ? {
-        region_record_id: '', region_start: null, region_end: null, region_reverse: false
-      } : {})
+      ...(!seq[field] ? {} : sourceReplacementRetiresPresentation({
+        removed: !nextValue, previousRecordCount: group.records.length
+      }) ? RETIRED_LINEAR_RECORD_PRESENTATION : RETIRED_LINEAR_RECORD_REFERENCE)
     });
     const keepSource = field === 'gb' ? Boolean(nextValue) : Boolean(replacement.gff || replacement.fasta);
     applyLinearSeqMutation(drawing, linearSeqs.flatMap((entry) => (
@@ -5223,6 +5346,8 @@ export const createAppSetup = () => {
     annotationImportNotice,
     specificRuleNotice,
     importAnnotationTableFile: undoableAction('Import annotations', annotationEditor.importAnnotationTableFile),
+    annotationReplaceAllDialog: annotationEditor.annotationReplaceAllDialog,
+    handleAnnotationReplaceAllChoice: annotationEditor.handleAnnotationReplaceAllChoice,
     renameAnnotation: annotationEditor.renameAnnotation,
     setAnnotationStyle: annotationEditor.setAnnotationStyle,
     canDownloadAnnotationTable: annotationEditor.canDownloadAnnotationTable,
@@ -5380,6 +5505,8 @@ export const createAppSetup = () => {
     setCircularTrackSlotsEnabled: circularTrackSlotEditor.setCircularTrackSlotsEnabled,
     setCircularGcSuppressed: circularTrackSlotEditor.setCircularGcSuppressed,
     setCircularSkewSuppressed: circularTrackSlotEditor.setCircularSkewSuppressed,
+    setCircularDinucleotide: circularTrackSlotEditor.setCircularDinucleotide,
+    setCircularTrackSlotNt: circularTrackSlotEditor.setCircularTrackSlotNt,
     addCircularTrackSlot: circularTrackSlotEditor.addCircularTrackSlot,
     canAddCircularTrackRenderer: circularTrackSlotEditor.canAddCircularTrackRenderer,
     duplicateCircularTrackSlot: circularTrackSlotEditor.duplicateCircularTrackSlot,
@@ -5583,6 +5710,7 @@ export const createAppSetup = () => {
     circularRecordSelectionEnabled,
     showCircularCanvasSetting,
     setCircularRecordPresentationSelector,
+    setCircularSourceFile,
     paletteDefinitions,
     paletteNames,
     selectedPalette: drawingMember('selectedPalette'),
@@ -5869,6 +5997,12 @@ export const createAppSetup = () => {
     saveSessionWithTitle,
     editSessionTitle,
     importSession,
+    sessionInput,
+    openSessionFilePicker,
+    loadExampleSession,
+    exampleSessionPending,
+    sessionReplaceDialog,
+    resolveSessionReplacement,
     circularRecordPresentationPanel,
     canUndoHistory,
     canRedoHistory,

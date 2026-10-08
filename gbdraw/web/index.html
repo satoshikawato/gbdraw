@@ -289,8 +289,6 @@
             min-width: min(300px, calc(100vw - 24px));
         }
         .pairwise-match-popup {
-            /* The footer (h-8) is not part of the popup's room: the inline max-height runs to the viewport bottom. */
-            --app-footer-clearance: 2rem;
             width: min(460px, calc(100vw - 24px));
             min-width: min(280px, calc(100vw - 24px));
             min-height: min(180px, calc(100vh - 24px));
@@ -1386,7 +1384,7 @@
                     <button data-history-ignore @click="saveSessionWithTitle" :disabled="!sessionSaveAvailable" :aria-busy="sessionSavePending" class="app-config-button disabled:opacity-40 disabled:cursor-wait" title="Save the current Result and settings draft without generating" aria-label="Save Session" aria-describedby="session-save-help">
                         <i :class="sessionSavePending ? 'ph ph-spinner animate-spin' : 'ph ph-archive'" aria-hidden="true"></i> Save Session
                     </button>
-                    <button data-history-managed @click="$refs.sessionInput.click()" :disabled="!sessionLoadAvailable" :aria-busy="sessionImportPending" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" title="Load Session" aria-label="Load Session">
+                    <button data-history-managed @click="openSessionFilePicker" :disabled="!sessionLoadAvailable" :aria-busy="sessionImportPending" class="app-config-button disabled:opacity-40 disabled:cursor-not-allowed" title="Load Session" aria-label="Load Session">
                         <i class="ph ph-archive-tray" aria-hidden="true"></i> Load Session
                     </button>
                     <input data-history-managed type="file" ref="sessionInput" accept=".json,.gz,application/json,application/gzip" class="hidden" @change="importSession">
@@ -1431,11 +1429,11 @@
                             <label class="flex items-center gap-2 cursor-pointer hover:text-blue-600"><input type="radio" v-model="cInputType" value="gff" class="text-blue-600 focus:ring-blue-500" :disabled="!semanticMutationAvailable"> GFF3 + FASTA</label>
                         </div>
                         <div v-if="cInputType === 'gb'">
-                            <file-uploader label="GenBank/DDBJ File" v-model="files.c_gb" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"></file-uploader>
+                            <file-uploader label="GenBank/DDBJ File" :model-value="files.c_gb" @update:model-value="setCircularSourceFile('c_gb', $event)" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gb,.gbk,.gbff,.genbank,.ddbj,.txt,text/plain,text/*"></file-uploader>
                         </div>
                         <div v-else class="grid grid-cols-1 gap-3">
-                            <file-uploader label="GFF3 File" v-model="files.c_gff" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gff,.gff3,.txt,text/plain,text/*"></file-uploader>
-                            <file-uploader label="FASTA File" v-model="files.c_fasta" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>
+                            <file-uploader label="GFF3 File" :model-value="files.c_gff" @update:model-value="setCircularSourceFile('c_gff', $event)" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".gff,.gff3,.txt,text/plain,text/*"></file-uploader>
+                            <file-uploader label="FASTA File" :model-value="files.c_fasta" @update:model-value="setCircularSourceFile('c_fasta', $event)" :inspection-failed="circularRecordDiscoveryState.status === 'error'" accept=".fa,.fas,.fasta,.fna,.ffn,.faa,.txt,text/plain,text/*"></file-uploader>
                         </div>
                         <section aria-label="Source records" class="space-y-2">
                             <p data-circular-discovery-status role="status" aria-live="polite" class="text-xs text-slate-600">
@@ -1618,7 +1616,7 @@
                                     </div>
                                     <div class="grid grid-cols-[1fr_44px] gap-1.5 items-end">
                                         <div>
-                                            <span class="input-label text-[10px]">Legend title <help-tip :id="`help-circular-depth-legend-title-${track.index}`" text="Legend label shown for this depth coverage track."></help-tip></span>
+                                            <span class="input-label text-[10px]">Legend title <help-tip :id="`help-circular-depth-legend-title-${track.index}`" text="Name of this Depth series in the legend. The legend label field of every Depth row that draws this series edits the same name. Leave blank for the default name: Depth, or Depth N when there are several series."></help-tip></span>
                                             <input
                                                 type="text"
                                                 :value="getDepthTrackLabel(track.index)"
@@ -1626,7 +1624,7 @@
                                                 class="form-input form-input-compact"
                                                 :aria-label="track.index === 0 ? 'Depth legend title' : `Depth ${track.index + 1} legend title`"
                                                 :aria-describedby="`help-circular-depth-legend-title-${track.index}`"
-                                                :placeholder="track.index === 0 ? 'Depth' : `Depth ${track.index + 1}`"
+                                                :placeholder="track.index === 0 && circularDepthTrackRows.length === 1 ? 'Depth' : `Depth ${track.index + 1}`"
                                                 :disabled="!semanticMutationAvailable"
                                             >
                                         </div>
@@ -2067,7 +2065,7 @@
                                     </div>
                                     <div class="grid grid-cols-[1fr_64px_44px] gap-1.5 items-end">
                                         <div>
-                                            <span class="input-label text-[10px]">Legend title <help-tip :id="`help-linear-depth-legend-title-${track.index}`" text="Legend label shown for this depth coverage track."></help-tip></span>
+                                            <span class="input-label text-[10px]">Legend title <help-tip :id="`help-linear-depth-legend-title-${track.index}`" text="Name of this Depth series in the legend. The legend label field of every Depth row that draws this series edits the same name. Leave blank for the default name: Depth, or Depth N when there are several series."></help-tip></span>
                                             <input
                                                 :aria-label="track.index === 0 ? 'Depth legend title' : `Depth ${track.index + 1} legend title`"
                                                 :aria-describedby="`help-linear-depth-legend-title-${track.index}`"
@@ -2075,7 +2073,7 @@
                                                 :value="getDepthTrackLabel(track.index)"
                                                 @input="setDepthTrackLabel(track.index, $event.target.value)"
                                                 class="form-input form-input-compact"
-                                                :placeholder="track.index === 0 ? 'Depth' : `Depth ${track.index + 1}`"
+                                                :placeholder="track.index === 0 && linearDepthTrackRows().length === 1 ? 'Depth' : `Depth ${track.index + 1}`"
                                                 :disabled="!semanticMutationAvailable"
                                             >
                                         </div>
@@ -3111,7 +3109,7 @@
                                                             <button :aria-label="`Linear track slot ${entry.slot.id} Move above Axis`" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotAbove(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotAbove(entry.index))" title="Move above Axis"><i class="ph ph-arrow-line-up" aria-hidden="true"></i></button>
                                                             <button :aria-label="`Linear track slot ${entry.slot.id} Move below Axis`" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotBelow(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotBelow(entry.index))" title="Move below Axis"><i class="ph ph-arrow-line-down" aria-hidden="true"></i></button>
                                                             <button :aria-label="`Linear track slot ${entry.slot.id} Track on Axis`" v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveLinearTrackSlotToAxis(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveLinearTrackSlotToAxis(entry.index))" title="Track on Axis"><i class="ph ph-record" aria-hidden="true"></i></button>
-                                                            <button type="button" :aria-label="`Linear track slot ${entry.slot.id} Duplicate`" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateLinearTrackSlot(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canDuplicateLinearTrackSlot(entry.slot))" :title="canDuplicateLinearTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid'"><i class="ph ph-copy" aria-hidden="true"></i></button>
+                                                            <button type="button" :aria-label="`Linear track slot ${entry.slot.id} Duplicate`" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateLinearTrackSlot(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canDuplicateLinearTrackSlot(entry.slot))" :title="!semanticMutationAvailable || canDuplicateLinearTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid'"><i class="ph ph-copy" aria-hidden="true"></i></button>
                                                             <button :aria-label="`Linear track slot ${entry.slot.id} Delete`" type="button" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeLinearTrackSlot(entry.index, $event)" title="Delete" :disabled="!semanticMutationAvailable"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                                         </div>
                                                     </div>
@@ -3209,7 +3207,7 @@
                                                             </select>
                                                         </div>
                                                         <div class="track-slot-field">
-                                                            <span class="track-slot-field-label">legend label <help-tip :id="`help-linear-slot-depth-legend-label-${entry.index}`" text="Text shown for this enabled Depth slot in custom-stack order. Leave blank to use the selected logical series title; unselected series are omitted."></help-tip></span>
+                                                            <span class="track-slot-field-label">legend label <help-tip :id="`help-linear-slot-depth-legend-label-${entry.index}`" text="Name of the Depth series this row draws. Typing renames the series everywhere: its series card, every row that draws it, and the legend. The legend lists series in custom-stack order and omits series that no enabled row draws. Leave blank for the default name: Depth, or Depth N when there are several series."></help-tip></span>
                                                             <input
                                                                 :aria-label="`Linear track slot ${entry.slot.id} Depth legend label`"
                                                                 :aria-describedby="`help-linear-slot-depth-legend-label-${entry.index}`"
@@ -3487,7 +3485,7 @@
                                                             <button :aria-label="`Circular track slot ${entry.slot.id} Move outside Axis`" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotOutside(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotOutside(entry.index))" title="Move outside Axis"><i class="ph ph-arrow-line-up" aria-hidden="true"></i></button>
                                                             <button :aria-label="`Circular track slot ${entry.slot.id} Move inside Axis`" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotInside(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotInside(entry.index))" title="Move inside Axis"><i class="ph ph-arrow-line-down" aria-hidden="true"></i></button>
                                                             <button :aria-label="`Circular track slot ${entry.slot.id} Track on Axis`" v-if="entry.slot.renderer === 'features' || entry.slot.renderer === 'ticks' || entry.slot.renderer === 'annotations'" type="button" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="moveCircularTrackSlotToAxis(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canMoveCircularTrackSlotToAxis(entry.index))" title="Track on Axis"><i class="ph ph-record" aria-hidden="true"></i></button>
-                                                            <button type="button" :aria-label="`Circular track slot ${entry.slot.id} Duplicate`" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canDuplicateCircularTrackSlot(entry.slot))" :title="isManagedCircularConservationSlot(entry.slot) ? 'Comparison tracks are managed by Series' : (canDuplicateCircularTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid')"><i class="ph ph-copy" aria-hidden="true"></i></button>
+                                                            <button type="button" :aria-label="`Circular track slot ${entry.slot.id} Duplicate`" class="btn btn-secondary text-[10px] h-6 w-6 p-0" @click="duplicateCircularTrackSlot(entry.index, $event)" :disabled="!semanticMutationAvailable || (!canDuplicateCircularTrackSlot(entry.slot))" :title="isManagedCircularConservationSlot(entry.slot) ? 'Comparison tracks are managed by Series' : (!semanticMutationAvailable || canDuplicateCircularTrackSlot(entry.slot) ? 'Duplicate' : 'Duplicating this row would make the custom stack invalid')"><i class="ph ph-copy" aria-hidden="true"></i></button>
                                                             <button type="button" :aria-label="`Circular track slot ${entry.slot.id} Remove`" class="btn btn-danger text-[10px] h-6 w-6 p-0" @click="removeCircularTrackSlot(entry.index, $event)" :disabled="!semanticMutationAvailable || (isManagedCircularConservationSlot(entry.slot))" :title="isManagedCircularConservationSlot(entry.slot) ? 'Remove this source in Pairwise Comparisons' : 'Remove'"><i class="ph ph-trash" aria-hidden="true"></i></button>
                                                         </div>
                                                     </div>
@@ -3592,10 +3590,10 @@
                                                     <div v-if="entry.slot.renderer === 'depth'" class="grid grid-cols-2 gap-1">
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">track index <help-tip :id="`help-circular-slot-track-index-${entry.index}`" text="Zero-based non-negative integer for the logical Depth series used by this slot. Reordering slots does not change source binding."></help-tip></span>
-                                                            <input type="number" min="0" step="1" v-model.number="entry.slot.params.track_index" @change="syncDepthTrackSlotLabel(entry.slot)" :aria-label="`Depth track index ${entry.slot.id}`" :aria-describedby="`help-circular-slot-track-index-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" placeholder="0" :disabled="!semanticMutationAvailable">
+                                                            <depth-track-index-input v-model="entry.slot.params.track_index" @change="syncDepthTrackSlotLabel(entry.slot)" :slot-id="entry.slot.id" :control-id="`${circularTrackSlotEditorKey(entry.slot)}-track-index`" :help-id="`help-circular-slot-track-index-${entry.index}`" :disabled="!semanticMutationAvailable"></depth-track-index-input>
                                                         </div>
                                                         <div class="track-slot-field">
-                                                            <span class="track-slot-field-label">legend label <help-tip :id="`help-circular-slot-depth-legend-label-${entry.index}`" text="Text shown for this enabled Depth slot. Leave blank to use the selected logical series title."></help-tip></span>
+                                                            <span class="track-slot-field-label">legend label <help-tip :id="`help-circular-slot-depth-legend-label-${entry.index}`" text="Name of the Depth series this row draws. Typing renames the series everywhere: its series card, every row that draws it, and the legend. Leave blank for the default name: Depth, or Depth N when there are several series."></help-tip></span>
                                                             <input
                                                                 :aria-label="`Circular track slot ${entry.slot.id} Depth legend label`"
                                                                 :aria-describedby="`help-circular-slot-depth-legend-label-${entry.index}`"
@@ -3610,7 +3608,7 @@
                                                     <div v-if="entry.slot.renderer === 'dinucleotide_content' || entry.slot.renderer === 'dinucleotide_skew'" class="grid grid-cols-2 gap-1">
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">dinucleotide <help-tip :id="`help-circular-slot-dinucleotide-${entry.index}`" text="Two-base code used for this content/skew track, such as GC or AT."></help-tip></span>
-                                                            <input v-model.trim="entry.slot.params.nt" :aria-label="`Circular track slot ${entry.slot.id} Track dinucleotide`" :aria-describedby="`help-circular-slot-dinucleotide-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" placeholder="GC" :disabled="!semanticMutationAvailable">
+                                                            <input :value="entry.slot.params.nt" @input="setCircularTrackSlotNt(entry.slot, $event.target.value)" :aria-label="`Circular track slot ${entry.slot.id} Track dinucleotide`" :aria-describedby="`help-circular-slot-dinucleotide-${entry.index}`" class="form-input px-1 py-0.5 text-[10px]" placeholder="GC" :disabled="!semanticMutationAvailable">
                                                         </div>
                                                         <div class="track-slot-field">
                                                             <span class="track-slot-field-label">legend label <help-tip :id="`help-circular-slot-legend-label-${entry.index}`" text="Base text shown in the diagram legend. Leave blank to use the auto label shown here; two-color tracks add (+) and (-)."></help-tip></span>
@@ -4703,7 +4701,7 @@
                                 </div>
                                 <div>
                                     <span class="input-label text-[10px]">Dinucleotide <help-tip id="help-gc-dinucleotide" text="Dinucleotide to use (e.g., 'GC'). Default is 'GC'."></help-tip></span>
-                                    <input type="text" v-model="adv.nt" aria-label="Dinucleotide" aria-describedby="help-gc-dinucleotide" class="form-input form-input-compact w-full" placeholder="GC" :disabled="!semanticMutationAvailable">
+                                    <input type="text" :value="adv.nt" @input="mode === 'circular' ? setCircularDinucleotide($event.target.value) : (adv.nt = $event.target.value)" aria-label="Dinucleotide" aria-describedby="help-gc-dinucleotide" class="form-input form-input-compact w-full" placeholder="GC" :disabled="!semanticMutationAvailable">
                                 </div>
                             </div>
 
@@ -4900,9 +4898,9 @@
                     <button v-if="canRetryFeatureEditTableImport" type="button" @click="retryFeatureEditTableImport" class="btn btn-secondary btn-sm">Retry Feature Edits TSV import</button>
                     <button v-if="canRetryFeatureEditTableImport" type="button" @click="reselectFeatureEditTable" class="btn btn-secondary btn-sm">Reselect Feature Edits TSV</button>
                     <button v-if="canRetrySpecificRuleFailure" type="button" @click="retrySpecificRuleFailure" :disabled="!semanticMutationAvailable" class="btn btn-secondary btn-sm">Retry rule operation</button>
-                    <button v-if="canEditSpecificRuleFailure && errorDisplay.actions.includes('edit-pattern')" type="button" @click="editSpecificRuleFailure" class="btn-secondary text-xs">Edit pattern</button>
-                    <button v-if="errorDisplay.actions.includes('generate') && errorDisplay.operation !== 'generate'" type="button" @click="generateFromError" :disabled="processing" class="btn-secondary text-xs">Generate</button>
-                    <button v-if="(errorDisplay.actions.includes('save-session') && errorDisplay.operation !== 'session-save') || generationFailureRecovery === 'restore-failed'" type="button" @click="saveSessionWithTitle" :disabled="sessionImportPending" class="btn-secondary text-xs">Save Session</button>
+                    <button v-if="canEditSpecificRuleFailure && errorDisplay.actions.includes('edit-pattern')" type="button" @click="editSpecificRuleFailure" class="btn btn-secondary btn-sm">Edit pattern</button>
+                    <button v-if="errorDisplay.actions.includes('generate') && errorDisplay.operation !== 'generate'" type="button" @click="generateFromError" :disabled="processing" class="btn btn-secondary btn-sm">Generate</button>
+                    <button v-if="(errorDisplay.actions.includes('save-session') && errorDisplay.operation !== 'session-save') || generationFailureRecovery === 'restore-failed'" type="button" @click="saveSessionWithTitle" :disabled="sessionImportPending" class="btn btn-secondary btn-sm">Save Session</button>
                     <button v-if="generationFailureRecovery === 'restore-failed' || errorDisplay.actions.includes('reload')" type="button" @click="reloadAfterOperationError" class="btn btn-secondary btn-sm">Reload</button>
                     <button v-if="errorDisplay.operation.startsWith('export-') && errorDisplay.actions.includes('use-svg')" type="button" @click="downloadSVG" class="btn btn-secondary btn-sm">Use SVG</button>
                     <button v-if="errorDisplay.operation === 'export-svg' && !canRetryInteractiveSvgExport && errorDisplay.actions.includes('retry')" type="button" @click="downloadSVG" class="btn btn-secondary btn-sm">Retry SVG export</button>
@@ -4998,7 +4996,8 @@
                      role="status"
                      class="-mx-4 border-b border-amber-200 bg-amber-50 px-5 py-3 text-sm text-amber-900 shrink-0">
                     <p class="font-semibold">Showing the last successful result.</p>
-                    <p>Current changes were not applied.</p>
+                    <p v-if="failedGeneratePreservedResult === 'current'">It matches the current settings.</p>
+                    <p v-else>Current changes were not applied.</p>
                 </div>
 
                 <div v-if="similarityAlignmentBusy"
@@ -5977,7 +5976,7 @@
                          role="dialog"
                          aria-label="Pairwise match details"
                          class="fixed z-50 feature-popup pairwise-match-popup custom-scrollbar bg-white rounded-xl shadow-2xl border border-slate-200 p-4"
-                         :style="[pairwiseMatchPopupStyle, { maxHeight: `calc(${pairwiseMatchPopupStyle.maxHeight} - var(--app-footer-clearance))` }]">
+                         :style="pairwiseMatchPopupStyle">
                         <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100 cursor-move">
                             <div class="w-4 h-4 rounded mt-1 border border-slate-200"
                                  :style="{ backgroundColor: clickedPairwiseMatch.fill || '#94a3b8' }"></div>
@@ -7348,6 +7347,11 @@
             <div v-else class="h-full flex flex-col items-center justify-center text-slate-300 border-4 border-dashed border-slate-200 rounded-3xl p-12 bg-slate-50/30">
                 <i class="ph ph-dna text-6xl mb-4 text-slate-200" aria-hidden="true"></i>
                 <p class="font-medium text-slate-400">No {{ mode === 'linear' ? 'Linear' : 'Circular' }} Result yet. Configure settings and click Generate.</p>
+                <button type="button" data-history-managed @click="loadExampleSession" :disabled="!sessionLoadAvailable || exampleSessionPending" :aria-busy="exampleSessionPending"
+                        class="btn btn-secondary btn-sm mt-4" aria-describedby="example-session-help">
+                    <i :class="exampleSessionPending ? 'ph ph-spinner animate-spin' : 'ph ph-play-circle'" aria-hidden="true"></i> Load an example
+                </button>
+                <p id="example-session-help" class="ui-hint mt-2">Opens the human mitochondrial genome Session from the Gallery.</p>
             </div>
         </div>
     </main>
@@ -7649,6 +7653,19 @@
                 </p>
             </section>
         </div>
+        <!-- UJ-09: loading a Session asks before it replaces unsaved work -->
+        <choice-dialog v-if="sessionReplaceDialog.show" labelledby="session-replace-title" describedby="session-replace-description"
+             @cancel="resolveSessionReplacement('cancel')" @keydown.tab="trapDialogFocus"
+             class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
+            <h2 id="session-replace-title" class="text-base font-bold text-slate-800">Replace the current work?</h2>
+            <p id="session-replace-description" class="mt-2 text-sm leading-relaxed text-slate-600">
+                Loading a Session replaces the current settings and Results and clears Undo history. Changes since the last Save Session or Load Session are lost.
+            </p>
+            <div class="mt-4 flex justify-end gap-2">
+                <button type="button" data-history-ignore @click="resolveSessionReplacement('cancel')" class="btn btn-secondary btn-sm">Cancel</button>
+                <button type="button" data-history-ignore @click="resolveSessionReplacement('load')" class="btn btn-primary btn-sm">{{ sessionReplaceDialog.actionLabel }}</button>
+            </div>
+        </choice-dialog>
         <!-- Q3: a layout edit that would leave lane Feature placements undrawable -->
         <div v-if="featurePlacementActions.layoutChange.open" class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4"
              @click.self="featurePlacementActions.resolveLayoutChange('cancel')" @keydown.esc.prevent.stop="featurePlacementActions.resolveLayoutChange('cancel')" @keydown.tab="trapDialogFocus">
@@ -7666,6 +7683,26 @@
                 </div>
             </section>
         </div>
+        <!-- Region Annotations: an imported table without rows removes every set (FL-14) -->
+        <choice-dialog v-if="annotationReplaceAllDialog.show" labelledby="annotation-replace-all-title" describedby="annotation-replace-all-description"
+             @cancel="handleAnnotationReplaceAllChoice('cancel')" @keydown.tab="trapDialogFocus"
+             class="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center">
+                <h3 id="annotation-replace-all-title" class="text-lg font-bold text-slate-800 mb-2">Remove All Annotation Sets</h3>
+                <p id="annotation-replace-all-description" class="text-sm text-slate-600 mb-4">
+                    The imported table has no annotation rows. Importing it removes all {{ annotationReplaceAllDialog.setCount }} annotation set(s).
+                </p>
+                <button @click="handleAnnotationReplaceAllChoice('remove')"
+                        data-history-managed
+                        class="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors text-left flex items-center gap-2" :disabled="!semanticMutationAvailable">
+                    <i class="ph ph-trash text-lg" aria-hidden="true"></i>
+                    <span>Remove all sets</span>
+                </button>
+                <button @click="handleAnnotationReplaceAllChoice('cancel')"
+                        data-history-managed
+                        class="w-full mt-3 px-4 py-2 text-slate-500 hover:text-slate-700 text-sm font-medium" :disabled="!semanticMutationAvailable">
+                    Cancel
+                </button>
+        </choice-dialog>
     </Teleport>
 </div>
 
@@ -7708,6 +7745,15 @@
         </div>
         <p v-if="view.isAuto && autoText" :id="`${controlId}-auto`" class="circular-measure-note ui-hint">{{ autoText }}</p>
         <p v-if="view.error" :id="`${controlId}-error`" class="circular-measure-note text-red-700" role="alert">{{ view.error }}</p>
+    </div>
+</script>
+
+<script type="text/x-template" id="depth-track-index-input-template">
+    <div>
+        <input :id="controlId" type="number" min="0" step="1" :value="text" @change="commit($event.target.value)"
+               :aria-label="`Depth track index ${slotId}`" :aria-describedby="describedBy || null"
+               :aria-invalid="error ? 'true' : 'false'" class="form-input px-1 py-0.5 text-[10px]" placeholder="0" :disabled="disabled">
+        <p v-if="error" :id="`${controlId}-error`" class="circular-measure-note text-red-700" role="alert">{{ error }}</p>
     </div>
 </script>
 

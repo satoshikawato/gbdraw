@@ -665,13 +665,15 @@ test('file import commits once, separates notices, and preserves draft/Result on
       await editor.importAnnotationTableFile({ target: input });
       assert.equal(JSON.stringify(state), before);
       assert.equal(commits, 1);
-      assert.equal(notices.at(-1), '');
+      // FL-14: the panel notice reports the error; no native alert.
+      assert.match(notices.at(-1), /^Could not import annotations: /);
     }
     const before = JSON.stringify(state);
     input.files = [{ text: async () => { throw new Error('read failure'); } }];
     await editor.importAnnotationTableFile({ target: input });
     assert.equal(JSON.stringify(state), before);
-    assert.match(alerts.at(-1), /read failure/);
+    assert.match(notices.at(-1), /^Could not import annotations: read failure/);
+    assert.deepEqual(alerts, []);
     let finish;
     input.files = [{ text: () => new Promise((resolve) => { finish = resolve; }) }];
     const pending = editor.importAnnotationTableFile({ target: input });
@@ -710,10 +712,59 @@ test('file import commits once, separates notices, and preserves draft/Result on
   }
 });
 
-test('record reconciliation failure cannot partially replace an imported draft', () => {
+test('record reconciliation failure cannot partially replace an imported draft', async () => {
   const state = { annotationSets: [createAnnotationSet({ id: 'original' })] };
   const before = JSON.stringify(state);
   const editor = createAnnotationEditor({ state: withDrawings(state), getRecordCatalog: () => { throw new Error('catalog unavailable'); } });
-  assert.throws(() => editor.importAnnotationTable(importCases[0].table), /catalog unavailable/);
+  await assert.rejects(() => editor.importAnnotationTable(importCases[0].table), /catalog unavailable/);
   assert.equal(JSON.stringify(state), before);
+});
+
+// FL-14: the editor keeps the ids valid and says which id it stored.
+test('an id edit that the editor changes names the stored id in the panel notice', () => {
+  const state = { annotationSets: [
+    createAnnotationSet({ id: 'annotations', annotations: [
+      { id: 'region_1', target: coordinateTarget({ start: 1, end: 3 }), mark: 'band' },
+      { id: 'region_2', target: coordinateTarget({ start: 5, end: 9 }), mark: 'band' }
+    ] }),
+    createAnnotationSet({ id: 'second' })
+  ], adv: { circular_track_slots: [], linear_track_slots: [] } };
+  const notices = [];
+  const editor = createAnnotationEditor({ state: withDrawings(state), onImportNotice: (notice) => notices.push(notice) });
+  const [first, second] = state.annotationSets;
+  editor.renameAnnotation(first, first.annotations[1], 'region_1');
+  assert.equal(first.annotations[1].id, 'region_1_2');
+  assert.equal(notices.at(-1), 'Annotation id "region_1" is used by another annotation of this set, so it was saved as "region_1_2".');
+  editor.renameAnnotation(first, first.annotations[1], '  ');
+  assert.equal(first.annotations[1].id, 'region');
+  assert.equal(notices.at(-1), 'Annotation id cannot be empty, so it was saved as "region".');
+  editor.renameAnnotation(first, first.annotations[1], 'kept');
+  assert.equal(notices.at(-1), '');
+  editor.renameAnnotationSet(second, 'annotations');
+  assert.equal(second.id, 'annotations_2');
+  assert.equal(notices.at(-1), 'Set id "annotations" is used by another set, so it was saved as "annotations_2".');
+  editor.renameAnnotationSet(second, '');
+  assert.equal(second.id, 'annotations_2');
+  assert.equal(notices.at(-1), 'Set id cannot be empty, so it was saved as "annotations_2".');
+});
+
+// FL-14: a table without rows would remove every set, so the import asks.
+test('an import that would remove every set asks first, and Cancel keeps the sets', async () => {
+  const state = { annotationSets: [createAnnotationSet({ id: 'kept', annotations: [
+    { id: 'old', target: coordinateTarget({ start: 1, end: 3 }), mark: 'band' }
+  ] })] };
+  const editor = createAnnotationEditor({ state: withDrawings(state), onImportNotice: () => {} });
+  const before = JSON.stringify(state);
+  const canceled = editor.importAnnotationTable('');
+  assert.deepEqual({ ...editor.annotationReplaceAllDialog }, { show: true, setCount: 1 });
+  editor.handleAnnotationReplaceAllChoice('cancel');
+  await canceled;
+  assert.equal(editor.annotationReplaceAllDialog.show, false);
+  assert.equal(JSON.stringify(state), before);
+  const removed = editor.importAnnotationTable('');
+  editor.handleAnnotationReplaceAllChoice('remove');
+  await removed;
+  assert.deepEqual(state.annotationSets, []);
+  await editor.importAnnotationTable('');
+  assert.equal(editor.annotationReplaceAllDialog.show, false, 'no set to remove: no question');
 });

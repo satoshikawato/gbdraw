@@ -1,6 +1,7 @@
 // @ts-check
 /** @import { DrawingState } from '../../state.js' */
 import { resolveColorToHex } from '../../utils/color-utils.js';
+import { popupViewportBottom } from '../../utils/popup-bounds.js';
 import { reportRuleRunFailure, runWhenPrepared } from '../rule-matching.js';
 import {
   formatFeatureLength,
@@ -230,13 +231,14 @@ export const createFeatureSvgActions = ({
   const getPopupPosition = (eventLike, popupWidth = 720, popupHeight = 520) => {
     const margin = 12;
     const fallbackX = window.innerWidth / 2;
-    const fallbackY = window.innerHeight / 2;
+    const bottom = popupViewportBottom();
+    const fallbackY = bottom / 2;
     const resolvedPopupWidth = Math.min(popupWidth, Math.max(0, window.innerWidth - (2 * margin)));
-    const resolvedPopupHeight = Math.min(popupHeight, Math.max(0, window.innerHeight - (2 * margin)));
+    const resolvedPopupHeight = Math.min(popupHeight, Math.max(0, bottom - (2 * margin)));
     const rawX = Number.isFinite(eventLike?.clientX) ? eventLike.clientX + 10 : fallbackX;
     const rawY = Number.isFinite(eventLike?.clientY) ? eventLike.clientY + 10 : fallbackY;
     const maxX = Math.max(margin, window.innerWidth - resolvedPopupWidth - margin);
-    const maxY = Math.max(margin, window.innerHeight - resolvedPopupHeight - margin);
+    const maxY = Math.max(margin, bottom - resolvedPopupHeight - margin);
     return {
       x: Math.min(Math.max(rawX, margin), maxX),
       y: Math.min(Math.max(rawY, margin), maxY)

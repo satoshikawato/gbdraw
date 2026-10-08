@@ -315,6 +315,20 @@ test('the operation error panel offers Generate and no Save after a failed Save 
   assert.equal(saveFailure.operation, 'session-save');
 });
 
+// #941 residual: every action of an operation error panel is the same small
+// button (`btn btn-secondary btn-sm`), so a new action cannot miss the style.
+test('every operation error panel action is a small secondary button', () => {
+  const indexHtml = readFileSync(new URL('../../gbdraw/web/index.html', import.meta.url), 'utf8');
+  const panels = indexHtml.match(/<operation-error[\s\S]*?<\/operation-error>/g) || [];
+  const buttons = panels.flatMap((panel) => panel.match(/<button\b[^>]*>[^<]*/g) || []);
+  assert.ok(buttons.length >= 15, `operation error actions found: ${buttons.length}`);
+  const unstyled = buttons.filter((button) => {
+    const classes = new Set((button.match(/\sclass="([^"]*)"/)?.[1] || '').split(/\s+/));
+    return !['btn', 'btn-secondary', 'btn-sm'].every((name) => classes.has(name));
+  }).map((button) => button.replace(/^[^>]*>/, '').trim());
+  assert.deepEqual(unstyled, []);
+});
+
 // R6: locators the producer keeps are shown in the summary, wording only here.
 test('summary shows Sequence, Line, Track row, Depth series, band and setting locators', () => {
   for (const [source, pattern] of [
@@ -612,4 +626,19 @@ test('a GenBank slot file without records says what it looks like (UJ-07)', () =
     'No records were found. Choose input containing records. This file looks like FASTA. Use GFF3 + FASTA input, or a GenBank/DDBJ flat file.');
   assert.match(producerSummary('NO_RECORDS', { reason: 'EMPTY_FILE' }), / The file is empty\.$/);
   assert.match(producerSummary('NO_RECORDS', { reason: 'NOT_GENBANK' }), / The file is not a GenBank\/DDBJ flat file: it has no record header line\.$/);
+});
+
+// TK-06: a Depth series with no file in any record names the series and offers
+// both recoveries, whether the request builder or the Generate check finds it.
+test('a Depth series without a file says to attach a TSV or remove the series (TK-06)', () => {
+  const expected = 'The depth input or settings are invalid. Depth series 2. Attach a Depth TSV to this series, or remove the series.';
+  assert.equal(producerSummary('DEPTH_INVALID', { reason: 'DEPTH_SERIES_SOURCE', seriesIndex: 1 }), expected);
+  for (const message of [
+    'Depth series #2 (logical track index 1) has no TSV source in any record.',
+    'Depth series #2 (logical track index 1) has no TSV source in any record. Add a TSV or remove the series.'
+  ]) {
+    const model = roundtrip(new Error(message));
+    assert.deepEqual([model.code, model.context], ['DEPTH_INVALID', { reason: 'DEPTH_SERIES_SOURCE', seriesIndex: 1 }]);
+    assert.equal(model.summary, expected);
+  }
 });

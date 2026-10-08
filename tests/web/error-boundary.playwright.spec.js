@@ -68,6 +68,22 @@ test('real Python adapters retain causes through one lazy Worker and successful 
   expect(activity.instances[0].initializations).toBe(1);
 });
 
+// UI-07: Generate with no input names the missing input before the diagram
+// Worker (Pyodide) starts, in both modes, and Retry repeats the same check.
+test('Generate without input fails before the diagram Worker starts', async ({ page }) => {
+  await openApp(page);
+  for (const mode of ['circular', 'linear']) {
+    await page.evaluate((target) => window.__GBDRAW_APP__.setDiagramMode(target), mode);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const outcome = await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.runAnalysis());
+      expect(outcome).toMatchObject({ status: 'error', error: { code: 'INPUT_REQUIRED', operation: 'generate' },
+        recovery: 'no-result' });
+    }
+    await expect(page.getByRole('alert', { name: 'Generation Error' })).toContainText('Supply GenBank input');
+  }
+  expect((await getDiagramWorkerActivity(page)).constructions).toBe(0);
+});
+
 const { join } = require('node:path');
 const { pathToFileURL } = require('node:url');
 const { failNextNativeRender, inspectSafeDetails } = require('./helpers/operation-error.cjs');

@@ -510,9 +510,8 @@ test('choice dialogs and the feature popup move focus in and back, and drawer ta
         expect((await focusState(page)).inDialog, `${heading}: ${key} stays inside`).toBe(true);
       }
       await page.keyboard.press('Escape');
-      // A Cancel handler commits through History, which may first capture the
-      // intent; the dialog closes when that returns.
-      await expect(dialog, `${heading} closes on Escape`).toHaveCount(0, { timeout: 60_000 });
+      // Cancel settles outside History (OV-161), so the dialog closes at once.
+      await expect(dialog, `${heading} closes on Escape`).toHaveCount(0);
       await expect(featurePopup, `${heading}: Escape keeps the popup`).toBeVisible();
       await expect(opener, `${heading}: focus returns`).toBeFocused();
     }
@@ -548,6 +547,33 @@ test('choice dialogs and the feature popup move focus in and back, and drawer ta
       await expect(drawer.locator(`input[placeholder="${placeholder}"]`)).toHaveAttribute('aria-label', 'Search similarity groups');
     }
     await expect(drawer.locator('select:has(option[value="member_count"])')).toHaveAttribute('aria-label', 'Sort similarity groups');
+  } finally { await page.context().close(); }
+});
+
+// #941 residual: Escape closes only the top layer. A feature popup opened from
+// the Editor drawer closes on Escape and Close with the drawer still open, and
+// focus returns to the drawer's Edit button; a second Escape closes the drawer.
+test('a feature popup opened from the Editor drawer returns focus to its Edit button', async ({ browser }) => {
+  test.setTimeout(300_000);
+  const page = await load(browser, seeds.circular);
+  try {
+    if (!await page.locator('.right-drawer').isVisible()) await page.locator('.drawer-toggle').click();
+    const drawer = page.locator('.right-drawer');
+    const featurePopup = page.locator('.feature-popup');
+    const edit = drawer.getByRole('button', { name: 'Edit', exact: true }).first();
+    for (const close of ['Escape', 'Close feature popup']) {
+      await edit.focus();
+      await page.keyboard.press('Enter');
+      await expect(featurePopup).toBeVisible();
+      await expect.poll(() => focusState(page), 'focus moves into the popup').toMatchObject({ inPopup: true });
+      if (close === 'Escape') await page.keyboard.press('Escape');
+      else await featurePopup.getByRole('button', { name: close, exact: true }).press('Enter');
+      await expect(featurePopup).toHaveCount(0);
+      await expect(drawer, `${close} keeps the drawer open`).toBeVisible();
+      await expect(edit, `${close} returns focus to the drawer's Edit button`).toBeFocused();
+    }
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.drawer-toggle')).toHaveAttribute('aria-expanded', 'false');
   } finally { await page.context().close(); }
 });
 

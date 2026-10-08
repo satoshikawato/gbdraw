@@ -1226,6 +1226,8 @@ export const executeCanonicalRenderCandidate = async ({
  *   The draft record display rows the request reads (`recordDisplayControls.allRows`, R13).
  * @property {() => Promise<void>} [settleComparisonRecordLabels] D12: ring rows added just before Generate are named before it reads them.
  * @property {((mode: string, state: any) => void) | null} [assertActiveModeInputs]
+ * @property {(() => string) | null} [readDraftSignature] The History signature of the committed draft
+ *   intent (UJ-10: a Cancel compares the canceled draft with the draft of the shown Result).
  *   services/config.js owns the active-mode input check shared with Save.
  * @property {() => void} closeLabelTextScopeDialog The label owner's port (app/feature-editor/label-actions.js).
  * @property {(options?: { rerender?: boolean }) => void} clearLabelBuildNotices The label owner's port.
@@ -1262,6 +1264,7 @@ export const createRunAnalysis = ({
   settleComparisonRecordLabels = async () => {},
   // services/config.js owns the active-mode input check shared with Save.
   assertActiveModeInputs = null,
+  readDraftSignature = null,
   // R13: the label owner's ports (app/feature-editor/label-actions.js).
   closeLabelTextScopeDialog,
   clearLabelBuildNotices,
@@ -1528,6 +1531,26 @@ export const createRunAnalysis = ({
 
   const formatError = (cause, operation = 'generate', stage = 'request-validation') =>
     normalizeUserFacingError(cause || { code: 'UNKNOWN' }, { operation, stage });
+  // UJ-08: the shown Generate failure about the source inputs, and its mode.
+  /** @type {{ error: any, mode: string } | null} */
+  let sourceInputFailure = null;
+  const SOURCE_INPUT_FAILURES = new Set(['INPUT_REQUIRED', 'FASTA_REQUIRED', 'INPUT_UNREADABLE', 'NO_RECORDS']);
+  /**
+   * Record discovery read every source input of `drawingMode`: a shown
+   * Generate failure about those inputs no longer holds, so it ends here.
+   * @param {string} drawingMode
+   */
+  const releaseSourceInputFailure = (drawingMode) => {
+    if (!sourceInputFailure || sourceInputFailure.mode !== drawingMode
+      || errorLog.value !== sourceInputFailure.error) return;
+    try {
+      assertActiveModeInputs?.(drawingMode, state);
+    } catch (_) {
+      return;
+    }
+    sourceInputFailure = null;
+    errorLog.value = null;
+  };
   /**
    * @param {any} cause
    * @param {{ handle?: Record<string, any> | null, restore?: (() => any) | null, operation?: string, stage?: string,
@@ -1551,6 +1574,8 @@ export const createRunAnalysis = ({
     }
     if (!isCurrent()) return { status: 'stale' };
     errorLog.value = error;
+    sourceInputFailure = operation === 'generate' && SOURCE_INPUT_FAILURES.has(error?.code)
+      ? { error: errorLog.value, mode: mode.value } : null;
     if (generationFailureRecovery) generationFailureRecovery.value = recovery;
     failedGeneratePreservedResult.value = ['preserved', 'restored'].includes(recovery);
     return { status: 'error', error, recovery };
@@ -1992,6 +2017,7 @@ export const createRunAnalysis = ({
         .map(({ selector, record_id, recordKey }) => ({ selector, record_id, recordKey }));
       const nextPositions = mergeCircularRecordPositions(nextRecords, drawing.adv.multi_record_positions);
       drawing.adv.multi_record_positions.splice(0, drawing.adv.multi_record_positions.length, ...nextPositions);
+      if (nextRecords.length > 0) releaseSourceInputFailure('circular');
     } catch (error) {
       if (
         refreshGeneration !== circularRecordRefreshGeneration ||
@@ -2693,7 +2719,8 @@ export const createRunAnalysis = ({
                 drawing.form.track_type,
                 circularTrackAxisIndex
               ),
-              drawing.form
+              drawing.form,
+              drawing.adv.nt
             )
           : [];
         if (useCircularTrackSlots) {
@@ -2787,8 +2814,6 @@ export const createRunAnalysis = ({
           }
           validateDepthStyleSettings();
         }
-
-        assertActiveModeInputs?.('circular', state);
 
         const sourceMode = String(drawing.circularConservation.source || '').trim().toLowerCase() === 'upload'
           ? 'upload'
@@ -3695,7 +3720,6 @@ export const createRunAnalysis = ({
             : new Set(comparisonResolution.edges
                 .filter((edge) => edge.source === 'losat')
                 .flatMap((edge) => [edge.queryIndex, edge.subjectIndex]));
-          assertActiveModeInputs?.('linear', state);
           for (let i = 0; i < linearSeqs.length; i++) {
             const seq = linearSeqs[i];
             if (lInputType.value === 'gb') {
@@ -4989,6 +5013,9 @@ export const createRunAnalysis = ({
     }
   };
 
+  // UJ-10: the Results a successful Generate showed and the draft it read.
+  /** @type {{ results: any, signature: string } | null} */
+  let shownGenerateDraft = null;
   /**
    * @param {Record<string, any> | null} [comparisonPlanSnapshot]
    * @param {Record<string, any> | null} [generatedArtifactHandle]
@@ -5017,6 +5044,19 @@ export const createRunAnalysis = ({
     const initialResults = results.value;
     /** @type {string | null} */
     let historyRecovery = null;
+    // UJ-10: whether the draft this run reads is the one of the shown Result.
+    // It is read when the run settles its draft or when Cancel is observed,
+    // whichever comes first, so an edit committed before either counts.
+    const readRunDraftIsShown = () => {
+      const signature = readDraftSignature?.() || '';
+      return Boolean(signature) && shownGenerateDraft?.signature === signature
+        && shownGenerateDraft.results === results.value;
+    };
+    /** @param {boolean} draftIsShown */
+    const preserveCanceledResult = (draftIsShown) => {
+      failedGeneratePreservedResult.value = results.value.length > 0 && (draftIsShown ? 'current' : true);
+    };
+    let runDraftIsShown = false;
     processing.value = true;
     processingStatus.value = 'Preparing input files...';
     generationCancelRequested.value = false;
@@ -5032,10 +5072,19 @@ export const createRunAnalysis = ({
         if (!generationCancelRequested.value) return null;
         processingStatus.value = 'Canceled.';
         outcome = { status: 'canceled' };
-        failedGeneratePreservedResult.value = results.value.length > 0;
+        preserveCanceledResult(readRunDraftIsShown());
         return outcome;
       };
       if (cancelBeforeRender()) return outcome;
+      // UI-07: the active mode's input check runs before anything here starts
+      // the diagram Worker, so a missing input is named at once.
+      try {
+        assertActiveModeInputs?.(mode.value, state);
+      } catch (cause) {
+        outcome = await failOperation(cause, { handle: null, stage: 'request-validation',
+          isCurrent: isCurrentAlert, isCurrentOperation, recovery: results.value.length ? 'preserved' : 'no-result' });
+        return outcome;
+      }
       await settleComparisonRecordLabels();
       if (!isCurrentOperation()) return { status: 'stale' };
       if (cancelBeforeRender()) return outcome;
@@ -5050,6 +5099,8 @@ export const createRunAnalysis = ({
       }
       const execute = (handle) => {
         beforeHandle = handle || generatedArtifactHandle;
+        // History has settled the draft this run reads.
+        runDraftIsShown = readRunDraftIsShown();
         return runAnalysisInternal(drawing, {
           decorationContinuity, comparisonPlanSnapshot, generatedArtifactHandle: beforeHandle,
           comparisonExecution, isCurrentOperation, isCurrentAlert
@@ -5113,12 +5164,13 @@ export const createRunAnalysis = ({
         outcome = publicOutcome;
       }
       if (outcome?.status === 'canceled' && isCurrentOperation()) {
-        failedGeneratePreservedResult.value = results.value.length > 0;
+        preserveCanceledResult(runDraftIsShown);
       } else if (outcome?.status === 'ok') {
         failedGeneratePreservedResult.value = false;
         if (generationFailureRecovery) generationFailureRecovery.value = null;
       }
       await afterGenerate?.(outcome);
+      if (outcome?.status === 'ok') shownGenerateDraft = { results: results.value, signature: readDraftSignature?.() || '' };
       return outcome;
     } catch (cause) {
       outcome = await failOperation(cause, { handle: beforeHandle, isCurrent: isCurrentAlert, isCurrentOperation,
@@ -5732,6 +5784,7 @@ export const createRunAnalysis = ({
     restoreGeneratedArtifactRuntimeState,
     runLabelReflow,
     refreshCircularRecordOrder,
+    releaseSourceInputFailure,
     downloadCliHelperFiles,
     downloadLosatCache,
     downloadLosatPair,

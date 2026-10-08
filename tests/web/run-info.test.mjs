@@ -1174,6 +1174,37 @@ test('a Linear scale font without a ruler-label font is not a lossless recipe (G
 
 // Design Q4 (PR-Q4-1): identical features share an original-coordinate hash, so
 // the placement row must name the complete biological feature ID with hash=.
+// CI-02: a Circular record order changed with Up/Down is the order of
+// `layout.multiRecordPositions`; the records table carries it as `column`, and
+// the CLI draws the records in that order.
+test('a reordered Circular multi-record canvas keeps its order in the records table recipe', async () => {
+  const text = await readFile(join(repoRoot, 'tests', 'fixtures', 'web_batch_two_records.gb'), 'utf8');
+  const session = canonical({
+    mode: 'circular',
+    records: ['TESTA', 'TESTB'].map((recordId) => ({
+      recordKey: recordId,
+      cardinality: 'exactly_one',
+      source: { kind: 'genbank', resourceId: 'source' },
+      selector: { kind: 'recordId', value: recordId },
+      region: null,
+      presentation: presentation()
+    })),
+    resources: { source: resource('genbank', 'source-two.gbk', text) },
+    webFiles: { resourceOriginalNames: { source: 'two.gbk' } }
+  });
+  session.renderRequest.layout = { multiRecordSizeMode: 'equal', multiRecordPositions: ['#2@1', '#1@1'] };
+  const recipe = await buildSourceRecipe(session);
+  assert.equal(recipe.available, true, recipe.unavailableReason);
+  const table = recipe.generatedFiles.find((file) => file.name === 'records.tsv').data;
+  assert.match(table, /two\.gbk\t\t\tTESTA\t\t0\t1\t1\t2\n/);
+  assert.match(table, /two\.gbk\t\t\tTESTB\t\t0\t2\t1\t1\n/);
+  const svg = await readFile(await materializeAndRunRecipe(
+    session, recipe, buildRunInfo({ mode: recipe.mode, sourceRecipe: recipe }), 'reordered records'
+  ), 'utf8');
+  const drawn = [...new Set([...svg.matchAll(/data-gbdraw-record-id="([^"]+)"/g)].map((match) => match[1]))];
+  assert.deepEqual(drawn, ['TESTB', 'TESTA']);
+});
+
 test('placement recipe names one of two identical features and the CLI replays it', async () => {
   const genbank = [
     'LOCUS       dup                      120 bp    DNA     linear   UNK 01-JAN-1980',

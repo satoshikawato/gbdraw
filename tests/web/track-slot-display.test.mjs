@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { cp, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -38,7 +39,7 @@ for (const leaf of ['depth-track-state.js', 'track-slot-display.js', 'track-slot
   );
 }
 
-const { findTrackSlotGeometry } = await import(
+const { findTrackSlotGeometry, formatRadiusFactorAuto, tickAnchorRadiusFactor } = await import(
   pathToFileURL(join(tempRoot, 'services', 'track-slot-display.js'))
 );
 const { createLinearTrackSlotEditor } = await import(
@@ -359,8 +360,9 @@ test('disabled rows show their estimate in both editors', () => {
   });
   const resolved = createCircularTrackSlotEditor({ state: withDrawings(circularState(circularGeometry)) });
   const estimated = createCircularTrackSlotEditor({ state: withDrawings(circularState(null)) });
+  // circularTrackSlots() lists row entries; the note reads the entry's slot.
   const circularText = (editor, index, field) => (
-    editor.circularTrackSlotGeometryAutoText(editor.circularTrackSlots()[index], index, field)
+    editor.circularTrackSlotGeometryAutoText(editor.circularTrackSlots()[index].slot, index, field)
   );
   assert.equal(circularText(resolved, 2, 'width'), '74.1 px (auto)');
   for (const index of [1, 3]) {
@@ -398,4 +400,91 @@ test('disabled rows show their estimate in both editors', () => {
   });
   assert.equal(linearEditor.linearTrackSlotGeometryAutoText(linearSlots[1], 1, 'height'), '77 px (auto)');
   assert.notEqual(linearEditor.linearTrackSlotGeometryAutoText(linearSlots[2], 2, 'height'), '77 px (auto)');
+});
+
+// GX-18: Python's resolver and geometry serializer give these band centres
+// and anchors (tests/test_circular_tick_anchor_vectors.py keeps them current).
+const TICK_ANCHOR_VECTORS = JSON.parse(
+  readFileSync(new URL('../fixtures/circular_tick_anchor_vectors.json', import.meta.url), 'utf8')
+).cases;
+
+test('a ticks row note converts the band centre to the anchor that r pins (GX-18)', () => {
+  assert.equal(TICK_ANCHOR_VECTORS.length, 32);
+  for (const { tickLabelLayout, axisRadiusPx, geometry, anchorFactor } of TICK_ANCHOR_VECTORS) {
+    const actual = tickAnchorRadiusFactor(geometry, axisRadiusPx, tickLabelLayout);
+    const name = `${tickLabelLayout} ${geometry.side} ${geometry.widthPx} px, R ${axisRadiusPx}`;
+    assert.ok(Math.abs(actual - anchorFactor) < 1e-12, `${name}: ${actual} != ${anchorFactor}`);
+  }
+  assert.equal(tickAnchorRadiusFactor(null, 390, 'tick_only'), null);
+  assert.equal(tickAnchorRadiusFactor({ radiusFactor: 0.9, widthPx: 0 }, 0, 'tick_only'), null);
+  // Two decimals, rounded away from the Axis: typing the note back keeps the
+  // ticks off the neighbouring row (MG1655 Tuckin 0.855, Middle 0.9175).
+  for (const [anchor, text] of [[0.855, '0.85 R (auto)'], [0.9175, '0.91 R (auto)'], [0.76, '0.76 R (auto)'],
+    [0.7599999999999999, '0.76 R (auto)'], [1.0125, '1.02 R (auto)'], [1.01, '1.01 R (auto)'], [1, '1 R (auto)']]) {
+    assert.equal(formatRadiusFactorAuto(anchor, { awayFromAxis: true }), text, String(anchor));
+  }
+});
+
+const circularNoteEditor = (geometry) => {
+  const slots = [
+    { id: 'features', renderer: 'features', enabled: true, side: 'inside', params: { lane_direction: 'inside' } },
+    { id: 'ticks', renderer: 'ticks', enabled: true, side: 'inside', params: { tick_label_layout: 'label_in_tick_out' } },
+    { id: 'gc_content', renderer: 'dinucleotide_content', enabled: true, side: 'inside', params: { nt: 'GC' } }
+  ];
+  const editor = createCircularTrackSlotEditor({
+    state: withDrawings({
+      mode: { value: 'circular' },
+      form: { track_type: 'tuckin', show_depth: false, suppress_gc: false, suppress_skew: true, show_scale: true, separate_strands: true },
+      adv: {
+        circular_track_slots: slots, circular_track_slots_axis_index: 0, nt: 'GC',
+        features: ['CDS'], feature_shapes: { CDS: 'arrow' }, depth_tracks: [],
+        feature_width_circular: null, depth_width_circular: null, gc_content_width_circular: null,
+        gc_content_radius_circular: null, gc_skew_width_circular: null, gc_skew_radius_circular: null
+      },
+      files: { c_depth: [] },
+      circularConservation: { enabled: false, series: [] },
+      circularRecordList: { value: [] },
+      annotationSets: [],
+      selectedResultIndex: { value: 0 },
+      trackSlotResolvedGeometry: { value: geometry }
+    })
+  });
+  const note = (index, field) => editor.circularTrackSlotGeometryAutoText(slots[index], index, field);
+  return Object.assign(note, { editor, slots });
+};
+
+// TK-15: before a render the note is an estimate and says so; a rendered row
+// shows the measured value. An Auto ticks row is never 0 px wide.
+test('Circular notes mark estimates and show measured values after a render (TK-15, GX-18)', () => {
+  const estimated = circularNoteEditor(null);
+  assert.equal(estimated(1, 'width'), '≈ 9.8 px (estimate)');
+  for (const [index, field] of [[0, 'width'], [0, 'radius'], [1, 'radius'], [2, 'width'], [2, 'radius'], [2, 'inner_gap_px']]) {
+    assert.match(estimated(index, field), /^≈ [0-9.]+ (?:px|R) \(estimate\)$/, `${index} ${field}`);
+  }
+  const rendered = circularNoteEditor({
+    mode: 'circular',
+    records: [{ resultIndex: 0, recordIndex: 0, axisRadiusPx: 390, slots: [
+      { slotIndex: 0, slotId: 'features', renderer: 'features', side: 'inside', widthPx: 37, radiusFactor: 0.89, innerGapPx: 3.9, outerGapPx: 3.9 },
+      { slotIndex: 1, slotId: 'ticks', renderer: 'ticks', side: 'inside', widthPx: 7.8, radiusFactor: 0.77, innerGapPx: 3.9, outerGapPx: 3.9 },
+      { slotIndex: 2, slotId: 'gc_content', renderer: 'dinucleotide_content', side: 'inside', widthPx: 54.1, radiusFactor: 0.54, innerGapPx: 3.9, outerGapPx: 3.9 }
+    ] }]
+  });
+  assert.equal(rendered(0, 'radius'), '0.89 R (auto)');
+  assert.equal(rendered(1, 'width'), '7.8 px (auto)');
+  // The ticks grow outward (label_in_tick_out) from the anchor 0.77 - 7.8 / 390 / 2.
+  assert.equal(rendered(1, 'radius'), '0.76 R (auto)');
+  assert.equal(rendered(2, 'width'), '54.1 px (auto)');
+  assert.equal(rendered(2, 'inner_gap_px'), '3.9 px (auto)');
+});
+
+// TK-12: an invalid Width or Radius is reported once, by its own field; the
+// row alert does not repeat it.
+test('the row alert leaves an invalid Width or Radius to its field (TK-12)', () => {
+  const { editor, slots } = circularNoteEditor(null);
+  slots[2].width = { value: '0', unit: 'factor' };
+  slots[0].radius = '0x10';
+  assert.equal(editor.circularTrackSlotIssue(slots[2], 2), '');
+  assert.equal(editor.circularTrackSlotIssue(slots[0], 0), '');
+  slots[2].z = 'x';
+  assert.match(editor.circularTrackSlotIssue(slots[2], 2), /z must be an integer/);
 });

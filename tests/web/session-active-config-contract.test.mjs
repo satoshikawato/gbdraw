@@ -178,7 +178,7 @@ for (const field of ['width', 'radius']) {
       }];
       assert.throws(() => validateCurrentWriterActiveConfig({
         mode: 'circular', storedConfig: invalid
-      }), /positive finite px or factor scalar/);
+      }), /must be a number greater than 0, in px or ×R/);
     }
   }
 }

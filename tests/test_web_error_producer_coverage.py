@@ -54,7 +54,7 @@ UNPROVEN_BASELINE: dict[str, tuple[int, str]] = {
     "gbdraw/analysis/ortholog_paths.py": (25, _COMPARISON),
     "gbdraw/analysis/protein_artifacts.py": (4, _COMPARISON),
     "gbdraw/analysis/protein_colinearity.py": (115, _COMPARISON),
-    "gbdraw/annotations/feature_underlays.py": (3, _ANNOTATIONS),
+    "gbdraw/annotations/feature_underlays.py": (1, _ANNOTATIONS),
     "gbdraw/annotations/io.py": (7, _ANNOTATIONS),
     "gbdraw/annotations/layout.py": (5, _ANNOTATIONS),
     "gbdraw/annotations/models.py": (47, _ANNOTATIONS),
