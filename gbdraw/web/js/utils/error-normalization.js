@@ -61,7 +61,7 @@ const REASONS = Object.freeze({
   POSITIVE_UNIT_INTERVAL: 'Use a finite number greater than zero and at most one.',
   PIXEL_POSITIVE: 'Use a finite number of pixels greater than zero (px optional).',
   PIXEL_NONNEGATIVE: 'Use a finite number of pixels of zero or greater (px optional).',
-  POSITIVE_SCALAR: 'Use a positive finite px or factor scalar.',
+  POSITIVE_SCALAR: 'Use a number greater than 0, in px or ×R.',
   CIRCULAR_GAPS: 'Use inner_gap_px and outer_gap_px for physical gaps.',
   OBSOLETE_TRACK_FIELD: 'Custom Track Slots no longer read this field. Use slot-level radius, width, inner_gap_px, outer_gap_px, side, and z fields.',
   SEPARATE_LINEAR_ROWS: 'Turn Normalize Record Lengths off or assign each record to a separate Linear row.',
@@ -380,7 +380,7 @@ const nativeValidation = (message) => {
   const pixel = /^(?:Circular|Linear) track slot '[\s\S]*' (height|spacing|inner_gap_px|outer_gap_px) must be (nonnegative|positive) finite number of pixels \(px optional\)\.$/.exec(message);
   if (pixel) return { code: 'TRACK_INVALID', stage: 'request-validation', context: {
     field: pixel[1], reason: pixel[2] === 'positive' ? 'PIXEL_POSITIVE' : 'PIXEL_NONNEGATIVE' } };
-  const scalar = /^Circular track slot '[\s\S]*' (radius|width) must be a positive finite px or factor scalar\.$/.exec(message);
+  const scalar = /^Circular track slot '[\s\S]*' (radius|width) must be a number greater than 0, in px or ×R\.$/.exec(message);
   if (scalar) return { code: 'TRACK_INVALID', stage: 'request-validation', context: { field: scalar[1], reason: 'POSITIVE_SCALAR' } };
   if (/^Circular track slot '[\s\S]*' uses obsolete field '(?:spacing|strict|compress|reserve)'\. Use inner_gap_px and outer_gap_px for physical gaps\.$/.test(message)) return { code: 'TRACK_INVALID', stage: 'request-validation', context: { reason: 'CIRCULAR_GAPS' } };
   const selector = /^Record selector #[0-9]+ is out of range \(loaded ([0-9]+) record\(s\)\)\.$/.exec(message);

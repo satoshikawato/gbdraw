@@ -7,8 +7,12 @@ const requireEditorUnit = (unit) => {
   if (unit !== 'px' && unit !== 'factor') throw new Error('Circular measure editor unit must be px or factor.');
 };
 
-/** Read a detached view. The slot scalar remains the only persisted draft. */
-export const readCircularMeasure = (scalar) => {
+/**
+ * Read a detached view. The slot scalar remains the only persisted draft.
+ * @param {any} scalar A slot Width or Radius draft.
+ * @param {string} [fieldName] The field label an invalid value's message names (TK-12).
+ */
+export const readCircularMeasure = (scalar, fieldName = 'Value') => {
   const typed = isTypedMeasure(scalar);
   let valueText = String((typed ? scalar.value : scalar) ?? '');
   /** @type {string | null} */
@@ -17,7 +21,7 @@ export const readCircularMeasure = (scalar) => {
   let error = null;
   let isAuto = false;
   try {
-    const pair = parseOptionalCircularScalar(scalar);
+    const pair = parseOptionalCircularScalar(scalar, fieldName);
     isAuto = pair === null;
     selectedUnit = pair?.unit ?? null;
     if (pair === null) valueText = '';

@@ -379,7 +379,7 @@ test('Circular measure action refuses nonfinite numeric leaves before changing a
     for (const scalar of [NaN, Infinity, -Infinity,
       { value: NaN, unit: 'px' }, { value: Infinity, unit: 'factor' },
       { value: -Infinity, unit: 'px' }]) {
-      assert.throws(() => editor.updateCircularTrackSlotMeasure(slot, field, scalar), /positive finite px or factor scalar/);
+      assert.throws(() => editor.updateCircularTrackSlotMeasure(slot, field, scalar), /must be a number greater than 0, in px or ×R/);
       assert.strictEqual(slot[field], before);
     }
   }
