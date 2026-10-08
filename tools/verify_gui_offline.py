@@ -1152,9 +1152,21 @@ def smoke_test(contract: str = "all") -> None:
         _run_browser_contract(browser_contract)
 
 
+def _assert_no_gallery_catalog_or_sessions(names: set[str], archive: str) -> None:
+    """UJ-06: Load an example shows only where the Gallery catalog is served,
+    so a distribution ships neither the catalog nor a Gallery Session."""
+    shipped = sorted(
+        name for name in names
+        if name.endswith("gbdraw/web/gallery/examples.json") or "gbdraw/web/gallery/sessions/" in name
+    )
+    if shipped:
+        raise RuntimeError(f"{archive} ships Gallery catalog or Session files:\n" + "\n".join(shipped))
+
+
 def inspect_sdist(sdist_path: Path) -> None:
     with tarfile.open(sdist_path, "r:gz") as sdist:
         names = set(sdist.getnames())
+    _assert_no_gallery_catalog_or_sessions(names, "Sdist")
     for path in REQUIRED_TUTORIAL_DATA_FILES:
         suffix = f"/gbdraw/web/{path.as_posix()}"
         if not any(name.endswith(suffix) for name in names):
@@ -1193,6 +1205,7 @@ def inspect_wheel(wheel_path: Path) -> None:
         raise FileNotFoundError(wheel_path)
     with zipfile.ZipFile(wheel_path) as zf:
         names = set(zf.namelist())
+    _assert_no_gallery_catalog_or_sessions(names, "Wheel")
     expected_browser_wheel = f"gbdraw/web/{_parse_wheel_name()}"
     browser_wheels = sorted(
         name for name in names if name.startswith("gbdraw/web/gbdraw-") and name.endswith(".whl")
@@ -1205,7 +1218,6 @@ def inspect_wheel(wheel_path: Path) -> None:
         "gbdraw/web/index.html",
         "gbdraw/web/open-source-notices.html",
         "gbdraw/web/gallery/palettes/palettes.json",
-        "gbdraw/web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json",
         "gbdraw/web/assets/favicon.ico",
         "gbdraw/web/assets/gbdraw-logo.svg",
         "gbdraw/web/assets/gbdraw-logo-title.svg",

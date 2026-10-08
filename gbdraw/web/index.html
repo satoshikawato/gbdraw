@@ -7347,11 +7347,13 @@
             <div v-else class="h-full flex flex-col items-center justify-center text-slate-300 border-4 border-dashed border-slate-200 rounded-3xl p-12 bg-slate-50/30">
                 <i class="ph ph-dna text-6xl mb-4 text-slate-200" aria-hidden="true"></i>
                 <p class="font-medium text-slate-400">No {{ mode === 'linear' ? 'Linear' : 'Circular' }} Result yet. Configure settings and click Generate.</p>
-                <button type="button" data-history-managed @click="loadExampleSession" :disabled="!sessionLoadAvailable || exampleSessionPending" :aria-busy="exampleSessionPending"
-                        class="btn btn-secondary btn-sm mt-4" aria-describedby="example-session-help">
-                    <i :class="exampleSessionPending ? 'ph ph-spinner animate-spin' : 'ph ph-play-circle'" aria-hidden="true"></i> Load an example
-                </button>
-                <p id="example-session-help" class="ui-hint mt-2">Opens the human mitochondrial genome Session from the Gallery.</p>
+                <template v-if="galleryExamples.length">
+                    <button type="button" data-history-managed @click="openExampleChooser" :disabled="!sessionLoadAvailable || exampleSessionPending" :aria-busy="exampleSessionPending"
+                            class="btn btn-secondary btn-sm mt-4" aria-haspopup="dialog" aria-describedby="example-session-help">
+                        <i :class="exampleSessionPending ? 'ph ph-spinner animate-spin' : 'ph ph-play-circle'" aria-hidden="true"></i> Load an example
+                    </button>
+                    <p id="example-session-help" class="ui-hint mt-2">Opens a finished Gallery example as a Session.</p>
+                </template>
             </div>
         </div>
     </main>
@@ -7664,6 +7666,31 @@
             <div class="mt-4 flex justify-end gap-2">
                 <button type="button" data-history-ignore @click="resolveSessionReplacement('cancel')" class="btn btn-secondary btn-sm">Cancel</button>
                 <button type="button" data-history-ignore @click="resolveSessionReplacement('load')" class="btn btn-primary btn-sm">{{ sessionReplaceDialog.actionLabel }}</button>
+            </div>
+        </choice-dialog>
+        <!-- UJ-06: the Gallery examples this origin serves -->
+        <choice-dialog v-if="exampleChooserOpen" labelledby="example-chooser-title" describedby="example-chooser-description"
+             @cancel="closeExampleChooser" @keydown.tab="trapDialogFocus"
+             class="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
+            <h2 id="example-chooser-title" class="text-base font-bold text-slate-800">Choose an example</h2>
+            <p id="example-chooser-description" class="mt-2 text-sm leading-relaxed text-slate-600">
+                Each example opens its Gallery Session: the inputs, settings, and Result.
+            </p>
+            <ul class="mt-3 max-h-[60vh] overflow-y-auto divide-y divide-slate-100 rounded-lg border border-slate-200">
+                <li v-for="example in galleryExamples" :key="example.id">
+                    <button type="button" data-history-managed :data-gallery-example="example.id" @click="loadExampleSession(example)"
+                            class="flex w-full items-center gap-3 p-2 text-left hover:bg-slate-50 focus-visible:bg-slate-50">
+                        <img v-if="example.thumbnailUrl" :src="example.thumbnailUrl" alt="" loading="lazy"
+                             class="h-14 w-20 shrink-0 rounded border border-slate-200 bg-white object-contain">
+                        <span class="min-w-0">
+                            <span class="block text-sm font-medium text-slate-800"><template v-for="(part, index) in example.titleParts" :key="index"><i v-if="part.italic">{{ part.text }}</i><template v-else>{{ part.text }}</template></template></span>
+                            <span v-if="example.mode" class="block text-xs text-slate-500">{{ example.mode }}</span>
+                        </span>
+                    </button>
+                </li>
+            </ul>
+            <div class="mt-4 flex justify-end">
+                <button type="button" data-history-ignore @click="closeExampleChooser" class="btn btn-secondary btn-sm">Cancel</button>
             </div>
         </choice-dialog>
         <!-- Q3: a layout edit that would leave lane Feature placements undrawable -->

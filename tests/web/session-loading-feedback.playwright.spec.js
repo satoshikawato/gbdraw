@@ -397,41 +397,160 @@ test('Load Session asks before it replaces work changed since the last Save or L
   await expect(confirm).toHaveCount(0);
 });
 
-// UJ-06 (Owner 2026-10-07): the empty state offers one example, the bundled
-// HmmtDNA Gallery Session, loaded from this origin through the Load Session path
-// and its UJ-09 confirmation.
-test('Load an example opens the bundled HmmtDNA Session from the empty state', async ({ page }) => {
-  test.setTimeout(180_000);
+// UJ-06 (Owner 2026-10-08): where this origin serves the Gallery catalog
+// (gbdraw.app), the empty state's Load an example lists every catalog entry and
+// loads the chosen one's Session through the Load Session path and its UJ-09
+// question. Without the catalog (the pip GUI) the button is absent.
+const galleryCatalog = JSON.parse(readFileSync(
+  join(repoRoot, 'gbdraw', 'web', 'gallery', 'examples.json'), 'utf8'
+));
+const plainTitle = (title) => title.replace(/<\/?i>/g, '');
+const blockExternalRequests = async (page) => {
   const external = [];
   await page.context().route('**/*', (route) => {
     if (new URL(route.request().url()).hostname === '127.0.0.1') return route.continue();
     external.push(route.request().url());
     return route.abort();
   });
+  return external;
+};
+const exampleControls = (page) => ({
+  example: page.getByRole('button', { name: 'Load an example', exact: true }),
+  chooser: page.getByRole('dialog', { name: 'Choose an example', exact: true }),
+  confirm: page.getByRole('dialog', { name: 'Replace the current work?', exact: true })
+});
+// Owner 2026-10-08: an example opens fitted. The rendered SVG lies inside the
+// preview frame, at a zoom other than the 1.0 its Session stored.
+const exampleFit = (page) => page.evaluate(() => {
+  const app = window.__GBDRAW_APP__;
+  const container = app.canvasContainerRef;
+  const frame = container.getBoundingClientRect();
+  const box = app.svgContainer.querySelector('svg').getBoundingClientRect();
+  const left = frame.left + container.clientLeft;
+  const top = frame.top + container.clientTop;
+  const inside = box.left >= left - 1 && box.top >= top - 1
+    && box.right <= left + container.clientWidth + 1 && box.bottom <= top + container.clientHeight + 1;
+  return { inside, zoomChanged: app.zoom !== 1 };
+});
+const expectExampleFitted = (page) => expect.poll(() => exampleFit(page))
+  .toEqual({ inside: true, zoomChanged: true });
+const acceptLoadedSession = async (page, title) => {
+  const loaded = page.waitForEvent('dialog');
+  return async () => {
+    const alert = await loaded;
+    expect(alert.message()).toBe('Session loaded successfully!');
+    await alert.accept();
+    await page.waitForFunction((expected) => (
+      window.__GBDRAW_APP__?.sessionImportPending === false
+      && window.__GBDRAW_APP__.sessionTitle === expected
+      && window.__GBDRAW_APP__.results.length === 1
+    ), title);
+  };
+};
+
+test('Load an example lists every Gallery example and loads the chosen Circular or Linear .gz Session', async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const external = await blockExternalRequests(page);
+  // The Linear .gz entry answers with the gzip of the small lambda Session, so
+  // the file-name route of .gz loading runs without a 6 MB download.
+  const gzEntry = galleryCatalog.find((entry) => entry.id === 'majanivirus_orthogroup');
+  expect(gzEntry.session.endsWith('.json.gz')).toBe(true);
+  expect(gzEntry.tags).toContain('Linear');
+  const gzRequests = [];
+  await page.route(`**/gbdraw/web/gallery/${gzEntry.session.slice(2)}`, (route) => {
+    gzRequests.push(route.request().url());
+    return route.fulfill({ status: 200, contentType: 'application/gzip', body: replacementSession.buffer });
+  });
   await openApp(page);
-  const example = page.getByRole('button', { name: 'Load an example', exact: true });
-  const confirm = page.getByRole('dialog', { name: 'Replace the current work?', exact: true });
+  const { example, chooser } = exampleControls(page);
+  await example.click();
+  await expect(chooser).toBeVisible();
+  const items = chooser.locator('[data-gallery-example]');
+  await expect(items).toHaveCount(galleryCatalog.length);
+  expect(await items.evaluateAll((nodes) => nodes.map((node) => node.dataset.galleryExample)))
+    .toEqual(galleryCatalog.map((entry) => entry.id));
+  for (const [index, entry] of galleryCatalog.entries()) {
+    await expect(items.nth(index)).toContainText(plainTitle(entry.title));
+    await expect(items.nth(index)).toContainText(entry.tags.includes('Linear') ? 'Linear' : 'Circular');
+  }
+  await expect(chooser.locator('[data-gallery-example="tobacco-chloroplast"] i'))
+    .toHaveText('Nicotiana tabacum');
+  await expect(chooser.locator('[data-gallery-example="lambda_basic_linear"] img'))
+    .toHaveAttribute('src', /\/gallery\/thumbnails\/lambda_basic_linear\.webp$/);
+
+  const circularLoaded = await acceptLoadedSession(page, 'HmmtDNA_basic_circular');
+  await chooser.locator('[data-gallery-example="HmmtDNA_basic_circular"]').click();
+  await circularLoaded();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('circular');
+  await expectExampleFitted(page);
+
+  await openApp(page);
+  await example.click();
+  const linearLoaded = await acceptLoadedSession(page, 'lambda_basic_linear');
+  await chooser.locator(`[data-gallery-example="${gzEntry.id}"]`).click();
+  await linearLoaded();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.mode)).toBe('linear');
+  await expectExampleFitted(page);
+  expect(gzRequests).toHaveLength(1);
+  expect(external).toEqual([]);
+});
+
+test('Load an example is absent where this origin serves no Gallery catalog', async ({ page }) => {
+  test.setTimeout(180_000);
+  let catalogRequested;
+  const catalogRead = new Promise((resolve) => { catalogRequested = resolve; });
+  await page.route('**/gallery/examples.json', (route) => {
+    catalogRequested();
+    return route.fulfill({ status: 404, body: 'not found' });
+  });
+  // The 404 is a network log line, not an application error.
+  const diagnostics = await openApp(page, { checkErrors: false });
+  await catalogRead;
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => resolve())));
+  expect(diagnostics.pageErrors).toEqual([]);
+  await expect(page.getByText('No Circular Result yet. Configure settings and click Generate.')).toBeVisible();
+  await expect(exampleControls(page).example).toHaveCount(0);
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.errorDisplay)).toBeFalsy();
+});
+
+test('the example chooser cancels with focus back on Load an example and keeps the UJ-09 question', async ({ page }) => {
+  test.setTimeout(180_000);
+  await openApp(page);
+  const { example, chooser, confirm } = exampleControls(page);
+  const first = chooser.locator('[data-gallery-example]').first();
+  await example.click();
+  await expect(chooser).toHaveAttribute('aria-modal', 'true');
+  await expect(first).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(chooser.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(chooser).toHaveCount(0);
+  await expect(example).toBeFocused();
+  await example.click();
+  await chooser.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(chooser).toHaveCount(0);
+  await expect(example).toBeFocused();
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.results.length)).toBe(0);
+
   const prefix = page.locator('#output-prefix');
   await prefix.fill('unsaved-work');
   await prefix.press('Tab');
   await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(1);
   await example.click();
+  await chooser.locator('[data-gallery-example="HmmtDNA_basic_circular"]').click();
+  await expect(chooser).toHaveCount(0);
   await expect(confirm).toBeVisible();
   await confirm.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(confirm).toHaveCount(0);
+  await expect(example).toBeFocused();
   await expect(prefix).toHaveValue('unsaved-work');
 
   await example.click();
-  const loaded = page.waitForEvent('dialog');
+  await chooser.locator('[data-gallery-example="HmmtDNA_basic_circular"]').click();
+  const loaded = await acceptLoadedSession(page, 'HmmtDNA_basic_circular');
   await confirm.getByRole('button', { name: 'Load example', exact: true }).click();
-  const alert = await loaded;
-  expect(alert.message()).toBe('Session loaded successfully!');
-  await alert.accept();
-  await page.waitForFunction(() => (
-    window.__GBDRAW_APP__?.sessionImportPending === false
-    && window.__GBDRAW_APP__.sessionTitle === 'HmmtDNA_basic_circular'
-    && window.__GBDRAW_APP__.results.length === 1
-  ));
+  await loaded();
   expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(0);
   await expect(example).toHaveCount(0);
-  expect(external).toEqual([]);
 });

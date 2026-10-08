@@ -7,6 +7,7 @@
 /** @import { AnnotationCatalogSource } from './annotations/record-catalog.js' */
 /** @import { LegacyResultSvgTransform } from '../services/config.js' */
 /** @import { ArtifactSlot } from '../services/artifact-slot.js' */
+/** @import { GalleryExample } from '../services/gallery-examples.js' */
 /** @typedef {{ opening: Readonly<ArtifactSlot> | null, stashed: Readonly<ArtifactSlot> | null }} LoadedArtifactSlots */
 import { createRulePreparation } from './rule-matching.js';
 import { compileDirectEditorMutationPlan } from './candidate-render.js';
@@ -54,6 +55,7 @@ import {
   setPreviewRuntime
 } from '../services/config.js';
 import { setMainSessionComparisonFrameConverter } from '../services/main-session-comparison-frame.js';
+import { fetchGalleryExampleSession, readGalleryExamples } from '../services/gallery-examples.js';
 import { createHistoryManager } from '../services/history.js';
 import { createHistoryFileStore } from '../services/history-files.js';
 import { createHistorySnapshotService } from '../services/history-snapshot.js';
@@ -2997,24 +2999,40 @@ export const createAppSetup = () => {
       }
     }
   });
-  // UJ-06 (Owner 2026-10-07): the empty state's Load an example reads the
-  // bundled HmmtDNA Gallery Session from this origin and loads it through the
-  // Load Session path, with the same confirmation.
-  const EXAMPLE_SESSION_NAME = 'HmmtDNA_basic_circular.gbdraw-session.json';
+  // UJ-06 (Owner 2026-10-08): Load an example shows only where this origin
+  // serves the Gallery catalog (gbdraw.app, not the pip GUI), and its chooser
+  // lists every catalog example. The choice closes the chooser, asks the UJ-09
+  // question, and loads the Session through the Load Session path. The catalog
+  // read does not hold up startup. A loaded example opens fitted, as the Fit
+  // button leaves it (Owner 2026-10-08); Load Session keeps the saved zoom.
+  const galleryExamples = ref(/** @type {GalleryExample[]} */ ([]));
+  void readGalleryExamples().then((examples) => { galleryExamples.value = examples; });
+  const exampleChooserOpen = ref(false);
   const exampleSessionPending = ref(false);
-  const loadExampleSession = () => confirmSessionReplacement('Load example', async () => {
-    exampleSessionPending.value = true;
-    try {
-      const response = await fetch(`./gallery/sessions/${EXAMPLE_SESSION_NAME}`);
-      if (!response.ok) throw new Error(`The example Session could not be read (HTTP ${response.status}).`);
-      const file = new File([await response.blob()], EXAMPLE_SESSION_NAME, { type: 'application/json' });
-      await importSession({ target: { files: [file], value: '' } });
-    } catch (error) {
-      errorLog.value = normalizeUserFacingError(error);
-    } finally {
-      exampleSessionPending.value = false;
-    }
-  });
+  const openExampleChooser = () => { exampleChooserOpen.value = true; };
+  const closeExampleChooser = () => { exampleChooserOpen.value = false; };
+  /** @param {GalleryExample} example */
+  const loadExampleSession = async (example) => {
+    closeExampleChooser();
+    // The chooser returns focus to its button before the question opens.
+    await nextTick();
+    await confirmSessionReplacement('Load example', async () => {
+      exampleSessionPending.value = true;
+      try {
+        const file = await fetchGalleryExampleSession(example);
+        // The import resolves after the shown Result's preview is mounted.
+        const { status } = await importSession({ target: { files: [file], value: '' } }) || {};
+        if (status === 'ok' || status === 'legacy') {
+          await nextTick();
+          fitPreviewToViewport();
+        }
+      } catch (error) {
+        errorLog.value = normalizeUserFacingError(error);
+      } finally {
+        exampleSessionPending.value = false;
+      }
+    });
+  };
 
   const {
     addNewLegendEntry,
@@ -5999,6 +6017,10 @@ export const createAppSetup = () => {
     importSession,
     sessionInput,
     openSessionFilePicker,
+    galleryExamples,
+    exampleChooserOpen,
+    openExampleChooser,
+    closeExampleChooser,
     loadExampleSession,
     exampleSessionPending,
     sessionReplaceDialog,

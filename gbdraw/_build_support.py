@@ -32,8 +32,6 @@ _WEB_APP_PACKAGE_DATA = [
     "web/index.html",
     "web/open-source-notices.html",
     "web/gallery/palettes/palettes.json",
-    # UJ-06: the empty state's Load an example reads this one Gallery Session.
-    "web/gallery/sessions/HmmtDNA_basic_circular.gbdraw-session.json",
     "web/assets/*.ico",
     "web/assets/*.png",
     "web/assets/*.svg",

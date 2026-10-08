@@ -1110,9 +1110,10 @@ Retired names and their replacements are listed under
   the label text default, the default Legend name, and the Interactive SVG popup.
   It read `576..647`. Stored Legend names keep their text (GX-10).
 - Load Session (web app): **Load Session** asks "Replace the current work?" before it
-  replaces work changed since the last Save or Load (UJ-09). The empty state offers
-  **Load an example**, which loads the bundled HmmtDNA Circular Session; the pip
-  package ships that Session too (UJ-06).
+  replaces work changed since the last Save or Load (UJ-09). On gbdraw.app the empty
+  state offers **Load an example**, which lists every Gallery example and loads the
+  chosen one's Session, fitted to the Preview; the local `gbdraw gui` ships no Gallery and shows no such
+  button (UJ-06).
 - Preview (web app): the Preview feature search belongs to its mode and a Session load
   clears it (observation). After a Generate, the Linear Auto notice says "Auto
   shows/hides these fields" when the shown Result already does (observation).
