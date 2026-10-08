@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field, replace
+from functools import lru_cache
 import base64
 import hashlib
 from io import StringIO
@@ -88,6 +89,7 @@ _MANIFEST_PRESENTATION_IDENTITY_FRAGMENTS = frozenset(
         "renderedsvgid",
     }
 )
+_MANIFEST_SCALAR_TYPES = frozenset({str, int, float, bool, type(None)})
 _NUMERIC_COMPARISON_COLUMNS = COMPARISON_COLUMNS[2:]
 _INTEGER_COMPARISON_COLUMNS = frozenset(
     {
@@ -842,6 +844,19 @@ def _expected_export_ordinals(
     return expected
 
 
+@lru_cache(maxsize=4096)
+def _is_presentation_identity_key(raw_key: str) -> bool:
+    normalized_key = re.sub(
+        r"[^a-z0-9]+",
+        "",
+        unicodedata.normalize("NFKC", raw_key).casefold(),
+    )
+    return any(
+        fragment in normalized_key
+        for fragment in _MANIFEST_PRESENTATION_IDENTITY_FRAGMENTS
+    )
+
+
 def _reject_manifest_presentation_identity(value: Mapping[str, object]) -> None:
     """Keep protein identity manifests independent of rendered view coordinates."""
 
@@ -849,27 +864,23 @@ def _reject_manifest_presentation_identity(value: Mapping[str, object]) -> None:
     visited: set[int] = set()
     while pending:
         current = pending.pop()
-        if isinstance(current, Mapping):
+        if type(current) is dict or isinstance(current, Mapping):
             object_id = id(current)
             if object_id in visited:
                 continue
             visited.add(object_id)
             for raw_key, item in current.items():
-                normalized_key = re.sub(
-                    r"[^a-z0-9]+",
-                    "",
-                    unicodedata.normalize("NFKC", str(raw_key)).casefold(),
-                )
-                if any(
-                    fragment in normalized_key
-                    for fragment in _MANIFEST_PRESENTATION_IDENTITY_FRAGMENTS
-                ):
+                if _is_presentation_identity_key(str(raw_key)):
                     raise ValidationError(
                         "Protein identity manifests cannot contain rendered-view identity fields."
                     )
-                pending.append(item)
-        elif isinstance(current, (list, tuple)):
-            pending.extend(current)
+                # Only containers can hold more keys.
+                if type(item) not in _MANIFEST_SCALAR_TYPES:
+                    pending.append(item)
+        elif type(current) is list or isinstance(current, (list, tuple)):
+            pending.extend(
+                item for item in current if type(item) not in _MANIFEST_SCALAR_TYPES
+            )
 
 
 def validate_protein_identity_manifest(
