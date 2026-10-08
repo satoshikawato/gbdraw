@@ -754,10 +754,16 @@ test('a Label visibility On for one of two same-location features draws only its
 // fail on an On that cannot be drawn, and draws it once it can.
 const labelOnFacts = (page) => page.evaluate(async () => {
   const { state } = await import('./js/state.js');
-  // Per-feature edits by the rendered ID of the feature in view.
-  const edits = (field) => Object.fromEntries(state.extractedFeatures.value.flatMap((feature) => {
-    const value = state.activeDrawing().featureOverrides[JSON.stringify([feature.record_key, feature.biological_feature_id])]?.[field];
-    return value === null || value === undefined ? [] : [[feature.svg_id, value]];
+  // Per-feature edits by the rendered ID of a feature seen in view. A feature
+  // that a later reflow no longer draws keeps its edits in the facts, so a
+  // read does not depend on whether that reflow has ended.
+  const seen = (window.__labelOnFactIds ||= new Map());
+  state.extractedFeatures.value.forEach((feature) => {
+    seen.set(feature.svg_id, JSON.stringify([feature.record_key, feature.biological_feature_id]));
+  });
+  const edits = (field) => Object.fromEntries([...seen].flatMap(([svgId, key]) => {
+    const value = state.activeDrawing().featureOverrides[key]?.[field];
+    return value === null || value === undefined ? [] : [[svgId, value]];
   }));
   return {
     undo: window.__GBDRAW_HISTORY__.getUndoCount(),
@@ -1098,6 +1104,9 @@ test('a Feature Visibility rule that hides a feature hides its label too', async
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_HISTORY__.redo());
   expect(await shown()).toEqual(withoutFl1);
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.setFeatureVisibilityRuleField(0, 'action', 'show'));
+  expect(await shown()).toEqual(all);
+  // The rerender this edit asks for draws the feature too.
+  await waitForLabelReflow(page);
   expect(await shown()).toEqual(all);
   await evaluateWithRetainedPromise(page, () => window.__GBDRAW_APP__.setFeatureVisibilityRuleField(0, 'action', 'off'));
   expect(await shown()).toEqual(withoutFl1);

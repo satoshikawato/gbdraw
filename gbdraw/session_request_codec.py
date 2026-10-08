@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from collections.abc import Mapping as MappingABC, Sequence as SequenceABC
 from copy import deepcopy
-from dataclasses import MISSING, asdict, dataclass, fields, is_dataclass, replace
+from dataclasses import MISSING, Field, asdict, dataclass, fields, is_dataclass, replace
+from functools import lru_cache
 from io import StringIO
 import json
 import math
@@ -4429,8 +4430,8 @@ def _decode_typed_tree(
                 f"Unsupported typed resource object at {path}: {tagged['type']!r}."
             )
         raw_fields = _object(tagged["fields"], path=f"{path}.fields")
-        hints = get_type_hints(hint)
-        field_defs = {_camel(item.name): item for item in fields(hint)}
+        hints = _class_type_hints(hint)
+        field_defs = _class_field_defs(hint)
         optional_fields = (
             _SCHEMA1_TYPED_OPTIONAL_FIELDS.get(hint.__name__, frozenset())
             if resource_schema == 1
@@ -4613,7 +4614,7 @@ def _json_value(value: object, *, path: str) -> Any:
 def _validate_dataclass_contract(value: object, *, path: str, error: str) -> None:
     if not is_dataclass(value) or isinstance(value, type):
         _raise_contract_error(error, f"{path} must be a dataclass value.")
-    hints = get_type_hints(type(value))
+    hints = _class_type_hints(type(value))
     for item in fields(value):
         raw = getattr(value, item.name)
         hint = hints.get(item.name, Any)
@@ -4694,6 +4695,17 @@ def _resource_id(value: str) -> str:
     return normalized
 
 
+@lru_cache(maxsize=256)
+def _class_type_hints(cls: type) -> dict[str, Any]:
+    return get_type_hints(cls)
+
+
+@lru_cache(maxsize=256)
+def _class_field_defs(cls: type) -> dict[str, Field[Any]]:
+    return {_camel(item.name): item for item in fields(cls)}
+
+
+@lru_cache(maxsize=1024)
 def _camel(value: str) -> str:
     head, *tail = value.split("_")
     return head + "".join(part[:1].upper() + part[1:] for part in tail)

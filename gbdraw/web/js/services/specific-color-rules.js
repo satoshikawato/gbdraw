@@ -143,15 +143,21 @@ const mayBeAllocated = (rule, legendEntries) => Boolean(rule.cap) && (legendEntr
   normalizeText(entry?.caption) === rule.cap && fillIdentity(entry?.color) !== fillIdentity(rule.color)
 ));
 
-// The legend caption Generate draws for one rule of `context.rules`.
+// The legend caption Generate draws for a rule of `context.rules`, read for
+// many rules: the captions are allocated once, when a rule first needs it.
 /**
- * @param {Partial<SpecificColorRule> | null | undefined} rule
  * @param {LegendRowContext} [context]
+ * @returns {(rule: Partial<SpecificColorRule> | null | undefined) => string}
  */
-export const ruleLegendCaption = (rule, { rules = [], legendEntries = [], originalLegendOrder = [] } = {}) => {
-  const normalized = normalizeSpecificRule(rule);
-  if (!mayBeAllocated(normalized, legendEntries)) return normalized.cap;
-  return createRuleLegendCaptions(rules, rendererLegendRows({ legendEntries, originalLegendOrder, rules }))(normalized);
+export const ruleLegendCaptions = ({ rules = [], legendEntries = [], originalLegendOrder = [] } = {}) => {
+  /** @type {((rule: Partial<SpecificColorRule> | null | undefined) => string) | null} */
+  let allocated = null;
+  return (rule) => {
+    const normalized = normalizeSpecificRule(rule);
+    if (!mayBeAllocated(normalized, legendEntries)) return normalized.cap;
+    allocated ||= createRuleLegendCaptions(rules, rendererLegendRows({ legendEntries, originalLegendOrder, rules }));
+    return allocated(normalized);
+  };
 };
 
 export const buildLegendIntents = (rules, rendererRows = []) => {

@@ -1903,30 +1903,20 @@ def _integer_or_none(value: Any) -> int | None:
     return int(number)
 
 
+class _ComplementTable(dict[int, int]):
+    """Translate table that maps every unlisted character to ``N``."""
+
+    def __missing__(self, ordinal: int) -> int:
+        return ord("N")
+
+
+_COMPLEMENT_TABLE = _ComplementTable(
+    str.maketrans("ACGTURYSWKMBDHVN-", "TGCAAYRSWMKVHDBN-")
+)
+
+
 def _reverse_complement_sequence(sequence: str) -> str:
-    complements = {
-        "A": "T",
-        "C": "G",
-        "G": "C",
-        "T": "A",
-        "U": "A",
-        "R": "Y",
-        "Y": "R",
-        "S": "S",
-        "W": "W",
-        "K": "M",
-        "M": "K",
-        "B": "V",
-        "D": "H",
-        "H": "D",
-        "V": "B",
-        "N": "N",
-        "-": "-",
-    }
-    return "".join(
-        complements.get(base, "N")
-        for base in reversed("".join(sequence.split()).upper())
-    )
+    return "".join(sequence.split()).upper()[::-1].translate(_COMPLEMENT_TABLE)
 
 
 def _canonical_sequence_source(

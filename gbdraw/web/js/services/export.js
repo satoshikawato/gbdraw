@@ -228,28 +228,33 @@ const flattenTextPathsForPdf = (svg) => {
   });
 };
 
-const normalizeTextBaselinesForPdf = (svg) => {
+// Reads and writes run in separate phases: interleaving them forces a layout per text.
+export const normalizeTextBaselinesForPdf = (svg) => {
+  const pending = [];
   svg.querySelectorAll('text').forEach((textEl) => {
     const baseline = textEl.getAttribute('dominant-baseline');
     if (!baseline || baseline === 'alphabetic' || baseline === 'auto') return;
-
-    let before;
     try {
-      before = textEl.getBBox();
+      pending.push({ textEl, baseline, before: textEl.getBBox() });
     } catch (error) {
-      return;
+      // Text without a measurable box keeps its baseline.
     }
+  });
 
-    textEl.setAttribute('dominant-baseline', 'alphabetic');
+  pending.forEach(({ textEl }) => textEl.setAttribute('dominant-baseline', 'alphabetic'));
 
-    let after;
+  const measured = [];
+  const unmeasurable = [];
+  pending.forEach((entry) => {
     try {
-      after = textEl.getBBox();
+      measured.push({ ...entry, after: entry.textEl.getBBox() });
     } catch (error) {
-      textEl.setAttribute('dominant-baseline', baseline);
-      return;
+      unmeasurable.push(entry);
     }
+  });
+  unmeasurable.forEach(({ textEl, baseline }) => textEl.setAttribute('dominant-baseline', baseline));
 
+  measured.forEach(({ textEl, before, after }) => {
     const dy = before.y - after.y;
     if (!Number.isFinite(dy) || Math.abs(dy) < 0.01) {
       textEl.removeAttribute('dominant-baseline');

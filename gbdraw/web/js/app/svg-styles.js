@@ -1,7 +1,6 @@
 // @ts-check
 /** @import { DrawingState } from '../state.js' */
-import { ruleMatchDeclined, ruleMatchesReady, firstMatchingRule } from './rule-matching.js';
-import { ruleMatchesFeature } from '../services/rule-matchers.js';
+import { ruleMatcher } from '../services/rule-matchers.js';
 import {
   estimateColorFactor,
   interpolateColor,
@@ -104,7 +103,8 @@ export const createSvgStyles = ({
     if (busy) return busy;
     if (!svgContent.value || !extractedFeatures.value.length) return;
     if (!svgContainer.value) return;
-    if (!ruleMatchesReady(extractedFeatures.value, drawing.manualSpecificRules)) return;
+    const ruleMatches = ruleMatcher(drawing.manualSpecificRules);
+    if (!ruleMatches.ready(extractedFeatures.value)) return;
 
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -123,9 +123,9 @@ export const createSvgStyles = ({
       const paletteColor = colors[feat.type] || colors.default;
       if (!paletteColor) return;
       // A declined live match keeps the color Generate drew (R4).
-      if (ruleMatchDeclined(feat, drawing.manualSpecificRules)) return;
+      if (ruleMatches.declined(feat)) return;
 
-      const hasSpecificRule = drawing.manualSpecificRules.some((rule) => ruleMatchesFeature(feat, rule));
+      const hasSpecificRule = ruleMatches.matchesAny(feat) === true;
 
       if (!hasSpecificRule && !getFeatureOverride(drawing.featureColorOverrides, feat)) {
         const currentFill = path.getAttribute('fill');
@@ -376,7 +376,8 @@ export const createSvgStyles = ({
     if (!svgContent.value || !extractedFeatures.value.length) return;
     if (!drawing.manualSpecificRules.length) return;
     if (!svgContainer.value) return;
-    if (!ruleMatchesReady(extractedFeatures.value, drawing.manualSpecificRules)) return;
+    const ruleMatches = ruleMatcher(drawing.manualSpecificRules);
+    if (!ruleMatches.ready(extractedFeatures.value)) return;
 
     const svg = svgContainer.value.querySelector('svg');
     if (!svg) return;
@@ -387,9 +388,9 @@ export const createSvgStyles = ({
     extractedFeatures.value.forEach((feat) => {
       if (!feat.svg_id) return;
       // A declined live match keeps the color Generate drew (R4).
-      if (ruleMatchDeclined(feat, drawing.manualSpecificRules)) return;
+      if (ruleMatches.declined(feat)) return;
 
-      const matchingRule = firstMatchingRule(feat, drawing.manualSpecificRules);
+      const matchingRule = ruleMatches.first(feat);
 
       const elements = getFeatureFillElements(svg, feat.svg_id, featureElementIndex);
       if (elements.length > 0) {

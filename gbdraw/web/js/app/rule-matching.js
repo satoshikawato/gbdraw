@@ -3,7 +3,9 @@ import { normalizeSpecificRule } from '../services/specific-color-rules.js';
 import { normalizeFeatureSelectorMetadata } from '../services/feature-selector.js';
 import { getFeatureColorRuleHash } from '../services/feature-utils.js';
 import { normalizeUserFacingError } from '../utils/error-normalization.js';
-import { cacheFor, cacheOf, ruleKey, ruleMatchesFeature, visibilityRuleKey } from '../services/rule-matchers.js';
+import {
+  recordRuleMatches, recordVisibilityMatch, ruleKey, ruleKeysPending, ruleMatcher, visibilityRuleKnown
+} from '../services/rule-matchers.js';
 
 // A feature of a catalog before schema 5 has no drawn selector values. Where
 // its rendered ID carries its source hash, its record was drawn with the
@@ -15,26 +17,13 @@ export const DRAWN_SELECTOR_QUALIFIERS = new Set(['location', 'record_location']
 export const drawnSelectorUnknown = (feature) => !feature?.drawnSelector
   && Object.prototype.hasOwnProperty.call(feature || {}, 'drawnSelector')
   && getFeatureColorRuleHash(feature) !== String(feature?.selector?.hash || '');
-const declinesLiveMatch = (feature, rule) => drawnSelectorUnknown(feature)
-  && DRAWN_SELECTOR_QUALIFIERS.has(String(rule?.qual || '').toLowerCase());
-export const ruleMatchDeclined = (feature, rules) => rules
-  .some((rule) => cacheOf(feature)?.get(ruleKey(rule))?.declined === true);
-export const firstMatchingRule = (feature, rules) => {
-  /** @type {Record<string, any> | null} */
-  let winner = null;
-  let priority = Infinity;
-  for (const rule of rules) {
-    const result = cacheOf(feature)?.get(ruleKey(rule));
-    if (result?.matches && result.priority < priority) {
-      winner = rule;
-      priority = result.priority;
-    }
-  }
-  return winner;
+// The indexes of the `rules` a feature declines (`drawnSelectorUnknown`).
+const liveMatchDeclines = (rules) => {
+  const drawnRules = rules.flatMap((rule, index) => (
+    DRAWN_SELECTOR_QUALIFIERS.has(String(rule?.qual || '').toLowerCase()) ? [index] : []
+  ));
+  return (feature) => (drawnSelectorUnknown(feature) ? drawnRules : []);
 };
-export const ruleMatchesReady = (features, rules) => features.every((feature) =>
-  rules.every((rule) => ruleMatchesFeature(feature, rule) !== null || ruleMatchDeclined(feature, [rule]))
-);
 // A catalog feature that Python did not render carries no drawn values (feature
 // catalog 5 has them on rendered features only), so a `hash`, `location`, or
 // `record_location` rule is not matched live for it.
@@ -51,7 +40,18 @@ const declinesVisibilityMatch = (feature, rule) => {
 // values (`drawnSelector`, feature catalog 5, OV-02); a feature of an older
 // catalog sends the hash its rendered ID carries, and its source values only
 // where they are the drawn ones.
+// The payload of a feature without a label is built once per feature object.
+/** @type {WeakMap<object, Record<string, any>>} */
+const payloads = new WeakMap();
 export const ruleFeaturePayload = (feature, label = '') => {
+  const source = globalThis.window?.Vue?.toRaw?.(feature) ?? feature;
+  const known = label === '' ? payloads.get(source) : undefined;
+  if (known) return known;
+  const payload = buildRuleFeaturePayload(feature, label);
+  if (label === '') payloads.set(source, payload);
+  return payload;
+};
+const buildRuleFeaturePayload = (feature, label) => {
   const metadata = normalizeFeatureSelectorMetadata(feature);
   const qualifiers = Object.fromEntries(Object.entries(feature.selector?.qualifiers || feature.qualifiers || metadata.qualifiers)
     .map(([key, values]) => [key, (Array.isArray(values) ? values : [values]).filter(value => value != null).map(String)]));
@@ -113,8 +113,8 @@ export const runWhenPrepared = (state, preparations, commit) => {
 
 /**
  * Python's answer to a rule evaluation (R7): per feature, the indexes of the
- * rules it matches and, for color rules, their priorities; or the normalized
- * rows of `color-captions`.
+ * rules it matches and, for color rules, the priority of each match (aligned
+ * with the indexes); or the normalized rows of `color-captions`.
  * @typedef {Record<string, any>} RuleEvaluationResult
  */
 
@@ -163,7 +163,9 @@ export const runWhenPrepared = (state, preparations, commit) => {
 export const createRulePreparation = ({
   state, evaluate, pending = { value: false }, notify = () => {}, visibilityRules = () => []
 }) => {
-  let validated = new Set();
+  // The rule keys Python accepted: a key's syntax is a fact of its content.
+  /** @type {Set<string>} */
+  const validated = new Set();
   let pendingCount = 0;
   const features = () => [...new Set([
     ...(state.extractedFeatures.value || []), ...(state.biologicalFeatures?.value || [])
@@ -204,7 +206,7 @@ export const createRulePreparation = ({
       : before[key] === after[key]);
   };
   const matchesPrepared = (targets, draft) => !draft.length || (
-    draft.every((rule) => validated.has(ruleKey(rule))) && ruleMatchesReady(targets, draft)
+    draft.every((rule) => validated.has(ruleKey(rule))) && ruleMatcher(draft).ready(targets)
   );
   const isPrepared = (rules = state.activeDrawing().manualSpecificRules) => {
     const draft = [...new Map(rules.map((rule) => [ruleKey(rule), rule])).values()];
@@ -220,19 +222,21 @@ export const createRulePreparation = ({
     const draft = [...new Map([...rules, ...retained].map((rule) => [ruleKey(rule), { feat: rule.feat, qual: rule.qual, val: rule.val }])).values()];
     // Empty catalogs still require syntax validation at input boundaries.
     if (matchesPrepared(targets, draft)) return true;
+    // Only the rules without a result for every target, or not yet validated,
+    // go to Python; the others' results are already known.
+    const pendingKeys = new Set(ruleKeysPending(targets, draft.map(ruleKey)));
+    const sent = draft.filter((rule) => pendingKeys.has(ruleKey(rule)) || !validated.has(ruleKey(rule)));
     const before = snapshot();
     pending.value = ++pendingCount > 0;
-    return evaluate({ features: targets.map((feature) => ruleFeaturePayload(feature)), rules: draft, kind: 'color' }, options)
+    return evaluate({ features: targets.map((feature) => ruleFeaturePayload(feature)), rules: sent, kind: 'color' }, options)
       .then((result) => {
         if (!isCurrent(before) || state.sessionOperationAvailability?.()) return false;
-        validated = new Set(draft.map(ruleKey));
-        targets.forEach((feature, index) => {
-          const cache = cacheFor(feature);
-          const matches = new Set(result.matches[index]);
-          draft.forEach((rule, ruleIndex) => cache.set(ruleKey(rule), declinesLiveMatch(feature, rule)
-            ? { matches: null, declined: true, priority: Infinity }
-            : { matches: matches.has(ruleIndex), priority: result.priorities[index][ruleIndex] }));
-        });
+        const keys = sent.map(ruleKey);
+        keys.forEach((key) => validated.add(key));
+        const declines = liveMatchDeclines(sent);
+        recordRuleMatches(targets, keys, (index) => ({
+          matched: result.matches[index], priorities: result.priorities[index], declined: declines(targets[index])
+        }));
         return true;
       }).finally(() => { pending.value = --pendingCount > 0; });
   };
@@ -247,8 +251,7 @@ export const createRulePreparation = ({
       value: rule.value, action: rule.action
     }));
     if (draft.length === 0) return true;
-    const targets = features().filter((feature) => draft
-      .some((rule) => !cacheOf(feature)?.has(visibilityRuleKey(rule))));
+    const targets = features().filter((feature) => draft.some((rule) => !visibilityRuleKnown(feature, rule)));
     if (targets.length === 0) return true;
     pending.value = ++pendingCount > 0;
     return Promise.resolve()
@@ -257,9 +260,8 @@ export const createRulePreparation = ({
       }))
       .then((result) => {
         targets.forEach((feature, index) => {
-          const cache = cacheFor(feature);
           const matches = new Set(result.matches[index]);
-          draft.forEach((rule, ruleIndex) => cache.set(visibilityRuleKey(rule), declinesVisibilityMatch(feature, rule)
+          draft.forEach((rule, ruleIndex) => recordVisibilityMatch(feature, rule, declinesVisibilityMatch(feature, rule)
             ? { matches: null, declined: true }
             : { matches: matches.has(ruleIndex) }));
         });

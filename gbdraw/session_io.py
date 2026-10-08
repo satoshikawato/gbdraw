@@ -1827,7 +1827,7 @@ def validate_current_session_artifacts(session: Mapping[str, Any]) -> None:
         try:
             validate_current_derived_protein_artifacts(
                 derived_entries,
-                manifest,
+                validated_manifest,
             )
         except ValidationError as exc:
             raise ValidationError(
@@ -4888,7 +4888,7 @@ def write_session_json(
                     filename="",
                     mode="wb",
                     fileobj=raw_file,
-                    compresslevel=9,
+                    compresslevel=6,
                     mtime=0,
                 ) as compressed_file:
                     with io.TextIOWrapper(compressed_file, encoding="utf-8") as text_file:

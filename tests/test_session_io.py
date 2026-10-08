@@ -2359,6 +2359,18 @@ def test_session_json_gzip_round_trip(tmp_path: Path) -> None:
     assert load_session(session_path) == session
 
 
+def test_session_json_gzip_decompresses_to_the_plain_bytes(tmp_path: Path) -> None:
+    import gzip
+
+    session = _minimal_session({})
+    write_session_json(tmp_path / "session.json", session)
+    write_session_json(tmp_path / "session.json.gz", session)
+
+    assert gzip.decompress((tmp_path / "session.json.gz").read_bytes()) == (
+        tmp_path / "session.json"
+    ).read_bytes()
+
+
 def test_embedded_file_materialization_sanitizes_name(tmp_path: Path) -> None:
     path = materialize_embedded_file(
         _file_entry("../unsafe/input.gb", b"LOCUS       TEST\n"),

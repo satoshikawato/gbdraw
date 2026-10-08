@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createRulePreparation, firstMatchingRule, rebindRuleColorOverrides, runWhenPrepared } from '../../gbdraw/web/js/app/rule-matching.js';
-import { ruleMatchesFeature } from '../../gbdraw/web/js/services/rule-matchers.js';
+import { createRulePreparation, rebindRuleColorOverrides, runWhenPrepared } from '../../gbdraw/web/js/app/rule-matching.js';
+import { ruleMatcher, ruleMatchesFeature } from '../../gbdraw/web/js/services/rule-matchers.js';
+
+const firstMatchingRule = (feature, rules) => ruleMatcher(rules).first(feature);
 import { evaluatePythonRules } from './helpers/python-rule-evaluator.mjs';
 import { withDrawings } from './helpers/drawing-state.mjs';
 

@@ -4469,3 +4469,80 @@ def test_orthogroup_display_pairs_do_not_restrict_all_record_membership(reverse:
     )
     assert without_display.adjacent_display_edges_by_pair == {}
     assert without_display.orthogroups == result.orthogroups
+
+
+def test_manifest_presentation_identity_check_normalizes_each_distinct_key_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The verdict cache is process-wide: start from a cold one.
+    protein_colinearity_module._is_presentation_identity_key.cache_clear()
+    key_names = ("pi_probe_alpha", "pi_probe_beta", "pi_probe_gamma")
+    payload = {
+        "nodes": [
+            {name: [{name: index} for name in key_names] for name in key_names}
+            for index in range(50)
+        ]
+    }
+    normalize_calls = 0
+    real_normalize = protein_colinearity_module.unicodedata.normalize
+
+    def count_normalize(form, text):
+        nonlocal normalize_calls
+        normalize_calls += 1
+        return real_normalize(form, text)
+
+    monkeypatch.setattr(
+        protein_colinearity_module.unicodedata, "normalize", count_normalize
+    )
+
+    protein_colinearity_module._reject_manifest_presentation_identity(payload)
+    first_pass_calls = normalize_calls
+    protein_colinearity_module._reject_manifest_presentation_identity(payload)
+
+    # "nodes" plus the three probe keys, each normalized once across both walks.
+    assert first_pass_calls == 1 + len(key_names)
+    assert normalize_calls == first_pass_calls
+
+
+@pytest.mark.parametrize(
+    "key",
+    ("viewFeatureSvgId", "view_feature_hash_parts", "Rendered SVG ID", "\uff52enderedSvgId"),
+)
+def test_manifest_presentation_identity_check_still_rejects_view_fields(key: str) -> None:
+    for _ in range(2):  # The second pass is served from the verdict memo.
+        with pytest.raises(ValidationError, match="rendered-view identity fields"):
+            protein_colinearity_module._reject_manifest_presentation_identity(
+                {"proteinSets": [{"nested": ({key: 1},)}]}
+            )
+
+
+def test_raw_protein_tsv_validation_parses_each_distinct_text_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from uuid import uuid4
+
+    token = uuid4().hex  # The verdict memo is process-wide; use texts no other test has.
+    query_id, subject_id = f"q_{token}", f"s_{token}"
+    valid = f"{query_id}\t{subject_id}\t100\t1\t0\t0\t1\t1\t1\t1\t0\t50\n"
+    bad_number = valid.replace("\t100\t", "\tnan\t")
+    parse_calls = 0
+    real_parse = protein_colinearity_module.parse_losatp_outfmt6
+
+    def count_parse(text):
+        nonlocal parse_calls
+        parse_calls += 1
+        return real_parse(text)
+
+    monkeypatch.setattr(protein_colinearity_module, "parse_losatp_outfmt6", count_parse)
+
+    def matches(text: str) -> bool:
+        return protein_colinearity_module.raw_protein_tsv_matches_bindings(
+            text, query_ids={query_id}, subject_ids={subject_id}
+        )
+
+    assert [matches(valid) for _ in range(4)] == [True] * 4
+    assert parse_calls == 1
+    assert [matches(bad_number) for _ in range(4)] == [False] * 4
+    assert parse_calls == 2
+    assert matches(f"# comment {token}\n")
+    assert parse_calls == 3  # A distinct text parses once, even without rows.

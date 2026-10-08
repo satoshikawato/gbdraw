@@ -120,7 +120,9 @@ const commitActiveResultEdit = () => {
 };
 
 const { featureOverrideKey } = await import(pathToFileURL(join(tempDir, 'services', 'feature-override-identity.js')));
-const { createRulePreparation, firstMatchingRule, runWhenPrepared } = await import(pathToFileURL(join(tempDir, 'app', 'rule-matching.js')));
+const { createRulePreparation, runWhenPrepared } = await import(pathToFileURL(join(tempDir, 'app', 'rule-matching.js')));
+const { ruleMatcher } = await import(pathToFileURL(join(tempDir, 'services', 'rule-matchers.js')));
+const firstMatchingRule = (feature, rules) => ruleMatcher(rules).first(feature);
 // The rule owner's `runWithRuleMatches` for these fakes: the color matches of the rules, prepared once.
 const runWithRuleMatchesOf = (preparation, state) => (rules, commit) => runWhenPrepared(state, () => [preparation.prepare(rules)], commit);
 const preparationState = { extractedFeatures, biologicalFeatures, manualSpecificRules };
@@ -193,7 +195,7 @@ const actions = createFeatureColorActions({
     findFeaturesWithSameLegendItem: () => legendSiblings,
     findMatchingRegexRule: () => specificRule,
     getDisplayedFeatureLabel: (feature) => feature.displayLabel || feature.product || '',
-    getEffectiveLegendCaption: () => 'Core',
+    effectiveLegendCaptions: () => () => 'Core',
     getLegendRowRules: (caption) => legendRowRules(caption, { rules: manualSpecificRules, legendEntries: legendEntries.value }),
     getIndividualFeatureLabel: (feature) => feature.product || '',
     // FE-09 (D-14): "This feature only" always writes the stable hash.
@@ -266,6 +268,51 @@ assert.equal(legendColorOverrides['Manual row'], undefined);
   legendSiblings = [featureB, hashOnlyFeature];
   clickedFeature.value = null;
   Object.assign(featureStyleScopeDialog, { show: false });
+  manualSpecificRules.splice(0);
+}
+
+// Each popup action prepares an allowlisted set of rules (OV-198): a stroke
+// edit reads only the saved rules, a color edit also the clicked feature's hash
+// rule and its label rules.
+{
+  const popupFeature = {
+    id: 'popup-feature', svg_id: 'hash-popup', type: 'CDS', product: 'popup product',
+    qualifiers: { product: ['popup product'] }, start: 40, end: 50
+  };
+  const ruleKey = (rule) => `${rule.feat}|${rule.qual}|${rule.val}`;
+  const savedRules = [specificRule, { feat: 'CDS', qual: 'hash', val: 'hash-z', color: '#444444', cap: 'Other' }];
+  const savedKeys = savedRules.map(ruleKey);
+  const label = resolveFeatureLabelSelector(popupFeature, 'popup product');
+  assert.ok(label, 'the popup feature has a label rule');
+  const clickedKeys = [
+    ...savedKeys,
+    `CDS|hash|${getFeatureColorRuleHash(popupFeature)}`,
+    `CDS|${label.qualifier}|${label.pattern}`
+  ];
+  const strokeScope = (kind) => () => {
+    Object.assign(featureStyleScopeDialog, { show: true, kind, feat: popupFeature, color: '#123456', strokeColor: '#123456' });
+    return actions.handleFeatureStyleScopeChoice('cancel');
+  };
+  const allowlist = [
+    ['applyStrokeToSelectedFeatures', () => actions.applyStrokeToSelectedFeatures([popupFeature], '#112233', 2), savedKeys],
+    ['resetClickedFeatureStroke', () => actions.resetClickedFeatureStroke(), savedKeys],
+    ['setClickedFeatureStrokeColorValue', () => actions.setClickedFeatureStrokeColorValue('#112233'), savedKeys],
+    ['setClickedFeatureStrokeWidthValue', () => actions.setClickedFeatureStrokeWidthValue(3), savedKeys],
+    ['updateClickedFeatureStroke', () => actions.updateClickedFeatureStroke('#112233', 2), savedKeys],
+    ['handleFeatureStyleScopeChoice (stroke)', strokeScope('stroke'), savedKeys],
+    ['handleFeatureStyleScopeChoice (fill)', strokeScope('fill'), clickedKeys],
+    ['updateClickedFeatureColor', () => actions.updateClickedFeatureColor('#123456'), clickedKeys]
+  ];
+  for (const [name, run, expected] of allowlist) {
+    manualSpecificRules.splice(0, manualSpecificRules.length, ...savedRules);
+    clickedFeature.value = { feat: popupFeature, svg_id: popupFeature.svg_id, legendName: 'Core', strokeColor: '#000000', strokeWidth: 1 };
+    Object.assign(featureStyleScopeDialog, { show: false, kind: 'fill', feat: null });
+    preparedRuleSets.length = 0;
+    await run();
+    assert.deepEqual([...new Set(preparedRuleSets.flat())].sort(), [...expected].sort(), `${name} prepares exactly its allowlisted rules`);
+  }
+  clickedFeature.value = null;
+  Object.assign(featureStyleScopeDialog, { show: false, kind: 'fill', feat: null });
   manualSpecificRules.splice(0);
 }
 
@@ -790,7 +837,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
         committed.push(rules.map((rule) => ({ ...rule })));
         return true;
       },
-      getEffectiveLegendCaption: (feature) => feature.type,
+      effectiveLegendCaptions: () => (feature) => feature.type,
       getLegendRowRules: (caption) => legendRowRules(caption, { rules: resetRules }),
       getFeatureQualifier: (feature) => ({ qual: 'hash', val: feature.svg_id }),
       findFeaturesWithSameLegendItem: () => [],
@@ -860,7 +907,7 @@ assert.equal(legendAttributes.get('data-legend-key'), 'Oxidative phosphorylation
       ruleActions: {
         runWithRuleMatches: runWithRuleMatchesOf(createRulePreparation({ state: withDrawings(renameState), evaluate: evaluatePythonRules }), renameState),
         commitSpecificRules: async (nextRules) => { committed.push(nextRules.map((rule) => ({ ...rule }))); return true; },
-        getEffectiveLegendCaption: (feature) => feature.legendCaption || rules.find((rule) => rule.feat === feature.type)?.cap || feature.type,
+        effectiveLegendCaptions: () => (feature) => feature.legendCaption || rules.find((rule) => rule.feat === feature.type)?.cap || feature.type,
         getLegendRowRules: (caption) => legendRowRules(caption, {
           rules, legendEntries: stateLegendEntries.value, originalLegendOrder: originalOrder.value
         }),
