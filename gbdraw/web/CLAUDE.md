@@ -91,14 +91,14 @@ in the same change.
 | Current active-config defaults, inventory, and validation | `js/services/session-active-config-contract.js` |
 | Historical Gallery session migration | `js/services/gallery-session-migration.js` |
 | Per-feature edits and Feature placements by source identity (draft key, row checks, request rows, notices) | `js/services/feature-placement.js` |
-| Rendered-ID feature edits of Sessions 31–33 and 44, and Feature placement drafts of Sessions 41–44, onto mode-scoped identity rows | `js/services/feature-edit-migration.js` |
+| Rendered-ID feature edits of Sessions 44 and older, and Feature placement drafts of Sessions 41–44, onto mode-scoped identity rows | `js/services/feature-edit-migration.js` |
 | Gallery publication preparation, finalization, and readiness | `js/services/gallery-session-publication.js` |
 | Save/load coordination | `js/services/config.js` |
 | History transactions and availability | `js/services/history.js`, `js/app/history-inputs.js`, `js/services/history-snapshot.js` |
-| Error producer contract and user-facing wording | `js/services/error-normalization.js` (`diagnosticError`, `normalizeUserFacingError`) |
+| Error producer contract and user-facing wording | `js/utils/error-normalization.js` (`diagnosticError`, `normalizeUserFacingError`) |
 | Numeric draft projection | `js/utils/optional-positive-number.js` (`projectOptionalNumber`) |
-| GenBank header reading | `js/app/genbank-header.js` |
-| Managed Depth slot reconciliation | `js/app/depth-track-state.js` (`reconcileManagedDepthSlots`), called by `changeCircularDepthSources` and `changeLinearDepthSources` |
+| GenBank header reading | `js/services/genbank-header.js` |
+| Managed Depth slot reconciliation | `js/services/depth-track-state.js` (`reconcileManagedDepthSlots`), called by `changeCircularDepthSources` and `changeLinearDepthSources` |
 | Editor-intent projection onto a displayed Result | `js/app/app-setup.js` (`projectMountedEditorIntent`) |
 | Render-worker client and lifecycle | `js/services/diagram-generation.js` |
 | Pyodide typed rendering | `js/workers/diagram-generation-worker.js` |
@@ -208,7 +208,7 @@ Guards:
 Editor overrides are created, pruned, or deleted only by an explicit Reset or
 Import, Undo or Redo, a Session replacement, the owner reconcile inside a
 successful source-replacing Generate (`pruneUnmatchedFeatureOverrides` in
-`app/feature-visibility.js`), or **Remove N unmatched feature edits**
+`services/feature-visibility.js`), or **Remove N unmatched feature edits**
 (`removeUnresolvedFeatureEdits`). Result selection, mount, record selection,
 mode change, hiding, and reflow never touch them. Per-feature edits
 (`state.featureOverrides`) and Feature placements are keyed by
@@ -220,7 +220,7 @@ and every reconcile reach only the rows of their own mode and records; the
 other mode's rows stay in the draft. Only `services/feature-placement.js`
 builds a draft key. A selected-feature annotation target (`featureIdentity`)
 names its mode the same way, and `annotationOptionsPayload` in
-`app/annotations/state.js` gives a request only the targets of its mode and
+`services/annotation-state.js` gives a request only the targets of its mode and
 records, without `scope`.
 
 Guards: `tests/web/non-edit-state-preservation.playwright.spec.js` with
@@ -242,7 +242,7 @@ and specific rules) and `projectFeatureVisibility` in
 `app/feature-editor/visibility-actions.js` (feature visibility and the labels of
 the features it hides or shows),
 `orderLegendEntries` in `app/legend/utils.js` (legend order), and
-`resolveFeatureDrawn` in `app/feature-visibility.js` (whether a feature is
+`resolveFeatureDrawn` in `services/feature-visibility.js` (whether a feature is
 drawn, as Python's `should_render_feature` answers; the Features list and
 Search features read it through `listFeatureRows`). A displayed batch Result whose shared legend entries already follow
 the legend order keeps its order (`orderLegendEntries` with `keepFollowed`),
@@ -282,7 +282,7 @@ Generate), and the `projection-shapes` baseline in
 ### R4: A fast path matches the canonical reader or declines
 
 A browser shortcut for a fact Python owns either equals the canonical loader or
-hands the decision to the Worker. `app/genbank-header.js` is the only JavaScript
+hands the decision to the Worker. `services/genbank-header.js` is the only JavaScript
 GenBank header reader, and it declines what it cannot read exactly. A Worker
 helper that answers what Generate reads calls the canonical loader. A JavaScript
 check that anticipates a Python match (letter case, color domains) uses Python's
@@ -307,7 +307,7 @@ orientation owner is the File card's `region_reverse`
 Reuse compares every input that is knowable without extraction as data; an
 invalidation event is only an optimization. LOSAT job planning is one pure plan
 for execution and the estimate: `planLosatSourceJobs` (`app/linear-sources.js`)
-and `buildLosatJobSpecs` (`app/linear-comparisons.js`).
+and `buildLosatJobSpecs` (`services/linear-comparisons.js`).
 
 Guards: `tests/web/linear-sources.test.mjs` (one-file packaging equals separate
 files; job plan) and `tests/web/gui-audit-20260930-comparisons.playwright.spec.js`
@@ -613,7 +613,7 @@ metadata construction.
 
 Current owners in the initial automated scope:
 - The bulk label projection is owned by
-  `app/feature-editor/label-override-table.js` (`buildBulkLabelProjection`).
+  `services/label-override-table.js` (`buildBulkLabelProjection`).
   `services/session-request.js` builds it once per request
   (`requestLabelProjection`) and writes its identity-row label text and its
   `* * label` table rows into the canonical request.
@@ -711,7 +711,7 @@ request boundary instead of duplicating it in configuration and session modules.
 
 ## Gallery ownership
 
-`tools/prepare_interactive_gallery_assets.py::EXAMPLES` is the public 11-example
+`tools/prepare_interactive_gallery_assets.py::EXAMPLES` is the public example
 inventory. `gbdraw/web/gallery/examples.json`, session artifacts, source/example
 SVGs, thumbnails, and `artifact-manifest.json` are generated projections.
 `tools/refresh_gallery_sessions.py` is the supported unfiltered owner command;
@@ -722,13 +722,12 @@ Tutorial instructions live under
 `gbdraw/web/gallery/tutorials/`; screenshots and thumbnails live under
 `gbdraw/web/gallery/media/` and `thumbnails/`.
 
-Use `tools/build_web_gallery.py` for generated gallery markup. Use
-`tools/capture_gallery_tutorial_screenshots.py` for declarative tutorial
+Use `tools/capture_gallery_tutorial_screenshots.py` for declarative tutorial
 captures. Data-dependent captures must load the example's own session, declare
 the expected app state, and prove that the controls or data identity named by
 the instruction are visible in the final crop.
 
-Read `.agents/skills/web-gallery-screenshot-maintenance/SKILL.md` before editing
+Read `.claude/skills/web-gallery-screenshot-maintenance/SKILL.md` before editing
 Gallery tutorials or screenshots.
 
 ## Local build and verification

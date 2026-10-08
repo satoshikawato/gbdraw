@@ -43,5 +43,5 @@ You implement exactly the step in your brief, in a worktree created with the
   tokens, write a step handoff (what is done, branch and head SHA, PR, what
   remains) to the path in the brief and finish.
 
-Return at most 30 lines: branch, head SHA, PR number and state, the tests you
+Return a short report the caller can act on without opening your logs: branch, head SHA, PR number and state, the tests you
 ran with their results, bugs found, decisions you took, and what remains.

@@ -27,5 +27,5 @@ You do one mechanical task from your brief.
   lines that matter.
 - Push each verified commit at once.
 
-Return at most 20 lines: what you did, branch and head SHA, the commands you
+Return a short report the caller can act on without opening your logs: what you did, branch and head SHA, the commands you
 ran with their results, and anything you stopped on.
