@@ -273,3 +273,39 @@ def test_multi_record_canvas_legend_includes_slot_rows_for_every_record() -> Non
     assert "MY GC" in keys
     assert "AT skew (+)" in keys and "AT skew (-)" in keys
     assert "GC content" not in keys
+
+
+def test_multi_record_canvas_moves_record_elements_instead_of_copying_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import copy
+
+    from svgwrite.base import BaseElement
+
+    element_copies = 0
+    real_deepcopy = copy.deepcopy
+
+    def count_element_copies(value, *args, **kwargs):
+        nonlocal element_copies
+        if isinstance(value, BaseElement):
+            element_copies += 1
+        return real_deepcopy(value, *args, **kwargs)
+
+    monkeypatch.setattr(copy, "deepcopy", count_element_copies)
+    # Equal record IDs force the duplicate-ID repair path of the merge.
+    records = [_synthetic_record("same"), _synthetic_record("same")]
+
+    drawing = build_circular_multi_diagram(
+        records,
+        options=_web_default_options(),
+        layout=CircularMultiRecordOptions(multi_record_positions=["#1@1", "#2@2"]),
+    )
+
+    assert element_copies == 0
+    root = ET.fromstring(drawing.tostring())
+    ids = [element.get("id") for element in root.iter() if element.get("id")]
+    assert len(ids) == len(set(ids))
+    assert {group.get("id") for group in root.findall("svg:g", SVG_NS)} >= {
+        "record_0",
+        "record_1",
+    }
