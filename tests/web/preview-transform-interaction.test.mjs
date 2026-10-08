@@ -50,6 +50,7 @@ await copyModule('utils/error-normalization.js', 'utils/error-normalization.js')
 await copyModule('app/ui.js', 'app/ui.js');
 await copyModule('services/feature-dom.js', 'services/feature-dom.js');
 await copyModule('app/feature-editor/svg-actions.js', 'app/feature-editor/svg-actions.js');
+await copyModule('utils/popup-bounds.js', 'utils/popup-bounds.js');
 await copyModule('services/runtime-test-hooks.js', 'services/runtime-test-hooks.js');
 await copyModule('services/feature-identity.js', 'services/feature-identity.js');
 await copyModule('services/feature-placement.js', 'services/feature-placement.js');
@@ -532,6 +533,7 @@ const unrelatedPath = new FakeElement('generic', {
 const svg = new FakeSvg([featureOne, featureTwo, match, unrelatedPath]);
 globalThis.document = {
   elementsFromPoint: () => [featureOne],
+  querySelector: () => null,
   createElement: () => { throw new Error('Hover summary should stay disabled in this Contract.'); },
   body: { appendChild: () => {} }
 };
