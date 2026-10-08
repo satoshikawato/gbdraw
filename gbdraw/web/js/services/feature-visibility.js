@@ -514,7 +514,7 @@ export const listFeatureRows = (catalogFeatures, context) => {
 // that changes a Result's source asks for the automatic rerender (OV-42,
 // OV-43). The color of a rule is in it only for a batch: with one Result the
 // rows keep their captions and the Legend follows the color live
-// (`ruleLegendCaption` gives the caption of a rule whose caption names another
+// (`ruleLegendCaptions` gives the caption of a rule whose caption names another
 // row), while another batch Result shows the row it was drawn with until
 // Python draws it again (OV-44). A Result is read from its catalog features:
 // `asRendered` reads the features Python drew at the last render, else

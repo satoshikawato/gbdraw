@@ -7,12 +7,13 @@ import { test } from 'node:test';
 import { createRulePreparation } from '../../gbdraw/web/js/app/rule-matching.js';
 import { createSvgStyles } from '../../gbdraw/web/js/app/svg-styles.js';
 import { createFeatureColorActions } from '../../gbdraw/web/js/app/feature-editor/color-actions.js';
+import { createFeatureRuleActions } from '../../gbdraw/web/js/app/feature-editor/rule-actions.js';
 import { withDrawings } from './helpers/drawing-state.mjs';
 
 const ref = (value) => ({ value });
 const hashOf = (index) => `f${index.toString(16).padStart(8, '0')}`;
 
-// Property reads of the features, and JSON.stringify calls (rule keys).
+// Property reads of the features and rules, and JSON.stringify calls (rule keys).
 const counting = () => {
   const counts = { reads: 0, keys: 0 };
   const stringify = JSON.stringify;
@@ -44,7 +45,7 @@ const setup = (count, count_) => {
   const features = Array.from({ length: count }, (_, index) => count_.feature({
     id: `feature-${index}`, svg_id: hashOf(index), type: 'CDS', qualifiers: { product: [`p${index}`] }
   }));
-  const rules = features.map((_, index) => ({ feat: 'CDS', qual: 'hash', val: hashOf(index), color: '#111111', cap: 'CDS' }));
+  const rules = features.map((_, index) => count_.feature({ feat: 'CDS', qual: 'hash', val: hashOf(index), color: '#111111', cap: 'CDS' }));
   const state = withDrawings({
     extractedFeatures: ref(features), biologicalFeatures: ref(features), manualSpecificRules: rules,
     svgResultIdentity: ref('one'), legendEntries: ref([{ caption: 'CDS', color: '#111111' }]),
@@ -122,6 +123,29 @@ test('"All features with legend item" over K features with K hash rules does O(K
     measured.push(await count_.measure(() => actions.handleColorScopeChoice('caption')));
     assert.equal(committed.length, count);
     assert.ok(committed.every((rule, index) => rule.val === hashOf(index) && rule.color === '#abcdef'));
+  }
+  linear(...measured);
+});
+
+test('the Legend item of K features, whose K hash rules name a row of another color, is read in O(K)', async () => {
+  const measured = [];
+  for (const count of [50, 200]) {
+    const count_ = counting();
+    const { features, rules, state } = setup(count, count_);
+    rules.forEach((rule) => { rule.color = '#abcdef'; });
+    const preparation = createRulePreparation({ state, evaluate: evaluateHashRules });
+    assert.equal(await preparation.prepare(rules), true);
+    Object.assign(state, { results: ref([]), files: { t_color: null }, fileLegendCaptions: ref(new Set()), originalLegendOrder: ref(['CDS']) });
+    const actions = createFeatureRuleActions({
+      ref, computed: (get) => ({ get value() { return get(); } }), watch() {}, state, rulePreparation: preparation,
+      runUndoable: async (_, commit) => commit(), runUndoableCheckpoint: async (_, commit) => commit(),
+      prepareFileLegendEntries: async () => false, projectPaletteAndRules: () => true,
+      ports: { requestAutomaticRerender: () => true }, getCommittedRequest: () => null, isPatternEditAvailable: () => true
+    });
+    /** @type {Record<string, any>[]} */
+    let siblings = [];
+    measured.push(await count_.measure(() => { siblings = actions.findFeaturesWithSameLegendItem(features[0]); }));
+    assert.equal(siblings.length, count - 1);
   }
   linear(...measured);
 });

@@ -8,7 +8,7 @@ import { resolveColorToHex } from '../../utils/color-utils.js';
 import { parseSpecificRules, serializeSpecificRules } from '../../services/file-imports.js';
 import { formatFeatureRange, getFeatureColorRuleHash } from '../../services/feature-utils.js';
 import {
-  buildLegendIntents, createRuleLegendCaptions, legendRowRules, rendererLegendRows, ruleLegendCaption
+  buildLegendIntents, createRuleLegendCaptions, legendRowRules, rendererLegendRows, ruleLegendCaptions
 } from '../../services/specific-color-rules.js';
 import { resolveFeatureLabelSelector } from '../../services/feature-selector.js';
 import { downloadTextFile } from '../../services/text-download.js';
@@ -500,11 +500,11 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
   const effectiveLegendCaptions = () => {
     const drawing = state.activeDrawing();
     const ruleMatches = ruleMatcher(drawing.manualSpecificRules);
-    const context = legendRowContext(drawing);
+    const legendCaption = ruleLegendCaptions(legendRowContext(drawing));
     return (feat) => {
       if (!feat) return '';
       const rule = ruleMatches.first(feat);
-      if (rule && normalizeCaption(rule.cap)) return ruleLegendCaption(rule, context);
+      if (rule && normalizeCaption(rule.cap)) return legendCaption(rule);
 
       const overrideCaption = normalizeCaption(
         getFeatureOverride(drawing.featureColorOverrides, feat)?.caption
