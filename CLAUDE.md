@@ -2,8 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Agents also follow `AGENTS.md` (branching, pull-request base and contents, and
-when not to auto-merge).
+@AGENTS.md
+
+`AGENTS.md`, imported above, holds the rules every agent follows: branching,
+pull-request base and contents, when not to auto-merge, workspace cleanup, and
+browser checks.
 
 ## Project Overview
 
@@ -66,15 +69,24 @@ gbdraw linear --gbk genome1.gb genome2.gb -b blast.txt -o comparison
 gbdraw gui  # Launch web UI
 ```
 
-### Browser / Playwright Checks
+Browser and Playwright availability checks are in `AGENTS.md`.
 
-- Do not treat missing repo-local `node_modules/`, `package.json`, or `@playwright/test` as proof that browser testing is unavailable. This environment may provide Playwright through Python/conda.
-- Check both installations when web UI verification matters:
-  - `command -v playwright && playwright --version`
-  - `python -c "from playwright.sync_api import sync_playwright; print('python playwright ok')"`
-- JavaScript Playwright specs in `tests/web/*.playwright.spec.js` require Node's `@playwright/test`; verify with `node -e "console.log(require.resolve('@playwright/test'))"`.
-- If `@playwright/test` is missing, run an equivalent targeted browser check with Python Playwright instead of skipping browser verification.
-- In Codex/agent sandboxes, Chromium can fail with `sandbox_host_linux.cc ... Operation not permitted`. Rerun the same local browser check with the required sandbox escalation before declaring Playwright unavailable.
+## Agent skills and subagents
+
+- Project skills live in `.claude/skills/` and subagent definitions in
+  `.claude/agents/`. A skill describes a procedure; selecting one never widens
+  the task's scope or adds surfaces to it.
+- Run test suites whose output is long (Playwright, the full pytest suite)
+  through `.claude/scripts/run_quiet.py`, which keeps the full log in a file
+  and prints a short summary with the exit status preserved.
+
+## Compact instructions
+
+When compacting, keep: the task goal and its done criteria; open PR numbers
+with head SHAs and CI state; branch and worktree paths; Owner decisions and
+Owner-delegated choices not yet written to a file; bug IDs assigned in this
+session; and the path of the task's `STATE.md`. Drop file contents, command
+output, and passing test logs that can be read again.
 
 ## Project Structure
 

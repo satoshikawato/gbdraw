@@ -3,5 +3,19 @@
     "allow": [
       "Bash(git commit:*)"
     ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "compact|resume",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/campaign-state.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
   }
 }
