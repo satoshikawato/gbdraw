@@ -477,9 +477,8 @@ states the dependencies. This replaces revision 4's 11-13 v0.15.0 PRs.
 
 ### 8.1 v0.14.0 (bug-fix track; this campaign, beside Phase E's per-mode store)
 
-Status on 2026-10-07 (dev `98d4bc13`). Two PRs of this campaign remain: #936 and E1. No further small-fix
-PRs: a new 0.14.0 finding goes into E1 if it touches E1's files, otherwise into the owning session's open PR,
-otherwise it waits.
+Status on 2026-10-08 (dev `acd35a17`). This campaign's PRs have all merged; Phase E's AUTHORITY is the last
+0.14.0 PR. A new 0.14.0 finding goes into the owning session's open PR, otherwise it waits.
 
 | PR | Content | Status |
 | --- | --- | --- |
@@ -495,20 +494,20 @@ otherwise it waits.
 | #931 OV-103 | resource `checksum` accepted and verified once in both Python loaders | merged |
 | #932 OV-136 | a label rerender keeps a loaded Session's Result names | merged |
 | #935 OV-140 | Python named colors: `seashell` corrected, `rebeccapurple` added | merged |
-| #936 OV-138 | a CLI re-save keeps an empty label text empty (text tables read as text) | open, in CI (Python only) |
-| E1 + Q0 | per-mode artifact slots, `transitionDiagramMode`, switch refused during Generate, reflow or a History restore (OV-116), per-Result cache live identities, History restore port; `otherModeResult` writer/reader (Web) and validator/CLI (Python); one Load pipeline for both sets. Fixes OV-104, OV-107, OV-83/100, OV-108, OV-113, OV-115, OV-116, OV-117 by construction | its own PR, not yet open (squashed head `818ef8a4`; Review REQUIRED); the base of PER-MODE. Written as 45; PR-1 rewrites it as 46 |
-| E0 fixtures | F1-F3 (v44/v42 two-mode Sessions from main), branch `test/session-two-mode-fixtures` | pushed; PER-MODE (PR-1) cherry-picks it |
+| #936 OV-138 | a CLI re-save keeps an empty label text empty (text tables read as text) | merged |
+| #937 E1 + Q0 | per-mode artifact slots, `transitionDiagramMode`, switch refused during Generate, reflow or a History restore (OV-116), per-Result cache live identities, History restore port; `otherModeResult` writer/reader (Web) and validator/CLI (Python); one Load pipeline for both sets. Fixes OV-104, OV-107, OV-83/100, OV-108, OV-113, OV-115, OV-116, OV-117 by construction. Its review findings OV-142 (cross-mode Legend arrival) and OV-143 (single-mode Legend geometry) went to PER-MODE and LEGEND | merged (dev `5947d457`); written as 45, PER-MODE rewrote it as 46 |
+| E0 fixtures | F1-F3 (v44/v42 two-mode Sessions from main), branch `test/session-two-mode-fixtures` | in PER-MODE (#945) |
 
 Phase E's track (gbdraw-87), after PR-0a (#934) and E1:
-- **LEGEND** (runtime): OV-125..129, OV-150, OV-151 (+ gbdraw-41's Legend leftovers); K + Z1 (Python GPOS
-  kerning, `legendReflow` metadata, reference SVG and Gallery refresh); Z2 (Legend measurement port, §8.2);
-  Z3 (Legend layout through the port, JS reflow deleted); layering D.
-- **PER-MODE** (runtime, Session 46): PR-0b + PR-0c + PR-1 (Web half, with our Python half
-  `feat/session-46-python` merged in), layering C, Gallery and docs regenerated, version sweep. LEGEND and
-  PER-MODE share `app/legend/*` and `app/app-setup.js`, so they run one after the other (LEGEND first
-  preferred).
-- **AUTHORITY** (Owner approval, no auto-merge): DOC (the mode-scoped `gbdraw/web/CLAUDE.md` rule) + POST
-  authority + parity spec split + FINDINGS, plus this design revision as one commit.
+- **LEGEND** #940, merged (dev `52a103c5`) (runtime): OV-125..129, OV-150, OV-151 (+ gbdraw-41's Legend
+  leftovers); OV-143; K + Z1 (Python GPOS kerning, `legendReflow` metadata, reference SVG and Gallery
+  refresh); Z2 (Legend measurement port, §8.2); Z3 (Legend layout through the port, JS reflow deleted);
+  layering D.
+- **PER-MODE** #945, merged (dev `acd35a17`) (runtime, Session 46): PR-0b + PR-0c + PR-1 (Web half, with our
+  Python half `feat/session-46-python` merged in), OV-142, layering C, Gallery and docs regenerated, version
+  sweep.
+- **AUTHORITY**, this PR (Owner approval, no auto-merge): DOC (the mode-scoped `gbdraw/web/CLAUDE.md` rule) +
+  POST authority + parity spec split + FINDINGS, plus this design revision.
 - PD-OI-086 (Contract rev 33) merged as #909.
 
 ### 8.2 v0.15.0 (drawings): three PRs
