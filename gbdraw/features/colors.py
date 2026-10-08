@@ -8,7 +8,7 @@ from pandas import DataFrame
 from Bio.SeqFeature import SeqFeature
 
 from .ids import compute_feature_hash as compute_feature_hash
-from .selector_values import feature_matches_specific_color_rule, find_specific_color_rule
+from .selector_values import ColorRuleList, feature_matches_specific_color_rule, find_specific_color_rule
 
 
 def normalize_specific_color_captions(
@@ -86,6 +86,9 @@ def preprocess_color_tables(color_table: DataFrame, default_colors: DataFrame) -
             caption = getattr(row, 'caption', '') or ''
             rule_list.append((pattern, row.color, caption))
 
+    for qualifier_rules in color_map.values():
+        for key, rule_list in qualifier_rules.items():
+            qualifier_rules[key] = ColorRuleList(rule_list)
     return color_map, default_color_map
 
 

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any, Optional
 
@@ -278,6 +279,117 @@ def _unpack_color_rule(rule) -> tuple[Any, str, Optional[str]]:
     return rule[0], rule[1], None
 
 
+# A rule list of one feature type and key with at least this many rules is
+# looked up through an index of its literal patterns (`ColorRuleList`).
+INDEXED_COLOR_RULE_THRESHOLD = 32
+_REGEX_METACHARACTERS = frozenset(".^$*+?{}[]\\|()")
+
+
+def _literal_pattern(source: str) -> Optional[tuple[str, bool, bool]]:
+    """(literal, anchored at start, anchored at end) of a pattern that matches
+    one ASCII literal, or None. Escapes of ASCII punctuation are literal."""
+    start = source.startswith("^")
+    index = 1 if start else 0
+    end = False
+    chars: list[str] = []
+    while index < len(source):
+        char = source[index]
+        if char == "\\":
+            escaped = source[index + 1:index + 2]
+            if not escaped or escaped.isalnum() or not escaped.isascii():
+                return None
+            chars.append(escaped)
+            index += 2
+            continue
+        if char == "$" and index == len(source) - 1:
+            end = True
+        elif char in _REGEX_METACHARACTERS or not char.isascii():
+            return None
+        else:
+            chars.append(char)
+        index += 1
+    return "".join(chars).lower(), start, end
+
+
+class _LiteralRuleIndex:
+    """Positions of literal rules by the lowercased literal, for exact
+    (`^lit$`), prefix (`^lit`), suffix (`lit$`), and unanchored (`lit`)
+    patterns; every other rule is a candidate for every value."""
+
+    def __init__(self, rules: list) -> None:
+        self.exact: dict[str, list[int]] = {}
+        self.prefix: dict[int, dict[str, list[int]]] = {}
+        self.suffix: dict[int, dict[str, list[int]]] = {}
+        self.contains: dict[int, dict[str, list[int]]] = {}
+        self.contains_positions: list[int] = []
+        self.scan: list[int] = []
+        for position, rule in enumerate(rules):
+            pattern = rule[0]
+            source = getattr(pattern, "pattern", None)
+            literal = (
+                _literal_pattern(source)
+                if isinstance(source, str) and not getattr(pattern, "flags", 0) & re.VERBOSE
+                else None
+            )
+            if literal is None or (not literal[0] and not (literal[1] and literal[2])):
+                self.scan.append(position)
+                continue
+            text, start, end = literal
+            if start and end:
+                self.exact.setdefault(text, []).append(position)
+                continue
+            if start or end:
+                table = self.prefix if start else self.suffix
+            else:
+                table = self.contains
+                self.contains_positions.append(position)
+            table.setdefault(len(text), {}).setdefault(text, []).append(position)
+
+    def candidates(self, value: str) -> Optional[set[int]]:
+        """Positions of the rules that may match `value`; None when the index
+        cannot rule any out (a non-ASCII value, or one with a newline)."""
+        if not value.isascii() or "\n" in value:
+            return None
+        text = value.lower()
+        found = set(self.scan)
+        found.update(self.exact.get(text, ()))
+        for length, table in self.prefix.items():
+            found.update(table.get(text[:length], ()))
+        for length, table in self.suffix.items():
+            if length <= len(text):
+                found.update(table.get(text[len(text) - length:], ()))
+        windows = sum(max(0, len(text) - length + 1) for length in self.contains)
+        if windows > len(self.contains_positions):
+            found.update(self.contains_positions)
+        else:
+            for length, table in self.contains.items():
+                for offset in range(len(text) - length + 1):
+                    found.update(table.get(text[offset:offset + length], ()))
+        return found
+
+
+class ColorRuleList(list):
+    """The `(pattern, color, caption)` rules of one feature type and key in
+    table order. A long list carries an index of its literal patterns, built
+    with the color map, so a lookup does not test every rule."""
+
+    def __init__(self, rules=()) -> None:
+        super().__init__(rules)
+        self.literal_index = _LiteralRuleIndex(self) if len(self) >= INDEXED_COLOR_RULE_THRESHOLD else None
+
+    def candidates(self, values: list[str]) -> list:
+        """The rules that may match one of `values`, in table order."""
+        if self.literal_index is None:
+            return self
+        positions: set[int] = set()
+        for value in values:
+            found = self.literal_index.candidates(value)
+            if found is None:
+                return self
+            positions |= found
+        return [self[position] for position in sorted(positions)]
+
+
 def iter_specific_color_rules(feature, color_map, record_id=None, *, selector=None):
     """Yield matching rules and their stable renderer precedence rank."""
     feature_type = get_feature_type(feature)
@@ -299,7 +411,9 @@ def iter_specific_color_rules(feature, color_map, record_id=None, *, selector=No
                 values = [value] if value else []
             else:
                 values = get_qualifier_values(qualifiers, key)
-            for rule in rules[key]:
+            rule_list = rules[key]
+            candidates = rule_list.candidates(values) if isinstance(rule_list, ColorRuleList) else rule_list
+            for rule in candidates:
                 pattern, color, caption = _unpack_color_rule(rule)
                 if any(pattern.search(value) for value in values):
                     yield color, caption, offset + index
@@ -347,6 +461,7 @@ def build_feature_selector_values(
 
 
 __all__ = [
+    "ColorRuleList",
     "build_feature_selector_values",
     "get_feature_hash",
     "get_feature_location_str",
