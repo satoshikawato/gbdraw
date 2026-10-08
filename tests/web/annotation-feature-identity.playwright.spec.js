@@ -115,7 +115,7 @@ test('OV-03: an annotation of a selected feature on a cropped record stays on it
     envelope: 'outer_bounds', circularPath: 'shortest'
   }]);
   await expect(panel(page).locator('[data-annotation-feature-identity]'))
-    .toHaveText('Selected feature: misc_feature at 2400..2500');
+    .toHaveText('Selected feature: misc_feature at 2401..2500');
 
   await page.evaluate(() => {
     const app = window.__GBDRAW_APP__;

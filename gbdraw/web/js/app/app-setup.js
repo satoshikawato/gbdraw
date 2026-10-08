@@ -1613,7 +1613,7 @@ export const createAppSetup = () => {
   const linearTrackSlotEditor = createLinearTrackSlotEditor({ state, changeTrackLayout });
   const annotationImportNotice = ref('');
   const annotationEditor = createAnnotationEditor({
-    state, getRecordCatalog: getAnnotationRecordCatalog, retireLegendStylesOfUnnamedCaptions,
+    state, getRecordCatalog: getAnnotationRecordCatalog, retireLegendStylesOfUnnamedCaptions, reactive,
     onImportNotice: (notice) => { annotationImportNotice.value = notice; }
   });
   watch(
@@ -5231,6 +5231,8 @@ export const createAppSetup = () => {
     annotationImportNotice,
     specificRuleNotice,
     importAnnotationTableFile: undoableAction('Import annotations', annotationEditor.importAnnotationTableFile),
+    annotationReplaceAllDialog: annotationEditor.annotationReplaceAllDialog,
+    handleAnnotationReplaceAllChoice: annotationEditor.handleAnnotationReplaceAllChoice,
     renameAnnotation: annotationEditor.renameAnnotation,
     setAnnotationStyle: annotationEditor.setAnnotationStyle,
     canDownloadAnnotationTable: annotationEditor.canDownloadAnnotationTable,

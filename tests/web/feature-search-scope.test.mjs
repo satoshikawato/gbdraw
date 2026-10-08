@@ -109,6 +109,7 @@ const createEmbeddedSearch = (popupMode) => new Function('features', 'popupMode'
   function biologicalFeatureForMember() { return null; }
   ${embeddedFunction('normalizeArray')}
   ${embeddedFunction('featureLocationParts')}
+  ${embeddedFunction('rangeText')}
   ${embeddedFunction('locationText')}
   ${embeddedFunction('featureLengthText')}
   ${embeddedSlice('var searchFieldIds = {', 'var featuresById = new Map();')}
@@ -251,6 +252,8 @@ test('Interactive SVG popup title and Protein ID match the app popup', () => {
     ${embeddedFunction('isInternalProteinDisplayId')}
     ${embeddedFunction('firstNonInternalDisplayText')}
     ${embeddedFunction('qualifierDisplayValue')}
+    ${embeddedFunction('featureLocationParts')}
+    ${embeddedFunction('rangeText')}
     ${embeddedFunction('featureCaption')}
     ${embeddedFunction('featureProteinId')}
     return { featureCaption: featureCaption, featureProteinId: featureProteinId };
@@ -264,6 +267,11 @@ test('Interactive SVG popup title and Protein ID match the app popup', () => {
   assert.deepEqual(titles.slice(0, 5), [
     'tRNA-Phe', 'cytochrome c oxidase subunit I', 'TRNF', 'LOC_0001', `${'n'.repeat(49)}😀`
   ]);
+  // An unnamed feature falls back to its 1-based range (start is 0-based), in both rules.
+  assert.equal(titles[5], 'CDS at 51..55');
+  const split = { ...runtimeFeatures[5], location_parts: [{ start: 50, end: 52 }, { start: 53, end: 55, display: '54..55' }] };
+  assert.equal(embedded.featureCaption(split), 'CDS at 51..52, 54..55');
+  assert.equal(featureUtils.getFeatureCaption({ ...appFeatures[5], location_parts: split.location_parts }), 'CDS at 51..52, 54..55');
   const proteinIds = runtimeFeatures.map((feature) => embedded.featureProteinId(feature, null));
   assert.deepEqual(proteinIds, appFeatures.map((feature) => featureUtils.resolveFeatureProteinId(feature, null)));
   // Only a protein ID names the Protein ID row; the gene or locus tag of a tRNA does not.

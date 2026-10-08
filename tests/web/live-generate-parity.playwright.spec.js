@@ -143,6 +143,16 @@ const history = async (page, step) => {
   await settleLive(page);
 };
 
+// Show Labels None (Circular Label Mode None), then Generate.
+const showNoLabels = async (page) => {
+  await page.evaluate(() => {
+    const app = window.__GBDRAW_APP__;
+    if (app.mode === 'linear') app.form.show_labels_linear = 'none';
+    else app.form.labels_mode = 'none';
+  });
+  await generate(page);
+};
+
 const FL1_OFF = { recordId: 'FORCEDLBL', featureType: 'CDS', qualifier: 'locus_tag', value: '^fl1$', action: 'off' };
 const BATCH_0004_OFF = { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '_0004$', action: 'off' };
 const BATCH_CDS_OFF = { recordId: '*', featureType: 'CDS', qualifier: 'locus_tag', value: '.', action: 'off' };
@@ -192,7 +202,7 @@ const KINDS = [
   'visibility rule add', 'visibility rule action', 'visibility rule delete', 'feature Off', 'feature On',
   'label text', 'label Off', 'label On', 'color rule add', 'color rule color', 'color rule delete', 'feature color',
   'undo', 'redo', 'Result switch', 'legend color', 'legend add', 'legend stroke', 'feature stroke',
-  'feature legend name', 'feature color reset'
+  'feature legend name', 'feature color reset', 'label Default'
 ];
 
 // The matrix: one edit kind in one set of states, with the setup before the
@@ -590,6 +600,56 @@ const CASES = [
       await appAction(page, 'removeSpecificRule', 0);
     },
     run: (page) => showResult(page, 1)
+  },
+  // UJ-01: a label drawn only because of Label visibility On (Show Labels
+  // None) leaves the Result when the intent returns to Default, by Undo or by
+  // the popup; a label Off that the rerender left out comes back.
+  {
+    kind: 'undo',
+    edit: 'Undo of a label text with Label visibility On under Show Labels None',
+    states: { mode: 'circular', results: 'single', reflow: 'off', labels: 'unbound' },
+    setup: async (page) => {
+      await showNoLabels(page);
+      await popupEdit(page, 'FL1', { labelText: 'FL1-X', labelVisibility: 'on' });
+    },
+    run: (page) => history(page, 'undo')
+  },
+  {
+    kind: 'undo',
+    edit: 'Undo of a label text with Label visibility On under Show Labels None',
+    states: { mode: 'linear', results: 'single', reflow: 'on', labels: 'bound' },
+    setup: async (page) => {
+      await showNoLabels(page);
+      await popupEdit(page, 'FL1', { labelText: 'FL1-X', labelVisibility: 'on' });
+    },
+    run: (page) => history(page, 'undo')
+  },
+  {
+    kind: 'label Default',
+    edit: 'Label visibility Default after On under Show Labels None',
+    states: { mode: 'circular', results: 'batch', reflow: 'off', labels: 'bound' },
+    setup: async (page) => {
+      await showNoLabels(page);
+      await popupEdit(page, 'TESTA_0002', { labelVisibility: 'on' });
+    },
+    run: (page) => popupEdit(page, 'TESTA_0002', { labelVisibility: 'default' })
+  },
+  {
+    kind: 'label Default',
+    edit: 'Label visibility Default after On under Show Labels None',
+    states: { mode: 'linear', results: 'single', reflow: 'on', labels: 'unbound' },
+    setup: async (page) => {
+      await showNoLabels(page);
+      await popupEdit(page, 'FL1', { labelVisibility: 'on' });
+    },
+    run: (page) => popupEdit(page, 'FL1', { labelVisibility: 'default' })
+  },
+  {
+    kind: 'undo',
+    edit: 'Undo of Label visibility Off that the rerender drew',
+    states: { mode: 'circular', results: 'single', reflow: 'on', labels: 'unbound' },
+    setup: (page) => popupEdit(page, 'FL2', { labelVisibility: 'off' }),
+    run: (page) => history(page, 'undo')
   }
 ];
 

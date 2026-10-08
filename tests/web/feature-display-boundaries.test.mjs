@@ -122,7 +122,7 @@ test('feature captions ignore internal labels and use safe fallbacks', () => {
     type: 'CDS',
     start: 0,
     end: 9
-  }), 'CDS at 0..9');
+  }), 'CDS at 1..9');
   assert.equal(getFeatureCaption({
     label: featureAnalysisId,
     displayLabel: runtimeHandle,
@@ -133,6 +133,25 @@ test('feature captions ignore internal labels and use safe fallbacks', () => {
     gene: unsupportedHistoricalTransportId,
     locus_tag: 'LOCUS_AFTER_INTERNAL_PRODUCT'
   }), 'LOCUS_AFTER_INTERNAL_PRODUCT');
+});
+
+// GX-10: start is 0-based; the fallback caption writes the 1-based INSDC range
+// of formatFeatureLocation (without the strand), joins split locations and
+// prefers Python's location_parts[].display.
+test('the fallback feature caption uses the 1-based location', () => {
+  assert.equal(getFeatureCaption({ type: 'tRNA', start: 576, end: 647, strand: '+' }), 'tRNA at 577..647');
+  assert.equal(getFeatureCaption({
+    type: 'CDS',
+    start: 90,
+    end: 400,
+    location_parts: [{ start: 90, end: 120 }, { start: 300, end: 400 }]
+  }), 'CDS at 91..120, 301..400');
+  assert.equal(getFeatureCaption({
+    type: 'CDS',
+    start: 0,
+    end: 9,
+    location_parts: [{ start: 0, end: 9, display: 'complement(1..9)' }]
+  }), 'CDS at complement(1..9)');
 });
 
 test('FASTA descriptions skip internal metadata and retain safe later candidates', () => {

@@ -19,7 +19,7 @@ export const getFeatureCaption = (feature) => {
     feature?.locus_tag,
     feature?.note
   );
-  return caption || `${feature?.type} at ${feature?.start}..${feature?.end}`;
+  return caption || `${feature?.type} at ${formatFeatureRange(feature)}`;
 };
 
 // Python owns `location_parts[].display` (1-based INSDC). A feature without
@@ -30,14 +30,18 @@ const featureLocationParts = (feature) => (
     : [feature]
 );
 
+// The 1-based coordinates of every part, without the strand. Also the location
+// of the fallback caption of an unnamed feature, here and in the rule editor.
+export const formatFeatureRange = (feature) => featureLocationParts(feature).map((part) => {
+  const display = String(part?.display || '').trim();
+  if (display) return display;
+  const start = Number(part?.start);
+  const end = Number(part?.end);
+  return Number.isFinite(start) && Number.isFinite(end) ? `${start + 1}..${end}` : '';
+}).filter(Boolean).join(', ');
+
 export const formatFeatureLocation = (feature) => {
-  const range = featureLocationParts(feature).map((part) => {
-    const display = String(part?.display || '').trim();
-    if (display) return display;
-    const start = Number(part?.start);
-    const end = Number(part?.end);
-    return Number.isFinite(start) && Number.isFinite(end) ? `${start + 1}..${end}` : '';
-  }).filter(Boolean).join(', ');
+  const range = formatFeatureRange(feature);
   const strand = String(feature?.strand || '').trim();
   return range && strand ? `${range} (${strand})` : range;
 };
