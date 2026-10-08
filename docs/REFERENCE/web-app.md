@@ -290,9 +290,10 @@ source." **Generate Diagram** then stops on that row. Add a file, or disable or
 remove the row. A Session whose inactive custom stack has no Depth row does not
 gain one when you turn the stack on; use **Reset**.
 
-**Hide GC Content** and **Hide GC Skew** disable the matching enabled rows,
-whether or not the custom stack is in use, and turning the option off enables
-those rows again. Rows you disabled yourself stay disabled. A row's resolved
+**Hide GC Content** and **Hide GC Skew** disable the matching enabled rows
+that use the **Dinucleotide** setting, whether or not the custom stack is in
+use, and turning the option off enables those rows again. A row with another
+dinucleotide, such as an AT skew row, is not affected. Rows you disabled yourself stay disabled. A row's resolved
 **(auto)** geometry comes from the last generated diagram and appears only for
 rows it drew; a disabled row shows the estimate.
 

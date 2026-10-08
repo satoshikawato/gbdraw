@@ -22,7 +22,12 @@ import {
   normalizeOptionalText
 } from '../services/track-slot-display.js';
 import { featureSlotEdits } from './track-slot-edits.js';
-import { parseOptionalCircularScalar, parseOptionalPixel, validateCustomTrackPlan } from '../services/track-slot-validation.js';
+import {
+  paramsKeptOnRendererChange,
+  parseOptionalCircularScalar,
+  parseOptionalPixel,
+  validateCustomTrackPlan
+} from '../services/track-slot-validation.js';
 import { visibleFeatureUnderlaysForState } from '../utils/feature-rendering.js';
 import {
   applyCircularGeometryShortcuts,
@@ -231,13 +236,6 @@ const circularSourcedDepthTrackIndexesForState = (state) => (
     .flatMap((file, trackIndex) => (file ? [trackIndex] : []))
 );
 
-/** @param {DrawingState} drawing */
-const circularDepthTrackCountForState = (state, drawing) => (
-  Boolean(drawing?.form?.show_depth)
-    ? circularAvailableDepthTrackCountForState(state)
-    : 0
-);
-
 const applyPlacementDefaults = (slot, placement = 'inside') => {
   if (!slot) return;
   const requestedSide = normalizePlacement(placement);
@@ -398,20 +396,32 @@ export const isCircularTrackRendererSuppressedByForm = (renderer, form = {}) => 
   return Boolean(formKey && form?.[formKey]);
 };
 
-export const circularTrackSlotHiddenBySuppressForm = (slot, form = {}) =>
-  isCircularTrackRendererSuppressedByForm(slot?.renderer, form);
+// Hide GC Content / Hide GC Skew reach the rows the simple control draws: the
+// rows of the drawing's dinucleotide `nt` (TK-09). An AT skew row is not hidden.
+/**
+ * @param {Record<string, any> | null | undefined} slot
+ * @param {unknown} nt
+ */
+const slotUsesDrawingDinucleotide = (slot, nt) => {
+  const drawingNt = normalizeNt(nt);
+  return normalizeNt(slot?.params?.nt ?? slot?.params?.dinucleotide, drawingNt) === drawingNt;
+};
+
+export const circularTrackSlotHiddenBySuppressForm = (slot, form = {}, nt = 'GC') =>
+  isCircularTrackRendererSuppressedByForm(slot?.renderer, form) && slotUsesDrawingDinucleotide(slot, nt);
 
 // Hide GC Content / Hide GC Skew own the visibility of their rows. A hidden
 // renderer disables its enabled rows and marks them; once the form no longer
 // hides it, the marked rows are enabled again. Rows the user disabled carry no
-// mark and stay disabled. The projection depends only on the rows and the form.
-export const applyCircularSuppressControlsToSlots = (slots, form = {}) => (
+// mark and stay disabled. The projection depends only on the rows, the form,
+// and the drawing's dinucleotide.
+export const applyCircularSuppressControlsToSlots = (slots, form = {}, nt = 'GC') => (
   (Array.isArray(slots) ? slots : []).map((slot) => {
     if (!slot || typeof slot !== 'object' || Array.isArray(slot)) return slot;
     const token = SUPPRESS_KEY_BY_RENDERER[String(slot.renderer || '').trim()];
     if (!token) return slot;
     const params = cloneParams(slot.params);
-    if (circularTrackSlotHiddenBySuppressForm(slot, form)) {
+    if (circularTrackSlotHiddenBySuppressForm(slot, form, nt)) {
       if (slot.enabled === false) return slot;
       params[GLOBAL_SUPPRESS_PARAM] = token;
       return { ...slot, enabled: false, params };
@@ -609,9 +619,6 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
   );
 
   /** @param {DrawingState} drawing */
-  const desiredCircularDepthTrackCount = (drawing) => circularDepthTrackCountForState(state, drawing);
-
-  /** @param {DrawingState} drawing */
   const annotationSetIds = (drawing) => (
     (Array.isArray(drawing.annotationSets) ? drawing.annotationSets : [])
       .map((set) => String(set?.id || '').trim())
@@ -698,9 +705,10 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     return true;
   };
 
+  // Duplicate shares the availability of the other row controls (GX-01).
   const canDuplicateCircularTrackSlot = (slot) => {
     const drawing = state.drawings.circular;
-    if (!slot || isManagedConservationSlot(slot)) return false;
+    if (!slot || isManagedConservationSlot(slot) || state.sessionOperationAvailability?.()) return false;
     if (slot.enabled === false) return true;
     if (
       slot.renderer === 'features' &&
@@ -801,7 +809,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
       axis,
       drawing.form.track_type
     );
-    const suppressed = applyCircularSuppressControlsToSlots(normalized, drawing.form);
+    const suppressed = applyCircularSuppressControlsToSlots(normalized, drawing.form, drawing.adv.nt);
     const identityPreserving = suppressed.map((slot, index) => (
       replaceObjectContents(drawing.adv.circular_track_slots[index], slot)
     ));
@@ -981,10 +989,12 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
     const normalizedPreset = normalizeCircularTrackPreset(preset);
+    // One Depth row per loaded Depth series; Show Depth is not an input (TK-10).
+    const depthTrackCount = circularAvailableDepthTrackCountForState(state);
     const templateSlots = applyCircularGeometryShortcuts(createDefaultCircularTrackSlots({
       nt: drawing.adv.nt,
-      showDepth: Boolean(drawing.form.show_depth),
-      depthTrackCount: desiredCircularDepthTrackCount(drawing),
+      showDepth: depthTrackCount > 0,
+      depthTrackCount,
       showGc: !drawing.form.suppress_gc,
       showSkew: !drawing.form.suppress_skew,
       showTicks: drawing.form.show_scale !== false,
@@ -1253,8 +1263,8 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     if (sessionBusy) return sessionBusy;
     renderer = renderer || slot?.renderer;
     if (!slot || !SUPPORTED_RENDERERS.includes(renderer)) return;
+    slot.params = renderer === slot.renderer ? cloneParams(slot.params) : paramsKeptOnRendererChange(slot.params, renderer);
     slot.renderer = renderer;
-    slot.params = cloneParams(slot.params);
     slot.side = normalizeSlotSide(slot.side);
     if (renderer === 'ticks') {
       delete slot.params['axis'];
@@ -1286,7 +1296,8 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     return drawing.adv.circular_track_slots.filter((slot) => (
       slot &&
       slot.enabled !== false &&
-      String(slot.renderer || '').trim() === renderer
+      String(slot.renderer || '').trim() === renderer &&
+      slotUsesDrawingDinucleotide(slot, drawing.adv.nt)
     ));
   };
 
@@ -1300,7 +1311,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     const plural = activeSlots.length === 1 ? '' : 's';
     const message = [
       `Custom Track Slots currently include ${activeSlots.length} enabled ${trackLabel} track${plural}.`,
-      `Hiding ${trackLabel} will disable those custom track slot${plural} and override the custom track settings.`,
+      `Hiding ${trackLabel} will disable ${activeSlots.length === 1 ? 'that custom track slot' : 'those custom track slots'} and override the custom track settings.`,
       '',
       'Continue?'
     ].join('\n');
@@ -1353,7 +1364,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     const drawing = state.drawings.circular;
     const sessionBusy = state.sessionOperationAvailability?.();
     if (sessionBusy) return sessionBusy;
-    if (!slot || circularTrackSlotHiddenBySuppressForm(slot, drawing.form)) return;
+    if (!slot || circularTrackSlotHiddenBySuppressForm(slot, drawing.form, drawing.adv.nt)) return;
     slot.enabled = Boolean(enabled);
     if (slot.params && typeof slot.params === 'object' && !Array.isArray(slot.params)) {
       const token = SUPPRESS_KEY_BY_RENDERER[String(slot.renderer || '').trim()];
@@ -1365,12 +1376,15 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     normalizeSlotsInPlace();
   };
 
-  const circularTrackSlotEffectiveEnabled = (slot) => (
-    Boolean(slot?.enabled !== false) && !circularTrackSlotHiddenBySuppressForm(slot, state.drawings.circular.form)
+  const circularTrackSlotHiddenBySuppress = (slot) => circularTrackSlotHiddenBySuppressForm(
+    slot,
+    state.drawings.circular.form,
+    state.drawings.circular.adv.nt
   );
 
-  const circularTrackSlotHiddenBySuppress = (slot) =>
-    circularTrackSlotHiddenBySuppressForm(slot, state.drawings.circular.form);
+  const circularTrackSlotEffectiveEnabled = (slot) => (
+    Boolean(slot?.enabled !== false) && !circularTrackSlotHiddenBySuppress(slot)
+  );
 
   const circularTrackSlotSuppressMessage = (slot) => {
     if (!circularTrackSlotHiddenBySuppress(slot)) return '';

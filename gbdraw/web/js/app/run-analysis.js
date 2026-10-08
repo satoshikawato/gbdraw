@@ -2693,7 +2693,8 @@ export const createRunAnalysis = ({
                 drawing.form.track_type,
                 circularTrackAxisIndex
               ),
-              drawing.form
+              drawing.form,
+              drawing.adv.nt
             )
           : [];
         if (useCircularTrackSlots) {

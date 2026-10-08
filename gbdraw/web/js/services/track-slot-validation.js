@@ -530,6 +530,19 @@ const paramsAllowedForRenderer = (renderer, key) => {
   return false;
 };
 
+/**
+ * The params a row keeps when its renderer changes (TK-04): those the new
+ * renderer accepts under PARAM_OWNER. `legend_label` names the previous track
+ * (a Depth row's is its series title), so the new renderer starts without it.
+ * @param {unknown} params
+ * @param {string} renderer
+ * @returns {Record<string, unknown>}
+ */
+export const paramsKeptOnRendererChange = (params, renderer) => Object.fromEntries(
+  Object.entries(params && typeof params === 'object' && !Array.isArray(params) ? params : {})
+    .filter(([key]) => key !== 'legend_label' && paramsAllowedForRenderer(renderer, normalizedString(key)))
+);
+
 const normalizedInventoryIds = (values) => new Set(
   (Array.isArray(values) ? values : [])
     .map((value) => String(value?.id ?? value ?? '').trim())
