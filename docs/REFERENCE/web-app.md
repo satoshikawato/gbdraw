@@ -76,10 +76,12 @@ and the file defaults); the crop, reverse complement, **Definition**, and
 **Subtitle** of the replaced File's row do not carry over. Replacing a single-record
 File with another single-record File keeps them.
 
-Each Linear File card starts with its **Depth TSV** disclosure open. Its summary
-reports the File's record count, logical series count, and whether any series
-has mixed per-record assignments. Collapse it to shorten the sidebar; the open
-state is not saved. Use **Add Depth TSV series** there to add one logical series
+Each Linear File card starts with its **Depth TSV** disclosure closed. Its
+summary line reports how many Depth tracks the File has attached, for example
+"No depth track attached". Click the summary, or focus it and press Enter or
+Space, to open the disclosure; the open state is not saved. Inside, each logical
+series reports whether its file is attached to all, some, or none of the File's
+records. Use **Add Depth TSV series** there to add one logical series
 for every record while preserving existing assignments. A new series has no file,
 so it adds no track row; see [Custom Track Slots](#custom-track-slots).
 
@@ -131,9 +133,9 @@ Generate or apply draft settings. A review's guide, candidate numbers, and
 unapplied choices are excluded from saved and exported artifacts.
 
 For Linear diagrams, the DOM and keyboard order is **Input Genomes**,
-**Comparison**, **Basic**, **Generate Diagram**, then **Advanced comparison and
-layout**. The fixed Generate bar remains visible while its DOM anchor stays in
-that order.
+**Comparison**, **Basic**, then **Advanced comparison and layout**. In both
+modes, **Generate Diagram** is the last keyboard stop of the settings panel,
+after every section, and its bar stays fixed at the bottom of the panel.
 
 ### Save and Load Sessions
 
@@ -255,9 +257,9 @@ the restored draft. Invalid drafts cannot be saved as valid Sessions.
 
 **Use custom stack** draws the saved stack. Turning it on for the first time
 uses the saved default stack as it is, including its **Ticks** row. **Reset**
-and **Reset to Tuckin**, **Reset to Middle**, or **Reset to Spreadout** rebuild
-the stack from **Show Coordinate Scale**, **Hide GC Content**, **Hide GC Skew**,
-and the loaded Depth series.
+and, in Circular, the **Tuckin**, **Middle**, or **Spreadout** button under
+**Reset to preset** rebuild the stack from **Show Coordinate Scale**,
+**Hide GC Content**, **Hide GC Skew**, and the loaded Depth series.
 
 Depth rows follow Depth files the same way in Circular and Linear. When a
 logical Depth series gets its first file, the stack gains one Depth row for it,
@@ -902,8 +904,11 @@ Generate draw the same labels. A label text edit keeps **Default** visibility,
 which follows **Show Labels** and the filters. When the feature has no label in
 the current Result, **Label Not Shown** names the reason (a hidden feature,
 **Underlay**, **Embedded Only**, **Show Labels**, or a label filter), as the popup
-note does, and offers **Show this label**, which sets **On**, or **Keep hidden
-(apply text only)**, which keeps the text for when the label is shown.
+note does, before the text is applied. It offers **Show this label**, which
+applies the text and sets **On**; **Keep hidden (apply text only)**, which keeps
+the text for when the label is shown; and **Cancel** (or Escape), which applies
+nothing and keeps the popup open. Each choice is one History step; **Cancel**
+records none.
 
 **On** takes effect only when the diagram can draw the label, so applying it
 asks first when the diagram cannot:
@@ -939,6 +944,9 @@ Feature search stays in its own row above the canvas, and the zoom and layout
 controls stay in a row below it. Open or close **Editor** without moving the
 search bar over the diagram; the search bar can no longer be dragged to a free
 position. On a short screen, scroll the Result or page to reach both rows.
+**Fit to preview** (**Fit**) in the zoom controls shows the whole diagram
+centred in the canvas, at the largest whole percent that fits; with **Editor**
+open beside the canvas, it fits the part of the canvas the Editor leaves free.
 
 To adjust a legend, plot title, or Linear scale, select **Layout edit** in the
 lower control row, then drag the item in the Preview. The explanation beside

@@ -105,6 +105,7 @@ const readOverlayGeometry = (page) => page.evaluate(() => {
         hit: hit ? { tag: hit.tagName, className: hit.getAttribute('class'), text: hit.textContent.trim().slice(0, 80) } : null };
     }),
     preview: rect(preview),
+    previewBorder: ['borderLeftWidth', 'borderRightWidth'].map((side) => parseFloat(getComputedStyle(preview)[side])),
     toggle: rect(toggle),
     controls: rect(controls),
     zoomControls: rect(zoomControls),
@@ -344,8 +345,9 @@ const assertMobileGeometry = (geometry, drawerOpen) => {
     expect(button.box.left).toBeGreaterThanOrEqual(canvas.left);
     expect(button.box.right).toBeLessThanOrEqual(canvas.right);
   }
-  expect(canvas.left).toBe(preview.left + 2);
-  expect(canvas.right).toBe(preview.right - 2);
+  // The canvas fills the Result card inside its border.
+  expect(canvas.left).toBe(preview.left + geometry.previewBorder[0]);
+  expect(canvas.right).toBe(preview.right - geometry.previewBorder[1]);
   if (drawerOpen) {
     expect(drawer.left).toBe(canvas.left);
     expect(drawer.right).toBe(canvas.right);
