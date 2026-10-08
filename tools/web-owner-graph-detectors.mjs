@@ -79,7 +79,7 @@ export const WEB_OWNER_GRAPH_DEFAULTS = Object.freeze({
     }),
     Object.freeze({
       name: 'legend-order',
-      owners: Object.freeze(['app/legend/utils.js', 'services/legend-svg.js', 'app/legend/entry-actions.js']),
+      owners: Object.freeze(['services/legend-svg.js', 'app/legend/entry-actions.js']),
       functions: Object.freeze(['orderLegendEntries', 'reconcileLegendEntries'])
     }),
     Object.freeze({
