@@ -271,6 +271,51 @@ assert.equal(legendColorOverrides['Manual row'], undefined);
   manualSpecificRules.splice(0);
 }
 
+// Each popup action prepares an allowlisted set of rules (OV-198): a stroke
+// edit reads only the saved rules, a color edit also the clicked feature's hash
+// rule and its label rules.
+{
+  const popupFeature = {
+    id: 'popup-feature', svg_id: 'hash-popup', type: 'CDS', product: 'popup product',
+    qualifiers: { product: ['popup product'] }, start: 40, end: 50
+  };
+  const ruleKey = (rule) => `${rule.feat}|${rule.qual}|${rule.val}`;
+  const savedRules = [specificRule, { feat: 'CDS', qual: 'hash', val: 'hash-z', color: '#444444', cap: 'Other' }];
+  const savedKeys = savedRules.map(ruleKey);
+  const label = resolveFeatureLabelSelector(popupFeature, 'popup product');
+  assert.ok(label, 'the popup feature has a label rule');
+  const clickedKeys = [
+    ...savedKeys,
+    `CDS|hash|${getFeatureColorRuleHash(popupFeature)}`,
+    `CDS|${label.qualifier}|${label.pattern}`
+  ];
+  const strokeScope = (kind) => () => {
+    Object.assign(featureStyleScopeDialog, { show: true, kind, feat: popupFeature, color: '#123456', strokeColor: '#123456' });
+    return actions.handleFeatureStyleScopeChoice('cancel');
+  };
+  const allowlist = [
+    ['applyStrokeToSelectedFeatures', () => actions.applyStrokeToSelectedFeatures([popupFeature], '#112233', 2), savedKeys],
+    ['resetClickedFeatureStroke', () => actions.resetClickedFeatureStroke(), savedKeys],
+    ['setClickedFeatureStrokeColorValue', () => actions.setClickedFeatureStrokeColorValue('#112233'), savedKeys],
+    ['setClickedFeatureStrokeWidthValue', () => actions.setClickedFeatureStrokeWidthValue(3), savedKeys],
+    ['updateClickedFeatureStroke', () => actions.updateClickedFeatureStroke('#112233', 2), savedKeys],
+    ['handleFeatureStyleScopeChoice (stroke)', strokeScope('stroke'), savedKeys],
+    ['handleFeatureStyleScopeChoice (fill)', strokeScope('fill'), clickedKeys],
+    ['updateClickedFeatureColor', () => actions.updateClickedFeatureColor('#123456'), clickedKeys]
+  ];
+  for (const [name, run, expected] of allowlist) {
+    manualSpecificRules.splice(0, manualSpecificRules.length, ...savedRules);
+    clickedFeature.value = { feat: popupFeature, svg_id: popupFeature.svg_id, legendName: 'Core', strokeColor: '#000000', strokeWidth: 1 };
+    Object.assign(featureStyleScopeDialog, { show: false, kind: 'fill', feat: null });
+    preparedRuleSets.length = 0;
+    await run();
+    assert.deepEqual([...new Set(preparedRuleSets.flat())].sort(), [...expected].sort(), `${name} prepares exactly its allowlisted rules`);
+  }
+  clickedFeature.value = null;
+  Object.assign(featureStyleScopeDialog, { show: false, kind: 'fill', feat: null });
+  manualSpecificRules.splice(0);
+}
+
 const labelFeatureA = {
   id: 'label-feature-a',
   svg_id: 'f11111111_record_1',

@@ -113,9 +113,14 @@ export const createFeatureColorActions = ({
     }
   };
 
-  const colorAction = (action) => (...args) => {
+  // A color action also prepares the rules it may add for the clicked feature
+  // (its hash and label rules); a stroke action reads only the saved rules
+  // (OV-198), so it prepares nothing else.
+  const colorAction = (action, { targetRules = true } = {}) => (...args) => {
     const drawing = state.activeDrawing();
+    const run = () => runColorAction(() => action(drawing, ...args));
     const prepareTargets = () => {
+      if (!targetRules) return run();
       const targets = new Set();
       const add = (feature) => { if (feature?.type && feature?.svg_id) targets.add(feature); };
       args.forEach((arg) => Array.isArray(arg) ? arg.forEach(add) : add(arg));
@@ -130,10 +135,11 @@ export const createFeatureColorActions = ({
           if (rule) candidates.push(rule);
         }
       });
-      return runWithRuleMatches(candidates, () => runColorAction(() => action(drawing, ...args)));
+      return runWithRuleMatches(candidates, run);
     };
     return reportRuleRunFailure(state, 'evaluateRules', () => runWithRuleMatches(drawing.manualSpecificRules, prepareTargets));
   };
+  const strokeAction = (action) => colorAction(action, { targetRules: false });
 
   // The `hash` rule values that target a feature exactly.
   const exactHashValues = (feature) => {
@@ -1694,13 +1700,6 @@ export const createFeatureColorActions = ({
     return featureChanged || legendChanged;
   };
 
-  /** @param {DrawingState} drawing */
-  const handleFeatureStyleScopeChoice = (drawing, choice) => (
-    featureStyleScopeDialog.kind === 'stroke'
-      ? handleStrokeScopeChoice(drawing, choice)
-      : handleColorScopeChoice(drawing, choice)
-  );
-
   /**
    * @param {DrawingState} drawing
    * @param {Record<string, any>} feature
@@ -1730,13 +1729,17 @@ export const createFeatureColorActions = ({
     return setFeatureColor(drawing, feature, value, customCaption);
   };
 
+  // The dialog's kind decides at call time which rules the choice prepares.
+  const strokeScopeChoice = strokeAction(handleStrokeScopeChoice);
+  const colorScopeChoice = colorAction(handleColorScopeChoice);
+
   return {
     // OV-161: Cancel of a scope dialog only closes it: no rule matching, no
     // History step (app-setup.js answers Cancel outside `runUndoable`).
     cancelFeatureStyleScope: clearFeatureStyleScopeDialog,
     cancelLegendRename: () => clearLegendRenameDialog(state.activeDrawing(), { restoreInput: true }),
-    handleColorScopeChoice: colorAction(handleColorScopeChoice),
-    handleFeatureStyleScopeChoice: colorAction(handleFeatureStyleScopeChoice),
+    handleColorScopeChoice: colorScopeChoice,
+    handleFeatureStyleScopeChoice: (...args) => (featureStyleScopeDialog.kind === 'stroke' ? strokeScopeChoice : colorScopeChoice)(...args),
     handleLegendNameCommit: colorAction(handleLegendNameCommit),
     handleLegendRenameChoice: colorAction(handleLegendRenameChoice),
     renameLegendEntry: colorAction(renameLegendEntry),
@@ -1744,15 +1747,15 @@ export const createFeatureColorActions = ({
     selectLegendNameOption: colorAction(selectLegendNameOption),
     handleResetColorChoice: colorAction(handleResetColorChoice),
     applyColorToSelectedFeatures: colorAction(applyColorToSelectedFeatures),
-    applyStrokeToSelectedFeatures: colorAction(applyStrokeToSelectedFeatures),
+    applyStrokeToSelectedFeatures: strokeAction(applyStrokeToSelectedFeatures),
     resetClickedFeatureFillColor: colorAction(resetClickedFeatureFillColor),
-    resetClickedFeatureStroke: colorAction(resetClickedFeatureStroke),
+    resetClickedFeatureStroke: strokeAction(resetClickedFeatureStroke),
     getFeatureStrokeColorValue,
-    setClickedFeatureStrokeColorValue: colorAction(setClickedFeatureStrokeColorValue),
-    setClickedFeatureStrokeWidthValue: colorAction(setClickedFeatureStrokeWidthValue),
+    setClickedFeatureStrokeColorValue: strokeAction(setClickedFeatureStrokeColorValue),
+    setClickedFeatureStrokeWidthValue: strokeAction(setClickedFeatureStrokeWidthValue),
     setFeatureColor: colorAction(setFeatureColor),
     setFeatureColorValue: colorAction(setFeatureColorValue),
     updateClickedFeatureColor: colorAction(updateClickedFeatureColor),
-    updateClickedFeatureStroke: colorAction(updateClickedFeatureStroke)
+    updateClickedFeatureStroke: strokeAction(updateClickedFeatureStroke)
   };
 };
