@@ -22,7 +22,9 @@ this skill, they win.
 2. **Use at most two or three CI slots per session.** Serialize PRs that touch
    the same files: open the next one only after the previous one merges, then
    rebase it on `origin/dev`. Stack linearly; never stack through merge
-   commits.
+   commits. `CHANGELOG.md` does not count: while two or more of your PRs are
+   open at once, leave their entries out. Add them together to the last open
+   PR once the others have merged, or in one documentation-only PR afterwards.
 3. **Check version literals.** If the change bumps a schema or version
    constant, grep `tests/`, `docs/capture/`, `docs/recipes/`, and tool fixtures
    for the old value, including suites that run only on `main`, nightly, or by
@@ -69,6 +71,11 @@ this skill, they win.
   under Monitor or in the background, and act on its event lines (merged,
   closed, conflict, failed, cancelled, green). It polls every five minutes, as
   `AGENTS.md` requires.
+- Before you act on an event line (rebase, update-branch, merge, or report the
+  PR done), re-read the PR with
+  `gh pr view <n> --json state,mergeStateStatus,statusCheckRollup`. The Owner
+  may have merged it already, and a green line covers only the checks that
+  existed at that poll, not those of a workflow that starts later.
 - A run whose jobs all passed but which ended `cancelled` is recovered with
   `gh run rerun <id> --failed`.
 - When a local check predicts a CI failure, settle it now with CI's own
