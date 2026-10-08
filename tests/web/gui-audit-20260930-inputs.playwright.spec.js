@@ -473,6 +473,15 @@ test('Cancel of a Generate without changes says the shown Result is current', as
     return { status: (await run).status, preserved: app.failedGeneratePreservedResult };
   });
   const notice = page.getByRole('status').filter({ hasText: 'Showing the last successful result.' });
+  // A Cancel during preparation, before the diagram request starts.
+  const cancelInPreparation = () => evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    const run = app.runAnalysis();
+    app.cancelGeneration();
+    return { status: (await run).status, preserved: app.failedGeneratePreservedResult };
+  });
+  expect(await cancelInPreparation()).toEqual({ status: 'canceled', preserved: 'current' });
+  await expect(notice).toContainText('It matches the current settings.');
   expect(await cancelInsideRun()).toEqual({ status: 'canceled', preserved: 'current' });
   await expect(notice).toContainText('It matches the current settings.');
   await expect(notice).not.toContainText('Current changes were not applied.');
@@ -480,6 +489,7 @@ test('Cancel of a Generate without changes says the shown Result is current', as
   await page.getByLabel('Species', { exact: true }).fill('Changed species');
   await page.getByLabel('Species', { exact: true }).blur();
   await settle(page);
+  expect(await cancelInPreparation()).toEqual({ status: 'canceled', preserved: true });
   expect(await cancelInsideRun()).toEqual({ status: 'canceled', preserved: true });
   await expect(notice).toContainText('Current changes were not applied.');
 });
