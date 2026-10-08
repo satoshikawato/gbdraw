@@ -1724,7 +1724,7 @@ def _encode_diagram_options(
         if _same_default(value, default):
             continue
         result[_option_wire_key(name)] = _encode_option_value(name, value, resources=resources)
-    labels = _ring_labels_of_renamed_files(options, result.get("conservationBlastFiles"), resources)
+    labels = _precomputed_ring_labels(options)
     if labels is not None:
         result["conservationLabels"] = _encode_option_value(
             "conservation_labels", labels, resources=resources
@@ -1737,21 +1737,17 @@ def _encode_diagram_options(
     return result
 
 
-def _ring_labels_of_renamed_files(
+def _precomputed_ring_labels(
     options: CircularDiagramOptions | LinearDiagramOptions,
-    refs: object,
-    resources: RequestResources,
 ) -> tuple[str, ...] | None:
-    """Ring labels to store when a ring file without a label was renamed.
+    """The drawn label of every precomputed ring, stored so a replay never derives one.
 
-    A ring without a label is labelled with its file name, which a replay reads
-    from the resource name; storing the labels keeps the drawn labels.
+    A Session without them predates D-03 and drew the full file name
+    (``_decode_diagram_options``); a renamed resource would also change it.
     """
 
     files = tuple(getattr(options, "conservation_blast_files", None) or ())
-    if not files or not isinstance(refs, list) or not any(
-        resources.renamed(ref["resourceId"]) for ref in refs if isinstance(ref, Mapping)
-    ):
+    if not files:
         return None
     given = getattr(options, "conservation_labels", None)
     count = max(len(files), len(getattr(options, "conservation_dataframes", None) or ()))
@@ -1820,6 +1816,14 @@ def _decode_diagram_options(
     }
     decoded["feature_placements"] = placements
     decoded["feature_overrides"] = overrides
+    if "conservationBlastFiles" in payload and "conservationLabels" not in payload:
+        # Writers before D-03 stored no label for a precomputed ring and drew its file name.
+        files = decoded.get("conservation_blast_files") or ()
+        count = max(len(files), len(decoded.get("conservation_dataframes") or ()))
+        decoded["conservation_labels"] = tuple(
+            Path(files[index]).name if index < len(files) else f"Conservation {index + 1}"
+            for index in range(count)
+        )
     if decoded.get("config_overrides") is not None:
         decoded["config_overrides"] = _decode_config_overrides(
             decoded["config_overrides"],

@@ -1,0 +1,31 @@
+{
+  "purpose": "Positive fixtures for the D-03 reader rule: a Session without conservationLabels for a precomputed ring draws the label it drew before (the file name with its extension).",
+  "inputs": {
+    "HmmtDNA.gbk": "gbdraw/web/tutorial-data/human-mitochondrion/HmmtDNA.gbk (sha256 7530d659e7174272372814edfecb2ece1f87a444395a861fcdf1b977c4aa5c1f)",
+    "caenorhabditis-human.tlosatx.tsv": "gbdraw/web/tutorial-data/metazoan-mitochondria-comparison/caenorhabditis-human.tlosatx.tsv (sha256 b7244a0154965935d60694549a8d2e779c8f0788737b2a1f4f1f96ebc57bd416)"
+  },
+  "compression": "gzip -n -9",
+  "fixtures": {
+    "precomputed-ring-unlabelled-cli.v44.gbdraw-session.json.gz": {
+      "sourceCommit": "fe6861f06d0eaaecac0ba4ee6b1c3095019789df",
+      "history": "first-parent main",
+      "writer": "gbdraw/circular.py --session_output (CLI sidecar), run with PYTHONPATH=<detached worktree at fe6861f0>",
+      "command": "python -m gbdraw.cli circular --gbk HmmtDNA.gbk --conservation_blast caenorhabditis-human.tlosatx.tsv --conservation_reference subject -o main-ring -f svg --session_output main-ring.gbdraw-session.json",
+      "stored": "renderRequest.diagramOptions has conservationBlastFiles and no conservationLabels; the CLI SVG labels the ring caenorhabditis-human.tlosatx.tsv",
+      "sessionVersion": 44,
+      "requestSchema": 8,
+      "sha256": "0b1d9abc1e1dbd311dcf85c90bade20270c0d1114d55f8d2a4c0fda20c36668d",
+      "replaySvgSha256": "8f014fa3de93d1d233155d0db7040854cbf0b81ff842b0263960e9612721ce47 (gbdraw circular --session <fixture> -o before -f svg, before and after D-03)"
+    },
+    "precomputed-ring-unlabelled-cli.v30.gbdraw-session.json.gz": {
+      "sourceCommit": "8be9e3a5a2e1bc4cd983b502716ae44330396f28",
+      "history": "release tag 0.13.0",
+      "writer": "gbdraw/circular.py --session_output (CLI sidecar) of tag 0.13.0, run from `git archive 0.13.0 gbdraw`",
+      "command": "python -m gbdraw.cli circular --gbk HmmtDNA.gbk --conservation_blast caenorhabditis-human.tlosatx.tsv --conservation_reference subject -o v013-ring -f svg --session_output v013-ring.gbdraw-session.json",
+      "stored": "cliInvocation.args without --conservation_labels; the replay reads the table as arg3-caenorhabditis-human.tlosatx.tsv and labels the ring with that name",
+      "sessionVersion": 30,
+      "sha256": "619f726f775f98f1064077da3c04930557d39488a5cd7b4513a473279116b6f7",
+      "replaySvgSha256": "2e3b509105e53ca82af218d6087592392e05ed0edd86257542e044c825686877 (gbdraw circular --session <fixture> -o before13 -f svg, before and after D-03)"
+    }
+  }
+}

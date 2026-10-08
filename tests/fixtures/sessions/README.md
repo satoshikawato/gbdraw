@@ -140,3 +140,13 @@ CLI (in `diagramOptions.config`) and typed API (in `configOverrides`, where
 They are the positive fixtures for the reader that keeps drawing it so after
 fresh input rejects it (D-04, `test_scale_interval_domain.py`). The commands
 and hashes are in `scale-interval.provenance.json`.
+
+`precomputed-ring-unlabelled-cli.v44.gbdraw-session.json.gz` and
+`precomputed-ring-unlabelled-cli.v30.gbdraw-session.json.gz` are Circular CLI
+Sessions with one `--conservation_blast` ring and no `--conservation_labels`,
+written by first-parent `main` commit `fe6861f0` and by release tag `0.13.0`.
+Those writers stored no ring label and drew the table's file name. They are the
+positive fixtures for the readers that keep that label after the default
+became the file name without the extension (D-03,
+`test_losat_circular_rings.py`). The commands and hashes are in
+`precomputed-ring.provenance.json`.
