@@ -63,7 +63,7 @@ for (const fixture of fixtures) {
         if (typeof scalar?.value === 'string') assert.equal(draft.value, scalar.value, 'numeric lexeme is not rounded');
       } else {
         assert.equal(view.isAuto, false);
-        assert.match(view.error, /positive finite px or factor/);
+        assert.match(view.error, /^Value must be a number greater than 0, in px or ×R\.$/);
         assert.throws(() => parseOptionalCircularScalar(scalar));
         assert.throws(() => buildCircularTrackSlotPayload(slot));
         assert.ok(validateRow(slot).rowIssues.get(0).some(issue => issue.code === 'geometry_invalid'));
@@ -128,7 +128,7 @@ test('Auto has no canonical unit; explicit clear returns null while typed empty 
     assert.equal(writeCircularMeasureValue('  ', unit), null);
     const empty = { value: '', unit };
     assert.equal(readCircularMeasure(empty).isAuto, false);
-    assert.match(readCircularMeasure(empty).error, /positive/);
+    assert.match(readCircularMeasure(empty).error, /greater than 0/);
     assert.strictEqual(projectCircularMeasureDraft(empty), empty);
   }
 });
@@ -190,5 +190,29 @@ test('current and historical request projection keeps zero pixel gaps separate f
       historical.renderRequest.diagramOptions.tracks.circularTrackSlots[0].spacing = invalid;
       assert.throws(() => projectCanonicalSessionRequest(historical), /pixels/);
     }
+  }
+});
+
+// TK-12: Width and Radius read decimal numbers as the CLI does. Number() also
+// read 0x10 as 16; the CLI's float() rejects it.
+test('Width and Radius read decimal number text only (TK-12)', () => {
+  for (const text of ['0x10', '0X1A', '0b11', '0o7', '0x10px', '0b1%', '1_0', ' 0x10 ', '1 0']) {
+    assert.throws(() => parseOptionalCircularScalar(text, 'Width'), /^Error: Width must be a number greater than 0, in px or ×R\.$/, text);
+    assert.throws(() => parseOptionalCircularScalar({ value: text, unit: 'factor' }), text);
+    assert.equal(readCircularMeasure({ value: text, unit: 'px' }, 'Radius').error, 'Radius must be a number greater than 0, in px or ×R.');
+  }
+  for (const [text, value, unit] of [['1e-1', 0.1, 'factor'], ['.5', 0.5, 'factor'], ['5.', 5, 'factor'], ['+0.5', 0.5, 'factor'],
+    ['1E2px', 100, 'px'], [' 12 px ', 12, 'px'], ['50 %', 0.5, 'factor']]) {
+    assert.deepEqual(parseOptionalCircularScalar(text), { value, unit }, text);
+  }
+  assert.deepEqual(parseOptionalCircularScalar({ value: ' 0.25 ', unit: 'factor' }), { value: 0.25, unit: 'factor' });
+});
+
+// TK-12: the row's own field reports an invalid Width or Radius; the row issue
+// names the field, so the row does not repeat it, and Generate still stops.
+test('an invalid Width or Radius row issue names its field (TK-12)', () => {
+  for (const field of ['width', 'radius']) {
+    const issues = validateRow(slotFor({ value: '0', unit: 'factor' }, field)).rowIssues.get(0);
+    assert.deepEqual(issues.map(issue => [issue.code, issue.field]), [['geometry_invalid', field]]);
   }
 });

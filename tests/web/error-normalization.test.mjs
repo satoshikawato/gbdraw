@@ -613,3 +613,18 @@ test('a GenBank slot file without records says what it looks like (UJ-07)', () =
   assert.match(producerSummary('NO_RECORDS', { reason: 'EMPTY_FILE' }), / The file is empty\.$/);
   assert.match(producerSummary('NO_RECORDS', { reason: 'NOT_GENBANK' }), / The file is not a GenBank\/DDBJ flat file: it has no record header line\.$/);
 });
+
+// TK-06: a Depth series with no file in any record names the series and offers
+// both recoveries, whether the request builder or the Generate check finds it.
+test('a Depth series without a file says to attach a TSV or remove the series (TK-06)', () => {
+  const expected = 'The depth input or settings are invalid. Depth series 2. Attach a Depth TSV to this series, or remove the series.';
+  assert.equal(producerSummary('DEPTH_INVALID', { reason: 'DEPTH_SERIES_SOURCE', seriesIndex: 1 }), expected);
+  for (const message of [
+    'Depth series #2 (logical track index 1) has no TSV source in any record.',
+    'Depth series #2 (logical track index 1) has no TSV source in any record. Add a TSV or remove the series.'
+  ]) {
+    const model = roundtrip(new Error(message));
+    assert.deepEqual([model.code, model.context], ['DEPTH_INVALID', { reason: 'DEPTH_SERIES_SOURCE', seriesIndex: 1 }]);
+    assert.equal(model.summary, expected);
+  }
+});

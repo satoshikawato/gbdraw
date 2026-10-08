@@ -16,10 +16,12 @@ import {
 import { resolveTrackSlotSkewColorValue } from './track-slot-colors.js';
 import {
   findTrackSlotGeometry,
+  findTrackSlotGeometryRecord,
   formatPxAuto,
   formatRadiusFactorAuto,
   isManualSlotValue,
-  normalizeOptionalText
+  normalizeOptionalText,
+  tickAnchorRadiusFactor
 } from '../services/track-slot-display.js';
 import { featureSlotEdits } from './track-slot-edits.js';
 import {
@@ -147,7 +149,9 @@ const previewWidthPxForRenderer = (renderer, lengthParam) => {
   if (renderer === 'sequence_conservation') return base * Number(factors[0]);
   if (renderer === 'depth') return base * Number(factors[1]) * 0.5;
   if (renderer === 'dinucleotide_skew') return base * Number(factors[2]);
-  if (renderer === 'ticks') return 0;
+  // An Auto ticks row draws marks of the default length max(6 px, 0.025 R)
+  // (_default_tick_length_px, gbdraw/svg/circular_ticks.py), not 0 px (TK-15).
+  if (renderer === 'ticks') return Math.max(6, 0.025 * PREVIEW_RADIUS_PX);
   return base * Number(factors[1]);
 };
 
@@ -634,7 +638,6 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     depthTrackCount: circularAvailableDepthTrackCountForState(state),
     depthSourcedTrackIndexes: circularSourcedDepthTrackIndexesForState(state),
     annotationSetIds: annotationSetIds(drawing),
-    visibleFeatureUnderlays: visibleFeatureUnderlaysForState(state),
     conservationSeries: conservationEntriesForState(state, drawing)
   });
 
@@ -645,6 +648,8 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
       : drawing.adv.circular_track_slots.findIndex((candidate) => candidate === slot);
     if (resolvedIndex < 0) return '';
     return (circularTrackValidationPlan(drawing).rowIssues.get(resolvedIndex) || [])
+      // The Width and Radius fields show their own invalid value (TK-12).
+      .filter((issue) => !(issue.code === 'geometry_invalid' && ['width', 'radius'].includes(issue.field)))
       .map((issue) => issue.message)
       .join(' ');
   };
@@ -1566,7 +1571,7 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
 
   const selectedResultIndexValue = () => Number(state?.selectedResultIndex?.value ?? 0) || 0;
 
-  const resolvedCircularSlotGeometry = (slotId) => findTrackSlotGeometry(/** @type {any} */ ({
+  const circularSlotGeometryLookup = (slotId) => (/** @type {any} */ ({
     geometry: String(state?.trackSlotResolvedGeometry?.value?.mode || '') === 'circular'
       ? state.trackSlotResolvedGeometry.value
       : null,
@@ -1602,23 +1607,26 @@ export const createCircularTrackSlotEditor = ({ state, changeTrackLayout = (appl
     };
   };
 
-  // Only a rendered row has resolved geometry; a disabled row shows the estimate.
-  /** @param {DrawingState} drawing */
-  const circularTrackSlotDisplayGeometry = (drawing, slot, slotIndex) => {
-    const resolved = circularTrackSlotEffectiveEnabled(slot)
-      ? resolvedCircularSlotGeometry(slot?.id)
-      : null;
-    return resolved || estimateCircularSlotGeometry(drawing, slot, slotIndex);
-  };
-
+  // Only a rendered row has resolved geometry. Any other row, and every row
+  // before the first Generate, shows an estimate marked as one (TK-15).
   const circularTrackSlotGeometryAutoText = (slot, slotIndex, field) => {
-    const drawing = state.drawings.circular;
     if (isManualSlotValue(circularSlotManualValue(slot, field))) return '';
-    const geometry = circularTrackSlotDisplayGeometry(drawing, slot, slotIndex);
-    if (field === 'width') return formatPxAuto(geometry.widthPx);
-    if (field === 'radius') return formatRadiusFactorAuto(geometry.radiusFactor);
-    if (field === 'inner_gap_px') return formatPxAuto(geometry.innerGapPx);
-    if (field === 'outer_gap_px') return formatPxAuto(geometry.outerGapPx);
+    const lookup = circularSlotGeometryLookup(slot?.id);
+    const resolved = circularTrackSlotEffectiveEnabled(slot) ? findTrackSlotGeometry(lookup) : null;
+    const estimate = !resolved;
+    const geometry = resolved || estimateCircularSlotGeometry(state.drawings.circular, slot, slotIndex);
+    if (field === 'width') return formatPxAuto(geometry.widthPx, { estimate });
+    if (field === 'radius') {
+      // `r` pins a ticks row's anchor, not the band centre the payload holds (GX-18).
+      const tickAnchor = resolved && slot?.renderer === 'ticks'
+        ? tickAnchorRadiusFactor(resolved, findTrackSlotGeometryRecord(lookup)?.axisRadiusPx, slot.params?.tick_label_layout)
+        : null;
+      return tickAnchor === null
+        ? formatRadiusFactorAuto(geometry.radiusFactor, { estimate })
+        : formatRadiusFactorAuto(tickAnchor, { awayFromAxis: true });
+    }
+    if (field === 'inner_gap_px') return formatPxAuto(geometry.innerGapPx, { estimate });
+    if (field === 'outer_gap_px') return formatPxAuto(geometry.outerGapPx, { estimate });
     return '';
   };
 

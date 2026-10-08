@@ -38,8 +38,23 @@ const parseSlotZIndex = (value, fieldName) => {
   return numeric;
 };
 
+// The decimal number text every track geometry field reads: Python's float
+// grammar without its digit-group underscores. Number() also reads 0x10,
+// 0b11 and 0o7, which the CLI rejects (TK-12).
+const DECIMAL_NUMBER = '[+-]?(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)(?:[eE][+-]?[0-9]+)?';
+const DECIMAL_TEXT = new RegExp(`^${DECIMAL_NUMBER}$`);
 // Pure physical-pixel text grammar; factor/% scalars keep their separate owner.
-const PIXEL_TEXT = /^([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)(?:\s*px)?$/i;
+const PIXEL_TEXT = new RegExp(`^(${DECIMAL_NUMBER})(?:\\s*px)?$`, 'i');
+
+/**
+ * @param {unknown} value A number, or decimal number text.
+ * @returns {number} NaN for any other value.
+ */
+const decimalValue = (value) => {
+  if (typeof value === 'number') return value;
+  const text = typeof value === 'string' ? value.trim() : '';
+  return DECIMAL_TEXT.test(text) ? Number(text) : Number.NaN;
+};
 
 export const parseOptionalPixel = (value, fieldName, { allowZero }) => {
   if (value === null || value === undefined) return null;
@@ -64,12 +79,16 @@ export const parseOptionalPixel = (value, fieldName, { allowZero }) => {
   return numeric === 0 ? 0 : numeric;
 };
 
+/**
+ * @param {any} value A Width or Radius draft: text, a number, or { value, unit }.
+ * @param {string} [fieldName] The field the message names.
+ */
 export const parseOptionalCircularScalar = (value, fieldName = 'Circular measure') => {
   if (value === null || value === undefined || value === '') return null;
-  const invalid = () => new Error(`${fieldName} must be a positive finite px or factor scalar.`);
+  const invalid = () => new Error(`${fieldName} must be a number greater than 0, in px or ×R.`);
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     if (typeof value.value !== 'number' && typeof value.value !== 'string') throw invalid();
-    const numeric = Number(value.value);
+    const numeric = decimalValue(value.value);
     const unit = normalizedString(value.unit);
     if (!Number.isFinite(numeric) || numeric <= 0 || !['px', 'factor'].includes(unit)) {
       throw invalid();
@@ -85,7 +104,7 @@ export const parseOptionalCircularScalar = (value, fieldName = 'Circular measure
   let numericText = text;
   if (isPx) numericText = text.slice(0, -2).trim();
   else if (isPercent) numericText = text.slice(0, -1).trim();
-  const numeric = Number(numericText);
+  const numeric = decimalValue(numericText);
   const resolved = isPercent ? numeric / 100 : numeric;
   if (!text || !Number.isFinite(resolved) || resolved <= 0) {
     throw invalid();
@@ -111,8 +130,14 @@ const validateSlotGeometry = (slot, id, layoutKind) => {
       'Use inner_gap_px and outer_gap_px for physical gaps.'
     );
   }
-  parseOptionalCircularScalar(slot.radius, `Circular track slot '${id}' radius`);
-  parseOptionalCircularScalar(slot.width, `Circular track slot '${id}' width`);
+  for (const field of ['radius', 'width']) {
+    try {
+      parseOptionalCircularScalar(slot[field], `Circular track slot '${id}' ${field}`);
+    } catch (error) {
+      // The row's Width or Radius field shows this failure itself (TK-12).
+      throw Object.assign(error, { field });
+    }
+  }
   parseOptionalPixel(
     slot.inner_gap_px,
     `Circular track slot '${id}' inner_gap_px`,
@@ -504,12 +529,6 @@ const inferredCustomTrackAxisIndex = (slots, mode, trackType) => {
   return firstInner < 0 ? slots.length : firstInner;
 };
 
-const featureUnderlaysVisible = (value) => {
-  if (Array.isArray(value)) return value.length > 0;
-  if (typeof value === 'number') return value > 0;
-  return Boolean(value);
-};
-
 const nonnegativeFiniteNumber = (value) => {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value === 'boolean') return Number.NaN;
@@ -585,7 +604,6 @@ const collectCustomTrackIssues = ({
   depthTrackCount,
   depthSourcedTrackIndexes,
   annotationSetIds,
-  visibleFeatureUnderlays,
   conservationSeries
 }) => {
   const rowIssues = new Map();
@@ -784,7 +802,7 @@ const collectCustomTrackIssues = ({
     } catch (error) {
       addRowIssue(rowIssues, index, {
         code: 'geometry_invalid',
-        field: 'geometry',
+        field: typeof error?.field === 'string' ? error.field : 'geometry',
         slotId: id || null,
         message: error instanceof Error ? error.message : String(error)
       });
@@ -1071,18 +1089,9 @@ const collectCustomTrackIssues = ({
       message: 'Linear Custom Track Slots support only one enabled Features row.'
     }));
   }
-  if (featureUnderlaysVisible(visibleFeatureUnderlays)) {
-    const featureCount = enabledIndexes.filter(
-      (index) => normalizedString(draftSlots[index]?.renderer) === 'features'
-    ).length;
-    if (featureCount !== 1) {
-      globalIssues.push(globalIssue({
-        code: 'feature_underlay_features_count',
-        field: 'slots',
-        message: `Visible feature underlays require exactly one enabled ${modeLabel} Features row.`
-      }));
-    }
-  }
+  // Whether the plan needs a Features row for underlays depends on the
+  // record's features, which only Python reads; it reports TRACK_INVALID
+  // FEATURES_COUNT, as the CLI does (TK-13).
 
   const enabledById = new Map(
     normalizedEnabled
@@ -1198,7 +1207,6 @@ export const validateCustomTrackPlan = (options = {}) => collectCustomTrackIssue
   depthTrackCount: options.depthTrackCount,
   depthSourcedTrackIndexes: options.depthSourcedTrackIndexes,
   annotationSetIds: options.annotationSetIds,
-  visibleFeatureUnderlays: options.visibleFeatureUnderlays,
   conservationSeries: options.conservationSeries
 });
 

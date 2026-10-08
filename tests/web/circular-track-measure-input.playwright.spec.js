@@ -668,7 +668,7 @@ test('nonfinite numeric action writes are rejected before History; finite, Auto,
       } catch (caught) { error = caught.message; }
       return { error, same: row.width === before };
     }, kind);
-    expect(rejected.error).toMatch(/positive finite px or factor scalar/);
+    expect(rejected.error).toMatch(/must be a number greater than 0, in px or ×R/);
     expect(rejected.same).toBe(true);
     expect(await snapshot(page)).toEqual(baseline);
     expect(await workerCounts(page)).toEqual(workers);

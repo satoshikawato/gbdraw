@@ -15,7 +15,6 @@ import {
 } from '../services/track-slot-display.js';
 import { featureSlotEdits } from './track-slot-edits.js';
 import { paramsKeptOnRendererChange, parseOptionalPixel, validateCustomTrackPlan } from '../services/track-slot-validation.js';
-import { visibleFeatureUnderlaysForState } from '../utils/feature-rendering.js';
 
 import {
   applyLinearTrackOrderPlacements,
@@ -231,7 +230,6 @@ export const createLinearTrackSlotEditor = ({ state, changeTrackLayout = (apply)
     depthTrackCount: linearAvailableDepthTrackCountForState(state),
     depthSourcedTrackIndexes: linearSourcedDepthTrackIndexesForState(state),
     annotationSetIds: annotationSetIds(drawing),
-    visibleFeatureUnderlays: visibleFeatureUnderlaysForState(state),
     conservationSeries: []
   });
 

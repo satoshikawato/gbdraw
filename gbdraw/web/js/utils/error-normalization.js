@@ -61,7 +61,7 @@ const REASONS = Object.freeze({
   POSITIVE_UNIT_INTERVAL: 'Use a finite number greater than zero and at most one.',
   PIXEL_POSITIVE: 'Use a finite number of pixels greater than zero (px optional).',
   PIXEL_NONNEGATIVE: 'Use a finite number of pixels of zero or greater (px optional).',
-  POSITIVE_SCALAR: 'Use a positive finite px or factor scalar.',
+  POSITIVE_SCALAR: 'Use a number greater than 0, in px or ×R.',
   CIRCULAR_GAPS: 'Use inner_gap_px and outer_gap_px for physical gaps.',
   OBSOLETE_TRACK_FIELD: 'Custom Track Slots no longer read this field. Use slot-level radius, width, inner_gap_px, outer_gap_px, side, and z fields.',
   SEPARATE_LINEAR_ROWS: 'Turn Normalize Record Lengths off or assign each record to a separate Linear row.',
@@ -88,6 +88,7 @@ const REASONS = Object.freeze({
   JSON_FORMAT: 'Use valid JSON.', VISIBILITY_ACTION: 'Use show, off, or exclude_matching; accepted aliases are on, hide, false, and 0.',
   TARGET_RECORD: 'Choose an available target record.',
   DEPTH_SERIES: 'Select an existing Depth TSV or remove the slot.',
+  DEPTH_SERIES_SOURCE: 'Attach a Depth TSV to this series, or remove the series.',
   BOTH_ENDPOINTS: 'Supply both region endpoints or leave both empty.', SPECIFIC_COLUMNS: 'Supply four or five tab-separated columns.',
   COLOR: 'Use none, a supported named color, or a hex color with 3 or 6 digits.',
   // Output Prefix (gbdraw/api/requests.py RenderOutputRequest).
@@ -379,7 +380,7 @@ const nativeValidation = (message) => {
   const pixel = /^(?:Circular|Linear) track slot '[\s\S]*' (height|spacing|inner_gap_px|outer_gap_px) must be (nonnegative|positive) finite number of pixels \(px optional\)\.$/.exec(message);
   if (pixel) return { code: 'TRACK_INVALID', stage: 'request-validation', context: {
     field: pixel[1], reason: pixel[2] === 'positive' ? 'PIXEL_POSITIVE' : 'PIXEL_NONNEGATIVE' } };
-  const scalar = /^Circular track slot '[\s\S]*' (radius|width) must be a positive finite px or factor scalar\.$/.exec(message);
+  const scalar = /^Circular track slot '[\s\S]*' (radius|width) must be a number greater than 0, in px or ×R\.$/.exec(message);
   if (scalar) return { code: 'TRACK_INVALID', stage: 'request-validation', context: { field: scalar[1], reason: 'POSITIVE_SCALAR' } };
   if (/^Circular track slot '[\s\S]*' uses obsolete field '(?:spacing|strict|compress|reserve)'\. Use inner_gap_px and outer_gap_px for physical gaps\.$/.test(message)) return { code: 'TRACK_INVALID', stage: 'request-validation', context: { reason: 'CIRCULAR_GAPS' } };
   const selector = /^Record selector #[0-9]+ is out of range \(loaded ([0-9]+) record\(s\)\)\.$/.exec(message);
@@ -395,7 +396,7 @@ const nativeValidation = (message) => {
   const labelRequired = /^Invalid label TSV at line ([0-9]+): column ([1-4]) \((record_id|feature_type|qualifier|value)\) is required\.$/.exec(message);
   if (labelRequired) return { code: 'TABLE_INVALID', stage: 'request-validation', context: { row: Number(labelRequired[1]), field: labelRequired[3], reason: 'REQUIRED' } };
   const series = /^Depth series #([0-9]+) \(logical track index ([0-9]+)\) has no TSV source in any record\.(?: Add a TSV or remove the series\.)?$/.exec(message);
-  if (series) return { code: 'DEPTH_INVALID', stage: 'request-validation', context: { seriesIndex: Number(series[2]), reason: 'REQUIRED' } };
+  if (series) return { code: 'DEPTH_INVALID', stage: 'request-validation', context: { seriesIndex: Number(series[2]), reason: 'DEPTH_SERIES_SOURCE' } };
   return null;
 };
 // The native track validator already identifies its failures. Project its
@@ -417,7 +418,7 @@ const TRACK_ISSUES = Object.freeze({
   annotation_layer: ['LAYER', 'layer'], annotation_anchor_required: ['OVERLAY_ANCHOR', 'anchor_slot'],
   annotation_anchor_without_overlay: ['OVERLAY_SIDE', 'side'], conservation_unmanaged: ['CONSERVATION_SOURCE'],
   conservation_source_missing: ['CONSERVATION_SOURCE'], features_multiple: ['FEATURES_COUNT'],
-  feature_underlay_features_count: ['FEATURES_COUNT'], annotation_anchor_unknown: ['OVERLAY_ANCHOR', 'anchor_slot'],
+  annotation_anchor_unknown: ['OVERLAY_ANCHOR', 'anchor_slot'],
   annotation_anchor_ineligible: ['OVERLAY_ANCHOR', 'anchor_slot'], annotation_underlay_z: ['DRAW_ORDER', 'z'],
   annotation_foreground_z: ['DRAW_ORDER', 'z'], axis_side_conflict: ['TRACK_SIDE', 'side']
 });
