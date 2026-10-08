@@ -350,11 +350,12 @@ test('Feature stroke width steppers defer scope selection and stroke changes kee
 });
 
 // OV-161 (gui-fix GX-16): right after a Session load, Cancel on the Color
-// Change Scope dialog closes it at once and records no History step. Cancel
-// used to run inside a History step, so it first waited for that step's
-// intent capture, which took seconds on a freshly loaded Session. The dialog
-// is opened from its state, as the accessibility spec does, so no earlier
-// History step has captured the intent yet.
+// Change Scope dialog (Escape or the Cancel button) closes it at once and
+// records no History step. Cancel used to run inside a History step, so it
+// first waited for that step's intent capture, which took seconds on a
+// freshly loaded Session. The dialog is opened from its state, as the
+// accessibility spec does, so no earlier History step has captured the
+// intent yet.
 test('Cancel closes the Color Change Scope dialog at once after a Session load and records no step (OV-161)', async ({
   browser
 }) => {
@@ -363,13 +364,18 @@ test('Cancel closes the Color Change Scope dialog at once after a Session load a
   try {
     await openFeaturePopup(page);
     const undoCount = await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount());
-    await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.featureStyleScopeDialog, { kind: 'fill', show: true }));
-    const dialog = page.getByRole('heading', { name: 'Color Change Scope' }).locator('..');
-    await expect(dialog).toBeVisible();
-    const started = Date.now();
-    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-    await expect(dialog).toBeHidden({ timeout: 60_000 });
-    expect(Date.now() - started, 'milliseconds from Cancel to a closed dialog').toBeLessThan(1000);
+    const dialog = page.getByRole('dialog', { name: 'Color Change Scope' });
+    for (const answer of ['Escape', 'Cancel']) {
+      await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.featureStyleScopeDialog, { kind: 'fill', show: true }));
+      await expect(dialog).toBeVisible();
+      // The dialog takes focus (UI-02), so Escape reaches it.
+      await expect.poll(() => dialog.evaluate((element) => element.contains(document.activeElement))).toBe(true);
+      const started = Date.now();
+      if (answer === 'Escape') await page.keyboard.press('Escape');
+      else await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await expect(dialog).toHaveCount(0, { timeout: 60_000 });
+      expect(Date.now() - started, `milliseconds from ${answer} to a closed dialog`).toBeLessThan(1000);
+    }
     expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(undoCount);
   } finally {
     await page.context().close();
