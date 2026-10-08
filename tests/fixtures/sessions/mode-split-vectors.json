@@ -1837,7 +1837,6 @@
             "color": "#112233",
             "xPos": 10,
             "yPos": 12,
-            "showStroke": false,
             "featureIds": []
           },
           {
@@ -1846,7 +1845,6 @@
             "color": "#445566",
             "xPos": 10,
             "yPos": 12,
-            "showStroke": false,
             "featureIds": []
           }
         ],
@@ -1857,7 +1855,6 @@
             "color": "#aa3300",
             "xPos": 10,
             "yPos": 12,
-            "showStroke": false,
             "featureIds": []
           }
         ],
@@ -1943,7 +1940,6 @@
                   "color": "#112233",
                   "xPos": 10,
                   "yPos": 12,
-                  "showStroke": false,
                   "featureIds": []
                 },
                 {
@@ -1952,7 +1948,6 @@
                   "color": "#445566",
                   "xPos": 10,
                   "yPos": 12,
-                  "showStroke": false,
                   "featureIds": []
                 }
               ],
@@ -1963,7 +1958,6 @@
                   "color": "#aa3300",
                   "xPos": 10,
                   "yPos": 12,
-                  "showStroke": false,
                   "featureIds": []
                 }
               ],
@@ -2131,7 +2125,6 @@
             "color": "#112233",
             "xPos": 10,
             "yPos": 12,
-            "showStroke": false,
             "featureIds": []
           },
           {
@@ -2140,7 +2133,6 @@
             "color": "#445566",
             "xPos": 10,
             "yPos": 12,
-            "showStroke": false,
             "featureIds": []
           }
         ],
@@ -2151,7 +2143,6 @@
             "color": "#aa3300",
             "xPos": 10,
             "yPos": 12,
-            "showStroke": false,
             "featureIds": []
           }
         ],
@@ -2235,7 +2226,6 @@
                   "color": "#112233",
                   "xPos": 10,
                   "yPos": 12,
-                  "showStroke": false,
                   "featureIds": []
                 },
                 {
@@ -2244,7 +2234,6 @@
                   "color": "#445566",
                   "xPos": 10,
                   "yPos": 12,
-                  "showStroke": false,
                   "featureIds": []
                 }
               ],
@@ -2255,7 +2244,6 @@
                   "color": "#aa3300",
                   "xPos": 10,
                   "yPos": 12,
-                  "showStroke": false,
                   "featureIds": []
                 }
               ],
@@ -5097,7 +5085,6 @@
                   "color": "#112233",
                   "xPos": 37.714285714285715,
                   "yPos": 12,
-                  "showStroke": false,
                   "featureIds": []
                 },
                 {
@@ -5106,7 +5093,6 @@
                   "color": "#445566",
                   "xPos": 186.53087797619048,
                   "yPos": 12,
-                  "showStroke": false,
                   "featureIds": []
                 },
                 {
@@ -5115,7 +5101,6 @@
                   "color": "#e8b441",
                   "xPos": 186.53087797619048,
                   "yPos": 12,
-                  "showStroke": false,
                   "featureIds": []
                 }
               ],
@@ -5126,7 +5111,6 @@
                   "color": "#aa3300",
                   "xPos": 1044.3411960601807,
                   "yPos": 12,
-                  "showStroke": false,
                   "featureIds": []
                 }
               ],
@@ -5684,7 +5668,6 @@
                   "color": "#54bcf8",
                   "xPos": 37.714285714285715,
                   "yPos": 0,
-                  "showStroke": false,
                   "featureIds": []
                 },
                 {
@@ -5693,7 +5676,6 @@
                   "color": "#e8b441",
                   "xPos": 37.714285714285715,
                   "yPos": 41.14285714285714,
-                  "showStroke": false,
                   "featureIds": []
                 },
                 {
@@ -5702,7 +5684,6 @@
                   "color": "#a1a1a1",
                   "xPos": 37.714285714285715,
                   "yPos": 82.28571428571428,
-                  "showStroke": false,
                   "featureIds": []
                 },
                 {
@@ -5711,7 +5692,6 @@
                   "color": "#6dded3",
                   "xPos": 37.714285714285715,
                   "yPos": 123.42857142857142,
-                  "showStroke": false,
                   "featureIds": []
                 },
                 {
@@ -5720,7 +5700,6 @@
                   "color": "#ad72e3",
                   "xPos": 37.714285714285715,
                   "yPos": 164.57142857142856,
-                  "showStroke": false,
                   "featureIds": []
                 }
               ],
@@ -6662,7 +6641,6 @@
                   "color": "#54bcf8",
                   "xPos": 37.714285714285715,
                   "yPos": 12,
-                  "showStroke": false,
                   "featureIds": []
                 },
                 {
@@ -6671,7 +6649,6 @@
                   "color": "#e8b441",
                   "xPos": 186.53087797619048,
                   "yPos": 12,
-                  "showStroke": false,
                   "featureIds": []
                 }
               ],
@@ -7430,7 +7407,6 @@
                   "color": "#e8b441",
                   "xPos": 37.714285714285715,
                   "yPos": 12,
-                  "showStroke": false,
                   "featureIds": []
                 },
                 {
@@ -7439,7 +7415,6 @@
                   "color": "#71ee7d",
                   "xPos": 192.76785714285717,
                   "yPos": 12,
-                  "showStroke": false,
                   "featureIds": []
                 },
                 {
@@ -7448,7 +7423,6 @@
                   "color": "#54bcf8",
                   "xPos": 349.0453869047619,
                   "yPos": 12,
-                  "showStroke": false,
                   "featureIds": []
                 }
               ],
@@ -7897,7 +7871,6 @@
                   "color": "#e8b441",
                   "xPos": 37.714285714285715,
                   "yPos": 0,
-                  "showStroke": false,
                   "featureIds": []
                 },
                 {
@@ -7906,7 +7879,6 @@
                   "color": "#71ee7d",
                   "xPos": 37.714285714285715,
                   "yPos": 41.14285714285714,
-                  "showStroke": false,
                   "featureIds": []
                 },
                 {
@@ -7915,7 +7887,6 @@
                   "color": "#54bcf8",
                   "xPos": 37.714285714285715,
                   "yPos": 82.28571428571428,
-                  "showStroke": false,
                   "featureIds": []
                 },
                 {
@@ -7924,7 +7895,6 @@
                   "color": "#a1a1a1",
                   "xPos": 37.714285714285715,
                   "yPos": 123.42857142857142,
-                  "showStroke": false,
                   "featureIds": []
                 },
                 {
@@ -7933,7 +7903,6 @@
                   "color": "#6dded3",
                   "xPos": 37.714285714285715,
                   "yPos": 164.57142857142856,
-                  "showStroke": false,
                   "featureIds": []
                 },
                 {
@@ -7942,7 +7911,6 @@
                   "color": "#ad72e3",
                   "xPos": 37.714285714285715,
                   "yPos": 205.7142857142857,
-                  "showStroke": false,
                   "featureIds": []
                 }
               ],

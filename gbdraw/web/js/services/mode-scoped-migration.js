@@ -276,6 +276,26 @@ const withResolvedOverrideColors = (config, paletteColors) => {
   return resolved;
 };
 
+// The Stroke options disclosure (`showStroke`) that earlier Sessions saved on
+// a Legend row is view state (OV-157): the split drops it from the Legend
+// rows, as Load does (`normalizeSessionLegendEntries`).
+const LEGEND_ROW_LISTS = ['entries', 'deletedEntries', 'dormantEntries'];
+/** @param {Record<string, any>} draft */
+const withoutStrokeDisclosure = (draft) => {
+  const legend = isObject(draft.editorState) ? draft.editorState.legend : null;
+  if (!isObject(legend)) return draft;
+  const changed = { ...legend };
+  for (const rows of LEGEND_ROW_LISTS) {
+    if (!Array.isArray(legend[rows])) continue;
+    changed[rows] = legend[rows].map((/** @type {unknown} */ entry) => {
+      if (!isObject(entry)) return entry;
+      const { showStroke: _showStroke, ...row } = /** @type {Record<string, any>} */ (entry);
+      return row;
+    });
+  }
+  return { ...draft, editorState: { ...draft.editorState, legend: changed } };
+};
+
 /**
  * Splits the flat Web draft of a Session 27-44 into Session 46 mode slices.
  *
@@ -289,7 +309,7 @@ const withResolvedOverrideColors = (config, paletteColors) => {
  * execution settings to `ui.losatExecution`, `config.adv.rich_feature_popup`
  * to `ui.richFeaturePopup`, a boolean `config.paletteInstantPreviewEnabled` to
  * `ui` (over a saved `ui` value, as Load applies it last), and
- * `config.cliOptions` to `cliOptions`.
+ * `config.cliOptions` to `cliOptions`. The Legend rows lose `showStroke`.
  *
  * @param {Record<string, any>} draft
  * @param {{
@@ -307,6 +327,7 @@ const withResolvedOverrideColors = (config, paletteColors) => {
 export const splitDraftIntoModes = (draft, { committedMode, modeProfiles = undefined, depthSources = null, paletteColors = null }) => {
   const committed = sliceMode(committedMode);
   if (!committed) throw fieldsError();
+  draft = withoutStrokeDisclosure(draft);
   let configValue = draft.config;
   if (isObject(configValue) && Object.hasOwn(configValue, 'colorsAreOverrides')) {
     configValue = withResolvedOverrideColors(configValue, paletteColors);

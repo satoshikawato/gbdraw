@@ -2821,10 +2821,25 @@ def _legend_color_overrides(source: object) -> dict[str, str]:
     return normalized
 
 
+def _without_stroke_disclosure(entries: object) -> object:
+    """Legend rows without ``showStroke``: the Stroke options disclosure that
+    earlier Sessions saved is view state (OV-157), which Web Load drops
+    (``normalizeSessionLegendEntries``); other values stay as they are."""
+
+    if not isinstance(entries, list):
+        return entries
+    return [
+        {key: value for key, value in entry.items() if key != "showStroke"}
+        if isinstance(entry, Mapping) else entry
+        for entry in entries
+    ]
+
+
 def _with_normalized_editor_colors(draft: Mapping[str, Any]) -> Mapping[str, Any]:
     """The draft with the Legend and feature stroke and color edits and the
-    original SVG stroke as Web Load reads them (``normalizeEditorStateData``);
-    absent fields stay absent."""
+    original SVG stroke as Web Load reads them (``normalizeEditorStateData``),
+    and its Legend rows without the Stroke options disclosure; absent fields
+    stay absent."""
 
     editor = draft.get("editorState")
     if not isinstance(editor, Mapping):
@@ -2837,6 +2852,9 @@ def _with_normalized_editor_colors(draft: Mapping[str, Any]) -> Mapping[str, Any
             changed_legend["strokeOverrides"] = _stroke_override_map(legend["strokeOverrides"])
         if "colorOverrides" in legend:
             changed_legend["colorOverrides"] = _legend_color_overrides(legend["colorOverrides"])
+        for rows in ("entries", "deletedEntries", "dormantEntries"):
+            if rows in legend:
+                changed_legend[rows] = _without_stroke_disclosure(legend[rows])
         changed["legend"] = changed_legend
     strokes = editor.get("featureStrokes")
     if isinstance(strokes, Mapping) and "overrides" in strokes:
@@ -2878,7 +2896,8 @@ def split_draft_into_modes(
     ``cliOptions``. ``config.colorsAreOverrides`` is resolved into ``colors``
     over ``palette_colors`` (``mode_split_palette_colors``) and dropped. The
     Legend and feature stroke and color edits are read as Web Load reads them
-    (hex colors, color names through the shared table, else ``None``).
+    (hex colors, color names through the shared table, else ``None``), and the
+    Legend rows lose ``showStroke`` (OV-157).
 
     ``committed_mode`` is the saved Result's mode (``renderRequest.mode``, else
     ``ui.mode``). ``mode_profiles`` defaults to ``config.modeProfiles``, and
