@@ -127,3 +127,54 @@ test('the match popup stays above the footer and its text reaches 4.5:1', async 
     await page.context().close();
   }
 });
+
+// #941 residual: the feature popup keeps the same footer clearance as the match
+// popup when it opens near the bottom, when it is dragged down, and when the
+// match popup is dragged down. A drag released past the clamp (here on the
+// footer) is not a click outside, so the popup stays open.
+test('feature and match popups stay above the footer when opened low or dragged down', async ({ browser }) => {
+  test.setTimeout(300000);
+  const page = await open(browser);
+  try {
+    const footerTop = async () => (await page.locator('[data-app-footer]').boundingBox()).y;
+    const bottomOf = async (locator) => {
+      await expect(locator).toBeVisible();
+      const box = await locator.boundingBox();
+      return box.y + box.height;
+    };
+    const dragDown = async (locator) => {
+      const box = await locator.boundingBox();
+      await page.mouse.move(box.x + box.width / 2, box.y + 8);
+      await page.mouse.down();
+      await page.mouse.move(box.x + box.width / 2, 990, { steps: 4 });
+      await page.mouse.up();
+    };
+    await page.evaluate(() => {
+      const app = window.__GBDRAW_APP__;
+      app.openFeatureEditorFromList(app.extractedFeatures.find((feature) => feature.type === 'CDS'), { clientX: 700, clientY: 990 });
+    });
+    const featurePopup = page.locator('.feature-popup').first();
+    await expect(featurePopup).toBeVisible();
+    expect(await bottomOf(featurePopup), 'opened low').toBeLessThanOrEqual(await footerTop() + 0.5);
+    await dragDown(featurePopup);
+    expect(await bottomOf(featurePopup), 'dragged down').toBeLessThanOrEqual(await footerTop() + 0.5);
+    await page.keyboard.press('Escape');
+    await expect(featurePopup).toHaveCount(0);
+
+    await page.evaluate(async () => {
+      const { state } = await import('./js/state.js');
+      state.clickedPairwiseMatch.value = {
+        title: 'Pairwise match', subtitle: 'comparison1_match1', fill: '#f87171',
+        sections: [{ title: 'Summary', rows: [{ label: 'Identity', value: '99%' }] }]
+      };
+      state.clickedPairwiseMatchPos.x = 884;
+      state.clickedPairwiseMatchPos.y = 300;
+    });
+    const matchPopup = page.getByRole('dialog', { name: 'Pairwise match details', exact: true });
+    await expect(matchPopup).toBeVisible();
+    await dragDown(matchPopup);
+    expect(await bottomOf(matchPopup), 'match popup dragged down').toBeLessThanOrEqual(await footerTop() + 0.5);
+  } finally {
+    await page.context().close();
+  }
+});

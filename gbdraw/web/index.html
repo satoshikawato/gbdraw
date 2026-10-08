@@ -289,8 +289,6 @@
             min-width: min(300px, calc(100vw - 24px));
         }
         .pairwise-match-popup {
-            /* The footer (h-8) is not part of the popup's room: the inline max-height runs to the viewport bottom. */
-            --app-footer-clearance: 2rem;
             width: min(460px, calc(100vw - 24px));
             min-width: min(280px, calc(100vw - 24px));
             min-height: min(180px, calc(100vh - 24px));
@@ -5977,7 +5975,7 @@
                          role="dialog"
                          aria-label="Pairwise match details"
                          class="fixed z-50 feature-popup pairwise-match-popup custom-scrollbar bg-white rounded-xl shadow-2xl border border-slate-200 p-4"
-                         :style="[pairwiseMatchPopupStyle, { maxHeight: `calc(${pairwiseMatchPopupStyle.maxHeight} - var(--app-footer-clearance))` }]">
+                         :style="pairwiseMatchPopupStyle">
                         <div class="flex items-start gap-2 mb-3 pb-3 border-b border-slate-100 cursor-move">
                             <div class="w-4 h-4 rounded mt-1 border border-slate-200"
                                  :style="{ backgroundColor: clickedPairwiseMatch.fill || '#94a3b8' }"></div>

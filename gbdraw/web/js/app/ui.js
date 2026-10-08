@@ -419,7 +419,17 @@ export const setupGlobalUiEvents = ({
   // a choice unmounts the dialog before this document listener runs.
   const modalDialogOpen = () => Boolean(document.querySelector('[role="dialog"][aria-modal="true"]'));
 
+  // A click whose press began in a popup (a drag released past the popup's
+  // clamp, a text selection) is not a click outside it.
+  let pressStartedInPopup = false;
+  const rememberPressTarget = (e) => {
+    pressStartedInPopup = Boolean(e.target?.closest?.('.feature-popup, .pairwise-match-popup, .label-popup'));
+  };
+
   const closeFeaturePopup = (e) => {
+    const startedInPopup = pressStartedInPopup;
+    pressStartedInPopup = false;
+    if (startedInPopup) return;
     if (
       !e.target.closest('[data-modal-overlay], [aria-modal="true"]')
       && !e.target.closest('.feature-popup')
@@ -449,11 +459,13 @@ export const setupGlobalUiEvents = ({
   };
 
   onMounted(() => {
+    document.addEventListener('mousedown', rememberPressTarget, true);
     document.addEventListener('click', closeFeaturePopup);
     document.addEventListener('keydown', handleEscapeKey);
   });
 
   onUnmounted(() => {
+    document.removeEventListener('mousedown', rememberPressTarget, true);
     document.removeEventListener('click', closeFeaturePopup);
     document.removeEventListener('keydown', handleEscapeKey);
   });

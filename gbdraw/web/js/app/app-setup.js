@@ -98,6 +98,7 @@ import { createPaletteLoader } from './palettes.js';
 import { afterPaint, createRunAnalysis } from './run-analysis.js';
 import { createSimilarityAlignmentActions } from './similarity-alignment.js';
 import { diagnosticError, normalizeUserFacingError } from '../utils/error-normalization.js';
+import { popupViewportBottom } from '../utils/popup-bounds.js';
 import { formatElapsedMs, reproducibilityLabel } from './run-info.js';
 import { createLegendLayout } from './legend-layout.js';
 import {
@@ -3882,7 +3883,7 @@ export const createAppSetup = () => {
     if (!palette || similarityAlignmentCompact.value) return;
     const margin = 12;
     const maxX = Math.max(margin, window.innerWidth - palette.offsetWidth - margin);
-    const maxY = Math.max(margin, window.innerHeight - palette.offsetHeight - margin);
+    const maxY = Math.max(margin, popupViewportBottom() - palette.offsetHeight - margin);
     similarityAlignmentPalettePosition.x = Math.min(
       Math.max(similarityAlignmentPalettePosition.x ?? maxX, margin), maxX
     );
@@ -4159,7 +4160,7 @@ export const createAppSetup = () => {
   // The popup's size follows the app-level rich popup preference.
   const getFeaturePopupConstraints = (left = clickedFeaturePos.x, top = clickedFeaturePos.y) => {
     const viewportWidth = Math.max(1, window.innerWidth || 1);
-    const viewportHeight = Math.max(1, window.innerHeight || 1);
+    const viewportHeight = popupViewportBottom();
     const availableWidth = Math.max(1, viewportWidth - (FEATURE_POPUP_MARGIN * 2));
     const availableHeight = Math.max(1, viewportHeight - (FEATURE_POPUP_MARGIN * 2));
     const desiredMinWidth =
@@ -4191,7 +4192,7 @@ export const createAppSetup = () => {
 
   const getPairwiseMatchPopupConstraints = (left = clickedPairwiseMatchPos.x, top = clickedPairwiseMatchPos.y) => {
     const viewportWidth = Math.max(1, window.innerWidth || 1);
-    const viewportHeight = Math.max(1, window.innerHeight || 1);
+    const viewportHeight = popupViewportBottom();
     const availableWidth = Math.max(1, viewportWidth - (FEATURE_POPUP_MARGIN * 2));
     const availableHeight = Math.max(1, viewportHeight - (FEATURE_POPUP_MARGIN * 2));
     const minWidth = Math.min(PAIRWISE_MATCH_POPUP_MIN_WIDTH, availableWidth);
@@ -4298,7 +4299,7 @@ export const createAppSetup = () => {
     const height = popup?.offsetHeight || 360;
     const margin = FEATURE_POPUP_MARGIN;
     const maxX = Math.max(margin, window.innerWidth - width - margin);
-    const maxY = Math.max(margin, window.innerHeight - height - margin);
+    const maxY = Math.max(margin, popupViewportBottom() - height - margin);
     const nextX = event.clientX - pairwiseMatchPopupDrag.offsetX;
     const nextY = event.clientY - pairwiseMatchPopupDrag.offsetY;
     clickedPairwiseMatchPos.x = Math.min(Math.max(nextX, margin), maxX);
@@ -4377,7 +4378,7 @@ export const createAppSetup = () => {
     const height = popup?.offsetHeight || 260;
     const margin = 12;
     const maxX = Math.max(margin, window.innerWidth - width - margin);
-    const maxY = Math.max(margin, window.innerHeight - height - margin);
+    const maxY = Math.max(margin, popupViewportBottom() - height - margin);
     const nextX = event.clientX - featurePopupDrag.offsetX;
     const nextY = event.clientY - featurePopupDrag.offsetY;
     clickedFeaturePos.x = Math.min(Math.max(nextX, margin), maxX);
