@@ -366,3 +366,29 @@ test('replacing or removing a multi-record source resets its one-record presenta
   await page.getByRole('button', { name: 'Remove GenBank/DDBJ File', exact: true }).click();
   await expect.poll(presentation).toEqual(clean);
 });
+
+// CI-03 / D-32: one record replacing one record with a different record ID
+// keeps the crop and Record label but retires the selector naming the old
+// record, so Generate draws the new record instead of failing RECORD_SELECTION.
+test('one record replacing one record with another ID keeps the crop and still generates', async ({ page }) => {
+  test.setTimeout(300000);
+  await openApp(page);
+  await page.evaluate(() => { window.__GBDRAW_APP__.form.multi_record_canvas = false; });
+  await nativeUpload(page, firstGenbank, 'one.gb');
+  await ready(page);
+  await page.getByLabel('Circular record', { exact: true }).selectOption('BGC0000708');
+  await page.evaluate(() => Object.assign(window.__GBDRAW_APP__.form, {
+    circular_region_start: 500, circular_region_end: 3000, circular_record_label: 'Label X'
+  }));
+  await nativeUpload(page, secondGenbank, 'other.gb');
+  await ready(page);
+  const outcome = await evaluateWithRetainedPromise(page, async () => {
+    const app = window.__GBDRAW_APP__;
+    const result = await app.runAnalysis();
+    return { status: result?.status, code: app.errorLog?.code || null,
+      selector: app.form.circular_record_selector, start: app.form.circular_region_start,
+      end: app.form.circular_region_end, label: app.form.circular_record_label };
+  });
+  expect(outcome).toEqual({ status: 'ok', code: null, selector: '', start: 500, end: 3000, label: 'Label X' });
+  expect((await inspectCircularResult(page)).recordIds).toContain('BGC0000709');
+});
