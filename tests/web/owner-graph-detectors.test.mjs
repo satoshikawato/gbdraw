@@ -471,7 +471,7 @@ const LAYER_SOURCES = new Map([
 
 test('webLayerOf ranks modules by the R13 layers and leaves workers unranked', () => {
   const ranks = (paths) => paths.map((path) => webLayerOf(path));
-  assert.deepEqual(ranks(['utils/zip.js', 'config.js', 'web-ux-profile.js', 'mode-profiles.generated.js', 'mode-profiles.js']), [0, 0, 0, 0, 0]);
+  assert.deepEqual(ranks(['utils/zip.js', 'config.js', 'web-ux-profile.js', 'mode-profiles.generated.js', 'mode-profiles.js', 'mode-scoped-settings.generated.js']), [0, 0, 0, 0, 0, 0]);
   assert.deepEqual(ranks(['services/svg-serialization.js', 'services/losat.js', 'services/error-normalization.js']), [1, 1, 1]);
   assert.equal(webLayerOf('state.js'), 2);
   assert.deepEqual(ranks(['services/config.js', 'services/reset.js']), [3, 3]);

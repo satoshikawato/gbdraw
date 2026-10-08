@@ -55,7 +55,8 @@ export const WEB_OWNER_GRAPH_DEFAULTS = Object.freeze({
   // roots layer and the state layer.
   layers: Object.freeze({
     leaves: Object.freeze([
-      'config.js', 'web-ux-profile.js', 'mode-profiles.generated.js', 'mode-profiles.js'
+      'config.js', 'web-ux-profile.js', 'mode-profiles.generated.js', 'mode-profiles.js',
+      'mode-scoped-settings.generated.js'
     ]),
     leafDirectories: Object.freeze(['utils/']),
     stateBoundServices: Object.freeze(['services/config.js', 'services/reset.js']),
