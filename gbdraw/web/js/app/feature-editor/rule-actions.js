@@ -452,20 +452,25 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
     return feat.product || feat.gene || feat.locus_tag || `${feat.type} at ${formatFeatureRange(feat)}`;
   };
 
-  const getEditableLabelEntryForFeature = (feat) => {
-    if (!feat || !Array.isArray(editableLabels.value)) return null;
-    const featureIdKey = normalizeFeatureIdKey(feat.svg_id || feat.id);
-    if (!featureIdKey) return null;
-    return (
-      editableLabels.value.find((entry) => normalizeFeatureIdKey(entry?.featureId) === featureIdKey) || null
-    );
+  // First entry per normalized feature ID (the first-match rule of a linear scan).
+  // Entries are edited in place, so callers build it per operation, not once.
+  const indexEditableLabels = () => {
+    const index = new Map();
+    if (!Array.isArray(editableLabels.value)) return index;
+    for (const entry of editableLabels.value) {
+      const key = normalizeFeatureIdKey(entry?.featureId);
+      if (key && !index.has(key)) index.set(key, entry);
+    }
+    return index;
   };
 
-  const getDisplayedFeatureLabel = (feat) => {
+  /** @param {Map<string, any>} [entryIndex] */
+  const getDisplayedFeatureLabel = (feat, entryIndex = indexEditableLabels()) => {
     const drawing = state.activeDrawing();
     if (!feat) return '';
 
-    const editableEntry = getEditableLabelEntryForFeature(feat);
+    const featureIdKey = normalizeFeatureIdKey(feat.svg_id || feat.id);
+    const editableEntry = featureIdKey ? entryIndex.get(featureIdKey) || null : null;
     const editableText = normalizeCaption(editableEntry?.text);
     if (editableText) return editableText;
 
@@ -791,12 +796,13 @@ export const createFeatureRuleActions = ({ state, prepareFileLegendEntries, rule
 
   /** @param {string | null} [label] */
   const findFeaturesWithSameDisplayedLabel = (currentFeat, label = null) => {
-    const targetLabel = normalizeCaption(label || getDisplayedFeatureLabel(currentFeat));
+    const entryIndex = indexEditableLabels();
+    const targetLabel = normalizeCaption(label || getDisplayedFeatureLabel(currentFeat, entryIndex));
     if (!targetLabel) return [];
 
     return extractedFeatures.value.filter((f) => {
       if (f.svg_id === currentFeat.svg_id) return false;
-      return captionMatches(getDisplayedFeatureLabel(f), targetLabel);
+      return captionMatches(getDisplayedFeatureLabel(f, entryIndex), targetLabel);
     });
   };
 
