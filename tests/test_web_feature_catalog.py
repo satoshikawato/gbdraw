@@ -1834,3 +1834,39 @@ def test_catalog_match_payload_reports_record_source_coordinates() -> None:
         {"match_kind": "homology", "query_record_index": "0", "qstart": "80", "qend": "41"},
         {0: (101, 200, -1)},
     ) == {}
+
+
+def _former_reverse_complement_sequence(sequence: str) -> str:
+    complements = {
+        "A": "T", "C": "G", "G": "C", "T": "A", "U": "A", "R": "Y", "Y": "R",
+        "S": "S", "W": "W", "K": "M", "M": "K", "B": "V", "D": "H", "H": "D",
+        "V": "B", "N": "N", "-": "-",
+    }
+    return "".join(
+        complements.get(base, "N")
+        for base in reversed("".join(sequence.split()).upper())
+    )
+
+
+def test_reverse_complement_sequence_matches_the_former_per_base_mapping() -> None:
+    import random
+
+    from gbdraw.web_support.feature_catalog import _reverse_complement_sequence
+
+    every_character = [chr(code) for code in range(0x300)]
+    # Characters whose upper-case form is several characters or a different
+    # letter ("ß", "ſ", "ı", ligatures) must be mapped after upper-casing.
+    special = list("ßſıİŉǰﬃﬀ  　\t\r\n") + ["K", "Ａ"]
+    for character in every_character + special:
+        assert _reverse_complement_sequence(character) == (
+            _former_reverse_complement_sequence(character)
+        ), repr(character)
+
+    rng = random.Random(11)
+    alphabet = every_character + special + list("ACGTUacgtuNnRYKMSWBDHV- ") * 20
+    for _ in range(300):
+        text = "".join(rng.choice(alphabet) for _ in range(rng.randrange(0, 200)))
+        assert _reverse_complement_sequence(text) == (
+            _former_reverse_complement_sequence(text)
+        )
+    assert _reverse_complement_sequence("") == ""
