@@ -2988,6 +2988,24 @@ export const createAppSetup = () => {
       }
     }
   });
+  // UJ-06 (Owner 2026-10-07): the empty state's Load an example reads the
+  // bundled HmmtDNA Gallery Session from this origin and loads it through the
+  // Load Session path, with the same confirmation.
+  const EXAMPLE_SESSION_NAME = 'HmmtDNA_basic_circular.gbdraw-session.json';
+  const exampleSessionPending = ref(false);
+  const loadExampleSession = () => confirmSessionReplacement('Load example', async () => {
+    exampleSessionPending.value = true;
+    try {
+      const response = await fetch(`./gallery/sessions/${EXAMPLE_SESSION_NAME}`);
+      if (!response.ok) throw new Error(`The example Session could not be read (HTTP ${response.status}).`);
+      const file = new File([await response.blob()], EXAMPLE_SESSION_NAME, { type: 'application/json' });
+      await importSession({ target: { files: [file], value: '' } });
+    } catch (error) {
+      errorLog.value = normalizeUserFacingError(error);
+    } finally {
+      exampleSessionPending.value = false;
+    }
+  });
 
   const {
     addNewLegendEntry,
@@ -5917,6 +5935,8 @@ export const createAppSetup = () => {
     importSession,
     sessionInput,
     openSessionFilePicker,
+    loadExampleSession,
+    exampleSessionPending,
     sessionReplaceDialog,
     resolveSessionReplacement,
     circularRecordPresentationPanel,

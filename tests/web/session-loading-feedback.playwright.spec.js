@@ -375,3 +375,42 @@ test('Load Session asks before it replaces work changed since the last Save or L
   await expect.poll(() => pickers).toBe(pickersBefore + 1);
   await expect(confirm).toHaveCount(0);
 });
+
+// UJ-06 (Owner 2026-10-07): the empty state offers one example, the bundled
+// HmmtDNA Gallery Session, loaded from this origin through the Load Session path
+// and its UJ-09 confirmation.
+test('Load an example opens the bundled HmmtDNA Session from the empty state', async ({ page }) => {
+  test.setTimeout(180_000);
+  const external = [];
+  await page.context().route('**/*', (route) => {
+    if (new URL(route.request().url()).hostname === '127.0.0.1') return route.continue();
+    external.push(route.request().url());
+    return route.abort();
+  });
+  await openApp(page);
+  const example = page.getByRole('button', { name: 'Load an example', exact: true });
+  const confirm = page.getByRole('dialog', { name: 'Replace the current work?', exact: true });
+  const prefix = page.locator('#output-prefix');
+  await prefix.fill('unsaved-work');
+  await prefix.press('Tab');
+  await expect.poll(() => page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(1);
+  await example.click();
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(prefix).toHaveValue('unsaved-work');
+
+  await example.click();
+  const loaded = page.waitForEvent('dialog');
+  await confirm.getByRole('button', { name: 'Load example', exact: true }).click();
+  const alert = await loaded;
+  expect(alert.message()).toBe('Session loaded successfully!');
+  await alert.accept();
+  await page.waitForFunction(() => (
+    window.__GBDRAW_APP__?.sessionImportPending === false
+    && window.__GBDRAW_APP__.sessionTitle === 'HmmtDNA_basic_circular'
+    && window.__GBDRAW_APP__.results.length === 1
+  ));
+  expect(await page.evaluate(() => window.__GBDRAW_HISTORY__.getUndoCount())).toBe(0);
+  await expect(example).toHaveCount(0);
+  expect(external).toEqual([]);
+});

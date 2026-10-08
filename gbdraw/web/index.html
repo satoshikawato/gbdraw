@@ -7346,6 +7346,11 @@
             <div v-else class="h-full flex flex-col items-center justify-center text-slate-300 border-4 border-dashed border-slate-200 rounded-3xl p-12 bg-slate-50/30">
                 <i class="ph ph-dna text-6xl mb-4 text-slate-200" aria-hidden="true"></i>
                 <p class="font-medium text-slate-400">No {{ mode === 'linear' ? 'Linear' : 'Circular' }} Result yet. Configure settings and click Generate.</p>
+                <button type="button" data-history-managed @click="loadExampleSession" :disabled="!sessionLoadAvailable || exampleSessionPending" :aria-busy="exampleSessionPending"
+                        class="btn btn-secondary btn-sm mt-4" aria-describedby="example-session-help">
+                    <i :class="exampleSessionPending ? 'ph ph-spinner animate-spin' : 'ph ph-play-circle'" aria-hidden="true"></i> Load an example
+                </button>
+                <p id="example-session-help" class="ui-hint mt-2">Opens the human mitochondrial genome Session from the Gallery.</p>
             </div>
         </div>
     </main>
