@@ -10,7 +10,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REFERENCE_PATH = ROOT / "docs" / "CLI_Reference.md"
-MODES = ("circular", "linear")
+MODES = ("circular", "linear", "render")
 
 
 def _marker(mode: str, edge: str) -> str:
@@ -33,7 +33,7 @@ def _live_help(mode: str) -> str:
 
 
 def render_reference(source: str) -> str:
-    """Return the reference with both generated blocks refreshed."""
+    """Return the reference with every generated block refreshed."""
 
     rendered = source
     for mode in MODES:

@@ -146,6 +146,23 @@ write-up of a release.
   metadata also records the font file, font size, DPI, and wrap width the Legend was
   laid out with, and the diagram bounds it was placed against, so that the web app
   can lay out an edited Legend as Python does. Drawn content is unchanged.
+- CLI: `gbdraw render --session FILE` renders the drawings of a saved Session:
+  every drawing with a committed render by default, or the ones named with
+  `--drawing ID` (an ID or a name, repeatable). A drawing without a committed
+  render is skipped with a notice, and naming one is an error.
+  `--list_drawings` prints each drawing's ID, mode, name, and whether it has a
+  committed render. One drawing keeps its output names; several write
+  `<prefix>_<ID>`, and every diagram path and the Session output are checked
+  before the first file is written. `--save_session` or `--session_output`
+  writes the Session again with only the rendered drawings replaced; the
+  Session is brought to the current version and validated before any render,
+  so a Session that cannot be written again leaves no diagram behind. For a
+  Session 31–39, which saved no feature catalog, the command prints a warning
+  that names each saved Result it drops; the re-saved Session holds the Results
+  of the new render.
+  `gbdraw circular --session` and `gbdraw linear --session` take `--drawing ID`
+  and, without it, render the Session's only drawing of their mode; a drawing of
+  the other mode is an error that lists the drawings.
 - Python API: a Session's diagrams are drawings. `SessionDocument.drawings`
   lists them as `SessionDrawing` values (ID, name, mode, and whether a committed
   render exists); `SessionDocument.drawing()` selects one by ID or name, and

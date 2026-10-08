@@ -3528,21 +3528,6 @@ def validate_current_web_state_field_names(
         )
 
 
-def validate_current_mode_slices(modes: object) -> None:
-    """Reject Session 46 mode slices that the current writer would refuse.
-
-    The CLI runs this on a projected sidecar's ``modes`` before it renders, so
-    a failing sidecar writes no diagram.
-    """
-
-    if modes is not None:
-        _validate_mode_slices({"modes": modes})
-        for mode in DIAGRAM_MODES:
-            config = _mode_slice_config({"modes": modes}, mode)
-            if config is not None:
-                validate_current_web_state_field_names(config)
-
-
 def normalize_current_session_artifacts(
     session: dict[str, Any],
     *,
@@ -6571,7 +6556,6 @@ __all__ = [
     "SessionDraftMigration",
     "validate_session",
     "validate_current_session_artifacts",
-    "validate_current_mode_slices",
     "validate_current_web_state_field_names",
     "write_session_json",
 ]

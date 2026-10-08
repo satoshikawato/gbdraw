@@ -195,10 +195,34 @@ selection are unsupported.
 
 `--save_session` writes `<output>.gbdraw-session.json`;
 `--session_output PATH` selects a `.json` or `.json.gz` path and implies save.
-Replay uses the same `circular` or `linear` subcommand that created the session.
-With `--session`, only output and format overrides, session-output options, and
-`--overwrite` are accepted; other diagram flags would mix persisted and new
-settings.
+With `--session`, only output and format overrides, session-output options,
+`--drawing`, and `--overwrite` are accepted; other diagram flags would mix
+persisted and new settings.
+
+A Session holds one or more drawings, one per diagram. Session 46 holds at most
+a Circular drawing (ID `circular`) and a Linear drawing (ID `linear`).
+`gbdraw render --session FILE` renders every drawing with a committed render
+and skips a drawing without one (a settings-only Session) with a notice.
+`--drawing ID` (repeatable, ID or name) renders only the named drawings; naming
+a drawing without a committed render is an error. `--list_drawings` prints
+`ID<TAB>mode<TAB>name<TAB>yes|no`, one line per drawing, and exits.
+`gbdraw circular --session` and `gbdraw linear --session` render the Session's
+only drawing of their mode; `--drawing ID` names it when there are several,
+and a drawing of the other mode is an error that lists the drawings.
+
+One drawing keeps the output names of the command that created the Session.
+Several drawings write `<prefix>_<ID>`, where the prefix is the name part of
+`-o` or each drawing's saved prefix; a Circular batch inside a drawing still
+appends `_<n>`. Every diagram path and the Session output are checked together
+before the first file is written. A re-save replaces the rendered drawings and
+keeps the others; with several drawings, `--save_session` needs `-o`. Before
+any render, the Session is brought to the current version and validated, so a
+Session that cannot be saved again writes no diagram. A Session 31-39 saved no
+feature catalog, so this drops its saved Results: the command prints a warning
+that names each one, and the re-saved Session holds the Results of this render.
+A Session 27-30 has one
+drawing without a canonical request, which `gbdraw render` replays as its
+mode's command does.
 
 SVG is the base render. Additional formats are selected with `-f` or
 `--format`. `-o` or `--output` accepts a path-like output prefix; its last

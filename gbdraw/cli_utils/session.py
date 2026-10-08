@@ -37,7 +37,6 @@ from gbdraw.session_io import (
     get_session_slot,
     safe_embedded_filename,
     serialize_file_entry,
-    validate_current_mode_slices,
 )
 from gbdraw.session_migration import (
     project_session_adjunct_for_current_write,
@@ -49,7 +48,6 @@ if TYPE_CHECKING:
     from gbdraw.api.requests import DiagramRequest
     from gbdraw.render.interactive_svg import InteractiveSvgContext
     from gbdraw.session import SessionDocument
-    from gbdraw.session_drawings import SessionDrawingArtifacts
 
 
 @dataclass(frozen=True)
@@ -85,6 +83,8 @@ class SessionCliRequest:
     overwrite: bool
     save_session: bool
     session_output: str | None
+    drawings: tuple[str, ...] = ()
+    list_drawings: bool = False
 
 
 def add_session_args(parser: argparse.ArgumentParser) -> None:
@@ -95,6 +95,15 @@ def add_session_args(parser: argparse.ArgumentParser) -> None:
         help=(
             "Regenerate a diagram from a plain or gzip-compressed gbdraw GUI "
             "session JSON file."
+        ),
+        type=str,
+    )
+    parser.add_argument(
+        "--drawing",
+        metavar="ID",
+        help=(
+            "With --session, the drawing to render, by ID or name (default: "
+            "the Session's only drawing of this mode)."
         ),
         type=str,
     )
@@ -124,6 +133,14 @@ def parse_session_pre_args(
     if "-h" in cmd_args or "--help" in cmd_args:
         return None
     if "--session" not in cmd_args:
+        if any(
+            str(token) == "--drawing" or str(token).startswith("--drawing=")
+            for token in cmd_args
+        ):
+            raise ValidationError(
+                "--drawing selects a drawing of a --session file.",
+                diagnostic={"code": "INPUT_INVALID", "field": "input", "reason": "REQUIRED"},
+            )
         return None
 
     parser = argparse.ArgumentParser(
@@ -131,6 +148,7 @@ def parse_session_pre_args(
         add_help=False,
     )
     parser.add_argument("--session", required=True)
+    parser.add_argument("--drawing", action="append")
     parser.add_argument("-o", "--output")
     parser.add_argument("-f", "--format")
     parser.add_argument("--overwrite", action="store_true")
@@ -142,6 +160,10 @@ def parse_session_pre_args(
             "--session cannot be combined with unsupported option(s): "
             + " ".join(unknown)
         )
+    if namespace.drawing and len(namespace.drawing) > 1:
+        parser.error(
+            f"gbdraw {mode} renders one drawing; use gbdraw render for several."
+        )
     return SessionCliRequest(
         session_path=str(namespace.session),
         output=namespace.output,
@@ -149,6 +171,94 @@ def parse_session_pre_args(
         overwrite=bool(namespace.overwrite),
         save_session=bool(namespace.save_session or namespace.session_output),
         session_output=namespace.session_output,
+        drawings=tuple(namespace.drawing or ()),
+    )
+
+
+def parse_render_args(cmd_args: Sequence[str]) -> SessionCliRequest:
+    """Parse ``gbdraw render``: render the drawings of a saved Session."""
+
+    parser = argparse.ArgumentParser(
+        prog="gbdraw render",
+        description=(
+            "Render the drawings of a plain or gzip-compressed gbdraw Session "
+            "file. Without --drawing, every drawing with a committed render "
+            "is rendered and the others are skipped with a notice."
+        ),
+    )
+    parser.add_argument(
+        "--session",
+        required=True,
+        metavar="FILE",
+        help="The gbdraw Session file (.gbdraw-session.json or .json.gz).",
+    )
+    parser.add_argument(
+        "--drawing",
+        action="extend",
+        nargs="+",
+        metavar="ID",
+        help=(
+            "Render only these drawings, by ID or name; repeatable. Naming a "
+            "drawing without a committed render is an error."
+        ),
+    )
+    parser.add_argument(
+        "--list_drawings",
+        action="store_true",
+        help=(
+            "Print one tab-separated line per drawing (ID, mode, name, and yes "
+            "or no for a committed render) and exit."
+        ),
+    )
+    parser.add_argument(
+        "-o",
+        "--output",
+        help=(
+            "Output path prefix (default: each drawing's saved prefix). With "
+            "several drawings, each name ends in _<ID>."
+        ),
+    )
+    parser.add_argument(
+        "-f",
+        "--format",
+        help=(
+            "Comma-separated list of output file formats (svg, interactive_svg, "
+            "png, pdf, eps, ps; default: the saved formats; png/pdf/eps/ps "
+            "require CairoSVG)."
+        ),
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace existing output files (default: refuse to overwrite).",
+    )
+    sidecar = parser.add_mutually_exclusive_group()
+    sidecar.add_argument(
+        "--save_session",
+        action="store_true",
+        help=(
+            "Write the Session again with the rendered drawings replaced, next "
+            "to the diagrams; several drawings need -o."
+        ),
+    )
+    sidecar.add_argument(
+        "--session_output",
+        metavar="PATH",
+        help=(
+            "Write the Session again with the rendered drawings replaced to "
+            "PATH; use a .gz suffix for gzip compression."
+        ),
+    )
+    namespace = parser.parse_args(list(cmd_args))
+    return SessionCliRequest(
+        session_path=str(namespace.session),
+        output=namespace.output,
+        format=namespace.format,
+        overwrite=bool(namespace.overwrite),
+        save_session=bool(namespace.save_session or namespace.session_output),
+        session_output=namespace.session_output,
+        drawings=tuple(namespace.drawing or ()),
+        list_drawings=bool(namespace.list_drawings),
     )
 
 
@@ -410,6 +520,11 @@ def save_session_sidecar_if_requested(
     return sidecar_path
 
 
+def _require_committed_render(document: SessionDocument) -> None:
+    if not any(drawing.has_canonical_request for drawing in document.drawings):
+        raise ValidationError("Settings-only Session has no biological render request; load a source in Web before generating.")
+
+
 def render_canonical_session_if_present(
     session: SessionDocument | Mapping[str, Any],
     *,
@@ -419,218 +534,317 @@ def render_canonical_session_if_present(
     save_session: bool,
     session_output: str | None,
     overwrite: bool = False,
+    drawing: str | None = None,
 ) -> bool:
-    """Render an authoritative canonical request and bypass legacy CLI replay."""
+    """Render one drawing of ``mode`` from a canonical Session.
 
-    from gbdraw.session import (
-        _build_session_document_from_drawings,
-        _DrawingBuild,
-        _write_session_document,
-        load_session_document,
-        materialize_session,
-        session_drawing_artifacts,
-        session_to_request,
-        with_request_output,
-    )
-    from gbdraw.api.request_render import diagram_request_output_paths
+    ``drawing`` names it by ID or name; without it the Session must have one
+    drawing of ``mode``. Sessions 27-30 return ``False`` for legacy replay.
+    """
+
+    from gbdraw.session import load_session_document
     from gbdraw.session_io import CANONICAL_SESSION_MIN_VERSION
 
     document = load_session_document(session)
     if document.version < CANONICAL_SESSION_MIN_VERSION:
         return False
-    if not any(drawing.has_canonical_request for drawing in document.drawings):
-        raise ValidationError("Settings-only Session has no biological render request; load a source in Web before generating.")
-    # The subcommand renders the drawing of its own mode.
-    drawing = document.drawing(mode=mode)
-    drawing_view = session_drawing_artifacts(document, drawing.id)
+    _require_committed_render(document)
+    selected = document.drawing(drawing, mode=mode)
+    render_session_drawings_cli(
+        document,
+        drawings=(selected.id,),
+        output_override=output_override,
+        format_override=format_override,
+        save_session=save_session,
+        session_output=session_output,
+        overwrite=overwrite,
+    )
+    return True
 
+
+def _session_sidecar_path(
+    plans: Sequence[Any],
+    *,
+    session_output: str | None,
+    output_path: Path | None,
+    output_directory: Path,
+) -> tuple[Path, str]:
+    """The sidecar path and the title fallback of a Session re-save."""
+
+    from gbdraw.api.requests import CircularBatchRequest
+
+    if len(plans) > 1:
+        if output_path is None and not session_output:
+            raise ValidationError(
+                "--save_session with several drawings needs -o or --session_output.",
+                diagnostic={"code": "INPUT_INVALID", "field": "output_prefix", "reason": "REQUIRED"},
+            )
+        prefix = output_path.name if output_path is not None else Path(str(session_output)).name
+    else:
+        request = plans[0].request
+        if isinstance(request, CircularBatchRequest):
+            prefix = (
+                output_path.name
+                if output_path is not None
+                else (
+                    request.outputs[0].output_prefix
+                    if len(request.outputs) == 1
+                    else "gbdraw"
+                )
+            )
+        else:
+            prefix = request.output.output_prefix
+    path = (
+        Path(session_output)
+        if session_output
+        else output_directory / f"{prefix}.gbdraw-session.json"
+    )
+    return path, prefix
+
+
+def _rendered_drawing_build(
+    plan: Any,
+    rendered: Any,
+    *,
+    source_version: int,
+) -> tuple[Any, dict[str, Any] | None]:
+    """The re-save of one rendered drawing: its request, Results and artifacts."""
+
+    from gbdraw.api.requests import CircularBatchRequest
+    from gbdraw.session import _DrawingBuild
+
+    state, web_file_inventory = project_session_adjunct_for_current_write(
+        copy.deepcopy(dict(plan.drawing.artifacts.fields)),
+        source_version=source_version,
+    )
+    state = with_current_artifacts(
+        state,
+        losat_cache_entries=getattr(rendered, "losat_cache_entries", ()),
+        protein_identity_manifest=getattr(rendered, "protein_identity_manifest", None),
+        legacy_protein_raw_candidates=getattr(rendered, "legacy_protein_raw_candidates", ()),
+        legacy_protein_derived_evidence=getattr(rendered, "legacy_protein_derived_evidence", ()),
+        protein_id_map=getattr(rendered, "protein_id_map", None),
+    )
+    svg_results = [
+        {"name": output.stem, "content": output.read_text(encoding="utf-8")}
+        for output in rendered.output_paths
+        if output.suffix.lower() == ".svg"
+        and output.is_file()
+        and not output.name.lower().endswith(".interactive.svg")
+    ]
+    if svg_results:
+        state["results"] = svg_results
+    interactive_contexts = (
+        rendered.interactive_contexts
+        if hasattr(rendered, "interactive_contexts")
+        else (rendered.interactive_context,)
+    )
+    replace_current_derived_feature_state(
+        state,
+        _feature_catalog_for_svg_results(
+            [(str(result["name"]), str(result["content"])) for result in svg_results],
+            tuple(interactive_contexts),
+        ),
+    )
+    request = rendered.request
+    svg_drawings = (
+        rendered.drawings if hasattr(rendered, "drawings") else (rendered.drawing,)
+    )
+    result_names = (
+        tuple(output.output_prefix for output in request.outputs)
+        if isinstance(request, CircularBatchRequest)
+        else (request.output.output_prefix,)
+    )
+    run_metadata = build_track_slot_geometry_run_metadata(
+        mode=plan.drawing.mode,
+        records=[
+            record
+            for index, (svg_drawing, result_name) in enumerate(
+                zip(svg_drawings, result_names, strict=True)
+            )
+            for record in collect_track_slot_geometry_records(
+                svg_drawing,
+                result_index=index,
+                result_name=str(result_name),
+            )
+        ],
+    )
+    if run_metadata:
+        state["runMetadata"] = run_metadata
+    else:
+        state.pop("runMetadata", None)
+    build = _DrawingBuild(
+        mode=plan.drawing.mode,
+        request=request,
+        state=state,
+        id=plan.drawing.id,
+    )
+    return build, web_file_inventory
+
+
+def render_session_drawings_cli(
+    document: SessionDocument,
+    *,
+    drawings: Sequence[str] | None,
+    output_override: str | None,
+    format_override: str | None,
+    save_session: bool,
+    session_output: str | None,
+    overwrite: bool = False,
+) -> None:
+    """Render drawings of a canonical Session and optionally save it again.
+
+    ``drawings`` selects drawings by ID or name; ``None`` renders every drawing
+    with a committed render. ``-o`` splits into the output directory and
+    prefix; several drawings get ``<prefix>_<ID>``. With a re-save, the
+    document is brought to the current version and validated before any
+    render; every diagram path and the sidecar are checked together before the
+    first write; and the re-save replaces only the rendered drawings.
+    """
+
+    from gbdraw.api.request_render import (
+        CircularBatchRenderResult,
+        diagram_request_output_paths,
+        preflight_diagram_request_outputs,
+    )
+    from gbdraw.features.overrides import log_feature_identity_notices
+    from gbdraw.session import (
+        _build_session_document_from_drawings,
+        _plan_session_drawings,
+        _render_session_drawing_plans,
+        _write_session_document,
+        materialize_session,
+        upgrade_session_document,
+    )
+
+    save = bool(save_session or session_output)
+    # The document the re-save is built from is validated before any render.
+    # The upgrade logs a warning for each drawing whose Results it drops; the
+    # render below writes new Results for the rendered drawings.
+    base = upgrade_session_document(document).document if save else document
     output_path = Path(output_override) if output_override else None
     output_directory = (
         output_path.parent if output_path is not None and output_path.parent != Path("") else Path.cwd()
     )
-    with materialize_session(
-        document,
-        output_directory=output_directory,
-    ) as materialized:
-        request = session_to_request(materialized, drawing=drawing.id)
-        legacy_source_request = request
-        request = with_request_output(
-            request,
+    with materialize_session(base, output_directory=output_directory) as materialized:
+        plans = _plan_session_drawings(
+            materialized,
+            drawings,
             output_prefix=output_path.name if output_path is not None else None,
-            output_directory=output_directory,
             formats=format_override,
             overwrite=overwrite,
         )
-        replay_prefix: str | None = None
-        sidecar_path: Path | None = None
-        adjunct: dict[str, Any] | None = None
-        web_file_inventory: dict[str, Any] | None = None
-        source_resources: dict[str, Any] | None = None
-        if save_session or session_output:
-            from gbdraw.api.requests import CircularBatchRequest
-
-            if isinstance(request, CircularBatchRequest):
-                replay_prefix = (
-                    output_path.name
-                    if output_path is not None
-                    else (
-                        request.outputs[0].output_prefix
-                        if len(request.outputs) == 1
-                        else "gbdraw"
-                    )
-                )
-            else:
-                replay_prefix = request.output.output_prefix
-            sidecar_path = (
-                Path(session_output)
-                if session_output
-                else output_directory / f"{replay_prefix}.gbdraw-session.json"
+        sidecar: tuple[Path, str] | None = None
+        if save:
+            sidecar = _session_sidecar_path(
+                plans,
+                session_output=session_output,
+                output_path=output_path,
+                output_directory=output_directory,
             )
             preflight_session_sidecar_if_requested(
                 save_session=True,
-                session_output=str(sidecar_path),
+                session_output=str(sidecar[0]),
                 output_prefix=None,
-                diagram_output_paths=diagram_request_output_paths(request),
-                overwrite=overwrite,
-            )
-            source_session = copy.deepcopy(dict(drawing_view.fields))
-            source_resources = source_session["resources"]
-            adjunct, web_file_inventory = project_session_adjunct_for_current_write(
-                source_session,
-                source_version=document.version,
-            )
-            validate_current_mode_slices(adjunct.get("modes"))
-
-        rendered = _render_request(
-            request,
-            session_drawing=drawing_view,
-            include_feature_catalog=sidecar_path is not None,
-        )
-        from gbdraw.features.overrides import log_feature_identity_notices
-
-        for item in getattr(rendered, "items", (rendered,)):
-            log_feature_identity_notices(item.feature_identity_notices)
-
-        if sidecar_path is not None:
-            assert adjunct is not None
-            adjunct = with_current_artifacts(
-                adjunct,
-                losat_cache_entries=getattr(rendered, "losat_cache_entries", ()),
-                protein_identity_manifest=getattr(rendered, "protein_identity_manifest", None),
-                legacy_protein_raw_candidates=getattr(rendered, "legacy_protein_raw_candidates", ()),
-                legacy_protein_derived_evidence=getattr(rendered, "legacy_protein_derived_evidence", ()),
-                protein_id_map=getattr(rendered, "protein_id_map", None),
-            )
-            svg_results = []
-            for output in rendered.output_paths:
-                if output.suffix.lower() != ".svg" or not output.is_file():
-                    continue
-                if output.name.lower().endswith(".interactive.svg"):
-                    continue
-                svg_results.append(
-                    {"name": output.stem, "content": output.read_text(encoding="utf-8")}
-                )
-            if svg_results:
-                adjunct["results"] = svg_results
-            interactive_contexts = (
-                rendered.interactive_contexts
-                if hasattr(rendered, "interactive_contexts")
-                else (rendered.interactive_context,)
-            )
-            catalog_contexts = tuple(interactive_contexts)
-            catalog_results = [
-                (str(result["name"]), str(result["content"]))
-                for result in svg_results
-            ]
-            feature_catalog = _feature_catalog_for_svg_results(
-                catalog_results,
-                catalog_contexts,
-            )
-            replace_current_derived_feature_state(
-                adjunct,
-                feature_catalog,
-            )
-            drawings = (
-                rendered.drawings
-                if hasattr(rendered, "drawings")
-                else (rendered.drawing,)
-            )
-            rendered_request = rendered.request
-            from gbdraw.api.session_compat import (
-                project_legacy_similarity_alignment_for_current_write,
-            )
-
-            rendered_request = project_legacy_similarity_alignment_for_current_write(
-                rendered_request,
-                legacy_source=legacy_source_request,
-            )
-            result_names = (
-                tuple(output.output_prefix for output in rendered_request.outputs)
-                if isinstance(rendered_request, CircularBatchRequest)
-                else (rendered_request.output.output_prefix,)
-            )
-            geometry_records = [
-                record
-                for index, (drawing, result_name) in enumerate(
-                    zip(drawings, result_names, strict=True)
-                )
-                for record in collect_track_slot_geometry_records(
-                    drawing,
-                    result_index=index,
-                    result_name=str(result_name),
-                )
-            ]
-            run_metadata = build_track_slot_geometry_run_metadata(
-                mode=mode,
-                records=geometry_records,
-            )
-            if run_metadata:
-                adjunct["runMetadata"] = run_metadata
-            else:
-                adjunct.pop("runMetadata", None)
-            # The rendered drawing replaces its own parts; the others stay.
-            _write_session_document(
-                sidecar_path,
-                _build_session_document_from_drawings(
-                    (
-                        _DrawingBuild(
-                            mode=drawing.mode,
-                            request=rendered_request,
-                            state=adjunct,
-                            id=drawing.id,
-                        ),
-                    ),
-                    base=document,
-                    title=str(drawing_view.fields.get("title") or replay_prefix),
-                    web_file_inventory=web_file_inventory,
-                    resources=source_resources,
+                diagram_output_paths=tuple(
+                    path
+                    for plan in plans
+                    for path in diagram_request_output_paths(plan.request)
                 ),
                 overwrite=overwrite,
             )
-    return True
-
-
-def _render_request(
-    request,
-    *,
-    session_drawing: SessionDrawingArtifacts | None = None,
-    include_feature_catalog: bool = False,
-):
-    """Import the request renderer lazily to keep CLI session imports lightweight."""
-
-    if session_drawing is None:
-        from gbdraw.api.request_render import render_request
-
-        return render_request(
-            request,
-            include_feature_catalog=include_feature_catalog,
+        preflight_diagram_request_outputs(tuple(plan.request for plan in plans))
+        rendered = _render_session_drawing_plans(
+            materialized,
+            plans,
+            include_feature_catalog=save,
         )
-    from gbdraw.api.session_compat import render_session_compatible_request
+        for result in rendered.values():
+            items = (
+                result.items
+                if isinstance(result, CircularBatchRenderResult)
+                else (result,)
+            )
+            for item in items:
+                log_feature_identity_notices(item.feature_identity_notices)
+        if sidecar is None:
+            return
+        sidecar_path, title_fallback = sidecar
+        builds = []
+        web_file_inventory: dict[str, Any] | None = None
+        for plan in plans:
+            build, inventory = _rendered_drawing_build(
+                plan,
+                rendered[plan.drawing.id],
+                source_version=base.version,
+            )
+            builds.append(build)
+            # The drawings of a current Session share their Web file inventory.
+            web_file_inventory = web_file_inventory or inventory
+        _write_session_document(
+            sidecar_path,
+            _build_session_document_from_drawings(
+                builds,
+                base=base,
+                title=str(plans[0].drawing.artifacts.fields.get("title") or title_fallback),
+                web_file_inventory=web_file_inventory,
+                resources=plans[0].drawing.artifacts.fields["resources"],
+            ),
+            overwrite=overwrite,
+        )
 
-    return render_session_compatible_request(
-        request,
-        session_drawing,
-        include_feature_catalog=include_feature_catalog,
+
+def _legacy_session_replay(mode: str) -> Any:
+    """The mode command's replay of a Session 27-30 (CLI arguments)."""
+
+    if mode == "linear":
+        from gbdraw.linear import replay_legacy_session
+
+        return replay_legacy_session
+    from gbdraw.circular import replay_legacy_session as replay_circular
+
+    return replay_circular
+
+
+def render_main(cmd_args: Sequence[str]) -> None:
+    """``gbdraw render``: render the drawings of a saved Session."""
+
+    from gbdraw.session import SessionDrawingSelectionError, load_session_document
+    from gbdraw.session_io import CANONICAL_SESSION_MIN_VERSION
+
+    request = parse_render_args(cmd_args)
+    document = load_session_document(request.session_path)
+    if request.list_drawings:
+        for drawing in document.drawings:
+            print(
+                "\t".join(
+                    (
+                        drawing.id,
+                        drawing.mode,
+                        drawing.name,
+                        "yes" if drawing.has_canonical_request else "no",
+                    )
+                )
+            )
+        return
+    if document.version < CANONICAL_SESSION_MIN_VERSION:
+        # A Session 27-30 is one drawing that its mode command replays.
+        if len(request.drawings) > 1:
+            raise SessionDrawingSelectionError(
+                f"Session version {document.version} has one drawing; name it once."
+            )
+        selected = document.drawing(request.drawings[0] if request.drawings else None)
+        _legacy_session_replay(selected.mode)(document, request)
+        return
+    _require_committed_render(document)
+    render_session_drawings_cli(
+        document,
+        drawings=request.drawings or None,
+        output_override=request.output,
+        format_override=request.format,
+        save_session=request.save_session,
+        session_output=request.session_output,
+        overwrite=request.overwrite,
     )
 
 

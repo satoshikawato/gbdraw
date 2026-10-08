@@ -36,6 +36,7 @@ Usage:
 Subcommands:
   circular  Generate a circular genome diagram
   linear    Generate a linear genome diagram
+  render    Render the drawings of a saved Session
   setup-losat  Install the pinned native LOSAT release
   gui       Launch the local web UI in your browser
 
@@ -49,6 +50,7 @@ Examples:
   gbdraw linear --gff input.gff --fasta input.fna
   gbdraw linear --gbk input1.gb input2.gb input3.gb -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt
   gbdraw linear --gff input1.gff input2.gff input3.gff --fasta input1.fna input2.fna input3.fna -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt
+  gbdraw render --session project.gbdraw-session.json
   gbdraw gui
 
 Options (examples):
@@ -179,7 +181,7 @@ usage: gbdraw circular [-h] [--feature_placement_table TSV]
               [--gc_skew_radius GC_SKEW_RADIUS]
               [--legend_box_size LEGEND_BOX_SIZE]
               [--legend_font_size LEGEND_FONT_SIZE] [--session SESSION]
-              [--save_session] [--session_output PATH]
+              [--drawing ID] [--save_session] [--session_output PATH]
 
 Generate genome diagrams in PNG/PDF/SVG/PS/EPS. By default, diagrams for
 multiple entries are saved separately. Use --multi_record_canvas to place
@@ -559,6 +561,8 @@ options:
                         for genomes <= 50 kb, 16 for genomes >= 50 kb).
   --session SESSION     Regenerate a diagram from a plain or gzip-compressed
                         gbdraw GUI session JSON file.
+  --drawing ID          With --session, the drawing to render, by ID or name
+                        (default: the Session's only drawing of this mode).
   --save_session        Write one GUI-loadable .gbdraw-session.json sidecar
                         for this run.
   --session_output PATH
@@ -965,7 +969,7 @@ usage: gbdraw linear [-h] [--feature_placement_table TSV]
               [--legend_font_size LEGEND_FONT_SIZE] [--normalize_length]
               [--region REGION] [--record_id RECORD_ID]
               [--reverse_complement REVERSE_COMPLEMENT] [--session SESSION]
-              [--save_session] [--session_output PATH]
+              [--drawing ID] [--save_session] [--session_output PATH]
 
 Generate plot in PNG/PDF/SVG/PS/EPS.
 
@@ -1399,6 +1403,8 @@ options:
                         true/false, yes/no.
   --session SESSION     Regenerate a diagram from a plain or gzip-compressed
                         gbdraw GUI session JSON file.
+  --drawing ID          With --session, the drawing to render, by ID or name
+                        (default: the Session's only drawing of this mode).
   --save_session        Write one GUI-loadable .gbdraw-session.json sidecar
                         for this run.
   --session_output PATH
@@ -1481,6 +1487,52 @@ executable is available, install NCBI BLAST+ and make the program executable
 with `--ncbi_blast_bin`. You can force a native LOSAT executable on any
 platform with `--losat_bin`. NCBI BLAST+ fallback produces compatible outfmt 6
 comparisons, but its hit set is not guaranteed to be identical to LOSAT.
+
+## Render mode
+
+<!-- BEGIN GENERATED RENDER HELP -->
+
+```text
+usage: gbdraw render [-h] --session FILE [--drawing ID [ID ...]]
+                     [--list_drawings] [-o OUTPUT] [-f FORMAT] [--overwrite]
+                     [--save_session | --session_output PATH]
+
+Render the drawings of a plain or gzip-compressed gbdraw Session file. Without
+--drawing, every drawing with a committed render is rendered and the others
+are skipped with a notice.
+
+options:
+  -h, --help            show this help message and exit
+  --session FILE        The gbdraw Session file (.gbdraw-session.json or
+                        .json.gz).
+  --drawing ID [ID ...]
+                        Render only these drawings, by ID or name; repeatable.
+                        Naming a drawing without a committed render is an
+                        error.
+  --list_drawings       Print one tab-separated line per drawing (ID, mode,
+                        name, and yes or no for a committed render) and exit.
+  -o, --output OUTPUT   Output path prefix (default: each drawing's saved
+                        prefix). With several drawings, each name ends in
+                        _<ID>.
+  -f, --format FORMAT   Comma-separated list of output file formats (svg,
+                        interactive_svg, png, pdf, eps, ps; default: the saved
+                        formats; png/pdf/eps/ps require CairoSVG).
+  --overwrite           Replace existing output files (default: refuse to
+                        overwrite).
+  --save_session        Write the Session again with the rendered drawings
+                        replaced, next to the diagrams; several drawings need
+                        -o.
+  --session_output PATH
+                        Write the Session again with the rendered drawings
+                        replaced to PATH; use a .gz suffix for gzip
+                        compression.
+```
+
+<!-- END GENERATED RENDER HELP -->
+
+`gbdraw render` renders the drawings of a saved Session. Drawing selection,
+output names, and the Session re-save are described in
+[Sessions and output](./REFERENCE/command-line.md#sessions-and-output).
 
 ## Related documentation
 

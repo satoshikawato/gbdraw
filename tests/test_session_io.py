@@ -4078,7 +4078,9 @@ def test_cli_i24f_invalid_bindings_reject_before_render_or_publication(tmp_path,
         svg.write_bytes(b'existing diagram')
         sidecar.write_bytes(b'existing sidecar')
     calls = []
-    monkeypatch.setattr(cli_session, '_render_request', lambda *a, **kw: calls.append(a))
+    import gbdraw.session as session_module
+
+    monkeypatch.setattr(session_module, '_render_session_drawing_plans', lambda *a, **kw: calls.append(a))
     with pytest.raises((ValidationError, SystemExit)):
         circular_main([
             '--session', str(source_path), '-o', str(svg.with_suffix('')),

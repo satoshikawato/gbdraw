@@ -93,6 +93,7 @@ def print_help_message() -> NoReturn:
     print("Subcommands:")
     print("  circular  Generate a circular genome diagram")
     print("  linear    Generate a linear genome diagram")
+    print("  render    Render the drawings of a saved Session")
     print("  setup-losat  Install the pinned native LOSAT release")
     print("  gui       Launch the local web UI in your browser")
     print("")
@@ -107,6 +108,7 @@ def print_help_message() -> NoReturn:
     print("  gbdraw linear --gbk input1.gb input2.gb input3.gb -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt")
     print("  gbdraw linear --gbk input1.gb input2.gb --losat losatp --losatp_mode pairwise")
     print("  gbdraw linear --gff input1.gff input2.gff input3.gff --fasta input1.fna input2.fna input3.fna -b input1_input2.blast.outfmt7.txt input2_input3.blast.outfmt7.txt")
+    print("  gbdraw render --session project.gbdraw-session.json")
     print("  gbdraw gui")
     print("")
     print("Options (examples):")
@@ -157,6 +159,9 @@ def main() -> None:
             circular_main(args)
         elif command == "linear":
             linear_main(args)
+        elif command == "render":
+            from .cli_utils.session import render_main
+            render_main(args)
         elif command == "setup-losat":
             from .losat_setup import setup_main
             setup_main(args)
@@ -173,7 +178,7 @@ def main() -> None:
             start_local_server(str(web_dir))
         else:
             print(
-                f"Unknown command {sys.argv[1]!r}. Choose circular, linear, setup-losat, or gui; "
+                f"Unknown command {sys.argv[1]!r}. Choose circular, linear, render, setup-losat, or gui; "
                 "run gbdraw --help for usage.",
                 file=sys.stderr,
             )
