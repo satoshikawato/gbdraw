@@ -3,7 +3,7 @@
 Guidance for automated agents working in this repository.
 
 ## Read First
-- コード1行増やすごとに技術負債が増えると心得よ。
+- コード1行増やすごとに技術負債が増えると心得よ。負債は行数ではなく、増えた変更点・分岐・重複で数える。
 - See `CLAUDE.md` for project-wide guidance.
 - If working on the web UI, also read `gbdraw/web/CLAUDE.md`.
 

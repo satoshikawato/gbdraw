@@ -27,7 +27,7 @@ being taught, produces the documented result, and regenerates the manual.
 
 ## Progress checklist
 
-Copy this into your response and check items off:
+The steps, in order:
 
 ```
 Docs Progress:
@@ -54,8 +54,9 @@ Docs Progress:
   [references/capture-web.md](references/capture-web.md),
   [references/capture-mobile.md](references/capture-mobile.md), and
   [references/execute-cli-python.md](references/execute-cli-python.md).
-- **Output:** MkDocs Material site (recommended — beautiful by default,
-  searchable), plain Markdown in `docs/manual/`, or PDF. One choice.
+- **Output:** the project's existing documentation. In this repository that
+  is Markdown under `docs/`, with `docs/DOCS.md` as the navigation authority
+  (see the Documentation section of `CLAUDE.md`).
 
 ## Step 2 — Flow census
 
@@ -140,9 +141,10 @@ finding them after all pages are drafted:
 
 1. Boot the app (document the exact command) and verify the base URL
    responds.
-2. Log the demo account in once; save the storage state to
-   `docs/capture/auth.json`.
-3. Verify one seeded entity is visible on a real page.
+2. If the app requires sign-in, log the demo account in once and save the
+   storage state to `docs/capture/auth.json`.
+3. If the app shows seeded data, verify one seeded entity is visible on a
+   real page.
 4. Capture ONE screenshot through the harness skeleton and render ONE public
    page that references it, in the chosen output format.
 

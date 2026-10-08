@@ -35,7 +35,7 @@ pytest tests/test_output_comparison.py::TestGenerateReferences --update-referenc
 pytest tests/test_regression.py -v
 
 # Run a single test by name
-pytest tests/ -v -k "test_circular_basic"
+pytest tests/ -v -k "circular_basic"
 
 # Run tests by marker
 pytest tests/ -v -m "circular"
@@ -274,8 +274,8 @@ Tests compare generated SVG against `tests/reference_outputs/` files.
 - **Python versions tested:** 3.10, 3.11, 3.12
 - **Lint job:** Uses Ruff 0.15.12 and blocks CI on lint failures
 - **Type check:** `Core PR` and `Core` install the `typecheck` extra and run `tests/test_type_check_ratchet.py` (mypy 2.4.0) with the other core tests
-- **CairoSVG:** The Python matrix installs the `dev` extra and required system packages (`libcairo2-dev`, `libpango1.0-dev` on Ubuntu)
-- **Slow tests:** Only run on push to main branch
+- **CairoSVG:** The Core jobs install the `export` extra (`cairosvg`) with `typecheck`; no workflow installs extra system packages
+- **Slow tests:** Run only in release acceptance (a `workflow_dispatch` of Tests on `dev` with the release profile), not on pull requests or ordinary pushes
 
 ## Dependencies
 

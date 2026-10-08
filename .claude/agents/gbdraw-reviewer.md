@@ -18,5 +18,5 @@ change nothing.
 - For each finding give the file and line, what goes wrong, and a concrete
   case (input, state, and the wrong result).
 
-Return the findings ranked by severity, at most 15, or "no findings" with the
-criteria you checked.
+Return every finding, ranked by severity, or "no findings" with the criteria
+you checked.
