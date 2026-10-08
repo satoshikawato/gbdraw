@@ -26,5 +26,5 @@ You audit the area in your brief and report. You never change the repository.
 - Record user-visible behaviour, not intended designs. Mark a behaviour you
   are unsure is wrong as a question, not a bug.
 
-Return at most 30 lines: counts by severity, one line per finding, and the
+Return a short report the caller can act on without opening your logs: counts by severity, one line per finding, and the
 path of the findings file.
