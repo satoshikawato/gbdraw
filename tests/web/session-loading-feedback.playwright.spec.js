@@ -334,6 +334,27 @@ test('Load Session asks before it replaces work changed since the last Save or L
   await expect.poll(() => pickers).toBe(1);
   await expect(confirm).toHaveCount(0);
 
+  // An open control transaction asks only when its value changed: focus alone
+  // (the transaction a text control begins on focus) is nothing to lose.
+  await page.evaluate(async () => {
+    window.__focusOnlyTx = await window.__GBDRAW_HISTORY__.begin('Focus only');
+    await window.__GBDRAW_APP__.openSessionFilePicker();
+  });
+  await expect(confirm).toHaveCount(0);
+  await expect.poll(() => pickers).toBe(2);
+  await page.evaluate(async () => {
+    window.__GBDRAW_APP__.form.prefix = 'typed-not-committed';
+    await window.__GBDRAW_APP__.openSessionFilePicker();
+  });
+  await expect(confirm).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(confirm).toHaveCount(0);
+  await page.evaluate(() => {
+    window.__GBDRAW_APP__.form.prefix = '';
+    window.__GBDRAW_HISTORY__.cancel(window.__focusOnlyTx);
+  });
+  expect(await undoCount()).toBe(0);
+
   const prefix = page.locator('#output-prefix');
   await prefix.fill('unsaved-work');
   await prefix.press('Tab');
@@ -345,7 +366,7 @@ test('Load Session asks before it replaces work changed since the last Save or L
   await page.keyboard.press('Escape');
   await expect(confirm).toHaveCount(0);
   await expect(loadButton).toBeFocused();
-  expect(pickers).toBe(1);
+  expect(pickers).toBe(2);
   expect(await undoCount()).toBe(1);
   await expect(prefix).toHaveValue('unsaved-work');
 

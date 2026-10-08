@@ -495,17 +495,21 @@ export const createHistoryManager = ({
   const clearRedo = () => clearStack(redoStack);
 
   // UJ-09: the History position of the last Save or Load. Work is unsaved
-  // when an Undo or Redo step was added or traversed since then, or when a
-  // control's transaction is still open.
+  // when an Undo or Redo step was added or traversed since then, or when an
+  // open control transaction already changed the intent it began with.
   /** @param {any[]} stack */
   const topEntry = (stack) => stack[stack.length - 1] || null;
   let savePoint = { undo: null, redo: null };
   const markSavePoint = () => {
     savePoint = { undo: topEntry(undoStack), redo: topEntry(redoStack) };
   };
-  const hasChangesSinceSavePoint = () => Boolean(activeTransaction && !activeTransaction.closed)
-    || topEntry(undoStack) !== savePoint.undo
-    || topEntry(redoStack) !== savePoint.redo;
+  const hasChangesSinceSavePoint = async () => {
+    if (topEntry(undoStack) !== savePoint.undo || topEntry(redoStack) !== savePoint.redo) return true;
+    const open = activeTransaction && !activeTransaction.closed ? activeTransaction : null;
+    if (!open) return false;
+    // A text control begins on focus; focus alone changes nothing.
+    return (await captureIntent()).signature !== open.beforeSignature;
+  };
 
   const enforceLimits = () => {
     let evicted = false;

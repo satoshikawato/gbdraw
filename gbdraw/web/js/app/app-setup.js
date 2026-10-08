@@ -2896,8 +2896,8 @@ export const createAppSetup = () => {
   /** @type {(() => void) | null} */
   let pendingSessionReplacement = null;
   /** @param {string} actionLabel @param {() => void} proceed */
-  const confirmSessionReplacement = (actionLabel, proceed) => {
-    if (!history.hasChangesSinceSavePoint()) {
+  const confirmSessionReplacement = async (actionLabel, proceed) => {
+    if (!await history.hasChangesSinceSavePoint()) {
       proceed();
       return;
     }
