@@ -412,3 +412,37 @@ test('a CLI Session keeps its legend position through load and the first Generat
     (await import('/gbdraw/web/js/state.js')).state.generatedLegendPosition.value
   ))).toBe('upper_left');
 });
+
+// FL-10: the typed Output Prefix reaches Python as typed. A value that is not
+// one file name fails Generate before rendering and names the field.
+test('an Output Prefix that is not one file name fails Generate and names the field (FL-10)', async ({ page }) => {
+  test.setTimeout(300_000);
+  await openWithGenBank(page, HMMT);
+  const prefix = await reveal(page.locator('#output-prefix'));
+  await prefix.fill('../../x');
+  await settle(page);
+  await generateAndWaitForResult(page, { expectedStatus: 'error', requireCommittedResult: false });
+  expect(await page.evaluate(() => {
+    const { code, context } = window.__GBDRAW_APP__.errorLog || {};
+    return { code, field: context?.field, reason: context?.reason };
+  })).toEqual({ code: 'INPUT_INVALID', field: 'output_prefix', reason: 'FILENAME' });
+  await expect(page.getByRole('alert', { name: 'Generation Error' })).toContainText('Field: Output Prefix');
+});
+
+// FL-10: a Result named from a record ID is named as the browser saves it, so
+// the downloaded SVG has the Result's name.
+test('a Result named from a record ID downloads under its own name (FL-10)', async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
+  const text = readFileSync(HMMT, 'utf8').replace(/^VERSION {5}\S+/m, 'VERSION     gi|1|ref|X');
+  await openWithGenBank(page, { name: 'gi-record.gb', mimeType: 'text/plain', buffer: Buffer.from(text) });
+  expect(await page.evaluate(() => window.__GBDRAW_APP__.circularRecordList.map((record) => record.record_id)))
+    .toEqual(['gi|1|ref|X']);
+  await generateAndWaitForResult(page);
+  const name = await page.evaluate(() => window.__GBDRAW_APP__.results[0].name);
+  expect(name).toBe('gi_1_ref_X.svg');
+  const pending = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'SVG', exact: true }).click();
+  const download = await pending;
+  expect(download.suggestedFilename()).toBe(name);
+  await download.saveAs(testInfo.outputPath(download.suggestedFilename()));
+});

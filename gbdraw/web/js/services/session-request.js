@@ -42,6 +42,7 @@ import {
   parseCircularTrackSlotSpecs
 } from './circular-track-slot-model.js';
 import { countGenBankRecords } from './genbank-header.js';
+import { downloadSafeName } from '../utils/download-names.js';
 import { projectCircularMeasureDraft } from './circular-track-measure.js';
 import {
   buildLinearTrackSlotPayload,
@@ -600,14 +601,13 @@ const legacyFlatConfigKey = (semanticName) => (
     .toLowerCase()
 );
 
-const safePrefix = (value, fallback = 'out') => {
-  const normalized = String(value || '').trim().replace(/[\\/]+/g, '_');
-  return normalized && normalized !== '.' && normalized !== '..' ? normalized : fallback;
-};
-
+// FL-10: the typed Output Prefix goes to Python as typed (Python strips it as
+// this does); Python rejects a value that is not one portable file name
+// (INPUT_INVALID, field Output Prefix). A name derived from a record ID is
+// made safe here, by the browser's download-name rule (utils/download-names.js).
 const explicitOutputPrefix = (value) => {
-  const raw = String(value || '').trim();
-  return raw ? safePrefix(raw) : null;
+  const raw = String(value ?? '').trim();
+  return raw || null;
 };
 
 const circularRecordId = (record, index) => (
@@ -622,7 +622,7 @@ const resolveCircularBatchPrefixes = (records, explicitPrefix) => {
   const prefixes = [];
   const used = new Set();
   records.forEach((record, index) => {
-    const base = safePrefix(circularRecordId(record, index));
+    const base = downloadSafeName(circularRecordId(record, index), 'out');
     let candidate = base;
     let suffix = 2;
     while (used.has(candidate)) {
@@ -948,8 +948,8 @@ const circularRegionPayload = (form, record) => {
 const circularRecordKey = (record) => {
   const preserved = String(record?.recordKey || '').trim();
   if (preserved) return preserved;
-  const recordId = safePrefix(record?.recordId, 'record');
-  const selector = safePrefix(record?.selector, '1');
+  const recordId = downloadSafeName(record?.recordId, 'record');
+  const selector = downloadSafeName(record?.selector, '1');
   return `circular-${recordId}-${selector}`;
 };
 
@@ -2628,7 +2628,7 @@ const projectCanonicalRenderInput = ({
       record_id: resolved.record?.recordId || selector || `Record_${index + 1}`
     };
   });
-  const defaultCircularPrefix = safePrefix(circularRecordId(circularOutputRecords[0], 0));
+  const defaultCircularPrefix = downloadSafeName(circularRecordId(circularOutputRecords[0], 0), 'out');
   const output = grouping === 'batch'
     ? resolveCircularBatchPrefixes(circularOutputRecords, explicitPrefix)
         .map(renderOutputPayload)

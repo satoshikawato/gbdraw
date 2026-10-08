@@ -18,6 +18,11 @@ write-up of a release.
   index names no series changes nothing (TK-03).
 - Color Change Scope (web app): **Cancel** closes the dialog at once and records no
   Undo step, also right after a Session load, when it used to wait seconds (OV-161).
+- Output Prefix (web app): the typed **Output Prefix** reaches Python as typed, so
+  `../../x` fails Generate with an error that names **Output Prefix** instead of
+  drawing a Result named `.._.._x.svg` that the browser saved as `_.._x.svg`. A
+  Result named from a record ID is named as the browser saves it: a record such
+  as `gi|1|ref|X` draws `gi_1_ref_X.svg` instead of failing Generate (FL-10).
 - Layout (CLI and Python API): Legend, multi-record and definition coordinates no
   longer depend on the Python version. The side-by-side rows of a Circular Legend, the
   multi-record grid, the rows of a multi-record Linear diagram, and the definition text
